@@ -17,11 +17,31 @@ High-level architecture (short)
 - AWS Lambda consumers perform inference and write a compact record to DynamoDB.
 - Terraform + Terraform Cloud (TFC) manage infra; GitHub Actions run checks and publish artifacts.
 
+Technology Stack
+----------------
+- AWS Region: us-west-2 (Oregon)
+- Lambda Runtime: Python 3.11
+- Sentiment Analysis: VADER (vaderSentiment library) - lightweight rule-based analyzer optimized for social media, sub-100ms inference, <5MB package size
+- Ingestion Libraries: feedparser (RSS/Atom), tweepy (Twitter API v2)
+- Infrastructure: Terraform >= 1.5.0, AWS provider ~> 5.0
+- Testing: pytest, moto (AWS mocking), LocalStack (integration tests)
+
+Data Residency & Compliance
+----------------------------
+- Primary region: us-west-2 (all data at rest stored in Oregon)
+- No cross-region replication initially (single-region deployment)
+- Data retention: 90-day TTL on DynamoDB items, 7-year CloudWatch Logs retention for compliance
+- Encryption: Server-side encryption (SSE) enabled on DynamoDB, S3 artifacts encrypted with AWS-managed keys (SSE-S3)
+- No PII storage by default; text snippets require explicit approval and must be minimal
+
 Interfaces & Contracts
 ----------------------
 1) Admin API: configure sources
+- Implementation: AWS API Gateway (REST API) + Lambda (Python 3.11)
+- Authentication: API Gateway API Keys with usage plans (1000 requests/day per key, 10 requests/second burst)
 - Endpoint: POST /v1/sources
 - Purpose: create source subscriptions or update polling config
+- Headers required: `X-API-Key: <api-key-value>`
 - Example request payload:
   {
     "id": "source-1",
@@ -32,6 +52,7 @@ Interfaces & Contracts
     "enabled": true
   }
 - Validation rules: `id` unique and slug-safe; `type` in allowlist {"rss","twitter"}; `poll_interval_seconds` >= 15; `endpoint` must be a valid URL.
+- Additional endpoints: GET /v1/sources (list all sources), GET /v1/sources/{id} (get source details), PATCH /v1/sources/{id} (update source), DELETE /v1/sources/{id} (remove source)
 
 2) Output record (persisted / forwarded shape)
 - Documented JSON schema (minimal):
@@ -91,12 +112,27 @@ module "lambda_function" {
 module "dynamodb_table" {
   source = "./modules/dynamodb_table"
   name   = "items"
-  pk     = "id"
-  gsi    = []
+  pk     = "source_key"     # Format: "source_type#source_id" (e.g., "rss#source-1")
+  sk     = "item_id"        # Content hash (SHA-256) or publisher's stable ID
+  gsi    = [
+    {
+      name = "model-version-index"
+      pk   = "model_version"
+      sk   = "received_at"
+    }
+  ]
+  ttl_attribute = "ttl_timestamp"
 }
 
+DynamoDB Schema Details:
+- Partition Key (PK): `source_key` (STRING) - composite format "source_type#source_id" distributes writes across sources
+- Sort Key (SK): `item_id` (STRING) - content hash (SHA-256) or publisher's stable ID for deduplication
+- Attributes: received_at (ISO8601), sentiment (STRING), score (NUMBER), model_version (STRING), text_snippet (STRING, optional), ttl_timestamp (NUMBER)
+- GSI-1 (model-version-index): PK=model_version, SK=received_at - enables model performance queries and A/B testing
+- TTL: ttl_timestamp field (90 days from received_at, configurable)
+
 - Each module must document required inputs, optional inputs and outputs (e.g., topic_arn, queue_url, table_name).
-- Conditional writes example for dedup (DynamoDB): PutItem with ConditionExpression: "attribute_not_exists(id)".
+- Conditional writes example for dedup (DynamoDB): PutItem with ConditionExpression: "attribute_not_exists(source_key) AND attribute_not_exists(item_id)".
 
 CI / CD
 -------
@@ -117,6 +153,9 @@ Acceptance tests & fixtures
 
 Metrics & dashboard mapping
 ---------------------------
+- Dashboard Implementation: AWS CloudWatch Dashboard
+- Access Control: IAM-based authentication (read-only role for operators/auditors, admin role for full access)
+- Update Frequency: Near real-time (CloudWatch standard 1-minute metric resolution, 5-second resolution for custom metrics via high-resolution)
 - Metric names (minimal):
   - `sentiment.request_count{source,model_version}`
   - `sentiment.error_count{source}`
@@ -125,6 +164,7 @@ Metrics & dashboard mapping
   - `sentiment.watch_match_count{filter}`
   - `sentiment.dedup_rate`
 - Dashboard widgets must reference these exact metric names.
+- Admin Controls: Feed switching and watch filter management implemented via Admin API endpoints (GET/POST /v1/dashboard/config), UI can be added later as separate lightweight web interface
 
 Security & privacy checklist
 ---------------------------
@@ -157,3 +197,13 @@ Contact / ownership
 -------------------
 - Core service owner: `scotthazlett@gmail.com`
 - Infra owner (Terraform/TFC): `scotthazlett@gmail.com`
+
+## Clarifications
+
+### Session 2025-11-15
+
+- Q: Which sentiment analysis approach should the Lambda inference function use? → A: VADER (Valence Aware Dictionary and sEntiment Reasoner) - Lightweight rule-based analyzer, <5MB, no cold starts, sub-100ms inference, good for social media text
+- Q: What should be the DynamoDB table partition key (PK) and sort key (SK) design for the items table? → A: PK: `source_type#source_id` (e.g., "rss#source-1"), SK: `item_id` (content hash or publisher ID) - Distributes writes across sources, supports per-source queries
+- Q: How should the Admin API (POST /v1/sources, etc.) authenticate requests? → A: API Gateway API Keys with usage plans - Simplest implementation, built-in rate limiting, easy rotation via Terraform, suitable for service-to-service or small admin team
+- Q: Which AWS region should host the infrastructure? → A: us-west-2 (Oregon) - Good alternative to us-east-1, slightly higher availability due to fewer outages historically, minimal cost difference
+- Q: What technology should implement the externally-facing dashboard with metrics and admin controls? → A: CloudWatch Dashboard (native AWS) - Zero infrastructure overhead, direct metric integration, built-in auth via IAM/SSO, limited customization for admin controls
