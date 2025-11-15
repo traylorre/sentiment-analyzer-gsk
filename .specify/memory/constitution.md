@@ -54,6 +54,62 @@ Minimal Requirements (Bare Minimum)
 	- Use a managed hosting environment (cloud VMs, serverless, or managed containers). Avoid ad-hoc single-host deployments.
 	- Health-check endpoints for liveness and readiness.
 
+5) Deployment Requirements (Serverless / Event-driven preferred)
+	- Preferred architecture: event-driven, serverless implementation on AWS using Lambda for compute, SNS for pub/sub events, SQS for durable queues and decoupling, and DynamoDB for persistence. This stack must be described in the deployment docs and implemented via IaC.
+	- Infrastructure as Code: use Terraform for all deployments and adopt Terraform Cloud (TFC) as the canonical remote execution and state backend. Use GitHub (VCS) integration with TFC workspaces for dev/staging/prod. Pin provider and module versions in Terraform configs and implement a clear module layout for core components (sns_topic, sqs_queue, lambda_function, dynamodb_table, iam_roles, s3_artifacts).
+	  - Terraform Cloud specifics:
+	    - Workspaces: create one workspace per environment (dev/staging/prod) or use workspace-per-branch patterns. Connect TFC workspaces to the repository via VCS so TFC runs plan/apply when branches are merged or via API triggers.
+	    - Remote runs & state: use TFC remote runs to execute plans/applies and to serve as the authoritative remote state store. This provides locking, run history, and plan logs.
+	    - Variables & secrets: store Terraform variables and sensitive values in TFC workspace variables (sensitive vars) or reference Secrets Manager/Parameter Store via data sources; avoid storing plaintext secrets in repos or state.
+	    - Policy as code: use Sentinel (TFC) or OPA/Conftest integrated into CI to enforce org policies (encryption required, no public S3, allowed instance sizes, IAM least-privilege checks) before apply.
+	    - Runs & approvals: require TFC run approvals for production applies (either manual approval in TFC or via policy gates); maintain a run-approver group for prod changes.
+
+	  - CI/CD integration (GitHub Actions + TFC):
+	    - GitHub Actions runs on PRs/branches and performs fast checks: `terraform fmt`, `terraform validate`, `tflint`, `tfsec`/`checkov`, unit tests, and build packaging for Lambda/model artifacts.
+	    - For Terraform plan/apply, prefer TFC VCS-driven runs: push branch → Actions runs checks → merge to protected branch triggers TFC workspace run that performs plan/apply. Alternatively, Actions can use the TFC API to queue runs if programmatic trigger is needed.
+	    - Actions should upload any built artifacts (model packages) to a controlled S3 artifact bucket with versioned paths before TFC run so the plan references published artifacts.
+	    - Ensure GitHub Actions uses a short-lived TFC token or a GitHub App with least-privilege permissions; store tokens as GitHub Secrets.
+	  - Provider & module version pinning: explicitly pin AWS provider and module versions in `required_providers` and `required_version` blocks to keep builds reproducible.
+
+	- Scalability & decoupling
+	  - Use SNS topics to fan-out ingestion events (per-source or per-purpose topics). Use SQS queues to buffer work and allow horizontal scaling of Lambda consumers.
+	  - Design consumers (Lambdas) to be idempotent. Use message deduplication (SQS FIFO or application-level idempotency keys persisted in DynamoDB) to avoid double-processing.
+	  - Configure DLQs (dead-letter queues) for messages that fail processing after retries; include alerting for DLQ accumulation.
+	  - Visibility timeout and concurrency: tune SQS visibility timeouts to exceed typical Lambda processing time; set reserved concurrency limits to control downstream systems and to protect model inference endpoints.
+	- Persistence (DynamoDB)
+	  - Use DynamoDB as the primary persistence layer for items, metadata, and lightweight indices. Define clear primary key patterns (partition key + sort key) and GSIs for query access patterns.
+	  - Use conditional writes (PutItem with ConditionExpression) to implement atomic deduplication and optimistic concurrency where needed.
+	  - Consider on-demand capacity mode for unpredictable workloads; if provisioned mode is used, include autoscaling policies and cost/throughput guidance.
+	  - Enable server-side encryption (SSE), point-in-time recovery (PITR) per-table, and daily backups as required by governance.
+	- Model artifacts and inference
+	  - Model binaries/artifacts should be stored in an immutable artifact store (S3) with versioning and signed access controls; Lambda functions or containers should reference model_version explicitly.
+	  - If heavy inference is required, consider using a managed inference service (SageMaker endpoints or containerized inference on Fargate) triggered by events; document latency expectations and autoscaling settings.
+	- Deployment & CI/CD
+	  - CI/CD pipelines must build, test, and deploy IaC and function artefacts; include unit and integration tests, SAST, and IaC linting checks.
+	  - Blue/green or canary deployment strategies are recommended for Lambda and model updates to minimize risk.
+	- Observability & cost
+	  - Integrate with CloudWatch metrics/logs, X-Ray tracing for end-to-end latency, and a metrics backend (Prometheus pushgateway or CloudWatch metrics exported to the dashboard) so the dashboard metrics map to real telemetry.
+	  - Add budgeting and alerts for unexpected cost growth (e.g., spikes in Lambda invocations, DynamoDB read/write units).
+	- Local development & testing
+	  - Provide a local testing story (SAM local, LocalStack, or an integration test harness) so developers can simulate SNS/SQS/DynamoDB interactions in CI and locally.
+
+Architecture & Tech Stack Notes
+	- Event model: represent each source ingestion as an event with a stable id, source metadata, and a minimal payload (avoid shipping raw full text in events unless approved). Events should include model_version when forwarded to inference consumers.
+	- Security & IAM: use least-privilege IAM roles per Lambda; grant narrow access to SNS topics, SQS queues, S3 model artifacts, and DynamoDB tables. Manage secrets with AWS Secrets Manager or Parameter Store and restrict which roles can read secrets.
+	- NoSQL/Expression safety: when using DynamoDB expressions (UpdateExpression, ConditionExpression), always use ExpressionAttributeNames and ExpressionAttributeValues to avoid injection-like issues from user-controlled values.
+	- Idempotency & replay: store an ingestion record with source_id + fetch_timestamp; provide an easy way to re-run inference for a given source_id and model_version (replay endpoint or job triggered via event).
+	- Backpressure & graceful degradation: if downstream systems (e.g., inference endpoint, external APIs) are slow or rate-limited, queue messages in SQS with appropriate retention and scale Lambda concurrency gradually.
+	- DLQ & manual remediation: provide tooling and runbooks for inspecting DLQ messages, reprocessing them, and resolving data issues.
+
+Acceptance Criteria (serverless stack)
+	- Terraform configs/modules are present and deploy a working stack for dev/staging/prod via the documented CI/CD pipeline.
+	- CI verifies `terraform fmt`, `terraform validate`, and `terraform plan` on branches and requires a reviewed plan for prod deploys.
+	- SNS topics and SQS queues are configured with DLQs, visibility timeout, and access policies.
+	- Lambda consumers are idempotent and pass an integration test that demonstrates deduplication and replay for a sample feed.
+	- DynamoDB tables exist with documented key design, PITR enabled, encryption at rest enabled, and an example conditional write that prevents duplicate inserts.
+	- Observability: CloudWatch/X-Ray traces available end-to-end for a sample ingestion -> inference -> persist flow; dashboard metrics map to live telemetry.
+	- Security: IAM roles follow least-privilege, secrets are stored in Secrets Manager/Parameter Store, and SAST/IaC checks run in CI.
+
 6) Observability & Monitoring
 	- Emit structured logs for requests (request id, model_version, latency, outcome) without logging raw input text by default.
 	- Export metrics: request_count, error_count, latency_histogram, model_version_inferences, and data_drift indicators.
@@ -161,3 +217,33 @@ Amendments & Governance
 This constitution is intentionally minimal. Amendments may be added with a short rationale and must include any new acceptance criteria. Maintain a Version and Last Amended date at the bottom.
 
 **Version**: 1.0 | **Ratified**: [2025-11-14] | **Last Amended**: [2025-11-14]
+
+Design & Diagrams (Canva preferred)
+----------------------------------
+- Preferred tool: use Canva for system and design diagrams (architecture diagrams, data flow, sequence diagrams, and stakeholder visuals). Canva is the standard for design assets to keep visual style consistent and editable by non-engineering stakeholders.
+
+- What to store in the repo
+	- Do NOT store Canva source files (proprietary format) in the main code tree. Instead store:
+		- A small `diagrams/` directory containing exported, versioned artifacts: PNG (high-res) and SVG (editable vector) for each diagram, plus a lightweight PDF export where appropriate.
+		- A `diagrams/README.md` that lists the Canva design link, the exported filenames, the diagram purpose, and the last-updated date.
+		- For each diagram, include a short text summary describing the diagram, the key components, and any assumptions.
+
+- Collaboration & permissions
+	- Store a canonical Canva design link in `diagrams/README.md` and keep the design ownership under the project's design/account group. Use Canva team sharing settings and restrict editing rights to designers and architects; allow view/comment for wider stakeholders.
+	- When a non-designer needs to request a change, open an issue with the requested change and tag the diagram owner; maintain an edit log in the README.
+
+- Export guidelines
+	- Export both PNG (for documentation and quick previews) and SVG (for high-quality embeds and accessibility). Prefer 2x or 3x PNG sizes for retina screens where images are used in docs.
+	- File names should include a short slug and ISO date: e.g., `architecture-event-driven-2025-11-14.svg`.
+
+- Versioning & provenance
+	- Each exported artifact must include the diagram's Canva URL and the last editor and edit timestamp in the `diagrams/README.md`.
+	- When a diagram changes materially (architecture, data flow, security boundaries), add a short changelog entry in the README with who approved the change.
+
+- Accessibility & archival
+	- Provide alt text for each exported image in docs where the image is embedded. Keep an archived PDF snapshot for major releases.
+
+- Acceptance criteria
+	- `diagrams/README.md` exists and contains Canva link(s), export file names, and ownership.
+	- At least one canonical architecture diagram is present as SVG and PNG in `diagrams/` and documents the event-driven, serverless stack.
+	- Diagram exports include provenance metadata (Canva link, last editor, date) and a brief changelog for material edits.
