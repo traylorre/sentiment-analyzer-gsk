@@ -59,7 +59,7 @@ External API Configuration:
       - CloudWatch metric: twitter.auto_throttle_active (boolean) - alerts when throttling engaged
     - Quota enforcement: Pre-request quota check prevents exceeding monthly cap
     - Upgrade trigger: CloudWatch alarm at 80% quota utilization for 2 consecutive days
-    - **Attack Protection:** Limit source creation to 10 sources/hour per API key, max 100 total Twitter sources per tier (Free: 10, Basic: 50, Pro: 100)
+    - **Attack Protection:** Limit source creation to 10 sources/hour per API key, max Twitter sources per tier: Free (10), Basic (50), Pro (100)
   - Rate limit handling: Dual-layer (request rate + monthly consumption cap) with exponential backoff
   - Compliance: Must follow Twitter Developer Agreement (attribution, no redistribution)
   - Tier Upgrade Procedure (seamless migration):
@@ -143,7 +143,7 @@ Interfaces & Contracts
     "poll_interval_seconds": 60,
     "enabled": true
   }
-- Validation rules: `id` unique and slug-safe; `type` in allowlist {"rss","twitter"}; `poll_interval_seconds` >= 15; `endpoint` must be a valid URL.
+- Validation rules: `id` unique and slug-safe; `type` in allowlist {"rss","twitter"}; `poll_interval_seconds` >= 60; `endpoint` must be a valid URL.
 - Additional endpoints: GET /v1/sources (list all sources), GET /v1/sources/{id} (get source details), PATCH /v1/sources/{id} (update source), DELETE /v1/sources/{id} (remove source)
 
 5) Data deletion API (GDPR compliance)
@@ -461,7 +461,7 @@ Implement these alarms to trigger migrations BEFORE failures occur:
 - Metric: `twitter.quota_utilization_pct` (custom metric: monthly_tweets_consumed ÷ tier_limit × 100)
 - Alarm 1: WARN when quota_utilization >60% for 2 consecutive days
   - Action: Review source activity, forecast when 80% threshold will be reached
-- Alarm 2: CRITICAL when quota_utilization >80% for 2 consecutive days (per spec line 53)
+- Alarm 2: CRITICAL when quota_utilization >80% for 2 consecutive days (per spec line 61)
   - Action: Prepare tier upgrade (Basic → Pro)
 - Alarm 3: EMERGENCY when quota_utilization >95%
   - Action: Immediately upgrade tier or disable low-priority sources
@@ -473,7 +473,7 @@ Implement these alarms to trigger migrations BEFORE failures occur:
 
 **DLQ Depth (Operational - Indicates failures)**
 - Metric: `AWS/SQS/ApproximateNumberOfMessagesVisible` for each DLQ
-- Alarm: CRITICAL when DLQ depth >10 messages (per spec line 211)
+- Alarm: CRITICAL when DLQ depth >10 messages (per spec line 295)
   - Action: Investigate root cause (API failures, throttling, bugs)
 
 **Cost Overrun (Budget Protection)**
