@@ -201,6 +201,18 @@ Operational Behaviors (must implement)
     - Basic tier: reserved concurrency = 20 (supports 50K tweets/month, ~1,666 tweets/day)
     - Pro tier: reserved concurrency = 50 (supports 1M tweets/month, ~33,333 tweets/day)
   - Inference Lambda: 512 MB memory, 30s timeout, reserved concurrency: 20 (processes SQS messages, performs VADER sentiment analysis, writes to DynamoDB)
+  - Quota Reset Lambda: 256 MB memory, 60s timeout, reserved concurrency: 1 (monthly quota counter reset for Twitter sources)
+    - Trigger: EventBridge scheduled rule `cron(0 0 1 * ? *)` (first day of month, midnight UTC)
+    - Behavior:
+      1. Scan source-configs table for all Twitter sources (type = "twitter")
+      2. For each source: Set monthly_tweets_consumed = 0, last_quota_reset = current_timestamp, quota_exhausted = false
+      3. If source.enabled = false AND disable_reason = "quota_exhausted": Set enabled = true, calculate next_poll_time = current_time + poll_interval_seconds
+      4. Emit CloudWatch metric: twitter.quota_reset_count (value = number of sources reset)
+      5. Log completion to CloudWatch Logs
+    - Error Handling: DynamoDB UpdateItem failures → log error, continue to next source; complete failure → send to quota-reset-lambda-dlq
+    - IAM Permissions: dynamodb:Scan, dynamodb:UpdateItem (source-configs), cloudwatch:PutMetricData, logs:CreateLogStream, logs:PutLogEvents
+    - CloudWatch Alarm: twitter.quota_reset_count = 0 on month boundary (evaluation: 24 hours after 1st of month) → CRITICAL (indicates quota reset did not run)
+    - DLQ: quota-reset-lambda-dlq (14-day retention, S3 archival after 10 days)
 - Expected Throughput:
   - Average load: 100 items/minute (~1.7 items/second)
   - Peak load: 1,000 items/minute (~16.7 items/second) during viral events or breaking news
