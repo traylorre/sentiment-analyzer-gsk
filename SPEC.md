@@ -42,11 +42,25 @@ Technology Stack
 - Testing: pytest, moto (AWS mocking), LocalStack (integration tests)
 
 External API Configuration:
-- Twitter API: Free tier initially ($0/month) - 1,500 tweets/month, 50 requests/day, 10,000 characters/month
-  - Limits: Suitable for testing/demo only, NOT production-grade
-  - Upgrade path: Migrate to Basic tier ($100/month, 10K tweets/month) when approaching limits
-  - Rate limit handling: Implement exponential backoff, monitor quota usage via CloudWatch metrics
+- Twitter API: Tier-based configuration (externalized via Terraform variable `twitter_api_tier`)
+  - Current tier: Free ($0/month) - 1,500 tweets/month, 450 requests/15min
+  - Upgrade path: Basic ($100/month, 50K tweets/month) → Pro ($5K/month, 1M tweets/month)
+  - Tier Management:
+    - Configuration: Terraform variable controls tier (values: free|basic|pro)
+    - Monthly quota tracking: DynamoDB source-configs table tracks consumption per source
+    - Automatic tier detection: Lambda reads TWITTER_API_TIER environment variable
+    - Quota enforcement: Pre-request quota check prevents exceeding monthly cap
+    - Upgrade trigger: CloudWatch alarm at 80% quota utilization for 2 consecutive days
+  - Rate limit handling: Dual-layer (request rate + monthly consumption cap) with exponential backoff
   - Compliance: Must follow Twitter Developer Agreement (attribution, no redistribution)
+  - Tier Upgrade Procedure (seamless migration):
+    1. Update Twitter Developer Portal: Upgrade account tier (Free → Basic or Basic → Pro)
+    2. Update Terraform variable: Change `var.twitter_api_tier = "basic"` (or "pro") in terraform/live/<env>/terraform.tfvars
+    3. Run Terraform apply: `terraform apply` updates Lambda environment variables, ingestion concurrency, CloudWatch alarms
+    4. Automatic detection: Ingestion Lambda reads new TWITTER_API_TIER env var, adjusts quota enforcement automatically
+    5. Quota reset: DynamoDB source-configs table entries auto-reset monthly_tweets_consumed on next monthly boundary
+    6. Zero downtime: No code changes required, no Lambda redeployment, no DynamoDB migration
+    7. Rollback: Simply revert Terraform variable and re-apply if needed
   - OAuth 2.0 Token Management:
     - Store access_token and refresh_token in AWS Secrets Manager (per-source secret)
     - Access tokens expire after ~2 hours
@@ -155,9 +169,12 @@ Operational Behaviors (must implement)
 - Idempotency: every ingestion event includes an idempotency key; consumers must be idempotent and avoid double-processing.
 - Watch filters: admin can set up to 5 watch keywords/hashtags per scope. Matching is token/hashtag exact match (case-insensitive). UI must reflect changes within ≤5s.
 - Backpressure: use SQS retention and DLQs; tune visibility timeout > expected processing time (60 seconds based on 30s Lambda timeout + buffer); reserved concurrency for Lambdas to protect downstream.
-- Lambda Configuration:
+- Lambda Configuration (tier-aware for ingestion Lambda):
   - Scheduler Lambda: 256 MB memory, 60s timeout, reserved concurrency: 1 (single invocation per minute, scans DynamoDB, invokes ingestion Lambdas)
-  - Ingestion Lambda: 256 MB memory, 60s timeout, reserved concurrency: 10 (max 10 sources polled concurrently, fetches from external APIs, publishes to SNS)
+  - Ingestion Lambda: 256 MB memory, 60s timeout, reserved concurrency tier-based (controlled via Terraform variable `var.twitter_api_tier`):
+    - Free tier: reserved concurrency = 10 (conservative limit for 1,500 tweets/month, ~50 tweets/day)
+    - Basic tier: reserved concurrency = 20 (supports 50K tweets/month, ~1,666 tweets/day)
+    - Pro tier: reserved concurrency = 50 (supports 1M tweets/month, ~33,333 tweets/day)
   - Inference Lambda: 512 MB memory, 30s timeout, reserved concurrency: 20 (processes SQS messages, performs VADER sentiment analysis, writes to DynamoDB)
 - Expected Throughput:
   - Average load: 100 items/minute (~1.7 items/second)
@@ -165,7 +182,23 @@ Operational Behaviors (must implement)
   - Supports: 10-50 active sources with moderate activity
   - DynamoDB throughput: ~100-1,000 write requests/minute (well within on-demand capacity)
   - Lambda concurrency: Peak requires ~5-10 concurrent inference executions (well below reserved limit of 20)
-  - Estimated monthly cost: $50-200 (DynamoDB $20-80, Lambda $10-50, other services $20-70)
+- Cost Estimates (tier-dependent, based on 100 items/min average load):
+  - Free tier (current): ~$15-30/month
+    - Twitter API: $0/month (1,500 tweets/month cap)
+    - Lambda: $5-10/month (10 reserved concurrency, ~200K invocations/month)
+    - DynamoDB: $5-10/month (on-demand, ~400K writes/month)
+    - API Gateway + CloudWatch + Secrets Manager: $5-10/month
+  - Basic tier (50K tweets/month): ~$130-160/month
+    - Twitter API: $100/month
+    - Lambda: $10-20/month (20 reserved concurrency, ~500K invocations/month)
+    - DynamoDB: $10-20/month (on-demand, ~1M writes/month)
+    - API Gateway + CloudWatch + Secrets Manager: $10-20/month
+  - Pro tier (1M tweets/month): ~$5,130-5,200/month
+    - Twitter API: $5,000/month
+    - Lambda: $50-80/month (50 reserved concurrency, ~2M invocations/month)
+    - DynamoDB: $50-80/month (on-demand, ~4M writes/month)
+    - API Gateway + CloudWatch + Secrets Manager: $30-40/month
+  - Upgrade Impact: Changing `var.twitter_api_tier` from "free" → "basic" increases costs by ~$100-130/month (mostly Twitter API tier fee)
 - Lambda Error Handling (Dead Letter Queues):
   - Each Lambda function configured with dedicated SQS DLQ
   - Async invocations (EventBridge → Scheduler, Scheduler → Ingestion): MaximumRetryAttempts=2, MaximumEventAge=3600s (1 hour)
@@ -235,7 +268,7 @@ Table: sentiment-items
 
 Table: source-configs
 - Partition Key (PK): `source_id` (STRING) - unique identifier for each source
-- Attributes: type (STRING: "rss"|"twitter"), endpoint (STRING), auth_secret_ref (STRING: ARN), poll_interval_seconds (NUMBER), enabled (BOOLEAN), next_poll_time (NUMBER: Unix timestamp), last_poll_time (NUMBER: Unix timestamp), etag (STRING, optional for RSS), last_modified (STRING, optional for RSS), created_at (ISO8601), updated_at (ISO8601)
+- Attributes: type (STRING: "rss"|"twitter"), endpoint (STRING), auth_secret_ref (STRING: ARN), poll_interval_seconds (NUMBER), enabled (BOOLEAN), next_poll_time (NUMBER: Unix timestamp), last_poll_time (NUMBER: Unix timestamp), etag (STRING, optional for RSS), last_modified (STRING, optional for RSS), twitter_api_tier (STRING: "free"|"basic"|"pro", for Twitter sources only), monthly_tweets_consumed (NUMBER: for Twitter sources, resets monthly), last_quota_reset (NUMBER: Unix timestamp, for Twitter sources), quota_exhausted (BOOLEAN: for Twitter sources, auto-disable when monthly cap reached), created_at (ISO8601), updated_at (ISO8601)
 - Purpose: Stores source subscription configurations accessed by Admin API and polling scheduler
 - Access pattern: GetItem by source_id (Admin API), Scan with filter enabled=true AND next_poll_time <= now (scheduler Lambda)
 - Capacity Mode: On-demand (low-volume table, predictable costs)
@@ -348,3 +381,4 @@ Contact / ownership
 - Q: Should Lambda functions run in a VPC? → A: No VPC (public Lambda execution) - Lambdas access AWS services via public endpoints with IAM auth, lowest latency, no NAT costs, simpler networking - Recommended for serverless-only stack
 - Q: What input validation rules should the Admin API enforce? → A: Comprehensive validation with pydantic models - source_id: regex `^[a-z0-9-]{1,64}$`, endpoint: HTTPS URL max 2048 chars, poll_interval: integer 60-86400, reject control characters - Use API Gateway request validation + Lambda pydantic models
 - Q: How should the service handle data deletion requests (GDPR "right to be forgotten")? → A: DELETE endpoint + cascading deletion - DELETE /v1/items/{source}/{item_id} removes record from sentiment-items table, audit logs deletion with timestamp and requester, returns 204 No Content - Full GDPR compliance
+- Q: Should the Twitter API tier configuration be hardcoded or externalized to support future upgrades (Free → Basic → Pro)? → A: Externalized via Terraform variable `twitter_api_tier` - Enables seamless tier upgrades with zero code changes, tier-aware Lambda concurrency scaling (10→20→50), DynamoDB quota tracking fields, automatic tier detection via environment variables - Upgrade procedure: change Terraform variable + apply (zero downtime)
