@@ -35,3 +35,8 @@ override.tf.json
 # Ignore CLI configuration files
 .terraformrc
 terraform.rc
+
+# Confidential security analysis - NEVER commit
+SECURITY_ANALYSIS_CONFIDENTIAL_DO_NOT_COMMIT.md
+*CONFIDENTIAL*
+*_CONFIDENTIAL_*
