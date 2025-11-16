@@ -145,6 +145,47 @@ Interfaces & Contracts
   }
 - Validation rules: `id` unique and slug-safe; `type` in allowlist {"rss","twitter"}; `poll_interval_seconds` >= 60; `endpoint` must be a valid URL.
 - Additional endpoints: GET /v1/sources (list all sources), GET /v1/sources/{id} (get source details), PATCH /v1/sources/{id} (update source), DELETE /v1/sources/{id} (remove source)
+- Error Response Schema (standardized across ALL Admin API endpoints):
+  - HTTP Status Codes:
+    - 200 OK: Success (GET, PATCH)
+    - 201 Created: Resource created (POST)
+    - 204 No Content: Deletion successful (DELETE)
+    - 400 Bad Request: Validation error
+    - 401 Unauthorized: Invalid/missing API key
+    - 404 Not Found: Resource doesn't exist
+    - 409 Conflict: Duplicate resource (source ID already exists)
+    - 429 Too Many Requests: Rate limit exceeded (includes Retry-After header in seconds)
+    - 500 Internal Server Error: Unexpected error
+    - 503 Service Unavailable: Temporary outage
+  - Error Response Body (JSON):
+    ```json
+    {
+      "error": {
+        "code": "ERROR_CODE",
+        "message": "Human-readable error description",
+        "field": "field_name",
+        "request_id": "uuid-v4",
+        "timestamp": "2025-11-16T12:00:00Z",
+        "docs_url": "https://docs.example.com/errors/ERROR_CODE"
+      }
+    }
+    ```
+  - Error Code Enumeration:
+    - VALIDATION_ERROR: Input validation failed (field specified, e.g., "source_id must be lowercase alphanumeric")
+    - DUPLICATE_RESOURCE: Resource with same ID already exists (409 Conflict)
+    - RESOURCE_NOT_FOUND: Requested resource doesn't exist (404 Not Found)
+    - RATE_LIMIT_EXCEEDED: Too many requests (429, check Retry-After header)
+    - QUOTA_EXHAUSTED: Monthly Twitter quota exceeded
+    - UNAUTHORIZED: Invalid or missing API key (401)
+    - FORBIDDEN: Valid credentials but insufficient permissions (403)
+    - INVALID_ENDPOINT: Endpoint contains private IP (169.254.0.0/16, 10.0.0.0/8, 127.0.0.0/8) or invalid URL
+    - INTERNAL_ERROR: Unexpected server error (check request_id in CloudWatch Logs)
+    - SERVICE_UNAVAILABLE: Temporary outage (503, retry with exponential backoff)
+  - Example Error Responses:
+    - Validation Error (400): `{"error": {"code": "VALIDATION_ERROR", "message": "source_id must be lowercase alphanumeric with hyphens only", "field": "source_id", "request_id": "...", "timestamp": "...", "docs_url": "..."}}`
+    - Rate Limit (429): HTTP header `Retry-After: 3600`, body: `{"error": {"code": "RATE_LIMIT_EXCEEDED", "message": "API key exceeded 10 source creations per hour limit", "request_id": "...", ...}}`
+    - SSRF Prevention (400): `{"error": {"code": "INVALID_ENDPOINT", "message": "Endpoint cannot be a private IP address (169.254.0.0/16 blocked)", "field": "endpoint", ...}}`
+  - Lambda Implementation: Use Pydantic models for validation, catch exceptions, return standardized error structure with request_id from Lambda context
 
 5) Data deletion API (GDPR compliance)
 - Endpoint: DELETE /v1/items/{source_type}/{source_id}/{item_id}
