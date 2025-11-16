@@ -12,10 +12,17 @@ Location and usage
 High-level architecture (short)
 -------------------------------
 - Event-driven, serverless pipeline on AWS.
+- EventBridge scheduled rules trigger ingestion Lambdas per source based on poll_interval_seconds.
 - Ingestion adapters fetch from external publishing endpoints (RSS/Twitter-style APIs) and emit ingestion events.
 - SNS topics publish ingestion events; SQS queues buffer and decouple work.
 - AWS Lambda consumers perform inference and write a compact record to DynamoDB.
 - Terraform + Terraform Cloud (TFC) manage infra; GitHub Actions run checks and publish artifacts.
+
+Ingestion Flow Details:
+- Each source in source-configs table gets a dedicated EventBridge scheduled rule (rate expression based on poll_interval_seconds).
+- Rule triggers ingestion Lambda with source_id as event payload.
+- Ingestion Lambda reads source config from DynamoDB, fetches new items from endpoint, deduplicates, publishes to SNS.
+- When source is disabled or deleted via Admin API, corresponding EventBridge rule is disabled/deleted via Terraform/API.
 
 Technology Stack
 ----------------
@@ -82,7 +89,8 @@ Operational Behaviors (must implement)
 - Deduplication: prefer stable `source_id` from publishers; fallback to content hash (SHA-256) where `source_id` not available. Use DynamoDB conditional write (ConditionExpression attribute_not_exists(pk)) to dedupe atomically.
 - Idempotency: every ingestion event includes an idempotency key; consumers must be idempotent and avoid double-processing.
 - Watch filters: admin can set up to 5 watch keywords/hashtags per scope. Matching is token/hashtag exact match (case-insensitive). UI must reflect changes within ≤5s.
-- Backpressure: use SQS retention and DLQs; tune visibility timeout > expected processing time; reserved concurrency for Lambdas to protect downstream.
+- Backpressure: use SQS retention and DLQs; tune visibility timeout > expected processing time (60 seconds based on 30s Lambda timeout + buffer); reserved concurrency for Lambdas to protect downstream.
+- Lambda Configuration: Inference Lambda uses 512 MB memory, 30s timeout; ingestion Lambda uses 256 MB memory, 60s timeout (allows for external API latency).
 
 Terraform module contracts (core)
 --------------------------------
@@ -104,6 +112,8 @@ module "lambda_function" {
   name           = "inference-consumer"
   runtime        = "python3.11"
   handler        = "handler.lambda_handler"
+  memory_size    = 512                    # MB - balanced for VADER + Python runtime
+  timeout        = 30                     # seconds - ample for P90 ≤ 500ms target
   s3_key         = "artifacts/model-v1.2.0.zip"
   environment    = { MODEL_VERSION = "v1.2.0" }
   iam_role_arn   = var.lambda_role_arn
@@ -125,11 +135,19 @@ module "dynamodb_table" {
 }
 
 DynamoDB Schema Details:
+
+Table: sentiment-items
 - Partition Key (PK): `source_key` (STRING) - composite format "source_type#source_id" distributes writes across sources
 - Sort Key (SK): `item_id` (STRING) - content hash (SHA-256) or publisher's stable ID for deduplication
 - Attributes: received_at (ISO8601), sentiment (STRING), score (NUMBER), model_version (STRING), text_snippet (STRING, optional), ttl_timestamp (NUMBER)
 - GSI-1 (model-version-index): PK=model_version, SK=received_at - enables model performance queries and A/B testing
 - TTL: ttl_timestamp field (90 days from received_at, configurable)
+
+Table: source-configs
+- Partition Key (PK): `source_id` (STRING) - unique identifier for each source
+- Attributes: type (STRING: "rss"|"twitter"), endpoint (STRING), auth_secret_ref (STRING: ARN), poll_interval_seconds (NUMBER), enabled (BOOLEAN), created_at (ISO8601), updated_at (ISO8601)
+- Purpose: Stores source subscription configurations accessed by Admin API and polling scheduler
+- Access pattern: GetItem by source_id (Admin API), Scan with filter enabled=true (polling scheduler)
 
 - Each module must document required inputs, optional inputs and outputs (e.g., topic_arn, queue_url, table_name).
 - Conditional writes example for dedup (DynamoDB): PutItem with ConditionExpression: "attribute_not_exists(source_key) AND attribute_not_exists(item_id)".
@@ -207,3 +225,6 @@ Contact / ownership
 - Q: How should the Admin API (POST /v1/sources, etc.) authenticate requests? → A: API Gateway API Keys with usage plans - Simplest implementation, built-in rate limiting, easy rotation via Terraform, suitable for service-to-service or small admin team
 - Q: Which AWS region should host the infrastructure? → A: us-west-2 (Oregon) - Good alternative to us-east-1, slightly higher availability due to fewer outages historically, minimal cost difference
 - Q: What technology should implement the externally-facing dashboard with metrics and admin controls? → A: CloudWatch Dashboard (native AWS) - Zero infrastructure overhead, direct metric integration, built-in auth via IAM/SSO, limited customization for admin controls
+- Q: Where should source configuration data (from POST /v1/sources) be persisted? → A: DynamoDB table (source-configs) with source_id as PK - Native serverless integration, fast Lambda access, supports atomic updates, consistent with existing data layer
+- Q: What should trigger the periodic polling of RSS/Twitter feeds for each configured source? → A: EventBridge scheduled rules (one per source) - Dynamic scheduling per poll_interval_seconds, easy enable/disable, native Lambda integration, scales well with many sources
+- Q: What memory allocation should the sentiment inference Lambda function use? → A: 512 MB - Good balance for Python + VADER + logging, comfortable headroom, minimal cost increase, faster cold starts due to more allocated CPU
