@@ -19,19 +19,44 @@ High-level architecture (short)
 - Terraform + Terraform Cloud (TFC) manage infra; GitHub Actions run checks and publish artifacts.
 
 Ingestion Flow Details:
-- Each source in source-configs table gets a dedicated EventBridge scheduled rule (rate expression based on poll_interval_seconds).
-- Rule triggers ingestion Lambda with source_id as event payload.
+- Single EventBridge scheduled rule (rate: 1 minute) triggers scheduler Lambda.
+- Scheduler Lambda scans source-configs table for all enabled sources, filters by poll_interval_seconds (e.g., only sources with next_poll_time <= now).
+- For each eligible source, scheduler Lambda invokes ingestion Lambda asynchronously with source_id as event payload.
 - Ingestion Lambda reads source config from DynamoDB, fetches new items from endpoint, deduplicates, publishes to SNS.
-- When source is disabled or deleted via Admin API, corresponding EventBridge rule is disabled/deleted via Terraform/API.
+- After successful poll, ingestion Lambda updates next_poll_time = now + poll_interval_seconds in source-configs.
+- Scaling: This pattern supports unlimited sources (no EventBridge 300-rule limit), with all sources checked every minute.
 
 Technology Stack
 ----------------
 - AWS Region: us-west-2 (Oregon)
 - Lambda Runtime: Python 3.11
+- Lambda Networking: No VPC (public execution environment)
+  - Rationale: All AWS services (DynamoDB, SNS, SQS, Secrets Manager, S3) accessible via public endpoints with IAM authentication
+  - Security: TLS 1.2+ encryption in transit, IAM policies enforce least privilege, no network-level access required
+  - Performance: Avoids VPC cold start overhead (10-50ms) and NAT Gateway latency
+  - Cost: Saves $32/month NAT Gateway + data transfer fees
+  - Future: Migrate to VPC only if private resources (RDS, ElastiCache) added
 - Sentiment Analysis: VADER (vaderSentiment library) - lightweight rule-based analyzer optimized for social media, sub-100ms inference, <5MB package size
 - Ingestion Libraries: feedparser (RSS/Atom), tweepy (Twitter API v2)
 - Infrastructure: Terraform >= 1.5.0, AWS provider ~> 5.0
 - Testing: pytest, moto (AWS mocking), LocalStack (integration tests)
+
+External API Configuration:
+- Twitter API: Free tier initially ($0/month) - 1,500 tweets/month, 50 requests/day, 10,000 characters/month
+  - Limits: Suitable for testing/demo only, NOT production-grade
+  - Upgrade path: Migrate to Basic tier ($100/month, 10K tweets/month) when approaching limits
+  - Rate limit handling: Implement exponential backoff, monitor quota usage via CloudWatch metrics
+  - Compliance: Must follow Twitter Developer Agreement (attribution, no redistribution)
+  - OAuth 2.0 Token Management:
+    - Store access_token and refresh_token in AWS Secrets Manager (per-source secret)
+    - Access tokens expire after ~2 hours
+    - Ingestion Lambda checks token expiry before each API call (compare expires_at timestamp)
+    - If expired or expiring within 5 minutes, use refresh_token to obtain new access_token via OAuth refresh flow
+    - Atomically update Secrets Manager with new access_token, refresh_token, and expires_at
+    - On refresh failure (invalid refresh_token), disable source and alert operator for manual re-authentication
+- RSS/Atom: No tier limits, respect feed-specific rate limits and robots.txt
+  - ETag/Last-Modified caching: Store ETag and Last-Modified headers in source-configs, send If-None-Match/If-Modified-Since on subsequent requests
+  - Handle 304 Not Modified responses (skip processing, update last_poll_time only)
 
 Data Residency & Compliance
 ----------------------------
@@ -40,6 +65,27 @@ Data Residency & Compliance
 - Data retention: 90-day TTL on DynamoDB items, 7-year CloudWatch Logs retention for compliance
 - Encryption: Server-side encryption (SSE) enabled on DynamoDB, S3 artifacts encrypted with AWS-managed keys (SSE-S3)
 - No PII storage by default; text snippets require explicit approval and must be minimal
+- GDPR Compliance:
+  - Right to be forgotten: DELETE /v1/items endpoint provides immediate deletion capability
+  - Data portability: Can be implemented via GET /v1/items/{source}/{id} or DynamoDB export (future enhancement)
+  - Consent tracking: Not required (publicly available social media data, no user accounts)
+  - Privacy policy: Must document data collection, retention (90 days), deletion procedures, backup retention (30 days)
+  - DPA (Data Processing Agreement): Required if processing data on behalf of EU controllers
+
+Disaster Recovery & Business Continuity
+----------------------------------------
+- RTO (Recovery Time Objective): 4 hours - Maximum acceptable downtime to restore service from backup
+- RPO (Recovery Point Objective): 1 hour - Maximum acceptable data loss window
+- Backup Strategy:
+  - DynamoDB PITR (Point-in-Time Recovery): Enabled on both tables, restore to any second within last 35 days
+  - AWS Backup: Daily automated backups with 30-day retention for long-term archival
+  - Lambda code: Versioned in Git, artifacts stored in versioned S3 bucket
+  - Infrastructure: Terraform state in Terraform Cloud with state history
+- Recovery Procedures:
+  - DynamoDB restore: Use PITR to restore tables to new table names, update Lambda environment variables, redeploy via Terraform (estimated 2-4 hours)
+  - Lambda restore: Redeploy from Git tag or previous S3 artifact version via Terraform (estimated 30 minutes)
+  - Full region outage: Manual failover not supported initially; document multi-region migration path for future (would achieve RTO: 1 hour, RPO: 5 minutes with active-active)
+- Testing: Quarterly disaster recovery drill (restore to non-prod environment, validate data integrity)
 
 Interfaces & Contracts
 ----------------------
@@ -60,6 +106,25 @@ Interfaces & Contracts
   }
 - Validation rules: `id` unique and slug-safe; `type` in allowlist {"rss","twitter"}; `poll_interval_seconds` >= 15; `endpoint` must be a valid URL.
 - Additional endpoints: GET /v1/sources (list all sources), GET /v1/sources/{id} (get source details), PATCH /v1/sources/{id} (update source), DELETE /v1/sources/{id} (remove source)
+
+5) Data deletion API (GDPR compliance)
+- Endpoint: DELETE /v1/items/{source_type}/{source_id}/{item_id}
+- Purpose: Delete sentiment records to comply with GDPR "right to be forgotten" and similar regulations
+- Headers required: `X-API-Key: <api-key-value>`
+- Path parameters:
+  - source_type: "rss" or "twitter"
+  - source_id: source identifier (e.g., "source-1")
+  - item_id: item identifier (content hash or publisher ID)
+- Behavior:
+  - Constructs DynamoDB composite key: source_key = "source_type#source_id", item_id
+  - Deletes item from sentiment-items table via DeleteItem operation
+  - Logs deletion event to CloudWatch with: requester (API key ID), timestamp, deleted record keys, deletion reason (if provided)
+  - Returns 204 No Content on successful deletion
+  - Returns 404 Not Found if record doesn't exist (idempotent - safe to retry)
+  - Returns 400 Bad Request if invalid path parameters
+- Audit trail: All deletions logged to dedicated CloudWatch log group `/aws/api/deletions` with 7-year retention for compliance
+- SLA: Deletion completed within 30 days of request (actual: immediate, well within GDPR requirements)
+- Backup handling: Deleted items remain in PITR and AWS Backup snapshots per retention policy (30 days), document this in privacy policy
 
 2) Output record (persisted / forwarded shape)
 - Documented JSON schema (minimal):
@@ -90,7 +155,28 @@ Operational Behaviors (must implement)
 - Idempotency: every ingestion event includes an idempotency key; consumers must be idempotent and avoid double-processing.
 - Watch filters: admin can set up to 5 watch keywords/hashtags per scope. Matching is token/hashtag exact match (case-insensitive). UI must reflect changes within ≤5s.
 - Backpressure: use SQS retention and DLQs; tune visibility timeout > expected processing time (60 seconds based on 30s Lambda timeout + buffer); reserved concurrency for Lambdas to protect downstream.
-- Lambda Configuration: Inference Lambda uses 512 MB memory, 30s timeout; ingestion Lambda uses 256 MB memory, 60s timeout (allows for external API latency).
+- Lambda Configuration:
+  - Scheduler Lambda: 256 MB memory, 60s timeout, reserved concurrency: 1 (single invocation per minute, scans DynamoDB, invokes ingestion Lambdas)
+  - Ingestion Lambda: 256 MB memory, 60s timeout, reserved concurrency: 10 (max 10 sources polled concurrently, fetches from external APIs, publishes to SNS)
+  - Inference Lambda: 512 MB memory, 30s timeout, reserved concurrency: 20 (processes SQS messages, performs VADER sentiment analysis, writes to DynamoDB)
+- Expected Throughput:
+  - Average load: 100 items/minute (~1.7 items/second)
+  - Peak load: 1,000 items/minute (~16.7 items/second) during viral events or breaking news
+  - Supports: 10-50 active sources with moderate activity
+  - DynamoDB throughput: ~100-1,000 write requests/minute (well within on-demand capacity)
+  - Lambda concurrency: Peak requires ~5-10 concurrent inference executions (well below reserved limit of 20)
+  - Estimated monthly cost: $50-200 (DynamoDB $20-80, Lambda $10-50, other services $20-70)
+- Lambda Error Handling (Dead Letter Queues):
+  - Each Lambda function configured with dedicated SQS DLQ
+  - Async invocations (EventBridge → Scheduler, Scheduler → Ingestion): MaximumRetryAttempts=2, MaximumEventAge=3600s (1 hour)
+  - SQS event source (SQS → Inference): ReportBatchItemFailures enabled, maxReceiveCount=3 before DLQ
+  - DLQ Configuration:
+    - scheduler-lambda-dlq: Stores failed scheduler invocations
+    - ingestion-lambda-dlq: Stores failed ingestion invocations (Twitter/RSS fetch failures)
+    - inference-lambda-dlq: Stores failed sentiment analysis invocations
+  - Message retention: 14 days (maximum) in all DLQs
+  - CloudWatch alarms: Alert when DLQ depth >10 messages (indicates persistent failures)
+  - DLQ Reprocessing: Provide manual inspection and replay script in `tools/dlq-reprocessor.py`
 
 Terraform module contracts (core)
 --------------------------------
@@ -142,12 +228,21 @@ Table: sentiment-items
 - Attributes: received_at (ISO8601), sentiment (STRING), score (NUMBER), model_version (STRING), text_snippet (STRING, optional), ttl_timestamp (NUMBER)
 - GSI-1 (model-version-index): PK=model_version, SK=received_at - enables model performance queries and A/B testing
 - TTL: ttl_timestamp field (90 days from received_at, configurable)
+- Capacity Mode: On-demand (pay per request, no throttling, instant scaling)
+- Billing: $1.25 per million write requests, $0.25 per million read requests
+- Encryption: Server-side encryption (SSE) with AWS-managed keys
+- Backup: Point-in-time recovery (PITR) enabled, daily AWS Backup with 30-day retention
 
 Table: source-configs
 - Partition Key (PK): `source_id` (STRING) - unique identifier for each source
-- Attributes: type (STRING: "rss"|"twitter"), endpoint (STRING), auth_secret_ref (STRING: ARN), poll_interval_seconds (NUMBER), enabled (BOOLEAN), created_at (ISO8601), updated_at (ISO8601)
+- Attributes: type (STRING: "rss"|"twitter"), endpoint (STRING), auth_secret_ref (STRING: ARN), poll_interval_seconds (NUMBER), enabled (BOOLEAN), next_poll_time (NUMBER: Unix timestamp), last_poll_time (NUMBER: Unix timestamp), etag (STRING, optional for RSS), last_modified (STRING, optional for RSS), created_at (ISO8601), updated_at (ISO8601)
 - Purpose: Stores source subscription configurations accessed by Admin API and polling scheduler
-- Access pattern: GetItem by source_id (Admin API), Scan with filter enabled=true (polling scheduler)
+- Access pattern: GetItem by source_id (Admin API), Scan with filter enabled=true AND next_poll_time <= now (scheduler Lambda)
+- Capacity Mode: On-demand (low-volume table, predictable costs)
+- Encryption: Server-side encryption (SSE) with AWS-managed keys
+- Backup: Point-in-time recovery (PITR) enabled
+
+Note: Both tables use on-demand capacity for MVP to avoid throttling during unpredictable traffic patterns. After establishing baseline traffic (2-3 months), evaluate migration to provisioned capacity with autoscaling for cost optimization.
 
 - Each module must document required inputs, optional inputs and outputs (e.g., topic_arn, queue_url, table_name).
 - Conditional writes example for dedup (DynamoDB): PutItem with ConditionExpression: "attribute_not_exists(source_key) AND attribute_not_exists(item_id)".
@@ -186,10 +281,25 @@ Metrics & dashboard mapping
 
 Security & privacy checklist
 ---------------------------
-- TLS enforced for all external endpoints.
+- TLS enforced for all external endpoints (TLS 1.2+ minimum).
 - Secrets stored in AWS Secrets Manager or TFC sensitive variables; not in repo.
 - Default behavior: do not persist full raw text. When required, approvals and encryption-at-rest must be in place.
 - DynamoDB conditional writes and ExpressionAttributeNames/Values used for all expressions that incorporate user-provided values.
+
+Input Validation & Sanitization:
+- API Gateway request validation: Enable request validators for all POST/PATCH endpoints with JSON schema models
+- Lambda validation: Use pydantic models for request/response validation with strict type enforcement
+- Validation Rules:
+  - source_id: Regex `^[a-z0-9-]{1,64}$` (lowercase alphanumeric and hyphens only, max 64 chars)
+  - type: Enum allowlist {"rss", "twitter"} (reject any other values)
+  - endpoint: Valid HTTPS URL (regex check), max 2048 characters, reject non-HTTPS
+  - poll_interval_seconds: Integer range 60-86400 (1 minute to 24 hours)
+  - enabled: Boolean only (true/false)
+  - Control character rejection: Reject any input containing ASCII control characters (0x00-0x1F except whitespace)
+  - SQL keyword blocking: Reject inputs containing SQL keywords (SELECT, DROP, INSERT, etc.) to prevent injection attempts
+  - Path traversal prevention: Reject inputs containing ../, ..\, or encoded variants
+- Error responses: Return 400 Bad Request with specific validation error messages (e.g., "source_id must be lowercase alphanumeric")
+- Logging: Log validation failures to CloudWatch for security monitoring (track repeated failed attempts from same IP/API key)
 
 Runbooks (short)
 -----------------
@@ -226,5 +336,15 @@ Contact / ownership
 - Q: Which AWS region should host the infrastructure? → A: us-west-2 (Oregon) - Good alternative to us-east-1, slightly higher availability due to fewer outages historically, minimal cost difference
 - Q: What technology should implement the externally-facing dashboard with metrics and admin controls? → A: CloudWatch Dashboard (native AWS) - Zero infrastructure overhead, direct metric integration, built-in auth via IAM/SSO, limited customization for admin controls
 - Q: Where should source configuration data (from POST /v1/sources) be persisted? → A: DynamoDB table (source-configs) with source_id as PK - Native serverless integration, fast Lambda access, supports atomic updates, consistent with existing data layer
-- Q: What should trigger the periodic polling of RSS/Twitter feeds for each configured source? → A: EventBridge scheduled rules (one per source) - Dynamic scheduling per poll_interval_seconds, easy enable/disable, native Lambda integration, scales well with many sources
+- Q: What should trigger the periodic polling of RSS/Twitter feeds for each configured source? → A: Single EventBridge rule (1-minute) → Scheduler Lambda scans source-configs → Invokes ingestion Lambda per eligible source - Avoids 300-rule limit, scales indefinitely
+- Q: How to handle more than 300 sources (EventBridge rule limit)? → A: Single EventBridge rule (1-minute interval) → Scheduler Lambda scans source-configs table → Invokes ingestion Lambda per enabled source - Scales indefinitely, simpler operations, all sources checked every minute
 - Q: What memory allocation should the sentiment inference Lambda function use? → A: 512 MB - Good balance for Python + VADER + logging, comfortable headroom, minimal cost increase, faster cold starts due to more allocated CPU
+- Q: Which DynamoDB capacity mode should the tables use? → A: On-demand capacity - Pay per request ($1.25/M writes, $0.25/M reads), no throttling, instant scaling, unpredictable costs - Best for MVP with unknown traffic patterns
+- Q: Which Twitter API v2 tier should the service use? → A: Free tier - $0/month, 1,500 tweets/month, 50 requests/day, 10,000 characters/month - Only suitable for demo/testing, not production
+- Q: How should the service handle Twitter OAuth token expiration and refresh? → A: Automatic refresh in ingestion Lambda - Lambda checks token expiry, uses refresh_token from Secrets Manager to get new access_token, updates Secrets Manager atomically - Zero downtime, fully automated
+- Q: How should Lambda function failures be handled? → A: Dedicated SQS DLQ per Lambda function - Each Lambda has its own DLQ, maxReceiveCount=3 retries, CloudWatch alarm when DLQ depth >10, DLQ processor Lambda for replay - Complete failure visibility and recovery
+- Q: What are the acceptable recovery targets for disaster recovery? → A: RTO: 4 hours, RPO: 1 hour - Balanced targets, achievable with DynamoDB PITR, daily AWS Backup snapshots, acceptable for non-mission-critical service - Future upgrade path to multi-region for RTO: 1 hour, RPO: 5 minutes
+- Q: What is the expected throughput for ingested items? → A: 100 items/min average, 1,000 items/min peak - Moderate load for MVP with 10-50 sources, validates serverless scaling, reasonable costs $50-200/month
+- Q: Should Lambda functions run in a VPC? → A: No VPC (public Lambda execution) - Lambdas access AWS services via public endpoints with IAM auth, lowest latency, no NAT costs, simpler networking - Recommended for serverless-only stack
+- Q: What input validation rules should the Admin API enforce? → A: Comprehensive validation with pydantic models - source_id: regex `^[a-z0-9-]{1,64}$`, endpoint: HTTPS URL max 2048 chars, poll_interval: integer 60-86400, reject control characters - Use API Gateway request validation + Lambda pydantic models
+- Q: How should the service handle data deletion requests (GDPR "right to be forgotten")? → A: DELETE endpoint + cascading deletion - DELETE /v1/items/{source}/{item_id} removes record from sentiment-items table, audit logs deletion with timestamp and requester, returns 204 No Content - Full GDPR compliance
