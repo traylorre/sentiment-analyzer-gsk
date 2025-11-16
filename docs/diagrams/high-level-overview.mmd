@@ -1,0 +1,77 @@
+graph LR
+    %% External Sources
+    Twitter[Twitter API<br/>Rate: 450/15min]
+    RSS[RSS Feeds<br/>Size: ≤10MB]
+    Admin[Admin User<br/>REST API]
+
+    %% Entry Points
+    EventBridge[EventBridge<br/>Every 60s]
+    APIGateway[API Gateway<br/>API Key Auth]
+
+    %% Lambda Functions
+    Scheduler["scheduler-lambda<br/>256MB | 60s<br/>Concurrency: 1"]
+    IngestTwitter["ingestion-twitter<br/>256MB | 60s<br/>OAuth refresh"]
+    IngestRSS["ingestion-rss<br/>256MB | 60s<br/>Parse XML"]
+    AdminAPI["admin-api-lambda<br/>256MB | 30s<br/>CRUD sources"]
+
+    %% Messaging
+    SNS[SNS Topics<br/>Fan-out to SQS]
+    SQS[SQS Queues<br/>Batch: 10 msgs]
+
+    %% Processing
+    Inference["inference-lambda<br/>512MB | 30s<br/>VADER analysis"]
+
+    %% Storage
+    SourceConfigs[(DynamoDB<br/>source-configs<br/>GSI: polling-schedule)]
+    SentimentItems[(DynamoDB<br/>sentiment-items<br/>TTL: 90 days)]
+
+    %% Support Services
+    Secrets[Secrets Manager<br/>OAuth tokens]
+    CloudWatch["CloudWatch<br/>Logs | Metrics"]
+    S3[S3 Bucket<br/>DLQ Archives]
+
+    %% Data Flow
+    EventBridge -->|Trigger 1/min| Scheduler
+    Admin -->|POST/GET/PATCH/DELETE| APIGateway
+
+    Scheduler -->|Query enabled sources| SourceConfigs
+    Scheduler -->|Invoke N times| IngestTwitter
+    Scheduler -->|Invoke N times| IngestRSS
+
+    Twitter -.->|HTTP GET /tweets| IngestTwitter
+    RSS -.->|HTTP GET feed.xml| IngestRSS
+
+    IngestTwitter -->|GetSecret| Secrets
+    IngestTwitter -->|Update next_poll_time| SourceConfigs
+    IngestRSS -->|Update etag| SourceConfigs
+
+    IngestTwitter ==>|Publish 10-100 items| SNS
+    IngestRSS ==>|Publish 10-100 items| SNS
+
+    SNS -->|Subscription| SQS
+    SQS ==>|Poll batch: 10| Inference
+
+    APIGateway -->|Invoke| AdminAPI
+    AdminAPI -->|CRUD ops| SourceConfigs
+
+    Inference ==>|PutItem conditional<br/>100-1000/min| SentimentItems
+
+    IngestTwitter -.->|Logs| CloudWatch
+    IngestRSS -.->|Logs| CloudWatch
+    Inference -.->|Logs| CloudWatch
+    AdminAPI -.->|Logs| CloudWatch
+
+    SQS -.->|DLQ after 3 retries| S3
+
+    %% Styling
+    classDef external fill:#E3F2FD,stroke:#90CAF9,stroke-width:2px
+    classDef lambda fill:#E1BEE7,stroke:#9C27B0,stroke-width:2px
+    classDef messaging fill:#FCE4EC,stroke:#F48FB1,stroke-width:2px
+    classDef database fill:#C8E6C9,stroke:#66BB6A,stroke-width:2px
+    classDef support fill:#B2DFDB,stroke:#4DB6AC,stroke-width:2px
+
+    class Twitter,RSS,Admin external
+    class Scheduler,IngestTwitter,IngestRSS,AdminAPI,Inference lambda
+    class EventBridge,APIGateway,SNS,SQS messaging
+    class SourceConfigs,SentimentItems database
+    class Secrets,CloudWatch,S3 support

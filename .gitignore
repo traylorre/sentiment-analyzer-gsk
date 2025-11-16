@@ -40,3 +40,9 @@ terraform.rc
 SECURITY_ANALYSIS_CONFIDENTIAL_DO_NOT_COMMIT.md
 *CONFIDENTIAL*
 *_CONFIDENTIAL_*
+
+# Node.js dependencies
+node_modules/
+
+# Puppeteer cache
+.cache/

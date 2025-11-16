@@ -1,0 +1,74 @@
+graph TB
+    subgraph Zone1[" ZONE 1: UNTRUSTED - Internet Input "]
+        TwitterAPI[Twitter API Response<br/>⚠ XSS, SQL Injection<br/>⚠ Oversized: 2MB]
+        RSSXML[RSS Feed XML<br/>⚠ XXE, SSRF<br/>⚠ Oversized: 10MB]
+        AdminReq[Admin API Request<br/>⚠ SSRF, NoSQL Injection<br/>⚠ Rate abuse]
+        OAuthResp[OAuth Refresh<br/>⚠ Token injection<br/>⚠ Expired tokens]
+    end
+
+    subgraph Zone2[" ZONE 2: VALIDATION & SANITIZATION "]
+        IngestT[ingestion-twitter<br/>✓ Size check: 2MB<br/>✓ JSON parsing<br/>✓ Schema validation<br/>✗ NO SANITIZATION<br/>→ Errors → DLQ]
+        IngestR[ingestion-rss<br/>✓ Size check: 10MB<br/>✓ XML parsing secure<br/>✓ XXE prevention<br/>✗ NO SANITIZATION<br/>→ Errors → DLQ]
+        AdminL["admin-api-lambda<br/>✓ Pydantic validation<br/>✓ Regex: ^[a-z0-9-]+$<br/>✓ HTTPS only<br/>✓ IP blocklist<br/>✓ Parameterized writes"]
+        OAuthV[OAuth Validation<br/>✓ Token expiry<br/>✓ Base64 decode<br/>✓ Circuit breaker<br/>Cache: 5-min TTL]
+    end
+
+    subgraph Zone3[" ZONE 3: PROCESSING - Still Tainted "]
+        Queue[SNS → SQS<br/>TAINTED DATA<br/>Batch: 10 msgs<br/>maxReceiveCount: 3<br/>Visibility: 60s]
+        InferenceL[inference-lambda<br/>1. Extract text TAINTED<br/>2. VADER analysis<br/>3. SHA-256 hash<br/>✓ Partial sanitization<br/>✗ text field: RAW]
+        DLQ[Dead Letter Queue<br/>3 DLQs total<br/>Retention: 14 days<br/>Archive to S3: 10 days<br/>⚠ ALARM: depth > 10]
+    end
+
+    subgraph Zone4[" ZONE 4: PROTECTED - Parameterized Only "]
+        DDBWrite[DynamoDB PutItem<br/>✓ PARAMETERIZED<br/>✓ No SQL injection<br/>✓ No code execution<br/>✓ Conditional writes<br/>⚠ XSS if web UI displays]
+        SecGuard[Security Guarantees<br/>✅ No SQL injection<br/>✅ No NoSQL injection<br/>✅ No XXE attacks<br/>✅ No SSRF<br/>⚠ XSS in UI<br/>⚠ Log injection]
+    end
+
+    subgraph Zone5[" ZONE 5: INFRASTRUCTURE "]
+        SecretsM[Secrets Manager<br/>OAuth tokens<br/>Cache: 5-min<br/>Circuit breaker<br/>Throttle: 5K/day]
+        CW[CloudWatch<br/>Retention: 7 years<br/>Secret filtering<br/>Alarms: DLQ > 10]
+        S3Arch[S3 DLQ Archive<br/>Age > 10 days<br/>Retention: 90 days<br/>Glacier storage]
+    end
+
+    %% Data Flow
+    TwitterAPI -->|HTTP Response<br/>TAINTED| IngestT
+    RSSXML -->|XML Response<br/>TAINTED| IngestR
+    AdminReq -->|JSON Body<br/>TAINTED| AdminL
+    OAuthResp -->|Token Response| OAuthV
+
+    IngestT -.->|GetSecret| SecretsM
+    IngestR -.->|GetSecret| SecretsM
+
+    IngestT ==>|Publish 10-100<br/>TAINTED| Queue
+    IngestR ==>|Publish 10-100<br/>TAINTED| Queue
+
+    Queue ==>|Poll batch: 10<br/>TAINTED| InferenceL
+
+    %% Error Paths
+    IngestT -.->|FAILURE<br/>after 3 retries| DLQ
+    IngestR -.->|FAILURE<br/>ValidationError| DLQ
+    InferenceL -.->|FAILURE<br/>ThrottlingError| DLQ
+    DLQ -.->|Age > 10 days| S3Arch
+
+    %% Success Path
+    InferenceL ==>|PutItem<br/>100-1000/min<br/>PARAMETERIZED| DDBWrite
+    DDBWrite --> SecGuard
+
+    %% Monitoring
+    IngestT -.->|Logs & Metrics| CW
+    IngestR -.->|Logs & Metrics| CW
+    InferenceL -.->|Logs & Metrics| CW
+    AdminL -.->|Logs & Metrics| CW
+
+    %% Styling
+    classDef untrusted fill:#FFEBEE,stroke:#EF5350,stroke-width:3px
+    classDef validation fill:#FFF3E0,stroke:#FF9800,stroke-width:3px
+    classDef processing fill:#FFFDE7,stroke:#FDD835,stroke-width:3px
+    classDef protected fill:#E8F5E9,stroke:#66BB6A,stroke-width:3px
+    classDef infrastructure fill:#E3F2FD,stroke:#42A5F5,stroke-width:2px
+
+    class TwitterAPI,RSSXML,AdminReq,OAuthResp untrusted
+    class IngestT,IngestR,AdminL,OAuthV validation
+    class Queue,InferenceL,DLQ processing
+    class DDBWrite,SecGuard protected
+    class SecretsM,CW,S3Arch infrastructure
