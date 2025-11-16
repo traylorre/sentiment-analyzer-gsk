@@ -750,6 +750,74 @@ Metrics & dashboard mapping
       - WARN alarm: >5 missed invocations in 1 hour
 - Dashboard widgets must reference these exact metric names.
 - Admin Controls: Feed switching and watch filter management implemented via Admin API endpoints (GET/POST /v1/dashboard/config), UI can be added later as separate lightweight web interface
+- Metric Dimension Access Control (security - zero-trust collaboration):
+  - Two CloudWatch Dashboards (created via Terraform):
+    1. **sentiment-analyzer-contributor-dashboard** (safe metrics only)
+    2. **sentiment-analyzer-admin-dashboard** (all metrics, full access)
+  - Contributor Dashboard (sentiment-analyzer-contributor IAM role):
+    - Access: Read-only via CloudWatch Dashboard URL (no console access, no custom queries)
+    - Metrics Allowed (aggregate only, NO dimensions):
+      - AWS/Lambda/Invocations (aggregate Sum, no per-function breakdown)
+      - AWS/Lambda/Duration (P50/P90/P99 statistics only)
+      - AWS/Lambda/Errors (aggregate count, no error details)
+      - AWS/Lambda/Throttles (aggregate count)
+      - AWS/Lambda/ConcurrentExecutions (aggregate)
+      - AWS/DynamoDB/ConsumedReadCapacityUnits (aggregate)
+      - AWS/DynamoDB/ConsumedWriteCapacityUnits (aggregate)
+      - AWS/DynamoDB/UserErrors (aggregate count, no details)
+    - Metrics DENIED (security risk):
+      - Any metric with source_id dimension (competitive intelligence - enables source usage tracking)
+      - Any metric with api_key_id dimension (usage tracking)
+      - twitter.quota_utilization_pct (enables quota exhaustion attack planning)
+      - scheduler.scan_duration_ms (timing attack vector)
+      - dlq.oldest_message_age_days (reveals incident duration)
+      - oauth.refresh_failure_rate (reveals auth issues)
+      - dynamodb.throttled_requests (hot partition attack data)
+    - Dashboard Configuration:
+      - Fixed time ranges: 1h, 24h, 7d, 30d (no custom ranges)
+      - No CloudWatch Insights access (prevents dimension filtering bypass)
+      - No alarm modification permissions
+      - Auto-refresh: 60 seconds
+    - IAM Policy Enforcement:
+      ```json
+      {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": ["cloudwatch:GetDashboard", "cloudwatch:ListDashboards", "cloudwatch:GetMetricData"],
+            "Resource": "arn:aws:cloudwatch:us-west-2:ACCOUNT:dashboard/sentiment-analyzer-contributor-dashboard"
+          },
+          {
+            "Effect": "Deny",
+            "Action": ["cloudwatch:GetDashboard", "cloudwatch:GetMetricData"],
+            "Resource": "arn:aws:cloudwatch:us-west-2:ACCOUNT:dashboard/sentiment-analyzer-admin-dashboard"
+          }
+        ]
+      }
+      ```
+    - Example Widget (aggregate Lambda health):
+      ```json
+      {
+        "type": "metric",
+        "properties": {
+          "metrics": [
+            ["AWS/Lambda", "Invocations", {"stat": "Sum"}],
+            ["AWS/Lambda", "Errors", {"stat": "Sum"}]
+          ],
+          "title": "Lambda Health (Service-Level - All Sources)",
+          "region": "us-west-2",
+          "period": 300
+        }
+      }
+      ```
+  - Admin Dashboard (sentiment-analyzer-admin IAM role):
+    - Access: Full read/write via IAM admin role (console access, custom queries, exports)
+    - Metrics Allowed: ALL (no restrictions)
+    - Capabilities: Filter by all dimensions (source_id, model_version, api_key_id), create CloudWatch Insights queries, modify alarms/dashboards, export metric data to S3
+  - Terraform Implementation: Create both dashboards in terraform/modules/cloudwatch_dashboard/, reference dashboard ARNs in IAM policies
+  - Audit: Log all CloudWatch API calls (GetDashboard, GetMetricData) to CloudTrail with 7-year retention
+  - Rationale: Prevents contributors from gaining competitive intelligence (per-source usage), planning DoS attacks (quota utilization), or optimizing attack timing (scan duration)
 
 Security & privacy checklist
 ---------------------------
