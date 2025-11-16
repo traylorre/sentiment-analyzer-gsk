@@ -1,0 +1,44 @@
+# CODEOWNERS - Defines mandatory reviewers for all changes
+#
+# ALL changes to this repository require approval from @traylorre
+# This file is enforced by GitHub branch protection rules.
+#
+# Security Model:
+# - @traylorre is the sole admin and must approve ALL pull requests
+# - Contributors CANNOT merge without @traylorre approval
+# - Contributors CANNOT modify this file without @traylorre approval
+# - Branch protection prevents bypass of these requirements
+#
+# See CONTRIBUTING.md for collaboration security model
+
+# Default owner for everything in the repo
+* @traylorre
+
+# Critical security files require explicit @traylorre review
+SECURITY.md @traylorre
+CONTRIBUTING.md @traylorre
+.github/CODEOWNERS @traylorre
+.github/workflows/* @traylorre
+
+# Infrastructure code requires @traylorre review and approval
+terraform/ @traylorre
+*.tf @traylorre
+.terraform.lock.hcl @traylorre
+
+# Source code requires @traylorre review
+src/ @traylorre
+tests/ @traylorre
+
+# Configuration and specification require @traylorre review
+SPEC.md @traylorre
+.specify/memory/constitution.md @traylorre
+
+# GitHub Actions workflows require @traylorre review (prevent workflow bypass)
+.github/workflows/ @traylorre
+
+# CI/CD configuration require @traylorre review
+.github/actions/ @traylorre
+
+# Documentation can be reviewed by @traylorre
+README.md @traylorre
+docs/ @traylorre
