@@ -4,6 +4,24 @@
 **Trigger**: Lambda Function URL (HTTPS requests from browser)
 **Purpose**: Serve dashboard UI and provide real-time metrics via Server-Sent Events (SSE)
 
+**Updated**: 2025-11-17 - Incorporated "Best of All Worlds" redundancy strategy
+
+---
+
+## Redundancy Strategy
+
+**Read Target**: `sentiment-items-dashboard` (read-optimized table)
+- Queries ONLY sentiment-items-dashboard (NOT primary table)
+- Day-partitioned for efficient queries (PK: `day_partition`)
+- Uses GSIs: `by_sentiment`, `by_tag`
+- Eventually consistent reads (200-500ms lag from primary table acceptable)
+
+**Phase 2 (Optional)**: DAX Cache
+- Read through DAX cluster for sub-10ms latency
+- Enable when dashboard reads > 10 queries/sec
+
+**Fallback**: If dashboard table unavailable, query primary table (slower performance)
+
 ---
 
 ## Endpoints
@@ -171,36 +189,73 @@ async def serve_dashboard():
 async def get_metrics(source_type: str = "newsapi", hours: int = 24):
     """
     Return current metrics snapshot for dashboard initialization.
+
+    ROUTING LOGIC:
+    - Queries sentiment-items-dashboard (read-optimized table)
+    - Uses day_partition PK for efficient queries
+    - Phase 2: Reads through DAX cache if enabled
+    - Fallback: Query primary table if dashboard table unavailable
     """
     try:
-        # Query recent items from DynamoDB
-        cutoff = (datetime.utcnow() - timedelta(hours=hours)).isoformat() + 'Z'
+        # Calculate day partitions to query (today + yesterday for 24h window)
+        today = datetime.utcnow().strftime('%Y-%m-%d')
+        yesterday = (datetime.utcnow() - timedelta(days=1)).strftime('%Y-%m-%d')
 
-        response = dynamodb.query(
-            TableName=os.environ['DYNAMODB_TABLE'],
-            IndexName='by_timestamp',
-            KeyConditionExpression='source_type = :st AND ingested_at > :cutoff',
-            ExpressionAttributeValues={
-                ':st': {'S': source_type},
-                ':cutoff': {'S': cutoff}
-            },
+        items = []
+
+        # Query today's partition
+        response_today = dynamodb.query(
+            TableName=os.environ['DYNAMODB_DASHBOARD_TABLE'],  # sentiment-items-dashboard
+            KeyConditionExpression='day_partition = :day',
+            ExpressionAttributeValues={':day': {'S': today}},
             ScanIndexForward=False,  # Newest first
-            Limit=1000  # Max for aggregation
+            Limit=1000,
+            ConsistentRead=False  # Eventually consistent (acceptable)
         )
+        items.extend(parse_dynamodb_items(response_today['Items']))
 
-        items = parse_dynamodb_items(response['Items'])
+        # Query yesterday's partition if hours > 12
+        if hours > 12:
+            response_yesterday = dynamodb.query(
+                TableName=os.environ['DYNAMODB_DASHBOARD_TABLE'],
+                KeyConditionExpression='day_partition = :day',
+                ExpressionAttributeValues={':day': {'S': yesterday}},
+                ScanIndexForward=False,
+                Limit=1000,
+                ConsistentRead=False
+            )
+            items.extend(parse_dynamodb_items(response_yesterday['Items']))
+
+        # Filter by time window and source type
+        cutoff = (datetime.utcnow() - timedelta(hours=hours)).isoformat() + 'Z'
+        filtered_items = [
+            item for item in items
+            if item['ingested_at'] > cutoff and item.get('source_type') == source_type
+        ]
 
         # Calculate metrics
-        metrics = calculate_metrics(items)
+        metrics = calculate_metrics(filtered_items)
 
         return JSONResponse(content=metrics)
 
     except Exception as e:
-        logger.error(f"Failed to fetch metrics: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={"error": "Failed to fetch metrics", "details": str(e)}
-        )
+        logger.error(f"Failed to fetch metrics from dashboard table: {str(e)}")
+
+        # FALLBACK: Try primary table (slower, but functional)
+        try:
+            logger.warning("Falling back to primary table query")
+            response = dynamodb.query(
+                TableName=os.environ['DYNAMODB_PRIMARY_TABLE'],
+                # Use primary table's schema (no day_partition)
+                ...
+            )
+            # Process and return
+        except Exception as fallback_error:
+            logger.error(f"Fallback also failed: {str(fallback_error)}")
+            return JSONResponse(
+                status_code=500,
+                content={"error": "Failed to fetch metrics", "details": str(e)}
+            )
 ```
 
 ### Server-Sent Events Stream
@@ -594,7 +649,10 @@ document.addEventListener('DOMContentLoaded', initDashboard);
 
 | Variable | Description | Example |
 |---|---|---|
-| `DYNAMODB_TABLE` | DynamoDB table name | `"sentiment-items"` |
+| `DYNAMODB_DASHBOARD_TABLE` | **DASHBOARD** read table name | `"sentiment-items-dashboard"` |
+| `DYNAMODB_PRIMARY_TABLE` | Primary table (fallback only) | `"sentiment-items-primary"` |
+| `DAX_ENDPOINT` | DAX cluster endpoint (Phase 2, optional) | `"sentiment-dashboard.abc123.dax-clusters.us-east-1.amazonaws.com:8111"` |
+| `ENABLE_DAX` | Enable DAX caching (Phase 2) | `"false"` (default), `"true"` (when enabled) |
 
 ---
 
@@ -607,12 +665,29 @@ document.addEventListener('DOMContentLoaded', initDashboard);
     {
       "Effect": "Allow",
       "Action": [
+        "dynamodb:Query",
+        "dynamodb:GetItem"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:*:*:table/sentiment-items-dashboard",
+        "arn:aws:dynamodb:*:*:table/sentiment-items-dashboard/index/by_sentiment",
+        "arn:aws:dynamodb:*:*:table/sentiment-items-dashboard/index/by_tag"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
         "dynamodb:Query"
       ],
       "Resource": [
-        "arn:aws:dynamodb:*:*:table/sentiment-items",
-        "arn:aws:dynamodb:*:*:table/sentiment-items/index/by_timestamp"
-      ]
+        "arn:aws:dynamodb:*:*:table/sentiment-items-primary"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "dynamodb:Select": "SPECIFIC_ATTRIBUTES"
+        }
+      },
+      "Description": "Fallback access to primary table (read-only, for emergency use)"
     },
     {
       "Effect": "Allow",

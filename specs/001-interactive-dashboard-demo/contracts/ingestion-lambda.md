@@ -4,6 +4,19 @@
 **Trigger**: EventBridge Scheduler (every 10 minutes)
 **Purpose**: Fetch items from NewsAPI matching watch tags, deduplicate, trigger sentiment analysis
 
+**Updated**: 2025-11-17 - Incorporated "Best of All Worlds" redundancy strategy
+
+---
+
+## Redundancy Strategy
+
+**Write Target**: `sentiment-items-primary` (us-east-1 ONLY)
+- Always write to PRIMARY table in us-east-1
+- Global replicas (us-west-2, eu-west-1, ap-south-1) are updated asynchronously
+- Dashboard table is populated via DynamoDB Streams (NO direct writes)
+
+**Read Operations**: None (ingestion Lambda does NOT read from dashboard table)
+
 ---
 
 ## Input Event
@@ -37,7 +50,8 @@
 | Variable | Description | Example |
 |---|---|---|
 | `WATCH_TAGS` | Comma-separated tags to monitor | `"AI,climate,economy,health,sports"` |
-| `DYNAMODB_TABLE` | DynamoDB table name | `"sentiment-items"` |
+| `DYNAMODB_PRIMARY_TABLE` | **PRIMARY** write table name | `"sentiment-items-primary"` |
+| `AWS_REGION_PRIMARY` | Primary region (for explicit region pinning) | `"us-east-1"` |
 | `NEWSAPI_SECRET_ARN` | Secrets Manager ARN for NewsAPI key | `"arn:aws:secretsmanager:..."` |
 | `MODEL_VERSION` | Current model version | `"v1.0.0"` |
 | `SNS_ANALYSIS_TOPIC_ARN` | SNS topic for analysis triggers | `"arn:aws:sns:..."` |
@@ -148,18 +162,25 @@ def generate_source_id(article: dict) -> str:
 
 ```python
 import boto3
+import os
 from datetime import datetime
 
-dynamodb = boto3.client('dynamodb')
+# IMPORTANT: Always target primary region for writes
+dynamodb = boto3.client('dynamodb', region_name=os.environ.get('AWS_REGION_PRIMARY', 'us-east-1'))
 
 def insert_pending_item(article: dict, source_id: str, matched_tags: list[str]) -> bool:
     """
     Insert item with status=pending if source_id doesn't exist.
     Returns True if inserted, False if duplicate.
+
+    ROUTING LOGIC:
+    - Writes ONLY to sentiment-items-primary (us-east-1)
+    - Global replicas updated asynchronously by DynamoDB
+    - Dashboard table populated via DynamoDB Streams (NOT written directly)
     """
     try:
         dynamodb.put_item(
-            TableName=os.environ['DYNAMODB_TABLE'],
+            TableName=os.environ['DYNAMODB_PRIMARY_TABLE'],  # sentiment-items-primary
             Item={
                 'source_id': {'S': source_id},
                 'ingested_at': {'S': datetime.utcnow().isoformat() + 'Z'},
@@ -349,7 +370,12 @@ def log_structured(level: str, message: str, **kwargs):
       "Action": [
         "dynamodb:PutItem"
       ],
-      "Resource": "arn:aws:dynamodb:*:*:table/sentiment-items"
+      "Resource": "arn:aws:dynamodb:us-east-1:*:table/sentiment-items-primary",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "us-east-1"
+        }
+      }
     },
     {
       "Effect": "Allow",
