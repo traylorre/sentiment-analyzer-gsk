@@ -10,7 +10,7 @@
 
 ## Redundancy Strategy
 
-**Write Target**: `sentiment-items-primary` (us-east-1 ONLY)
+**Write Target**: `sentiment-items` (us-east-1 ONLY)
 - Updates ONLY to PRIMARY table in us-east-1
 - Global replicas updated asynchronously by DynamoDB
 - Dashboard table receives updates via DynamoDB Streams (NO direct writes)
@@ -63,8 +63,8 @@
 
 | Variable | Description | Example |
 |---|---|---|
-| `DYNAMODB_PRIMARY_TABLE` | **PRIMARY** write table name | `"sentiment-items-primary"` |
-| `AWS_REGION_PRIMARY` | Primary region (for explicit region pinning) | `"us-east-1"` |
+| `DYNAMODB_TABLE` | **PRIMARY** write table name | `"sentiment-items"` |
+| `AWS_REGION` | Primary region (for explicit region pinning) | `"us-east-1"` |
 | `MODEL_PATH` | S3 path or local path to model | `"s3://models/distilbert-sst2"` or `/opt/model` |
 | `MODEL_VERSION` | Current model version | `"v1.0.0"` |
 
@@ -174,7 +174,7 @@ import boto3
 import os
 
 # IMPORTANT: Always target primary region for writes
-dynamodb = boto3.client('dynamodb', region_name=os.environ.get('AWS_REGION_PRIMARY', 'us-east-1'))
+dynamodb = boto3.client('dynamodb', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
 
 def update_item_with_sentiment(source_id: str, ingested_at: str, sentiment: str, score: float, model_version: str) -> bool:
     """
@@ -182,13 +182,13 @@ def update_item_with_sentiment(source_id: str, ingested_at: str, sentiment: str,
     Only update if status=pending (avoid overwriting retries).
 
     ROUTING LOGIC:
-    - Updates ONLY to sentiment-items-primary (us-east-1)
+    - Updates ONLY to sentiment-items (us-east-1)
     - Global replicas updated asynchronously by DynamoDB
     - Dashboard table receives updates via DynamoDB Streams (NOT written directly)
     """
     try:
         response = dynamodb.update_item(
-            TableName=os.environ['DYNAMODB_PRIMARY_TABLE'],  # sentiment-items-primary
+            TableName=os.environ['DYNAMODB_TABLE'],  # sentiment-items
             Key={
                 'source_id': {'S': source_id},
                 'ingested_at': {'S': ingested_at}  # IMPORTANT: Include sort key
@@ -404,7 +404,7 @@ def emit_cloudwatch_metrics(sentiment: str, latency_ms: int):
         "dynamodb:UpdateItem",
         "dynamodb:GetItem"
       ],
-      "Resource": "arn:aws:dynamodb:us-east-1:*:table/sentiment-items-primary",
+      "Resource": "arn:aws:dynamodb:us-east-1:*:table/sentiment-items",
       "Condition": {
         "StringEquals": {
           "aws:RequestedRegion": "us-east-1"
