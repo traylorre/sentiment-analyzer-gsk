@@ -166,6 +166,218 @@ tests/
 
 **Structure Decision**: Serverless-first with separate lambda handlers, shared libraries, and an S3-hosted static dashboard. Terraform IaC in `infrastructure/`. This supports independent Lambda deployment, testability, and clear separation of concerns (ingestion, analysis, dashboard).
 
+---
+
+## Redundancy & Replication Strategy
+
+**Updated**: 2025-11-17 - Incorporated "Best of All Worlds" multi-tier architecture
+
+### Overview
+
+This implementation uses a production-grade redundancy strategy combining:
+1. **Global Tables** for multi-region disaster recovery
+2. **DynamoDB Streams** for read/write separation
+3. **Read-Optimized Table** for dashboard performance
+4. **DAX Cache** (Phase 2) for sub-10ms read latency
+
+### Architecture Tiers
+
+```
+TIER 1: PRIMARY WRITE TABLE (sentiment-items-primary)
+├── Purpose: Write-optimized, strong consistency
+├── Location: us-east-1 (primary region)
+├── GSIs: NONE (reduces write latency)
+├── Streams: Enabled (NEW_AND_OLD_IMAGES)
+└── Operations: All ingestion + analysis writes
+
+TIER 2: GLOBAL TABLE REPLICAS (Disaster Recovery)
+├── us-west-2 replica (standby, < 1 sec replication lag)
+├── eu-west-1 replica (standby, < 1 sec replication lag)
+└── ap-south-1 replica (standby, < 1 sec replication lag)
+    └── Failover: Can be promoted if us-east-1 unavailable
+
+TIER 3: READ-OPTIMIZED TABLE (sentiment-items-dashboard)
+├── Purpose: Dashboard queries, denormalized schema
+├── Source: Populated via DynamoDB Streams
+├── PK: day_partition (YYYY-MM-DD) for efficient time queries
+├── GSIs: by_sentiment (filter by positive/negative/neutral)
+│         by_tag (query by matched tags)
+├── TTL: 7 days (auto-cleanup for cost control)
+└── Lag: 200-500ms behind primary table (acceptable)
+
+TIER 4: DAX CACHE (Phase 2 - Optional)
+├── Purpose: Sub-10ms read performance
+├── Cluster: 3 nodes (multi-AZ HA)
+├── Cache TTL: 5 minutes
+├── Target: sentiment-items-dashboard ONLY
+└── Enable When: Dashboard reads > 10 queries/sec
+```
+
+### Data Flow
+
+```
+1. WRITE PATH (Ingestion Lambda)
+   ┌──────────────────────────┐
+   │ External API (NewsAPI)   │
+   └────────┬─────────────────┘
+            ↓ (fetch items)
+   ┌──────────────────────────┐
+   │  Ingestion Lambda        │
+   │  • Deduplication check   │
+   │  • Conditional PutItem   │
+   └────────┬─────────────────┘
+            ↓ (write to primary table ONLY)
+   ┌──────────────────────────┐
+   │ sentiment-items-primary  │
+   │ (us-east-1)              │
+   │ status = "pending"       │
+   └────────┬────────┬────────┘
+            │        │
+            │        └─► Global Replicas (async, < 1 sec)
+            │            • us-west-2
+            │            • eu-west-1
+            │            • ap-south-1
+            │
+            └─► DynamoDB Streams (real-time)
+                     ↓
+   ┌──────────────────────────┐
+   │ Stream Processor Lambda  │
+   │ • Skip if status=pending │
+   │ • Transform schema       │
+   │ • Day-partition          │
+   │ • Denormalize tags       │
+   └────────┬─────────────────┘
+            ↓ (batch write, 100 records/5 sec)
+   ┌──────────────────────────┐
+   │ sentiment-items-dashboard│
+   │ • PK: day_partition      │
+   │ • One item per tag       │
+   │ • TTL: 7 days            │
+   └──────────────────────────┘
+
+2. ANALYSIS PATH (Analysis Lambda)
+   ┌──────────────────────────┐
+   │  SNS Topic (new item)    │
+   └────────┬─────────────────┘
+            ↓ (trigger)
+   ┌──────────────────────────┐
+   │  Analysis Lambda         │
+   │  • Run sentiment model   │
+   │  • Conditional Update    │
+   └────────┬─────────────────┘
+            ↓ (update primary table ONLY)
+   ┌──────────────────────────┐
+   │ sentiment-items-primary  │
+   │ SET status = "analyzed"  │
+   │ SET sentiment, score     │
+   └────────┬─────────────────┘
+            └─► DynamoDB Streams (triggers update to dashboard table)
+
+3. READ PATH (Dashboard Lambda)
+   ┌──────────────────────────┐
+   │  Dashboard User Request  │
+   └────────┬─────────────────┘
+            ↓ (API Gateway invoke)
+   ┌──────────────────────────┐
+   │  Dashboard Lambda        │
+   │  • Query by day_partition│
+   │  • Use by_sentiment GSI  │
+   │  • Limit=20              │
+   └────────┬─────────────────┘
+            ↓ (read from dashboard table, NOT primary)
+   ┌──────────────────────────┐
+   │ Phase 1: Direct Query    │
+   │ sentiment-items-dashboard│
+   │ (eventually consistent)  │
+   └──────────────────────────┘
+            ↓ (Phase 2: add cache)
+   ┌──────────────────────────┐
+   │ DAX Cache (3-node)       │
+   │ • 5-minute TTL           │
+   │ • Sub-10ms reads         │
+   └──────────────────────────┘
+```
+
+### Consistency Model
+
+**Strong Consistency Requirements**:
+- ✅ Deduplication checks (primary table writes)
+- ✅ Analysis updates (conditional write prevents race conditions)
+- ✅ Failover promotion (global replica promotion requires manual intervention)
+
+**Eventual Consistency Acceptable**:
+- ✅ Dashboard reads (200-500ms lag acceptable)
+- ✅ Metrics aggregation (5-minute staleness with DAX cache)
+- ✅ Global table replication (< 1 second lag)
+
+**Write-after-Read Scenarios**:
+- ❌ NOT NEEDED: No use case requires immediate read after write
+- Ingestion → Dashboard display can tolerate 500ms lag
+- Analysis update → Dashboard refresh can tolerate 500ms lag
+
+### Traffic Interleaving & Load Management
+
+**Problem**: Prevent stream processor from overwhelming dashboard table during traffic spikes.
+
+**Solution**: Batched stream processing with configurable limits
+
+**Lambda Event Source Mapping Configuration**:
+```hcl
+batch_size = 100  # Process 100 stream records per invocation
+maximum_batching_window_in_seconds = 5  # Wait up to 5 seconds to fill batch
+maximum_retry_attempts = 3
+bisect_batch_on_function_error = true  # Split failed batches
+```
+
+**Traffic Patterns**:
+- **Ingestion rate**: 500 writes/hour → 0.14 writes/sec (demo scale)
+- **Stream processing**: Batches of 100 records every ~5-10 seconds
+- **Dashboard writes**: Smoothed by batching (no spikes)
+- **Dashboard reads**: 2 queries/sec (demo scale)
+
+**Failover Strategy**:
+1. **Primary region failure** (us-east-1 down):
+   - Manual promotion of us-west-2 replica to primary
+   - Update Lambda environment variables to point to us-west-2
+   - RTO (Recovery Time Objective): ~15 minutes
+   - RPO (Recovery Point Objective): < 1 second (last replicated write)
+
+2. **Dashboard table unavailable**:
+   - Fallback to primary table queries (slower, but functional)
+   - Implement circuit breaker pattern in Dashboard Lambda
+
+3. **Stream processor failure**:
+   - DynamoDB Streams retain records for 24 hours
+   - Lambda automatic retry (3 attempts)
+   - CloudWatch alarm triggers manual investigation
+
+### Cost Analysis
+
+**Phase 1 (Demo Scale)**: $1.19/month
+- Primary table writes: $0.09
+- Global replicas (3 regions): $0.27
+- Dashboard table writes: $0.54
+- Dashboard table reads: $0.26
+- Stream processor Lambda: $0.02
+- Data transfer: $0.01
+
+**Phase 2 (Add DAX)**: +$97/month (enable when reads > 10/sec)
+
+**Phase 3 (Production Scale)**: $538/month
+- Saves $1,462/month vs. DynamoDB-only architecture (73% reduction)
+
+### Rollout Plan
+
+See: `/specs/001-interactive-dashboard-demo/traffic-migration.md` (created separately)
+
+**Phased Rollout**:
+1. **Phase 1A (Demo)**: Primary table + dashboard table (no replicas, no DAX)
+2. **Phase 1B (Staging)**: Add global table replicas
+3. **Phase 2 (Production)**: Add DAX cache when reads > 10/sec
+4. **Phase 3 (Scale)**: Optimize batch sizes, add monitoring dashboards
+
+---
+
 ## Complexity Tracking
 
 > **Fill ONLY if Constitution Check has violations that must be justified**
