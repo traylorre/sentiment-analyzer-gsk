@@ -1,21 +1,21 @@
 # Ingestion Lambda - Contract
 
 **Handler**: `src/lambdas/ingestion/handler.lambda_handler`
-**Trigger**: EventBridge Scheduler (every 10 minutes)
+**Trigger**: EventBridge Scheduler (every 5 minutes)
 **Purpose**: Fetch items from NewsAPI matching watch tags, deduplicate, trigger sentiment analysis
 
-**Updated**: 2025-11-17 - Incorporated "Best of All Worlds" redundancy strategy
+**Updated**: 2025-11-17 - Regional Multi-AZ architecture
 
 ---
 
-## Redundancy Strategy
+## Data Routing
 
-**Write Target**: `sentiment-items-primary` (us-east-1 ONLY)
-- Always write to PRIMARY table in us-east-1
-- Global replicas (us-west-2, eu-west-1, ap-south-1) are updated asynchronously
-- Dashboard table is populated via DynamoDB Streams (NO direct writes)
+**Write Target**: `sentiment-items` (single table, us-east-1)
+- Write to single DynamoDB table
+- Multi-AZ replication automatic (AWS-managed)
+- Point-in-time recovery enabled (35 days)
 
-**Read Operations**: None (ingestion Lambda does NOT read from dashboard table)
+**Read Operations**: Deduplication check only (conditional write)
 
 ---
 
@@ -50,8 +50,7 @@
 | Variable | Description | Example |
 |---|---|---|
 | `WATCH_TAGS` | Comma-separated tags to monitor | `"AI,climate,economy,health,sports"` |
-| `DYNAMODB_PRIMARY_TABLE` | **PRIMARY** write table name | `"sentiment-items-primary"` |
-| `AWS_REGION_PRIMARY` | Primary region (for explicit region pinning) | `"us-east-1"` |
+| `DYNAMODB_TABLE` | DynamoDB table name | `"sentiment-items"` |
 | `NEWSAPI_SECRET_ARN` | Secrets Manager ARN for NewsAPI key | `"arn:aws:secretsmanager:..."` |
 | `MODEL_VERSION` | Current model version | `"v1.0.0"` |
 | `SNS_ANALYSIS_TOPIC_ARN` | SNS topic for analysis triggers | `"arn:aws:sns:..."` |
@@ -165,22 +164,18 @@ import boto3
 import os
 from datetime import datetime
 
-# IMPORTANT: Always target primary region for writes
-dynamodb = boto3.client('dynamodb', region_name=os.environ.get('AWS_REGION_PRIMARY', 'us-east-1'))
+dynamodb = boto3.resource('dynamodb')
+table = dynamodb.Table(os.environ['DYNAMODB_TABLE'])
 
 def insert_pending_item(article: dict, source_id: str, matched_tags: list[str]) -> bool:
     """
     Insert item with status=pending if source_id doesn't exist.
     Returns True if inserted, False if duplicate.
 
-    ROUTING LOGIC:
-    - Writes ONLY to sentiment-items-primary (us-east-1)
-    - Global replicas updated asynchronously by DynamoDB
-    - Dashboard table populated via DynamoDB Streams (NOT written directly)
+    Uses conditional PutItem to ensure deduplication.
     """
     try:
-        dynamodb.put_item(
-            TableName=os.environ['DYNAMODB_PRIMARY_TABLE'],  # sentiment-items-primary
+        table.put_item(
             Item={
                 'source_id': {'S': source_id},
                 'ingested_at': {'S': datetime.utcnow().isoformat() + 'Z'},
@@ -370,12 +365,7 @@ def log_structured(level: str, message: str, **kwargs):
       "Action": [
         "dynamodb:PutItem"
       ],
-      "Resource": "arn:aws:dynamodb:us-east-1:*:table/sentiment-items-primary",
-      "Condition": {
-        "StringEquals": {
-          "aws:RequestedRegion": "us-east-1"
-        }
-      }
+      "Resource": "arn:aws:dynamodb:us-east-1:*:table/sentiment-items"
     },
     {
       "Effect": "Allow",

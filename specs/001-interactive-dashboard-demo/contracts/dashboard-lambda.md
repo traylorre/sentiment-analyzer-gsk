@@ -10,8 +10,8 @@
 
 ## Redundancy Strategy
 
-**Read Target**: `sentiment-items-dashboard` (read-optimized table)
-- Queries ONLY sentiment-items-dashboard (NOT primary table)
+**Read Target**: `sentiment-items` (read-optimized table)
+- Queries ONLY sentiment-items (NOT primary table)
 - Day-partitioned for efficient queries (PK: `day_partition`)
 - Uses GSIs: `by_sentiment`, `by_tag`
 - Eventually consistent reads (200-500ms lag from primary table acceptable)
@@ -191,7 +191,7 @@ async def get_metrics(source_type: str = "newsapi", hours: int = 24):
     Return current metrics snapshot for dashboard initialization.
 
     ROUTING LOGIC:
-    - Queries sentiment-items-dashboard (read-optimized table)
+    - Queries sentiment-items (read-optimized table)
     - Uses day_partition PK for efficient queries
     - Phase 2: Reads through DAX cache if enabled
     - Fallback: Query primary table if dashboard table unavailable
@@ -205,7 +205,7 @@ async def get_metrics(source_type: str = "newsapi", hours: int = 24):
 
         # Query today's partition
         response_today = dynamodb.query(
-            TableName=os.environ['DYNAMODB_DASHBOARD_TABLE'],  # sentiment-items-dashboard
+            TableName=os.environ['DYNAMODB_TABLE'],  # sentiment-items
             KeyConditionExpression='day_partition = :day',
             ExpressionAttributeValues={':day': {'S': today}},
             ScanIndexForward=False,  # Newest first
@@ -217,7 +217,7 @@ async def get_metrics(source_type: str = "newsapi", hours: int = 24):
         # Query yesterday's partition if hours > 12
         if hours > 12:
             response_yesterday = dynamodb.query(
-                TableName=os.environ['DYNAMODB_DASHBOARD_TABLE'],
+                TableName=os.environ['DYNAMODB_TABLE'],
                 KeyConditionExpression='day_partition = :day',
                 ExpressionAttributeValues={':day': {'S': yesterday}},
                 ScanIndexForward=False,
@@ -245,7 +245,7 @@ async def get_metrics(source_type: str = "newsapi", hours: int = 24):
         try:
             logger.warning("Falling back to primary table query")
             response = dynamodb.query(
-                TableName=os.environ['DYNAMODB_PRIMARY_TABLE'],
+                TableName=os.environ['DYNAMODB_TABLE'],
                 # Use primary table's schema (no day_partition)
                 ...
             )
@@ -649,8 +649,8 @@ document.addEventListener('DOMContentLoaded', initDashboard);
 
 | Variable | Description | Example |
 |---|---|---|
-| `DYNAMODB_DASHBOARD_TABLE` | **DASHBOARD** read table name | `"sentiment-items-dashboard"` |
-| `DYNAMODB_PRIMARY_TABLE` | Primary table (fallback only) | `"sentiment-items-primary"` |
+| `DYNAMODB_TABLE` | **DASHBOARD** read table name | `"sentiment-items"` |
+| `DYNAMODB_TABLE` | Primary table (fallback only) | `"sentiment-items"` |
 | `DAX_ENDPOINT` | DAX cluster endpoint (Phase 2, optional) | `"sentiment-dashboard.abc123.dax-clusters.us-east-1.amazonaws.com:8111"` |
 | `ENABLE_DAX` | Enable DAX caching (Phase 2) | `"false"` (default), `"true"` (when enabled) |
 
@@ -669,9 +669,9 @@ document.addEventListener('DOMContentLoaded', initDashboard);
         "dynamodb:GetItem"
       ],
       "Resource": [
-        "arn:aws:dynamodb:*:*:table/sentiment-items-dashboard",
-        "arn:aws:dynamodb:*:*:table/sentiment-items-dashboard/index/by_sentiment",
-        "arn:aws:dynamodb:*:*:table/sentiment-items-dashboard/index/by_tag"
+        "arn:aws:dynamodb:*:*:table/sentiment-items",
+        "arn:aws:dynamodb:*:*:table/sentiment-items/index/by_sentiment",
+        "arn:aws:dynamodb:*:*:table/sentiment-items/index/by_tag"
       ]
     },
     {
@@ -680,7 +680,7 @@ document.addEventListener('DOMContentLoaded', initDashboard);
         "dynamodb:Query"
       ],
       "Resource": [
-        "arn:aws:dynamodb:*:*:table/sentiment-items-primary"
+        "arn:aws:dynamodb:*:*:table/sentiment-items"
       ],
       "Condition": {
         "StringEquals": {
