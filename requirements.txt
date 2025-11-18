@@ -25,6 +25,7 @@ torch==2.1.0
 fastapi==0.104.0
 mangum==0.17.0
 uvicorn==0.24.0  # Local development only
+sse-starlette==1.8.2  # Server-Sent Events for real-time updates
 
 # HTTP Client - NewsAPI adapter
 requests==2.31.0
