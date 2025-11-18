@@ -5,11 +5,13 @@
 # - This deploys to dev environment only (safe to re-run)
 # - Check Terraform plan output before apply
 # - Rollback: revert commit and push, or use infrastructure/scripts/rollback.sh
+# - State lock issues: workflow handles stale locks automatically (>1 hour old)
 #
 # For Developers:
 # - Merge to main triggers dev deployment automatically
 # - Watch this workflow to verify your changes deploy correctly
 # - Integration tests run after successful deploy (see integration.yml)
+# - Never run terraform locally during CI deployment
 
 name: Deploy Dev
 
@@ -21,18 +23,32 @@ on:
       - 'infrastructure/terraform/**'
       - '.github/workflows/deploy-dev.yml'
   workflow_dispatch:
-    # Allow manual trigger for re-deployment
+    inputs:
+      force_unlock:
+        description: 'Force unlock state before deploy (use with caution)'
+        required: false
+        type: boolean
+        default: false
 
-# Ensure only one deployment runs at a time
+# CRITICAL: Ensure only one deployment runs at a time
+# This prevents state lock conflicts from concurrent runs
 concurrency:
-  group: deploy-dev
-  cancel-in-progress: false
+  group: terraform-deploy-dev
+  cancel-in-progress: false  # Never cancel running terraform operations
+
+env:
+  TF_VAR_environment: dev
+  TF_INPUT: false  # Disable interactive prompts
+  TF_IN_AUTOMATION: true  # Indicate running in automation
+  LOCK_TABLE: terraform-state-lock
+  STATE_BUCKET: sentiment-analyzer-tfstate-218795110243
 
 jobs:
   deploy:
     name: Deploy to Dev
     runs-on: ubuntu-latest
     environment: dev
+    timeout-minutes: 30  # Prevent infinite hangs
 
     # Security: Minimum required permissions
     permissions:
@@ -48,7 +64,84 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
-          # On-Call Note: If auth fails, check GitHub secrets are set correctly
+
+      - name: Check for stale locks
+        id: check-locks
+        run: |
+          # Check for locks older than 1 hour (stale from crashed CI runs)
+          echo "Checking for stale Terraform state locks..."
+
+          STALE_THRESHOLD=$(date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%S)
+
+          # Query DynamoDB for locks
+          LOCKS=$(aws dynamodb scan \
+            --table-name ${{ env.LOCK_TABLE }} \
+            --projection-expression "LockID, Info" \
+            --output json 2>/dev/null || echo '{"Items":[]}')
+
+          LOCK_COUNT=$(echo "$LOCKS" | jq '.Items | length')
+          echo "Found $LOCK_COUNT lock(s) in state"
+
+          if [ "$LOCK_COUNT" -gt 0 ]; then
+            # Extract lock info
+            LOCK_ID=$(echo "$LOCKS" | jq -r '.Items[0].LockID.S // empty')
+            LOCK_INFO=$(echo "$LOCKS" | jq -r '.Items[0].Info.S // empty')
+
+            if [ -n "$LOCK_INFO" ]; then
+              CREATED=$(echo "$LOCK_INFO" | jq -r '.Created // empty')
+              WHO=$(echo "$LOCK_INFO" | jq -r '.Who // "unknown"')
+
+              echo "Lock held by: $WHO"
+              echo "Lock created: $CREATED"
+
+              # Check if lock is stale (created more than 1 hour ago)
+              if [ -n "$CREATED" ]; then
+                CREATED_TS=$(date -d "$CREATED" +%s 2>/dev/null || echo "0")
+                THRESHOLD_TS=$(date -d "$STALE_THRESHOLD" +%s)
+
+                if [ "$CREATED_TS" -lt "$THRESHOLD_TS" ]; then
+                  echo "::warning::Stale lock detected (older than 1 hour)"
+                  echo "stale_lock=true" >> $GITHUB_OUTPUT
+                  echo "lock_id=$LOCK_ID" >> $GITHUB_OUTPUT
+                else
+                  echo "Lock is recent, will wait for it to be released"
+                  echo "stale_lock=false" >> $GITHUB_OUTPUT
+                fi
+              fi
+            fi
+          else
+            echo "No locks found"
+            echo "stale_lock=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Clean stale lock
+        if: steps.check-locks.outputs.stale_lock == 'true' || github.event.inputs.force_unlock == 'true'
+        working-directory: infrastructure/terraform
+        run: |
+          echo "::warning::Removing stale Terraform state lock"
+
+          # Initialize terraform first
+          terraform init -input=false
+
+          # Get lock ID
+          LOCK_ID="${{ steps.check-locks.outputs.lock_id }}"
+
+          if [ -n "$LOCK_ID" ]; then
+            echo "Force unlocking state with ID: $LOCK_ID"
+            terraform force-unlock -force "$LOCK_ID" || true
+          else
+            # If no lock ID from check, try to get it from DynamoDB directly
+            LOCK_ID=$(aws dynamodb scan \
+              --table-name ${{ env.LOCK_TABLE }} \
+              --projection-expression "LockID" \
+              --output text \
+              --query 'Items[0].LockID.S' 2>/dev/null || echo "")
+
+            if [ -n "$LOCK_ID" ] && [ "$LOCK_ID" != "None" ]; then
+              echo "Force unlocking state with ID: $LOCK_ID"
+              terraform force-unlock -force "$LOCK_ID" || true
+            fi
+          fi
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -63,11 +156,8 @@ jobs:
 
       - name: Package Lambda functions
         run: |
-          # Build deployment packages for each Lambda
-          # On-Call Note: If packaging fails, check requirements.txt compatibility
           mkdir -p dist
 
-          # Package each Lambda with its dependencies
           for lambda in ingestion analysis dashboard; do
             echo "Packaging $lambda Lambda..."
             cd src/lambdas/$lambda
@@ -92,23 +182,28 @@ jobs:
 
       - name: Terraform Init
         working-directory: infrastructure/terraform
-        run: terraform init
+        run: terraform init -input=false
 
       - name: Terraform Plan
         working-directory: infrastructure/terraform
         run: |
+          # Use lock-timeout to wait for any concurrent operations
           terraform plan \
             -var="environment=dev" \
+            -lock-timeout=5m \
             -out=tfplan
-        # On-Call Note: Review plan output for unexpected changes
+        # On-Call Note: If this fails with lock error after 5min, check for stuck processes
 
       - name: Terraform Apply
         working-directory: infrastructure/terraform
-        run: terraform apply -auto-approve tfplan
+        run: |
+          terraform apply \
+            -auto-approve \
+            -lock-timeout=5m \
+            tfplan
 
       - name: Upload Lambda packages to S3
         run: |
-          # Upload deployment packages for Lambda to pull
           for lambda in ingestion analysis dashboard; do
             aws s3 cp dist/$lambda.zip \
               s3://${{ secrets.DEPLOYMENT_BUCKET }}/lambdas/dev/$lambda.zip
@@ -116,8 +211,6 @@ jobs:
 
       - name: Update Lambda functions
         run: |
-          # Update each Lambda to use new code
-          # On-Call Note: This is where deployment actually happens
           for lambda in ingestion analysis dashboard; do
             aws lambda update-function-code \
               --function-name dev-sentiment-$lambda \
@@ -128,12 +221,30 @@ jobs:
 
       - name: Verify deployment
         run: |
-          # Basic health checks
-          # On-Call Note: If verification fails, check Lambda logs
           echo "Checking Lambda function status..."
           for lambda in ingestion analysis dashboard; do
-            aws lambda get-function \
+            STATUS=$(aws lambda get-function \
               --function-name dev-sentiment-$lambda \
               --query 'Configuration.State' \
-              --output text
+              --output text)
+            echo "$lambda: $STATUS"
+            if [ "$STATUS" != "Active" ]; then
+              echo "::error::Lambda $lambda is not Active: $STATUS"
+              exit 1
+            fi
           done
+
+      - name: Deployment summary
+        if: always()
+        run: |
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: dev" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Triggered by**: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ **Status**: Deployed successfully" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Status**: Deployment failed" >> $GITHUB_STEP_SUMMARY
+          fi

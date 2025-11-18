@@ -104,22 +104,50 @@ terraform plan -var="environment=dev"
 
 After this setup, CI/CD deployments will persist state in S3 and won't recreate existing resources.
 
-## Terraform Troubleshooting
+## Terraform State Management
 
-### State Lock Error
+### How State Locking Works
 
-If you see "Error acquiring the state lock", it means another terraform process has the lock. To force unlock:
+Terraform uses DynamoDB for state locking to prevent concurrent modifications. The CI/CD pipeline handles most lock scenarios automatically:
+
+1. **Concurrency control**: Only one deployment runs at a time (GitHub Actions `concurrency` group)
+2. **Lock timeout**: Terraform waits up to 5 minutes for locks to be released (`-lock-timeout=5m`)
+3. **Stale lock cleanup**: CI automatically removes locks older than 1 hour before each deploy
+4. **Manual override**: Use workflow_dispatch with `force_unlock=true` for emergencies
+
+### Best Practices
+
+- **Never run terraform locally while CI is deploying** - This causes lock conflicts
+- **Don't cancel running deploy workflows** - This leaves orphaned locks
+- **Use the GitHub Actions UI** to trigger deploys, not local terraform
+
+### Manual State Lock Recovery
+
+If the automated cleanup fails, you can manually unlock:
 
 ```bash
 cd infrastructure/terraform
+terraform init
 
-# Get the Lock ID from the error message, then:
+# Get the Lock ID from the error message or DynamoDB console, then:
 terraform force-unlock <LOCK_ID>
 
 # Example:
 terraform force-unlock 4a2b102d-2da5-6055-25d4-0aa01be88bbb
 ```
 
-Only do this if you're sure no other terraform operation is running.
+Or use the GitHub Actions workflow with force unlock:
+1. Go to Actions → Deploy Dev → Run workflow
+2. Check "Force unlock state before deploy"
+3. Click "Run workflow"
+
+### Checking Lock Status
+
+```bash
+# View current locks in DynamoDB
+aws dynamodb scan \
+  --table-name terraform-state-lock \
+  --projection-expression "LockID, Info"
+```
 
 <!-- MANUAL ADDITIONS END -->
