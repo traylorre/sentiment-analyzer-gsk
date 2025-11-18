@@ -67,8 +67,9 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+# lib/ - excluded, we use src/lib/ for project code
 lib64/
+!src/lib/
 parts/
 sdist/
 var/
