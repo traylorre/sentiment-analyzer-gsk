@@ -138,6 +138,18 @@ locals {
 # }
 
 # ===================================================================
+# Module: Monitoring & Alarms (On-Call SOP)
+# ===================================================================
+
+module "monitoring" {
+  source = "./modules/monitoring"
+
+  environment          = var.environment
+  alarm_email          = var.alarm_email
+  monthly_budget_limit = var.monthly_budget_limit
+}
+
+# ===================================================================
 # Outputs
 # ===================================================================
 
@@ -174,6 +186,16 @@ output "gsi_by_tag" {
 output "gsi_by_status" {
   description = "Name of the by_status GSI"
   value       = module.dynamodb.gsi_by_status_name
+}
+
+output "alarm_topic_arn" {
+  description = "ARN of the SNS topic for alarm notifications"
+  value       = module.monitoring.alarm_topic_arn
+}
+
+output "alarm_names" {
+  description = "List of all CloudWatch alarm names"
+  value       = module.monitoring.alarm_names
 }
 
 # Outputs that will be available after uncommenting IAM/SNS/EventBridge modules
