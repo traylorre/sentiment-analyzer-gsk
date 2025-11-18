@@ -53,9 +53,9 @@ def env_vars(aws_credentials):
     os.environ["WATCH_TAGS"] = "AI,climate"
     os.environ["DYNAMODB_TABLE"] = "test-sentiment-items"
     os.environ["SNS_TOPIC_ARN"] = "arn:aws:sns:us-east-1:123456789012:test-topic"
-    os.environ["NEWSAPI_SECRET_ARN"] = (
-        "arn:aws:secretsmanager:us-east-1:123456789012:secret:test"
-    )
+    os.environ[
+        "NEWSAPI_SECRET_ARN"
+    ] = "arn:aws:secretsmanager:us-east-1:123456789012:secret:test"
     os.environ["MODEL_VERSION"] = "v1.0.0"
     os.environ["ENVIRONMENT"] = "test"
 

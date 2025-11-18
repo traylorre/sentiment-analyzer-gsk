@@ -164,7 +164,6 @@ class TestAnalysisE2E:
             patch("src.lib.metrics.emit_metric"),
             patch("src.lib.metrics.emit_metrics_batch"),
         ):
-
             mock_analyze.return_value = ("positive", 0.94)
             mock_load_time.return_value = 0
 
@@ -221,7 +220,6 @@ class TestAnalysisE2E:
             patch("src.lib.metrics.emit_metric"),
             patch("src.lib.metrics.emit_metrics_batch"),
         ):
-
             mock_analyze.return_value = ("positive", 0.85)
             mock_load_time.return_value = 0
 
@@ -239,7 +237,6 @@ class TestAnalysisE2E:
             patch("src.lib.metrics.emit_metric"),
             patch("src.lib.metrics.emit_metrics_batch"),
         ):
-
             mock_analyze.return_value = ("negative", 0.90)  # Different result
             mock_load_time.return_value = 0
 
@@ -286,7 +283,6 @@ class TestAnalysisE2E:
             patch("src.lib.metrics.emit_metric"),
             patch("src.lib.metrics.emit_metrics_batch"),
         ):
-
             mock_analyze.return_value = ("neutral", 0.52)
             mock_load_time.return_value = 0
 
@@ -331,7 +327,6 @@ class TestAnalysisE2E:
             patch("src.lib.metrics.emit_metric"),
             patch("src.lib.metrics.emit_metrics_batch"),
         ):
-
             mock_analyze.return_value = ("negative", 0.88)
             mock_load_time.return_value = 0
 
@@ -404,7 +399,6 @@ class TestAnalysisE2E:
             patch("src.lib.metrics.emit_metric"),
             patch("src.lib.metrics.emit_metrics_batch"),
         ):
-
             mock_analyze.return_value = ("positive", 0.90)
             mock_load_time.return_value = 0
 
@@ -457,7 +451,6 @@ class TestAnalysisE2E:
             patch("src.lib.metrics.emit_metric"),
             patch("src.lib.metrics.emit_metrics_batch"),
         ):
-
             mock_analyze.return_value = ("positive", 0.80)
             mock_load_time.return_value = 0
 
@@ -503,7 +496,6 @@ class TestAnalysisE2E:
             patch("src.lib.metrics.emit_metric"),
             patch("src.lib.metrics.emit_metrics_batch"),
         ):
-
             mock_analyze.return_value = ("positive", 0.9234567890)  # Many decimals
             mock_load_time.return_value = 0
 
@@ -609,7 +601,6 @@ class TestAnalysisErrorScenarios:
             patch("src.lib.metrics.emit_metric"),
             patch("src.lib.metrics.emit_metrics_batch"),
         ):
-
             mock_analyze.return_value = ("positive", 0.80)
             mock_load_time.return_value = 0
 
@@ -646,7 +637,6 @@ class TestAnalysisErrorScenarios:
             patch("src.lib.metrics.emit_metric"),
             patch("src.lib.metrics.emit_metrics_batch"),
         ):
-
             # Model returns neutral for empty text
             mock_analyze.return_value = ("neutral", 0.5)
             mock_load_time.return_value = 0
@@ -692,7 +682,6 @@ class TestAnalysisMetrics:
             patch("src.lib.metrics.emit_metric"),
             patch("src.lambdas.analysis.handler.emit_metrics_batch", mock_batch),
         ):
-
             mock_analyze.return_value = ("positive", 0.90)
             mock_load_time.return_value = 0
 
@@ -736,7 +725,6 @@ class TestAnalysisMetrics:
             patch("src.lambdas.analysis.handler.emit_metric", mock_emit),
             patch("src.lib.metrics.emit_metrics_batch"),
         ):
-
             mock_analyze.return_value = ("positive", 0.80)
             mock_load_time.return_value = 2500  # Cold start
 
