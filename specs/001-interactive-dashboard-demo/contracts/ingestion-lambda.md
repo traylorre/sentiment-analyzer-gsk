@@ -162,7 +162,7 @@ def generate_source_id(article: dict) -> str:
 ```python
 import boto3
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 dynamodb = boto3.resource('dynamodb')
 table = dynamodb.Table(os.environ['DYNAMODB_TABLE'])
@@ -178,12 +178,14 @@ def insert_pending_item(article: dict, source_id: str, matched_tags: list[str]) 
         table.put_item(
             Item={
                 'source_id': {'S': source_id},
-                'ingested_at': {'S': datetime.utcnow().isoformat() + 'Z'},
+                'timestamp': {'S': datetime.utcnow().isoformat() + 'Z'},
                 'source_type': {'S': 'newsapi'},
                 'source_url': {'S': article.get('url', '')},
                 'text_snippet': {'S': article.get('description', '')[:200]},
                 'status': {'S': 'pending'},  # Will be updated by analysis lambda
                 'matched_tags': {'SS': matched_tags},
+                # TTL: Auto-delete after 30 days
+                'ttl_timestamp': {'N': str(int((datetime.utcnow() + timedelta(days=30)).timestamp()))},
                 'metadata': {
                     'M': {
                         'title': {'S': article.get('title', '')},

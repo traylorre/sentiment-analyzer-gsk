@@ -643,7 +643,7 @@ def test_lambda_handler_success(mock_boto):
 - **Warm execution**: <200ms (inference + DynamoDB update)
 - **Memory**: 1024 MB
 - **Timeout**: 30 seconds
-- **Concurrency**: 10 (handle 10 concurrent inferences)
+- **Reserved Concurrency**: 5 (limit concurrent inferences to control costs)
 
 ---
 

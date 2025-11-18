@@ -300,7 +300,7 @@ TIER 3: BACKUP & DISASTER RECOVERY
    │  GSI: by_tag              │
    └──────────────────────────┘
 
-4. MONITORING PATH
+4. MONITORING PATH (Phase 2 - Optional)
    ┌──────────────────────────┐
    │  EventBridge Schedule    │
    │  (every 1 minute)        │
@@ -317,6 +317,11 @@ TIER 3: BACKUP & DISASTER RECOVERY
                 • Sentiment distribution (%)
                 • Analysis latency (P50/P90)
                 • Error rates
+
+> **Note**: Metrics Lambda is **out of scope for Demo 1**. For the demo, CloudWatch
+> metrics are emitted directly by Ingestion/Analysis Lambdas. The dedicated Metrics
+> Lambda for pre-aggregation is a Phase 2 optimization if dashboard query latency
+> exceeds 500ms.
 ```
 
 ### Consistency Model
@@ -558,6 +563,50 @@ Example:
 - Audit trail of configuration changes
 - Tag validation before save
 
+### Standardized Error Response Schema
+
+All Lambda functions return errors in a consistent format:
+
+```json
+{
+  "statusCode": 500,
+  "body": {
+    "error": "Human readable message",
+    "code": "MACHINE_READABLE_CODE",
+    "details": {
+      "source_id": "newsapi#abc123",
+      "timestamp": "2025-11-17T10:00:00Z"
+    },
+    "request_id": "lambda-request-id-123"
+  }
+}
+```
+
+**Error Codes**:
+| Code | HTTP Status | Description |
+|------|-------------|-------------|
+| `RATE_LIMIT_EXCEEDED` | 429 | NewsAPI rate limit hit |
+| `VALIDATION_ERROR` | 400 | Input validation failed |
+| `NOT_FOUND` | 404 | Item not found in DynamoDB |
+| `UNAUTHORIZED` | 401 | Invalid or missing API key |
+| `MODEL_ERROR` | 500 | Sentiment inference failed |
+| `DATABASE_ERROR` | 500 | DynamoDB operation failed |
+| `INTERNAL_ERROR` | 500 | Unexpected error |
+
+**Implementation**:
+```python
+def error_response(status_code: int, message: str, code: str, details: dict = None) -> dict:
+    return {
+        "statusCode": status_code,
+        "body": {
+            "error": message,
+            "code": code,
+            "details": details or {},
+            "request_id": context.aws_request_id
+        }
+    }
+```
+
 ### Test Coverage Requirements
 
 **Minimum Coverage Gates**:
@@ -649,6 +698,28 @@ resource "aws_ecr_repository" "lambda" {
   }
 }
 ```
+
+### CloudWatch Log Retention
+
+All Lambda log groups have explicit retention to control costs and comply with data policies:
+
+```hcl
+# Add to each Lambda module (ingestion, analysis, dashboard, metrics)
+resource "aws_cloudwatch_log_group" "lambda" {
+  name              = "/aws/lambda/${var.environment}-sentiment-${var.function_name}"
+  retention_in_days = 30  # 30 days for demo, 90 days for prod
+
+  tags = {
+    Environment = var.environment
+    Feature     = "001-interactive-dashboard-demo"
+  }
+}
+```
+
+**Retention Policy**:
+- Dev environment: 30 days
+- Prod environment: 90 days
+- Cost: ~$0.03/GB/month for storage after ingestion
 
 ### Rollout Plan (Simplified)
 

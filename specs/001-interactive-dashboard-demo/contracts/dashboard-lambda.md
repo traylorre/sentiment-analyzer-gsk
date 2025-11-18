@@ -29,6 +29,54 @@ Serve static dashboard HTML page.
 
 ---
 
+### GET /health
+
+Health check endpoint for monitoring and load balancer probes.
+
+**Response** (JSON):
+```json
+{
+  "status": "healthy",
+  "timestamp": "2025-11-17T10:00:00.000Z",
+  "version": "1.0.0",
+  "checks": {
+    "dynamodb": "ok"
+  }
+}
+```
+
+**Implementation**:
+```python
+@app.get("/health")
+async def health_check():
+    """
+    Health check endpoint for monitoring.
+    Verifies DynamoDB connectivity.
+    """
+    try:
+        # Quick DynamoDB connectivity check
+        dynamodb.describe_table(TableName=os.environ['DYNAMODB_TABLE'])
+        db_status = "ok"
+    except Exception:
+        db_status = "error"
+
+    return {
+        "status": "healthy" if db_status == "ok" else "degraded",
+        "timestamp": datetime.utcnow().isoformat() + 'Z',
+        "version": os.environ.get('MODEL_VERSION', '1.0.0'),
+        "checks": {
+            "dynamodb": db_status
+        }
+    }
+```
+
+**Use Cases**:
+- Load balancer health checks
+- Monitoring systems (e.g., Pingdom, UptimeRobot)
+- CI/CD deployment verification
+
+---
+
 ### GET /api/metrics
 
 Return current metrics snapshot for dashboard initialization.
