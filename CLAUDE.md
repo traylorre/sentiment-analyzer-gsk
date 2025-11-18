@@ -95,11 +95,11 @@ cd ../
 terraform init
 
 # 5. Import existing secrets (if they exist in AWS)
-terraform import module.secrets.aws_secretsmanager_secret.newsapi dev/sentiment-analyzer/newsapi
-terraform import module.secrets.aws_secretsmanager_secret.dashboard_api_key dev/sentiment-analyzer/dashboard-api-key
+terraform import -var="environment=dev" module.secrets.aws_secretsmanager_secret.newsapi dev/sentiment-analyzer/newsapi
+terraform import -var="environment=dev" module.secrets.aws_secretsmanager_secret.dashboard_api_key dev/sentiment-analyzer/dashboard-api-key
 
 # 6. Verify everything is in state
-terraform plan
+terraform plan -var="environment=dev"
 ```
 
 After this setup, CI/CD deployments will persist state in S3 and won't recreate existing resources.
