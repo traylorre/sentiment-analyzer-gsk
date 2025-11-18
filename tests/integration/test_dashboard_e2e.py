@@ -22,7 +22,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 # Set env vars before importing handler (which reads them at module level)
-os.environ["API_KEY"] = "e2e-test-api-key-secret"
+os.environ["API_KEY"] = "test-api-key-12345"
 os.environ["DYNAMODB_TABLE"] = "test-sentiment-items"
 os.environ["ENVIRONMENT"] = "test"
 
@@ -202,7 +202,7 @@ def client():
 @pytest.fixture
 def auth_headers():
     """Return valid authorization headers for E2E tests."""
-    return {"Authorization": "Bearer e2e-test-api-key-secret"}
+    return {"Authorization": "Bearer test-api-key-12345"}
 
 
 class TestDashboardE2E:
