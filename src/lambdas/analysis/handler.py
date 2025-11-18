@@ -48,6 +48,7 @@ Security Notes:
 import json
 import logging
 import time
+from decimal import Decimal
 from typing import Any
 
 from src.lambdas.analysis.sentiment import (
@@ -279,7 +280,7 @@ def _update_item_with_sentiment(
             },
             ExpressionAttributeValues={
                 ":s": sentiment,
-                ":sc": round(score, 4),
+                ":sc": Decimal(str(round(score, 4))),
                 ":mv": model_version,
                 ":analyzed": "analyzed",
                 ":pending": "pending",
