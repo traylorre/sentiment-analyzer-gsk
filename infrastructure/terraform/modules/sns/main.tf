@@ -1,5 +1,17 @@
 # SNS Topic for Analysis Triggers
 
+# Dead Letter Queue for failed Lambda invocations
+resource "aws_sqs_queue" "dlq" {
+  name                      = "${var.environment}-sentiment-analysis-dlq"
+  message_retention_seconds = 1209600 # 14 days
+
+  tags = {
+    Name        = "${var.environment}-analysis-dlq"
+    Environment = var.environment
+    Feature     = "001-interactive-dashboard-demo"
+  }
+}
+
 resource "aws_sns_topic" "analysis_requests" {
   name = "${var.environment}-sentiment-analysis-requests"
 
@@ -34,15 +46,19 @@ resource "aws_sns_topic_policy" "analysis_requests" {
   })
 }
 
-# SNS Subscription: Analysis Lambda
+# SNS Subscription: Analysis Lambda (optional)
 resource "aws_sns_topic_subscription" "analysis_lambda" {
+  count = var.create_subscription ? 1 : 0
+
   topic_arn = aws_sns_topic.analysis_requests.arn
   protocol  = "lambda"
   endpoint  = var.analysis_lambda_arn
 }
 
-# Lambda permission to allow SNS to invoke Analysis Lambda
+# Lambda permission to allow SNS to invoke Analysis Lambda (optional)
 resource "aws_lambda_permission" "sns_invoke_analysis" {
+  count = var.create_subscription ? 1 : 0
+
   statement_id  = "AllowExecutionFromSNS"
   action        = "lambda:InvokeFunction"
   function_name = var.analysis_lambda_function_name
