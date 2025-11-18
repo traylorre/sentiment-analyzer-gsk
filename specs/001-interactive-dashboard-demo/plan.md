@@ -410,6 +410,246 @@ TIER 3: BACKUP & DISASTER RECOVERY
 - Revised architecture: $67/month (87% cost reduction)
 - Removed: $400 DAX + $71 global table replication costs
 
+### Cost Controls & Andon Cord
+
+**Purpose**: Prevent runaway charges and automatically alert/throttle on anomalies.
+
+**Budget Alarms** (AWS Budgets):
+```
+Monthly Budget: $50 (demo environment)
+├── 80% threshold ($40): Email notification to ops team
+├── 100% threshold ($50): Email notification + PagerDuty alert
+└── 120% threshold ($60): Auto-throttle Lambda concurrency to 1
+```
+
+**Andon Cord Triggers**:
+| Trigger | Threshold | Action |
+|---------|-----------|--------|
+| Budget exceeded | >100% monthly | Notify + throttle Lambdas |
+| Lambda invocations | >10k/hour | CloudWatch alarm + investigate |
+| DynamoDB WCU spike | >1000/minute | CloudWatch alarm (already exists) |
+| Lambda error rate | >10% over 5 min | CloudWatch alarm + notify |
+| Analysis cold starts | >50/hour | Investigate model loading issues |
+
+**Automatic Responses**:
+- **Level 1 (Warning)**: SNS notification to ops team
+- **Level 2 (Throttle)**: Reduce EventBridge schedule to 1/hour, set Lambda concurrency to 1
+- **Level 3 (Stop)**: Disable EventBridge rules (manual restart required)
+
+**Terraform Implementation** (add to `modules/budget/`):
+```hcl
+resource "aws_budgets_budget" "monthly_cost" {
+  name              = "${var.environment}-sentiment-monthly-budget"
+  budget_type       = "COST"
+  limit_amount      = var.monthly_budget_limit  # Default: 50
+  limit_unit        = "USD"
+  time_unit         = "MONTHLY"
+
+  cost_filters = {
+    TagKeyValue = "user:Feature$001-interactive-dashboard-demo"
+  }
+
+  notification {
+    comparison_operator        = "GREATER_THAN"
+    threshold                  = 80
+    threshold_type             = "PERCENTAGE"
+    notification_type          = "ACTUAL"
+    subscriber_email_addresses = var.alert_emails
+  }
+
+  notification {
+    comparison_operator        = "GREATER_THAN"
+    threshold                  = 100
+    threshold_type             = "PERCENTAGE"
+    notification_type          = "ACTUAL"
+    subscriber_email_addresses = var.alert_emails
+  }
+}
+```
+
+**Manual Andon Pull**: To immediately stop all ingestion:
+```bash
+# Disable ingestion schedule
+aws events disable-rule --name ${ENVIRONMENT}-ingestion-schedule
+
+# Throttle all Lambdas to 0
+aws lambda put-function-concurrency --function-name ${ENVIRONMENT}-ingestion --reserved-concurrent-executions 0
+aws lambda put-function-concurrency --function-name ${ENVIRONMENT}-analysis --reserved-concurrent-executions 0
+```
+
+### Model Versioning Strategy
+
+**Current Model**: DistilBERT fine-tuned on SST-2 (distilbert-base-uncased-finetuned-sst-2-english)
+
+**Version Management**:
+```
+Lambda Layer versioning tracks model versions:
+├── sentiment-model-layer:1  → v1.0.0 (DistilBERT SST-2, ~250MB)
+├── sentiment-model-layer:2  → v1.1.0 (quantized INT8, ~125MB)
+└── sentiment-model-layer:3  → v2.0.0 (RoBERTa, requires Container Image)
+```
+
+**Deployment Process**:
+1. Build new model layer: `scripts/build-model-layer.sh v1.1.0`
+2. Publish layer version: `aws lambda publish-layer-version`
+3. Update Lambda to new layer: `terraform apply -var="model_layer_version=2"`
+4. Verify: Check CloudWatch metrics for inference latency/accuracy
+
+**Rollback Process**:
+1. Identify issue: Monitor `InferenceLatencyMs`, `AnalysisErrors`, sentiment distribution drift
+2. Rollback: `terraform apply -var="model_layer_version=1"` (revert to previous)
+3. Verify: Confirm metrics return to baseline
+
+**Environment Variable**:
+- `MODEL_VERSION`: Tracked in Lambda environment, recorded in DynamoDB items
+- Enables filtering/querying by model version for A/B analysis
+
+**Upgrade Path**:
+| Model | Size | Accuracy | Cold Start | Deployment |
+|-------|------|----------|------------|------------|
+| DistilBERT (current) | 250MB | 91% | ~2.5s | Lambda Layer |
+| DistilBERT INT8 | 125MB | 90% | ~1.5s | Lambda Layer |
+| RoBERTa-base | 500MB | 94% | ~5s | Container Image |
+| OpenAI API | N/A | 95%+ | <100ms | API call (no layer) |
+
+### Watch Tags Configuration
+
+**Current Approach (Demo)**: Static environment variable
+
+```python
+# Ingestion Lambda reads from environment
+WATCH_TAGS = os.environ.get('WATCH_TAGS', 'AI,climate,economy,health,sports')
+tags = [tag.strip() for tag in WATCH_TAGS.split(',')]
+```
+
+**Changing Tags**:
+1. Update Terraform variable: `watch_tags = "AI,technology,finance,health,energy"`
+2. Apply: `terraform apply`
+3. Lambda cold start picks up new environment variable
+
+**Limitations**:
+- Requires Lambda redeployment to change tags
+- No runtime validation of tag format
+- Maximum ~10 tags (NewsAPI query limits)
+
+**Future Approach (Phase 2)**: DynamoDB configuration table
+
+```
+Table: sentiment-config
+├── PK: config_type
+├── SK: config_key
+└── value: JSON
+
+Example:
+{
+  "config_type": "watch_tags",
+  "config_key": "active",
+  "value": {
+    "tags": ["AI", "climate", "economy", "health", "sports"],
+    "updated_at": "2025-11-17T10:00:00Z",
+    "updated_by": "admin"
+  }
+}
+```
+
+**Benefits of Phase 2**:
+- Dynamic tag management via admin API
+- No redeployment required
+- Audit trail of configuration changes
+- Tag validation before save
+
+### Test Coverage Requirements
+
+**Minimum Coverage Gates**:
+- Unit tests: **>80% line coverage** (pytest-cov)
+- Integration tests: All Lambda handlers have happy path + error tests
+- E2E tests: Full ingestion → analysis → dashboard flow
+
+**Test Categories**:
+```
+tests/
+├── unit/                    # 80% coverage required
+│   ├── test_adapters.py     # NewsAPI adapter parsing
+│   ├── test_sentiment.py    # Inference logic, neutral threshold
+│   ├── test_deduplication.py # Hash generation, collision handling
+│   └── test_validation.py   # Pydantic schema validation
+├── integration/             # All handlers covered
+│   ├── test_ingestion.py    # Mock NewsAPI, real DynamoDB (moto)
+│   ├── test_analysis.py     # Mock model, real DynamoDB (moto)
+│   └── test_dashboard.py    # Query patterns, GSI usage
+└── e2e/                     # Deployed infrastructure
+    └── test_full_flow.py    # Seed data → verify dashboard
+```
+
+**CI/CD Gates**:
+```yaml
+# .github/workflows/test.yml
+- name: Run tests with coverage
+  run: pytest --cov=src --cov-report=xml --cov-fail-under=80
+
+- name: Upload coverage
+  uses: codecov/codecov-action@v3
+```
+
+**Mocking Strategy**:
+- AWS services: `moto` library (DynamoDB, Secrets Manager, SNS)
+- External APIs: `responses` library (NewsAPI)
+- ML model: Mock `pipeline()` return values
+
+### Supply Chain Security
+
+**Dependency Management**:
+```
+requirements.txt with pinned versions:
+boto3==1.34.20
+pydantic==2.5.3
+requests==2.31.0
+transformers==4.36.0
+torch==2.1.0
+```
+
+**Security Scanning**:
+- **Dependabot**: Enable in GitHub repository settings
+- **pip-audit**: Run in CI/CD pipeline
+  ```yaml
+  - name: Security audit
+    run: pip-audit --require-hashes -r requirements.txt
+  ```
+- **Snyk** (optional): For deeper vulnerability analysis
+
+**Model Artifact Verification**:
+```bash
+# scripts/build-model-layer.sh
+MODEL_NAME="distilbert-base-uncased-finetuned-sst-2-english"
+EXPECTED_HASH="sha256:abc123..."  # Pin expected hash
+
+# Download and verify
+python -c "from transformers import AutoModel; AutoModel.from_pretrained('$MODEL_NAME')"
+
+# Verify hash
+ACTUAL_HASH=$(sha256sum layer/model/pytorch_model.bin | cut -d' ' -f1)
+if [ "$ACTUAL_HASH" != "$EXPECTED_HASH" ]; then
+  echo "ERROR: Model hash mismatch!"
+  exit 1
+fi
+```
+
+**Lambda Code Signing** (Phase 2):
+- Create AWS Signer signing profile
+- Sign deployment packages before upload
+- Configure Lambda to reject unsigned code
+
+**Container Image Scanning** (if using Container Images):
+```yaml
+# ECR scanning enabled
+resource "aws_ecr_repository" "lambda" {
+  name                 = "sentiment-analysis"
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+}
+```
+
 ### Rollout Plan (Simplified)
 
 **Phase 1 (Demo)** - Week 1:
