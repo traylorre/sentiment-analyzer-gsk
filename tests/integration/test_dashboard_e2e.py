@@ -76,9 +76,7 @@ def create_test_table():
         BillingMode="PAY_PER_REQUEST",
     )
 
-    table.meta.client.get_waiter("table_exists").wait(
-        TableName="test-sentiment-items"
-    )
+    table.meta.client.get_waiter("table_exists").wait(TableName="test-sentiment-items")
 
     return table
 
@@ -252,8 +250,14 @@ class TestDashboardE2E:
 
         # Verify all required fields are present
         required_fields = [
-            "total", "positive", "neutral", "negative",
-            "by_tag", "rate_last_hour", "rate_last_24h", "recent_items"
+            "total",
+            "positive",
+            "neutral",
+            "negative",
+            "by_tag",
+            "rate_last_hour",
+            "rate_last_24h",
+            "recent_items",
         ]
         for field in required_fields:
             assert field in data, f"Missing field: {field}"
@@ -310,18 +314,20 @@ class TestDashboardE2E:
 
         # Add item with internal fields
         now = datetime.now(timezone.utc)
-        table.put_item(Item={
-            "source_id": "newsapi#internal",
-            "timestamp": now.isoformat(),
-            "title": "Test Item",
-            "sentiment": "positive",
-            "score": Decimal("0.9"),
-            "status": "analyzed",
-            "tags": ["test"],
-            "source": "test",
-            "ttl": 1234567890,  # Internal field
-            "content_hash": "abc123def456",  # Internal field
-        })
+        table.put_item(
+            Item={
+                "source_id": "newsapi#internal",
+                "timestamp": now.isoformat(),
+                "title": "Test Item",
+                "sentiment": "positive",
+                "score": Decimal("0.9"),
+                "status": "analyzed",
+                "tags": ["test"],
+                "source": "test",
+                "ttl": 1234567890,  # Internal field
+                "content_hash": "abc123def456",  # Internal field
+            }
+        )
 
         response = client.get("/api/metrics", headers=auth_headers)
 
@@ -352,16 +358,14 @@ class TestDashboardE2E:
 
         # Test wrong key
         response = client.get(
-            "/api/metrics",
-            headers={"Authorization": "Bearer wrong-key"}
+            "/api/metrics", headers={"Authorization": "Bearer wrong-key"}
         )
         assert response.status_code == 401
         assert "Invalid API key" in response.json()["detail"]
 
         # Test invalid format
         response = client.get(
-            "/api/metrics",
-            headers={"Authorization": "InvalidFormat"}
+            "/api/metrics", headers={"Authorization": "InvalidFormat"}
         )
         assert response.status_code == 401
         assert "Invalid Authorization header format" in response.json()["detail"]
@@ -456,22 +460,26 @@ class TestDashboardE2E:
         now = datetime.now(timezone.utc)
 
         # Add item within 1 hour
-        table.put_item(Item={
-            "source_id": "newsapi#recent",
-            "timestamp": (now - timedelta(minutes=30)).isoformat(),
-            "sentiment": "positive",
-            "status": "analyzed",
-            "tags": ["test"],
-        })
+        table.put_item(
+            Item={
+                "source_id": "newsapi#recent",
+                "timestamp": (now - timedelta(minutes=30)).isoformat(),
+                "sentiment": "positive",
+                "status": "analyzed",
+                "tags": ["test"],
+            }
+        )
 
         # Add item at 2 hours (outside 1-hour window)
-        table.put_item(Item={
-            "source_id": "newsapi#older",
-            "timestamp": (now - timedelta(hours=2)).isoformat(),
-            "sentiment": "negative",
-            "status": "analyzed",
-            "tags": ["test"],
-        })
+        table.put_item(
+            Item={
+                "source_id": "newsapi#older",
+                "timestamp": (now - timedelta(hours=2)).isoformat(),
+                "sentiment": "negative",
+                "status": "analyzed",
+                "tags": ["test"],
+            }
+        )
 
         # Query with 1-hour window
         response = client.get("/api/metrics?hours=1", headers=auth_headers)

@@ -76,9 +76,7 @@ def create_test_table():
         BillingMode="PAY_PER_REQUEST",
     )
 
-    table.meta.client.get_waiter("table_exists").wait(
-        TableName="test-sentiment-items"
-    )
+    table.meta.client.get_waiter("table_exists").wait(TableName="test-sentiment-items")
 
     return table
 
@@ -366,9 +364,11 @@ class TestLambdaHandler:
     def test_lambda_handler_exists(self):
         """Test lambda_handler function is exported."""
         from src.lambdas.dashboard.handler import lambda_handler
+
         assert callable(lambda_handler)
 
     def test_mangum_adapter_exists(self):
         """Test Mangum adapter is configured."""
         from src.lambdas.dashboard.handler import handler
+
         assert handler is not None

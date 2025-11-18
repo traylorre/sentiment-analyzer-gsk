@@ -35,7 +35,9 @@ def valid_env_vars(monkeypatch):
     monkeypatch.setenv("WATCH_TAGS", "AI,climate,economy,health,sports")
     monkeypatch.setenv("DYNAMODB_TABLE", "dev-sentiment-items")
     monkeypatch.setenv("SNS_TOPIC_ARN", "arn:aws:sns:us-east-1:123456789:test-topic")
-    monkeypatch.setenv("NEWSAPI_SECRET_ARN", "arn:aws:secretsmanager:us-east-1:123456789:secret:test")
+    monkeypatch.setenv(
+        "NEWSAPI_SECRET_ARN", "arn:aws:secretsmanager:us-east-1:123456789:secret:test"
+    )
     monkeypatch.setenv("MODEL_VERSION", "v1.0.0")
     monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
 
@@ -239,7 +241,10 @@ class TestGetConfig:
         monkeypatch.delenv("WATCH_TAGS", raising=False)
         monkeypatch.setenv("DYNAMODB_TABLE", "test")
         monkeypatch.setenv("SNS_TOPIC_ARN", "arn:aws:sns:us-east-1:123456789:topic")
-        monkeypatch.setenv("NEWSAPI_SECRET_ARN", "arn:aws:secretsmanager:us-east-1:123456789:secret:test")
+        monkeypatch.setenv(
+            "NEWSAPI_SECRET_ARN",
+            "arn:aws:secretsmanager:us-east-1:123456789:secret:test",
+        )
 
         with pytest.raises(ConfigurationError):
             get_config()

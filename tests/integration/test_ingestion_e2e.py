@@ -56,8 +56,12 @@ def env_vars(aws_credentials):
     """Set up environment variables for testing."""
     os.environ["WATCH_TAGS"] = "AI,climate,economy"
     os.environ["DYNAMODB_TABLE"] = "test-sentiment-items"
-    os.environ["SNS_TOPIC_ARN"] = "arn:aws:sns:us-east-1:123456789012:test-analysis-topic"
-    os.environ["NEWSAPI_SECRET_ARN"] = "arn:aws:secretsmanager:us-east-1:123456789012:secret:test-newsapi"
+    os.environ["SNS_TOPIC_ARN"] = (
+        "arn:aws:sns:us-east-1:123456789012:test-analysis-topic"
+    )
+    os.environ["NEWSAPI_SECRET_ARN"] = (
+        "arn:aws:secretsmanager:us-east-1:123456789012:secret:test-newsapi"
+    )
     os.environ["MODEL_VERSION"] = "v1.0.0"
     os.environ["ENVIRONMENT"] = "test"
 
@@ -65,8 +69,12 @@ def env_vars(aws_credentials):
 
     # Cleanup
     for key in [
-        "WATCH_TAGS", "DYNAMODB_TABLE", "SNS_TOPIC_ARN",
-        "NEWSAPI_SECRET_ARN", "MODEL_VERSION", "ENVIRONMENT",
+        "WATCH_TAGS",
+        "DYNAMODB_TABLE",
+        "SNS_TOPIC_ARN",
+        "NEWSAPI_SECRET_ARN",
+        "MODEL_VERSION",
+        "ENVIRONMENT",
     ]:
         os.environ.pop(key, None)
 
@@ -201,8 +209,10 @@ class TestIngestionE2E:
             )
 
         # Execute handler
-        with patch("src.lib.metrics.emit_metric"), \
-             patch("src.lib.metrics.emit_metrics_batch"):
+        with (
+            patch("src.lib.metrics.emit_metric"),
+            patch("src.lib.metrics.emit_metrics_batch"),
+        ):
             result = lambda_handler(eventbridge_event, mock_context)
 
         # Verify success response
@@ -260,8 +270,10 @@ class TestIngestionE2E:
             )
 
         # First invocation
-        with patch("src.lib.metrics.emit_metric"), \
-             patch("src.lib.metrics.emit_metrics_batch"):
+        with (
+            patch("src.lib.metrics.emit_metric"),
+            patch("src.lib.metrics.emit_metrics_batch"),
+        ):
             result1 = lambda_handler(eventbridge_event, mock_context)
 
         # Verify first invocation
@@ -282,8 +294,10 @@ class TestIngestionE2E:
             )
 
         # Second invocation - same articles
-        with patch("src.lib.metrics.emit_metric"), \
-             patch("src.lib.metrics.emit_metrics_batch"):
+        with (
+            patch("src.lib.metrics.emit_metric"),
+            patch("src.lib.metrics.emit_metrics_batch"),
+        ):
             result2 = lambda_handler(eventbridge_event, mock_context)
 
         # Verify second invocation - all duplicates
@@ -340,9 +354,11 @@ class TestIngestionE2E:
         )
 
         # Patch the SNS client creation to use our mock
-        with patch("src.lib.metrics.emit_metric"), \
-             patch("src.lib.metrics.emit_metrics_batch"), \
-             patch("src.lambdas.ingestion.handler._get_sns_client") as mock_sns:
+        with (
+            patch("src.lib.metrics.emit_metric"),
+            patch("src.lib.metrics.emit_metrics_batch"),
+            patch("src.lambdas.ingestion.handler._get_sns_client") as mock_sns,
+        ):
             mock_sns_client = MagicMock()
             mock_sns_client.publish = capture_publish
             mock_sns.return_value = mock_sns_client
@@ -402,8 +418,10 @@ class TestIngestionE2E:
         )
 
         # Execute handler
-        with patch("src.lib.metrics.emit_metric"), \
-             patch("src.lib.metrics.emit_metrics_batch"):
+        with (
+            patch("src.lib.metrics.emit_metric"),
+            patch("src.lib.metrics.emit_metrics_batch"),
+        ):
             result = lambda_handler(eventbridge_event, mock_context)
 
         # Get the item
@@ -455,8 +473,10 @@ class TestIngestionE2E:
         )
 
         # Execute handler
-        with patch("src.lib.metrics.emit_metric"), \
-             patch("src.lib.metrics.emit_metrics_batch"):
+        with (
+            patch("src.lib.metrics.emit_metric"),
+            patch("src.lib.metrics.emit_metrics_batch"),
+        ):
             result = lambda_handler(eventbridge_event, mock_context)
 
         # Get the item
@@ -536,8 +556,10 @@ class TestIngestionE2E:
         )
 
         # Execute handler
-        with patch("src.lib.metrics.emit_metric"), \
-             patch("src.lib.metrics.emit_metrics_batch"):
+        with (
+            patch("src.lib.metrics.emit_metric"),
+            patch("src.lib.metrics.emit_metrics_batch"),
+        ):
             result = lambda_handler(eventbridge_event, mock_context)
 
         # Should be 207 (partial success)
@@ -592,8 +614,10 @@ class TestIngestionE2E:
         )
 
         # Execute handler
-        with patch("src.lib.metrics.emit_metric"), \
-             patch("src.lib.metrics.emit_metrics_batch"):
+        with (
+            patch("src.lib.metrics.emit_metric"),
+            patch("src.lib.metrics.emit_metrics_batch"),
+        ):
             result = lambda_handler(eventbridge_event, mock_context)
 
         # Get the item
@@ -601,7 +625,9 @@ class TestIngestionE2E:
         item = scan_result["Items"][0]
 
         # Verify text_for_analysis combines title and description
-        expected_text = "Important AI News. This is the description with key information."
+        expected_text = (
+            "Important AI News. This is the description with key information."
+        )
         assert item["text_for_analysis"] == expected_text
 
     @mock_aws
@@ -635,8 +661,10 @@ class TestIngestionE2E:
             )
 
         # Execute handler
-        with patch("src.lib.metrics.emit_metric"), \
-             patch("src.lib.metrics.emit_metrics_batch"):
+        with (
+            patch("src.lib.metrics.emit_metric"),
+            patch("src.lib.metrics.emit_metrics_batch"),
+        ):
             result = lambda_handler(eventbridge_event, mock_context)
 
         # Verify per-tag stats
@@ -791,8 +819,10 @@ class TestIngestionEdgeCases:
             )
 
         # Execute handler
-        with patch("src.lib.metrics.emit_metric"), \
-             patch("src.lib.metrics.emit_metrics_batch"):
+        with (
+            patch("src.lib.metrics.emit_metric"),
+            patch("src.lib.metrics.emit_metrics_batch"),
+        ):
             result = lambda_handler(eventbridge_event, mock_context)
 
         # Should succeed with zero items
@@ -856,8 +886,10 @@ class TestIngestionEdgeCases:
         )
 
         # Execute handler
-        with patch("src.lib.metrics.emit_metric"), \
-             patch("src.lib.metrics.emit_metrics_batch"):
+        with (
+            patch("src.lib.metrics.emit_metric"),
+            patch("src.lib.metrics.emit_metrics_batch"),
+        ):
             result = lambda_handler(eventbridge_event, mock_context)
 
         # Should succeed

@@ -53,14 +53,23 @@ def env_vars(aws_credentials):
     os.environ["WATCH_TAGS"] = "AI,climate"
     os.environ["DYNAMODB_TABLE"] = "test-sentiment-items"
     os.environ["SNS_TOPIC_ARN"] = "arn:aws:sns:us-east-1:123456789012:test-topic"
-    os.environ["NEWSAPI_SECRET_ARN"] = "arn:aws:secretsmanager:us-east-1:123456789012:secret:test"
+    os.environ["NEWSAPI_SECRET_ARN"] = (
+        "arn:aws:secretsmanager:us-east-1:123456789012:secret:test"
+    )
     os.environ["MODEL_VERSION"] = "v1.0.0"
     os.environ["ENVIRONMENT"] = "test"
 
     yield
 
     # Cleanup
-    for key in ["WATCH_TAGS", "DYNAMODB_TABLE", "SNS_TOPIC_ARN", "NEWSAPI_SECRET_ARN", "MODEL_VERSION", "ENVIRONMENT"]:
+    for key in [
+        "WATCH_TAGS",
+        "DYNAMODB_TABLE",
+        "SNS_TOPIC_ARN",
+        "NEWSAPI_SECRET_ARN",
+        "MODEL_VERSION",
+        "ENVIRONMENT",
+    ]:
         os.environ.pop(key, None)
 
 
@@ -158,9 +167,7 @@ def eventbridge_event():
         "account": "123456789012",
         "time": "2025-11-17T14:30:00Z",
         "region": "us-east-1",
-        "resources": [
-            "arn:aws:events:us-east-1:123456789012:rule/test-scheduler"
-        ],
+        "resources": ["arn:aws:events:us-east-1:123456789012:rule/test-scheduler"],
         "detail": {},
     }
 
@@ -196,8 +203,10 @@ class TestLambdaHandler:
         )
 
         # Mock CloudWatch
-        with patch("src.lib.metrics.emit_metric"), \
-             patch("src.lib.metrics.emit_metrics_batch"):
+        with (
+            patch("src.lib.metrics.emit_metric"),
+            patch("src.lib.metrics.emit_metrics_batch"),
+        ):
             result = lambda_handler(eventbridge_event, mock_context)
 
         assert result["statusCode"] == 200
@@ -234,8 +243,10 @@ class TestLambdaHandler:
             status=200,
         )
 
-        with patch("src.lib.metrics.emit_metric"), \
-             patch("src.lib.metrics.emit_metrics_batch"):
+        with (
+            patch("src.lib.metrics.emit_metric"),
+            patch("src.lib.metrics.emit_metrics_batch"),
+        ):
             # First invocation
             result1 = lambda_handler(eventbridge_event, mock_context)
 
@@ -253,8 +264,10 @@ class TestLambdaHandler:
             status=200,
         )
 
-        with patch("src.lib.metrics.emit_metric"), \
-             patch("src.lib.metrics.emit_metrics_batch"):
+        with (
+            patch("src.lib.metrics.emit_metric"),
+            patch("src.lib.metrics.emit_metrics_batch"),
+        ):
             # Second invocation - should skip duplicates
             result2 = lambda_handler(eventbridge_event, mock_context)
 
@@ -292,8 +305,10 @@ class TestLambdaHandler:
             headers={"Retry-After": "3600"},
         )
 
-        with patch("src.lib.metrics.emit_metric"), \
-             patch("src.lib.metrics.emit_metrics_batch"):
+        with (
+            patch("src.lib.metrics.emit_metric"),
+            patch("src.lib.metrics.emit_metrics_batch"),
+        ):
             result = lambda_handler(eventbridge_event, mock_context)
 
         # Should be 207 (multi-status) since one tag failed
@@ -323,20 +338,26 @@ class TestLambdaHandler:
             status=401,
         )
 
-        with patch("src.lib.metrics.emit_metric"), \
-             patch("src.lib.metrics.emit_metrics_batch"):
+        with (
+            patch("src.lib.metrics.emit_metric"),
+            patch("src.lib.metrics.emit_metrics_batch"),
+        ):
             result = lambda_handler(eventbridge_event, mock_context)
 
         assert result["statusCode"] == 401
         assert result["body"]["code"] == "AUTHENTICATION_ERROR"
 
     @mock_aws
-    def test_handler_missing_config(self, mock_context, eventbridge_event, aws_credentials):
+    def test_handler_missing_config(
+        self, mock_context, eventbridge_event, aws_credentials
+    ):
         """Test handler fails with missing configuration."""
         # Don't set env vars
 
-        with patch("src.lib.metrics.emit_metric"), \
-             patch("src.lib.metrics.emit_metrics_batch"):
+        with (
+            patch("src.lib.metrics.emit_metric"),
+            patch("src.lib.metrics.emit_metrics_batch"),
+        ):
             result = lambda_handler(eventbridge_event, mock_context)
 
         assert result["statusCode"] == 500
@@ -381,10 +402,14 @@ class TestLambdaHandler:
         }
 
         responses.add(responses.GET, NEWSAPI_BASE_URL, json=ai_response, status=200)
-        responses.add(responses.GET, NEWSAPI_BASE_URL, json=climate_response, status=200)
+        responses.add(
+            responses.GET, NEWSAPI_BASE_URL, json=climate_response, status=200
+        )
 
-        with patch("src.lib.metrics.emit_metric"), \
-             patch("src.lib.metrics.emit_metrics_batch"):
+        with (
+            patch("src.lib.metrics.emit_metric"),
+            patch("src.lib.metrics.emit_metrics_batch"),
+        ):
             result = lambda_handler(eventbridge_event, mock_context)
 
         assert result["body"]["per_tag_stats"]["AI"]["fetched"] == 3
@@ -793,8 +818,13 @@ class TestMetricsEmission:
         def mock_emit_metrics_batch(metrics, **kwargs):
             emitted_metrics.extend(metrics)
 
-        with patch("src.lib.metrics.emit_metric"), \
-             patch("src.lambdas.ingestion.handler.emit_metrics_batch", mock_emit_metrics_batch):
+        with (
+            patch("src.lib.metrics.emit_metric"),
+            patch(
+                "src.lambdas.ingestion.handler.emit_metrics_batch",
+                mock_emit_metrics_batch,
+            ),
+        ):
             result = lambda_handler(eventbridge_event, mock_context)
 
         # Verify metrics
@@ -826,8 +856,10 @@ class TestErrorHandling:
             BillingMode="PAY_PER_REQUEST",
         )
 
-        with patch("src.lib.metrics.emit_metric"), \
-             patch("src.lib.metrics.emit_metrics_batch"):
+        with (
+            patch("src.lib.metrics.emit_metric"),
+            patch("src.lib.metrics.emit_metrics_batch"),
+        ):
             result = lambda_handler(eventbridge_event, mock_context)
 
         assert result["statusCode"] == 500
@@ -881,8 +913,10 @@ class TestErrorHandling:
             status=200,
         )
 
-        with patch("src.lib.metrics.emit_metric"), \
-             patch("src.lib.metrics.emit_metrics_batch"):
+        with (
+            patch("src.lib.metrics.emit_metric"),
+            patch("src.lib.metrics.emit_metrics_batch"),
+        ):
             # Create the topic so the test works
             sns.create_topic(Name="test-topic")
             result = lambda_handler(eventbridge_event, mock_context)
@@ -932,8 +966,10 @@ class TestErrorHandling:
         responses.add(responses.GET, NEWSAPI_BASE_URL, json=empty_response, status=200)
         responses.add(responses.GET, NEWSAPI_BASE_URL, json=empty_response, status=200)
 
-        with patch("src.lib.metrics.emit_metric"), \
-             patch("src.lib.metrics.emit_metrics_batch"):
+        with (
+            patch("src.lib.metrics.emit_metric"),
+            patch("src.lib.metrics.emit_metrics_batch"),
+        ):
             result = lambda_handler(eventbridge_event, mock_context)
 
         assert result["statusCode"] == 200

@@ -201,11 +201,13 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                     },
                 )
                 emit_metric("NewsAPIRateLimitHit", 1)
-                errors.append({
-                    "tag": tag,
-                    "error": "RATE_LIMIT_EXCEEDED",
-                    "retry_after": e.retry_after,
-                })
+                errors.append(
+                    {
+                        "tag": tag,
+                        "error": "RATE_LIMIT_EXCEEDED",
+                        "retry_after": e.retry_after,
+                    }
+                )
                 summary["errors"] += 1
 
             except AuthenticationError as e:
@@ -224,11 +226,13 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                     extra={"tag": tag, "error": str(e)},
                 )
                 emit_metric("IngestionErrors", 1)
-                errors.append({
-                    "tag": tag,
-                    "error": "ADAPTER_ERROR",
-                    "message": str(e),
-                })
+                errors.append(
+                    {
+                        "tag": tag,
+                        "error": "ADAPTER_ERROR",
+                        "message": str(e),
+                    }
+                )
                 summary["errors"] += 1
 
             except Exception as e:
@@ -238,11 +242,13 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                     extra={"tag": tag, "error": str(e)},
                 )
                 emit_metric("IngestionErrors", 1)
-                errors.append({
-                    "tag": tag,
-                    "error": "INTERNAL_ERROR",
-                    "message": str(e),
-                })
+                errors.append(
+                    {
+                        "tag": tag,
+                        "error": "INTERNAL_ERROR",
+                        "message": str(e),
+                    }
+                )
                 summary["errors"] += 1
 
             # Record tag stats
@@ -493,14 +499,24 @@ def _emit_summary_metrics(summary: dict[str, int], execution_time_ms: float) -> 
         - ArticlesFetched = 0 → "No articles" alarm
     """
     metrics = [
-        {"name": "ArticlesFetched", "value": summary["articles_fetched"], "unit": "Count"},
+        {
+            "name": "ArticlesFetched",
+            "value": summary["articles_fetched"],
+            "unit": "Count",
+        },
         {"name": "NewItemsIngested", "value": summary["new_items"], "unit": "Count"},
-        {"name": "DuplicatesSkipped", "value": summary["duplicates_skipped"], "unit": "Count"},
+        {
+            "name": "DuplicatesSkipped",
+            "value": summary["duplicates_skipped"],
+            "unit": "Count",
+        },
         {"name": "ExecutionTimeMs", "value": execution_time_ms, "unit": "Milliseconds"},
     ]
 
     # Only emit error metric if there were errors
     if summary["errors"] > 0:
-        metrics.append({"name": "IngestionErrors", "value": summary["errors"], "unit": "Count"})
+        metrics.append(
+            {"name": "IngestionErrors", "value": summary["errors"], "unit": "Count"}
+        )
 
     emit_metrics_batch(metrics)
