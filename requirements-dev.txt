@@ -23,7 +23,8 @@ pytest-cov==4.1.0       # Coverage reporting
 
 # AWS Mocking - Critical for unit tests
 # Note: moto version must support all AWS services we use
-moto==4.2.0
+# moto 5.0+ required for unified mock_aws decorator
+moto[all]==5.0.0
 
 # HTTP Mocking - For NewsAPI adapter tests
 responses==0.24.0
