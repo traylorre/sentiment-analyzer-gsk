@@ -21,17 +21,17 @@ import os
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
-# Set API_KEY before importing handler (which reads it at module level)
+# Set env vars before importing handler (which reads them at module level)
 os.environ["API_KEY"] = "e2e-test-api-key-secret"
 os.environ["DYNAMODB_TABLE"] = "test-sentiment-items"
 os.environ["ENVIRONMENT"] = "test"
 
-import boto3
-import pytest
-from fastapi.testclient import TestClient
-from moto import mock_aws
+import boto3  # noqa: E402
+import pytest  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+from moto import mock_aws  # noqa: E402
 
-from src.lambdas.dashboard.handler import app
+from src.lambdas.dashboard.handler import app  # noqa: E402
 
 
 def create_test_table():
