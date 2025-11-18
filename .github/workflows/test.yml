@@ -1,0 +1,91 @@
+# Test Workflow
+# Runs pytest with coverage on every push and PR
+#
+# For On-Call Engineers:
+# - If this workflow fails, check the "Run tests" step for specific failures
+# - Coverage must be >80% or the build fails
+# - Tests use moto to mock AWS services (no real AWS calls)
+#
+# For Developers:
+# - Run locally first: pytest --cov=src --cov-report=term-missing
+# - Add new tests in tests/unit/ or tests/integration/
+# - Mark slow tests with @pytest.mark.slow
+
+name: Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'requirements*.txt'
+      - 'pyproject.toml'
+      - 'pytest.ini'
+      - '.github/workflows/test.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'requirements*.txt'
+      - 'pyproject.toml'
+      - 'pytest.ini'
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+
+    # Security: Limit permissions
+    permissions:
+      contents: read
+      checks: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run tests with coverage
+        run: |
+          pytest --cov=src --cov-report=term-missing --cov-report=xml --junitxml=test-results.xml
+        env:
+          # Test environment variables
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_ACCESS_KEY_ID: testing
+          AWS_SECRET_ACCESS_KEY: testing
+
+      - name: Check coverage threshold
+        run: |
+          # Extract coverage percentage and fail if below 80%
+          # On-Call Note: If this fails, add more tests before merging
+          coverage report --fail-under=80
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: |
+            coverage.xml
+            test-results.xml
+          retention-days: 30
+
+      - name: Comment coverage on PR
+        uses: py-cov-action/python-coverage-comment-action@v3
+        if: github.event_name == 'pull_request'
+        with:
+          GITHUB_TOKEN: ${{ github.token }}
+          MINIMUM_GREEN: 80
+          MINIMUM_ORANGE: 60

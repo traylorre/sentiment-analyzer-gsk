@@ -1,7 +1,12 @@
 # sentiment-analyzer-gsk
 
-[![CI](https://img.shields.io/badge/ci-GitHub%20Actions-blue.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions)
+[![Tests](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/test.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/test.yml)
+[![Lint](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/lint.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/lint.yml)
+[![Deploy Dev](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/deploy-dev.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/deploy-dev.yml)
+[![Deploy Prod](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/deploy-prod.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/deploy-prod.yml)
 [![Security](https://img.shields.io/badge/security-hardened-green.svg)](./SECURITY.md)
+[![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/)
+[![Coverage](https://img.shields.io/badge/coverage-%3E80%25-brightgreen.svg)](./pyproject.toml)
 
 A cloud-hosted Sentiment Analyzer service built with serverless AWS architecture (Lambda, DynamoDB, EventBridge, SNS/SQS). Developed using [GitHub Spec-Kit](https://github.com/github/spec-kit) methodology for specification-driven development.
 
@@ -11,12 +16,14 @@ A cloud-hosted Sentiment Analyzer service built with serverless AWS architecture
 
 - [Quick Start](#quick-start)
 - [Project Overview](#project-overview)
+- [Demo 1: Interactive Dashboard](#demo-1-interactive-dashboard)
 - [Getting Started](#getting-started)
   - [Prerequisites](#prerequisites)
   - [Local Development Setup](#local-development-setup)
   - [Verify Your Setup](#verify-your-setup)
 - [Project Structure](#project-structure)
 - [Development Workflow](#development-workflow)
+- [On-Call & Operations](#on-call--operations)
 - [Contributing](#contributing)
 - [Security](#security)
 - [Documentation](#documentation)
@@ -83,6 +90,113 @@ Ingests text from external sources (Twitter, RSS feeds) and returns sentiment an
 ✅ **Security-first** - Least-privilege IAM, secrets in AWS Secrets Manager
 ✅ **Observable** - CloudWatch dashboards, alarms, DLQ monitoring
 ✅ **Tier-aware** - Twitter API tier configuration (Free → Basic → Pro)
+
+---
+
+## Demo 1: Interactive Dashboard
+
+**Current Feature**: Real-time sentiment analysis with live dashboard
+
+### Quick Links
+
+| Document | Purpose |
+|----------|---------|
+| [Quickstart Guide](./specs/001-interactive-dashboard-demo/quickstart.md) | Step-by-step deployment |
+| [Implementation Plan](./specs/001-interactive-dashboard-demo/plan.md) | Architecture & design decisions |
+| [Feature Spec](./specs/001-interactive-dashboard-demo/spec.md) | Requirements & acceptance criteria |
+| [On-Call SOP](./specs/001-interactive-dashboard-demo/ON_CALL_SOP.md) | Incident response runbooks |
+| [Tasks](./specs/001-interactive-dashboard-demo/tasks.md) | Implementation checklist |
+
+### Architecture Overview
+
+```
+NewsAPI → Ingestion Lambda → DynamoDB → Analysis Lambda → Dashboard
+              ↓                              ↓
+         SNS Topic                    DistilBERT Model
+```
+
+**Components**:
+- **Ingestion Lambda**: EventBridge-triggered (5 min), fetches NewsAPI articles
+- **Analysis Lambda**: SNS-triggered, runs DistilBERT sentiment inference
+- **Dashboard Lambda**: Function URL, serves FastAPI + SSE real-time updates
+- **DynamoDB**: Single table with 3 GSIs (by_sentiment, by_tag, by_status)
+
+### Running Locally
+
+```bash
+# 1. Create virtual environment
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+# 2. Install dependencies
+pip install -r requirements-dev.txt
+
+# 3. Run tests
+pytest
+
+# 4. Run linting
+black --check src/ tests/
+ruff check src/ tests/
+```
+
+### Deployment
+
+See [Quickstart Guide](./specs/001-interactive-dashboard-demo/quickstart.md) for full deployment instructions.
+
+```bash
+# Dev deployment (automatic on merge to main)
+# Or manually trigger via GitHub Actions
+
+# Prod deployment (requires approval)
+# Go to Actions → Deploy Prod → Run workflow
+```
+
+---
+
+## On-Call & Operations
+
+### For On-Call Engineers
+
+**Start here during incidents**: [ON_CALL_SOP.md](./specs/001-interactive-dashboard-demo/ON_CALL_SOP.md)
+
+12 documented scenarios with step-by-step CLI commands:
+- SC-01: Service Degradation
+- SC-03: Ingestion Failures
+- SC-04: Analysis Failures
+- SC-05: Dashboard Failures
+- SC-07: NewsAPI Rate Limiting
+- SC-08: Budget Alerts
+- SC-09: DLQ Accumulation
+- And more...
+
+### Monitoring
+
+11 CloudWatch alarms configured in `infrastructure/terraform/modules/monitoring/`:
+- Lambda error rates
+- Latency thresholds
+- SNS delivery failures
+- DLQ depth
+- Budget alerts
+
+### Quick Diagnostics
+
+```bash
+# Check Lambda errors
+aws logs filter-log-events \
+  --log-group-name /aws/lambda/dev-sentiment-ingestion \
+  --filter-pattern "ERROR" \
+  --start-time $(date -d '30 minutes ago' +%s)000
+
+# Check DynamoDB item count
+aws dynamodb scan \
+  --table-name dev-sentiment-items \
+  --select COUNT
+
+# Check active alarms
+aws cloudwatch describe-alarms \
+  --state-value ALARM \
+  --alarm-name-prefix "dev-"
+```
 
 ---
 
@@ -435,15 +549,26 @@ _Coming soon - OpenAPI/Swagger specs for Admin API_
 
 ## Project Status
 
-**Current Phase:** Specification Complete (GitHub Spec-Kit Stage 1 ✅)
+**Current Phase:** Implementation (GitHub Spec-Kit Stage 4 🔄)
 
-**Next Steps:**
+**Demo 1 Progress:**
 1. ✅ Stage 1: Specify - **COMPLETE**
-2. 🔄 Stage 2: Plan - In progress (implementation planning)
-3. ⏳ Stage 3: Tasks - Pending (task breakdown)
-4. ⏳ Stage 4: Implement - Pending (development)
+2. ✅ Stage 2: Plan - **COMPLETE**
+3. ✅ Stage 3: Tasks - **COMPLETE** (72 tasks defined)
+4. 🔄 Stage 4: Implement - **IN PROGRESS**
 
-**Tracking:** See GitHub Issues and Projects
+**Implementation Status:**
+- ✅ Phase 1: Project Setup & CI/CD (T001-T011)
+- ⏳ Phase 2: Shared Libraries (T012-T023)
+- ⏳ Phase 3: Ingestion Lambda (T024-T031)
+- ⏳ Phase 4: Analysis Lambda (T032-T038)
+- ⏳ Phase 5: Dashboard Lambda (T039-T047)
+- ⏳ Phase 6: Lambda Terraform (T048-T053)
+- ⏳ Phase 7: Integration (T054-T058)
+- ⏳ Phase 8: Deployment (T059-T064)
+- ⏳ Phase 9: Documentation (T065-T072)
+
+**Tracking:** See [tasks.md](./specs/001-interactive-dashboard-demo/tasks.md)
 
 ---
 

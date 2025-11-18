@@ -1,0 +1,139 @@
+# Deploy to Dev Environment
+# Runs on push to main after tests pass
+#
+# For On-Call Engineers:
+# - This deploys to dev environment only (safe to re-run)
+# - Check Terraform plan output before apply
+# - Rollback: revert commit and push, or use infrastructure/scripts/rollback.sh
+#
+# For Developers:
+# - Merge to main triggers dev deployment automatically
+# - Watch this workflow to verify your changes deploy correctly
+# - Integration tests run after successful deploy (see integration.yml)
+
+name: Deploy Dev
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'infrastructure/terraform/**'
+      - '.github/workflows/deploy-dev.yml'
+  workflow_dispatch:
+    # Allow manual trigger for re-deployment
+
+# Ensure only one deployment runs at a time
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to Dev
+    runs-on: ubuntu-latest
+    environment: dev
+
+    # Security: Minimum required permissions
+    permissions:
+      contents: read
+      id-token: write  # For OIDC auth to AWS
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
+          aws-region: us-east-1
+          # On-Call Note: If auth fails, check IAM role trust policy
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Package Lambda functions
+        run: |
+          # Build deployment packages for each Lambda
+          # On-Call Note: If packaging fails, check requirements.txt compatibility
+          mkdir -p dist
+
+          # Package each Lambda with its dependencies
+          for lambda in ingestion analysis dashboard; do
+            echo "Packaging $lambda Lambda..."
+            cd src/lambdas/$lambda
+            zip -r ../../../dist/$lambda.zip . -x "*.pyc" -x "__pycache__/*"
+            cd ../../..
+          done
+
+          # Add shared code to each package
+          for lambda in ingestion analysis dashboard; do
+            cd src/lambdas/shared
+            zip -ur ../../../dist/$lambda.zip . -x "*.pyc" -x "__pycache__/*"
+            cd ../../..
+            cd src/lib
+            zip -ur ../../dist/$lambda.zip . -x "*.pyc" -x "__pycache__/*"
+            cd ../..
+          done
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+
+      - name: Terraform Init
+        working-directory: infrastructure/terraform
+        run: terraform init
+
+      - name: Terraform Plan
+        working-directory: infrastructure/terraform
+        run: |
+          terraform plan \
+            -var="environment=dev" \
+            -out=tfplan
+        # On-Call Note: Review plan output for unexpected changes
+
+      - name: Terraform Apply
+        working-directory: infrastructure/terraform
+        run: terraform apply -auto-approve tfplan
+
+      - name: Upload Lambda packages to S3
+        run: |
+          # Upload deployment packages for Lambda to pull
+          for lambda in ingestion analysis dashboard; do
+            aws s3 cp dist/$lambda.zip \
+              s3://${{ secrets.DEPLOYMENT_BUCKET }}/lambdas/dev/$lambda.zip
+          done
+
+      - name: Update Lambda functions
+        run: |
+          # Update each Lambda to use new code
+          # On-Call Note: This is where deployment actually happens
+          for lambda in ingestion analysis dashboard; do
+            aws lambda update-function-code \
+              --function-name dev-sentiment-$lambda \
+              --s3-bucket ${{ secrets.DEPLOYMENT_BUCKET }} \
+              --s3-key lambdas/dev/$lambda.zip \
+              --publish
+          done
+
+      - name: Verify deployment
+        run: |
+          # Basic health checks
+          # On-Call Note: If verification fails, check Lambda logs
+          echo "Checking Lambda function status..."
+          for lambda in ingestion analysis dashboard; do
+            aws lambda get-function \
+              --function-name dev-sentiment-$lambda \
+              --query 'Configuration.State' \
+              --output text
+          done

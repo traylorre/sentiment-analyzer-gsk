@@ -1,0 +1,162 @@
+# Deploy to Prod Environment
+# Requires manual approval before deployment
+#
+# For On-Call Engineers:
+# - PRODUCTION DEPLOYMENT - requires approval
+# - Always verify dev deployment succeeded first
+# - Rollback: use infrastructure/scripts/rollback.sh or revert commit
+# - See ON_CALL_SOP.md for incident response
+#
+# For Developers:
+# - Only deploy to prod after validating in dev
+# - Requires approval from designated reviewers
+# - Monitor CloudWatch alarms after deployment
+
+name: Deploy Prod
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "deploy" to confirm production deployment'
+        required: true
+        type: string
+
+# Ensure only one deployment runs at a time
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate Deployment Request
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm deployment intent
+        if: ${{ github.event.inputs.confirm != 'deploy' }}
+        run: |
+          echo "::error::You must type 'deploy' to confirm production deployment"
+          exit 1
+
+  deploy:
+    name: Deploy to Prod
+    needs: validate
+    runs-on: ubuntu-latest
+    environment:
+      name: prod
+      # Requires manual approval configured in GitHub environment settings
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_PROD }}
+          aws-region: us-east-1
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Package Lambda functions
+        run: |
+          mkdir -p dist
+
+          for lambda in ingestion analysis dashboard; do
+            echo "Packaging $lambda Lambda..."
+            cd src/lambdas/$lambda
+            zip -r ../../../dist/$lambda.zip . -x "*.pyc" -x "__pycache__/*"
+            cd ../../..
+          done
+
+          for lambda in ingestion analysis dashboard; do
+            cd src/lambdas/shared
+            zip -ur ../../../dist/$lambda.zip . -x "*.pyc" -x "__pycache__/*"
+            cd ../../..
+            cd src/lib
+            zip -ur ../../dist/$lambda.zip . -x "*.pyc" -x "__pycache__/*"
+            cd ../..
+          done
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+
+      - name: Terraform Init
+        working-directory: infrastructure/terraform
+        run: terraform init
+
+      - name: Terraform Plan
+        working-directory: infrastructure/terraform
+        run: |
+          # On-Call Note: REVIEW THIS CAREFULLY before approving
+          terraform plan \
+            -var="environment=prod" \
+            -out=tfplan
+
+      - name: Terraform Apply
+        working-directory: infrastructure/terraform
+        run: terraform apply -auto-approve tfplan
+
+      - name: Upload Lambda packages to S3
+        run: |
+          for lambda in ingestion analysis dashboard; do
+            aws s3 cp dist/$lambda.zip \
+              s3://${{ secrets.DEPLOYMENT_BUCKET }}/lambdas/prod/$lambda.zip
+          done
+
+      - name: Update Lambda functions
+        run: |
+          # On-Call Note: Production Lambda update - monitor closely
+          for lambda in ingestion analysis dashboard; do
+            aws lambda update-function-code \
+              --function-name prod-sentiment-$lambda \
+              --s3-bucket ${{ secrets.DEPLOYMENT_BUCKET }} \
+              --s3-key lambdas/prod/$lambda.zip \
+              --publish
+          done
+
+      - name: Verify deployment
+        run: |
+          echo "Verifying production deployment..."
+          for lambda in ingestion analysis dashboard; do
+            state=$(aws lambda get-function \
+              --function-name prod-sentiment-$lambda \
+              --query 'Configuration.State' \
+              --output text)
+            echo "$lambda: $state"
+            if [ "$state" != "Active" ]; then
+              echo "::error::Lambda $lambda is not Active"
+              exit 1
+            fi
+          done
+
+      - name: Check CloudWatch alarms
+        run: |
+          # Verify no alarms are firing after deployment
+          # On-Call Note: If alarms fire, check ON_CALL_SOP.md
+          alarms=$(aws cloudwatch describe-alarms \
+            --alarm-name-prefix "prod-" \
+            --state-value ALARM \
+            --query 'MetricAlarms[].AlarmName' \
+            --output text)
+
+          if [ -n "$alarms" ]; then
+            echo "::warning::Active alarms detected: $alarms"
+          else
+            echo "No active alarms - deployment healthy"
+          fi
