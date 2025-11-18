@@ -170,9 +170,13 @@ class TestFullPipeline:
         5. Dashboard can query and display results
         """
         # Setup infrastructure
-        table, sns_client, sqs_client, queue_url, topic_arn = (
-            create_test_infrastructure()
-        )
+        (
+            table,
+            sns_client,
+            sqs_client,
+            queue_url,
+            topic_arn,
+        ) = create_test_infrastructure()
 
         # Step 1: Simulate ingestion - create pending items
         test_articles = [
@@ -515,9 +519,13 @@ class TestFullPipeline:
 
         The analysis Lambda expects specific fields in the message.
         """
-        table, sns_client, sqs_client, queue_url, topic_arn = (
-            create_test_infrastructure()
-        )
+        (
+            table,
+            sns_client,
+            sqs_client,
+            queue_url,
+            topic_arn,
+        ) = create_test_infrastructure()
 
         # Publish message in expected format
         message = {

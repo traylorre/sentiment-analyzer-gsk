@@ -47,7 +47,7 @@ class TestLoadModel:
 
     def test_load_model_success(self):
         """Test successful model loading."""
-        with patch("src.lambdas.analysis.sentiment.pipeline") as mock_pipeline:
+        with patch("transformers.pipeline") as mock_pipeline:
             mock_instance = MagicMock()
             mock_pipeline.return_value = mock_instance
 
@@ -64,7 +64,7 @@ class TestLoadModel:
 
     def test_load_model_caching(self):
         """Test that model is cached after first load."""
-        with patch("src.lambdas.analysis.sentiment.pipeline") as mock_pipeline:
+        with patch("transformers.pipeline") as mock_pipeline:
             mock_instance = MagicMock()
             mock_pipeline.return_value = mock_instance
 
@@ -79,7 +79,7 @@ class TestLoadModel:
 
     def test_load_model_uses_env_var(self):
         """Test model path from environment variable."""
-        with patch("src.lambdas.analysis.sentiment.pipeline") as mock_pipeline:
+        with patch("transformers.pipeline") as mock_pipeline:
             mock_pipeline.return_value = MagicMock()
 
             os.environ["MODEL_PATH"] = "/env/model/path"
@@ -93,7 +93,7 @@ class TestLoadModel:
 
     def test_load_model_default_path(self):
         """Test default model path when no env var."""
-        with patch("src.lambdas.analysis.sentiment.pipeline") as mock_pipeline:
+        with patch("transformers.pipeline") as mock_pipeline:
             mock_pipeline.return_value = MagicMock()
 
             # Ensure no MODEL_PATH env var
@@ -106,7 +106,7 @@ class TestLoadModel:
 
     def test_load_model_failure(self):
         """Test error handling when model load fails."""
-        with patch("src.lambdas.analysis.sentiment.pipeline") as mock_pipeline:
+        with patch("transformers.pipeline") as mock_pipeline:
             mock_pipeline.side_effect = Exception("Model not found")
 
             with pytest.raises(ModelLoadError, match="Failed to load model"):
@@ -114,7 +114,7 @@ class TestLoadModel:
 
     def test_load_model_records_time(self):
         """Test that model load time is recorded."""
-        with patch("src.lambdas.analysis.sentiment.pipeline") as mock_pipeline:
+        with patch("transformers.pipeline") as mock_pipeline:
             mock_pipeline.return_value = MagicMock()
 
             load_model("/test/path")
@@ -271,7 +271,7 @@ class TestModelCacheHelpers:
 
     def test_is_model_loaded_true_after_load(self):
         """Test is_model_loaded returns True after loading."""
-        with patch("src.lambdas.analysis.sentiment.pipeline") as mock_pipeline:
+        with patch("transformers.pipeline") as mock_pipeline:
             mock_pipeline.return_value = MagicMock()
 
             load_model("/test/path")
@@ -280,7 +280,7 @@ class TestModelCacheHelpers:
 
     def test_clear_model_cache(self):
         """Test clearing model cache."""
-        with patch("src.lambdas.analysis.sentiment.pipeline") as mock_pipeline:
+        with patch("transformers.pipeline") as mock_pipeline:
             mock_pipeline.return_value = MagicMock()
 
             load_model("/test/path")
@@ -344,7 +344,7 @@ class TestErrorHandling:
 
     def test_model_load_error_preserves_cause(self):
         """Test ModelLoadError preserves original exception."""
-        with patch("src.lambdas.analysis.sentiment.pipeline") as mock_pipeline:
+        with patch("transformers.pipeline") as mock_pipeline:
             original_error = FileNotFoundError("Model files missing")
             mock_pipeline.side_effect = original_error
 
@@ -359,7 +359,7 @@ class TestIntegrationScenarios:
 
     def test_full_analysis_flow(self):
         """Test complete flow from load to inference."""
-        with patch("src.lambdas.analysis.sentiment.pipeline") as mock_pipeline:
+        with patch("transformers.pipeline") as mock_pipeline:
             mock_instance = MagicMock()
             mock_instance.return_value = [{"label": "POSITIVE", "score": 0.92}]
             mock_pipeline.return_value = mock_instance
