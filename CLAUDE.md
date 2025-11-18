@@ -104,4 +104,22 @@ terraform plan -var="environment=dev"
 
 After this setup, CI/CD deployments will persist state in S3 and won't recreate existing resources.
 
+## Terraform Troubleshooting
+
+### State Lock Error
+
+If you see "Error acquiring the state lock", it means another terraform process has the lock. To force unlock:
+
+```bash
+cd infrastructure/terraform
+
+# Get the Lock ID from the error message, then:
+terraform force-unlock <LOCK_ID>
+
+# Example:
+terraform force-unlock 4a2b102d-2da5-6055-25d4-0aa01be88bbb
+```
+
+Only do this if you're sure no other terraform operation is running.
+
 <!-- MANUAL ADDITIONS END -->
