@@ -58,16 +58,37 @@ module "dynamodb" {
 }
 
 # ===================================================================
-# PLACEHOLDER: Lambda Functions
-# Note: Lambda functions will be deployed separately via CI/CD
-# This section defines placeholders that will be updated after Lambda deployment
+# Lambda Functions
 # ===================================================================
 
-# These resources are marked as "data" sources because Lambdas are deployed
-# by CI/CD pipeline (GitHub Actions) before Terraform runs
-# Terraform will reference these existing resources rather than creating them
+# S3 bucket for Lambda deployment packages
+# Note: This should be created before deploying Lambdas
+resource "aws_s3_bucket" "lambda_deployments" {
+  bucket = "${var.environment}-sentiment-lambda-deployments"
 
-# Ingestion Lambda (to be created by CI/CD)
+  tags = {
+    Name = "${var.environment}-sentiment-lambda-deployments"
+  }
+}
+
+resource "aws_s3_bucket_versioning" "lambda_deployments" {
+  bucket = aws_s3_bucket.lambda_deployments.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+# Block public access to Lambda deployment bucket
+resource "aws_s3_bucket_public_access_block" "lambda_deployments" {
+  bucket = aws_s3_bucket.lambda_deployments.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+# Lambda naming
 locals {
   ingestion_lambda_name = "${var.environment}-sentiment-ingestion"
   analysis_lambda_name  = "${var.environment}-sentiment-analysis"
@@ -75,52 +96,194 @@ locals {
   metrics_lambda_name   = "${var.environment}-sentiment-metrics"
 }
 
-# NOTE: These data sources will fail on first `terraform plan` because Lambdas don't exist yet
-# Solution: Comment out EventBridge + SNS modules on first apply, uncomment after Lambda deployment
+# ===================================================================
+# Module: Ingestion Lambda (T051)
+# ===================================================================
 
-# data "aws_lambda_function" "ingestion" {
-#   function_name = local.ingestion_lambda_name
-# }
-#
-# data "aws_lambda_function" "analysis" {
-#   function_name = local.analysis_lambda_name
-# }
-#
-# data "aws_lambda_function" "dashboard" {
-#   function_name = local.dashboard_lambda_name
-# }
-#
-# data "aws_lambda_function" "metrics" {
-#   function_name = local.metrics_lambda_name
-# }
+module "ingestion_lambda" {
+  source = "./modules/lambda"
+
+  function_name = local.ingestion_lambda_name
+  description   = "Fetches articles from NewsAPI and stores in DynamoDB"
+  iam_role_arn  = module.iam.ingestion_lambda_role_arn
+  handler       = "handler.lambda_handler"
+  s3_bucket     = aws_s3_bucket.lambda_deployments.id
+  s3_key        = "ingestion/lambda.zip"
+
+  # Resource configuration per task spec
+  memory_size          = 512
+  timeout              = 60
+  reserved_concurrency = 1
+
+  # Environment variables
+  environment_variables = {
+    WATCH_TAGS         = var.watch_tags
+    DYNAMODB_TABLE     = module.dynamodb.table_name
+    SNS_TOPIC_ARN      = module.sns.topic_arn
+    NEWSAPI_SECRET_ARN = module.secrets.newsapi_secret_arn
+    ENVIRONMENT        = var.environment
+    MODEL_VERSION      = var.model_version
+  }
+
+  # Logging
+  log_retention_days = var.environment == "prod" ? 90 : 30
+
+  # Alarms
+  create_error_alarm    = true
+  error_alarm_threshold = 5
+  alarm_actions         = [module.monitoring.alarm_topic_arn]
+
+  tags = {
+    Lambda = "ingestion"
+  }
+
+  depends_on = [module.iam, module.sns]
+}
+
+# ===================================================================
+# Module: Analysis Lambda (T052)
+# ===================================================================
+
+module "analysis_lambda" {
+  source = "./modules/lambda"
+
+  function_name = local.analysis_lambda_name
+  description   = "Performs sentiment analysis using DistilBERT model"
+  iam_role_arn  = module.iam.analysis_lambda_role_arn
+  handler       = "handler.lambda_handler"
+  s3_bucket     = aws_s3_bucket.lambda_deployments.id
+  s3_key        = "analysis/lambda.zip"
+
+  # Resource configuration per task spec
+  memory_size          = 1024
+  timeout              = 30
+  reserved_concurrency = 5
+
+  # Lambda layer for DistilBERT model
+  layers = var.model_layer_arns
+
+  # Environment variables
+  environment_variables = {
+    DYNAMODB_TABLE = module.dynamodb.table_name
+    MODEL_PATH     = "/opt/model"
+    MODEL_VERSION  = var.model_version
+    ENVIRONMENT    = var.environment
+  }
+
+  # Dead letter queue
+  dlq_arn = module.sns.dlq_arn
+
+  # Logging
+  log_retention_days = var.environment == "prod" ? 90 : 30
+
+  # Alarms
+  create_error_alarm       = true
+  error_alarm_threshold    = 5
+  create_duration_alarm    = true
+  duration_alarm_threshold = 5000 # 5 seconds
+  alarm_actions            = [module.monitoring.alarm_topic_arn]
+
+  tags = {
+    Lambda = "analysis"
+  }
+
+  depends_on = [module.iam]
+}
+
+# SNS subscription for Analysis Lambda
+resource "aws_sns_topic_subscription" "analysis" {
+  topic_arn = module.sns.topic_arn
+  protocol  = "lambda"
+  endpoint  = module.analysis_lambda.function_arn
+}
+
+# Allow SNS to invoke Analysis Lambda
+resource "aws_lambda_permission" "analysis_sns" {
+  statement_id  = "AllowSNSInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = module.analysis_lambda.function_name
+  principal     = "sns.amazonaws.com"
+  source_arn    = module.sns.topic_arn
+}
+
+# ===================================================================
+# Module: Dashboard Lambda (T053)
+# ===================================================================
+
+module "dashboard_lambda" {
+  source = "./modules/lambda"
+
+  function_name = local.dashboard_lambda_name
+  description   = "Serves dashboard UI and API endpoints"
+  iam_role_arn  = module.iam.dashboard_lambda_role_arn
+  handler       = "handler.lambda_handler"
+  s3_bucket     = aws_s3_bucket.lambda_deployments.id
+  s3_key        = "dashboard/lambda.zip"
+
+  # Resource configuration per task spec
+  memory_size          = 512
+  timeout              = 60
+  reserved_concurrency = 10
+
+  # Environment variables
+  environment_variables = {
+    DYNAMODB_TABLE               = module.dynamodb.table_name
+    API_KEY                      = "" # Will be fetched from Secrets Manager at runtime
+    DASHBOARD_API_KEY_SECRET_ARN = module.secrets.dashboard_api_key_secret_arn
+    SSE_POLL_INTERVAL            = "5"
+    ENVIRONMENT                  = var.environment
+  }
+
+  # Function URL with CORS
+  create_function_url    = true
+  function_url_auth_type = "NONE"
+  function_url_cors = {
+    allow_credentials = false
+    allow_headers     = ["content-type", "authorization"]
+    allow_methods     = ["GET", "OPTIONS"]
+    allow_origins     = ["*"] # Restrict in production
+    expose_headers    = []
+    max_age           = 86400
+  }
+
+  # Logging
+  log_retention_days = var.environment == "prod" ? 90 : 30
+
+  # Alarms
+  create_error_alarm    = true
+  error_alarm_threshold = 10
+  alarm_actions         = [module.monitoring.alarm_topic_arn]
+
+  tags = {
+    Lambda = "dashboard"
+  }
+
+  depends_on = [module.iam]
+}
 
 # ===================================================================
 # Module: SNS Topic (for Analysis Triggers)
 # ===================================================================
 
-# Commented out until Lambdas are deployed
-# module "sns" {
-#   source = "./modules/sns"
-#
-#   environment                    = var.environment
-#   analysis_lambda_arn            = data.aws_lambda_function.analysis.arn
-#   analysis_lambda_function_name  = data.aws_lambda_function.analysis.function_name
-# }
+module "sns" {
+  source = "./modules/sns"
+
+  environment = var.environment
+}
 
 # ===================================================================
 # Module: IAM Roles (for Lambda Functions)
 # ===================================================================
 
-# Commented out until SNS topic exists
-# module "iam" {
-#   source = "./modules/iam"
-#
-#   environment                   = var.environment
-#   dynamodb_table_arn            = module.dynamodb.table_arn
-#   newsapi_secret_arn            = module.secrets.newsapi_secret_arn
-#   dashboard_api_key_secret_arn  = module.secrets.dashboard_api_key_secret_arn
-#   analysis_topic_arn            = module.sns.topic_arn
-# }
+module "iam" {
+  source = "./modules/iam"
+
+  environment                  = var.environment
+  dynamodb_table_arn           = module.dynamodb.table_arn
+  newsapi_secret_arn           = module.secrets.newsapi_secret_arn
+  dashboard_api_key_secret_arn = module.secrets.dashboard_api_key_secret_arn
+  analysis_topic_arn           = module.sns.topic_arn
+}
 
 # ===================================================================
 # Module: EventBridge Schedules
@@ -198,13 +361,33 @@ output "alarm_names" {
   value       = module.monitoring.alarm_names
 }
 
-# Outputs that will be available after uncommenting IAM/SNS/EventBridge modules
-# output "sns_topic_arn" {
-#   description = "ARN of the SNS topic"
-#   value       = module.sns.topic_arn
-# }
-#
-# output "ingestion_lambda_role_arn" {
-#   description = "ARN of the Ingestion Lambda IAM role"
-#   value       = module.iam.ingestion_lambda_role_arn
-# }
+# Lambda outputs
+output "sns_topic_arn" {
+  description = "ARN of the SNS topic"
+  value       = module.sns.topic_arn
+}
+
+output "ingestion_lambda_arn" {
+  description = "ARN of the Ingestion Lambda function"
+  value       = module.ingestion_lambda.function_arn
+}
+
+output "analysis_lambda_arn" {
+  description = "ARN of the Analysis Lambda function"
+  value       = module.analysis_lambda.function_arn
+}
+
+output "dashboard_lambda_arn" {
+  description = "ARN of the Dashboard Lambda function"
+  value       = module.dashboard_lambda.function_arn
+}
+
+output "dashboard_function_url" {
+  description = "URL of the Dashboard Lambda Function URL"
+  value       = module.dashboard_lambda.function_url
+}
+
+output "lambda_deployment_bucket" {
+  description = "S3 bucket for Lambda deployment packages"
+  value       = aws_s3_bucket.lambda_deployments.id
+}

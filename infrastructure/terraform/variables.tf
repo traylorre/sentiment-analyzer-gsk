@@ -46,3 +46,9 @@ variable "monthly_budget_limit" {
   type        = number
   default     = 50
 }
+
+variable "model_layer_arns" {
+  description = "List of Lambda layer ARNs for the sentiment model"
+  type        = list(string)
+  default     = []
+}
