@@ -35,21 +35,23 @@ This guide walks you through setting up, deploying, and demoing the interactive 
 
 ---
 
-## Step 1: Store NewsAPI Key in AWS Secrets Manager
+## Step 1: Store Secrets in AWS Secrets Manager
 
 **Important**: Store secrets before deployment (required by Lambda functions)
 
+### NewsAPI Key
+
 ```bash
-# Store NewsAPI key
+# Store NewsAPI key (dev environment)
 aws secretsmanager create-secret \
-    --name sentiment-analyzer/newsapi \
+    --name dev/sentiment-analyzer/newsapi \
     --description "NewsAPI key for sentiment analyzer demo" \
     --secret-string "{\"api_key\":\"YOUR_NEWSAPI_KEY_HERE\"}" \
     --region us-east-1
 
 # Verify stored
 aws secretsmanager get-secret-value \
-    --secret-id sentiment-analyzer/newsapi \
+    --secret-id dev/sentiment-analyzer/newsapi \
     --region us-east-1 \
     --query SecretString \
     --output text
@@ -59,6 +61,30 @@ aws secretsmanager get-secret-value \
 ```json
 {"api_key":"your-key-here"}
 ```
+
+### Dashboard API Key
+
+```bash
+# Generate a secure API key
+DASHBOARD_KEY=$(openssl rand -hex 32)
+echo "Dashboard API Key: $DASHBOARD_KEY"
+
+# Store dashboard API key (dev environment)
+aws secretsmanager create-secret \
+    --name dev/sentiment-analyzer/dashboard-api-key \
+    --description "API key for dashboard authentication" \
+    --secret-string "{\"api_key\":\"$DASHBOARD_KEY\"}" \
+    --region us-east-1
+
+# Verify stored
+aws secretsmanager get-secret-value \
+    --secret-id dev/sentiment-analyzer/dashboard-api-key \
+    --region us-east-1 \
+    --query SecretString \
+    --output text
+```
+
+> **Note**: Save the dashboard API key - you'll need it to access the dashboard.
 
 ---
 
@@ -188,7 +214,7 @@ cd infrastructure/terraform
 terraform init
 
 # Review plan
-terraform plan -var="newsapi_secret_arn=arn:aws:secretsmanager:us-east-1:ACCOUNT_ID:secret:sentiment-analyzer/newsapi-XXXXX"
+terraform plan -var="newsapi_secret_arn=arn:aws:secretsmanager:us-east-1:ACCOUNT_ID:secret:dev/sentiment-analyzer/newsapi-XXXXX"
 
 # Deploy (takes ~5-10 minutes)
 terraform apply -auto-approve
@@ -589,13 +615,17 @@ terraform destroy -auto-approve
 # Delete S3 model bucket (if created)
 aws s3 rb s3://sentiment-models-ACCOUNT_ID --force
 
-# Delete Secrets Manager secret
+# Delete Secrets Manager secrets
 aws secretsmanager delete-secret \
-    --secret-id sentiment-analyzer/newsapi \
+    --secret-id dev/sentiment-analyzer/newsapi \
+    --force-delete-without-recovery
+
+aws secretsmanager delete-secret \
+    --secret-id dev/sentiment-analyzer/dashboard-api-key \
     --force-delete-without-recovery
 ```
 
-**WARNING**: This deletes all data (DynamoDB items, Lambda functions, etc.)
+**WARNING**: This deletes all data (DynamoDB items, Lambda functions, secrets, etc.)
 
 ---
 
