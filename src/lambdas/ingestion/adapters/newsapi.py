@@ -119,9 +119,7 @@ class NewsAPIAdapter(BaseAdapter):
         """
         # Check circuit breaker
         if self._is_circuit_open():
-            raise AdapterError(
-                "Circuit breaker open - too many consecutive failures"
-            )
+            raise AdapterError("Circuit breaker open - too many consecutive failures")
 
         # Build request parameters
         params = self._build_params(tag, page_size, lookback_hours)
@@ -192,7 +190,9 @@ class NewsAPIAdapter(BaseAdapter):
             try:
                 logger.debug(
                     f"NewsAPI request attempt {attempt + 1}",
-                    extra={"params": {k: v for k, v in params.items() if k != "apiKey"}},
+                    extra={
+                        "params": {k: v for k, v in params.items() if k != "apiKey"}
+                    },
                 )
 
                 response = requests.get(
@@ -246,9 +246,7 @@ class NewsAPIAdapter(BaseAdapter):
                         backoff = min(backoff * 2, MAX_BACKOFF_SECONDS)
                         continue
 
-                    raise AdapterError(
-                        f"NewsAPI server error: {response.status_code}"
-                    )
+                    raise AdapterError(f"NewsAPI server error: {response.status_code}")
 
                 else:
                     # Other error
@@ -335,9 +333,7 @@ class NewsAPIAdapter(BaseAdapter):
         """
         # Must have URL or (title + publishedAt) for deduplication
         has_url = bool(article.get("url"))
-        has_title_and_date = bool(
-            article.get("title") and article.get("publishedAt")
-        )
+        has_title_and_date = bool(article.get("title") and article.get("publishedAt"))
 
         return has_url or has_title_and_date
 

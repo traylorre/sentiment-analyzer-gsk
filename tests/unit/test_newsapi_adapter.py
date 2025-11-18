@@ -410,9 +410,7 @@ class TestNewsAPIAdapterHeaders:
             NEWSAPI_BASE_URL,
             json=sample_response,
             status=200,
-            match=[
-                matchers.header_matcher({"X-Api-Key": "test-api-key-12345"})
-            ],
+            match=[matchers.header_matcher({"X-Api-Key": "test-api-key-12345"})],
         )
 
         adapter.fetch_items("AI")

@@ -145,9 +145,7 @@ def get_secret(
                 "Failed to retrieve secret",
                 extra={"secret_id": secret_id, "error_code": error_code},
             )
-            raise SecretRetrievalError(
-                f"Failed to retrieve secret: {secret_id}"
-            ) from e
+            raise SecretRetrievalError(f"Failed to retrieve secret: {secret_id}") from e
 
     # Parse secret value
     secret_string = response.get("SecretString")
@@ -162,9 +160,7 @@ def get_secret(
             "Failed to parse secret as JSON",
             extra={"secret_id": secret_id},
         )
-        raise SecretRetrievalError(
-            f"Secret is not valid JSON: {secret_id}"
-        ) from e
+        raise SecretRetrievalError(f"Secret is not valid JSON: {secret_id}") from e
 
     # Cache the secret
     _set_in_cache(secret_id, secret_value)

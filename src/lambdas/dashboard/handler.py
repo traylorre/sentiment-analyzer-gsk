@@ -50,6 +50,7 @@ from sse_starlette.sse import EventSourceResponse
 
 # Import shared modules
 import sys
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from shared.dynamodb import get_table, parse_dynamodb_item
@@ -264,11 +265,13 @@ async def health_check():
         # Test connectivity by describing table
         table.table_status  # This triggers a DescribeTable call
 
-        return JSONResponse({
-            "status": "healthy",
-            "table": DYNAMODB_TABLE,
-            "environment": ENVIRONMENT,
-        })
+        return JSONResponse(
+            {
+                "status": "healthy",
+                "table": DYNAMODB_TABLE,
+                "environment": ENVIRONMENT,
+            }
+        )
 
     except Exception as e:
         logger.error(
@@ -362,6 +365,7 @@ async def stream_metrics(
         2. Verify client reconnects on disconnect
         3. Check for Lambda cold starts causing delays
     """
+
     async def event_generator():
         """Generate SSE events with metrics updates."""
         try:
@@ -442,8 +446,7 @@ async def get_items(
 
         # Sanitize items
         sanitized = [
-            sanitize_item_for_response(parse_dynamodb_item(item))
-            for item in items
+            sanitize_item_for_response(parse_dynamodb_item(item)) for item in items
         ]
 
         return JSONResponse(sanitized)
@@ -487,7 +490,9 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         "Dashboard Lambda invoked",
         extra={
             "path": event.get("rawPath", event.get("path", "unknown")),
-            "method": event.get("requestContext", {}).get("http", {}).get("method", "unknown"),
+            "method": event.get("requestContext", {})
+            .get("http", {})
+            .get("method", "unknown"),
         },
     )
 
