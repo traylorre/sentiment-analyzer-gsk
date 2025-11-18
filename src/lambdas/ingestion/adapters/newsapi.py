@@ -31,7 +31,7 @@ Security Notes:
 
 import logging
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import requests
@@ -130,7 +130,7 @@ class NewsAPIAdapter(BaseAdapter):
             self._reset_circuit_breaker()
             return self._parse_response(response)
 
-        except Exception as e:
+        except Exception:
             self._record_failure()
             raise
 
@@ -152,7 +152,7 @@ class NewsAPIAdapter(BaseAdapter):
             Dict of request parameters
         """
         # Calculate time window
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         from_date = now - timedelta(hours=lookback_hours)
 
         return {
@@ -233,7 +233,7 @@ class NewsAPIAdapter(BaseAdapter):
                 elif response.status_code >= 500:
                     # Server error - retry with backoff
                     logger.warning(
-                        f"NewsAPI server error, retrying",
+                        "NewsAPI server error, retrying",
                         extra={
                             "status_code": response.status_code,
                             "attempt": attempt + 1,
@@ -266,7 +266,7 @@ class NewsAPIAdapter(BaseAdapter):
                     backoff = min(backoff * 2, MAX_BACKOFF_SECONDS)
                     continue
 
-                raise ConnectionError("NewsAPI request timed out")
+                raise ConnectionError("NewsAPI request timed out") from None
 
             except requests.exceptions.RequestException as e:
                 logger.error(
@@ -279,7 +279,7 @@ class NewsAPIAdapter(BaseAdapter):
                     backoff = min(backoff * 2, MAX_BACKOFF_SECONDS)
                     continue
 
-                raise ConnectionError(f"Failed to connect to NewsAPI: {e}")
+                raise ConnectionError(f"Failed to connect to NewsAPI: {e}") from e
 
         # Should not reach here
         raise AdapterError("Max retries exceeded")

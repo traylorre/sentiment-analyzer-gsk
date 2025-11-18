@@ -108,7 +108,7 @@ def load_model(model_path: str | None = None) -> Any:
         _model_load_time_ms = (time.perf_counter() - start_time) * 1000
 
         logger.info(
-            f"Model loaded successfully",
+            "Model loaded successfully",
             extra={
                 "model_path": path,
                 "load_time_ms": round(_model_load_time_ms, 2),
@@ -185,7 +185,7 @@ def analyze_sentiment(text: str) -> tuple[str, float]:
             sentiment = label  # 'positive' or 'negative'
 
         logger.debug(
-            f"Sentiment analysis complete",
+            "Sentiment analysis complete",
             extra={
                 "raw_label": label,
                 "score": round(score, 4),

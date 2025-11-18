@@ -20,10 +20,9 @@ import json
 import os
 import time
 
+import boto3
 import pytest
 from moto import mock_aws
-
-import boto3
 
 from src.lambdas.shared.secrets import (
     SecretAccessDeniedError,

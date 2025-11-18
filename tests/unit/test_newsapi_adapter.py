@@ -17,7 +17,6 @@ For Developers:
     - Verify exponential backoff timing
 """
 
-import time
 
 import pytest
 import responses
@@ -26,7 +25,6 @@ from responses import matchers
 from src.lambdas.ingestion.adapters.base import (
     AdapterError,
     AuthenticationError,
-    ConnectionError,
     RateLimitError,
 )
 from src.lambdas.ingestion.adapters.newsapi import (

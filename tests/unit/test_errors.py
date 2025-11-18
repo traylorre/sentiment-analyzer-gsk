@@ -16,8 +16,6 @@ For Developers:
 
 import json
 
-import pytest
-
 from src.lambdas.shared.errors import (
     ErrorCode,
     database_error,

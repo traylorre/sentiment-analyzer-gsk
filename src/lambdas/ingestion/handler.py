@@ -48,7 +48,7 @@ Security Notes:
 import json
 import logging
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import boto3
@@ -65,7 +65,6 @@ from src.lambdas.shared.dynamodb import get_table, put_item_if_not_exists
 from src.lambdas.shared.secrets import get_api_key
 from src.lib.deduplication import generate_source_id
 from src.lib.metrics import (
-    Timer,
     emit_metric,
     emit_metrics_batch,
     log_structured,
@@ -166,7 +165,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
                 log_structured(
                     "INFO",
-                    f"Fetched articles for tag",
+                    "Fetched articles for tag",
                     tag=tag,
                     count=len(articles),
                 )
@@ -213,7 +212,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             except AuthenticationError as e:
                 # Auth error - this affects all tags, raise immediately
                 logger.error(
-                    f"Authentication failed for NewsAPI",
+                    "Authentication failed for NewsAPI",
                     extra={"tag": tag, "error": str(e)},
                 )
                 emit_metric("IngestionErrors", 1)
@@ -361,7 +360,7 @@ def _process_article(
         return "duplicate"
 
     # Build DynamoDB item
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     timestamp = now.isoformat()
     ttl_timestamp = int((now + timedelta(days=TTL_DAYS)).timestamp())
 

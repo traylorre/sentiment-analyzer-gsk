@@ -28,7 +28,7 @@ For Developers:
 
 import json
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 import boto3
@@ -116,7 +116,7 @@ def create_sns_event(
                     "TopicArn": "arn:aws:sns:us-east-1:123456789012:test-topic",
                     "Subject": None,
                     "Message": json.dumps(message),
-                    "Timestamp": datetime.now(timezone.utc).isoformat(),
+                    "Timestamp": datetime.now(UTC).isoformat(),
                     "MessageAttributes": {},
                 },
             }

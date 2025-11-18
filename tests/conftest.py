@@ -20,6 +20,16 @@ import os
 
 import pytest
 
+# Set default test environment variables at module load time
+# This allows test files to import modules that read env vars at import time
+os.environ.setdefault("AWS_ACCESS_KEY_ID", "testing")
+os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "testing")
+os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
+os.environ.setdefault("DYNAMODB_TABLE", "test-sentiment-items")
+os.environ.setdefault("API_KEY", "test-api-key-12345")
+os.environ.setdefault("SSE_POLL_INTERVAL", "1")
+os.environ.setdefault("ENVIRONMENT", "test")
+
 
 @pytest.fixture(autouse=True)
 def reset_env_vars():

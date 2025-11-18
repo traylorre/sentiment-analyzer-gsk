@@ -19,13 +19,11 @@ For Developers:
 import json
 import os
 import time
-from io import StringIO
 from unittest.mock import MagicMock, patch
 
+import boto3
 import pytest
 from moto import mock_aws
-
-import boto3
 
 from src.lib.metrics import (
     JsonFormatter,
