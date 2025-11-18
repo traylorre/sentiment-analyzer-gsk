@@ -73,4 +73,35 @@ gh run list --repo traylorre/sentiment-analyzer-gsk --limit 5
 gh run view <run-id> --repo traylorre/sentiment-analyzer-gsk
 ```
 
+## Terraform Backend Setup (One-Time)
+
+Before CI/CD deploys will work, you must set up the Terraform state backend:
+
+```bash
+# 1. Create the S3 bucket and DynamoDB table for state
+cd infrastructure/terraform/bootstrap
+terraform init
+terraform apply
+
+# 2. Note the bucket name from output
+terraform output state_bucket_name
+
+# 3. Update main.tf with your bucket name
+# Edit infrastructure/terraform/main.tf and replace
+# "sentiment-analyzer-tfstate-YOUR_ACCOUNT_ID" with the actual bucket name
+
+# 4. Initialize main terraform with S3 backend
+cd ../
+terraform init
+
+# 5. Import existing secrets (if they exist in AWS)
+terraform import module.secrets.aws_secretsmanager_secret.newsapi dev/sentiment-analyzer/newsapi
+terraform import module.secrets.aws_secretsmanager_secret.dashboard_api_key dev/sentiment-analyzer/dashboard-api-key
+
+# 6. Verify everything is in state
+terraform plan
+```
+
+After this setup, CI/CD deployments will persist state in S3 and won't recreate existing resources.
+
 <!-- MANUAL ADDITIONS END -->
