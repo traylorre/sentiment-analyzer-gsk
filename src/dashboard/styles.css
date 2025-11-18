@@ -1,0 +1,387 @@
+/*
+ * Sentiment Analyzer Dashboard Styles
+ * ====================================
+ *
+ * For On-Call Engineers:
+ *     If dashboard appears broken:
+ *     1. Check browser console for CSS load errors
+ *     2. Verify /static/styles.css is served correctly
+ *     3. Clear browser cache
+ *
+ * For Developers:
+ *     - Mobile-first responsive design
+ *     - CSS custom properties for sentiment colors
+ *     - Flexbox and Grid layouts
+ */
+
+/* Custom Properties */
+:root {
+    /* Sentiment colors */
+    --positive-color: #22c55e;
+    --positive-bg: #dcfce7;
+    --neutral-color: #6b7280;
+    --neutral-bg: #f3f4f6;
+    --negative-color: #ef4444;
+    --negative-bg: #fee2e2;
+
+    /* UI colors */
+    --primary-color: #3b82f6;
+    --background-color: #f9fafb;
+    --card-background: #ffffff;
+    --text-color: #1f2937;
+    --text-muted: #6b7280;
+    --border-color: #e5e7eb;
+
+    /* Status colors */
+    --connected-color: #22c55e;
+    --disconnected-color: #ef4444;
+
+    /* Spacing */
+    --spacing-xs: 0.25rem;
+    --spacing-sm: 0.5rem;
+    --spacing-md: 1rem;
+    --spacing-lg: 1.5rem;
+    --spacing-xl: 2rem;
+
+    /* Border radius */
+    --radius-sm: 0.25rem;
+    --radius-md: 0.5rem;
+    --radius-lg: 0.75rem;
+}
+
+/* Reset */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+/* Base Styles */
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    background-color: var(--background-color);
+    color: var(--text-color);
+    line-height: 1.5;
+    min-height: 100vh;
+}
+
+/* Header */
+header {
+    background-color: var(--card-background);
+    padding: var(--spacing-md) var(--spacing-lg);
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+header h1 {
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+.connection-status {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    font-size: 0.875rem;
+}
+
+.status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.status-dot.connected {
+    background-color: var(--connected-color);
+    animation: pulse 2s infinite;
+}
+
+.status-dot.disconnected {
+    background-color: var(--disconnected-color);
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* Main Content */
+main {
+    padding: var(--spacing-lg);
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+/* Metrics Cards */
+.metrics-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-xl);
+}
+
+.card {
+    background-color: var(--card-background);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    text-align: center;
+}
+
+.card h3 {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    margin-bottom: var(--spacing-sm);
+}
+
+.card .value {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin-bottom: var(--spacing-xs);
+}
+
+.card .label,
+.card .percentage {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+/* Card colors */
+.card.total .value {
+    color: var(--primary-color);
+}
+
+.card.positive {
+    border-left: 4px solid var(--positive-color);
+}
+
+.card.positive .value {
+    color: var(--positive-color);
+}
+
+.card.neutral {
+    border-left: 4px solid var(--neutral-color);
+}
+
+.card.neutral .value {
+    color: var(--neutral-color);
+}
+
+.card.negative {
+    border-left: 4px solid var(--negative-color);
+}
+
+.card.negative .value {
+    color: var(--negative-color);
+}
+
+/* Charts Row */
+.charts-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: var(--spacing-lg);
+    margin-bottom: var(--spacing-xl);
+}
+
+.chart-container {
+    background-color: var(--card-background);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.chart-container h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: var(--spacing-md);
+}
+
+.chart-container canvas {
+    max-height: 300px;
+}
+
+/* Recent Items Table */
+.recent-items {
+    background-color: var(--card-background);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    margin-bottom: var(--spacing-xl);
+}
+
+.recent-items h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: var(--spacing-md);
+}
+
+.table-container {
+    overflow-x: auto;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+}
+
+th, td {
+    padding: var(--spacing-sm) var(--spacing-md);
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+
+th {
+    font-weight: 600;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+tbody tr:hover {
+    background-color: var(--background-color);
+}
+
+/* Sentiment badges in table */
+.sentiment-badge {
+    display: inline-block;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.sentiment-badge.positive {
+    background-color: var(--positive-bg);
+    color: var(--positive-color);
+}
+
+.sentiment-badge.neutral {
+    background-color: var(--neutral-bg);
+    color: var(--neutral-color);
+}
+
+.sentiment-badge.negative {
+    background-color: var(--negative-bg);
+    color: var(--negative-color);
+}
+
+/* Tags */
+.tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-xs);
+}
+
+.tag {
+    display: inline-block;
+    padding: 2px 6px;
+    background-color: var(--background-color);
+    border-radius: var(--radius-sm);
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+/* Ingestion Stats */
+.ingestion-stats {
+    display: flex;
+    justify-content: center;
+    gap: var(--spacing-xl);
+    padding: var(--spacing-md);
+    background-color: var(--card-background);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.ingestion-stats .stat {
+    text-align: center;
+}
+
+.ingestion-stats .label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    display: block;
+    margin-bottom: var(--spacing-xs);
+}
+
+.ingestion-stats .value {
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+/* Footer */
+footer {
+    text-align: center;
+    padding: var(--spacing-lg);
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    header {
+        flex-direction: column;
+        gap: var(--spacing-sm);
+    }
+
+    .metrics-cards {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .card .value {
+        font-size: 1.75rem;
+    }
+
+    .charts-row {
+        grid-template-columns: 1fr;
+    }
+
+    .ingestion-stats {
+        flex-direction: column;
+        gap: var(--spacing-md);
+    }
+}
+
+@media (max-width: 480px) {
+    .metrics-cards {
+        grid-template-columns: 1fr;
+    }
+
+    main {
+        padding: var(--spacing-md);
+    }
+}
+
+/* Loading State */
+.loading {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+/* Error State */
+.error-message {
+    background-color: var(--negative-bg);
+    color: var(--negative-color);
+    padding: var(--spacing-md);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--spacing-md);
+    text-align: center;
+}
+
+/* Animation for new items */
+@keyframes highlight {
+    0% { background-color: #fef3c7; }
+    100% { background-color: transparent; }
+}
+
+.new-item {
+    animation: highlight 2s ease-out;
+}
