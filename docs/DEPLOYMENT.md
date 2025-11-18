@@ -5,6 +5,7 @@ Deployment procedures for the Sentiment Analyzer application.
 ## Table of Contents
 
 - [Prerequisites](#prerequisites)
+- [GitHub Actions CI/CD](#github-actions-cicd)
 - [Deployment Process](#deployment-process)
 - [Zero-Downtime Deployment](#zero-downtime-deployment)
 - [Rollback Procedures](#rollback-procedures)
@@ -62,6 +63,75 @@ terraform workspace new dev  # or prod
 ```bash
 ./infrastructure/scripts/pre-deploy-checklist.sh dev
 ```
+
+---
+
+## GitHub Actions CI/CD
+
+The project uses GitHub Actions for continuous integration and deployment. Three workflows run automatically on push to main:
+
+- **Lint** (`lint.yml`): Black formatting and ruff linting
+- **Tests** (`test.yml`): pytest with 80% coverage requirement
+- **Deploy Dev** (`deploy-dev.yml`): Automatic deployment to dev environment
+
+### Setting Up GitHub Secrets
+
+For the Deploy Dev workflow to function, you must configure AWS credentials as GitHub repository secrets.
+
+#### Step 1: Create IAM User for CI/CD
+
+```bash
+# Create IAM user
+aws iam create-user --user-name sentiment-analyzer-github-actions
+
+# Attach deployment policy (create this policy first with required permissions)
+aws iam attach-user-policy \
+  --user-name sentiment-analyzer-github-actions \
+  --policy-arn arn:aws:iam::aws:policy/AdministratorAccess  # Use least-privilege in production
+```
+
+#### Step 2: Create Access Keys
+
+```bash
+# Generate access keys
+aws iam create-access-key --user-name sentiment-analyzer-github-actions
+
+# Output includes AccessKeyId and SecretAccessKey - save these securely
+```
+
+#### Step 3: Add Secrets to GitHub
+
+1. Navigate to your GitHub repository
+2. Go to **Settings** > **Secrets and variables** > **Actions**
+3. Click **New repository secret**
+4. Add the following secrets:
+
+| Secret Name | Value |
+|-------------|-------|
+| `AWS_ACCESS_KEY_ID` | Access key from Step 2 |
+| `AWS_SECRET_ACCESS_KEY` | Secret key from Step 2 |
+| `AWS_REGION` | Your AWS region (e.g., `us-east-1`) |
+
+#### Verification
+
+After adding secrets, push a commit to main and verify:
+
+```bash
+# Check workflow runs
+gh run list --limit 3
+
+# View specific workflow status
+gh run view <run-id>
+```
+
+The Deploy Dev workflow should now have access to AWS credentials.
+
+### Troubleshooting CI Failures
+
+1. **Lint fails on black**: Install CI version locally: `pip3 install black==23.11.0`
+2. **Lint fails on ruff**: Install CI version locally: `pip3 install ruff==0.1.6`
+3. **Tests fail**: Ensure `requirements-dev.txt` is installed: `pip3 install -r requirements-dev.txt`
+4. **Deploy fails on credentials**: Verify all three secrets are configured correctly
 
 ---
 
