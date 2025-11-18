@@ -4,18 +4,18 @@
 **Trigger**: SNS topic subscription (from ingestion lambda)
 **Purpose**: Run sentiment inference on pending items, update DynamoDB with results
 
-**Updated**: 2025-11-17 - Incorporated "Best of All Worlds" redundancy strategy
+**Updated**: 2025-11-17 - Regional Multi-AZ architecture
 
 ---
 
-## Redundancy Strategy
+## Data Routing
 
-**Write Target**: `sentiment-items` (us-east-1 ONLY)
-- Updates ONLY to PRIMARY table in us-east-1
-- Global replicas updated asynchronously by DynamoDB
-- Dashboard table receives updates via DynamoDB Streams (NO direct writes)
+**Write Target**: `sentiment-items` (single table, us-east-1)
+- Write to single DynamoDB table
+- Multi-AZ replication automatic (AWS-managed)
+- Point-in-time recovery enabled (35 days)
 
-**Read Operations**: None (analysis Lambda does NOT read from dashboard table)
+**Read Operations**: None (analysis Lambda writes only)
 
 ---
 
@@ -35,7 +35,7 @@
         "MessageId": "95df01b4-ee98-5cb9-9903-4c221d41eb5e",
         "TopicArn": "arn:aws:sns:us-east-1:123456789012:sentiment-analysis-requests",
         "Subject": null,
-        "Message": "{\"source_id\":\"newsapi#a3f4e9d2c1b8a7f6\",\"source_type\":\"newsapi\",\"text_for_analysis\":\"Article description...\",\"model_version\":\"v1.0.0\",\"matched_tags\":[\"AI\",\"technology\"],\"ingested_at\":\"2025-11-16T14:30:15.000Z\"}",
+        "Message": "{\"source_id\":\"newsapi#a3f4e9d2c1b8a7f6\",\"source_type\":\"newsapi\",\"text_for_analysis\":\"Article description...\",\"model_version\":\"v1.0.0\",\"matched_tags\":[\"AI\",\"technology\"],\"timestamp\":\"2025-11-16T14:30:15.000Z\"}",
         "Timestamp": "2025-11-16T14:30:16.000Z",
         "MessageAttributes": {}
       }
@@ -48,12 +48,12 @@
 
 | Field | Type | Description |
 |---|---|---|
-| `source_id` | String | DynamoDB primary key (e.g., `newsapi#abc123`) |
+| `source_id` | String | DynamoDB partition key (e.g., `newsapi#abc123`) |
 | `source_type` | String | Source adapter type (`newsapi`, `twitter`) |
 | `text_for_analysis` | String | Text snippet to analyze (≤200 chars) |
 | `model_version` | String | Model version to use (`v1.0.0`) |
 | `matched_tags` | Array[String] | Tags that matched this item |
-| `ingested_at` | String | ISO8601 timestamp |
+| `timestamp` | String | ISO8601 timestamp (DynamoDB sort key) |
 
 ---
 
@@ -176,22 +176,21 @@ import os
 # IMPORTANT: Always target primary region for writes
 dynamodb = boto3.client('dynamodb', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
 
-def update_item_with_sentiment(source_id: str, ingested_at: str, sentiment: str, score: float, model_version: str) -> bool:
+def update_item_with_sentiment(source_id: str, timestamp: str, sentiment: str, score: float, model_version: str) -> bool:
     """
     Update DynamoDB item with sentiment results.
     Only update if status=pending (avoid overwriting retries).
 
-    ROUTING LOGIC:
-    - Updates ONLY to sentiment-items (us-east-1)
-    - Global replicas updated asynchronously by DynamoDB
-    - Dashboard table receives updates via DynamoDB Streams (NOT written directly)
+    Data Routing:
+    - Updates to sentiment-items table (single table, us-east-1)
+    - Multi-AZ replication handled automatically by AWS
     """
     try:
         response = dynamodb.update_item(
             TableName=os.environ['DYNAMODB_TABLE'],  # sentiment-items
             Key={
                 'source_id': {'S': source_id},
-                'ingested_at': {'S': ingested_at}  # IMPORTANT: Include sort key
+                'timestamp': {'S': timestamp}  # Sort key from data model
             },
             UpdateExpression='SET sentiment = :s, score = :sc, model_version = :mv, #status = :analyzed',
             ExpressionAttributeNames={
@@ -277,6 +276,7 @@ def lambda_handler(event, context):
         message = json.loads(record['Sns']['Message'])
 
         source_id = message['source_id']
+        timestamp = message['timestamp']
         text = message['text_for_analysis']
         model_version = message['model_version']
 
@@ -287,7 +287,7 @@ def lambda_handler(event, context):
         sentiment, score = analyze_sentiment(text)
 
         # Update DynamoDB
-        updated = update_item_with_sentiment(source_id, sentiment, score, model_version)
+        updated = update_item_with_sentiment(source_id, timestamp, sentiment, score, model_version)
 
         # Emit metrics
         inference_time_ms = int((time.time() - start_time) * 1000)

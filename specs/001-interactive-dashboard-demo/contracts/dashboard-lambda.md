@@ -64,7 +64,7 @@ Return current metrics snapshot for dashboard initialization.
   "recent_items": [
     {
       "source_id": "newsapi#a3f4e9d2c1b8a7f6",
-      "ingested_at": "2025-11-16T14:25:10.000Z",
+      "timestamp": "2025-11-16T14:25:10.000Z",
       "sentiment": "positive",
       "score": 0.89,
       "text_snippet": "European markets surge on positive economic data...",
@@ -117,7 +117,7 @@ data: {"new_items": [...], "updated_metrics": {...}, "timestamp": "2025-11-16T14
       "sentiment": "positive",
       "score": 0.92,
       "text_snippet": "...",
-      "ingested_at": "2025-11-16T14:30:28.000Z"
+      "timestamp": "2025-11-16T14:30:28.000Z"
     }
   ],
   "updated_metrics": {
@@ -183,69 +183,53 @@ async def get_metrics(source_type: str = "newsapi", hours: int = 24):
     """
     Return current metrics snapshot for dashboard initialization.
 
-    ROUTING LOGIC:
-    - Queries sentiment-items (single table)
-    - Uses day_partition PK for efficient queries
+    Query Strategy:
+    - Uses by_status GSI to find analyzed items
+    - Filters by timestamp for time window
+    - Single table design (sentiment-items)
+    """
     try:
-        # Calculate day partitions to query (today + yesterday for 24h window)
-        today = datetime.utcnow().strftime('%Y-%m-%d')
-        yesterday = (datetime.utcnow() - timedelta(days=1)).strftime('%Y-%m-%d')
+        # Calculate time window cutoff
+        cutoff = (datetime.utcnow() - timedelta(hours=hours)).isoformat() + 'Z'
 
-        items = []
-
-        # Query today's partition
-        response_today = dynamodb.query(
+        # Query analyzed items using by_status GSI
+        response = dynamodb.query(
             TableName=os.environ['DYNAMODB_TABLE'],  # sentiment-items
-            KeyConditionExpression='day_partition = :day',
-            ExpressionAttributeValues={':day': {'S': today}},
+            IndexName='by_status',
+            KeyConditionExpression='#status = :analyzed AND #ts > :cutoff',
+            ExpressionAttributeNames={
+                '#status': 'status',
+                '#ts': 'timestamp'
+            },
+            ExpressionAttributeValues={
+                ':analyzed': {'S': 'analyzed'},
+                ':cutoff': {'S': cutoff}
+            },
             ScanIndexForward=False,  # Newest first
             Limit=1000,
             ConsistentRead=False  # Eventually consistent (acceptable)
         )
-        items.extend(parse_dynamodb_items(response_today['Items']))
 
-        # Query yesterday's partition if hours > 12
-        if hours > 12:
-            response_yesterday = dynamodb.query(
-                TableName=os.environ['DYNAMODB_TABLE'],
-                KeyConditionExpression='day_partition = :day',
-                ExpressionAttributeValues={':day': {'S': yesterday}},
-                ScanIndexForward=False,
-                Limit=1000,
-                ConsistentRead=False
-            )
-            items.extend(parse_dynamodb_items(response_yesterday['Items']))
+        items = parse_dynamodb_items(response['Items'])
 
-        # Filter by time window and source type
-        cutoff = (datetime.utcnow() - timedelta(hours=hours)).isoformat() + 'Z'
-        filtered_items = [
-            item for item in items
-            if item['ingested_at'] > cutoff and item.get('source_type') == source_type
-        ]
+        # Filter by source type if specified
+        if source_type:
+            items = [
+                item for item in items
+                if item.get('source_type') == source_type
+            ]
 
         # Calculate metrics
-        metrics = calculate_metrics(filtered_items)
+        metrics = calculate_metrics(items)
 
         return JSONResponse(content=metrics)
 
     except Exception as e:
-        logger.error(f"Failed to fetch metrics from dashboard table: {str(e)}")
-
-        # FALLBACK: Try primary table (slower, but functional)
-        try:
-            logger.warning("Falling back to primary table query")
-            response = dynamodb.query(
-                TableName=os.environ['DYNAMODB_TABLE'],
-                # Use primary table's schema (no day_partition)
-                ...
-            )
-            # Process and return
-        except Exception as fallback_error:
-            logger.error(f"Fallback also failed: {str(fallback_error)}")
-            return JSONResponse(
-                status_code=500,
-                content={"error": "Failed to fetch metrics", "details": str(e)}
-            )
+        logger.error(f"Failed to fetch metrics: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Failed to fetch metrics", "details": str(e)}
+        )
 ```
 
 ### Server-Sent Events Stream
@@ -267,13 +251,18 @@ async def stream_updates(request: Request, source_type: str = "newsapi"):
                     logger.info("Client disconnected from SSE stream")
                     break
 
-                # Query DynamoDB for new items since last check
+                # Query DynamoDB for new analyzed items since last check
+                # Use by_status GSI and filter by timestamp
                 response = dynamodb.query(
                     TableName=os.environ['DYNAMODB_TABLE'],
-                    IndexName='by_timestamp',
-                    KeyConditionExpression='source_type = :st AND ingested_at > :last',
+                    IndexName='by_status',
+                    KeyConditionExpression='#status = :analyzed AND #ts > :last',
+                    ExpressionAttributeNames={
+                        '#status': 'status',
+                        '#ts': 'timestamp'
+                    },
                     ExpressionAttributeValues={
-                        ':st': {'S': source_type},
+                        ':analyzed': {'S': 'analyzed'},
                         ':last': {'S': last_check}
                     },
                     ScanIndexForward=False,
@@ -297,7 +286,7 @@ async def stream_updates(request: Request, source_type: str = "newsapi"):
                     yield f"data: {json.dumps(event_data)}\n\n"
 
                     # Update last_check to most recent item
-                    last_check = items[0]['ingested_at']
+                    last_check = items[0]['timestamp']
 
                 # Wait 5 seconds before next poll
                 await asyncio.sleep(5)
@@ -336,7 +325,8 @@ def parse_dynamodb_items(items: list) -> list:
     for item in items:
         parsed.append({
             'source_id': item['source_id']['S'],
-            'ingested_at': item['ingested_at']['S'],
+            'timestamp': item['timestamp']['S'],
+            'source_type': item.get('source_type', {}).get('S', 'newsapi'),
             'sentiment': item.get('sentiment', {}).get('S', 'pending'),
             'score': float(item.get('score', {}).get('N', '0')),
             'text_snippet': item.get('text_snippet', {}).get('S', ''),
@@ -377,13 +367,13 @@ def calculate_metrics(items: list) -> dict:
         tag_counter.update(item['matched_tags'])
 
     # Recent items (last 20)
-    recent_items = sorted(items, key=lambda x: x['ingested_at'], reverse=True)[:20]
+    recent_items = sorted(items, key=lambda x: x['timestamp'], reverse=True)[:20]
 
     # Ingestion rate
     last_hour = sum(
         1 for item in items
-        if datetime.fromisoformat(item['ingested_at'].replace('Z', '+00:00'))
-           > datetime.utcnow() - timedelta(hours=1)
+        if datetime.fromisoformat(item['timestamp'].replace('Z', '+00:00'))
+           > datetime.utcnow().replace(tzinfo=None) - timedelta(hours=1)
     )
 
     return {
@@ -610,7 +600,7 @@ function prependItems(items) {
     items.forEach(item => {
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td>${new Date(item.ingested_at).toLocaleTimeString()}</td>
+            <td>${new Date(item.timestamp).toLocaleTimeString()}</td>
             <td class="snippet">${item.text_snippet}</td>
             <td class="sentiment-${item.sentiment}">${item.sentiment}</td>
             <td>${item.score.toFixed(2)}</td>
@@ -639,8 +629,8 @@ document.addEventListener('DOMContentLoaded', initDashboard);
 
 | Variable | Description | Example |
 |---|---|---|
-| `DYNAMODB_TABLE` | **DASHBOARD** read table name | `"sentiment-items"` |
-| `DYNAMODB_TABLE` | Primary table (fallback only) | `"sentiment-items"` |
+| `DYNAMODB_TABLE` | DynamoDB table name | `"sentiment-items"` |
+| `DASHBOARD_API_KEY` | API key for authentication | Retrieved from Secrets Manager |
 
 ---
 
