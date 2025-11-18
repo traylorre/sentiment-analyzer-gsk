@@ -211,8 +211,9 @@ class TestLambdaHandler:
         assert result["statusCode"] == 200
         assert result["body"]["summary"]["tags_processed"] == 2
         assert result["body"]["summary"]["articles_fetched"] == 4
-        assert result["body"]["summary"]["new_items"] == 4
-        assert result["body"]["summary"]["duplicates_skipped"] == 0
+        # Same articles returned for both tags, so second tag's articles are duplicates
+        assert result["body"]["summary"]["new_items"] == 2
+        assert result["body"]["summary"]["duplicates_skipped"] == 2
         assert "execution_time_ms" in result["body"]
 
     @mock_aws
@@ -270,7 +271,9 @@ class TestLambdaHandler:
             # Second invocation - should skip duplicates
             result2 = lambda_handler(eventbridge_event, mock_context)
 
-        assert result1["body"]["summary"]["new_items"] == 4
+        # First invocation: 2 new (same articles for both tags means 2 duplicates)
+        assert result1["body"]["summary"]["new_items"] == 2
+        # Second invocation: all duplicates
         assert result2["body"]["summary"]["new_items"] == 0
         assert result2["body"]["summary"]["duplicates_skipped"] == 4
 
@@ -861,7 +864,8 @@ class TestErrorHandling:
         ):
             result = lambda_handler(eventbridge_event, mock_context)
 
-        assert result["statusCode"] == 500
+        # Missing secret results in authentication failure
+        assert result["statusCode"] == 401
         assert "error" in result["body"]
 
     @mock_aws
