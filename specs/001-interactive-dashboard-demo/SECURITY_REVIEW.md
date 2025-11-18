@@ -57,7 +57,7 @@ This security review analyzes the **revised regional multi-AZ architecture** tha
                         ↓
 ┌─────────────────────────────────────────────────────────────┐
 │  TRUST ZONE 4: INFRASTRUCTURE (AWS-Managed)                │
-│  • SNS Topic: new-item (analysis trigger)                  │
+│  • SNS Topic: sentiment-analysis-requests (analysis trigger) │
 │  • EventBridge: ingestion-schedule (every 5 min)           │
 │  • Secrets Manager: api-keys (NewsAPI, dashboard)          │
 │  • CloudWatch: logs, metrics, alarms                       │

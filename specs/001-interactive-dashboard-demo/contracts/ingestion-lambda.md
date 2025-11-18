@@ -214,7 +214,7 @@ def insert_pending_item(article: dict, source_id: str, matched_tags: list[str]) 
   "text_for_analysis": "Article description or content snippet...",
   "model_version": "v1.0.0",
   "matched_tags": ["AI", "technology"],
-  "ingested_at": "2025-11-16T14:30:15.000Z"
+  "timestamp": "2025-11-16T14:30:15.000Z"
 }
 ```
 
