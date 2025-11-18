@@ -7,8 +7,11 @@ Common issues and solutions for the Sentiment Analyzer project.
 - [Development Environment Issues](#development-environment-issues)
   - [OpenSSL/pyOpenSSL Compatibility](#opensslpyopenssl-compatibility)
   - [Python Version Issues](#python-version-issues)
+  - [httpx Missing for FastAPI TestClient](#httpx-missing-for-fastapi-testclient)
 - [Test Issues](#test-issues)
   - [Moto Tests Failing](#moto-tests-failing)
+- [Infrastructure Issues](#infrastructure-issues)
+  - [Terraform Module Not Installed](#terraform-module-not-installed)
 - [AWS Issues](#aws-issues)
   - [DynamoDB GSI Not Found](#dynamodb-gsi-not-found)
 
@@ -95,6 +98,44 @@ sudo apt install python-is-python3
 
 ---
 
+### httpx Missing for FastAPI TestClient
+
+**Error:**
+```
+RuntimeError: The starlette.testclient module requires the httpx package to be installed.
+Install it by running the command:
+
+    pip install httpx
+```
+
+**Cause:**
+FastAPI's `TestClient` (from Starlette) requires `httpx` for making test requests, but it's not automatically installed with FastAPI.
+
+**Solution:**
+Install httpx:
+
+```bash
+pip3 install --user httpx
+```
+
+**Verification:**
+```bash
+# Verify installation
+pip3 show httpx | grep Version
+
+# Run tests to confirm fix
+python3 -m pytest tests/unit/test_dashboard_handler.py -v
+```
+
+**Prevention:**
+Add httpx to your test dependencies in requirements-dev.txt:
+
+```text
+httpx>=0.25.0
+```
+
+---
+
 ## Test Issues
 
 ### Moto Tests Failing
@@ -131,6 +172,72 @@ def test_something():
 pip3 show moto | grep Version
 # Should be 5.x or newer
 ```
+
+---
+
+## Infrastructure Issues
+
+### Terraform Module Not Installed
+
+**Error:**
+```
+Error: Module not installed
+
+  on main.tf line 103:
+ 103: module "ingestion_lambda" {
+
+This module is not yet installed. Run "terraform init" to install all modules
+required by this configuration.
+```
+
+**Cause:**
+Terraform modules must be downloaded/initialized before they can be used. This error occurs when:
+- Running `terraform validate` or `terraform plan` before `terraform init`
+- Adding new modules to an existing configuration
+- Cloning a repo for the first time
+
+**Solution:**
+Run terraform init before validate/plan/apply:
+
+```bash
+cd infrastructure/terraform
+
+# Initialize Terraform (downloads providers and modules)
+terraform init
+
+# Now validate will work
+terraform validate
+```
+
+**Expected Output:**
+```
+Initializing the backend...
+Initializing provider plugins...
+Initializing modules...
+
+Terraform has been successfully initialized!
+```
+
+**Verification:**
+```bash
+# Verify modules are installed
+ls -la .terraform/modules/
+
+# Run validation
+terraform validate
+# Expected: Success! The configuration is valid.
+```
+
+**Common Scenarios:**
+1. **Fresh clone**: Always run `terraform init` first
+2. **New module added**: Run `terraform init` to download the new module
+3. **CI/CD**: Ensure `terraform init` runs before validate/plan
+
+**On-Call Note:**
+If `terraform init` fails, check:
+- Network connectivity to registry.terraform.io
+- AWS credentials for S3 backend (if configured)
+- Provider version constraints in required_providers
 
 ---
 
@@ -178,4 +285,4 @@ If you encounter an issue not covered here:
 
 ---
 
-*Last updated: 2025-11-17*
+*Last updated: 2025-11-17 (added httpx and Terraform init issues)*
