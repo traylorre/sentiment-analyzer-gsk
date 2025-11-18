@@ -34,3 +34,15 @@ variable "model_version" {
     error_message = "Model version must follow semantic versioning (e.g., v1.0.0)."
   }
 }
+
+variable "alarm_email" {
+  description = "Email address for alarm notifications (leave empty to skip)"
+  type        = string
+  default     = ""
+}
+
+variable "monthly_budget_limit" {
+  description = "Monthly budget limit in USD for cost alerts"
+  type        = number
+  default     = 50
+}
