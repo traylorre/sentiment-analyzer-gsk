@@ -29,7 +29,7 @@ For Developers:
 
 import json
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 import boto3
@@ -99,7 +99,7 @@ def eventbridge_event():
         "detail-type": "Scheduled Event",
         "source": "aws.events",
         "account": "123456789012",
-        "time": datetime.now(timezone.utc).isoformat(),
+        "time": datetime.now(UTC).isoformat(),
         "region": "us-east-1",
         "resources": [
             "arn:aws:events:us-east-1:123456789012:rule/sentiment-ingestion-scheduler"
@@ -433,7 +433,7 @@ class TestIngestionE2E:
 
         # TTL should be approximately 30 days from now
         ttl = int(item["ttl_timestamp"])
-        now = datetime.now(timezone.utc).timestamp()
+        now = datetime.now(UTC).timestamp()
         days_until_expiry = (ttl - now) / (24 * 60 * 60)
 
         # Should be between 29 and 31 days (allowing for test execution time)

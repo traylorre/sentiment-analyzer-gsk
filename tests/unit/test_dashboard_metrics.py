@@ -17,19 +17,12 @@ For Developers:
     - Edge cases include empty tables, missing fields
 """
 
-import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
+import boto3
 import pytest
 from moto import mock_aws
-
-# Set environment variables before imports
-os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
-os.environ.setdefault("AWS_ACCESS_KEY_ID", "testing")
-os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "testing")
-
-import boto3
 
 from src.lambdas.dashboard.metrics import (
     MAX_RECENT_ITEMS,
@@ -102,7 +95,7 @@ def dynamodb_table():
 @pytest.fixture
 def sample_items():
     """Generate sample items for testing."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     items = [
         {
@@ -396,7 +389,7 @@ class TestGetItemsBySentiment:
 
     def test_time_window(self, dynamodb_table):
         """Test time window filtering."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Create items at different times
         old_item = {
@@ -427,7 +420,7 @@ class TestCalculateIngestionRate:
 
     def test_calculates_rates(self, dynamodb_table):
         """Test rate calculation for different time windows."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Create items at different times
         items = [
@@ -464,7 +457,7 @@ class TestCalculateIngestionRate:
 
     def test_includes_pending_items(self, dynamodb_table):
         """Test pending items are included in rate calculation."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         items = [
             {

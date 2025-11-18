@@ -48,17 +48,12 @@ from fastapi.security import APIKeyHeader
 from mangum import Mangum
 from sse_starlette.sse import EventSourceResponse
 
-# Import shared modules
-import sys
-
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from shared.dynamodb import get_table, parse_dynamodb_item
-from dashboard.metrics import (
+from src.lambdas.dashboard.metrics import (
     aggregate_dashboard_metrics,
     get_recent_items,
     sanitize_item_for_response,
 )
+from src.lambdas.shared.dynamodb import get_table, parse_dynamodb_item
 
 # Structured logging
 logger = logging.getLogger(__name__)
@@ -263,7 +258,7 @@ async def health_check():
         table = get_table(DYNAMODB_TABLE)
 
         # Test connectivity by describing table
-        table.table_status  # This triggers a DescribeTable call
+        _ = table.table_status  # This triggers a DescribeTable call
 
         return JSONResponse(
             {
@@ -343,7 +338,7 @@ async def get_metrics(
         raise HTTPException(
             status_code=500,
             detail="Failed to retrieve metrics",
-        )
+        ) from e
 
 
 @app.get("/api/stream")
@@ -459,7 +454,7 @@ async def get_items(
         raise HTTPException(
             status_code=500,
             detail="Failed to retrieve items",
-        )
+        ) from e
 
 
 # Mangum adapter for AWS Lambda

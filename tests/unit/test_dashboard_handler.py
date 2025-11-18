@@ -17,24 +17,13 @@ For Developers:
     - API key validation tested with various scenarios
 """
 
-import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from unittest.mock import patch
 
+import boto3
 import pytest
 from fastapi.testclient import TestClient
 from moto import mock_aws
-
-# Set environment variables before imports
-os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
-os.environ["AWS_ACCESS_KEY_ID"] = "testing"
-os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
-os.environ["DYNAMODB_TABLE"] = "test-sentiment-items"
-os.environ["API_KEY"] = "test-api-key-12345"
-os.environ["SSE_POLL_INTERVAL"] = "1"
-
-import boto3
 
 from src.lambdas.dashboard.handler import app
 
@@ -83,7 +72,7 @@ def create_test_table():
 
 def seed_test_data(table):
     """Seed the table with test items."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     items = [
         {

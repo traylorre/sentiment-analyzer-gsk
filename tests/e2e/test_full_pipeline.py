@@ -21,17 +21,17 @@ Security:
 Author: Claude Code
 """
 
+import hashlib
 import json
 import os
-import hashlib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import boto3
 import pytest
+from botocore.exceptions import ClientError
 from moto import mock_aws
-
 
 # Test configuration
 TEST_TABLE_NAME = "test-sentiment-items"
@@ -118,7 +118,7 @@ def create_test_infrastructure():
     queue_url = queue_response["QueueUrl"]
 
     # Subscribe SQS to SNS
-    queue_arn = f"arn:aws:sqs:us-east-1:123456789012:test-analysis-queue"
+    queue_arn = "arn:aws:sqs:us-east-1:123456789012:test-analysis-queue"
     sns.subscribe(
         TopicArn=topic_arn,
         Protocol="sqs",
@@ -222,7 +222,7 @@ class TestFullPipeline:
                 "source_name": article["source"]["name"],
                 "tag": ["AI", "climate", "economy"][i],
                 "status": "pending",
-                "ttl": int(datetime.now(timezone.utc).timestamp()) + 86400 * 30,
+                "ttl": int(datetime.now(UTC).timestamp()) + 86400 * 30,
                 "content_hash": hashlib.sha256(article["url"].encode()).hexdigest()[
                     :16
                 ],
@@ -260,7 +260,7 @@ class TestFullPipeline:
             {"sentiment": "negative", "score": Decimal("0.85")},
         ]
 
-        for item, result in zip(stored_items, sentiment_results):
+        for item, result in zip(stored_items, sentiment_results, strict=True):
             table.update_item(
                 Key={
                     "source_id": item["source_id"],
@@ -279,7 +279,7 @@ class TestFullPipeline:
                     ":sc": result["score"],
                     ":mv": "v1.0.0",
                     ":status": "analyzed",
-                    ":at": datetime.now(timezone.utc).isoformat(),
+                    ":at": datetime.now(UTC).isoformat(),
                 },
                 ConditionExpression="attribute_not_exists(sentiment)",
             )
@@ -668,7 +668,7 @@ class TestConcurrency:
         )
 
         # Second update fails (idempotency check)
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(ClientError):
             table.update_item(
                 Key={"source_id": source_id, "timestamp": timestamp},
                 UpdateExpression="SET sentiment = :s",

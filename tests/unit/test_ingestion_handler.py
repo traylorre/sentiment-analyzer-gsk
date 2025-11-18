@@ -21,7 +21,6 @@ For Developers:
 
 import json
 import os
-from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 import boto3

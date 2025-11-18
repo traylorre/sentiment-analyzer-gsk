@@ -33,7 +33,7 @@ Security Notes:
 
 import logging
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 # Structured logging
 logger = logging.getLogger(__name__)

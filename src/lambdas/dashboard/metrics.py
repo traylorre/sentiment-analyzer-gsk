@@ -25,7 +25,7 @@ Security Notes:
 """
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from boto3.dynamodb.conditions import Key
@@ -182,7 +182,7 @@ def get_items_by_sentiment(
         raise ValueError(f"Invalid sentiment: {sentiment}")
 
     # Calculate time window
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     start_time = (now - timedelta(hours=hours)).isoformat()
 
     try:
@@ -235,7 +235,7 @@ def calculate_ingestion_rate(
         2. Verify ingestion Lambda is not erroring
         3. Check NewsAPI is returning articles
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # Calculate time boundaries
     one_hour_ago = (now - timedelta(hours=1)).isoformat()
@@ -342,8 +342,6 @@ def aggregate_dashboard_metrics(
 
         # For distribution calculations, we need more items
         # Query all analyzed items in time window
-        now = datetime.now(timezone.utc)
-        start_time = (now - timedelta(hours=hours)).isoformat()
 
         # Get all analyzed items for accurate distribution
         all_items: list[dict[str, Any]] = []

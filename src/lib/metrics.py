@@ -38,7 +38,7 @@ import json
 import logging
 import os
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import boto3
@@ -108,7 +108,7 @@ class StructuredLogger:
     def _log(self, level: int, message: str, **kwargs):
         """Internal logging with extra fields."""
         # Add timestamp
-        kwargs["timestamp"] = datetime.now(timezone.utc).isoformat()
+        kwargs["timestamp"] = datetime.now(UTC).isoformat()
 
         self.logger.log(level, message, extra={"structured_data": kwargs})
 
@@ -125,7 +125,7 @@ class JsonFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         log_data = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "level": record.levelname,
             "message": record.getMessage(),
             "logger": record.name,
@@ -194,7 +194,7 @@ def emit_metric(
         "MetricName": name,
         "Value": value,
         "Unit": unit,
-        "Timestamp": datetime.now(timezone.utc),
+        "Timestamp": datetime.now(UTC),
     }
 
     # Add dimensions
@@ -257,7 +257,7 @@ def emit_metrics_batch(
             "MetricName": metric["name"],
             "Value": metric["value"],
             "Unit": metric.get("unit", "Count"),
-            "Timestamp": datetime.now(timezone.utc),
+            "Timestamp": datetime.now(UTC),
             "Dimensions": [{"Name": "Environment", "Value": environment}],
         }
 
@@ -333,7 +333,7 @@ def log_structured(
         ... )
     """
     log_data = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "level": level,
         "message": message,
         **kwargs,

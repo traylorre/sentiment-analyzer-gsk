@@ -99,6 +99,10 @@ ignore = [
     "S101",  # assert allowed in tests
     "S105",  # hardcoded passwords OK in test fixtures
     "S106",  # hardcoded passwords OK in test fixtures
+    "F841",  # unused variables - often used for side effects in tests
+]
+"src/lambdas/shared/errors.py" = [
+    "S105",  # error code constants are not passwords
 ]
 
 [tool.ruff.isort]

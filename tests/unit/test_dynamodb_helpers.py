@@ -19,11 +19,10 @@ For Developers:
 import os
 from decimal import Decimal
 
-import pytest
-from moto import mock_aws
-
 # Import after setting up mocks
 import boto3
+import pytest
+from moto import mock_aws
 
 from src.lambdas.shared.dynamodb import (
     build_key,

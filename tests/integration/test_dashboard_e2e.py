@@ -18,25 +18,18 @@ For Developers:
 """
 
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
+import boto3
 import pytest
 from fastapi.testclient import TestClient
 from moto import mock_aws
 
-# Set environment variables before imports
-os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
-os.environ["AWS_ACCESS_KEY_ID"] = "testing"
-os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
-os.environ["DYNAMODB_TABLE"] = "test-sentiment-items"
-os.environ["API_KEY"] = "e2e-test-api-key-secret"
-os.environ["SSE_POLL_INTERVAL"] = "1"
-os.environ["ENVIRONMENT"] = "test"
-
-import boto3
-
 from src.lambdas.dashboard.handler import app
+
+# Override default API key for E2E tests
+os.environ["API_KEY"] = "e2e-test-api-key-secret"
 
 
 def create_test_table():
@@ -88,7 +81,7 @@ def seed_comprehensive_test_data(table):
     Creates items with various sentiments, tags, and timestamps
     to test all aggregation functions.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     items = [
         # Recent positive items
@@ -313,7 +306,7 @@ class TestDashboardE2E:
         table = create_test_table()
 
         # Add item with internal fields
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         table.put_item(
             Item={
                 "source_id": "newsapi#internal",
@@ -457,7 +450,7 @@ class TestDashboardE2E:
         """
         table = create_test_table()
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Add item within 1 hour
         table.put_item(
