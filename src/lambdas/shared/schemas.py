@@ -28,7 +28,7 @@ Security Notes:
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class SentimentItemCreate(BaseModel):
@@ -147,6 +147,8 @@ class SentimentItemUpdate(BaseModel):
         score must be: 0.0 to 1.0
     """
 
+    model_config = ConfigDict(protected_namespaces=())
+
     sentiment: Literal["positive", "neutral", "negative"] = Field(
         ...,
         description="Sentiment classification result",
@@ -188,6 +190,8 @@ class SentimentItemResponse(BaseModel):
         This is the public-facing schema. It includes all fields
         that are safe to expose to dashboard users.
     """
+
+    model_config = ConfigDict(protected_namespaces=())
 
     source_id: str = Field(
         ...,

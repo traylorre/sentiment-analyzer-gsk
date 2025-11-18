@@ -17,7 +17,7 @@ terraform {
   # IMPORTANT: After running bootstrap, update the bucket name below with the
   # output from: terraform output state_bucket_name
   backend "s3" {
-    bucket         = "sentiment-analyzer-tfstate-YOUR_ACCOUNT_ID"  # UPDATE THIS
+    bucket         = "sentiment-analyzer-tfstate-218795110243"
     key            = "sentiment-analyzer/terraform.tfstate"
     region         = "us-east-1"
     encrypt        = true
