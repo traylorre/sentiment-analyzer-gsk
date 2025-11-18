@@ -32,9 +32,12 @@ provider "aws" {
   }
 }
 
+# Get AWS account ID for unique bucket name
+data "aws_caller_identity" "current" {}
+
 # S3 bucket for Terraform state
 resource "aws_s3_bucket" "terraform_state" {
-  bucket = "sentiment-analyzer-terraform-state"
+  bucket = "sentiment-analyzer-tfstate-${data.aws_caller_identity.current.account_id}"
 
   lifecycle {
     prevent_destroy = true
@@ -97,7 +100,22 @@ resource "aws_dynamodb_table" "terraform_lock" {
 
 output "state_bucket_name" {
   value       = aws_s3_bucket.terraform_state.id
-  description = "Name of the S3 bucket for Terraform state"
+  description = "Name of the S3 bucket for Terraform state - use this in main.tf backend config"
+}
+
+output "backend_config" {
+  value = <<-EOT
+    Update infrastructure/terraform/main.tf with:
+
+    backend "s3" {
+      bucket         = "${aws_s3_bucket.terraform_state.id}"
+      key            = "sentiment-analyzer/terraform.tfstate"
+      region         = "us-east-1"
+      encrypt        = true
+      dynamodb_table = "terraform-state-lock"
+    }
+  EOT
+  description = "Backend configuration to add to main.tf"
 }
 
 output "lock_table_name" {

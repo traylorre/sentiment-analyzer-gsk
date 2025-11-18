@@ -13,8 +13,11 @@ terraform {
 
   # Backend configuration for persistent state
   # Resources created by infrastructure/terraform/bootstrap
+  #
+  # IMPORTANT: After running bootstrap, update the bucket name below with the
+  # output from: terraform output state_bucket_name
   backend "s3" {
-    bucket         = "sentiment-analyzer-terraform-state"
+    bucket         = "sentiment-analyzer-tfstate-YOUR_ACCOUNT_ID"  # UPDATE THIS
     key            = "sentiment-analyzer/terraform.tfstate"
     region         = "us-east-1"
     encrypt        = true
