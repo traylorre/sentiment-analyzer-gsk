@@ -11,15 +11,15 @@ terraform {
     }
   }
 
-  # Backend configuration (commented out for initial setup)
-  # Uncomment after creating S3 bucket and DynamoDB table for state locking
-  # backend "s3" {
-  #   bucket         = "sentiment-analyzer-terraform-state"
-  #   key            = "sentiment-analyzer/terraform.tfstate"
-  #   region         = "us-east-1"
-  #   encrypt        = true
-  #   dynamodb_table = "terraform-state-lock"
-  # }
+  # Backend configuration for persistent state
+  # Resources created by infrastructure/terraform/bootstrap
+  backend "s3" {
+    bucket         = "sentiment-analyzer-terraform-state"
+    key            = "sentiment-analyzer/terraform.tfstate"
+    region         = "us-east-1"
+    encrypt        = true
+    dynamodb_table = "terraform-state-lock"
+  }
 }
 
 provider "aws" {
