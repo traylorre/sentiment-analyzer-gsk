@@ -140,67 +140,73 @@ ruff==0.1.6
 # Navigate to scripts directory
 cd infrastructure/scripts
 
-# Run model layer build script
+# Make script executable
+chmod +x build-model-layer.sh
+
+# Run model layer build script (local only)
 ./build-model-layer.sh
+
+# Or build and upload to S3
+./build-model-layer.sh --upload-s3 my-models-bucket
 
 # Expected output:
 # - downloads DistilBERT (~250MB)
+# - verifies model hash (supply chain security)
 # - creates model-layer.zip
-# - uploads to S3: s3://sentiment-models-ACCOUNT_ID/layers/distilbert-v1.0.0.zip
 ```
 
-### build-model-layer.sh
+### Script Options
+
+| Option | Description |
+|---|---|
+| `--upload-s3 BUCKET` | Upload ZIP to S3 bucket |
+| `--no-verify` | Skip hash verification (not recommended) |
+
+### Publishing as Lambda Layer
+
+After building the ZIP, publish it as a Lambda layer:
 
 ```bash
-#!/bin/bash
-set -e
-
+# Create S3 bucket for model artifacts
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-BUCKET_NAME="sentiment-models-${ACCOUNT_ID}"
-LAYER_NAME="distilbert-v1.0.0"
+aws s3 mb s3://sentiment-models-${ACCOUNT_ID} --region us-east-1
 
-echo "Building model layer: $LAYER_NAME"
+# Upload ZIP to S3
+aws s3 cp model-layer.zip s3://sentiment-models-${ACCOUNT_ID}/layers/distilbert-v1.0.0.zip
 
-# Create S3 bucket for model artifacts (if doesn't exist)
-aws s3 mb s3://${BUCKET_NAME} --region us-east-1 2>/dev/null || true
+# Publish as Lambda layer
+aws lambda publish-layer-version \
+    --layer-name sentiment-model-distilbert \
+    --description "DistilBERT sentiment model v1.0.0" \
+    --content S3Bucket=sentiment-models-${ACCOUNT_ID},S3Key=layers/distilbert-v1.0.0.zip \
+    --compatible-runtimes python3.11 \
+    --compatible-architectures x86_64
 
-# Create temporary directory
-mkdir -p layer/python/model
-cd layer
-
-# Download DistilBERT model
-python3.11 << EOF
-from transformers import AutoModelForSequenceClassification, AutoTokenizer
-
-model_name = "distilbert-base-uncased-finetuned-sst-2-english"
-print(f"Downloading {model_name}...")
-
-model = AutoModelForSequenceClassification.from_pretrained(model_name)
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-
-model.save_pretrained("python/model")
-tokenizer.save_pretrained("python/model")
-
-print("Model saved to layer/python/model")
-EOF
-
-# Create layer zip
-zip -r ../${LAYER_NAME}.zip python
-cd ..
-
-# Upload to S3
-aws s3 cp ${LAYER_NAME}.zip s3://${BUCKET_NAME}/layers/${LAYER_NAME}.zip
-
-echo "Model layer uploaded to s3://${BUCKET_NAME}/layers/${LAYER_NAME}.zip"
-
-# Cleanup
-rm -rf layer
+# Note the LayerVersionArn from output - use this in Terraform
 ```
 
-**Make executable**:
-```bash
-chmod +x infrastructure/scripts/build-model-layer.sh
+### Security Notes
+
+The build script includes hash verification for supply chain security:
+- Downloads model directly from HuggingFace
+- Verifies SHA256 hash of config.json
+- Warns if hash doesn't match expected value
+
+**On first run**: Update `EXPECTED_CONFIG_HASH` in the script with the actual hash after manually verifying the model.
+
+### Layer Structure
+
 ```
+/opt/
+└── model/
+    ├── config.json
+    ├── pytorch_model.bin
+    ├── tokenizer_config.json
+    ├── vocab.txt
+    └── special_tokens_map.json
+```
+
+**Layer size**: ~250MB
 
 ---
 
