@@ -17,15 +17,21 @@ For Developers:
     - API key validation tested with various scenarios
 """
 
+import os
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
-import boto3
-import pytest
-from fastapi.testclient import TestClient
-from moto import mock_aws
+# Set env vars before importing handler (which reads them at module level)
+os.environ["API_KEY"] = "test-api-key-12345"
+os.environ["DYNAMODB_TABLE"] = "test-sentiment-items"
+os.environ["ENVIRONMENT"] = "test"
 
-from src.lambdas.dashboard.handler import app
+import boto3  # noqa: E402
+import pytest  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+from moto import mock_aws  # noqa: E402
+
+from src.lambdas.dashboard.handler import app  # noqa: E402
 
 
 def create_test_table():

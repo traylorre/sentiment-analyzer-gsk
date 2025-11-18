@@ -21,6 +21,7 @@ For Developers:
 
 import json
 import os
+from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
 import boto3
@@ -235,7 +236,7 @@ class TestLambdaHandler:
                 "timestamp": "2025-11-17T14:30:15.000Z",
                 "status": "analyzed",  # Already analyzed
                 "sentiment": "positive",
-                "score": 0.85,
+                "score": Decimal("0.85"),
             }
         )
 
