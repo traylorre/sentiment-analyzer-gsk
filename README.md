@@ -109,11 +109,9 @@ Ingests text from external sources (Twitter, RSS feeds) and returns sentiment an
 
 ### Architecture Overview
 
-```
-NewsAPI → Ingestion Lambda → DynamoDB → Analysis Lambda → Dashboard
-              ↓                              ↓
-         SNS Topic                    DistilBERT Model
-```
+![Architecture Diagram](docs/architecture.png)
+
+**Data Flow**: NewsAPI → Ingestion → DynamoDB → SNS → Analysis → Dashboard
 
 **Components**:
 - **Ingestion Lambda**: EventBridge-triggered (5 min), fetches NewsAPI articles
@@ -559,14 +557,19 @@ _Coming soon - OpenAPI/Swagger specs for Admin API_
 
 **Implementation Status:**
 - ✅ Phase 1: Project Setup & CI/CD (T001-T011)
-- ⏳ Phase 2: Shared Libraries (T012-T023)
-- ⏳ Phase 3: Ingestion Lambda (T024-T031)
-- ⏳ Phase 4: Analysis Lambda (T032-T038)
-- ⏳ Phase 5: Dashboard Lambda (T039-T047)
-- ⏳ Phase 6: Lambda Terraform (T048-T053)
-- ⏳ Phase 7: Integration (T054-T058)
-- ⏳ Phase 8: Deployment (T059-T064)
-- ⏳ Phase 9: Documentation (T065-T072)
+- ✅ Phase 2: Shared Libraries (T012-T023)
+- ✅ Phase 3: Ingestion Lambda (T024-T031)
+- ✅ Phase 4: Analysis Lambda (T032-T038)
+- ✅ Phase 5: Dashboard Lambda (T039-T047)
+- ✅ Phase 6: Lambda Terraform (T048-T053)
+- ✅ Phase 7: Integration (T054-T058)
+- ✅ Phase 8: Deployment (T059-T064)
+- ✅ Phase 9: Documentation (T065-T072)
+
+**Additional Documentation:**
+- [Deployment Guide](docs/DEPLOYMENT.md) - Zero-downtime deployment and rollback
+- [Demo Checklist](docs/DEMO_CHECKLIST.md) - Demo day preparation
+- [Troubleshooting](docs/TROUBLESHOOTING.md) - Common issues and solutions
 
 **Tracking:** See [tasks.md](./specs/001-interactive-dashboard-demo/tasks.md)
 

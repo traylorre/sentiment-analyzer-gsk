@@ -155,11 +155,15 @@ class TestAnalysisE2E:
         )
 
         # Execute with mocked model
-        with patch("src.lambdas.analysis.handler.load_model"), \
-             patch("src.lambdas.analysis.handler.analyze_sentiment") as mock_analyze, \
-             patch("src.lambdas.analysis.handler.get_model_load_time_ms") as mock_load_time, \
-             patch("src.lib.metrics.emit_metric"), \
-             patch("src.lib.metrics.emit_metrics_batch"):
+        with (
+            patch("src.lambdas.analysis.handler.load_model"),
+            patch("src.lambdas.analysis.handler.analyze_sentiment") as mock_analyze,
+            patch(
+                "src.lambdas.analysis.handler.get_model_load_time_ms"
+            ) as mock_load_time,
+            patch("src.lib.metrics.emit_metric"),
+            patch("src.lib.metrics.emit_metrics_batch"),
+        ):
 
             mock_analyze.return_value = ("positive", 0.94)
             mock_load_time.return_value = 0
@@ -208,11 +212,15 @@ class TestAnalysisE2E:
         )
 
         # First invocation
-        with patch("src.lambdas.analysis.handler.load_model"), \
-             patch("src.lambdas.analysis.handler.analyze_sentiment") as mock_analyze, \
-             patch("src.lambdas.analysis.handler.get_model_load_time_ms") as mock_load_time, \
-             patch("src.lib.metrics.emit_metric"), \
-             patch("src.lib.metrics.emit_metrics_batch"):
+        with (
+            patch("src.lambdas.analysis.handler.load_model"),
+            patch("src.lambdas.analysis.handler.analyze_sentiment") as mock_analyze,
+            patch(
+                "src.lambdas.analysis.handler.get_model_load_time_ms"
+            ) as mock_load_time,
+            patch("src.lib.metrics.emit_metric"),
+            patch("src.lib.metrics.emit_metrics_batch"),
+        ):
 
             mock_analyze.return_value = ("positive", 0.85)
             mock_load_time.return_value = 0
@@ -222,11 +230,15 @@ class TestAnalysisE2E:
         assert result1["body"]["updated"] is True
 
         # Second invocation (duplicate message)
-        with patch("src.lambdas.analysis.handler.load_model"), \
-             patch("src.lambdas.analysis.handler.analyze_sentiment") as mock_analyze, \
-             patch("src.lambdas.analysis.handler.get_model_load_time_ms") as mock_load_time, \
-             patch("src.lib.metrics.emit_metric"), \
-             patch("src.lib.metrics.emit_metrics_batch"):
+        with (
+            patch("src.lambdas.analysis.handler.load_model"),
+            patch("src.lambdas.analysis.handler.analyze_sentiment") as mock_analyze,
+            patch(
+                "src.lambdas.analysis.handler.get_model_load_time_ms"
+            ) as mock_load_time,
+            patch("src.lib.metrics.emit_metric"),
+            patch("src.lib.metrics.emit_metrics_batch"),
+        ):
 
             mock_analyze.return_value = ("negative", 0.90)  # Different result
             mock_load_time.return_value = 0
@@ -265,11 +277,15 @@ class TestAnalysisE2E:
             text="The weather is okay today.",
         )
 
-        with patch("src.lambdas.analysis.handler.load_model"), \
-             patch("src.lambdas.analysis.handler.analyze_sentiment") as mock_analyze, \
-             patch("src.lambdas.analysis.handler.get_model_load_time_ms") as mock_load_time, \
-             patch("src.lib.metrics.emit_metric"), \
-             patch("src.lib.metrics.emit_metrics_batch"):
+        with (
+            patch("src.lambdas.analysis.handler.load_model"),
+            patch("src.lambdas.analysis.handler.analyze_sentiment") as mock_analyze,
+            patch(
+                "src.lambdas.analysis.handler.get_model_load_time_ms"
+            ) as mock_load_time,
+            patch("src.lib.metrics.emit_metric"),
+            patch("src.lib.metrics.emit_metrics_batch"),
+        ):
 
             mock_analyze.return_value = ("neutral", 0.52)
             mock_load_time.return_value = 0
@@ -306,11 +322,15 @@ class TestAnalysisE2E:
             text="This is terrible news about the economy.",
         )
 
-        with patch("src.lambdas.analysis.handler.load_model"), \
-             patch("src.lambdas.analysis.handler.analyze_sentiment") as mock_analyze, \
-             patch("src.lambdas.analysis.handler.get_model_load_time_ms") as mock_load_time, \
-             patch("src.lib.metrics.emit_metric"), \
-             patch("src.lib.metrics.emit_metrics_batch"):
+        with (
+            patch("src.lambdas.analysis.handler.load_model"),
+            patch("src.lambdas.analysis.handler.analyze_sentiment") as mock_analyze,
+            patch(
+                "src.lambdas.analysis.handler.get_model_load_time_ms"
+            ) as mock_load_time,
+            patch("src.lib.metrics.emit_metric"),
+            patch("src.lib.metrics.emit_metrics_batch"),
+        ):
 
             mock_analyze.return_value = ("negative", 0.88)
             mock_load_time.return_value = 0
@@ -353,16 +373,20 @@ class TestAnalysisE2E:
         table = dynamodb.Table("test-sentiment-items")
 
         # Insert two items
-        table.put_item(Item={
-            "source_id": "newsapi#item1",
-            "timestamp": "2025-11-17T10:00:00.000Z",
-            "status": "pending",
-        })
-        table.put_item(Item={
-            "source_id": "newsapi#item2",
-            "timestamp": "2025-11-17T11:00:00.000Z",
-            "status": "pending",
-        })
+        table.put_item(
+            Item={
+                "source_id": "newsapi#item1",
+                "timestamp": "2025-11-17T10:00:00.000Z",
+                "status": "pending",
+            }
+        )
+        table.put_item(
+            Item={
+                "source_id": "newsapi#item2",
+                "timestamp": "2025-11-17T11:00:00.000Z",
+                "status": "pending",
+            }
+        )
 
         # Process first item
         event1 = create_sns_event(
@@ -371,11 +395,15 @@ class TestAnalysisE2E:
             text="Positive news",
         )
 
-        with patch("src.lambdas.analysis.handler.load_model"), \
-             patch("src.lambdas.analysis.handler.analyze_sentiment") as mock_analyze, \
-             patch("src.lambdas.analysis.handler.get_model_load_time_ms") as mock_load_time, \
-             patch("src.lib.metrics.emit_metric"), \
-             patch("src.lib.metrics.emit_metrics_batch"):
+        with (
+            patch("src.lambdas.analysis.handler.load_model"),
+            patch("src.lambdas.analysis.handler.analyze_sentiment") as mock_analyze,
+            patch(
+                "src.lambdas.analysis.handler.get_model_load_time_ms"
+            ) as mock_load_time,
+            patch("src.lib.metrics.emit_metric"),
+            patch("src.lib.metrics.emit_metrics_batch"),
+        ):
 
             mock_analyze.return_value = ("positive", 0.90)
             mock_load_time.return_value = 0
@@ -383,14 +411,18 @@ class TestAnalysisE2E:
             lambda_handler(event1, mock_context)
 
         # Verify item1 updated, item2 still pending
-        item1 = table.get_item(Key={
-            "source_id": "newsapi#item1",
-            "timestamp": "2025-11-17T10:00:00.000Z",
-        })["Item"]
-        item2 = table.get_item(Key={
-            "source_id": "newsapi#item2",
-            "timestamp": "2025-11-17T11:00:00.000Z",
-        })["Item"]
+        item1 = table.get_item(
+            Key={
+                "source_id": "newsapi#item1",
+                "timestamp": "2025-11-17T10:00:00.000Z",
+            }
+        )["Item"]
+        item2 = table.get_item(
+            Key={
+                "source_id": "newsapi#item2",
+                "timestamp": "2025-11-17T11:00:00.000Z",
+            }
+        )["Item"]
 
         assert item1["status"] == "analyzed"
         assert item2["status"] == "pending"
@@ -416,11 +448,15 @@ class TestAnalysisE2E:
             model_version="v2.0.0",  # Different version
         )
 
-        with patch("src.lambdas.analysis.handler.load_model"), \
-             patch("src.lambdas.analysis.handler.analyze_sentiment") as mock_analyze, \
-             patch("src.lambdas.analysis.handler.get_model_load_time_ms") as mock_load_time, \
-             patch("src.lib.metrics.emit_metric"), \
-             patch("src.lib.metrics.emit_metrics_batch"):
+        with (
+            patch("src.lambdas.analysis.handler.load_model"),
+            patch("src.lambdas.analysis.handler.analyze_sentiment") as mock_analyze,
+            patch(
+                "src.lambdas.analysis.handler.get_model_load_time_ms"
+            ) as mock_load_time,
+            patch("src.lib.metrics.emit_metric"),
+            patch("src.lib.metrics.emit_metrics_batch"),
+        ):
 
             mock_analyze.return_value = ("positive", 0.80)
             mock_load_time.return_value = 0
@@ -458,11 +494,15 @@ class TestAnalysisE2E:
             text="Test",
         )
 
-        with patch("src.lambdas.analysis.handler.load_model"), \
-             patch("src.lambdas.analysis.handler.analyze_sentiment") as mock_analyze, \
-             patch("src.lambdas.analysis.handler.get_model_load_time_ms") as mock_load_time, \
-             patch("src.lib.metrics.emit_metric"), \
-             patch("src.lib.metrics.emit_metrics_batch"):
+        with (
+            patch("src.lambdas.analysis.handler.load_model"),
+            patch("src.lambdas.analysis.handler.analyze_sentiment") as mock_analyze,
+            patch(
+                "src.lambdas.analysis.handler.get_model_load_time_ms"
+            ) as mock_load_time,
+            patch("src.lib.metrics.emit_metric"),
+            patch("src.lib.metrics.emit_metrics_batch"),
+        ):
 
             mock_analyze.return_value = ("positive", 0.9234567890)  # Many decimals
             mock_load_time.return_value = 0
@@ -560,11 +600,15 @@ class TestAnalysisErrorScenarios:
             text="Test",
         )
 
-        with patch("src.lambdas.analysis.handler.load_model"), \
-             patch("src.lambdas.analysis.handler.analyze_sentiment") as mock_analyze, \
-             patch("src.lambdas.analysis.handler.get_model_load_time_ms") as mock_load_time, \
-             patch("src.lib.metrics.emit_metric"), \
-             patch("src.lib.metrics.emit_metrics_batch"):
+        with (
+            patch("src.lambdas.analysis.handler.load_model"),
+            patch("src.lambdas.analysis.handler.analyze_sentiment") as mock_analyze,
+            patch(
+                "src.lambdas.analysis.handler.get_model_load_time_ms"
+            ) as mock_load_time,
+            patch("src.lib.metrics.emit_metric"),
+            patch("src.lib.metrics.emit_metrics_batch"),
+        ):
 
             mock_analyze.return_value = ("positive", 0.80)
             mock_load_time.return_value = 0
@@ -593,11 +637,15 @@ class TestAnalysisErrorScenarios:
             text="",  # Empty
         )
 
-        with patch("src.lambdas.analysis.handler.load_model"), \
-             patch("src.lambdas.analysis.handler.analyze_sentiment") as mock_analyze, \
-             patch("src.lambdas.analysis.handler.get_model_load_time_ms") as mock_load_time, \
-             patch("src.lib.metrics.emit_metric"), \
-             patch("src.lib.metrics.emit_metrics_batch"):
+        with (
+            patch("src.lambdas.analysis.handler.load_model"),
+            patch("src.lambdas.analysis.handler.analyze_sentiment") as mock_analyze,
+            patch(
+                "src.lambdas.analysis.handler.get_model_load_time_ms"
+            ) as mock_load_time,
+            patch("src.lib.metrics.emit_metric"),
+            patch("src.lib.metrics.emit_metrics_batch"),
+        ):
 
             # Model returns neutral for empty text
             mock_analyze.return_value = ("neutral", 0.5)
@@ -635,11 +683,15 @@ class TestAnalysisMetrics:
         def mock_batch(metrics, **kwargs):
             emitted_metrics.extend(metrics)
 
-        with patch("src.lambdas.analysis.handler.load_model"), \
-             patch("src.lambdas.analysis.handler.analyze_sentiment") as mock_analyze, \
-             patch("src.lambdas.analysis.handler.get_model_load_time_ms") as mock_load_time, \
-             patch("src.lib.metrics.emit_metric"), \
-             patch("src.lambdas.analysis.handler.emit_metrics_batch", mock_batch):
+        with (
+            patch("src.lambdas.analysis.handler.load_model"),
+            patch("src.lambdas.analysis.handler.analyze_sentiment") as mock_analyze,
+            patch(
+                "src.lambdas.analysis.handler.get_model_load_time_ms"
+            ) as mock_load_time,
+            patch("src.lib.metrics.emit_metric"),
+            patch("src.lambdas.analysis.handler.emit_metrics_batch", mock_batch),
+        ):
 
             mock_analyze.return_value = ("positive", 0.90)
             mock_load_time.return_value = 0
@@ -675,11 +727,15 @@ class TestAnalysisMetrics:
         def mock_emit(name, value, **kwargs):
             emitted.append({"name": name, "value": value})
 
-        with patch("src.lambdas.analysis.handler.load_model"), \
-             patch("src.lambdas.analysis.handler.analyze_sentiment") as mock_analyze, \
-             patch("src.lambdas.analysis.handler.get_model_load_time_ms") as mock_load_time, \
-             patch("src.lambdas.analysis.handler.emit_metric", mock_emit), \
-             patch("src.lib.metrics.emit_metrics_batch"):
+        with (
+            patch("src.lambdas.analysis.handler.load_model"),
+            patch("src.lambdas.analysis.handler.analyze_sentiment") as mock_analyze,
+            patch(
+                "src.lambdas.analysis.handler.get_model_load_time_ms"
+            ) as mock_load_time,
+            patch("src.lambdas.analysis.handler.emit_metric", mock_emit),
+            patch("src.lib.metrics.emit_metrics_batch"),
+        ):
 
             mock_analyze.return_value = ("positive", 0.80)
             mock_load_time.return_value = 2500  # Cold start

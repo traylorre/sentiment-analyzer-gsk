@@ -1,0 +1,69 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#4A90A4', 'secondaryColor': '#F5A623', 'tertiaryColor': '#7ED321'}}}%%
+flowchart TB
+    subgraph External["External Services"]
+        NewsAPI["NewsAPI<br/>News Articles"]
+    end
+
+    subgraph EventBridge["Amazon EventBridge"]
+        Schedule["Schedule Rule<br/>(5 min)"]
+    end
+
+    subgraph Lambda["AWS Lambda Functions"]
+        Ingestion["Ingestion Lambda<br/>512MB / 60s"]
+        Analysis["Analysis Lambda<br/>1024MB / 30s"]
+        Dashboard["Dashboard Lambda<br/>512MB / 60s"]
+    end
+
+    subgraph Storage["Data Storage"]
+        DynamoDB["DynamoDB<br/>sentiment-items"]
+        Secrets["Secrets Manager<br/>API Keys"]
+    end
+
+    subgraph Messaging["Messaging"]
+        SNS["SNS Topic<br/>analysis-requests"]
+        DLQ["SQS DLQ<br/>Failed Messages"]
+    end
+
+    subgraph Monitoring["Monitoring & Alerts"]
+        CloudWatch["CloudWatch<br/>Logs & Metrics"]
+        Alarms["CloudWatch Alarms<br/>11 Configured"]
+    end
+
+    subgraph Users["Users"]
+        Browser["Web Browser"]
+    end
+
+    %% Data Flow
+    Schedule -->|Trigger| Ingestion
+    NewsAPI -->|Articles| Ingestion
+    Secrets -->|API Key| Ingestion
+    Ingestion -->|Store Items| DynamoDB
+    Ingestion -->|Publish| SNS
+    
+    SNS -->|Trigger| Analysis
+    SNS -->|Failed| DLQ
+    Analysis -->|Update Items| DynamoDB
+    Secrets -->|Model Config| Analysis
+    
+    Browser -->|HTTP| Dashboard
+    Dashboard -->|Query| DynamoDB
+    Secrets -->|API Key| Dashboard
+    
+    %% Monitoring
+    Ingestion -->|Logs| CloudWatch
+    Analysis -->|Logs| CloudWatch
+    Dashboard -->|Logs| CloudWatch
+    CloudWatch -->|Triggers| Alarms
+
+    %% Styling
+    classDef external fill:#FFE4B5,stroke:#F5A623,stroke-width:2px
+    classDef lambda fill:#D4E8F2,stroke:#4A90A4,stroke-width:2px
+    classDef storage fill:#D4F2D4,stroke:#7ED321,stroke-width:2px
+    classDef messaging fill:#F2E4D4,stroke:#D0021B,stroke-width:2px
+    classDef monitoring fill:#E8E4F2,stroke:#9013FE,stroke-width:2px
+    
+    class NewsAPI external
+    class Ingestion,Analysis,Dashboard lambda
+    class DynamoDB,Secrets storage
+    class SNS,DLQ messaging
+    class CloudWatch,Alarms monitoring

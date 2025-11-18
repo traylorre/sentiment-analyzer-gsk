@@ -102,9 +102,7 @@ def calculate_tag_distribution(items: list[dict[str, Any]]) -> dict[str, int]:
                     tag_counts[tag] = tag_counts.get(tag, 0) + 1
 
     # Sort by count descending
-    sorted_tags = dict(
-        sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)
-    )
+    sorted_tags = dict(sorted(tag_counts.items(), key=lambda x: x[1], reverse=True))
 
     return sorted_tags
 
@@ -249,8 +247,7 @@ def calculate_ingestion_rate(
         response_1h = table.query(
             IndexName="by_status",
             KeyConditionExpression=(
-                Key("status").eq("analyzed")
-                & Key("timestamp").gte(one_hour_ago)
+                Key("status").eq("analyzed") & Key("timestamp").gte(one_hour_ago)
             ),
             Select="COUNT",
         )
@@ -260,8 +257,7 @@ def calculate_ingestion_rate(
         response_1h_pending = table.query(
             IndexName="by_status",
             KeyConditionExpression=(
-                Key("status").eq("pending")
-                & Key("timestamp").gte(one_hour_ago)
+                Key("status").eq("pending") & Key("timestamp").gte(one_hour_ago)
             ),
             Select="COUNT",
         )

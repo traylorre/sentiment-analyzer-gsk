@@ -330,7 +330,11 @@ def _emit_analysis_metrics(
     """
     metrics = [
         {"name": "SentimentAnalysisCount", "value": 1, "unit": "Count"},
-        {"name": "InferenceLatencyMs", "value": inference_time_ms, "unit": "Milliseconds"},
+        {
+            "name": "InferenceLatencyMs",
+            "value": inference_time_ms,
+            "unit": "Milliseconds",
+        },
     ]
 
     # Emit sentiment-specific metric

@@ -74,11 +74,13 @@ def secrets_manager(aws_credentials):
         # Create a secret with multiple fields
         client.create_secret(
             Name="dev/sentiment-analyzer/multi-field",
-            SecretString=json.dumps({
-                "api_key": "multi-key",
-                "username": "test-user",
-                "password": "test-pass",
-            }),
+            SecretString=json.dumps(
+                {
+                    "api_key": "multi-key",
+                    "username": "test-user",
+                    "password": "test-pass",
+                }
+            ),
         )
 
         # Clear any cached secrets from previous tests
