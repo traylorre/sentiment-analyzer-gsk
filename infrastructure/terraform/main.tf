@@ -190,22 +190,6 @@ module "analysis_lambda" {
   depends_on = [module.iam]
 }
 
-# SNS subscription for Analysis Lambda
-resource "aws_sns_topic_subscription" "analysis" {
-  topic_arn = module.sns.topic_arn
-  protocol  = "lambda"
-  endpoint  = module.analysis_lambda.function_arn
-}
-
-# Allow SNS to invoke Analysis Lambda
-resource "aws_lambda_permission" "analysis_sns" {
-  statement_id  = "AllowSNSInvoke"
-  action        = "lambda:InvokeFunction"
-  function_name = module.analysis_lambda.function_name
-  principal     = "sns.amazonaws.com"
-  source_arn    = module.sns.topic_arn
-}
-
 # ===================================================================
 # Module: Dashboard Lambda (T053)
 # ===================================================================
@@ -269,6 +253,27 @@ module "sns" {
   source = "./modules/sns"
 
   environment = var.environment
+
+  # Subscription created separately below to avoid circular dependency
+  # (ingestion needs topic_arn, but subscription needs analysis lambda)
+  create_subscription = false
+}
+
+# SNS subscription for Analysis Lambda
+# Created after both SNS and Analysis Lambda modules
+resource "aws_sns_topic_subscription" "analysis" {
+  topic_arn = module.sns.topic_arn
+  protocol  = "lambda"
+  endpoint  = module.analysis_lambda.function_arn
+}
+
+# Allow SNS to invoke Analysis Lambda
+resource "aws_lambda_permission" "analysis_sns" {
+  statement_id  = "AllowSNSInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = module.analysis_lambda.function_name
+  principal     = "sns.amazonaws.com"
+  source_arn    = module.sns.topic_arn
 }
 
 # ===================================================================
@@ -289,16 +294,19 @@ module "iam" {
 # Module: EventBridge Schedules
 # ===================================================================
 
-# Commented out until Lambdas are deployed
-# module "eventbridge" {
-#   source = "./modules/eventbridge"
-#
-#   environment                      = var.environment
-#   ingestion_lambda_arn             = data.aws_lambda_function.ingestion.arn
-#   ingestion_lambda_function_name   = data.aws_lambda_function.ingestion.function_name
-#   metrics_lambda_arn               = data.aws_lambda_function.metrics.arn
-#   metrics_lambda_function_name     = data.aws_lambda_function.metrics.function_name
-# }
+module "eventbridge" {
+  source = "./modules/eventbridge"
+
+  environment                    = var.environment
+  ingestion_lambda_arn           = module.ingestion_lambda.function_arn
+  ingestion_lambda_function_name = module.ingestion_lambda.function_name
+
+  # Metrics Lambda not implemented in Demo 1
+  # Dashboard Lambda handles metrics via /api/metrics endpoint
+  create_metrics_schedule = false
+
+  depends_on = [module.ingestion_lambda]
+}
 
 # ===================================================================
 # Module: Monitoring & Alarms (On-Call SOP)
@@ -390,4 +398,10 @@ output "dashboard_function_url" {
 output "lambda_deployment_bucket" {
   description = "S3 bucket for Lambda deployment packages"
   value       = aws_s3_bucket.lambda_deployments.id
+}
+
+# EventBridge outputs
+output "ingestion_schedule_arn" {
+  description = "ARN of the ingestion EventBridge rule"
+  value       = module.eventbridge.ingestion_schedule_arn
 }

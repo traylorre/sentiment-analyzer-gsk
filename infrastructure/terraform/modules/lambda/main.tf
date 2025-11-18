@@ -88,10 +88,10 @@ resource "aws_lambda_function" "this" {
     Name = var.function_name
   })
 
-  # Lifecycle: ignore changes to s3_key if using aliases for deployment
-  lifecycle {
-    ignore_changes = var.ignore_source_code_changes ? [s3_key, source_code_hash] : []
-  }
+  # Note: ignore_source_code_changes variable is available but not used here
+  # because Terraform requires static lists in lifecycle blocks.
+  # For deployments that need to ignore source changes, use a separate resource
+  # or manage deployments via Lambda aliases instead.
 }
 
 # Lambda Function URL (optional)
@@ -147,7 +147,7 @@ resource "aws_cloudwatch_metric_alarm" "duration" {
   metric_name         = "Duration"
   namespace           = "AWS/Lambda"
   period              = 300
-  statistic           = "p90"
+  extended_statistic  = "p90"
   threshold           = var.duration_alarm_threshold
   alarm_description   = "Lambda function ${var.function_name} duration exceeded threshold"
   treat_missing_data  = "notBreaching"

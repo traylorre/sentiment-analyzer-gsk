@@ -14,11 +14,19 @@ variable "ingestion_lambda_function_name" {
 }
 
 variable "metrics_lambda_arn" {
-  description = "ARN of the Metrics Lambda function"
+  description = "ARN of the Metrics Lambda function (optional)"
   type        = string
+  default     = null
 }
 
 variable "metrics_lambda_function_name" {
-  description = "Name of the Metrics Lambda function"
+  description = "Name of the Metrics Lambda function (optional)"
   type        = string
+  default     = null
+}
+
+variable "create_metrics_schedule" {
+  description = "Whether to create the metrics schedule (requires metrics Lambda)"
+  type        = bool
+  default     = false
 }

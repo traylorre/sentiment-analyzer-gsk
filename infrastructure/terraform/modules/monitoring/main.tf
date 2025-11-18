@@ -218,14 +218,14 @@ resource "aws_cloudwatch_metric_alarm" "newsapi_rate_limit" {
 resource "aws_cloudwatch_metric_alarm" "no_new_items" {
   alarm_name          = "${var.environment}-no-new-items-1h"
   comparison_operator = "LessThanOrEqualToThreshold"
-  evaluation_periods  = 6  # 6 x 10 min = 1 hour
+  evaluation_periods  = 6 # 6 x 10 min = 1 hour
   metric_name         = "NewItemsIngested"
   namespace           = "SentimentAnalyzer"
   period              = 600
   statistic           = "Sum"
   threshold           = 0
   alarm_description   = "SC-10: No new items ingested for 1 hour"
-  treat_missing_data  = "breaching"  # Missing data means no ingestion
+  treat_missing_data  = "breaching" # Missing data means no ingestion
 
   alarm_actions = [aws_sns_topic.alarms.arn]
   ok_actions    = [aws_sns_topic.alarms.arn]
