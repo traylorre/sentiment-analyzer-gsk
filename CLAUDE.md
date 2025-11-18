@@ -41,4 +41,36 @@ ruff check --fix src/ tests/
 - 001-interactive-dashboard-demo: Added Python 3.11
 
 <!-- MANUAL ADDITIONS START -->
+
+## GitHub CLI Setup
+
+Install gh CLI for checking CI results and managing PRs:
+
+```bash
+# Install to local bin (no sudo required)
+mkdir -p ~/.local/bin
+curl -sL https://github.com/cli/cli/releases/download/v2.40.1/gh_2.40.1_linux_amd64.tar.gz | tar xz -C /tmp
+mv /tmp/gh_2.40.1_linux_amd64/bin/gh ~/.local/bin/
+export PATH="$HOME/.local/bin:$PATH"
+
+# One-time authentication
+gh auth login
+```
+
+**Auth login steps:**
+1. Where do you use GitHub? → `GitHub.com`
+2. Preferred protocol? → `HTTPS`
+3. Authenticate Git with credentials? → `Yes`
+4. How to authenticate? → `Login with a web browser`
+
+A one-time code will appear (8 characters). Copy just the code itself, then paste it in the browser when prompted.
+
+```bash
+# Check CI workflow runs
+gh run list --repo traylorre/sentiment-analyzer-gsk --limit 5
+
+# View specific run details
+gh run view <run-id> --repo traylorre/sentiment-analyzer-gsk
+```
+
 <!-- MANUAL ADDITIONS END -->

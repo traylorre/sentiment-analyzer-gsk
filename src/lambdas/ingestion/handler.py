@@ -360,8 +360,15 @@ def _process_article(
         return "duplicate"
 
     # Build DynamoDB item
+    # Use article's published time for consistent deduplication
+    # If not available, use current time
+    published_at = article.get("publishedAt")
+    if published_at:
+        timestamp = published_at
+    else:
+        timestamp = datetime.now(UTC).isoformat()
+
     now = datetime.now(UTC)
-    timestamp = now.isoformat()
     ttl_timestamp = int((now + timedelta(days=TTL_DAYS)).timestamp())
 
     item = {

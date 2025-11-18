@@ -30,6 +30,7 @@ For Developers:
 import json
 import os
 from datetime import UTC, datetime
+from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
 import boto3
@@ -759,7 +760,7 @@ class TestIngestionE2E:
         assert len(item["matched_tags"]) > 0
 
         assert "ttl_timestamp" in item
-        assert isinstance(item["ttl_timestamp"], int)
+        assert isinstance(item["ttl_timestamp"], (int, Decimal))
 
         assert "metadata" in item
         metadata = item["metadata"]
