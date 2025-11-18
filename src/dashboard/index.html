@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentiment Analyzer Dashboard</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <header>
+        <h1>Sentiment Analyzer Dashboard</h1>
+        <div class="connection-status">
+            <span id="status-indicator" class="status-dot disconnected"></span>
+            <span id="status-text">Connecting...</span>
+        </div>
+    </header>
+
+    <main>
+        <!-- Metrics Cards -->
+        <section class="metrics-cards">
+            <div class="card total">
+                <h3>Total Items</h3>
+                <div class="value" id="total-items">0</div>
+                <div class="label">Last 24 hours</div>
+            </div>
+            <div class="card positive">
+                <h3>Positive</h3>
+                <div class="value" id="positive-count">0</div>
+                <div class="percentage" id="positive-pct">0%</div>
+            </div>
+            <div class="card neutral">
+                <h3>Neutral</h3>
+                <div class="value" id="neutral-count">0</div>
+                <div class="percentage" id="neutral-pct">0%</div>
+            </div>
+            <div class="card negative">
+                <h3>Negative</h3>
+                <div class="value" id="negative-count">0</div>
+                <div class="percentage" id="negative-pct">0%</div>
+            </div>
+        </section>
+
+        <!-- Charts Row -->
+        <section class="charts-row">
+            <div class="chart-container">
+                <h3>Sentiment Distribution</h3>
+                <canvas id="sentiment-chart"></canvas>
+            </div>
+            <div class="chart-container">
+                <h3>By Tag</h3>
+                <canvas id="tag-chart"></canvas>
+            </div>
+        </section>
+
+        <!-- Recent Items Table -->
+        <section class="recent-items">
+            <h3>Recent Items</h3>
+            <div class="table-container">
+                <table id="items-table">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Sentiment</th>
+                            <th>Score</th>
+                            <th>Title</th>
+                            <th>Source</th>
+                            <th>Tags</th>
+                        </tr>
+                    </thead>
+                    <tbody id="items-tbody">
+                        <!-- Items populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Ingestion Rate -->
+        <section class="ingestion-stats">
+            <div class="stat">
+                <span class="label">Last Hour:</span>
+                <span class="value" id="rate-last-hour">0</span>
+            </div>
+            <div class="stat">
+                <span class="label">Last 24h:</span>
+                <span class="value" id="rate-last-24h">0</span>
+            </div>
+            <div class="stat">
+                <span class="label">Last Updated:</span>
+                <span class="value" id="last-updated">--</span>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>Sentiment Analyzer v1.0.0 | Model: DistilBERT SST-2</p>
+    </footer>
+
+    <script src="/static/config.js"></script>
+    <script src="/static/app.js"></script>
+</body>
+</html>
