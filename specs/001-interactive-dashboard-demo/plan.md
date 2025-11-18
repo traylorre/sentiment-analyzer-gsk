@@ -14,9 +14,9 @@ Build a demonstrable, interactive sentiment analysis system where stakeholders p
 **Language/Version**: Python 3.11
 **Primary Dependencies**:
 - AWS SDK (boto3) for Lambda, DynamoDB, Secrets Manager
-- NEEDS CLARIFICATION: Sentiment model choice (OpenAI API vs HuggingFace transformers)
-- NEEDS CLARIFICATION: Data source API (NewsAPI vs Twitter API v2)
-- NEEDS CLARIFICATION: Dashboard framework (S3-hosted static HTML + Chart.js vs Lambda web app)
+- HuggingFace transformers (DistilBERT) - chosen for cost efficiency and Lambda compatibility
+- NewsAPI - chosen for reliability and generous free tier
+- FastAPI + Mangum - chosen for SSE support and Lambda Function URL integration
 
 **Storage**: DynamoDB (on-demand capacity mode)
 **Testing**: pytest for unit tests, moto for AWS service mocking
@@ -563,6 +563,42 @@ Example:
 - Audit trail of configuration changes
 - Tag validation before save
 
+### Correlation ID & Tracing
+
+All Lambda functions include correlation IDs for distributed tracing:
+
+**Format**: `{source_id}-{lambda_request_id}`
+
+**Example**: `newsapi#a3f4e9d2c1b8a7f6-1234-5678-abcd-ef0123456789`
+
+**Implementation**:
+```python
+import os
+
+def get_correlation_id(source_id: str, context) -> str:
+    """Generate correlation ID for tracing across services."""
+    return f"{source_id}-{context.aws_request_id}"
+
+# Include in all log entries
+logger.info("Processing item", extra={
+    "correlation_id": correlation_id,
+    "source_id": source_id,
+    "lambda_request_id": context.aws_request_id
+})
+```
+
+**Propagation**:
+- Ingestion → SNS message includes `correlation_id`
+- Analysis reads `correlation_id` from SNS message
+- Dashboard queries can filter by `correlation_id` (future)
+
+**CloudWatch Logs Insights Query**:
+```sql
+fields @timestamp, @message, correlation_id
+| filter correlation_id = "newsapi#a3f4e9d2c1b8a7f6-1234-5678-abcd-ef0123456789"
+| sort @timestamp asc
+```
+
 ### Standardized Error Response Schema
 
 All Lambda functions return errors in a consistent format:
@@ -740,6 +776,305 @@ resource "aws_cloudwatch_log_group" "lambda" {
 - Consider regional replicas ONLY if international expansion required
 - Implement geo-routing with Route 53 (per-region data isolation)
 - Add DynamoDB auto-scaling (if traffic patterns warrant)
+
+---
+
+## Multi-Region Expansion Path
+
+**Current State**: Single region (us-east-1) with Multi-AZ redundancy
+
+**When to Expand**:
+- International users with latency > 200ms
+- Data residency requirements (EU GDPR, India DPDP Act)
+- Regulatory compliance requiring in-region processing
+
+**Expansion Architecture**:
+```
+┌─────────────────────────────────────────────────────────────┐
+│  ROUTE 53 GEO-ROUTING                                       │
+│  • US users → us-east-1                                     │
+│  • EU users → eu-west-1                                     │
+│  • Asia users → ap-south-1                                  │
+└─────────────────────────────────────────────────────────────┘
+                          ↓
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│ US Stack    │    │ EU Stack    │    │ Asia Stack  │
+│ us-east-1   │    │ eu-west-1   │    │ ap-south-1  │
+│             │    │             │    │             │
+│ • Lambdas   │    │ • Lambdas   │    │ • Lambdas   │
+│ • DynamoDB  │    │ • DynamoDB  │    │ • DynamoDB  │
+│ • Secrets   │    │ • Secrets   │    │ • Secrets   │
+└─────────────┘    └─────────────┘    └─────────────┘
+      ↓                   ↓                   ↓
+┌─────────────────────────────────────────────────────────────┐
+│  GLOBAL METRICS (Optional)                                  │
+│  • Aggregated CloudWatch dashboard                          │
+│  • Cross-region metrics only (no PII replication)           │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Migration Steps**:
+1. Deploy independent stack to new region (Terraform workspace)
+2. Configure region-specific NewsAPI sources
+3. Update Route 53 with geo-routing policy
+4. Test latency and failover
+5. Monitor regional metrics independently
+
+**Data Isolation Guarantee**:
+- NO cross-region DynamoDB replication
+- Each region stores only its own data
+- Metrics aggregation uses CloudWatch cross-region (no PII)
+
+**Cost Impact**: ~$67/month per region (same as current)
+
+---
+
+## Dashboard Authentication UX
+
+**Demo 1 (Current)**: Static API key
+
+```
+┌─────────────────────────────────────────┐
+│  Dashboard Access Flow (Demo)           │
+├─────────────────────────────────────────┤
+│ 1. Developer retrieves API key from     │
+│    Secrets Manager (one-time setup)     │
+│                                         │
+│ 2. API key stored in browser localStorage│
+│    or passed as query param for testing │
+│                                         │
+│ 3. All API requests include:            │
+│    Authorization: Bearer <api_key>      │
+│                                         │
+│ 4. Key rotation: Manual via Secrets     │
+│    Manager (90-day reminder)            │
+└─────────────────────────────────────────┘
+```
+
+**Demo Setup Instructions**:
+```bash
+# Retrieve API key for dashboard access
+API_KEY=$(aws secretsmanager get-secret-value \
+  --secret-id dev/sentiment-analyzer/dashboard-api-key \
+  --query 'SecretString' --output text | jq -r '.api_key')
+
+# Test dashboard access
+curl -H "Authorization: Bearer $API_KEY" \
+  https://<function-url>/api/metrics
+```
+
+**Phase 2 (Production)**: Cognito User Pools
+
+```
+┌─────────────────────────────────────────┐
+│  Dashboard Access Flow (Production)     │
+├─────────────────────────────────────────┤
+│ 1. User visits dashboard URL            │
+│ 2. Redirected to Cognito hosted UI      │
+│ 3. User logs in (email/password or SSO) │
+│ 4. Cognito returns JWT token            │
+│ 5. Dashboard stores JWT in memory       │
+│ 6. All API requests include:            │
+│    Authorization: Bearer <jwt>          │
+│ 7. Lambda validates JWT with Cognito    │
+│ 8. Token refresh automatic (1 hour)     │
+└─────────────────────────────────────────┘
+```
+
+**Why Defer Cognito to Phase 2**:
+- Demo has 1-5 viewers (API key sufficient)
+- Cognito adds $0.0055/MAU cost
+- Setup requires domain configuration
+- Not needed to prove architecture works
+
+---
+
+## DLQ Processing Strategy
+
+**Dead Letter Queues**:
+- `sentiment-analysis-dlq` - Failed analysis messages
+- Future: `sentiment-ingestion-dlq` - Failed ingestion batches
+
+**DLQ Architecture**:
+```
+┌─────────────┐     fail 3x     ┌─────────────┐
+│ SNS Topic   │ ───────────────► │ SQS DLQ     │
+│ (analysis)  │                  │ (14 days)   │
+└─────────────┘                  └──────┬──────┘
+                                        │
+                                        ▼
+                              ┌─────────────────┐
+                              │ Manual Review   │
+                              │ or Replay Lambda│
+                              └─────────────────┘
+```
+
+**Processing Strategy (Demo)**:
+
+1. **Monitoring**: CloudWatch alarm when DLQ depth > 10
+2. **Investigation**: Query DLQ messages to identify failure pattern
+   ```bash
+   # View DLQ messages
+   aws sqs receive-message \
+     --queue-url https://sqs.us-east-1.amazonaws.com/.../sentiment-analysis-dlq \
+     --max-number-of-messages 10 \
+     --attribute-names All
+   ```
+3. **Resolution**: Fix root cause (model error, schema issue, etc.)
+4. **Replay**: Manually move messages back to main topic
+   ```bash
+   # Replay single message
+   aws sns publish \
+     --topic-arn arn:aws:sns:us-east-1:...:sentiment-analysis-requests \
+     --message file://dlq-message.json
+   ```
+
+**Processing Strategy (Phase 2)**: Automated replay Lambda
+
+```python
+# Lambda triggered by CloudWatch alarm or schedule
+def replay_dlq_messages(event, context):
+    sqs = boto3.client('sqs')
+    sns = boto3.client('sns')
+
+    while True:
+        response = sqs.receive_message(
+            QueueUrl=DLQ_URL,
+            MaxNumberOfMessages=10,
+            WaitTimeSeconds=0
+        )
+
+        if 'Messages' not in response:
+            break
+
+        for message in response['Messages']:
+            # Republish to SNS
+            sns.publish(
+                TopicArn=ANALYSIS_TOPIC_ARN,
+                Message=message['Body']
+            )
+
+            # Delete from DLQ
+            sqs.delete_message(
+                QueueUrl=DLQ_URL,
+                ReceiptHandle=message['ReceiptHandle']
+            )
+
+    return {'replayed': len(messages)}
+```
+
+**Retention**: 14 days (then messages expire)
+
+---
+
+## Backup & Restoration Procedures
+
+### Point-in-Time Recovery (PITR)
+
+**Use Case**: Accidental data corruption, bad deployment, bulk delete
+
+**Restore Steps**:
+```bash
+# 1. Identify restore point (up to 35 days back)
+RESTORE_TIME="2025-11-17T10:00:00Z"
+
+# 2. Restore to new table
+aws dynamodb restore-table-to-point-in-time \
+  --source-table-name dev-sentiment-items \
+  --target-table-name dev-sentiment-items-restored \
+  --restore-date-time $RESTORE_TIME
+
+# 3. Wait for restore (check status)
+aws dynamodb describe-table \
+  --table-name dev-sentiment-items-restored \
+  --query 'Table.TableStatus'
+
+# 4. Verify data
+aws dynamodb scan \
+  --table-name dev-sentiment-items-restored \
+  --select COUNT
+
+# 5. Swap tables (update Lambda env vars)
+# Option A: Update Terraform and apply
+# Option B: Direct Lambda update
+aws lambda update-function-configuration \
+  --function-name dev-sentiment-ingestion \
+  --environment "Variables={DYNAMODB_TABLE=dev-sentiment-items-restored,...}"
+
+# 6. Delete corrupted table (after verification)
+aws dynamodb delete-table \
+  --table-name dev-sentiment-items
+
+# 7. Rename restored table (optional, requires delete + restore)
+```
+
+**RTO**: < 4 hours | **RPO**: < 1 second
+
+### On-Demand Backup Restore
+
+**Use Case**: Disaster recovery, compliance, table migration
+
+**Restore Steps**:
+```bash
+# 1. List available backups
+aws dynamodb list-backups \
+  --table-name dev-sentiment-items
+
+# 2. Get backup ARN
+BACKUP_ARN="arn:aws:dynamodb:us-east-1:...:table/dev-sentiment-items/backup/..."
+
+# 3. Restore from backup
+aws dynamodb restore-table-from-backup \
+  --target-table-name dev-sentiment-items-restored \
+  --backup-arn $BACKUP_ARN
+
+# 4. Follow steps 3-7 from PITR above
+```
+
+**RTO**: < 4 hours | **RPO**: < 24 hours (daily backups)
+
+### Cross-Region Recovery
+
+**Use Case**: Full region failure (rare, but documented for completeness)
+
+**Prerequisites**: S3 cross-region replication to us-west-2 enabled
+
+**Restore Steps**:
+```bash
+# 1. Export table to S3 (if not already replicated)
+aws dynamodb export-table-to-point-in-time \
+  --table-arn arn:aws:dynamodb:us-east-1:...:table/dev-sentiment-items \
+  --s3-bucket sentiment-backup-us-west-2 \
+  --s3-prefix exports/
+
+# 2. In us-west-2, import from S3
+aws dynamodb import-table \
+  --s3-bucket-source sentiment-backup-us-west-2 \
+  --s3-prefix exports/ \
+  --input-format DYNAMODB_JSON \
+  --table-creation-parameters file://table-definition.json
+
+# 3. Deploy Lambda stack to us-west-2
+cd infrastructure/terraform
+terraform workspace new us-west-2-dr
+terraform apply -var="aws_region=us-west-2"
+
+# 4. Update DNS (if using custom domain)
+```
+
+**RTO**: < 8 hours | **RPO**: < 24 hours
+
+### Restoration Checklist
+
+- [ ] Identify failure type (corruption, deletion, region failure)
+- [ ] Choose restore method (PITR, backup, cross-region)
+- [ ] Restore to NEW table (never overwrite)
+- [ ] Verify row counts and sample data
+- [ ] Update Lambda environment variables
+- [ ] Test ingestion and analysis flow
+- [ ] Verify dashboard displays data
+- [ ] Delete old/corrupted table
+- [ ] Document incident in runbook
 
 ---
 
