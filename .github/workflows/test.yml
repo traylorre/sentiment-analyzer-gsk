@@ -65,6 +65,8 @@ jobs:
           AWS_DEFAULT_REGION: us-east-1
           AWS_ACCESS_KEY_ID: testing
           AWS_SECRET_ACCESS_KEY: testing
+          # Add project root to PYTHONPATH for src imports
+          PYTHONPATH: ${{ github.workspace }}
 
       - name: Check coverage threshold
         run: |
