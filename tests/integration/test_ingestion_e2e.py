@@ -330,11 +330,11 @@ class TestIngestionE2E:
         published_messages = []
 
         # Create a subscription to capture messages
-        topic_arn = os.environ["SNS_TOPIC_ARN"]
-        queue_url = "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue"
+        _topic_arn = os.environ["SNS_TOPIC_ARN"]
+        _queue_url = "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue"
 
         # Mock the SNS client's publish method
-        original_publish = sns_client.publish
+        _original_publish = sns_client.publish
 
         def capture_publish(**kwargs):
             published_messages.append(kwargs)
@@ -364,7 +364,7 @@ class TestIngestionE2E:
             mock_sns_client.publish = capture_publish
             mock_sns.return_value = mock_sns_client
 
-            result = lambda_handler(eventbridge_event, mock_context)
+            _result = lambda_handler(eventbridge_event, mock_context)
 
         # Verify message was published
         assert len(published_messages) == 1
@@ -423,7 +423,7 @@ class TestIngestionE2E:
             patch("src.lib.metrics.emit_metric"),
             patch("src.lib.metrics.emit_metrics_batch"),
         ):
-            result = lambda_handler(eventbridge_event, mock_context)
+            _result = lambda_handler(eventbridge_event, mock_context)
 
         # Get the item
         scan_result = table.scan()
@@ -478,7 +478,7 @@ class TestIngestionE2E:
             patch("src.lib.metrics.emit_metric"),
             patch("src.lib.metrics.emit_metrics_batch"),
         ):
-            result = lambda_handler(eventbridge_event, mock_context)
+            _result = lambda_handler(eventbridge_event, mock_context)
 
         # Get the item
         scan_result = table.scan()
@@ -619,7 +619,7 @@ class TestIngestionE2E:
             patch("src.lib.metrics.emit_metric"),
             patch("src.lib.metrics.emit_metrics_batch"),
         ):
-            result = lambda_handler(eventbridge_event, mock_context)
+            _result = lambda_handler(eventbridge_event, mock_context)
 
         # Get the item
         scan_result = table.scan()

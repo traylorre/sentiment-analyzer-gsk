@@ -123,8 +123,8 @@ class TestGetSecret:
 
     def test_get_secret_caching(self, secrets_manager):
         """Test that secrets are cached."""
-        # First call - fetches from Secrets Manager
-        secret1 = get_secret("dev/sentiment-analyzer/newsapi")
+        # First call - fetches from Secrets Manager (result triggers caching)
+        _secret1 = get_secret("dev/sentiment-analyzer/newsapi")
 
         # Modify the secret in Secrets Manager
         secrets_manager.update_secret(
