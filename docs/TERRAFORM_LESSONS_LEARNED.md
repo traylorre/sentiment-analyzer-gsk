@@ -323,6 +323,70 @@ terraform import -var="environment=dev" "module.dynamodb.aws_backup_plan.dynamod
 
 ---
 
+## Additional Lessons (Post-Stabilization Audit)
+
+### 9. Test-Driven vs Test-Adjusted Development
+
+**What Happened**:
+- When tests failed, we adjusted test expectations to match observed behavior
+- Instead of investigating whether the behavior was correct
+- Example: Deduplication test expected 4 new items, got 2, changed expectation
+
+**Commit Example**: 0062d8d
+```python
+# Was: 4 new, 0 duplicates
+# Now: 2 new, 2 duplicates
+# Comment: "Same articles returned for both tags"
+```
+
+**Why This Is Bad**:
+- Passing tests don't mean correct behavior
+- Hides potential bugs in production
+- Makes tests less trustworthy
+
+**Root Cause**: Pressure to pass CI, treating green checkmark as goal instead of correct behavior.
+
+**Prevention**:
+- [ ] When changing test expectations, add comment explaining WHY behavior is correct
+- [ ] If unsure, mark with `# TODO: Verify this is correct behavior`
+- [ ] Review test changes in PRs with same scrutiny as code changes
+
+---
+
+### 10. Lint Suppression Debt
+
+**What Happened**:
+- Added `noqa: E402` comments to 10+ imports instead of restructuring code
+- Blanket ignored F841 (unused variables) in all tests
+- Filtered all deprecation warnings from moto/boto
+
+**Root Cause**: Treating linting as checkbox, not as code quality signal.
+
+**Prevention**:
+- [ ] For every `noqa`, create a tech debt item
+- [ ] Set SLA for removing `noqa` comments
+- [ ] Review new lint ignores in pyproject.toml carefully
+- [ ] Address specific deprecation warnings, not blanket ignore
+
+---
+
+### 11. Dependency Major Version Jumps
+
+**What Happened**:
+- Jumped moto from 4.2.0 to 5.0.0 to get one feature (mock_aws decorator)
+- Didn't check if other tests were compatible with the new API
+
+**Commit**: 1f2c1ae
+
+**Root Cause**: Quick fix without reading changelog.
+
+**Prevention**:
+- [ ] Read changelog for major version bumps
+- [ ] Test locally before pushing dependency changes
+- [ ] Consider pinning exact versions for test dependencies
+
+---
+
 ## Technical Debt
 
 ### TD-001: Lambda Function URL CORS allow_methods Wildcard
