@@ -69,6 +69,7 @@ def get_api_key() -> str:
     """Get API key from environment (lazy load to support test mocking)."""
     return os.environ.get("API_KEY", "")
 
+
 # Path to static dashboard files
 STATIC_DIR = Path(__file__).parent.parent.parent / "dashboard"
 
