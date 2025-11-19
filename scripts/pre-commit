@@ -1,0 +1,54 @@
+#!/bin/bash
+# Pre-commit hook for sentiment-analyzer-gsk
+# Ensures code quality checks match CI/CD environment
+#
+# Install: cp scripts/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+# Or run directly: ./scripts/pre-commit
+# Skip: git commit --no-verify (NOT recommended)
+
+set -e
+
+echo "🔍 Running pre-commit checks..."
+
+# Get list of staged Python files
+PYTHON_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep '\.py$' || true)
+
+# Get list of staged Terraform files
+TF_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep '\.tf$' || true)
+
+# Check for Python files
+if [ -n "$PYTHON_FILES" ]; then
+    echo "📝 Formatting Python files with black..."
+    echo "$PYTHON_FILES" | xargs black --check --quiet 2>/dev/null || {
+        echo "❌ Black formatting failed. Running black to fix..."
+        echo "$PYTHON_FILES" | xargs black
+        echo ""
+        echo "⚠️  Files were reformatted. Please review and stage the changes:"
+        echo "$PYTHON_FILES"
+        exit 1
+    }
+
+    echo "🔎 Linting Python files with ruff..."
+    echo "$PYTHON_FILES" | xargs ruff check --quiet || {
+        echo "❌ Ruff linting failed. Fix the issues above."
+        exit 1
+    }
+fi
+
+# Check for Terraform files
+if [ -n "$TF_FILES" ]; then
+    echo "📐 Checking Terraform formatting..."
+
+    # Get unique directories containing .tf files
+    TF_DIRS=$(echo "$TF_FILES" | xargs -I {} dirname {} | sort -u)
+
+    for dir in $TF_DIRS; do
+        if ! terraform fmt -check -diff "$dir" > /dev/null 2>&1; then
+            echo "❌ Terraform formatting failed in $dir"
+            echo "Run: terraform fmt $dir"
+            exit 1
+        fi
+    done
+fi
+
+echo "✅ All pre-commit checks passed!"

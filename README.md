@@ -381,6 +381,17 @@ sentiment-analyzer-gsk/
 
 ## Development Workflow
 
+### Pre-commit Hooks
+
+Install the pre-commit hook to ensure code quality matches CI/CD:
+
+```bash
+cp scripts/pre-commit .git/hooks/pre-commit
+chmod +x .git/hooks/pre-commit
+```
+
+This runs black, ruff, and terraform fmt on staged files before each commit.
+
 ### Standard Workflow for Contributors
 
 **1. Always work on a feature branch:**
