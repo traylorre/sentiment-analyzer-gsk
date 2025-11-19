@@ -78,9 +78,9 @@ resource "aws_s3_bucket_public_access_block" "terraform_state" {
   restrict_public_buckets = true
 }
 
-# DynamoDB table for state locking
-resource "aws_dynamodb_table" "terraform_lock" {
-  name         = "terraform-state-lock"
+# DynamoDB tables for state locking - ONE PER ENVIRONMENT
+resource "aws_dynamodb_table" "terraform_lock_dev" {
+  name         = "terraform-state-lock-dev"
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "LockID"
 
@@ -90,7 +90,28 @@ resource "aws_dynamodb_table" "terraform_lock" {
   }
 
   tags = {
-    Name = "Terraform State Lock Table"
+    Name        = "Terraform State Lock Table - Dev"
+    Environment = "dev"
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "aws_dynamodb_table" "terraform_lock_prod" {
+  name         = "terraform-state-lock-prod"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "LockID"
+
+  attribute {
+    name = "LockID"
+    type = "S"
+  }
+
+  tags = {
+    Name        = "Terraform State Lock Table - Prod"
+    Environment = "prod"
   }
 
   lifecycle {
@@ -100,25 +121,27 @@ resource "aws_dynamodb_table" "terraform_lock" {
 
 output "state_bucket_name" {
   value       = aws_s3_bucket.terraform_state.id
-  description = "Name of the S3 bucket for Terraform state - use this in main.tf backend config"
+  description = "Name of the S3 bucket for Terraform state"
 }
 
-output "backend_config" {
+output "lock_table_dev" {
+  value       = aws_dynamodb_table.terraform_lock_dev.name
+  description = "DynamoDB table for dev state locking"
+}
+
+output "lock_table_prod" {
+  value       = aws_dynamodb_table.terraform_lock_prod.name
+  description = "DynamoDB table for prod state locking"
+}
+
+output "backend_config_instructions" {
   value = <<-EOT
-    Update infrastructure/terraform/main.tf with:
+    Initialize with environment-specific backend:
 
-    backend "s3" {
-      bucket         = "${aws_s3_bucket.terraform_state.id}"
-      key            = "sentiment-analyzer/terraform.tfstate"
-      region         = "us-east-1"
-      encrypt        = true
-      dynamodb_table = "terraform-state-lock"
-    }
+    DEV:  terraform init -backend-config=backend-dev.hcl
+    PROD: terraform init -backend-config=backend-prod.hcl
+
+    State files: dev/terraform.tfstate, prod/terraform.tfstate
   EOT
-  description = "Backend configuration to add to main.tf"
-}
-
-output "lock_table_name" {
-  value       = aws_dynamodb_table.terraform_lock.name
-  description = "Name of the DynamoDB table for state locking"
+  description = "Backend configuration instructions"
 }

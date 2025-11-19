@@ -27,6 +27,14 @@ concurrency:
   group: deploy-prod
   cancel-in-progress: false
 
+env:
+  TF_VAR_environment: prod
+  TF_INPUT: false
+  TF_IN_AUTOMATION: true
+  LOCK_TABLE: terraform-state-lock-prod
+  STATE_BUCKET: sentiment-analyzer-tfstate-218795110243
+  BACKEND_CONFIG: backend-prod.hcl
+
 jobs:
   validate:
     name: Validate Deployment Request
@@ -98,35 +106,39 @@ jobs:
 
       - name: Terraform Init
         working-directory: infrastructure/terraform
-        run: terraform init
+        run: terraform init -input=false -backend-config=${{ env.BACKEND_CONFIG }}
+
+      - name: Upload Lambda packages to S3
+        run: |
+          # CRITICAL: Upload BEFORE terraform apply
+          for lambda in ingestion analysis dashboard; do
+            aws s3 cp dist/$lambda.zip \
+              s3://${{ secrets.DEPLOYMENT_BUCKET }}/$lambda/lambda.zip
+          done
 
       - name: Terraform Plan
         working-directory: infrastructure/terraform
         run: |
-          # On-Call Note: REVIEW THIS CAREFULLY before approving
           terraform plan \
             -var="environment=prod" \
+            -lock-timeout=5m \
             -out=tfplan
 
       - name: Terraform Apply
         working-directory: infrastructure/terraform
-        run: terraform apply -auto-approve tfplan
-
-      - name: Upload Lambda packages to S3
         run: |
-          for lambda in ingestion analysis dashboard; do
-            aws s3 cp dist/$lambda.zip \
-              s3://${{ secrets.DEPLOYMENT_BUCKET }}/lambdas/prod/$lambda.zip
-          done
+          terraform apply \
+            -auto-approve \
+            -lock-timeout=5m \
+            tfplan
 
       - name: Update Lambda functions
         run: |
-          # On-Call Note: Production Lambda update - monitor closely
           for lambda in ingestion analysis dashboard; do
             aws lambda update-function-code \
               --function-name prod-sentiment-$lambda \
               --s3-bucket ${{ secrets.DEPLOYMENT_BUCKET }} \
-              --s3-key lambdas/prod/$lambda.zip \
+              --s3-key $lambda/lambda.zip \
               --publish
           done
 

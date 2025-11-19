@@ -14,14 +14,13 @@ terraform {
   # Backend configuration for persistent state
   # Resources created by infrastructure/terraform/bootstrap
   #
-  # IMPORTANT: After running bootstrap, update the bucket name below with the
-  # output from: terraform output state_bucket_name
+  # CRITICAL: Use partial backend configuration to separate dev/prod state
+  # Initialize with: terraform init -backend-config=backend-dev.hcl
+  #              or: terraform init -backend-config=backend-prod.hcl
   backend "s3" {
-    bucket         = "sentiment-analyzer-tfstate-218795110243"
-    key            = "sentiment-analyzer/terraform.tfstate"
-    region         = "us-east-1"
-    encrypt        = true
-    dynamodb_table = "terraform-state-lock"
+    # Values provided by backend-{env}.hcl files
+    region  = "us-east-1"
+    encrypt = true
   }
 }
 
