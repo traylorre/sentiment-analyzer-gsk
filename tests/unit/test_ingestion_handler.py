@@ -183,11 +183,21 @@ class TestLambdaHandler:
         mock_context,
         eventbridge_event,
     ):
-        """Test successful ingestion flow."""
+        """Test successful ingestion flow with within-invocation deduplication.
+
+        This test verifies that when NewsAPI returns the same articles for
+        different search tags (a common real-world scenario), the Lambda
+        correctly deduplicates them within a single invocation.
+
+        Expected behavior:
+        - Tag 1 (AI): 2 articles fetched → 2 new items inserted
+        - Tag 2 (climate): Same 2 articles → both skipped as duplicates
+        - Total: 4 fetched, 2 new, 2 duplicates
+        """
         # Setup mocks
         self._setup_aws_mocks()
 
-        # Mock NewsAPI responses for both tags
+        # Mock NewsAPI responses - same articles for both tags tests deduplication
         responses.add(
             responses.GET,
             NEWSAPI_BASE_URL,
@@ -211,7 +221,7 @@ class TestLambdaHandler:
         assert result["statusCode"] == 200
         assert result["body"]["summary"]["tags_processed"] == 2
         assert result["body"]["summary"]["articles_fetched"] == 4
-        # Same articles returned for both tags, so second tag's articles are duplicates
+        # Same articles for both tags validates within-invocation deduplication
         assert result["body"]["summary"]["new_items"] == 2
         assert result["body"]["summary"]["duplicates_skipped"] == 2
         assert "execution_time_ms" in result["body"]
@@ -827,7 +837,7 @@ class TestMetricsEmission:
                 mock_emit_metrics_batch,
             ),
         ):
-            result = lambda_handler(eventbridge_event, mock_context)
+            _result = lambda_handler(eventbridge_event, mock_context)
 
         # Verify metrics
         metric_names = [m["name"] for m in emitted_metrics]
@@ -864,8 +874,10 @@ class TestErrorHandling:
         ):
             result = lambda_handler(eventbridge_event, mock_context)
 
-        # Missing secret results in authentication failure
-        assert result["statusCode"] == 401
+        # Missing secret is a server configuration error, not client auth failure
+        # 401 = client didn't provide credentials
+        # 500 = server misconfiguration (secret not set up)
+        assert result["statusCode"] == 500
         assert "error" in result["body"]
 
     @mock_aws

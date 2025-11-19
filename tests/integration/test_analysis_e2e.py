@@ -615,7 +615,7 @@ class TestAnalysisErrorScenarios:
         """
         Test handling of empty text for analysis.
         """
-        table = TestAnalysisE2E()._setup_dynamodb_with_item(
+        _table = TestAnalysisE2E()._setup_dynamodb_with_item(
             source_id="newsapi#empty123",
             timestamp="2025-11-17T21:00:00.000Z",
             status="pending",
