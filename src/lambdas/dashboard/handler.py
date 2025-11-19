@@ -61,9 +61,13 @@ logger.setLevel(logging.INFO)
 
 # Configuration from environment
 DYNAMODB_TABLE = os.environ.get("DYNAMODB_TABLE", "sentiment-items")
-API_KEY = os.environ.get("API_KEY", "")
 SSE_POLL_INTERVAL = int(os.environ.get("SSE_POLL_INTERVAL", "5"))
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "dev")
+
+
+def get_api_key() -> str:
+    """Get API key from environment (lazy load to support test mocking)."""
+    return os.environ.get("API_KEY", "")
 
 # Path to static dashboard files
 STATIC_DIR = Path(__file__).parent.parent.parent / "dashboard"
@@ -130,7 +134,9 @@ def verify_api_key(authorization: str | None = Depends(api_key_header)) -> bool:
         2. Check client is sending correct Authorization header
         3. Format: "Bearer <api-key>"
     """
-    if not API_KEY:
+    api_key = get_api_key()
+
+    if not api_key:
         # No API key configured - allow access (dev mode only)
         logger.warning(
             "API_KEY not configured - allowing unauthenticated access",
@@ -155,7 +161,7 @@ def verify_api_key(authorization: str | None = Depends(api_key_header)) -> bool:
     provided_key = parts[1]
 
     # Constant-time comparison to prevent timing attacks
-    if not secrets.compare_digest(provided_key, API_KEY):
+    if not secrets.compare_digest(provided_key, api_key):
         logger.warning(
             "Invalid API key attempt",
             extra={"environment": ENVIRONMENT},
