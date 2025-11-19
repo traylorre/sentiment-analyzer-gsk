@@ -227,7 +227,7 @@ module "dashboard_lambda" {
   function_url_cors = {
     allow_credentials = false
     allow_headers     = ["content-type", "authorization"]
-    allow_methods     = ["GET", "OPTIONS"]
+    allow_methods     = ["*"]
     allow_origins     = ["*"] # Restrict in production
     expose_headers    = []
     max_age           = 86400
