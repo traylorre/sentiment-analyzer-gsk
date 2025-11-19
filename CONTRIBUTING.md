@@ -255,7 +255,7 @@ git rebase main  # Or merge main into your branch
 ```
 
 **3. Write clear commit messages:**
-```
+```text
 <type>: <summary in 50 chars or less>
 
 <Detailed explanation of changes in 72-char lines>
