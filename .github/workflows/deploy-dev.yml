@@ -178,9 +178,10 @@ jobs:
       - name: Upload Lambda packages to S3
         run: |
           # Upload BEFORE Terraform apply so Lambda functions can reference the S3 objects
+          # Paths must match s3_key in infrastructure/terraform/main.tf
           for lambda in ingestion analysis dashboard; do
             aws s3 cp dist/$lambda.zip \
-              s3://${{ secrets.DEPLOYMENT_BUCKET }}/lambdas/dev/$lambda.zip
+              s3://${{ secrets.DEPLOYMENT_BUCKET }}/$lambda/lambda.zip
           done
 
       - name: Setup Terraform
@@ -212,11 +213,12 @@ jobs:
 
       - name: Update Lambda functions
         run: |
+          # Paths must match s3_key in infrastructure/terraform/main.tf
           for lambda in ingestion analysis dashboard; do
             aws lambda update-function-code \
               --function-name dev-sentiment-$lambda \
               --s3-bucket ${{ secrets.DEPLOYMENT_BUCKET }} \
-              --s3-key lambdas/dev/$lambda.zip \
+              --s3-key $lambda/lambda.zip \
               --publish
           done
 

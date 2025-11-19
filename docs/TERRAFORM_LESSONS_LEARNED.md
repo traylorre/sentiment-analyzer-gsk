@@ -180,7 +180,29 @@ Lock Info:
 
 ---
 
-### 7. Incremental "Hole Plugging" Approach
+### 7. S3 Key Path Mismatch
+
+**What Happened**:
+- Terraform configuration defined S3 keys as `ingestion/lambda.zip`
+- Workflow uploaded to `lambdas/dev/ingestion.zip`
+- Lambda creation failed because S3 object didn't exist at expected path
+
+**Error Message**:
+```
+InvalidParameterValueException: Error occurred while GetObject.
+S3 Error Code: NoSuchKey. S3 Error Message: The specified key does not exist.
+```
+
+**Root Cause**: Workflow was written without checking what paths Terraform expected.
+
+**Prevention**:
+- [ ] Check Terraform `s3_key` values before writing upload commands
+- [ ] Add comment in workflow referencing Terraform config
+- [ ] Consider using Terraform outputs for S3 paths
+
+---
+
+### 8. Incremental "Hole Plugging" Approach
 
 **What Happened**:
 - Each CI failure revealed one new issue
