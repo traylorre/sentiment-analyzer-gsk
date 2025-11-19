@@ -323,6 +323,32 @@ terraform import -var="environment=dev" "module.dynamodb.aws_backup_plan.dynamod
 
 ---
 
+## Technical Debt
+
+### TD-001: Lambda Function URL CORS allow_methods Wildcard
+
+**Location**: `infrastructure/terraform/main.tf` line ~230
+
+**Issue**: Using `["*"]` for `allow_methods` instead of specific methods `["GET", "OPTIONS"]`
+
+**Why**: The specific methods list caused a validation error:
+```
+Value '[GET, OPTIONS]' at 'cors.allowMethods' failed to satisfy constraint
+```
+
+**Risk**: Wildcard allows all HTTP methods (POST, PUT, DELETE, etc.) when only GET and OPTIONS are needed for the dashboard.
+
+**Resolution**: Investigate if this is:
+1. AWS provider version issue
+2. Terraform version issue
+3. Specific AWS API limitation
+
+Should be fixed to use specific methods for security best practices.
+
+**Priority**: Medium - Security concern for production
+
+---
+
 ## References
 
 - [Terraform Import Documentation](https://developer.hashicorp.com/terraform/cli/import)
