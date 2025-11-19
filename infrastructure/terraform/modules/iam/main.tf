@@ -192,6 +192,25 @@ resource "aws_iam_role_policy" "analysis_metrics" {
   })
 }
 
+# Analysis Lambda: SQS Dead Letter Queue
+resource "aws_iam_role_policy" "analysis_dlq" {
+  name = "${var.environment}-analysis-dlq-policy"
+  role = aws_iam_role.analysis_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "sqs:SendMessage"
+        ]
+        Resource = var.dlq_arn
+      }
+    ]
+  })
+}
+
 # ===================================================================
 # Dashboard Lambda IAM Role
 # ===================================================================
