@@ -175,6 +175,14 @@ jobs:
             cd ../..
           done
 
+      - name: Upload Lambda packages to S3
+        run: |
+          # Upload BEFORE Terraform apply so Lambda functions can reference the S3 objects
+          for lambda in ingestion analysis dashboard; do
+            aws s3 cp dist/$lambda.zip \
+              s3://${{ secrets.DEPLOYMENT_BUCKET }}/lambdas/dev/$lambda.zip
+          done
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
@@ -201,13 +209,6 @@ jobs:
             -auto-approve \
             -lock-timeout=5m \
             tfplan
-
-      - name: Upload Lambda packages to S3
-        run: |
-          for lambda in ingestion analysis dashboard; do
-            aws s3 cp dist/$lambda.zip \
-              s3://${{ secrets.DEPLOYMENT_BUCKET }}/lambdas/dev/$lambda.zip
-          done
 
       - name: Update Lambda functions
         run: |

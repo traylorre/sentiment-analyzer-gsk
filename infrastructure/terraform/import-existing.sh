@@ -114,6 +114,12 @@ echo "========== Importing Backup Plans =========="
 BACKUP_PLAN_ID=$(aws backup list-backup-plans --region $AWS_REGION --query "BackupPlansList[?BackupPlanName=='$ENVIRONMENT-dynamodb-daily-backup'].BackupPlanId" --output text 2>/dev/null || echo "")
 if [ -n "$BACKUP_PLAN_ID" ] && [ "$BACKUP_PLAN_ID" != "None" ]; then
     import_resource "module.dynamodb.aws_backup_plan.dynamodb_daily" "$BACKUP_PLAN_ID" || true
+
+    # Import backup selection
+    SELECTION_ID=$(aws backup list-backup-selections --backup-plan-id "$BACKUP_PLAN_ID" --region $AWS_REGION --query "BackupSelectionsList[?SelectionName=='$ENVIRONMENT-dynamodb-backup-selection'].SelectionId" --output text 2>/dev/null || echo "")
+    if [ -n "$SELECTION_ID" ] && [ "$SELECTION_ID" != "None" ]; then
+        import_resource "module.dynamodb.aws_backup_selection.dynamodb" "$BACKUP_PLAN_ID|$SELECTION_ID" || true
+    fi
 else
     echo "  Backup plan not found, skipping"
 fi
