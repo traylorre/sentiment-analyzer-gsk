@@ -103,10 +103,20 @@ import_resource "module.monitoring.aws_cloudwatch_metric_alarm.high_error_rate" 
 import_resource "module.monitoring.aws_cloudwatch_metric_alarm.lambda_throttles" "$ENVIRONMENT-sentiment-lambda-throttles" || true
 
 echo ""
-echo "========== Importing Lambda Functions =========="
-import_resource "module.lambda.aws_lambda_function.ingestion" "$ENVIRONMENT-sentiment-ingestion" || true
-import_resource "module.lambda.aws_lambda_function.analysis" "$ENVIRONMENT-sentiment-analysis" || true
-import_resource "module.lambda.aws_lambda_function.dashboard" "$ENVIRONMENT-sentiment-dashboard" || true
+echo "========== Importing CloudWatch Log Groups =========="
+import_resource "module.analysis_lambda.aws_cloudwatch_log_group.lambda" "/aws/lambda/$ENVIRONMENT-sentiment-analysis" || true
+import_resource "module.dashboard_lambda.aws_cloudwatch_log_group.lambda" "/aws/lambda/$ENVIRONMENT-sentiment-dashboard" || true
+import_resource "module.ingestion_lambda.aws_cloudwatch_log_group.lambda" "/aws/lambda/$ENVIRONMENT-sentiment-ingestion" || true
+
+echo ""
+echo "========== Importing Backup Plans =========="
+# Get backup plan ID dynamically
+BACKUP_PLAN_ID=$(aws backup list-backup-plans --region $AWS_REGION --query "BackupPlansList[?BackupPlanName=='$ENVIRONMENT-dynamodb-daily-backup'].BackupPlanId" --output text 2>/dev/null || echo "")
+if [ -n "$BACKUP_PLAN_ID" ] && [ "$BACKUP_PLAN_ID" != "None" ]; then
+    import_resource "module.dynamodb.aws_backup_plan.dynamodb_daily" "$BACKUP_PLAN_ID" || true
+else
+    echo "  Backup plan not found, skipping"
+fi
 
 echo ""
 echo "================================================"
