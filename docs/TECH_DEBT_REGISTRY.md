@@ -158,18 +158,20 @@ create_metrics_schedule = false
 2. Then changed to: `pip install -e .`
 **Note**: Editable install is correct, but shows trial-and-error
 
-### TD-014: moto Version Jump
+### TD-014: moto Version Jump [RESOLVED]
 **Location**: `requirements-dev.txt`
 **Commit**: 1f2c1ae
 ```text
-moto>=5.0.0  # Upgraded from 4.2.0 for mock_aws decorator
+moto==5.0.0  # Upgraded from 4.2.0 for mock_aws decorator
 ```
-**Note**: Major version jump, may have other API changes we haven't tested
+**Status**: RESOLVED - All tests pass with moto 5.0
+**Note**: mock_aws unified decorator works correctly; no breaking changes found
 
-### TD-015: pytest-env Dependency Added
+### TD-015: pytest-env Dependency Added [RESOLVED]
 **Location**: `requirements-dev.txt`
 **Commit**: b90bc06
-**Note**: Added but seems unused in pyproject.toml. Verify if actually needed.
+**Status**: RESOLVED - Removed pytest-env and pytest-asyncio (unused)
+**Fix Commit**: 6abdf29
 
 ---
 
@@ -198,23 +200,23 @@ moto>=5.0.0  # Upgraded from 4.2.0 for mock_aws decorator
 
 ## Action Items for Cleanup Sprint
 
-### Must Fix Before Demo
-- [ ] TD-001: Investigate CORS allow_methods validation error
-- [ ] TD-002: Document which origins should be allowed (or keep * for demo)
-- [ ] TD-005: Implement test data cleanup
+### Must Fix Before Demo - COMPLETED
+- [x] TD-001: CORS allow_methods restored to ["GET", "OPTIONS"]
+- [x] TD-002: Documented allow_origins * for demo, checklist item for prod
+- [x] TD-005: Clarified integration tests use moto mocks (no cleanup needed)
 
-### Should Fix for Code Quality
-- [ ] TD-004: Refactor dashboard handler to not read env at import time
-- [ ] TD-006: Verify deduplication behavior is correct
-- [ ] TD-007: Verify secret_not_found should return 401
-- [ ] TD-008: Replace blanket F841 ignore with explicit `_` variables
+### Should Fix for Code Quality - COMPLETED
+- [x] TD-004: Dashboard handler now reads env lazily via get_api_key()
+- [x] TD-006: Documented deduplication behavior (correct)
+- [x] TD-007: Fixed secret_not_found to return 500 (server config error)
+- [x] TD-008: Replaced F841 blanket ignore with explicit `_` variables
 
-### Can Defer
-- [ ] TD-009: Address specific deprecation warnings
-- [ ] TD-010: Rename model_version field
-- [ ] TD-012: Remove or implement S3 archival Lambda
-- [ ] TD-014: Review moto 5.0 changelog for breaking changes
-- [ ] TD-015: Remove pytest-env if unused
+### Can Defer - RESOLVED OR ACCEPTABLE
+- [x] TD-009: Deprecation warnings properly filtered (third-party only)
+- [ ] TD-010: Rename model_version field (low risk, workaround in place)
+- [x] TD-012: S3 archival Lambda deferred to post-demo (documented)
+- [x] TD-014: moto 5.0 verified working (all tests pass)
+- [x] TD-015: pytest-env removed (was unused)
 
 ---
 
