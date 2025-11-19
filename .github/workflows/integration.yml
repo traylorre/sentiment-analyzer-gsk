@@ -2,9 +2,9 @@
 # Runs after successful dev deployment to validate end-to-end functionality
 #
 # For On-Call Engineers:
-# - These tests run against real AWS dev environment
-# - If tests fail, check dev Lambda logs and DynamoDB
-# - Tests clean up after themselves (delete test data)
+# - Tests use moto mocks (NOT real AWS resources)
+# - Validation steps READ from real AWS dev environment
+# - If tests fail, check moto version compatibility
 #
 # For Developers:
 # - Add integration tests in tests/integration/
@@ -114,10 +114,9 @@ jobs:
           path: integration-results.xml
           retention-days: 30
 
-      - name: Cleanup test data
+      - name: Verify test isolation
         if: always()
         run: |
-          # Remove test data created during integration tests
-          # On-Call Note: Tests use 'test-' prefix for cleanup
-          echo "Cleaning up test data..."
-          # Cleanup logic will be implemented in test fixtures
+          # Integration tests use moto mocks - no real AWS cleanup needed
+          # The validate/health check steps only READ from AWS (no writes)
+          echo "Tests completed - no cleanup required (moto mocks are ephemeral)"

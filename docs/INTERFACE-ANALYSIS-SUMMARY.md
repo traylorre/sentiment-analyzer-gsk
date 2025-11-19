@@ -55,8 +55,9 @@
 
 **3. DLQ 14-Day Data Loss**
 - Risk: Messages expire after 14 days → permanent loss
-- Fix: S3 archival Lambda (specified but not implemented)
-- Timeline: Implement BEFORE production launch
+- Fix: S3 archival Lambda (deferred for Demo 1)
+- Timeline: NOT required for demo - DLQ only holds analysis retries
+- Note: Demo scope focuses on happy path; DLQ archival is post-demo enhancement
 
 ---
 
