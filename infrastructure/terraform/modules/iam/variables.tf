@@ -24,3 +24,8 @@ variable "analysis_topic_arn" {
   description = "ARN of the SNS topic for analysis triggers"
   type        = string
 }
+
+variable "dlq_arn" {
+  description = "ARN of the SQS dead letter queue for analysis Lambda"
+  type        = string
+}
