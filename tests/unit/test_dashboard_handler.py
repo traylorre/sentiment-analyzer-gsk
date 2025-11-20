@@ -196,18 +196,31 @@ class TestStaticFiles:
         assert response.status_code in [200, 404]
 
     def test_path_traversal_blocked(self, client):
-        """Test path traversal attack with slashes is blocked."""
-        # Direct slash in path
+        r"""Test path traversal attacks are blocked.
+
+        Verifies that handler.py line 221 checks block all path traversal attempts:
+        - Forward slash (/) - trying to access parent directories
+        - Backslash (\) - Windows-style path traversal
+        - Double dot (..) - relative path traversal
+        - URL-encoded variants
+        """
+        # Test forward slash (Unix path separator)
         response = client.get("/static/foo/bar.css")
-        # Starlette converts this to 404 (file not found)
-        # Our check for "/" in filename catches it at route level
         assert response.status_code in [400, 404]
 
-    def test_dotdot_in_filename_blocked(self, client):
-        """Test .. in filename is blocked."""
+        # Test backslash (Windows path separator)
+        response = client.get("/static/foo\\bar.css")
+        assert response.status_code == 400
+        assert "Invalid filename" in response.json()["detail"]
+
+        # Test double dot (relative path)
         response = client.get("/static/..styles.css")
         assert response.status_code == 400
         assert "Invalid filename" in response.json()["detail"]
+
+        # Test URL-encoded forward slash (%2F) - should be decoded by Starlette
+        response = client.get("/static/foo%2Fbar.css")
+        assert response.status_code in [400, 404]
 
 
 class TestHealthCheck:

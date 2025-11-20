@@ -246,18 +246,6 @@ class TestAnalyzeSentiment:
             # Pipeline should not be called for empty text
             mock_pipeline.assert_not_called()
 
-    def test_none_text_returns_neutral(self):
-        """Test None-like text returns neutral."""
-        with patch("src.lambdas.analysis.sentiment.load_model") as mock_load:
-            mock_pipeline = MagicMock()
-            mock_load.return_value = mock_pipeline
-
-            # Empty string after truncation
-            sentiment, score = analyze_sentiment("")
-
-            assert sentiment == "neutral"
-            assert score == 0.5
-
     def test_inference_failure(self, caplog):
         """Test error handling when inference fails."""
         with patch("src.lambdas.analysis.sentiment.load_model") as mock_load:

@@ -116,7 +116,11 @@ class TestNewsAPIAdapterBasic:
 
     @responses.activate
     def test_fetch_items_with_custom_page_size(self, adapter, sample_response):
-        """Test custom page size is passed to API."""
+        """Test custom page size is passed to API.
+
+        Verifies that when page_size=50 is provided, the NewsAPI request includes
+        pageSize=50 in the query parameters (newsapi.py line 164).
+        """
         responses.add(
             responses.GET,
             NEWSAPI_BASE_URL,
@@ -126,8 +130,10 @@ class TestNewsAPIAdapterBasic:
 
         adapter.fetch_items("AI", page_size=50)
 
-        # Verify request was made
+        # Verify request was made with correct page size
         assert len(responses.calls) == 1
+        request_params = responses.calls[0].request.params
+        assert request_params["pageSize"] == "50"
 
 
 class TestNewsAPIAdapterErrors:

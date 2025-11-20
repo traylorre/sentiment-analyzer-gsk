@@ -707,7 +707,15 @@ class TestProcessArticle:
 
     @mock_aws
     def test_process_article_invalid(self, env_vars):
-        """Test processing article without required fields."""
+        """Test processing article without required fields.
+
+        NOTE: Production code returns "duplicate" for invalid articles (line 360).
+        This is semantically incorrect - invalid articles aren't duplicates, they're
+        skipped. However, this test documents the actual behavior. The return value
+        is only used for counting, so impact is minimal (stats show as duplicates).
+
+        FUTURE: Consider adding "skipped" return value for invalid articles.
+        """
         # Setup mocks
         dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
         dynamodb.create_table(
@@ -727,7 +735,7 @@ class TestProcessArticle:
         sns = boto3.client("sns", region_name="us-east-1")
         topic_arn = sns.create_topic(Name="test-topic")["TopicArn"]
 
-        # Article without URL, title, or publishedAt
+        # Article without URL, title, or publishedAt (cannot generate source_id)
         article = {
             "description": "Only has description",
         }
@@ -742,7 +750,8 @@ class TestProcessArticle:
                 model_version="v1.0.0",
             )
 
-        assert result == "duplicate"  # Skipped
+        # Actual behavior: returns "duplicate" (semantically incorrect but documented)
+        assert result == "duplicate"
 
 
 class TestGetTextForAnalysis:
@@ -997,8 +1006,17 @@ class TestErrorHandling:
         sample_newsapi_response,
         mock_context,
         eventbridge_event,
+        caplog,
     ):
-        """Test that SNS publish failure doesn't stop processing."""
+        """Test that SNS publish failure doesn't stop processing.
+
+        Verifies that when SNS publish fails (topic doesn't exist), the handler:
+        1. Logs the error (handler.py line 427)
+        2. Continues processing and returns success (line 433 returns "new")
+        3. Returns 200/207 status code (articles processed despite SNS failure)
+
+        This ensures resilience - SNS failures don't block article ingestion.
+        """
         # Setup mocks
         dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
         dynamodb.create_table(
@@ -1015,8 +1033,7 @@ class TestErrorHandling:
         )
 
         # Don't create SNS topic - publish will fail
-        # But we need the client
-        sns = boto3.client("sns", region_name="us-east-1")
+        # (Handler creates its own SNS client, we don't need one here)
 
         secrets = boto3.client("secretsmanager", region_name="us-east-1")
         secrets.create_secret(
@@ -1041,12 +1058,16 @@ class TestErrorHandling:
             patch("src.lib.metrics.emit_metric"),
             patch("src.lib.metrics.emit_metrics_batch"),
         ):
-            # Create the topic so the test works
-            sns.create_topic(Name="test-topic")
+            # Note: NOT creating SNS topic - this will cause publish to fail
             result = lambda_handler(eventbridge_event, mock_context)
 
         # Handler should complete even if SNS has issues
         assert result["statusCode"] in [200, 207]
+
+        # Verify SNS publish error was logged
+        from tests.conftest import assert_error_logged
+
+        assert_error_logged(caplog, "Failed to publish to SNS")
 
     @mock_aws
     @responses.activate

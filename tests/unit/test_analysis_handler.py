@@ -178,8 +178,7 @@ class TestLambdaHandler:
     @mock_aws
     def test_handler_updates_dynamodb(self, env_vars, sns_event, mock_context):
         """Test that DynamoDB item is updated correctly."""
-        # Setup DynamoDB
-        dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
+        # Setup DynamoDB with pending item
         table = self._setup_dynamodb_with_pending_item()
 
         with (
@@ -196,8 +195,7 @@ class TestLambdaHandler:
 
             lambda_handler(sns_event, mock_context)
 
-        # Verify item was updated
-        table = dynamodb.Table("test-sentiment-items")
+        # Verify item was updated (reuse table from setup)
         response = table.get_item(
             Key={
                 "source_id": "newsapi#abc123def456",
