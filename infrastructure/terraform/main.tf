@@ -226,8 +226,8 @@ module "dashboard_lambda" {
   function_url_cors = {
     allow_credentials = false
     allow_headers     = ["content-type", "authorization"]
-    allow_methods     = ["GET", "OPTIONS"]  # TD-001: Restored from ["*"]
-    allow_origins     = ["*"] # TD-002: Restrict in production
+    allow_methods     = ["GET"] # AWS handles OPTIONS preflight automatically; not in allowed values
+    allow_origins     = ["*"]   # TD-002: Restrict in production
     expose_headers    = []
     max_age           = 86400
   }
