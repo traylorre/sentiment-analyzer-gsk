@@ -29,7 +29,7 @@ moto[all]==5.1.17
 responses==0.24.0
 
 # Code Quality
-black==23.11.0          # Code formatter
+black==25.11.0          # Code formatter
 ruff==0.14.5             # Fast linter (replaces flake8, isort)
 pre-commit==3.6.0       # Git hooks framework
 
