@@ -289,7 +289,7 @@ class TestLambdaHandler:
         assert result["body"]["sentiment"] == "neutral"
         assert result["body"]["score"] == 0.55
 
-    def test_handler_invalid_message_format(self, env_vars, mock_context):
+    def test_handler_invalid_message_format(self, env_vars, mock_context, caplog):
         """Test error handling for invalid SNS message."""
         # Missing required field
         invalid_event = {
@@ -313,8 +313,13 @@ class TestLambdaHandler:
         assert result["statusCode"] == 400
         assert result["body"]["code"] == "VALIDATION_ERROR"
 
+        # Verify expected error was logged
+        from tests.conftest import assert_error_logged
+
+        assert_error_logged(caplog, "Invalid SNS message format")
+
     @mock_aws
-    def test_handler_model_load_error(self, env_vars, sns_event, mock_context):
+    def test_handler_model_load_error(self, env_vars, sns_event, mock_context, caplog):
         """Test error handling when model fails to load."""
         self._setup_dynamodb_with_pending_item()
 
@@ -331,8 +336,13 @@ class TestLambdaHandler:
         assert result["statusCode"] == 500
         assert result["body"]["code"] == "MODEL_ERROR"
 
+        # Verify expected error was logged
+        from tests.conftest import assert_error_logged
+
+        assert_error_logged(caplog, "Model load error")
+
     @mock_aws
-    def test_handler_inference_error(self, env_vars, sns_event, mock_context):
+    def test_handler_inference_error(self, env_vars, sns_event, mock_context, caplog):
         """Test error handling when inference fails."""
         self._setup_dynamodb_with_pending_item()
 
@@ -353,6 +363,11 @@ class TestLambdaHandler:
 
         assert result["statusCode"] == 500
         assert result["body"]["code"] == "MODEL_ERROR"
+
+        # Verify expected error was logged
+        from tests.conftest import assert_error_logged
+
+        assert_error_logged(caplog, "Inference error")
 
     @mock_aws
     def test_handler_emits_model_load_metric(self, env_vars, sns_event, mock_context):

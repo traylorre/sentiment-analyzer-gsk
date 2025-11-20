@@ -154,12 +154,17 @@ class TestGetSecret:
 
         assert secret == {"api_key": "updated-key"}
 
-    def test_get_secret_not_found(self, secrets_manager):
+    def test_get_secret_not_found(self, secrets_manager, caplog):
         """Test SecretNotFoundError for missing secret."""
         with pytest.raises(SecretNotFoundError, match="Secret not found"):
             get_secret("nonexistent/secret")
 
-    def test_get_secret_invalid_json(self, secrets_manager):
+        # Verify expected error was logged
+        from tests.conftest import assert_error_logged
+
+        assert_error_logged(caplog, "Secret not found")
+
+    def test_get_secret_invalid_json(self, secrets_manager, caplog):
         """Test SecretRetrievalError for non-JSON secret."""
         # Create secret with invalid JSON
         secrets_manager.create_secret(
@@ -169,6 +174,11 @@ class TestGetSecret:
 
         with pytest.raises(SecretRetrievalError, match="not valid JSON"):
             get_secret("invalid-json-secret")
+
+        # Verify expected error was logged
+        from tests.conftest import assert_error_logged
+
+        assert_error_logged(caplog, "Failed to parse secret as JSON")
 
     def test_cache_expiry(self, secrets_manager, monkeypatch):
         """Test that cache expires after TTL."""

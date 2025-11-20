@@ -134,7 +134,7 @@ class TestNewsAPIAdapterErrors:
     """Test error handling in NewsAPI adapter."""
 
     @responses.activate
-    def test_authentication_error(self, adapter):
+    def test_authentication_error(self, adapter, caplog):
         """Test 401 raises AuthenticationError."""
         responses.add(
             responses.GET,
@@ -145,6 +145,11 @@ class TestNewsAPIAdapterErrors:
 
         with pytest.raises(AuthenticationError, match="Invalid NewsAPI key"):
             adapter.fetch_items("AI")
+
+        # Verify expected error was logged
+        from tests.conftest import assert_error_logged
+
+        assert_error_logged(caplog, "NewsAPI authentication failed")
 
     @responses.activate
     def test_rate_limit_error(self, adapter):
@@ -265,7 +270,7 @@ class TestNewsAPIAdapterCircuitBreaker:
     """Test circuit breaker behavior."""
 
     @responses.activate
-    def test_circuit_breaker_opens(self, adapter):
+    def test_circuit_breaker_opens(self, adapter, caplog):
         """Test circuit opens after consecutive failures."""
         # Add many failures
         for _ in range(10):
@@ -286,6 +291,11 @@ class TestNewsAPIAdapterCircuitBreaker:
         # Circuit should now be open
         with pytest.raises(AdapterError, match="Circuit breaker open"):
             adapter.fetch_items("AI")
+
+        # Verify expected error was logged
+        from tests.conftest import assert_error_logged
+
+        assert_error_logged(caplog, "Circuit breaker opened")
 
     @responses.activate
     def test_circuit_breaker_resets_on_success(self, adapter, sample_response):

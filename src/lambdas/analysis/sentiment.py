@@ -43,8 +43,6 @@ import os
 import time
 from typing import Any
 
-from src.lib.logging_utils import log_expected_warning
-
 # Structured logging
 logger = logging.getLogger(__name__)
 
@@ -168,7 +166,7 @@ def analyze_sentiment(text: str) -> tuple[str, float]:
     truncated_text = text[:MAX_TEXT_LENGTH] if text else ""
 
     if not truncated_text:
-        log_expected_warning(logger, "Empty text for analysis, returning neutral")
+        logger.warning("Empty text for analysis, returning neutral")
         return "neutral", 0.5
 
     try:

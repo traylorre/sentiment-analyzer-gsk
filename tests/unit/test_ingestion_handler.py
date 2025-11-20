@@ -426,6 +426,7 @@ class TestLambdaHandler:
         env_vars,
         mock_context,
         eventbridge_event,
+        caplog,
     ):
         """Test handler fails fast on authentication error."""
         # Setup mocks
@@ -448,9 +449,14 @@ class TestLambdaHandler:
         assert result["statusCode"] == 401
         assert result["body"]["code"] == "AUTHENTICATION_ERROR"
 
+        # Verify expected error was logged
+        from tests.conftest import assert_error_logged
+
+        assert_error_logged(caplog, "Authentication")
+
     @mock_aws
     def test_handler_missing_config(
-        self, mock_context, eventbridge_event, aws_credentials
+        self, mock_context, eventbridge_event, aws_credentials, caplog
     ):
         """Test handler fails with missing configuration."""
         # Don't set env vars
@@ -463,6 +469,11 @@ class TestLambdaHandler:
 
         assert result["statusCode"] == 500
         assert result["body"]["code"] == "CONFIGURATION_ERROR"
+
+        # Verify expected error was logged
+        from tests.conftest import assert_error_logged
+
+        assert_error_logged(caplog, "Configuration error")
 
     @mock_aws
     @responses.activate
@@ -940,7 +951,7 @@ class TestErrorHandling:
     """Tests for error handling scenarios."""
 
     @mock_aws
-    def test_secret_not_found(self, env_vars, mock_context, eventbridge_event):
+    def test_secret_not_found(self, env_vars, mock_context, eventbridge_event, caplog):
         """Test handler when secret is not found."""
         # Clear secrets cache to ensure we test the actual missing secret scenario
         # Previous tests may have cached a valid secret
@@ -972,6 +983,11 @@ class TestErrorHandling:
         # 500 = server misconfiguration (secret not set up)
         assert result["statusCode"] == 500
         assert "error" in result["body"]
+
+        # Verify expected error was logged
+        from tests.conftest import assert_error_logged
+
+        assert_error_logged(caplog, "Secret not found")
 
     @mock_aws
     @responses.activate
