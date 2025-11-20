@@ -6,15 +6,15 @@
 
 ## Critical Priority (Security/Production Risk)
 
-### TD-001: CORS allow_methods Wildcard [EXISTING]
-**Location**: `infrastructure/terraform/main.tf:230`
+### TD-001: CORS allow_methods Configuration [RESOLVED]
+**Location**: `infrastructure/terraform/main.tf:229`
 ```hcl
-allow_methods = ["*"]  # Should be ["GET", "OPTIONS"]
+allow_methods = ["GET"]  # AWS handles OPTIONS preflight automatically
 ```
-**Risk**: Allows all HTTP methods (POST, PUT, DELETE) when only GET/OPTIONS needed
-**Root Cause**: AWS validation error with specific methods list
-**Fix**: Investigate AWS provider version or API limitation
-**Commit**: 108a34f
+**Status**: RESOLVED - Correct configuration
+**Root Cause**: AWS API constraint requires each method <= 6 characters; "OPTIONS" is 7
+**Resolution**: AWS Lambda Function URLs automatically handle OPTIONS preflight requests
+**Note**: Only specify actual methods your Lambda handles; AWS manages CORS preflight
 
 ### TD-002: CORS allow_origins Wildcard
 **Location**:
