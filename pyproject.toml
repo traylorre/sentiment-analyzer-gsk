@@ -117,23 +117,8 @@ exclude = [
     "node_modules/",
 ]
 
-[tool.pytest.ini_options]
-# Main pytest configuration - see also pytest.ini for additional settings
-minversion = "7.0"
-testpaths = ["tests"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-addopts = [
-    "-ra",           # Show extra test summary
-    "--strict-markers",
-    "--tb=short",    # Shorter tracebacks
-]
-asyncio_mode = "auto"
-filterwarnings = [
-    "ignore::DeprecationWarning:moto.*:",
-    "ignore::DeprecationWarning:boto.*:",
-]
+# Note: pytest configuration is in pytest.ini (not here) to avoid duplication warning
+# pytest.ini has complete config with markers, logging, and documentation
 
 [tool.coverage.run]
 source = ["src"]

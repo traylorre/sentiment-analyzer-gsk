@@ -290,6 +290,94 @@ class TestLambdaHandler:
 
     @mock_aws
     @responses.activate
+    def test_handler_deduplication_with_partial_overlap(
+        self,
+        env_vars,
+        mock_context,
+        eventbridge_event,
+    ):
+        """Test deduplication with realistic partial overlap between tags.
+
+        Real-world scenario: Different tags return some unique articles and
+        some overlapping articles. This tests that deduplication correctly
+        handles partial overlap.
+
+        Expected behavior:
+        - Tag 1 (AI): 2 unique articles → 2 new items
+        - Tag 2 (climate): 1 shared article + 1 unique → 1 duplicate, 1 new
+        - Total: 4 fetched, 3 new, 1 duplicate
+        """
+        # Setup mocks
+        self._setup_aws_mocks()
+
+        # Articles for tag 1 (AI)
+        ai_response = {
+            "status": "ok",
+            "totalResults": 2,
+            "articles": [
+                {
+                    "source": {"id": "test-source", "name": "Test News"},
+                    "author": "AI Author",
+                    "title": "AI-Only Article",
+                    "description": "This article is only about AI.",
+                    "url": "https://example.com/article/ai-only",
+                    "publishedAt": "2025-11-17T14:30:00Z",
+                },
+                {
+                    "source": {"id": "test-source", "name": "Test News"},
+                    "author": "Shared Author",
+                    "title": "AI and Climate Crossover",
+                    "description": "This article covers both AI and climate.",
+                    "url": "https://example.com/article/shared",  # Same URL = duplicate
+                    "publishedAt": "2025-11-17T15:00:00Z",
+                },
+            ],
+        }
+
+        # Articles for tag 2 (climate) - one shared, one unique
+        climate_response = {
+            "status": "ok",
+            "totalResults": 2,
+            "articles": [
+                {
+                    "source": {"id": "test-source", "name": "Test News"},
+                    "author": "Shared Author",
+                    "title": "AI and Climate Crossover",
+                    "description": "This article covers both AI and climate.",
+                    "url": "https://example.com/article/shared",  # Same URL = duplicate
+                    "publishedAt": "2025-11-17T15:00:00Z",
+                },
+                {
+                    "source": {"id": "test-source", "name": "Test News"},
+                    "author": "Climate Author",
+                    "title": "Climate-Only Article",
+                    "description": "This article is only about climate.",
+                    "url": "https://example.com/article/climate-only",
+                    "publishedAt": "2025-11-17T15:30:00Z",
+                },
+            ],
+        }
+
+        responses.add(responses.GET, NEWSAPI_BASE_URL, json=ai_response, status=200)
+        responses.add(
+            responses.GET, NEWSAPI_BASE_URL, json=climate_response, status=200
+        )
+
+        with (
+            patch("src.lib.metrics.emit_metric"),
+            patch("src.lib.metrics.emit_metrics_batch"),
+        ):
+            result = lambda_handler(eventbridge_event, mock_context)
+
+        assert result["statusCode"] == 200
+        assert result["body"]["summary"]["tags_processed"] == 2
+        assert result["body"]["summary"]["articles_fetched"] == 4
+        # 3 unique articles (ai-only, shared, climate-only), 1 duplicate (shared again)
+        assert result["body"]["summary"]["new_items"] == 3
+        assert result["body"]["summary"]["duplicates_skipped"] == 1
+
+    @mock_aws
+    @responses.activate
     def test_handler_rate_limit_partial_success(
         self,
         env_vars,

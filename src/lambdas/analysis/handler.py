@@ -59,6 +59,7 @@ from src.lambdas.analysis.sentiment import (
     load_model,
 )
 from src.lambdas.shared.dynamodb import get_table
+from src.lib.logging_utils import log_expected_warning
 from src.lib.metrics import (
     emit_metric,
     emit_metrics_batch,
@@ -296,7 +297,8 @@ def _update_item_with_sentiment(
 
     except table.meta.client.exceptions.ConditionalCheckFailedException:
         # Item already analyzed (duplicate SNS message)
-        logger.warning(
+        log_expected_warning(
+            logger,
             "Item already analyzed, skipping",
             extra={"source_id": source_id},
         )

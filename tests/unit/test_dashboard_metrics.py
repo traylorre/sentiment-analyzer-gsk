@@ -220,13 +220,17 @@ class TestCalculateSentimentDistribution:
         }
 
     def test_invalid_sentiment_logged(self, caplog):
-        """Test that invalid sentiment values are logged."""
+        """Test that invalid sentiment values are logged.
+
+        Note: In test environment, expected warnings are logged at DEBUG level
+        to prevent log pollution (see src.lib.logging_utils).
+        """
         items = [
             {"sentiment": "positive", "source_id": "test1"},
             {"sentiment": "invalid", "source_id": "test2"},
         ]
 
-        with caplog.at_level("WARNING"):
+        with caplog.at_level("DEBUG"):
             result = calculate_sentiment_distribution(items)
 
         assert result["positive"] == 1

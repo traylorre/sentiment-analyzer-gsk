@@ -54,6 +54,7 @@ from src.lambdas.dashboard.metrics import (
     sanitize_item_for_response,
 )
 from src.lambdas.shared.dynamodb import get_table, parse_dynamodb_item
+from src.lib.logging_utils import log_expected_warning
 
 # Structured logging
 logger = logging.getLogger(__name__)
@@ -139,7 +140,8 @@ def verify_api_key(authorization: str | None = Depends(api_key_header)) -> bool:
 
     if not api_key:
         # No API key configured - allow access (dev mode only)
-        logger.warning(
+        log_expected_warning(
+            logger,
             "API_KEY not configured - allowing unauthenticated access",
             extra={"environment": ENVIRONMENT},
         )
@@ -163,7 +165,8 @@ def verify_api_key(authorization: str | None = Depends(api_key_header)) -> bool:
 
     # Constant-time comparison to prevent timing attacks
     if not secrets.compare_digest(provided_key, api_key):
-        logger.warning(
+        log_expected_warning(
+            logger,
             "Invalid API key attempt",
             extra={"environment": ENVIRONMENT},
         )
