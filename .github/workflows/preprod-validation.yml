@@ -1,0 +1,178 @@
+name: Preprod Validation
+
+# This workflow runs integration tests against REAL AWS resources in preprod.
+#
+# Purpose:
+# - Final validation before production deployment
+# - Weekly automated checks for infrastructure drift
+# - Cost-controlled alternative to running on every PR
+#
+# When to use:
+# - Before deploying to production (REQUIRED)
+# - Weekly schedule (automated drift detection)
+# - After major infrastructure changes
+# - When troubleshooting production issues
+#
+# Cost: ~$1-2 per run (real AWS resources)
+
+on:
+  # Manual trigger from GitHub UI
+  workflow_dispatch:
+    inputs:
+      terraform_action:
+        description: 'Terraform action (plan or apply)'
+        required: true
+        default: 'plan'
+        type: choice
+        options:
+          - plan
+          - apply
+
+  # Weekly schedule (every Monday at 3 AM UTC)
+  schedule:
+    - cron: '0 3 * * 1'
+
+permissions:
+  contents: read
+  id-token: write  # For OIDC if configured
+
+jobs:
+  terraform:
+    name: Deploy Preprod Infrastructure
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infrastructure/terraform
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Terraform Init (Preprod Backend)
+        run: terraform init -backend-config=backend-preprod.hcl -reconfigure
+
+      - name: Terraform Plan (Preprod)
+        id: plan
+        run: terraform plan -var-file=preprod.tfvars -no-color -out=preprod.tfplan
+        continue-on-error: true
+
+      - name: Terraform Apply (Preprod)
+        if: |
+          (github.event_name == 'workflow_dispatch' && github.event.inputs.terraform_action == 'apply') ||
+          github.event_name == 'schedule'
+        run: terraform apply -auto-approve preprod.tfplan
+
+      - name: Upload Lambda Packages to S3
+        if: |
+          (github.event_name == 'workflow_dispatch' && github.event.inputs.terraform_action == 'apply') ||
+          github.event_name == 'schedule'
+        run: |
+          # Package Lambdas (if not already packaged)
+          cd ../../
+
+          # Ingestion Lambda
+          if [ ! -f packages/ingestion.zip ]; then
+            mkdir -p packages
+            cd src/lambdas/ingestion
+            zip -r ../../../packages/ingestion.zip . -x "*.pyc" -x "__pycache__/*"
+            cd ../../..
+          fi
+
+          # Analysis Lambda
+          if [ ! -f packages/analysis.zip ]; then
+            cd src/lambdas/analysis
+            zip -r ../../../packages/analysis.zip . -x "*.pyc" -x "__pycache__/*"
+            cd ../../..
+          fi
+
+          # Dashboard Lambda
+          if [ ! -f packages/dashboard.zip ]; then
+            cd src/lambdas/dashboard
+            zip -r ../../../packages/dashboard.zip . -x "*.pyc" -x "__pycache__/*"
+            cd ../../..
+          fi
+
+          # Upload to S3
+          aws s3 cp packages/ingestion.zip s3://sentiment-analyzer-lambda-packages-preprod/ingestion/lambda.zip
+          aws s3 cp packages/analysis.zip s3://sentiment-analyzer-lambda-packages-preprod/analysis/lambda.zip
+          aws s3 cp packages/dashboard.zip s3://sentiment-analyzer-lambda-packages-preprod/dashboard/lambda.zip
+
+  integration-tests:
+    name: Run Preprod Integration Tests
+    needs: terraform
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Run Preprod Integration Tests
+        env:
+          AWS_DEFAULT_REGION: us-east-1
+          ENVIRONMENT: preprod
+          DYNAMODB_TABLE: preprod-sentiment-items
+          SNS_TOPIC_ARN: ${{ secrets.PREPROD_SNS_TOPIC_ARN }}
+          NEWSAPI_SECRET_ARN: ${{ secrets.PREPROD_NEWSAPI_SECRET_ARN }}
+          API_KEY: ${{ secrets.PREPROD_DASHBOARD_API_KEY }}
+          WATCH_TAGS: AI,climate,economy
+          MODEL_VERSION: v1.0.0
+        run: |
+          # Run ONLY preprod integration tests (real AWS)
+          pytest tests/integration/test_*_preprod.py -v --tb=short
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: preprod-test-results
+          path: |
+            pytest-results.xml
+            coverage.xml
+          retention-days: 30
+
+  notify:
+    name: Notify Results
+    needs: [terraform, integration-tests]
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check test status
+        run: |
+          if [ "${{ needs.integration-tests.result }}" == "success" ]; then
+            echo "✅ Preprod validation PASSED - Ready for production deployment"
+            echo "::notice::Preprod integration tests passed. Infrastructure validated."
+          else
+            echo "❌ Preprod validation FAILED - Do NOT deploy to production"
+            echo "::error::Preprod integration tests failed. Fix issues before deploying to prod."
+            exit 1
+          fi
