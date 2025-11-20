@@ -177,6 +177,51 @@ Acceptance Criteria (serverless stack)
 
 
 7) Testing & Validation
+
+	Unit Tests vs Integration Tests — Critical Distinction
+	-------------------------------------------------------
+	PRINCIPLE: Unit tests mock externals; integration tests MUST use real dev infrastructure.
+
+	Unit Tests (tests/unit/)
+		- Mock ALL external dependencies (AWS services, APIs, databases)
+		- Use moto for AWS service mocking, unittest.mock for functions
+		- Run everywhere: local development, CI, pre-commit hooks
+		- Fast execution (milliseconds to seconds)
+		- Goal: Validate code logic in isolation without external dependencies
+
+	Integration Tests (tests/integration/)
+		- MUST use REAL dev environment Terraform-deployed resources
+		- NO mocking of infrastructure (DynamoDB tables, Lambda functions, SNS topics, SQS queues, S3 buckets)
+		- Run ONLY in CI with AWS credentials for dev environment
+		- Slower execution (seconds to minutes) due to real AWS calls
+		- Goal: Verify end-to-end data flow through ACTUAL production-like infrastructure
+
+	CRITICAL RULE: Integration test failures indicate dev environment or code problems, NOT test configuration problems.
+
+	When Integration Tests Fail:
+		1. DO NOT assume tests are using mocks incorrectly
+		2. DO NOT change Terraform to "match test mocks"
+		3. DO verify dev environment is deployed and matches Terraform (run `terraform plan`)
+		4. DO check deployed AWS resources match Terraform definitions (aws describe-table, aws lambda get-function, etc.)
+		5. DO identify whether Terraform, deployed resources, or code expectations are misaligned
+		6. DO fix root cause (Terraform config, deployment, or code) then re-test against dev
+
+	Rationale:
+		- Dev environment exists as a production-like testing ground
+		- Integration tests verify code works with ACTUAL AWS infrastructure behavior
+		- Mocking infrastructure defeats the purpose of integration testing
+		- "Works in CI with mocks" ≠ "Works in production with real AWS"
+		- GSI projection types, IAM permissions, capacity limits, and service quotas only surface in real AWS
+
+	Enforcement:
+		- Integration test directory (tests/integration/) uses real dev resources configured via environment variables
+		- CI workflow MUST have AWS credentials and point to dev environment (DYNAMODB_TABLE=dev-*, ENVIRONMENT=dev)
+		- Terraform MUST have dev workspace deployed before integration tests run
+		- Any `@mock_aws` decorators in integration tests are legacy or for test-specific fixtures only, NOT for infrastructure under test
+		- Code review MUST verify integration tests are not mocking the services being tested
+
+	Standard Tests
+	--------------
 	- Unit tests for core logic and schema validations.
 	- Integration test verifying end-to-end inference against a deterministic test fixture and asserting schema + performance (latency under a small synthetic load).
 	- Model evaluation: report precision/recall/F1 (or other chosen metrics) on a held-out test set and include baseline numbers in repo.
