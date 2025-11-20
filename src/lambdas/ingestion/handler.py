@@ -64,7 +64,6 @@ from src.lambdas.ingestion.config import ConfigurationError, get_config
 from src.lambdas.shared.dynamodb import get_table, put_item_if_not_exists
 from src.lambdas.shared.secrets import get_api_key
 from src.lib.deduplication import generate_source_id
-from src.lib.logging_utils import log_expected_warning
 from src.lib.metrics import (
     emit_metric,
     emit_metrics_batch,
@@ -193,8 +192,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
             except RateLimitError as e:
                 # Rate limited - log and continue with next tag
-                log_expected_warning(
-                    logger,
+                logger.warning(
                     f"Rate limited for tag {tag}",
                     extra={
                         "tag": tag,
@@ -355,8 +353,7 @@ def _process_article(
         source_id = generate_source_id(article)
     except ValueError as e:
         # Article lacks required fields - skip
-        log_expected_warning(
-            logger,
+        logger.warning(
             "Skipping article - cannot generate source_id",
             extra={"error": str(e)},
         )

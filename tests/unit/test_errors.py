@@ -245,7 +245,7 @@ class TestInternalError:
         assert body["code"] == "INTERNAL_ERROR"
         assert body["error"] == "Internal server error"
 
-    def test_internal_error_no_details_exposed(self):
+    def test_internal_error_no_details_exposed(self, caplog):
         """Test that internal error details are not exposed."""
         response = internal_error(
             "req-123",
@@ -256,11 +256,16 @@ class TestInternalError:
         # Details should NOT be in response (security)
         assert "details" not in body
 
+        # Verify expected error was logged
+        from tests.conftest import assert_error_logged
+
+        assert_error_logged(caplog, "Internal error details")
+
 
 class TestDatabaseError:
     """Tests for database_error convenience function."""
 
-    def test_database_error(self):
+    def test_database_error(self, caplog):
         """Test database error."""
         response = database_error("req-123", "put_item")
 
@@ -269,7 +274,12 @@ class TestDatabaseError:
         assert body["code"] == "DATABASE_ERROR"
         assert "put_item" in body["error"]
 
-    def test_database_error_with_details(self):
+        # Verify expected error was logged
+        from tests.conftest import assert_error_logged
+
+        assert_error_logged(caplog, "Database operation failed")
+
+    def test_database_error_with_details(self, caplog):
         """Test database error with details."""
         response = database_error(
             "req-123",
@@ -280,11 +290,16 @@ class TestDatabaseError:
         body = json.loads(response["body"])
         assert body["details"]["table"] == "sentiment-items"
 
+        # Verify expected error was logged
+        from tests.conftest import assert_error_logged
+
+        assert_error_logged(caplog, "Database operation failed")
+
 
 class TestSecretError:
     """Tests for secret_error convenience function."""
 
-    def test_secret_error(self):
+    def test_secret_error(self, caplog):
         """Test secret error."""
         response = secret_error("req-123", "dev/sentiment-analyzer/newsapi")
 
@@ -293,11 +308,16 @@ class TestSecretError:
         assert body["code"] == "SECRET_ERROR"
         assert body["details"]["secret_id"] == "dev/sentiment-analyzer/newsapi"
 
+        # Verify expected error was logged
+        from tests.conftest import assert_error_logged
+
+        assert_error_logged(caplog, "Failed to retrieve configuration")
+
 
 class TestModelError:
     """Tests for model_error convenience function."""
 
-    def test_model_error_default(self):
+    def test_model_error_default(self, caplog):
         """Test model error with default message."""
         response = model_error("req-123")
 
@@ -306,7 +326,12 @@ class TestModelError:
         assert body["code"] == "MODEL_ERROR"
         assert body["error"] == "Sentiment analysis failed"
 
-    def test_model_error_custom_message(self):
+        # Verify expected error was logged
+        from tests.conftest import assert_error_logged
+
+        assert_error_logged(caplog, "Sentiment analysis failed")
+
+    def test_model_error_custom_message(self, caplog):
         """Test model error with custom message."""
         response = model_error(
             "req-123",
@@ -317,6 +342,11 @@ class TestModelError:
         body = json.loads(response["body"])
         assert body["error"] == "Model loading failed"
         assert body["details"]["model_path"] == "/opt/model"
+
+        # Verify expected error was logged
+        from tests.conftest import assert_error_logged
+
+        assert_error_logged(caplog, "Model loading failed")
 
 
 class TestResponseFormat:

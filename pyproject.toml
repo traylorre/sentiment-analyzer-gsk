@@ -127,6 +127,7 @@ omit = [
     "*/__init__.py",
 ]
 branch = true
+relative_files = true
 
 [tool.coverage.report]
 # On-Call Note: Coverage below 80% will fail CI/CD pipeline

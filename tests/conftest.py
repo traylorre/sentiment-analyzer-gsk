@@ -10,12 +10,19 @@ For On-Call Engineers:
     2. Verify AWS env vars are set in fixtures
     3. Check moto version (moto==4.2.0)
 
+    If tests fail with "Unexpected ERROR/WARNING logs":
+    1. The test is catching a real issue - investigate the logs
+    2. If the log is expected, add marker: @pytest.mark.expect_errors("pattern")
+    3. See docs/TESTING_LESSONS_LEARNED.md for details
+
 For Developers:
     - Import fixtures by name in test files (pytest auto-discovers conftest.py)
     - All fixtures use moto mocks (no real AWS calls)
     - Add new shared fixtures here, test-specific fixtures in test files
+    - Use markers to declare expected logs: @pytest.mark.expect_errors("pattern")
 """
 
+import logging
 import os
 
 import pytest
@@ -123,3 +130,64 @@ def sample_pending_item():
         "tag": "climate",
         "ttl_timestamp": 1734444600,
     }
+
+
+# =============================================================================
+# Log Validation Helpers
+# =============================================================================
+#
+# Philosophy (see docs/TESTING_LESSONS_LEARNED.md):
+# - Production code logs normally (never test-aware)
+# - Tests explicitly assert on expected logs using caplog
+# - Helper functions reduce boilerplate
+#
+# The autouse fixture approach was attempted but doesn't work because
+# pytest clears caplog.record_tuples before fixture teardown runs.
+# Explicit assertions are the correct pytest pattern.
+
+
+def assert_error_logged(caplog, pattern: str):
+    """
+    Helper to assert an ERROR log was captured.
+
+    Args:
+        caplog: pytest caplog fixture
+        pattern: String pattern to search for in log messages
+
+    Raises:
+        AssertionError: If no ERROR log matches the pattern
+
+    Example:
+        def test_model_failure(caplog):
+            result = handler(bad_event, context)
+            assert result["statusCode"] == 500
+            assert_error_logged(caplog, "Model load error")
+    """
+    assert any(
+        pattern in record.message
+        for record in caplog.records
+        if record.levelno >= logging.ERROR
+    ), f"Expected ERROR log matching '{pattern}' not found"
+
+
+def assert_warning_logged(caplog, pattern: str):
+    """
+    Helper to assert a WARNING log was captured.
+
+    Args:
+        caplog: pytest caplog fixture
+        pattern: String pattern to search for in log messages
+
+    Raises:
+        AssertionError: If no WARNING log matches the pattern
+
+    Example:
+        def test_retry_behavior(caplog):
+            result = handler(flaky_event, context)
+            assert_warning_logged(caplog, "Retrying request")
+    """
+    assert any(
+        pattern in record.message
+        for record in caplog.records
+        if record.levelno == logging.WARNING
+    ), f"Expected WARNING log matching '{pattern}' not found"
