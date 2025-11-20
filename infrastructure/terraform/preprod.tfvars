@@ -16,7 +16,7 @@ tags = {
 
 # Lambda Configuration
 # Note: Same settings as prod to ensure accurate testing
-lambda_memory_mb = 512
+lambda_memory_mb       = 512
 lambda_timeout_seconds = 60
 
 # DynamoDB Configuration

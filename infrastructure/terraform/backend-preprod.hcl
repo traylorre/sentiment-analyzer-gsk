@@ -18,7 +18,7 @@
 # - Weekly automated integration test runs
 # - Troubleshooting production issues in safe environment
 
-bucket         = "sentiment-analyzer-terraform-state"
+bucket         = "sentiment-analyzer-terraform-state-218795110243"
 key            = "preprod/terraform.tfstate"
 region         = "us-east-1"
 encrypt        = true
