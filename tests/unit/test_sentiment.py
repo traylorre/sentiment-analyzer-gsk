@@ -16,14 +16,30 @@ For Developers:
     - Uses mocks to avoid loading actual model in tests
     - Test both happy path and error scenarios
     - Verify neutral detection for low-confidence results
+
+    Important: Tests mock the transformers module in sys.modules to avoid
+    requiring the 2GB transformers+torch installation locally.
 """
 
 import os
+import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.lambdas.analysis.sentiment import (
+# Create mock transformers module before importing sentiment module
+# This allows tests to run without the 2GB transformers+torch installation
+_mock_pipeline = MagicMock()
+_mock_transformers = MagicMock()
+_mock_transformers.pipeline = _mock_pipeline
+
+# Store original module if it exists (for CI where transformers is installed)
+_original_transformers = sys.modules.get("transformers")
+
+# Inject mock into sys.modules
+sys.modules["transformers"] = _mock_transformers
+
+from src.lambdas.analysis.sentiment import (  # noqa: E402
     InferenceError,
     ModelLoadError,
     analyze_sentiment,
@@ -38,6 +54,8 @@ from src.lambdas.analysis.sentiment import (
 def reset_model_cache():
     """Reset model cache before each test."""
     clear_model_cache()
+    # Reset the mock pipeline for each test
+    _mock_pipeline.reset_mock()
     yield
     clear_model_cache()
 
@@ -47,80 +65,77 @@ class TestLoadModel:
 
     def test_load_model_success(self):
         """Test successful model loading."""
-        with patch("transformers.pipeline") as mock_pipeline:
-            mock_instance = MagicMock()
-            mock_pipeline.return_value = mock_instance
+        mock_instance = MagicMock()
+        _mock_pipeline.return_value = mock_instance
 
-            result = load_model("/test/model/path")
+        result = load_model("/test/model/path")
 
-            assert result == mock_instance
-            mock_pipeline.assert_called_once_with(
-                "sentiment-analysis",
-                model="/test/model/path",
-                tokenizer="/test/model/path",
-                framework="pt",
-                device=-1,
-            )
+        assert result == mock_instance
+        _mock_pipeline.assert_called_once_with(
+            "sentiment-analysis",
+            model="/test/model/path",
+            tokenizer="/test/model/path",
+            framework="pt",
+            device=-1,
+        )
 
     def test_load_model_caching(self):
         """Test that model is cached after first load."""
-        with patch("transformers.pipeline") as mock_pipeline:
-            mock_instance = MagicMock()
-            mock_pipeline.return_value = mock_instance
+        mock_instance = MagicMock()
+        _mock_pipeline.return_value = mock_instance
 
-            # First load
-            result1 = load_model("/test/model/path")
-            # Second load
-            result2 = load_model("/test/model/path")
+        # First load
+        result1 = load_model("/test/model/path")
+        # Second load
+        result2 = load_model("/test/model/path")
 
-            # Should only call pipeline once (cached)
-            assert mock_pipeline.call_count == 1
-            assert result1 == result2
+        # Should only call pipeline once (cached)
+        assert _mock_pipeline.call_count == 1
+        assert result1 == result2
 
     def test_load_model_uses_env_var(self):
         """Test model path from environment variable."""
-        with patch("transformers.pipeline") as mock_pipeline:
-            mock_pipeline.return_value = MagicMock()
+        _mock_pipeline.return_value = MagicMock()
 
-            os.environ["MODEL_PATH"] = "/env/model/path"
-            try:
-                load_model()
-                mock_pipeline.assert_called_once()
-                call_args = mock_pipeline.call_args
-                assert call_args[1]["model"] == "/env/model/path"
-            finally:
-                del os.environ["MODEL_PATH"]
+        os.environ["MODEL_PATH"] = "/env/model/path"
+        try:
+            load_model()
+            _mock_pipeline.assert_called_once()
+            call_args = _mock_pipeline.call_args
+            assert call_args[1]["model"] == "/env/model/path"
+        finally:
+            del os.environ["MODEL_PATH"]
 
     def test_load_model_default_path(self):
         """Test default model path when no env var."""
-        with patch("transformers.pipeline") as mock_pipeline:
-            mock_pipeline.return_value = MagicMock()
+        _mock_pipeline.return_value = MagicMock()
 
-            # Ensure no MODEL_PATH env var
-            os.environ.pop("MODEL_PATH", None)
+        # Ensure no MODEL_PATH env var
+        os.environ.pop("MODEL_PATH", None)
 
-            load_model()
+        load_model()
 
-            call_args = mock_pipeline.call_args
-            assert call_args[1]["model"] == "/opt/model"
+        call_args = _mock_pipeline.call_args
+        assert call_args[1]["model"] == "/opt/model"
 
     def test_load_model_failure(self):
         """Test error handling when model load fails."""
-        with patch("transformers.pipeline") as mock_pipeline:
-            mock_pipeline.side_effect = Exception("Model not found")
+        _mock_pipeline.side_effect = Exception("Model not found")
 
-            with pytest.raises(ModelLoadError, match="Failed to load model"):
-                load_model("/bad/path")
+        with pytest.raises(ModelLoadError, match="Failed to load model"):
+            load_model("/bad/path")
+
+        # Reset side_effect for other tests
+        _mock_pipeline.side_effect = None
 
     def test_load_model_records_time(self):
         """Test that model load time is recorded."""
-        with patch("transformers.pipeline") as mock_pipeline:
-            mock_pipeline.return_value = MagicMock()
+        _mock_pipeline.return_value = MagicMock()
 
-            load_model("/test/path")
+        load_model("/test/path")
 
-            load_time = get_model_load_time_ms()
-            assert load_time >= 0
+        load_time = get_model_load_time_ms()
+        assert load_time >= 0
 
 
 class TestAnalyzeSentiment:
@@ -271,25 +286,23 @@ class TestModelCacheHelpers:
 
     def test_is_model_loaded_true_after_load(self):
         """Test is_model_loaded returns True after loading."""
-        with patch("transformers.pipeline") as mock_pipeline:
-            mock_pipeline.return_value = MagicMock()
+        _mock_pipeline.return_value = MagicMock()
 
-            load_model("/test/path")
+        load_model("/test/path")
 
-            assert is_model_loaded() is True
+        assert is_model_loaded() is True
 
     def test_clear_model_cache(self):
         """Test clearing model cache."""
-        with patch("transformers.pipeline") as mock_pipeline:
-            mock_pipeline.return_value = MagicMock()
+        _mock_pipeline.return_value = MagicMock()
 
-            load_model("/test/path")
-            assert is_model_loaded() is True
+        load_model("/test/path")
+        assert is_model_loaded() is True
 
-            clear_model_cache()
+        clear_model_cache()
 
-            assert is_model_loaded() is False
-            assert get_model_load_time_ms() == 0
+        assert is_model_loaded() is False
+        assert get_model_load_time_ms() == 0
 
     def test_get_model_load_time_zero_before_load(self):
         """Test load time is 0 before model is loaded."""
@@ -344,14 +357,15 @@ class TestErrorHandling:
 
     def test_model_load_error_preserves_cause(self):
         """Test ModelLoadError preserves original exception."""
-        with patch("transformers.pipeline") as mock_pipeline:
-            original_error = FileNotFoundError("Model files missing")
-            mock_pipeline.side_effect = original_error
+        original_error = FileNotFoundError("Model files missing")
+        _mock_pipeline.side_effect = original_error
 
-            with pytest.raises(ModelLoadError) as exc_info:
-                load_model("/bad/path")
+        with pytest.raises(ModelLoadError) as exc_info:
+            load_model("/bad/path")
 
-            assert exc_info.value.__cause__ is original_error
+        assert exc_info.value.__cause__ is original_error
+        # Reset side_effect for other tests
+        _mock_pipeline.side_effect = None
 
 
 class TestIntegrationScenarios:
@@ -359,31 +373,30 @@ class TestIntegrationScenarios:
 
     def test_full_analysis_flow(self):
         """Test complete flow from load to inference."""
-        with patch("transformers.pipeline") as mock_pipeline:
-            mock_instance = MagicMock()
-            mock_instance.return_value = [{"label": "POSITIVE", "score": 0.92}]
-            mock_pipeline.return_value = mock_instance
+        mock_instance = MagicMock()
+        mock_instance.return_value = [{"label": "POSITIVE", "score": 0.92}]
+        _mock_pipeline.return_value = mock_instance
 
-            # First call loads model
-            sentiment1, score1 = analyze_sentiment("Great product!")
+        # First call loads model
+        sentiment1, score1 = analyze_sentiment("Great product!")
 
-            # Second call uses cache
-            mock_instance.return_value = [{"label": "NEGATIVE", "score": 0.78}]
-            sentiment2, score2 = analyze_sentiment("Terrible service!")
+        # Second call uses cache
+        mock_instance.return_value = [{"label": "NEGATIVE", "score": 0.78}]
+        sentiment2, score2 = analyze_sentiment("Terrible service!")
 
-            assert sentiment1 == "positive"
-            assert score1 == 0.92
-            assert sentiment2 == "negative"
-            assert score2 == 0.78
+        assert sentiment1 == "positive"
+        assert score1 == 0.92
+        assert sentiment2 == "negative"
+        assert score2 == 0.78
 
-            # Model loaded only once
-            assert mock_pipeline.call_count == 1
+        # Model loaded only once
+        assert _mock_pipeline.call_count == 1
 
     def test_multiple_neutral_detections(self):
         """Test that low-confidence items are consistently neutral."""
         with patch("src.lambdas.analysis.sentiment.load_model") as mock_load:
-            mock_pipeline = MagicMock()
-            mock_load.return_value = mock_pipeline
+            mock_pipeline_instance = MagicMock()
+            mock_load.return_value = mock_pipeline_instance
 
             # Various low-confidence results
             test_cases = [
@@ -393,6 +406,6 @@ class TestIntegrationScenarios:
             ]
 
             for result in test_cases:
-                mock_pipeline.return_value = result
+                mock_pipeline_instance.return_value = result
                 sentiment, _ = analyze_sentiment("Test")
                 assert sentiment == "neutral"

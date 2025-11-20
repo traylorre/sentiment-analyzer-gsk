@@ -30,6 +30,8 @@ from typing import Any
 
 from boto3.dynamodb.conditions import Key
 
+from src.lib.logging_utils import log_expected_warning
+
 # Structured logging
 logger = logging.getLogger(__name__)
 
@@ -65,7 +67,8 @@ def calculate_sentiment_distribution(items: list[dict[str, Any]]) -> dict[str, i
             distribution[sentiment] += 1
         elif sentiment:
             # Log unexpected sentiment values
-            logger.warning(
+            log_expected_warning(
+                logger,
                 "Unexpected sentiment value",
                 extra={"sentiment": sentiment, "source_id": item.get("source_id")},
             )

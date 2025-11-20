@@ -31,6 +31,8 @@ import hashlib
 import logging
 from typing import Any
 
+from src.lib.logging_utils import log_expected_warning
+
 # Structured logging for CloudWatch
 logger = logging.getLogger(__name__)
 
@@ -118,7 +120,8 @@ def _get_hash_content(article: dict[str, Any]) -> str:
     published_at = article.get("publishedAt")
 
     if title and published_at:
-        logger.warning(
+        log_expected_warning(
+            logger,
             "Using title+publishedAt for deduplication (URL missing)",
             extra={"title": title[:50]},  # Truncate for logging
         )
@@ -267,7 +270,8 @@ def batch_deduplicate(
         try:
             source_id = generate_source_id(article)
         except ValueError as e:
-            logger.warning(
+            log_expected_warning(
+                logger,
                 "Skipping article - cannot generate source_id",
                 extra={"error": str(e)},
             )

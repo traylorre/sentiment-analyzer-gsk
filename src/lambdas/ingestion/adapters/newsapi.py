@@ -36,6 +36,8 @@ from typing import Any
 
 import requests
 
+from src.lib.logging_utils import log_expected_warning
+
 from .base import (
     AdapterError,
     AuthenticationError,
@@ -218,7 +220,8 @@ class NewsAPIAdapter(BaseAdapter):
                     retry_after = response.headers.get("Retry-After")
                     retry_seconds = int(retry_after) if retry_after else 3600
 
-                    logger.warning(
+                    log_expected_warning(
+                        logger,
                         "NewsAPI rate limited",
                         extra={
                             "status_code": 429,
@@ -232,7 +235,8 @@ class NewsAPIAdapter(BaseAdapter):
 
                 elif response.status_code >= 500:
                     # Server error - retry with backoff
-                    logger.warning(
+                    log_expected_warning(
+                        logger,
                         "NewsAPI server error, retrying",
                         extra={
                             "status_code": response.status_code,
@@ -256,7 +260,8 @@ class NewsAPIAdapter(BaseAdapter):
                     )
 
             except requests.exceptions.Timeout:
-                logger.warning(
+                log_expected_warning(
+                    logger,
                     "NewsAPI request timeout",
                     extra={"attempt": attempt + 1},
                 )

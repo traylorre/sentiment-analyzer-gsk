@@ -35,6 +35,8 @@ import logging
 import os
 from dataclasses import dataclass
 
+from src.lib.logging_utils import log_expected_warning
+
 # Structured logging
 logger = logging.getLogger(__name__)
 
@@ -209,7 +211,8 @@ def parse_watch_tags(tags_string: str) -> list[str]:
                 seen.add(tag)
                 unique_tags.append(tag)
 
-        logger.warning(
+        log_expected_warning(
+            logger,
             f"Duplicate tags removed: {len(tags) - len(unique_tags)} duplicates",
             extra={"original": tags, "cleaned": unique_tags},
         )
