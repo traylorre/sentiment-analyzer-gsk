@@ -61,12 +61,12 @@ resource "aws_dynamodb_table" "sentiment_items" {
   }
 
   # GSI 3: by_status
-  # Query pattern: Monitor pending items (operational dashboards)
+  # Query pattern: Dashboard displays recent items (needs all fields for display)
   global_secondary_index {
     name            = "by_status"
     hash_key        = "status"
     range_key       = "timestamp"
-    projection_type = "KEYS_ONLY" # Minimal storage for monitoring
+    projection_type = "ALL" # Dashboard needs all fields to display items
   }
 
   # TTL configuration (30-day auto-deletion)
