@@ -36,8 +36,22 @@ jobs:
             // Get PR details
             const pr = context.payload.pull_request;
             const prNumber = pr ? pr.number : context.payload.pull_request_review.pull_request.number;
+            const prAuthor = pr ? pr.user.login : context.payload.pull_request_review.pull_request.user.login;
 
-            // Get reviews
+            // Allow Dependabot PRs to skip manual approval (for unattended operation)
+            // These are auto-merged only after all CI checks pass
+            if (prAuthor === 'dependabot[bot]') {
+              core.info('✅ Dependabot PR - manual approval not required (CI checks still required)');
+              return;
+            }
+
+            // Allow repo owner's PRs to skip manual approval (solo project)
+            if (prAuthor === 'traylorre') {
+              core.info('✅ Repo owner PR - manual approval not required (CI checks still required)');
+              return;
+            }
+
+            // Get reviews for external contributors
             const { data: reviews } = await github.rest.pulls.listReviews({
               owner: context.repo.owner,
               repo: context.repo.repo,
