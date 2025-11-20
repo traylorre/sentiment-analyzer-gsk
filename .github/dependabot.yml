@@ -1,0 +1,86 @@
+# Dependabot Configuration
+# ========================
+#
+# Automatically creates PRs for dependency updates.
+# Essential for 1-year unattended operation.
+#
+# For On-Call Engineers:
+#   - Dependabot PRs appear weekly for each ecosystem
+#   - Review changelog/release notes before merging
+#   - CI must pass before merge
+#   - Security updates are prioritized
+#
+# For Developers:
+#   - PRs are auto-created for pip and GitHub Actions
+#   - Terraform updates require manual testing
+#   - Group minor/patch updates to reduce PR noise
+
+version: 2
+updates:
+  # Python dependencies (pip)
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/Los_Angeles"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "python"
+    # Group minor/patch updates together
+    groups:
+      minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    # Ignore major version bumps for critical packages (review manually)
+    ignore:
+      - dependency-name: "boto3"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "transformers"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "torch"
+        update-types: ["version-update:semver-major"]
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/Los_Angeles"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "github-actions"
+
+  # Terraform providers
+  - package-ecosystem: "terraform"
+    directory: "/infrastructure/terraform"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/Los_Angeles"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "infra"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "terraform"
+    # Be conservative with Terraform updates
+    ignore:
+      - dependency-name: "hashicorp/aws"
+        update-types: ["version-update:semver-major"]

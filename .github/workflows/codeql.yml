@@ -1,0 +1,64 @@
+# CodeQL Security Analysis
+# ========================
+#
+# GitHub's semantic code analysis for security vulnerabilities.
+# Catches complex issues that simple linters miss.
+#
+# For On-Call Engineers:
+#   If CodeQL finds issues:
+#   1. Review in Security tab → Code scanning alerts
+#   2. Assess severity (Critical/High/Medium/Low)
+#   3. Fix or dismiss with justification
+#   4. Critical issues should block deployment
+#
+# For Developers:
+#   - CodeQL analyzes Python code for security patterns
+#   - Results appear in PR checks and Security tab
+#   - False positives can be dismissed with comment
+
+name: CodeQL Analysis
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Run weekly on Sunday at 3am UTC
+    - cron: '0 3 * * 0'
+  workflow_dispatch:
+
+jobs:
+  analyze:
+    name: Analyze
+    runs-on: ubuntu-latest
+
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ['python']
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          # Use security-extended for more comprehensive scanning
+          queries: security-extended
+
+      # Autobuild attempts to build any compiled languages
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{matrix.language}}"
