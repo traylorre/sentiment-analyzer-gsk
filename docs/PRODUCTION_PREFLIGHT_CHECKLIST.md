@@ -65,6 +65,14 @@
 - [ ] Review Lambda execution roles for least privilege
 - [ ] CloudWatch metrics use namespace condition (TD-003 - acceptable)
 
+#### Branch Protection
+- [ ] Review GitHub branch protection rules: Settings → Branches → main
+  - See `docs/security/BRANCH-PROTECTION.md` for required settings
+- [ ] Verify required status checks include new security workflows:
+  - `Security Scan / Dependency Vulnerability Scan`
+  - `CodeQL Analysis / Analyze`
+- [ ] Confirm "Do not allow bypassing" is enabled
+
 ### 6. Monitoring & Alerting
 
 - [ ] CloudWatch alarms are configured for all Lambdas
