@@ -36,17 +36,11 @@ Security Notes:
 
 import json
 import logging
-import sys
 from enum import Enum
 from typing import Any
 
 # Structured logging
 logger = logging.getLogger(__name__)
-
-
-def _is_running_in_pytest() -> bool:
-    """Check if code is running inside pytest."""
-    return "pytest" in sys.modules
 
 
 class ErrorCode(str, Enum):
@@ -147,12 +141,8 @@ def error_response(
         body["details"] = details
 
     # Log the error
-    # When running in pytest, use DEBUG level for expected error responses
     if log_error:
-        if _is_running_in_pytest():
-            log_level = logging.DEBUG
-        else:
-            log_level = logging.ERROR if status_code >= 500 else logging.WARNING
+        log_level = logging.ERROR if status_code >= 500 else logging.WARNING
         logger.log(
             log_level,
             message,
@@ -327,11 +317,9 @@ def internal_error(
         Never expose internal error details to end users.
         Details are logged server-side only.
     """
-    # Log full details (debug when running in pytest to avoid log pollution)
+    # Log full details
     if details:
-        log_level = logging.DEBUG if _is_running_in_pytest() else logging.ERROR
-        logger.log(
-            log_level,
+        logger.error(
             f"Internal error details: {details}",
             extra={"request_id": request_id},
         )
