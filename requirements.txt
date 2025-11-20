@@ -34,4 +34,4 @@ requests==2.32.5
 pydantic==2.12.4
 
 # Logging - Structured JSON logs for CloudWatch
-python-json-logger==2.0.7
+python-json-logger==4.0.0
