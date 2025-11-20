@@ -118,7 +118,7 @@ class TestLoadModel:
         call_args = _mock_pipeline.call_args
         assert call_args[1]["model"] == "/opt/model"
 
-    def test_load_model_failure(self):
+    def test_load_model_failure(self, caplog):
         """Test error handling when model load fails."""
         _mock_pipeline.side_effect = Exception("Model not found")
 
@@ -127,6 +127,11 @@ class TestLoadModel:
 
         # Reset side_effect for other tests
         _mock_pipeline.side_effect = None
+
+        # Verify expected error was logged
+        from tests.conftest import assert_error_logged
+
+        assert_error_logged(caplog, "Failed to load model")
 
     def test_load_model_records_time(self):
         """Test that model load time is recorded."""
@@ -253,7 +258,7 @@ class TestAnalyzeSentiment:
             assert sentiment == "neutral"
             assert score == 0.5
 
-    def test_inference_failure(self):
+    def test_inference_failure(self, caplog):
         """Test error handling when inference fails."""
         with patch("src.lambdas.analysis.sentiment.load_model") as mock_load:
             mock_pipeline = MagicMock()
@@ -262,6 +267,11 @@ class TestAnalyzeSentiment:
 
             with pytest.raises(InferenceError, match="Sentiment inference failed"):
                 analyze_sentiment("Test text")
+
+        # Verify expected error was logged
+        from tests.conftest import assert_error_logged
+
+        assert_error_logged(caplog, "Inference failed")
 
     def test_label_case_insensitivity(self):
         """Test that label case is normalized."""
@@ -355,7 +365,7 @@ class TestErrorHandling:
 
         assert issubclass(InferenceError, SentimentError)
 
-    def test_model_load_error_preserves_cause(self):
+    def test_model_load_error_preserves_cause(self, caplog):
         """Test ModelLoadError preserves original exception."""
         original_error = FileNotFoundError("Model files missing")
         _mock_pipeline.side_effect = original_error
@@ -366,6 +376,11 @@ class TestErrorHandling:
         assert exc_info.value.__cause__ is original_error
         # Reset side_effect for other tests
         _mock_pipeline.side_effect = None
+
+        # Verify expected error was logged
+        from tests.conftest import assert_error_logged
+
+        assert_error_logged(caplog, "Failed to load model")
 
 
 class TestIntegrationScenarios:
