@@ -65,13 +65,21 @@
 - [ ] Review Lambda execution roles for least privilege
 - [ ] CloudWatch metrics use namespace condition (TD-003 - acceptable)
 
-#### Branch Protection
-- [ ] Review GitHub branch protection rules: Settings → Branches → main
+#### Branch Protection ✅ CONFIGURED
+- [x] Review GitHub branch protection rules: Settings → Branches → main
   - See `docs/security/BRANCH-PROTECTION.md` for required settings
-- [ ] Verify required status checks include new security workflows:
+- [x] Verify required status checks include all CI workflows:
+  - `Test / test`
+  - `Lint / lint`
   - `Security Scan / Dependency Vulnerability Scan`
   - `CodeQL Analysis / Analyze`
-- [ ] Confirm "Do not allow bypassing" is enabled
+- [x] Confirm "Do not allow bypassing" is enabled
+- [x] Dependabot auto-merge requires these status checks to pass:
+  - Auto-merge will NOT proceed if any check fails
+  - This is your safety net for dependency updates
+
+> **Note**: Branch protection configured 2025-11-19. Dependabot PRs will
+> auto-merge only after all required status checks pass.
 
 ### 6. Monitoring & Alerting
 
