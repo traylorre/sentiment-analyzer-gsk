@@ -300,11 +300,12 @@ aws lambda list-functions \
 python -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
-# Install development dependencies (when available)
-# pip install -r requirements-dev.txt
+# Install development dependencies
+pip install -r requirements-dev.txt
 
-# Install pre-commit hooks (when configured)
-# pre-commit install
+# Install git hooks (runs tests before push, formatting before commit)
+pre-commit install
+pre-commit install --hook-type pre-push
 ```
 
 ---
@@ -381,16 +382,37 @@ sentiment-analyzer-gsk/
 
 ## Development Workflow
 
-### Pre-commit Hooks
+### Git Hooks (Pre-commit Framework)
 
-Install the pre-commit hook to ensure code quality matches CI/CD:
+This project uses the [pre-commit](https://pre-commit.com/) framework for git hooks.
+
+**One-time setup after cloning:**
 
 ```bash
-cp scripts/pre-commit .git/hooks/pre-commit
-chmod +x .git/hooks/pre-commit
+pip install pre-commit
+pre-commit install
+pre-commit install --hook-type pre-push
 ```
 
-This runs black, ruff, and terraform fmt on staged files before each commit.
+**What happens automatically:**
+
+- **On commit**: Formatting (black), linting (ruff), Terraform fmt, security checks
+- **On push**: Full test suite runs before code is pushed
+
+**Manual commands:**
+
+```bash
+# Run all hooks on all files
+pre-commit run --all-files
+
+# Update hooks to latest versions
+pre-commit autoupdate
+
+# Skip hooks (NOT recommended)
+git commit --no-verify
+```
+
+This ensures code quality before it reaches CI/CD, saving time and preventing failures.
 
 ### Standard Workflow for Contributors
 

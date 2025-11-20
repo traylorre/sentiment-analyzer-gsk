@@ -1,0 +1,113 @@
+# Pre-commit Configuration
+# ========================
+#
+# Industry-standard git hooks for code quality and testing.
+#
+# Installation:
+#   pip install pre-commit
+#   pre-commit install
+#   pre-commit install --hook-type pre-push
+#
+# Usage:
+#   - Hooks run automatically on commit (formatting/linting) and push (tests)
+#   - Skip hooks: git commit --no-verify (NOT recommended)
+#   - Run manually: pre-commit run --all-files
+#
+# For On-Call Engineers:
+#   If hooks fail in CI but not locally:
+#   1. Run: pre-commit autoupdate
+#   2. Run: pre-commit run --all-files
+#   3. Check Python/Terraform versions match CI
+#
+# For Developers:
+#   - Add pre-commit to requirements-dev.txt
+#   - Run pre-commit install after cloning repo
+#   - Hooks catch issues before they reach CI
+
+# Default hook types to install
+default_install_hook_types: [pre-commit, pre-push]
+
+# Default stages for hooks
+default_stages: [commit]
+
+repos:
+  # Standard pre-commit hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: \.md$
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-added-large-files
+        args: [--maxkb=1000]
+      - id: check-merge-conflict
+      - id: debug-statements
+      - id: check-json
+      - id: check-toml
+
+  # Python code formatter
+  - repo: https://github.com/psf/black
+    rev: 23.11.0
+    hooks:
+      - id: black
+        language_version: python3.11
+
+  # Python linter (replaces flake8, isort, bandit)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.6
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  # Terraform formatter
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.83.6
+    hooks:
+      - id: terraform_fmt
+        args:
+          - --args=-recursive
+
+  # Security checks - detect hardcoded secrets
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.4.0
+    hooks:
+      - id: detect-secrets
+        args: [--baseline, .secrets.baseline]
+        exclude: >
+          (?x)^(
+            tests/.*|
+            \.secrets\.baseline
+          )$
+
+  # Local hooks for project-specific checks
+  - repo: local
+    hooks:
+      # Run pytest on push only (not on every commit)
+      - id: pytest
+        name: pytest
+        entry: python -m pytest tests/ -x --tb=short -q
+        language: system
+        types: [python]
+        pass_filenames: false
+        always_run: true
+        stages: [push]
+
+      # Type checking (optional - can be slow)
+      - id: mypy
+        name: mypy
+        entry: python -m mypy src/ --ignore-missing-imports
+        language: system
+        types: [python]
+        pass_filenames: false
+        always_run: true
+        stages: [manual]  # Run with: pre-commit run mypy --hook-stage manual
+
+# CI Integration:
+# In GitHub Actions, add:
+#   - name: Run pre-commit
+#     run: pre-commit run --all-files
+#
+# This ensures CI and local hooks are always in sync.
