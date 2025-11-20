@@ -5,15 +5,26 @@
 # Essential for 1-year unattended operation.
 #
 # For On-Call Engineers:
-#   - Dependabot PRs appear weekly for each ecosystem
-#   - Review changelog/release notes before merging
-#   - CI must pass before merge
-#   - Security updates are prioritized
+#   - Security updates: Created daily, auto-merged if checks pass
+#   - Regular updates: Created weekly (Mondays), auto-merged if minor/patch
+#   - Major updates: Require manual review (commented on PR)
+#
+#   If PRs are piling up:
+#   1. Check if CI is failing (tests, lint, security)
+#   2. Review any major version updates
+#   3. Check for dependency conflicts
 #
 # For Developers:
-#   - PRs are auto-created for pip and GitHub Actions
+#   - PRs are auto-created and auto-merged via dependabot-auto-merge.yml
+#   - Branch protection required: tests, lint, security must pass
 #   - Terraform updates require manual testing
 #   - Group minor/patch updates to reduce PR noise
+#
+# Auto-Merge Behavior:
+#   - Patch updates (1.0.0 → 1.0.1): Auto-merged
+#   - Minor updates (1.0.0 → 1.1.0): Auto-merged
+#   - Major updates (1.0.0 → 2.0.0): Manual review required
+#   - Security updates: Expedited, auto-merged
 
 version: 2
 updates:
@@ -32,9 +43,38 @@ updates:
     labels:
       - "dependencies"
       - "python"
-    # Group minor/patch updates together
+    # Group updates to reduce PR noise
     groups:
-      minor-and-patch:
+      # AWS SDK updates together
+      aws-sdk:
+        patterns:
+          - "boto3"
+          - "botocore"
+          - "moto"
+        update-types:
+          - "minor"
+          - "patch"
+      # Testing framework updates together
+      testing:
+        patterns:
+          - "pytest*"
+          - "moto"
+          - "responses"
+          - "coverage"
+        update-types:
+          - "minor"
+          - "patch"
+      # Code quality tools together
+      code-quality:
+        patterns:
+          - "black"
+          - "ruff"
+          - "pre-commit"
+        update-types:
+          - "minor"
+          - "patch"
+      # All other minor/patch updates
+      other-minor-patch:
         patterns:
           - "*"
         update-types:
