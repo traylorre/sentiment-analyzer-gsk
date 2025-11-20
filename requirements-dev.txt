@@ -31,6 +31,7 @@ responses==0.24.0
 # Code Quality
 black==23.11.0          # Code formatter
 ruff==0.1.6             # Fast linter (replaces flake8, isort)
+pre-commit==3.6.0       # Git hooks framework
 
 # Type Checking (optional but recommended)
 mypy==1.7.1

@@ -34,6 +34,7 @@ from src.lambdas.ingestion.handler import (
     _process_article,
     lambda_handler,
 )
+from src.lambdas.shared.secrets import clear_cache
 
 
 @pytest.fixture
@@ -853,6 +854,10 @@ class TestErrorHandling:
     @mock_aws
     def test_secret_not_found(self, env_vars, mock_context, eventbridge_event):
         """Test handler when secret is not found."""
+        # Clear secrets cache to ensure we test the actual missing secret scenario
+        # Previous tests may have cached a valid secret
+        clear_cache()
+
         # Setup DynamoDB but not secret
         dynamodb = boto3.client("dynamodb", region_name="us-east-1")
         dynamodb.create_table(
