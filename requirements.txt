@@ -17,21 +17,21 @@ botocore==1.34.0
 # ML/NLP - DistilBERT sentiment analysis
 # Note: torch is large (~2GB); Lambda layer built separately
 # See infrastructure/scripts/build-model-layer.sh
-transformers==4.36.0
-torch==2.1.0
+transformers==4.57.1
+torch==2.9.1
 
 # Web Framework - Dashboard Lambda
 # FastAPI for endpoints, Mangum for Lambda adapter
-fastapi==0.104.0
-mangum==0.17.0
-uvicorn==0.24.0  # Local development only
+fastapi==0.121.3
+mangum==0.19.0
+uvicorn==0.38.0  # Local development only
 sse-starlette==1.8.2  # Server-Sent Events for real-time updates
 
 # HTTP Client - NewsAPI adapter
-requests==2.31.0
+requests==2.32.5
 
 # Data Validation - Input/output schemas
-pydantic==2.5.3
+pydantic==2.12.4
 
 # Logging - Structured JSON logs for CloudWatch
 python-json-logger==2.0.7
