@@ -49,6 +49,11 @@ permissions:
   id-token: write  # For OIDC if configured
   actions: write   # For artifact management
 
+# Prevent concurrent preprod deployments to avoid Terraform state conflicts
+concurrency:
+  group: deploy-preprod
+  cancel-in-progress: false  # Wait for current deployment to finish
+
 jobs:
   # ========================================================================
   # JOB 1: Build Lambda Packages (Build Once, Deploy Everywhere)

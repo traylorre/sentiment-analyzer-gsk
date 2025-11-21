@@ -49,6 +49,12 @@ permissions:
   id-token: write
   actions: read
 
+# Prevent concurrent production deployments to avoid Terraform state conflicts
+# Both production and production-auto use the same concurrency group
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false  # Wait for current deployment to finish
+
 jobs:
   # ========================================================================
   # JOB 0: Check if Preprod Validation Passed
