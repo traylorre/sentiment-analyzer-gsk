@@ -26,12 +26,12 @@ variable "watch_tags" {
 }
 
 variable "model_version" {
-  description = "Sentiment model version"
+  description = "Sentiment model version (semantic version like v1.0.0 or git SHA like a1b2c3d)"
   type        = string
   default     = "v1.0.0"
   validation {
-    condition     = can(regex("^v\\d+\\.\\d+\\.\\d+$", var.model_version))
-    error_message = "Model version must follow semantic versioning (e.g., v1.0.0)."
+    condition     = can(regex("^v\\d+\\.\\d+\\.\\d+$", var.model_version)) || can(regex("^[0-9a-f]{7}$", var.model_version))
+    error_message = "Model version must be semantic versioning (e.g., v1.0.0) or git SHA (e.g., a1b2c3d)."
   }
 }
 
