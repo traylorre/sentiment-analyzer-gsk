@@ -64,31 +64,39 @@ module "dynamodb" {
 # ===================================================================
 
 # S3 bucket for Lambda deployment packages
-# Note: This should be created before deploying Lambdas
-resource "aws_s3_bucket" "lambda_deployments" {
-  bucket = "${var.environment}-sentiment-lambda-deployments"
-
-  tags = {
-    Name = "${var.environment}-sentiment-lambda-deployments"
-  }
-}
-
-resource "aws_s3_bucket_versioning" "lambda_deployments" {
-  bucket = aws_s3_bucket.lambda_deployments.id
-  versioning_configuration {
-    status = "Enabled"
-  }
-}
-
-# Block public access to Lambda deployment bucket
-resource "aws_s3_bucket_public_access_block" "lambda_deployments" {
-  bucket = aws_s3_bucket.lambda_deployments.id
-
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
+# BOOTSTRAP INFRASTRUCTURE: This bucket must be created manually before deployment.
+# The promotion pipeline uploads Lambda packages to S3 *before* Terraform runs,
+# so the bucket cannot be managed by Terraform.
+#
+# Manual creation (one-time setup):
+#   aws s3api create-bucket --bucket preprod-sentiment-lambda-deployments --region us-east-1
+#   aws s3api put-bucket-versioning --bucket preprod-sentiment-lambda-deployments --versioning-configuration Status=Enabled
+#   aws s3api put-bucket-public-access-block --bucket preprod-sentiment-lambda-deployments --block-public-acls=true --block-public-policy=true --ignore-public-acls=true --restrict-public-buckets=true
+#
+# resource "aws_s3_bucket" "lambda_deployments" {
+#   bucket = "${var.environment}-sentiment-lambda-deployments"
+#
+#   tags = {
+#     Name = "${var.environment}-sentiment-lambda-deployments"
+#   }
+# }
+#
+# resource "aws_s3_bucket_versioning" "lambda_deployments" {
+#   bucket = aws_s3_bucket.lambda_deployments.id
+#   versioning_configuration {
+#     status = "Enabled"
+#   }
+# }
+#
+# # Block public access to Lambda deployment bucket
+# resource "aws_s3_bucket_public_access_block" "lambda_deployments" {
+#   bucket = aws_s3_bucket.lambda_deployments.id
+#
+#   block_public_acls       = true
+#   block_public_policy     = true
+#   ignore_public_acls      = true
+#   restrict_public_buckets = true
+# }
 
 # Lambda naming
 locals {
@@ -109,7 +117,7 @@ module "ingestion_lambda" {
   description   = "Fetches articles from NewsAPI and stores in DynamoDB"
   iam_role_arn  = module.iam.ingestion_lambda_role_arn
   handler       = "handler.lambda_handler"
-  s3_bucket     = aws_s3_bucket.lambda_deployments.id
+  s3_bucket     = "${var.environment}-sentiment-lambda-deployments"
   s3_key        = "ingestion/lambda.zip"
 
   # Resource configuration per task spec
@@ -153,7 +161,7 @@ module "analysis_lambda" {
   description   = "Performs sentiment analysis using DistilBERT model"
   iam_role_arn  = module.iam.analysis_lambda_role_arn
   handler       = "handler.lambda_handler"
-  s3_bucket     = aws_s3_bucket.lambda_deployments.id
+  s3_bucket     = "${var.environment}-sentiment-lambda-deployments"
   s3_key        = "analysis/lambda.zip"
 
   # Resource configuration per task spec
@@ -203,7 +211,7 @@ module "dashboard_lambda" {
   description   = "Serves dashboard UI and API endpoints"
   iam_role_arn  = module.iam.dashboard_lambda_role_arn
   handler       = "handler.lambda_handler"
-  s3_bucket     = aws_s3_bucket.lambda_deployments.id
+  s3_bucket     = "${var.environment}-sentiment-lambda-deployments"
   s3_key        = "dashboard/lambda.zip"
 
   # Resource configuration per task spec
@@ -400,7 +408,7 @@ output "dashboard_function_url" {
 
 output "lambda_deployment_bucket" {
   description = "S3 bucket for Lambda deployment packages"
-  value       = aws_s3_bucket.lambda_deployments.id
+  value       = "${var.environment}-sentiment-lambda-deployments"
 }
 
 # EventBridge outputs
