@@ -1,11 +1,11 @@
 # DynamoDB Module Variables
 
 variable "environment" {
-  description = "Environment name (dev or prod)"
+  description = "Environment name (dev, preprod, or prod)"
   type        = string
   validation {
-    condition     = contains(["dev", "prod"], var.environment)
-    error_message = "Environment must be either 'dev' or 'prod'."
+    condition     = contains(["dev", "preprod", "prod"], var.environment)
+    error_message = "Environment must be one of: dev, preprod, prod."
   }
 }
 
