@@ -70,16 +70,16 @@ class TestDashboardE2E:
         Verifies:
         - Status code is 200
         - Response contains status, table name, environment
-        - DynamoDB connectivity to REAL dev table is tested
+        - DynamoDB connectivity to REAL preprod table is tested
         """
         response = client.get("/health")
 
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "healthy"
-        # Table name should be from environment (e.g., dev-sentiment-items)
+        # Table name should be from environment (e.g., preprod-sentiment-items)
         assert "sentiment-items" in data["table"]
-        assert data["environment"] in ["dev", "test"]
+        assert data["environment"] in ["dev", "test", "preprod"]
 
     def test_metrics_response_schema(self, client, auth_headers):
         """
@@ -298,10 +298,10 @@ class TestDashboardE2E:
         """
         Integration: Empty results return zero counts gracefully.
 
-        Tests with time window that likely has no data (168 hours = 1 week).
+        Tests with time window that likely has no data.
         """
-        # Query with very restrictive time window
-        response = client.get("/api/metrics?hours=0.001", headers=auth_headers)
+        # Query with very restrictive time window (minimum valid: 0.01 hours = 36 seconds)
+        response = client.get("/api/metrics?hours=0.01", headers=auth_headers)
 
         assert response.status_code == 200
         data = response.json()
