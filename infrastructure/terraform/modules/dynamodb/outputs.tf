@@ -31,13 +31,13 @@ output "gsi_by_status_name" {
 }
 
 output "backup_vault_arn" {
-  description = "ARN of the backup vault"
-  value       = aws_backup_vault.dynamodb.arn
+  description = "ARN of the backup vault (empty if backups disabled)"
+  value       = var.enable_backup ? aws_backup_vault.dynamodb[0].arn : ""
 }
 
 output "backup_plan_id" {
-  description = "ID of the backup plan"
-  value       = aws_backup_plan.dynamodb_daily.id
+  description = "ID of the backup plan (empty if backups disabled)"
+  value       = var.enable_backup ? aws_backup_plan.dynamodb_daily[0].id : ""
 }
 
 output "cloudwatch_alarm_user_errors_arn" {
