@@ -1,0 +1,89 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ProdResourcesOnly",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:*",
+        "lambda:*",
+        "s3:*",
+        "sns:*",
+        "sqs:*",
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:DescribeSecret",
+        "secretsmanager:CreateSecret",
+        "secretsmanager:UpdateSecret",
+        "secretsmanager:DeleteSecret",
+        "secretsmanager:PutSecretValue",
+        "secretsmanager:TagResource",
+        "events:*",
+        "iam:*",
+        "logs:*",
+        "cloudwatch:*"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:*:*:table/prod-*",
+        "arn:aws:lambda:*:*:function:prod-*",
+        "arn:aws:lambda:*:*:function:prod-*:*",
+        "arn:aws:s3:::*-prod-*",
+        "arn:aws:s3:::*-prod-*/*",
+        "arn:aws:sns:*:*:prod-*",
+        "arn:aws:sqs:*:*:prod-*",
+        "arn:aws:secretsmanager:*:*:secret:prod/*",
+        "arn:aws:secretsmanager:*:*:secret:prod/*-*",
+        "arn:aws:events:*:*:rule/prod-*",
+        "arn:aws:iam::*:role/prod-*",
+        "arn:aws:iam::*:policy/prod-*",
+        "arn:aws:logs:*:*:log-group:/aws/lambda/prod-*",
+        "arn:aws:logs:*:*:log-group:/aws/lambda/prod-*:*",
+        "arn:aws:cloudwatch:*:*:alarm:prod-*"
+      ]
+    },
+    {
+      "Sid": "SecretsManagerGlobalActions",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:ListSecrets"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "TerraformStateAccess",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:ListBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::sentiment-analyzer-tfstate-*",
+        "arn:aws:s3:::sentiment-analyzer-tfstate-*/prod/*"
+      ]
+    },
+    {
+      "Sid": "TerraformLockAccess",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:DeleteItem",
+        "dynamodb:DescribeTable"
+      ],
+      "Resource": "arn:aws:dynamodb:*:*:table/terraform-state-lock-prod"
+    },
+    {
+      "Sid": "DenyPreprodResources",
+      "Effect": "Deny",
+      "Action": "*",
+      "Resource": [
+        "arn:aws:dynamodb:*:*:table/preprod-*",
+        "arn:aws:lambda:*:*:function:preprod-*",
+        "arn:aws:s3:::*-preprod-*",
+        "arn:aws:s3:::*-preprod-*/*",
+        "arn:aws:secretsmanager:*:*:secret:preprod/*",
+        "arn:aws:iam::*:role/preprod-*"
+      ]
+    }
+  ]
+}
