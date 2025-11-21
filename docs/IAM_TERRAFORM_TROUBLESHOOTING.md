@@ -569,9 +569,9 @@ This would be more complex but eliminate manual bucket creation.
 **Problem:**
 - Error: `Insufficient privileges to create a backup vault. Creating a backup vault requires backup-storage and KMS permissions`
 - Persists despite adding extensive KMS permissions (CreateKey, CreateGrant, Encrypt, Decrypt, GenerateDataKey, etc.)
-- Added 7 policy versions trying different permission combinations
+- Added 10+ policy versions trying different permission combinations
 
-**Root Cause (Under Investigation):**
+**Root Cause (Resolved via Workaround):**
 The error message mentions "backup-storage" which may be:
 1. A separate AWS service/API namespace we haven't granted
 2. A permission on the KMS key itself (resource-based policy)
@@ -580,78 +580,47 @@ The error message mentions "backup-storage" which may be:
 
 **Attempted Solutions:**
 - ✅ Added KMS permissions: CreateKey, DescribeKey, CreateAlias, DeleteAlias, GetKeyPolicy, PutKeyPolicy, EnableKeyRotation, TagResource, UntagResource, ListAliases, ListKeys
-- ✅ Added KMS grant permissions: CreateGrant, ListGrants, RevokeGrant
-- ✅ Added KMS encryption permissions: Encrypt, Decrypt, GenerateDataKey
+- ✅ Added KMS grant permissions via ViaService condition: CreateGrant, ListGrants with `kms:ViaService` for backup.amazonaws.com
+- ✅ Added backup-storage:* wildcard permission based on AWS managed policies
 - ✅ Added service-linked role creation: `iam:CreateServiceLinkedRole` with condition for `backup.amazonaws.com`
 - ✅ Added comprehensive Backup permissions: CreateBackupVault, DeleteBackupVault, DescribeBackupVault, PutBackupVaultAccessPolicy, etc.
-- ❌ Still failing with same error
+- ❌ Still failing with same error through policy v10
 
-**Current IAM Policy (v7):**
-```json
-{
-  "Sid": "KMSForBackup",
-  "Effect": "Allow",
-  "Action": [
-    "kms:CreateKey", "kms:DescribeKey", "kms:CreateAlias", "kms:DeleteAlias",
-    "kms:GetKeyPolicy", "kms:PutKeyPolicy", "kms:EnableKeyRotation",
-    "kms:TagResource", "kms:UntagResource", "kms:ListAliases", "kms:ListKeys",
-    "kms:CreateGrant", "kms:ListGrants", "kms:RevokeGrant",
-    "kms:Encrypt", "kms:Decrypt", "kms:GenerateDataKey"
-  ],
-  "Resource": "*"
-},
-{
-  "Sid": "BackupAccess",
-  "Effect": "Allow",
-  "Action": [
-    "backup:CreateBackupVault", "backup:DeleteBackupVault",
-    "backup:DescribeBackupVault", "backup:PutBackupVaultAccessPolicy",
-    "backup:DeleteBackupVaultAccessPolicy", "backup:GetBackupVaultAccessPolicy",
-    "backup:CreateBackupPlan", "backup:DeleteBackupPlan", "backup:GetBackupPlan",
-    "backup:CreateBackupSelection", "backup:DeleteBackupSelection",
-    "backup:ListTags", "backup:TagResource", "backup:UntagResource"
-  ],
-  "Resource": [
-    "arn:aws:backup:us-east-1:218795110243:backup-vault:preprod-*",
-    "arn:aws:backup:us-east-1:218795110243:backup-plan:*"
-  ]
-},
-{
-  "Sid": "IAMServiceLinkedRoles",
-  "Effect": "Allow",
-  "Action": "iam:CreateServiceLinkedRole",
-  "Resource": "arn:aws:iam::218795110243:role/aws-service-role/*",
-  "Condition": {
-    "StringLike": {
-      "iam:AWSServiceName": "backup.amazonaws.com"
-    }
-  }
+**Pragmatic Solution (Implemented):**
+Made AWS Backup optional for preprod environment via `enable_backup` variable:
+
+```hcl
+# modules/dynamodb/variables.tf
+variable "enable_backup" {
+  description = "Enable AWS Backup for DynamoDB table (disable for environments with IAM limitations)"
+  type        = bool
+  default     = true
+}
+
+# infrastructure/terraform/main.tf
+module "dynamodb" {
+  source = "./modules/dynamodb"
+
+  environment   = var.environment
+  aws_region    = var.aws_region
+  enable_backup = var.environment == "preprod" ? false : true
 }
 ```
 
+All backup resources use conditional creation with `count = var.enable_backup ? 1 : 0`.
+
 **Why AWS Backup Matters:**
-- **Critical for disaster recovery**: DynamoDB table (`preprod-sentiment-items`) stores all sentiment analysis results
+- **Critical for disaster recovery**: DynamoDB table stores all sentiment analysis results
 - **30-day retention**: Configured for daily backups with point-in-time recovery
 - **Production requirement**: Essential for data durability and compliance
-- **Preprod testing**: Need to validate backup/restore procedures before production
+- **Preprod trade-off**: Backups disabled to unblock deployment (testing environment, acceptable risk)
 
-**Next Steps to Try:**
-1. Search AWS documentation for "backup-storage" permission namespace
-2. Check if Backup vault creation requires a pre-existing KMS key with specific key policy
-3. Investigate whether the backup service role needs `iam:PassRole` permission
-4. Consider temporarily disabling AWS Backup to unblock preprod deployment, then debug separately
-5. Check if there's a global service-linked role that needs to be created first
+**Future Work:**
+- Re-investigate IAM permissions once preprod is stable
+- Re-enable backups for preprod after resolving permission mystery
+- Consider using AWS-managed default encryption keys instead of custom KMS keys
 
-**Temporary Workaround (If Needed):**
-Comment out AWS Backup resources in `modules/dynamodb/main.tf` to unblock preprod:
-```hcl
-# Temporarily disabled - debugging IAM permissions
-# resource "aws_backup_vault" "dynamodb" { ... }
-# resource "aws_backup_plan" "dynamodb_daily" { ... }
-# resource "aws_backup_selection" "dynamodb" { ... }
-```
-
-**Reference:** Workflow runs 19560934089, 19562636370, 19563070049, 19563207981
+**Reference:** Workflow runs 19560934089 through 19566434595, PR #25
 
 ### 9. Secrets Manager Recovery Window Issue
 
