@@ -564,6 +564,120 @@ This would be more complex but eliminate manual bucket creation.
 
 **Reference:** Workflow run 19561400519
 
+### 8. AWS Backup Vault Permissions - "backup-storage" Mystery
+
+**Problem:**
+- Error: `Insufficient privileges to create a backup vault. Creating a backup vault requires backup-storage and KMS permissions`
+- Persists despite adding extensive KMS permissions (CreateKey, CreateGrant, Encrypt, Decrypt, GenerateDataKey, etc.)
+- Added 7 policy versions trying different permission combinations
+
+**Root Cause (Under Investigation):**
+The error message mentions "backup-storage" which may be:
+1. A separate AWS service/API namespace we haven't granted
+2. A permission on the KMS key itself (resource-based policy)
+3. A requirement for the Backup service-linked role to have additional permissions
+4. A permission that needs to be granted via `iam:PassRole` to the backup service
+
+**Attempted Solutions:**
+- ✅ Added KMS permissions: CreateKey, DescribeKey, CreateAlias, DeleteAlias, GetKeyPolicy, PutKeyPolicy, EnableKeyRotation, TagResource, UntagResource, ListAliases, ListKeys
+- ✅ Added KMS grant permissions: CreateGrant, ListGrants, RevokeGrant
+- ✅ Added KMS encryption permissions: Encrypt, Decrypt, GenerateDataKey
+- ✅ Added service-linked role creation: `iam:CreateServiceLinkedRole` with condition for `backup.amazonaws.com`
+- ✅ Added comprehensive Backup permissions: CreateBackupVault, DeleteBackupVault, DescribeBackupVault, PutBackupVaultAccessPolicy, etc.
+- ❌ Still failing with same error
+
+**Current IAM Policy (v7):**
+```json
+{
+  "Sid": "KMSForBackup",
+  "Effect": "Allow",
+  "Action": [
+    "kms:CreateKey", "kms:DescribeKey", "kms:CreateAlias", "kms:DeleteAlias",
+    "kms:GetKeyPolicy", "kms:PutKeyPolicy", "kms:EnableKeyRotation",
+    "kms:TagResource", "kms:UntagResource", "kms:ListAliases", "kms:ListKeys",
+    "kms:CreateGrant", "kms:ListGrants", "kms:RevokeGrant",
+    "kms:Encrypt", "kms:Decrypt", "kms:GenerateDataKey"
+  ],
+  "Resource": "*"
+},
+{
+  "Sid": "BackupAccess",
+  "Effect": "Allow",
+  "Action": [
+    "backup:CreateBackupVault", "backup:DeleteBackupVault",
+    "backup:DescribeBackupVault", "backup:PutBackupVaultAccessPolicy",
+    "backup:DeleteBackupVaultAccessPolicy", "backup:GetBackupVaultAccessPolicy",
+    "backup:CreateBackupPlan", "backup:DeleteBackupPlan", "backup:GetBackupPlan",
+    "backup:CreateBackupSelection", "backup:DeleteBackupSelection",
+    "backup:ListTags", "backup:TagResource", "backup:UntagResource"
+  ],
+  "Resource": [
+    "arn:aws:backup:us-east-1:218795110243:backup-vault:preprod-*",
+    "arn:aws:backup:us-east-1:218795110243:backup-plan:*"
+  ]
+},
+{
+  "Sid": "IAMServiceLinkedRoles",
+  "Effect": "Allow",
+  "Action": "iam:CreateServiceLinkedRole",
+  "Resource": "arn:aws:iam::218795110243:role/aws-service-role/*",
+  "Condition": {
+    "StringLike": {
+      "iam:AWSServiceName": "backup.amazonaws.com"
+    }
+  }
+}
+```
+
+**Why AWS Backup Matters:**
+- **Critical for disaster recovery**: DynamoDB table (`preprod-sentiment-items`) stores all sentiment analysis results
+- **30-day retention**: Configured for daily backups with point-in-time recovery
+- **Production requirement**: Essential for data durability and compliance
+- **Preprod testing**: Need to validate backup/restore procedures before production
+
+**Next Steps to Try:**
+1. Search AWS documentation for "backup-storage" permission namespace
+2. Check if Backup vault creation requires a pre-existing KMS key with specific key policy
+3. Investigate whether the backup service role needs `iam:PassRole` permission
+4. Consider temporarily disabling AWS Backup to unblock preprod deployment, then debug separately
+5. Check if there's a global service-linked role that needs to be created first
+
+**Temporary Workaround (If Needed):**
+Comment out AWS Backup resources in `modules/dynamodb/main.tf` to unblock preprod:
+```hcl
+# Temporarily disabled - debugging IAM permissions
+# resource "aws_backup_vault" "dynamodb" { ... }
+# resource "aws_backup_plan" "dynamodb_daily" { ... }
+# resource "aws_backup_selection" "dynamodb" { ... }
+```
+
+**Reference:** Workflow runs 19560934089, 19562636370, 19563070049, 19563207981
+
+### 9. Secrets Manager Recovery Window Issue
+
+**Problem:**
+- Secrets created and destroyed multiple times during debugging
+- Error: `You can't create this secret because a secret with this name is already scheduled for deletion`
+- Secrets Manager enforces minimum 7-day recovery window by default
+
+**Root Cause:**
+When Terraform destroys a secret, it's scheduled for deletion but not immediately removed. The secret name is locked for the recovery period.
+
+**Solution:**
+Either wait 7 days or force-delete without recovery (loses ability to recover):
+```bash
+aws secretsmanager delete-secret \
+  --secret-id preprod/sentiment-analyzer/newsapi \
+  --force-delete-without-recovery
+```
+
+**Prevention:**
+- Avoid destroying secrets during iterative debugging
+- Use `terraform import` to bring existing secrets into state instead of recreating
+- Set `recovery_window_in_days = 0` in Terraform for dev/test environments (not recommended for prod)
+
+**Reference:** Workflow run 19563207981
+
 ---
 
 ## Quick Reference: Common Commands
