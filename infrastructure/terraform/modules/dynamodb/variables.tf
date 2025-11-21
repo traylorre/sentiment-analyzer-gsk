@@ -20,3 +20,9 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "enable_backup" {
+  description = "Enable AWS Backup for DynamoDB table (disable for environments with IAM limitations)"
+  type        = bool
+  default     = true
+}
