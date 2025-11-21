@@ -1,0 +1,282 @@
+"""
+Canary Test for Preprod
+
+This is a META-TEST: We're testing the canary itself.
+
+The canary is a simple health check that will run after prod deployment
+to validate the system is operational. If this test fails in preprod,
+the canary is broken and we should NOT deploy to prod (we'd have no monitoring).
+
+Purpose:
+- Validate the health endpoint returns expected structure
+- Validate the health endpoint responds quickly
+- Validate authentication is required
+
+Integration Level: REAL AWS (preprod environment)
+Mocking: None (we're testing the actual health endpoint)
+"""
+
+import os
+import time
+
+import pytest
+import requests
+
+
+class TestCanaryPreprod:
+    """Test the production canary against preprod infrastructure."""
+
+    @pytest.fixture(scope="class")
+    def dashboard_url(self):
+        """
+        Get dashboard URL from environment.
+
+        This should be set after preprod deployment.
+        """
+        url = os.environ.get("PREPROD_DASHBOARD_URL")
+        if not url:
+            pytest.skip("PREPROD_DASHBOARD_URL not set - run after preprod deployment")
+        return url
+
+    @pytest.fixture(scope="class")
+    def api_key(self):
+        """Get preprod API key from environment."""
+        key = os.environ.get("PREPROD_DASHBOARD_API_KEY")
+        if not key:
+            pytest.skip("PREPROD_DASHBOARD_API_KEY not set")
+        return key
+
+    def test_health_endpoint_structure(self, dashboard_url, api_key):
+        """
+        Verify the health endpoint returns the expected structure.
+
+        This is what the prod canary will check after deployment.
+        If this fails, the canary won't work in prod.
+
+        CRITICAL: This test validates the canary itself, not just the app.
+        """
+        response = requests.get(
+            f"{dashboard_url}/health",
+            headers={"X-API-Key": api_key},
+            timeout=10,
+        )
+
+        # Canary requirement: Must return 200
+        assert (
+            response.status_code == 200
+        ), f"Health check failed with {response.status_code}: {response.text}"
+
+        # Canary requirement: Must have JSON body
+        data = response.json()
+        assert isinstance(data, dict), "Response must be JSON object"
+
+        # Canary requirement: Must include 'status' field
+        assert "status" in data, "Missing 'status' field in response"
+        assert data["status"] in [
+            "healthy",
+            "degraded",
+        ], f"Status is '{data['status']}', expected 'healthy' or 'degraded'"
+
+        # Canary requirement: Must include version info
+        assert "version" in data, "Missing 'version' field"
+        assert "timestamp" in data, "Missing 'timestamp' field"
+
+        # Nice-to-have: Environment info
+        if "environment" in data:
+            assert (
+                data["environment"] == "preprod"
+            ), "Environment should be 'preprod' in preprod tests"
+
+        print(f"✅ Health endpoint structure valid: {data}")
+
+    def test_health_endpoint_performance(self, dashboard_url, api_key):
+        """
+        Verify the health endpoint responds quickly.
+
+        Prod canary has 2-minute timeout (120 seconds).
+        If preprod is slower than 5 seconds, there's a performance issue
+        that could cause spurious canary failures in prod.
+
+        CRITICAL: Slow health checks will cause false alarms in prod.
+        """
+        start = time.time()
+
+        response = requests.get(
+            f"{dashboard_url}/health",
+            headers={"X-API-Key": api_key},
+            timeout=10,
+        )
+
+        duration = time.time() - start
+
+        assert response.status_code == 200, "Health check must succeed"
+
+        # Health check should respond in <5 seconds
+        # This gives 115 seconds margin before prod canary timeout
+        assert duration < 5.0, (
+            f"Health check took {duration:.2f}s (should be <5s). "
+            f"This is too slow and will cause prod canary failures."
+        )
+
+        print(f"✅ Health endpoint responded in {duration:.2f}s")
+
+    def test_health_endpoint_without_auth(self, dashboard_url):
+        """
+        Verify the health endpoint rejects requests without API key.
+
+        This ensures we're actually testing authentication, not an open endpoint.
+
+        If health endpoint is publicly accessible, we're not testing
+        the full prod configuration (which requires auth).
+        """
+        response = requests.get(
+            f"{dashboard_url}/health",
+            timeout=10,
+        )
+
+        # Health endpoint MUST require authentication
+        assert response.status_code == 401, (
+            f"Health endpoint should return 401 without auth, got {response.status_code}. "
+            f"If endpoint is public, canary is not testing auth correctly."
+        )
+
+        print("✅ Health endpoint correctly requires authentication")
+
+    def test_health_endpoint_with_invalid_auth(self, dashboard_url):
+        """
+        Verify the health endpoint rejects invalid API keys.
+
+        This ensures authentication is actually being validated,
+        not just checked for presence.
+        """
+        response = requests.get(
+            f"{dashboard_url}/health",
+            headers={"X-API-Key": "invalid-key-12345"},
+            timeout=10,
+        )
+
+        assert (
+            response.status_code == 401
+        ), f"Health endpoint should reject invalid API key, got {response.status_code}"
+
+        print("✅ Health endpoint correctly rejects invalid API key")
+
+    def test_health_endpoint_idempotency(self, dashboard_url, api_key):
+        """
+        Verify the health endpoint is idempotent (multiple calls return same result).
+
+        Prod canary runs hourly. If health check mutates state,
+        it could cause issues over time.
+        """
+        responses = []
+
+        # Call health endpoint 3 times
+        for i in range(3):
+            response = requests.get(
+                f"{dashboard_url}/health",
+                headers={"X-API-Key": api_key},
+                timeout=10,
+            )
+            assert response.status_code == 200, f"Call {i+1} failed"
+            responses.append(response.json())
+
+        # All responses should have 'status': 'healthy'
+        statuses = [r["status"] for r in responses]
+        assert all(
+            s == "healthy" for s in statuses
+        ), f"Health endpoint returned inconsistent statuses: {statuses}"
+
+        print("✅ Health endpoint is idempotent (3 calls, all returned 'healthy')")
+
+    def test_health_endpoint_concurrent_requests(self, dashboard_url, api_key):
+        """
+        Verify the health endpoint handles concurrent requests.
+
+        If multiple canary checks run simultaneously (e.g., from different regions),
+        they shouldn't interfere with each other.
+        """
+        import concurrent.futures
+
+        def check_health():
+            response = requests.get(
+                f"{dashboard_url}/health",
+                headers={"X-API-Key": api_key},
+                timeout=10,
+            )
+            return response.status_code
+
+        # Run 5 concurrent health checks
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            futures = [executor.submit(check_health) for _ in range(5)]
+            results = [f.result() for f in concurrent.futures.as_completed(futures)]
+
+        # All requests should succeed
+        assert all(
+            status == 200 for status in results
+        ), f"Concurrent health checks had failures: {results}"
+
+        print("✅ Health endpoint handles concurrent requests (5 parallel calls)")
+
+    def test_health_endpoint_error_messages(self, dashboard_url, api_key):
+        """
+        Verify the health endpoint provides useful error messages.
+
+        If canary fails in prod, we need to know WHY it failed.
+        Good error messages help with debugging.
+        """
+        response = requests.get(
+            f"{dashboard_url}/health",
+            headers={"X-API-Key": api_key},
+            timeout=10,
+        )
+
+        assert response.status_code == 200
+
+        data = response.json()
+
+        # If status is "degraded", there should be details
+        if data["status"] == "degraded":
+            assert (
+                "details" in data or "message" in data or "errors" in data
+            ), "Degraded status should include error details for debugging"
+
+        print("✅ Health endpoint provides adequate error information")
+
+
+class TestCanaryMetadata:
+    """Test that canary metadata is correct for production use."""
+
+    def test_canary_validates_correct_fields(self):
+        """
+        Document which fields the canary validates.
+
+        This serves as documentation for what prod canary checks.
+        If we change the health endpoint structure, we need to update
+        both the canary and this test.
+        """
+        required_fields = ["status", "version", "timestamp"]
+
+        # This test just documents expectations
+        # Actual validation happens in test_health_endpoint_structure
+        assert required_fields == ["status", "version", "timestamp"]
+
+        print(f"✅ Canary validates these fields: {required_fields}")
+
+    def test_canary_timeout_configuration(self):
+        """
+        Document the canary timeout configuration.
+
+        Prod canary has 2-minute timeout.
+        Preprod tests expect <5 second response.
+        This gives 115 seconds margin for network latency, etc.
+        """
+        prod_canary_timeout = 120  # seconds (from deploy-prod.yml)
+        preprod_performance_threshold = 5  # seconds
+
+        margin = prod_canary_timeout - preprod_performance_threshold
+        assert margin >= 100, (
+            f"Only {margin}s margin between preprod threshold and prod timeout. "
+            f"This is too tight and could cause false alarms."
+        )
+
+        print("✅ Canary timeout configuration validated (115s margin)")

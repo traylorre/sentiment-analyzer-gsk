@@ -1,17 +1,28 @@
-# Test Workflow
-# Runs pytest with coverage on every push and PR
+# Test Workflow - Dev Environment
+# ==================================
+#
+# Runs unit tests + dev E2E tests (ALL AWS mocked) on every push and PR.
+#
+# IMPORTANT: This workflow uses moto to mock ALL AWS resources.
+# - Purpose: Fast feedback, zero cost, high frequency
+# - Tests: Unit tests + E2E with mocked DynamoDB/SNS/Secrets
+# - Cost: $0 (no real AWS API calls)
+#
+# For integration tests against REAL AWS, see preprod-validation.yml
+# (runs on manual trigger before production deployment).
 #
 # For On-Call Engineers:
-# - If this workflow fails, check the "Run tests" step for specific failures
-# - Coverage must be >80% or the build fails
-# - Tests use moto to mock AWS services (no real AWS calls)
+# - If this workflow fails, check "Run tests" step for details
+# - Coverage must be >80% or build fails
+# - All AWS services are mocked (moto) - no real infrastructure needed
 #
 # For Developers:
-# - Run locally first: pytest --cov=src --cov-report=term-missing
-# - Add new tests in tests/unit/ or tests/integration/
-# - Mark slow tests with @pytest.mark.slow
+# - Run locally: pytest tests/unit/ tests/integration/test_*_dev.py -v
+# - Unit tests: tests/unit/ (all mocked)
+# - Dev E2E: tests/integration/test_*_dev.py (mocked AWS)
+# - Preprod E2E: tests/integration/test_*_preprod.py (real AWS, CI only)
 
-name: Tests
+name: Tests (Dev)
 
 on:
   workflow_dispatch:  # Manual trigger from GitHub UI
