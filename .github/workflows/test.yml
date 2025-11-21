@@ -73,7 +73,10 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          pytest --cov=src --cov-report=term-missing --cov-report=xml --junitxml=test-results.xml
+          # Exclude preprod tests (they require real AWS preprod credentials)
+          # Preprod tests run in build-and-promote.yml workflow only
+          pytest --ignore=tests/integration/test_analysis_preprod.py \
+            --cov=src --cov-report=term-missing --cov-report=xml --junitxml=test-results.xml
         env:
           # Test environment variables
           AWS_DEFAULT_REGION: us-east-1
