@@ -192,15 +192,16 @@ jobs:
           echo "📤 Uploading Lambda packages to S3 (preprod)..."
 
           # Upload with SHA-based versioning
-          aws s3 cp ../packages/ingestion-${SHA}.zip \
+          # Note: packages/ is relative to workspace root, not working-directory
+          aws s3 cp ../../packages/ingestion-${SHA}.zip \
             s3://${BUCKET}/ingestion/lambda.zip \
             --metadata "git-sha=${GITHUB_SHA},build-timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-          aws s3 cp ../packages/analysis-${SHA}.zip \
+          aws s3 cp ../../packages/analysis-${SHA}.zip \
             s3://${BUCKET}/analysis/lambda.zip \
             --metadata "git-sha=${GITHUB_SHA},build-timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-          aws s3 cp ../packages/dashboard-${SHA}.zip \
+          aws s3 cp ../../packages/dashboard-${SHA}.zip \
             s3://${BUCKET}/dashboard/lambda.zip \
             --metadata "git-sha=${GITHUB_SHA},build-timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 

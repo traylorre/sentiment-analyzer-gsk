@@ -171,15 +171,16 @@ jobs:
           echo "IMPORTANT: These are the EXACT packages tested in preprod"
 
           # Upload with SHA-based versioning (matches preprod)
-          aws s3 cp ../packages/ingestion-${SHA}.zip \
+          # Note: packages/ is relative to workspace root, not working-directory
+          aws s3 cp ../../packages/ingestion-${SHA}.zip \
             s3://${BUCKET}/ingestion/lambda.zip \
             --metadata "git-sha=${GITHUB_SHA},build-timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ),validated-in=preprod"
 
-          aws s3 cp ../packages/analysis-${SHA}.zip \
+          aws s3 cp ../../packages/analysis-${SHA}.zip \
             s3://${BUCKET}/analysis/lambda.zip \
             --metadata "git-sha=${GITHUB_SHA},build-timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ),validated-in=preprod"
 
-          aws s3 cp ../packages/dashboard-${SHA}.zip \
+          aws s3 cp ../../packages/dashboard-${SHA}.zip \
             s3://${BUCKET}/dashboard/lambda.zip \
             --metadata "git-sha=${GITHUB_SHA},build-timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ),validated-in=preprod"
 
