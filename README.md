@@ -3,12 +3,17 @@
 [![Tests](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/test.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/test.yml)
 [![Lint](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/lint.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/lint.yml)
 [![Deploy Dev](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/deploy-dev.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/deploy-dev.yml)
+[![Build & Promote](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/build-and-promote.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/build-and-promote.yml)
 [![Deploy Prod](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/deploy-prod.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/deploy-prod.yml)
 [![Security](https://img.shields.io/badge/security-hardened-green.svg)](./SECURITY.md)
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/)
 [![Coverage](https://img.shields.io/badge/coverage-%3E80%25-brightgreen.svg)](./pyproject.toml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![Terraform](https://img.shields.io/badge/terraform-%3E%3D1.5-623CE4.svg?logo=terraform)](https://www.terraform.io/)
+[![AWS](https://img.shields.io/badge/AWS-Lambda%20%7C%20DynamoDB-FF9900.svg?logo=amazon-aws)](https://aws.amazon.com/)
 
-A cloud-hosted Sentiment Analyzer service built with serverless AWS architecture (Lambda, DynamoDB, EventBridge, SNS/SQS). Developed using [GitHub Spec-Kit](https://github.com/github/spec-kit) methodology for specification-driven development.
+A cloud-hosted Sentiment Analyzer service built with serverless AWS architecture (Lambda, DynamoDB, EventBridge, SNS/SQS). Features dev/preprod/prod promotion pipeline with automated testing and deployment gates.
 
 ---
 
@@ -16,17 +21,31 @@ A cloud-hosted Sentiment Analyzer service built with serverless AWS architecture
 
 - [Quick Start](#quick-start)
 - [Project Overview](#project-overview)
-- [Demo 1: Interactive Dashboard](#demo-1-interactive-dashboard)
+  - [What This Service Does](#what-this-service-does)
+  - [Architecture](#architecture)
+  - [Key Features](#key-features)
+- [Architecture Diagrams](#architecture-diagrams)
+- [Demo: Interactive Dashboard](#demo-interactive-dashboard)
 - [Getting Started](#getting-started)
   - [Prerequisites](#prerequisites)
   - [Local Development Setup](#local-development-setup)
   - [Verify Your Setup](#verify-your-setup)
-- [Project Structure](#project-structure)
 - [Development Workflow](#development-workflow)
+  - [Git Hooks](#git-hooks-pre-commit-framework)
+  - [Standard Workflow](#standard-workflow-for-contributors)
+- [Deployment](#deployment)
+  - [Environment Promotion Flow](#environment-promotion-flow)
+  - [Deployment Commands](#deployment-commands)
 - [On-Call & Operations](#on-call--operations)
+  - [For On-Call Engineers](#for-on-call-engineers)
+  - [Monitoring](#monitoring)
+  - [Quick Diagnostics](#quick-diagnostics)
+- [Project Structure](#project-structure)
 - [Contributing](#contributing)
 - [Security](#security)
 - [Documentation](#documentation)
+- [Project Status](#project-status)
+- [License](#license)
 
 ---
 
@@ -42,20 +61,25 @@ cd sentiment-analyzer-gsk
 # 2. Install prerequisites (see Prerequisites section)
 # Verify: aws --version, terraform --version, python --version
 
-# 3. Configure AWS access (Contributor role only - see CONTRIBUTING.md)
-aws configure --profile sentiment-analyzer-contributor
-# Use IAM credentials provided by project admin
+# 3. Set up Python environment
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -r requirements-dev.txt
 
-# 4. Verify access (read-only CloudWatch)
-aws cloudwatch list-dashboards --profile sentiment-analyzer-contributor
+# 4. Install git hooks
+pre-commit install
+pre-commit install --hook-type pre-push
 
-# 5. Read project specification
+# 5. Run tests locally
+pytest
+
+# 6. Read project specification
 cat SPEC.md  # or open in your editor
 
-# 6. Review contribution guidelines
+# 7. Review contribution guidelines
 cat CONTRIBUTING.md
 
-# 7. Create feature branch
+# 8. Create feature branch
 git checkout -b feature/your-feature-name
 ```
 
@@ -67,33 +91,238 @@ git checkout -b feature/your-feature-name
 
 ### What This Service Does
 
-Ingests text from external sources (Twitter, RSS feeds) and returns sentiment analysis:
+Ingests text from external sources (NewsAPI, RSS feeds) and returns sentiment analysis:
 - **Sentiment labels**: positive/neutral/negative
 - **Confidence scores**: 0.0-1.0 range
 - **Real-time & batch processing**: EventBridge scheduler + Lambda processors
 - **Deduplication**: Avoids reprocessing duplicate items
-- **Admin API**: Manage source subscriptions, pause/resume ingestion
+- **Live dashboard**: FastAPI + SSE for real-time sentiment streaming
 
 ### Architecture
 
 - **Compute**: AWS Lambda (Python 3.11)
 - **Orchestration**: EventBridge, SNS, SQS
 - **Storage**: DynamoDB (on-demand capacity)
-- **Sentiment Model**: VADER (lightweight, social media optimized)
-- **Infrastructure**: Terraform + Terraform Cloud
-- **CI/CD**: GitHub Actions → Terraform Cloud
+- **Sentiment Model**: DistilBERT (fine-tuned for social media)
+- **Infrastructure**: Terraform with S3 backend and DynamoDB locking
+- **CI/CD**: GitHub Actions → Dev → Preprod → Prod promotion pipeline
 
 ### Key Features
 
 ✅ **Serverless & auto-scaling** - No manual capacity management
-✅ **Cost-optimized** - Pay-per-use, ~$15-30/month for 10-50 sources
+✅ **Cost-optimized** - Pay-per-use with budget alerts
 ✅ **Security-first** - Least-privilege IAM, secrets in AWS Secrets Manager
 ✅ **Observable** - CloudWatch dashboards, alarms, DLQ monitoring
-✅ **Tier-aware** - Twitter API tier configuration (Free → Basic → Pro)
+✅ **Multi-environment** - Isolated dev/preprod/prod environments
+✅ **Promotion pipeline** - Automated artifact promotion with validation gates
 
 ---
 
-## Demo 1: Interactive Dashboard
+## Architecture Diagrams
+
+### High-Level System Architecture
+
+```mermaid
+graph TB
+    subgraph "External Sources"
+        NewsAPI[NewsAPI]
+        RSS[RSS Feeds]
+    end
+
+    subgraph "AWS Cloud"
+        subgraph "Ingestion Layer"
+            EB[EventBridge<br/>Scheduler<br/>5 min]
+            Ingestion[Ingestion Lambda<br/>Python 3.11]
+        end
+
+        subgraph "Processing Layer"
+            SNS[SNS Topic<br/>sentiment-events]
+            Analysis[Analysis Lambda<br/>DistilBERT]
+        end
+
+        subgraph "API Layer"
+            Dashboard[Dashboard Lambda<br/>FastAPI + SSE]
+            FnURL[Function URL]
+        end
+
+        subgraph "Storage Layer"
+            DDB[(DynamoDB<br/>sentiment-items)]
+            DLQ[DLQ<br/>Failed Messages]
+        end
+
+        subgraph "Monitoring"
+            CW[CloudWatch<br/>Logs & Alarms]
+            Budget[Budget Alerts]
+        end
+    end
+
+    subgraph "Users"
+        Browser[Web Browser]
+    end
+
+    EB -->|Trigger| Ingestion
+    NewsAPI -->|Fetch Articles| Ingestion
+    RSS -->|Fetch Feeds| Ingestion
+
+    Ingestion -->|Publish| SNS
+    Ingestion -->|Store| DDB
+
+    SNS -->|Subscribe| Analysis
+    Analysis -->|Store Results| DDB
+    Analysis -->|Failed| DLQ
+
+    Browser <-->|HTTPS| FnURL
+    FnURL <-->|Invoke| Dashboard
+    Dashboard -->|Query| DDB
+    Dashboard -->|SSE Stream| Browser
+
+    Ingestion -.->|Logs| CW
+    Analysis -.->|Logs| CW
+    Dashboard -.->|Logs| CW
+
+    CW -.->|Cost Alerts| Budget
+
+    style Ingestion fill:#FF6B6B
+    style Analysis fill:#4ECDC4
+    style Dashboard fill:#45B7D1
+    style DDB fill:#FFA07A
+    style SNS fill:#98D8C8
+```
+
+### Environment Promotion Pipeline
+
+```mermaid
+graph LR
+    subgraph "Source"
+        Code[Feature Branch]
+    end
+
+    subgraph "Build"
+        GHA[GitHub Actions<br/>Build & Test]
+        Artifact[Lambda Packages<br/>SHA-versioned]
+    end
+
+    subgraph "Dev Environment"
+        DevDeploy[Deploy Dev]
+        DevTest[Integration Tests]
+        DevApprove{Tests Pass?}
+    end
+
+    subgraph "Preprod Environment"
+        PreprodDeploy[Deploy Preprod]
+        PreprodTest[Smoke Tests]
+        PreprodApprove{Validation<br/>Gate}
+    end
+
+    subgraph "Prod Environment"
+        ProdApprove{Manual<br/>Approval}
+        ProdDeploy[Deploy Prod]
+        ProdMonitor[Production<br/>Monitoring]
+    end
+
+    Code --> GHA
+    GHA --> Artifact
+    Artifact --> DevDeploy
+    DevDeploy --> DevTest
+    DevTest --> DevApprove
+
+    DevApprove -->|✅ Pass| PreprodDeploy
+    DevApprove -->|❌ Fail| Code
+
+    PreprodDeploy --> PreprodTest
+    PreprodTest --> PreprodApprove
+
+    PreprodApprove -->|✅ Pass| ProdApprove
+    PreprodApprove -->|❌ Fail| Code
+
+    ProdApprove -->|✅ Approved| ProdDeploy
+    ProdApprove -->|❌ Rejected| Code
+
+    ProdDeploy --> ProdMonitor
+
+    style DevApprove fill:#FFD93D
+    style PreprodApprove fill:#FFD93D
+    style ProdApprove fill:#FF6B6B
+    style Artifact fill:#6BCF7F
+```
+
+### Data Flow: Real-Time Sentiment Processing
+
+```mermaid
+sequenceDiagram
+    participant EB as EventBridge
+    participant Ing as Ingestion Lambda
+    participant NA as NewsAPI
+    participant SNS as SNS Topic
+    participant Ana as Analysis Lambda
+    participant DDB as DynamoDB
+    participant Dash as Dashboard Lambda
+    participant User as Browser (SSE)
+
+    EB->>Ing: Trigger (every 5 min)
+    Ing->>NA: Fetch latest articles
+    NA-->>Ing: Articles JSON
+
+    Ing->>DDB: Check for duplicates
+    DDB-->>Ing: Dedup results
+
+    Ing->>DDB: Store raw article
+    Ing->>SNS: Publish event
+
+    SNS->>Ana: Trigger analysis
+    Ana->>Ana: Run DistilBERT inference
+    Ana->>DDB: Store sentiment results
+
+    User->>Dash: Connect SSE stream
+    Dash->>DDB: Query sentiment_index
+    DDB-->>Dash: Stream results
+    Dash-->>User: SSE events (JSON)
+
+    Note over Dash,User: Real-time updates<br/>via Server-Sent Events
+```
+
+### DynamoDB Table Design
+
+```mermaid
+erDiagram
+    SENTIMENT_ITEMS {
+        string item_id PK
+        string source_type
+        string source_id
+        string title
+        string content
+        timestamp ingested_at
+        string status
+        float sentiment_score
+        string sentiment_label
+        timestamp analyzed_at
+        json tags
+    }
+
+    GSI_BY_SENTIMENT {
+        string sentiment_label PK
+        timestamp analyzed_at SK
+        float sentiment_score
+    }
+
+    GSI_BY_TAG {
+        string tag PK
+        timestamp ingested_at SK
+    }
+
+    GSI_BY_STATUS {
+        string status PK
+        timestamp ingested_at SK
+    }
+
+    SENTIMENT_ITEMS ||--o{ GSI_BY_SENTIMENT : "indexed by"
+    SENTIMENT_ITEMS ||--o{ GSI_BY_TAG : "indexed by"
+    SENTIMENT_ITEMS ||--o{ GSI_BY_STATUS : "indexed by"
+```
+
+---
+
+## Demo: Interactive Dashboard
 
 **Current Feature**: Real-time sentiment analysis with live dashboard
 
@@ -105,19 +334,6 @@ Ingests text from external sources (Twitter, RSS feeds) and returns sentiment an
 | [Implementation Plan](./specs/001-interactive-dashboard-demo/plan.md) | Architecture & design decisions |
 | [Feature Spec](./specs/001-interactive-dashboard-demo/spec.md) | Requirements & acceptance criteria |
 | [On-Call SOP](./specs/001-interactive-dashboard-demo/ON_CALL_SOP.md) | Incident response runbooks |
-| [Tasks](./specs/001-interactive-dashboard-demo/tasks.md) | Implementation checklist |
-
-### Architecture Overview
-
-![Architecture Diagram](docs/architecture.png)
-
-**Data Flow**: NewsAPI → Ingestion → DynamoDB → SNS → Analysis → Dashboard
-
-**Components**:
-- **Ingestion Lambda**: EventBridge-triggered (5 min), fetches NewsAPI articles
-- **Analysis Lambda**: SNS-triggered, runs DistilBERT sentiment inference
-- **Dashboard Lambda**: Function URL, serves FastAPI + SSE real-time updates
-- **DynamoDB**: Single table with 3 GSIs (by_sentiment, by_tag, by_status)
 
 ### Running Locally
 
@@ -137,65 +353,6 @@ black --check src/ tests/
 ruff check src/ tests/
 ```
 
-### Deployment
-
-See [Quickstart Guide](./specs/001-interactive-dashboard-demo/quickstart.md) for full deployment instructions.
-
-```bash
-# Dev deployment (automatic on merge to main)
-# Or manually trigger via GitHub Actions
-
-# Prod deployment (requires approval)
-# Go to Actions → Deploy Prod → Run workflow
-```
-
----
-
-## On-Call & Operations
-
-### For On-Call Engineers
-
-**Start here during incidents**: [ON_CALL_SOP.md](./specs/001-interactive-dashboard-demo/ON_CALL_SOP.md)
-
-12 documented scenarios with step-by-step CLI commands:
-- SC-01: Service Degradation
-- SC-03: Ingestion Failures
-- SC-04: Analysis Failures
-- SC-05: Dashboard Failures
-- SC-07: NewsAPI Rate Limiting
-- SC-08: Budget Alerts
-- SC-09: DLQ Accumulation
-- And more...
-
-### Monitoring
-
-11 CloudWatch alarms configured in `infrastructure/terraform/modules/monitoring/`:
-- Lambda error rates
-- Latency thresholds
-- SNS delivery failures
-- DLQ depth
-- Budget alerts
-
-### Quick Diagnostics
-
-```bash
-# Check Lambda errors
-aws logs filter-log-events \
-  --log-group-name /aws/lambda/dev-sentiment-ingestion \
-  --filter-pattern "ERROR" \
-  --start-time $(date -d '30 minutes ago' +%s)000
-
-# Check DynamoDB item count
-aws dynamodb scan \
-  --table-name dev-sentiment-items \
-  --select COUNT
-
-# Check active alarms
-aws cloudwatch describe-alarms \
-  --state-value ALARM \
-  --alarm-name-prefix "dev-"
-```
-
 ---
 
 ## Getting Started
@@ -211,13 +368,6 @@ aws cloudwatch describe-alarms \
 | **Python** | 3.11+ | Lambda function development | [Download](https://www.python.org/downloads/) |
 | **Git** | ≥2.30 | Version control | [Download](https://git-scm.com/downloads) |
 | **jq** | Latest | JSON processing (optional) | [Download](https://jqlang.github.io/jq/download/) |
-
-**Access requirements:**
-
-- ✅ GitHub account with contributor access to this repository
-- ✅ AWS IAM credentials (Contributor role - request from @traylorre)
-- ❌ **NO production AWS admin access** (principle of least privilege)
-- ❌ **NO Terraform Cloud write access** (read-only for contributors)
 
 **Verify installations:**
 
@@ -239,61 +389,7 @@ git clone https://github.com/traylorre/sentiment-analyzer-gsk.git
 cd sentiment-analyzer-gsk
 ```
 
-**Step 2: Configure AWS profile (Contributor role)**
-
-```bash
-# Create dedicated profile for this project
-aws configure --profile sentiment-analyzer-contributor
-
-# Enter credentials provided by project admin:
-# AWS Access Key ID: [PROVIDED_BY_ADMIN]
-# AWS Secret Access Key: [PROVIDED_BY_ADMIN]
-# Default region: us-west-2
-# Default output format: json
-```
-
-**⚠️ IMPORTANT:** Contributor credentials are **read-only** for:
-- CloudWatch dashboards and non-sensitive metrics
-- Lambda function logs (sanitized - no secrets)
-- DynamoDB table schemas (not data)
-- EventBridge rule status
-
-Contributors **CANNOT**:
-- Deploy infrastructure changes
-- Access Secrets Manager
-- Modify IAM roles/policies
-- View sensitive CloudWatch metrics (DDoS, quota exhaustion, detailed failure rates)
-
-**Step 3: Verify AWS access**
-
-```bash
-# Test read access to CloudWatch
-aws cloudwatch list-dashboards \
-  --profile sentiment-analyzer-contributor \
-  --region us-west-2
-
-# Expected output: List of dashboard names (no error)
-
-# Test Lambda list access (read-only)
-aws lambda list-functions \
-  --profile sentiment-analyzer-contributor \
-  --region us-west-2 \
-  --query 'Functions[*].FunctionName'
-
-# Expected output: List of Lambda function names
-```
-
-**Step 4: Review project documentation**
-
-```bash
-# Read in this order:
-1. SPEC.md              # Complete technical specification
-2. CONTRIBUTING.md      # Collaboration guidelines
-3. SECURITY.md          # Security policy
-4. .specify/memory/constitution.md  # High-level requirements
-```
-
-**Step 5: Set up Python environment (for Lambda development)**
+**Step 2: Set up Python environment**
 
 ```bash
 # Create virtual environment
@@ -308,6 +404,16 @@ pre-commit install
 pre-commit install --hook-type pre-push
 ```
 
+**Step 3: Review project documentation**
+
+```bash
+# Read in this order:
+1. SPEC.md              # Complete technical specification
+2. CONTRIBUTING.md      # Collaboration guidelines
+3. SECURITY.md          # Security policy
+4. docs/DEPLOYMENT.md   # Deployment procedures
+```
+
 ---
 
 ### Verify Your Setup
@@ -315,68 +421,25 @@ pre-commit install --hook-type pre-push
 Run this verification checklist:
 
 ```bash
-# ✅ AWS CLI configured
-aws sts get-caller-identity --profile sentiment-analyzer-contributor
-# Should show: UserId, Account, Arn (contributor role)
+# ✅ Python environment
+python --version
+# Should show Python 3.11+
 
-# ✅ Can access CloudWatch
-aws cloudwatch describe-alarms \
-  --profile sentiment-analyzer-contributor \
-  --region us-west-2 \
-  --max-records 5
-# Should list some alarms (or empty list if none exist yet)
-
-# ✅ Terraform works
-terraform version
-# Should show version ≥1.5.0
+# ✅ Dependencies installed
+pytest --version
+black --version
+ruff --version
 
 # ✅ Git configured
 git config user.name && git config user.email
 # Should show your name and email
+
+# ✅ Pre-commit hooks installed
+pre-commit --version
+# Should show pre-commit version
 ```
 
 **All checks passed?** You're ready to contribute! 🎉
-
----
-
-## Project Structure
-
-```
-sentiment-analyzer-gsk/
-├── README.md                    # This file - start here
-├── SPEC.md                      # Complete technical specification
-├── CONTRIBUTING.md              # Contribution guidelines (MUST READ)
-├── SECURITY.md                  # Security policy and vulnerability reporting
-├── LICENSE                      # MIT License
-│
-├── .specify/                    # GitHub Spec-Kit configuration
-│   ├── memory/
-│   │   └── constitution.md      # High-level project requirements
-│   ├── templates/               # Spec-Kit templates
-│   └── scripts/                 # Automation scripts
-│
-├── terraform/                   # Infrastructure as code (when created)
-│   ├── modules/                 # Reusable Terraform modules
-│   ├── environments/            # Environment-specific configs
-│   └── *.tf                     # Root Terraform configuration
-│
-├── src/                         # Lambda function source code (when created)
-│   ├── scheduler/               # EventBridge scheduler Lambda
-│   ├── ingestion/               # Source ingestion Lambdas
-│   ├── inference/               # Sentiment analysis Lambda
-│   └── common/                  # Shared utilities
-│
-├── tests/                       # Test suites (when created)
-│   ├── unit/
-│   ├── integration/
-│   └── contract/
-│
-└── .github/                     # GitHub configuration
-    ├── workflows/               # CI/CD workflows
-    └── CODEOWNERS              # Review assignments
-```
-
-**Current stage:** Specification complete, implementation pending
 
 ---
 
@@ -434,8 +497,12 @@ git checkout -b feature/your-feature-name
 
 ```bash
 # Edit files
-# Run local tests (when test suite exists)
+# Run local tests
+pytest
+
 # Ensure code follows project conventions
+black src/ tests/
+ruff check src/ tests/
 ```
 
 **3. Commit with clear messages:**
@@ -480,14 +547,156 @@ git push origin feature/your-feature-name
 - ❌ **Contributors CANNOT merge their own PRs**
 - ❌ **Contributors CANNOT bypass review requirements**
 
-**6. After approval:**
+---
+
+## Deployment
+
+### Environment Promotion Flow
+
+This project uses a three-stage promotion pipeline:
+
+1. **Dev** - Deploys automatically on merge to `main`
+2. **Preprod** - Artifact promotion via `build-and-promote.yml` workflow
+3. **Prod** - Manual deployment after preprod validation
+
+### Deployment Commands
+
+**Dev Deployment (Automatic):**
+```bash
+# Automatically triggers on merge to main
+# Or manually trigger via:
+gh workflow run deploy-dev.yml --repo traylorre/sentiment-analyzer-gsk
+```
+
+**Preprod Deployment (Artifact Promotion):**
+```bash
+# Build and promote to preprod
+gh workflow run build-and-promote.yml \
+  --repo traylorre/sentiment-analyzer-gsk \
+  --ref feat/promotion-pipeline-setup
+
+# Check preprod deployment status
+gh run list --workflow=build-and-promote.yml --limit 1
+```
+
+**Prod Deployment (Manual Approval Required):**
+```bash
+# Only after preprod validation passes
+gh workflow run deploy-prod.yml --repo traylorre/sentiment-analyzer-gsk
+```
+
+See [DEPLOYMENT.md](docs/DEPLOYMENT.md) for detailed deployment procedures and rollback strategies.
+
+---
+
+## On-Call & Operations
+
+### For On-Call Engineers
+
+**Start here during incidents**: [ON_CALL_SOP.md](./specs/001-interactive-dashboard-demo/ON_CALL_SOP.md)
+
+12 documented scenarios with step-by-step CLI commands:
+- SC-01: Service Degradation
+- SC-03: Ingestion Failures
+- SC-04: Analysis Failures
+- SC-05: Dashboard Failures
+- SC-07: NewsAPI Rate Limiting
+- SC-08: Budget Alerts
+- SC-09: DLQ Accumulation
+- And more...
+
+### Monitoring
+
+11 CloudWatch alarms configured in `infrastructure/terraform/modules/monitoring/`:
+- Lambda error rates
+- Latency thresholds
+- SNS delivery failures
+- DLQ depth
+- Budget alerts
+
+### Quick Diagnostics
 
 ```bash
-# @traylorre merges the PR (contributors cannot merge)
-# Delete your feature branch
-git checkout main
-git pull origin main
-git branch -d feature/your-feature-name
+# Check Lambda errors
+aws logs filter-log-events \
+  --log-group-name /aws/lambda/dev-sentiment-ingestion \
+  --filter-pattern "ERROR" \
+  --start-time $(date -d '30 minutes ago' +%s)000
+
+# Check DynamoDB item count
+aws dynamodb scan \
+  --table-name dev-sentiment-items \
+  --select COUNT
+
+# Check active alarms
+aws cloudwatch describe-alarms \
+  --state-value ALARM \
+  --alarm-name-prefix "dev-"
+```
+
+---
+
+## Project Structure
+
+```
+sentiment-analyzer-gsk/
+├── README.md                    # This file - start here
+├── SPEC.md                      # Complete technical specification
+├── CONTRIBUTING.md              # Contribution guidelines
+├── SECURITY.md                  # Security policy and vulnerability reporting
+├── LICENSE                      # MIT License
+│
+├── .specify/                    # GitHub Spec-Kit configuration
+│   ├── memory/
+│   │   └── constitution.md      # High-level project requirements
+│   └── templates/               # Spec-Kit templates
+│
+├── infrastructure/              # Infrastructure as code
+│   ├── terraform/               # Terraform root module
+│   │   ├── modules/             # Reusable Terraform modules
+│   │   │   ├── lambda/          # Lambda function module
+│   │   │   ├── dynamodb/        # DynamoDB table module
+│   │   │   ├── secrets/         # Secrets Manager module
+│   │   │   ├── iam/             # IAM roles and policies
+│   │   │   └── monitoring/      # CloudWatch alarms
+│   │   ├── main.tf              # Root configuration
+│   │   ├── variables.tf         # Input variables
+│   │   └── outputs.tf           # Output values
+│   └── scripts/                 # Helper scripts
+│
+├── src/                         # Lambda function source code
+│   ├── ingestion/               # Ingestion Lambda
+│   ├── analysis/                # Analysis Lambda
+│   ├── dashboard/               # Dashboard Lambda (FastAPI)
+│   └── common/                  # Shared utilities
+│
+├── tests/                       # Test suites
+│   ├── unit/                    # Unit tests
+│   ├── integration/             # Integration tests
+│   └── contract/                # Contract tests
+│
+├── docs/                        # Project documentation
+│   ├── DEPLOYMENT.md            # Deployment guide
+│   ├── DEMO_CHECKLIST.md        # Demo preparation
+│   ├── TROUBLESHOOTING.md       # Common issues
+│   └── IAM_TERRAFORM_TROUBLESHOOTING.md  # IAM debugging guide
+│
+├── specs/                       # Feature specifications
+│   └── 001-interactive-dashboard-demo/
+│       ├── spec.md              # Feature requirements
+│       ├── plan.md              # Implementation plan
+│       ├── tasks.md             # Task breakdown
+│       ├── quickstart.md        # Getting started
+│       └── ON_CALL_SOP.md       # Operations runbook
+│
+└── .github/                     # GitHub configuration
+    ├── workflows/               # CI/CD workflows
+    │   ├── test.yml             # Run tests
+    │   ├── lint.yml             # Code quality checks
+    │   ├── deploy-dev.yml       # Dev deployment
+    │   ├── build-and-promote.yml # Preprod promotion
+    │   └── deploy-prod.yml      # Prod deployment
+    └── CODEOWNERS               # Review assignments
 ```
 
 ---
@@ -498,18 +707,20 @@ git branch -d feature/your-feature-name
 
 📖 **[CONTRIBUTING.md](./CONTRIBUTING.md)** - Complete contribution guidelines including:
 - Code of conduct
-- Collaboration security model
-- AWS access policies (Admin vs Contributor roles)
-- Secret handling procedures
-- Credential rotation process
-- Audit trail requirements
-- What contributors CAN and CANNOT do
+- Development workflow
+- Testing requirements
+- PR review process
+- Security best practices
 
 **Quick summary:**
-- ✅ Contributors can: View logs, dashboards, create PRs, run read-only AWS commands
-- ❌ Contributors cannot: Deploy infra, access secrets, merge PRs, modify IAM
+- ✅ Contributors can: Create PRs, run tests, view documentation
+- ❌ Contributors cannot: Merge PRs without approval, modify IAM directly
 
-**All contributors are assumed to be potential bad-faith actors** - this is not personal, it's defense-in-depth security.
+**All contributions require:**
+- Passing tests (`pytest`)
+- Code formatting (`black`, `ruff`)
+- Security scans (automated via pre-commit)
+- Review approval from @traylorre
 
 ---
 
@@ -521,7 +732,7 @@ git branch -d feature/your-feature-name
 
 **DO NOT create public issues for security vulnerabilities.**
 
-Report privately to: [Configure security contact]
+Report privately to: @traylorre
 
 Response time: 48 hours
 
@@ -529,17 +740,15 @@ See [SECURITY.md](./SECURITY.md) for full security policy.
 
 ### Security Posture
 
-⚠️ **Service is NOT production-ready** - requires security hardening (see SPEC.md lines 720-881)
-
 **Key security features:**
 - Least-privilege IAM roles
 - Secrets in AWS Secrets Manager (never in code)
 - TLS 1.2+ enforcement
 - Input validation on all external data
 - NoSQL injection prevention (parameterized DynamoDB queries)
-- XXE attack prevention (feedparser secure config)
 - Rate limiting and quota management
 - Comprehensive audit logging (CloudTrail)
+- Automated security scanning (pre-commit hooks)
 
 ---
 
@@ -553,58 +762,36 @@ See [SECURITY.md](./SECURITY.md) for full security policy.
 | **[SPEC.md](./SPEC.md)** | Complete technical specification | Developers, architects |
 | **[CONTRIBUTING.md](./CONTRIBUTING.md)** | Collaboration guidelines | All contributors |
 | **[SECURITY.md](./SECURITY.md)** | Security policy | Security researchers, contributors |
-| **[constitution.md](./.specify/memory/constitution.md)** | High-level requirements | Product owners, architects |
+| **[DEPLOYMENT.md](./docs/DEPLOYMENT.md)** | Deployment procedures | DevOps, on-call |
+| **[IAM_TERRAFORM_TROUBLESHOOTING.md](./docs/IAM_TERRAFORM_TROUBLESHOOTING.md)** | IAM debugging guide | DevOps, on-call |
 
-### Architecture Decision Records (ADRs)
+### Operations Documentation
 
-_Coming soon - will document key architectural decisions_
-
-### API Documentation
-
-_Coming soon - OpenAPI/Swagger specs for Admin API_
-
-### Monitoring & Alerts
-
-**CloudWatch Dashboard Access** (Contributors: read-only):
-- Service health metrics (request count, success rate)
-- Lambda execution metrics (duration, errors)
-- DynamoDB metrics (read/write capacity)
-- ❌ **NOT accessible:** DDoS metrics, quota exhaustion rates, detailed failure analysis
-
-**Alarm Access** (Contributors: read-only):
-- Can view alarm states (OK, ALARM, INSUFFICIENT_DATA)
-- Can view alarm history
-- ❌ **CANNOT:** Modify alarms, silence alarms, change thresholds
+| Document | Purpose |
+|----------|---------|
+| [ON_CALL_SOP.md](./specs/001-interactive-dashboard-demo/ON_CALL_SOP.md) | Incident response runbooks |
+| [TROUBLESHOOTING.md](./docs/TROUBLESHOOTING.md) | Common issues and solutions |
+| [DEMO_CHECKLIST.md](./docs/DEMO_CHECKLIST.md) | Demo day preparation |
 
 ---
 
 ## Project Status
 
-**Current Phase:** Implementation (GitHub Spec-Kit Stage 4 🔄)
+**Current Phase:** Promotion Pipeline Setup 🔄
 
-**Demo 1 Progress:**
-1. ✅ Stage 1: Specify - **COMPLETE**
-2. ✅ Stage 2: Plan - **COMPLETE**
-3. ✅ Stage 3: Tasks - **COMPLETE** (72 tasks defined)
-4. 🔄 Stage 4: Implement - **IN PROGRESS**
+**Recent Milestones:**
+1. ✅ Demo 1: Interactive Dashboard - **COMPLETE**
+2. ✅ Dev Environment - **DEPLOYED**
+3. 🔄 Preprod Environment - **IN PROGRESS**
+4. ⏳ Prod Environment - **PENDING**
 
-**Implementation Status:**
-- ✅ Phase 1: Project Setup & CI/CD (T001-T011)
-- ✅ Phase 2: Shared Libraries (T012-T023)
-- ✅ Phase 3: Ingestion Lambda (T024-T031)
-- ✅ Phase 4: Analysis Lambda (T032-T038)
-- ✅ Phase 5: Dashboard Lambda (T039-T047)
-- ✅ Phase 6: Lambda Terraform (T048-T053)
-- ✅ Phase 7: Integration (T054-T058)
-- ✅ Phase 8: Deployment (T059-T064)
-- ✅ Phase 9: Documentation (T065-T072)
+**Deployment Pipeline Status:**
+- ✅ Build & Test - Automated
+- ✅ Dev Deploy - Automated on merge to `main`
+- 🔄 Preprod Deploy - Artifact promotion via workflow
+- ⏳ Prod Deploy - Manual approval required
 
-**Additional Documentation:**
-- [Deployment Guide](docs/DEPLOYMENT.md) - Zero-downtime deployment and rollback
-- [Demo Checklist](docs/DEMO_CHECKLIST.md) - Demo day preparation
-- [Troubleshooting](docs/TROUBLESHOOTING.md) - Common issues and solutions
-
-**Tracking:** See [tasks.md](./specs/001-interactive-dashboard-demo/tasks.md)
+**Tracking:** See [GitHub Actions](https://github.com/traylorre/sentiment-analyzer-gsk/actions)
 
 ---
 

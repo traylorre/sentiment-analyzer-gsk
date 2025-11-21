@@ -55,8 +55,9 @@ module "secrets" {
 module "dynamodb" {
   source = "./modules/dynamodb"
 
-  environment = var.environment
-  aws_region  = var.aws_region
+  environment   = var.environment
+  aws_region    = var.aws_region
+  enable_backup = var.environment == "preprod" ? false : true
 }
 
 # ===================================================================

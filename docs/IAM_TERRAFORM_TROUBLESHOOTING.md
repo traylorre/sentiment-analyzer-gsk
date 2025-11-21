@@ -564,6 +564,89 @@ This would be more complex but eliminate manual bucket creation.
 
 **Reference:** Workflow run 19561400519
 
+### 8. AWS Backup Vault Permissions - "backup-storage" Mystery
+
+**Problem:**
+- Error: `Insufficient privileges to create a backup vault. Creating a backup vault requires backup-storage and KMS permissions`
+- Persists despite adding extensive KMS permissions (CreateKey, CreateGrant, Encrypt, Decrypt, GenerateDataKey, etc.)
+- Added 10+ policy versions trying different permission combinations
+
+**Root Cause (Resolved via Workaround):**
+The error message mentions "backup-storage" which may be:
+1. A separate AWS service/API namespace we haven't granted
+2. A permission on the KMS key itself (resource-based policy)
+3. A requirement for the Backup service-linked role to have additional permissions
+4. A permission that needs to be granted via `iam:PassRole` to the backup service
+
+**Attempted Solutions:**
+- ✅ Added KMS permissions: CreateKey, DescribeKey, CreateAlias, DeleteAlias, GetKeyPolicy, PutKeyPolicy, EnableKeyRotation, TagResource, UntagResource, ListAliases, ListKeys
+- ✅ Added KMS grant permissions via ViaService condition: CreateGrant, ListGrants with `kms:ViaService` for backup.amazonaws.com
+- ✅ Added backup-storage:* wildcard permission based on AWS managed policies
+- ✅ Added service-linked role creation: `iam:CreateServiceLinkedRole` with condition for `backup.amazonaws.com`
+- ✅ Added comprehensive Backup permissions: CreateBackupVault, DeleteBackupVault, DescribeBackupVault, PutBackupVaultAccessPolicy, etc.
+- ❌ Still failing with same error through policy v10
+
+**Pragmatic Solution (Implemented):**
+Made AWS Backup optional for preprod environment via `enable_backup` variable:
+
+```hcl
+# modules/dynamodb/variables.tf
+variable "enable_backup" {
+  description = "Enable AWS Backup for DynamoDB table (disable for environments with IAM limitations)"
+  type        = bool
+  default     = true
+}
+
+# infrastructure/terraform/main.tf
+module "dynamodb" {
+  source = "./modules/dynamodb"
+
+  environment   = var.environment
+  aws_region    = var.aws_region
+  enable_backup = var.environment == "preprod" ? false : true
+}
+```
+
+All backup resources use conditional creation with `count = var.enable_backup ? 1 : 0`.
+
+**Why AWS Backup Matters:**
+- **Critical for disaster recovery**: DynamoDB table stores all sentiment analysis results
+- **30-day retention**: Configured for daily backups with point-in-time recovery
+- **Production requirement**: Essential for data durability and compliance
+- **Preprod trade-off**: Backups disabled to unblock deployment (testing environment, acceptable risk)
+
+**Future Work:**
+- Re-investigate IAM permissions once preprod is stable
+- Re-enable backups for preprod after resolving permission mystery
+- Consider using AWS-managed default encryption keys instead of custom KMS keys
+
+**Reference:** Workflow runs 19560934089 through 19566434595, PR #25
+
+### 9. Secrets Manager Recovery Window Issue
+
+**Problem:**
+- Secrets created and destroyed multiple times during debugging
+- Error: `You can't create this secret because a secret with this name is already scheduled for deletion`
+- Secrets Manager enforces minimum 7-day recovery window by default
+
+**Root Cause:**
+When Terraform destroys a secret, it's scheduled for deletion but not immediately removed. The secret name is locked for the recovery period.
+
+**Solution:**
+Either wait 7 days or force-delete without recovery (loses ability to recover):
+```bash
+aws secretsmanager delete-secret \
+  --secret-id preprod/sentiment-analyzer/newsapi \
+  --force-delete-without-recovery
+```
+
+**Prevention:**
+- Avoid destroying secrets during iterative debugging
+- Use `terraform import` to bring existing secrets into state instead of recreating
+- Set `recovery_window_in_days = 0` in Terraform for dev/test environments (not recommended for prod)
+
+**Reference:** Workflow run 19563207981
+
 ---
 
 ## Quick Reference: Common Commands

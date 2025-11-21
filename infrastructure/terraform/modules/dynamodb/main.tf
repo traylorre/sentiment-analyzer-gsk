@@ -93,11 +93,12 @@ resource "aws_dynamodb_table" "sentiment_items" {
 
 # On-demand backup schedule (daily at 02:00 UTC)
 resource "aws_backup_plan" "dynamodb_daily" {
-  name = "${var.environment}-dynamodb-daily-backup"
+  count = var.enable_backup ? 1 : 0
+  name  = "${var.environment}-dynamodb-daily-backup"
 
   rule {
     rule_name         = "daily_backup"
-    target_vault_name = aws_backup_vault.dynamodb.name
+    target_vault_name = aws_backup_vault.dynamodb[0].name
     schedule          = "cron(0 2 * * ? *)" # 02:00 UTC daily
 
     lifecycle {
@@ -113,7 +114,8 @@ resource "aws_backup_plan" "dynamodb_daily" {
 
 # Backup vault
 resource "aws_backup_vault" "dynamodb" {
-  name = "${var.environment}-dynamodb-backup-vault"
+  count = var.enable_backup ? 1 : 0
+  name  = "${var.environment}-dynamodb-backup-vault"
 
   tags = {
     Environment = var.environment
@@ -123,9 +125,10 @@ resource "aws_backup_vault" "dynamodb" {
 
 # Backup selection (target DynamoDB table)
 resource "aws_backup_selection" "dynamodb" {
+  count        = var.enable_backup ? 1 : 0
   name         = "${var.environment}-dynamodb-backup-selection"
-  plan_id      = aws_backup_plan.dynamodb_daily.id
-  iam_role_arn = aws_iam_role.backup.arn
+  plan_id      = aws_backup_plan.dynamodb_daily[0].id
+  iam_role_arn = aws_iam_role.backup[0].arn
 
   resources = [
     aws_dynamodb_table.sentiment_items.arn
@@ -134,7 +137,8 @@ resource "aws_backup_selection" "dynamodb" {
 
 # IAM role for AWS Backup
 resource "aws_iam_role" "backup" {
-  name = "${var.environment}-dynamodb-backup-role"
+  count = var.enable_backup ? 1 : 0
+  name  = "${var.environment}-dynamodb-backup-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -157,7 +161,8 @@ resource "aws_iam_role" "backup" {
 
 # Attach AWS managed backup policy
 resource "aws_iam_role_policy_attachment" "backup" {
-  role       = aws_iam_role.backup.name
+  count      = var.enable_backup ? 1 : 0
+  role       = aws_iam_role.backup[0].name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSBackupServiceRolePolicyForBackup"
 }
 
