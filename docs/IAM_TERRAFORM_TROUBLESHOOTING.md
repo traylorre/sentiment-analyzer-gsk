@@ -502,6 +502,68 @@ variable "model_version" {
 
 **Reference:** PR #21
 
+### 7. Lambda Deployment Bucket is Bootstrap Infrastructure
+
+**Problem:**
+- Workflow uploads Lambda packages to S3 before Terraform runs
+- Error: `NoSuchBucket: The specified bucket does not exist`
+- Chicken-egg problem: Can't upload packages without bucket, can't run Terraform without packages
+
+**Root Cause:**
+The promotion pipeline workflow (`.github/workflows/build-and-promote.yml`) has this order:
+1. Upload Lambda packages to S3 (line 192-213)
+2. Run Terraform (line 215-244)
+
+This design assumes the S3 bucket already exists as **bootstrap infrastructure**.
+
+**Solution:**
+Pre-create the Lambda deployment buckets manually (one-time setup):
+
+```bash
+# Create buckets
+aws s3api create-bucket \
+  --bucket preprod-sentiment-lambda-deployments \
+  --region us-east-1
+
+aws s3api create-bucket \
+  --bucket prod-sentiment-lambda-deployments \
+  --region us-east-1
+
+# Enable versioning
+aws s3api put-bucket-versioning \
+  --bucket preprod-sentiment-lambda-deployments \
+  --versioning-configuration Status=Enabled
+
+aws s3api put-bucket-versioning \
+  --bucket prod-sentiment-lambda-deployments \
+  --versioning-configuration Status=Enabled
+
+# Add tags
+aws s3api put-bucket-tagging \
+  --bucket preprod-sentiment-lambda-deployments \
+  --tagging 'TagSet=[{Key=Environment,Value=preprod},{Key=ManagedBy,Value=terraform},{Key=Project,Value=sentiment-analyzer}]'
+
+aws s3api put-bucket-tagging \
+  --bucket prod-sentiment-lambda-deployments \
+  --tagging 'TagSet=[{Key=Environment,Value=prod},{Key=ManagedBy,Value=terraform},{Key=Project,Value=sentiment-analyzer}]'
+```
+
+**Why This Design?**
+- Lambda packages must exist in S3 before Terraform can reference them
+- Terraform creates Lambda functions that point to `s3://BUCKET/FUNCTION/lambda.zip`
+- Workflow uploads packages first, then Terraform deploys infrastructure
+- Similar to Terraform state bucket - it's bootstrap infrastructure
+
+**Alternative Design (Future Improvement):**
+Refactor workflow to:
+1. Run Terraform with minimal config (just create S3 bucket)
+2. Upload Lambda packages
+3. Run Terraform again with full config (create Lambda functions)
+
+This would be more complex but eliminate manual bucket creation.
+
+**Reference:** Workflow run 19561400519
+
 ---
 
 ## Quick Reference: Common Commands
