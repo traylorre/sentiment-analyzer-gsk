@@ -7,7 +7,7 @@ Parses and validates configuration from environment variables.
 For On-Call Engineers:
     Environment variables:
     - WATCH_TAGS: Comma-separated tags (max 5)
-    - DYNAMODB_TABLE: DynamoDB table name
+    - DATABASE_TABLE: Database table name (or DYNAMODB_TABLE for backward compatibility)
     - SNS_TOPIC_ARN: SNS topic for analysis requests
     - NEWSAPI_SECRET_ARN: Secret ARN for NewsAPI key
     - MODEL_VERSION: Sentiment model version
@@ -84,7 +84,7 @@ class IngestionConfig:
 
         # Validate required strings
         if not self.dynamodb_table:
-            raise ConfigurationError("DYNAMODB_TABLE is required")
+            raise ConfigurationError("DATABASE_TABLE is required")
 
         if not self.sns_topic_arn:
             raise ConfigurationError("SNS_TOPIC_ARN is required")
@@ -146,7 +146,10 @@ def get_config() -> IngestionConfig:
     watch_tags = parse_watch_tags(watch_tags_str)
 
     # Get required variables
-    dynamodb_table = os.environ.get("DYNAMODB_TABLE", "")
+    # Cloud-agnostic: Use DATABASE_TABLE, fallback to DYNAMODB_TABLE for backward compatibility
+    dynamodb_table = os.environ.get("DATABASE_TABLE") or os.environ.get(
+        "DYNAMODB_TABLE", ""
+    )
     sns_topic_arn = os.environ.get("SNS_TOPIC_ARN", "")
     newsapi_secret_arn = os.environ.get("NEWSAPI_SECRET_ARN", "")
 

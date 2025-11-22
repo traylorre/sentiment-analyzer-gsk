@@ -61,7 +61,8 @@ logger.setLevel(logging.INFO)
 
 # Configuration from environment
 # CRITICAL: These must be set - no defaults to prevent wrong-environment data corruption
-DYNAMODB_TABLE = os.environ["DYNAMODB_TABLE"]
+# Cloud-agnostic: Use DATABASE_TABLE, fallback to DYNAMODB_TABLE for backward compatibility
+DYNAMODB_TABLE = os.environ.get("DATABASE_TABLE") or os.environ["DYNAMODB_TABLE"]
 SSE_POLL_INTERVAL = int(
     os.environ.get("SSE_POLL_INTERVAL", "5")
 )  # Safe default: polling frequency
