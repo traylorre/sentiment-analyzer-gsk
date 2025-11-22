@@ -1,0 +1,59 @@
+# Auto-Enable Auto-Merge Workflow
+# =================================
+#
+# Automatically enables auto-merge on all PRs when they are opened.
+# PRs will auto-merge once all required status checks pass.
+#
+# For On-Call Engineers:
+#   This workflow enables auto-merge so PRs don't require manual merging.
+#   PRs still require:
+#   - All status checks to pass (tests, lint, security, CodeQL)
+#   - Branch to be up to date with main
+#   - All conversations resolved
+#
+# For Developers:
+#   - Auto-merge is enabled automatically on PR creation
+#   - PR will merge automatically once all checks pass
+#   - Uses squash merge for clean git history
+#   - To disable auto-merge: gh pr merge --disable-auto <PR_NUMBER>
+#
+# Security Notes:
+#   - All branch protection rules still apply
+#   - Status checks must pass before merge
+#   - Uses GITHUB_TOKEN with minimal permissions
+
+name: Enable Auto-Merge
+
+on:
+  pull_request_target:
+    types: [opened, reopened, ready_for_review]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  enable-auto-merge:
+    runs-on: ubuntu-latest
+    # Skip for Dependabot PRs (handled by dependabot-auto-merge.yml)
+    if: github.actor != 'dependabot[bot]'
+
+    steps:
+      - name: Enable auto-merge
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Comment on PR
+        run: |
+          gh pr comment "$PR_URL" --body "🤖 Auto-merge enabled. This PR will automatically merge once all required checks pass:
+          - ✅ Run Tests
+          - ✅ Code Quality
+          - ✅ Dependency Vulnerability Scan
+          - ✅ Analyze (CodeQL)
+
+          To disable auto-merge: \`gh pr merge --disable-auto ${{ github.event.pull_request.number }}\`"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
