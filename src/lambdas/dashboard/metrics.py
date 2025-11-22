@@ -30,6 +30,8 @@ from typing import Any
 
 from boto3.dynamodb.conditions import Key
 
+from src.lambdas.shared.logging_utils import get_safe_error_info, sanitize_for_log
+
 # Structured logging
 logger = logging.getLogger(__name__)
 
@@ -64,10 +66,13 @@ def calculate_sentiment_distribution(items: list[dict[str, Any]]) -> dict[str, i
         if sentiment in distribution:
             distribution[sentiment] += 1
         elif sentiment:
-            # Log unexpected sentiment values
+            # Log unexpected sentiment values (sanitize to prevent log injection)
             logger.warning(
                 "Unexpected sentiment value",
-                extra={"sentiment": sentiment, "source_id": item.get("source_id")},
+                extra={
+                    "sentiment": sanitize_for_log(sentiment),
+                    "source_id": sanitize_for_log(item.get("source_id", "unknown")),
+                },
             )
 
     return distribution
@@ -151,7 +156,7 @@ def get_recent_items(
     except Exception as e:
         logger.error(
             "Failed to get recent items",
-            extra={"status": status, "limit": limit, "error": str(e)},
+            extra={"status": status, "limit": limit, **get_safe_error_info(e)},
         )
         raise
 
@@ -210,7 +215,7 @@ def get_items_by_sentiment(
     except Exception as e:
         logger.error(
             "Failed to get items by sentiment",
-            extra={"sentiment": sentiment, "hours": hours, "error": str(e)},
+            extra={"sentiment": sentiment, "hours": hours, **get_safe_error_info(e)},
         )
         raise
 
@@ -301,7 +306,7 @@ def calculate_ingestion_rate(
     except Exception as e:
         logger.error(
             "Failed to calculate ingestion rates",
-            extra={"hours": hours, "error": str(e)},
+            extra={"hours": hours, **get_safe_error_info(e)},
         )
         raise
 
@@ -383,7 +388,7 @@ def aggregate_dashboard_metrics(
     except Exception as e:
         logger.error(
             "Failed to aggregate dashboard metrics",
-            extra={"hours": hours, "error": str(e)},
+            extra={"hours": hours, **get_safe_error_info(e)},
         )
         raise
 

@@ -54,6 +54,11 @@ from src.lambdas.dashboard.metrics import (
     sanitize_item_for_response,
 )
 from src.lambdas.shared.dynamodb import get_table, parse_dynamodb_item
+from src.lambdas.shared.logging_utils import (
+    get_safe_error_info,
+    get_safe_error_message_for_user,
+    sanitize_path_component,
+)
 
 # Structured logging
 logger = logging.getLogger(__name__)
@@ -281,21 +286,27 @@ async def serve_static(filename: str):
         File content with appropriate media type
 
     Security Note:
-        Path traversal prevented by only allowing filenames, not paths.
+        Path traversal prevented using sanitize_path_component() utility.
+        Rejects directory separators, parent references, null bytes, and control chars.
     """
-    # Prevent path traversal
-    if "/" in filename or "\\" in filename or ".." in filename:
+    # Sanitize filename to prevent path traversal attacks
+    sanitized_filename = sanitize_path_component(filename)
+    if not sanitized_filename:
+        logger.warning(
+            "Path traversal attempt blocked",
+            extra={"client_ip": "unknown"},  # Could extract from request if needed
+        )
         raise HTTPException(
             status_code=400,
             detail="Invalid filename",
         )
 
-    file_path = STATIC_DIR / filename
+    file_path = STATIC_DIR / sanitized_filename
 
     if not file_path.exists():
         raise HTTPException(
             status_code=404,
-            detail=f"Static file not found: {filename}",
+            detail="Static file not found",  # Don't expose user input in error
         )
 
     # Determine media type
@@ -344,14 +355,14 @@ async def health_check():
     except Exception as e:
         logger.error(
             "Health check failed",
-            extra={"error": str(e), "table": DYNAMODB_TABLE},
+            extra={"table": DYNAMODB_TABLE, **get_safe_error_info(e)},
         )
 
         return JSONResponse(
             status_code=503,
             content={
                 "status": "unhealthy",
-                "error": str(e),
+                "error": get_safe_error_message_for_user(e),
                 "table": DYNAMODB_TABLE,
             },
         )
@@ -406,7 +417,7 @@ async def get_metrics(
     except Exception as e:
         logger.error(
             "Failed to get metrics",
-            extra={"hours": hours, "error": str(e)},
+            extra={"hours": hours, **get_safe_error_info(e)},
         )
         raise HTTPException(
             status_code=500,
@@ -497,7 +508,7 @@ async def stream_metrics(
                 except Exception as e:
                     logger.error(
                         "SSE metrics error",
-                        extra={"error": str(e)},
+                        extra={**get_safe_error_info(e)},
                     )
                     # Send error event but keep connection alive
                     yield {
@@ -573,7 +584,7 @@ async def get_items(
     except Exception as e:
         logger.error(
             "Failed to get items",
-            extra={"limit": limit, "status": status, "error": str(e)},
+            extra={"limit": limit, "status": status, **get_safe_error_info(e)},
         )
         raise HTTPException(
             status_code=500,

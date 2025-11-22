@@ -306,7 +306,8 @@ class TestSecretError:
         assert response["statusCode"] == 500
         body = json.loads(response["body"])
         assert body["code"] == "SECRET_ERROR"
-        assert body["details"]["secret_id"] == "dev/sentiment-analyzer/newsapi"
+        # Security: Only logs secret name, not full path
+        assert body["details"]["secret_name"] == "newsapi"
 
         # Verify expected error was logged
         from tests.conftest import assert_error_logged
