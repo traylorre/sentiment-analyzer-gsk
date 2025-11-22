@@ -200,11 +200,13 @@ jobs:
 
       - name: Terraform Plan (Preprod)
         id: plan
+        timeout-minutes: 10
         run: |
           terraform plan \
             -var-file=preprod.tfvars \
             -var="model_version=${{ needs.build.outputs.artifact-sha }}" \
             -no-color \
+            -lock-timeout=5m \
             -out=preprod.tfplan | tee plan.txt
 
           if grep -q "No changes" plan.txt; then
@@ -215,8 +217,9 @@ jobs:
 
       - name: Terraform Apply (Preprod)
         if: steps.plan.outputs.has_changes == 'true'
+        timeout-minutes: 15
         run: |
-          terraform apply -auto-approve preprod.tfplan
+          terraform apply -auto-approve -lock-timeout=5m preprod.tfplan
           echo "✅ Preprod infrastructure deployed"
 
       - name: Get Preprod Outputs
@@ -399,17 +402,20 @@ jobs:
 
       - name: Terraform Plan (Production)
         id: plan
+        timeout-minutes: 10
         run: |
           terraform plan \
             -var-file=prod.tfvars \
             -var="model_version=${{ needs.build.outputs.artifact-sha }}" \
             -no-color \
+            -lock-timeout=5m \
             -out=prod.tfplan | tee plan.txt
 
       - name: Terraform Apply (Production)
+        timeout-minutes: 15
         run: |
           echo "🚀 Deploying to PRODUCTION..."
-          terraform apply -auto-approve prod.tfplan
+          terraform apply -auto-approve -lock-timeout=5m prod.tfplan
           echo "✅ Production deployment complete"
 
       - name: Get Production Outputs
