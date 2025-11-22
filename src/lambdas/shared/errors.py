@@ -382,13 +382,20 @@ def secret_error(
         Check Secrets Manager access:
         aws secretsmanager describe-secret --secret-id <id>
         See SC-03, SC-05 in ON_CALL_SOP.md.
+
+    Security Note:
+        Only logs the secret name (last path component), not the full secret ID
+        to prevent exposing environment/application structure.
     """
+    # Sanitize secret_id to log only the name, not full path
+    secret_name = secret_id.split("/")[-1] if "/" in secret_id else secret_id
+
     return error_response(
         500,
         "Failed to retrieve configuration",
         ErrorCode.SECRET_ERROR,
         request_id,
-        details={"secret_id": secret_id},
+        details={"secret_name": secret_name},
     )
 
 
