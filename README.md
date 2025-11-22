@@ -19,43 +19,45 @@ A cloud-hosted Sentiment Analyzer service built with serverless AWS architecture
 [![CodeQL](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pr-check-codeql.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pr-check-codeql.yml)
 
 ### Deployment Pipeline
-| Stage | Workflow | Status |
-|-------|----------|--------|
-| **[1/4]** Build Artifacts | [pipeline-1-build.yml](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pipeline-1-build.yml) | ![Build](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pipeline-1-build.yml/badge.svg) |
-| **[2/4]** Deploy to Preprod | [pipeline-2-deploy-preprod.yml](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pipeline-2-deploy-preprod.yml) | ![Deploy Preprod](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pipeline-2-deploy-preprod.yml/badge.svg) |
-| **[3/4]** Preprod Integration Tests | [pipeline-3-test-preprod.yml](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pipeline-3-test-preprod.yml) | ![Test Preprod](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pipeline-3-test-preprod.yml/badge.svg) |
-| **[4/4]** Deploy to Production | [pipeline-4-deploy-prod.yml](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pipeline-4-deploy-prod.yml) | ![Deploy Prod](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pipeline-4-deploy-prod.yml/badge.svg) |
 
-**Pipeline Behavior:**
-- **Automatic:** Merges to `main` trigger `[1/4]` → `[2/4]` → `[3/4]` → `[4/4]` automatically
-- **Manual Control:** Use GitHub UI or `gh workflow run` to trigger any stage independently
+[![Deploy Pipeline](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/deploy.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/deploy.yml)
 
-**Manual Deployment Commands:**
-```bash
-# Trigger full pipeline (build + deploy all environments)
-gh workflow run pipeline-1-build.yml --repo traylorre/sentiment-analyzer-gsk
+**Pipeline Flow:** Build → Deploy Preprod → Test Preprod → Deploy Production → Canary Test → Summary
 
-# Deploy specific SHA to preprod (bypass build)
-gh workflow run pipeline-2-deploy-preprod.yml \
-  --repo traylorre/sentiment-analyzer-gsk \
-  --field artifact_sha=abc1234
+[View latest pipeline run →](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/deploy.yml)
 
-# Re-run preprod tests without redeploying
-gh workflow run pipeline-3-test-preprod.yml \
-  --repo traylorre/sentiment-analyzer-gsk \
-  --field artifact_sha=abc1234
+**Pipeline Stages:**
+```mermaid
+graph LR
+    Build[Build<br/>Lambda Packages] --> DeployPreprod[Deploy<br/>Preprod]
+    DeployPreprod --> TestPreprod[Test<br/>Preprod]
+    TestPreprod --> DeployProd[Deploy<br/>Production]
+    DeployProd --> Canary[Canary<br/>Test]
+    Canary --> Summary[Deployment<br/>Summary]
 
-# Emergency: Deploy specific SHA to production
-gh workflow run pipeline-4-deploy-prod.yml \
-  --repo traylorre/sentiment-analyzer-gsk \
-  --field artifact_sha=abc1234 \
-  --field skip_canary=false
+    style Build fill:#4CAF50
+    style DeployPreprod fill:#2196F3
+    style TestPreprod fill:#FF9800
+    style DeployProd fill:#F44336
+    style Canary fill:#9C27B0
+    style Summary fill:#607D8B
 ```
 
-**GitHub UI Alternative:**
-1. Go to [Actions](https://github.com/traylorre/sentiment-analyzer-gsk/actions)
-2. Select workflow (e.g., `[2/4] Deploy to Preprod`)
-3. Click "Run workflow" → Choose branch → Fill parameters → "Run workflow"
+**Quick Actions:**
+```bash
+# Trigger full pipeline (automatic on push to main)
+gh workflow run deploy.yml --repo traylorre/sentiment-analyzer-gsk
+
+# View current pipeline status
+gh run list --workflow=deploy.yml --limit 5
+
+# Watch latest pipeline run
+gh run watch
+```
+
+**Interactive Pipeline View:**
+See live graphical pipeline with job dependencies at:
+https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/deploy.yml
 
 ---
 
