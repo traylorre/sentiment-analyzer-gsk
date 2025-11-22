@@ -100,11 +100,11 @@ jobs:
 
           # Package Ingestion Lambda WITH dependencies
           echo "📦 Packaging Ingestion Lambda..."
-          mkdir -p packages/ingestion-build
+          mkdir -p packages/ingestion-build/src/lambdas packages/ingestion-build/src/lib
           cp -r packages/deps/* packages/ingestion-build/
           cp -r src/lambdas/ingestion/* packages/ingestion-build/
           cp -r src/lambdas/shared packages/ingestion-build/src/lambdas/
-          cp -r src/lib packages/ingestion-build/src/
+          cp -r src/lib/* packages/ingestion-build/src/lib/
           cd packages/ingestion-build
           zip -r ../ingestion-${SHA}.zip . \
             -x "*.pyc" "__pycache__/*" "*.pytest_cache/*" "tests/*" -q
@@ -116,13 +116,13 @@ jobs:
 
           # Package Analysis Lambda WITH dependencies (excluding torch/transformers - in layer)
           echo "📦 Packaging Analysis Lambda..."
-          mkdir -p packages/analysis-build
+          mkdir -p packages/analysis-build/src/lambdas packages/analysis-build/src/lib
           cp -r packages/deps/* packages/analysis-build/
           # Remove torch and transformers - provided by ML layer
           rm -rf packages/analysis-build/torch* packages/analysis-build/transformers*
           cp -r src/lambdas/analysis/* packages/analysis-build/
           cp -r src/lambdas/shared packages/analysis-build/src/lambdas/
-          cp -r src/lib packages/analysis-build/src/
+          cp -r src/lib/* packages/analysis-build/src/lib/
           cd packages/analysis-build
           zip -r ../analysis-${SHA}.zip . \
             -x "*.pyc" "__pycache__/*" "*.pytest_cache/*" "tests/*" -q
@@ -134,12 +134,12 @@ jobs:
 
           # Package Dashboard Lambda WITH dependencies
           echo "📦 Packaging Dashboard Lambda..."
-          mkdir -p packages/dashboard-build
+          mkdir -p packages/dashboard-build/src/lambdas packages/dashboard-build/src/lib packages/dashboard-build/src/dashboard
           cp -r packages/deps/* packages/dashboard-build/
           cp -r src/lambdas/dashboard/* packages/dashboard-build/
           cp -r src/lambdas/shared packages/dashboard-build/src/lambdas/
-          cp -r src/lib packages/dashboard-build/src/
-          cp -r src/dashboard packages/dashboard-build/src/
+          cp -r src/lib/* packages/dashboard-build/src/lib/
+          cp -r src/dashboard/* packages/dashboard-build/src/dashboard/
           cd packages/dashboard-build
           zip -r ../dashboard-${SHA}.zip . \
             -x "*.pyc" "__pycache__/*" "*.pytest_cache/*" "tests/*" -q
