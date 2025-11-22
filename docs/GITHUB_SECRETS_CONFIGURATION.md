@@ -143,8 +143,8 @@ Credential isolation tested and verified:
 
 ### DynamoDB Lock Tables
 
-- `terraform-state-lock-preprod` - Prevents concurrent preprod Terraform runs
-- `terraform-state-lock-prod` - Prevents concurrent prod Terraform runs
+- `preprod/terraform.tfstate.tflock` - Prevents concurrent preprod Terraform runs
+- `prod/terraform.tfstate.tflock` - Prevents concurrent prod Terraform runs
 
 ### S3 State Bucket
 
@@ -289,7 +289,7 @@ Before first deployment:
 
 **Monthly Cost**: ~$2.50
 
-- DynamoDB lock tables (on-demand): ~$1.00/month (minimal requests)
+- S3 lock files (on-demand): ~$1.00/month (minimal requests)
 - Secrets Manager secrets (4 total): $1.60/month ($0.40 each)
 - S3 bucket storage: ~$0.10/month (<1GB)
 - IAM users: $0 (included)

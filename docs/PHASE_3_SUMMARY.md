@@ -407,7 +407,7 @@ Create `tests/fixtures/newsapi_responses.py`:
 **Monthly Costs**:
 - GitHub Actions minutes: ~$0 (2,000 free minutes/month)
 - GitHub Artifacts storage: ~$0 (500MB free, we use ~100MB)
-- IAM/Secrets/DynamoDB locks: ~$1.85/month (from Phases 1-2)
+- IAM/Secrets/S3 lock files: ~$1.85/month (from Phases 1-2)
 
 **Total New Cost**: $0/month (within free tier)
 

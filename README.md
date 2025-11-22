@@ -22,42 +22,31 @@ A cloud-hosted Sentiment Analyzer service built with serverless AWS architecture
 
 [![Deploy Pipeline](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/deploy.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/deploy.yml)
 
-**Pipeline Flow:** Build → Deploy Preprod → Test Preprod → Deploy Production → Canary Test → Summary
+**Pipeline Flow:** Build → Deploy Preprod → Test Preprod → Deploy Production
 
-[View latest pipeline run →](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/deploy.yml)
-
-**Pipeline Stages:**
 ```mermaid
 graph LR
     Build[Build<br/>Lambda Packages] --> DeployPreprod[Deploy<br/>Preprod]
     DeployPreprod --> TestPreprod[Test<br/>Preprod]
     TestPreprod --> DeployProd[Deploy<br/>Production]
-    DeployProd --> Canary[Canary<br/>Test]
-    Canary --> Summary[Deployment<br/>Summary]
 
     style Build fill:#4CAF50
     style DeployPreprod fill:#2196F3
     style TestPreprod fill:#FF9800
     style DeployProd fill:#F44336
-    style Canary fill:#9C27B0
-    style Summary fill:#607D8B
 ```
 
 **Quick Actions:**
 ```bash
-# Trigger full pipeline (automatic on push to main)
-gh workflow run deploy.yml --repo traylorre/sentiment-analyzer-gsk
-
-# View current pipeline status
+# View pipeline status (automatic on push to main)
 gh run list --workflow=deploy.yml --limit 5
 
 # Watch latest pipeline run
 gh run watch
-```
 
-**Interactive Pipeline View:**
-See live graphical pipeline with job dependencies at:
-https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/deploy.yml
+# View detailed pipeline visualization
+open https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/deploy.yml
+```
 
 ---
 
@@ -597,36 +586,28 @@ git push origin feature/your-feature-name
 
 ### Environment Promotion Flow
 
-This project uses a three-stage promotion pipeline:
+Deployments follow an automated promotion pipeline triggered on push to `main`:
 
-1. **Dev** - Deploys automatically on merge to `main`
-2. **Preprod** - Artifact promotion via `build-and-promote.yml` workflow
-3. **Prod** - Manual deployment after preprod validation
+1. **Build** - Lambda packages built and SHA-versioned
+2. **Preprod** - Automatically deployed and tested
+3. **Production** - Deployed after preprod validation
 
-### Deployment Commands
+**Key Features:**
+- ✅ Automatic progression through stages
+- ✅ SHA-based artifact versioning
+- ✅ S3 native state locking (no DynamoDB dependency)
+- ✅ Integrated validation gates
 
-**Dev Deployment (Automatic):**
+**Monitor Deployments:**
 ```bash
-# Automatically triggers on merge to main
-# Or manually trigger via:
-gh workflow run deploy-dev.yml --repo traylorre/sentiment-analyzer-gsk
-```
+# View pipeline status
+gh run list --workflow=deploy.yml --limit 5
 
-**Preprod Deployment (Artifact Promotion):**
-```bash
-# Build and promote to preprod
-gh workflow run build-and-promote.yml \
-  --repo traylorre/sentiment-analyzer-gsk \
-  --ref feat/promotion-pipeline-setup
+# Watch active deployment
+gh run watch
 
-# Check preprod deployment status
-gh run list --workflow=build-and-promote.yml --limit 1
-```
-
-**Prod Deployment (Manual Approval Required):**
-```bash
-# Only after preprod validation passes
-gh workflow run deploy-prod.yml --repo traylorre/sentiment-analyzer-gsk
+# View workflow details
+gh run view <run-id> --log
 ```
 
 See [DEPLOYMENT.md](docs/DEPLOYMENT.md) for detailed deployment procedures and rollback strategies.
@@ -735,11 +716,9 @@ sentiment-analyzer-gsk/
 │
 └── .github/                     # GitHub configuration
     ├── workflows/               # CI/CD workflows
-    │   ├── test.yml             # Run tests
-    │   ├── lint.yml             # Code quality checks
-    │   ├── deploy-dev.yml       # Dev deployment
-    │   ├── build-and-promote.yml # Preprod promotion
-    │   └── deploy-prod.yml      # Prod deployment
+    │   ├── pr-check-*.yml       # PR validation checks
+    │   ├── deploy.yml           # Main deployment pipeline
+    │   └── dependabot-auto-merge.yml  # Dependabot automation
     └── CODEOWNERS               # Review assignments
 ```
 
