@@ -79,7 +79,7 @@ extend-exclude = '''
 
 [tool.ruff]
 line-length = 88
-target-version = "py313"
+target-version = "py312"  # Ruff doesn't have py313 target yet, py312 is latest
 select = [
     "E",   # pycodestyle errors
     "W",   # pycodestyle warnings
