@@ -198,6 +198,68 @@ jobs:
             -backend-config="region=${{ vars.AWS_REGION }}" \
             -reconfigure
 
+      - name: Clean Stale Terraform Locks (Preprod)
+        run: |
+          echo "🔍 Checking for stale Terraform state locks..."
+
+          # Get all locks from DynamoDB
+          LOCKS=$(aws dynamodb scan \
+            --table-name terraform-state-lock-preprod \
+            --region ${{ vars.AWS_REGION }} \
+            --output json 2>/dev/null || echo '{"Items":[]}')
+
+          # Check if any locks exist
+          LOCK_COUNT=$(echo "$LOCKS" | jq '.Items | length')
+
+          if [ "$LOCK_COUNT" -eq 0 ]; then
+            echo "✅ No locks found - proceeding with deployment"
+            exit 0
+          fi
+
+          echo "⚠️  Found $LOCK_COUNT lock(s) in DynamoDB"
+
+          # For each lock, check if it's stale (older than 1 hour)
+          CURRENT_TIME=$(date +%s)
+          STALE_THRESHOLD=3600  # 1 hour in seconds
+
+          echo "$LOCKS" | jq -r '.Items[] | @json' | while read -r item; do
+            LOCK_ID=$(echo "$item" | jq -r '.LockID.S // empty')
+            INFO=$(echo "$item" | jq -r '.Info.S // empty')
+
+            if [ -z "$LOCK_ID" ]; then
+              continue
+            fi
+
+            echo "Lock ID: $LOCK_ID"
+
+            # Extract timestamp from Info field (format: {"Created":"2025-11-22T12:33:40Z",...})
+            CREATED=$(echo "$INFO" | jq -r '.Created // empty' 2>/dev/null || echo "")
+
+            if [ -n "$CREATED" ]; then
+              LOCK_TIME=$(date -d "$CREATED" +%s 2>/dev/null || echo "0")
+              AGE=$((CURRENT_TIME - LOCK_TIME))
+
+              echo "  Created: $CREATED (${AGE}s ago)"
+
+              if [ "$AGE" -gt "$STALE_THRESHOLD" ]; then
+                echo "  🗑️  Lock is stale (> 1 hour old) - removing..."
+                aws dynamodb delete-item \
+                  --table-name terraform-state-lock-preprod \
+                  --region ${{ vars.AWS_REGION }} \
+                  --key "{\"LockID\":{\"S\":\"$LOCK_ID\"}}"
+                echo "  ✅ Stale lock removed"
+              else
+                echo "  ⏳ Lock is recent (< 1 hour old) - keeping for safety"
+                echo "  ℹ️  If this blocks deployment, another process may be running"
+                echo "  ℹ️  Wait for it to complete or manually force-unlock if stuck"
+              fi
+            else
+              echo "  ⚠️  Could not determine lock age - keeping for safety"
+            fi
+          done
+
+          echo "✅ Stale lock cleanup complete"
+
       - name: Terraform Plan (Preprod)
         id: plan
         timeout-minutes: 10
@@ -399,6 +461,67 @@ jobs:
             -backend-config=backend-prod.hcl \
             -backend-config="region=${{ vars.AWS_REGION }}" \
             -reconfigure
+
+      - name: Clean Stale Terraform Locks (Production)
+        run: |
+          echo "🔍 Checking for stale Terraform state locks..."
+
+          # Get all locks from DynamoDB
+          LOCKS=$(aws dynamodb scan \
+            --table-name terraform-state-lock-prod \
+            --region ${{ vars.AWS_REGION }} \
+            --output json 2>/dev/null || echo '{"Items":[]}')
+
+          # Check if any locks exist
+          LOCK_COUNT=$(echo "$LOCKS" | jq '.Items | length')
+
+          if [ "$LOCK_COUNT" -eq 0 ]; then
+            echo "✅ No locks found - proceeding with deployment"
+            exit 0
+          fi
+
+          echo "⚠️  Found $LOCK_COUNT lock(s) in DynamoDB"
+
+          # For each lock, check if it's stale (older than 1 hour)
+          CURRENT_TIME=$(date +%s)
+          STALE_THRESHOLD=3600  # 1 hour in seconds
+
+          echo "$LOCKS" | jq -r '.Items[] | @json' | while read -r item; do
+            LOCK_ID=$(echo "$item" | jq -r '.LockID.S // empty')
+            INFO=$(echo "$item" | jq -r '.Info.S // empty')
+
+            if [ -z "$LOCK_ID" ]; then
+              continue
+            fi
+
+            echo "Lock ID: $LOCK_ID"
+
+            # Extract timestamp from Info field
+            CREATED=$(echo "$INFO" | jq -r '.Created // empty' 2>/dev/null || echo "")
+
+            if [ -n "$CREATED" ]; then
+              LOCK_TIME=$(date -d "$CREATED" +%s 2>/dev/null || echo "0")
+              AGE=$((CURRENT_TIME - LOCK_TIME))
+
+              echo "  Created: $CREATED (${AGE}s ago)"
+
+              if [ "$AGE" -gt "$STALE_THRESHOLD" ]; then
+                echo "  🗑️  Lock is stale (> 1 hour old) - removing..."
+                aws dynamodb delete-item \
+                  --table-name terraform-state-lock-prod \
+                  --region ${{ vars.AWS_REGION }} \
+                  --key "{\"LockID\":{\"S\":\"$LOCK_ID\"}}"
+                echo "  ✅ Stale lock removed"
+              else
+                echo "  ⏳ Lock is recent (< 1 hour old) - keeping for safety"
+                echo "  ℹ️  If this blocks deployment, another process may be running"
+              fi
+            else
+              echo "  ⚠️  Could not determine lock age - keeping for safety"
+            fi
+          done
+
+          echo "✅ Stale lock cleanup complete"
 
       - name: Terraform Plan (Production)
         id: plan
