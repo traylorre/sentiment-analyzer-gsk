@@ -1,5 +1,5 @@
 # Main Terraform Configuration for Sentiment Analyzer
-# Regional Multi-AZ Architecture (us-east-1)
+# Regional Multi-AZ Architecture (region configured via aws_region variable)
 
 terraform {
   required_version = ">= 1.0"
@@ -19,7 +19,7 @@ terraform {
   #              or: terraform init -backend-config=backend-prod.hcl
   backend "s3" {
     # Values provided by backend-{env}.hcl files
-    region  = "us-east-1"
+    # region is passed via -backend-config="region=${AWS_REGION}" in CI/CD
     encrypt = true
   }
 }
@@ -70,7 +70,7 @@ module "dynamodb" {
 # so the bucket cannot be managed by Terraform.
 #
 # Manual creation (one-time setup):
-#   aws s3api create-bucket --bucket preprod-sentiment-lambda-deployments --region us-east-1
+#   aws s3api create-bucket --bucket preprod-sentiment-lambda-deployments --region $AWS_REGION
 #   aws s3api put-bucket-versioning --bucket preprod-sentiment-lambda-deployments --versioning-configuration Status=Enabled
 #   aws s3api put-bucket-public-access-block --bucket preprod-sentiment-lambda-deployments --block-public-acls=true --block-public-policy=true --ignore-public-acls=true --restrict-public-buckets=true
 #

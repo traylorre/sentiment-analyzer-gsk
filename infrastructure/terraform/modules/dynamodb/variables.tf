@@ -12,7 +12,7 @@ variable "environment" {
 variable "aws_region" {
   description = "AWS region for DynamoDB table"
   type        = string
-  default     = "us-east-1"
+  # No default - region must be explicitly provided
 }
 
 variable "tags" {

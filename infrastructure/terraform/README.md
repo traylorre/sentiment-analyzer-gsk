@@ -1,6 +1,6 @@
 # Terraform Infrastructure: Sentiment Analyzer
 
-**Architecture**: Regional Multi-AZ (us-east-1)
+**Architecture**: Regional Multi-AZ (region configured via aws_region variable)
 **Feature**: `001-interactive-dashboard-demo`
 
 ## Overview

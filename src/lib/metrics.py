@@ -147,12 +147,14 @@ def get_cloudwatch_client(region_name: str | None = None) -> Any:
     Get a CloudWatch client with retry configuration.
 
     Args:
-        region_name: AWS region (defaults to AWS_DEFAULT_REGION)
+        region_name: AWS region (defaults to AWS_REGION env var)
 
     Returns:
         boto3 CloudWatch client
     """
-    region = region_name or os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
+    region = region_name or os.environ.get("AWS_REGION")
+    if not region:
+        raise ValueError("AWS_REGION environment variable must be set")
 
     return boto3.client(
         "cloudwatch",
@@ -204,7 +206,8 @@ def emit_metric(
         ]
 
     # Add environment dimension by default
-    environment = os.environ.get("ENVIRONMENT", "dev")
+    # CRITICAL: Must be set - no default to prevent metrics going to wrong environment
+    environment = os.environ["ENVIRONMENT"]
     if "Dimensions" not in metric_data:
         metric_data["Dimensions"] = []
     metric_data["Dimensions"].append({"Name": "Environment", "Value": environment})
@@ -249,7 +252,8 @@ def emit_metrics_batch(
         return
 
     client = get_cloudwatch_client(region_name)
-    environment = os.environ.get("ENVIRONMENT", "dev")
+    # CRITICAL: Must be set - no default to prevent metrics going to wrong environment
+    environment = os.environ["ENVIRONMENT"]
 
     metric_data_list = []
     for metric in metrics:
