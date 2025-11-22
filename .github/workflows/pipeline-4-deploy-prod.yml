@@ -133,6 +133,9 @@ jobs:
             SHA="${{ needs.check-preprod-validation.outputs.artifact_sha }}"
           fi
 
+          # Strip 'v' prefix if present (GitHub UI may add it)
+          SHA="${SHA#v}"
+
           echo "sha=${SHA}" >> $GITHUB_OUTPUT
           echo "Deploying SHA: ${SHA}"
 
