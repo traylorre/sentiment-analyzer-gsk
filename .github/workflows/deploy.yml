@@ -101,7 +101,7 @@ jobs:
           echo "✅ Lambda packages built successfully"
 
       - name: Upload Lambda Packages as Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ steps.package.outputs.name }}
           path: packages/
@@ -125,7 +125,7 @@ jobs:
           cat build-manifest.json
 
       - name: Upload Build Manifest
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: build-manifest-${{ steps.package.outputs.sha }}
           path: build-manifest.json
@@ -289,7 +289,7 @@ jobs:
 
       - name: Upload Test Results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: preprod-test-results-${{ needs.build.outputs.artifact-sha }}
           path: preprod-test-results.xml
@@ -314,7 +314,7 @@ jobs:
 
       - name: Upload Validation Metadata
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: validation-${{ needs.build.outputs.artifact-sha }}
           path: validated.json
