@@ -482,7 +482,11 @@ def _get_sns_client() -> Any:
     """
     import os
 
-    region = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
+    region = os.environ.get("AWS_DEFAULT_REGION") or os.environ.get("AWS_REGION")
+    if not region:
+        raise ValueError(
+            "AWS_DEFAULT_REGION or AWS_REGION environment variable must be set"
+        )
 
     return boto3.client(
         "sns",
