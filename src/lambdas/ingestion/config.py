@@ -99,9 +99,26 @@ class IngestionConfig:
             )
 
         # Validate model version format
+        # Accepts either:
+        # - Git SHA: v + 7 hex chars (e.g., "vf35be7e")
+        # - Semantic version: v + semver (e.g., "v1.0.0")
         if not self.model_version.startswith("v"):
             raise ConfigurationError(
                 f"MODEL_VERSION must start with 'v': {self.model_version}"
+            )
+
+        # Validate format (Git SHA or semantic version)
+        version_without_v = self.model_version[1:]  # Strip 'v' prefix
+        is_git_sha = len(version_without_v) == 7 and all(
+            c in "0123456789abcdefABCDEF" for c in version_without_v
+        )
+        is_semver = "." in version_without_v and all(
+            part.isdigit() for part in version_without_v.split(".")
+        )
+
+        if not (is_git_sha or is_semver):
+            raise ConfigurationError(
+                f"MODEL_VERSION must be Git SHA (v + 7 hex chars) or semantic version (v + X.Y.Z): {self.model_version}"
             )
 
 
