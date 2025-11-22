@@ -198,9 +198,9 @@ jobs:
             -backend-config="region=${{ vars.AWS_REGION }}" \
             -reconfigure
 
-      - name: Clean Stale Terraform Locks (Preprod)
+      - name: Check for Stale Terraform Locks (Preprod)
         run: |
-          echo "🔍 Checking for stale Terraform state locks..."
+          echo "🔍 Checking for Terraform state locks..."
 
           # Get all locks from DynamoDB
           LOCKS=$(aws dynamodb scan \
@@ -208,7 +208,6 @@ jobs:
             --region ${{ vars.AWS_REGION }} \
             --output json 2>/dev/null || echo '{"Items":[]}')
 
-          # Check if any locks exist
           LOCK_COUNT=$(echo "$LOCKS" | jq '.Items | length')
 
           if [ "$LOCK_COUNT" -eq 0 ]; then
@@ -217,48 +216,45 @@ jobs:
           fi
 
           echo "⚠️  Found $LOCK_COUNT lock(s) in DynamoDB"
-
-          # For each lock, check if it's stale (older than 1 hour)
-          CURRENT_TIME=$(date +%s)
-          STALE_THRESHOLD=3600  # 1 hour in seconds
-
+          echo ""
+          echo "⚠️  LOCK DETECTED - Manual intervention may be required"
+          echo ""
+          echo "This workflow uses concurrency controls (cancel-in-progress: false)"
+          echo "so only ONE deployment should run at a time."
+          echo ""
+          echo "If you see a lock here, it likely means:"
+          echo "1. A previous run was canceled/failed and left an orphaned lock"
+          echo "2. Someone is running Terraform manually (check with team)"
+          echo ""
+          echo "Lock details:"
           echo "$LOCKS" | jq -r '.Items[] | @json' | while read -r item; do
             LOCK_ID=$(echo "$item" | jq -r '.LockID.S // empty')
             INFO=$(echo "$item" | jq -r '.Info.S // empty')
 
-            if [ -z "$LOCK_ID" ]; then
-              continue
-            fi
-
-            echo "Lock ID: $LOCK_ID"
-
-            # Extract timestamp from Info field (format: {"Created":"2025-11-22T12:33:40Z",...})
-            CREATED=$(echo "$INFO" | jq -r '.Created // empty' 2>/dev/null || echo "")
-
-            if [ -n "$CREATED" ]; then
-              LOCK_TIME=$(date -d "$CREATED" +%s 2>/dev/null || echo "0")
-              AGE=$((CURRENT_TIME - LOCK_TIME))
-
-              echo "  Created: $CREATED (${AGE}s ago)"
-
-              if [ "$AGE" -gt "$STALE_THRESHOLD" ]; then
-                echo "  🗑️  Lock is stale (> 1 hour old) - removing..."
-                aws dynamodb delete-item \
-                  --table-name terraform-state-lock-preprod \
-                  --region ${{ vars.AWS_REGION }} \
-                  --key "{\"LockID\":{\"S\":\"$LOCK_ID\"}}"
-                echo "  ✅ Stale lock removed"
-              else
-                echo "  ⏳ Lock is recent (< 1 hour old) - keeping for safety"
-                echo "  ℹ️  If this blocks deployment, another process may be running"
-                echo "  ℹ️  Wait for it to complete or manually force-unlock if stuck"
-              fi
-            else
-              echo "  ⚠️  Could not determine lock age - keeping for safety"
+            if [ -n "$LOCK_ID" ]; then
+              echo "  Lock ID: $LOCK_ID"
+              CREATED=$(echo "$INFO" | jq -r '.Created // empty' 2>/dev/null || echo "unknown")
+              echo "  Created: $CREATED"
+              echo "  Info: $INFO" | head -c 200
+              echo ""
             fi
           done
 
-          echo "✅ Stale lock cleanup complete"
+          echo ""
+          echo "🛠️  TO MANUALLY UNLOCK:"
+          echo "If you're certain no other deployment is running, unlock with:"
+          echo ""
+          echo "  terraform force-unlock <LOCK_ID>"
+          echo ""
+          echo "Or via AWS CLI:"
+          echo "  aws dynamodb delete-item \\"
+          echo "    --table-name terraform-state-lock-preprod \\"
+          echo "    --region ${{ vars.AWS_REGION }} \\"
+          echo "    --key '{\"LockID\":{\"S\":\"<LOCK_ID>\"}}'"
+          echo ""
+          echo "⏳ Proceeding with deployment..."
+          echo "   Terraform will wait for lock release (timeout: 5 minutes)"
+          echo ""
 
       - name: Terraform Plan (Preprod)
         id: plan
@@ -462,9 +458,9 @@ jobs:
             -backend-config="region=${{ vars.AWS_REGION }}" \
             -reconfigure
 
-      - name: Clean Stale Terraform Locks (Production)
+      - name: Check for Stale Terraform Locks (Production)
         run: |
-          echo "🔍 Checking for stale Terraform state locks..."
+          echo "🔍 Checking for Terraform state locks..."
 
           # Get all locks from DynamoDB
           LOCKS=$(aws dynamodb scan \
@@ -472,7 +468,6 @@ jobs:
             --region ${{ vars.AWS_REGION }} \
             --output json 2>/dev/null || echo '{"Items":[]}')
 
-          # Check if any locks exist
           LOCK_COUNT=$(echo "$LOCKS" | jq '.Items | length')
 
           if [ "$LOCK_COUNT" -eq 0 ]; then
@@ -481,47 +476,45 @@ jobs:
           fi
 
           echo "⚠️  Found $LOCK_COUNT lock(s) in DynamoDB"
-
-          # For each lock, check if it's stale (older than 1 hour)
-          CURRENT_TIME=$(date +%s)
-          STALE_THRESHOLD=3600  # 1 hour in seconds
-
+          echo ""
+          echo "⚠️  LOCK DETECTED - Manual intervention may be required"
+          echo ""
+          echo "This workflow uses concurrency controls (cancel-in-progress: false)"
+          echo "so only ONE deployment should run at a time."
+          echo ""
+          echo "If you see a lock here, it likely means:"
+          echo "1. A previous run was canceled/failed and left an orphaned lock"
+          echo "2. Someone is running Terraform manually (check with team)"
+          echo ""
+          echo "Lock details:"
           echo "$LOCKS" | jq -r '.Items[] | @json' | while read -r item; do
             LOCK_ID=$(echo "$item" | jq -r '.LockID.S // empty')
             INFO=$(echo "$item" | jq -r '.Info.S // empty')
 
-            if [ -z "$LOCK_ID" ]; then
-              continue
-            fi
-
-            echo "Lock ID: $LOCK_ID"
-
-            # Extract timestamp from Info field
-            CREATED=$(echo "$INFO" | jq -r '.Created // empty' 2>/dev/null || echo "")
-
-            if [ -n "$CREATED" ]; then
-              LOCK_TIME=$(date -d "$CREATED" +%s 2>/dev/null || echo "0")
-              AGE=$((CURRENT_TIME - LOCK_TIME))
-
-              echo "  Created: $CREATED (${AGE}s ago)"
-
-              if [ "$AGE" -gt "$STALE_THRESHOLD" ]; then
-                echo "  🗑️  Lock is stale (> 1 hour old) - removing..."
-                aws dynamodb delete-item \
-                  --table-name terraform-state-lock-prod \
-                  --region ${{ vars.AWS_REGION }} \
-                  --key "{\"LockID\":{\"S\":\"$LOCK_ID\"}}"
-                echo "  ✅ Stale lock removed"
-              else
-                echo "  ⏳ Lock is recent (< 1 hour old) - keeping for safety"
-                echo "  ℹ️  If this blocks deployment, another process may be running"
-              fi
-            else
-              echo "  ⚠️  Could not determine lock age - keeping for safety"
+            if [ -n "$LOCK_ID" ]; then
+              echo "  Lock ID: $LOCK_ID"
+              CREATED=$(echo "$INFO" | jq -r '.Created // empty' 2>/dev/null || echo "unknown")
+              echo "  Created: $CREATED"
+              echo "  Info: $INFO" | head -c 200
+              echo ""
             fi
           done
 
-          echo "✅ Stale lock cleanup complete"
+          echo ""
+          echo "🛠️  TO MANUALLY UNLOCK (PRODUCTION):"
+          echo "⚠️  ONLY unlock if you're CERTAIN no other deployment is running!"
+          echo ""
+          echo "  terraform force-unlock <LOCK_ID>"
+          echo ""
+          echo "Or via AWS CLI:"
+          echo "  aws dynamodb delete-item \\"
+          echo "    --table-name terraform-state-lock-prod \\"
+          echo "    --region ${{ vars.AWS_REGION }} \\"
+          echo "    --key '{\"LockID\":{\"S\":\"<LOCK_ID>\"}}'"
+          echo ""
+          echo "⏳ Proceeding with deployment..."
+          echo "   Terraform will wait for lock release (timeout: 5 minutes)"
+          echo ""
 
       - name: Terraform Plan (Production)
         id: plan
