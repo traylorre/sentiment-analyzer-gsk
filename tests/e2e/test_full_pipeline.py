@@ -152,7 +152,7 @@ class TestFullPipeline:
     @patch.dict(
         os.environ,
         {
-            "AWS_DEFAULT_REGION": "us-east-1",
+            "AWS_REGION": "us-east-1",
             "DYNAMODB_TABLE": TEST_TABLE_NAME,
             "WATCH_TAGS": "AI,climate",
             "ENVIRONMENT": "test",
@@ -333,7 +333,7 @@ class TestFullPipeline:
     @patch.dict(
         os.environ,
         {
-            "AWS_DEFAULT_REGION": "us-east-1",
+            "AWS_REGION": "us-east-1",
             "DYNAMODB_TABLE": TEST_TABLE_NAME,
         },
     )
@@ -395,7 +395,7 @@ class TestFullPipeline:
     @patch.dict(
         os.environ,
         {
-            "AWS_DEFAULT_REGION": "us-east-1",
+            "AWS_REGION": "us-east-1",
             "DYNAMODB_TABLE": TEST_TABLE_NAME,
         },
     )
@@ -462,7 +462,7 @@ class TestFullPipeline:
     @patch.dict(
         os.environ,
         {
-            "AWS_DEFAULT_REGION": "us-east-1",
+            "AWS_REGION": "us-east-1",
             "DYNAMODB_TABLE": TEST_TABLE_NAME,
         },
     )
@@ -510,7 +510,7 @@ class TestFullPipeline:
     @patch.dict(
         os.environ,
         {
-            "AWS_DEFAULT_REGION": "us-east-1",
+            "AWS_REGION": "us-east-1",
             "DYNAMODB_TABLE": TEST_TABLE_NAME,
         },
     )
@@ -565,7 +565,7 @@ class TestPipelineErrorHandling:
     @patch.dict(
         os.environ,
         {
-            "AWS_DEFAULT_REGION": "us-east-1",
+            "AWS_REGION": "us-east-1",
             "DYNAMODB_TABLE": TEST_TABLE_NAME,
         },
     )
@@ -592,7 +592,7 @@ class TestPipelineErrorHandling:
     @patch.dict(
         os.environ,
         {
-            "AWS_DEFAULT_REGION": "us-east-1",
+            "AWS_REGION": "us-east-1",
             "DYNAMODB_TABLE": TEST_TABLE_NAME,
         },
     )
@@ -630,7 +630,7 @@ class TestConcurrency:
     @patch.dict(
         os.environ,
         {
-            "AWS_DEFAULT_REGION": "us-east-1",
+            "AWS_REGION": "us-east-1",
             "DYNAMODB_TABLE": TEST_TABLE_NAME,
         },
     )

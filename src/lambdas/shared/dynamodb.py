@@ -48,7 +48,7 @@ def get_dynamodb_resource(region_name: str | None = None) -> Any:
     Get a DynamoDB resource with retry configuration.
 
     Args:
-        region_name: AWS region (defaults to AWS_DEFAULT_REGION env var)
+        region_name: AWS region (defaults to AWS_REGION env var)
 
     Returns:
         boto3 DynamoDB resource
@@ -56,9 +56,11 @@ def get_dynamodb_resource(region_name: str | None = None) -> Any:
     On-Call Note:
         If this fails with credential errors, check:
         1. Lambda execution role has dynamodb:* permissions
-        2. Region matches table location (us-east-1)
+        2. Region matches table location
     """
-    region = region_name or os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
+    region = region_name or os.environ.get("AWS_REGION")
+    if not region:
+        raise ValueError("AWS_REGION environment variable must be set")
 
     return boto3.resource(
         "dynamodb",
@@ -74,12 +76,14 @@ def get_dynamodb_client(region_name: str | None = None) -> Any:
     Use client for low-level operations; use resource for high-level table operations.
 
     Args:
-        region_name: AWS region (defaults to AWS_DEFAULT_REGION env var)
+        region_name: AWS region (defaults to AWS_REGION env var)
 
     Returns:
         boto3 DynamoDB client
     """
-    region = region_name or os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
+    region = region_name or os.environ.get("AWS_REGION")
+    if not region:
+        raise ValueError("AWS_REGION environment variable must be set")
 
     return boto3.client(
         "dynamodb",

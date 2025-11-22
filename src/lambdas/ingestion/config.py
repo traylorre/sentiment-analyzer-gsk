@@ -60,7 +60,7 @@ class IngestionConfig:
     sns_topic_arn: str
     newsapi_secret_arn: str
     model_version: str
-    aws_region: str = "us-east-1"
+    aws_region: str  # No default - must be provided via AWS_REGION env var
 
     def __post_init__(self):
         """Validate configuration after initialization."""
@@ -152,7 +152,9 @@ def get_config() -> IngestionConfig:
 
     # Get optional variables with defaults
     model_version = os.environ.get("MODEL_VERSION", DEFAULT_MODEL_VERSION)
-    aws_region = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
+    aws_region = os.environ.get("AWS_REGION")
+    if not aws_region:
+        raise ValueError("AWS_REGION environment variable must be set")
 
     # Create and validate config
     config = IngestionConfig(

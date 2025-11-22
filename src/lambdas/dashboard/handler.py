@@ -60,9 +60,12 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 # Configuration from environment
-DYNAMODB_TABLE = os.environ.get("DYNAMODB_TABLE", "sentiment-items")
-SSE_POLL_INTERVAL = int(os.environ.get("SSE_POLL_INTERVAL", "5"))
-ENVIRONMENT = os.environ.get("ENVIRONMENT", "dev")
+# CRITICAL: These must be set - no defaults to prevent wrong-environment data corruption
+DYNAMODB_TABLE = os.environ["DYNAMODB_TABLE"]
+SSE_POLL_INTERVAL = int(
+    os.environ.get("SSE_POLL_INTERVAL", "5")
+)  # Safe default: polling frequency
+ENVIRONMENT = os.environ["ENVIRONMENT"]
 
 
 def get_api_key() -> str:

@@ -20,6 +20,6 @@
 
 bucket         = "sentiment-analyzer-terraform-state-218795110243"
 key            = "preprod/terraform.tfstate"
-region         = "us-east-1"
+# region is passed via -backend-config="region=${AWS_REGION}" in CI/CD
 encrypt        = true
 dynamodb_table = "terraform-state-lock-preprod"

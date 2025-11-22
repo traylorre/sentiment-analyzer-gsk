@@ -8,7 +8,7 @@ For On-Call Engineers:
     If tests fail in CI but pass locally:
     1. Check moto version matches (moto==4.2.0)
     2. Verify test fixtures match current DynamoDB schema
-    3. Check AWS_DEFAULT_REGION is set to us-east-1
+    3. Check AWS_REGION is set to us-east-1
 
 For Developers:
     - All tests use moto to mock DynamoDB (no real AWS calls)
@@ -42,7 +42,7 @@ def aws_credentials():
     os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
     os.environ["AWS_SECURITY_TOKEN"] = "testing"
     os.environ["AWS_SESSION_TOKEN"] = "testing"
-    os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
+    os.environ["AWS_REGION"] = "us-east-1"
 
 
 @pytest.fixture

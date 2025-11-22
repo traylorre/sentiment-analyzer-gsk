@@ -163,7 +163,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.PREPROD_AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.PREPROD_AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          aws-region: ${{ vars.AWS_REGION }}
 
       - name: Upload Lambda Packages to S3 (Preprod)
         run: |
@@ -192,7 +192,11 @@ jobs:
           terraform_version: 1.6.0
 
       - name: Terraform Init (Preprod)
-        run: terraform init -backend-config=backend-preprod.hcl -reconfigure
+        run: |
+          terraform init \
+            -backend-config=backend-preprod.hcl \
+            -backend-config="region=${{ vars.AWS_REGION }}" \
+            -reconfigure
 
       - name: Terraform Plan (Preprod)
         id: plan
@@ -254,7 +258,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.PREPROD_AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.PREPROD_AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          aws-region: ${{ vars.AWS_REGION }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -265,15 +269,17 @@ jobs:
         id: infra
         run: |
           cd infrastructure/terraform
-          terraform init -backend-config=backend-preprod.hcl -reconfigure
+          terraform init \
+            -backend-config=backend-preprod.hcl \
+            -backend-config="region=${{ vars.AWS_REGION }}" \
+            -reconfigure
 
           SNS_TOPIC_ARN=$(terraform output -raw sns_topic_arn 2>/dev/null || echo "")
           echo "sns_topic_arn=${SNS_TOPIC_ARN}" >> $GITHUB_OUTPUT
 
       - name: Run Preprod Integration Tests
         env:
-          AWS_DEFAULT_REGION: us-east-1
-          AWS_REGION: us-east-1
+          AWS_REGION: ${{ vars.AWS_REGION }}
           ENVIRONMENT: preprod
           DYNAMODB_TABLE: preprod-sentiment-items
           SNS_TOPIC_ARN: ${{ steps.infra.outputs.sns_topic_arn }}
@@ -356,7 +362,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.PROD_AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.PROD_AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          aws-region: ${{ vars.AWS_REGION }}
 
       - name: Upload Lambda Packages to S3 (Production)
         run: |
@@ -385,7 +391,11 @@ jobs:
           terraform_version: 1.6.0
 
       - name: Terraform Init (Production)
-        run: terraform init -backend-config=backend-prod.hcl -reconfigure
+        run: |
+          terraform init \
+            -backend-config=backend-prod.hcl \
+            -backend-config="region=${{ vars.AWS_REGION }}" \
+            -reconfigure
 
       - name: Terraform Plan (Production)
         id: plan

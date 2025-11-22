@@ -20,8 +20,14 @@ terraform {
   }
 }
 
+variable "aws_region" {
+  description = "AWS region for Terraform state resources"
+  type        = string
+  # No default - region must be explicitly provided
+}
+
 provider "aws" {
-  region = "us-east-1"
+  region = var.aws_region
 
   default_tags {
     tags = {
@@ -135,7 +141,7 @@ output "lock_table_prod" {
 }
 
 output "backend_config_instructions" {
-  value = <<-EOT
+  value       = <<-EOT
     Initialize with environment-specific backend:
 
     DEV:  terraform init -backend-config=backend-dev.hcl
