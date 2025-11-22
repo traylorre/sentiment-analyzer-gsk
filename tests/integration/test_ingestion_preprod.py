@@ -172,7 +172,7 @@ class TestIngestionE2E:
                 patch("src.lib.metrics.emit_metric"),
                 patch("src.lib.metrics.emit_metrics_batch"),
                 patch(
-                    "src.lambdas.shared.secrets.get_api_key",
+                    "src.lambdas.ingestion.handler.get_api_key",
                     return_value="mock-newsapi-key-for-testing",
                 ),
             ):
@@ -267,7 +267,7 @@ class TestIngestionE2E:
                 patch("src.lib.metrics.emit_metric"),
                 patch("src.lib.metrics.emit_metrics_batch"),
                 patch(
-                    "src.lambdas.shared.secrets.get_api_key",
+                    "src.lambdas.ingestion.handler.get_api_key",
                     return_value="mock-newsapi-key-for-testing",
                 ),
             ):
@@ -293,7 +293,7 @@ class TestIngestionE2E:
                 patch("src.lib.metrics.emit_metric"),
                 patch("src.lib.metrics.emit_metrics_batch"),
                 patch(
-                    "src.lambdas.shared.secrets.get_api_key",
+                    "src.lambdas.ingestion.handler.get_api_key",
                     return_value="mock-newsapi-key-for-testing",
                 ),
             ):
@@ -363,7 +363,7 @@ class TestIngestionE2E:
                 patch("src.lib.metrics.emit_metric"),
                 patch("src.lib.metrics.emit_metrics_batch"),
                 patch(
-                    "src.lambdas.shared.secrets.get_api_key",
+                    "src.lambdas.ingestion.handler.get_api_key",
                     return_value="mock-newsapi-key-for-testing",
                 ),
             ):
@@ -440,7 +440,7 @@ class TestIngestionE2E:
                 patch("src.lib.metrics.emit_metric"),
                 patch("src.lib.metrics.emit_metrics_batch"),
                 patch(
-                    "src.lambdas.shared.secrets.get_api_key",
+                    "src.lambdas.ingestion.handler.get_api_key",
                     return_value="mock-newsapi-key-for-testing",
                 ),
             ):
@@ -521,7 +521,7 @@ class TestIngestionE2E:
                 patch("src.lib.metrics.emit_metric"),
                 patch("src.lib.metrics.emit_metrics_batch"),
                 patch(
-                    "src.lambdas.shared.secrets.get_api_key",
+                    "src.lambdas.ingestion.handler.get_api_key",
                     return_value="mock-newsapi-key-for-testing",
                 ),
             ):
