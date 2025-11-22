@@ -9,7 +9,7 @@
 # - Configure editor to format on save with black
 # - Ruff includes security checks (bandit rules)
 
-name: Lint
+name: "PR Check: Code Quality"
 
 on:
   workflow_dispatch:  # Manual trigger from GitHub UI
@@ -19,7 +19,7 @@ on:
       - 'src/**'
       - 'tests/**'
       - 'pyproject.toml'
-      - '.github/workflows/lint.yml'
+      - '.github/workflows/pr-check-lint.yml'
   pull_request:
     branches: [main]
     paths:
