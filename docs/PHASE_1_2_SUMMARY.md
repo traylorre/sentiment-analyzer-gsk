@@ -142,11 +142,11 @@ resource "aws_secretsmanager_secret" "newsapi" {
 **Backend Configuration**:
 - Preprod: `backend-preprod.hcl`
   - State Key: `preprod/terraform.tfstate`
-  - Lock Table: `terraform-state-lock-preprod`
+  - Lock Table: `preprod/terraform.tfstate.tflock`
 
 - Prod: `backend-prod.hcl`
   - State Key: `prod/terraform.tfstate`
-  - Lock Table: `terraform-state-lock-prod`
+  - Lock Table: `prod/terraform.tfstate.tflock`
 
 ✅ **Verified**: Separate state files prevent cross-environment contamination
 
@@ -182,7 +182,7 @@ variable "environment" {
 
 **Location**: `infrastructure/terraform/bootstrap-prod.sh`
 
-- Creates `terraform-state-lock-prod` DynamoDB table
+- Creates `prod/terraform.tfstate.tflock` DynamoDB table
 - Safety prompts (confirm production deployment)
 - Account ID verification
 - Pre-deployment checklist
@@ -270,8 +270,8 @@ Before proceeding to Phase 3, verify:
 
 ### Bootstrap
 
-- [ ] Preprod lock table exists: `terraform-state-lock-preprod`
-- [ ] Prod lock table exists: `terraform-state-lock-prod` (run bootstrap-prod.sh)
+- [ ] Preprod lock table exists: `preprod/terraform.tfstate.tflock`
+- [ ] Prod lock table exists: `prod/terraform.tfstate.tflock` (run bootstrap-prod.sh)
 
 ---
 

@@ -241,7 +241,7 @@ Use this checklist BEFORE pushing any Terraform CI changes:
 
 ### State Management
 - [ ] S3 backend bucket exists and is accessible
-- [ ] DynamoDB lock table exists
+- [ ] S3 lock file exists
 - [ ] No stale locks in lock table
 - [ ] Local state matches remote state (`terraform refresh`)
 

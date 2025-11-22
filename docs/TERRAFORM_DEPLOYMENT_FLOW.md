@@ -15,9 +15,9 @@ flowchart TB
     subgraph "Deploy Dev Workflow"
         C --> E[Checkout Code]
         E --> F[Configure AWS Credentials]
-        F --> G[Check for Stale Locks]
-        G --> H{Stale Lock?}
-        H -->|Yes| I[Force Unlock]
+        F --> G[Check for S3 Lock Files]
+        G --> H{Lock File Exists?}
+        H -->|Yes| I[Report Lock & Proceed]
         H -->|No| J[Continue]
         I --> J
         J --> K[Package Lambda Functions]
@@ -48,9 +48,8 @@ flowchart TB
 flowchart LR
     subgraph "Phase 1: Foundation"
         A[S3 Bucket]
-        B[DynamoDB Table]
-        C[Secrets Manager]
-        D[SNS Topic & DLQ]
+        B[Secrets Manager]
+        C[SNS Topic & DLQ]
     end
 
     subgraph "Phase 2: IAM"
@@ -76,10 +75,9 @@ flowchart LR
         O[Backup Plans]
     end
 
-    A --> G
+    A --> E
     B --> E
     C --> E
-    D --> E
     E --> F
     F --> G
     G --> H
@@ -88,7 +86,6 @@ flowchart LR
     G --> K
     G --> L
     G --> M
-    B --> O
 ```
 
 ## State Management Flow
@@ -98,14 +95,14 @@ sequenceDiagram
     participant Dev as Developer
     participant GH as GitHub Actions
     participant S3 as S3 State Bucket
-    participant DDB as DynamoDB Lock
+    participant Lock as S3 Lock File
     participant AWS as AWS Resources
 
     Dev->>GH: Push to main
-    GH->>DDB: Acquire state lock
+    GH->>Lock: Create .tflock file
 
-    alt Lock acquired
-        DDB-->>GH: Lock granted
+    alt Lock created
+        Lock-->>GH: Lock acquired
         GH->>S3: Read current state
         S3-->>GH: State file
         GH->>AWS: terraform plan
@@ -113,12 +110,12 @@ sequenceDiagram
         GH->>AWS: terraform apply
         AWS-->>GH: Apply complete
         GH->>S3: Write new state
-        GH->>DDB: Release lock
-    else Lock held by another process
-        DDB-->>GH: Lock denied
+        GH->>Lock: Delete .tflock file
+    else Lock file exists
+        Lock-->>GH: Lock denied
         GH->>GH: Wait (lock-timeout=5m)
-        alt Lock released
-            GH->>DDB: Retry acquire
+        alt Lock file deleted
+            GH->>Lock: Retry create
         else Timeout
             GH-->>Dev: Deployment failed
         end
@@ -159,10 +156,10 @@ flowchart LR
 flowchart TB
     A[Alert: Deploy Failed] --> B{Check Error Type}
 
-    B -->|State Lock| C[Check DynamoDB Lock Table]
-    C --> D{Lock Stale?}
-    D -->|Yes >1hr| E[Use force_unlock workflow input]
-    D -->|No| F[Wait for other process]
+    B -->|State Lock| C[Check S3 Lock File]
+    C --> D{Lock File Exists?}
+    D -->|Yes| E[Delete lock file via aws s3 rm]
+    D -->|No| F[Check workflow logs]
 
     B -->|Resource Exists| G[Resource created outside Terraform]
     G --> H[Import into state]
@@ -178,11 +175,14 @@ flowchart TB
 **Recovery Commands:**
 
 ```bash
-# Force unlock stale state
-# Go to Actions > Deploy Dev > Run workflow > Check force_unlock
+# Remove orphaned lock file
+aws s3 rm s3://sentiment-analyzer-terraform-state-218795110243/dev/terraform.tfstate.tflock
+
+# Or use terraform force-unlock with Lock ID from workflow logs
+cd infrastructure/terraform
+terraform force-unlock <LOCK_ID>
 
 # Import missing resource
-cd infrastructure/terraform
 terraform import -var="environment=dev" "RESOURCE_ADDRESS" "RESOURCE_ID"
 
 # Refresh state after manual changes
@@ -197,7 +197,7 @@ terraform refresh -var="environment=dev"
 graph TB
     subgraph "Terraform State Backend"
         A[S3 Bucket<br/>sentiment-analyzer-tfstate-*]
-        B[DynamoDB Table<br/>terraform-state-lock]
+        B[S3 Lock Files<br/>*.tfstate.tflock]
     end
 
     subgraph "GitHub Secrets Required"
@@ -267,7 +267,7 @@ gantt
     section Setup
     Checkout           :a1, 00:00, 10s
     AWS Credentials    :a2, after a1, 5s
-    Check Locks        :a3, after a2, 10s
+    Check S3 Lock Files:a3, after a2, 10s
 
     section Build
     Setup Python       :b1, after a3, 15s
@@ -304,7 +304,7 @@ flowchart TD
 
     B -->|Terraform Init| E[Check State Backend]
     E --> E1[Verify S3 state bucket exists]
-    E --> E2[Verify DynamoDB lock table exists]
+    E --> E2[Verify S3 lock file permissions]
 
     B -->|Terraform Plan| F[Check Resources]
     F --> F1[Run terraform plan locally]

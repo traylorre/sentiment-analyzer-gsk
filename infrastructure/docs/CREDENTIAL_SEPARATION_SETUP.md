@@ -129,7 +129,7 @@ Create file: `preprod-deployer-policy.json`
         "dynamodb:PutItem",
         "dynamodb:DeleteItem"
       ],
-      "Resource": "arn:aws:dynamodb:*:*:table/terraform-state-lock-preprod"
+      "Resource": "arn:aws:dynamodb:*:*:table/preprod/terraform.tfstate.tflock"
     },
     {
       "Sid": "DenyProdResources",
@@ -218,7 +218,7 @@ Create file: `prod-deployer-policy.json`
         "dynamodb:PutItem",
         "dynamodb:DeleteItem"
       ],
-      "Resource": "arn:aws:dynamodb:*:*:table/terraform-state-lock-prod"
+      "Resource": "arn:aws:dynamodb:*:*:table/prod/terraform.tfstate.tflock"
     },
     {
       "Sid": "DenyPreprodResources",

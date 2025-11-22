@@ -11,10 +11,10 @@
   - Dev: `s3://sentiment-analyzer-tfstate-218795110243/dev/terraform.tfstate`
   - Prod: `s3://sentiment-analyzer-tfstate-218795110243/prod/terraform.tfstate`
 - [ ] Confirm dev and prod use separate lock tables:
-  - Dev: `terraform-state-lock-dev`
-  - Prod: `terraform-state-lock-prod`
+  - Dev: `dev/terraform.tfstate.tflock`
+  - Prod: `prod/terraform.tfstate.tflock`
 - [ ] Run `terraform state list` to verify state is populated (not empty)
-- [ ] No active state lock: `aws dynamodb scan --table-name terraform-state-lock-prod`
+- [ ] No active state lock: `aws s3api head-object --bucket sentiment-analyzer-terraform-state-218795110243 --key/terraform.tfstate.tflock`
 
 ### 2. AWS Resources Pre-Check
 

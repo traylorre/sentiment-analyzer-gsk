@@ -206,17 +206,17 @@ terraform apply -lock-timeout=5m
 ```
 
 **How it works:**
-1. First deploy acquires DynamoDB lock (`terraform-state-lock-{env}`)
-2. Second deploy waits up to 5 minutes for lock
+1. First deploy creates S3 lock file (`{env}/terraform.tfstate.tflock`)
+2. Second deploy waits up to 5 minutes for lock file to be deleted
 3. If timeout → fails safely (no corruption)
 
-**Lock table schema:**
+**Lock file location:**
 ```
-DynamoDB Table: terraform-state-lock-dev|preprod|prod
-Primary Key: LockID
-Attributes:
-  - LockID (String)
-  - Info (JSON with Who, Created, Operation)
+S3 Bucket: sentiment-analyzer-terraform-state-218795110243
+Lock Files:
+  - dev/terraform.tfstate.tflock
+  - preprod/terraform.tfstate.tflock
+  - prod/terraform.tfstate.tflock
 ```
 
 ## Proof of No Race Condition
@@ -229,11 +229,11 @@ Attributes:
 **Guarantee:** GitHub Actions **guarantees** sequential execution within a concurrency group.
 
 ### Layer 2: Terraform State Lock
-**Source:** [Terraform DynamoDB Backend](https://www.terraform.io/language/settings/backends/s3#dynamodb-state-locking)
+**Source:** [Terraform S3 Backend - Native Locking](https://developer.hashicorp.com/terraform/language/backend/s3)
 
-> "DynamoDB is used for state locking. Terraform will automatically acquire the lock before any operation that could write state, and release the lock when the operation completes."
+> "S3 native locking uses lock files stored directly in the S3 bucket. Terraform will automatically create a lock file before any operation that could write state, and delete the lock file when the operation completes."
 
-**Guarantee:** Terraform **guarantees** exclusive state access via DynamoDB locks.
+**Guarantee:** Terraform **guarantees** exclusive state access via S3 lock files.
 
 ### Layer 3: Idempotent Operations
 Even if both layers failed (they won't), Lambda deployments are idempotent:
@@ -257,30 +257,32 @@ gh run list --workflow deploy-prod.yml --status in_progress
 
 ```bash
 # Dev environment
-aws dynamodb scan --table-name terraform-state-lock-dev \
-  --projection-expression "LockID, Info"
+aws s3api head-object \
+  --bucket sentiment-analyzer-terraform-state-218795110243 \
+  --key dev/terraform.tfstate.tflock
 
 # Preprod environment
-aws dynamodb scan --table-name terraform-state-lock-preprod \
-  --projection-expression "LockID, Info"
+aws s3api head-object \
+  --bucket sentiment-analyzer-terraform-state-218795110243 \
+  --key preprod/terraform.tfstate.tflock
 
 # Production environment
-aws dynamodb scan --table-name terraform-state-lock-prod \
-  --projection-expression "LockID, Info"
+aws s3api head-object \
+  --bucket sentiment-analyzer-terraform-state-218795110243 \
+  --key prod/terraform.tfstate.tflock
 ```
 
-### Alert on Stuck Locks
+### Remove Orphaned Locks
 
-If a lock is held for >1 hour, it's likely a crashed workflow:
+If a lock file exists from a crashed workflow:
 
 ```bash
-# Check for stale locks (automated in workflows)
-STALE_THRESHOLD=$(date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%S)
+# Remove lock file for specific environment
+aws s3 rm s3://sentiment-analyzer-terraform-state-218795110243/prod/terraform.tfstate.tflock
 
-aws dynamodb scan --table-name terraform-state-lock-prod \
-  --projection-expression "LockID, Info" \
-  --filter-expression "Info.Created < :threshold" \
-  --expression-attribute-values "{\":threshold\":{\"S\":\"$STALE_THRESHOLD\"}}"
+# Or use terraform force-unlock (requires Lock ID from workflow logs)
+cd infrastructure/terraform
+terraform force-unlock <LOCK_ID>
 ```
 
 ## Recovery from Stuck Locks
@@ -308,5 +310,5 @@ gh workflow run deploy-dev.yml --ref main \
 ## References
 
 - [GitHub Actions Concurrency](https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#concurrency)
-- [Terraform State Locking](https://www.terraform.io/language/settings/backends/s3#dynamodb-state-locking)
-- [DynamoDB Conditional Writes](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/WorkingWithItems.html#WorkingWithItems.ConditionalUpdate)
+- [Terraform S3 Backend - Native Locking](https://developer.hashicorp.com/terraform/language/backend/s3)
+- [S3 Object Operations](https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-operations.html)

@@ -227,7 +227,7 @@ terraform apply -var-file=preprod.tfvars
 **If test data is polluted**:
 ```bash
 # Clean up preprod DynamoDB (use cautiously)
-aws dynamodb scan --table-name preprod-sentiment-items \
+aws s3api head-object --bucket sentiment-analyzer-terraform-state-218795110243 --key \
   --projection-expression "source_id,timestamp" \
   | jq -r '.Items[] | "\(.source_id.S) \(.timestamp.S)"' \
   | while read source_id timestamp; do
@@ -562,8 +562,8 @@ gh run rerun <RUN_ID>
 # Check who holds the lock
 terraform force-unlock <LOCK_ID>
 
-# If unsure, check DynamoDB lock table
-aws dynamodb scan --table-name terraform-state-lock-prod
+# If unsure, check S3 lock file
+aws s3api head-object --bucket sentiment-analyzer-terraform-state-218795110243 --key/terraform.tfstate.tflock
 ```
 
 ### Secrets Not Accessible

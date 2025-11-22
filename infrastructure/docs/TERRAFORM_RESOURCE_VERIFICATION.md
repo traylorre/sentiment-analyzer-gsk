@@ -74,8 +74,8 @@ resource "aws_secretsmanager_secret" "newsapi" {
 
 | Environment | Table Name | Verified? |
 |-------------|------------|-----------|
-| Preprod | `terraform-state-lock-preprod` | ✅ |
-| Prod | `terraform-state-lock-prod` | ✅ |
+| Preprod | `preprod/terraform.tfstate.tflock` | ✅ |
+| Prod | `prod/terraform.tfstate.tflock` | ✅ |
 
 Created by: `infrastructure/terraform/bootstrap-preprod.sh` and `infrastructure/terraform/bootstrap-prod.sh`
 
@@ -277,7 +277,7 @@ resource "aws_iam_role" "ingestion" {
 - [x] S3 buckets unique per environment
 - [x] Backend configuration separated (backend-preprod.hcl)
 - [x] Environment-specific tfvars created (preprod.tfvars)
-- [x] DynamoDB lock table exists (terraform-state-lock-preprod)
+- [x] S3 lock file exists (preprod/terraform.tfstate.tflock)
 
 ### Prod Deployment Prerequisites
 
@@ -288,13 +288,13 @@ resource "aws_iam_role" "ingestion" {
 - [x] S3 buckets unique per environment
 - [x] Backend configuration separated (backend-prod.hcl)
 - [x] Environment-specific tfvars created (prod.tfvars)
-- [ ] DynamoDB lock table exists (terraform-state-lock-prod) - **TODO: Run bootstrap-prod.sh**
+- [ ] S3 lock file exists (prod/terraform.tfstate.tflock) - **TODO: Run bootstrap-prod.sh**
 
 ---
 
 ## Next Steps
 
-1. **Create DynamoDB lock table for prod**:
+1. **Create S3 lock file for prod**:
    ```bash
    ./infrastructure/terraform/bootstrap-prod.sh
    ```

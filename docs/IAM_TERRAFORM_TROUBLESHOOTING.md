@@ -171,7 +171,7 @@ Creating a backup vault requires backup-storage and KMS permissions.
 **Check Lock Status:**
 ```bash
 aws dynamodb scan \
-  --table-name terraform-state-lock-preprod \
+  --table-name preprod/terraform.tfstate.tflock \
   --projection-expression "LockID, Info"
 ```
 
@@ -685,7 +685,7 @@ gh run watch 19560934089 --interval 10
 ### Force Unlock Terraform State
 ```bash
 # Check for locks
-aws dynamodb scan --table-name terraform-state-lock-preprod
+aws s3api head-object --bucket sentiment-analyzer-terraform-state-218795110243 --key/terraform.tfstate.tflock
 
 # Force unlock
 cd infrastructure/terraform
