@@ -2,7 +2,7 @@
 # Sentiment Analyzer - Demo 1 (001-interactive-dashboard-demo)
 #
 # For On-Call Engineers:
-# - Python version must be 3.11 (matches Lambda runtime)
+# - Python version must be 3.13 (matches Lambda runtime)
 # - If import errors occur, verify virtual environment matches this config
 #
 # For Developers:
@@ -20,7 +20,7 @@ version = "0.1.0"
 description = "Real-time sentiment analysis pipeline with interactive dashboard"
 readme = "README.md"
 license = {text = "MIT"}
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 authors = [
     {name = "Sentiment Analyzer Team"}
 ]
@@ -29,7 +29,8 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
@@ -55,7 +56,7 @@ dev = [
 
 [tool.black]
 line-length = 88
-target-version = ['py311']
+target-version = ['py312']  # Black doesn't have py313 target yet, py312 is latest
 include = '\.pyi?$'
 extend-exclude = '''
 /(
@@ -78,7 +79,7 @@ extend-exclude = '''
 
 [tool.ruff]
 line-length = 88
-target-version = "py311"
+target-version = "py312"  # Ruff doesn't have py313 target yet, py312 is latest
 select = [
     "E",   # pycodestyle errors
     "W",   # pycodestyle warnings
@@ -108,7 +109,7 @@ ignore = [
 known-first-party = ["src"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.13"
 warn_return_any = true
 warn_unused_configs = true
 ignore_missing_imports = true

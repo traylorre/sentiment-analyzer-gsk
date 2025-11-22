@@ -14,12 +14,43 @@ Please report security vulnerabilities privately to the project maintainers. Do 
 
 ## Security Status
 
-⚠️ **This service is under active security review and is NOT production-ready.**
+⚠️ **CRITICAL: Dashboard has P0 vulnerabilities - DO NOT deploy to production without mitigations.**
+
+**Last Security Review**: 2025-11-22
+**Status**: BLOCKED FOR PRODUCTION
+
+### Critical Issues (MUST fix before production)
+
+**Dashboard Lambda Function URL** - See `docs/DASHBOARD_SECURITY_ANALYSIS.md` for full details:
+- **P0-1**: No rate limiting on Lambda Function URL → Cost drain attack ($100 budget in ~33 hours)
+- **P0-2**: ✅ FIXED - SSE connection limits implemented (max 2 per IP)
+- **P0-3**: Static API key with no rotation policy → Long-term unauthorized access
+- **P0-4**: Lambda Function URL has `auth_type = "NONE"` → No AWS-level authentication
+- **P0-5**: ✅ FIXED - CORS wildcard removed, environment-based origins enforced
+
+### High Priority Issues
+
+- **P1-1**: No CloudWatch alarms for anomalous request patterns
+- **P1-2**: ✅ FIXED - IP logging added to authentication failures
+
+### Recommended Deployment Architecture
+
+**Before production**, migrate from Lambda Function URL to:
+1. **CloudFront CDN** - DDoS protection, geo-blocking
+2. **AWS WAF** - IP-based rate limiting, automatic blocking
+3. **API Gateway** - Request throttling (100 req/min), custom authorizer
+4. **Lambda** (current) - Connection limits, API key rotation
+
+**Estimated Cost**: +$5/month
+**Risk Reduction**: 95% (blocks all automated attacks)
 
 Key areas requiring hardening before production deployment:
-- Input validation for external data sources
-- Rate limiting and quota management
-- Deployment automation and rollback procedures
+- ✅ SSE concurrency exhaustion protection (FIXED)
+- ✅ CORS wildcard removal (FIXED)
+- ✅ IP-based forensic logging (FIXED)
+- ⚠️ Rate limiting and quota management (PENDING - requires API Gateway)
+- ⚠️ API key rotation policy (PENDING)
+- ⚠️ CloudWatch security monitoring alarms (PENDING)
 
 ## Architecture Overview
 

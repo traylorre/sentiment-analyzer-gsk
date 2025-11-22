@@ -57,6 +57,51 @@ RETRY_CONFIG = Config(
 _secrets_cache: dict[str, dict[str, Any]] = {}
 
 
+def _sanitize_secret_id_for_log(secret_id: str) -> str:
+    """
+    Sanitize secret ID for safe logging.
+
+    Only logs the last component of the secret path to prevent:
+    - Exposing environment names (dev/prod)
+    - Revealing full secret paths
+    - Information disclosure for reconnaissance attacks
+
+    Args:
+        secret_id: Full secret ID (e.g., "dev/sentiment-analyzer/newsapi")
+
+    Returns:
+        Sanitized secret name (e.g., "newsapi")
+
+    Security:
+        - Prevents exposing full secret paths in logs
+        - Reduces information available for attackers
+        - Still provides enough context for debugging
+
+    Example:
+        >>> _sanitize_secret_id_for_log("dev/sentiment-analyzer/newsapi")
+        'newsapi'
+        >>> _sanitize_secret_id_for_log("arn:aws:secretsmanager:us-east-1:123:secret:api-key-abc123")
+        'api-key'
+    """
+    # Extract just the secret name from the path
+    # Handles both simple paths (dev/app/secret) and ARNs
+    if secret_id.startswith("arn:"):
+        # For ARNs, extract the secret name after "secret:"
+        # Format: arn:aws:secretsmanager:region:account:secret:name-randomsuffix
+        parts = secret_id.split(":")
+        if len(parts) >= 7:
+            name_with_suffix = parts[6]
+            # Remove the random suffix AWS adds (last 7 chars like "-abc123")
+            return (
+                name_with_suffix.rsplit("-", 1)[0]
+                if "-" in name_with_suffix
+                else name_with_suffix
+            )
+
+    # For simple paths, just get the last component
+    return secret_id.split("/")[-1]
+
+
 def get_secrets_client(region_name: str | None = None) -> Any:
     """
     Get a Secrets Manager client with retry configuration.
@@ -117,7 +162,7 @@ def get_secret(
         if cached is not None:
             logger.debug(
                 "Secret retrieved from cache",
-                extra={"secret_id": secret_id},
+                extra={"secret_name": _sanitize_secret_id_for_log(secret_id)},
             )
             return cached
 
@@ -132,14 +177,20 @@ def get_secret(
         if error_code == "ResourceNotFoundException":
             logger.error(
                 "Secret not found",
-                extra={"secret_id": secret_id, "error_code": error_code},
+                extra={
+                    "secret_name": _sanitize_secret_id_for_log(secret_id),
+                    "error_code": error_code,
+                },
             )
             raise SecretNotFoundError(f"Secret not found: {secret_id}") from e
 
         elif error_code in ("AccessDeniedException", "UnauthorizedAccess"):
             logger.error(
                 "Access denied to secret",
-                extra={"secret_id": secret_id, "error_code": error_code},
+                extra={
+                    "secret_name": _sanitize_secret_id_for_log(secret_id),
+                    "error_code": error_code,
+                },
             )
             raise SecretAccessDeniedError(
                 f"Access denied to secret: {secret_id}"
@@ -148,7 +199,10 @@ def get_secret(
         else:
             logger.error(
                 "Failed to retrieve secret",
-                extra={"secret_id": secret_id, "error_code": error_code},
+                extra={
+                    "secret_name": _sanitize_secret_id_for_log(secret_id),
+                    "error_code": error_code,
+                },
             )
             raise SecretRetrievalError(f"Failed to retrieve secret: {secret_id}") from e
 
@@ -163,7 +217,7 @@ def get_secret(
     except json.JSONDecodeError as e:
         logger.error(
             "Failed to parse secret as JSON",
-            extra={"secret_id": secret_id},
+            extra={"secret_name": _sanitize_secret_id_for_log(secret_id)},
         )
         raise SecretRetrievalError(f"Secret is not valid JSON: {secret_id}") from e
 
@@ -172,7 +226,7 @@ def get_secret(
 
     logger.info(
         "Secret retrieved from Secrets Manager",
-        extra={"secret_id": secret_id},
+        extra={"secret_name": _sanitize_secret_id_for_log(secret_id)},
     )
 
     return secret_value
