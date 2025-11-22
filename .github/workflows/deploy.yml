@@ -279,7 +279,6 @@ jobs:
 
       - name: Run Preprod Integration Tests
         env:
-          AWS_DEFAULT_REGION: ${{ vars.AWS_REGION }}
           AWS_REGION: ${{ vars.AWS_REGION }}
           ENVIRONMENT: preprod
           DYNAMODB_TABLE: preprod-sentiment-items

@@ -147,20 +147,14 @@ def get_cloudwatch_client(region_name: str | None = None) -> Any:
     Get a CloudWatch client with retry configuration.
 
     Args:
-        region_name: AWS region (defaults to AWS_DEFAULT_REGION)
+        region_name: AWS region (defaults to AWS_REGION env var)
 
     Returns:
         boto3 CloudWatch client
     """
-    region = (
-        region_name
-        or os.environ.get("AWS_DEFAULT_REGION")
-        or os.environ.get("AWS_REGION")
-    )
+    region = region_name or os.environ.get("AWS_REGION")
     if not region:
-        raise ValueError(
-            "AWS_DEFAULT_REGION or AWS_REGION environment variable must be set"
-        )
+        raise ValueError("AWS_REGION environment variable must be set")
 
     return boto3.client(
         "cloudwatch",

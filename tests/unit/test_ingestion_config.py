@@ -38,7 +38,7 @@ def valid_env_vars(monkeypatch):
         "NEWSAPI_SECRET_ARN", "arn:aws:secretsmanager:us-east-1:123456789:secret:test"
     )
     monkeypatch.setenv("MODEL_VERSION", "v1.0.0")
-    monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
+    monkeypatch.setenv("AWS_REGION", "us-east-1")
 
 
 class TestParseWatchTags:
@@ -258,7 +258,7 @@ class TestGetConfig:
 
     def test_get_config_default_region(self, valid_env_vars, monkeypatch):
         """Test default region when not set."""
-        monkeypatch.delenv("AWS_DEFAULT_REGION", raising=False)
+        monkeypatch.delenv("AWS_REGION", raising=False)
 
         config = get_config()
 
