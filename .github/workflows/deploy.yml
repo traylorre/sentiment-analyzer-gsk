@@ -69,6 +69,20 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Free up disk space
+        run: |
+          echo "🧹 Freeing up disk space on GitHub runner..."
+          df -h
+
+          # Remove unnecessary packages to free up ~10GB
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+
+          echo "✅ Disk space after cleanup:"
+          df -h
+
       - name: Package Lambda Functions
         id: package
         run: |
@@ -97,6 +111,9 @@ jobs:
           cd ../..
           echo "✅ Ingestion package: $(du -h packages/ingestion-${SHA}.zip | cut -f1)"
 
+          # Clean up ingestion build directory immediately to save space
+          rm -rf packages/ingestion-build
+
           # Package Analysis Lambda WITH dependencies (excluding torch/transformers - in layer)
           echo "📦 Packaging Analysis Lambda..."
           mkdir -p packages/analysis-build
@@ -112,6 +129,9 @@ jobs:
           cd ../..
           echo "✅ Analysis package: $(du -h packages/analysis-${SHA}.zip | cut -f1)"
 
+          # Clean up analysis build directory immediately to save space
+          rm -rf packages/analysis-build
+
           # Package Dashboard Lambda WITH dependencies
           echo "📦 Packaging Dashboard Lambda..."
           mkdir -p packages/dashboard-build
@@ -126,8 +146,8 @@ jobs:
           cd ../..
           echo "✅ Dashboard package: $(du -h packages/dashboard-${SHA}.zip | cut -f1)"
 
-          # Cleanup build directories
-          rm -rf packages/deps packages/*-build
+          # Cleanup all build directories and dependencies
+          rm -rf packages/deps packages/dashboard-build
 
           echo ""
           echo "📊 Final package sizes:"
