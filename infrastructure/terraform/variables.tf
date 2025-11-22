@@ -30,8 +30,8 @@ variable "model_version" {
   type        = string
   default     = "v1.0.0"
   validation {
-    condition     = can(regex("^v\\d+\\.\\d+\\.\\d+$", var.model_version)) || can(regex("^[0-9a-f]{7}$", var.model_version))
-    error_message = "Model version must be semantic versioning (e.g., v1.0.0) or git SHA (e.g., a1b2c3d)."
+    condition     = can(regex("^v\\d+\\.\\d+\\.\\d+$", var.model_version)) || can(regex("^[0-9a-fA-F]{7}$", var.model_version))
+    error_message = "Model version must be semantic versioning (e.g., v1.0.0) or git SHA (e.g., a1b2c3d or A1B2C3D)."
   }
 }
 
