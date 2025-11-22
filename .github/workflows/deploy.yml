@@ -26,7 +26,7 @@ on:
     paths:
       - 'src/**'
       - 'infrastructure/terraform/**'
-      - 'tests/integration/test_*_preprod.py'
+      - 'tests/integration/**'
       - '.github/workflows/deploy.yml'
 
   # Manual trigger for testing/rollbacks
