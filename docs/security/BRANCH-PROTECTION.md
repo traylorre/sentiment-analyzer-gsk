@@ -19,10 +19,10 @@ Go to: **GitHub → Settings → Branches → Add rule** for `main`
 - [x] **Require status checks to pass before merging**
   - [x] Require branches to be up to date before merging
   - Required status checks:
-    - `Lint`
-    - `Run Tests`
-    - `Security Scan / Dependency Vulnerability Scan`
-    - `CodeQL Analysis / Analyze`
+    - `Run Tests` - Unit tests with coverage validation
+    - `Code Quality` - Linting with ruff and black
+    - `Dependency Vulnerability Scan` - pip-audit security scanning
+    - `Analyze` - CodeQL static analysis
 
 - [x] **Require conversation resolution before merging**
 
@@ -32,6 +32,38 @@ Go to: **GitHub → Settings → Branches → Add rule** for `main`
 
 - [x] **Restrict who can push to matching branches**
   - Only @traylorre (admin)
+
+---
+
+## Auto-Merge Configuration
+
+### Automatic PR Merging
+
+All PRs have auto-merge **automatically enabled** via the `pr-auto-merge-enable.yml` workflow.
+
+**How it works:**
+1. Developer creates PR → auto-merge is enabled automatically
+2. All required status checks pass → PR auto-merges with squash
+3. No manual merge step required
+
+**Workflow File**: `.github/workflows/pr-auto-merge-enable.yml`
+
+**Safety guarantees:**
+- All branch protection rules enforced (status checks, approvals, etc.)
+- Branch must be up to date with main
+- All conversations must be resolved
+- Uses squash merge for clean git history
+
+**To disable auto-merge on a specific PR:**
+```bash
+gh pr merge --disable-auto <PR_NUMBER>
+```
+
+**Dependabot PRs:**
+Dependabot PRs use a separate workflow (`dependabot-auto-merge.yml`) that:
+- Auto-merges patch/minor version updates
+- Auto-merges GitHub Actions major updates
+- Requires manual review for Python major version updates
 
 ---
 
