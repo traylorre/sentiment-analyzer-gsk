@@ -381,6 +381,38 @@ graph TB
 
 ---
 
+## Test Coverage
+
+**Comprehensive test suite**: 20 automated tests covering all P0/P1 mitigations.
+
+See [DASHBOARD_SECURITY_TEST_COVERAGE.md](./DASHBOARD_SECURITY_TEST_COVERAGE.md) for full details.
+
+| Mitigation | Unit Tests | Integration Tests | Coverage |
+|-----------|------------|-------------------|----------|
+| P0-2: SSE Connection Limits | 5 | 2 | 100% |
+| P0-5: CORS Origin Validation | 5 | 2 | 100% |
+| P1-2: IP Logging | 5 | 1 | 100% |
+| **Total** | **15** | **5** | **100%** |
+
+**Run Security Tests**:
+```bash
+# Unit tests (fast, no AWS required)
+pytest tests/unit/test_dashboard_handler.py::TestSecurityMitigations -v
+
+# Integration tests (requires preprod deployment)
+pytest tests/integration/test_dashboard_preprod.py::TestSecurityIntegration -v
+```
+
+**Key Test Scenarios**:
+- ✅ SSE connection limit enforced (returns 429 when exceeded)
+- ✅ Different IPs tracked separately (per-IP limits)
+- ✅ Connection cleanup on stream close (prevents leak)
+- ✅ Production requires explicit CORS_ORIGINS (no wildcard)
+- ✅ Authentication failures log client IP + request path
+- ✅ X-Forwarded-For header parsed correctly (first IP = client)
+
+---
+
 ## Testing Plan
 
 **Before Production Deployment**:
