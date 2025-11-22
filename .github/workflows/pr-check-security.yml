@@ -16,14 +16,14 @@
 #   - Vulnerabilities are reported with CVE IDs and severity
 #   - Some false positives may occur; use --ignore-vuln to suppress
 
-name: Security Scan
+name: "PR Check: Security Scan"
 
 on:
   push:
     branches: [main]
     paths:
       - 'requirements*.txt'
-      - '.github/workflows/security.yml'
+      - '.github/workflows/pr-check-security.yml'
   pull_request:
     branches: [main]
     paths:

@@ -1,4 +1,4 @@
-name: Deploy to Production
+name: "[4/4] Deploy to Production"
 
 # This workflow deploys VALIDATED artifacts to production.
 #
@@ -22,9 +22,9 @@ name: Deploy to Production
 #   - Check CloudWatch alarms for root cause
 
 on:
-  # Trigger after preprod validation succeeds
+  # Trigger after preprod integration tests succeed
   workflow_run:
-    workflows: ["Build and Promote to Preprod"]
+    workflows: ["[3/4] Preprod Integration Tests"]
     types: [completed]
     branches: [main]
 

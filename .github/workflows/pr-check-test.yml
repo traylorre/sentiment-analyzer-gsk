@@ -22,7 +22,7 @@
 # - Dev E2E: tests/integration/test_*_dev.py (mocked AWS)
 # - Preprod E2E: tests/integration/test_*_preprod.py (real AWS, CI only)
 
-name: Tests (Dev)
+name: "PR Check: Unit Tests"
 
 on:
   workflow_dispatch:  # Manual trigger from GitHub UI
@@ -34,7 +34,7 @@ on:
       - 'requirements*.txt'
       - 'pyproject.toml'
       - 'pytest.ini'
-      - '.github/workflows/test.yml'
+      - '.github/workflows/pr-check-test.yml'
   pull_request:
     branches: [main]
     paths:

@@ -16,7 +16,7 @@
 #   - Results appear in PR checks and Security tab
 #   - False positives can be dismissed with comment
 
-name: CodeQL Analysis
+name: "PR Check: CodeQL Analysis"
 
 on:
   push:
