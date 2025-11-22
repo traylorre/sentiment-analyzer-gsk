@@ -202,21 +202,21 @@ jobs:
         run: |
           echo "🔍 Checking for Terraform state locks..."
 
-          # Get all locks from DynamoDB
-          LOCKS=$(aws dynamodb scan \
-            --table-name terraform-state-lock-preprod \
+          # Check for S3 native lock file (.tflock)
+          BUCKET="sentiment-analyzer-terraform-state-218795110243"
+          LOCK_KEY="preprod/terraform.tfstate.tflock"
+
+          LOCK_EXISTS=$(aws s3api head-object \
+            --bucket "$BUCKET" \
+            --key "$LOCK_KEY" \
             --region ${{ vars.AWS_REGION }} \
-            --output json 2>/dev/null || echo '{"Items":[]}')
+            2>/dev/null || echo "")
 
-          LOCK_COUNT=$(echo "$LOCKS" | jq '.Items | length')
-
-          if [ "$LOCK_COUNT" -eq 0 ]; then
-            echo "✅ No locks found - proceeding with deployment"
+          if [ -z "$LOCK_EXISTS" ]; then
+            echo "✅ No lock file found - proceeding with deployment"
             exit 0
           fi
 
-          echo "⚠️  Found $LOCK_COUNT lock(s) in DynamoDB"
-          echo ""
           echo "⚠️  LOCK DETECTED - Manual intervention may be required"
           echo ""
           echo "This workflow uses concurrency controls (cancel-in-progress: false)"
@@ -226,31 +226,25 @@ jobs:
           echo "1. A previous run was canceled/failed and left an orphaned lock"
           echo "2. Someone is running Terraform manually (check with team)"
           echo ""
-          echo "Lock details:"
-          echo "$LOCKS" | jq -r '.Items[] | @json' | while read -r item; do
-            LOCK_ID=$(echo "$item" | jq -r '.LockID.S // empty')
-            INFO=$(echo "$item" | jq -r '.Info.S // empty')
+          echo "Lock file details:"
+          echo "  Location: s3://$BUCKET/$LOCK_KEY"
 
-            if [ -n "$LOCK_ID" ]; then
-              echo "  Lock ID: $LOCK_ID"
-              CREATED=$(echo "$INFO" | jq -r '.Created // empty' 2>/dev/null || echo "unknown")
-              echo "  Created: $CREATED"
-              echo "  Info: $INFO" | head -c 200
-              echo ""
-            fi
-          done
+          # Get lock file metadata
+          LAST_MODIFIED=$(echo "$LOCK_EXISTS" | jq -r '.LastModified // "unknown"')
+          echo "  Last Modified: $LAST_MODIFIED"
 
+          # Download and display lock contents (contains lock ID and info)
+          aws s3 cp "s3://$BUCKET/$LOCK_KEY" - 2>/dev/null | head -c 500 || echo "  (Unable to read lock contents)"
+          echo ""
           echo ""
           echo "🛠️  TO MANUALLY UNLOCK:"
           echo "If you're certain no other deployment is running, unlock with:"
           echo ""
+          echo "  cd infrastructure/terraform"
           echo "  terraform force-unlock <LOCK_ID>"
           echo ""
-          echo "Or via AWS CLI:"
-          echo "  aws dynamodb delete-item \\"
-          echo "    --table-name terraform-state-lock-preprod \\"
-          echo "    --region ${{ vars.AWS_REGION }} \\"
-          echo "    --key '{\"LockID\":{\"S\":\"<LOCK_ID>\"}}'"
+          echo "Or delete the lock file via AWS CLI:"
+          echo "  aws s3 rm s3://$BUCKET/$LOCK_KEY"
           echo ""
           echo "⏳ Proceeding with deployment..."
           echo "   Terraform will wait for lock release (timeout: 5 minutes)"
@@ -462,21 +456,21 @@ jobs:
         run: |
           echo "🔍 Checking for Terraform state locks..."
 
-          # Get all locks from DynamoDB
-          LOCKS=$(aws dynamodb scan \
-            --table-name terraform-state-lock-prod \
+          # Check for S3 native lock file (.tflock)
+          BUCKET="sentiment-analyzer-terraform-state-218795110243"
+          LOCK_KEY="prod/terraform.tfstate.tflock"
+
+          LOCK_EXISTS=$(aws s3api head-object \
+            --bucket "$BUCKET" \
+            --key "$LOCK_KEY" \
             --region ${{ vars.AWS_REGION }} \
-            --output json 2>/dev/null || echo '{"Items":[]}')
+            2>/dev/null || echo "")
 
-          LOCK_COUNT=$(echo "$LOCKS" | jq '.Items | length')
-
-          if [ "$LOCK_COUNT" -eq 0 ]; then
-            echo "✅ No locks found - proceeding with deployment"
+          if [ -z "$LOCK_EXISTS" ]; then
+            echo "✅ No lock file found - proceeding with deployment"
             exit 0
           fi
 
-          echo "⚠️  Found $LOCK_COUNT lock(s) in DynamoDB"
-          echo ""
           echo "⚠️  LOCK DETECTED - Manual intervention may be required"
           echo ""
           echo "This workflow uses concurrency controls (cancel-in-progress: false)"
@@ -486,31 +480,25 @@ jobs:
           echo "1. A previous run was canceled/failed and left an orphaned lock"
           echo "2. Someone is running Terraform manually (check with team)"
           echo ""
-          echo "Lock details:"
-          echo "$LOCKS" | jq -r '.Items[] | @json' | while read -r item; do
-            LOCK_ID=$(echo "$item" | jq -r '.LockID.S // empty')
-            INFO=$(echo "$item" | jq -r '.Info.S // empty')
+          echo "Lock file details:"
+          echo "  Location: s3://$BUCKET/$LOCK_KEY"
 
-            if [ -n "$LOCK_ID" ]; then
-              echo "  Lock ID: $LOCK_ID"
-              CREATED=$(echo "$INFO" | jq -r '.Created // empty' 2>/dev/null || echo "unknown")
-              echo "  Created: $CREATED"
-              echo "  Info: $INFO" | head -c 200
-              echo ""
-            fi
-          done
+          # Get lock file metadata
+          LAST_MODIFIED=$(echo "$LOCK_EXISTS" | jq -r '.LastModified // "unknown"')
+          echo "  Last Modified: $LAST_MODIFIED"
 
+          # Download and display lock contents (contains lock ID and info)
+          aws s3 cp "s3://$BUCKET/$LOCK_KEY" - 2>/dev/null | head -c 500 || echo "  (Unable to read lock contents)"
+          echo ""
           echo ""
           echo "🛠️  TO MANUALLY UNLOCK (PRODUCTION):"
           echo "⚠️  ONLY unlock if you're CERTAIN no other deployment is running!"
           echo ""
+          echo "  cd infrastructure/terraform"
           echo "  terraform force-unlock <LOCK_ID>"
           echo ""
-          echo "Or via AWS CLI:"
-          echo "  aws dynamodb delete-item \\"
-          echo "    --table-name terraform-state-lock-prod \\"
-          echo "    --region ${{ vars.AWS_REGION }} \\"
-          echo "    --key '{\"LockID\":{\"S\":\"<LOCK_ID>\"}}'"
+          echo "Or delete the lock file via AWS CLI:"
+          echo "  aws s3 rm s3://$BUCKET/$LOCK_KEY"
           echo ""
           echo "⏳ Proceeding with deployment..."
           echo "   Terraform will wait for lock release (timeout: 5 minutes)"
