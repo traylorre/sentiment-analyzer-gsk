@@ -1,0 +1,473 @@
+name: "Deploy Pipeline"
+
+# Consolidated deployment pipeline using job dependencies (needs:)
+# instead of multiple workflow_run triggers.
+#
+# ARCHITECTURAL NOTE:
+# Previous implementation used 4 separate workflows chained with workflow_run triggers.
+# This violated GitHub Actions' 3-level workflow_run nesting limit and caused
+# "startup_failure" issues. The correct pattern is multiple jobs with dependencies
+# within a single workflow.
+#
+# Flow:
+#   push to main → build → deploy-preprod → test-preprod → deploy-prod
+#
+# Benefits:
+# - No workflow_run nesting limits
+# - Shared artifacts between jobs
+# - Single workflow run view
+# - Automatic progression through stages
+# - Environment-based approval gates
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'infrastructure/terraform/**'
+      - 'tests/integration/test_*_preprod.py'
+      - '.github/workflows/deploy.yml'
+
+  # Manual trigger for testing/rollbacks
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+  id-token: write
+
+# Prevent concurrent deployments
+concurrency:
+  group: deploy-pipeline
+  cancel-in-progress: false
+
+jobs:
+  # ========================================================================
+  # JOB 1: Build Lambda Packages
+  # ========================================================================
+  build:
+    name: Build Lambda Packages
+    runs-on: ubuntu-latest
+
+    outputs:
+      artifact-sha: ${{ steps.package.outputs.sha }}
+      artifact-name: ${{ steps.package.outputs.name }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Package Lambda Functions
+        id: package
+        run: |
+          SHA="${GITHUB_SHA:0:7}"
+          echo "sha=${SHA}" >> $GITHUB_OUTPUT
+          echo "name=lambda-packages-${SHA}" >> $GITHUB_OUTPUT
+
+          echo "📦 Building Lambda packages for commit: ${SHA}"
+          mkdir -p packages
+
+          # Package Ingestion Lambda
+          cd src/lambdas/ingestion
+          zip -r ../../../packages/ingestion-${SHA}.zip . \
+            -x "*.pyc" "__pycache__/*" "*.pytest_cache/*" "tests/*"
+          cd ../../..
+
+          # Package Analysis Lambda
+          cd src/lambdas/analysis
+          zip -r ../../../packages/analysis-${SHA}.zip . \
+            -x "*.pyc" "__pycache__/*" "*.pytest_cache/*" "tests/*"
+          cd ../../..
+
+          # Package Dashboard Lambda
+          cd src/lambdas/dashboard
+          zip -r ../../../packages/dashboard-${SHA}.zip . \
+            -x "*.pyc" "__pycache__/*" "*.pytest_cache/*" "tests/*"
+          cd ../../..
+
+          ls -lh packages/
+          echo "✅ Lambda packages built successfully"
+
+      - name: Upload Lambda Packages as Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.name }}
+          path: packages/
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Create Build Manifest
+        run: |
+          SHA="${GITHUB_SHA:0:7}"
+          cat > build-manifest.json <<EOF
+          {
+            "git_sha": "${GITHUB_SHA}",
+            "git_sha_short": "${SHA}",
+            "git_ref": "${GITHUB_REF}",
+            "build_timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "actor": "${GITHUB_ACTOR}",
+            "workflow_run_id": "${GITHUB_RUN_ID}",
+            "workflow_run_number": "${GITHUB_RUN_NUMBER}"
+          }
+          EOF
+          cat build-manifest.json
+
+      - name: Upload Build Manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-manifest-${{ steps.package.outputs.sha }}
+          path: build-manifest.json
+          retention-days: 90
+
+  # ========================================================================
+  # JOB 2: Deploy to Preprod
+  # ========================================================================
+  deploy-preprod:
+    name: Deploy to Preprod
+    needs: build
+    runs-on: ubuntu-latest
+    environment: preprod
+
+    outputs:
+      dashboard_url: ${{ steps.outputs.outputs.dashboard_url }}
+      sns_topic_arn: ${{ steps.outputs.outputs.sns_topic_arn }}
+
+    defaults:
+      run:
+        working-directory: infrastructure/terraform
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Lambda Packages
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.artifact-name }}
+          path: packages/
+
+      - name: Configure AWS Credentials (Preprod)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.PREPROD_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.PREPROD_AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Upload Lambda Packages to S3 (Preprod)
+        run: |
+          SHA="${{ needs.build.outputs.artifact-sha }}"
+          BUCKET="preprod-sentiment-lambda-deployments"
+
+          echo "📤 Uploading Lambda packages to S3 (preprod)..."
+
+          aws s3 cp ../../packages/ingestion-${SHA}.zip \
+            s3://${BUCKET}/ingestion/lambda.zip \
+            --metadata "git-sha=${GITHUB_SHA},build-timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+          aws s3 cp ../../packages/analysis-${SHA}.zip \
+            s3://${BUCKET}/analysis/lambda.zip \
+            --metadata "git-sha=${GITHUB_SHA},build-timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+          aws s3 cp ../../packages/dashboard-${SHA}.zip \
+            s3://${BUCKET}/dashboard/lambda.zip \
+            --metadata "git-sha=${GITHUB_SHA},build-timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+          echo "✅ Lambda packages uploaded to S3"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+
+      - name: Terraform Init (Preprod)
+        run: terraform init -backend-config=backend-preprod.hcl -reconfigure
+
+      - name: Terraform Plan (Preprod)
+        id: plan
+        run: |
+          terraform plan \
+            -var-file=preprod.tfvars \
+            -var="model_version=${{ needs.build.outputs.artifact-sha }}" \
+            -no-color \
+            -out=preprod.tfplan | tee plan.txt
+
+          if grep -q "No changes" plan.txt; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Terraform Apply (Preprod)
+        if: steps.plan.outputs.has_changes == 'true'
+        run: |
+          terraform apply -auto-approve preprod.tfplan
+          echo "✅ Preprod infrastructure deployed"
+
+      - name: Get Preprod Outputs
+        id: outputs
+        run: |
+          DASHBOARD_URL=$(terraform output -raw dashboard_function_url 2>/dev/null || echo "")
+          SNS_TOPIC_ARN=$(terraform output -raw sns_topic_arn 2>/dev/null || echo "")
+
+          echo "dashboard_url=${DASHBOARD_URL}" >> $GITHUB_OUTPUT
+          echo "sns_topic_arn=${SNS_TOPIC_ARN}" >> $GITHUB_OUTPUT
+
+  # ========================================================================
+  # JOB 3: Test Preprod
+  # ========================================================================
+  test-preprod:
+    name: Preprod Integration Tests
+    needs: [build, deploy-preprod]
+    runs-on: ubuntu-latest
+    environment: preprod
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install -r requirements-dev.txt
+
+      - name: Configure AWS Credentials (Preprod)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.PREPROD_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.PREPROD_AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+
+      - name: Get Preprod Infrastructure Outputs
+        id: infra
+        run: |
+          cd infrastructure/terraform
+          terraform init -backend-config=backend-preprod.hcl -reconfigure
+
+          SNS_TOPIC_ARN=$(terraform output -raw sns_topic_arn 2>/dev/null || echo "")
+          echo "sns_topic_arn=${SNS_TOPIC_ARN}" >> $GITHUB_OUTPUT
+
+      - name: Run Preprod Integration Tests
+        env:
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_REGION: us-east-1
+          ENVIRONMENT: preprod
+          DYNAMODB_TABLE: preprod-sentiment-items
+          SNS_TOPIC_ARN: ${{ steps.infra.outputs.sns_topic_arn }}
+          NEWSAPI_SECRET_ARN: ${{ secrets.PREPROD_NEWSAPI_SECRET_ARN }}
+          DASHBOARD_API_KEY: ${{ secrets.PREPROD_DASHBOARD_API_KEY }}
+          WATCH_TAGS: AI,climate,economy
+          MODEL_VERSION: v${{ needs.build.outputs.artifact-sha }}
+        run: |
+          pytest tests/integration/test_*_preprod.py \
+            -v \
+            --tb=short \
+            --junitxml=preprod-test-results.xml
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: preprod-test-results-${{ needs.build.outputs.artifact-sha }}
+          path: preprod-test-results.xml
+          retention-days: 30
+
+      - name: Create Validation Metadata
+        if: success()
+        run: |
+          SHA="${{ needs.build.outputs.artifact-sha }}"
+          cat > validated.json <<EOF
+          {
+            "artifact_name": "lambda-packages-${SHA}",
+            "validation_timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "preprod_tests_passed": true,
+            "validated_by_workflow": "${GITHUB_RUN_ID}",
+            "git_sha": "${GITHUB_SHA}",
+            "ready_for_production": true
+          }
+          EOF
+          cat validated.json
+          echo "✅ Integration tests passed - ready for production!"
+
+      - name: Upload Validation Metadata
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-${{ needs.build.outputs.artifact-sha }}
+          path: validated.json
+          retention-days: 90
+
+  # ========================================================================
+  # JOB 4: Deploy to Production
+  # ========================================================================
+  deploy-production:
+    name: Deploy to Production
+    needs: [build, deploy-preprod, test-preprod]
+    runs-on: ubuntu-latest
+
+    # Conditional environment based on PR author
+    # - Dependabot → production-auto (no approval)
+    # - Human → production (requires approval)
+    environment:
+      name: ${{ github.actor == 'dependabot[bot]' && 'production-auto' || 'production' }}
+
+    outputs:
+      dashboard_url: ${{ steps.outputs.outputs.dashboard_url }}
+
+    defaults:
+      run:
+        working-directory: infrastructure/terraform
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Lambda Packages
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.artifact-name }}
+          path: packages/
+
+      - name: Configure AWS Credentials (Production)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.PROD_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.PROD_AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Upload Lambda Packages to S3 (Production)
+        run: |
+          SHA="${{ needs.build.outputs.artifact-sha }}"
+          BUCKET="prod-sentiment-lambda-deployments"
+
+          echo "📤 Uploading VALIDATED Lambda packages to S3 (production)..."
+
+          aws s3 cp ../../packages/ingestion-${SHA}.zip \
+            s3://${BUCKET}/ingestion/lambda.zip \
+            --metadata "git-sha=${GITHUB_SHA},build-timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ),validated-in=preprod"
+
+          aws s3 cp ../../packages/analysis-${SHA}.zip \
+            s3://${BUCKET}/analysis/lambda.zip \
+            --metadata "git-sha=${GITHUB_SHA},build-timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ),validated-in=preprod"
+
+          aws s3 cp ../../packages/dashboard-${SHA}.zip \
+            s3://${BUCKET}/dashboard/lambda.zip \
+            --metadata "git-sha=${GITHUB_SHA},build-timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ),validated-in=preprod"
+
+          echo "✅ Lambda packages uploaded to S3"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+
+      - name: Terraform Init (Production)
+        run: terraform init -backend-config=backend-prod.hcl -reconfigure
+
+      - name: Terraform Plan (Production)
+        id: plan
+        run: |
+          terraform plan \
+            -var-file=prod.tfvars \
+            -var="model_version=${{ needs.build.outputs.artifact-sha }}" \
+            -no-color \
+            -out=prod.tfplan | tee plan.txt
+
+      - name: Terraform Apply (Production)
+        run: |
+          echo "🚀 Deploying to PRODUCTION..."
+          terraform apply -auto-approve prod.tfplan
+          echo "✅ Production deployment complete"
+
+      - name: Get Production Outputs
+        id: outputs
+        run: |
+          DASHBOARD_URL=$(terraform output -raw dashboard_function_url 2>/dev/null || echo "")
+          echo "dashboard_url=${DASHBOARD_URL}" >> $GITHUB_OUTPUT
+          echo "Production Dashboard URL: ${DASHBOARD_URL}"
+
+  # ========================================================================
+  # JOB 5: Production Canary Test
+  # ========================================================================
+  canary-test:
+    name: Production Canary Test
+    needs: [build, deploy-production]
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Run Canary Health Check
+        timeout-minutes: 2
+        run: |
+          DASHBOARD_URL="${{ needs.deploy-production.outputs.dashboard_url }}"
+          API_KEY="${{ secrets.PROD_DASHBOARD_API_KEY }}"
+
+          echo "🔍 Running canary test against: ${DASHBOARD_URL}"
+
+          response=$(curl -f -s -w "\n%{http_code}" \
+            "${DASHBOARD_URL}/health" \
+            -H "X-API-Key: ${API_KEY}" || echo "FAILED")
+
+          http_code=$(echo "$response" | tail -1)
+          body=$(echo "$response" | head -n -1)
+
+          echo "HTTP Status: ${http_code}"
+          echo "Response: ${body}"
+
+          if [ "${http_code}" != "200" ]; then
+            echo "❌ Canary FAILED - Health check returned ${http_code}"
+            exit 1
+          fi
+
+          if ! echo "$body" | grep -q '"status"'; then
+            echo "❌ Canary FAILED - Response missing 'status' field"
+            exit 1
+          fi
+
+          echo "✅ Canary test PASSED"
+
+  # ========================================================================
+  # JOB 6: Summary
+  # ========================================================================
+  summary:
+    name: Deployment Summary
+    needs: [build, deploy-preprod, test-preprod, deploy-production, canary-test]
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deployment Status
+        run: |
+          echo "## Deployment Pipeline Summary"
+          echo ""
+          echo "- Build: ${{ needs.build.result }}"
+          echo "- Deploy Preprod: ${{ needs.deploy-preprod.result }}"
+          echo "- Test Preprod: ${{ needs.test-preprod.result }}"
+          echo "- Deploy Production: ${{ needs.deploy-production.result }}"
+          echo "- Canary Test: ${{ needs.canary-test.result }}"
+          echo ""
+          echo "Artifact SHA: ${{ needs.build.outputs.artifact-sha }}"
+          echo "Production Dashboard: ${{ needs.deploy-production.outputs.dashboard_url }}"
