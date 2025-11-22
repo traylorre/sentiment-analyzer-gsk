@@ -1,4 +1,4 @@
-name: "[2/5] Deploy to Preprod"
+name: "[2/4] Deploy to Preprod"
 
 # Pipeline Stage 2: Deploy built artifacts to preprod environment
 #
@@ -15,7 +15,7 @@ name: "[2/5] Deploy to Preprod"
 
 on:
   workflow_run:
-    workflows: ["[1/5] Build Artifacts"]
+    workflows: ["[1/4] Build Artifacts"]
     types: [completed]
     branches: [main]
 
