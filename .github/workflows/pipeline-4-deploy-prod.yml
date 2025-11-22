@@ -139,13 +139,42 @@ jobs:
           echo "sha=${SHA}" >> $GITHUB_OUTPUT
           echo "Deploying SHA: ${SHA}"
 
+      - name: Find Artifact Run ID
+        id: find_artifact
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          # For manual triggers, we need to find which build run created the artifact
+          ARTIFACT_NAME="lambda-packages-${{ steps.determine_sha.outputs.sha }}"
+
+          # Query GitHub API for artifact details
+          ARTIFACT_INFO=$(gh api repos/${{ github.repository }}/actions/artifacts \
+            --jq ".artifacts[] | select(.name == \"${ARTIFACT_NAME}\") | {workflow_run_id: .workflow_run.id, expired}")
+
+          if [ -z "$ARTIFACT_INFO" ]; then
+            echo "::error::Artifact ${ARTIFACT_NAME} not found"
+            exit 1
+          fi
+
+          RUN_ID=$(echo "$ARTIFACT_INFO" | jq -r '.workflow_run_id')
+          EXPIRED=$(echo "$ARTIFACT_INFO" | jq -r '.expired')
+
+          if [ "$EXPIRED" == "true" ]; then
+            echo "::error::Artifact ${ARTIFACT_NAME} has expired"
+            exit 1
+          fi
+
+          echo "run_id=${RUN_ID}" >> $GITHUB_OUTPUT
+          echo "Found artifact ${ARTIFACT_NAME} from run ${RUN_ID}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Download Lambda Packages from Preprod Validation
         uses: actions/download-artifact@v4
         with:
           name: lambda-packages-${{ steps.determine_sha.outputs.sha }}
           path: packages/
-          # Download from the workflow run that validated this artifact
-          run-id: ${{ github.event.workflow_run.id }}
+          # For workflow_run, use triggering run ID; for manual, use discovered run ID
+          run-id: ${{ github.event.workflow_run.id || steps.find_artifact.outputs.run_id }}
 
       - name: Verify Validation Metadata Exists
         run: |
