@@ -152,6 +152,7 @@ class TestIngestionConfig:
             sns_topic_arn="arn:aws:sns:us-east-1:123456789:topic",
             newsapi_secret_arn="arn:aws:secretsmanager:us-east-1:123456789:secret:test",
             model_version="v1.0.0",
+            aws_region="us-east-1",
         )
 
         assert config.watch_tags == ["AI", "climate"]
@@ -166,6 +167,7 @@ class TestIngestionConfig:
                 sns_topic_arn="arn:aws:sns:us-east-1:123456789:topic",
                 newsapi_secret_arn="arn:aws:secretsmanager:us-east-1:123456789:secret:test",
                 model_version="v1.0.0",
+                aws_region="us-east-1",
             )
 
     def test_too_many_watch_tags_raises(self):
@@ -177,6 +179,7 @@ class TestIngestionConfig:
                 sns_topic_arn="arn:aws:sns:us-east-1:123456789:topic",
                 newsapi_secret_arn="arn:aws:secretsmanager:us-east-1:123456789:secret:test",
                 model_version="v1.0.0",
+                aws_region="us-east-1",
             )
 
     def test_missing_dynamodb_table_raises(self):
@@ -188,6 +191,7 @@ class TestIngestionConfig:
                 sns_topic_arn="arn:aws:sns:us-east-1:123456789:topic",
                 newsapi_secret_arn="arn:aws:secretsmanager:us-east-1:123456789:secret:test",
                 model_version="v1.0.0",
+                aws_region="us-east-1",
             )
 
     def test_missing_sns_topic_raises(self):
@@ -199,6 +203,7 @@ class TestIngestionConfig:
                 sns_topic_arn="",
                 newsapi_secret_arn="arn:aws:secretsmanager:us-east-1:123456789:secret:test",
                 model_version="v1.0.0",
+                aws_region="us-east-1",
             )
 
     def test_invalid_sns_arn_format_raises(self):
@@ -210,6 +215,7 @@ class TestIngestionConfig:
                 sns_topic_arn="invalid-arn",
                 newsapi_secret_arn="arn:aws:secretsmanager:us-east-1:123456789:secret:test",
                 model_version="v1.0.0",
+                aws_region="us-east-1",
             )
 
     def test_invalid_model_version_raises(self):
@@ -221,6 +227,7 @@ class TestIngestionConfig:
                 sns_topic_arn="arn:aws:sns:us-east-1:123456789:topic",
                 newsapi_secret_arn="arn:aws:secretsmanager:us-east-1:123456789:secret:test",
                 model_version="1.0.0",  # Missing 'v'
+                aws_region="us-east-1",
             )
 
 
@@ -256,13 +263,14 @@ class TestGetConfig:
 
         assert config.model_version == "v1.0.0"
 
-    def test_get_config_default_region(self, valid_env_vars, monkeypatch):
-        """Test default region when not set."""
+    def test_get_config_missing_region_raises(self, valid_env_vars, monkeypatch):
+        """Test that missing AWS_REGION raises error."""
         monkeypatch.delenv("AWS_REGION", raising=False)
 
-        config = get_config()
-
-        assert config.aws_region == "us-east-1"
+        with pytest.raises(
+            ValueError, match="AWS_REGION environment variable must be set"
+        ):
+            get_config()
 
 
 class TestConfigurationError:
