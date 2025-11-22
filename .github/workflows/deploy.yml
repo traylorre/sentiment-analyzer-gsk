@@ -198,13 +198,67 @@ jobs:
             -backend-config="region=${{ vars.AWS_REGION }}" \
             -reconfigure
 
+      - name: Check for Stale Terraform Locks (Preprod)
+        run: |
+          echo "🔍 Checking for Terraform state locks..."
+
+          # Check for S3 native lock file (.tflock)
+          BUCKET="sentiment-analyzer-terraform-state-218795110243"
+          LOCK_KEY="preprod/terraform.tfstate.tflock"
+
+          LOCK_EXISTS=$(aws s3api head-object \
+            --bucket "$BUCKET" \
+            --key "$LOCK_KEY" \
+            --region ${{ vars.AWS_REGION }} \
+            2>/dev/null || echo "")
+
+          if [ -z "$LOCK_EXISTS" ]; then
+            echo "✅ No lock file found - proceeding with deployment"
+            exit 0
+          fi
+
+          echo "⚠️  LOCK DETECTED - Manual intervention may be required"
+          echo ""
+          echo "This workflow uses concurrency controls (cancel-in-progress: false)"
+          echo "so only ONE deployment should run at a time."
+          echo ""
+          echo "If you see a lock here, it likely means:"
+          echo "1. A previous run was canceled/failed and left an orphaned lock"
+          echo "2. Someone is running Terraform manually (check with team)"
+          echo ""
+          echo "Lock file details:"
+          echo "  Location: s3://$BUCKET/$LOCK_KEY"
+
+          # Get lock file metadata
+          LAST_MODIFIED=$(echo "$LOCK_EXISTS" | jq -r '.LastModified // "unknown"')
+          echo "  Last Modified: $LAST_MODIFIED"
+
+          # Download and display lock contents (contains lock ID and info)
+          aws s3 cp "s3://$BUCKET/$LOCK_KEY" - 2>/dev/null | head -c 500 || echo "  (Unable to read lock contents)"
+          echo ""
+          echo ""
+          echo "🛠️  TO MANUALLY UNLOCK:"
+          echo "If you're certain no other deployment is running, unlock with:"
+          echo ""
+          echo "  cd infrastructure/terraform"
+          echo "  terraform force-unlock <LOCK_ID>"
+          echo ""
+          echo "Or delete the lock file via AWS CLI:"
+          echo "  aws s3 rm s3://$BUCKET/$LOCK_KEY"
+          echo ""
+          echo "⏳ Proceeding with deployment..."
+          echo "   Terraform will wait for lock release (timeout: 5 minutes)"
+          echo ""
+
       - name: Terraform Plan (Preprod)
         id: plan
+        timeout-minutes: 10
         run: |
           terraform plan \
             -var-file=preprod.tfvars \
             -var="model_version=${{ needs.build.outputs.artifact-sha }}" \
             -no-color \
+            -lock-timeout=5m \
             -out=preprod.tfplan | tee plan.txt
 
           if grep -q "No changes" plan.txt; then
@@ -215,8 +269,9 @@ jobs:
 
       - name: Terraform Apply (Preprod)
         if: steps.plan.outputs.has_changes == 'true'
+        timeout-minutes: 15
         run: |
-          terraform apply -auto-approve preprod.tfplan
+          terraform apply -auto-approve -lock-timeout=5m preprod.tfplan
           echo "✅ Preprod infrastructure deployed"
 
       - name: Get Preprod Outputs
@@ -397,19 +452,74 @@ jobs:
             -backend-config="region=${{ vars.AWS_REGION }}" \
             -reconfigure
 
+      - name: Check for Stale Terraform Locks (Production)
+        run: |
+          echo "🔍 Checking for Terraform state locks..."
+
+          # Check for S3 native lock file (.tflock)
+          BUCKET="sentiment-analyzer-terraform-state-218795110243"
+          LOCK_KEY="prod/terraform.tfstate.tflock"
+
+          LOCK_EXISTS=$(aws s3api head-object \
+            --bucket "$BUCKET" \
+            --key "$LOCK_KEY" \
+            --region ${{ vars.AWS_REGION }} \
+            2>/dev/null || echo "")
+
+          if [ -z "$LOCK_EXISTS" ]; then
+            echo "✅ No lock file found - proceeding with deployment"
+            exit 0
+          fi
+
+          echo "⚠️  LOCK DETECTED - Manual intervention may be required"
+          echo ""
+          echo "This workflow uses concurrency controls (cancel-in-progress: false)"
+          echo "so only ONE deployment should run at a time."
+          echo ""
+          echo "If you see a lock here, it likely means:"
+          echo "1. A previous run was canceled/failed and left an orphaned lock"
+          echo "2. Someone is running Terraform manually (check with team)"
+          echo ""
+          echo "Lock file details:"
+          echo "  Location: s3://$BUCKET/$LOCK_KEY"
+
+          # Get lock file metadata
+          LAST_MODIFIED=$(echo "$LOCK_EXISTS" | jq -r '.LastModified // "unknown"')
+          echo "  Last Modified: $LAST_MODIFIED"
+
+          # Download and display lock contents (contains lock ID and info)
+          aws s3 cp "s3://$BUCKET/$LOCK_KEY" - 2>/dev/null | head -c 500 || echo "  (Unable to read lock contents)"
+          echo ""
+          echo ""
+          echo "🛠️  TO MANUALLY UNLOCK (PRODUCTION):"
+          echo "⚠️  ONLY unlock if you're CERTAIN no other deployment is running!"
+          echo ""
+          echo "  cd infrastructure/terraform"
+          echo "  terraform force-unlock <LOCK_ID>"
+          echo ""
+          echo "Or delete the lock file via AWS CLI:"
+          echo "  aws s3 rm s3://$BUCKET/$LOCK_KEY"
+          echo ""
+          echo "⏳ Proceeding with deployment..."
+          echo "   Terraform will wait for lock release (timeout: 5 minutes)"
+          echo ""
+
       - name: Terraform Plan (Production)
         id: plan
+        timeout-minutes: 10
         run: |
           terraform plan \
             -var-file=prod.tfvars \
             -var="model_version=${{ needs.build.outputs.artifact-sha }}" \
             -no-color \
+            -lock-timeout=5m \
             -out=prod.tfplan | tee plan.txt
 
       - name: Terraform Apply (Production)
+        timeout-minutes: 15
         run: |
           echo "🚀 Deploying to PRODUCTION..."
-          terraform apply -auto-approve prod.tfplan
+          terraform apply -auto-approve -lock-timeout=5m prod.tfplan
           echo "✅ Production deployment complete"
 
       - name: Get Production Outputs
