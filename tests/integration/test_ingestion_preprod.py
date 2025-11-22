@@ -1,31 +1,30 @@
 """
-Ingestion E2E Test
-==================
+Ingestion E2E Test (Preprod)
+============================
 
-Integration tests for the ingestion flow against REAL dev environment.
+Integration tests for the ingestion flow against REAL preprod environment.
 
-CRITICAL: These tests use REAL AWS resources (dev environment only).
-- DynamoDB: dev-sentiment-items table (Terraform-deployed)
-- SNS: dev-sentiment-topic (Terraform-deployed)
-- Secrets Manager: dev-newsapi-secret (Terraform-deployed)
+CRITICAL: These tests use REAL AWS resources (preprod environment only).
+- DynamoDB: preprod-sentiment-items table (Terraform-deployed)
+- SNS: preprod-sentiment-topic (Terraform-deployed)
 - NO mocking of AWS infrastructure
 
 External dependencies mocked:
 - NewsAPI (external third-party publisher - not under our control)
   Mocking allows deterministic test data without rate limits or API costs.
+- Secrets Manager API key retrieval (mocked to avoid dependency on actual secret)
 
 For On-Call Engineers:
     If these tests fail in CI:
-    1. Verify dev environment is deployed: `aws dynamodb describe-table --table-name dev-sentiment-items`
-    2. Check SNS topic exists: `aws sns list-topics | grep dev-sentiment-topic`
-    3. Verify Secrets Manager has NewsAPI key: `aws secretsmanager list-secrets`
-    4. Check AWS credentials are configured in CI
+    1. Verify preprod environment is deployed: `aws dynamodb describe-table --table-name preprod-sentiment-items`
+    2. Check SNS topic exists: `aws sns list-topics | grep preprod-sentiment`
+    3. Check AWS credentials are configured in CI
 
     See SC-03 in ON_CALL_SOP.md for ingestion issues.
 
 For Developers:
-    - Tests use REAL dev DynamoDB, SNS, Secrets Manager
-    - NewsAPI is mocked (external dependency exception)
+    - Tests use REAL preprod DynamoDB and SNS
+    - NewsAPI and Secrets Manager are mocked (external dependencies)
     - Verifies complete data flow through the system
     - Tests idempotency (duplicate handling)
     - Validates schema compliance
@@ -143,8 +142,8 @@ class TestIngestionE2E:
 
         This is the primary integration test that verifies:
         1. Articles are fetched from NewsAPI (mocked - external dependency)
-        2. Items are inserted into REAL dev DynamoDB with correct schema
-        3. SNS messages are published to REAL dev SNS topic
+        2. Items are inserted into REAL preprod DynamoDB with correct schema
+        3. SNS messages are published to REAL preprod SNS topic
         4. Metrics and statistics are tracked correctly
         """
         # Setup NewsAPI mock responses (external dependency)
@@ -167,11 +166,15 @@ class TestIngestionE2E:
             status=200,
         )
 
-        # Execute handler - interacts with REAL dev AWS
+        # Execute handler - interacts with REAL preprod AWS
         try:
             with (
                 patch("src.lib.metrics.emit_metric"),
                 patch("src.lib.metrics.emit_metrics_batch"),
+                patch(
+                    "src.lambdas.shared.secrets.get_api_key",
+                    return_value="mock-newsapi-key-for-testing",
+                ),
             ):
                 result = lambda_handler(eventbridge_event, mock_context)
 
@@ -236,7 +239,7 @@ class TestIngestionE2E:
         sample_newsapi_article,
     ):
         """
-        Integration: Duplicate articles are skipped in REAL dev DynamoDB.
+        Integration: Duplicate articles are skipped in REAL preprod DynamoDB.
 
         Verifies the idempotency of the ingestion process against real AWS.
         """
@@ -263,6 +266,10 @@ class TestIngestionE2E:
             with (
                 patch("src.lib.metrics.emit_metric"),
                 patch("src.lib.metrics.emit_metrics_batch"),
+                patch(
+                    "src.lambdas.shared.secrets.get_api_key",
+                    return_value="mock-newsapi-key-for-testing",
+                ),
             ):
                 result1 = lambda_handler(eventbridge_event, mock_context)
 
@@ -285,6 +292,10 @@ class TestIngestionE2E:
             with (
                 patch("src.lib.metrics.emit_metric"),
                 patch("src.lib.metrics.emit_metrics_batch"),
+                patch(
+                    "src.lambdas.shared.secrets.get_api_key",
+                    return_value="mock-newsapi-key-for-testing",
+                ),
             ):
                 result2 = lambda_handler(eventbridge_event, mock_context)
 
@@ -326,7 +337,7 @@ class TestIngestionE2E:
         sample_newsapi_article,
     ):
         """
-        Integration: Items have TTL set for 30-day expiration in REAL dev table.
+        Integration: Items have TTL set for 30-day expiration in REAL preprod table.
 
         This is important for data retention and cost management.
         """
@@ -351,6 +362,10 @@ class TestIngestionE2E:
             with (
                 patch("src.lib.metrics.emit_metric"),
                 patch("src.lib.metrics.emit_metrics_batch"),
+                patch(
+                    "src.lambdas.shared.secrets.get_api_key",
+                    return_value="mock-newsapi-key-for-testing",
+                ),
             ):
                 _result = lambda_handler(eventbridge_event, mock_context)
 
@@ -399,7 +414,7 @@ class TestIngestionE2E:
         sample_newsapi_article,
     ):
         """
-        Integration: Article metadata is correctly preserved in REAL dev DynamoDB.
+        Integration: Article metadata is correctly preserved in REAL preprod DynamoDB.
 
         This data is used by the dashboard for display.
         """
@@ -424,6 +439,10 @@ class TestIngestionE2E:
             with (
                 patch("src.lib.metrics.emit_metric"),
                 patch("src.lib.metrics.emit_metrics_batch"),
+                patch(
+                    "src.lambdas.shared.secrets.get_api_key",
+                    return_value="mock-newsapi-key-for-testing",
+                ),
             ):
                 _result = lambda_handler(eventbridge_event, mock_context)
 
@@ -469,7 +488,7 @@ class TestIngestionE2E:
         dynamodb_table,
     ):
         """
-        Integration: text_for_analysis is correctly extracted and stored in REAL dev table.
+        Integration: text_for_analysis is correctly extracted and stored in REAL preprod table.
 
         This is the text that will be analyzed for sentiment.
         """
@@ -501,6 +520,10 @@ class TestIngestionE2E:
             with (
                 patch("src.lib.metrics.emit_metric"),
                 patch("src.lib.metrics.emit_metrics_batch"),
+                patch(
+                    "src.lambdas.shared.secrets.get_api_key",
+                    return_value="mock-newsapi-key-for-testing",
+                ),
             ):
                 _result = lambda_handler(eventbridge_event, mock_context)
 
@@ -564,6 +587,10 @@ class TestIngestionEdgeCases:
         with (
             patch("src.lib.metrics.emit_metric"),
             patch("src.lib.metrics.emit_metrics_batch"),
+            patch(
+                "src.lambdas.shared.secrets.get_api_key",
+                return_value="mock-newsapi-key-for-testing",
+            ),
         ):
             result = lambda_handler(eventbridge_event, mock_context)
 
