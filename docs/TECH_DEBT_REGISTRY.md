@@ -175,6 +175,197 @@ moto==5.0.0  # Upgraded from 4.2.0 for mock_aws decorator
 
 ---
 
+## Cloud Provider Portability
+
+> **Context**: Comprehensive portability audit completed (see `docs/CLOUD_PROVIDER_PORTABILITY_AUDIT.md`). Quick wins implemented in PR #43. This section tracks longer-term refactoring work.
+
+### TD-016: Repository Pattern for Database Access
+**Status**: Future work (2-3 weeks)
+**Current State**: Direct boto3 DynamoDB usage in ~350 LOC across lambdas
+**Locations**:
+- `src/lambdas/ingestion/handler.py`
+- `src/lambdas/analysis/handler.py`
+- `src/lambdas/dashboard/handler.py`
+- `src/lambdas/shared/dynamodb.py`
+
+**Proposed Fix**: Create cloud-agnostic repository interface
+```python
+# Example target architecture:
+class SentimentRepository(ABC):
+    @abstractmethod
+    def save_article(self, article: Article) -> bool: ...
+    @abstractmethod
+    def get_article(self, source_id: str, timestamp: str) -> Article | None: ...
+
+class DynamoDBRepository(SentimentRepository):
+    # AWS implementation
+
+class FirestoreRepository(SentimentRepository):
+    # GCP implementation
+```
+
+**Benefits**:
+- Clean abstraction for NoSQL operations
+- Testability without mocking boto3
+- Easy swap to GCP Firestore or Azure Cosmos DB
+
+**Effort**: 2-3 weeks
+**Risk**: Medium (requires refactoring all database calls)
+
+### TD-017: Metrics Interface Abstraction
+**Status**: Future work (1-2 weeks)
+**Current State**: Direct CloudWatch metrics emission in ~200 LOC
+**Locations**:
+- `src/lib/metrics.py`
+- All lambda handlers emitting custom metrics
+
+**Proposed Fix**: Create metrics interface
+```python
+class MetricsProvider(ABC):
+    @abstractmethod
+    def emit_counter(self, name: str, value: int, dimensions: dict): ...
+    @abstractmethod
+    def emit_gauge(self, name: str, value: float, dimensions: dict): ...
+
+class CloudWatchMetrics(MetricsProvider):
+    # AWS implementation
+
+class StackdriverMetrics(MetricsProvider):
+    # GCP implementation
+```
+
+**Benefits**:
+- Swap monitoring backend without code changes
+- Support hybrid cloud deployments
+- Easier local development (mock metrics)
+
+**Effort**: 1-2 weeks
+**Risk**: Low (isolated to metrics.py)
+
+### TD-018: Secrets Management Abstraction
+**Status**: Future work (1 week)
+**Current State**: Direct AWS Secrets Manager usage in ~100 LOC
+**Locations**:
+- `src/lambdas/shared/secrets.py`
+- `src/lambdas/ingestion/handler.py` (NewsAPI key retrieval)
+
+**Proposed Fix**: Create secrets interface
+```python
+class SecretsProvider(ABC):
+    @abstractmethod
+    def get_secret(self, secret_id: str) -> str: ...
+
+class AWSSecretsManager(SecretsProvider):
+    # AWS implementation
+
+class GCPSecretManager(SecretsProvider):
+    # GCP implementation
+```
+
+**Benefits**:
+- Environment-based secrets provider selection
+- Support for local .env files in development
+- Easier testing with mock secrets
+
+**Effort**: 1 week
+**Risk**: Low (isolated to secrets.py)
+
+### TD-019: Event Source Abstraction
+**Status**: Future work (2-3 weeks)
+**Current State**: Direct SNS/EventBridge usage, Lambda-specific event handlers
+**Locations**:
+- `src/lambdas/ingestion/handler.py` (SNS publish)
+- `infrastructure/terraform/modules/lambda/main.tf` (EventBridge schedules)
+
+**Proposed Fix**: Create event adapter layer
+```python
+class EventPublisher(ABC):
+    @abstractmethod
+    def publish(self, topic: str, message: dict): ...
+
+class SNSPublisher(EventPublisher):
+    # AWS implementation
+
+class PubSubPublisher(EventPublisher):
+    # GCP implementation
+```
+
+**Benefits**:
+- Decouple business logic from AWS event services
+- Easier testing without mocking SNS
+- Support GCP Pub/Sub or Azure Event Grid
+
+**Effort**: 2-3 weeks
+**Risk**: Medium (touches event-driven architecture)
+
+### TD-020: Infrastructure as Code Abstraction
+**Status**: Future work (4-6 weeks)
+**Current State**: AWS-specific Terraform with 12 AWS provider resources
+**Locations**: All of `infrastructure/terraform/`
+
+**Options**:
+1. **Pulumi**: Multi-cloud IaC in Python
+2. **Terragrunt**: Terraform wrapper with better modularity
+3. **CDK for Terraform**: Type-safe infrastructure in Python
+
+**Proposed Fix**: Migrate to Pulumi for cloud-agnostic IaC
+```python
+# Example Pulumi abstraction:
+class CloudDatabase(ComponentResource):
+    def __init__(self, provider: "aws" | "gcp" | "azure"):
+        if provider == "aws":
+            self.table = dynamodb.Table(...)
+        elif provider == "gcp":
+            self.table = firestore.Database(...)
+```
+
+**Benefits**:
+- Single codebase for multi-cloud deployments
+- Type safety and IDE autocomplete
+- Easier testing of infrastructure
+
+**Effort**: 4-6 weeks
+**Risk**: High (complete infrastructure rewrite)
+
+---
+
+## Cloud Portability Action Plan
+
+### Phase 1: Quick Wins (COMPLETED ✅)
+- [x] CLOUD_REGION environment variable with AWS_REGION fallback
+- [x] DATABASE_TABLE environment variable with DYNAMODB_TABLE fallback
+- [x] Comprehensive portability audit document created
+- **PR**: #43
+- **Effort**: 2-3 hours
+- **Portability Score**: Improved from 20/100 to 25/100
+
+### Phase 2: Abstraction Layers (Future - 6-8 weeks)
+- [ ] TD-016: Repository pattern for database access
+- [ ] TD-017: Metrics interface abstraction
+- [ ] TD-018: Secrets management abstraction
+- [ ] TD-019: Event source abstraction
+- **Estimated Effort**: 6-8 weeks
+- **Portability Score**: Would reach 60-70/100
+
+### Phase 3: Infrastructure Abstraction (Future - 4-6 weeks)
+- [ ] TD-020: Migrate to Pulumi or multi-cloud Terraform modules
+- **Estimated Effort**: 4-6 weeks
+- **Portability Score**: Would reach 80-90/100
+
+### Cost-Benefit Analysis
+- **Current State**: 25/100 portability (heavily AWS-coupled)
+- **Cost to Reach 60/100**: ~6-8 weeks engineering time
+- **Cost to Reach 80/100**: ~10-14 weeks total engineering time
+- **Business Value**: Enables multi-cloud strategy, reduces vendor lock-in
+- **Recommendation**: Defer until multi-cloud is a business requirement
+
+### References
+- Full audit: `docs/CLOUD_PROVIDER_PORTABILITY_AUDIT.md` (729 lines)
+- Quick wins implementation: PR #43
+- GCP migration estimate: 8-12 weeks for full port
+
+---
+
 ## Commit-by-Commit Lessons
 
 ### Commits That Were Shortcuts
@@ -224,13 +415,16 @@ moto==5.0.0  # Upgraded from 4.2.0 for mock_aws decorator
 
 | Metric | Value |
 |--------|-------|
-| Total Tech Debt Items | 15 |
+| Total Tech Debt Items | 20 |
 | Critical (Security) | 3 |
 | High (Quality) | 4 |
 | Medium (Cleanup) | 5 |
 | Low (Nice to Have) | 3 |
+| Cloud Portability (Future) | 5 |
 | Items from shortcuts | 7 |
 | Items acceptable for demo | 4 |
+| Items completed | 10 |
+| Items deferred to future | 10 |
 
 ---
 
