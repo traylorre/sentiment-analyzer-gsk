@@ -1,4 +1,4 @@
-name: "[3/5] Preprod Integration Tests"
+name: "[3/4] Preprod Integration Tests"
 
 # Pipeline Stage 3: Run integration tests against preprod environment
 #
@@ -15,7 +15,7 @@ name: "[3/5] Preprod Integration Tests"
 
 on:
   workflow_run:
-    workflows: ["[2/5] Deploy to Preprod"]
+    workflows: ["[2/4] Deploy to Preprod"]
     types: [completed]
     branches: [main]
 

@@ -26,6 +26,37 @@ A cloud-hosted Sentiment Analyzer service built with serverless AWS architecture
 | **[3/4]** Preprod Integration Tests | [pipeline-3-test-preprod.yml](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pipeline-3-test-preprod.yml) | ![Test Preprod](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pipeline-3-test-preprod.yml/badge.svg) |
 | **[4/4]** Deploy to Production | [pipeline-4-deploy-prod.yml](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pipeline-4-deploy-prod.yml) | ![Deploy Prod](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pipeline-4-deploy-prod.yml/badge.svg) |
 
+**Pipeline Behavior:**
+- **Automatic:** Merges to `main` trigger `[1/4]` → `[2/4]` → `[3/4]` → `[4/4]` automatically
+- **Manual Control:** Use GitHub UI or `gh workflow run` to trigger any stage independently
+
+**Manual Deployment Commands:**
+```bash
+# Trigger full pipeline (build + deploy all environments)
+gh workflow run pipeline-1-build.yml --repo traylorre/sentiment-analyzer-gsk
+
+# Deploy specific SHA to preprod (bypass build)
+gh workflow run pipeline-2-deploy-preprod.yml \
+  --repo traylorre/sentiment-analyzer-gsk \
+  --field artifact_sha=abc1234
+
+# Re-run preprod tests without redeploying
+gh workflow run pipeline-3-test-preprod.yml \
+  --repo traylorre/sentiment-analyzer-gsk \
+  --field artifact_sha=abc1234
+
+# Emergency: Deploy specific SHA to production
+gh workflow run pipeline-4-deploy-prod.yml \
+  --repo traylorre/sentiment-analyzer-gsk \
+  --field artifact_sha=abc1234 \
+  --field skip_canary=false
+```
+
+**GitHub UI Alternative:**
+1. Go to [Actions](https://github.com/traylorre/sentiment-analyzer-gsk/actions)
+2. Select workflow (e.g., `[2/4] Deploy to Preprod`)
+3. Click "Run workflow" → Choose branch → Fill parameters → "Run workflow"
+
 ---
 
 ## Table of Contents

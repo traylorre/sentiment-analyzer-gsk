@@ -1,4 +1,4 @@
-name: "[1/5] Build Artifacts"
+name: "[1/4] Build Artifacts"
 
 # Pipeline Stage 1: Build Lambda packages once, version with Git SHA
 #
