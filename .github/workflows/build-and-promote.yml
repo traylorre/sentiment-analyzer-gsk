@@ -168,6 +168,10 @@ jobs:
     runs-on: ubuntu-latest
     environment: preprod  # Uses preprod GitHub Environment secrets
 
+    outputs:
+      sns_topic_arn: ${{ steps.outputs.outputs.sns_topic_arn }}
+      dashboard_url: ${{ steps.outputs.outputs.dashboard_url }}
+
     defaults:
       run:
         working-directory: infrastructure/terraform
@@ -291,9 +295,10 @@ jobs:
         if: github.event.inputs.skip_tests != 'true'
         env:
           AWS_DEFAULT_REGION: us-east-1
+          AWS_REGION: us-east-1
           ENVIRONMENT: preprod
           DYNAMODB_TABLE: preprod-sentiment-items
-          SNS_TOPIC_ARN: ${{ secrets.PREPROD_SNS_TOPIC_ARN }}
+          SNS_TOPIC_ARN: ${{ needs.deploy-preprod.outputs.sns_topic_arn }}
           NEWSAPI_SECRET_ARN: ${{ secrets.PREPROD_NEWSAPI_SECRET_ARN }}
           DASHBOARD_API_KEY: ${{ secrets.PREPROD_DASHBOARD_API_KEY }}
           WATCH_TAGS: AI,climate,economy
