@@ -17,7 +17,7 @@
 -r requirements.txt
 
 # Testing Framework
-pytest==7.4.3
+pytest==9.0.1
 pytest-cov==4.1.0       # Coverage reporting
 
 # AWS Mocking - Critical for unit tests
