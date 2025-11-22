@@ -316,42 +316,38 @@ sequenceDiagram
 
 ### DynamoDB Table Design
 
-```mermaid
-erDiagram
-    SENTIMENT_ITEMS {
-        string item_id PK
-        string source_type
-        string source_id
-        string title
-        string content
-        timestamp ingested_at
-        string status
-        float sentiment_score
-        string sentiment_label
-        timestamp analyzed_at
-        json tags
-    }
+**Main Table:** `sentiment-items`
 
-    GSI_BY_SENTIMENT {
-        string sentiment_label PK
-        timestamp analyzed_at SK
-        float sentiment_score
-    }
+| Attribute | Type | Key Type | Description |
+|-----------|------|----------|-------------|
+| `item_id` | String | Partition Key (PK) | Unique identifier for each item |
+| `source_type` | String | - | Source system (e.g., "newsapi", "rss") |
+| `source_id` | String | - | External source identifier |
+| `title` | String | - | Article/item title |
+| `content` | String | - | Article text content |
+| `ingested_at` | Timestamp | - | When item was ingested |
+| `status` | String | - | Processing status ("pending", "analyzed") |
+| `sentiment_score` | Float | - | Sentiment score (0.0-1.0) |
+| `sentiment_label` | String | - | Sentiment classification (positive/neutral/negative) |
+| `analyzed_at` | Timestamp | - | When sentiment analysis completed |
+| `tags` | JSON | - | Associated tags for categorization |
 
-    GSI_BY_TAG {
-        string tag PK
-        timestamp ingested_at SK
-    }
+**Global Secondary Indexes (GSI):**
 
-    GSI_BY_STATUS {
-        string status PK
-        timestamp ingested_at SK
-    }
+1. **sentiment_index** - Query by sentiment
+   - PK: `sentiment_label`
+   - SK: `analyzed_at`
+   - Use case: Fetch all positive/negative items sorted by time
 
-    SENTIMENT_ITEMS ||--o{ GSI_BY_SENTIMENT : "indexed by"
-    SENTIMENT_ITEMS ||--o{ GSI_BY_TAG : "indexed by"
-    SENTIMENT_ITEMS ||--o{ GSI_BY_STATUS : "indexed by"
-```
+2. **tag_index** - Query by tag
+   - PK: `tag`
+   - SK: `ingested_at`
+   - Use case: Fetch all items for a specific tag
+
+3. **status_index** - Query by processing status
+   - PK: `status`
+   - SK: `ingested_at`
+   - Use case: Find pending items for processing
 
 ---
 
