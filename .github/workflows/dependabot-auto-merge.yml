@@ -55,6 +55,17 @@ jobs:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Auto-merge GitHub Actions major version updates
+        if: |
+          steps.metadata.outputs.update-type == 'version-update:semver-major' &&
+          steps.metadata.outputs.package-ecosystem == 'github_actions'
+        run: |
+          echo "Auto-merging GitHub Actions major version update"
+          gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Auto-merge security updates (any version)
         if: steps.metadata.outputs.dependency-type == 'direct:production' && contains(github.event.pull_request.title, 'security')
         run: gh pr merge --auto --squash "$PR_URL"
@@ -62,27 +73,34 @@ jobs:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Approve PR
-        if: steps.metadata.outputs.update-type == 'version-update:semver-patch' || steps.metadata.outputs.update-type == 'version-update:semver-minor'
+      - name: Approve PR (patch/minor or GitHub Actions)
+        if: |
+          steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+          steps.metadata.outputs.update-type == 'version-update:semver-minor' ||
+          (steps.metadata.outputs.update-type == 'version-update:semver-major' && steps.metadata.outputs.package-ecosystem == 'github_actions')
         run: gh pr review --approve "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Comment on major version updates
-        if: steps.metadata.outputs.update-type == 'version-update:semver-major'
+      - name: Comment on Python major version updates
+        if: |
+          steps.metadata.outputs.update-type == 'version-update:semver-major' &&
+          steps.metadata.outputs.package-ecosystem == 'pip'
         run: |
-          gh pr comment "$PR_URL" --body "⚠️ **Major version update detected**
+          gh pr comment "$PR_URL" --body "⚠️ **Major Python dependency update detected**
 
           This PR updates \`${{ steps.metadata.outputs.dependency-names }}\` to a new major version.
 
           Major updates may contain breaking changes and require manual review:
           1. Check the changelog for breaking changes
-          2. Review test results
+          2. Review test results carefully
           3. Test locally if needed
           4. Merge manually when ready
 
-          This PR will NOT be auto-merged."
+          This PR will NOT be auto-merged.
+
+          Note: GitHub Actions major updates are auto-merged as they typically follow a different versioning convention."
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
