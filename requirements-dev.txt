@@ -19,6 +19,7 @@
 # Testing Framework
 pytest==9.0.1
 pytest-cov==4.1.0       # Coverage reporting
+pytest-asyncio==0.24.0  # Async test support for SSE endpoints
 
 # AWS Mocking - Critical for unit tests
 # Note: moto version must support all AWS services we use
