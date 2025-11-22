@@ -21,13 +21,8 @@ name: "PR Check: Security Scan"
 on:
   push:
     branches: [main]
-    paths:
-      - 'requirements*.txt'
-      - '.github/workflows/pr-check-security.yml'
   pull_request:
     branches: [main]
-    paths:
-      - 'requirements*.txt'
   schedule:
     # Run weekly on Monday at 9am UTC to catch new CVEs
     - cron: '0 9 * * 1'
