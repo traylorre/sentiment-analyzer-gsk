@@ -434,7 +434,7 @@ jobs:
         "dynamodb:PutItem",
         "dynamodb:DeleteItem"
       ],
-      "Resource": "arn:aws:dynamodb:*:*:table/terraform-state-lock-preprod"
+      "Resource": "arn:aws:dynamodb:*:*:table/preprod/terraform.tfstate.tflock"
     },
     {
       "Sid": "DenyProdResources",
@@ -501,7 +501,7 @@ jobs:
         "dynamodb:PutItem",
         "dynamodb:DeleteItem"
       ],
-      "Resource": "arn:aws:dynamodb:*:*:table/terraform-state-lock-prod"
+      "Resource": "arn:aws:dynamodb:*:*:table/prod/terraform.tfstate.tflock"
     },
     {
       "Sid": "DenyPreprodResources",
@@ -661,7 +661,7 @@ git push origin main
 aws logs tail /aws/lambda/preprod-sentiment-ingestion --follow
 
 # Check DynamoDB
-aws dynamodb scan --table-name preprod-sentiment-items --limit 10
+aws s3api head-object --bucket sentiment-analyzer-terraform-state-218795110243 --key --limit 10
 
 # Check Secrets
 aws secretsmanager get-secret-value --secret-id preprod-newsapi-key

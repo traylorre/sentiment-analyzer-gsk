@@ -107,7 +107,7 @@ terraform apply -var-file=preprod.tfvars
 - Identical Terraform modules to prod
 - Different `preprod.tfvars` for scale/cost optimization
 - Separate state file: `preprod/terraform.tfstate`
-- Separate lock table: `terraform-state-lock-preprod`
+- Separate lock table: `preprod/terraform.tfstate.tflock`
 
 **Why Real AWS?**
 - Catches infrastructure mismatches (GSI projections, IAM permissions)
