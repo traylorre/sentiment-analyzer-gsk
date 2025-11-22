@@ -79,26 +79,60 @@ jobs:
           echo "📦 Building Lambda packages for commit: ${SHA}"
           mkdir -p packages
 
-          # Package Ingestion Lambda
-          cd src/lambdas/ingestion
-          zip -r ../../../packages/ingestion-${SHA}.zip . \
-            -x "*.pyc" "__pycache__/*" "*.pytest_cache/*" "tests/*"
-          cd ../../..
+          # Install dependencies once to shared directory
+          echo "📥 Installing Python dependencies..."
+          pip install -r requirements.txt -t packages/deps/ --quiet
+          echo "✅ Dependencies installed to packages/deps/"
 
-          # Package Analysis Lambda
-          cd src/lambdas/analysis
-          zip -r ../../../packages/analysis-${SHA}.zip . \
-            -x "*.pyc" "__pycache__/*" "*.pytest_cache/*" "tests/*"
-          cd ../../..
+          # Package Ingestion Lambda WITH dependencies
+          echo "📦 Packaging Ingestion Lambda..."
+          mkdir -p packages/ingestion-build
+          cp -r packages/deps/* packages/ingestion-build/
+          cp -r src/lambdas/ingestion/* packages/ingestion-build/
+          cp -r src/lambdas/shared packages/ingestion-build/src/lambdas/
+          cp -r src/lib packages/ingestion-build/src/
+          cd packages/ingestion-build
+          zip -r ../ingestion-${SHA}.zip . \
+            -x "*.pyc" "__pycache__/*" "*.pytest_cache/*" "tests/*" -q
+          cd ../..
+          echo "✅ Ingestion package: $(du -h packages/ingestion-${SHA}.zip | cut -f1)"
 
-          # Package Dashboard Lambda
-          cd src/lambdas/dashboard
-          zip -r ../../../packages/dashboard-${SHA}.zip . \
-            -x "*.pyc" "__pycache__/*" "*.pytest_cache/*" "tests/*"
-          cd ../../..
+          # Package Analysis Lambda WITH dependencies (excluding torch/transformers - in layer)
+          echo "📦 Packaging Analysis Lambda..."
+          mkdir -p packages/analysis-build
+          cp -r packages/deps/* packages/analysis-build/
+          # Remove torch and transformers - provided by ML layer
+          rm -rf packages/analysis-build/torch* packages/analysis-build/transformers*
+          cp -r src/lambdas/analysis/* packages/analysis-build/
+          cp -r src/lambdas/shared packages/analysis-build/src/lambdas/
+          cp -r src/lib packages/analysis-build/src/
+          cd packages/analysis-build
+          zip -r ../analysis-${SHA}.zip . \
+            -x "*.pyc" "__pycache__/*" "*.pytest_cache/*" "tests/*" -q
+          cd ../..
+          echo "✅ Analysis package: $(du -h packages/analysis-${SHA}.zip | cut -f1)"
 
+          # Package Dashboard Lambda WITH dependencies
+          echo "📦 Packaging Dashboard Lambda..."
+          mkdir -p packages/dashboard-build
+          cp -r packages/deps/* packages/dashboard-build/
+          cp -r src/lambdas/dashboard/* packages/dashboard-build/
+          cp -r src/lambdas/shared packages/dashboard-build/src/lambdas/
+          cp -r src/lib packages/dashboard-build/src/
+          cp -r src/dashboard packages/dashboard-build/src/
+          cd packages/dashboard-build
+          zip -r ../dashboard-${SHA}.zip . \
+            -x "*.pyc" "__pycache__/*" "*.pytest_cache/*" "tests/*" -q
+          cd ../..
+          echo "✅ Dashboard package: $(du -h packages/dashboard-${SHA}.zip | cut -f1)"
+
+          # Cleanup build directories
+          rm -rf packages/deps packages/*-build
+
+          echo ""
+          echo "📊 Final package sizes:"
           ls -lh packages/
-          echo "✅ Lambda packages built successfully"
+          echo "✅ Lambda packages built successfully with bundled dependencies"
 
       - name: Upload Lambda Packages as Artifacts
         uses: actions/upload-artifact@v5
