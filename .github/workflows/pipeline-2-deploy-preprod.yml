@@ -68,6 +68,10 @@ jobs:
             SHA="${{ github.event.workflow_run.head_sha }}"
             SHA="${SHA:0:7}"
           fi
+
+          # Strip 'v' prefix if present (GitHub UI may add it)
+          SHA="${SHA#v}"
+
           echo "sha=${SHA}" >> $GITHUB_OUTPUT
           echo "artifact_name=lambda-packages-${SHA}" >> $GITHUB_OUTPUT
 
