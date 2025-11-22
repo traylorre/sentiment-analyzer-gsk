@@ -68,10 +68,38 @@ SSE_POLL_INTERVAL = int(
 )  # Safe default: polling frequency
 ENVIRONMENT = os.environ["ENVIRONMENT"]
 
+# SSE connection tracking (P0-2 mitigation: prevent concurrency exhaustion)
+MAX_SSE_CONNECTIONS_PER_IP = int(os.environ.get("MAX_SSE_CONNECTIONS_PER_IP", "2"))
+sse_connections: dict[str, int] = {}  # ip_address -> active_connection_count
+
 
 def get_api_key() -> str:
     """Get API key from environment (lazy load to support test mocking)."""
     return os.environ.get("API_KEY", "")
+
+
+def get_cors_origins() -> list[str]:
+    """
+    Get CORS allowed origins from environment.
+
+    Returns localhost for dev/test, specific domains for production.
+    Production REQUIRES explicit CORS_ORIGINS configuration.
+    """
+    cors_origins = os.environ.get("CORS_ORIGINS", "")
+    if cors_origins:
+        return [origin.strip() for origin in cors_origins.split(",")]
+
+    # Default: environment-based CORS (dev/test only)
+    if ENVIRONMENT in ("dev", "test", "preprod"):
+        # Allow localhost for local development and preprod testing
+        return ["http://localhost:3000", "http://127.0.0.1:3000"]
+    else:
+        # Production: no defaults, must be explicitly configured via CORS_ORIGINS
+        logger.error(
+            "CORS_ORIGINS not configured for production - dashboard will reject cross-origin requests",
+            extra={"environment": ENVIRONMENT},
+        )
+        return []
 
 
 # Path to static dashboard files
@@ -107,24 +135,39 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Configure CORS
-# Note: In production, restrict origins to specific domains
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Demo configuration - restrict in production
-    allow_credentials=True,
-    allow_methods=["GET", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"],
-)
+# Configure CORS (P0-5 mitigation: no wildcard in production)
+# Environment-based CORS configuration
+cors_origins = get_cors_origins()
+if cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,
+        allow_credentials=False,  # Not needed for Bearer token auth
+        allow_methods=["GET", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type"],
+    )
+    logger.info(
+        "CORS configured",
+        extra={"allowed_origins": cors_origins, "environment": ENVIRONMENT},
+    )
+else:
+    logger.error(
+        "CORS not configured - API will reject cross-origin requests",
+        extra={"environment": ENVIRONMENT},
+    )
 
 
-def verify_api_key(authorization: str | None = Depends(api_key_header)) -> bool:
+def verify_api_key(
+    request: Request,
+    authorization: str | None = Depends(api_key_header),
+) -> bool:
     """
     Verify API key from Authorization header.
 
     Uses constant-time comparison to prevent timing attacks.
 
     Args:
+        request: FastAPI request object (for IP logging)
         authorization: Authorization header value (Bearer <key>)
 
     Returns:
@@ -138,18 +181,28 @@ def verify_api_key(authorization: str | None = Depends(api_key_header)) -> bool:
         1. Verify API_KEY environment variable is set
         2. Check client is sending correct Authorization header
         3. Format: "Bearer <api-key>"
+
+    Security Note (P1-2):
+        Logs client IP on authentication failures for forensics.
     """
+    # Get client IP for logging (behind Lambda Function URL / API Gateway)
+    client_ip = request.headers.get("X-Forwarded-For", "unknown").split(",")[0].strip()
+
     api_key = get_api_key()
 
     if not api_key:
         # No API key configured - allow access (dev mode only)
         logger.warning(
             "API_KEY not configured - allowing unauthenticated access",
-            extra={"environment": ENVIRONMENT},
+            extra={"environment": ENVIRONMENT, "client_ip": client_ip},
         )
         return True
 
     if not authorization:
+        logger.warning(
+            "Missing Authorization header",
+            extra={"client_ip": client_ip, "path": request.url.path},
+        )
         raise HTTPException(
             status_code=401,
             detail="Missing Authorization header",
@@ -158,6 +211,10 @@ def verify_api_key(authorization: str | None = Depends(api_key_header)) -> bool:
     # Extract token from "Bearer <token>"
     parts = authorization.split(" ")
     if len(parts) != 2 or parts[0].lower() != "bearer":
+        logger.warning(
+            "Invalid Authorization header format",
+            extra={"client_ip": client_ip, "path": request.url.path},
+        )
         raise HTTPException(
             status_code=401,
             detail="Invalid Authorization header format. Use: Bearer <api-key>",
@@ -169,7 +226,12 @@ def verify_api_key(authorization: str | None = Depends(api_key_header)) -> bool:
     if not secrets.compare_digest(provided_key, api_key):
         logger.warning(
             "Invalid API key attempt",
-            extra={"environment": ENVIRONMENT},
+            extra={
+                "environment": ENVIRONMENT,
+                "client_ip": client_ip,
+                "path": request.url.path,
+                "key_prefix": provided_key[:8] if len(provided_key) >= 8 else "short",
+            },
         )
         raise HTTPException(
             status_code=401,
@@ -370,7 +432,39 @@ async def stream_metrics(
         1. Check Lambda timeout (should be > 30s)
         2. Verify client reconnects on disconnect
         3. Check for Lambda cold starts causing delays
+
+    Security Note (P0-2):
+        Connection limits enforced per IP to prevent concurrency exhaustion.
+        Max connections per IP: MAX_SSE_CONNECTIONS_PER_IP (default: 2)
     """
+    # Get client IP from headers (behind Lambda Function URL / API Gateway)
+    client_ip = request.headers.get("X-Forwarded-For", "unknown").split(",")[0].strip()
+
+    # P0-2 mitigation: Enforce SSE connection limit per IP
+    current_connections = sse_connections.get(client_ip, 0)
+    if current_connections >= MAX_SSE_CONNECTIONS_PER_IP:
+        logger.warning(
+            "SSE connection limit exceeded",
+            extra={
+                "client_ip": client_ip,
+                "current_connections": current_connections,
+                "max_allowed": MAX_SSE_CONNECTIONS_PER_IP,
+            },
+        )
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many SSE connections from your IP. Max: {MAX_SSE_CONNECTIONS_PER_IP}",
+        )
+
+    # Increment connection count
+    sse_connections[client_ip] = current_connections + 1
+    logger.info(
+        "SSE connection established",
+        extra={
+            "client_ip": client_ip,
+            "total_connections": sse_connections[client_ip],
+        },
+    )
 
     async def event_generator():
         """Generate SSE events with metrics updates."""
@@ -378,7 +472,10 @@ async def stream_metrics(
             while True:
                 # Check if client disconnected
                 if await request.is_disconnected():
-                    logger.info("SSE client disconnected")
+                    logger.info(
+                        "SSE client disconnected",
+                        extra={"client_ip": client_ip},
+                    )
                     break
 
                 try:
@@ -412,8 +509,24 @@ async def stream_metrics(
                 await asyncio.sleep(SSE_POLL_INTERVAL)
 
         except asyncio.CancelledError:
-            logger.info("SSE stream cancelled")
+            logger.info(
+                "SSE stream cancelled",
+                extra={"client_ip": client_ip},
+            )
             raise
+        finally:
+            # Decrement connection count when stream ends
+            if client_ip in sse_connections:
+                sse_connections[client_ip] -= 1
+                if sse_connections[client_ip] <= 0:
+                    del sse_connections[client_ip]
+                logger.info(
+                    "SSE connection closed",
+                    extra={
+                        "client_ip": client_ip,
+                        "remaining_connections": sse_connections.get(client_ip, 0),
+                    },
+                )
 
     return EventSourceResponse(event_generator())
 

@@ -17,8 +17,9 @@
 -r requirements.txt
 
 # Testing Framework
-pytest==9.0.1
+pytest==8.3.4           # Compatible with pytest-asyncio 0.24.0 (requires <9)
 pytest-cov==4.1.0       # Coverage reporting
+pytest-asyncio==0.24.0  # Async test support for SSE endpoints
 
 # AWS Mocking - Critical for unit tests
 # Note: moto version must support all AWS services we use

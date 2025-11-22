@@ -261,7 +261,7 @@ A: 4 weeks total:
 - License: Apache 2.0
 
 ### AWS Lambda Configuration
-- Runtime: Python 3.11
+- Runtime: Python 3.13
 - Memory: 512MB (recommended)
 - Timeout: 30 seconds
 - Packaging: Docker container (250MB limit avoidable)

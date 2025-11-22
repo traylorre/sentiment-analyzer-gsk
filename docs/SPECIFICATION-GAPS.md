@@ -26,7 +26,7 @@
 # Add to SPEC.md - Section: Lambda Functions
 
 Lambda Function: quota-reset-lambda
-Runtime: Python 3.11
+Runtime: Python 3.13
 Memory: 256 MB
 Timeout: 60s
 Concurrency: 1 (reserved)

@@ -5,7 +5,7 @@
 ```
 SQS Queue (ingestion events)
     ↓
-Lambda Function (512MB memory, Python 3.11)
+Lambda Function (512MB memory, Python 3.13)
     ├─ Load DistilBERT model (cached)
     ├─ Batch process 10 items
     └─ Call inference pipeline
@@ -23,7 +23,7 @@ DynamoDB (sentiment-items table)
 ### File: `lambda/Dockerfile`
 
 ```dockerfile
-# Use AWS Lambda Python 3.11 runtime base image
+# Use AWS Lambda Python 3.13 runtime base image
 FROM public.ecr.aws/lambda/python:3.11
 
 # Set working directory
@@ -416,7 +416,7 @@ resource "aws_lambda_layer_version" "distilbert_model" {
   filename   = data.archive_file.model_layer.output_path
   layer_name = "distilbert-model"
 
-  compatible_runtimes = ["python3.11"]
+  compatible_runtimes = ["python3.13"]
 
   source_code_hash = data.archive_file.model_layer.output_base64sha256
 }

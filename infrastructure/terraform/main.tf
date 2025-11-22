@@ -216,7 +216,7 @@ module "dashboard_lambda" {
   s3_key        = "dashboard/lambda.zip"
 
   # Resource configuration per task spec
-  memory_size          = 512
+  memory_size          = 1024
   timeout              = 60
   reserved_concurrency = 10
 

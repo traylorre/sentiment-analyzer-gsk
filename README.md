@@ -1,7 +1,7 @@
 # sentiment-analyzer-gsk
 
 [![Security](https://img.shields.io/badge/security-hardened-green.svg)](./SECURITY.md)
-[![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.13](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/downloads/)
 [![Coverage](https://img.shields.io/badge/coverage-%3E80%25-brightgreen.svg)](./pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
@@ -25,15 +25,21 @@ A cloud-hosted Sentiment Analyzer service built with serverless AWS architecture
 **Pipeline Flow:** Build → Deploy Preprod → Test Preprod → Deploy Production
 
 ```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'fontSize':'16px'}}}%%
 graph LR
     Build[Build<br/>Lambda Packages] --> DeployPreprod[Deploy<br/>Preprod]
     DeployPreprod --> TestPreprod[Test<br/>Preprod]
     TestPreprod --> DeployProd[Deploy<br/>Production]
 
-    style Build fill:#4CAF50
-    style DeployPreprod fill:#2196F3
-    style TestPreprod fill:#FF9800
-    style DeployProd fill:#F44336
+    classDef buildStep fill:#2e7d32,stroke:#1b5e20,stroke-width:2px,color:#fff
+    classDef deployStep fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
+    classDef testStep fill:#f57c00,stroke:#e65100,stroke-width:2px,color:#fff
+    classDef prodStep fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
+
+    class Build buildStep
+    class DeployPreprod deployStep
+    class TestPreprod testStep
+    class DeployProd prodStep
 ```
 
 **Quick Actions:**
@@ -133,7 +139,7 @@ Ingests text from external sources (NewsAPI, RSS feeds) and returns sentiment an
 
 ### Architecture
 
-- **Compute**: AWS Lambda (Python 3.11)
+- **Compute**: AWS Lambda (Python 3.13)
 - **Orchestration**: EventBridge, SNS, SQS
 - **Storage**: DynamoDB (on-demand capacity)
 - **Sentiment Model**: DistilBERT (fine-tuned for social media)
@@ -156,6 +162,7 @@ Ingests text from external sources (NewsAPI, RSS feeds) and returns sentiment an
 ### High-Level System Architecture
 
 ```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
 graph TB
     subgraph "External Sources"
         NewsAPI[NewsAPI]
@@ -165,7 +172,7 @@ graph TB
     subgraph "AWS Cloud"
         subgraph "Ingestion Layer"
             EB[EventBridge<br/>Scheduler<br/>5 min]
-            Ingestion[Ingestion Lambda<br/>Python 3.11]
+            Ingestion[Ingestion Lambda<br/>Python 3.13]
         end
 
         subgraph "Processing Layer"
@@ -215,16 +222,21 @@ graph TB
 
     CW -.->|Cost Alerts| Budget
 
-    style Ingestion fill:#FF6B6B
-    style Analysis fill:#4ECDC4
-    style Dashboard fill:#45B7D1
-    style DDB fill:#FFA07A
-    style SNS fill:#98D8C8
+    classDef lambdaStyle fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
+    classDef storageStyle fill:#388e3c,stroke:#1b5e20,stroke-width:2px,color:#fff
+    classDef messagingStyle fill:#7b1fa2,stroke:#4a148c,stroke-width:2px,color:#fff
+    classDef monitoringStyle fill:#f57c00,stroke:#e65100,stroke-width:2px,color:#fff
+
+    class Ingestion,Analysis,Dashboard lambdaStyle
+    class DDB,DLQ storageStyle
+    class SNS messagingStyle
+    class CW,Budget monitoringStyle
 ```
 
 ### Environment Promotion Pipeline
 
 ```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
 graph LR
     subgraph "Source"
         Code[Feature Branch]
@@ -273,10 +285,13 @@ graph LR
 
     ProdDeploy --> ProdMonitor
 
-    style DevApprove fill:#FFD93D
-    style PreprodApprove fill:#FFD93D
-    style ProdApprove fill:#FF6B6B
-    style Artifact fill:#6BCF7F
+    classDef gateStyle fill:#f57c00,stroke:#e65100,stroke-width:2px,color:#fff
+    classDef criticalGate fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef artifactStyle fill:#388e3c,stroke:#1b5e20,stroke-width:2px,color:#fff
+
+    class DevApprove,PreprodApprove gateStyle
+    class ProdApprove criticalGate
+    class Artifact artifactStyle
 ```
 
 ### Data Flow: Real-Time Sentiment Processing
@@ -394,7 +409,7 @@ ruff check src/ tests/
 |------|---------|---------|--------------|
 | **AWS CLI** | v2.x | AWS resource management | [Install Guide](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) |
 | **Terraform** | ≥1.5.0 | Infrastructure as code | [Install Guide](https://developer.hashicorp.com/terraform/downloads) |
-| **Python** | 3.11+ | Lambda function development | [Download](https://www.python.org/downloads/) |
+| **Python** | 3.13+ | Lambda function development | [Download](https://www.python.org/downloads/) |
 | **Git** | ≥2.30 | Version control | [Download](https://git-scm.com/downloads) |
 | **jq** | Latest | JSON processing (optional) | [Download](https://jqlang.github.io/jq/download/) |
 
@@ -403,7 +418,7 @@ ruff check src/ tests/
 ```bash
 aws --version          # Should show: aws-cli/2.x.x
 terraform --version    # Should show: Terraform v1.5.x+
-python --version       # Should show: Python 3.11.x
+python --version       # Should show: Python 3.13.x
 git --version          # Should show: git version 2.30+
 ```
 
@@ -452,7 +467,7 @@ Run this verification checklist:
 ```bash
 # ✅ Python environment
 python --version
-# Should show Python 3.11+
+# Should show Python 3.13+
 
 # ✅ Dependencies installed
 pytest --version

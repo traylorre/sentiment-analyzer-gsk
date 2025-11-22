@@ -40,7 +40,7 @@ variable "s3_key" {
 variable "runtime" {
   description = "Lambda runtime"
   type        = string
-  default     = "python3.11"
+  default     = "python3.13"
 }
 
 variable "timeout" {

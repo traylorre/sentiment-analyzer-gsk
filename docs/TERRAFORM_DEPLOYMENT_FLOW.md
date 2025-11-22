@@ -5,6 +5,7 @@ This document explains the Terraform deployment process with visual diagrams for
 ## Overview Diagram
 
 ```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
 flowchart TB
     subgraph "Developer Workflow"
         A[Push to main] --> B{Paths changed?}
@@ -40,11 +41,18 @@ flowchart TB
         X -->|Yes| Y[Deployment Complete]
         X -->|No| Z[Tests Failed]
     end
+
+    classDef successStep fill:#388e3c,stroke:#1b5e20,stroke-width:2px,color:#fff
+    classDef failStep fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
+
+    class Y successStep
+    class T,Z failStep
 ```
 
 ## Resource Creation Order
 
 ```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
 flowchart LR
     subgraph "Phase 1: Foundation"
         A[S3 Bucket]
@@ -86,6 +94,18 @@ flowchart LR
     G --> K
     G --> L
     G --> M
+
+    classDef phase1 fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
+    classDef phase2 fill:#7b1fa2,stroke:#4a148c,stroke-width:2px,color:#fff
+    classDef phase3 fill:#388e3c,stroke:#1b5e20,stroke-width:2px,color:#fff
+    classDef phase4 fill:#f57c00,stroke:#e65100,stroke-width:2px,color:#fff
+    classDef phase5 fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
+
+    class A,B,C phase1
+    class E,F phase2
+    class G,H,I phase3
+    class J,K,L phase4
+    class M,N,O phase5
 ```
 
 ## State Management Flow
@@ -131,6 +151,7 @@ sequenceDiagram
 **What you need to know:**
 
 ```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
 flowchart LR
     A[Your Code Change] --> B[Push to main]
     B --> C[CI Runs Automatically]
@@ -140,6 +161,12 @@ flowchart LR
     E --> G{Tests Pass?}
     G -->|Yes| H[Done!]
     G -->|No| I[Check Test Logs]
+
+    classDef successNode fill:#388e3c,stroke:#1b5e20,stroke-width:2px,color:#fff
+    classDef errorNode fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
+
+    class H successNode
+    class F,I errorNode
 ```
 
 **Key Points:**
@@ -153,6 +180,7 @@ flowchart LR
 **Incident Response Flow:**
 
 ```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
 flowchart TB
     A[Alert: Deploy Failed] --> B{Check Error Type}
 
@@ -170,6 +198,12 @@ flowchart TB
 
     B -->|S3 NoSuchKey| L[Lambda package missing]
     L --> M[Check S3 upload step succeeded]
+
+    classDef alertNode fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef actionNode fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
+
+    class A alertNode
+    class E,I,K,M actionNode
 ```
 
 **Recovery Commands:**
@@ -194,6 +228,7 @@ terraform refresh -var="environment=dev"
 **Infrastructure Dependencies:**
 
 ```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
 graph TB
     subgraph "Terraform State Backend"
         A[S3 Bucket<br/>sentiment-analyzer-tfstate-*]
@@ -225,11 +260,20 @@ graph TB
     D --> G
     E --> G
     F --> G
+
+    classDef stateBackend fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
+    classDef secrets fill:#7b1fa2,stroke:#4a148c,stroke-width:2px,color:#fff
+    classDef resources fill:#388e3c,stroke:#1b5e20,stroke-width:2px,color:#fff
+
+    class A,B stateBackend
+    class C,D,E,F secrets
+    class G,H,I,J,K,L,M,N,O resources
 ```
 
 **Terraform Module Structure:**
 
 ```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
 graph LR
     subgraph "main.tf"
         A[Root Module]
@@ -252,6 +296,12 @@ graph LR
     A --> F
     A --> G
     A --> H
+
+    classDef rootModule fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef childModule fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
+
+    class A rootModule
+    class B,C,D,E,F,G,H childModule
 ```
 
 ---
@@ -290,6 +340,7 @@ gantt
 ## Troubleshooting Decision Tree
 
 ```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
 flowchart TD
     A[Deployment Failed] --> B{Which step failed?}
 
@@ -319,6 +370,14 @@ flowchart TD
     B -->|Update Lambda| H[Check Lambda Status]
     H --> H1[Verify functions exist]
     H --> H2[Check S3 key paths match]
+
+    classDef errorNode fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef checkNode fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
+    classDef actionNode fill:#388e3c,stroke:#1b5e20,stroke-width:2px,color:#fff
+
+    class A errorNode
+    class C,D,E,F,G,H checkNode
+    class C1,C2,C3,D1,D2,E1,E2,F1,F2,G2,G3,G4,H1,H2 actionNode
 ```
 
 ---
