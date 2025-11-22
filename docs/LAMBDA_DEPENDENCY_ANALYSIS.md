@@ -182,7 +182,7 @@ aws lambda publish-layer-version \
   --layer-name sentiment-dependencies \
   --description 'Python dependencies for sentiment analyzer' \
   --content S3Bucket=BUCKET,S3Key=layers/dependencies.zip \
-  --compatible-runtimes python3.11
+  --compatible-runtimes python3.13
 ```
 
 Then update `infrastructure/terraform/main.tf` to attach layer to dashboard Lambda:

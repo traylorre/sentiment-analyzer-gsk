@@ -1,7 +1,7 @@
 # sentiment-analyzer-gsk
 
 [![Security](https://img.shields.io/badge/security-hardened-green.svg)](./SECURITY.md)
-[![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.13](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/downloads/)
 [![Coverage](https://img.shields.io/badge/coverage-%3E80%25-brightgreen.svg)](./pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
@@ -139,7 +139,7 @@ Ingests text from external sources (NewsAPI, RSS feeds) and returns sentiment an
 
 ### Architecture
 
-- **Compute**: AWS Lambda (Python 3.11)
+- **Compute**: AWS Lambda (Python 3.13)
 - **Orchestration**: EventBridge, SNS, SQS
 - **Storage**: DynamoDB (on-demand capacity)
 - **Sentiment Model**: DistilBERT (fine-tuned for social media)
@@ -172,7 +172,7 @@ graph TB
     subgraph "AWS Cloud"
         subgraph "Ingestion Layer"
             EB[EventBridge<br/>Scheduler<br/>5 min]
-            Ingestion[Ingestion Lambda<br/>Python 3.11]
+            Ingestion[Ingestion Lambda<br/>Python 3.13]
         end
 
         subgraph "Processing Layer"
@@ -409,7 +409,7 @@ ruff check src/ tests/
 |------|---------|---------|--------------|
 | **AWS CLI** | v2.x | AWS resource management | [Install Guide](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) |
 | **Terraform** | ≥1.5.0 | Infrastructure as code | [Install Guide](https://developer.hashicorp.com/terraform/downloads) |
-| **Python** | 3.11+ | Lambda function development | [Download](https://www.python.org/downloads/) |
+| **Python** | 3.13+ | Lambda function development | [Download](https://www.python.org/downloads/) |
 | **Git** | ≥2.30 | Version control | [Download](https://git-scm.com/downloads) |
 | **jq** | Latest | JSON processing (optional) | [Download](https://jqlang.github.io/jq/download/) |
 
@@ -418,7 +418,7 @@ ruff check src/ tests/
 ```bash
 aws --version          # Should show: aws-cli/2.x.x
 terraform --version    # Should show: Terraform v1.5.x+
-python --version       # Should show: Python 3.11.x
+python --version       # Should show: Python 3.13.x
 git --version          # Should show: git version 2.30+
 ```
 
@@ -467,7 +467,7 @@ Run this verification checklist:
 ```bash
 # ✅ Python environment
 python --version
-# Should show Python 3.11+
+# Should show Python 3.13+
 
 # ✅ Dependencies installed
 pytest --version

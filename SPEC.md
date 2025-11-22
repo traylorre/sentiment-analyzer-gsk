@@ -29,7 +29,7 @@ Ingestion Flow Details:
 Technology Stack
 ----------------
 - AWS Region: us-west-2 (Oregon)
-- Lambda Runtime: Python 3.11
+- Lambda Runtime: Python 3.13
 - Lambda Networking: No VPC (public execution environment)
   - Rationale: All AWS services (DynamoDB, SNS, SQS, Secrets Manager, S3) accessible via public endpoints with IAM authentication
   - Security: TLS 1.2+ encryption in transit, IAM policies enforce least privilege, no network-level access required
@@ -129,7 +129,7 @@ Disaster Recovery & Business Continuity
 Interfaces & Contracts
 ----------------------
 1) Admin API: configure sources
-- Implementation: AWS API Gateway (REST API) + Lambda (Python 3.11)
+- Implementation: AWS API Gateway (REST API) + Lambda (Python 3.13)
 - Authentication: API Gateway API Keys with usage plans (1000 requests/day per key, 10 requests/second burst)
 - Endpoint: POST /v1/sources
 - Purpose: create source subscriptions or update polling config
@@ -590,7 +590,7 @@ module "sqs_queue" {
 module "lambda_function" {
   source         = "./modules/lambda"
   name           = "inference-consumer"
-  runtime        = "python3.11"
+  runtime        = "python3.13"
   handler        = "handler.lambda_handler"
   memory_size    = 512                    # MB - balanced for VADER + Python runtime
   timeout        = 30                     # seconds - ample for P90 ≤ 500ms target
