@@ -62,14 +62,17 @@ def get_secrets_client(region_name: str | None = None) -> Any:
     Get a Secrets Manager client with retry configuration.
 
     Args:
-        region_name: AWS region (defaults to AWS_REGION env var)
+        region_name: Cloud region (defaults to CLOUD_REGION or AWS_REGION env var)
 
     Returns:
         boto3 Secrets Manager client
     """
-    region = region_name or os.environ.get("AWS_REGION")
+    # Cloud-agnostic: Use CLOUD_REGION, fallback to AWS_REGION for backward compatibility
+    region = (
+        region_name or os.environ.get("CLOUD_REGION") or os.environ.get("AWS_REGION")
+    )
     if not region:
-        raise ValueError("AWS_REGION environment variable must be set")
+        raise ValueError("CLOUD_REGION or AWS_REGION environment variable must be set")
 
     return boto3.client(
         "secretsmanager",

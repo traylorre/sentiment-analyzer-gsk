@@ -184,7 +184,7 @@ class TestIngestionConfig:
 
     def test_missing_dynamodb_table_raises(self):
         """Test that empty dynamodb_table raises error."""
-        with pytest.raises(ConfigurationError, match="DYNAMODB_TABLE is required"):
+        with pytest.raises(ConfigurationError, match="DATABASE_TABLE is required"):
             IngestionConfig(
                 watch_tags=["AI"],
                 dynamodb_table="",

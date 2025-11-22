@@ -5,6 +5,7 @@
 # Infrastructure is identical to prod but with lower scale/cost.
 
 environment = "preprod"
+aws_region  = "us-east-1"
 
 # Tags for cost tracking and resource management
 tags = {
