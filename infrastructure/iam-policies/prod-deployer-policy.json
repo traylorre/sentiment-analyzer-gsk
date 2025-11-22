@@ -54,23 +54,13 @@
       "Action": [
         "s3:GetObject",
         "s3:PutObject",
+        "s3:DeleteObject",
         "s3:ListBucket"
       ],
       "Resource": [
         "arn:aws:s3:::sentiment-analyzer-tfstate-*",
         "arn:aws:s3:::sentiment-analyzer-tfstate-*/prod/*"
       ]
-    },
-    {
-      "Sid": "TerraformLockAccess",
-      "Effect": "Allow",
-      "Action": [
-        "dynamodb:GetItem",
-        "dynamodb:PutItem",
-        "dynamodb:DeleteItem",
-        "dynamodb:DescribeTable"
-      ],
-      "Resource": "arn:aws:dynamodb:*:*:table/terraform-state-lock-prod"
     },
     {
       "Sid": "DenyPreprodResources",

@@ -34,22 +34,14 @@ fi
 echo "✅ AWS CLI configured"
 echo ""
 
-# Create DynamoDB table for preprod state locking
-echo "📦 Creating DynamoDB lock table for preprod..."
+# NOTE: DynamoDB lock table is NO LONGER NEEDED
+# Terraform now uses S3 native locking (use_lockfile=true in backend config)
+# Lock files are stored as .tflock files directly in S3 bucket
+#
+# The old DynamoDB table 'terraform-state-lock-preprod' can be deleted after
+# confirming S3 native locking works correctly
 
-if aws dynamodb describe-table --table-name terraform-state-lock-preprod --region us-east-1 &> /dev/null; then
-    echo "✅ DynamoDB lock table 'terraform-state-lock-preprod' already exists"
-else
-    aws dynamodb create-table \
-        --table-name terraform-state-lock-preprod \
-        --attribute-definitions AttributeName=LockID,AttributeType=S \
-        --key-schema AttributeName=LockID,KeyType=HASH \
-        --billing-mode PAY_PER_REQUEST \
-        --region us-east-1 \
-        --tags Key=Environment,Value=preprod Key=ManagedBy,Value=Terraform
-
-    echo "✅ Created DynamoDB lock table 'terraform-state-lock-preprod'"
-fi
+echo "✅ Skipping DynamoDB lock table creation (using S3 native locking)"
 
 echo ""
 echo "✅ Preprod bootstrap complete!"

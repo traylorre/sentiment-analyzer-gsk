@@ -148,7 +148,7 @@ Ingests text from external sources (NewsAPI, RSS feeds) and returns sentiment an
 - **Orchestration**: EventBridge, SNS, SQS
 - **Storage**: DynamoDB (on-demand capacity)
 - **Sentiment Model**: DistilBERT (fine-tuned for social media)
-- **Infrastructure**: Terraform with S3 backend and DynamoDB locking
+- **Infrastructure**: Terraform with S3 backend and S3 native locking
 - **CI/CD**: GitHub Actions → Dev → Preprod → Prod promotion pipeline
 
 ### Key Features

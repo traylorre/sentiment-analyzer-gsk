@@ -55,22 +55,14 @@ if [ "$account_confirm" != "yes" ]; then
     exit 1
 fi
 
-# Create DynamoDB table for prod state locking
-echo "📦 Creating DynamoDB lock table for production..."
+# NOTE: DynamoDB lock table is NO LONGER NEEDED
+# Terraform now uses S3 native locking (use_lockfile=true in backend config)
+# Lock files are stored as .tflock files directly in S3 bucket
+#
+# The old DynamoDB table 'terraform-state-lock-prod' can be deleted after
+# confirming S3 native locking works correctly
 
-if aws dynamodb describe-table --table-name terraform-state-lock-prod --region us-east-1 &> /dev/null; then
-    echo "✅ DynamoDB lock table 'terraform-state-lock-prod' already exists"
-else
-    aws dynamodb create-table \
-        --table-name terraform-state-lock-prod \
-        --attribute-definitions AttributeName=LockID,AttributeType=S \
-        --key-schema AttributeName=LockID,KeyType=HASH \
-        --billing-mode PAY_PER_REQUEST \
-        --region us-east-1 \
-        --tags Key=Environment,Value=prod Key=ManagedBy,Value=Terraform
-
-    echo "✅ Created DynamoDB lock table 'terraform-state-lock-prod'"
-fi
+echo "✅ Skipping DynamoDB lock table creation (using S3 native locking)"
 
 echo ""
 echo "✅ Production bootstrap complete!"
