@@ -206,7 +206,8 @@ def emit_metric(
         ]
 
     # Add environment dimension by default
-    environment = os.environ.get("ENVIRONMENT", "dev")
+    # CRITICAL: Must be set - no default to prevent metrics going to wrong environment
+    environment = os.environ["ENVIRONMENT"]
     if "Dimensions" not in metric_data:
         metric_data["Dimensions"] = []
     metric_data["Dimensions"].append({"Name": "Environment", "Value": environment})
@@ -251,7 +252,8 @@ def emit_metrics_batch(
         return
 
     client = get_cloudwatch_client(region_name)
-    environment = os.environ.get("ENVIRONMENT", "dev")
+    # CRITICAL: Must be set - no default to prevent metrics going to wrong environment
+    environment = os.environ["ENVIRONMENT"]
 
     metric_data_list = []
     for metric in metrics:
