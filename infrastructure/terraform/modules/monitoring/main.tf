@@ -286,6 +286,19 @@ resource "aws_budgets_budget" "monthly" {
   }
 
   # Only add notifications if alarm_email is provided
+  # Notification 1: Absolute $20 threshold (early warning)
+  dynamic "notification" {
+    for_each = var.alarm_email != "" ? [1] : []
+    content {
+      comparison_operator        = "GREATER_THAN"
+      threshold                  = 20
+      threshold_type             = "ABSOLUTE_VALUE"
+      notification_type          = "ACTUAL"
+      subscriber_email_addresses = [var.alarm_email]
+    }
+  }
+
+  # Notification 2: 80% of budget (percentage warning)
   dynamic "notification" {
     for_each = var.alarm_email != "" ? [1] : []
     content {
@@ -297,6 +310,7 @@ resource "aws_budgets_budget" "monthly" {
     }
   }
 
+  # Notification 3: 100% of budget (budget exceeded)
   dynamic "notification" {
     for_each = var.alarm_email != "" ? [1] : []
     content {
