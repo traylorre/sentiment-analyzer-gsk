@@ -1,10 +1,5 @@
 # sentiment-analyzer-gsk
 
-[![Tests](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/test.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/test.yml)
-[![Lint](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/lint.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/lint.yml)
-[![Deploy Dev](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/deploy-dev.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/deploy-dev.yml)
-[![Build & Promote](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/build-and-promote.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/build-and-promote.yml)
-[![Deploy Prod](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/deploy-prod.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/deploy-prod.yml)
 [![Security](https://img.shields.io/badge/security-hardened-green.svg)](./SECURITY.md)
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/)
 [![Coverage](https://img.shields.io/badge/coverage-%3E80%25-brightgreen.svg)](./pyproject.toml)
@@ -14,6 +9,22 @@
 [![AWS](https://img.shields.io/badge/AWS-Lambda%20%7C%20DynamoDB-FF9900.svg?logo=amazon-aws)](https://aws.amazon.com/)
 
 A cloud-hosted Sentiment Analyzer service built with serverless AWS architecture (Lambda, DynamoDB, EventBridge, SNS/SQS). Features dev/preprod/prod promotion pipeline with automated testing and deployment gates.
+
+## CI/CD Pipeline Status
+
+### PR Checks
+[![Code Quality](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pr-check-lint.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pr-check-lint.yml)
+[![Unit Tests](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pr-check-test.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pr-check-test.yml)
+[![Security Scan](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pr-check-security.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pr-check-security.yml)
+[![CodeQL](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pr-check-codeql.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pr-check-codeql.yml)
+
+### Deployment Pipeline
+| Stage | Workflow | Status |
+|-------|----------|--------|
+| **[1/4]** Build Artifacts | [pipeline-1-build.yml](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pipeline-1-build.yml) | ![Build](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pipeline-1-build.yml/badge.svg) |
+| **[2/4]** Deploy to Preprod | [pipeline-2-deploy-preprod.yml](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pipeline-2-deploy-preprod.yml) | ![Deploy Preprod](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pipeline-2-deploy-preprod.yml/badge.svg) |
+| **[3/4]** Preprod Integration Tests | [pipeline-3-test-preprod.yml](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pipeline-3-test-preprod.yml) | ![Test Preprod](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pipeline-3-test-preprod.yml/badge.svg) |
+| **[4/4]** Deploy to Production | [pipeline-4-deploy-prod.yml](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pipeline-4-deploy-prod.yml) | ![Deploy Prod](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pipeline-4-deploy-prod.yml/badge.svg) |
 
 ---
 
