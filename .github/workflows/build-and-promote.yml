@@ -302,7 +302,7 @@ jobs:
           NEWSAPI_SECRET_ARN: ${{ secrets.PREPROD_NEWSAPI_SECRET_ARN }}
           DASHBOARD_API_KEY: ${{ secrets.PREPROD_DASHBOARD_API_KEY }}
           WATCH_TAGS: AI,climate,economy
-          MODEL_VERSION: ${{ needs.build.outputs.artifact-sha }}
+          MODEL_VERSION: v${{ needs.build.outputs.artifact-sha }}
         run: |
           # Run ONLY preprod integration tests (real AWS)
           pytest tests/integration/test_*_preprod.py \
