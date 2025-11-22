@@ -25,15 +25,21 @@ A cloud-hosted Sentiment Analyzer service built with serverless AWS architecture
 **Pipeline Flow:** Build → Deploy Preprod → Test Preprod → Deploy Production
 
 ```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'fontSize':'16px'}}}%%
 graph LR
     Build[Build<br/>Lambda Packages] --> DeployPreprod[Deploy<br/>Preprod]
     DeployPreprod --> TestPreprod[Test<br/>Preprod]
     TestPreprod --> DeployProd[Deploy<br/>Production]
 
-    style Build fill:#4CAF50
-    style DeployPreprod fill:#2196F3
-    style TestPreprod fill:#FF9800
-    style DeployProd fill:#F44336
+    classDef buildStep fill:#2e7d32,stroke:#1b5e20,stroke-width:2px,color:#fff
+    classDef deployStep fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
+    classDef testStep fill:#f57c00,stroke:#e65100,stroke-width:2px,color:#fff
+    classDef prodStep fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
+
+    class Build buildStep
+    class DeployPreprod deployStep
+    class TestPreprod testStep
+    class DeployProd prodStep
 ```
 
 **Quick Actions:**
@@ -156,6 +162,7 @@ Ingests text from external sources (NewsAPI, RSS feeds) and returns sentiment an
 ### High-Level System Architecture
 
 ```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
 graph TB
     subgraph "External Sources"
         NewsAPI[NewsAPI]
@@ -215,16 +222,21 @@ graph TB
 
     CW -.->|Cost Alerts| Budget
 
-    style Ingestion fill:#FF6B6B
-    style Analysis fill:#4ECDC4
-    style Dashboard fill:#45B7D1
-    style DDB fill:#FFA07A
-    style SNS fill:#98D8C8
+    classDef lambdaStyle fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
+    classDef storageStyle fill:#388e3c,stroke:#1b5e20,stroke-width:2px,color:#fff
+    classDef messagingStyle fill:#7b1fa2,stroke:#4a148c,stroke-width:2px,color:#fff
+    classDef monitoringStyle fill:#f57c00,stroke:#e65100,stroke-width:2px,color:#fff
+
+    class Ingestion,Analysis,Dashboard lambdaStyle
+    class DDB,DLQ storageStyle
+    class SNS messagingStyle
+    class CW,Budget monitoringStyle
 ```
 
 ### Environment Promotion Pipeline
 
 ```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
 graph LR
     subgraph "Source"
         Code[Feature Branch]
@@ -273,10 +285,13 @@ graph LR
 
     ProdDeploy --> ProdMonitor
 
-    style DevApprove fill:#FFD93D
-    style PreprodApprove fill:#FFD93D
-    style ProdApprove fill:#FF6B6B
-    style Artifact fill:#6BCF7F
+    classDef gateStyle fill:#f57c00,stroke:#e65100,stroke-width:2px,color:#fff
+    classDef criticalGate fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef artifactStyle fill:#388e3c,stroke:#1b5e20,stroke-width:2px,color:#fff
+
+    class DevApprove,PreprodApprove gateStyle
+    class ProdApprove criticalGate
+    class Artifact artifactStyle
 ```
 
 ### Data Flow: Real-Time Sentiment Processing
