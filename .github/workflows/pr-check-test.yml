@@ -28,21 +28,8 @@ on:
   workflow_dispatch:  # Manual trigger from GitHub UI
   push:
     branches: [main]
-    paths:
-      - 'src/**'
-      - 'tests/**'
-      - 'requirements*.txt'
-      - 'pyproject.toml'
-      - 'pytest.ini'
-      - '.github/workflows/pr-check-test.yml'
   pull_request:
     branches: [main]
-    paths:
-      - 'src/**'
-      - 'tests/**'
-      - 'requirements*.txt'
-      - 'pyproject.toml'
-      - 'pytest.ini'
 
 jobs:
   test:
