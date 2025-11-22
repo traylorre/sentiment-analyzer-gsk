@@ -56,7 +56,7 @@ dev = [
 
 [tool.black]
 line-length = 88
-target-version = ['py313']
+target-version = ['py312']  # Black doesn't have py313 target yet, py312 is latest
 include = '\.pyi?$'
 extend-exclude = '''
 /(
