@@ -300,8 +300,8 @@ class TestDashboardE2E:
 
         Tests with time window that likely has no data.
         """
-        # Query with very restrictive time window (minimum valid: 0.01 hours = 36 seconds)
-        response = client.get("/api/metrics?hours=0.01", headers=auth_headers)
+        # Query with very restrictive time window (minimum valid: 1 hour)
+        response = client.get("/api/metrics?hours=1", headers=auth_headers)
 
         assert response.status_code == 200
         data = response.json()
