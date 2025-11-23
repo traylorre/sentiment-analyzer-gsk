@@ -146,9 +146,9 @@ jobs:
             --quiet
 
           # Build dashboard package
-          mkdir -p packages/dashboard-build/src/lambdas packages/dashboard-build/src/lib packages/dashboard-build/src/dashboard
+          mkdir -p packages/dashboard-build/src/lambdas/dashboard packages/dashboard-build/src/lib packages/dashboard-build/src/dashboard
           cp -r packages/dashboard-deps/* packages/dashboard-build/
-          cp -r src/lambdas/dashboard/* packages/dashboard-build/
+          cp -r src/lambdas/dashboard/* packages/dashboard-build/src/lambdas/dashboard/
           cp -r src/lambdas/shared packages/dashboard-build/src/lambdas/
           cp -r src/lib/* packages/dashboard-build/src/lib/
           cp -r src/dashboard/* packages/dashboard-build/src/dashboard/
