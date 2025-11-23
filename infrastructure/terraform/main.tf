@@ -306,6 +306,7 @@ module "iam" {
   dashboard_api_key_secret_arn = module.secrets.dashboard_api_key_secret_arn
   analysis_topic_arn           = module.sns.topic_arn
   dlq_arn                      = module.sns.dlq_arn
+  model_s3_bucket_arn          = "arn:aws:s3:::${local.model_s3_bucket}"
 }
 
 # ===================================================================
