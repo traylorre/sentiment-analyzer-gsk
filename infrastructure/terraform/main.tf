@@ -105,6 +105,9 @@ locals {
   analysis_lambda_name  = "${var.environment}-sentiment-analysis"
   dashboard_lambda_name = "${var.environment}-sentiment-dashboard"
   metrics_lambda_name   = "${var.environment}-sentiment-metrics"
+
+  # S3 bucket for ML model storage
+  model_s3_bucket = "sentiment-analyzer-models-218795110243"
 }
 
 # ===================================================================
@@ -159,7 +162,7 @@ module "analysis_lambda" {
   source = "./modules/lambda"
 
   function_name = local.analysis_lambda_name
-  description   = "Performs sentiment analysis using DistilBERT model"
+  description   = "Performs sentiment analysis using DistilBERT model from S3"
   iam_role_arn  = module.iam.analysis_lambda_role_arn
   handler       = "handler.lambda_handler"
   s3_bucket     = "${var.environment}-sentiment-lambda-deployments"
@@ -170,15 +173,18 @@ module "analysis_lambda" {
   timeout              = 30
   reserved_concurrency = 5
 
-  # Lambda layer for DistilBERT model
+  # Ephemeral storage for ML model (~250MB extracted, 3GB for headroom)
+  ephemeral_storage_size = 3072 # 3GB
+
+  # Lambda layer for DistilBERT model (deprecated - now using S3)
   layers = var.model_layer_arns
 
   # Environment variables
   environment_variables = {
-    DYNAMODB_TABLE = module.dynamodb.table_name
-    MODEL_PATH     = "/opt/model"
-    MODEL_VERSION  = var.model_version
-    ENVIRONMENT    = var.environment
+    DYNAMODB_TABLE  = module.dynamodb.table_name
+    MODEL_S3_BUCKET = local.model_s3_bucket
+    MODEL_VERSION   = var.model_version
+    ENVIRONMENT     = var.environment
   }
 
   # Dead letter queue

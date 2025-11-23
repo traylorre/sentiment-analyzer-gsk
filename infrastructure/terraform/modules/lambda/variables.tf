@@ -55,6 +55,17 @@ variable "memory_size" {
   default     = 512
 }
 
+variable "ephemeral_storage_size" {
+  description = "Ephemeral storage (/tmp) size in MB (512-10240)"
+  type        = number
+  default     = 512
+
+  validation {
+    condition     = var.ephemeral_storage_size >= 512 && var.ephemeral_storage_size <= 10240
+    error_message = "Ephemeral storage must be between 512 MB and 10240 MB."
+  }
+}
+
 variable "environment_variables" {
   description = "Environment variables for the Lambda function"
   type        = map(string)
