@@ -30,7 +30,5 @@ variable "dlq_arn" {
   type        = string
 }
 
-variable "model_s3_bucket_arn" {
-  description = "ARN of the S3 bucket containing ML model files"
-  type        = string
-}
+# model_s3_bucket_arn variable removed - no longer needed
+# Model is now baked into container image instead of S3 lazy loading

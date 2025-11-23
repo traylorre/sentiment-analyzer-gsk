@@ -166,10 +166,15 @@ echo "Verifying model files..."
 
 required_files=(
     "config.json"
-    "pytorch_model.bin"
     "tokenizer_config.json"
     "vocab.txt"
 )
+
+# Check for either pytorch_model.bin or model.safetensors
+if [ ! -f "${MODEL_DIR}/pytorch_model.bin" ] && [ ! -f "${MODEL_DIR}/model.safetensors" ]; then
+    echo -e "${RED}Error: Missing model weights file (pytorch_model.bin or model.safetensors)${NC}"
+    exit 1
+fi
 
 missing_files=()
 for file in "${required_files[@]}"; do

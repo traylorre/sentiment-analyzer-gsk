@@ -38,6 +38,30 @@ provider "aws" {
 }
 
 # ===================================================================
+# Data Sources
+# ===================================================================
+
+# Get current AWS account ID for ECR repository policy
+data "aws_caller_identity" "current" {}
+
+# ===================================================================
+# Module: ECR Repository (Container Registry for Analysis Lambda)
+# ===================================================================
+
+module "ecr_analysis" {
+  source = "./modules/ecr"
+
+  repository_name = "${var.environment}-sentiment-analysis"
+  environment     = var.environment
+  aws_region      = var.aws_region
+  aws_account_id  = data.aws_caller_identity.current.account_id
+
+  tags = {
+    Lambda = "analysis"
+  }
+}
+
+# ===================================================================
 # Module: Secrets Manager
 # ===================================================================
 
@@ -105,9 +129,6 @@ locals {
   analysis_lambda_name  = "${var.environment}-sentiment-analysis"
   dashboard_lambda_name = "${var.environment}-sentiment-dashboard"
   metrics_lambda_name   = "${var.environment}-sentiment-metrics"
-
-  # S3 bucket for ML model storage
-  model_s3_bucket = "sentiment-analyzer-models-218795110243"
 }
 
 # ===================================================================
@@ -155,36 +176,33 @@ module "ingestion_lambda" {
 }
 
 # ===================================================================
-# Module: Analysis Lambda (T052)
+# Module: Analysis Lambda (T052) - Container Image
 # ===================================================================
 
 module "analysis_lambda" {
   source = "./modules/lambda"
 
   function_name = local.analysis_lambda_name
-  description   = "Performs sentiment analysis using DistilBERT model from S3"
+  description   = "Performs sentiment analysis using DistilBERT model baked into container"
   iam_role_arn  = module.iam.analysis_lambda_role_arn
-  handler       = "handler.lambda_handler"
-  s3_bucket     = "${var.environment}-sentiment-lambda-deployments"
-  s3_key        = "analysis/lambda.zip"
+
+  # Container image configuration
+  package_type = "Image"
+  image_uri    = "${module.ecr_analysis.repository_url}:${var.model_version}"
 
   # Resource configuration per task spec
   memory_size          = 1024
   timeout              = 30
   reserved_concurrency = 5
 
-  # Ephemeral storage for ML model (~250MB extracted, 3GB for headroom)
-  ephemeral_storage_size = 3072 # 3GB
+  # Ephemeral storage (container images don't need as much since model is baked in)
+  ephemeral_storage_size = 512 # Default
 
-  # Lambda layer for DistilBERT model (deprecated - now using S3)
-  layers = var.model_layer_arns
-
-  # Environment variables
+  # Environment variables (MODEL_S3_BUCKET removed - no longer needed)
   environment_variables = {
-    DYNAMODB_TABLE  = module.dynamodb.table_name
-    MODEL_S3_BUCKET = local.model_s3_bucket
-    MODEL_VERSION   = var.model_version
-    ENVIRONMENT     = var.environment
+    DYNAMODB_TABLE = module.dynamodb.table_name
+    MODEL_VERSION  = var.model_version
+    ENVIRONMENT    = var.environment
   }
 
   # Dead letter queue
@@ -204,7 +222,7 @@ module "analysis_lambda" {
     Lambda = "analysis"
   }
 
-  depends_on = [module.iam]
+  depends_on = [module.iam, module.ecr_analysis]
 }
 
 # ===================================================================
@@ -306,7 +324,6 @@ module "iam" {
   dashboard_api_key_secret_arn = module.secrets.dashboard_api_key_secret_arn
   analysis_topic_arn           = module.sns.topic_arn
   dlq_arn                      = module.sns.dlq_arn
-  model_s3_bucket_arn          = "arn:aws:s3:::${local.model_s3_bucket}"
 }
 
 # ===================================================================
@@ -423,4 +440,15 @@ output "lambda_deployment_bucket" {
 output "ingestion_schedule_arn" {
   description = "ARN of the ingestion EventBridge rule"
   value       = module.eventbridge.ingestion_schedule_arn
+}
+
+# ECR outputs
+output "ecr_analysis_repository_url" {
+  description = "URL of the Analysis Lambda ECR repository"
+  value       = module.ecr_analysis.repository_url
+}
+
+output "ecr_analysis_repository_arn" {
+  description = "ARN of the Analysis Lambda ECR repository"
+  value       = module.ecr_analysis.repository_arn
 }

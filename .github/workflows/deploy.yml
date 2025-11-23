@@ -69,6 +69,65 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Configure AWS Credentials (for ECR)
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          aws-access-key-id: ${{ secrets.PREPROD_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.PREPROD_AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          version: v0.12.0  # Pin Docker Buildx version for consistency
+          driver-opts: image=moby/buildkit:v0.12.5  # Pin BuildKit version
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        run: |
+          aws ecr get-login-password --region ${{ vars.AWS_REGION }} | \
+            docker login --username AWS --password-stdin \
+            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com
+
+      - name: Build and Push Analysis Lambda Container Image
+        run: |
+          SHA="${GITHUB_SHA:0:7}"
+          ECR_REPO="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/preprod-sentiment-analysis"
+
+          echo "🐳 Building Analysis Lambda container image..."
+          echo "  Commit SHA: ${SHA}"
+          echo "  ECR Repo: ${ECR_REPO}"
+          echo "  Docker Buildx: v0.12.0"
+          echo "  BuildKit: v0.12.5"
+
+          # Build image with git SHA tag
+          cd src/lambdas/analysis
+          docker buildx build \
+            --platform linux/amd64 \
+            --load \
+            -t "${ECR_REPO}:${SHA}" \
+            -t "${ECR_REPO}:latest" \
+            .
+
+          # Verify image size < 10GB (Lambda limit)
+          IMAGE_SIZE=$(docker image inspect "${ECR_REPO}:${SHA}" --format='{{.Size}}')
+          IMAGE_SIZE_GB=$(echo "scale=2; ${IMAGE_SIZE} / 1073741824" | bc)
+          echo "📊 Image size: ${IMAGE_SIZE_GB} GB"
+
+          if [ ${IMAGE_SIZE} -gt 10737418240 ]; then
+            echo "❌ ERROR: Image size ${IMAGE_SIZE_GB}GB exceeds 10GB Lambda limit"
+            exit 1
+          fi
+
+          # Push both tags to ECR
+          echo "📤 Pushing image to ECR..."
+          docker push "${ECR_REPO}:${SHA}"
+          docker push "${ECR_REPO}:latest"
+
+          echo "✅ Analysis Lambda container image pushed to ECR"
+          echo "  Image URI: ${ECR_REPO}:${SHA}"
+          echo "  Image Size: ${IMAGE_SIZE_GB}GB"
+
       - name: Free up disk space
         run: |
           echo "🧹 Freeing up disk space on GitHub runner..."
@@ -163,50 +222,18 @@ jobs:
           rm -rf packages/dashboard-deps packages/dashboard-build
 
           # ============================================================
-          # Analysis Lambda - Minimal dependencies (model loads from S3)
-          # ============================================================
-          echo ""
-          echo "📦 Packaging Analysis Lambda (minimal - model in S3)..."
-
-          # Install minimal analysis dependencies (NO torch/transformers)
-          pip install \
-            boto3==1.41.0 \
-            pydantic==2.12.4 \
-            python-json-logger==4.0.0 \
-            -t packages/analysis-deps/ \
-            --no-cache-dir \
-            --disable-pip-version-check \
-            --quiet
-
-          # Build analysis package
-          mkdir -p packages/analysis-build/src/lambdas packages/analysis-build/src/lib
-          cp -r packages/analysis-deps/* packages/analysis-build/
-          cp -r src/lambdas/analysis/* packages/analysis-build/
-          cp -r src/lambdas/shared packages/analysis-build/src/lambdas/
-          cp -r src/lib/* packages/analysis-build/src/lib/
-          cd packages/analysis-build
-          zip -r ../analysis-${SHA}.zip . \
-            -x "*.pyc" "__pycache__/*" "*.pytest_cache/*" "tests/*" -q
-          cd ../..
-
-          # Show size and cleanup
-          ANALYSIS_SIZE=$(du -h packages/analysis-${SHA}.zip | cut -f1)
-          echo "✅ Analysis Lambda: ${ANALYSIS_SIZE}"
-          rm -rf packages/analysis-deps packages/analysis-build
-
-          # ============================================================
           # Summary
           # ============================================================
           echo ""
           echo "📊 Package Summary:"
           echo "  Ingestion:  ${INGESTION_SIZE}"
           echo "  Dashboard:  ${DASHBOARD_SIZE}"
-          echo "  Analysis:   ${ANALYSIS_SIZE}"
+          echo "  Analysis:   Container image (pushed to ECR)"
           echo ""
-          ls -lh packages/*.zip
+          ls -lh packages/*.zip 2>/dev/null || true
           echo ""
           echo "✅ All Lambda packages built successfully!"
-          echo "🚀 Build time optimized: Per-Lambda dependencies (not bundling 3.9GB!)"
+          echo "🚀 Build optimized: ZIP for ingestion/dashboard, Container for analysis"
 
       - name: Upload Lambda Packages as Artifacts
         uses: actions/upload-artifact@v5
@@ -278,21 +305,18 @@ jobs:
           SHA="${{ needs.build.outputs.artifact-sha }}"
           BUCKET="preprod-sentiment-lambda-deployments"
 
-          echo "📤 Uploading Lambda packages to S3 (preprod)..."
+          echo "📤 Uploading Lambda ZIP packages to S3 (preprod)..."
 
           aws s3 cp ../../packages/ingestion-${SHA}.zip \
             s3://${BUCKET}/ingestion/lambda.zip \
-            --metadata "git-sha=${GITHUB_SHA},build-timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-
-          aws s3 cp ../../packages/analysis-${SHA}.zip \
-            s3://${BUCKET}/analysis/lambda.zip \
             --metadata "git-sha=${GITHUB_SHA},build-timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
           aws s3 cp ../../packages/dashboard-${SHA}.zip \
             s3://${BUCKET}/dashboard/lambda.zip \
             --metadata "git-sha=${GITHUB_SHA},build-timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-          echo "✅ Lambda packages uploaded to S3"
+          echo "✅ Lambda ZIP packages uploaded to S3"
+          echo "ℹ️  Analysis Lambda uses container image from ECR (not S3)"
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -533,21 +557,18 @@ jobs:
           SHA="${{ needs.build.outputs.artifact-sha }}"
           BUCKET="prod-sentiment-lambda-deployments"
 
-          echo "📤 Uploading VALIDATED Lambda packages to S3 (production)..."
+          echo "📤 Uploading VALIDATED Lambda ZIP packages to S3 (production)..."
 
           aws s3 cp ../../packages/ingestion-${SHA}.zip \
             s3://${BUCKET}/ingestion/lambda.zip \
-            --metadata "git-sha=${GITHUB_SHA},build-timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ),validated-in=preprod"
-
-          aws s3 cp ../../packages/analysis-${SHA}.zip \
-            s3://${BUCKET}/analysis/lambda.zip \
             --metadata "git-sha=${GITHUB_SHA},build-timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ),validated-in=preprod"
 
           aws s3 cp ../../packages/dashboard-${SHA}.zip \
             s3://${BUCKET}/dashboard/lambda.zip \
             --metadata "git-sha=${GITHUB_SHA},build-timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ),validated-in=preprod"
 
-          echo "✅ Lambda packages uploaded to S3"
+          echo "✅ Lambda ZIP packages uploaded to S3"
+          echo "ℹ️  Analysis Lambda uses container image from ECR (not S3)"
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3

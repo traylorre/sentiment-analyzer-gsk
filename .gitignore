@@ -183,3 +183,4 @@ model/
 # Credential files (temporary, delete after adding to GitHub)
 *-credentials.json
 
+model.tar.gz

@@ -1,0 +1,26 @@
+# Production dependencies for Analysis Lambda (Container Image)
+# =============================================================
+#
+# This file contains ONLY production dependencies needed at runtime.
+# Test dependencies (pytest, moto, etc.) are in requirements-dev.txt
+#
+# Key dependencies:
+# - transformers: HuggingFace library for DistilBERT model
+# - torch: PyTorch for model inference (CPU-only)
+# - boto3: AWS SDK for DynamoDB access
+#
+# Note: Container images don't need AWS Lambda runtime libraries
+# (they're provided by the base image)
+
+# HuggingFace transformers for sentiment analysis model
+transformers>=4.30.0,<5.0.0
+
+# PyTorch (CPU-only for Lambda cost optimization)
+# Use torch-cpu index for smaller image size
+torch>=2.0.0,<3.0.0
+
+# AWS SDK for DynamoDB
+boto3>=1.28.0
+
+# boto3 stubs for type hints (optional but helpful)
+boto3-stubs[dynamodb]>=1.28.0

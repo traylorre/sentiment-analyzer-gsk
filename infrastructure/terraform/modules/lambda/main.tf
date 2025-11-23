@@ -33,17 +33,33 @@ resource "aws_lambda_function" "this" {
   function_name = var.function_name
   description   = var.description
   role          = var.iam_role_arn
-  handler       = var.handler
-  runtime       = var.runtime
   timeout       = var.timeout
   memory_size   = var.memory_size
 
-  # Deployment package from S3
-  s3_bucket = var.s3_bucket
-  s3_key    = var.s3_key
+  # Package type (Zip or Image)
+  package_type = var.package_type
 
-  # Optional: specific version of the package
-  source_code_hash = var.source_code_hash
+  # ZIP package configuration (only used when package_type = "Zip")
+  handler = var.package_type == "Zip" ? var.handler : null
+  runtime = var.package_type == "Zip" ? var.runtime : null
+
+  # Deployment package from S3 (only used when package_type = "Zip")
+  s3_bucket        = var.package_type == "Zip" ? var.s3_bucket : null
+  s3_key           = var.package_type == "Zip" ? var.s3_key : null
+  source_code_hash = var.package_type == "Zip" ? var.source_code_hash : null
+
+  # Container image configuration (only used when package_type = "Image")
+  image_uri = var.package_type == "Image" ? var.image_uri : null
+
+  # Container image config overrides (optional)
+  dynamic "image_config" {
+    for_each = var.package_type == "Image" && var.image_config != null ? [var.image_config] : []
+    content {
+      command           = image_config.value.command
+      entry_point       = image_config.value.entry_point
+      working_directory = image_config.value.working_directory
+    }
+  }
 
   # Environment variables
   dynamic "environment" {
@@ -53,8 +69,8 @@ resource "aws_lambda_function" "this" {
     }
   }
 
-  # Optional Lambda layers (e.g., for DistilBERT model)
-  layers = var.layers
+  # Optional Lambda layers (only for ZIP packages, not supported for container images)
+  layers = var.package_type == "Zip" ? var.layers : null
 
   # Reserved concurrency (0 = use unreserved account concurrency)
   reserved_concurrent_executions = var.reserved_concurrency

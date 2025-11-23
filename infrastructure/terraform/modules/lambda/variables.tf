@@ -20,18 +20,51 @@ variable "iam_role_arn" {
 }
 
 variable "handler" {
-  description = "Lambda function handler (e.g., handler.lambda_handler)"
+  description = "Lambda function handler (e.g., handler.lambda_handler). Not used for container images."
   type        = string
+  default     = null
 }
 
 variable "s3_bucket" {
-  description = "S3 bucket containing the deployment package"
+  description = "S3 bucket containing the deployment package. Not used for container images."
   type        = string
+  default     = null
 }
 
 variable "s3_key" {
-  description = "S3 key (path) to the deployment package"
+  description = "S3 key (path) to the deployment package. Not used for container images."
   type        = string
+  default     = null
+}
+
+# Container Image Configuration
+# -----------------------------
+
+variable "package_type" {
+  description = "Lambda package type (Zip or Image)"
+  type        = string
+  default     = "Zip"
+
+  validation {
+    condition     = contains(["Zip", "Image"], var.package_type)
+    error_message = "Package type must be Zip or Image."
+  }
+}
+
+variable "image_uri" {
+  description = "ECR image URI for container-based Lambda. Required when package_type is Image."
+  type        = string
+  default     = null
+}
+
+variable "image_config" {
+  description = "Container image configuration overrides"
+  type = object({
+    command           = optional(list(string))
+    entry_point       = optional(list(string))
+    working_directory = optional(string)
+  })
+  default = null
 }
 
 # Optional Variables with Defaults
