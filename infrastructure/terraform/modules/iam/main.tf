@@ -211,6 +211,25 @@ resource "aws_iam_role_policy" "analysis_dlq" {
   })
 }
 
+# Analysis Lambda: S3 Model Access (lazy loading from S3)
+resource "aws_iam_role_policy" "analysis_s3_model" {
+  name = "${var.environment}-analysis-s3-model-policy"
+  role = aws_iam_role.analysis_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject"
+        ]
+        Resource = "${var.model_s3_bucket_arn}/*"
+      }
+    ]
+  })
+}
+
 # ===================================================================
 # Dashboard Lambda IAM Role
 # ===================================================================

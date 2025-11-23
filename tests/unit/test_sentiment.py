@@ -60,6 +60,17 @@ def reset_model_cache():
     clear_model_cache()
 
 
+@pytest.fixture(autouse=True)
+def mock_s3_download():
+    """Mock S3 download function to prevent real S3 calls in unit tests."""
+    with patch(
+        "src.lambdas.analysis.sentiment._download_model_from_s3"
+    ) as mock_download:
+        # Configure mock to do nothing (successful no-op)
+        mock_download.return_value = None
+        yield mock_download
+
+
 class TestLoadModel:
     """Tests for load_model function."""
 
@@ -116,7 +127,7 @@ class TestLoadModel:
         load_model()
 
         call_args = _mock_pipeline.call_args
-        assert call_args[1]["model"] == "/opt/model"
+        assert call_args[1]["model"] == "/tmp/model"  # noqa: S108
 
     def test_load_model_failure(self, caplog):
         """Test error handling when model load fails."""
