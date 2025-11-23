@@ -40,14 +40,22 @@ Security Notes:
 
 import logging
 import os
+import tarfile
 import time
+from pathlib import Path
 from typing import Any
 
 # Structured logging
 logger = logging.getLogger(__name__)
 
 # Model configuration
-DEFAULT_MODEL_PATH = "/opt/model"
+DEFAULT_MODEL_S3_BUCKET = os.environ.get(
+    "MODEL_S3_BUCKET", "sentiment-analyzer-models-218795110243"
+)
+DEFAULT_MODEL_S3_KEY = "distilbert/v1.0.0/model.tar.gz"
+LOCAL_MODEL_PATH = (
+    "/tmp/model"  # noqa: S108 - Lambda /tmp storage (configurable up to 10GB)
+)
 MAX_TEXT_LENGTH = 512  # DistilBERT token limit
 NEUTRAL_THRESHOLD = 0.6  # Below this confidence → neutral
 
@@ -57,43 +65,126 @@ _sentiment_pipeline: Any = None
 _model_load_time_ms: float = 0
 
 
+def _download_model_from_s3() -> None:
+    """
+    Download ML model from S3 to Lambda /tmp storage.
+
+    Only downloads if model doesn't already exist locally (Lambda container reuse).
+    Model is extracted from tar.gz to /tmp/model for transformers to load.
+
+    On-Call Note:
+        If downloads are slow:
+        1. Check S3 bucket is in same region as Lambda (us-east-1)
+        2. Check Lambda has s3:GetObject permission
+        3. Download time ~3-5s for 250MB model (acceptable cold start)
+    """
+    import boto3
+
+    model_path = Path(LOCAL_MODEL_PATH)
+
+    # Check if model already exists (warm Lambda container)
+    if model_path.exists() and (model_path / "config.json").exists():
+        logger.info(
+            "Model already exists in /tmp (warm container)",
+            extra={"model_path": str(model_path)},
+        )
+        return
+
+    logger.info(
+        f"Downloading model from S3: s3://{DEFAULT_MODEL_S3_BUCKET}/{DEFAULT_MODEL_S3_KEY}"
+    )
+
+    try:
+        # Download model tar.gz from S3
+        s3_client = boto3.client("s3")
+        tar_path = "/tmp/model.tar.gz"  # noqa: S108 - Lambda /tmp storage
+
+        download_start = time.perf_counter()
+        s3_client.download_file(
+            Bucket=DEFAULT_MODEL_S3_BUCKET, Key=DEFAULT_MODEL_S3_KEY, Filename=tar_path
+        )
+        download_time_ms = (time.perf_counter() - download_start) * 1000
+
+        logger.info(
+            "Model downloaded from S3",
+            extra={"download_time_ms": round(download_time_ms, 2)},
+        )
+
+        # Extract tar.gz to /tmp/model
+        extract_start = time.perf_counter()
+        with tarfile.open(tar_path, "r:gz") as tar:
+            tar.extractall(path="/tmp")  # noqa: S108 - Lambda /tmp storage
+        extract_time_ms = (time.perf_counter() - extract_start) * 1000
+
+        logger.info(
+            "Model extracted successfully",
+            extra={
+                "extract_time_ms": round(extract_time_ms, 2),
+                "total_time_ms": round(download_time_ms + extract_time_ms, 2),
+            },
+        )
+
+        # Clean up tar.gz to save /tmp space
+        Path(tar_path).unlink()
+
+    except Exception as e:
+        logger.error(
+            f"Failed to download model from S3: {e}",
+            extra={
+                "bucket": DEFAULT_MODEL_S3_BUCKET,
+                "key": DEFAULT_MODEL_S3_KEY,
+                "error": str(e),
+            },
+        )
+        raise ModelLoadError(f"Failed to download model from S3: {e}") from e
+
+
 def load_model(model_path: str | None = None) -> Any:
     """
-    Load HuggingFace DistilBERT sentiment model with caching.
+    Load HuggingFace DistilBERT sentiment model with S3 lazy loading and caching.
 
-    Model is cached in a global variable for Lambda container reuse.
-    First invocation (cold start) loads the model; subsequent invocations
-    use the cached instance.
+    Model loading strategy:
+    1. Check global cache (warm Lambda container) → Return immediately
+    2. Check /tmp/model exists → Load from disk
+    3. Download from S3 → Extract → Load
 
     Args:
-        model_path: Path to model directory (default: /opt/model or MODEL_PATH env)
+        model_path: Path to model directory (default: /tmp/model from S3)
 
     Returns:
         HuggingFace pipeline for sentiment analysis
 
     Raises:
-        ModelLoadError: If model cannot be loaded
+        ModelLoadError: If model cannot be downloaded or loaded
 
     On-Call Note:
-        If cold start is slow (>5s), check:
-        1. Lambda memory (should be 1024MB)
-        2. Model layer is attached
-        3. Model path is correct
+        Cold start times:
+        - Warm container (cached): 0ms (instant)
+        - Warm /tmp (model on disk): ~1-2s (load only)
+        - Cold /tmp (S3 download): ~5-7s (download + extract + load)
+
+        If cold starts >10s:
+        1. Check Lambda memory (should be 1024MB+)
+        2. Check S3 bucket region matches Lambda
+        3. Check /tmp storage size (should be 3GB)
     """
     global _sentiment_pipeline, _model_load_time_ms
 
-    # Return cached model if available
+    # Return cached model if available (warm Lambda container)
     if _sentiment_pipeline is not None:
         logger.debug("Using cached sentiment pipeline")
         return _sentiment_pipeline
 
     # Determine model path
-    path = model_path or os.environ.get("MODEL_PATH", DEFAULT_MODEL_PATH)
+    path = model_path or os.environ.get("MODEL_PATH", LOCAL_MODEL_PATH)
 
     logger.info(f"Loading sentiment model from {path}")
     start_time = time.perf_counter()
 
     try:
+        # Download model from S3 if not in /tmp (only on cold start)
+        _download_model_from_s3()
+
         # Import here to avoid cold start penalty if model is cached
         from transformers import pipeline
 
