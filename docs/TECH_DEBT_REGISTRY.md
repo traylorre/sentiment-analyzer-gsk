@@ -415,16 +415,117 @@ class CloudDatabase(ComponentResource):
 
 | Metric | Value |
 |--------|-------|
-| Total Tech Debt Items | 20 |
+| Total Tech Debt Items | 21 |
 | Critical (Security) | 3 |
 | High (Quality) | 4 |
-| Medium (Cleanup) | 5 |
+| Medium (Cleanup) | 6 |
 | Low (Nice to Have) | 3 |
 | Cloud Portability (Future) | 5 |
 | Items from shortcuts | 7 |
 | Items acceptable for demo | 4 |
 | Items completed | 10 |
-| Items deferred to future | 10 |
+| Items deferred to future | 11 |
+
+---
+
+## Testing Infrastructure
+
+### TD-021: Sophisticated Race Condition Integration Tests
+**Status**: Future work (2-3 weeks)
+**Priority**: Medium (Production hardening)
+**Context**: Basic concurrent request tests exist in `test_e2e_lambda_invocation_preprod.py`, but sophisticated race condition scenarios need dedicated test infrastructure.
+
+**Current State**:
+- Basic concurrency tests: 10 concurrent requests, rapid sequential requests
+- No testing of concurrent writes, conditional updates, or message ordering
+- No chaos engineering or failure injection tests
+
+**Proposed Tests**:
+
+1. **Concurrent DynamoDB Writes**
+   - Multiple Lambdas writing same item_id with conditional updates
+   - Verify optimistic locking prevents data corruption
+   - Test: 10 concurrent PUT requests with version checks
+   - Expected: All writes succeed or fail gracefully with ConditionalCheckFailed
+
+2. **SNS Message Ordering**
+   - Publish multiple messages rapidly, verify processing order
+   - Test: Publish 20 messages in <1s, validate timestamp ordering in DynamoDB
+   - Expected: Messages processed with correct causality guarantees
+
+3. **Lambda Cold Start Race Conditions**
+   - Trigger 50 concurrent Lambda invocations to force cold starts
+   - Verify: No import errors, no shared state corruption, correct initialization
+   - Test: Concurrent requests during blue/green deployment
+   - Expected: All requests succeed, no 502 errors
+
+4. **DynamoDB GSI Eventual Consistency**
+   - Write to base table, immediately query GSI
+   - Test: Verify application handles GSI lag gracefully
+   - Expected: Dashboard shows eventual consistency, no errors
+
+5. **S3 Model Loading Race Conditions**
+   - 20 concurrent Analysis Lambda invocations loading same model
+   - Verify: No S3 throttling, efficient caching, correct model versioning
+   - Test: Concurrent model downloads with ETag validation
+   - Expected: Efficient caching, no duplicate downloads
+
+6. **Secrets Manager Rate Limiting**
+   - 100 concurrent Lambda cold starts fetching API key
+   - Verify: Graceful degradation, caching works, no request failures
+   - Test: Simulate Secrets Manager throttling
+   - Expected: Exponential backoff, cached values used
+
+7. **DynamoDB Conditional Update Conflicts**
+   - Simulate: Multiple Lambdas updating same item status simultaneously
+   - Test: Concurrent status transitions (pending → processing → completed)
+   - Expected: Only one Lambda wins, others retry or fail gracefully
+
+8. **EventBridge/SNS Duplicate Message Handling**
+   - Send duplicate events (same source_id + timestamp)
+   - Verify: Idempotency keys prevent duplicate processing
+   - Test: Publish same event 5 times rapidly
+   - Expected: Only 1 DynamoDB item created
+
+**Test Infrastructure Needed**:
+```python
+# Example chaos testing framework
+class ChaosTest:
+    def inject_dynamodb_throttling(self, rate: float):
+        """Inject DynamoDB throttling errors"""
+
+    def inject_s3_latency(self, delay_ms: int):
+        """Add artificial S3 latency"""
+
+    def inject_lambda_timeout(self, percentage: float):
+        """Randomly timeout percentage of Lambda invocations"""
+
+    def inject_network_partition(self, duration_s: int):
+        """Simulate network partition between services"""
+```
+
+**Complexity**:
+- Requires: Chaos engineering tools (e.g., aws-fault-injection-simulator)
+- Requires: Test fixtures to inject failures
+- Requires: DynamoDB conditional update test harness
+- Requires: Metrics to detect race conditions (duplicate writes, etc.)
+
+**Effort Estimate**: 2-3 weeks
+- Week 1: Design test infrastructure, set up chaos tools
+- Week 2: Implement 8 race condition test scenarios
+- Week 3: CI/CD integration, flakiness fixes
+
+**Business Value**:
+- HIGH: Catches production race conditions before deployment
+- Validates: Distributed system correctness guarantees
+- Prevents: Data corruption, duplicate processing, lost messages
+
+**References**:
+- AWS Fault Injection Simulator: https://aws.amazon.com/fis/
+- DynamoDB Transactions: https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/transactions.html
+- Chaos Engineering principles: https://principlesofchaos.org/
+
+**Related**: Basic E2E tests in `tests/integration/test_e2e_lambda_invocation_preprod.py:377-418`
 
 ---
 
