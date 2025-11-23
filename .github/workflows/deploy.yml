@@ -100,12 +100,16 @@ jobs:
           echo "📦 Packaging Ingestion Lambda (boto3, requests, pydantic, logging)..."
 
           # Install only ingestion dependencies
+          # Use platform-specific flags for Lambda Python 3.13 compatibility
           pip install \
             boto3==1.41.0 \
             requests==2.32.5 \
             pydantic==2.12.4 \
             python-json-logger==4.0.0 \
             -t packages/ingestion-deps/ \
+            --platform manylinux2014_x86_64 \
+            --python-version 3.13 \
+            --only-binary=:all: \
             --no-cache-dir \
             --disable-pip-version-check \
             --quiet
@@ -133,6 +137,7 @@ jobs:
           echo "📦 Packaging Dashboard Lambda (FastAPI, Mangum, SSE, pydantic)..."
 
           # Install dashboard dependencies
+          # Use platform-specific flags for Lambda Python 3.13 compatibility
           pip install \
             fastapi==0.121.3 \
             mangum==0.19.0 \
@@ -141,6 +146,9 @@ jobs:
             boto3==1.41.0 \
             python-json-logger==4.0.0 \
             -t packages/dashboard-deps/ \
+            --platform manylinux2014_x86_64 \
+            --python-version 3.13 \
+            --only-binary=:all: \
             --no-cache-dir \
             --disable-pip-version-check \
             --quiet
@@ -169,11 +177,15 @@ jobs:
           echo "📦 Packaging Analysis Lambda (minimal - model in S3)..."
 
           # Install minimal analysis dependencies (NO torch/transformers)
+          # Use platform-specific flags for Lambda Python 3.13 compatibility
           pip install \
             boto3==1.41.0 \
             pydantic==2.12.4 \
             python-json-logger==4.0.0 \
             -t packages/analysis-deps/ \
+            --platform manylinux2014_x86_64 \
+            --python-version 3.13 \
+            --only-binary=:all: \
             --no-cache-dir \
             --disable-pip-version-check \
             --quiet
