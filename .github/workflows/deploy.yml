@@ -177,15 +177,13 @@ jobs:
           echo "📦 Packaging Analysis Lambda (minimal - model in S3)..."
 
           # Install minimal analysis dependencies (NO torch/transformers)
-          # Use platform-specific flags for Lambda Python 3.13 compatibility
+          # NOTE: Analysis Lambda will use container images (see PR #58)
+          # This ZIP packaging remains temporarily for backwards compatibility
           pip install \
             boto3==1.41.0 \
             pydantic==2.12.4 \
             python-json-logger==4.0.0 \
             -t packages/analysis-deps/ \
-            --platform manylinux2014_x86_64 \
-            --python-version 3.13 \
-            --only-binary=:all: \
             --no-cache-dir \
             --disable-pip-version-check \
             --quiet
