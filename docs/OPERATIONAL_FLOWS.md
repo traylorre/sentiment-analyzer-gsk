@@ -1,0 +1,658 @@
+# Operational Flows and Troubleshooting Guide
+
+This document provides operational flow diagrams and troubleshooting guides for the Sentiment Analyzer system. Use these diagrams to understand system behavior, diagnose issues, and respond to incidents.
+
+**Target Audience:**
+- On-call engineers responding to incidents
+- Operators managing the system
+- Contributors understanding operational patterns
+
+---
+
+## Table of Contents
+
+1. [Common Operational Flows](#common-operational-flows)
+   - [Normal Operation Flow](#normal-operation-flow)
+   - [Deployment Flow](#deployment-flow)
+   - [Incident Response Flow](#incident-response-flow)
+2. [Troubleshooting Guides](#troubleshooting-guides)
+   - [Lambda Failures](#lambda-failures)
+   - [DynamoDB Issues](#dynamodb-issues)
+   - [S3 Model Loading Issues](#s3-model-loading-issues)
+   - [Dashboard Not Responding](#dashboard-not-responding)
+3. [Monitoring and Alerts](#monitoring-and-alerts)
+4. [Recovery Procedures](#recovery-procedures)
+
+---
+
+## Common Operational Flows
+
+### Normal Operation Flow
+
+This shows the happy path for article ingestion and sentiment analysis:
+
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
+flowchart TD
+    Start[EventBridge Trigger<br/>Every 5 minutes] --> Ingest[Ingestion Lambda Invoked]
+    Ingest --> FetchAPI[Fetch from NewsAPI]
+    FetchAPI --> CheckDup{Duplicate<br/>Check}
+    CheckDup -->|New Article| StoreDDB[Store in DynamoDB<br/>status: pending]
+    CheckDup -->|Duplicate| Skip[Skip Article]
+    StoreDDB --> PublishSNS[Publish to SNS Topic]
+    PublishSNS --> AnalysisLambda[Analysis Lambda Triggered]
+    AnalysisLambda --> LoadModel{Model in<br/>Memory?}
+    LoadModel -->|No| FetchS3[Load from S3<br/>model.tar.gz]
+    LoadModel -->|Yes| RunInference
+    FetchS3 --> CacheModel[Cache in /tmp]
+    CacheModel --> RunInference[Run DistilBERT<br/>Inference]
+    RunInference --> UpdateDDB[Update DynamoDB<br/>with sentiment results<br/>status: analyzed]
+    UpdateDDB --> LogMetrics[Log CloudWatch Metrics]
+    LogMetrics --> End[Complete]
+    Skip --> End
+
+    classDef success fill:#2e7d32,stroke:#1b5e20,stroke-width:2px,color:#fff
+    classDef process fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
+    classDef decision fill:#f57c00,stroke:#e65100,stroke-width:2px,color:#fff
+    classDef storage fill:#7b1fa2,stroke:#4a148c,stroke-width:2px,color:#fff
+
+    class Start,End success
+    class Ingest,AnalysisLambda,FetchAPI,RunInference process
+    class CheckDup,LoadModel decision
+    class StoreDDB,UpdateDDB,FetchS3,PublishSNS storage
+```
+
+**Key Points:**
+- Ingestion runs every 5 minutes via EventBridge
+- Duplicate detection prevents reprocessing
+- Model lazy loading reduces cold start time
+- Model cached in Lambda /tmp for warm starts
+
+---
+
+### Deployment Flow
+
+This shows the CI/CD deployment process from PR to production:
+
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
+flowchart TD
+    PR[Create Pull Request] --> CIChecks{CI Checks<br/>Pass?}
+    CIChecks -->|No| FixCode[Fix Code]
+    FixCode --> PR
+    CIChecks -->|Yes| Merge[Merge to Main]
+    Merge --> BuildPackages[Build Lambda Packages<br/>SHA-versioned ZIPs]
+    BuildPackages --> UploadS3[Upload to S3<br/>preprod bucket]
+    UploadS3 --> TerraformPlan[Terraform Plan<br/>Preprod]
+    TerraformPlan --> ApplyPreprod[Terraform Apply<br/>Preprod]
+    ApplyPreprod --> IntegrationTests{Integration<br/>Tests Pass?}
+    IntegrationTests -->|No| Rollback[Rollback Preprod]
+    Rollback --> IncidentResponse[Create Incident]
+    IntegrationTests -->|Yes| ManualGate{Manual<br/>Approval?}
+    ManualGate -->|No| WaitApproval[Wait for Approval]
+    WaitApproval --> ManualGate
+    ManualGate -->|Yes| DeployProd[Deploy to Production]
+    DeployProd --> SmokeTests{Smoke Tests<br/>Pass?}
+    SmokeTests -->|No| RollbackProd[Rollback Production]
+    RollbackProd --> IncidentResponse
+    SmokeTests -->|Yes| Complete[Deployment Complete]
+
+    classDef cicd fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
+    classDef decision fill:#f57c00,stroke:#e65100,stroke-width:2px,color:#fff
+    classDef danger fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef success fill:#2e7d32,stroke:#1b5e20,stroke-width:2px,color:#fff
+
+    class PR,BuildPackages,UploadS3,TerraformPlan,ApplyPreprod,DeployProd cicd
+    class CIChecks,IntegrationTests,ManualGate,SmokeTests decision
+    class Rollback,RollbackProd,IncidentResponse danger
+    class Complete success
+```
+
+**Key Points:**
+- All deployments go through preprod first
+- Integration tests must pass before production deployment
+- Manual approval gate protects production
+- Rollback procedures in place for both environments
+
+---
+
+### Incident Response Flow
+
+This shows the decision tree for responding to production incidents:
+
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
+flowchart TD
+    Alert[CloudWatch Alarm<br/>or User Report] --> Assess{Severity<br/>Assessment}
+    Assess -->|P0: Complete Outage| P0Response[P0: Immediate Response]
+    Assess -->|P1: Partial Outage| P1Response[P1: Urgent Response]
+    Assess -->|P2: Degraded| P2Response[P2: Normal Response]
+
+    P0Response --> PageTeam[Page On-Call Team]
+    PageTeam --> CheckDashboard{Dashboard<br/>Accessible?}
+    CheckDashboard -->|No| CheckLambda[Check Lambda Logs]
+    CheckDashboard -->|Yes| DashboardOK[Dashboard OK]
+
+    P1Response --> CheckLogs[Check CloudWatch Logs]
+    P2Response --> CreateTicket[Create Ticket]
+
+    CheckLambda --> IdentifyError{Error Type?}
+    IdentifyError -->|Lambda Timeout| IncreaseMem[Increase Memory/Timeout]
+    IdentifyError -->|S3 Model Load Fail| CheckS3[Verify S3 Model exists]
+    IdentifyError -->|DynamoDB Throttle| CheckDDB[Check DynamoDB capacity]
+    IdentifyError -->|Code Error| CodeFix[Deploy Hotfix]
+
+    CheckS3 --> S3Exists{Model<br/>Exists?}
+    S3Exists -->|No| UploadModel[Upload Model to S3]
+    S3Exists -->|Yes| CheckPerms[Check IAM Permissions]
+
+    CheckDDB --> Throttled{Throttling?}
+    Throttled -->|Yes| IncreaseCapacity[Increase WCU/RCU]
+    Throttled -->|No| CheckIndex[Check GSI status]
+
+    IncreaseMem --> TestFix{Issue<br/>Resolved?}
+    CheckPerms --> TestFix
+    IncreaseCapacity --> TestFix
+    CodeFix --> TestFix
+    UploadModel --> TestFix
+    CheckIndex --> TestFix
+
+    TestFix -->|Yes| PostMortem[Create Post-Mortem]
+    TestFix -->|No| Escalate[Escalate to Engineering]
+
+    PostMortem --> CloseIncident[Close Incident]
+    Escalate --> CodeFix
+
+    classDef alert fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef decision fill:#f57c00,stroke:#e65100,stroke-width:2px,color:#fff
+    classDef action fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
+    classDef success fill:#2e7d32,stroke:#1b5e20,stroke-width:2px,color:#fff
+
+    class Alert,P0Response alert
+    class Assess,CheckDashboard,IdentifyError,S3Exists,Throttled,TestFix decision
+    class PageTeam,CheckLambda,CheckLogs,CheckS3,CheckDDB,IncreaseMem,CodeFix,CheckPerms action
+    class PostMortem,CloseIncident success
+```
+
+**Key Points:**
+- Severity assessment drives response urgency
+- Check dashboard accessibility first
+- Lambda logs are primary diagnostic tool
+- Post-mortem required for all P0/P1 incidents
+
+---
+
+## Troubleshooting Guides
+
+### Lambda Failures
+
+**Common Issues:**
+
+#### 1. Lambda Timeout
+
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
+flowchart LR
+    Timeout[Lambda Timeout Error] --> CheckLogs[Check CloudWatch Logs]
+    CheckLogs --> FindDuration[Find execution duration]
+    FindDuration --> Compare{Duration near<br/>timeout limit?}
+    Compare -->|Yes| IncreaseTimeout[Increase timeout<br/>in Terraform]
+    Compare -->|No| CheckLogic[Review slow code path]
+    IncreaseTimeout --> Deploy[Deploy change]
+    CheckLogic --> OptimizeCode[Optimize code]
+    OptimizeCode --> Deploy
+
+    classDef error fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef decision fill:#f57c00,stroke:#e65100,stroke-width:2px,color:#fff
+    classDef action fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
+
+    class Timeout error
+    class Compare decision
+    class CheckLogs,IncreaseTimeout,CheckLogic,OptimizeCode,Deploy action
+```
+
+**Quick Fix:**
+```bash
+# Check current timeout setting
+terraform output analysis_lambda_arn
+aws lambda get-function-configuration --function-name preprod-sentiment-analysis --query 'Timeout'
+
+# Update in infrastructure/terraform/main.tf (module "analysis_lambda")
+# Then redeploy
+cd infrastructure/terraform
+terraform apply
+```
+
+#### 2. Out of Memory Error
+
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
+flowchart LR
+    OOM[Out of Memory Error] --> CheckMetrics[Check CloudWatch<br/>Memory Metrics]
+    CheckMetrics --> MemUsage{Memory usage<br/>>90%?}
+    MemUsage -->|Yes| IncreaseMemory[Increase memory<br/>in Terraform]
+    MemUsage -->|No| MemoryLeak[Investigate memory leak]
+    IncreaseMemory --> Deploy[Deploy change]
+    MemoryLeak --> ProfileCode[Profile code<br/>with memory profiler]
+    ProfileCode --> FixLeak[Fix leak]
+    FixLeak --> Deploy
+
+    classDef error fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef decision fill:#f57c00,stroke:#e65100,stroke-width:2px,color:#fff
+    classDef action fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
+
+    class OOM error
+    class MemUsage decision
+    class CheckMetrics,IncreaseMemory,MemoryLeak,ProfileCode,FixLeak,Deploy action
+```
+
+**Quick Fix:**
+```bash
+# Check memory usage
+aws cloudwatch get-metric-statistics \
+  --namespace AWS/Lambda \
+  --metric-name MemoryUtilization \
+  --dimensions Name=FunctionName,Value=preprod-sentiment-analysis \
+  --start-time $(date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%S) \
+  --end-time $(date -u +%Y-%m-%dT%H:%M:%S) \
+  --period 300 \
+  --statistics Maximum
+
+# Update memory in infrastructure/terraform/main.tf
+# analysis_lambda: memory_size = 1024 -> 2048
+terraform apply
+```
+
+---
+
+### DynamoDB Issues
+
+#### Throttling Errors
+
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
+flowchart TD
+    Throttle[DynamoDB<br/>Throttling Error] --> CheckMetrics[Check CloudWatch<br/>DynamoDB Metrics]
+    CheckMetrics --> TableOrIndex{Table or<br/>GSI throttled?}
+    TableOrIndex -->|Table| CheckWCU[Check WCU/RCU<br/>consumption]
+    TableOrIndex -->|GSI| CheckGSI[Check GSI capacity]
+    CheckWCU --> AtLimit{At capacity<br/>limit?}
+    AtLimit -->|Yes| IncreaseCapacity[Increase capacity<br/>in Terraform]
+    AtLimit -->|No| HotKey[Investigate hot<br/>partition keys]
+    CheckGSI --> GSILimit{GSI at<br/>limit?}
+    GSILimit -->|Yes| IncreaseGSI[Increase GSI capacity]
+    GSILimit -->|No| QueryPattern[Review query patterns]
+    IncreaseCapacity --> Deploy[Deploy change]
+    IncreaseGSI --> Deploy
+    HotKey --> RefactorKeys[Refactor partition keys]
+    QueryPattern --> OptimizeQueries[Optimize queries]
+    RefactorKeys --> Deploy
+    OptimizeQueries --> Deploy
+
+    classDef error fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef decision fill:#f57c00,stroke:#e65100,stroke-width:2px,color:#fff
+    classDef action fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
+
+    class Throttle error
+    class TableOrIndex,AtLimit,GSILimit decision
+    class CheckMetrics,CheckWCU,CheckGSI,IncreaseCapacity,HotKey,IncreaseGSI,QueryPattern,RefactorKeys,OptimizeQueries,Deploy action
+```
+
+**Quick Fix:**
+```bash
+# Check current capacity
+aws dynamodb describe-table --table-name preprod-sentiment-items \
+  --query 'Table.ProvisionedThroughput'
+
+# View consumed capacity
+aws cloudwatch get-metric-statistics \
+  --namespace AWS/DynamoDB \
+  --metric-name ConsumedReadCapacityUnits \
+  --dimensions Name=TableName,Value=preprod-sentiment-items \
+  --start-time $(date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%S) \
+  --end-time $(date -u +%Y-%m-%dT%H:%M:%S) \
+  --period 300 \
+  --statistics Sum
+
+# Increase capacity in infrastructure/terraform/modules/dynamodb/main.tf
+terraform apply
+```
+
+---
+
+### S3 Model Loading Issues
+
+#### Model Load Failures
+
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
+flowchart TD
+    LoadFail[S3 Model Load<br/>Failure] --> CheckLogs[Check Lambda Logs<br/>for S3 error]
+    CheckLogs --> ErrorType{Error Type?}
+    ErrorType -->|NoSuchKey| ModelMissing[Model file missing<br/>in S3]
+    ErrorType -->|AccessDenied| PermissionError[IAM permission<br/>issue]
+    ErrorType -->|Timeout| NetworkIssue[Network/S3 timeout]
+
+    ModelMissing --> VerifyBucket[Verify S3 bucket<br/>and key]
+    VerifyBucket --> BucketExists{Bucket<br/>exists?}
+    BucketExists -->|No| CreateBucket[Create bucket and<br/>upload model]
+    BucketExists -->|Yes| UploadModel[Upload model.tar.gz]
+
+    PermissionError --> CheckIAM[Check Lambda<br/>IAM role]
+    CheckIAM --> HasS3Perms{Has s3:GetObject<br/>permission?}
+    HasS3Perms -->|No| UpdateIAM[Update IAM policy]
+    HasS3Perms -->|Yes| CheckBucketPolicy[Check bucket policy]
+
+    NetworkIssue --> CheckVPC[Check VPC config]
+    CheckVPC --> InVPC{Lambda in<br/>VPC?}
+    InVPC -->|Yes| CheckNAT[Verify NAT Gateway<br/>or VPC endpoint]
+    InVPC -->|No| IncreaseTimeout[Increase Lambda<br/>timeout]
+
+    CreateBucket --> TestAgain[Test Lambda again]
+    UploadModel --> TestAgain
+    UpdateIAM --> TestAgain
+    CheckBucketPolicy --> TestAgain
+    CheckNAT --> TestAgain
+    IncreaseTimeout --> TestAgain
+
+    TestAgain --> Success{Works?}
+    Success -->|Yes| Complete[Issue Resolved]
+    Success -->|No| Escalate[Escalate to<br/>Engineering]
+
+    classDef error fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef decision fill:#f57c00,stroke:#e65100,stroke-width:2px,color:#fff
+    classDef action fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
+    classDef success fill:#2e7d32,stroke:#1b5e20,stroke-width:2px,color:#fff
+
+    class LoadFail error
+    class ErrorType,BucketExists,HasS3Perms,InVPC,Success decision
+    class CheckLogs,VerifyBucket,CheckIAM,CheckVPC,CreateBucket,UploadModel,UpdateIAM,CheckBucketPolicy,CheckNAT,IncreaseTimeout,TestAgain action
+    class Complete success
+```
+
+**Quick Fix:**
+```bash
+# Check if model exists
+aws s3 ls s3://sentiment-analyzer-models-218795110243/models/
+
+# Verify model version in Lambda env vars
+aws lambda get-function-configuration \
+  --function-name preprod-sentiment-analysis \
+  --query 'Environment.Variables.MODEL_VERSION'
+
+# Check IAM permissions
+aws iam get-role-policy \
+  --role-name preprod-sentiment-analysis-role \
+  --policy-name analysis-lambda-policy
+
+# Manual upload if missing (use build script)
+cd infrastructure/scripts
+./build-and-upload-model-s3.sh
+```
+
+---
+
+### Dashboard Not Responding
+
+#### Dashboard Debugging Flow
+
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
+flowchart TD
+    NotResponding[Dashboard Not<br/>Responding] --> CheckURL{Function URL<br/>accessible?}
+    CheckURL -->|No| CheckLambda[Check Lambda<br/>Function URL config]
+    CheckURL -->|Yes| TestEndpoint[Test /health endpoint]
+
+    CheckLambda --> URLExists{Function URL<br/>exists?}
+    URLExists -->|No| CreateURL[Create Function URL<br/>in Terraform]
+    URLExists -->|Yes| CheckAuth[Verify auth_type=NONE]
+
+    TestEndpoint --> HealthOK{/health returns<br/>200 OK?}
+    HealthOK -->|No| CheckDeps[Check Lambda<br/>dependencies]
+    HealthOK -->|Yes| TestAPI[Test /api/metrics]
+
+    CheckDeps --> ImportError{Import errors<br/>in logs?}
+    ImportError -->|Yes| RebuildPackage[Rebuild Lambda<br/>package with deps]
+    ImportError -->|No| CheckCode[Review handler code]
+
+    TestAPI --> MetricsOK{/api/metrics<br/>returns data?}
+    MetricsOK -->|No| CheckAPIKey[Verify API key]
+    MetricsOK -->|Yes| TestSSE[Test /api/items SSE]
+
+    CheckAPIKey --> KeyValid{API key in<br/>Secrets Manager?}
+    KeyValid -->|No| CreateAPIKey[Create API key<br/>in Secrets Manager]
+    KeyValid -->|Yes| CheckEnvVar[Check DASHBOARD_API_KEY_SECRET_ARN<br/>env var]
+
+    TestSSE --> SSEWorks{SSE stream<br/>working?}
+    SSEWorks -->|No| CheckDDB[Verify DynamoDB<br/>access]
+    SSEWorks -->|Yes| CheckFrontend[Check frontend<br/>JavaScript]
+
+    CreateURL --> Redeploy[Redeploy with<br/>Terraform]
+    CheckAuth --> Redeploy
+    RebuildPackage --> Redeploy
+    CreateAPIKey --> Redeploy
+    CheckEnvVar --> Redeploy
+    CheckDDB --> Redeploy
+
+    Redeploy --> Verify{Issue<br/>resolved?}
+    CheckCode --> Verify
+    CheckFrontend --> Verify
+    Verify -->|Yes| Complete[Dashboard Working]
+    Verify -->|No| Escalate[Escalate to<br/>Engineering]
+
+    classDef error fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef decision fill:#f57c00,stroke:#e65100,stroke-width:2px,color:#fff
+    classDef action fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
+    classDef success fill:#2e7d32,stroke:#1b5e20,stroke-width:2px,color:#fff
+
+    class NotResponding error
+    class CheckURL,URLExists,HealthOK,ImportError,MetricsOK,KeyValid,SSEWorks,Verify decision
+    class CheckLambda,TestEndpoint,CheckDeps,TestAPI,CheckAPIKey,CreateAPIKey,CheckEnvVar,TestSSE,CheckDDB,CheckFrontend,CreateURL,CheckAuth,RebuildPackage,Redeploy,CheckCode action
+    class Complete success
+```
+
+**Quick Fix:**
+```bash
+# Get dashboard URL
+terraform output dashboard_function_url
+
+# Test health endpoint
+URL=$(terraform output -raw dashboard_function_url)
+curl -i "$URL/health"
+
+# Test metrics endpoint (requires API key)
+API_KEY=$(aws secretsmanager get-secret-value \
+  --secret-id preprod/sentiment-analyzer/dashboard-api-key \
+  --query SecretString --output text | jq -r .api_key)
+curl -H "Authorization: $API_KEY" "$URL/api/metrics"
+
+# Check Lambda logs
+aws logs tail /aws/lambda/preprod-sentiment-dashboard --follow
+```
+
+---
+
+## Monitoring and Alerts
+
+### CloudWatch Alarms
+
+The system has the following CloudWatch alarms configured:
+
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
+graph TD
+    subgraph "Lambda Alarms"
+        IngestionErrors[Ingestion Errors<br/>>5 in 5 min]
+        AnalysisErrors[Analysis Errors<br/>>5 in 5 min]
+        AnalysisDuration[Analysis Duration<br/>>5 seconds]
+        DashboardErrors[Dashboard Errors<br/>>10 in 5 min]
+    end
+
+    subgraph "DynamoDB Alarms"
+        ReadThrottle[Read Throttle Events]
+        WriteThrottle[Write Throttle Events]
+    end
+
+    subgraph "Cost Alarms"
+        BudgetAlert[Monthly Budget<br/>>$50]
+    end
+
+    IngestionErrors --> SNSTopic[SNS Alarm Topic]
+    AnalysisErrors --> SNSTopic
+    AnalysisDuration --> SNSTopic
+    DashboardErrors --> SNSTopic
+    ReadThrottle --> SNSTopic
+    WriteThrottle --> SNSTopic
+    BudgetAlert --> SNSTopic
+
+    SNSTopic --> Email[Email Notification<br/>to On-Call]
+
+    classDef alarm fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef notification fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
+
+    class IngestionErrors,AnalysisErrors,AnalysisDuration,DashboardErrors,ReadThrottle,WriteThrottle,BudgetAlert alarm
+    class SNSTopic,Email notification
+```
+
+**Alarm Response:**
+
+| Alarm | Severity | Response Time | Action |
+|-------|----------|---------------|--------|
+| Ingestion Errors | P1 | 15 minutes | Check NewsAPI status, verify API key |
+| Analysis Errors | P1 | 15 minutes | Check S3 model, review Lambda logs |
+| Analysis Duration | P2 | 1 hour | Review memory/timeout settings |
+| Dashboard Errors | P0 | Immediate | Check Function URL, verify dependencies |
+| DynamoDB Throttle | P1 | 30 minutes | Increase capacity or optimize queries |
+| Budget Alert | P2 | 1 business day | Review cost allocation, optimize resources |
+
+---
+
+## Recovery Procedures
+
+### Rollback to Previous Version
+
+```bash
+# 1. Identify previous deployment
+cd infrastructure/terraform
+terraform workspace select preprod
+terraform state list
+
+# 2. Find previous Lambda package version
+aws s3 ls s3://preprod-sentiment-lambda-deployments/analysis/ --recursive
+
+# 3. Update Terraform to point to previous version
+# Edit main.tf module "analysis_lambda" s3_key to previous SHA
+
+# 4. Apply rollback
+terraform apply
+
+# 5. Verify rollback
+aws lambda get-function --function-name preprod-sentiment-analysis \
+  --query 'Code.Location'
+
+# 6. Test functionality
+curl $(terraform output -raw dashboard_function_url)/health
+```
+
+### Complete System Restart
+
+```bash
+# 1. Disable EventBridge schedule
+aws events disable-rule --name preprod-sentiment-ingestion-schedule
+
+# 2. Stop all in-flight Lambda executions (wait for completion)
+# Check running executions
+aws lambda list-functions --query 'Functions[?starts_with(FunctionName, `preprod-sentiment`)].[FunctionName]' --output text | \
+  while read func; do
+    echo "$func concurrent executions:"
+    aws cloudwatch get-metric-statistics \
+      --namespace AWS/Lambda \
+      --metric-name ConcurrentExecutions \
+      --dimensions Name=FunctionName,Value=$func \
+      --start-time $(date -u -d '5 minutes ago' +%Y-%m-%dT%H:%M:%S) \
+      --end-time $(date -u +%Y-%m-%dT%H:%M:%S) \
+      --period 60 \
+      --statistics Maximum
+  done
+
+# 3. Clear DLQ if needed
+aws sqs purge-queue --queue-url $(aws sqs get-queue-url --queue-name preprod-sentiment-dlq --query QueueUrl --output text)
+
+# 4. Restart EventBridge schedule
+aws events enable-rule --name preprod-sentiment-ingestion-schedule
+
+# 5. Monitor for normal operation
+aws logs tail /aws/lambda/preprod-sentiment-ingestion --follow
+```
+
+### Database Recovery
+
+```bash
+# DynamoDB point-in-time recovery (if enabled)
+# 1. Find recovery point
+aws dynamodb describe-continuous-backups --table-name preprod-sentiment-items
+
+# 2. Restore to specific time
+aws dynamodb restore-table-to-point-in-time \
+  --source-table-name preprod-sentiment-items \
+  --target-table-name preprod-sentiment-items-restored \
+  --restore-date-time $(date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%S)
+
+# 3. Update Terraform to use restored table (if needed)
+# Edit infrastructure/terraform/modules/dynamodb/main.tf
+
+# 4. Redeploy
+cd infrastructure/terraform
+terraform apply
+```
+
+---
+
+## Quick Reference: Common Commands
+
+### Check System Health
+
+```bash
+# Dashboard health
+curl -i $(cd infrastructure/terraform && terraform output -raw dashboard_function_url)/health
+
+# Lambda function status
+aws lambda get-function --function-name preprod-sentiment-analysis --query 'Configuration.State'
+
+# DynamoDB table status
+aws dynamodb describe-table --table-name preprod-sentiment-items --query 'Table.TableStatus'
+
+# Recent errors in logs
+aws logs filter-log-events \
+  --log-group-name /aws/lambda/preprod-sentiment-analysis \
+  --filter-pattern "ERROR" \
+  --start-time $(($(date +%s) - 3600))000
+
+# Current throttling metrics
+aws cloudwatch get-metric-statistics \
+  --namespace AWS/DynamoDB \
+  --metric-name UserErrors \
+  --dimensions Name=TableName,Value=preprod-sentiment-items \
+  --start-time $(date -u -d '30 minutes ago' +%Y-%m-%dT%H:%M:%S) \
+  --end-time $(date -u +%Y-%m-%dT%H:%M:%S) \
+  --period 300 \
+  --statistics Sum
+```
+
+### Emergency Contacts
+
+| Role | Responsibility | Contact |
+|------|---------------|---------|
+| On-Call Engineer | First responder for P0/P1 incidents | PagerDuty rotation |
+| DevOps Lead | Infrastructure and deployment issues | Escalation path |
+| Engineering Manager | Decision authority for production changes | Escalation path |
+
+---
+
+## Additional Resources
+
+- [README.md](../README.md) - Project overview and architecture
+- [TERRAFORM_DEPLOYMENT_FLOW.md](TERRAFORM_DEPLOYMENT_FLOW.md) - Deployment details
+- [DASHBOARD_SECURITY_ANALYSIS.md](DASHBOARD_SECURITY_ANALYSIS.md) - Security considerations
+- [CloudWatch Console](https://console.aws.amazon.com/cloudwatch/) - Monitoring and logs
+- [Lambda Console](https://console.aws.amazon.com/lambda/) - Lambda function management

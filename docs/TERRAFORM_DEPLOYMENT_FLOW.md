@@ -55,9 +55,10 @@ flowchart TB
 %%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
 flowchart LR
     subgraph "Phase 1: Foundation"
-        A[S3 Bucket]
+        A[S3 Buckets<br/>Lambda Deployments<br/>ML Model Storage]
         B[Secrets Manager]
         C[SNS Topic & DLQ]
+        D[DynamoDB Table]
     end
 
     subgraph "Phase 2: IAM"
@@ -86,6 +87,7 @@ flowchart LR
     A --> E
     B --> E
     C --> E
+    D --> E
     E --> F
     F --> G
     G --> H
@@ -101,7 +103,7 @@ flowchart LR
     classDef phase4 fill:#f57c00,stroke:#e65100,stroke-width:2px,color:#fff
     classDef phase5 fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
 
-    class A,B,C phase1
+    class A,B,C,D phase1
     class E,F phase2
     class G,H,I phase3
     class J,K,L phase4

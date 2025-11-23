@@ -177,7 +177,8 @@ graph TB
 
         subgraph "Processing Layer"
             SNS[SNS Topic<br/>sentiment-events]
-            Analysis[Analysis Lambda<br/>DistilBERT]
+            Analysis[Analysis Lambda<br/>DistilBERT<br/>S3 Model Loading]
+            S3Model[S3 Bucket<br/>ML Model Storage<br/>model.tar.gz]
         end
 
         subgraph "API Layer"
@@ -208,6 +209,7 @@ graph TB
     Ingestion -->|Store| DDB
 
     SNS -->|Subscribe| Analysis
+    Analysis -->|Load Model| S3Model
     Analysis -->|Store Results| DDB
     Analysis -->|Failed| DLQ
 
@@ -228,7 +230,7 @@ graph TB
     classDef monitoringStyle fill:#f57c00,stroke:#e65100,stroke-width:2px,color:#fff
 
     class Ingestion,Analysis,Dashboard lambdaStyle
-    class DDB,DLQ storageStyle
+    class DDB,DLQ,S3Model storageStyle
     class SNS messagingStyle
     class CW,Budget monitoringStyle
 ```
@@ -303,6 +305,7 @@ sequenceDiagram
     participant NA as NewsAPI
     participant SNS as SNS Topic
     participant Ana as Analysis Lambda
+    participant S3 as S3 Model Storage
     participant DDB as DynamoDB
     participant Dash as Dashboard Lambda
     participant User as Browser (SSE)
@@ -318,6 +321,8 @@ sequenceDiagram
     Ing->>SNS: Publish event
 
     SNS->>Ana: Trigger analysis
+    Ana->>S3: Load DistilBERT model (lazy)
+    S3-->>Ana: model.tar.gz
     Ana->>Ana: Run DistilBERT inference
     Ana->>DDB: Store sentiment results
 
