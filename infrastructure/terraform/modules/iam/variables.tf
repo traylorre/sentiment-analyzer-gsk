@@ -29,3 +29,8 @@ variable "dlq_arn" {
   description = "ARN of the SQS dead letter queue for analysis Lambda"
   type        = string
 }
+
+variable "model_s3_bucket_arn" {
+  description = "ARN of the S3 bucket containing ML model files"
+  type        = string
+}

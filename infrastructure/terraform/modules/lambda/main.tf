@@ -81,6 +81,11 @@ resource "aws_lambda_function" "this" {
     mode = var.tracing_mode
   }
 
+  # Ephemeral storage (/tmp) configuration
+  ephemeral_storage {
+    size = var.ephemeral_storage_size
+  }
+
   # Ensure log group is created first
   depends_on = [aws_cloudwatch_log_group.lambda]
 
