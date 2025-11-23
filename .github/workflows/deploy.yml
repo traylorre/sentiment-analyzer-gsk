@@ -93,15 +93,26 @@ jobs:
           echo "📦 Building Lambda packages for commit: ${SHA}"
           mkdir -p packages
 
-          # Install dependencies once to shared directory
-          echo "📥 Installing Python dependencies..."
-          pip install -r requirements.txt -t packages/deps/ --quiet
-          echo "✅ Dependencies installed to packages/deps/"
+          # ============================================================
+          # Ingestion Lambda - Lightweight dependencies only
+          # ============================================================
+          echo ""
+          echo "📦 Packaging Ingestion Lambda (boto3, requests, pydantic, logging)..."
 
-          # Package Ingestion Lambda WITH dependencies
-          echo "📦 Packaging Ingestion Lambda..."
+          # Install only ingestion dependencies
+          pip install \
+            boto3==1.41.0 \
+            requests==2.32.5 \
+            pydantic==2.12.4 \
+            python-json-logger==4.0.0 \
+            -t packages/ingestion-deps/ \
+            --no-cache-dir \
+            --disable-pip-version-check \
+            --quiet
+
+          # Build ingestion package
           mkdir -p packages/ingestion-build/src/lambdas packages/ingestion-build/src/lib
-          cp -r packages/deps/* packages/ingestion-build/
+          cp -r packages/ingestion-deps/* packages/ingestion-build/
           cp -r src/lambdas/ingestion/* packages/ingestion-build/
           cp -r src/lambdas/shared packages/ingestion-build/src/lambdas/
           cp -r src/lib/* packages/ingestion-build/src/lib/
@@ -109,33 +120,34 @@ jobs:
           zip -r ../ingestion-${SHA}.zip . \
             -x "*.pyc" "__pycache__/*" "*.pytest_cache/*" "tests/*" -q
           cd ../..
-          echo "✅ Ingestion package: $(du -h packages/ingestion-${SHA}.zip | cut -f1)"
 
-          # Clean up ingestion build directory immediately to save space
-          rm -rf packages/ingestion-build
+          # Show size and cleanup
+          INGESTION_SIZE=$(du -h packages/ingestion-${SHA}.zip | cut -f1)
+          echo "✅ Ingestion Lambda: ${INGESTION_SIZE}"
+          rm -rf packages/ingestion-deps packages/ingestion-build
 
-          # Package Analysis Lambda WITH dependencies (excluding torch/transformers - in layer)
-          echo "📦 Packaging Analysis Lambda..."
-          mkdir -p packages/analysis-build/src/lambdas packages/analysis-build/src/lib
-          cp -r packages/deps/* packages/analysis-build/
-          # Remove torch and transformers - provided by ML layer
-          rm -rf packages/analysis-build/torch* packages/analysis-build/transformers*
-          cp -r src/lambdas/analysis/* packages/analysis-build/
-          cp -r src/lambdas/shared packages/analysis-build/src/lambdas/
-          cp -r src/lib/* packages/analysis-build/src/lib/
-          cd packages/analysis-build
-          zip -r ../analysis-${SHA}.zip . \
-            -x "*.pyc" "__pycache__/*" "*.pytest_cache/*" "tests/*" -q
-          cd ../..
-          echo "✅ Analysis package: $(du -h packages/analysis-${SHA}.zip | cut -f1)"
+          # ============================================================
+          # Dashboard Lambda - Web framework dependencies
+          # ============================================================
+          echo ""
+          echo "📦 Packaging Dashboard Lambda (FastAPI, Mangum, SSE, pydantic)..."
 
-          # Clean up analysis build directory immediately to save space
-          rm -rf packages/analysis-build
+          # Install dashboard dependencies
+          pip install \
+            fastapi==0.121.3 \
+            mangum==0.19.0 \
+            sse-starlette==3.0.3 \
+            pydantic==2.12.4 \
+            boto3==1.41.0 \
+            python-json-logger==4.0.0 \
+            -t packages/dashboard-deps/ \
+            --no-cache-dir \
+            --disable-pip-version-check \
+            --quiet
 
-          # Package Dashboard Lambda WITH dependencies
-          echo "📦 Packaging Dashboard Lambda..."
+          # Build dashboard package
           mkdir -p packages/dashboard-build/src/lambdas packages/dashboard-build/src/lib packages/dashboard-build/src/dashboard
-          cp -r packages/deps/* packages/dashboard-build/
+          cp -r packages/dashboard-deps/* packages/dashboard-build/
           cp -r src/lambdas/dashboard/* packages/dashboard-build/
           cp -r src/lambdas/shared packages/dashboard-build/src/lambdas/
           cp -r src/lib/* packages/dashboard-build/src/lib/
@@ -144,15 +156,57 @@ jobs:
           zip -r ../dashboard-${SHA}.zip . \
             -x "*.pyc" "__pycache__/*" "*.pytest_cache/*" "tests/*" -q
           cd ../..
-          echo "✅ Dashboard package: $(du -h packages/dashboard-${SHA}.zip | cut -f1)"
 
-          # Cleanup all build directories and dependencies
-          rm -rf packages/deps packages/dashboard-build
+          # Show size and cleanup
+          DASHBOARD_SIZE=$(du -h packages/dashboard-${SHA}.zip | cut -f1)
+          echo "✅ Dashboard Lambda: ${DASHBOARD_SIZE}"
+          rm -rf packages/dashboard-deps packages/dashboard-build
 
+          # ============================================================
+          # Analysis Lambda - Minimal dependencies (model loads from S3)
+          # ============================================================
           echo ""
-          echo "📊 Final package sizes:"
-          ls -lh packages/
-          echo "✅ Lambda packages built successfully with bundled dependencies"
+          echo "📦 Packaging Analysis Lambda (minimal - model in S3)..."
+
+          # Install minimal analysis dependencies (NO torch/transformers)
+          pip install \
+            boto3==1.41.0 \
+            pydantic==2.12.4 \
+            python-json-logger==4.0.0 \
+            -t packages/analysis-deps/ \
+            --no-cache-dir \
+            --disable-pip-version-check \
+            --quiet
+
+          # Build analysis package
+          mkdir -p packages/analysis-build/src/lambdas packages/analysis-build/src/lib
+          cp -r packages/analysis-deps/* packages/analysis-build/
+          cp -r src/lambdas/analysis/* packages/analysis-build/
+          cp -r src/lambdas/shared packages/analysis-build/src/lambdas/
+          cp -r src/lib/* packages/analysis-build/src/lib/
+          cd packages/analysis-build
+          zip -r ../analysis-${SHA}.zip . \
+            -x "*.pyc" "__pycache__/*" "*.pytest_cache/*" "tests/*" -q
+          cd ../..
+
+          # Show size and cleanup
+          ANALYSIS_SIZE=$(du -h packages/analysis-${SHA}.zip | cut -f1)
+          echo "✅ Analysis Lambda: ${ANALYSIS_SIZE}"
+          rm -rf packages/analysis-deps packages/analysis-build
+
+          # ============================================================
+          # Summary
+          # ============================================================
+          echo ""
+          echo "📊 Package Summary:"
+          echo "  Ingestion:  ${INGESTION_SIZE}"
+          echo "  Dashboard:  ${DASHBOARD_SIZE}"
+          echo "  Analysis:   ${ANALYSIS_SIZE}"
+          echo ""
+          ls -lh packages/*.zip
+          echo ""
+          echo "✅ All Lambda packages built successfully!"
+          echo "🚀 Build time optimized: Per-Lambda dependencies (not bundling 3.9GB!)"
 
       - name: Upload Lambda Packages as Artifacts
         uses: actions/upload-artifact@v5
