@@ -148,7 +148,11 @@ def get_recent_items(
 
         logger.info(
             "Retrieved recent items",
-            extra={"count": len(items), "status": status, "limit": limit},
+            extra={
+                "count": len(items),
+                "status": sanitize_for_log(status),
+                "limit": limit,
+            },
         )
 
         return items
@@ -156,7 +160,11 @@ def get_recent_items(
     except Exception as e:
         logger.error(
             "Failed to get recent items",
-            extra={"status": status, "limit": limit, **get_safe_error_info(e)},
+            extra={
+                "status": sanitize_for_log(status),
+                "limit": limit,
+                **get_safe_error_info(e),
+            },
         )
         raise
 
@@ -204,7 +212,7 @@ def get_items_by_sentiment(
         logger.debug(
             "Retrieved items by sentiment",
             extra={
-                "sentiment": sentiment,
+                "sentiment": sanitize_for_log(sentiment),
                 "hours": hours,
                 "count": len(items),
             },
@@ -215,7 +223,11 @@ def get_items_by_sentiment(
     except Exception as e:
         logger.error(
             "Failed to get items by sentiment",
-            extra={"sentiment": sentiment, "hours": hours, **get_safe_error_info(e)},
+            extra={
+                "sentiment": sanitize_for_log(sentiment),
+                "hours": hours,
+                **get_safe_error_info(e),
+            },
         )
         raise
 
@@ -306,7 +318,7 @@ def calculate_ingestion_rate(
     except Exception as e:
         logger.error(
             "Failed to calculate ingestion rates",
-            extra={"hours": hours, **get_safe_error_info(e)},
+            extra={"hours": sanitize_for_log(str(hours)), **get_safe_error_info(e)},
         )
         raise
 
@@ -388,7 +400,7 @@ def aggregate_dashboard_metrics(
     except Exception as e:
         logger.error(
             "Failed to aggregate dashboard metrics",
-            extra={"hours": hours, **get_safe_error_info(e)},
+            extra={"hours": sanitize_for_log(str(hours)), **get_safe_error_info(e)},
         )
         raise
 

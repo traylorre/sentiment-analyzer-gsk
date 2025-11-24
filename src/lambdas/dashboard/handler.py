@@ -57,6 +57,7 @@ from src.lambdas.shared.dynamodb import get_table, parse_dynamodb_item
 from src.lambdas.shared.logging_utils import (
     get_safe_error_info,
     get_safe_error_message_for_user,
+    sanitize_for_log,
     sanitize_path_component,
 )
 
@@ -407,7 +408,7 @@ async def get_metrics(
         logger.info(
             "Metrics retrieved",
             extra={
-                "total": metrics.get("total", 0),
+                "total": sanitize_for_log(str(metrics.get("total", 0))),
                 "hours": hours,
             },
         )
@@ -417,7 +418,7 @@ async def get_metrics(
     except Exception as e:
         logger.error(
             "Failed to get metrics",
-            extra={"hours": hours, **get_safe_error_info(e)},
+            extra={"hours": sanitize_for_log(str(hours)), **get_safe_error_info(e)},
         )
         raise HTTPException(
             status_code=500,
