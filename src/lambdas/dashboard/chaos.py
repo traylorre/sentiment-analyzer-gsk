@@ -41,12 +41,14 @@ logger = logging.getLogger(__name__)
 # Configuration
 CHAOS_TABLE = os.environ.get("CHAOS_EXPERIMENTS_TABLE", "")
 ENVIRONMENT = os.environ["ENVIRONMENT"]
+FIS_DYNAMODB_THROTTLE_TEMPLATE = os.environ.get("FIS_DYNAMODB_THROTTLE_TEMPLATE", "")
 
 # Safety: Only allow chaos testing in preprod
 ALLOWED_ENVIRONMENTS = ["preprod", "dev", "test"]
 
-# DynamoDB client
+# AWS clients
 dynamodb = boto3.resource("dynamodb")
+fis_client = boto3.client("fis")
 
 
 class ChaosError(Exception):
@@ -343,3 +345,302 @@ def _deserialize_dynamodb_item(item: dict[str, Any]) -> dict[str, Any]:
         else:
             result[key] = value
     return result
+
+
+# ===================================================================
+# AWS FIS Integration (Phase 2)
+# ===================================================================
+
+
+def start_fis_experiment(
+    experiment_id: str,
+    blast_radius: int,
+    duration_seconds: int,
+) -> str:
+    """
+    Start an AWS FIS experiment for DynamoDB throttling.
+
+    Args:
+        experiment_id: Chaos experiment UUID (for tagging)
+        blast_radius: Percentage of requests to affect (10-100)
+        duration_seconds: Duration in seconds (5-300)
+
+    Returns:
+        FIS experiment ID
+
+    Raises:
+        ChaosError: If FIS experiment fails to start
+    """
+    check_environment_allowed()
+
+    if not FIS_DYNAMODB_THROTTLE_TEMPLATE:
+        raise ChaosError("FIS_DYNAMODB_THROTTLE_TEMPLATE environment variable not set")
+
+    # Note: FIS experiment template already defines duration (PT5M).
+    # blast_radius and duration_seconds are passed as tags for tracking only.
+
+    try:
+        response = fis_client.start_experiment(
+            experimentTemplateId=FIS_DYNAMODB_THROTTLE_TEMPLATE,
+            tags={
+                "chaos_experiment_id": experiment_id,
+                "environment": ENVIRONMENT,
+                "blast_radius": str(blast_radius),
+            },
+        )
+
+        fis_experiment_id = response["experiment"]["id"]
+
+        logger.info(
+            "FIS experiment started",
+            extra={
+                "chaos_experiment_id": experiment_id,
+                "fis_experiment_id": fis_experiment_id,
+                "blast_radius": blast_radius,
+                "duration_seconds": duration_seconds,
+            },
+        )
+
+        return fis_experiment_id
+
+    except ClientError as e:
+        error_code = e.response.get("Error", {}).get("Code", "Unknown")
+        error_msg = e.response.get("Error", {}).get("Message", str(e))
+
+        logger.error(
+            "Failed to start FIS experiment",
+            extra={
+                "chaos_experiment_id": experiment_id,
+                "error_code": error_code,
+                "error_message": error_msg,
+            },
+        )
+
+        raise ChaosError(
+            f"FIS experiment failed to start: {error_code} - {error_msg}"
+        ) from e
+
+
+def stop_fis_experiment(fis_experiment_id: str) -> bool:
+    """
+    Stop a running AWS FIS experiment.
+
+    Args:
+        fis_experiment_id: FIS experiment ID
+
+    Returns:
+        True if stopped successfully
+
+    Raises:
+        ChaosError: If FIS experiment fails to stop
+    """
+    check_environment_allowed()
+
+    try:
+        fis_client.stop_experiment(id=fis_experiment_id)
+
+        logger.info(
+            "FIS experiment stopped",
+            extra={"fis_experiment_id": fis_experiment_id},
+        )
+
+        return True
+
+    except ClientError as e:
+        error_code = e.response.get("Error", {}).get("Code", "Unknown")
+        error_msg = e.response.get("Error", {}).get("Message", str(e))
+
+        logger.error(
+            "Failed to stop FIS experiment",
+            extra={
+                "fis_experiment_id": fis_experiment_id,
+                "error_code": error_code,
+                "error_message": error_msg,
+            },
+        )
+
+        raise ChaosError(
+            f"FIS experiment failed to stop: {error_code} - {error_msg}"
+        ) from e
+
+
+def get_fis_experiment_status(fis_experiment_id: str) -> dict[str, Any]:
+    """
+    Get status of an AWS FIS experiment.
+
+    Args:
+        fis_experiment_id: FIS experiment ID
+
+    Returns:
+        FIS experiment status dict
+
+    Raises:
+        ChaosError: If failed to get status
+    """
+    try:
+        response = fis_client.get_experiment(id=fis_experiment_id)
+        experiment = response["experiment"]
+
+        return {
+            "id": experiment["id"],
+            "state": experiment["state"]["status"],
+            "reason": experiment["state"].get("reason", ""),
+            "created_time": experiment["creationTime"].isoformat(),
+            "start_time": experiment.get("startTime", {}).isoformat()
+            if experiment.get("startTime")
+            else None,
+            "end_time": experiment.get("endTime", {}).isoformat()
+            if experiment.get("endTime")
+            else None,
+        }
+
+    except ClientError as e:
+        error_code = e.response.get("Error", {}).get("Code", "Unknown")
+        error_msg = e.response.get("Error", {}).get("Message", str(e))
+
+        logger.error(
+            "Failed to get FIS experiment status",
+            extra={
+                "fis_experiment_id": fis_experiment_id,
+                "error_code": error_code,
+                "error_message": error_msg,
+            },
+        )
+
+        raise ChaosError(
+            f"Failed to get FIS experiment status: {error_code} - {error_msg}"
+        ) from e
+
+
+def start_experiment(experiment_id: str) -> dict[str, Any]:
+    """
+    Start a chaos experiment.
+
+    Args:
+        experiment_id: Experiment UUID
+
+    Returns:
+        Updated experiment dict
+
+    Raises:
+        ChaosError: If experiment fails to start
+    """
+    check_environment_allowed()
+
+    # Get experiment details
+    experiment = get_experiment(experiment_id)
+    if not experiment:
+        raise ChaosError(f"Experiment not found: {experiment_id}")
+
+    if experiment["status"] != "pending":
+        raise ChaosError(
+            f"Experiment must be in 'pending' status to start, got: {experiment['status']}"
+        )
+
+    scenario_type = experiment["scenario_type"]
+    blast_radius = experiment["blast_radius"]
+    duration_seconds = experiment["duration_seconds"]
+
+    try:
+        # Route to appropriate chaos implementation
+        if scenario_type == "dynamodb_throttle":
+            # AWS FIS integration (Phase 2)
+            fis_experiment_id = start_fis_experiment(
+                experiment_id, blast_radius, duration_seconds
+            )
+
+            # Update experiment with FIS experiment ID
+            results = {
+                "fis_experiment_id": fis_experiment_id,
+                "started_at": datetime.utcnow().isoformat() + "Z",
+            }
+            update_experiment_status(experiment_id, "running", results)
+
+        elif scenario_type == "newsapi_failure":
+            # Phase 3: Lambda environment variable injection
+            raise ChaosError("newsapi_failure scenario not yet implemented (Phase 3)")
+
+        elif scenario_type == "lambda_cold_start":
+            # Phase 4: Lambda delay injection
+            raise ChaosError("lambda_cold_start scenario not yet implemented (Phase 4)")
+
+        else:
+            raise ValueError(f"Unknown scenario_type: {scenario_type}")
+
+        # Return updated experiment
+        return get_experiment(experiment_id) or experiment
+
+    except Exception as e:
+        # Mark experiment as failed
+        update_experiment_status(
+            experiment_id,
+            "failed",
+            {"error": str(e), "failed_at": datetime.utcnow().isoformat() + "Z"},
+        )
+        raise
+
+
+def stop_experiment(experiment_id: str) -> dict[str, Any]:
+    """
+    Stop a running chaos experiment.
+
+    Args:
+        experiment_id: Experiment UUID
+
+    Returns:
+        Updated experiment dict
+
+    Raises:
+        ChaosError: If experiment fails to stop
+    """
+    check_environment_allowed()
+
+    # Get experiment details
+    experiment = get_experiment(experiment_id)
+    if not experiment:
+        raise ChaosError(f"Experiment not found: {experiment_id}")
+
+    if experiment["status"] != "running":
+        raise ChaosError(
+            f"Experiment must be in 'running' status to stop, got: {experiment['status']}"
+        )
+
+    scenario_type = experiment["scenario_type"]
+
+    try:
+        # Route to appropriate stop implementation
+        if scenario_type == "dynamodb_throttle":
+            # AWS FIS integration (Phase 2)
+            fis_experiment_id = experiment.get("results", {}).get("fis_experiment_id")
+            if not fis_experiment_id:
+                raise ChaosError("FIS experiment ID not found in experiment results")
+
+            stop_fis_experiment(fis_experiment_id)
+
+            # Update experiment status
+            results = experiment.get("results", {})
+            results["stopped_at"] = datetime.utcnow().isoformat() + "Z"
+            update_experiment_status(experiment_id, "stopped", results)
+
+        elif scenario_type == "newsapi_failure":
+            # Phase 3: Revert Lambda environment variable
+            raise ChaosError("newsapi_failure scenario not yet implemented (Phase 3)")
+
+        elif scenario_type == "lambda_cold_start":
+            # Phase 4: Stop Lambda delay injection
+            raise ChaosError("lambda_cold_start scenario not yet implemented (Phase 4)")
+
+        else:
+            raise ValueError(f"Unknown scenario_type: {scenario_type}")
+
+        # Return updated experiment
+        return get_experiment(experiment_id) or experiment
+
+    except Exception as e:
+        # Mark experiment as failed
+        update_experiment_status(
+            experiment_id,
+            "failed",
+            {"error": str(e), "failed_at": datetime.utcnow().isoformat() + "Z"},
+        )
+        raise

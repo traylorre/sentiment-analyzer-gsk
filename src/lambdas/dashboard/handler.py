@@ -55,7 +55,8 @@ from src.lambdas.dashboard.chaos import (
     delete_experiment,
     get_experiment,
     list_experiments,
-    update_experiment_status,
+    start_experiment,
+    stop_experiment,
 )
 from src.lambdas.dashboard.metrics import (
     aggregate_dashboard_metrics,
@@ -758,34 +759,29 @@ async def start_chaos_experiment(
     Returns:
         Updated experiment JSON
 
-    Phase 1 Note:
-        This endpoint only updates experiment status to 'running'.
-        Actual fault injection implemented in Phase 2-4.
+    Phase 2 Note:
+        This endpoint now integrates with AWS FIS for DynamoDB throttling.
+        Other scenarios (NewsAPI failure, Lambda delay) will be implemented in Phase 3-4.
     """
-    experiment = get_experiment(experiment_id)
+    try:
+        updated_experiment = start_experiment(experiment_id)
+        return JSONResponse(updated_experiment)
 
-    if not experiment:
-        raise HTTPException(
-            status_code=404,
-            detail="Experiment not found",
+    except ChaosError as e:
+        logger.error(
+            "Chaos experiment start failed",
+            extra={"experiment_id": experiment_id, "error": str(e)},
         )
-
-    if experiment["status"] != "pending":
-        raise HTTPException(
-            status_code=400,
-            detail=f"Cannot start experiment with status: {experiment['status']}",
-        )
-
-    success = update_experiment_status(experiment_id, "running")
-
-    if not success:
         raise HTTPException(
             status_code=500,
-            detail="Failed to start experiment",
-        )
+            detail=str(e),
+        ) from e
 
-    experiment["status"] = "running"
-    return JSONResponse(experiment)
+    except EnvironmentNotAllowedError as e:
+        raise HTTPException(
+            status_code=403,
+            detail=str(e),
+        ) from e
 
 
 @app.post("/chaos/experiments/{experiment_id}/stop")
@@ -801,31 +797,29 @@ async def stop_chaos_experiment(
 
     Returns:
         Updated experiment JSON
+
+    Phase 2 Note:
+        This endpoint now integrates with AWS FIS to stop experiments.
     """
-    experiment = get_experiment(experiment_id)
+    try:
+        updated_experiment = stop_experiment(experiment_id)
+        return JSONResponse(updated_experiment)
 
-    if not experiment:
-        raise HTTPException(
-            status_code=404,
-            detail="Experiment not found",
+    except ChaosError as e:
+        logger.error(
+            "Chaos experiment stop failed",
+            extra={"experiment_id": experiment_id, "error": str(e)},
         )
-
-    if experiment["status"] not in ["pending", "running"]:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Cannot stop experiment with status: {experiment['status']}",
-        )
-
-    success = update_experiment_status(experiment_id, "stopped")
-
-    if not success:
         raise HTTPException(
             status_code=500,
-            detail="Failed to stop experiment",
-        )
+            detail=str(e),
+        ) from e
 
-    experiment["status"] = "stopped"
-    return JSONResponse(experiment)
+    except EnvironmentNotAllowedError as e:
+        raise HTTPException(
+            status_code=403,
+            detail=str(e),
+        ) from e
 
 
 @app.delete("/chaos/experiments/{experiment_id}")
