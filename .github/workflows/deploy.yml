@@ -321,8 +321,13 @@ jobs:
         env:
           AWS_REGION: us-east-1
           ENVIRONMENT: dev
+          AWS_ACCESS_KEY_ID: testing
+          AWS_SECRET_ACCESS_KEY: testing
+          AWS_SECURITY_TOKEN: testing
+          AWS_SESSION_TOKEN: testing
         run: |
           # Dev environment uses mocked AWS resources (LOCAL mirrors DEV)
+          # Fake AWS credentials prevent accidental real AWS access
           pytest tests/unit/ -v --tb=short -m "not preprod" \
             || echo "⚠️ Some unit tests failed - review before deploying"
 
