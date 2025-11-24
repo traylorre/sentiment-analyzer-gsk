@@ -274,34 +274,57 @@ async def serve_index():
     return FileResponse(index_path, media_type="text/html")
 
 
-@app.get("/static/{filename}")
-async def serve_static(filename: str):
+@app.get("/static/{filepath:path}")
+async def serve_static(filepath: str):
     """
-    Serve static dashboard files (CSS, JS).
+    Serve static dashboard files (CSS, JS, vendor libraries).
+
+    Supports subdirectories for vendor libraries (e.g., /static/vendor/htmx.min.js).
 
     Args:
-        filename: Name of static file
+        filepath: Path to static file (may include subdirectories)
 
     Returns:
         File content with appropriate media type
 
     Security Note:
         Path traversal prevented using sanitize_path_component() utility.
-        Rejects directory separators, parent references, null bytes, and control chars.
+        Each path component validated separately to prevent directory traversal.
     """
-    # Sanitize filename to prevent path traversal attacks
-    sanitized_filename = sanitize_path_component(filename)
-    if not sanitized_filename:
-        logger.warning(
-            "Path traversal attempt blocked",
-            extra={"client_ip": "unknown"},  # Could extract from request if needed
+    # Split path and sanitize each component
+    path_parts = filepath.split("/")
+    sanitized_parts = []
+
+    for part in path_parts:
+        sanitized = sanitize_path_component(part)
+        if not sanitized:
+            logger.warning(
+                "Path traversal attempt blocked",
+                extra={"client_ip": "unknown", "attempted_path": filepath},
+            )
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid file path",
+            )
+        sanitized_parts.append(sanitized)
+
+    # Build safe file path
+    file_path = STATIC_DIR
+    for part in sanitized_parts:
+        file_path = file_path / part
+
+    # Verify path is within STATIC_DIR (defense in depth)
+    try:
+        file_path.resolve().relative_to(STATIC_DIR.resolve())
+    except ValueError as e:
+        logger.error(
+            "Path traversal attempt escaped STATIC_DIR",
+            extra={"attempted_path": filepath, "resolved_path": str(file_path)},
         )
         raise HTTPException(
             status_code=400,
-            detail="Invalid filename",
-        )
-
-    file_path = STATIC_DIR / sanitized_filename
+            detail="Invalid file path",
+        ) from e
 
     if not file_path.exists():
         raise HTTPException(

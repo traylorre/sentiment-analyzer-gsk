@@ -1,102 +1,499 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="h-full">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sentiment Analyzer Dashboard</title>
-    <link rel="stylesheet" href="/static/styles.css">
+
+    <!-- Tailwind CSS (self-hosted build will replace this in production) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- DaisyUI for beautiful mobile-first components -->
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.14/dist/full.min.css" rel="stylesheet">
+
+    <!-- HTMX - Self-hosted (14KB) -->
+    <script src="/static/vendor/htmx.min.js"></script>
+
+    <!-- HTMX SSE Extension - Self-hosted (8.7KB) -->
+    <script src="/static/vendor/htmx-sse.min.js"></script>
+
+    <!-- Alpine.js - Self-hosted (44KB) -->
+    <script defer src="/static/vendor/alpine.min.js"></script>
+
+    <!-- Chart.js for data visualization -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+    <style>
+        /* Custom animations for mobile */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        /* Pulse animation for live indicator */
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .pulse-dot {
+            animation: pulse-dot 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+    </style>
 </head>
-<body>
-    <header>
-        <h1>Sentiment Analyzer Dashboard</h1>
-        <div class="connection-status">
-            <span id="status-indicator" class="status-dot disconnected"></span>
-            <span id="status-text">Connecting...</span>
+<body class="h-full bg-base-200" x-data="dashboard()">
+    <!-- Mobile-first navigation bar -->
+    <div class="navbar bg-primary text-primary-content shadow-lg">
+        <div class="flex-1">
+            <a class="btn btn-ghost normal-case text-xl">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6 mr-2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.631 8.41m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 00-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448 14.9 14.9 0 01.06-.312m-2.24 2.39a4.493 4.493 0 00-1.757 4.306 4.493 4.493 0 004.306-1.758M16.5 9a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" />
+                </svg>
+                Sentiment Analyzer
+            </a>
         </div>
-    </header>
 
-    <main>
-        <!-- Metrics Cards -->
-        <section class="metrics-cards">
-            <div class="card total">
-                <h3>Total Items</h3>
-                <div class="value" id="total-items">0</div>
-                <div class="label">Last 24 hours</div>
+        <div class="flex-none gap-2">
+            <!-- Live status indicator -->
+            <div class="badge badge-success gap-2" id="connection-status">
+                <span class="w-2 h-2 bg-white rounded-full pulse-dot" x-show="connected"></span>
+                <span x-show="connected">Live</span>
+                <span class="loading loading-dots loading-xs" x-show="!connected"></span>
+                <span x-show="!connected">Connecting...</span>
             </div>
-            <div class="card positive">
-                <h3>Positive</h3>
-                <div class="value" id="positive-count">0</div>
-                <div class="percentage" id="positive-pct">0%</div>
+
+            <!-- Dark mode toggle (mobile-friendly) -->
+            <label class="swap swap-rotate">
+                <input type="checkbox" @change="toggleDarkMode" x-model="darkMode"/>
+                <svg class="swap-on fill-current w-6 h-6" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                    <path d="M5.64,17l-.71.71a1,1,0,0,0,0,1.41,1,1,0,0,0,1.41,0l.71-.71A1,1,0,0,0,5.64,17ZM5,12a1,1,0,0,0-1-1H3a1,1,0,0,0,0,2H4A1,1,0,0,0,5,12Zm7-7a1,1,0,0,0,1-1V3a1,1,0,0,0-2,0V4A1,1,0,0,0,12,5ZM5.64,7.05a1,1,0,0,0,.7.29,1,1,0,0,0,.71-.29,1,1,0,0,0,0-1.41l-.71-.71A1,1,0,0,0,4.93,6.34Zm12,.29a1,1,0,0,0,.7-.29l.71-.71a1,1,0,1,0-1.41-1.41L17,5.64a1,1,0,0,0,0,1.41A1,1,0,0,0,17.66,7.34ZM21,11H20a1,1,0,0,0,0,2h1a1,1,0,0,0,0-2Zm-9,8a1,1,0,0,0-1,1v1a1,1,0,0,0,2,0V20A1,1,0,0,0,12,19ZM18.36,17A1,1,0,0,0,17,18.36l.71.71a1,1,0,0,0,1.41,0,1,1,0,0,0,0-1.41ZM12,6.5A5.5,5.5,0,1,0,17.5,12,5.51,5.51,0,0,0,12,6.5Zm0,9A3.5,3.5,0,1,1,15.5,12,3.5,3.5,0,0,1,12,15.5Z"/>
+                </svg>
+                <svg class="swap-off fill-current w-6 h-6" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                    <path d="M21.64,13a1,1,0,0,0-1.05-.14,8.05,8.05,0,0,1-3.37.73A8.15,8.15,0,0,1,9.08,5.49a8.59,8.59,0,0,1,.25-2A1,1,0,0,0,8,2.36,10.14,10.14,0,1,0,22,14.05,1,1,0,0,0,21.64,13Zm-9.5,6.69A8.14,8.14,0,0,1,7.08,5.22v.27A10.15,10.15,0,0,0,17.22,15.63a9.79,9.79,0,0,0,2.1-.22A8.11,8.11,0,0,1,12.14,19.73Z"/>
+                </svg>
+            </label>
+        </div>
+    </div>
+
+    <!-- Main content - Mobile-first responsive grid -->
+    <main class="container mx-auto p-4 max-w-7xl">
+        <!-- Metrics Cards - Stack on mobile, grid on desktop -->
+        <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <!-- Total Items Card -->
+            <div class="stat bg-base-100 rounded-box shadow-md">
+                <div class="stat-figure text-primary">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="inline-block w-8 h-8 stroke-current">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </div>
+                <div class="stat-title">Total Items</div>
+                <div class="stat-value text-primary" x-text="metrics.total || 0"></div>
+                <div class="stat-desc">Last 24 hours</div>
             </div>
-            <div class="card neutral">
-                <h3>Neutral</h3>
-                <div class="value" id="neutral-count">0</div>
-                <div class="percentage" id="neutral-pct">0%</div>
+
+            <!-- Positive Sentiment Card -->
+            <div class="stat bg-base-100 rounded-box shadow-md">
+                <div class="stat-figure text-success">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="inline-block w-8 h-8 stroke-current">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </div>
+                <div class="stat-title">Positive</div>
+                <div class="stat-value text-success" x-text="metrics.positive || 0"></div>
+                <div class="stat-desc" x-text="((metrics.positive || 0) / (metrics.total || 1) * 100).toFixed(1) + '%'"></div>
             </div>
-            <div class="card negative">
-                <h3>Negative</h3>
-                <div class="value" id="negative-count">0</div>
-                <div class="percentage" id="negative-pct">0%</div>
+
+            <!-- Neutral Sentiment Card -->
+            <div class="stat bg-base-100 rounded-box shadow-md">
+                <div class="stat-figure text-warning">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="inline-block w-8 h-8 stroke-current">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                    </svg>
+                </div>
+                <div class="stat-title">Neutral</div>
+                <div class="stat-value text-warning" x-text="metrics.neutral || 0"></div>
+                <div class="stat-desc" x-text="((metrics.neutral || 0) / (metrics.total || 1) * 100).toFixed(1) + '%'"></div>
+            </div>
+
+            <!-- Negative Sentiment Card -->
+            <div class="stat bg-base-100 rounded-box shadow-md">
+                <div class="stat-figure text-error">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="inline-block w-8 h-8 stroke-current">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </div>
+                <div class="stat-title">Negative</div>
+                <div class="stat-value text-error" x-text="metrics.negative || 0"></div>
+                <div class="stat-desc" x-text="((metrics.negative || 0) / (metrics.total || 1) * 100).toFixed(1) + '%'"></div>
             </div>
         </section>
 
-        <!-- Charts Row -->
-        <section class="charts-row">
-            <div class="chart-container">
-                <h3>Sentiment Distribution</h3>
-                <canvas id="sentiment-chart"></canvas>
+        <!-- Charts Row - Stack on mobile, side-by-side on desktop -->
+        <section class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <!-- Sentiment Distribution Chart -->
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <h2 class="card-title">Sentiment Distribution</h2>
+                    <div class="aspect-video">
+                        <canvas id="sentiment-chart"></canvas>
+                    </div>
+                </div>
             </div>
-            <div class="chart-container">
-                <h3>By Tag</h3>
-                <canvas id="tag-chart"></canvas>
+
+            <!-- Tag Distribution Chart -->
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <h2 class="card-title">By Tag</h2>
+                    <div class="aspect-video">
+                        <canvas id="tag-chart"></canvas>
+                    </div>
+                </div>
             </div>
         </section>
 
-        <!-- Recent Items Table -->
-        <section class="recent-items">
-            <h3>Recent Items</h3>
-            <div class="table-container">
-                <table id="items-table">
-                    <thead>
-                        <tr>
-                            <th>Time</th>
-                            <th>Sentiment</th>
-                            <th>Score</th>
-                            <th>Title</th>
-                            <th>Source</th>
-                            <th>Tags</th>
-                        </tr>
-                    </thead>
-                    <tbody id="items-tbody">
-                        <!-- Items populated by JavaScript -->
-                    </tbody>
-                </table>
+        <!-- Recent Items - Mobile-friendly table/cards -->
+        <section class="card bg-base-100 shadow-xl mb-6">
+            <div class="card-body">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+                    <h2 class="card-title">Recent Articles</h2>
+
+                    <!-- Search and Filter - Stack on mobile -->
+                    <div class="flex flex-col sm:flex-row gap-2">
+                        <input type="text"
+                               placeholder="Search articles..."
+                               class="input input-bordered input-sm w-full sm:w-auto"
+                               x-model="searchQuery">
+
+                        <select class="select select-bordered select-sm w-full sm:w-auto"
+                                x-model="sentimentFilter">
+                            <option value="all">All Sentiments</option>
+                            <option value="positive">Positive</option>
+                            <option value="neutral">Neutral</option>
+                            <option value="negative">Negative</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Mobile: Card view, Desktop: Table view -->
+                <div class="hidden lg:block overflow-x-auto">
+                    <table class="table table-zebra w-full">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Sentiment</th>
+                                <th>Score</th>
+                                <th>Title</th>
+                                <th>Source</th>
+                                <th>Tags</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="item in filteredItems" :key="item.id">
+                                <tr class="hover">
+                                    <td x-text="new Date(item.timestamp).toLocaleTimeString()"></td>
+                                    <td>
+                                        <span class="badge"
+                                              :class="{
+                                                  'badge-success': item.sentiment === 'positive',
+                                                  'badge-warning': item.sentiment === 'neutral',
+                                                  'badge-error': item.sentiment === 'negative'
+                                              }"
+                                              x-text="item.sentiment"></span>
+                                    </td>
+                                    <td x-text="item.score?.toFixed(3) || 'N/A'"></td>
+                                    <td class="max-w-xs truncate" x-text="item.title"></td>
+                                    <td x-text="item.source"></td>
+                                    <td>
+                                        <template x-for="tag in (item.tags || []).slice(0, 2)" :key="tag">
+                                            <span class="badge badge-outline badge-sm mr-1" x-text="tag"></span>
+                                        </template>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Mobile card view -->
+                <div class="lg:hidden space-y-4">
+                    <template x-for="item in filteredItems" :key="item.id">
+                        <div class="card bg-base-200 shadow-sm">
+                            <div class="card-body p-4">
+                                <div class="flex items-start justify-between gap-2">
+                                    <h3 class="card-title text-sm" x-text="item.title"></h3>
+                                    <span class="badge badge-sm"
+                                          :class="{
+                                              'badge-success': item.sentiment === 'positive',
+                                              'badge-warning': item.sentiment === 'neutral',
+                                              'badge-error': item.sentiment === 'negative'
+                                          }"
+                                          x-text="item.sentiment"></span>
+                                </div>
+                                <div class="text-xs text-base-content/60 space-y-1">
+                                    <div>
+                                        <span class="font-semibold">Score:</span>
+                                        <span x-text="item.score?.toFixed(3) || 'N/A'"></span>
+                                    </div>
+                                    <div>
+                                        <span class="font-semibold">Source:</span>
+                                        <span x-text="item.source"></span>
+                                    </div>
+                                    <div>
+                                        <span class="font-semibold">Time:</span>
+                                        <span x-text="new Date(item.timestamp).toLocaleString()"></span>
+                                    </div>
+                                    <div class="flex flex-wrap gap-1 mt-2">
+                                        <template x-for="tag in item.tags || []" :key="tag">
+                                            <span class="badge badge-outline badge-xs" x-text="tag"></span>
+                                        </template>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
             </div>
         </section>
 
-        <!-- Ingestion Rate -->
-        <section class="ingestion-stats">
+        <!-- Ingestion Stats -->
+        <section class="stats stats-vertical lg:stats-horizontal shadow bg-base-100 w-full">
             <div class="stat">
-                <span class="label">Last Hour:</span>
-                <span class="value" id="rate-last-hour">0</span>
+                <div class="stat-title">Last Hour</div>
+                <div class="stat-value text-primary" x-text="metrics.rate_last_hour || 0"></div>
+                <div class="stat-desc">articles ingested</div>
             </div>
+
             <div class="stat">
-                <span class="label">Last 24h:</span>
-                <span class="value" id="rate-last-24h">0</span>
+                <div class="stat-title">Last 24 Hours</div>
+                <div class="stat-value text-secondary" x-text="metrics.total || 0"></div>
+                <div class="stat-desc">total articles</div>
             </div>
+
             <div class="stat">
-                <span class="label">Last Updated:</span>
-                <span class="value" id="last-updated">--</span>
+                <div class="stat-title">Last Updated</div>
+                <div class="stat-value text-sm" x-text="lastUpdated"></div>
+                <div class="stat-desc">auto-refresh every 5s</div>
             </div>
         </section>
     </main>
 
-    <footer>
-        <p>Sentiment Analyzer v1.0.0 | Model: DistilBERT SST-2</p>
+    <!-- Footer -->
+    <footer class="footer footer-center p-4 bg-base-300 text-base-content mt-8">
+        <aside>
+            <p>Sentiment Analyzer v1.0.0 | Model: DistilBERT SST-2</p>
+            <p class="text-xs opacity-60">Built with HTMX + Alpine.js | Mobile-First Design</p>
+        </aside>
     </footer>
 
-    <script src="/static/config.js"></script>
-    <script src="/static/app.js"></script>
+    <!-- Alpine.js Dashboard State -->
+    <script>
+        function dashboard() {
+            return {
+                // Connection state
+                connected: false,
+
+                // Dark mode
+                darkMode: localStorage.getItem('darkMode') === 'true',
+
+                // Metrics data
+                metrics: {
+                    total: 0,
+                    positive: 0,
+                    neutral: 0,
+                    negative: 0,
+                    rate_last_hour: 0,
+                    recent_items: []
+                },
+
+                // Filters
+                searchQuery: '',
+                sentimentFilter: 'all',
+
+                // Last updated timestamp
+                lastUpdated: '--',
+
+                // Chart instances
+                sentimentChart: null,
+                tagChart: null,
+
+                // Initialize dashboard
+                async init() {
+                    // Apply dark mode
+                    if (this.darkMode) {
+                        document.documentElement.setAttribute('data-theme', 'dark');
+                    }
+
+                    // Fetch initial metrics
+                    await this.fetchMetrics();
+
+                    // Initialize charts
+                    this.initCharts();
+
+                    // Setup SSE connection
+                    this.setupSSE();
+                },
+
+                // Toggle dark mode
+                toggleDarkMode() {
+                    if (this.darkMode) {
+                        document.documentElement.setAttribute('data-theme', 'dark');
+                    } else {
+                        document.documentElement.removeAttribute('data-theme');
+                    }
+                    localStorage.setItem('darkMode', this.darkMode);
+                },
+
+                // Fetch metrics from API
+                async fetchMetrics() {
+                    try {
+                        const response = await fetch('/api/metrics', {
+                            headers: {
+                                'Authorization': 'Bearer ' + (localStorage.getItem('api_key') || '')
+                            }
+                        });
+
+                        if (response.ok) {
+                            const data = await response.json();
+                            this.updateMetrics(data);
+                        }
+                    } catch (error) {
+                        console.error('Failed to fetch metrics:', error);
+                    }
+                },
+
+                // Setup Server-Sent Events
+                setupSSE() {
+                    const apiKey = localStorage.getItem('api_key') || '';
+                    const eventSource = new EventSource(`/api/stream?authorization=Bearer ${apiKey}`);
+
+                    eventSource.addEventListener('metrics', (event) => {
+                        const data = JSON.parse(event.data);
+                        this.updateMetrics(data);
+                        this.connected = true;
+                    });
+
+                    eventSource.addEventListener('error', (event) => {
+                        console.error('SSE error:', event);
+                        this.connected = false;
+                    });
+
+                    eventSource.onopen = () => {
+                        this.connected = true;
+                    };
+                },
+
+                // Update metrics and charts
+                updateMetrics(data) {
+                    this.metrics = data;
+                    this.lastUpdated = new Date().toLocaleTimeString();
+
+                    // Update charts
+                    if (this.sentimentChart) {
+                        this.sentimentChart.data.datasets[0].data = [
+                            data.positive || 0,
+                            data.neutral || 0,
+                            data.negative || 0
+                        ];
+                        this.sentimentChart.update('none'); // No animation for smooth updates
+                    }
+
+                    if (this.tagChart && data.by_tag) {
+                        const tagData = Object.entries(data.by_tag).slice(0, 5);
+                        this.tagChart.data.labels = tagData.map(([tag]) => tag);
+                        this.tagChart.data.datasets[0].data = tagData.map(([, count]) => count);
+                        this.tagChart.update('none');
+                    }
+                },
+
+                // Initialize Chart.js charts
+                initCharts() {
+                    // Sentiment Distribution Pie Chart
+                    const sentimentCtx = document.getElementById('sentiment-chart');
+                    this.sentimentChart = new Chart(sentimentCtx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: ['Positive', 'Neutral', 'Negative'],
+                            datasets: [{
+                                data: [0, 0, 0],
+                                backgroundColor: [
+                                    'rgb(34, 197, 94)',  // green
+                                    'rgb(234, 179, 8)',  // yellow
+                                    'rgb(239, 68, 68)'   // red
+                                ],
+                                borderWidth: 0
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    position: 'bottom'
+                                }
+                            }
+                        }
+                    });
+
+                    // Tag Distribution Bar Chart
+                    const tagCtx = document.getElementById('tag-chart');
+                    this.tagChart = new Chart(tagCtx, {
+                        type: 'bar',
+                        data: {
+                            labels: [],
+                            datasets: [{
+                                label: 'Articles',
+                                data: [],
+                                backgroundColor: 'rgb(59, 130, 246)',
+                                borderRadius: 4
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    ticks: {
+                                        precision: 0
+                                    }
+                                }
+                            },
+                            plugins: {
+                                legend: {
+                                    display: false
+                                }
+                            }
+                        }
+                    });
+                },
+
+                // Computed: Filtered items based on search and sentiment
+                get filteredItems() {
+                    let items = this.metrics.recent_items || [];
+
+                    // Filter by sentiment
+                    if (this.sentimentFilter !== 'all') {
+                        items = items.filter(item => item.sentiment === this.sentimentFilter);
+                    }
+
+                    // Filter by search query
+                    if (this.searchQuery) {
+                        const query = this.searchQuery.toLowerCase();
+                        items = items.filter(item =>
+                            item.title?.toLowerCase().includes(query) ||
+                            item.source?.toLowerCase().includes(query) ||
+                            item.tags?.some(tag => tag.toLowerCase().includes(query))
+                        );
+                    }
+
+                    return items;
+                }
+            }
+        }
+    </script>
 </body>
 </html>
