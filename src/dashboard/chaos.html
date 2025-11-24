@@ -245,29 +245,44 @@
                         </tr>
                     </thead>
                     <tbody>
-                        <template x-for="exp in historyExperiments" :key="exp.experiment_id">
+                        <!-- Loading skeleton -->
+                        <template x-if="loadingExperiments">
                             <tr>
-                                <td x-text="formatTime(exp.created_at)"></td>
-                                <td x-text="scenarioNames[exp.scenario_type]"></td>
-                                <td>
-                                    <div class="badge" :class="{
-                                        'badge-success': exp.status === 'completed',
-                                        'badge-error': exp.status === 'failed',
-                                        'badge-warning': exp.status === 'stopped'
-                                    }" x-text="exp.status"></div>
-                                </td>
-                                <td x-text="exp.blast_radius + '%'"></td>
-                                <td x-text="exp.duration_seconds + 's'"></td>
-                                <td>
-                                    <button class="btn btn-ghost btn-xs" @click="viewExperiment(exp.experiment_id)">
-                                        Details
-                                    </button>
+                                <td colspan="6" class="text-center py-8">
+                                    <span class="loading loading-spinner loading-lg"></span>
+                                    <p class="mt-2 opacity-75">Loading experiments...</p>
                                 </td>
                             </tr>
                         </template>
-                        <tr x-show="historyExperiments.length === 0">
-                            <td colspan="6" class="text-center opacity-75">No experiments yet. Start your first chaos test above!</td>
-                        </tr>
+
+                        <!-- Experiment list -->
+                        <template x-if="!loadingExperiments">
+                            <template>
+                                <template x-for="exp in historyExperiments" :key="exp.experiment_id">
+                                    <tr>
+                                        <td x-text="formatTime(exp.created_at)"></td>
+                                        <td x-text="scenarioNames[exp.scenario_type]"></td>
+                                        <td>
+                                            <div class="badge" :class="{
+                                                'badge-success': exp.status === 'completed',
+                                                'badge-error': exp.status === 'failed',
+                                                'badge-warning': exp.status === 'stopped'
+                                            }" x-text="exp.status"></div>
+                                        </td>
+                                        <td x-text="exp.blast_radius + '%'"></td>
+                                        <td x-text="exp.duration_seconds + 's'"></td>
+                                        <td>
+                                            <button class="btn btn-ghost btn-xs" @click="viewExperiment(exp.experiment_id)">
+                                                Details
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </template>
+                                <tr x-show="historyExperiments.length === 0">
+                                    <td colspan="6" class="text-center opacity-75">No experiments yet. Start your first chaos test above!</td>
+                                </tr>
+                            </template>
+                        </template>
                     </tbody>
                 </table>
             </div>
@@ -283,6 +298,7 @@
                 blastRadius: 25,
                 duration: 60,
                 loading: false,
+                loadingExperiments: true,
                 experiments: [],
 
                 // Computed
@@ -388,6 +404,7 @@
                 },
 
                 async loadExperiments() {
+                    this.loadingExperiments = true;
                     try {
                         const response = await fetch('/chaos/experiments?limit=50', {
                             headers: {
@@ -423,6 +440,8 @@
                         }
                     } catch (error) {
                         console.error('Failed to load experiments:', error);
+                    } finally {
+                        this.loadingExperiments = false;
                     }
                 },
 
