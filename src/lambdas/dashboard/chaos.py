@@ -34,7 +34,7 @@ from typing import Any
 import boto3
 from botocore.exceptions import ClientError
 
-from src.lambdas.shared.logging_utils import get_safe_error_info
+from src.lambdas.shared.logging_utils import get_safe_error_info, sanitize_for_log
 
 logger = logging.getLogger(__name__)
 
@@ -158,7 +158,7 @@ def create_experiment(
             "Chaos experiment created",
             extra={
                 "experiment_id": experiment_id,
-                "scenario_type": scenario_type,
+                "scenario_type": sanitize_for_log(scenario_type),
                 "blast_radius": blast_radius,
                 "duration_seconds": duration_seconds,
             },
