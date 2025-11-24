@@ -75,9 +75,8 @@ jobs:
           df -h
 
           # Remove user-owned caches only (NO SUDO - security requirement)
-          # System directories removed: Unnecessary for current build (~600MB total)
-          # Available space: ~2GB (3x build requirement)
-          rm -rf ~/.cache/pip
+          # Build needs ~600MB, runner has ~2GB available
+          # KEEP ~/.cache/pip for faster subsequent builds (saves ~30-50% on pip install)
           rm -rf ~/.npm
           docker system prune -af --volumes
 
