@@ -862,3 +862,33 @@ class TestSecurityMitigations:
             getattr(record, "client_ip", None) == "198.51.100.1"
             for record in caplog.records
         )
+
+
+class TestChaosUIEndpoint:
+    """Tests for /chaos endpoint (chaos testing UI)."""
+
+    def test_chaos_page_returns_html(self, client):
+        """Test chaos testing page returns HTML."""
+        response = client.get("/chaos")
+        assert response.status_code == 200
+        assert "text/html" in response.headers["content-type"]
+
+    def test_chaos_page_no_auth_required(self, client):
+        """Test chaos page doesn't require authentication."""
+        # Chaos UI should be accessible without auth (API endpoints require auth)
+        response = client.get("/chaos")
+        assert response.status_code == 200
+
+    def test_chaos_page_contains_expected_elements(self, client):
+        """Test chaos page contains expected UI elements."""
+        response = client.get("/chaos")
+        assert response.status_code == 200
+
+        content = response.text
+        # Check for key UI elements
+        assert "Chaos Testing" in content
+        assert "DynamoDB Throttle" in content
+        assert "NewsAPI Failure" in content
+        assert "Lambda" in content or "Cold Start" in content
+        assert "Blast Radius" in content
+        assert "Duration" in content
