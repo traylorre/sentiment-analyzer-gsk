@@ -10,7 +10,7 @@ name: "Deploy Pipeline"
 # within a single workflow.
 #
 # Flow:
-#   push to main → build → test-dev → deploy-preprod → test-preprod → deploy-prod
+#   push to main → build → deploy-dev → test-dev → deploy-preprod → test-preprod → deploy-prod
 #
 # Benefits:
 # - No workflow_run nesting limits
@@ -26,11 +26,7 @@ on:
     paths-ignore:
       - 'docs/**'
       - '*.md'
-      - 'specs/**'
       - '.vscode/**'
-      - '.github/workflows/test.yml'
-      - '.github/workflows/lint.yml'
-      - '.github/workflows/codeql.yml'
 
   # Manual trigger for testing/rollbacks
   workflow_dispatch:
@@ -294,11 +290,113 @@ jobs:
           retention-days: 90
 
   # ========================================================================
-  # JOB 2: Test Dev (Local/Mocked)
+  # JOB 2: Deploy to Dev
+  # ========================================================================
+  deploy-dev:
+    name: Deploy to Dev
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: dev
+      url: ${{ steps.outputs.outputs.dashboard_url }}
+
+    outputs:
+      dashboard_url: ${{ steps.outputs.outputs.dashboard_url }}
+      sns_topic_arn: ${{ steps.outputs.outputs.sns_topic_arn }}
+
+    defaults:
+      run:
+        working-directory: infrastructure/terraform
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Lambda Packages
+        uses: actions/download-artifact@v5
+        with:
+          pattern: lambda-packages-*
+          path: packages
+          merge-multiple: true
+
+      - name: Configure AWS Credentials (Dev)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.DEV_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.DEV_AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Upload Lambda Packages to S3 (Dev)
+        run: |
+          set -e
+          SHA="${GITHUB_SHA::7}"
+          BUCKET="dev-sentiment-lambda-deployments"
+
+          echo "Uploading Lambda packages to S3..."
+          aws s3 cp ../../packages/ingestion-${SHA}.zip s3://${BUCKET}/ingestion/lambda.zip
+          aws s3 cp ../../packages/analysis-${SHA}.zip s3://${BUCKET}/analysis/lambda.zip
+          aws s3 cp ../../packages/dashboard-${SHA}.zip s3://${BUCKET}/dashboard/lambda.zip
+
+          echo "Lambda packages uploaded successfully"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.10.0
+          terraform_wrapper: false
+
+      - name: Terraform Init (Dev)
+        run: |
+          terraform init -backend-config=backend-dev.hcl -reconfigure
+
+      - name: Terraform Plan (Dev)
+        run: |
+          terraform plan -var-file=dev.tfvars -out=dev.tfplan
+
+      - name: Terraform Apply (Dev)
+        run: |
+          terraform apply -auto-approve dev.tfplan
+
+      - name: Capture Terraform Outputs
+        id: outputs
+        run: |
+          dashboard_url=$(terraform output -raw dashboard_url || echo "")
+          sns_topic_arn=$(terraform output -raw sns_topic_arn || echo "")
+
+          echo "dashboard_url=${dashboard_url}" >> $GITHUB_OUTPUT
+          echo "sns_topic_arn=${sns_topic_arn}" >> $GITHUB_OUTPUT
+
+      - name: Smoke Test (Post-Deployment)
+        run: |
+          dashboard_url="${{ steps.outputs.outputs.dashboard_url }}"
+          if [ -z "$dashboard_url" ]; then
+            echo "Dashboard URL not available, skipping smoke test"
+            exit 0
+          fi
+
+          echo "Testing Dashboard Lambda at: $dashboard_url"
+          status_code=$(curl -s -o /dev/null -w "%{http_code}" "${dashboard_url}/health" || echo "000")
+
+          if [ "$status_code" == "200" ]; then
+            echo "✓ Dashboard Lambda is responding (HTTP $status_code)"
+          else
+            echo "✗ Dashboard Lambda health check failed (HTTP $status_code)"
+            exit 1
+          fi
+
+      - name: Record Deployment
+        if: success()
+        run: |
+          echo "Dev deployment completed at $(date)"
+          echo "Commit: ${{ github.sha }}"
+          echo "Dashboard URL: ${{ steps.outputs.outputs.dashboard_url }}"
+
+  # ========================================================================
+  # JOB 3: Test Dev (Local/Mocked)
   # ========================================================================
   test-dev:
     name: Dev Tests (Mocked AWS)
-    needs: build
+    needs: deploy-dev
     runs-on: ubuntu-latest
     environment: dev
 
@@ -361,11 +459,11 @@ jobs:
           echo "✅ Dev validation complete"
 
   # ========================================================================
-  # JOB 3: Deploy to Preprod
+  # JOB 4: Deploy to Preprod
   # ========================================================================
   deploy-preprod:
     name: Deploy to Preprod
-    needs: [build, test-dev]
+    needs: test-dev
     runs-on: ubuntu-latest
     environment:
       name: preprod
