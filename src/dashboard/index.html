@@ -6,6 +6,33 @@
     <title>Sentiment Analyzer Dashboard</title>
     <link rel="stylesheet" href="/static/styles.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        .header-nav {
+            display: flex;
+            gap: 1rem;
+            margin-left: auto;
+        }
+        .nav-link {
+            color: #fff;
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.1);
+            transition: background 0.2s;
+        }
+        .nav-link:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        header {
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+            padding: 1rem 2rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+    </style>
 </head>
 <body>
     <header>
@@ -14,6 +41,9 @@
             <span id="status-indicator" class="status-dot disconnected"></span>
             <span id="status-text">Connecting...</span>
         </div>
+        <nav class="header-nav">
+            <a href="/chaos" class="nav-link">Chaos Testing</a>
+        </nav>
     </header>
 
     <main>

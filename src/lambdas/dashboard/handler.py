@@ -284,6 +284,34 @@ async def serve_index():
     return FileResponse(index_path, media_type="text/html")
 
 
+@app.get("/chaos", response_class=HTMLResponse)
+async def serve_chaos():
+    """
+    Serve the chaos testing UI page.
+
+    Returns:
+        HTML content of chaos.html
+
+    On-Call Note:
+        If this returns 404, verify:
+        1. src/dashboard/chaos.html exists
+        2. Lambda deployment includes chaos.html
+    """
+    chaos_path = STATIC_DIR / "chaos.html"
+
+    if not chaos_path.exists():
+        logger.error(
+            "chaos.html not found",
+            extra={"path": str(chaos_path)},
+        )
+        raise HTTPException(
+            status_code=404,
+            detail="Chaos testing page not found",
+        )
+
+    return FileResponse(chaos_path, media_type="text/html")
+
+
 @app.get("/static/{filename}")
 async def serve_static(filename: str):
     """
