@@ -266,6 +266,49 @@ module "dashboard_lambda" {
 }
 
 # ===================================================================
+# Module: Metrics Lambda (TD-011 - Operational Monitoring)
+# ===================================================================
+
+module "metrics_lambda" {
+  source = "./modules/lambda"
+
+  function_name = "${var.environment}-sentiment-metrics"
+  description   = "Monitors for stuck items and emits CloudWatch metrics"
+  iam_role_arn  = module.iam.metrics_lambda_role_arn
+  handler       = "handler.lambda_handler"
+  s3_bucket     = "${var.environment}-sentiment-lambda-deployments"
+  s3_key        = "metrics/lambda.zip"
+
+  # Lightweight Lambda - minimal resources needed
+  memory_size          = 128
+  timeout              = 30
+  reserved_concurrency = 1 # Only one instance needed
+
+  # Environment variables
+  environment_variables = {
+    DYNAMODB_TABLE = module.dynamodb.table_name
+    ENVIRONMENT    = var.environment
+  }
+
+  # No Function URL needed - triggered by EventBridge only
+  create_function_url = false
+
+  # Logging
+  log_retention_days = var.environment == "prod" ? 90 : 14
+
+  # Alarms
+  create_error_alarm    = true
+  error_alarm_threshold = 5
+  alarm_actions         = [module.monitoring.alarm_topic_arn]
+
+  tags = {
+    Lambda = "metrics"
+  }
+
+  depends_on = [module.iam]
+}
+
+# ===================================================================
 # Module: API Gateway (Dashboard Rate Limiting - P0 Security)
 # ===================================================================
 
@@ -362,11 +405,12 @@ module "eventbridge" {
   ingestion_lambda_arn           = module.ingestion_lambda.function_arn
   ingestion_lambda_function_name = module.ingestion_lambda.function_name
 
-  # Metrics Lambda not implemented in Demo 1
-  # Dashboard Lambda handles metrics via /api/metrics endpoint
-  create_metrics_schedule = false
+  # Metrics Lambda (TD-011) - monitors for stuck items
+  create_metrics_schedule      = true
+  metrics_lambda_arn           = module.metrics_lambda.function_arn
+  metrics_lambda_function_name = module.metrics_lambda.function_name
 
-  depends_on = [module.ingestion_lambda]
+  depends_on = [module.ingestion_lambda, module.metrics_lambda]
 }
 
 # ===================================================================
