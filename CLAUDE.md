@@ -36,6 +36,38 @@ ruff check --fix src/ tests/
 - Line length: 88 characters
 - Configuration: pyproject.toml (single source of truth)
 
+## Git Commit Security Requirements
+
+**CRITICAL SECURITY POLICY - NEVER BYPASS**:
+
+1. **ALL commits MUST be GPG-signed** - Use `git commit -S` or `git commit --amend -S`
+2. **NEVER use `--no-gpg-sign`** - This bypasses critical security verification
+3. **If GPG signing fails**, this indicates a security configuration issue that MUST be fixed
+4. **DO NOT attempt to bypass GPG failures** - Investigate and resolve the root cause
+
+**Why This Matters**:
+- GPG signatures verify commit authenticity and prevent impersonation
+- Unsigned commits create security vulnerabilities in the supply chain
+- GPG failures often indicate misconfiguration that could affect other security tools
+
+**Correct Workflow**:
+```bash
+# Making commits
+git commit -S -m "commit message"
+
+# Amending commits
+git commit --amend -S --no-edit
+
+# If GPG fails - FIX IT, don't bypass it
+# Check GPG configuration, verify key exists, ensure agent is running
+```
+
+**Test Environment Separation**:
+- **LOCAL mirrors DEV**: Always uses mocked AWS resources (moto)
+- **PREPROD mirrors PROD**: Always uses real AWS resources
+- Preprod tests are excluded from local runs via pytest marker: `-m "not preprod"`
+- Never attempt to run preprod tests locally - they require real AWS credentials
+
 ## Recent Changes
 
 - 001-interactive-dashboard-demo: Added Python 3.13
