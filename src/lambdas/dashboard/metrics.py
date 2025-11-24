@@ -146,21 +146,27 @@ def get_recent_items(
 
         items = response.get("Items", [])
 
-        # Security: Sanitize user-provided status for logging (CodeQL: py/log-injection)
+        # Security: Sanitize user-provided parameters for logging (CodeQL: py/log-injection)
         status_safe = status.replace("\r", "").replace("\n", "").replace("\t", "")
+        limit_safe = str(limit).replace("\r", "").replace("\n", "").replace("\t", "")
         logger.info(
             "Retrieved recent items",
-            extra={"count": len(items), "status": status_safe, "limit": limit},
+            extra={"count": len(items), "status": status_safe, "limit": limit_safe},
         )
 
         return items
 
     except Exception as e:
-        # Security: Sanitize user-provided status for logging (CodeQL: py/log-injection)
+        # Security: Sanitize user-provided parameters for logging (CodeQL: py/log-injection)
         status_safe = status.replace("\r", "").replace("\n", "").replace("\t", "")
+        limit_safe = str(limit).replace("\r", "").replace("\n", "").replace("\t", "")
         logger.error(
             "Failed to get recent items",
-            extra={"status": status_safe, "limit": limit, **get_safe_error_info(e)},
+            extra={
+                "status": status_safe,
+                "limit": limit_safe,
+                **get_safe_error_info(e),
+            },
         )
         raise
 
