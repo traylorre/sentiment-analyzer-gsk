@@ -1,0 +1,194 @@
+# Auto-Rebase PR Workflow
+# =========================
+#
+# Automatically rebases open PRs when main is updated.
+# Keeps feature branches up-to-date with minimal manual intervention.
+#
+# Flow:
+#   1. Push to main (from any source)
+#   2. Find all open PRs (this workflow)
+#   3. For each PR, check if behind main
+#   4. Attempt rebase (if no conflicts)
+#   5. Push updated branch (triggering PR checks)
+#
+# For On-Call Engineers:
+#   - PRs are automatically rebased when main moves forward
+#   - Only clean rebases are performed (no conflict resolution)
+#   - Conflicting PRs are left untouched (manual resolution required)
+#   - Rebase triggers PR checks to re-verify compatibility
+#
+# For Developers:
+#   - Your PR branch stays current with main automatically
+#   - If conflicts occur, you'll need to rebase manually
+#   - After rebase, PR checks run again automatically
+
+name: Auto-Rebase PRs
+
+on:
+  push:
+    branches:
+      - main
+  # Allow manual trigger for testing/recovery
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-rebase:
+    name: Rebase Open PRs
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # Use GitHub token with write permissions
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Get Open PRs
+        id: get_prs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Get all open PRs targeting main
+          echo "Fetching open PRs..."
+
+          PRS=$(gh pr list \
+            --state open \
+            --base main \
+            --json number,headRefName,title \
+            --jq '.[] | "\(.number)|\(.headRefName)|\(.title)"')
+
+          if [ -z "$PRS" ]; then
+            echo "No open PRs found"
+            echo "pr_count=0" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Save PR list to file
+          echo "$PRS" > /tmp/prs.txt
+          PR_COUNT=$(echo "$PRS" | wc -l)
+
+          echo "Found $PR_COUNT open PR(s)"
+          echo "pr_count=$PR_COUNT" >> $GITHUB_OUTPUT
+
+      - name: Rebase Each PR
+        if: steps.get_prs.outputs.pr_count != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e  # Don't fail on first error
+
+          echo "==================================="
+          echo "Auto-Rebase Summary"
+          echo "==================================="
+
+          SUCCESS_COUNT=0
+          CONFLICT_COUNT=0
+          ERROR_COUNT=0
+          UPTODATE_COUNT=0
+
+          while IFS='|' read -r PR_NUMBER BRANCH PR_TITLE; do
+            echo ""
+            echo "-----------------------------------"
+            echo "PR #$PR_NUMBER: $PR_TITLE"
+            echo "Branch: $BRANCH"
+            echo "-----------------------------------"
+
+            # Fetch latest main and the PR branch
+            git fetch origin main
+            git fetch origin "$BRANCH"
+
+            # Check if branch is behind main
+            BEHIND=$(git rev-list --count origin/$BRANCH..origin/main)
+            AHEAD=$(git rev-list --count origin/main..origin/$BRANCH)
+
+            if [ "$BEHIND" -eq 0 ]; then
+              echo "✓ Already up-to-date (ahead by $AHEAD commits)"
+              UPTODATE_COUNT=$((UPTODATE_COUNT + 1))
+              continue
+            fi
+
+            echo "Branch is $BEHIND commit(s) behind main, $AHEAD commit(s) ahead"
+            echo "Attempting rebase..."
+
+            # Checkout the PR branch
+            git checkout -B "$BRANCH" "origin/$BRANCH"
+
+            # Attempt rebase onto main
+            if git rebase origin/main; then
+              echo "✓ Rebase successful"
+
+              # Push the rebased branch
+              if git push origin "$BRANCH" --force-with-lease; then
+                echo "✓ Pushed rebased branch"
+                SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+
+                # Add comment to PR
+                gh pr comment "$PR_NUMBER" --body "🤖 Auto-rebased onto latest main (was $BEHIND commit(s) behind)
+
+This PR has been automatically rebased to stay current with main. PR checks will re-run to verify compatibility.
+
+_Auto-rebased by [pr-auto-rebase.yml](.github/workflows/pr-auto-rebase.yml)_"
+              else
+                echo "✗ Failed to push rebased branch"
+                ERROR_COUNT=$((ERROR_COUNT + 1))
+                git rebase --abort 2>/dev/null || true
+              fi
+            else
+              echo "✗ Rebase failed (conflicts detected)"
+              CONFLICT_COUNT=$((CONFLICT_COUNT + 1))
+              git rebase --abort
+
+              # Add comment to PR about conflicts
+              gh pr comment "$PR_NUMBER" --body "⚠️ Auto-rebase failed due to conflicts
+
+This PR is $BEHIND commit(s) behind main and has merge conflicts. Manual rebase required.
+
+To rebase manually:
+\`\`\`bash
+git fetch origin
+git checkout $BRANCH
+git rebase origin/main
+# Resolve conflicts
+git push origin $BRANCH --force-with-lease
+\`\`\`
+
+_Auto-rebase attempted by [pr-auto-rebase.yml](.github/workflows/pr-auto-rebase.yml)_"
+            fi
+
+            # Clean up
+            git checkout main 2>/dev/null || true
+
+          done < /tmp/prs.txt
+
+          echo ""
+          echo "==================================="
+          echo "Rebase Results:"
+          echo "  ✓ Successful: $SUCCESS_COUNT"
+          echo "  ⟳ Already up-to-date: $UPTODATE_COUNT"
+          echo "  ⚠ Conflicts: $CONFLICT_COUNT"
+          echo "  ✗ Errors: $ERROR_COUNT"
+          echo "==================================="
+
+          # Workflow succeeds even if some rebases fail
+          exit 0
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ "${{ steps.get_prs.outputs.pr_count }}" == "0" ]; then
+            echo "No open PRs to rebase"
+          else
+            echo "Rebase workflow completed"
+            echo "Processed ${{ steps.get_prs.outputs.pr_count }} PR(s)"
+            echo "See job logs for detailed results"
+          fi
