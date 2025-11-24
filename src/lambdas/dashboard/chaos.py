@@ -588,8 +588,15 @@ def start_experiment(experiment_id: str) -> dict[str, Any]:
             update_experiment_status(experiment_id, "running", results)
 
         elif scenario_type == "newsapi_failure":
-            # Phase 3: Lambda environment variable injection
-            raise ChaosError("newsapi_failure scenario not yet implemented (Phase 3)")
+            # Phase 3: DynamoDB-based chaos injection
+            # Ingestion Lambda queries chaos_experiments table and skips NewsAPI if active
+            # No AWS FIS needed - pure application-level fault injection
+            results = {
+                "started_at": datetime.utcnow().isoformat() + "Z",
+                "injection_method": "dynamodb_flag",
+                "note": "Ingestion Lambda will skip NewsAPI calls while experiment is running",
+            }
+            update_experiment_status(experiment_id, "running", results)
 
         elif scenario_type == "lambda_cold_start":
             # Phase 4: Lambda delay injection
@@ -654,8 +661,11 @@ def stop_experiment(experiment_id: str) -> dict[str, Any]:
             update_experiment_status(experiment_id, "stopped", results)
 
         elif scenario_type == "newsapi_failure":
-            # Phase 3: Revert Lambda environment variable
-            raise ChaosError("newsapi_failure scenario not yet implemented (Phase 3)")
+            # Phase 3: Stop DynamoDB-based chaos injection
+            # Simply mark experiment as stopped - Ingestion Lambda checks status
+            results = experiment.get("results", {})
+            results["stopped_at"] = datetime.utcnow().isoformat() + "Z"
+            update_experiment_status(experiment_id, "stopped", results)
 
         elif scenario_type == "lambda_cold_start":
             # Phase 4: Stop Lambda delay injection

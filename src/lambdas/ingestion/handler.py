@@ -61,6 +61,7 @@ from src.lambdas.ingestion.adapters.base import (
 )
 from src.lambdas.ingestion.adapters.newsapi import NewsAPIAdapter
 from src.lambdas.ingestion.config import ConfigurationError, get_config
+from src.lambdas.shared.chaos_injection import is_chaos_active
 from src.lambdas.shared.dynamodb import get_table, put_item_if_not_exists
 from src.lambdas.shared.secrets import get_api_key
 from src.lib.deduplication import generate_source_id
@@ -158,6 +159,19 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             }
 
             try:
+                # Phase 3 Chaos Injection: Check if newsapi_failure experiment is active
+                # If active, simulate NewsAPI unavailability by skipping fetch
+                if is_chaos_active("newsapi_failure"):
+                    log_structured(
+                        "WARNING",
+                        "Chaos experiment active: skipping NewsAPI fetch",
+                        scenario="newsapi_failure",
+                        tag=tag,
+                    )
+                    # Skip this tag and continue to next
+                    # This simulates NewsAPI being unavailable
+                    continue
+
                 # Fetch articles for this tag
                 articles = adapter.fetch_items(tag)
                 tag_stats["fetched"] = len(articles)
