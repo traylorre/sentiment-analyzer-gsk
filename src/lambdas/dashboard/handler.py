@@ -345,9 +345,11 @@ async def serve_static(filename: str):
     file_path = STATIC_DIR / sanitized_filename
 
     # Additional defense: ensure resolved path is within STATIC_DIR
+    # Use resolved_path for all operations to satisfy CodeQL taint tracking
     try:
         resolved_path = file_path.resolve()
-        if not resolved_path.is_relative_to(STATIC_DIR.resolve()):
+        resolved_static_dir = STATIC_DIR.resolve()
+        if not resolved_path.is_relative_to(resolved_static_dir):
             raise HTTPException(
                 status_code=400,
                 detail="Invalid filename",
@@ -358,7 +360,7 @@ async def serve_static(filename: str):
             detail="Invalid filename",
         ) from e
 
-    if not file_path.exists():
+    if not resolved_path.exists():
         raise HTTPException(
             status_code=404,
             detail="Static file not found",  # Don't expose user input in error
@@ -373,10 +375,10 @@ async def serve_static(filename: str):
         ".ico": "image/x-icon",
     }
 
-    suffix = file_path.suffix.lower()
+    suffix = resolved_path.suffix.lower()
     media_type = media_types.get(suffix, "application/octet-stream")
 
-    return FileResponse(file_path, media_type=media_type)
+    return FileResponse(resolved_path, media_type=media_type)
 
 
 @app.get("/health")

@@ -157,7 +157,7 @@ def create_experiment(
         logger.info(
             "Chaos experiment created",
             extra={
-                "experiment_id": experiment_id,
+                "experiment_id": sanitize_for_log(experiment_id),
                 "scenario_type": sanitize_for_log(scenario_type),
                 "blast_radius": blast_radius,
                 "duration_seconds": duration_seconds,
