@@ -54,6 +54,7 @@ from src.lambdas.dashboard.chaos import (
     create_experiment,
     delete_experiment,
     get_experiment,
+    get_fis_experiment_status,
     list_experiments,
     start_experiment,
     stop_experiment,
@@ -726,13 +727,16 @@ async def get_chaos_experiment(
     _: bool = Depends(verify_api_key),
 ):
     """
-    Get chaos experiment by ID.
+    Get chaos experiment by ID with enriched FIS status.
 
     Path parameters:
         experiment_id: Experiment UUID
 
     Returns:
-        Experiment JSON or 404 if not found
+        Experiment JSON with FIS status (if applicable) or 404 if not found
+
+    Phase 2.2 Enhancement:
+        Enriches response with real-time FIS experiment status for DynamoDB throttle scenarios.
     """
     experiment = get_experiment(experiment_id)
 
@@ -741,6 +745,28 @@ async def get_chaos_experiment(
             status_code=404,
             detail="Experiment not found",
         )
+
+    # Enrich with FIS status if experiment is running and has FIS experiment ID
+    if (
+        experiment.get("status") == "running"
+        and experiment.get("scenario_type") == "dynamodb_throttle"
+        and experiment.get("results", {}).get("fis_experiment_id")
+    ):
+        try:
+            fis_experiment_id = experiment["results"]["fis_experiment_id"]
+            fis_status = get_fis_experiment_status(fis_experiment_id)
+            experiment["fis_status"] = fis_status
+        except Exception as e:
+            logger.warning(
+                "Failed to fetch FIS experiment status",
+                extra={
+                    "experiment_id": experiment_id,
+                    "fis_experiment_id": fis_experiment_id,
+                    "error": str(e),
+                },
+            )
+            # Don't fail the request if FIS status fetch fails
+            experiment["fis_status"] = {"error": "Failed to fetch FIS status"}
 
     return JSONResponse(experiment)
 

@@ -183,7 +183,7 @@
                     <div class="card bg-base-100 shadow-xl">
                         <div class="card-body">
                             <div class="flex justify-between items-start">
-                                <div>
+                                <div class="flex-1">
                                     <h3 class="card-title" x-text="scenarioNames[exp.scenario_type]"></h3>
                                     <p class="text-sm opacity-75">
                                         Started: <span x-text="formatTime(exp.created_at)"></span>
@@ -194,6 +194,22 @@
                                         </div>
                                         <div class="badge badge-outline">
                                             <span x-text="exp.duration_seconds + 's duration'"></span>
+                                        </div>
+                                    </div>
+                                    <!-- FIS Status (Phase 2.2) -->
+                                    <div x-show="exp.fis_status" class="mt-3 p-2 bg-base-300 rounded">
+                                        <div class="text-xs font-semibold opacity-75 mb-1">FIS Experiment Status</div>
+                                        <div class="flex gap-2 items-center text-sm">
+                                            <div class="badge badge-xs" :class="{
+                                                'badge-success': exp.fis_status?.state === 'running',
+                                                'badge-warning': exp.fis_status?.state === 'initiating',
+                                                'badge-error': exp.fis_status?.state === 'failed',
+                                                'badge-info': exp.fis_status?.state === 'completed'
+                                            }" x-text="exp.fis_status?.state"></div>
+                                            <span class="opacity-75" x-show="exp.fis_status?.reason" x-text="exp.fis_status?.reason"></span>
+                                        </div>
+                                        <div class="text-xs opacity-60 mt-1" x-show="exp.fis_status?.id">
+                                            FIS ID: <span x-text="exp.fis_status?.id"></span>
                                         </div>
                                     </div>
                                 </div>
@@ -380,7 +396,30 @@
                         });
 
                         if (response.ok) {
-                            this.experiments = await response.json();
+                            const experiments = await response.json();
+
+                            // Phase 2.2: Enrich running experiments with detailed status (includes FIS)
+                            for (let exp of experiments) {
+                                if (exp.status === 'running') {
+                                    try {
+                                        const detailResponse = await fetch(`/chaos/experiments/${exp.experiment_id}`, {
+                                            headers: {
+                                                'X-API-Key': this.getApiKey()
+                                            }
+                                        });
+
+                                        if (detailResponse.ok) {
+                                            const detailedExp = await detailResponse.json();
+                                            // Merge FIS status into experiment
+                                            exp.fis_status = detailedExp.fis_status;
+                                        }
+                                    } catch (err) {
+                                        console.error(`Failed to fetch details for experiment ${exp.experiment_id}:`, err);
+                                    }
+                                }
+                            }
+
+                            this.experiments = experiments;
                         }
                     } catch (error) {
                         console.error('Failed to load experiments:', error);
