@@ -58,6 +58,7 @@ from src.lambdas.analysis.sentiment import (
     get_model_load_time_ms,
     load_model,
 )
+from src.lambdas.shared.chaos_injection import get_chaos_delay_ms
 from src.lambdas.shared.dynamodb import get_table
 from src.lib.metrics import (
     emit_metric,
@@ -91,6 +92,18 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """
     start_time = time.perf_counter()
     request_id = getattr(context, "aws_request_id", "unknown")
+
+    # Phase 4 Chaos Injection: Simulate cold start delay
+    delay_ms = get_chaos_delay_ms("lambda_cold_start")
+    if delay_ms > 0:
+        time.sleep(delay_ms / 1000.0)  # Convert ms to seconds
+        log_structured(
+            "WARNING",
+            f"Chaos experiment active: injected {delay_ms}ms delay",
+            scenario="lambda_cold_start",
+            delay_ms=delay_ms,
+            lambda_function="analysis",
+        )
 
     try:
         # Parse SNS message
