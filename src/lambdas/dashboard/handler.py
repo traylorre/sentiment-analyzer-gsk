@@ -68,6 +68,7 @@ from src.lambdas.shared.dynamodb import get_table, parse_dynamodb_item
 from src.lambdas.shared.logging_utils import (
     get_safe_error_info,
     get_safe_error_message_for_user,
+    sanitize_for_log,
     sanitize_path_component,
 )
 
@@ -343,6 +344,20 @@ async def serve_static(filename: str):
 
     file_path = STATIC_DIR / sanitized_filename
 
+    # Additional defense: ensure resolved path is within STATIC_DIR
+    try:
+        resolved_path = file_path.resolve()
+        if not resolved_path.is_relative_to(STATIC_DIR.resolve()):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid filename",
+            )
+    except (ValueError, RuntimeError) as e:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid filename",
+        ) from e
+
     if not file_path.exists():
         raise HTTPException(
             status_code=404,
@@ -457,7 +472,7 @@ async def get_metrics(
     except Exception as e:
         logger.error(
             "Failed to get metrics",
-            extra={"hours": hours, **get_safe_error_info(e)},
+            extra={"hours": sanitize_for_log(str(hours)), **get_safe_error_info(e)},
         )
         raise HTTPException(
             status_code=500,
@@ -760,9 +775,9 @@ async def get_chaos_experiment(
             logger.warning(
                 "Failed to fetch FIS experiment status",
                 extra={
-                    "experiment_id": experiment_id,
-                    "fis_experiment_id": fis_experiment_id,
-                    "error": str(e),
+                    "experiment_id": sanitize_for_log(experiment_id),
+                    "fis_experiment_id": sanitize_for_log(fis_experiment_id),
+                    "error": sanitize_for_log(str(e)),
                 },
             )
             # Don't fail the request if FIS status fetch fails
@@ -796,7 +811,10 @@ async def start_chaos_experiment(
     except ChaosError as e:
         logger.error(
             "Chaos experiment start failed",
-            extra={"experiment_id": experiment_id, "error": str(e)},
+            extra={
+                "experiment_id": sanitize_for_log(experiment_id),
+                "error": sanitize_for_log(str(e)),
+            },
         )
         raise HTTPException(
             status_code=500,
@@ -834,7 +852,10 @@ async def stop_chaos_experiment(
     except ChaosError as e:
         logger.error(
             "Chaos experiment stop failed",
-            extra={"experiment_id": experiment_id, "error": str(e)},
+            extra={
+                "experiment_id": sanitize_for_log(experiment_id),
+                "error": sanitize_for_log(str(e)),
+            },
         )
         raise HTTPException(
             status_code=500,

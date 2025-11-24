@@ -169,7 +169,10 @@ def create_experiment(
     except ClientError as e:
         logger.error(
             "Failed to create chaos experiment",
-            extra={"scenario_type": scenario_type, **get_safe_error_info(e)},
+            extra={
+                "scenario_type": sanitize_for_log(scenario_type),
+                **get_safe_error_info(e),
+            },
         )
         raise ChaosError(f"Failed to create experiment: {e}") from e
 
@@ -198,7 +201,10 @@ def get_experiment(experiment_id: str) -> dict[str, Any] | None:
     except ClientError as e:
         logger.error(
             "Failed to get chaos experiment",
-            extra={"experiment_id": experiment_id, **get_safe_error_info(e)},
+            extra={
+                "experiment_id": sanitize_for_log(experiment_id),
+                **get_safe_error_info(e),
+            },
         )
         return None
 
@@ -241,7 +247,10 @@ def list_experiments(
     except ClientError as e:
         logger.error(
             "Failed to list chaos experiments",
-            extra={"status": status, **get_safe_error_info(e)},
+            extra={
+                "status": sanitize_for_log(status) if status else None,
+                **get_safe_error_info(e),
+            },
         )
         return []
 
@@ -291,7 +300,10 @@ def update_experiment_status(
 
         logger.info(
             "Chaos experiment status updated",
-            extra={"experiment_id": experiment_id, "status": status},
+            extra={
+                "experiment_id": sanitize_for_log(experiment_id),
+                "status": sanitize_for_log(status),
+            },
         )
 
         return True
@@ -300,8 +312,8 @@ def update_experiment_status(
         logger.error(
             "Failed to update chaos experiment",
             extra={
-                "experiment_id": experiment_id,
-                "status": status,
+                "experiment_id": sanitize_for_log(experiment_id),
+                "status": sanitize_for_log(status),
                 **get_safe_error_info(e),
             },
         )
@@ -324,7 +336,7 @@ def delete_experiment(experiment_id: str) -> bool:
 
         logger.info(
             "Chaos experiment deleted",
-            extra={"experiment_id": experiment_id},
+            extra={"experiment_id": sanitize_for_log(experiment_id)},
         )
 
         return True
@@ -332,7 +344,10 @@ def delete_experiment(experiment_id: str) -> bool:
     except ClientError as e:
         logger.error(
             "Failed to delete chaos experiment",
-            extra={"experiment_id": experiment_id, **get_safe_error_info(e)},
+            extra={
+                "experiment_id": sanitize_for_log(experiment_id),
+                **get_safe_error_info(e),
+            },
         )
         return False
 
@@ -410,8 +425,8 @@ def start_fis_experiment(
         logger.info(
             "FIS experiment started",
             extra={
-                "chaos_experiment_id": experiment_id,
-                "fis_experiment_id": fis_experiment_id,
+                "chaos_experiment_id": sanitize_for_log(experiment_id),
+                "fis_experiment_id": sanitize_for_log(fis_experiment_id),
                 "blast_radius": blast_radius,
                 "duration_seconds": duration_seconds,
             },
@@ -426,9 +441,9 @@ def start_fis_experiment(
         logger.error(
             "Failed to start FIS experiment",
             extra={
-                "chaos_experiment_id": experiment_id,
-                "error_code": error_code,
-                "error_message": error_msg,
+                "chaos_experiment_id": sanitize_for_log(experiment_id),
+                "error_code": sanitize_for_log(error_code),
+                "error_message": sanitize_for_log(error_msg),
             },
         )
 
@@ -457,7 +472,7 @@ def stop_fis_experiment(fis_experiment_id: str) -> bool:
 
         logger.info(
             "FIS experiment stopped",
-            extra={"fis_experiment_id": fis_experiment_id},
+            extra={"fis_experiment_id": sanitize_for_log(fis_experiment_id)},
         )
 
         return True
@@ -469,9 +484,9 @@ def stop_fis_experiment(fis_experiment_id: str) -> bool:
         logger.error(
             "Failed to stop FIS experiment",
             extra={
-                "fis_experiment_id": fis_experiment_id,
-                "error_code": error_code,
-                "error_message": error_msg,
+                "fis_experiment_id": sanitize_for_log(fis_experiment_id),
+                "error_code": sanitize_for_log(error_code),
+                "error_message": sanitize_for_log(error_msg),
             },
         )
 
@@ -517,9 +532,9 @@ def get_fis_experiment_status(fis_experiment_id: str) -> dict[str, Any]:
         logger.error(
             "Failed to get FIS experiment status",
             extra={
-                "fis_experiment_id": fis_experiment_id,
-                "error_code": error_code,
-                "error_message": error_msg,
+                "fis_experiment_id": sanitize_for_log(fis_experiment_id),
+                "error_code": sanitize_for_log(error_code),
+                "error_message": sanitize_for_log(error_msg),
             },
         )
 
