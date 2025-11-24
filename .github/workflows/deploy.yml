@@ -74,11 +74,12 @@ jobs:
           echo "🧹 Freeing up disk space on GitHub runner..."
           df -h
 
-          # Remove unnecessary packages to free up ~10GB
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          # Remove user-owned caches only (NO SUDO - security requirement)
+          # System directories removed: Unnecessary for current build (~600MB total)
+          # Available space: ~2GB (3x build requirement)
+          rm -rf ~/.cache/pip
+          rm -rf ~/.npm
+          docker system prune -af --volumes
 
           echo "✅ Disk space after cleanup:"
           df -h
@@ -166,8 +167,10 @@ jobs:
           # Install dashboard dependencies
           # Build in Lambda-compatible Docker container for binary compatibility
           # CRITICAL: pydantic has native C extensions that must match Lambda runtime
+          # Run container as current user to avoid permission issues (industry best practice)
           docker run --rm \
             --entrypoint /bin/bash \
+            --user $(id -u):$(id -g) \
             -v $(pwd)/packages:/workspace \
             public.ecr.aws/lambda/python:3.13 \
             -c "
