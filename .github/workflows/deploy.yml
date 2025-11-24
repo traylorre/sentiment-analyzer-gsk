@@ -322,8 +322,8 @@ jobs:
       - name: Configure AWS Credentials (Dev)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.DEV_AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.DEV_AWS_SECRET_ACCESS_KEY }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
       - name: Upload Lambda Packages to S3 (Dev)
@@ -463,9 +463,7 @@ jobs:
   # ========================================================================
   deploy-preprod:
     name: Deploy to Preprod
-    # TEMPORARY: Skip dev to unblock preprod deploy (dev is broken)
-    # TODO: Revert to `needs: test-dev` once dev is fixed
-    needs: build
+    needs: test-dev
     runs-on: ubuntu-latest
     environment:
       name: preprod
@@ -492,8 +490,8 @@ jobs:
       - name: Configure AWS Credentials (Preprod)
         uses: aws-actions/configure-aws-credentials@v5
         with:
-          aws-access-key-id: ${{ secrets.PREPROD_AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.PREPROD_AWS_SECRET_ACCESS_KEY }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ vars.AWS_REGION }}
 
       - name: Upload Lambda Packages to S3 (Preprod)
@@ -713,8 +711,8 @@ jobs:
       - name: Configure AWS Credentials (Preprod)
         uses: aws-actions/configure-aws-credentials@v5
         with:
-          aws-access-key-id: ${{ secrets.PREPROD_AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.PREPROD_AWS_SECRET_ACCESS_KEY }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ vars.AWS_REGION }}
 
       - name: Setup Terraform
@@ -740,8 +738,8 @@ jobs:
           ENVIRONMENT: preprod
           DYNAMODB_TABLE: preprod-sentiment-items
           SNS_TOPIC_ARN: ${{ steps.infra.outputs.sns_topic_arn }}
-          NEWSAPI_SECRET_ARN: ${{ secrets.PREPROD_NEWSAPI_SECRET_ARN }}
-          DASHBOARD_API_KEY: ${{ secrets.PREPROD_DASHBOARD_API_KEY }}
+          NEWSAPI_SECRET_ARN: ${{ secrets.NEWSAPI_SECRET_ARN }}
+          DASHBOARD_API_KEY: ${{ secrets.DASHBOARD_API_KEY }}
           WATCH_TAGS: AI,climate,economy
           MODEL_VERSION: v${{ needs.build.outputs.artifact-sha }}
         run: |
@@ -819,8 +817,8 @@ jobs:
       - name: Configure AWS Credentials (Production)
         uses: aws-actions/configure-aws-credentials@v5
         with:
-          aws-access-key-id: ${{ secrets.PROD_AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.PROD_AWS_SECRET_ACCESS_KEY }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ vars.AWS_REGION }}
 
       - name: Upload Lambda Packages to S3 (Production)
@@ -947,7 +945,7 @@ jobs:
         timeout-minutes: 2
         run: |
           DASHBOARD_URL="${{ needs.deploy-production.outputs.dashboard_url }}"
-          API_KEY="${{ secrets.PROD_DASHBOARD_API_KEY }}"
+          API_KEY="${{ secrets.DASHBOARD_API_KEY }}"
 
           echo "🔍 Running canary test against: ${DASHBOARD_URL}"
 
