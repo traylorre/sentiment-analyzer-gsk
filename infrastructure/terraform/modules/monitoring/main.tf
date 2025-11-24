@@ -25,6 +25,42 @@ resource "aws_sns_topic_subscription" "alarm_email" {
 # Lambda Error Alarms (SC-03, SC-04, SC-05)
 # =============================================================================
 
+# Alarm: Lambda ImportModuleError (critical packaging issue)
+# Catches binary incompatibility issues like pydantic ImportModuleError
+resource "aws_cloudwatch_log_metric_filter" "dashboard_import_errors" {
+  name           = "${var.environment}-dashboard-import-errors"
+  log_group_name = "/aws/lambda/${var.environment}-sentiment-dashboard"
+  pattern        = "[time, request_id, level=ERROR*, msg=\"*ImportModuleError*\" || msg=\"*No module named*\" || msg=\"*cannot import name*\"]"
+
+  metric_transformation {
+    name      = "DashboardImportErrors"
+    namespace = "SentimentAnalyzer/Packaging"
+    value     = "1"
+    unit      = "Count"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "dashboard_import_errors" {
+  alarm_name          = "${var.environment}-dashboard-import-errors"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "DashboardImportErrors"
+  namespace           = "SentimentAnalyzer/Packaging"
+  period              = 60 # 1 minute (critical - immediate alert)
+  statistic           = "Sum"
+  threshold           = 0 # ANY import error is critical
+  alarm_description   = "CRITICAL: Dashboard Lambda ImportModuleError detected (packaging/binary compatibility issue)"
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alarms.arn]
+
+  tags = {
+    Environment = var.environment
+    Severity    = "CRITICAL"
+    Scenario    = "packaging-failure"
+  }
+}
+
 resource "aws_cloudwatch_metric_alarm" "ingestion_errors" {
   alarm_name          = "${var.environment}-lambda-ingestion-errors"
   comparison_operator = "GreaterThanThreshold"
