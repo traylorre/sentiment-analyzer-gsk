@@ -263,6 +263,41 @@ module "dashboard_lambda" {
 }
 
 # ===================================================================
+# Module: API Gateway (Dashboard Rate Limiting - P0 Security)
+# ===================================================================
+
+module "api_gateway" {
+  source = "./modules/api_gateway"
+
+  environment          = var.environment
+  lambda_function_name = module.dashboard_lambda.function_name
+  lambda_invoke_arn    = module.dashboard_lambda.invoke_arn
+  stage_name           = "v1"
+
+  # Rate limiting configuration (P0-1 mitigation: prevent budget exhaustion)
+  rate_limit  = 100 # Requests per second (steady state)
+  burst_limit = 200 # Concurrent requests (burst)
+
+  # CloudWatch logging
+  log_retention_days  = var.environment == "prod" ? 90 : 30
+  enable_xray_tracing = true
+
+  # CloudWatch alarms
+  create_alarms       = true
+  alarm_actions       = [module.monitoring.alarm_topic_arn]
+  error_4xx_threshold = 100  # Alert after 100 client errors in 5 minutes
+  error_5xx_threshold = 10   # Alert after 10 server errors in 5 minutes
+  latency_threshold   = 5000 # Alert if p90 latency > 5 seconds
+
+  tags = {
+    Component = "api-gateway"
+    Security  = "rate-limiting"
+  }
+
+  depends_on = [module.dashboard_lambda]
+}
+
+# ===================================================================
 # Module: SNS Topic (for Analysis Triggers)
 # ===================================================================
 
@@ -410,8 +445,18 @@ output "dashboard_lambda_arn" {
 }
 
 output "dashboard_function_url" {
-  description = "URL of the Dashboard Lambda Function URL"
+  description = "URL of the Dashboard Lambda Function URL (legacy, use API Gateway URL)"
   value       = module.dashboard_lambda.function_url
+}
+
+output "dashboard_api_url" {
+  description = "URL of the Dashboard API Gateway (recommended for production)"
+  value       = module.api_gateway.api_endpoint
+}
+
+output "api_gateway_id" {
+  description = "ID of the Dashboard API Gateway"
+  value       = module.api_gateway.api_id
 }
 
 output "lambda_deployment_bucket" {
