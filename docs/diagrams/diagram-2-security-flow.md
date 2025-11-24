@@ -540,13 +540,40 @@
 
   METRICS:
   • Custom metrics (per-source)
+  • StuckItems (from Metrics Lambda)
   • Access control (contributor vs admin)
 
   ALARMS:
   • DLQ depth >10
+  • StuckItems >0 for 10 min
   • OAuth failures >5%
   • Scheduler timeout
   • Quota >80%
+  ```
+
+**Component: Metrics Lambda (Operational Monitor)**
+- Position: (1780, 480)
+- Size: 280 x 160 px
+- Color: `#BBDEFB` (light blue)
+- Border: 2px solid `#64B5F6`
+- Text:
+  ```
+  metrics-lambda
+
+  SECURITY NOTES:
+  • No external input (internal only)
+  • Read-only DynamoDB access
+  • Query by_status GSI only
+  • No secrets required
+
+  OPERATIONS:
+  • Trigger: EventBridge (1/min)
+  • Query: pending items >5 min old
+  • Output: CloudWatch StuckItems metric
+
+  MINIMAL PERMISSIONS:
+  • dynamodb:Query (GSI only)
+  • cloudwatch:PutMetricData
   ```
 
 **Component: S3 (DLQ Archive)**
