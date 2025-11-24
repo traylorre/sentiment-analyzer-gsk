@@ -19,10 +19,12 @@ class TestIsChaoActive:
     """Tests for is_chaos_active() function."""
 
     @pytest.fixture(autouse=True)
-    def reset_dynamodb_client(self):
-        """Reset the global DynamoDB client before each test."""
-        chaos_injection_module._dynamodb_client = None
+    def reset_dynamodb_client(self, monkeypatch):
+        """Reset the global DynamoDB client before and after each test."""
+        # Reset before test
+        monkeypatch.setattr(chaos_injection_module, "_dynamodb_client", None)
         yield
+        # Reset after test
         chaos_injection_module._dynamodb_client = None
 
     @patch.dict(

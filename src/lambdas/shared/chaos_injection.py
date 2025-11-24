@@ -26,12 +26,6 @@ from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
 
-# Environment detection
-ENVIRONMENT = os.environ.get("ENVIRONMENT", "dev")
-
-# Chaos experiments table (optional - for preprod/dev only)
-CHAOS_TABLE = os.environ.get("CHAOS_EXPERIMENTS_TABLE", "")
-
 # Cache boto3 clients (Lambda container reuse)
 _dynamodb_client: Any | None = None
 
@@ -66,16 +60,20 @@ def is_chaos_active(scenario_type: str) -> bool:
         ...     logger.warning("Skipping NewsAPI due to active chaos experiment")
         ...     return empty_result
     """
+    # Read environment variables at call time for testability
+    environment = os.environ.get("ENVIRONMENT", "dev")
+    chaos_table = os.environ.get("CHAOS_EXPERIMENTS_TABLE", "")
+
     # Production safety: Never check chaos state in prod
-    if ENVIRONMENT not in ["preprod", "dev", "test"]:
+    if environment not in ["preprod", "dev", "test"]:
         return False
 
     # If chaos table not configured, no chaos testing available
-    if not CHAOS_TABLE:
+    if not chaos_table:
         return False
 
     try:
-        table = _get_dynamodb().Table(CHAOS_TABLE)
+        table = _get_dynamodb().Table(chaos_table)
 
         # Query by_status GSI for running experiments of this type
         response = table.query(
@@ -96,7 +94,7 @@ def is_chaos_active(scenario_type: str) -> bool:
                 "Chaos injection active",
                 extra={
                     "scenario_type": scenario_type,
-                    "environment": ENVIRONMENT,
+                    "environment": environment,
                 },
             )
 
