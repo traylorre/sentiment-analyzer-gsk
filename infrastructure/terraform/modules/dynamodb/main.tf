@@ -232,3 +232,63 @@ resource "aws_cloudwatch_metric_alarm" "write_throttles" {
     Feature     = "001-interactive-dashboard-demo"
   }
 }
+
+# ===================================================================
+# DynamoDB Table: Chaos Testing Experiments (Phase 1)
+# ===================================================================
+
+resource "aws_dynamodb_table" "chaos_experiments" {
+  name         = "${var.environment}-chaos-experiments"
+  billing_mode = "PAY_PER_REQUEST" # On-demand pricing (~$0.50/month)
+  hash_key     = "experiment_id"
+  range_key    = "created_at"
+
+  # Enable point-in-time recovery
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  # Primary table attributes
+  attribute {
+    name = "experiment_id"
+    type = "S" # String (UUID)
+  }
+
+  attribute {
+    name = "created_at"
+    type = "S" # String (ISO8601 timestamp)
+  }
+
+  attribute {
+    name = "status"
+    type = "S" # String (pending|running|completed|failed|stopped)
+  }
+
+  # GSI: by_status - Query experiments by status
+  global_secondary_index {
+    name            = "by_status"
+    hash_key        = "status"
+    range_key       = "created_at"
+    projection_type = "ALL"
+  }
+
+  # TTL configuration (auto-delete experiments after 7 days)
+  ttl {
+    attribute_name = "ttl_timestamp"
+    enabled        = true
+  }
+
+  # Encryption at rest
+  server_side_encryption {
+    enabled     = true
+    kms_key_arn = null # Use AWS-managed keys
+  }
+
+  tags = {
+    Name        = "${var.environment}-chaos-experiments"
+    Environment = var.environment
+    Feature     = "chaos-testing"
+    ManagedBy   = "Terraform"
+    CostCenter  = "demo"
+  }
+}

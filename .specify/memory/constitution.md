@@ -178,6 +178,19 @@ Acceptance Criteria (serverless stack)
 
 7) Testing & Validation
 
+	Functional Integrity Principle
+	-------------------------------
+	The functional integrity of the entire system depends on the integrity of each component which MUST be verified with comprehensive unit tests. Unit tests serve as the first line of defense against both:
+	- Human bugs: Logic errors, edge cases, incorrect implementations introduced by developers
+	- Non-human bugs: Breaking changes in dependent packages, incompatible library updates, security vulnerabilities
+
+	CRITICAL RULE: Never push code that causes local unit tests to fail. When tests fail:
+	1. DO NOT "make tests pass" by modifying test fixtures to match broken code (anti-pattern)
+	2. DO root-cause the failure: is the bug in the source code or in the test fixture?
+	3. DO fix the actual bug (source code if logic is wrong, test if expectations are wrong)
+	4. DO verify the fix makes semantic sense, not just satisfies the test assertion
+	5. DO run full test suite locally before pushing to ensure no regressions
+
 	Unit Tests vs Integration Tests — Critical Distinction
 	-------------------------------------------------------
 	PRINCIPLE: Unit tests mock externals; integration tests MUST use real dev infrastructure.

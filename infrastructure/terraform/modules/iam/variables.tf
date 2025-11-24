@@ -34,3 +34,9 @@ variable "model_s3_bucket_arn" {
   description = "ARN of the S3 bucket containing ML model files"
   type        = string
 }
+
+variable "chaos_experiments_table_arn" {
+  description = "ARN of the chaos experiments DynamoDB table"
+  type        = string
+  default     = ""
+}
