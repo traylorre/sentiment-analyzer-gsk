@@ -52,3 +52,13 @@ variable "model_layer_arns" {
   type        = list(string)
   default     = []
 }
+
+variable "cors_allowed_origins" {
+  description = "List of allowed CORS origins for the dashboard Lambda. Use specific domains in production."
+  type        = list(string)
+  default     = []
+  validation {
+    condition     = length(var.cors_allowed_origins) == 0 || !contains(var.cors_allowed_origins, "*")
+    error_message = "Wildcard '*' is not allowed in cors_allowed_origins. Use specific domain names."
+  }
+}

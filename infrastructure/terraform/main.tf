@@ -235,6 +235,7 @@ module "dashboard_lambda" {
     ENVIRONMENT                    = var.environment
     CHAOS_EXPERIMENTS_TABLE        = module.dynamodb.chaos_experiments_table_name
     FIS_DYNAMODB_THROTTLE_TEMPLATE = module.chaos.fis_dynamodb_throttle_template_id
+    CORS_ORIGINS                   = join(",", var.cors_allowed_origins)
   }
 
   # Function URL with CORS
@@ -242,9 +243,9 @@ module "dashboard_lambda" {
   function_url_auth_type = "NONE"
   function_url_cors = {
     allow_credentials = false
-    allow_headers     = ["content-type", "authorization"]
+    allow_headers     = ["content-type", "authorization", "x-api-key"]
     allow_methods     = ["GET"] # AWS handles OPTIONS preflight automatically; not in allowed values
-    allow_origins     = ["*"]   # TD-002: Restrict in production
+    allow_origins     = length(var.cors_allowed_origins) > 0 ? var.cors_allowed_origins : ["*"]
     expose_headers    = []
     max_age           = 86400
   }
