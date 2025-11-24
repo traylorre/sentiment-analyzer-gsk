@@ -167,9 +167,10 @@ jobs:
           # Build in Lambda-compatible Docker container for binary compatibility
           # CRITICAL: pydantic has native C extensions that must match Lambda runtime
           docker run --rm \
+            --entrypoint /bin/bash \
             -v $(pwd)/packages:/workspace \
             public.ecr.aws/lambda/python:3.13 \
-            bash -c "
+            -c "
               pip install \
                 fastapi==0.121.3 \
                 mangum==0.19.0 \
