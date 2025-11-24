@@ -218,8 +218,11 @@
                                         <span class="w-2 h-2 bg-white rounded-full pulse-dot"></span>
                                         <span x-text="exp.status"></span>
                                     </div>
-                                    <button class="btn btn-sm btn-error" @click="stopExperiment(exp.experiment_id)">
-                                        Stop
+                                    <button class="btn btn-sm btn-error"
+                                            @click="stopExperiment(exp.experiment_id)"
+                                            :disabled="stoppingExperimentId === exp.experiment_id">
+                                        <span x-show="stoppingExperimentId !== exp.experiment_id">Stop</span>
+                                        <span x-show="stoppingExperimentId === exp.experiment_id" class="loading loading-spinner loading-xs"></span>
                                     </button>
                                 </div>
                             </div>
@@ -299,6 +302,7 @@
                 duration: 60,
                 loading: false,
                 loadingExperiments: true,
+                stoppingExperimentId: null,
                 experiments: [],
 
                 // Computed
@@ -384,6 +388,7 @@
                         return;
                     }
 
+                    this.stoppingExperimentId = experimentId;
                     try {
                         const response = await fetch(`/chaos/experiments/${experimentId}/stop`, {
                             method: 'POST',
@@ -400,6 +405,8 @@
                         alert('Experiment stopped successfully');
                     } catch (error) {
                         alert('Error: ' + error.message);
+                    } finally {
+                        this.stoppingExperimentId = null;
                     }
                 },
 
