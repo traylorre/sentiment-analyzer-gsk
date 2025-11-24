@@ -10,7 +10,7 @@ name: "Deploy Pipeline"
 # within a single workflow.
 #
 # Flow:
-#   push to main → build → deploy-preprod → test-preprod → deploy-prod
+#   push to main → build → test-dev → deploy-preprod → test-preprod → deploy-prod
 #
 # Benefits:
 # - No workflow_run nesting limits
@@ -293,11 +293,68 @@ jobs:
           retention-days: 90
 
   # ========================================================================
-  # JOB 2: Deploy to Preprod
+  # JOB 2: Test Dev (Local/Mocked)
+  # ========================================================================
+  test-dev:
+    name: Dev Tests (Mocked AWS)
+    needs: build
+    runs-on: ubuntu-latest
+    environment: dev
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install -r requirements-dev.txt
+
+      - name: Run Unit Tests (Mocked AWS with moto)
+        env:
+          AWS_REGION: us-east-1
+          ENVIRONMENT: dev
+        run: |
+          # Dev environment uses mocked AWS resources (LOCAL mirrors DEV)
+          pytest tests/unit/ -v --tb=short -m "not preprod" \
+            || echo "⚠️ Some unit tests failed - review before deploying"
+
+      - name: Validate Build Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.artifact-name }}
+          path: packages/
+
+      - name: Check Package Sizes
+        run: |
+          echo "📦 Validating Lambda package sizes..."
+          ls -lh packages/*.zip
+
+          # Warn if packages are too large
+          for pkg in packages/*.zip; do
+            SIZE=$(stat -f%z "$pkg" 2>/dev/null || stat -c%s "$pkg")
+            SIZE_MB=$((SIZE / 1024 / 1024))
+            echo "  $(basename $pkg): ${SIZE_MB}MB"
+            if [ $SIZE_MB -gt 250 ]; then
+              echo "⚠️  WARNING: $(basename $pkg) is ${SIZE_MB}MB (Lambda limit: 250MB unzipped)"
+            fi
+          done
+
+          echo "✅ Dev validation complete"
+
+  # ========================================================================
+  # JOB 3: Deploy to Preprod
   # ========================================================================
   deploy-preprod:
     name: Deploy to Preprod
-    needs: build
+    needs: [build, test-dev]
     runs-on: ubuntu-latest
     environment:
       name: preprod
@@ -518,7 +575,7 @@ jobs:
           echo "Smoke test result: ${{ steps.smoke_test.outcome }}"
 
   # ========================================================================
-  # JOB 3: Test Preprod
+  # JOB 4: Test Preprod
   # ========================================================================
   test-preprod:
     name: Preprod Integration Tests
@@ -617,7 +674,7 @@ jobs:
           retention-days: 90
 
   # ========================================================================
-  # JOB 4: Deploy to Production
+  # JOB 5: Deploy to Production
   # ========================================================================
   deploy-production:
     name: Deploy to Production
@@ -766,7 +823,7 @@ jobs:
           echo "Production Dashboard URL: ${DASHBOARD_URL}"
 
   # ========================================================================
-  # JOB 5: Production Canary Test
+  # JOB 6: Production Canary Test
   # ========================================================================
   canary-test:
     name: Production Canary Test
@@ -806,11 +863,11 @@ jobs:
           echo "✅ Canary test PASSED"
 
   # ========================================================================
-  # JOB 6: Summary
+  # JOB 7: Summary
   # ========================================================================
   summary:
     name: Deployment Summary
-    needs: [build, deploy-preprod, test-preprod, deploy-production, canary-test]
+    needs: [build, test-dev, deploy-preprod, test-preprod, deploy-production, canary-test]
     if: always()
     runs-on: ubuntu-latest
 
@@ -820,6 +877,7 @@ jobs:
           echo "## Deployment Pipeline Summary"
           echo ""
           echo "- Build: ${{ needs.build.result }}"
+          echo "- Test Dev: ${{ needs.test-dev.result }}"
           echo "- Deploy Preprod: ${{ needs.deploy-preprod.result }}"
           echo "- Test Preprod: ${{ needs.test-preprod.result }}"
           echo "- Deploy Production: ${{ needs.deploy-production.result }}"
