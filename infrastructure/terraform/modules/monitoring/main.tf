@@ -268,7 +268,7 @@ resource "aws_cloudwatch_metric_alarm" "dlq_depth" {
 }
 
 # =============================================================================
-# Budget Alarms (SC-08)
+# Budget Alarms (SC-08) - Enhanced for P0 Security
 # =============================================================================
 
 resource "aws_budgets_budget" "monthly" {
@@ -285,32 +285,55 @@ resource "aws_budgets_budget" "monthly" {
     ]
   }
 
-  # Only add notifications if alarm_email is provided
-  # Notification 1: Absolute $20 threshold (early warning)
+  # Notification 1: 25% threshold (early warning for attacks)
   dynamic "notification" {
     for_each = var.alarm_email != "" ? [1] : []
     content {
       comparison_operator        = "GREATER_THAN"
-      threshold                  = 20
-      threshold_type             = "ABSOLUTE_VALUE"
-      notification_type          = "ACTUAL"
-      subscriber_email_addresses = [var.alarm_email]
-    }
-  }
-
-  # Notification 2: 80% of budget (percentage warning)
-  dynamic "notification" {
-    for_each = var.alarm_email != "" ? [1] : []
-    content {
-      comparison_operator        = "GREATER_THAN"
-      threshold                  = 80
+      threshold                  = 25
       threshold_type             = "PERCENTAGE"
       notification_type          = "ACTUAL"
       subscriber_email_addresses = [var.alarm_email]
     }
   }
 
-  # Notification 3: 100% of budget (budget exceeded)
+  # Notification 2: 50% threshold (investigate)
+  dynamic "notification" {
+    for_each = var.alarm_email != "" ? [1] : []
+    content {
+      comparison_operator        = "GREATER_THAN"
+      threshold                  = 50
+      threshold_type             = "PERCENTAGE"
+      notification_type          = "ACTUAL"
+      subscriber_email_addresses = [var.alarm_email]
+    }
+  }
+
+  # Notification 3: 75% threshold (take action)
+  dynamic "notification" {
+    for_each = var.alarm_email != "" ? [1] : []
+    content {
+      comparison_operator        = "GREATER_THAN"
+      threshold                  = 75
+      threshold_type             = "PERCENTAGE"
+      notification_type          = "ACTUAL"
+      subscriber_email_addresses = [var.alarm_email]
+    }
+  }
+
+  # Notification 4: 90% threshold (emergency - consider shutdown)
+  dynamic "notification" {
+    for_each = var.alarm_email != "" ? [1] : []
+    content {
+      comparison_operator        = "GREATER_THAN"
+      threshold                  = 90
+      threshold_type             = "PERCENTAGE"
+      notification_type          = "ACTUAL"
+      subscriber_email_addresses = [var.alarm_email]
+    }
+  }
+
+  # Notification 5: 100% of budget (budget exceeded)
   dynamic "notification" {
     for_each = var.alarm_email != "" ? [1] : []
     content {
@@ -320,5 +343,60 @@ resource "aws_budgets_budget" "monthly" {
       notification_type          = "ACTUAL"
       subscriber_email_addresses = [var.alarm_email]
     }
+  }
+
+  # Notification 6: Forecasted overspend (predictive alert)
+  dynamic "notification" {
+    for_each = var.alarm_email != "" ? [1] : []
+    content {
+      comparison_operator        = "GREATER_THAN"
+      threshold                  = 100
+      threshold_type             = "PERCENTAGE"
+      notification_type          = "FORECASTED"
+      subscriber_email_addresses = [var.alarm_email]
+    }
+  }
+
+  # Also send to SNS topic for programmatic handling
+  dynamic "notification" {
+    for_each = var.alarm_email != "" ? [1, 2, 3, 4, 5] : []
+    content {
+      comparison_operator       = "GREATER_THAN"
+      threshold                 = notification.value * 20 # 20%, 40%, 60%, 80%, 100%
+      threshold_type            = "PERCENTAGE"
+      notification_type         = "ACTUAL"
+      subscriber_sns_topic_arns = [aws_sns_topic.alarms.arn]
+    }
+  }
+}
+
+# =============================================================================
+# Cost Anomaly Detection Alarms (P0 Security - Budget Protection)
+# =============================================================================
+
+# Alarm: High DynamoDB read capacity (primary cost driver in attacks)
+resource "aws_cloudwatch_metric_alarm" "dynamodb_high_reads" {
+  alarm_name          = "${var.environment}-dynamodb-high-read-capacity"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "ConsumedReadCapacityUnits"
+  namespace           = "AWS/DynamoDB"
+  period              = 300 # 5 minutes
+  statistic           = "Sum"
+  threshold           = 10000 # Alert if >10K reads in 5 minutes (normal: ~100-500)
+  alarm_description   = "P0-Security: DynamoDB read capacity exceeds normal rate (possible cost attack)"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    TableName = "${var.environment}-sentiment-items"
+  }
+
+  alarm_actions = [aws_sns_topic.alarms.arn]
+  ok_actions    = [aws_sns_topic.alarms.arn]
+
+  tags = {
+    Environment = var.environment
+    Security    = "P0-cost-protection"
+    Scenario    = "budget-exhaustion-attack"
   }
 }
