@@ -79,12 +79,12 @@ tests/
 ### Project Structure
 
 - [ ] T001 Create project directory structure per plan.md (src/, tests/, .github/workflows/)
-- [ ] T002 Initialize Python 3.11 project with pyproject.toml or requirements.txt
+- [ ] T002 Initialize Python 3.13 project with pyproject.toml or requirements.txt
   - boto3==1.34.0, transformers==4.36.0, torch==2.1.0, fastapi==0.104.0
   - mangum==0.17.0, requests==2.31.0, pydantic==2.5.3, python-json-logger==2.0.7
 - [ ] T003 Initialize requirements-dev.txt
   - pytest==7.4.3, moto==4.2.0, pytest-asyncio==0.21.1, pytest-cov==4.1.0
-  - black==23.11.0, ruff==0.1.6, responses==0.24.0
+  - black==23.13.0, ruff==0.1.6, responses==0.24.0
 - [ ] T004 Create .gitignore (venv/, __pycache__/, .env, *.zip, .terraform/, *.tfstate*)
 - [ ] T005 Create pytest.ini (testpaths=tests, coverage settings, asyncio_mode=auto)
 
@@ -92,7 +92,7 @@ tests/
 
 ### CI/CD Pipelines
 
-- [ ] T006 Create .github/workflows/test.yml (pytest on push/PR, Python 3.11, coverage report, 80% gate)
+- [ ] T006 Create .github/workflows/test.yml (pytest on push/PR, Python 3.13, coverage report, 80% gate)
 - [ ] T007 Create .github/workflows/lint.yml (black --check, ruff check)
 - [ ] T008 Create .github/workflows/deploy-dev.yml (terraform apply on main push, dev workspace)
 - [ ] T009 Create .github/workflows/deploy-prod.yml (manual approval, prod workspace)

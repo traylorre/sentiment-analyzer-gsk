@@ -36,7 +36,7 @@ Technology Stack
   - Performance: Avoids VPC cold start overhead (10-50ms) and NAT Gateway latency
   - Cost: Saves $32/month NAT Gateway + data transfer fees
   - Future: Migrate to VPC only if private resources (RDS, ElastiCache) added
-- Sentiment Analysis: VADER (vaderSentiment library) - lightweight rule-based analyzer optimized for social media, sub-100ms inference, <5MB package size
+- Sentiment Analysis: DistilBERT (HuggingFace transformers) - fine-tuned transformer model (distilbert-base-uncased-finetuned-sst-2-english), 100-150ms inference, ~250MB model size, superior accuracy for nuanced sentiment
 - Ingestion Libraries: feedparser (RSS/Atom), tweepy (Twitter API v2)
 - Infrastructure: Terraform >= 1.5.0, AWS provider ~> 5.0
 - Testing: pytest, moto (AWS mocking), LocalStack (integration tests)
@@ -241,7 +241,7 @@ Operational Behaviors (must implement)
     - Free tier: reserved concurrency = 10 (conservative limit for 1,500 tweets/month, ~50 tweets/day)
     - Basic tier: reserved concurrency = 20 (supports 50K tweets/month, ~1,666 tweets/day)
     - Pro tier: reserved concurrency = 50 (supports 1M tweets/month, ~33,333 tweets/day)
-  - Inference Lambda: 512 MB memory, 30s timeout, reserved concurrency: 20 (processes SQS messages, performs VADER sentiment analysis, writes to DynamoDB)
+  - Inference Lambda: 1024 MB memory, 30s timeout, reserved concurrency: 20 (processes SQS messages, performs DistilBERT sentiment analysis, writes to DynamoDB)
   - Quota Reset Lambda: 256 MB memory, 60s timeout, reserved concurrency: 1 (monthly quota counter reset for Twitter sources)
     - Trigger: EventBridge scheduled rule `cron(0 0 1 * ? *)` (first day of month, midnight UTC)
     - Behavior:
@@ -592,7 +592,7 @@ module "lambda_function" {
   name           = "inference-consumer"
   runtime        = "python3.13"
   handler        = "handler.lambda_handler"
-  memory_size    = 512                    # MB - balanced for VADER + Python runtime
+  memory_size    = 1024                   # MB - required for DistilBERT model + Python runtime
   timeout        = 30                     # seconds - ample for P90 ≤ 500ms target
   s3_key         = "artifacts/model-v1.2.0.zip"
   environment    = { MODEL_VERSION = "v1.2.0" }
@@ -678,7 +678,7 @@ CI / CD (with deployment safety and resilience patterns)
     - Lambda error rate >5% for new version → rollback
     - Lambda duration >2x baseline P99 → rollback
     - DLQ message increase >50% during deployment → rollback
-    - Custom metric inference.accuracy <95% → rollback (VADER sentiment validation)
+    - Custom metric inference.accuracy <95% → rollback (DistilBERT sentiment validation)
   - Post-deployment validation:
     - Smoke test: Invoke new Lambda with fixture, verify expected sentiment output
     - Integration test: End-to-end test via Admin API → Lambda → DynamoDB
@@ -1029,7 +1029,7 @@ Contact / ownership
 
 ### Session 2025-11-15
 
-- Q: Which sentiment analysis approach should the Lambda inference function use? → A: VADER (Valence Aware Dictionary and sEntiment Reasoner) - Lightweight rule-based analyzer, <5MB, no cold starts, sub-100ms inference, good for social media text
+- Q: Which sentiment analysis approach should the Lambda inference function use? → A: DistilBERT (distilbert-base-uncased-finetuned-sst-2-english via HuggingFace) - Fine-tuned transformer model, superior accuracy, 100-150ms inference, ~250MB model packaged in Lambda layer, better handles nuanced sentiment than rule-based approaches
 - Q: What should be the DynamoDB table partition key (PK) and sort key (SK) design for the items table? → A: PK: `source_type#source_id` (e.g., "rss#source-1"), SK: `item_id` (content hash or publisher ID) - Distributes writes across sources, supports per-source queries
 - Q: How should the Admin API (POST /v1/sources, etc.) authenticate requests? → A: API Gateway API Keys with usage plans - Simplest implementation, built-in rate limiting, easy rotation via Terraform, suitable for service-to-service or small admin team
 - Q: Which AWS region should host the infrastructure? → A: us-west-2 (Oregon) - Good alternative to us-east-1, slightly higher availability due to fewer outages historically, minimal cost difference
@@ -1037,7 +1037,7 @@ Contact / ownership
 - Q: Where should source configuration data (from POST /v1/sources) be persisted? → A: DynamoDB table (source-configs) with source_id as PK - Native serverless integration, fast Lambda access, supports atomic updates, consistent with existing data layer
 - Q: What should trigger the periodic polling of RSS/Twitter feeds for each configured source? → A: Single EventBridge rule (1-minute) → Scheduler Lambda scans source-configs → Invokes ingestion Lambda per eligible source - Avoids 300-rule limit, scales indefinitely
 - Q: How to handle more than 300 sources (EventBridge rule limit)? → A: Single EventBridge rule (1-minute interval) → Scheduler Lambda scans source-configs table → Invokes ingestion Lambda per enabled source - Scales indefinitely, simpler operations, all sources checked every minute
-- Q: What memory allocation should the sentiment inference Lambda function use? → A: 512 MB - Good balance for Python + VADER + logging, comfortable headroom, minimal cost increase, faster cold starts due to more allocated CPU
+- Q: What memory allocation should the sentiment inference Lambda function use? → A: 1024 MB - Required for DistilBERT model + Python runtime + logging, comfortable headroom for model loading, faster inference with more allocated CPU
 - Q: Which DynamoDB capacity mode should the tables use? → A: On-demand capacity - Pay per request ($1.25/M writes, $0.25/M reads), no throttling, instant scaling, unpredictable costs - Best for MVP with unknown traffic patterns
 - Q: Which Twitter API v2 tier should the service use? → A: Free tier - $0/month, 1,500 tweets/month, 50 requests/day, 10,000 characters/month - Only suitable for demo/testing, not production
 - Q: How should the service handle Twitter OAuth token expiration and refresh? → A: Automatic refresh in ingestion Lambda - Lambda checks token expiry, uses refresh_token from Secrets Manager to get new access_token, updates Secrets Manager atomically - Zero downtime, fully automated

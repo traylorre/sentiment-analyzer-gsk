@@ -96,7 +96,7 @@ Deliver a demonstrable, interactive sentiment analysis system where stakeholders
 ```
 
 ### Technology Stack
-- **Compute**: AWS Lambda (Python 3.11)
+- **Compute**: AWS Lambda (Python 3.13)
 - **Storage**: DynamoDB (on-demand capacity)
 - **Dashboard**: Options:
   - Static S3-hosted HTML + Chart.js + AWS SDK (polls DynamoDB)

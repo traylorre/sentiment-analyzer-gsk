@@ -1,17 +1,17 @@
 # Python Version Parity Guide
 
-**Problem**: Local development was using Python 3.11, but CI/CD uses Python 3.13. This caused type annotation errors that passed locally but failed in CI.
+**Problem**: Local development was using Python 3.13, but CI/CD uses Python 3.13. This ensures type annotation compatibility.
 
-**Example Error**:
+**Example Error (if using older Python)**:
 ```python
-_dynamodb_client: any | None = None  # Works in 3.13, FAILS in 3.11
+_dynamodb_client: any | None = None  # Works in 3.13, FAILS in older versions
 # TypeError: unsupported operand type(s) for |: 'builtin_function_or_method' and 'NoneType'
 ```
 
 **Solution**: Use `typing.Any` instead:
 ```python
 from typing import Any
-_dynamodb_client: Any | None = None  # Works in both 3.11 and 3.13
+_dynamodb_client: Any | None = None  # Works in Python 3.10+
 ```
 
 ## Setting Up Python 3.13 Locally

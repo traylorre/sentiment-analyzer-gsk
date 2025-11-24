@@ -498,7 +498,7 @@ resource "aws_lambda_function" "andon_responder" {
   function_name = "${var.environment}-andon-responder"
   role          = aws_iam_role.andon_responder.arn
   handler       = "index.handler"
-  runtime       = "python3.11"
+  runtime       = "python3.13"
 
   # Inline code to throttle resources
   filename = "andon_responder.zip"

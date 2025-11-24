@@ -319,7 +319,7 @@ resource "aws_lambda_function" "dashboard" {
   function_name = "sentiment-dashboard"
   role          = aws_iam_role.lambda_dashboard.arn
   handler       = "lambda_handler.lambda_handler"
-  runtime       = "python3.11"
+  runtime       = "python3.13"
   timeout       = 60
   memory_size   = 512
 

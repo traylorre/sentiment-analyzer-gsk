@@ -19,7 +19,7 @@ graph LR
     SQS[SQS Queues<br/>Batch: 10 msgs]
 
     %% Processing
-    Inference["inference-lambda<br/>512MB | 30s<br/>VADER analysis"]
+    Inference["inference-lambda<br/>1024MB | 30s<br/>DistilBERT analysis"]
 
     %% Storage
     SourceConfigs[(DynamoDB<br/>source-configs<br/>GSI: polling-schedule)]

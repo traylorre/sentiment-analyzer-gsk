@@ -26,7 +26,7 @@ This document outlines comprehensive testing for the dashboard Lambda that goes 
 
 **Tests to Add**:
 - [ ] **Cold start time** - First invocation after deployment
-  - Target: <3 seconds (Lambda Python 3.11 + 50MB package)
+  - Target: <3 seconds (Lambda Python 3.13 + 50MB package)
   - Measure: Time from invoke to first byte
   - Track: Across different package sizes (current ~50MB)
 
