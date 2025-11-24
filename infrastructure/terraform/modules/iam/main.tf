@@ -331,6 +331,53 @@ resource "aws_iam_role_policy" "dashboard_metrics" {
   })
 }
 
+# Dashboard Lambda: Chaos Testing (FIS + Chaos Experiments DynamoDB)
+# Only in preprod/dev environments
+resource "aws_iam_role_policy" "dashboard_chaos" {
+  count = var.environment != "prod" ? 1 : 0
+  name  = "${var.environment}-dashboard-chaos-policy"
+  role  = aws_iam_role.dashboard_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "fis:StartExperiment",
+          "fis:StopExperiment",
+          "fis:GetExperiment",
+          "fis:ListExperiments"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:Query",
+          "dynamodb:Scan",
+          "dynamodb:DeleteItem"
+        ]
+        Resource = [
+          var.chaos_experiments_table_arn,
+          "${var.chaos_experiments_table_arn}/index/*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "cloudwatch:GetMetricStatistics",
+          "cloudwatch:GetMetricData"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
 # ===================================================================
 # Metrics Lambda IAM Role (Operational Monitoring)
 # ===================================================================

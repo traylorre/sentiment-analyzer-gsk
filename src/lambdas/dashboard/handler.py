@@ -48,6 +48,17 @@ from fastapi.security import APIKeyHeader
 from mangum import Mangum
 from sse_starlette.sse import EventSourceResponse
 
+from src.lambdas.dashboard.chaos import (
+    ChaosError,
+    EnvironmentNotAllowedError,
+    create_experiment,
+    delete_experiment,
+    get_experiment,
+    get_fis_experiment_status,
+    list_experiments,
+    start_experiment,
+    stop_experiment,
+)
 from src.lambdas.dashboard.metrics import (
     aggregate_dashboard_metrics,
     get_recent_items,
@@ -68,6 +79,7 @@ logger.setLevel(logging.INFO)
 # CRITICAL: These must be set - no defaults to prevent wrong-environment data corruption
 # Cloud-agnostic: Use DATABASE_TABLE, fallback to DYNAMODB_TABLE for backward compatibility
 DYNAMODB_TABLE = os.environ.get("DATABASE_TABLE") or os.environ["DYNAMODB_TABLE"]
+CHAOS_EXPERIMENTS_TABLE = os.environ.get("CHAOS_EXPERIMENTS_TABLE", "")
 SSE_POLL_INTERVAL = int(
     os.environ.get("SSE_POLL_INTERVAL", "5")
 )  # Safe default: polling frequency
@@ -274,6 +286,34 @@ async def serve_index():
     return FileResponse(index_path, media_type="text/html")
 
 
+@app.get("/chaos", response_class=HTMLResponse)
+async def serve_chaos():
+    """
+    Serve the chaos testing UI page.
+
+    Returns:
+        HTML content of chaos.html
+
+    On-Call Note:
+        If this returns 404, verify:
+        1. src/dashboard/chaos.html exists
+        2. Lambda deployment includes chaos.html
+    """
+    chaos_path = STATIC_DIR / "chaos.html"
+
+    if not chaos_path.exists():
+        logger.error(
+            "chaos.html not found",
+            extra={"path": str(chaos_path)},
+        )
+        raise HTTPException(
+            status_code=404,
+            detail="Chaos testing page not found",
+        )
+
+    return FileResponse(chaos_path, media_type="text/html")
+
+
 @app.get("/static/{filename}")
 async def serve_static(filename: str):
     """
@@ -303,24 +343,7 @@ async def serve_static(filename: str):
 
     file_path = STATIC_DIR / sanitized_filename
 
-    # Security: Path traversal protection - verify resolved path stays within STATIC_DIR (CodeQL: py/path-injection)
-    try:
-        resolved_path = file_path.resolve()
-        resolved_static = STATIC_DIR.resolve()
-
-        # Ensure resolved path is within STATIC_DIR
-        if not str(resolved_path).startswith(str(resolved_static)):
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid file path",
-            )
-    except (OSError, ValueError) as e:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid file path",
-        ) from e
-
-    if not resolved_path.exists():
+    if not file_path.exists():
         raise HTTPException(
             status_code=404,
             detail="Static file not found",  # Don't expose user input in error
@@ -335,10 +358,10 @@ async def serve_static(filename: str):
         ".ico": "image/x-icon",
     }
 
-    suffix = resolved_path.suffix.lower()
+    suffix = file_path.suffix.lower()
     media_type = media_types.get(suffix, "application/octet-stream")
 
-    return FileResponse(resolved_path, media_type=media_type)
+    return FileResponse(file_path, media_type=media_type)
 
 
 @app.get("/health")
@@ -421,24 +444,20 @@ async def get_metrics(
             for item in metrics.get("recent_items", [])
         ]
 
-        # Security: Sanitize user-provided hours for logging (CodeQL: py/log-injection)
-        hours_safe = str(hours).replace("\r", "").replace("\n", "").replace("\t", "")
         logger.info(
             "Metrics retrieved",
             extra={
                 "total": metrics.get("total", 0),
-                "hours": hours_safe,
+                "hours": hours,
             },
         )
 
         return JSONResponse(metrics)
 
     except Exception as e:
-        # Security: Sanitize user-provided hours for logging (CodeQL: py/log-injection)
-        hours_safe = str(hours).replace("\r", "").replace("\n", "").replace("\t", "")
         logger.error(
             "Failed to get metrics",
-            extra={"hours": hours_safe, **get_safe_error_info(e)},
+            extra={"hours": hours, **get_safe_error_info(e)},
         )
         raise HTTPException(
             status_code=500,
@@ -611,6 +630,247 @@ async def get_items(
             status_code=500,
             detail="Failed to retrieve items",
         ) from e
+
+
+# ===================================================================
+# Chaos Testing Endpoints (Phase 1b)
+# ===================================================================
+
+
+@app.post("/chaos/experiments")
+async def create_chaos_experiment(
+    request: Request,
+    _: bool = Depends(verify_api_key),
+):
+    """
+    Create a new chaos experiment.
+
+    Request body:
+        {
+            "scenario_type": "dynamodb_throttle|newsapi_failure|lambda_cold_start",
+            "blast_radius": 10-100,
+            "duration_seconds": 5-300,
+            "parameters": {}
+        }
+
+    Returns:
+        Created experiment JSON
+
+    Security Note:
+        Environment gating enforced in chaos module (preprod only).
+    """
+    try:
+        body = await request.json()
+
+        experiment = create_experiment(
+            scenario_type=body["scenario_type"],
+            blast_radius=body["blast_radius"],
+            duration_seconds=body["duration_seconds"],
+            parameters=body.get("parameters"),
+        )
+
+        return JSONResponse(experiment, status_code=201)
+
+    except EnvironmentNotAllowedError as e:
+        logger.warning(
+            "Chaos testing attempted in disallowed environment",
+            extra={"environment": ENVIRONMENT},
+        )
+        raise HTTPException(
+            status_code=403,
+            detail=str(e),
+        ) from e
+
+    except (KeyError, ValueError) as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid request: {e}",
+        ) from e
+
+    except ChaosError as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to create experiment: {e}",
+        ) from e
+
+
+@app.get("/chaos/experiments")
+async def list_chaos_experiments(
+    status: str | None = None,
+    limit: int = 20,
+    _: bool = Depends(verify_api_key),
+):
+    """
+    List chaos experiments with optional status filter.
+
+    Query parameters:
+        status: Optional filter (pending|running|completed|failed|stopped)
+        limit: Maximum experiments to return (default: 20, max: 100)
+
+    Returns:
+        Array of experiment JSON objects
+    """
+    try:
+        experiments = list_experiments(status=status, limit=limit)
+        return JSONResponse(experiments)
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=str(e),
+        ) from e
+
+
+@app.get("/chaos/experiments/{experiment_id}")
+async def get_chaos_experiment(
+    experiment_id: str,
+    _: bool = Depends(verify_api_key),
+):
+    """
+    Get chaos experiment by ID with enriched FIS status.
+
+    Path parameters:
+        experiment_id: Experiment UUID
+
+    Returns:
+        Experiment JSON with FIS status (if applicable) or 404 if not found
+
+    Phase 2.2 Enhancement:
+        Enriches response with real-time FIS experiment status for DynamoDB throttle scenarios.
+    """
+    experiment = get_experiment(experiment_id)
+
+    if not experiment:
+        raise HTTPException(
+            status_code=404,
+            detail="Experiment not found",
+        )
+
+    # Enrich with FIS status if experiment is running and has FIS experiment ID
+    if (
+        experiment.get("status") == "running"
+        and experiment.get("scenario_type") == "dynamodb_throttle"
+        and experiment.get("results", {}).get("fis_experiment_id")
+    ):
+        try:
+            fis_experiment_id = experiment["results"]["fis_experiment_id"]
+            fis_status = get_fis_experiment_status(fis_experiment_id)
+            experiment["fis_status"] = fis_status
+        except Exception as e:
+            logger.warning(
+                "Failed to fetch FIS experiment status",
+                extra={
+                    "experiment_id": experiment_id,
+                    "fis_experiment_id": fis_experiment_id,
+                    "error": str(e),
+                },
+            )
+            # Don't fail the request if FIS status fetch fails
+            experiment["fis_status"] = {"error": "Failed to fetch FIS status"}
+
+    return JSONResponse(experiment)
+
+
+@app.post("/chaos/experiments/{experiment_id}/start")
+async def start_chaos_experiment(
+    experiment_id: str,
+    _: bool = Depends(verify_api_key),
+):
+    """
+    Start a chaos experiment.
+
+    Path parameters:
+        experiment_id: Experiment UUID
+
+    Returns:
+        Updated experiment JSON
+
+    Phase 2 Note:
+        This endpoint now integrates with AWS FIS for DynamoDB throttling.
+        Other scenarios (NewsAPI failure, Lambda delay) will be implemented in Phase 3-4.
+    """
+    try:
+        updated_experiment = start_experiment(experiment_id)
+        return JSONResponse(updated_experiment)
+
+    except ChaosError as e:
+        logger.error(
+            "Chaos experiment start failed",
+            extra={"experiment_id": experiment_id, "error": str(e)},
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        ) from e
+
+    except EnvironmentNotAllowedError as e:
+        raise HTTPException(
+            status_code=403,
+            detail=str(e),
+        ) from e
+
+
+@app.post("/chaos/experiments/{experiment_id}/stop")
+async def stop_chaos_experiment(
+    experiment_id: str,
+    _: bool = Depends(verify_api_key),
+):
+    """
+    Stop a running chaos experiment.
+
+    Path parameters:
+        experiment_id: Experiment UUID
+
+    Returns:
+        Updated experiment JSON
+
+    Phase 2 Note:
+        This endpoint now integrates with AWS FIS to stop experiments.
+    """
+    try:
+        updated_experiment = stop_experiment(experiment_id)
+        return JSONResponse(updated_experiment)
+
+    except ChaosError as e:
+        logger.error(
+            "Chaos experiment stop failed",
+            extra={"experiment_id": experiment_id, "error": str(e)},
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        ) from e
+
+    except EnvironmentNotAllowedError as e:
+        raise HTTPException(
+            status_code=403,
+            detail=str(e),
+        ) from e
+
+
+@app.delete("/chaos/experiments/{experiment_id}")
+async def delete_chaos_experiment(
+    experiment_id: str,
+    _: bool = Depends(verify_api_key),
+):
+    """
+    Delete a chaos experiment.
+
+    Path parameters:
+        experiment_id: Experiment UUID
+
+    Returns:
+        Success message
+    """
+    success = delete_experiment(experiment_id)
+
+    if not success:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to delete experiment",
+        )
+
+    return JSONResponse({"message": "Experiment deleted successfully"})
 
 
 # Mangum adapter for AWS Lambda

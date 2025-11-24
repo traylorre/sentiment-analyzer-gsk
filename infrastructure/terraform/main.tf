@@ -228,11 +228,13 @@ module "dashboard_lambda" {
 
   # Environment variables
   environment_variables = {
-    DYNAMODB_TABLE               = module.dynamodb.table_name
-    API_KEY                      = "" # Will be fetched from Secrets Manager at runtime
-    DASHBOARD_API_KEY_SECRET_ARN = module.secrets.dashboard_api_key_secret_arn
-    SSE_POLL_INTERVAL            = "5"
-    ENVIRONMENT                  = var.environment
+    DYNAMODB_TABLE                 = module.dynamodb.table_name
+    API_KEY                        = "" # Will be fetched from Secrets Manager at runtime
+    DASHBOARD_API_KEY_SECRET_ARN   = module.secrets.dashboard_api_key_secret_arn
+    SSE_POLL_INTERVAL              = "5"
+    ENVIRONMENT                    = var.environment
+    CHAOS_EXPERIMENTS_TABLE        = module.dynamodb.chaos_experiments_table_name
+    FIS_DYNAMODB_THROTTLE_TEMPLATE = module.chaos.fis_dynamodb_throttle_template_id
   }
 
   # Function URL with CORS
@@ -345,6 +347,7 @@ module "iam" {
   analysis_topic_arn           = module.sns.topic_arn
   dlq_arn                      = module.sns.dlq_arn
   model_s3_bucket_arn          = "arn:aws:s3:::${local.model_s3_bucket}"
+  chaos_experiments_table_arn  = module.dynamodb.chaos_experiments_table_arn
 }
 
 # ===================================================================
@@ -375,6 +378,19 @@ module "monitoring" {
   environment          = var.environment
   alarm_email          = var.alarm_email
   monthly_budget_limit = var.monthly_budget_limit
+}
+
+# ===================================================================
+# Module: Chaos Testing (AWS FIS)
+# ===================================================================
+
+module "chaos" {
+  source = "./modules/chaos"
+
+  environment              = var.environment
+  enable_chaos_testing     = var.environment != "prod" # Only in preprod/dev
+  dynamodb_table_arn       = module.dynamodb.table_arn
+  write_throttle_alarm_arn = module.dynamodb.cloudwatch_alarm_write_throttles_arn
 }
 
 # ===================================================================
@@ -471,4 +487,15 @@ output "lambda_deployment_bucket" {
 output "ingestion_schedule_arn" {
   description = "ARN of the ingestion EventBridge rule"
   value       = module.eventbridge.ingestion_schedule_arn
+}
+
+# Chaos Testing outputs
+output "fis_dynamodb_throttle_template_id" {
+  description = "ID of the FIS experiment template for DynamoDB throttling"
+  value       = module.chaos.fis_dynamodb_throttle_template_id
+}
+
+output "fis_execution_role_arn" {
+  description = "ARN of the IAM role used by FIS to execute experiments"
+  value       = module.chaos.fis_execution_role_arn
 }
