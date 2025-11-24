@@ -36,6 +36,9 @@ import time
 import pytest
 import requests
 
+# Mark all tests in this file as preprod (requires real AWS resources)
+pytestmark = pytest.mark.preprod
+
 # Get Function URL from environment (set by CI or Terraform)
 DASHBOARD_URL = os.environ.get(
     "DASHBOARD_FUNCTION_URL",

@@ -33,6 +33,9 @@ from fastapi.testclient import TestClient
 
 from src.lambdas.dashboard.handler import app
 
+# Mark all tests in this file as preprod (requires real AWS resources)
+pytestmark = pytest.mark.preprod
+
 # Environment variables should be set by CI (do NOT override here)
 # CI sets: DYNAMODB_TABLE=dev-sentiment-items, API_KEY=<from secrets>
 # For local testing, ensure these are set in your environment
