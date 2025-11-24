@@ -61,16 +61,20 @@ def mock_environment_prod(monkeypatch):
 @pytest.fixture
 def mock_fis_client():
     """Mock boto3 FIS client."""
-    with patch("src.lambdas.dashboard.chaos.fis_client") as mock_client:
+    with patch("src.lambdas.dashboard.chaos._get_fis_client") as mock_client_getter:
+        mock_client = MagicMock()
+        mock_client_getter.return_value = mock_client
         yield mock_client
 
 
 @pytest.fixture
 def mock_dynamodb_table():
     """Mock DynamoDB table resource."""
-    with patch("src.lambdas.dashboard.chaos.dynamodb") as mock_dynamodb:
+    with patch("src.lambdas.dashboard.chaos._get_dynamodb") as mock_dynamodb_getter:
+        mock_dynamodb = MagicMock()
         mock_table = MagicMock()
         mock_dynamodb.Table.return_value = mock_table
+        mock_dynamodb_getter.return_value = mock_dynamodb
         yield mock_table
 
 

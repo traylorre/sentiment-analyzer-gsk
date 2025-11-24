@@ -46,9 +46,25 @@ FIS_DYNAMODB_THROTTLE_TEMPLATE = os.environ.get("FIS_DYNAMODB_THROTTLE_TEMPLATE"
 # Safety: Only allow chaos testing in preprod
 ALLOWED_ENVIRONMENTS = ["preprod", "dev", "test"]
 
-# AWS clients
-dynamodb = boto3.resource("dynamodb")
-fis_client = boto3.client("fis")
+# AWS clients (lazy-loaded to avoid region errors during test imports)
+_dynamodb = None
+_fis_client = None
+
+
+def _get_dynamodb():
+    """Lazy-load DynamoDB resource."""
+    global _dynamodb
+    if _dynamodb is None:
+        _dynamodb = boto3.resource("dynamodb")
+    return _dynamodb
+
+
+def _get_fis_client():
+    """Lazy-load FIS client."""
+    global _fis_client
+    if _fis_client is None:
+        _fis_client = boto3.client("fis")
+    return _fis_client
 
 
 class ChaosError(Exception):
@@ -135,7 +151,7 @@ def create_experiment(
     }
 
     try:
-        table = dynamodb.Table(CHAOS_TABLE)
+        table = _get_dynamodb().Table(CHAOS_TABLE)
         table.put_item(Item=experiment)
 
         logger.info(
@@ -169,7 +185,7 @@ def get_experiment(experiment_id: str) -> dict[str, Any] | None:
         Experiment dict or None if not found
     """
     try:
-        table = dynamodb.Table(CHAOS_TABLE)
+        table = _get_dynamodb().Table(CHAOS_TABLE)
         response = table.get_item(Key={"experiment_id": experiment_id})
 
         if "Item" not in response:
@@ -204,7 +220,7 @@ def list_experiments(
         raise ValueError(f"limit must be 1-100, got: {limit}")
 
     try:
-        table = dynamodb.Table(CHAOS_TABLE)
+        table = _get_dynamodb().Table(CHAOS_TABLE)
 
         if status:
             # Query by status GSI
@@ -253,7 +269,7 @@ def update_experiment_status(
         )
 
     try:
-        table = dynamodb.Table(CHAOS_TABLE)
+        table = _get_dynamodb().Table(CHAOS_TABLE)
 
         update_expr = "SET #status = :status, updated_at = :updated_at"
         expr_attr_names = {"#status": "status"}
@@ -303,7 +319,7 @@ def delete_experiment(experiment_id: str) -> bool:
         True if deleted successfully
     """
     try:
-        table = dynamodb.Table(CHAOS_TABLE)
+        table = _get_dynamodb().Table(CHAOS_TABLE)
         table.delete_item(Key={"experiment_id": experiment_id})
 
         logger.info(
@@ -380,7 +396,7 @@ def start_fis_experiment(
     # blast_radius and duration_seconds are passed as tags for tracking only.
 
     try:
-        response = fis_client.start_experiment(
+        response = _get_fis_client().start_experiment(
             experimentTemplateId=FIS_DYNAMODB_THROTTLE_TEMPLATE,
             tags={
                 "chaos_experiment_id": experiment_id,
@@ -437,7 +453,7 @@ def stop_fis_experiment(fis_experiment_id: str) -> bool:
     check_environment_allowed()
 
     try:
-        fis_client.stop_experiment(id=fis_experiment_id)
+        _get_fis_client().stop_experiment(id=fis_experiment_id)
 
         logger.info(
             "FIS experiment stopped",
@@ -478,7 +494,7 @@ def get_fis_experiment_status(fis_experiment_id: str) -> dict[str, Any]:
         ChaosError: If failed to get status
     """
     try:
-        response = fis_client.get_experiment(id=fis_experiment_id)
+        response = _get_fis_client().get_experiment(id=fis_experiment_id)
         experiment = response["experiment"]
 
         return {
