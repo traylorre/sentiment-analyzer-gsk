@@ -7,11 +7,10 @@ Last Updated: 2025-11-24
 ## Overview
 
 This repository implements a fully continuous deployment pipeline where:
-1. Feature branches automatically create PRs
+1. Feature branches automatically create PRs (via git hook)
 2. PRs automatically enable auto-merge
-3. PRs automatically stay up-to-date with main
-4. PRs automatically merge when all checks pass
-5. Merged code automatically deploys through dev → preprod → prod
+3. PRs automatically merge when all checks pass
+4. Merged code automatically deploys through dev → preprod → prod
 
 ## Workflow Trigger Map
 
@@ -22,7 +21,7 @@ This repository implements a fully continuous deployment pipeline where:
 
 Feature Branch Push (feat/*, fix/*, docs/*, etc.)
        │
-       ├─→ feature-auto-pr.yml ─────→ Creates PR automatically
+       ├─→ pre-push git hook ─────→ Creates PR automatically (local)
        │
        └─→ PR Created ────────────────┐
                                       │
@@ -40,37 +39,31 @@ Feature Branch Push (feat/*, fix/*, docs/*, etc.)
                                                                       │
 Push to Main (from PR merge) ──────────────────────────────────────────────┤
        │                                                                    │
-       ├─→ deploy.yml ────────────────┐                                    │
-       │   ├─→ build                  │                                    │
-       │   ├─→ deploy-dev              │                                    │
-       │   ├─→ test-dev                │                                    │
-       │   ├─→ deploy-preprod          │                                    │
-       │   ├─→ test-preprod            │                                    │
-       │   └─→ deploy-prod             │                                    │
-       │                               │                                    │
-       └─→ pr-auto-rebase.yml ─────→ Rebases all open PRs onto latest main
+       └─→ deploy.yml ────────────────┐                                    │
+           ├─→ build                  │                                    │
+           ├─→ deploy-dev              │                                    │
+           ├─→ test-dev                │                                    │
+           ├─→ deploy-preprod          │                                    │
+           ├─→ test-preprod            │                                    │
+           └─→ deploy-prod             │                                    │
 ```
 
 ## Workflow Details
 
-### 1. feature-auto-pr.yml (Auto-Create PR)
+### 1. pre-push Git Hook (Auto-Create PR)
 
-**Purpose**: Automatically creates a PR when a feature branch is pushed.
+**Purpose**: Automatically creates a PR when pushing a feature branch to remote.
 
-**Location**: `.github/workflows/feature-auto-pr.yml`
+**Location**: `.githooks/pre-push`
+
+**Setup**:
+```bash
+./scripts/setup-git-hooks.sh
+```
 
 **Triggers**:
-```yaml
-on:
-  push:
-    branches:
-      - 'feat/**'
-      - 'fix/**'
-      - 'docs/**'
-      - 'refactor/**'
-      - 'test/**'
-      - 'chore/**'
-```
+- Runs locally on `git push` for feature branches:
+  - `feat/**`, `fix/**`, `docs/**`, `refactor/**`, `test/**`, `chore/**`
 
 **Behavior**:
 - Checks if PR already exists for the branch (skips if yes)
@@ -80,14 +73,22 @@ on:
   - Commit messages since divergence from main
   - List of changed files
   - Test plan checklist
-- Creates PR targeting `main` branch
-- PR creation triggers other workflows (auto-merge, checks)
+- Creates PR targeting `main` branch using `gh pr create`
+- Enables auto-merge with squash strategy
+- PR creation triggers GitHub Actions workflows (checks)
 
-**Permissions Required**:
-- `contents: read` - Read repository code
-- `pull-requests: write` - Create pull requests
+**Requirements**:
+- GitHub CLI (`gh`) installed and authenticated
+- Git hooks configured (`./scripts/setup-git-hooks.sh`)
 
-**Human Interaction Required**: None (fully automated)
+**Human Interaction Required**: None (runs automatically on push)
+
+**Bypass Hook**: Use `git push --no-verify` to skip PR creation temporarily
+
+**Why Git Hook Instead of GitHub Actions?**:
+- GitHub Actions with default `GITHUB_TOKEN` cannot create PRs from push-triggered workflows
+- This is a security restriction to prevent infinite workflow loops
+- Git hooks run locally using your authenticated `gh` CLI, avoiding this limitation
 
 ---
 
@@ -121,48 +122,7 @@ gh pr merge --disable-auto <PR_NUMBER>
 
 ---
 
-### 3. pr-auto-rebase.yml (Auto-Rebase PRs)
-
-**Purpose**: Automatically rebases open PRs when main branch is updated.
-
-**Location**: `.github/workflows/pr-auto-rebase.yml`
-
-**Triggers**:
-```yaml
-on:
-  push:
-    branches:
-      - main
-  workflow_dispatch:  # Manual trigger
-```
-
-**Behavior**:
-- Finds all open PRs targeting main
-- For each PR:
-  - Checks if branch is behind main
-  - Skips if already up-to-date
-  - Attempts `git rebase origin/main`
-  - If successful: Pushes rebased branch with `--force-with-lease`
-  - If conflicts: Leaves PR alone and adds comment
-- Adds comments to PRs explaining what happened
-- Rebase triggers PR checks to re-run
-
-**Permissions Required**:
-- `contents: write` - Push rebased branches
-- `pull-requests: write` - Comment on PRs
-
-**Human Interaction Required**:
-- None for clean rebases
-- Manual rebase required if conflicts detected
-
-**Manual Trigger**:
-```bash
-gh workflow run pr-auto-rebase.yml
-```
-
----
-
-### 4. pr-check-lint.yml (Lint Checks)
+### 3. pr-check-lint.yml (Lint Checks)
 
 **Purpose**: Runs code quality checks on PR code.
 
@@ -478,9 +438,8 @@ terraform output -raw dashboard_url
 
 | Workflow | Contents | PRs | Security Events |
 |----------|----------|-----|-----------------|
-| feature-auto-pr.yml | read | write | - |
+| pre-push (git hook) | local | local (via gh CLI) | - |
 | pr-auto-merge-enable.yml | - | write | - |
-| pr-auto-rebase.yml | write | write | - |
 | pr-check-lint.yml | read | - | - |
 | pr-check-test.yml | read | - | - |
 | pr-check-security.yml | read | - | - |
@@ -512,11 +471,6 @@ The `main` branch should have the following protections:
 ### Disable Auto-Merge on Specific PR
 ```bash
 gh pr merge --disable-auto 123
-```
-
-### Manually Trigger Rebase
-```bash
-gh workflow run pr-auto-rebase.yml
 ```
 
 ### Manually Trigger Deploy
