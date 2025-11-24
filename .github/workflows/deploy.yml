@@ -137,21 +137,24 @@ jobs:
           echo "📦 Packaging Dashboard Lambda (FastAPI, Mangum, SSE, pydantic)..."
 
           # Install dashboard dependencies
-          # Use platform-specific flags for Lambda Python 3.13 compatibility
-          pip install \
-            fastapi==0.121.3 \
-            mangum==0.19.0 \
-            sse-starlette==3.0.3 \
-            pydantic==2.12.4 \
-            boto3==1.41.0 \
-            python-json-logger==4.0.0 \
-            -t packages/dashboard-deps/ \
-            --platform manylinux2014_x86_64 \
-            --python-version 3.13 \
-            --only-binary=:all: \
-            --no-cache-dir \
-            --disable-pip-version-check \
-            --quiet
+          # Build in Lambda-compatible Docker container for binary compatibility
+          # CRITICAL: pydantic has native C extensions that must match Lambda runtime
+          docker run --rm \
+            -v $(pwd)/packages:/workspace \
+            public.ecr.aws/lambda/python:3.13 \
+            bash -c "
+              pip install \
+                fastapi==0.121.3 \
+                mangum==0.19.0 \
+                sse-starlette==3.0.3 \
+                pydantic==2.12.4 \
+                boto3==1.41.0 \
+                python-json-logger==4.0.0 \
+                -t /workspace/dashboard-deps/ \
+                --no-cache-dir \
+                --disable-pip-version-check \
+                --quiet
+            "
 
           # Build dashboard package
           mkdir -p packages/dashboard-build/src/lambdas/dashboard packages/dashboard-build/src/lib packages/dashboard-build/src/dashboard
