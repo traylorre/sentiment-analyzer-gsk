@@ -93,6 +93,25 @@ jobs:
           echo "📦 Building Lambda packages for commit: ${SHA}"
           mkdir -p packages
 
+          # Validation function to test package imports
+          validate_lambda_package() {
+            local package_name=$1
+            local handler_module=$2
+
+            echo "🔍 Validating ${package_name} package imports..."
+            cd packages/${package_name}-build
+
+            # Test Python can import the handler (catch ImportModuleError early)
+            if python3 -c "import ${handler_module}" 2>&1 | grep -i "error\|traceback"; then
+              echo "❌ IMPORT VALIDATION FAILED for ${package_name}"
+              echo "This package will fail in Lambda runtime!"
+              exit 1
+            fi
+
+            echo "✅ ${package_name} imports validated successfully"
+            cd ../..
+          }
+
           # ============================================================
           # Ingestion Lambda - Lightweight dependencies only
           # ============================================================
@@ -124,6 +143,9 @@ jobs:
           zip -r ../ingestion-${SHA}.zip . \
             -x "*.pyc" "__pycache__/*" "*.pytest_cache/*" "tests/*" -q
           cd ../..
+
+          # Validate imports before zipping
+          validate_lambda_package "ingestion" "handler"
 
           # Show size and cleanup
           INGESTION_SIZE=$(du -h packages/ingestion-${SHA}.zip | cut -f1)
@@ -168,6 +190,9 @@ jobs:
             -x "*.pyc" "__pycache__/*" "*.pytest_cache/*" "tests/*" -q
           cd ../..
 
+          # Validate imports before cleanup (CRITICAL: catches pydantic binary issues)
+          validate_lambda_package "dashboard" "src.lambdas.dashboard.handler"
+
           # Show size and cleanup
           DASHBOARD_SIZE=$(du -h packages/dashboard-${SHA}.zip | cut -f1)
           echo "✅ Dashboard Lambda: ${DASHBOARD_SIZE}"
@@ -201,6 +226,9 @@ jobs:
           zip -r ../analysis-${SHA}.zip . \
             -x "*.pyc" "__pycache__/*" "*.pytest_cache/*" "tests/*" -q
           cd ../..
+
+          # Validate imports before cleanup
+          validate_lambda_package "analysis" "handler"
 
           # Show size and cleanup
           ANALYSIS_SIZE=$(du -h packages/analysis-${SHA}.zip | cut -f1)
@@ -403,6 +431,77 @@ jobs:
 
           echo "dashboard_url=${DASHBOARD_URL}" >> $GITHUB_OUTPUT
           echo "sns_topic_arn=${SNS_TOPIC_ARN}" >> $GITHUB_OUTPUT
+
+      - name: Smoke Test (Post-Deployment)
+        id: smoke_test
+        timeout-minutes: 2
+        run: |
+          DASHBOARD_URL="${{ steps.outputs.outputs.dashboard_url }}"
+
+          if [ -z "$DASHBOARD_URL" ]; then
+            echo "⚠️ Dashboard URL not found - skipping smoke test"
+            exit 0
+          fi
+
+          echo "🧪 Running post-deployment smoke test..."
+          echo "Dashboard URL: $DASHBOARD_URL"
+
+          # Test 1: Health endpoint (unauthenticated)
+          echo ""
+          echo "Test 1: Health endpoint..."
+          HEALTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "${DASHBOARD_URL}/health")
+
+          if [ "$HEALTH_STATUS" != "200" ]; then
+            echo "❌ SMOKE TEST FAILED: Health endpoint returned HTTP $HEALTH_STATUS"
+            echo "This indicates a Lambda cold start failure or packaging issue."
+            echo "Check CloudWatch logs: aws logs tail /aws/lambda/preprod-sentiment-dashboard"
+            exit 1
+          fi
+
+          echo "✅ Health endpoint: HTTP 200"
+
+          # Test 2: Verify Lambda cold start succeeded (no ImportModuleError)
+          echo ""
+          echo "Test 2: Checking Lambda logs for import errors..."
+          sleep 5  # Wait for CloudWatch logs to propagate
+
+          IMPORT_ERRORS=$(aws logs tail /aws/lambda/preprod-sentiment-dashboard --since 2m --format short 2>/dev/null | \
+            grep -i "ImportModuleError\|No module named\|cannot import" || echo "")
+
+          if [ -n "$IMPORT_ERRORS" ]; then
+            echo "❌ SMOKE TEST FAILED: ImportModuleError detected in Lambda logs"
+            echo "$IMPORT_ERRORS"
+            echo ""
+            echo "This indicates a packaging/binary compatibility issue."
+            echo "See docs/security/PREPROD_HTTP_502_ROOT_CAUSE.md for troubleshooting."
+            exit 1
+          fi
+
+          echo "✅ No import errors in Lambda logs"
+
+          # Test 3: Verify response body is valid JSON
+          echo ""
+          echo "Test 3: Validating response format..."
+          HEALTH_RESPONSE=$(curl -s --max-time 30 "${DASHBOARD_URL}/health")
+
+          if ! echo "$HEALTH_RESPONSE" | jq . >/dev/null 2>&1; then
+            echo "❌ SMOKE TEST FAILED: Health endpoint returned invalid JSON"
+            echo "Response: $HEALTH_RESPONSE"
+            exit 1
+          fi
+
+          echo "✅ Response is valid JSON"
+          echo ""
+          echo "🎉 All smoke tests passed! Deployment is healthy."
+
+      - name: Record Deployment
+        if: always()
+        run: |
+          echo "📝 Recording deployment metadata..."
+          echo "Git SHA: ${{ github.sha }}"
+          echo "Deployed at: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          echo "Dashboard URL: ${{ steps.outputs.outputs.dashboard_url }}"
+          echo "Smoke test result: ${{ steps.smoke_test.outcome }}"
 
   # ========================================================================
   # JOB 3: Test Preprod
