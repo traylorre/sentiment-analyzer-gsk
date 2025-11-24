@@ -303,7 +303,24 @@ async def serve_static(filename: str):
 
     file_path = STATIC_DIR / sanitized_filename
 
-    if not file_path.exists():
+    # Security: Path traversal protection - verify resolved path stays within STATIC_DIR (CodeQL: py/path-injection)
+    try:
+        resolved_path = file_path.resolve()
+        resolved_static = STATIC_DIR.resolve()
+
+        # Ensure resolved path is within STATIC_DIR
+        if not str(resolved_path).startswith(str(resolved_static)):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid file path",
+            )
+    except (OSError, ValueError) as e:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid file path",
+        ) from e
+
+    if not resolved_path.exists():
         raise HTTPException(
             status_code=404,
             detail="Static file not found",  # Don't expose user input in error
@@ -318,10 +335,10 @@ async def serve_static(filename: str):
         ".ico": "image/x-icon",
     }
 
-    suffix = file_path.suffix.lower()
+    suffix = resolved_path.suffix.lower()
     media_type = media_types.get(suffix, "application/octet-stream")
 
-    return FileResponse(file_path, media_type=media_type)
+    return FileResponse(resolved_path, media_type=media_type)
 
 
 @app.get("/health")
@@ -404,20 +421,24 @@ async def get_metrics(
             for item in metrics.get("recent_items", [])
         ]
 
+        # Security: Sanitize user-provided hours for logging (CodeQL: py/log-injection)
+        hours_safe = str(hours).replace("\r", "").replace("\n", "").replace("\t", "")
         logger.info(
             "Metrics retrieved",
             extra={
                 "total": metrics.get("total", 0),
-                "hours": hours,
+                "hours": hours_safe,
             },
         )
 
         return JSONResponse(metrics)
 
     except Exception as e:
+        # Security: Sanitize user-provided hours for logging (CodeQL: py/log-injection)
+        hours_safe = str(hours).replace("\r", "").replace("\n", "").replace("\t", "")
         logger.error(
             "Failed to get metrics",
-            extra={"hours": hours, **get_safe_error_info(e)},
+            extra={"hours": hours_safe, **get_safe_error_info(e)},
         )
         raise HTTPException(
             status_code=500,

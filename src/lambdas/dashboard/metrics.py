@@ -146,17 +146,21 @@ def get_recent_items(
 
         items = response.get("Items", [])
 
+        # Security: Sanitize user-provided status for logging (CodeQL: py/log-injection)
+        status_safe = status.replace("\r", "").replace("\n", "").replace("\t", "")
         logger.info(
             "Retrieved recent items",
-            extra={"count": len(items), "status": status, "limit": limit},
+            extra={"count": len(items), "status": status_safe, "limit": limit},
         )
 
         return items
 
     except Exception as e:
+        # Security: Sanitize user-provided status for logging (CodeQL: py/log-injection)
+        status_safe = status.replace("\r", "").replace("\n", "").replace("\t", "")
         logger.error(
             "Failed to get recent items",
-            extra={"status": status, "limit": limit, **get_safe_error_info(e)},
+            extra={"status": status_safe, "limit": limit, **get_safe_error_info(e)},
         )
         raise
 
@@ -201,11 +205,14 @@ def get_items_by_sentiment(
 
         items = response.get("Items", [])
 
+        # Security: Sanitize user-provided values for logging (CodeQL: py/log-injection)
+        sentiment_safe = sentiment.replace("\r", "").replace("\n", "").replace("\t", "")
+        hours_safe = str(hours).replace("\r", "").replace("\n", "").replace("\t", "")
         logger.debug(
             "Retrieved items by sentiment",
             extra={
-                "sentiment": sentiment,
-                "hours": hours,
+                "sentiment": sentiment_safe,
+                "hours": hours_safe,
                 "count": len(items),
             },
         )
@@ -213,9 +220,16 @@ def get_items_by_sentiment(
         return items
 
     except Exception as e:
+        # Security: Sanitize user-provided values for logging (CodeQL: py/log-injection)
+        sentiment_safe = sentiment.replace("\r", "").replace("\n", "").replace("\t", "")
+        hours_safe = str(hours).replace("\r", "").replace("\n", "").replace("\t", "")
         logger.error(
             "Failed to get items by sentiment",
-            extra={"sentiment": sentiment, "hours": hours, **get_safe_error_info(e)},
+            extra={
+                "sentiment": sentiment_safe,
+                "hours": hours_safe,
+                **get_safe_error_info(e),
+            },
         )
         raise
 
@@ -304,9 +318,11 @@ def calculate_ingestion_rate(
         }
 
     except Exception as e:
+        # Security: Sanitize user-provided hours for logging (CodeQL: py/log-injection)
+        hours_safe = str(hours).replace("\r", "").replace("\n", "").replace("\t", "")
         logger.error(
             "Failed to calculate ingestion rates",
-            extra={"hours": hours, **get_safe_error_info(e)},
+            extra={"hours": hours_safe, **get_safe_error_info(e)},
         )
         raise
 
@@ -386,9 +402,11 @@ def aggregate_dashboard_metrics(
         return metrics
 
     except Exception as e:
+        # Security: Sanitize user-provided hours for logging (CodeQL: py/log-injection)
+        hours_safe = str(hours).replace("\r", "").replace("\n", "").replace("\t", "")
         logger.error(
             "Failed to aggregate dashboard metrics",
-            extra={"hours": hours, **get_safe_error_info(e)},
+            extra={"hours": hours_safe, **get_safe_error_info(e)},
         )
         raise
 
