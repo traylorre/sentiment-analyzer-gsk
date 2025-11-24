@@ -66,7 +66,6 @@ jobs:
             --ignore=tests/integration/test_dashboard_preprod.py \
             --ignore=tests/integration/test_canary_preprod.py \
             --ignore=tests/integration/test_ingestion_preprod.py \
-            --ignore=tests/integration/test_e2e_lambda_invocation_preprod.py \
             --cov=src --cov-report=term-missing --cov-report=xml --junitxml=test-results.xml
         env:
           # Test environment variables
