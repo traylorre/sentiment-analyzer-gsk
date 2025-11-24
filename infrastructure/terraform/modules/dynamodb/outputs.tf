@@ -54,3 +54,14 @@ output "cloudwatch_alarm_write_throttles_arn" {
   description = "ARN of the write throttles CloudWatch alarm"
   value       = aws_cloudwatch_metric_alarm.write_throttles.arn
 }
+
+# Chaos Testing Outputs
+output "chaos_experiments_table_name" {
+  description = "Name of the Chaos Experiments DynamoDB table"
+  value       = aws_dynamodb_table.chaos_experiments.name
+}
+
+output "chaos_experiments_table_arn" {
+  description = "ARN of the Chaos Experiments DynamoDB table"
+  value       = aws_dynamodb_table.chaos_experiments.arn
+}
