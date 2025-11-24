@@ -16,17 +16,21 @@ allow_methods = ["GET"]  # AWS handles OPTIONS preflight automatically
 **Resolution**: AWS Lambda Function URLs automatically handle OPTIONS preflight requests
 **Note**: Only specify actual methods your Lambda handles; AWS manages CORS preflight
 
-### TD-002: CORS allow_origins Wildcard
+### TD-002: CORS allow_origins Wildcard [RESOLVED]
 **Location**:
-- `infrastructure/terraform/main.tf:231`
-- `src/lambdas/dashboard/handler.py:105`
-```python
-allow_origins=["*"],  # Demo configuration - restrict in production
-```
-**Risk**: Any domain can make requests to dashboard API
-**Root Cause**: Demo configuration left as placeholder
-**Fix**: Restrict to specific origins before production deployment
-**Priority**: HIGH for production, acceptable for demo
+- `infrastructure/terraform/main.tf:248`
+- `infrastructure/terraform/variables.tf:56-64`
+- `infrastructure/terraform/*.tfvars`
+
+**Status**: RESOLVED
+**Resolution**:
+- Added `cors_allowed_origins` variable with validation blocking wildcards
+- Environment-specific configuration via tfvars:
+  - dev: localhost origins for local development
+  - preprod: localhost for testing
+  - prod: empty by default (must be explicitly configured)
+- Lambda receives `CORS_ORIGINS` env var (comma-separated)
+- Handler already implements environment-based CORS logic
 
 ### TD-003: CloudWatch Metrics IAM Resource Wildcard
 **Location**: `infrastructure/terraform/modules/iam/main.tf` (lines 107, 184, 304, 380)

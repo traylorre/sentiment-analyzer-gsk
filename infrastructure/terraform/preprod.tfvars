@@ -32,3 +32,7 @@ ingestion_schedule = "rate(2 hours)"
 # Monitoring and Alerting
 # Preprod has same alarms as prod but with higher thresholds
 # This prevents alert fatigue while still catching major issues
+
+# CORS: Preprod allows the Lambda Function URL domain itself (same-origin)
+# and localhost for testing. No wildcard allowed.
+cors_allowed_origins = ["http://localhost:3000", "http://localhost:8080"]
