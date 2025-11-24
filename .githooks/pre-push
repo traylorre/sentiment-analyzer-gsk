@@ -1,0 +1,122 @@
+#!/bin/bash
+# Pre-Push Hook: Auto-Create PR
+# ==============================
+#
+# Automatically creates a PR when pushing a feature branch to remote.
+# This runs on your local machine using your GitHub credentials.
+#
+# Installation:
+#   ./scripts/setup-git-hooks.sh
+#
+# To bypass this hook temporarily:
+#   git push --no-verify
+
+set -e
+
+# Color output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Read push information from stdin
+while read local_ref local_sha remote_ref remote_sha; do
+    # Extract branch name from ref (refs/heads/feat/my-feature -> feat/my-feature)
+    BRANCH=$(echo "$remote_ref" | sed 's|refs/heads/||')
+
+    # Only process feature branches
+    if [[ ! "$BRANCH" =~ ^(feat|fix|docs|refactor|test|chore)/ ]]; then
+        continue
+    fi
+
+    echo -e "${BLUE}[pre-push hook]${NC} Detected feature branch push: ${GREEN}$BRANCH${NC}"
+
+    # Check if gh CLI is available
+    if ! command -v gh &> /dev/null; then
+        echo -e "${YELLOW}[pre-push hook]${NC} 'gh' CLI not found, skipping PR creation"
+        echo -e "${YELLOW}[pre-push hook]${NC} Install gh CLI: https://cli.github.com/"
+        exit 0
+    fi
+
+    # Check if PR already exists
+    PR_EXISTS=$(gh pr list --head "$BRANCH" --json number --jq '.[0].number // empty' 2>/dev/null || echo "")
+
+    if [ -n "$PR_EXISTS" ]; then
+        echo -e "${GREEN}[pre-push hook]${NC} PR #$PR_EXISTS already exists for branch $BRANCH"
+        echo -e "${GREEN}[pre-push hook]${NC} View PR: https://github.com/$(gh repo view --json nameWithOwner -q .nameWithOwner)/pull/$PR_EXISTS"
+        continue
+    fi
+
+    # Generate PR title from branch name
+    # Examples: feat/add-feature -> feat: Add feature
+    #           fix/bug-123 -> fix: Bug 123
+    PREFIX=$(echo "$BRANCH" | cut -d'/' -f1)
+    DESCRIPTION=$(echo "$BRANCH" | cut -d'/' -f2- | sed 's/-/ /g' | sed 's/\b\(.\)/\u\1/g')
+    TITLE="${PREFIX}: ${DESCRIPTION}"
+
+    echo -e "${BLUE}[pre-push hook]${NC} Creating PR..."
+    echo -e "${BLUE}[pre-push hook]${NC} Title: ${GREEN}$TITLE${NC}"
+
+    # Get commit messages since divergence from main
+    COMMITS=$(git log origin/main..HEAD --pretty=format:"- %s" 2>/dev/null | head -20 || echo "- Initial commit")
+
+    # Get changed files
+    CHANGED_FILES=$(git diff --name-only origin/main...HEAD 2>/dev/null | head -20 || echo "")
+
+    # Create PR body
+    PR_BODY=$(cat <<EOF
+## Summary
+
+Automated PR created from branch: \`$BRANCH\`
+
+## Changes
+
+### Commits
+$COMMITS
+
+### Files Changed
+\`\`\`
+$CHANGED_FILES
+\`\`\`
+
+## Test Plan
+- [ ] All CI checks pass (lint, test, security, CodeQL)
+- [ ] Manual testing completed (if required)
+
+---
+
+🤖 Auto-created by [pre-push git hook](.githooks/pre-push)
+
+This PR will auto-merge once all checks pass.
+To disable auto-merge: \`gh pr merge --disable-auto $BRANCH\`
+EOF
+)
+
+    # Create the PR
+    if gh pr create \
+        --title "$TITLE" \
+        --body "$PR_BODY" \
+        --base main \
+        --head "$BRANCH" 2>&1; then
+
+        echo -e "${GREEN}[pre-push hook]${NC} ✅ PR created successfully!"
+
+        # Get the PR number
+        PR_NUMBER=$(gh pr list --head "$BRANCH" --json number --jq '.[0].number')
+        echo -e "${GREEN}[pre-push hook]${NC} View PR: https://github.com/$(gh repo view --json nameWithOwner -q .nameWithOwner)/pull/$PR_NUMBER"
+
+        # Enable auto-merge (squash)
+        echo -e "${BLUE}[pre-push hook]${NC} Enabling auto-merge..."
+        if gh pr merge "$PR_NUMBER" --auto --squash 2>&1; then
+            echo -e "${GREEN}[pre-push hook]${NC} ✅ Auto-merge enabled (squash)"
+        else
+            echo -e "${YELLOW}[pre-push hook]${NC} Could not enable auto-merge (may require branch protection rules)"
+        fi
+    else
+        echo -e "${YELLOW}[pre-push hook]${NC} Could not create PR (may already exist or require authentication)"
+    fi
+
+done
+
+exit 0
