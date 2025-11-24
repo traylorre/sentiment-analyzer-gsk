@@ -19,6 +19,7 @@ Safety Design:
 
 import logging
 import os
+from typing import Any
 
 import boto3
 from botocore.exceptions import ClientError
@@ -32,10 +33,10 @@ ENVIRONMENT = os.environ.get("ENVIRONMENT", "dev")
 CHAOS_TABLE = os.environ.get("CHAOS_EXPERIMENTS_TABLE", "")
 
 # Cache boto3 clients (Lambda container reuse)
-_dynamodb_client: any | None = None
+_dynamodb_client: Any | None = None
 
 
-def _get_dynamodb():
+def _get_dynamodb() -> Any:
     """Get cached DynamoDB resource."""
     global _dynamodb_client
     if _dynamodb_client is None:
