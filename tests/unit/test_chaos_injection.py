@@ -8,13 +8,22 @@ chaos experiments across Lambda functions.
 import os
 from unittest.mock import MagicMock, patch
 
+import pytest
 from botocore.exceptions import ClientError
 
+import src.lambdas.shared.chaos_injection as chaos_injection_module
 from src.lambdas.shared.chaos_injection import is_chaos_active
 
 
 class TestIsChaoActive:
     """Tests for is_chaos_active() function."""
+
+    @pytest.fixture(autouse=True)
+    def reset_dynamodb_client(self):
+        """Reset the global DynamoDB client before each test."""
+        chaos_injection_module._dynamodb_client = None
+        yield
+        chaos_injection_module._dynamodb_client = None
 
     @patch.dict(
         os.environ,
