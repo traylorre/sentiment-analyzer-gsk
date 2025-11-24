@@ -389,7 +389,7 @@ module "chaos" {
   source = "./modules/chaos"
 
   environment              = var.environment
-  enable_chaos_testing     = var.environment != "prod" # Only in preprod/dev
+  enable_chaos_testing     = false # Temporarily disabled - FIS template needs fix (TD-XXX)
   dynamodb_table_arn       = module.dynamodb.table_arn
   write_throttle_alarm_arn = module.dynamodb.cloudwatch_alarm_write_throttles_arn
 }
