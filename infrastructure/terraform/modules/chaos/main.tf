@@ -65,31 +65,49 @@ resource "aws_fis_experiment_template" "dynamodb_throttle" {
   count       = var.enable_chaos_testing ? 1 : 0
   description = "Inject DynamoDB write throttling to test backpressure and DLQ behavior"
 
-  stop_conditions {
+  stop_condition {
     source = "aws:cloudwatch:alarm"
     value  = var.write_throttle_alarm_arn
   }
 
   role_arn = aws_iam_role.fis_execution[0].arn
 
-  actions {
+  action {
     name      = "dynamodb-throttle-writes"
     action_id = "aws:dynamodb:api-error"
 
-    parameters = {
-      service    = "dynamodb"
-      api        = "PutItem,UpdateItem,BatchWriteItem"
-      percentage = "25"   # Default blast radius (overridable at experiment start)
-      duration   = "PT5M" # 5 minutes (ISO 8601 duration)
-      errorCode  = "ThrottlingException"
+    parameter {
+      key   = "service"
+      value = "dynamodb"
     }
 
-    targets = {
-      Tables = "dynamodb-tables"
+    parameter {
+      key   = "api"
+      value = "PutItem,UpdateItem,BatchWriteItem"
+    }
+
+    parameter {
+      key   = "percentage"
+      value = "25"
+    }
+
+    parameter {
+      key   = "duration"
+      value = "PT5M"
+    }
+
+    parameter {
+      key   = "errorCode"
+      value = "ThrottlingException"
+    }
+
+    target {
+      key   = "Tables"
+      value = "dynamodb-tables"
     }
   }
 
-  targets {
+  target {
     name          = "dynamodb-tables"
     resource_type = "aws:dynamodb:table"
 
