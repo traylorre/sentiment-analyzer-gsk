@@ -337,6 +337,55 @@
 
 ---
 
+### Layer 6b: Operational Monitoring (x: 1300-1500, y: 800-1000)
+
+**Component: EventBridge Metrics Scheduler**
+- Position: (1050, 850)
+- Size: 160 x 100 px
+- Shape: Hexagon (or rounded rect)
+- Color: `#E8F5E9` (light green - pastel)
+- Border: 2px solid `#81C784`
+- Text:
+  ```
+  EventBridge
+  Every 1 minute
+  ```
+
+**Component: Metrics Lambda**
+- Position: (1350, 850)
+- Size: 180 x 140 px
+- Shape: Rounded rectangle
+- Color: `#E1BEE7` (light purple)
+- Border: 2px solid `#9C27B0`
+- Text:
+  ```
+  metrics-lambda
+  128 MB | 30s timeout
+  Concurrency: 1
+
+  • Query by_status GSI
+  • Detect stuck items
+  • Emit CloudWatch metric
+  ```
+
+**Arrow: EventBridge Metrics → Metrics Lambda**
+- From: (1210, 900) → To: (1350, 900)
+- Style: Solid, 3px, `#81C784`
+- Label: "Trigger (1/min)"
+
+**Arrow: Metrics Lambda → DynamoDB**
+- From: (1530, 920) → To: (1650, 640)
+- Style: Dashed, 2px, `#66BB6A`
+- Label: "Query\n(by_status GSI)"
+- Curve: Arc
+
+**Arrow: Metrics Lambda → CloudWatch**
+- From: (1440, 990) → To: (790, 1050)
+- Style: Solid, 3px, `#FF8A65`
+- Label: "PutMetricData\n(StuckItems)"
+
+---
+
 ### Layer 7: Support Services (Bottom - y: 1000-1200)
 
 **Component: Secrets Manager**

@@ -13,6 +13,7 @@ This document provides operational flow diagrams and troubleshooting guides for 
 
 1. [Common Operational Flows](#common-operational-flows)
    - [Normal Operation Flow](#normal-operation-flow)
+   - [Metrics Collection Flow](#metrics-collection-flow)
    - [Deployment Flow](#deployment-flow)
    - [Incident Response Flow](#incident-response-flow)
 2. [Troubleshooting Guides](#troubleshooting-guides)
@@ -67,6 +68,78 @@ flowchart TD
 - Duplicate detection prevents reprocessing
 - Model lazy loading reduces cold start time
 - Model cached in Lambda /tmp for warm starts
+
+---
+
+### Metrics Collection Flow
+
+This shows the operational monitoring flow for detecting stuck items:
+
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
+flowchart TD
+    Start[EventBridge Trigger<br/>Every 1 minute] --> MetricsLambda[Metrics Lambda Invoked]
+    MetricsLambda --> QueryGSI[Query by_status GSI<br/>status = 'pending']
+    QueryGSI --> FilterOld[Filter items older than<br/>5 minutes]
+    FilterOld --> Count{Stuck items<br/>found?}
+    Count -->|Yes| EmitMetric[Emit CloudWatch Metric<br/>StuckItems count]
+    Count -->|No| EmitZero[Emit CloudWatch Metric<br/>StuckItems = 0]
+    EmitMetric --> LogResults[Log stuck item count<br/>and oldest timestamp]
+    EmitZero --> LogResults
+    LogResults --> CheckAlarm{StuckItems > 10?}
+    CheckAlarm -->|Yes| TriggerAlarm[CloudWatch Alarm<br/>Triggers SNS]
+    CheckAlarm -->|No| End[Complete]
+    TriggerAlarm --> NotifyOnCall[Notify On-Call<br/>via Email/PagerDuty]
+    NotifyOnCall --> End
+
+    classDef success fill:#2e7d32,stroke:#1b5e20,stroke-width:2px,color:#fff
+    classDef process fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
+    classDef decision fill:#f57c00,stroke:#e65100,stroke-width:2px,color:#fff
+    classDef alert fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
+
+    class Start,End success
+    class MetricsLambda,QueryGSI,FilterOld,EmitMetric,EmitZero,LogResults process
+    class Count,CheckAlarm decision
+    class TriggerAlarm,NotifyOnCall alert
+```
+
+**Key Points:**
+- Metrics Lambda runs every 1 minute via EventBridge
+- Queries `by_status` GSI for items with `status = 'pending'`
+- Stuck threshold: items pending for more than 5 minutes
+- Emits `SentimentAnalyzer/StuckItems` CloudWatch metric
+- CloudWatch Alarm triggers if stuck items > 10 for 3 consecutive periods
+
+**Stuck Items Causes:**
+- Analysis Lambda failures (check DLQ)
+- SNS/SQS delivery delays
+- DynamoDB throttling preventing status updates
+- Lambda concurrency limits reached
+
+**Quick Investigation:**
+```bash
+# Check current stuck items count
+aws cloudwatch get-metric-statistics \
+  --namespace SentimentAnalyzer \
+  --metric-name StuckItems \
+  --dimensions Name=Environment,Value=preprod \
+  --start-time $(date -u -d '30 minutes ago' +%Y-%m-%dT%H:%M:%S) \
+  --end-time $(date -u +%Y-%m-%dT%H:%M:%S) \
+  --period 60 \
+  --statistics Maximum
+
+# Check Metrics Lambda logs for details
+aws logs tail /aws/lambda/preprod-sentiment-metrics --since 30m
+
+# Query DynamoDB directly for stuck items
+aws dynamodb query \
+  --table-name preprod-sentiment-items \
+  --index-name by_status \
+  --key-condition-expression "#s = :status" \
+  --expression-attribute-names '{"#s": "status"}' \
+  --expression-attribute-values '{":status": {"S": "pending"}}' \
+  --select COUNT
+```
 
 ---
 
@@ -486,11 +559,16 @@ graph TD
         AnalysisErrors[Analysis Errors<br/>>5 in 5 min]
         AnalysisDuration[Analysis Duration<br/>>5 seconds]
         DashboardErrors[Dashboard Errors<br/>>10 in 5 min]
+        MetricsErrors[Metrics Errors<br/>>3 in 5 min]
     end
 
     subgraph "DynamoDB Alarms"
         ReadThrottle[Read Throttle Events]
         WriteThrottle[Write Throttle Events]
+    end
+
+    subgraph "Operational Alarms"
+        StuckItems[Stuck Items<br/>>10 for 3 periods]
     end
 
     subgraph "Cost Alarms"
@@ -501,16 +579,20 @@ graph TD
     AnalysisErrors --> SNSTopic
     AnalysisDuration --> SNSTopic
     DashboardErrors --> SNSTopic
+    MetricsErrors --> SNSTopic
     ReadThrottle --> SNSTopic
     WriteThrottle --> SNSTopic
+    StuckItems --> SNSTopic
     BudgetAlert --> SNSTopic
 
     SNSTopic --> Email[Email Notification<br/>to On-Call]
 
     classDef alarm fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
     classDef notification fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
+    classDef operational fill:#f57c00,stroke:#e65100,stroke-width:2px,color:#fff
 
-    class IngestionErrors,AnalysisErrors,AnalysisDuration,DashboardErrors,ReadThrottle,WriteThrottle,BudgetAlert alarm
+    class IngestionErrors,AnalysisErrors,AnalysisDuration,DashboardErrors,MetricsErrors,ReadThrottle,WriteThrottle,BudgetAlert alarm
+    class StuckItems operational
     class SNSTopic,Email notification
 ```
 
@@ -522,6 +604,8 @@ graph TD
 | Analysis Errors | P1 | 15 minutes | Check S3 model, review Lambda logs |
 | Analysis Duration | P2 | 1 hour | Review memory/timeout settings |
 | Dashboard Errors | P0 | Immediate | Check Function URL, verify dependencies |
+| Metrics Errors | P2 | 1 hour | Check Metrics Lambda logs, verify GSI access |
+| Stuck Items | P1 | 15 minutes | Check Analysis Lambda, DLQ, SNS delivery |
 | DynamoDB Throttle | P1 | 30 minutes | Increase capacity or optimize queries |
 | Budget Alert | P2 | 1 business day | Review cost allocation, optimize resources |
 

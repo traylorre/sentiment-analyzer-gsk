@@ -21,10 +21,11 @@ This directory contains comprehensive system architecture diagrams for the Senti
 **What It Shows:**
 - ✅ External sources (Twitter API, RSS feeds, Admin users)
 - ✅ Entry points (EventBridge, API Gateway)
-- ✅ Lambda functions (scheduler, ingestion, inference, admin API)
+- ✅ Lambda functions (scheduler, ingestion, inference, admin API, metrics)
 - ✅ Messaging (SNS topics, SQS queues)
 - ✅ Data storage (DynamoDB tables)
 - ✅ Support services (Secrets Manager, CloudWatch, S3)
+- ✅ Operational monitoring (Metrics Lambda, StuckItems detection)
 - ❌ Error paths (hidden for clarity)
 - ❌ Security zones (not emphasized)
 
@@ -253,7 +254,8 @@ Keep Canva project active for future diagrams:
 
 **Version History:**
 - v1.0 (2025-11-16): Initial high-level overview and security flow diagrams
-- v1.1 (TBD): Add monthly quota reset Lambda (after specification gap fix)
+- v1.1 (2025-11-24): Added Metrics Lambda for operational monitoring (StuckItems detection)
+- v1.2 (TBD): Add monthly quota reset Lambda (after specification gap fix)
 - v2.0 (TBD): Add focused component diagrams (OAuth, DLQ, Retry)
 
 ---
@@ -315,6 +317,6 @@ Keep Canva project active for future diagrams:
 
 ---
 
-**Last Updated:** 2025-11-16
+**Last Updated:** 2025-11-24
 **Diagram Count:** 2 (+ 6 planned)
 **Status:** Ready for Canva creation

@@ -192,6 +192,8 @@ graph TB
         end
 
         subgraph "Monitoring"
+            EBMetrics[EventBridge<br/>Scheduler<br/>1 min]
+            Metrics[Metrics Lambda<br/>Stuck Item Monitor]
             CW[CloudWatch<br/>Logs & Alarms]
             Budget[Budget Alerts]
         end
@@ -218,9 +220,14 @@ graph TB
     Dashboard -->|Query| DDB
     Dashboard -->|SSE Stream| Browser
 
+    EBMetrics -->|Trigger| Metrics
+    Metrics -->|Query by_status GSI| DDB
+    Metrics -->|Emit StuckItems| CW
+
     Ingestion -.->|Logs| CW
     Analysis -.->|Logs| CW
     Dashboard -.->|Logs| CW
+    Metrics -.->|Logs| CW
 
     CW -.->|Cost Alerts| Budget
 
@@ -229,10 +236,10 @@ graph TB
     classDef messagingStyle fill:#7b1fa2,stroke:#4a148c,stroke-width:2px,color:#fff
     classDef monitoringStyle fill:#f57c00,stroke:#e65100,stroke-width:2px,color:#fff
 
-    class Ingestion,Analysis,Dashboard lambdaStyle
+    class Ingestion,Analysis,Dashboard,Metrics lambdaStyle
     class DDB,DLQ,S3Model storageStyle
     class SNS messagingStyle
-    class CW,Budget monitoringStyle
+    class CW,Budget,EBMetrics monitoringStyle
 ```
 
 ### Environment Promotion Pipeline
@@ -706,10 +713,13 @@ sentiment-analyzer-gsk/
 │   └── scripts/                 # Helper scripts
 │
 ├── src/                         # Lambda function source code
-│   ├── ingestion/               # Ingestion Lambda
-│   ├── analysis/                # Analysis Lambda
-│   ├── dashboard/               # Dashboard Lambda (FastAPI)
-│   └── common/                  # Shared utilities
+│   ├── lambdas/
+│   │   ├── ingestion/           # Ingestion Lambda
+│   │   ├── analysis/            # Analysis Lambda
+│   │   ├── dashboard/           # Dashboard Lambda (FastAPI)
+│   │   ├── metrics/             # Metrics Lambda (stuck item monitor)
+│   │   └── shared/              # Shared Lambda utilities
+│   └── lib/                     # Common library code
 │
 ├── tests/                       # Test suites
 │   ├── unit/                    # Unit tests
