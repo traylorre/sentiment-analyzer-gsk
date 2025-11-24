@@ -306,6 +306,9 @@ module "sns" {
 
   environment = var.environment
 
+  # Zero-Trust: Restrict SNS topic policy to specific Ingestion Lambda role
+  ingestion_lambda_role_arn = module.iam.ingestion_lambda_role_arn
+
   # Subscription created separately below to avoid circular dependency
   # (ingestion needs topic_arn, but subscription needs analysis lambda)
   create_subscription = false
