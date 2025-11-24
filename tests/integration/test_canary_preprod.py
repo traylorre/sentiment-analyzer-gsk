@@ -22,6 +22,9 @@ import time
 import pytest
 import requests
 
+# Mark all tests in this file as preprod (requires real AWS resources)
+pytestmark = pytest.mark.preprod
+
 
 class TestCanaryPreprod:
     """Test the production canary against preprod infrastructure."""
