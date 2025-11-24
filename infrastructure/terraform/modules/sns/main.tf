@@ -25,7 +25,9 @@ resource "aws_sns_topic" "analysis_requests" {
   }
 }
 
-# SNS Topic Policy (allow Lambda to publish)
+# SNS Topic Policy (Zero-Trust: allow ONLY Ingestion Lambda role)
+# ⚠️ IMPORTANT: Do NOT use Service = "lambda.amazonaws.com" (allows ANY Lambda in account)
+# Instead, restrict to specific IAM role ARN for least privilege
 resource "aws_sns_topic_policy" "analysis_requests" {
   arn = aws_sns_topic.analysis_requests.arn
 
@@ -33,9 +35,10 @@ resource "aws_sns_topic_policy" "analysis_requests" {
     Version = "2012-10-17"
     Statement = [
       {
+        Sid    = "AllowIngestionLambdaPublish"
         Effect = "Allow"
         Principal = {
-          Service = "lambda.amazonaws.com"
+          AWS = var.ingestion_lambda_role_arn
         }
         Action = [
           "SNS:Publish"

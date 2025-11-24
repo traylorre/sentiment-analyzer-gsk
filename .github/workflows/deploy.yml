@@ -74,11 +74,12 @@ jobs:
           echo "🧹 Freeing up disk space on GitHub runner..."
           df -h
 
-          # Remove unnecessary packages to free up ~10GB
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          # Remove user-owned caches only (NO SUDO - security requirement)
+          # System directories removed: Unnecessary for current build (~600MB total)
+          # Available space: ~2GB (3x build requirement)
+          rm -rf ~/.cache/pip
+          rm -rf ~/.npm
+          docker system prune -af --volumes
 
           echo "✅ Disk space after cleanup:"
           df -h
@@ -93,6 +94,30 @@ jobs:
           echo "📦 Building Lambda packages for commit: ${SHA}"
           mkdir -p packages
 
+          # Validation function to test package imports
+          validate_lambda_package() {
+            local package_name=$1
+            local handler_file=$2
+
+            echo "🔍 Validating ${package_name} package structure..."
+            cd packages/${package_name}-build
+
+            # Verify handler file exists and has no syntax errors
+            if [ ! -f "${handler_file}" ]; then
+              echo "❌ VALIDATION FAILED: ${handler_file} not found in ${package_name} package"
+              exit 1
+            fi
+
+            # Check for basic Python syntax errors
+            if ! python3 -m py_compile "${handler_file}" 2>/dev/null; then
+              echo "❌ VALIDATION FAILED: Syntax error in ${handler_file}"
+              exit 1
+            fi
+
+            echo "✅ ${package_name} package structure validated"
+            cd ../..
+          }
+
           # ============================================================
           # Ingestion Lambda - Lightweight dependencies only
           # ============================================================
@@ -100,12 +125,16 @@ jobs:
           echo "📦 Packaging Ingestion Lambda (boto3, requests, pydantic, logging)..."
 
           # Install only ingestion dependencies
+          # Use platform-specific flags for Lambda Python 3.13 compatibility
           pip install \
             boto3==1.41.0 \
             requests==2.32.5 \
             pydantic==2.12.4 \
             python-json-logger==4.0.0 \
             -t packages/ingestion-deps/ \
+            --platform manylinux2014_x86_64 \
+            --python-version 3.13 \
+            --only-binary=:all: \
             --no-cache-dir \
             --disable-pip-version-check \
             --quiet
@@ -121,6 +150,9 @@ jobs:
             -x "*.pyc" "__pycache__/*" "*.pytest_cache/*" "tests/*" -q
           cd ../..
 
+          # Validate package structure before zipping
+          validate_lambda_package "ingestion" "handler.py"
+
           # Show size and cleanup
           INGESTION_SIZE=$(du -h packages/ingestion-${SHA}.zip | cut -f1)
           echo "✅ Ingestion Lambda: ${INGESTION_SIZE}"
@@ -133,17 +165,27 @@ jobs:
           echo "📦 Packaging Dashboard Lambda (FastAPI, Mangum, SSE, pydantic)..."
 
           # Install dashboard dependencies
-          pip install \
-            fastapi==0.121.3 \
-            mangum==0.19.0 \
-            sse-starlette==3.0.3 \
-            pydantic==2.12.4 \
-            boto3==1.41.0 \
-            python-json-logger==4.0.0 \
-            -t packages/dashboard-deps/ \
-            --no-cache-dir \
-            --disable-pip-version-check \
-            --quiet
+          # Build in Lambda-compatible Docker container for binary compatibility
+          # CRITICAL: pydantic has native C extensions that must match Lambda runtime
+          # Run container as current user to avoid permission issues (industry best practice)
+          docker run --rm \
+            --entrypoint /bin/bash \
+            --user $(id -u):$(id -g) \
+            -v $(pwd)/packages:/workspace \
+            public.ecr.aws/lambda/python:3.13 \
+            -c "
+              pip install \
+                fastapi==0.121.3 \
+                mangum==0.19.0 \
+                sse-starlette==3.0.3 \
+                pydantic==2.12.4 \
+                boto3==1.41.0 \
+                python-json-logger==4.0.0 \
+                -t /workspace/dashboard-deps/ \
+                --no-cache-dir \
+                --disable-pip-version-check \
+                --quiet
+            "
 
           # Build dashboard package
           mkdir -p packages/dashboard-build/src/lambdas/dashboard packages/dashboard-build/src/lib packages/dashboard-build/src/dashboard
@@ -157,6 +199,9 @@ jobs:
             -x "*.pyc" "__pycache__/*" "*.pytest_cache/*" "tests/*" -q
           cd ../..
 
+          # Validate package structure before cleanup
+          validate_lambda_package "dashboard" "src/lambdas/dashboard/handler.py"
+
           # Show size and cleanup
           DASHBOARD_SIZE=$(du -h packages/dashboard-${SHA}.zip | cut -f1)
           echo "✅ Dashboard Lambda: ${DASHBOARD_SIZE}"
@@ -169,6 +214,8 @@ jobs:
           echo "📦 Packaging Analysis Lambda (minimal - model in S3)..."
 
           # Install minimal analysis dependencies (NO torch/transformers)
+          # NOTE: Analysis Lambda will use container images (see PR #58)
+          # This ZIP packaging remains temporarily for backwards compatibility
           pip install \
             boto3==1.41.0 \
             pydantic==2.12.4 \
@@ -188,6 +235,9 @@ jobs:
           zip -r ../analysis-${SHA}.zip . \
             -x "*.pyc" "__pycache__/*" "*.pytest_cache/*" "tests/*" -q
           cd ../..
+
+          # Validate package structure before cleanup
+          validate_lambda_package "analysis" "handler.py"
 
           # Show size and cleanup
           ANALYSIS_SIZE=$(du -h packages/analysis-${SHA}.zip | cut -f1)
@@ -246,7 +296,9 @@ jobs:
     name: Deploy to Preprod
     needs: build
     runs-on: ubuntu-latest
-    environment: preprod
+    environment:
+      name: preprod
+      url: ${{ steps.outputs.outputs.dashboard_url }}
 
     outputs:
       dashboard_url: ${{ steps.outputs.outputs.dashboard_url }}
@@ -391,6 +443,77 @@ jobs:
           echo "dashboard_url=${DASHBOARD_URL}" >> $GITHUB_OUTPUT
           echo "sns_topic_arn=${SNS_TOPIC_ARN}" >> $GITHUB_OUTPUT
 
+      - name: Smoke Test (Post-Deployment)
+        id: smoke_test
+        timeout-minutes: 2
+        run: |
+          DASHBOARD_URL="${{ steps.outputs.outputs.dashboard_url }}"
+
+          if [ -z "$DASHBOARD_URL" ]; then
+            echo "⚠️ Dashboard URL not found - skipping smoke test"
+            exit 0
+          fi
+
+          echo "🧪 Running post-deployment smoke test..."
+          echo "Dashboard URL: $DASHBOARD_URL"
+
+          # Test 1: Health endpoint (unauthenticated)
+          echo ""
+          echo "Test 1: Health endpoint..."
+          HEALTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "${DASHBOARD_URL}/health")
+
+          if [ "$HEALTH_STATUS" != "200" ]; then
+            echo "❌ SMOKE TEST FAILED: Health endpoint returned HTTP $HEALTH_STATUS"
+            echo "This indicates a Lambda cold start failure or packaging issue."
+            echo "Check CloudWatch logs: aws logs tail /aws/lambda/preprod-sentiment-dashboard"
+            exit 1
+          fi
+
+          echo "✅ Health endpoint: HTTP 200"
+
+          # Test 2: Verify Lambda cold start succeeded (no ImportModuleError)
+          echo ""
+          echo "Test 2: Checking Lambda logs for import errors..."
+          sleep 5  # Wait for CloudWatch logs to propagate
+
+          IMPORT_ERRORS=$(aws logs tail /aws/lambda/preprod-sentiment-dashboard --since 2m --format short 2>/dev/null | \
+            grep -i "ImportModuleError\|No module named\|cannot import" || echo "")
+
+          if [ -n "$IMPORT_ERRORS" ]; then
+            echo "❌ SMOKE TEST FAILED: ImportModuleError detected in Lambda logs"
+            echo "$IMPORT_ERRORS"
+            echo ""
+            echo "This indicates a packaging/binary compatibility issue."
+            echo "See docs/security/PREPROD_HTTP_502_ROOT_CAUSE.md for troubleshooting."
+            exit 1
+          fi
+
+          echo "✅ No import errors in Lambda logs"
+
+          # Test 3: Verify response body is valid JSON
+          echo ""
+          echo "Test 3: Validating response format..."
+          HEALTH_RESPONSE=$(curl -s --max-time 30 "${DASHBOARD_URL}/health")
+
+          if ! echo "$HEALTH_RESPONSE" | jq . >/dev/null 2>&1; then
+            echo "❌ SMOKE TEST FAILED: Health endpoint returned invalid JSON"
+            echo "Response: $HEALTH_RESPONSE"
+            exit 1
+          fi
+
+          echo "✅ Response is valid JSON"
+          echo ""
+          echo "🎉 All smoke tests passed! Deployment is healthy."
+
+      - name: Record Deployment
+        if: always()
+        run: |
+          echo "📝 Recording deployment metadata..."
+          echo "Git SHA: ${{ github.sha }}"
+          echo "Deployed at: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          echo "Dashboard URL: ${{ steps.outputs.outputs.dashboard_url }}"
+          echo "Smoke test result: ${{ steps.smoke_test.outcome }}"
+
   # ========================================================================
   # JOB 3: Test Preprod
   # ========================================================================
@@ -503,6 +626,7 @@ jobs:
     # - Human → production (requires approval)
     environment:
       name: ${{ github.actor == 'dependabot[bot]' && 'production-auto' || 'production' }}
+      url: ${{ steps.outputs.outputs.dashboard_url }}
 
     outputs:
       dashboard_url: ${{ steps.outputs.outputs.dashboard_url }}
