@@ -62,18 +62,3 @@ jobs:
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:${{matrix.language}}"
-
-  codeql-gate:
-    name: CodeQL
-    runs-on: ubuntu-latest
-    needs: analyze
-    if: github.event_name == 'pull_request'
-
-    steps:
-      - name: Check for new alerts in PR
-        run: |
-          # This job always passes for now - CodeQL Analysis job above uploads results
-          # Future enhancement: Add logic to fail only if PR introduces NEW alerts
-          echo "✅ CodeQL scan complete - no new critical alerts introduced by this PR"
-          echo "Note: Existing alerts should be fixed in a separate security hardening PR"
-          exit 0
