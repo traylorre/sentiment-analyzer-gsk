@@ -463,7 +463,7 @@ jobs:
   # ========================================================================
   deploy-preprod:
     name: Deploy to Preprod
-    needs: test-dev
+    needs: [build, test-dev]
     runs-on: ubuntu-latest
     environment:
       name: preprod
