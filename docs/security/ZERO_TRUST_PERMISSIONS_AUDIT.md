@@ -11,7 +11,7 @@
 
 ### Audit Results
 
-**Overall Zero-Trust Compliance**: 96% ✅
+**Overall Zero-Trust Compliance**: 100% ✅
 
 | Metric | Count | Status |
 |--------|-------|--------|
@@ -19,8 +19,8 @@
 | Total Permissions | 29 | ✅ All justified |
 | High/Critical Risk | 0 | ✅ None found |
 | Wildcard Resources | 4 | ✅ All properly conditioned |
-| Zero-Trust Violations | 1 | ⚠️ Low risk (SNS topic policy) |
-| Stage-Specific Gaps | 3 | 📋 Production hardening recommended |
+| Zero-Trust Violations | 0 | ✅ **RESOLVED** (SNS topic policy fixed) |
+| Stage-Specific Gaps | 3 | 📋 Production hardening recommended (optional) |
 
 ### Key Findings
 
@@ -33,7 +33,7 @@
 - ✅ Metrics Lambda has minimal access (only by_status GSI)
 
 **Violations**:
-- ⚠️ **V1**: SNS topic policy allows ANY Lambda in account (should restrict to ingestion Lambda only)
+- ✅ **V1** (RESOLVED): SNS topic policy now restricts to specific Ingestion Lambda role ARN only
 
 **Production Hardening Recommendations**:
 - 📋 **R1**: Add DynamoDB query pattern restrictions in production
@@ -577,13 +577,16 @@ prod_model_version = "distilbert-v1.2.3"  # Pin to tested version
 
 ## Action Items
 
-### Priority 1: Fix Zero-Trust Violation (1 item)
+### Priority 1: Fix Zero-Trust Violation ✅ **COMPLETE**
 
-**V1**: Restrict SNS topic policy to specific ingestion Lambda role ARN
-- **Effort**: 5 minutes
-- **Impact**: Closes account-level permission gap
-- **Stage**: All (dev, preprod, prod)
-- **File**: `infrastructure/terraform/modules/sns/main.tf:28-47`
+**V1**: ✅ **RESOLVED** - SNS topic policy restricted to specific Ingestion Lambda role ARN
+- **Status**: Fixed (commit: pending)
+- **Change**: Replaced `Service = "lambda.amazonaws.com"` with `AWS = ingestion_lambda_role_arn`
+- **Impact**: Only Ingestion Lambda can publish to SNS topic (not ANY Lambda in account)
+- **Files Modified**:
+  - `infrastructure/terraform/modules/sns/main.tf:28-50`
+  - `infrastructure/terraform/modules/sns/variables.tf:24-27`
+  - `infrastructure/terraform/main.tf:309-310`
 
 ### Priority 2: Production Hardening (3 items)
 
@@ -617,13 +620,16 @@ This infrastructure demonstrates **excellent zero-trust security practices** wit
 4. **Index-Level Precision**: Dashboard and Metrics Lambdas specify exact GSI ARNs instead of table-level wildcards
 5. **Function-Specific Access**: Metrics Lambda has the narrowest scope (only by_status GSI)
 
-The single violation (V1 - SNS topic policy) is **low-risk** and easily fixed in 5 minutes. The three production-hardening recommendations (R1-R3) are **optional enhancements** that further reduce attack surface while maintaining development flexibility in preprod.
+All zero-trust violations have been **RESOLVED**. The three production-hardening recommendations (R1-R3) are **optional enhancements** that further reduce attack surface while maintaining development flexibility in preprod.
 
-**Overall Assessment**: ✅ **COMPLIANT** with zero-trust principles
-**Recommended Action**: Fix V1, implement R1 and R3 before production launch
+**Overall Assessment**: ✅ **100% COMPLIANT** with zero-trust principles
+**Compliance Score**: **100%** (previously 96%, V1 violation resolved)
+**Recommended Action**: Consider implementing R1 and R3 before production launch (optional)
 
 ---
 
 **Audit Completed**: 2025-11-23
+**Violations Resolved**: 2025-11-24 (V1 - SNS topic policy)
+**Compliance Achieved**: 100% ✅
 **Next Review**: Quarterly or upon infrastructure changes
 **Maintained By**: @traylorre

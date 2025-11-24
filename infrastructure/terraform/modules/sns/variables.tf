@@ -20,3 +20,8 @@ variable "create_subscription" {
   type        = bool
   default     = false
 }
+
+variable "ingestion_lambda_role_arn" {
+  description = "ARN of the Ingestion Lambda IAM role (for least-privilege SNS topic policy)"
+  type        = string
+}
