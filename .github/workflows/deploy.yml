@@ -66,6 +66,7 @@ jobs:
         with:
           python-version: '3.13'
           cache: 'pip'
+          cache-dependency-path: 'requirements.txt'
 
       - name: Install dependencies
         run: |
@@ -301,6 +302,10 @@ jobs:
     runs-on: ubuntu-latest
     environment: dev
 
+    permissions:
+      contents: read
+      actions: read
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -310,6 +315,7 @@ jobs:
         with:
           python-version: '3.13'
           cache: 'pip'
+          cache-dependency-path: 'requirements-dev.txt'
 
       - name: Install dependencies
         run: |
