@@ -26,11 +26,7 @@ on:
     paths-ignore:
       - 'docs/**'
       - '*.md'
-      - 'specs/**'
       - '.vscode/**'
-      - '.github/workflows/test.yml'
-      - '.github/workflows/lint.yml'
-      - '.github/workflows/codeql.yml'
 
   # Manual trigger for testing/rollbacks
   workflow_dispatch:
