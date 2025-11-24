@@ -48,6 +48,15 @@ from fastapi.security import APIKeyHeader
 from mangum import Mangum
 from sse_starlette.sse import EventSourceResponse
 
+from src.lambdas.dashboard.chaos import (
+    ChaosError,
+    EnvironmentNotAllowedError,
+    create_experiment,
+    delete_experiment,
+    get_experiment,
+    list_experiments,
+    update_experiment_status,
+)
 from src.lambdas.dashboard.metrics import (
     aggregate_dashboard_metrics,
     get_recent_items,
@@ -68,6 +77,7 @@ logger.setLevel(logging.INFO)
 # CRITICAL: These must be set - no defaults to prevent wrong-environment data corruption
 # Cloud-agnostic: Use DATABASE_TABLE, fallback to DYNAMODB_TABLE for backward compatibility
 DYNAMODB_TABLE = os.environ.get("DATABASE_TABLE") or os.environ["DYNAMODB_TABLE"]
+CHAOS_EXPERIMENTS_TABLE = os.environ.get("CHAOS_EXPERIMENTS_TABLE", "")
 SSE_POLL_INTERVAL = int(
     os.environ.get("SSE_POLL_INTERVAL", "5")
 )  # Safe default: polling frequency
@@ -590,6 +600,229 @@ async def get_items(
             status_code=500,
             detail="Failed to retrieve items",
         ) from e
+
+
+# ===================================================================
+# Chaos Testing Endpoints (Phase 1b)
+# ===================================================================
+
+
+@app.post("/chaos/experiments")
+async def create_chaos_experiment(
+    request: Request,
+    _: bool = Depends(verify_api_key),
+):
+    """
+    Create a new chaos experiment.
+
+    Request body:
+        {
+            "scenario_type": "dynamodb_throttle|newsapi_failure|lambda_cold_start",
+            "blast_radius": 10-100,
+            "duration_seconds": 5-300,
+            "parameters": {}
+        }
+
+    Returns:
+        Created experiment JSON
+
+    Security Note:
+        Environment gating enforced in chaos module (preprod only).
+    """
+    try:
+        body = await request.json()
+
+        experiment = create_experiment(
+            scenario_type=body["scenario_type"],
+            blast_radius=body["blast_radius"],
+            duration_seconds=body["duration_seconds"],
+            parameters=body.get("parameters"),
+        )
+
+        return JSONResponse(experiment, status_code=201)
+
+    except EnvironmentNotAllowedError as e:
+        logger.warning(
+            "Chaos testing attempted in disallowed environment",
+            extra={"environment": ENVIRONMENT},
+        )
+        raise HTTPException(
+            status_code=403,
+            detail=str(e),
+        ) from e
+
+    except (KeyError, ValueError) as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid request: {e}",
+        ) from e
+
+    except ChaosError as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to create experiment: {e}",
+        ) from e
+
+
+@app.get("/chaos/experiments")
+async def list_chaos_experiments(
+    status: str | None = None,
+    limit: int = 20,
+    _: bool = Depends(verify_api_key),
+):
+    """
+    List chaos experiments with optional status filter.
+
+    Query parameters:
+        status: Optional filter (pending|running|completed|failed|stopped)
+        limit: Maximum experiments to return (default: 20, max: 100)
+
+    Returns:
+        Array of experiment JSON objects
+    """
+    try:
+        experiments = list_experiments(status=status, limit=limit)
+        return JSONResponse(experiments)
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=str(e),
+        ) from e
+
+
+@app.get("/chaos/experiments/{experiment_id}")
+async def get_chaos_experiment(
+    experiment_id: str,
+    _: bool = Depends(verify_api_key),
+):
+    """
+    Get chaos experiment by ID.
+
+    Path parameters:
+        experiment_id: Experiment UUID
+
+    Returns:
+        Experiment JSON or 404 if not found
+    """
+    experiment = get_experiment(experiment_id)
+
+    if not experiment:
+        raise HTTPException(
+            status_code=404,
+            detail="Experiment not found",
+        )
+
+    return JSONResponse(experiment)
+
+
+@app.post("/chaos/experiments/{experiment_id}/start")
+async def start_chaos_experiment(
+    experiment_id: str,
+    _: bool = Depends(verify_api_key),
+):
+    """
+    Start a chaos experiment.
+
+    Path parameters:
+        experiment_id: Experiment UUID
+
+    Returns:
+        Updated experiment JSON
+
+    Phase 1 Note:
+        This endpoint only updates experiment status to 'running'.
+        Actual fault injection implemented in Phase 2-4.
+    """
+    experiment = get_experiment(experiment_id)
+
+    if not experiment:
+        raise HTTPException(
+            status_code=404,
+            detail="Experiment not found",
+        )
+
+    if experiment["status"] != "pending":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot start experiment with status: {experiment['status']}",
+        )
+
+    success = update_experiment_status(experiment_id, "running")
+
+    if not success:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to start experiment",
+        )
+
+    experiment["status"] = "running"
+    return JSONResponse(experiment)
+
+
+@app.post("/chaos/experiments/{experiment_id}/stop")
+async def stop_chaos_experiment(
+    experiment_id: str,
+    _: bool = Depends(verify_api_key),
+):
+    """
+    Stop a running chaos experiment.
+
+    Path parameters:
+        experiment_id: Experiment UUID
+
+    Returns:
+        Updated experiment JSON
+    """
+    experiment = get_experiment(experiment_id)
+
+    if not experiment:
+        raise HTTPException(
+            status_code=404,
+            detail="Experiment not found",
+        )
+
+    if experiment["status"] not in ["pending", "running"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot stop experiment with status: {experiment['status']}",
+        )
+
+    success = update_experiment_status(experiment_id, "stopped")
+
+    if not success:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to stop experiment",
+        )
+
+    experiment["status"] = "stopped"
+    return JSONResponse(experiment)
+
+
+@app.delete("/chaos/experiments/{experiment_id}")
+async def delete_chaos_experiment(
+    experiment_id: str,
+    _: bool = Depends(verify_api_key),
+):
+    """
+    Delete a chaos experiment.
+
+    Path parameters:
+        experiment_id: Experiment UUID
+
+    Returns:
+        Success message
+    """
+    success = delete_experiment(experiment_id)
+
+    if not success:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to delete experiment",
+        )
+
+    return JSONResponse({"message": "Experiment deleted successfully"})
 
 
 # Mangum adapter for AWS Lambda
