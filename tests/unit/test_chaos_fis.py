@@ -373,17 +373,42 @@ class TestStartExperimentWithFIS:
 
         assert "must be in 'pending' status" in str(exc_info.value)
 
-    def test_start_experiment_newsapi_failure_not_implemented(
+    def test_start_experiment_newsapi_failure_success(
         self, mock_environment_preprod, mock_dynamodb_table, sample_experiment
     ):
-        """Test starting newsapi_failure scenario raises NotImplementedError."""
+        """Test starting newsapi_failure scenario succeeds (Phase 3)."""
         sample_experiment["scenario_type"] = "newsapi_failure"
         mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
 
-        with pytest.raises(ChaosError) as exc_info:
-            start_experiment(sample_experiment["experiment_id"])
+        # Mock the update_item call that sets status = "running"
+        mock_dynamodb_table.update_item.return_value = {}
 
-        assert "not yet implemented (Phase 3)" in str(exc_info.value)
+        # Mock get_experiment to return the updated experiment
+        updated_experiment = sample_experiment.copy()
+        updated_experiment["status"] = "running"
+        updated_experiment["results"] = {
+            "started_at": "2025-01-01T00:00:00Z",
+            "injection_method": "dynamodb_flag",
+        }
+        mock_dynamodb_table.get_item.side_effect = [
+            {"Item": sample_experiment},  # First call in start_experiment
+            {"Item": updated_experiment},  # Second call to return updated experiment
+        ]
+
+        result = start_experiment(sample_experiment["experiment_id"])
+
+        # Verify status was updated to running
+        mock_dynamodb_table.update_item.assert_called_once()
+        update_call = mock_dynamodb_table.update_item.call_args
+        assert (
+            update_call[1]["Key"]["experiment_id"] == sample_experiment["experiment_id"]
+        )
+        assert "status = :status" in update_call[1]["UpdateExpression"]
+        assert update_call[1]["ExpressionAttributeValues"][":status"] == "running"
+
+        # Verify returned experiment has correct structure
+        assert result["status"] == "running"
+        assert result["results"]["injection_method"] == "dynamodb_flag"
 
 
 # ===================================================================
@@ -449,3 +474,36 @@ class TestStopExperimentWithFIS:
             stop_experiment(sample_experiment["experiment_id"])
 
         assert "must be in 'running' status" in str(exc_info.value)
+
+    def test_stop_experiment_newsapi_failure_success(
+        self, mock_environment_preprod, mock_dynamodb_table, sample_experiment
+    ):
+        """Test stopping newsapi_failure experiment succeeds (Phase 3)."""
+        # Mock running newsapi_failure experiment
+        sample_experiment["status"] = "running"
+        sample_experiment["scenario_type"] = "newsapi_failure"
+        sample_experiment["results"] = {
+            "started_at": "2025-01-01T00:00:00Z",
+            "injection_method": "dynamodb_flag",
+        }
+        mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
+
+        # Mock update_experiment_status
+        with patch(
+            "src.lambdas.dashboard.chaos.update_experiment_status"
+        ) as mock_update:
+            mock_update.return_value = True
+
+            stop_experiment(sample_experiment["experiment_id"])
+
+            # Verify experiment status was updated to stopped
+            mock_update.assert_called_once()
+            call_args = mock_update.call_args
+            assert call_args[0][0] == sample_experiment["experiment_id"]
+            assert call_args[0][1] == "stopped"
+
+            # Verify results contain stopped_at timestamp
+            results = call_args[0][2]
+            assert "started_at" in results  # Original start time preserved
+            assert "stopped_at" in results  # Stop time added
+            assert "injection_method" in results  # Original method preserved
