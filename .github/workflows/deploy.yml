@@ -293,7 +293,9 @@ jobs:
     name: Deploy to Preprod
     needs: build
     runs-on: ubuntu-latest
-    environment: preprod
+    environment:
+      name: preprod
+      url: ${{ steps.outputs.outputs.dashboard_url }}
 
     outputs:
       dashboard_url: ${{ steps.outputs.outputs.dashboard_url }}
@@ -621,6 +623,7 @@ jobs:
     # - Human → production (requires approval)
     environment:
       name: ${{ github.actor == 'dependabot[bot]' && 'production-auto' || 'production' }}
+      url: ${{ steps.outputs.outputs.dashboard_url }}
 
     outputs:
       dashboard_url: ${{ steps.outputs.outputs.dashboard_url }}
