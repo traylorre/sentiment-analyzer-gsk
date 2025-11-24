@@ -159,8 +159,8 @@ def create_experiment(
             extra={
                 "experiment_id": sanitize_for_log(experiment_id),
                 "scenario_type": sanitize_for_log(scenario_type),
-                "blast_radius": blast_radius,
-                "duration_seconds": duration_seconds,
+                "blast_radius": sanitize_for_log(str(blast_radius)),
+                "duration_seconds": sanitize_for_log(str(duration_seconds)),
             },
         )
 
