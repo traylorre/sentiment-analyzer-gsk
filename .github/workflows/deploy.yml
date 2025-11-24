@@ -396,7 +396,7 @@ jobs:
   # ========================================================================
   test-dev:
     name: Dev Tests (Mocked AWS)
-    needs: deploy-dev
+    needs: [build, deploy-dev]
     runs-on: ubuntu-latest
     environment: dev
 
