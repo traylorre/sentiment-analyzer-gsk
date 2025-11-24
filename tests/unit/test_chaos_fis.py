@@ -474,3 +474,36 @@ class TestStopExperimentWithFIS:
             stop_experiment(sample_experiment["experiment_id"])
 
         assert "must be in 'running' status" in str(exc_info.value)
+
+    def test_stop_experiment_newsapi_failure_success(
+        self, mock_environment_preprod, mock_dynamodb_table, sample_experiment
+    ):
+        """Test stopping newsapi_failure experiment succeeds (Phase 3)."""
+        # Mock running newsapi_failure experiment
+        sample_experiment["status"] = "running"
+        sample_experiment["scenario_type"] = "newsapi_failure"
+        sample_experiment["results"] = {
+            "started_at": "2025-01-01T00:00:00Z",
+            "injection_method": "dynamodb_flag",
+        }
+        mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
+
+        # Mock update_experiment_status
+        with patch(
+            "src.lambdas.dashboard.chaos.update_experiment_status"
+        ) as mock_update:
+            mock_update.return_value = True
+
+            stop_experiment(sample_experiment["experiment_id"])
+
+            # Verify experiment status was updated to stopped
+            mock_update.assert_called_once()
+            call_args = mock_update.call_args
+            assert call_args[0][0] == sample_experiment["experiment_id"]
+            assert call_args[0][1] == "stopped"
+
+            # Verify results contain stopped_at timestamp
+            results = call_args[0][2]
+            assert "started_at" in results  # Original start time preserved
+            assert "stopped_at" in results  # Stop time added
+            assert "injection_method" in results  # Original method preserved
