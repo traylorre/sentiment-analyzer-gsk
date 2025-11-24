@@ -204,10 +204,11 @@ class TestStaticFiles:
         assert response.status_code in [400, 404]
 
     def test_dotdot_in_filename_blocked(self, client):
-        """Test .. in filename is blocked."""
+        """Test .. in filename is blocked (returns 404 since not in whitelist)."""
         response = client.get("/static/..styles.css")
-        assert response.status_code == 400
-        assert "Invalid filename" in response.json()["detail"]
+        # With whitelist approach, non-whitelisted files return 404
+        assert response.status_code == 404
+        assert "Static file not found" in response.json()["detail"]
 
 
 class TestHealthCheck:

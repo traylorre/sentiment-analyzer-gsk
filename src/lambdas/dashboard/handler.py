@@ -69,7 +69,6 @@ from src.lambdas.shared.logging_utils import (
     get_safe_error_info,
     get_safe_error_message_for_user,
     sanitize_for_log,
-    sanitize_path_component,
 )
 
 # Structured logging
@@ -122,6 +121,14 @@ def get_cors_origins() -> list[str]:
 
 # Path to static dashboard files
 STATIC_DIR = Path(__file__).parent.parent.parent / "dashboard"
+
+# Whitelist of allowed static files (path injection defense - CodeQL py/path-injection)
+# Only these files can be served via /static/ endpoint
+ALLOWED_STATIC_FILES: dict[str, str] = {
+    "app.js": "application/javascript",
+    "config.js": "application/javascript",
+    "styles.css": "text/css",
+}
 
 # API key header
 api_key_header = APIKeyHeader(name="Authorization", auto_error=False)
@@ -327,58 +334,38 @@ async def serve_static(filename: str):
         File content with appropriate media type
 
     Security Note:
-        Path traversal prevented using sanitize_path_component() utility.
-        Rejects directory separators, parent references, null bytes, and control chars.
+        Path injection prevented using strict whitelist (ALLOWED_STATIC_FILES).
+        Only pre-approved files can be served - no user input reaches filesystem.
     """
-    # Sanitize filename to prevent path traversal attacks
-    sanitized_filename = sanitize_path_component(filename)
-    if not sanitized_filename:
+    # Whitelist-based routing - completely eliminates path injection risk
+    # CodeQL py/path-injection: Use explicit string literals for file paths
+    # Each case uses a hardcoded string, not user input
+    if filename == "app.js":
+        safe_path = STATIC_DIR / "app.js"
+        media_type = "application/javascript"
+    elif filename == "config.js":
+        safe_path = STATIC_DIR / "config.js"
+        media_type = "application/javascript"
+    elif filename == "styles.css":
+        safe_path = STATIC_DIR / "styles.css"
+        media_type = "text/css"
+    else:
         logger.warning(
-            "Path traversal attempt blocked",
-            extra={"client_ip": "unknown"},  # Could extract from request if needed
+            "Static file request for non-whitelisted file",
+            extra={"requested": sanitize_for_log(filename)},
         )
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid filename",
-        )
-
-    file_path = STATIC_DIR / sanitized_filename
-
-    # Additional defense: ensure resolved path is within STATIC_DIR
-    # Use resolved_path for all operations to satisfy CodeQL taint tracking
-    try:
-        resolved_path = file_path.resolve()
-        resolved_static_dir = STATIC_DIR.resolve()
-        if not resolved_path.is_relative_to(resolved_static_dir):
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid filename",
-            )
-    except (ValueError, RuntimeError) as e:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid filename",
-        ) from e
-
-    if not resolved_path.exists():
         raise HTTPException(
             status_code=404,
-            detail="Static file not found",  # Don't expose user input in error
+            detail="Static file not found",
         )
 
-    # Determine media type
-    media_types = {
-        ".css": "text/css",
-        ".js": "application/javascript",
-        ".json": "application/json",
-        ".png": "image/png",
-        ".ico": "image/x-icon",
-    }
+    if not safe_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Static file not found",
+        )
 
-    suffix = resolved_path.suffix.lower()
-    media_type = media_types.get(suffix, "application/octet-stream")
-
-    return FileResponse(resolved_path, media_type=media_type)
+    return FileResponse(safe_path, media_type=media_type)
 
 
 @app.get("/health")
@@ -464,8 +451,8 @@ async def get_metrics(
         logger.info(
             "Metrics retrieved",
             extra={
-                "total": metrics.get("total", 0),
-                "hours": hours,
+                "total": int(metrics.get("total", 0)),
+                "hours": int(hours),  # Explicit int cast for CodeQL py/log-injection
             },
         )
 
