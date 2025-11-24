@@ -476,53 +476,56 @@ Monitoring During Deployment:
 
 ## MEDIUM Priority Gaps (Nice to Have - P2)
 
-### Gap 6: VADER Score Normalization Formula (AMBIGUOUS)
+### Gap 6: FinBERT/DistilBERT Score Normalization Formula (AMBIGUOUS)
 
 **Current:** "score: 0.0-1.0" (line 177)
 
-**Missing:** How is VADER compound score (-1 to +1) normalized?
+**Missing:** How is DistilBERT sentiment score normalized?
 
 **Resolution:**
 
 ```python
 # Add to SPEC.md - Section: Inference Lambda
 
-VADER Score Normalization:
+DistilBERT (FinBERT) Score Normalization:
 
-VADER Library Output:
-  - compound: float (-1.0 to +1.0)
-    - Ranges:
-      - positive: compound >= 0.05
-      - neutral: -0.05 < compound < 0.05
-      - negative: compound <= -0.05
-  - pos: float (0.0 to 1.0) - proportion of positive words
-  - neu: float (0.0 to 1.0) - proportion of neutral words
-  - neg: float (0.0 to 1.0) - proportion of negative words
+HuggingFace Transformers Output (distilbert-base-uncased-finetuned-sst-2-english):
+  - label: str ("POSITIVE", "NEGATIVE", or "NEUTRAL")
+  - score: float (0.0 to 1.0) - confidence probability
 
-Normalization Formula:
-  normalized_score = (compound_score + 1.0) / 2.0
+  Model returns softmax probabilities for each class:
+    - POSITIVE: probability of positive sentiment
+    - NEGATIVE: probability of negative sentiment
+    - NEUTRAL: probability of neutral sentiment (if 3-class model)
+
+Normalization (Already 0.0-1.0):
+  normalized_score = model_output['score']  # No transformation needed
 
   Examples:
-    - VADER compound: -1.0 → Normalized: 0.0 (most negative)
-    - VADER compound: -0.5 → Normalized: 0.25
-    - VADER compound: 0.0 → Normalized: 0.5 (neutral)
-    - VADER compound: +0.5 → Normalized: 0.75
-    - VADER compound: +1.0 → Normalized: 1.0 (most positive)
+    - DistilBERT output: {"label": "NEGATIVE", "score": 0.95} → Normalized: 0.05 (inverted for negative)
+    - DistilBERT output: {"label": "POSITIVE", "score": 0.85} → Normalized: 0.85
+    - DistilBERT output: {"label": "NEUTRAL", "score": 0.60} → Normalized: 0.50 (neutral midpoint)
 
 Sentiment Label Determination:
-  if compound >= 0.05:
+  label = model_output['label'].lower()
+  confidence = model_output['score']
+
+  if label == "positive":
       sentiment = "positive"
-  elif compound <= -0.05:
+      score = confidence
+  elif label == "negative":
       sentiment = "negative"
+      score = 1.0 - confidence  # Invert for consistency
   else:
       sentiment = "neutral"
+      score = 0.5  # Neutral midpoint
 
 DynamoDB Storage:
   {
     "sentiment": "positive",  # String enum
     "score": 0.85,            # Normalized float (0.0-1.0)
-    "vader_compound": 0.7,    # Original VADER score (optional, for debugging)
-    "model_version": "vader-3.3.2-config-default"
+    "confidence": 0.85,       # Original model confidence (optional, for debugging)
+    "model_version": "distilbert-base-uncased-finetuned-sst-2-english-v1.0.0"
   }
 
 Validation:

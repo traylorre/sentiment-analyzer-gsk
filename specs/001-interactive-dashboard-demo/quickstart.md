@@ -16,7 +16,7 @@ This guide walks you through setting up, deploying, and demoing the interactive 
 
 - **AWS CLI** (v2.x): `aws --version`
 - **Terraform** (v1.5+): `terraform --version`
-- **Python** (3.11): `python3.11 --version`
+- **Python** (3.13): `python3.13 --version`
 - **Docker** (for Lambda layers): `docker --version`
 - **Git**: `git --version`
 
@@ -99,7 +99,7 @@ cd sentiment-analyzer-gsk
 git checkout 001-interactive-dashboard-demo
 
 # Create Python virtual environment
-python3.11 -m venv venv
+python3.13 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install dependencies
@@ -126,7 +126,7 @@ python-json-logger==2.0.7
 pytest==7.4.3
 moto==4.2.0
 pytest-asyncio==0.21.1
-black==23.11.0
+black==23.13.0
 ruff==0.1.6
 ```
 
@@ -179,7 +179,7 @@ aws lambda publish-layer-version \
     --layer-name sentiment-model-distilbert \
     --description "DistilBERT sentiment model v1.0.0" \
     --content S3Bucket=sentiment-models-${ACCOUNT_ID},S3Key=layers/distilbert-v1.0.0.zip \
-    --compatible-runtimes python3.11 \
+    --compatible-runtimes python3.13 \
     --compatible-architectures x86_64
 
 # Note the LayerVersionArn from output - use this in Terraform

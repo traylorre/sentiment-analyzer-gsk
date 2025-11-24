@@ -11,7 +11,7 @@ Build a demonstrable, interactive sentiment analysis system where stakeholders p
 
 ## Technical Context
 
-**Language/Version**: Python 3.11
+**Language/Version**: Python 3.13
 **Primary Dependencies**:
 - AWS SDK (boto3) for Lambda, DynamoDB, Secrets Manager
 - HuggingFace transformers (DistilBERT) - chosen for cost efficiency and Lambda compatibility

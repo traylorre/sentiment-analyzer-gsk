@@ -79,7 +79,7 @@ wheels/
 *.egg
 
 # Virtual environments
-# On-Call Note: If tests fail with import errors, verify venv matches Python 3.11
+# On-Call Note: If tests fail with import errors, verify venv matches Python 3.13
 venv/
 ENV/
 env/

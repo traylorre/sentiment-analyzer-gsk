@@ -256,7 +256,7 @@ if [ -n "${UPLOAD_S3}" ]; then
     echo "    --layer-name sentiment-model-distilbert \\"
     echo "    --description 'DistilBERT sentiment model ${MODEL_VERSION}' \\"
     echo "    --content S3Bucket=${UPLOAD_S3},S3Key=${S3_KEY} \\"
-    echo "    --compatible-runtimes python3.11 \\"
+    echo "    --compatible-runtimes python3.13 \\"
     echo "    --compatible-architectures x86_64"
 fi
 

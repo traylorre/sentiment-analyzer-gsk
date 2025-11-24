@@ -3,7 +3,7 @@
 #
 # For On-Call Engineers:
 # - If Lambda fails with ImportError, check these versions match deployed layer
-# - boto3 version must be compatible with Lambda runtime (Python 3.11)
+# - boto3 version must be compatible with Lambda runtime (Python 3.13)
 #
 # For Developers:
 # - Pin exact versions for reproducible builds

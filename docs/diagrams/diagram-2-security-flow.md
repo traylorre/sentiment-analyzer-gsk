@@ -351,7 +351,7 @@
 
   PROCESSING:
   1. Extract text (STILL TAINTED)
-  2. VADER sentiment analysis
+  2. DistilBERT sentiment analysis
      → Text-only, NO code execution
   3. Compute SHA-256 hash
      → Hash = item_id (safe)

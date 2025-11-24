@@ -15,7 +15,7 @@ graph TB
 
     subgraph Zone3[" ZONE 3: PROCESSING - Still Tainted "]
         Queue[SNS → SQS<br/>TAINTED DATA<br/>Batch: 10 msgs<br/>maxReceiveCount: 3<br/>Visibility: 60s]
-        InferenceL[inference-lambda<br/>1. Extract text TAINTED<br/>2. VADER analysis<br/>3. SHA-256 hash<br/>✓ Partial sanitization<br/>✗ text field: RAW]
+        InferenceL[inference-lambda<br/>1. Extract text TAINTED<br/>2. DistilBERT analysis<br/>3. SHA-256 hash<br/>✓ Partial sanitization<br/>✗ text field: RAW]
         DLQ[Dead Letter Queue<br/>3 DLQs total<br/>Retention: 14 days<br/>Archive to S3: 10 days<br/>⚠ ALARM: depth > 10]
     end
 

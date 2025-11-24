@@ -267,7 +267,7 @@
   512 MB | 30s timeout
   Concurrency: 20
 
-  • VADER analysis
+  • DistilBERT analysis
   • Compute sentiment
   • Write to DynamoDB
   ```
