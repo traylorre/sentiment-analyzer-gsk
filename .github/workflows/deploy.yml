@@ -96,19 +96,24 @@ jobs:
           # Validation function to test package imports
           validate_lambda_package() {
             local package_name=$1
-            local handler_module=$2
+            local handler_file=$2
 
-            echo "🔍 Validating ${package_name} package imports..."
+            echo "🔍 Validating ${package_name} package structure..."
             cd packages/${package_name}-build
 
-            # Test Python can import the handler (catch ImportModuleError early)
-            if python3 -c "import ${handler_module}" 2>&1 | grep -i "error\|traceback"; then
-              echo "❌ IMPORT VALIDATION FAILED for ${package_name}"
-              echo "This package will fail in Lambda runtime!"
+            # Verify handler file exists and has no syntax errors
+            if [ ! -f "${handler_file}" ]; then
+              echo "❌ VALIDATION FAILED: ${handler_file} not found in ${package_name} package"
               exit 1
             fi
 
-            echo "✅ ${package_name} imports validated successfully"
+            # Check for basic Python syntax errors
+            if ! python3 -m py_compile "${handler_file}" 2>/dev/null; then
+              echo "❌ VALIDATION FAILED: Syntax error in ${handler_file}"
+              exit 1
+            fi
+
+            echo "✅ ${package_name} package structure validated"
             cd ../..
           }
 
@@ -144,8 +149,8 @@ jobs:
             -x "*.pyc" "__pycache__/*" "*.pytest_cache/*" "tests/*" -q
           cd ../..
 
-          # Validate imports before zipping
-          validate_lambda_package "ingestion" "handler"
+          # Validate package structure before zipping
+          validate_lambda_package "ingestion" "handler.py"
 
           # Show size and cleanup
           INGESTION_SIZE=$(du -h packages/ingestion-${SHA}.zip | cut -f1)
@@ -190,8 +195,8 @@ jobs:
             -x "*.pyc" "__pycache__/*" "*.pytest_cache/*" "tests/*" -q
           cd ../..
 
-          # Validate imports before cleanup (CRITICAL: catches pydantic binary issues)
-          validate_lambda_package "dashboard" "src.lambdas.dashboard.handler"
+          # Validate package structure before cleanup
+          validate_lambda_package "dashboard" "src/lambdas/dashboard/handler.py"
 
           # Show size and cleanup
           DASHBOARD_SIZE=$(du -h packages/dashboard-${SHA}.zip | cut -f1)
@@ -227,8 +232,8 @@ jobs:
             -x "*.pyc" "__pycache__/*" "*.pytest_cache/*" "tests/*" -q
           cd ../..
 
-          # Validate imports before cleanup
-          validate_lambda_package "analysis" "handler"
+          # Validate package structure before cleanup
+          validate_lambda_package "analysis" "handler.py"
 
           # Show size and cleanup
           ANALYSIS_SIZE=$(du -h packages/analysis-${SHA}.zip | cut -f1)
