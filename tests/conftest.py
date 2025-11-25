@@ -72,13 +72,23 @@ def pytest_collection_modifyitems(config, items):
 
 # Set default test environment variables at module load time
 # This allows test files to import modules that read env vars at import time
+#
+# IMPORTANT: Only set defaults that don't conflict with CI-provided values for preprod tests.
+# For preprod tests, CI provides: DYNAMODB_TABLE, ENVIRONMENT, API_KEY, etc.
+# setdefault() only sets if NOT already present, so CI values take precedence.
 os.environ.setdefault("AWS_ACCESS_KEY_ID", "testing")
 os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "testing")
 os.environ.setdefault("AWS_REGION", "us-east-1")
-os.environ.setdefault("DYNAMODB_TABLE", "test-sentiment-items")
-os.environ.setdefault("API_KEY", "test-api-key-12345")
 os.environ.setdefault("SSE_POLL_INTERVAL", "1")
-os.environ.setdefault("ENVIRONMENT", "test")
+
+# These are ONLY set if not already present (CI sets them for preprod)
+# For local unit tests (not preprod), these provide sensible defaults
+if "DYNAMODB_TABLE" not in os.environ:
+    os.environ["DYNAMODB_TABLE"] = "test-sentiment-items"
+if "API_KEY" not in os.environ:
+    os.environ["API_KEY"] = "test-api-key-12345"
+if "ENVIRONMENT" not in os.environ:
+    os.environ["ENVIRONMENT"] = "test"
 
 
 @pytest.fixture(autouse=True)

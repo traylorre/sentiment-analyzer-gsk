@@ -823,6 +823,7 @@ jobs:
           SNS_TOPIC_ARN: ${{ steps.infra.outputs.sns_topic_arn }}
           NEWSAPI_SECRET_ARN: ${{ secrets.NEWSAPI_SECRET_ARN }}
           DASHBOARD_API_KEY: ${{ secrets.DASHBOARD_API_KEY }}
+          API_KEY: ${{ secrets.DASHBOARD_API_KEY }}
           WATCH_TAGS: AI,climate,economy
           MODEL_VERSION: v${{ needs.build.outputs.artifact-sha }}
         run: |
