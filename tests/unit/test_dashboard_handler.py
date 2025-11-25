@@ -28,10 +28,11 @@ from moto import mock_aws
 
 from src.lambdas.dashboard.handler import app
 
-# Set env vars for tests (handler now reads lazily via get_api_key())
-os.environ["API_KEY"] = "test-api-key-12345"
-os.environ["DYNAMODB_TABLE"] = "test-sentiment-items"
-os.environ["ENVIRONMENT"] = "test"
+# Set default env vars for tests (only if not already set by CI)
+# IMPORTANT: Use setdefault to avoid overwriting CI-provided preprod values
+os.environ.setdefault("API_KEY", "test-api-key-12345")
+os.environ.setdefault("DYNAMODB_TABLE", "test-sentiment-items")
+os.environ.setdefault("ENVIRONMENT", "test")
 
 
 def create_test_table():
