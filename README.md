@@ -23,7 +23,7 @@ A cloud-hosted Sentiment Analyzer service built with serverless AWS architecture
 [![Deploy Pipeline](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/deploy.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/deploy.yml)
 
 ```mermaid
-%%{init: {'theme':'default', 'themeVariables': {'primaryColor':'#e3f2fd', 'primaryTextColor':'#1565c0', 'primaryBorderColor':'#1565c0', 'lineColor':'#424242', 'secondaryColor':'#fff3e0', 'tertiaryColor':'#e8f5e9', 'background':'#ffffff'}}}%%
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555', 'background':'#1a1a2e'}}}%%
 flowchart LR
     subgraph Stage1["Build Stage"]
         Build["Build Lambda<br/>Packages"]
@@ -53,16 +53,18 @@ flowchart LR
     DeployProd --> CanaryTest
     CanaryTest --> Summary
 
-    classDef buildStage fill:#c8e6c9,stroke:#2e7d32,stroke-width:2px,color:#1b5e20
-    classDef devStage fill:#bbdefb,stroke:#1565c0,stroke-width:2px,color:#0d47a1
-    classDef preprodStage fill:#ffe0b2,stroke:#ef6c00,stroke-width:2px,color:#e65100
-    classDef prodStage fill:#ffcdd2,stroke:#c62828,stroke-width:2px,color:#b71c1c
-    classDef summaryNode fill:#e1bee7,stroke:#7b1fa2,stroke-width:2px,color:#4a148c
+    classDef stageBox fill:#fff8e1,stroke:#c9a227,stroke-width:2px,color:#333
+    classDef buildNode fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px,color:#1e3a1e
+    classDef devNode fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
+    classDef preprodNode fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
+    classDef prodNode fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef summaryNode fill:#b39ddb,stroke:#673ab7,stroke-width:2px,color:#1a0a3e
 
-    class Build buildStage
-    class DeployDev,TestDev devStage
-    class DeployPreprod,TestPreprod preprodStage
-    class DeployProd,CanaryTest prodStage
+    class Stage1,Stage2,Stage3,Stage4 stageBox
+    class Build buildNode
+    class DeployDev,TestDev devNode
+    class DeployPreprod,TestPreprod preprodNode
+    class DeployProd,CanaryTest prodNode
     class Summary summaryNode
 ```
 
@@ -186,36 +188,36 @@ Ingests text from external sources (NewsAPI, RSS feeds) and returns sentiment an
 ### High-Level System Architecture
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
 graph TB
-    subgraph "External Sources"
+    subgraph External["External Sources"]
         NewsAPI[NewsAPI]
         RSS[RSS Feeds]
     end
 
-    subgraph "AWS Cloud"
-        subgraph "Ingestion Layer"
+    subgraph AWS["AWS Cloud"]
+        subgraph IngestionLayer["Ingestion Layer"]
             EB[EventBridge<br/>Scheduler<br/>5 min]
             Ingestion[Ingestion Lambda<br/>Python 3.13]
         end
 
-        subgraph "Processing Layer"
+        subgraph ProcessingLayer["Processing Layer"]
             SNS[SNS Topic<br/>sentiment-events]
             Analysis[Analysis Lambda<br/>DistilBERT<br/>S3 Model Loading]
             S3Model[S3 Bucket<br/>ML Model Storage<br/>model.tar.gz]
         end
 
-        subgraph "API Layer"
+        subgraph APILayer["API Layer"]
             Dashboard[Dashboard Lambda<br/>FastAPI + SSE]
             FnURL[Function URL]
         end
 
-        subgraph "Storage Layer"
+        subgraph StorageLayer["Storage Layer"]
             DDB[(DynamoDB<br/>sentiment-items)]
             DLQ[DLQ<br/>Failed Messages]
         end
 
-        subgraph "Monitoring"
+        subgraph MonitoringLayer["Monitoring"]
             EBMetrics[EventBridge<br/>Scheduler<br/>1 min]
             Metrics[Metrics Lambda<br/>Stuck Item Monitor]
             CW[CloudWatch<br/>Logs & Alarms]
@@ -223,7 +225,7 @@ graph TB
         end
     end
 
-    subgraph "Users"
+    subgraph Users["Users"]
         Browser[Web Browser]
     end
 
@@ -255,44 +257,48 @@ graph TB
 
     CW -.->|Cost Alerts| Budget
 
-    classDef lambdaStyle fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
-    classDef storageStyle fill:#388e3c,stroke:#1b5e20,stroke-width:2px,color:#fff
-    classDef messagingStyle fill:#7b1fa2,stroke:#4a148c,stroke-width:2px,color:#fff
-    classDef monitoringStyle fill:#f57c00,stroke:#e65100,stroke-width:2px,color:#fff
+    classDef layerBox fill:#fff8e1,stroke:#c9a227,stroke-width:2px,color:#333
+    classDef lambdaStyle fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
+    classDef storageStyle fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px,color:#1e3a1e
+    classDef messagingStyle fill:#b39ddb,stroke:#673ab7,stroke-width:2px,color:#1a0a3e
+    classDef monitoringStyle fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
+    classDef externalStyle fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
 
+    class External,AWS,IngestionLayer,ProcessingLayer,APILayer,StorageLayer,MonitoringLayer,Users layerBox
     class Ingestion,Analysis,Dashboard,Metrics lambdaStyle
     class DDB,DLQ,S3Model storageStyle
     class SNS messagingStyle
-    class CW,Budget,EBMetrics monitoringStyle
+    class CW,Budget,EBMetrics,EB monitoringStyle
+    class NewsAPI,RSS,Browser externalStyle
 ```
 
 ### Environment Promotion Pipeline
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
 graph LR
-    subgraph "Source"
+    subgraph Source["Source"]
         Code[Feature Branch]
     end
 
-    subgraph "Build"
+    subgraph Build["Build"]
         GHA[GitHub Actions<br/>Build & Test]
         Artifact[Lambda Packages<br/>SHA-versioned]
     end
 
-    subgraph "Dev Environment"
+    subgraph DevEnv["Dev Environment"]
         DevDeploy[Deploy Dev]
         DevTest[Integration Tests]
         DevApprove{Tests Pass?}
     end
 
-    subgraph "Preprod Environment"
+    subgraph PreprodEnv["Preprod Environment"]
         PreprodDeploy[Deploy Preprod]
         PreprodTest[Smoke Tests]
         PreprodApprove{Validation<br/>Gate}
     end
 
-    subgraph "Prod Environment"
+    subgraph ProdEnv["Prod Environment"]
         ProdApprove{Manual<br/>Approval}
         ProdDeploy[Deploy Prod]
         ProdMonitor[Production<br/>Monitoring]
@@ -304,27 +310,37 @@ graph LR
     DevDeploy --> DevTest
     DevTest --> DevApprove
 
-    DevApprove -->|✅ Pass| PreprodDeploy
-    DevApprove -->|❌ Fail| Code
+    DevApprove -->|Pass| PreprodDeploy
+    DevApprove -->|Fail| Code
 
     PreprodDeploy --> PreprodTest
     PreprodTest --> PreprodApprove
 
-    PreprodApprove -->|✅ Pass| ProdApprove
-    PreprodApprove -->|❌ Fail| Code
+    PreprodApprove -->|Pass| ProdApprove
+    PreprodApprove -->|Fail| Code
 
-    ProdApprove -->|✅ Approved| ProdDeploy
-    ProdApprove -->|❌ Rejected| Code
+    ProdApprove -->|Approved| ProdDeploy
+    ProdApprove -->|Rejected| Code
 
     ProdDeploy --> ProdMonitor
 
-    classDef gateStyle fill:#f57c00,stroke:#e65100,stroke-width:2px,color:#fff
-    classDef criticalGate fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
-    classDef artifactStyle fill:#388e3c,stroke:#1b5e20,stroke-width:2px,color:#fff
+    classDef stageBox fill:#fff8e1,stroke:#c9a227,stroke-width:2px,color:#333
+    classDef sourceNode fill:#b39ddb,stroke:#673ab7,stroke-width:2px,color:#1a0a3e
+    classDef buildNode fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px,color:#1e3a1e
+    classDef devNode fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
+    classDef preprodNode fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
+    classDef prodNode fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef gateStyle fill:#ffcc80,stroke:#e65100,stroke-width:2px,color:#4a2800
+    classDef criticalGate fill:#ef9a9a,stroke:#c62828,stroke-width:2px,color:#4a0000
 
+    class Source,Build,DevEnv,PreprodEnv,ProdEnv stageBox
+    class Code sourceNode
+    class GHA,Artifact buildNode
+    class DevDeploy,DevTest devNode
+    class PreprodDeploy,PreprodTest preprodNode
+    class ProdDeploy,ProdMonitor prodNode
     class DevApprove,PreprodApprove gateStyle
     class ProdApprove criticalGate
-    class Artifact artifactStyle
 ```
 
 ### Data Flow: Real-Time Sentiment Processing

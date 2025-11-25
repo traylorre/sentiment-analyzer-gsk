@@ -33,7 +33,7 @@ This document provides operational flow diagrams and troubleshooting guides for 
 This shows the happy path for article ingestion and sentiment analysis:
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
 flowchart TD
     Start[EventBridge Trigger<br/>Every 5 minutes] --> Ingest[Ingestion Lambda Invoked]
     Ingest --> FetchAPI[Fetch from NewsAPI]
@@ -52,15 +52,15 @@ flowchart TD
     LogMetrics --> End[Complete]
     Skip --> End
 
-    classDef success fill:#2e7d32,stroke:#1b5e20,stroke-width:2px,color:#fff
-    classDef process fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
-    classDef decision fill:#f57c00,stroke:#e65100,stroke-width:2px,color:#fff
-    classDef storage fill:#7b1fa2,stroke:#4a148c,stroke-width:2px,color:#fff
+    classDef successNode fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px,color:#1e3a1e
+    classDef processNode fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
+    classDef decisionNode fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
+    classDef storageNode fill:#b39ddb,stroke:#673ab7,stroke-width:2px,color:#1a0a3e
 
-    class Start,End success
-    class Ingest,AnalysisLambda,FetchAPI,RunInference process
-    class CheckDup,LoadModel decision
-    class StoreDDB,UpdateDDB,FetchS3,PublishSNS storage
+    class Start,End successNode
+    class Ingest,AnalysisLambda,FetchAPI,RunInference,CacheModel,LogMetrics,Skip processNode
+    class CheckDup,LoadModel decisionNode
+    class StoreDDB,UpdateDDB,FetchS3,PublishSNS storageNode
 ```
 
 **Key Points:**
@@ -76,7 +76,7 @@ flowchart TD
 This shows the operational monitoring flow for detecting stuck items:
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
 flowchart TD
     Start[EventBridge Trigger<br/>Every 1 minute] --> MetricsLambda[Metrics Lambda Invoked]
     MetricsLambda --> QueryGSI[Query by_status GSI<br/>status = 'pending']
@@ -92,15 +92,15 @@ flowchart TD
     TriggerAlarm --> NotifyOnCall[Notify On-Call<br/>via Email/PagerDuty]
     NotifyOnCall --> End
 
-    classDef success fill:#2e7d32,stroke:#1b5e20,stroke-width:2px,color:#fff
-    classDef process fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
-    classDef decision fill:#f57c00,stroke:#e65100,stroke-width:2px,color:#fff
-    classDef alert fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef successNode fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px,color:#1e3a1e
+    classDef processNode fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
+    classDef decisionNode fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
+    classDef alertNode fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
 
-    class Start,End success
-    class MetricsLambda,QueryGSI,FilterOld,EmitMetric,EmitZero,LogResults process
-    class Count,CheckAlarm decision
-    class TriggerAlarm,NotifyOnCall alert
+    class Start,End successNode
+    class MetricsLambda,QueryGSI,FilterOld,EmitMetric,EmitZero,LogResults processNode
+    class Count,CheckAlarm decisionNode
+    class TriggerAlarm,NotifyOnCall alertNode
 ```
 
 **Key Points:**
@@ -148,7 +148,7 @@ aws dynamodb query \
 This shows the CI/CD deployment process from PR to production:
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
 flowchart TD
     PR[Create Pull Request] --> CIChecks{CI Checks<br/>Pass?}
     CIChecks -->|No| FixCode[Fix Code]
@@ -170,15 +170,15 @@ flowchart TD
     RollbackProd --> IncidentResponse
     SmokeTests -->|Yes| Complete[Deployment Complete]
 
-    classDef cicd fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
-    classDef decision fill:#f57c00,stroke:#e65100,stroke-width:2px,color:#fff
-    classDef danger fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
-    classDef success fill:#2e7d32,stroke:#1b5e20,stroke-width:2px,color:#fff
+    classDef cicdNode fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
+    classDef decisionNode fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
+    classDef dangerNode fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef successNode fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px,color:#1e3a1e
 
-    class PR,BuildPackages,UploadS3,TerraformPlan,ApplyPreprod,DeployProd cicd
-    class CIChecks,IntegrationTests,ManualGate,SmokeTests decision
-    class Rollback,RollbackProd,IncidentResponse danger
-    class Complete success
+    class PR,BuildPackages,UploadS3,TerraformPlan,ApplyPreprod,DeployProd,Merge,FixCode,WaitApproval cicdNode
+    class CIChecks,IntegrationTests,ManualGate,SmokeTests decisionNode
+    class Rollback,RollbackProd,IncidentResponse dangerNode
+    class Complete successNode
 ```
 
 **Key Points:**
@@ -194,7 +194,7 @@ flowchart TD
 This shows the decision tree for responding to production incidents:
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
 flowchart TD
     Alert[CloudWatch Alarm<br/>or User Report] --> Assess{Severity<br/>Assessment}
     Assess -->|P0: Complete Outage| P0Response[P0: Immediate Response]
@@ -236,15 +236,15 @@ flowchart TD
     PostMortem --> CloseIncident[Close Incident]
     Escalate --> CodeFix
 
-    classDef alert fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
-    classDef decision fill:#f57c00,stroke:#e65100,stroke-width:2px,color:#fff
-    classDef action fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
-    classDef success fill:#2e7d32,stroke:#1b5e20,stroke-width:2px,color:#fff
+    classDef alertNode fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef decisionNode fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
+    classDef actionNode fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
+    classDef successNode fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px,color:#1e3a1e
 
-    class Alert,P0Response alert
-    class Assess,CheckDashboard,IdentifyError,S3Exists,Throttled,TestFix decision
-    class PageTeam,CheckLambda,CheckLogs,CheckS3,CheckDDB,IncreaseMem,CodeFix,CheckPerms action
-    class PostMortem,CloseIncident success
+    class Alert,P0Response alertNode
+    class Assess,CheckDashboard,IdentifyError,S3Exists,Throttled,TestFix decisionNode
+    class PageTeam,CheckLambda,CheckLogs,CheckS3,CheckDDB,IncreaseMem,CodeFix,CheckPerms,P1Response,P2Response,DashboardOK,CreateTicket,UploadModel,IncreaseCapacity,CheckIndex,Escalate actionNode
+    class PostMortem,CloseIncident successNode
 ```
 
 **Key Points:**
@@ -264,7 +264,7 @@ flowchart TD
 #### 1. Lambda Timeout
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
 flowchart LR
     Timeout[Lambda Timeout Error] --> CheckLogs[Check CloudWatch Logs]
     CheckLogs --> FindDuration[Find execution duration]
@@ -275,13 +275,13 @@ flowchart LR
     CheckLogic --> OptimizeCode[Optimize code]
     OptimizeCode --> Deploy
 
-    classDef error fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
-    classDef decision fill:#f57c00,stroke:#e65100,stroke-width:2px,color:#fff
-    classDef action fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
+    classDef errorNode fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef decisionNode fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
+    classDef actionNode fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
 
-    class Timeout error
-    class Compare decision
-    class CheckLogs,IncreaseTimeout,CheckLogic,OptimizeCode,Deploy action
+    class Timeout errorNode
+    class Compare decisionNode
+    class CheckLogs,IncreaseTimeout,CheckLogic,OptimizeCode,Deploy,FindDuration actionNode
 ```
 
 **Quick Fix:**
@@ -299,7 +299,7 @@ terraform apply
 #### 2. Out of Memory Error
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
 flowchart LR
     OOM[Out of Memory Error] --> CheckMetrics[Check CloudWatch<br/>Memory Metrics]
     CheckMetrics --> MemUsage{Memory usage<br/>>90%?}
@@ -310,13 +310,13 @@ flowchart LR
     ProfileCode --> FixLeak[Fix leak]
     FixLeak --> Deploy
 
-    classDef error fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
-    classDef decision fill:#f57c00,stroke:#e65100,stroke-width:2px,color:#fff
-    classDef action fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
+    classDef errorNode fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef decisionNode fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
+    classDef actionNode fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
 
-    class OOM error
-    class MemUsage decision
-    class CheckMetrics,IncreaseMemory,MemoryLeak,ProfileCode,FixLeak,Deploy action
+    class OOM errorNode
+    class MemUsage decisionNode
+    class CheckMetrics,IncreaseMemory,MemoryLeak,ProfileCode,FixLeak,Deploy actionNode
 ```
 
 **Quick Fix:**
@@ -343,7 +343,7 @@ terraform apply
 #### Throttling Errors
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
 flowchart TD
     Throttle[DynamoDB<br/>Throttling Error] --> CheckMetrics[Check CloudWatch<br/>DynamoDB Metrics]
     CheckMetrics --> TableOrIndex{Table or<br/>GSI throttled?}
@@ -362,13 +362,13 @@ flowchart TD
     RefactorKeys --> Deploy
     OptimizeQueries --> Deploy
 
-    classDef error fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
-    classDef decision fill:#f57c00,stroke:#e65100,stroke-width:2px,color:#fff
-    classDef action fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
+    classDef errorNode fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef decisionNode fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
+    classDef actionNode fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
 
-    class Throttle error
-    class TableOrIndex,AtLimit,GSILimit decision
-    class CheckMetrics,CheckWCU,CheckGSI,IncreaseCapacity,HotKey,IncreaseGSI,QueryPattern,RefactorKeys,OptimizeQueries,Deploy action
+    class Throttle errorNode
+    class TableOrIndex,AtLimit,GSILimit decisionNode
+    class CheckMetrics,CheckWCU,CheckGSI,IncreaseCapacity,HotKey,IncreaseGSI,QueryPattern,RefactorKeys,OptimizeQueries,Deploy actionNode
 ```
 
 **Quick Fix:**
@@ -398,7 +398,7 @@ terraform apply
 #### Model Load Failures
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
 flowchart TD
     LoadFail[S3 Model Load<br/>Failure] --> CheckLogs[Check Lambda Logs<br/>for S3 error]
     CheckLogs --> ErrorType{Error Type?}
@@ -432,15 +432,15 @@ flowchart TD
     Success -->|Yes| Complete[Issue Resolved]
     Success -->|No| Escalate[Escalate to<br/>Engineering]
 
-    classDef error fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
-    classDef decision fill:#f57c00,stroke:#e65100,stroke-width:2px,color:#fff
-    classDef action fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
-    classDef success fill:#2e7d32,stroke:#1b5e20,stroke-width:2px,color:#fff
+    classDef errorNode fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef decisionNode fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
+    classDef actionNode fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
+    classDef successNode fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px,color:#1e3a1e
 
-    class LoadFail error
-    class ErrorType,BucketExists,HasS3Perms,InVPC,Success decision
-    class CheckLogs,VerifyBucket,CheckIAM,CheckVPC,CreateBucket,UploadModel,UpdateIAM,CheckBucketPolicy,CheckNAT,IncreaseTimeout,TestAgain action
-    class Complete success
+    class LoadFail errorNode
+    class ErrorType,BucketExists,HasS3Perms,InVPC,Success decisionNode
+    class CheckLogs,VerifyBucket,CheckIAM,CheckVPC,CreateBucket,UploadModel,UpdateIAM,CheckBucketPolicy,CheckNAT,IncreaseTimeout,TestAgain,ModelMissing,PermissionError,NetworkIssue,Escalate actionNode
+    class Complete successNode
 ```
 
 **Quick Fix:**
@@ -470,7 +470,7 @@ cd infrastructure/scripts
 #### Dashboard Debugging Flow
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
 flowchart TD
     NotResponding[Dashboard Not<br/>Responding] --> CheckURL{Function URL<br/>accessible?}
     CheckURL -->|No| CheckLambda[Check Lambda<br/>Function URL config]
@@ -513,15 +513,15 @@ flowchart TD
     Verify -->|Yes| Complete[Dashboard Working]
     Verify -->|No| Escalate[Escalate to<br/>Engineering]
 
-    classDef error fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
-    classDef decision fill:#f57c00,stroke:#e65100,stroke-width:2px,color:#fff
-    classDef action fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
-    classDef success fill:#2e7d32,stroke:#1b5e20,stroke-width:2px,color:#fff
+    classDef errorNode fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef decisionNode fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
+    classDef actionNode fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
+    classDef successNode fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px,color:#1e3a1e
 
-    class NotResponding error
-    class CheckURL,URLExists,HealthOK,ImportError,MetricsOK,KeyValid,SSEWorks,Verify decision
-    class CheckLambda,TestEndpoint,CheckDeps,TestAPI,CheckAPIKey,CreateAPIKey,CheckEnvVar,TestSSE,CheckDDB,CheckFrontend,CreateURL,CheckAuth,RebuildPackage,Redeploy,CheckCode action
-    class Complete success
+    class NotResponding errorNode
+    class CheckURL,URLExists,HealthOK,ImportError,MetricsOK,KeyValid,SSEWorks,Verify decisionNode
+    class CheckLambda,TestEndpoint,CheckDeps,TestAPI,CheckAPIKey,CreateAPIKey,CheckEnvVar,TestSSE,CheckDDB,CheckFrontend,CreateURL,CheckAuth,RebuildPackage,Redeploy,CheckCode,Escalate actionNode
+    class Complete successNode
 ```
 
 **Quick Fix:**
@@ -552,9 +552,9 @@ aws logs tail /aws/lambda/preprod-sentiment-dashboard --follow
 The system has the following CloudWatch alarms configured:
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
 graph TD
-    subgraph "Lambda Alarms"
+    subgraph LambdaAlarms["Lambda Alarms"]
         IngestionErrors[Ingestion Errors<br/>>5 in 5 min]
         AnalysisErrors[Analysis Errors<br/>>5 in 5 min]
         AnalysisDuration[Analysis Duration<br/>>5 seconds]
@@ -562,16 +562,16 @@ graph TD
         MetricsErrors[Metrics Errors<br/>>3 in 5 min]
     end
 
-    subgraph "DynamoDB Alarms"
+    subgraph DDBAlarms["DynamoDB Alarms"]
         ReadThrottle[Read Throttle Events]
         WriteThrottle[Write Throttle Events]
     end
 
-    subgraph "Operational Alarms"
+    subgraph OpsAlarms["Operational Alarms"]
         StuckItems[Stuck Items<br/>>10 for 3 periods]
     end
 
-    subgraph "Cost Alarms"
+    subgraph CostAlarms["Cost Alarms"]
         BudgetAlert[Monthly Budget<br/>>$50]
     end
 
@@ -587,13 +587,15 @@ graph TD
 
     SNSTopic --> Email[Email Notification<br/>to On-Call]
 
-    classDef alarm fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
-    classDef notification fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
-    classDef operational fill:#f57c00,stroke:#e65100,stroke-width:2px,color:#fff
+    classDef stageBox fill:#fff8e1,stroke:#c9a227,stroke-width:2px,color:#333
+    classDef alarmNode fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef notificationNode fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
+    classDef operationalNode fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
 
-    class IngestionErrors,AnalysisErrors,AnalysisDuration,DashboardErrors,MetricsErrors,ReadThrottle,WriteThrottle,BudgetAlert alarm
-    class StuckItems operational
-    class SNSTopic,Email notification
+    class LambdaAlarms,DDBAlarms,OpsAlarms,CostAlarms stageBox
+    class IngestionErrors,AnalysisErrors,AnalysisDuration,DashboardErrors,MetricsErrors,ReadThrottle,WriteThrottle,BudgetAlert alarmNode
+    class StuckItems operationalNode
+    class SNSTopic,Email notificationNode
 ```
 
 **Alarm Response:**

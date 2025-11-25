@@ -125,7 +125,15 @@ def get_cors_origins() -> list[str]:
 
 
 # Path to static dashboard files
-STATIC_DIR = Path(__file__).parent.parent.parent / "dashboard"
+# In Lambda, handler.py is at ROOT (/var/task/) and static files are at /var/task/src/dashboard/
+# Locally, handler.py is at src/lambdas/dashboard/ and static files are at src/dashboard/
+_handler_dir = Path(__file__).parent
+if _handler_dir.name == "task" or str(_handler_dir) == "/var/task":
+    # Lambda runtime: handler.py at ROOT
+    STATIC_DIR = _handler_dir / "src" / "dashboard"
+else:
+    # Local development: handler.py at src/lambdas/dashboard/
+    STATIC_DIR = _handler_dir.parent.parent / "dashboard"
 
 # Whitelist of allowed static files (path injection defense - CodeQL py/path-injection)
 # Only these files can be served via /static/ endpoint
