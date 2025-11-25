@@ -257,7 +257,7 @@ resource "aws_iam_role" "dashboard_lambda" {
   }
 }
 
-# Dashboard Lambda policy (DynamoDB Query + GetItem - READ ONLY)
+# Dashboard Lambda policy (DynamoDB Query + GetItem + DescribeTable - READ ONLY)
 resource "aws_iam_role_policy" "dashboard_dynamodb" {
   name = "${var.environment}-dashboard-dynamodb-policy"
   role = aws_iam_role.dashboard_lambda.id
@@ -269,7 +269,8 @@ resource "aws_iam_role_policy" "dashboard_dynamodb" {
         Effect = "Allow"
         Action = [
           "dynamodb:Query",
-          "dynamodb:GetItem"
+          "dynamodb:GetItem",
+          "dynamodb:DescribeTable"
         ]
         Resource = [
           var.dynamodb_table_arn,
