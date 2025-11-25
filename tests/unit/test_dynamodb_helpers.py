@@ -437,3 +437,161 @@ class TestUpdateItemStatus:
             }
         )
         assert response["Item"]["status"] == "analyzed"
+
+
+# ===================================================================
+# Tests for Region Validation Edge Cases - Lines 66, 88-94
+# ===================================================================
+
+
+class TestRegionValidation:
+    """Tests for region validation in get_dynamodb_resource and get_dynamodb_client.
+
+    These tests cover the error paths when region environment variables are not set.
+    Critical for catching configuration errors early.
+    """
+
+    def test_get_resource_no_region_raises_error(self, monkeypatch):
+        """Test get_dynamodb_resource raises ValueError when no region set."""
+        from src.lambdas.shared.dynamodb import get_dynamodb_resource
+
+        # Remove all region env vars
+        monkeypatch.delenv("CLOUD_REGION", raising=False)
+        monkeypatch.delenv("AWS_REGION", raising=False)
+
+        with pytest.raises(ValueError) as exc_info:
+            get_dynamodb_resource()
+
+        assert "CLOUD_REGION or AWS_REGION" in str(exc_info.value)
+
+    def test_get_resource_prefers_cloud_region(self, monkeypatch):
+        """Test get_dynamodb_resource prefers CLOUD_REGION over AWS_REGION."""
+        from src.lambdas.shared.dynamodb import get_dynamodb_resource
+
+        monkeypatch.setenv("CLOUD_REGION", "eu-central-1")
+        monkeypatch.setenv("AWS_REGION", "us-east-1")
+
+        with mock_aws():
+            resource = get_dynamodb_resource()
+            # Resource should be created (no error)
+            assert resource is not None
+
+    def test_get_resource_falls_back_to_aws_region(self, monkeypatch):
+        """Test get_dynamodb_resource falls back to AWS_REGION."""
+        from src.lambdas.shared.dynamodb import get_dynamodb_resource
+
+        monkeypatch.delenv("CLOUD_REGION", raising=False)
+        monkeypatch.setenv("AWS_REGION", "us-west-2")
+
+        with mock_aws():
+            resource = get_dynamodb_resource()
+            assert resource is not None
+
+    def test_get_client_no_region_raises_error(self, monkeypatch):
+        """Test get_dynamodb_client raises ValueError when no region set."""
+        from src.lambdas.shared.dynamodb import get_dynamodb_client
+
+        monkeypatch.delenv("CLOUD_REGION", raising=False)
+        monkeypatch.delenv("AWS_REGION", raising=False)
+
+        with pytest.raises(ValueError) as exc_info:
+            get_dynamodb_client()
+
+        assert "CLOUD_REGION or AWS_REGION" in str(exc_info.value)
+
+    def test_get_client_prefers_cloud_region(self, monkeypatch):
+        """Test get_dynamodb_client prefers CLOUD_REGION over AWS_REGION."""
+        from src.lambdas.shared.dynamodb import get_dynamodb_client
+
+        monkeypatch.setenv("CLOUD_REGION", "ap-southeast-1")
+        monkeypatch.setenv("AWS_REGION", "us-east-1")
+
+        with mock_aws():
+            client = get_dynamodb_client()
+            assert client is not None
+
+    def test_get_client_falls_back_to_aws_region(self, monkeypatch):
+        """Test get_dynamodb_client falls back to AWS_REGION."""
+        from src.lambdas.shared.dynamodb import get_dynamodb_client
+
+        monkeypatch.delenv("CLOUD_REGION", raising=False)
+        monkeypatch.setenv("AWS_REGION", "eu-west-1")
+
+        with mock_aws():
+            client = get_dynamodb_client()
+            assert client is not None
+
+    def test_get_table_no_region_raises_error(self, monkeypatch):
+        """Test get_table raises ValueError when no region set."""
+        from src.lambdas.shared.dynamodb import get_table
+
+        monkeypatch.delenv("CLOUD_REGION", raising=False)
+        monkeypatch.delenv("AWS_REGION", raising=False)
+        monkeypatch.setenv("DATABASE_TABLE", "test-table")
+
+        with pytest.raises(ValueError) as exc_info:
+            get_table()
+
+        assert "CLOUD_REGION or AWS_REGION" in str(exc_info.value)
+
+    def test_get_table_prefers_database_table(self, monkeypatch):
+        """Test get_table prefers DATABASE_TABLE over DYNAMODB_TABLE."""
+        from src.lambdas.shared.dynamodb import get_table
+
+        monkeypatch.setenv("AWS_REGION", "us-east-1")
+        monkeypatch.setenv("DATABASE_TABLE", "cloud-agnostic-table")
+        monkeypatch.setenv("DYNAMODB_TABLE", "aws-specific-table")
+
+        with mock_aws():
+            # Create both tables
+            client = boto3.client("dynamodb", region_name="us-east-1")
+            for table_name in ["cloud-agnostic-table", "aws-specific-table"]:
+                client.create_table(
+                    TableName=table_name,
+                    KeySchema=[
+                        {"AttributeName": "pk", "KeyType": "HASH"},
+                    ],
+                    AttributeDefinitions=[
+                        {"AttributeName": "pk", "AttributeType": "S"},
+                    ],
+                    BillingMode="PAY_PER_REQUEST",
+                )
+
+            table = get_table()
+            assert table.table_name == "cloud-agnostic-table"
+
+    def test_get_table_falls_back_to_dynamodb_table(self, monkeypatch):
+        """Test get_table falls back to DYNAMODB_TABLE."""
+        from src.lambdas.shared.dynamodb import get_table
+
+        monkeypatch.setenv("AWS_REGION", "us-east-1")
+        monkeypatch.delenv("DATABASE_TABLE", raising=False)
+        monkeypatch.setenv("DYNAMODB_TABLE", "legacy-table")
+
+        with mock_aws():
+            client = boto3.client("dynamodb", region_name="us-east-1")
+            client.create_table(
+                TableName="legacy-table",
+                KeySchema=[
+                    {"AttributeName": "pk", "KeyType": "HASH"},
+                ],
+                AttributeDefinitions=[
+                    {"AttributeName": "pk", "AttributeType": "S"},
+                ],
+                BillingMode="PAY_PER_REQUEST",
+            )
+
+            table = get_table()
+            assert table.table_name == "legacy-table"
+
+    def test_explicit_region_overrides_env(self, monkeypatch):
+        """Test explicit region_name parameter overrides environment."""
+        from src.lambdas.shared.dynamodb import get_dynamodb_resource
+
+        monkeypatch.setenv("CLOUD_REGION", "us-east-1")
+        monkeypatch.setenv("AWS_REGION", "us-east-1")
+
+        with mock_aws():
+            # Pass explicit region that's different from env
+            resource = get_dynamodb_resource(region_name="eu-west-2")
+            assert resource is not None

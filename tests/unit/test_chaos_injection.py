@@ -356,3 +356,324 @@ class TestIsChaoActive:
         result = is_chaos_active("newsapi_failure")
 
         assert result is False
+
+
+# ===================================================================
+# Tests for get_chaos_delay_ms() - Lines 125-204
+# ===================================================================
+
+
+class TestGetChaosDelayMs:
+    """Tests for get_chaos_delay_ms() function.
+
+    This function is critical for Lambda cold start simulation.
+    Tests cover fail-safe behavior and delay retrieval.
+    """
+
+    @pytest.fixture(autouse=True)
+    def reset_dynamodb_client(self, monkeypatch):
+        """Reset the global DynamoDB client before and after each test."""
+        monkeypatch.setattr(chaos_injection_module, "_dynamodb_client", None)
+        yield
+        chaos_injection_module._dynamodb_client = None
+
+    @patch.dict(
+        os.environ,
+        {
+            "ENVIRONMENT": "preprod",
+            "CHAOS_EXPERIMENTS_TABLE": "preprod-chaos-experiments",
+        },
+    )
+    @patch("src.lambdas.shared.chaos_injection.boto3.resource")
+    def test_returns_delay_when_experiment_active(self, mock_boto3_resource):
+        """Test returns delay_ms when active experiment found."""
+        from src.lambdas.shared.chaos_injection import get_chaos_delay_ms
+
+        mock_table = MagicMock()
+        mock_table.query.return_value = {
+            "Items": [
+                {
+                    "experiment_id": "test-123",
+                    "scenario_type": "lambda_cold_start",
+                    "status": "running",
+                    "results": {"delay_ms": 3000},
+                }
+            ]
+        }
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_boto3_resource.return_value = mock_dynamodb
+
+        result = get_chaos_delay_ms("lambda_cold_start")
+
+        assert result == 3000
+
+    @patch.dict(
+        os.environ,
+        {
+            "ENVIRONMENT": "preprod",
+            "CHAOS_EXPERIMENTS_TABLE": "preprod-chaos-experiments",
+        },
+    )
+    @patch("src.lambdas.shared.chaos_injection.boto3.resource")
+    def test_returns_zero_when_no_experiment(self, mock_boto3_resource):
+        """Test returns 0 when no active experiment found."""
+        from src.lambdas.shared.chaos_injection import get_chaos_delay_ms
+
+        mock_table = MagicMock()
+        mock_table.query.return_value = {"Items": []}
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_boto3_resource.return_value = mock_dynamodb
+
+        result = get_chaos_delay_ms("lambda_cold_start")
+
+        assert result == 0
+
+    @patch.dict(
+        os.environ,
+        {
+            "ENVIRONMENT": "production",
+            "CHAOS_EXPERIMENTS_TABLE": "prod-chaos-experiments",
+        },
+    )
+    def test_production_environment_returns_zero(self):
+        """Test returns 0 in production (safety check)."""
+        from src.lambdas.shared.chaos_injection import get_chaos_delay_ms
+
+        result = get_chaos_delay_ms("lambda_cold_start")
+
+        assert result == 0
+
+    @patch.dict(
+        os.environ,
+        {"ENVIRONMENT": "preprod", "CHAOS_EXPERIMENTS_TABLE": ""},
+    )
+    def test_no_chaos_table_returns_zero(self):
+        """Test returns 0 when chaos table not configured."""
+        from src.lambdas.shared.chaos_injection import get_chaos_delay_ms
+
+        result = get_chaos_delay_ms("lambda_cold_start")
+
+        assert result == 0
+
+    @patch.dict(
+        os.environ,
+        {
+            "ENVIRONMENT": "preprod",
+            "CHAOS_EXPERIMENTS_TABLE": "preprod-chaos-experiments",
+        },
+    )
+    @patch("src.lambdas.shared.chaos_injection.boto3.resource")
+    def test_dynamodb_client_error_returns_zero(self, mock_boto3_resource):
+        """Test returns 0 on DynamoDB errors (fail-safe)."""
+        from src.lambdas.shared.chaos_injection import get_chaos_delay_ms
+
+        mock_table = MagicMock()
+        mock_table.query.side_effect = ClientError(
+            {
+                "Error": {
+                    "Code": "ResourceNotFoundException",
+                    "Message": "Table not found",
+                }
+            },
+            "Query",
+        )
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_boto3_resource.return_value = mock_dynamodb
+
+        result = get_chaos_delay_ms("lambda_cold_start")
+
+        assert result == 0
+
+    @patch.dict(
+        os.environ,
+        {
+            "ENVIRONMENT": "preprod",
+            "CHAOS_EXPERIMENTS_TABLE": "preprod-chaos-experiments",
+        },
+    )
+    @patch("src.lambdas.shared.chaos_injection.boto3.resource")
+    def test_unexpected_exception_returns_zero(self, mock_boto3_resource):
+        """Test returns 0 on unexpected errors (fail-safe)."""
+        from src.lambdas.shared.chaos_injection import get_chaos_delay_ms
+
+        mock_boto3_resource.side_effect = Exception("Unexpected error")
+
+        result = get_chaos_delay_ms("lambda_cold_start")
+
+        assert result == 0
+
+    @patch.dict(
+        os.environ,
+        {
+            "ENVIRONMENT": "preprod",
+            "CHAOS_EXPERIMENTS_TABLE": "preprod-chaos-experiments",
+        },
+    )
+    @patch("src.lambdas.shared.chaos_injection.boto3.resource")
+    def test_returns_zero_when_delay_not_in_results(self, mock_boto3_resource):
+        """Test returns 0 when experiment has no delay_ms in results."""
+        from src.lambdas.shared.chaos_injection import get_chaos_delay_ms
+
+        mock_table = MagicMock()
+        mock_table.query.return_value = {
+            "Items": [
+                {
+                    "experiment_id": "test-123",
+                    "scenario_type": "lambda_cold_start",
+                    "status": "running",
+                    "results": {},  # No delay_ms
+                }
+            ]
+        }
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_boto3_resource.return_value = mock_dynamodb
+
+        result = get_chaos_delay_ms("lambda_cold_start")
+
+        assert result == 0
+
+    @patch.dict(
+        os.environ,
+        {
+            "ENVIRONMENT": "dev",
+            "CHAOS_EXPERIMENTS_TABLE": "dev-chaos-experiments",
+        },
+    )
+    @patch("src.lambdas.shared.chaos_injection.boto3.resource")
+    def test_dev_environment_allowed(self, mock_boto3_resource):
+        """Test delay retrieval works in dev environment."""
+        from src.lambdas.shared.chaos_injection import get_chaos_delay_ms
+
+        mock_table = MagicMock()
+        mock_table.query.return_value = {
+            "Items": [
+                {
+                    "experiment_id": "test-dev-123",
+                    "scenario_type": "lambda_cold_start",
+                    "status": "running",
+                    "results": {"delay_ms": 5000},
+                }
+            ]
+        }
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_boto3_resource.return_value = mock_dynamodb
+
+        result = get_chaos_delay_ms("lambda_cold_start")
+
+        assert result == 5000
+
+    @patch.dict(
+        os.environ,
+        {
+            "ENVIRONMENT": "test",
+            "CHAOS_EXPERIMENTS_TABLE": "test-chaos-experiments",
+        },
+    )
+    @patch("src.lambdas.shared.chaos_injection.boto3.resource")
+    def test_test_environment_allowed(self, mock_boto3_resource):
+        """Test delay retrieval works in test environment."""
+        from src.lambdas.shared.chaos_injection import get_chaos_delay_ms
+
+        mock_table = MagicMock()
+        mock_table.query.return_value = {
+            "Items": [
+                {
+                    "experiment_id": "test-test-123",
+                    "scenario_type": "lambda_cold_start",
+                    "status": "running",
+                    "results": {"delay_ms": 2000},
+                }
+            ]
+        }
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_boto3_resource.return_value = mock_dynamodb
+
+        result = get_chaos_delay_ms("lambda_cold_start")
+
+        assert result == 2000
+
+    @patch.dict(
+        os.environ,
+        {
+            "ENVIRONMENT": "preprod",
+            "CHAOS_EXPERIMENTS_TABLE": "preprod-chaos-experiments",
+        },
+    )
+    @patch("src.lambdas.shared.chaos_injection.boto3.resource")
+    def test_delay_converted_to_int(self, mock_boto3_resource):
+        """Test delay_ms is converted to integer from Decimal."""
+        from decimal import Decimal
+
+        from src.lambdas.shared.chaos_injection import get_chaos_delay_ms
+
+        mock_table = MagicMock()
+        mock_table.query.return_value = {
+            "Items": [
+                {
+                    "experiment_id": "test-123",
+                    "scenario_type": "lambda_cold_start",
+                    "status": "running",
+                    "results": {"delay_ms": Decimal("4500")},
+                }
+            ]
+        }
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_boto3_resource.return_value = mock_dynamodb
+
+        result = get_chaos_delay_ms("lambda_cold_start")
+
+        assert result == 4500
+        assert isinstance(result, int)
+
+    @patch.dict(
+        os.environ,
+        {
+            "ENVIRONMENT": "preprod",
+            "CHAOS_EXPERIMENTS_TABLE": "preprod-chaos-experiments",
+        },
+    )
+    @patch("src.lambdas.shared.chaos_injection.boto3.resource")
+    def test_zero_delay_returns_zero(self, mock_boto3_resource):
+        """Test returns 0 when delay_ms is explicitly 0."""
+        from src.lambdas.shared.chaos_injection import get_chaos_delay_ms
+
+        mock_table = MagicMock()
+        mock_table.query.return_value = {
+            "Items": [
+                {
+                    "experiment_id": "test-123",
+                    "scenario_type": "lambda_cold_start",
+                    "status": "running",
+                    "results": {"delay_ms": 0},
+                }
+            ]
+        }
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_boto3_resource.return_value = mock_dynamodb
+
+        result = get_chaos_delay_ms("lambda_cold_start")
+
+        assert result == 0
+
+    @patch.dict(
+        os.environ,
+        {
+            "ENVIRONMENT": "staging",
+            "CHAOS_EXPERIMENTS_TABLE": "staging-chaos-experiments",
+        },
+    )
+    def test_staging_environment_returns_zero(self):
+        """Test returns 0 in staging (not in allowed list)."""
+        from src.lambdas.shared.chaos_injection import get_chaos_delay_ms
+
+        result = get_chaos_delay_ms("lambda_cold_start")
+
+        assert result == 0

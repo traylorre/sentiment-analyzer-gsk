@@ -507,3 +507,251 @@ class TestStopExperimentWithFIS:
             assert "started_at" in results  # Original start time preserved
             assert "stopped_at" in results  # Stop time added
             assert "injection_method" in results  # Original method preserved
+
+
+# ===================================================================
+# Tests for create_experiment() - Lines 96-177
+# ===================================================================
+
+
+class TestCreateExperiment:
+    """Tests for create_experiment() function.
+
+    This function creates chaos experiments with validation.
+    Critical for chaos testing safety mechanisms.
+    """
+
+    def test_create_experiment_success(
+        self, mock_environment_preprod, mock_dynamodb_table
+    ):
+        """Test successful experiment creation."""
+        from src.lambdas.dashboard.chaos import create_experiment
+
+        result = create_experiment(
+            scenario_type="dynamodb_throttle",
+            blast_radius=25,
+            duration_seconds=60,
+        )
+
+        # Verify experiment structure
+        assert "experiment_id" in result
+        assert result["scenario_type"] == "dynamodb_throttle"
+        assert result["blast_radius"] == 25
+        assert result["duration_seconds"] == 60
+        assert result["status"] == "pending"
+        assert result["environment"] == "preprod"
+        assert "created_at" in result
+        assert "ttl_timestamp" in result
+
+        # Verify DynamoDB put was called
+        mock_dynamodb_table.put_item.assert_called_once()
+
+    def test_create_experiment_environment_not_allowed(
+        self, mock_environment_prod, mock_dynamodb_table
+    ):
+        """Test experiment creation fails in prod environment."""
+        from src.lambdas.dashboard.chaos import create_experiment
+
+        with pytest.raises(EnvironmentNotAllowedError) as exc_info:
+            create_experiment(
+                scenario_type="dynamodb_throttle",
+                blast_radius=25,
+                duration_seconds=60,
+            )
+
+        assert "not allowed in prod" in str(exc_info.value)
+        mock_dynamodb_table.put_item.assert_not_called()
+
+    def test_create_experiment_invalid_scenario_type(
+        self, mock_environment_preprod, mock_dynamodb_table
+    ):
+        """Test experiment creation fails with invalid scenario type."""
+        from src.lambdas.dashboard.chaos import create_experiment
+
+        with pytest.raises(ValueError) as exc_info:
+            create_experiment(
+                scenario_type="invalid_scenario",
+                blast_radius=25,
+                duration_seconds=60,
+            )
+
+        assert "Invalid scenario_type" in str(exc_info.value)
+        mock_dynamodb_table.put_item.assert_not_called()
+
+    def test_create_experiment_blast_radius_too_low(
+        self, mock_environment_preprod, mock_dynamodb_table
+    ):
+        """Test experiment creation fails when blast_radius < 10."""
+        from src.lambdas.dashboard.chaos import create_experiment
+
+        with pytest.raises(ValueError) as exc_info:
+            create_experiment(
+                scenario_type="dynamodb_throttle",
+                blast_radius=5,  # Too low
+                duration_seconds=60,
+            )
+
+        assert "blast_radius must be 10-100" in str(exc_info.value)
+        mock_dynamodb_table.put_item.assert_not_called()
+
+    def test_create_experiment_blast_radius_too_high(
+        self, mock_environment_preprod, mock_dynamodb_table
+    ):
+        """Test experiment creation fails when blast_radius > 100."""
+        from src.lambdas.dashboard.chaos import create_experiment
+
+        with pytest.raises(ValueError) as exc_info:
+            create_experiment(
+                scenario_type="dynamodb_throttle",
+                blast_radius=150,  # Too high
+                duration_seconds=60,
+            )
+
+        assert "blast_radius must be 10-100" in str(exc_info.value)
+        mock_dynamodb_table.put_item.assert_not_called()
+
+    def test_create_experiment_duration_too_short(
+        self, mock_environment_preprod, mock_dynamodb_table
+    ):
+        """Test experiment creation fails when duration < 5 seconds."""
+        from src.lambdas.dashboard.chaos import create_experiment
+
+        with pytest.raises(ValueError) as exc_info:
+            create_experiment(
+                scenario_type="dynamodb_throttle",
+                blast_radius=25,
+                duration_seconds=3,  # Too short
+            )
+
+        assert "duration_seconds must be 5-300" in str(exc_info.value)
+        mock_dynamodb_table.put_item.assert_not_called()
+
+    def test_create_experiment_duration_too_long(
+        self, mock_environment_preprod, mock_dynamodb_table
+    ):
+        """Test experiment creation fails when duration > 300 seconds."""
+        from src.lambdas.dashboard.chaos import create_experiment
+
+        with pytest.raises(ValueError) as exc_info:
+            create_experiment(
+                scenario_type="dynamodb_throttle",
+                blast_radius=25,
+                duration_seconds=600,  # Too long
+            )
+
+        assert "duration_seconds must be 5-300" in str(exc_info.value)
+        mock_dynamodb_table.put_item.assert_not_called()
+
+    def test_create_experiment_with_parameters(
+        self, mock_environment_preprod, mock_dynamodb_table
+    ):
+        """Test experiment creation with optional parameters."""
+        from src.lambdas.dashboard.chaos import create_experiment
+
+        result = create_experiment(
+            scenario_type="newsapi_failure",
+            blast_radius=50,
+            duration_seconds=120,
+            parameters={"custom_key": "custom_value"},
+        )
+
+        assert result["parameters"] == {"custom_key": "custom_value"}
+
+    def test_create_experiment_dynamodb_error(
+        self, mock_environment_preprod, mock_dynamodb_table
+    ):
+        """Test experiment creation handles DynamoDB error."""
+        from src.lambdas.dashboard.chaos import ChaosError, create_experiment
+
+        mock_dynamodb_table.put_item.side_effect = ClientError(
+            {"Error": {"Code": "InternalServerError", "Message": "Service error"}},
+            "PutItem",
+        )
+
+        with pytest.raises(ChaosError) as exc_info:
+            create_experiment(
+                scenario_type="dynamodb_throttle",
+                blast_radius=25,
+                duration_seconds=60,
+            )
+
+        assert "Failed to create experiment" in str(exc_info.value)
+
+    def test_create_experiment_boundary_blast_radius_10(
+        self, mock_environment_preprod, mock_dynamodb_table
+    ):
+        """Test experiment creation at minimum blast_radius (10)."""
+        from src.lambdas.dashboard.chaos import create_experiment
+
+        result = create_experiment(
+            scenario_type="dynamodb_throttle",
+            blast_radius=10,  # Minimum allowed
+            duration_seconds=60,
+        )
+
+        assert result["blast_radius"] == 10
+        mock_dynamodb_table.put_item.assert_called_once()
+
+    def test_create_experiment_boundary_blast_radius_100(
+        self, mock_environment_preprod, mock_dynamodb_table
+    ):
+        """Test experiment creation at maximum blast_radius (100)."""
+        from src.lambdas.dashboard.chaos import create_experiment
+
+        result = create_experiment(
+            scenario_type="dynamodb_throttle",
+            blast_radius=100,  # Maximum allowed
+            duration_seconds=60,
+        )
+
+        assert result["blast_radius"] == 100
+        mock_dynamodb_table.put_item.assert_called_once()
+
+    def test_create_experiment_boundary_duration_5(
+        self, mock_environment_preprod, mock_dynamodb_table
+    ):
+        """Test experiment creation at minimum duration (5 seconds)."""
+        from src.lambdas.dashboard.chaos import create_experiment
+
+        result = create_experiment(
+            scenario_type="dynamodb_throttle",
+            blast_radius=25,
+            duration_seconds=5,  # Minimum allowed
+        )
+
+        assert result["duration_seconds"] == 5
+        mock_dynamodb_table.put_item.assert_called_once()
+
+    def test_create_experiment_boundary_duration_300(
+        self, mock_environment_preprod, mock_dynamodb_table
+    ):
+        """Test experiment creation at maximum duration (300 seconds)."""
+        from src.lambdas.dashboard.chaos import create_experiment
+
+        result = create_experiment(
+            scenario_type="dynamodb_throttle",
+            blast_radius=25,
+            duration_seconds=300,  # Maximum allowed
+        )
+
+        assert result["duration_seconds"] == 300
+        mock_dynamodb_table.put_item.assert_called_once()
+
+    def test_create_experiment_all_valid_scenario_types(
+        self, mock_environment_preprod, mock_dynamodb_table
+    ):
+        """Test all valid scenario types can be created."""
+        from src.lambdas.dashboard.chaos import create_experiment
+
+        valid_scenarios = ["dynamodb_throttle", "newsapi_failure", "lambda_cold_start"]
+
+        for scenario in valid_scenarios:
+            mock_dynamodb_table.reset_mock()
+            result = create_experiment(
+                scenario_type=scenario,
+                blast_radius=50,
+                duration_seconds=60,
+            )
+
+            assert result["scenario_type"] == scenario
+            mock_dynamodb_table.put_item.assert_called_once()
