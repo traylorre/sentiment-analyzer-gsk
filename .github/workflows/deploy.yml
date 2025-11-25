@@ -199,9 +199,12 @@ jobs:
             "
 
           # Build dashboard package
+          # NOTE: handler.py must be at ROOT for Lambda handler config "handler.lambda_handler"
+          # The src/ directory structure is needed for internal imports (from src.lambdas.shared...)
           mkdir -p packages/dashboard-build/src/lambdas/dashboard packages/dashboard-build/src/lib packages/dashboard-build/src/dashboard
           cp -r packages/dashboard-deps/* packages/dashboard-build/
-          cp -r src/lambdas/dashboard/* packages/dashboard-build/src/lambdas/dashboard/
+          cp -r src/lambdas/dashboard/* packages/dashboard-build/          # handler.py at ROOT
+          cp -r src/lambdas/dashboard/* packages/dashboard-build/src/lambdas/dashboard/  # also in src/ for imports
           cp -r src/lambdas/shared packages/dashboard-build/src/lambdas/
           cp -r src/lib/* packages/dashboard-build/src/lib/
           cp -r src/dashboard/* packages/dashboard-build/src/dashboard/
@@ -211,7 +214,7 @@ jobs:
           cd ../..
 
           # Validate package structure before cleanup
-          validate_lambda_package "dashboard" "src/lambdas/dashboard/handler.py"
+          validate_lambda_package "dashboard" "handler.py"
 
           # Show size and cleanup
           DASHBOARD_SIZE=$(du -h packages/dashboard-${SHA}.zip | cut -f1)
