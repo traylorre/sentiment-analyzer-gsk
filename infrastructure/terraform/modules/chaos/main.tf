@@ -3,9 +3,13 @@
 #
 # Chaos Engineering for Sentiment Analyzer
 #
-# Experiments:
-# 1. Lambda Latency Injection - Add delay to Lambda invocations
-# 2. Lambda Error Injection - Force Lambda failures
+# STATUS: TEMPORARILY DISABLED
+# The Terraform AWS provider doesn't support Lambda FIS targets yet.
+# See: https://github.com/hashicorp/terraform-provider-aws/issues/41208
+#
+# When the provider is updated:
+# 1. Uncomment the Lambda FIS templates below
+# 2. Set enable_chaos_testing = true in main.tf for preprod
 #
 # NOTE: DynamoDB does NOT support API-level fault injection via FIS.
 # FIS only supports:
@@ -18,7 +22,7 @@
 # Reference: https://docs.aws.amazon.com/fis/latest/userguide/fis-actions-reference.html
 
 # ============================================================================
-# IAM Role for FIS Execution
+# IAM Role for FIS Execution (placeholder - will be used when FIS is enabled)
 # ============================================================================
 
 resource "aws_iam_role" "fis_execution" {
@@ -96,140 +100,6 @@ resource "aws_iam_role_policy" "fis_lambda" {
 }
 
 # ============================================================================
-# FIS Experiment Template: Lambda Latency Injection
-# ============================================================================
-# Injects artificial delay into Lambda invocations to test:
-# - SSE timeout handling
-# - Client retry behavior
-# - Dashboard graceful degradation
-
-resource "aws_fis_experiment_template" "lambda_latency" {
-  count       = var.enable_chaos_testing ? 1 : 0
-  description = "Inject latency into Lambda invocations to test timeout handling"
-
-  stop_condition {
-    source = "aws:cloudwatch:alarm"
-    value  = var.lambda_error_alarm_arn
-  }
-
-  role_arn = aws_iam_role.fis_execution[0].arn
-
-  action {
-    name      = "inject-lambda-latency"
-    action_id = "aws:lambda:invocation-add-delay"
-
-    parameter {
-      key   = "duration"
-      value = "PT3M" # 3 minutes
-    }
-
-    parameter {
-      key   = "invocationPercentage"
-      value = "25" # Affect 25% of invocations
-    }
-
-    parameter {
-      key   = "startupDelayMilliseconds"
-      value = "5000" # 5 second delay
-    }
-
-    target {
-      key   = "Functions"
-      value = "lambda-targets"
-    }
-  }
-
-  target {
-    name           = "lambda-targets"
-    resource_type  = "aws:lambda:function"
-    resource_arns  = var.lambda_arns
-    selection_mode = "ALL"
-  }
-
-  log_configuration {
-    cloudwatch_logs_configuration {
-      log_group_arn = "${aws_cloudwatch_log_group.fis_experiments[0].arn}:*"
-    }
-    log_schema_version = 2
-  }
-
-  tags = {
-    Name        = "${var.environment}-lambda-latency"
-    Environment = var.environment
-    Purpose     = "chaos-testing"
-    Scenario    = "lambda_latency"
-    ManagedBy   = "Terraform"
-  }
-}
-
-# ============================================================================
-# FIS Experiment Template: Lambda Error Injection
-# ============================================================================
-# Forces Lambda invocations to fail to test:
-# - DLQ behavior
-# - SNS retry logic
-# - Dashboard error states
-
-resource "aws_fis_experiment_template" "lambda_error" {
-  count       = var.enable_chaos_testing ? 1 : 0
-  description = "Inject errors into Lambda invocations to test failure handling"
-
-  stop_condition {
-    source = "aws:cloudwatch:alarm"
-    value  = var.lambda_error_alarm_arn
-  }
-
-  role_arn = aws_iam_role.fis_execution[0].arn
-
-  action {
-    name      = "inject-lambda-error"
-    action_id = "aws:lambda:invocation-error"
-
-    parameter {
-      key   = "duration"
-      value = "PT2M" # 2 minutes
-    }
-
-    parameter {
-      key   = "invocationPercentage"
-      value = "10" # Affect 10% of invocations
-    }
-
-    parameter {
-      key   = "preventExecution"
-      value = "true" # Prevent Lambda from executing
-    }
-
-    target {
-      key   = "Functions"
-      value = "lambda-error-targets"
-    }
-  }
-
-  target {
-    name           = "lambda-error-targets"
-    resource_type  = "aws:lambda:function"
-    resource_arns  = var.lambda_arns
-    selection_mode = "ALL"
-  }
-
-  log_configuration {
-    cloudwatch_logs_configuration {
-      log_group_arn = "${aws_cloudwatch_log_group.fis_experiments[0].arn}:*"
-    }
-    log_schema_version = 2
-  }
-
-  tags = {
-    Name        = "${var.environment}-lambda-error"
-    Environment = var.environment
-    Purpose     = "chaos-testing"
-    Scenario    = "lambda_error"
-    ManagedBy   = "Terraform"
-  }
-}
-
-# ============================================================================
 # CloudWatch Log Group for FIS Experiment Logs
 # ============================================================================
 
@@ -244,3 +114,131 @@ resource "aws_cloudwatch_log_group" "fis_experiments" {
     ManagedBy   = "Terraform"
   }
 }
+
+# ============================================================================
+# FIS Experiment Templates - DISABLED
+# ============================================================================
+#
+# The aws_fis_experiment_template resources are commented out because the
+# Terraform AWS provider doesn't recognize "Functions" as a valid target key.
+# This is tracked in: https://github.com/hashicorp/terraform-provider-aws/issues/41208
+#
+# When the provider is updated, uncomment the following resources:
+#
+# resource "aws_fis_experiment_template" "lambda_latency" {
+#   count       = var.enable_chaos_testing ? 1 : 0
+#   description = "Inject latency into Lambda invocations to test timeout handling"
+#
+#   stop_condition {
+#     source = "aws:cloudwatch:alarm"
+#     value  = var.lambda_error_alarm_arn
+#   }
+#
+#   role_arn = aws_iam_role.fis_execution[0].arn
+#
+#   action {
+#     name      = "inject-lambda-latency"
+#     action_id = "aws:lambda:invocation-add-delay"
+#
+#     parameter {
+#       key   = "duration"
+#       value = "PT3M" # 3 minutes
+#     }
+#
+#     parameter {
+#       key   = "invocationPercentage"
+#       value = "25" # Affect 25% of invocations
+#     }
+#
+#     parameter {
+#       key   = "startupDelayMilliseconds"
+#       value = "5000" # 5 second delay
+#     }
+#
+#     target {
+#       key   = "Functions"
+#       value = "lambda-targets"
+#     }
+#   }
+#
+#   target {
+#     name           = "lambda-targets"
+#     resource_type  = "aws:lambda:function"
+#     resource_arns  = var.lambda_arns
+#     selection_mode = "ALL"
+#   }
+#
+#   log_configuration {
+#     cloudwatch_logs_configuration {
+#       log_group_arn = "${aws_cloudwatch_log_group.fis_experiments[0].arn}:*"
+#     }
+#     log_schema_version = 2
+#   }
+#
+#   tags = {
+#     Name        = "${var.environment}-lambda-latency"
+#     Environment = var.environment
+#     Purpose     = "chaos-testing"
+#     Scenario    = "lambda_latency"
+#     ManagedBy   = "Terraform"
+#   }
+# }
+#
+# resource "aws_fis_experiment_template" "lambda_error" {
+#   count       = var.enable_chaos_testing ? 1 : 0
+#   description = "Inject errors into Lambda invocations to test failure handling"
+#
+#   stop_condition {
+#     source = "aws:cloudwatch:alarm"
+#     value  = var.lambda_error_alarm_arn
+#   }
+#
+#   role_arn = aws_iam_role.fis_execution[0].arn
+#
+#   action {
+#     name      = "inject-lambda-error"
+#     action_id = "aws:lambda:invocation-error"
+#
+#     parameter {
+#       key   = "duration"
+#       value = "PT2M" # 2 minutes
+#     }
+#
+#     parameter {
+#       key   = "invocationPercentage"
+#       value = "10" # Affect 10% of invocations
+#     }
+#
+#     parameter {
+#       key   = "preventExecution"
+#       value = "true" # Prevent Lambda from executing
+#     }
+#
+#     target {
+#       key   = "Functions"
+#       value = "lambda-error-targets"
+#     }
+#   }
+#
+#   target {
+#     name           = "lambda-error-targets"
+#     resource_type  = "aws:lambda:function"
+#     resource_arns  = var.lambda_arns
+#     selection_mode = "ALL"
+#   }
+#
+#   log_configuration {
+#     cloudwatch_logs_configuration {
+#       log_group_arn = "${aws_cloudwatch_log_group.fis_experiments[0].arn}:*"
+#     }
+#     log_schema_version = 2
+#   }
+#
+#   tags = {
+#     Name        = "${var.environment}-lambda-error"
+#     Environment = var.environment
+#     Purpose     = "chaos-testing"
+#     Scenario    = "lambda_error"
+#     ManagedBy   = "Terraform"
+#   }
+# }
