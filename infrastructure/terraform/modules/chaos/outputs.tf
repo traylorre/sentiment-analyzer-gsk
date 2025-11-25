@@ -1,8 +1,14 @@
 # Chaos Testing Module Outputs
+# ============================
 
-output "fis_dynamodb_throttle_template_id" {
-  description = "ID of the FIS experiment template for DynamoDB throttling"
-  value       = var.enable_chaos_testing ? aws_fis_experiment_template.dynamodb_throttle[0].id : ""
+output "fis_lambda_latency_template_id" {
+  description = "ID of the FIS experiment template for Lambda latency injection"
+  value       = var.enable_chaos_testing ? aws_fis_experiment_template.lambda_latency[0].id : ""
+}
+
+output "fis_lambda_error_template_id" {
+  description = "ID of the FIS experiment template for Lambda error injection"
+  value       = var.enable_chaos_testing ? aws_fis_experiment_template.lambda_error[0].id : ""
 }
 
 output "fis_execution_role_arn" {
@@ -15,8 +21,11 @@ output "fis_log_group_name" {
   value       = var.enable_chaos_testing ? aws_cloudwatch_log_group.fis_experiments[0].name : ""
 }
 
-# Phase 4 outputs (commented out for now)
-# output "fis_lambda_delay_template_id" {
-#   description = "ID of the FIS experiment template for Lambda delay injection"
-#   value       = var.enable_chaos_testing ? aws_fis_experiment_template.lambda_delay[0].id : ""
-# }
+# ============================================================================
+# Deprecated Outputs (kept for backwards compatibility)
+# ============================================================================
+
+output "fis_dynamodb_throttle_template_id" {
+  description = "DEPRECATED: Use fis_lambda_latency_template_id instead"
+  value       = ""
+}

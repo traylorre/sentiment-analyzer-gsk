@@ -24,3 +24,8 @@ output "budget_name" {
   description = "Name of the monthly budget"
   value       = aws_budgets_budget.monthly.name
 }
+
+output "analysis_errors_alarm_arn" {
+  description = "ARN of the Analysis Lambda errors alarm (used as FIS kill switch)"
+  value       = aws_cloudwatch_metric_alarm.analysis_errors.arn
+}
