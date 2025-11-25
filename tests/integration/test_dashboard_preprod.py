@@ -448,6 +448,7 @@ class TestSecurityIntegration:
 
         # Use ASGITransport to test against the app directly
         transport = httpx.ASGITransport(app=app)
+        connection_established = False
 
         async with httpx.AsyncClient(transport=transport) as client:
             try:
@@ -457,13 +458,21 @@ class TestSecurityIntegration:
                     timeout=3.0,
                 )
 
-                # Should either establish connection (200) or reject if limit reached (429)
+                # Should return 200 for successful SSE connection
+                # 429 indicates rate limiting which is also valid behavior
                 assert status_code in [200, 429], f"Unexpected status: {status_code}"
+                connection_established = True
 
             except asyncio.TimeoutError:
-                # Timeout means connection was established but waiting for stream data
-                # This is SUCCESS - the endpoint is working and didn't reject immediately
-                pass
+                # Timeout means connection was established and is streaming
+                # This is SUCCESS - SSE connections hang waiting for events
+                connection_established = True
+
+        # Explicit assertion - test MUST establish connection or timeout while streaming
+        assert connection_established, (
+            "SSE endpoint test failed - neither connected nor timed out during streaming. "
+            "This indicates the endpoint may be broken or returning an error immediately."
+        )
 
     def test_cors_headers_present_for_valid_origin(self, client, auth_headers):
         """

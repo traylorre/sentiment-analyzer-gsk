@@ -24,26 +24,52 @@ import requests
 
 
 class TestCanaryPreprod:
-    """Test the production canary against preprod infrastructure."""
+    """Test the production canary against preprod infrastructure.
+
+    These tests validate that the canary (health check) will work in production.
+    If these tests fail, the production canary would also fail - meaning we'd
+    have no early warning system for production issues.
+
+    Required Environment Variables (set by CI in test-preprod job):
+    - PREPROD_DASHBOARD_URL: Lambda Function URL for preprod dashboard
+    - PREPROD_DASHBOARD_API_KEY: API key for preprod (same as DASHBOARD_API_KEY)
+
+    CI Configuration: deploy.yml test-preprod job sets these from Terraform outputs.
+    """
 
     @pytest.fixture(scope="class")
     def dashboard_url(self):
         """
         Get dashboard URL from environment.
 
-        This should be set after preprod deployment.
+        This MUST be set in CI - skipping is a test configuration error.
         """
         url = os.environ.get("PREPROD_DASHBOARD_URL")
         if not url:
-            pytest.skip("PREPROD_DASHBOARD_URL not set - run after preprod deployment")
+            pytest.fail(
+                "PREPROD_DASHBOARD_URL not set! "
+                "This is required for canary tests. "
+                "Check deploy.yml test-preprod job env vars. "
+                "The URL should come from Terraform output: dashboard_url"
+            )
         return url
 
     @pytest.fixture(scope="class")
     def api_key(self):
-        """Get preprod API key from environment."""
-        key = os.environ.get("PREPROD_DASHBOARD_API_KEY")
+        """Get preprod API key from environment.
+
+        This MUST be set in CI - skipping is a test configuration error.
+        """
+        # Try both env var names (CI uses DASHBOARD_API_KEY, tests expect PREPROD_DASHBOARD_API_KEY)
+        key = os.environ.get("PREPROD_DASHBOARD_API_KEY") or os.environ.get(
+            "DASHBOARD_API_KEY"
+        )
         if not key:
-            pytest.skip("PREPROD_DASHBOARD_API_KEY not set")
+            pytest.fail(
+                "PREPROD_DASHBOARD_API_KEY (or DASHBOARD_API_KEY) not set! "
+                "This is required for canary tests. "
+                "Check deploy.yml test-preprod job env vars."
+            )
         return key
 
     def test_health_endpoint_structure(self, dashboard_url, api_key):

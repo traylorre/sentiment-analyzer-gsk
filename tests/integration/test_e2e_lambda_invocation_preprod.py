@@ -51,9 +51,16 @@ REQUEST_TIMEOUT = 65
 
 @pytest.fixture
 def auth_headers() -> dict[str, str]:
-    """Return valid authorization headers for E2E tests."""
+    """Return valid authorization headers for E2E tests.
+
+    API_KEY MUST be set in CI - this is not optional.
+    """
     if not API_KEY:
-        pytest.skip("API_KEY not set - cannot test authenticated endpoints")
+        pytest.fail(
+            "API_KEY not set! "
+            "This is required for E2E Lambda invocation tests. "
+            "Check deploy.yml test-preprod job env vars."
+        )
     return {"Authorization": API_KEY}
 
 

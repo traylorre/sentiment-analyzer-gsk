@@ -178,31 +178,51 @@ class TestAuthentication:
 
 
 class TestStaticFiles:
-    """Tests for static file serving."""
+    """Tests for static file serving.
 
-    def test_index_html(self, client):
+    Static files exist at src/dashboard/ and are served by the dashboard handler.
+    These tests verify the files are correctly served and security is enforced.
+    """
+
+    def test_index_html_served(self, client):
         """Test serving index.html at root."""
         response = client.get("/")
-        # Returns 200 if file exists, 404 otherwise
-        assert response.status_code in [200, 404]
+        assert (
+            response.status_code == 200
+        ), f"Expected 200 for index.html, got {response.status_code}"
+        # Should be HTML content
+        assert "text/html" in response.headers.get("content-type", "")
 
-    def test_static_css(self, client):
+    def test_static_css_served(self, client):
         """Test serving CSS file."""
         response = client.get("/static/styles.css")
-        assert response.status_code in [200, 404]
+        assert (
+            response.status_code == 200
+        ), f"Expected 200 for styles.css, got {response.status_code}"
+        assert "text/css" in response.headers.get("content-type", "")
 
-    def test_static_js(self, client):
+    def test_static_js_served(self, client):
         """Test serving JavaScript file."""
         response = client.get("/static/app.js")
-        assert response.status_code in [200, 404]
+        assert (
+            response.status_code == 200
+        ), f"Expected 200 for app.js, got {response.status_code}"
+        assert "javascript" in response.headers.get("content-type", "")
 
     def test_path_traversal_blocked(self, client):
-        """Test path traversal attack with slashes is blocked."""
-        # Direct slash in path
+        """Test path traversal attack with slashes is blocked.
+
+        Security: The handler uses a strict whitelist approach. Any filename
+        not in ALLOWED_STATIC_FILES returns 404. This is secure because:
+        - User input never reaches the filesystem
+        - Only hardcoded paths are used
+        - Whitelist is explicit, not pattern-based
+        """
+        # Path with slashes - not in whitelist, so returns 404
         response = client.get("/static/foo/bar.css")
-        # Starlette converts this to 404 (file not found)
-        # Our check for "/" in filename catches it at route level
-        assert response.status_code in [400, 404]
+        assert (
+            response.status_code == 404
+        ), f"Expected 404 for non-whitelisted file, got {response.status_code}"
 
     def test_dotdot_in_filename_blocked(self, client):
         """Test .. in filename is blocked (returns 404 since not in whitelist)."""
@@ -430,46 +450,53 @@ class TestDynamoDBErrorHandling:
 
 
 class TestStaticFilePackaging:
-    """Tests for static file bundling in Lambda package."""
+    """Tests for static file bundling in Lambda package.
 
-    @pytest.mark.skip(
-        reason="Static file bundling not yet implemented - requires Lambda packaging work"
-    )
-    def test_static_files_exist_in_package(self):
-        """Test that static HTML/CSS/JS files are bundled in Lambda package."""
-        import os
+    Static files exist at src/dashboard/ and are served by the handler.
+    These tests verify the files are present and the security whitelist is correct.
+    """
 
-        # Get dashboard source directory
-        from src import dashboard
+    def test_static_files_exist(self):
+        """Verify static files exist in the expected location."""
+        from pathlib import Path
 
-        dashboard_dir = os.path.dirname(dashboard.__file__)
+        # Static files are at src/dashboard/
+        project_root = Path(__file__).parent.parent.parent
+        dashboard_dir = project_root / "src" / "dashboard"
 
-        # Verify static files exist
-        index_path = os.path.join(dashboard_dir, "index.html")
-        styles_path = os.path.join(dashboard_dir, "static", "styles.css")
-        app_js_path = os.path.join(dashboard_dir, "static", "app.js")
+        # These files should exist
+        index_html = dashboard_dir / "index.html"
+        styles_css = dashboard_dir / "styles.css"
+        app_js = dashboard_dir / "app.js"
 
-        assert os.path.exists(index_path), f"index.html not found at {index_path}"
-        assert os.path.exists(styles_path), f"styles.css not found at {styles_path}"
-        assert os.path.exists(app_js_path), f"app.js not found at {app_js_path}"
+        assert index_html.exists(), f"index.html not found at {index_html}"
+        assert styles_css.exists(), f"styles.css not found at {styles_css}"
+        assert app_js.exists(), f"app.js not found at {app_js}"
 
-    @pytest.mark.skip(
-        reason="Static file bundling not yet implemented - requires Lambda packaging work"
-    )
-    def test_index_html_has_content(self):
-        """Test index.html is not empty."""
-        import os
+    def test_index_html_has_valid_content(self):
+        """Verify index.html is a valid HTML file."""
+        from pathlib import Path
 
-        from src import dashboard
+        project_root = Path(__file__).parent.parent.parent
+        index_html = project_root / "src" / "dashboard" / "index.html"
 
-        dashboard_dir = os.path.dirname(dashboard.__file__)
-        index_path = os.path.join(dashboard_dir, "index.html")
+        content = index_html.read_text()
+        assert len(content) > 0, "index.html is empty"
+        assert (
+            "<html" in content.lower() or "<!doctype" in content.lower()
+        ), "index.html doesn't appear to be valid HTML"
 
-        if os.path.exists(index_path):
-            with open(index_path) as f:
-                content = f.read()
-                assert len(content) > 0
-                assert "<html" in content.lower() or "<!doctype" in content.lower()
+    def test_handler_defines_allowed_static_files(self):
+        """Verify handler has a static file whitelist (security feature)."""
+        from src.lambdas.dashboard.handler import ALLOWED_STATIC_FILES
+
+        # Security: Only whitelisted files should be servable
+        assert isinstance(ALLOWED_STATIC_FILES, dict)
+        assert "app.js" in ALLOWED_STATIC_FILES
+        assert "styles.css" in ALLOWED_STATIC_FILES
+        # All entries should have MIME types
+        for filename, mime_type in ALLOWED_STATIC_FILES.items():
+            assert "/" in mime_type, f"{filename} has invalid MIME type: {mime_type}"
 
 
 class TestLambdaHandler:
