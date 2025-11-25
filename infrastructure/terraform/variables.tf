@@ -62,3 +62,9 @@ variable "cors_allowed_origins" {
     error_message = "Wildcard '*' is not allowed in cors_allowed_origins. Use specific domain names."
   }
 }
+
+variable "lambda_package_version" {
+  description = "Version identifier for Lambda packages (git SHA). Used to force Lambda updates when packages change."
+  type        = string
+  default     = "initial"
+}

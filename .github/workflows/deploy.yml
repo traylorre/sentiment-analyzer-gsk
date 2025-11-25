@@ -176,27 +176,40 @@ jobs:
           echo "📦 Packaging Dashboard Lambda (FastAPI, Mangum, SSE, pydantic)..."
 
           # Install dashboard dependencies
-          # Build in Lambda-compatible Docker container for binary compatibility
-          # CRITICAL: pydantic has native C extensions that must match Lambda runtime
-          # Run container as current user to avoid permission issues (industry best practice)
-          docker run --rm \
-            --entrypoint /bin/bash \
-            --user $(id -u):$(id -g) \
-            -v $(pwd)/packages:/workspace \
-            public.ecr.aws/lambda/python:3.13 \
-            -c "
-              pip install \
-                fastapi==0.121.3 \
-                mangum==0.19.0 \
-                sse-starlette==3.0.3 \
-                pydantic==2.12.4 \
-                boto3==1.41.0 \
-                python-json-logger==4.0.0 \
-                -t /workspace/dashboard-deps/ \
-                --no-cache-dir \
-                --disable-pip-version-check \
-                --quiet
-            "
+          # CRITICAL: pydantic-core has Rust binaries that MUST match Lambda runtime
+          # Use explicit platform flags to ensure cp313 wheels are downloaded
+          # (Docker container approach was downloading cp311 wheels from cache)
+          pip install \
+            fastapi==0.121.3 \
+            mangum==0.19.0 \
+            sse-starlette==3.0.3 \
+            pydantic==2.12.4 \
+            boto3==1.41.0 \
+            python-json-logger==4.0.0 \
+            -t packages/dashboard-deps/ \
+            --platform manylinux2014_x86_64 \
+            --implementation cp \
+            --python-version 313 \
+            --only-binary=:all: \
+            --no-cache-dir \
+            --disable-pip-version-check \
+            --quiet
+
+          # Verify pydantic-core binary is for Python 3.13
+          echo "🔍 Verifying pydantic-core binary compatibility..."
+          PYDANTIC_SO=$(find packages/dashboard-deps -name "_pydantic_core*.so" | head -1)
+          if [ -z "$PYDANTIC_SO" ]; then
+            echo "❌ ERROR: pydantic-core .so file not found!"
+            exit 1
+          fi
+          echo "Found: $PYDANTIC_SO"
+          if echo "$PYDANTIC_SO" | grep -q "cpython-313"; then
+            echo "✅ pydantic-core binary is for Python 3.13"
+          else
+            echo "❌ ERROR: pydantic-core binary is NOT for Python 3.13!"
+            echo "File: $PYDANTIC_SO"
+            exit 1
+          fi
 
           # Build dashboard package
           # NOTE: handler.py must be at ROOT for Lambda handler config "handler.lambda_handler"
@@ -412,7 +425,11 @@ jobs:
 
       - name: Terraform Plan (Dev)
         run: |
-          terraform plan -var-file=dev.tfvars -out=dev.tfplan
+          SHA="${GITHUB_SHA::7}"
+          terraform plan \
+            -var-file=dev.tfvars \
+            -var="lambda_package_version=${SHA}" \
+            -out=dev.tfplan
 
       - name: Terraform Apply (Dev)
         run: |
@@ -651,6 +668,7 @@ jobs:
           terraform plan \
             -var-file=preprod.tfvars \
             -var="model_version=${{ needs.build.outputs.artifact-sha }}" \
+            -var="lambda_package_version=${{ needs.build.outputs.artifact-sha }}" \
             -no-color \
             -lock-timeout=5m \
             -out=preprod.tfplan | tee plan.txt
@@ -985,6 +1003,7 @@ jobs:
           terraform plan \
             -var-file=prod.tfvars \
             -var="model_version=${{ needs.build.outputs.artifact-sha }}" \
+            -var="lambda_package_version=${{ needs.build.outputs.artifact-sha }}" \
             -no-color \
             -lock-timeout=5m \
             -out=prod.tfplan | tee plan.txt
