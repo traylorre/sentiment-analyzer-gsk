@@ -71,7 +71,8 @@ def get_stuck_items_count(
     Returns:
         Count of stuck items
     """
-    dynamodb = boto3.resource("dynamodb")
+    region = os.environ.get("AWS_REGION", "us-east-1")
+    dynamodb = boto3.resource("dynamodb", region_name=region)
     table = dynamodb.Table(table_name)
 
     # Calculate threshold timestamp
