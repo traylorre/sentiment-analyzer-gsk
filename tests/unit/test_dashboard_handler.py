@@ -893,3 +893,443 @@ class TestChaosUIEndpoint:
         assert "Lambda" in content or "Cold Start" in content
         assert "Blast Radius" in content
         assert "Duration" in content
+
+
+class TestAPIv2SentimentEndpoint:
+    """Tests for the /api/v2/sentiment endpoint."""
+
+    def test_sentiment_requires_auth(self, client):
+        """Test that sentiment endpoint requires authentication."""
+        response = client.get("/api/v2/sentiment?tags=AI")
+        assert response.status_code == 401
+
+    def test_sentiment_requires_tags(self, client, auth_headers):
+        """Test that tags parameter is required."""
+        response = client.get("/api/v2/sentiment", headers=auth_headers)
+        # FastAPI returns 422 for missing required query params
+        assert response.status_code == 422
+
+    def test_sentiment_empty_tags_rejected(self, client, auth_headers):
+        """Test that empty tags string is rejected."""
+        response = client.get("/api/v2/sentiment?tags=", headers=auth_headers)
+        assert response.status_code == 400
+        assert "At least one tag" in response.json()["detail"]
+
+    def test_sentiment_max_tags_exceeded(self, client, auth_headers):
+        """Test that more than 5 tags is rejected."""
+        response = client.get(
+            "/api/v2/sentiment?tags=a,b,c,d,e,f", headers=auth_headers
+        )
+        assert response.status_code == 400
+        assert "Maximum 5 tags" in response.json()["detail"]
+
+    def test_sentiment_valid_request(self, client, auth_headers, monkeypatch):
+        """Test successful sentiment request returns expected structure."""
+        mock_result = {
+            "tags": {
+                "AI": {"positive": 0.7, "neutral": 0.2, "negative": 0.1, "count": 10}
+            },
+            "overall": {"positive": 0.7, "neutral": 0.2, "negative": 0.1},
+            "total_count": 10,
+            "trend": "improving",
+            "time_range": {
+                "start": "2025-11-24T00:00:00",
+                "end": "2025-11-24T23:59:59",
+            },
+        }
+        monkeypatch.setattr(
+            "src.lambdas.dashboard.handler.get_sentiment_by_tags",
+            lambda *args, **kwargs: mock_result,
+        )
+        response = client.get("/api/v2/sentiment?tags=AI", headers=auth_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert "tags" in data
+        assert "overall" in data
+        assert "total_count" in data
+
+    def test_sentiment_with_custom_time_range(self, client, auth_headers, monkeypatch):
+        """Test sentiment with custom start/end times."""
+        mock_result = {
+            "tags": {
+                "climate": {
+                    "positive": 0.5,
+                    "neutral": 0.3,
+                    "negative": 0.2,
+                    "count": 5,
+                }
+            },
+            "overall": {"positive": 0.5, "neutral": 0.3, "negative": 0.2},
+            "total_count": 5,
+            "trend": "stable",
+            "time_range": {
+                "start": "2025-11-23T00:00:00Z",
+                "end": "2025-11-24T00:00:00Z",
+            },
+        }
+        monkeypatch.setattr(
+            "src.lambdas.dashboard.handler.get_sentiment_by_tags",
+            lambda *args, **kwargs: mock_result,
+        )
+        response = client.get(
+            "/api/v2/sentiment?tags=climate&start=2025-11-23T00:00:00Z&end=2025-11-24T00:00:00Z",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+
+
+class TestAPIv2TrendsEndpoint:
+    """Tests for the /api/v2/trends endpoint."""
+
+    def test_trends_requires_auth(self, client):
+        """Test that trends endpoint requires authentication."""
+        response = client.get("/api/v2/trends?tags=AI")
+        assert response.status_code == 401
+
+    def test_trends_requires_tags(self, client, auth_headers):
+        """Test that tags parameter is required."""
+        response = client.get("/api/v2/trends", headers=auth_headers)
+        assert response.status_code == 422
+
+    def test_trends_empty_tags_rejected(self, client, auth_headers):
+        """Test that empty tags string is rejected."""
+        response = client.get("/api/v2/trends?tags=", headers=auth_headers)
+        assert response.status_code == 400
+        assert "At least one tag" in response.json()["detail"]
+
+    def test_trends_max_tags_exceeded(self, client, auth_headers):
+        """Test that more than 5 tags is rejected."""
+        response = client.get("/api/v2/trends?tags=a,b,c,d,e,f", headers=auth_headers)
+        assert response.status_code == 400
+        assert "Maximum 5 tags" in response.json()["detail"]
+
+    def test_trends_invalid_interval(self, client, auth_headers):
+        """Test that invalid interval is rejected."""
+        response = client.get(
+            "/api/v2/trends?tags=AI&interval=2h", headers=auth_headers
+        )
+        assert response.status_code == 400
+        assert "Invalid interval" in response.json()["detail"]
+
+    def test_trends_invalid_range_format(self, client, auth_headers):
+        """Test that invalid range format is rejected."""
+        response = client.get(
+            "/api/v2/trends?tags=AI&range=invalid", headers=auth_headers
+        )
+        assert response.status_code == 400
+        assert "Invalid range format" in response.json()["detail"]
+
+    def test_trends_valid_hourly_range(self, client, auth_headers, monkeypatch):
+        """Test valid hourly range format."""
+        mock_result = {
+            "AI": [{"timestamp": "2025-11-24T10:00:00", "sentiment": 0.7, "count": 5}]
+        }
+        monkeypatch.setattr(
+            "src.lambdas.dashboard.handler.get_trend_data",
+            lambda *args, **kwargs: mock_result,
+        )
+        response = client.get(
+            "/api/v2/trends?tags=AI&interval=1h&range=24h", headers=auth_headers
+        )
+        assert response.status_code == 200
+
+    def test_trends_valid_daily_range(self, client, auth_headers, monkeypatch):
+        """Test valid daily range format."""
+        mock_result = {
+            "AI": [{"timestamp": "2025-11-24T00:00:00", "sentiment": 0.6, "count": 20}]
+        }
+        monkeypatch.setattr(
+            "src.lambdas.dashboard.handler.get_trend_data",
+            lambda *args, **kwargs: mock_result,
+        )
+        response = client.get(
+            "/api/v2/trends?tags=AI&interval=1d&range=7d", headers=auth_headers
+        )
+        assert response.status_code == 200
+
+
+class TestAPIv2ArticlesEndpoint:
+    """Tests for the /api/v2/articles endpoint."""
+
+    def test_articles_requires_auth(self, client):
+        """Test that articles endpoint requires authentication."""
+        response = client.get("/api/v2/articles?tags=AI")
+        assert response.status_code == 401
+
+    def test_articles_requires_tags(self, client, auth_headers):
+        """Test that tags parameter is required."""
+        response = client.get("/api/v2/articles", headers=auth_headers)
+        assert response.status_code == 422
+
+    def test_articles_empty_tags_rejected(self, client, auth_headers):
+        """Test that empty tags string is rejected."""
+        response = client.get("/api/v2/articles?tags=", headers=auth_headers)
+        assert response.status_code == 400
+        assert "At least one tag" in response.json()["detail"]
+
+    def test_articles_invalid_sentiment_filter(self, client, auth_headers):
+        """Test that invalid sentiment filter is rejected."""
+        response = client.get(
+            "/api/v2/articles?tags=AI&sentiment=bad", headers=auth_headers
+        )
+        assert response.status_code == 400
+        assert "Invalid sentiment" in response.json()["detail"]
+
+    def test_articles_invalid_limit_zero(self, client, auth_headers):
+        """Test that limit of 0 is rejected."""
+        response = client.get("/api/v2/articles?tags=AI&limit=0", headers=auth_headers)
+        assert response.status_code == 400
+
+    def test_articles_invalid_limit_too_large(self, client, auth_headers):
+        """Test that limit over 100 is rejected."""
+        response = client.get(
+            "/api/v2/articles?tags=AI&limit=200", headers=auth_headers
+        )
+        assert response.status_code == 400
+
+    def test_articles_valid_request(self, client, auth_headers, monkeypatch):
+        """Test successful articles request."""
+        mock_result = [
+            {
+                "id": "1",
+                "title": "AI News",
+                "timestamp": "2025-11-24T10:00:00Z",
+                "sentiment": "positive",
+            }
+        ]
+        monkeypatch.setattr(
+            "src.lambdas.dashboard.handler.get_articles_by_tags",
+            lambda *args, **kwargs: mock_result,
+        )
+        response = client.get("/api/v2/articles?tags=AI", headers=auth_headers)
+        assert response.status_code == 200
+        assert isinstance(response.json(), list)
+
+    def test_articles_with_sentiment_filter(self, client, auth_headers, monkeypatch):
+        """Test articles with sentiment filter."""
+        mock_result = [
+            {
+                "id": "1",
+                "title": "Good News",
+                "timestamp": "2025-11-24T10:00:00Z",
+                "sentiment": "positive",
+            }
+        ]
+        monkeypatch.setattr(
+            "src.lambdas.dashboard.handler.get_articles_by_tags",
+            lambda *args, **kwargs: mock_result,
+        )
+        response = client.get(
+            "/api/v2/articles?tags=AI&sentiment=positive", headers=auth_headers
+        )
+        assert response.status_code == 200
+
+
+class TestChaosExperimentsAPI:
+    """Tests for chaos experiment CRUD endpoints."""
+
+    def test_create_experiment_requires_auth(self, client):
+        """Test that create experiment requires authentication."""
+        response = client.post(
+            "/chaos/experiments", json={"scenario_type": "dynamodb_throttle"}
+        )
+        assert response.status_code == 401
+
+    def test_create_experiment_environment_blocked(
+        self, client, auth_headers, monkeypatch
+    ):
+        """Test that chaos experiments are blocked in non-preprod environments."""
+        from src.lambdas.dashboard.chaos import EnvironmentNotAllowedError
+
+        def mock_create(*args, **kwargs):
+            raise EnvironmentNotAllowedError("Chaos testing only allowed in preprod")
+
+        monkeypatch.setattr(
+            "src.lambdas.dashboard.handler.create_experiment", mock_create
+        )
+
+        response = client.post(
+            "/chaos/experiments",
+            headers=auth_headers,
+            json={
+                "scenario_type": "dynamodb_throttle",
+                "blast_radius": 50,
+                "duration_seconds": 30,
+            },
+        )
+        assert response.status_code == 403
+        assert "preprod" in response.json()["detail"].lower()
+
+    def test_create_experiment_invalid_request(self, client, auth_headers):
+        """Test that invalid request body is rejected."""
+        response = client.post(
+            "/chaos/experiments",
+            headers=auth_headers,
+            json={"invalid": "data"},
+        )
+        assert response.status_code == 400
+
+    def test_create_experiment_success(self, client, auth_headers, monkeypatch):
+        """Test successful experiment creation."""
+        mock_experiment = {
+            "experiment_id": "test-123",
+            "scenario_type": "dynamodb_throttle",
+            "status": "pending",
+        }
+        monkeypatch.setattr(
+            "src.lambdas.dashboard.handler.create_experiment",
+            lambda *args, **kwargs: mock_experiment,
+        )
+
+        response = client.post(
+            "/chaos/experiments",
+            headers=auth_headers,
+            json={
+                "scenario_type": "dynamodb_throttle",
+                "blast_radius": 50,
+                "duration_seconds": 30,
+            },
+        )
+        assert response.status_code == 201
+        assert response.json()["experiment_id"] == "test-123"
+
+    def test_list_experiments_requires_auth(self, client):
+        """Test that list experiments requires authentication."""
+        response = client.get("/chaos/experiments")
+        assert response.status_code == 401
+
+    def test_list_experiments_success(self, client, auth_headers, monkeypatch):
+        """Test successful experiment listing."""
+        mock_experiments = [
+            {"experiment_id": "1", "status": "completed"},
+            {"experiment_id": "2", "status": "running"},
+        ]
+        monkeypatch.setattr(
+            "src.lambdas.dashboard.handler.list_experiments",
+            lambda *args, **kwargs: mock_experiments,
+        )
+
+        response = client.get("/chaos/experiments", headers=auth_headers)
+        assert response.status_code == 200
+        assert len(response.json()) == 2
+
+    def test_list_experiments_with_status_filter(
+        self, client, auth_headers, monkeypatch
+    ):
+        """Test experiment listing with status filter."""
+        mock_experiments = [{"experiment_id": "1", "status": "running"}]
+        monkeypatch.setattr(
+            "src.lambdas.dashboard.handler.list_experiments",
+            lambda *args, **kwargs: mock_experiments,
+        )
+
+        response = client.get("/chaos/experiments?status=running", headers=auth_headers)
+        assert response.status_code == 200
+
+    def test_get_experiment_requires_auth(self, client):
+        """Test that get experiment requires authentication."""
+        response = client.get("/chaos/experiments/test-123")
+        assert response.status_code == 401
+
+    def test_get_experiment_not_found(self, client, auth_headers, monkeypatch):
+        """Test 404 for non-existent experiment."""
+        monkeypatch.setattr(
+            "src.lambdas.dashboard.handler.get_experiment", lambda *args: None
+        )
+
+        response = client.get("/chaos/experiments/nonexistent", headers=auth_headers)
+        assert response.status_code == 404
+
+    def test_get_experiment_success(self, client, auth_headers, monkeypatch):
+        """Test successful experiment retrieval."""
+        mock_experiment = {
+            "experiment_id": "test-123",
+            "status": "pending",
+            "scenario_type": "newsapi_failure",
+        }
+        monkeypatch.setattr(
+            "src.lambdas.dashboard.handler.get_experiment",
+            lambda *args: mock_experiment,
+        )
+
+        response = client.get("/chaos/experiments/test-123", headers=auth_headers)
+        assert response.status_code == 200
+        assert response.json()["experiment_id"] == "test-123"
+
+    def test_start_experiment_requires_auth(self, client):
+        """Test that start experiment requires authentication."""
+        response = client.post("/chaos/experiments/test-123/start")
+        assert response.status_code == 401
+
+    def test_start_experiment_success(self, client, auth_headers, monkeypatch):
+        """Test successful experiment start."""
+        mock_result = {"experiment_id": "test-123", "status": "running"}
+        monkeypatch.setattr(
+            "src.lambdas.dashboard.handler.start_experiment",
+            lambda *args: mock_result,
+        )
+
+        response = client.post(
+            "/chaos/experiments/test-123/start", headers=auth_headers
+        )
+        assert response.status_code == 200
+        assert response.json()["status"] == "running"
+
+    def test_start_experiment_chaos_error(self, client, auth_headers, monkeypatch):
+        """Test start failure due to ChaosError returns 500."""
+        from src.lambdas.dashboard.chaos import ChaosError
+
+        def mock_start(*args):
+            raise ChaosError("Experiment failed to start")
+
+        monkeypatch.setattr(
+            "src.lambdas.dashboard.handler.start_experiment", mock_start
+        )
+
+        response = client.post(
+            "/chaos/experiments/test-123/start", headers=auth_headers
+        )
+        assert response.status_code == 500
+
+    def test_stop_experiment_requires_auth(self, client):
+        """Test that stop experiment requires authentication."""
+        response = client.post("/chaos/experiments/test-123/stop")
+        assert response.status_code == 401
+
+    def test_stop_experiment_success(self, client, auth_headers, monkeypatch):
+        """Test successful experiment stop."""
+        mock_result = {"experiment_id": "test-123", "status": "stopped"}
+        monkeypatch.setattr(
+            "src.lambdas.dashboard.handler.stop_experiment",
+            lambda *args: mock_result,
+        )
+
+        response = client.post("/chaos/experiments/test-123/stop", headers=auth_headers)
+        assert response.status_code == 200
+        assert response.json()["status"] == "stopped"
+
+    def test_delete_experiment_requires_auth(self, client):
+        """Test that delete experiment requires authentication."""
+        response = client.delete("/chaos/experiments/test-123")
+        assert response.status_code == 401
+
+    def test_delete_experiment_success(self, client, auth_headers, monkeypatch):
+        """Test successful experiment deletion."""
+        monkeypatch.setattr(
+            "src.lambdas.dashboard.handler.delete_experiment",
+            lambda *args: True,
+        )
+
+        response = client.delete("/chaos/experiments/test-123", headers=auth_headers)
+        assert response.status_code == 200
+        assert "deleted" in response.json()["message"].lower()
+
+    def test_delete_experiment_failure(self, client, auth_headers, monkeypatch):
+        """Test failed experiment deletion."""
+        monkeypatch.setattr(
+            "src.lambdas.dashboard.handler.delete_experiment",
+            lambda *args: False,
+        )
+
+        response = client.delete("/chaos/experiments/test-123", headers=auth_headers)
+        assert response.status_code == 500
