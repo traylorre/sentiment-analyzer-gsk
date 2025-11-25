@@ -5,15 +5,15 @@ This document explains the Terraform deployment process with visual diagrams for
 ## Overview Diagram
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
 flowchart TB
-    subgraph "Developer Workflow"
+    subgraph DevWorkflow["Developer Workflow"]
         A[Push to main] --> B{Paths changed?}
         B -->|src/** or terraform/**| C[Trigger Deploy Dev]
         B -->|Other| D[Skip Deploy]
     end
 
-    subgraph "Deploy Dev Workflow"
+    subgraph DeployWorkflow["Deploy Dev Workflow"]
         C --> E[Checkout Code]
         E --> F[Configure AWS Credentials]
         F --> G[Check for S3 Lock Files]
@@ -33,7 +33,7 @@ flowchart TB
         R -->|No| T[Deployment Failed]
     end
 
-    subgraph "Integration Tests"
+    subgraph IntegrationTests["Integration Tests"]
         S --> U[Run pytest]
         U --> V[Validate Data Flow]
         V --> W[Check Lambda Health]
@@ -42,43 +42,49 @@ flowchart TB
         X -->|No| Z[Tests Failed]
     end
 
-    classDef successStep fill:#388e3c,stroke:#1b5e20,stroke-width:2px,color:#fff
-    classDef failStep fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef stageBox fill:#fff8e1,stroke:#c9a227,stroke-width:2px,color:#333
+    classDef processNode fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
+    classDef decisionNode fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
+    classDef successNode fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px,color:#1e3a1e
+    classDef failNode fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
 
-    class Y successStep
-    class T,Z failStep
+    class DevWorkflow,DeployWorkflow,IntegrationTests stageBox
+    class A,C,D,E,F,G,I,J,K,L,M,N,O,P,Q,S,U,V,W processNode
+    class B,H,R,X decisionNode
+    class Y successNode
+    class T,Z failNode
 ```
 
 ## Resource Creation Order
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
 flowchart LR
-    subgraph "Phase 1: Foundation"
+    subgraph Phase1["Phase 1: Foundation"]
         A[S3 Buckets<br/>Lambda Deployments<br/>ML Model Storage]
         B[Secrets Manager]
         C[SNS Topic & DLQ]
         D[DynamoDB Table]
     end
 
-    subgraph "Phase 2: IAM"
+    subgraph Phase2["Phase 2: IAM"]
         E[IAM Roles]
         F[IAM Policies]
     end
 
-    subgraph "Phase 3: Compute"
+    subgraph Phase3["Phase 3: Compute"]
         G[Lambda Functions]
         H[Function URLs]
         I[CloudWatch Log Groups]
     end
 
-    subgraph "Phase 4: Triggers"
+    subgraph Phase4["Phase 4: Triggers"]
         J[EventBridge Rules]
         K[SNS Subscriptions]
         L[Lambda Permissions]
     end
 
-    subgraph "Phase 5: Monitoring"
+    subgraph Phase5["Phase 5: Monitoring"]
         M[CloudWatch Alarms]
         N[Budget Alerts]
         O[Backup Plans]
@@ -97,17 +103,19 @@ flowchart LR
     G --> L
     G --> M
 
-    classDef phase1 fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
-    classDef phase2 fill:#7b1fa2,stroke:#4a148c,stroke-width:2px,color:#fff
-    classDef phase3 fill:#388e3c,stroke:#1b5e20,stroke-width:2px,color:#fff
-    classDef phase4 fill:#f57c00,stroke:#e65100,stroke-width:2px,color:#fff
-    classDef phase5 fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef stageBox fill:#fff8e1,stroke:#c9a227,stroke-width:2px,color:#333
+    classDef phase1Node fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
+    classDef phase2Node fill:#b39ddb,stroke:#673ab7,stroke-width:2px,color:#1a0a3e
+    classDef phase3Node fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px,color:#1e3a1e
+    classDef phase4Node fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
+    classDef phase5Node fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
 
-    class A,B,C,D phase1
-    class E,F phase2
-    class G,H,I phase3
-    class J,K,L phase4
-    class M,N,O phase5
+    class Phase1,Phase2,Phase3,Phase4,Phase5 stageBox
+    class A,B,C,D phase1Node
+    class E,F phase2Node
+    class G,H,I phase3Node
+    class J,K,L phase4Node
+    class M,N,O phase5Node
 ```
 
 ## State Management Flow
@@ -153,7 +161,7 @@ sequenceDiagram
 **What you need to know:**
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
 flowchart LR
     A[Your Code Change] --> B[Push to main]
     B --> C[CI Runs Automatically]
@@ -164,9 +172,13 @@ flowchart LR
     G -->|Yes| H[Done!]
     G -->|No| I[Check Test Logs]
 
-    classDef successNode fill:#388e3c,stroke:#1b5e20,stroke-width:2px,color:#fff
-    classDef errorNode fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef processNode fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
+    classDef decisionNode fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
+    classDef successNode fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px,color:#1e3a1e
+    classDef errorNode fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
 
+    class A,B,C,E processNode
+    class D,G decisionNode
     class H successNode
     class F,I errorNode
 ```
@@ -182,7 +194,7 @@ flowchart LR
 **Incident Response Flow:**
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
 flowchart TB
     A[Alert: Deploy Failed] --> B{Check Error Type}
 
@@ -201,10 +213,14 @@ flowchart TB
     B -->|S3 NoSuchKey| L[Lambda package missing]
     L --> M[Check S3 upload step succeeded]
 
-    classDef alertNode fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
-    classDef actionNode fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
+    classDef alertNode fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef decisionNode fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
+    classDef processNode fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
+    classDef actionNode fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px,color:#1e3a1e
 
     class A alertNode
+    class B,D decisionNode
+    class C,F,G,H,J,L processNode
     class E,I,K,M actionNode
 ```
 
@@ -230,21 +246,21 @@ terraform refresh -var="environment=dev"
 **Infrastructure Dependencies:**
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
 graph TB
-    subgraph "Terraform State Backend"
+    subgraph StateBackend["Terraform State Backend"]
         A[S3 Bucket<br/>sentiment-analyzer-tfstate-*]
         B[S3 Lock Files<br/>*.tfstate.tflock]
     end
 
-    subgraph "GitHub Secrets Required"
+    subgraph GHSecrets["GitHub Secrets Required"]
         C[AWS_ACCESS_KEY_ID]
         D[AWS_SECRET_ACCESS_KEY]
         E[AWS_REGION]
         F[DEPLOYMENT_BUCKET]
     end
 
-    subgraph "AWS Resources Managed"
+    subgraph AWSResources["AWS Resources Managed"]
         G[3x Lambda Functions]
         H[1x DynamoDB Table]
         I[2x Secrets Manager]
@@ -263,25 +279,27 @@ graph TB
     E --> G
     F --> G
 
-    classDef stateBackend fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
-    classDef secrets fill:#7b1fa2,stroke:#4a148c,stroke-width:2px,color:#fff
-    classDef resources fill:#388e3c,stroke:#1b5e20,stroke-width:2px,color:#fff
+    classDef stageBox fill:#fff8e1,stroke:#c9a227,stroke-width:2px,color:#333
+    classDef stateNode fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
+    classDef secretNode fill:#b39ddb,stroke:#673ab7,stroke-width:2px,color:#1a0a3e
+    classDef resourceNode fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px,color:#1e3a1e
 
-    class A,B stateBackend
-    class C,D,E,F secrets
-    class G,H,I,J,K,L,M,N,O resources
+    class StateBackend,GHSecrets,AWSResources stageBox
+    class A,B stateNode
+    class C,D,E,F secretNode
+    class G,H,I,J,K,L,M,N,O resourceNode
 ```
 
 **Terraform Module Structure:**
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
 graph LR
-    subgraph "main.tf"
+    subgraph MainTF["main.tf"]
         A[Root Module]
     end
 
-    subgraph "Modules"
+    subgraph Modules["Modules"]
         B[modules/lambda]
         C[modules/iam]
         D[modules/dynamodb]
@@ -299,9 +317,11 @@ graph LR
     A --> G
     A --> H
 
-    classDef rootModule fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
-    classDef childModule fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
+    classDef stageBox fill:#fff8e1,stroke:#c9a227,stroke-width:2px,color:#333
+    classDef rootModule fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef childModule fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
 
+    class MainTF,Modules stageBox
     class A rootModule
     class B,C,D,E,F,G,H childModule
 ```
@@ -342,7 +362,7 @@ gantt
 ## Troubleshooting Decision Tree
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
 flowchart TD
     A[Deployment Failed] --> B{Which step failed?}
 
@@ -373,11 +393,13 @@ flowchart TD
     H --> H1[Verify functions exist]
     H --> H2[Check S3 key paths match]
 
-    classDef errorNode fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
-    classDef checkNode fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
-    classDef actionNode fill:#388e3c,stroke:#1b5e20,stroke-width:2px,color:#fff
+    classDef errorNode fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef decisionNode fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
+    classDef checkNode fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
+    classDef actionNode fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px,color:#1e3a1e
 
     class A errorNode
+    class B,G1 decisionNode
     class C,D,E,F,G,H checkNode
     class C1,C2,C3,D1,D2,E1,E2,F1,F2,G2,G3,G4,H1,H2 actionNode
 ```

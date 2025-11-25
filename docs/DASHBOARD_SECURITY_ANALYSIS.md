@@ -17,18 +17,18 @@ The sentiment analyzer dashboard has **7 critical security vulnerabilities** tha
 ## Architecture Overview
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
 graph TB
     Internet[Internet Users] --> LambdaURL[Lambda Function URL<br/>auth_type = NONE]
     LambdaURL --> Dashboard[Dashboard Lambda<br/>10 concurrent max]
     Dashboard --> DynamoDB[DynamoDB<br/>On-Demand Pricing]
     Dashboard --> Secrets[Secrets Manager<br/>API Key Storage]
 
-    classDef vulnerable fill:#c62828,stroke:#b71c1c,stroke-width:3px,color:#fff
-    classDef resource fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
+    classDef vulnerableNode fill:#ef5350,stroke:#b71c1c,stroke-width:3px,color:#fff
+    classDef resourceNode fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
 
-    class LambdaURL,Dashboard vulnerable
-    class DynamoDB,Secrets resource
+    class LambdaURL,Dashboard vulnerableNode
+    class DynamoDB,Secrets resourceNode
 ```
 
 **Current Authentication Flow**:
@@ -318,7 +318,7 @@ T+60s:  All dashboard functionality unavailable
 ## Recommended Architecture
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
 graph TB
     Internet[Internet Users] --> CloudFront[CloudFront CDN<br/>DDoS Protection]
     CloudFront --> WAF[AWS WAF<br/>Rate Limiting<br/>IP Blocking]
@@ -330,11 +330,11 @@ graph TB
     APIGW --> CW[CloudWatch Alarms<br/>Request Rate<br/>401 Errors<br/>Concurrent Executions]
     CW --> SNS[SNS Notifications<br/>On-Call Alerts]
 
-    classDef secure fill:#388e3c,stroke:#1b5e20,stroke-width:2px,color:#fff
-    classDef monitoring fill:#f57c00,stroke:#e65100,stroke-width:2px,color:#fff
+    classDef secureNode fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px,color:#1e3a1e
+    classDef monitoringNode fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
 
-    class CloudFront,WAF,APIGW,Dashboard,Secrets secure
-    class CW,SNS monitoring
+    class CloudFront,WAF,APIGW,Dashboard,Secrets,DynamoDB secureNode
+    class CW,SNS monitoringNode
 ```
 
 **Key Improvements**:
