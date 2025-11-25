@@ -23,46 +23,47 @@ A cloud-hosted Sentiment Analyzer service built with serverless AWS architecture
 [![Deploy Pipeline](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/deploy.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/deploy.yml)
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
-flowchart TB
-    subgraph row1[" "]
-        direction LR
-        Build["📦 Build<br/>Lambda Packages"]
-        DeployDev["🚀 Deploy Dev"]
-        TestDev["🧪 Test Dev"]
+%%{init: {'theme':'default', 'themeVariables': {'primaryColor':'#e3f2fd', 'primaryTextColor':'#1565c0', 'primaryBorderColor':'#1565c0', 'lineColor':'#424242', 'secondaryColor':'#fff3e0', 'tertiaryColor':'#e8f5e9', 'background':'#ffffff'}}}%%
+flowchart LR
+    subgraph Stage1["Build Stage"]
+        Build["Build Lambda<br/>Packages"]
     end
 
-    subgraph row2[" "]
-        direction RL
-        TestPreprod["🧪 Test Preprod"]
-        DeployPreprod["🚀 Deploy Preprod"]
+    subgraph Stage2["Dev Stage"]
+        DeployDev["Deploy Dev"]
+        TestDev["Test Dev"]
     end
 
-    subgraph row3[" "]
-        direction LR
-        DeployProd["🚀 Deploy Prod"]
-        CanaryTest["🐤 Canary Test"]
-        Summary["📋 Summary"]
+    subgraph Stage3["Preprod Stage"]
+        DeployPreprod["Deploy Preprod"]
+        TestPreprod["Test Preprod"]
     end
 
-    Build --> DeployDev --> TestDev
+    subgraph Stage4["Prod Stage"]
+        DeployProd["Deploy Prod"]
+        CanaryTest["Canary Test"]
+        Summary["Summary"]
+    end
+
+    Build --> DeployDev
+    DeployDev --> TestDev
     TestDev --> DeployPreprod
     DeployPreprod --> TestPreprod
     TestPreprod --> DeployProd
-    DeployProd --> CanaryTest --> Summary
+    DeployProd --> CanaryTest
+    CanaryTest --> Summary
 
-    classDef buildStep fill:#2e7d32,stroke:#1b5e20,stroke-width:2px,color:#fff
-    classDef deployStep fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
-    classDef testStep fill:#f57c00,stroke:#e65100,stroke-width:2px,color:#fff
-    classDef prodStep fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
-    classDef summaryStep fill:#6a1b9a,stroke:#4a148c,stroke-width:2px,color:#fff
-    classDef invisible fill:none,stroke:none
+    classDef buildStage fill:#c8e6c9,stroke:#2e7d32,stroke-width:2px,color:#1b5e20
+    classDef devStage fill:#bbdefb,stroke:#1565c0,stroke-width:2px,color:#0d47a1
+    classDef preprodStage fill:#ffe0b2,stroke:#ef6c00,stroke-width:2px,color:#e65100
+    classDef prodStage fill:#ffcdd2,stroke:#c62828,stroke-width:2px,color:#b71c1c
+    classDef summaryNode fill:#e1bee7,stroke:#7b1fa2,stroke-width:2px,color:#4a148c
 
-    class Build buildStep
-    class DeployDev,DeployPreprod,DeployProd deployStep
-    class TestDev,TestPreprod,CanaryTest testStep
-    class Summary summaryStep
-    class row1,row2,row3 invisible
+    class Build buildStage
+    class DeployDev,TestDev devStage
+    class DeployPreprod,TestPreprod preprodStage
+    class DeployProd,CanaryTest prodStage
+    class Summary summaryNode
 ```
 
 **Quick Actions:**
