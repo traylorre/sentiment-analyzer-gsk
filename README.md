@@ -22,24 +22,47 @@ A cloud-hosted Sentiment Analyzer service built with serverless AWS architecture
 
 [![Deploy Pipeline](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/deploy.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/deploy.yml)
 
-**Pipeline Flow:** Build → Deploy Preprod → Test Preprod → Deploy Production
-
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'fontSize':'16px'}}}%%
-graph LR
-    Build[Build<br/>Lambda Packages] --> DeployPreprod[Deploy<br/>Preprod]
-    DeployPreprod --> TestPreprod[Test<br/>Preprod]
-    TestPreprod --> DeployProd[Deploy<br/>Production]
+%%{init: {'theme':'base', 'themeVariables': {'fontSize':'14px'}}}%%
+flowchart TB
+    subgraph row1[" "]
+        direction LR
+        Build["📦 Build<br/>Lambda Packages"]
+        DeployDev["🚀 Deploy Dev"]
+        TestDev["🧪 Test Dev"]
+    end
+
+    subgraph row2[" "]
+        direction RL
+        TestPreprod["🧪 Test Preprod"]
+        DeployPreprod["🚀 Deploy Preprod"]
+    end
+
+    subgraph row3[" "]
+        direction LR
+        DeployProd["🚀 Deploy Prod"]
+        CanaryTest["🐤 Canary Test"]
+        Summary["📋 Summary"]
+    end
+
+    Build --> DeployDev --> TestDev
+    TestDev --> DeployPreprod
+    DeployPreprod --> TestPreprod
+    TestPreprod --> DeployProd
+    DeployProd --> CanaryTest --> Summary
 
     classDef buildStep fill:#2e7d32,stroke:#1b5e20,stroke-width:2px,color:#fff
     classDef deployStep fill:#1976d2,stroke:#0d47a1,stroke-width:2px,color:#fff
     classDef testStep fill:#f57c00,stroke:#e65100,stroke-width:2px,color:#fff
     classDef prodStep fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef summaryStep fill:#6a1b9a,stroke:#4a148c,stroke-width:2px,color:#fff
+    classDef invisible fill:none,stroke:none
 
     class Build buildStep
-    class DeployPreprod deployStep
-    class TestPreprod testStep
-    class DeployProd prodStep
+    class DeployDev,DeployPreprod,DeployProd deployStep
+    class TestDev,TestPreprod,CanaryTest testStep
+    class Summary summaryStep
+    class row1,row2,row3 invisible
 ```
 
 **Quick Actions:**
