@@ -4,6 +4,13 @@ Pytest Configuration and Shared Fixtures
 
 Common fixtures used across all test modules.
 
+Test Environment Separation:
+    - LOCAL/DEV: Mocked AWS (moto) - runs with `pytest -m "not preprod"`
+    - PREPROD/PROD: Real AWS resources - runs with `pytest -m "preprod"` or via CI
+
+    Files with "preprod" in their name are auto-marked with the `preprod` marker.
+    This ensures they are excluded from local runs automatically.
+
 For On-Call Engineers:
     If tests fail with AWS credential errors:
     1. Ensure moto is properly mocking (check @mock_aws decorator)
@@ -24,8 +31,44 @@ For Developers:
 
 import logging
 import os
+from pathlib import Path
 
 import pytest
+
+# =============================================================================
+# Pytest Marker Registration
+# =============================================================================
+
+
+def pytest_configure(config):
+    """Register custom markers to avoid warnings."""
+    config.addinivalue_line(
+        "markers",
+        "preprod: marks tests that require real AWS resources (deselect with '-m \"not preprod\"')",
+    )
+    config.addinivalue_line(
+        "markers",
+        "expect_errors(pattern): marks tests that expect ERROR logs matching pattern",
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    """
+    Auto-mark tests based on their file location.
+
+    Files with "preprod" in filename are marked as preprod tests.
+    This ensures they are excluded from local runs with `-m "not preprod"`.
+    """
+    preprod_marker = pytest.mark.preprod
+
+    for item in items:
+        # Get the file path relative to the tests directory
+        test_file = Path(item.fspath)
+
+        # Auto-mark files with "preprod" in their name
+        if "preprod" in test_file.name.lower():
+            item.add_marker(preprod_marker)
+
 
 # Set default test environment variables at module load time
 # This allows test files to import modules that read env vars at import time

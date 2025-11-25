@@ -125,6 +125,7 @@ jobs:
 
           # Install only ingestion dependencies
           # Use platform-specific flags for Lambda Python 3.13 compatibility
+          # CRITICAL: pydantic-core has Rust binaries that MUST match Lambda runtime
           pip install \
             boto3==1.41.0 \
             requests==2.32.5 \
@@ -132,7 +133,8 @@ jobs:
             python-json-logger==4.0.0 \
             -t packages/ingestion-deps/ \
             --platform manylinux2014_x86_64 \
-            --python-version 3.13 \
+            --implementation cp \
+            --python-version 313 \
             --only-binary=:all: \
             --no-cache-dir \
             --disable-pip-version-check \
@@ -215,11 +217,16 @@ jobs:
           # Install minimal analysis dependencies (NO torch/transformers)
           # NOTE: Analysis Lambda will use container images (see PR #58)
           # This ZIP packaging remains temporarily for backwards compatibility
+          # CRITICAL: pydantic-core has Rust binaries that MUST match Lambda runtime
           pip install \
             boto3==1.41.0 \
             pydantic==2.12.4 \
             python-json-logger==4.0.0 \
             -t packages/analysis-deps/ \
+            --platform manylinux2014_x86_64 \
+            --implementation cp \
+            --python-version 313 \
+            --only-binary=:all: \
             --no-cache-dir \
             --disable-pip-version-check \
             --quiet
@@ -250,10 +257,16 @@ jobs:
           echo "📦 Packaging Metrics Lambda (minimal - boto3 only)..."
 
           # Install minimal metrics dependencies
+          # Note: Metrics Lambda doesn't use pydantic, but we include platform flags
+          # for consistency and future-proofing if dependencies are added
           pip install \
             boto3==1.41.0 \
             python-json-logger==4.0.0 \
             -t packages/metrics-deps/ \
+            --platform manylinux2014_x86_64 \
+            --implementation cp \
+            --python-version 313 \
+            --only-binary=:all: \
             --no-cache-dir \
             --disable-pip-version-check \
             --quiet
@@ -782,7 +795,10 @@ jobs:
           WATCH_TAGS: AI,climate,economy
           MODEL_VERSION: v${{ needs.build.outputs.artifact-sha }}
         run: |
-          timeout 120 pytest tests/integration/test_*_preprod.py \
+          # Run tests marked as "preprod" (auto-marked by conftest.py for *_preprod.py files)
+          # These tests use REAL AWS resources, not moto mocks
+          timeout 120 pytest tests/ \
+            -m "preprod" \
             -v \
             --tb=short \
             --junitxml=preprod-test-results.xml \
