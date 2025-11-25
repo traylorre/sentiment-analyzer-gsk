@@ -23,10 +23,20 @@ on:
   push:
     branches:
       - main
-    paths-ignore:
-      - 'docs/**'
-      - '*.md'
-      - '.vscode/**'
+    # REMOVED paths-ignore - it was blocking critical deploys!
+    # Problem: When PR #94 changed deploy.yml + tests/conftest.py, it should have
+    # triggered a deploy, but the workflow was skipped. This left Lambda running
+    # old code with pydantic binary incompatibility (HTTP 502).
+    #
+    # Better approach: Deploy on ALL pushes to main. Terraform and the build job
+    # are idempotent - if nothing changed, they complete quickly. The cost of
+    # running an extra 5-minute workflow is far less than the cost of missing
+    # a critical fix.
+    #
+    # If build times become a problem, consider:
+    # - Using paths filter on the build job ONLY (not the whole workflow)
+    # - Caching more aggressively
+    # - Using Turborepo-style content hashing
 
   # Manual trigger for testing/rollbacks
   workflow_dispatch:

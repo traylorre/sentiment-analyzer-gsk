@@ -227,6 +227,9 @@ module "dashboard_lambda" {
   reserved_concurrency = 10
 
   # Environment variables
+  # NOTE: FIS template IDs removed to break circular dependency with chaos module.
+  # The chaos module needs Lambda ARNs, and Lambda needs chaos outputs = cycle.
+  # Dashboard can look up FIS templates at runtime via AWS SDK if needed.
   environment_variables = {
     DYNAMODB_TABLE               = module.dynamodb.table_name
     API_KEY                      = "" # Will be fetched from Secrets Manager at runtime
@@ -234,8 +237,6 @@ module "dashboard_lambda" {
     SSE_POLL_INTERVAL            = "5"
     ENVIRONMENT                  = var.environment
     CHAOS_EXPERIMENTS_TABLE      = module.dynamodb.chaos_experiments_table_name
-    FIS_LAMBDA_LATENCY_TEMPLATE  = module.chaos.fis_lambda_latency_template_id
-    FIS_LAMBDA_ERROR_TEMPLATE    = module.chaos.fis_lambda_error_template_id
     CORS_ORIGINS                 = join(",", var.cors_allowed_origins)
   }
 
