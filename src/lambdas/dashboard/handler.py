@@ -48,6 +48,11 @@ from fastapi.security import APIKeyHeader
 from mangum import Mangum
 from sse_starlette.sse import EventSourceResponse
 
+from src.lambdas.dashboard.api_v2 import (
+    get_articles_by_tags,
+    get_sentiment_by_tags,
+    get_trend_data,
+)
 from src.lambdas.dashboard.chaos import (
     ChaosError,
     EnvironmentNotAllowedError,
@@ -633,6 +638,284 @@ async def get_items(
         raise HTTPException(
             status_code=500,
             detail="Failed to retrieve items",
+        ) from e
+
+
+# ===================================================================
+# API v2 Endpoints (POWERPLAN Mobile Dashboard)
+# ===================================================================
+
+
+@app.get("/api/v2/sentiment")
+async def get_sentiment_v2(
+    request: Request,
+    tags: str,
+    start: str | None = None,
+    end: str | None = None,
+    _: bool = Depends(verify_api_key),
+):
+    """
+    Get aggregated sentiment for multiple tags (POWERPLAN).
+
+    Query Parameters:
+        tags: Comma-separated list of topic tags (max 5)
+        start: ISO8601 start timestamp (default: 24 hours ago)
+        end: ISO8601 end timestamp (default: now)
+
+    Returns:
+        JSON with per-tag sentiment breakdown and overall aggregate
+
+    Example:
+        GET /api/v2/sentiment?tags=AI,climate,economy&start=2025-11-24T00:00:00Z
+
+    On-Call Note:
+        If all sentiment values are 0:
+        1. Verify by_tag GSI exists on the table
+        2. Check items exist with matching tags
+        3. Verify time range covers existing data
+    """
+    from datetime import UTC, datetime, timedelta
+
+    # Parse tags
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()]
+    if not tag_list:
+        raise HTTPException(
+            status_code=400,
+            detail="At least one tag is required",
+        )
+    if len(tag_list) > 5:
+        raise HTTPException(
+            status_code=400,
+            detail="Maximum 5 tags allowed",
+        )
+
+    # Parse time range
+    now = datetime.now(UTC)
+    if not end:
+        end_time = now.isoformat()
+    else:
+        end_time = end
+
+    if not start:
+        start_time = (now - timedelta(hours=24)).isoformat()
+    else:
+        start_time = start
+
+    try:
+        table = get_table(DYNAMODB_TABLE)
+        result = get_sentiment_by_tags(table, tag_list, start_time, end_time)
+        return JSONResponse(result)
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=str(e),
+        ) from e
+
+    except Exception as e:
+        logger.error(
+            "Failed to get sentiment by tags",
+            extra={
+                "tags": sanitize_for_log(",".join(tag_list)),
+                **get_safe_error_info(e),
+            },
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to retrieve sentiment data",
+        ) from e
+
+
+@app.get("/api/v2/trends")
+async def get_trends_v2(
+    request: Request,
+    tags: str,
+    interval: str = "1h",
+    range: str = "24h",
+    _: bool = Depends(verify_api_key),
+):
+    """
+    Get trend data for sparkline visualizations (POWERPLAN).
+
+    Query Parameters:
+        tags: Comma-separated list of topic tags (max 5)
+        interval: Time interval for aggregation (1h, 6h, 1d)
+        range: Time range to look back (e.g., 24h, 7d)
+
+    Returns:
+        JSON with time-series data for each tag
+
+    Example:
+        GET /api/v2/trends?tags=AI,climate&interval=1h&range=7d
+
+    On-Call Note:
+        If trend data is empty or sparse:
+        1. Verify ingestion is running
+        2. Check time range covers data ingestion period
+        3. Verify by_tag GSI exists
+    """
+    # Parse tags
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()]
+    if not tag_list:
+        raise HTTPException(
+            status_code=400,
+            detail="At least one tag is required",
+        )
+    if len(tag_list) > 5:
+        raise HTTPException(
+            status_code=400,
+            detail="Maximum 5 tags allowed",
+        )
+
+    # Validate interval
+    if interval not in ["1h", "6h", "1d"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid interval. Use: 1h, 6h, or 1d",
+        )
+
+    # Parse range to hours
+    range_hours = 24  # default
+    if range.endswith("h"):
+        try:
+            range_hours = int(range[:-1])
+        except ValueError as e:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid range format. Use: Nh (e.g., 24h) or Nd (e.g., 7d)",
+            ) from e
+    elif range.endswith("d"):
+        try:
+            range_hours = int(range[:-1]) * 24
+        except ValueError as e:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid range format. Use: Nh (e.g., 24h) or Nd (e.g., 7d)",
+            ) from e
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid range format. Use: Nh (e.g., 24h) or Nd (e.g., 7d)",
+        )
+
+    # Cap at 7 days
+    if range_hours > 168:
+        range_hours = 168
+
+    try:
+        table = get_table(DYNAMODB_TABLE)
+        result = get_trend_data(table, tag_list, interval, range_hours)
+        return JSONResponse(result)
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=str(e),
+        ) from e
+
+    except Exception as e:
+        logger.error(
+            "Failed to get trend data",
+            extra={
+                "tags": sanitize_for_log(",".join(tag_list)),
+                "interval": interval,
+                **get_safe_error_info(e),
+            },
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to retrieve trend data",
+        ) from e
+
+
+@app.get("/api/v2/articles")
+async def get_articles_v2(
+    request: Request,
+    tags: str,
+    limit: int = 20,
+    sentiment: str | None = None,
+    _: bool = Depends(verify_api_key),
+):
+    """
+    Get recent articles for specified tags (POWERPLAN).
+
+    Query Parameters:
+        tags: Comma-separated list of topic tags (max 5)
+        limit: Maximum articles to return (default: 20, max: 100)
+        sentiment: Optional filter (positive, neutral, negative)
+
+    Returns:
+        JSON array of articles sorted by timestamp descending
+
+    Example:
+        GET /api/v2/articles?tags=AI,climate&limit=10&sentiment=positive
+
+    On-Call Note:
+        If articles list is empty:
+        1. Verify by_tag GSI exists
+        2. Check ingestion is working
+        3. Verify sentiment filter matches existing data
+    """
+    # Parse tags
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()]
+    if not tag_list:
+        raise HTTPException(
+            status_code=400,
+            detail="At least one tag is required",
+        )
+    if len(tag_list) > 5:
+        raise HTTPException(
+            status_code=400,
+            detail="Maximum 5 tags allowed",
+        )
+
+    # Validate limit
+    if limit < 1 or limit > 100:
+        raise HTTPException(
+            status_code=400,
+            detail="Limit must be between 1 and 100",
+        )
+
+    # Validate sentiment filter
+    if sentiment and sentiment.lower() not in ["positive", "neutral", "negative"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid sentiment. Use: positive, neutral, or negative",
+        )
+
+    try:
+        table = get_table(DYNAMODB_TABLE)
+        articles = get_articles_by_tags(
+            table,
+            tag_list,
+            limit=limit,
+            sentiment_filter=sentiment,
+        )
+
+        # Sanitize articles for response
+        sanitized = [
+            sanitize_item_for_response(parse_dynamodb_item(item)) for item in articles
+        ]
+
+        return JSONResponse(sanitized)
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=str(e),
+        ) from e
+
+    except Exception as e:
+        logger.error(
+            "Failed to get articles by tags",
+            extra={
+                "tags": sanitize_for_log(",".join(tag_list)),
+                **get_safe_error_info(e),
+            },
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to retrieve articles",
         ) from e
 
 
