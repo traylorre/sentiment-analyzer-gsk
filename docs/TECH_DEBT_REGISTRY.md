@@ -332,6 +332,30 @@ class CloudDatabase(ComponentResource):
 **Effort**: 4-6 weeks
 **Risk**: High (complete infrastructure rewrite)
 
+### TD-021: Lambda FIS Chaos Testing Blocked by Terraform Provider
+**Status**: Blocked - Waiting for upstream fix
+**Location**: `infrastructure/terraform/main.tf:442-445`, `modules/chaos/main.tf`
+**Issue**: [hashicorp/terraform-provider-aws#41208](https://github.com/hashicorp/terraform-provider-aws/issues/41208)
+
+**Current State**: AWS FIS added Lambda fault injection actions in October 2024:
+- `aws:lambda:invocation-add-delay` - Inject latency
+- `aws:lambda:invocation-error` - Force errors
+
+However, the Terraform AWS provider validation doesn't recognize `"Functions"` as a valid
+target key. The provider only allows: `AutoScalingGroups`, `Buckets`, `Cluster`, `Clusters`,
+`DBInstances`, `Instances`, `Nodegroups`, `Pods`, `ReplicationGroups`, `Roles`, `SpotInstances`,
+`Subnets`, `Tables`, `Tasks`, `TransitGateways`, `Volumes`.
+
+**Workaround**: Set `enable_chaos_testing = false` in main.tf until provider is updated.
+
+**Resolution**: Monitor the GitHub issue. Once resolved:
+1. Update AWS provider version in `versions.tf`
+2. Change `enable_chaos_testing = false` back to `var.environment == "preprod"`
+3. Test chaos experiments in preprod
+
+**Effort**: 30 minutes once provider is updated
+**Risk**: None (feature disabled, not broken)
+
 ---
 
 ## Cloud Portability Action Plan
