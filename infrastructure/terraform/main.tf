@@ -438,8 +438,11 @@ module "monitoring" {
 module "chaos" {
   source = "./modules/chaos"
 
-  environment          = var.environment
-  enable_chaos_testing = var.environment == "preprod" # Only enabled in preprod
+  environment = var.environment
+  # DISABLED: Terraform AWS provider doesn't support Lambda FIS target key "Functions" yet
+  # See: https://github.com/hashicorp/terraform-provider-aws/issues/41208
+  # Re-enable when provider version supports aws:lambda:invocation-add-delay targets
+  enable_chaos_testing = false # var.environment == "preprod"
 
   # Lambda targets for chaos experiments
   lambda_arns = [
