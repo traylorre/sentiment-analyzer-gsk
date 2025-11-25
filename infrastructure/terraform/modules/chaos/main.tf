@@ -1,12 +1,26 @@
-# AWS Fault Injection Simulator (FIS) for Chaos Testing
-# ========================================================
+# AWS Fault Injection Service (FIS) for Chaos Testing
+# =====================================================
 #
-# Phase 2: DynamoDB Throttling Experiment
+# Chaos Engineering for Sentiment Analyzer
 #
-# This module creates FIS experiment templates for controlled chaos testing.
-# Only deployed in preprod/dev environments for safety.
+# Experiments:
+# 1. Lambda Latency Injection - Add delay to Lambda invocations
+# 2. Lambda Error Injection - Force Lambda failures
+#
+# NOTE: DynamoDB does NOT support API-level fault injection via FIS.
+# FIS only supports:
+#   - aws:dynamodb:global-table-pause-replication (requires global tables)
+#   - aws:network:disrupt-connectivity (requires VPC/subnets)
+#
+# Our Lambdas are not VPC-attached, so we focus on Lambda-level chaos.
+# DynamoDB is highly durable; test your app's retry/backoff logic instead.
+#
+# Reference: https://docs.aws.amazon.com/fis/latest/userguide/fis-actions-reference.html
 
-# IAM role for FIS to assume when running experiments
+# ============================================================================
+# IAM Role for FIS Execution
+# ============================================================================
+
 resource "aws_iam_role" "fis_execution" {
   count = var.enable_chaos_testing ? 1 : 0
   name  = "${var.environment}-fis-execution-role"
@@ -31,107 +45,198 @@ resource "aws_iam_role" "fis_execution" {
   }
 }
 
-# IAM policy for FIS to inject faults into DynamoDB
-resource "aws_iam_role_policy" "fis_dynamodb" {
+# IAM policy for FIS Lambda fault injection (October 2024 actions)
+resource "aws_iam_role_policy" "fis_lambda" {
   count = var.enable_chaos_testing ? 1 : 0
-  name  = "fis-dynamodb-fault-injection"
+  name  = "fis-lambda-fault-injection"
   role  = aws_iam_role.fis_execution[0].id
 
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
+        Sid    = "LambdaFaultInjection"
         Effect = "Allow"
         Action = [
-          "dynamodb:DescribeTable",
-          "dynamodb:ListTables"
+          "lambda:GetFunction",
+          "lambda:GetFunctionConfiguration"
+        ]
+        Resource = var.lambda_arns
+      },
+      {
+        Sid    = "TagResources"
+        Effect = "Allow"
+        Action = [
+          "tag:GetResources"
         ]
         Resource = "*"
       },
       {
+        Sid    = "FISS3ConfigBucket"
         Effect = "Allow"
         Action = [
-          "fis:InjectApiThrottleError",
-          "fis:InjectApiInternalError"
+          "s3:PutObject",
+          "s3:DeleteObject"
         ]
-        Resource = var.dynamodb_table_arn
+        Resource = "arn:aws:s3:::aws-fis-*/*"
+      },
+      {
+        Sid    = "CloudWatchLogs"
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogDelivery",
+          "logs:DeleteLogDelivery",
+          "logs:GetLogDelivery",
+          "logs:ListLogDeliveries"
+        ]
+        Resource = "*"
       }
     ]
   })
 }
 
-# FIS Experiment Template: DynamoDB Write Throttling
-resource "aws_fis_experiment_template" "dynamodb_throttle" {
+# ============================================================================
+# FIS Experiment Template: Lambda Latency Injection
+# ============================================================================
+# Injects artificial delay into Lambda invocations to test:
+# - SSE timeout handling
+# - Client retry behavior
+# - Dashboard graceful degradation
+
+resource "aws_fis_experiment_template" "lambda_latency" {
   count       = var.enable_chaos_testing ? 1 : 0
-  description = "Inject DynamoDB write throttling to test backpressure and DLQ behavior"
+  description = "Inject latency into Lambda invocations to test timeout handling"
 
   stop_condition {
     source = "aws:cloudwatch:alarm"
-    value  = var.write_throttle_alarm_arn
+    value  = var.lambda_error_alarm_arn
   }
 
   role_arn = aws_iam_role.fis_execution[0].arn
 
   action {
-    name      = "dynamodb-throttle-writes"
-    action_id = "aws:dynamodb:api-error"
-
-    parameter {
-      key   = "service"
-      value = "dynamodb"
-    }
-
-    parameter {
-      key   = "api"
-      value = "PutItem,UpdateItem,BatchWriteItem"
-    }
-
-    parameter {
-      key   = "percentage"
-      value = "25"
-    }
+    name      = "inject-lambda-latency"
+    action_id = "aws:lambda:invocation-add-delay"
 
     parameter {
       key   = "duration"
-      value = "PT5M"
+      value = "PT3M" # 3 minutes
     }
 
     parameter {
-      key   = "errorCode"
-      value = "ThrottlingException"
+      key   = "invocationPercentage"
+      value = "25" # Affect 25% of invocations
+    }
+
+    parameter {
+      key   = "startupDelayMilliseconds"
+      value = "5000" # 5 second delay
     }
 
     target {
-      key   = "Tables"
-      value = "dynamodb-tables"
+      key   = "Functions"
+      value = "lambda-targets"
     }
   }
 
   target {
-    name          = "dynamodb-tables"
-    resource_type = "aws:dynamodb:table"
-
-    resource_arns = [
-      var.dynamodb_table_arn
-    ]
-
+    name           = "lambda-targets"
+    resource_type  = "aws:lambda:function"
+    resource_arns  = var.lambda_arns
     selection_mode = "ALL"
   }
 
+  log_configuration {
+    cloudwatch_logs_configuration {
+      log_group_arn = "${aws_cloudwatch_log_group.fis_experiments[0].arn}:*"
+    }
+    log_schema_version = 2
+  }
+
   tags = {
-    Name        = "${var.environment}-dynamodb-throttle"
+    Name        = "${var.environment}-lambda-latency"
     Environment = var.environment
     Purpose     = "chaos-testing"
-    Scenario    = "dynamodb_throttle"
+    Scenario    = "lambda_latency"
     ManagedBy   = "Terraform"
   }
 }
 
-# CloudWatch Log Group for FIS experiment logs
+# ============================================================================
+# FIS Experiment Template: Lambda Error Injection
+# ============================================================================
+# Forces Lambda invocations to fail to test:
+# - DLQ behavior
+# - SNS retry logic
+# - Dashboard error states
+
+resource "aws_fis_experiment_template" "lambda_error" {
+  count       = var.enable_chaos_testing ? 1 : 0
+  description = "Inject errors into Lambda invocations to test failure handling"
+
+  stop_condition {
+    source = "aws:cloudwatch:alarm"
+    value  = var.lambda_error_alarm_arn
+  }
+
+  role_arn = aws_iam_role.fis_execution[0].arn
+
+  action {
+    name      = "inject-lambda-error"
+    action_id = "aws:lambda:invocation-error"
+
+    parameter {
+      key   = "duration"
+      value = "PT2M" # 2 minutes
+    }
+
+    parameter {
+      key   = "invocationPercentage"
+      value = "10" # Affect 10% of invocations
+    }
+
+    parameter {
+      key   = "preventExecution"
+      value = "true" # Prevent Lambda from executing
+    }
+
+    target {
+      key   = "Functions"
+      value = "lambda-error-targets"
+    }
+  }
+
+  target {
+    name           = "lambda-error-targets"
+    resource_type  = "aws:lambda:function"
+    resource_arns  = var.lambda_arns
+    selection_mode = "ALL"
+  }
+
+  log_configuration {
+    cloudwatch_logs_configuration {
+      log_group_arn = "${aws_cloudwatch_log_group.fis_experiments[0].arn}:*"
+    }
+    log_schema_version = 2
+  }
+
+  tags = {
+    Name        = "${var.environment}-lambda-error"
+    Environment = var.environment
+    Purpose     = "chaos-testing"
+    Scenario    = "lambda_error"
+    ManagedBy   = "Terraform"
+  }
+}
+
+# ============================================================================
+# CloudWatch Log Group for FIS Experiment Logs
+# ============================================================================
+
 resource "aws_cloudwatch_log_group" "fis_experiments" {
   count             = var.enable_chaos_testing ? 1 : 0
   name              = "/aws/fis/${var.environment}-chaos-experiments"
-  retention_in_days = 7 # 7-day retention for chaos testing logs
+  retention_in_days = 14 # 2 weeks for chaos testing analysis
 
   tags = {
     Environment = var.environment
@@ -139,51 +244,3 @@ resource "aws_cloudwatch_log_group" "fis_experiments" {
     ManagedBy   = "Terraform"
   }
 }
-
-# FIS Experiment Template: Lambda Delay Injection (Phase 4)
-# Commented out for now - will be enabled in Phase 4
-#
-# resource "aws_fis_experiment_template" "lambda_delay" {
-#   count       = var.enable_chaos_testing ? 1 : 0
-#   description = "Add artificial delay to Lambda cold starts"
-#
-#   stop_conditions {
-#     source = "aws:cloudwatch:alarm"
-#     value  = var.lambda_error_alarm_arn
-#   }
-#
-#   role_arn = aws_iam_role.fis_execution[0].arn
-#
-#   actions {
-#     name      = "lambda-add-latency"
-#     action_id = "aws:lambda:invocation-add-delay"
-#
-#     parameters = {
-#       duration = "PT3M"
-#       delay    = "5000" # 5 seconds
-#     }
-#
-#     targets = {
-#       Functions = "lambda-functions"
-#     }
-#   }
-#
-#   targets {
-#     name          = "lambda-functions"
-#     resource_type = "aws:lambda:function"
-#
-#     resource_arns = [
-#       var.analysis_lambda_arn
-#     ]
-#
-#     selection_mode = "ALL"
-#   }
-#
-#   tags = {
-#     Name        = "${var.environment}-lambda-delay"
-#     Environment = var.environment
-#     Purpose     = "chaos-testing"
-#     Scenario    = "lambda_cold_start"
-#     ManagedBy   = "Terraform"
-#   }
-# }

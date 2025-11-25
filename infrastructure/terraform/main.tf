@@ -228,14 +228,15 @@ module "dashboard_lambda" {
 
   # Environment variables
   environment_variables = {
-    DYNAMODB_TABLE                 = module.dynamodb.table_name
-    API_KEY                        = "" # Will be fetched from Secrets Manager at runtime
-    DASHBOARD_API_KEY_SECRET_ARN   = module.secrets.dashboard_api_key_secret_arn
-    SSE_POLL_INTERVAL              = "5"
-    ENVIRONMENT                    = var.environment
-    CHAOS_EXPERIMENTS_TABLE        = module.dynamodb.chaos_experiments_table_name
-    FIS_DYNAMODB_THROTTLE_TEMPLATE = module.chaos.fis_dynamodb_throttle_template_id
-    CORS_ORIGINS                   = join(",", var.cors_allowed_origins)
+    DYNAMODB_TABLE               = module.dynamodb.table_name
+    API_KEY                      = "" # Will be fetched from Secrets Manager at runtime
+    DASHBOARD_API_KEY_SECRET_ARN = module.secrets.dashboard_api_key_secret_arn
+    SSE_POLL_INTERVAL            = "5"
+    ENVIRONMENT                  = var.environment
+    CHAOS_EXPERIMENTS_TABLE      = module.dynamodb.chaos_experiments_table_name
+    FIS_LAMBDA_LATENCY_TEMPLATE  = module.chaos.fis_lambda_latency_template_id
+    FIS_LAMBDA_ERROR_TEMPLATE    = module.chaos.fis_lambda_error_template_id
+    CORS_ORIGINS                 = join(",", var.cors_allowed_origins)
   }
 
   # Function URL with CORS
@@ -428,14 +429,32 @@ module "monitoring" {
 # ===================================================================
 # Module: Chaos Testing (AWS FIS)
 # ===================================================================
+# Uses Lambda fault injection (latency/errors) to test system resilience.
+# NOTE: DynamoDB doesn't support API-level FIS fault injection.
+#       FIS only supports global table replication pause or VPC network disruption.
+#       Our Lambdas aren't VPC-attached, so we test at the Lambda layer.
 
 module "chaos" {
   source = "./modules/chaos"
 
-  environment              = var.environment
-  enable_chaos_testing     = false # Temporarily disabled - FIS template needs fix (TD-XXX)
+  environment          = var.environment
+  enable_chaos_testing = var.environment == "preprod" # Only enabled in preprod
+
+  # Lambda targets for chaos experiments
+  lambda_arns = [
+    module.ingestion_lambda.function_arn,
+    module.analysis_lambda.function_arn,
+    module.dashboard_lambda.function_arn
+  ]
+
+  # Kill switch - stops experiments if Lambda errors spike
+  lambda_error_alarm_arn = module.monitoring.analysis_errors_alarm_arn
+
+  # Deprecated - kept for backwards compatibility
   dynamodb_table_arn       = module.dynamodb.table_arn
   write_throttle_alarm_arn = module.dynamodb.cloudwatch_alarm_write_throttles_arn
+
+  depends_on = [module.ingestion_lambda, module.analysis_lambda, module.dashboard_lambda, module.monitoring]
 }
 
 # ===================================================================
@@ -535,12 +554,23 @@ output "ingestion_schedule_arn" {
 }
 
 # Chaos Testing outputs
-output "fis_dynamodb_throttle_template_id" {
-  description = "ID of the FIS experiment template for DynamoDB throttling"
-  value       = module.chaos.fis_dynamodb_throttle_template_id
+output "fis_lambda_latency_template_id" {
+  description = "ID of the FIS experiment template for Lambda latency injection"
+  value       = module.chaos.fis_lambda_latency_template_id
+}
+
+output "fis_lambda_error_template_id" {
+  description = "ID of the FIS experiment template for Lambda error injection"
+  value       = module.chaos.fis_lambda_error_template_id
 }
 
 output "fis_execution_role_arn" {
   description = "ARN of the IAM role used by FIS to execute experiments"
   value       = module.chaos.fis_execution_role_arn
+}
+
+# Deprecated output - kept for backwards compatibility
+output "fis_dynamodb_throttle_template_id" {
+  description = "DEPRECATED: DynamoDB throttling not supported by FIS"
+  value       = ""
 }
