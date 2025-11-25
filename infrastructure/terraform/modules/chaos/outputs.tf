@@ -1,14 +1,18 @@
 # Chaos Testing Module Outputs
 # ============================
+#
+# NOTE: FIS Lambda templates are currently disabled due to Terraform provider bug.
+# See: https://github.com/hashicorp/terraform-provider-aws/issues/41208
+# These outputs return empty strings until the templates can be re-enabled.
 
 output "fis_lambda_latency_template_id" {
-  description = "ID of the FIS experiment template for Lambda latency injection"
-  value       = var.enable_chaos_testing ? aws_fis_experiment_template.lambda_latency[0].id : ""
+  description = "ID of the FIS experiment template for Lambda latency injection (DISABLED)"
+  value       = "" # Disabled until Terraform provider supports Lambda FIS targets
 }
 
 output "fis_lambda_error_template_id" {
-  description = "ID of the FIS experiment template for Lambda error injection"
-  value       = var.enable_chaos_testing ? aws_fis_experiment_template.lambda_error[0].id : ""
+  description = "ID of the FIS experiment template for Lambda error injection (DISABLED)"
+  value       = "" # Disabled until Terraform provider supports Lambda FIS targets
 }
 
 output "fis_execution_role_arn" {
