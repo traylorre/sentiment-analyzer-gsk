@@ -96,8 +96,37 @@ sse_connections: dict[str, int] = {}  # ip_address -> active_connection_count
 
 
 def get_api_key() -> str:
-    """Get API key from environment (lazy load to support test mocking)."""
-    return os.environ.get("API_KEY", "")
+    """
+    Get API key from environment or Secrets Manager.
+
+    Fallback chain:
+    1. API_KEY environment variable (set by CI or for testing)
+    2. DASHBOARD_API_KEY_SECRET_ARN -> fetch from Secrets Manager
+
+    Returns:
+        API key string, or empty string if not configured
+    """
+    # First check env var (takes precedence, allows test mocking)
+    api_key = os.environ.get("API_KEY", "")
+    if api_key:
+        return api_key
+
+    # Fall back to Secrets Manager if ARN is provided
+    secret_arn = os.environ.get("DASHBOARD_API_KEY_SECRET_ARN", "")
+    if secret_arn:
+        try:
+            from src.lambdas.shared.secrets import get_api_key as fetch_api_key
+
+            return fetch_api_key(secret_arn)
+        except Exception as e:
+            logger.error(
+                "Failed to fetch API key from Secrets Manager",
+                extra={"error": str(e)},
+            )
+            # Don't expose error details - just return empty to enforce auth
+            return ""
+
+    return ""
 
 
 def get_cors_origins() -> list[str]:
