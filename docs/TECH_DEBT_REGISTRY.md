@@ -135,15 +135,16 @@ class ConfigDict:
 **Why**: Pydantic complains about `model_*` field names
 **Better Fix**: Rename `model_version` to `ml_model_version` or `version`
 
-### TD-011: Metrics Lambda Not Implemented
-**Location**: `infrastructure/terraform/main.tf:308`
-```hcl
-# Metrics Lambda not implemented in Demo 1
-create_metrics_schedule = false
-```
-**Status**: Intentional for demo scope
-**Risk**: Operational monitoring for stuck items not active
-**Note**: Dashboard handles metrics via /api/metrics endpoint instead
+### TD-011: Metrics Lambda Not Implemented [RESOLVED]
+**Location**: `src/lambdas/metrics/handler.py`
+
+**Status**: RESOLVED
+**Resolution**:
+- Created Metrics Lambda that monitors for stuck items (pending > 5 minutes)
+- Queries `by_status` GSI and emits `StuckItems` CloudWatch metric
+- Runs every 1 minute via EventBridge schedule
+- Added to Terraform deployment pipeline
+- Unit tests: `tests/unit/test_metrics_handler.py` (14 tests)
 
 ### TD-012: S3 Archival Lambda Specified But Not Implemented
 **Location**: Referenced in `docs/INTERFACE-ANALYSIS-SUMMARY.md:58`
@@ -427,8 +428,8 @@ class CloudDatabase(ComponentResource):
 | Cloud Portability (Future) | 5 |
 | Items from shortcuts | 7 |
 | Items acceptable for demo | 4 |
-| Items completed | 10 |
-| Items deferred to future | 11 |
+| Items completed | 12 |
+| Items deferred to future | 9 |
 
 ---
 
