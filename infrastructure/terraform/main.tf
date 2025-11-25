@@ -124,6 +124,9 @@ module "ingestion_lambda" {
   s3_bucket     = "${var.environment}-sentiment-lambda-deployments"
   s3_key        = "ingestion/lambda.zip"
 
+  # Force update when package changes (git SHA triggers redeployment)
+  source_code_hash = var.lambda_package_version
+
   # Resource configuration per task spec
   memory_size          = 512
   timeout              = 60
@@ -167,6 +170,9 @@ module "analysis_lambda" {
   handler       = "handler.lambda_handler"
   s3_bucket     = "${var.environment}-sentiment-lambda-deployments"
   s3_key        = "analysis/lambda.zip"
+
+  # Force update when package changes (git SHA triggers redeployment)
+  source_code_hash = var.lambda_package_version
 
   # Resource configuration per task spec
   memory_size          = 1024
@@ -220,6 +226,9 @@ module "dashboard_lambda" {
   handler       = "handler.lambda_handler"
   s3_bucket     = "${var.environment}-sentiment-lambda-deployments"
   s3_key        = "dashboard/lambda.zip"
+
+  # Force update when package changes (git SHA triggers redeployment)
+  source_code_hash = var.lambda_package_version
 
   # Resource configuration per task spec
   memory_size          = 1024
@@ -280,6 +289,9 @@ module "metrics_lambda" {
   handler       = "handler.lambda_handler"
   s3_bucket     = "${var.environment}-sentiment-lambda-deployments"
   s3_key        = "metrics/lambda.zip"
+
+  # Force update when package changes (git SHA triggers redeployment)
+  source_code_hash = var.lambda_package_version
 
   # Lightweight Lambda - minimal resources needed
   memory_size          = 128
