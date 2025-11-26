@@ -27,11 +27,21 @@ mangum==0.19.0
 uvicorn==0.38.0  # Local development only
 sse-starlette==3.0.3  # Server-Sent Events for real-time updates
 
-# HTTP Client - NewsAPI adapter
+# HTTP Client - Financial API adapters (Tiingo, Finnhub)
 requests==2.32.5
+httpx==0.28.1  # Async HTTP client for financial APIs
 
 # Data Validation - Input/output schemas
 pydantic==2.12.4
 
 # Logging - Structured JSON logs for CloudWatch
 python-json-logger==4.0.0
+
+# AWS X-Ray - Distributed tracing (Feature 006)
+aws-xray-sdk==2.14.0
+
+# Email Notifications - SendGrid (Feature 006)
+sendgrid==6.11.0
+
+# AWS Lambda Powertools - Enhanced observability
+aws-lambda-powertools==3.9.0

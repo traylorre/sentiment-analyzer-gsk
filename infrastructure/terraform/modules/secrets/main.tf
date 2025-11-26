@@ -53,6 +53,110 @@ resource "aws_secretsmanager_secret_rotation" "dashboard_api_key" {
   count = var.rotation_lambda_arn != null ? 1 : 0
 }
 
+# ===================================================================
+# Feature 006: Financial News Sentiment API Secrets
+# ===================================================================
+
+# Tiingo API Secret (Primary financial news source)
+resource "aws_secretsmanager_secret" "tiingo" {
+  name        = "${var.environment}/sentiment-analyzer/tiingo"
+  description = "Tiingo API key for financial news and market data"
+
+  recovery_window_in_days = 7
+
+  tags = {
+    Environment = var.environment
+    Feature     = "006-user-config-dashboard"
+    Purpose     = "tiingo-api-key"
+  }
+}
+
+resource "aws_secretsmanager_secret_rotation" "tiingo" {
+  secret_id           = aws_secretsmanager_secret.tiingo.id
+  rotation_lambda_arn = var.rotation_lambda_arn
+
+  rotation_rules {
+    automatically_after_days = 90
+  }
+
+  count = var.rotation_lambda_arn != null ? 1 : 0
+}
+
+# Finnhub API Secret (Secondary financial news source)
+resource "aws_secretsmanager_secret" "finnhub" {
+  name        = "${var.environment}/sentiment-analyzer/finnhub"
+  description = "Finnhub API key for financial news and sentiment data"
+
+  recovery_window_in_days = 7
+
+  tags = {
+    Environment = var.environment
+    Feature     = "006-user-config-dashboard"
+    Purpose     = "finnhub-api-key"
+  }
+}
+
+resource "aws_secretsmanager_secret_rotation" "finnhub" {
+  secret_id           = aws_secretsmanager_secret.finnhub.id
+  rotation_lambda_arn = var.rotation_lambda_arn
+
+  rotation_rules {
+    automatically_after_days = 90
+  }
+
+  count = var.rotation_lambda_arn != null ? 1 : 0
+}
+
+# SendGrid API Secret (Email notifications)
+resource "aws_secretsmanager_secret" "sendgrid" {
+  name        = "${var.environment}/sentiment-analyzer/sendgrid"
+  description = "SendGrid API key for email notifications and magic links"
+
+  recovery_window_in_days = 7
+
+  tags = {
+    Environment = var.environment
+    Feature     = "006-user-config-dashboard"
+    Purpose     = "sendgrid-api-key"
+  }
+}
+
+resource "aws_secretsmanager_secret_rotation" "sendgrid" {
+  secret_id           = aws_secretsmanager_secret.sendgrid.id
+  rotation_lambda_arn = var.rotation_lambda_arn
+
+  rotation_rules {
+    automatically_after_days = 90
+  }
+
+  count = var.rotation_lambda_arn != null ? 1 : 0
+}
+
+# hCaptcha Secret (Bot protection for anonymous config creation)
+resource "aws_secretsmanager_secret" "hcaptcha" {
+  name        = "${var.environment}/sentiment-analyzer/hcaptcha"
+  description = "hCaptcha secret key for bot protection"
+
+  recovery_window_in_days = 7
+
+  tags = {
+    Environment = var.environment
+    Feature     = "006-user-config-dashboard"
+    Purpose     = "hcaptcha-secret"
+  }
+}
+
+resource "aws_secretsmanager_secret_rotation" "hcaptcha" {
+  secret_id           = aws_secretsmanager_secret.hcaptcha.id
+  rotation_lambda_arn = var.rotation_lambda_arn
+
+  rotation_rules {
+    automatically_after_days = 90
+  }
+
+  count = var.rotation_lambda_arn != null ? 1 : 0
+}
+
 # NOTE: Secret values are NOT stored in Terraform state
 # Use AWS CLI or Console to set initial secret values:
 #
@@ -63,3 +167,21 @@ resource "aws_secretsmanager_secret_rotation" "dashboard_api_key" {
 # aws secretsmanager put-secret-value \
 #   --secret-id ${var.environment}/sentiment-analyzer/dashboard-api-key \
 #   --secret-string '{"api_key":"GENERATED_API_KEY"}'
+#
+# Feature 006 secrets:
+#
+# aws secretsmanager put-secret-value \
+#   --secret-id ${var.environment}/sentiment-analyzer/tiingo \
+#   --secret-string '{"api_key":"YOUR_TIINGO_API_KEY"}'
+#
+# aws secretsmanager put-secret-value \
+#   --secret-id ${var.environment}/sentiment-analyzer/finnhub \
+#   --secret-string '{"api_key":"YOUR_FINNHUB_API_KEY"}'
+#
+# aws secretsmanager put-secret-value \
+#   --secret-id ${var.environment}/sentiment-analyzer/sendgrid \
+#   --secret-string '{"api_key":"YOUR_SENDGRID_API_KEY"}'
+#
+# aws secretsmanager put-secret-value \
+#   --secret-id ${var.environment}/sentiment-analyzer/hcaptcha \
+#   --secret-string '{"secret_key":"YOUR_HCAPTCHA_SECRET_KEY","site_key":"YOUR_HCAPTCHA_SITE_KEY"}'

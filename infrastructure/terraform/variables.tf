@@ -68,3 +68,75 @@ variable "lambda_package_version" {
   type        = string
   default     = "initial"
 }
+
+# ===================================================================
+# Feature 006: Cognito Variables
+# ===================================================================
+
+variable "cognito_domain_suffix" {
+  description = "Unique suffix for Cognito domain (must be globally unique)"
+  type        = string
+  default     = "218795110243" # AWS account ID as default
+}
+
+variable "cognito_callback_urls" {
+  description = "List of allowed callback URLs for OAuth redirects"
+  type        = list(string)
+  default     = ["http://localhost:3000/auth/callback"]
+}
+
+variable "cognito_logout_urls" {
+  description = "List of allowed logout redirect URLs"
+  type        = list(string)
+  default     = ["http://localhost:3000"]
+}
+
+variable "cognito_identity_providers" {
+  description = "List of enabled identity providers (Google, GitHub)"
+  type        = list(string)
+  default     = []
+}
+
+variable "google_oauth_client_id" {
+  description = "Google OAuth client ID (from Google Cloud Console)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "google_oauth_client_secret" {
+  description = "Google OAuth client secret"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "github_oauth_client_id" {
+  description = "GitHub OAuth client ID (from GitHub Developer Settings)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "github_oauth_client_secret" {
+  description = "GitHub OAuth client secret"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+# ===================================================================
+# Feature 006: CloudFront Variables
+# ===================================================================
+
+variable "cloudfront_custom_domain" {
+  description = "Custom domain for CloudFront distribution (optional)"
+  type        = string
+  default     = ""
+}
+
+variable "cloudfront_acm_certificate_arn" {
+  description = "ACM certificate ARN for custom domain (required if custom_domain is set)"
+  type        = string
+  default     = ""
+}
