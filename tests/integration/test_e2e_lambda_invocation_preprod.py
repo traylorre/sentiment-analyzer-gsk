@@ -355,15 +355,24 @@ class TestLambdaErrorHandling:
         assert response.status_code == 400
         assert "Hours must be between" in response.text
 
-    def test_malformed_json_handled_gracefully(self):
+    def test_malformed_json_handled_gracefully(self, auth_headers):
         """
         E2E: Malformed requests are handled gracefully.
 
-        Verifies Lambda doesn't crash on bad input.
+        Verifies Lambda doesn't crash on bad input and returns proper error.
+        Tests POST endpoint with invalid JSON body.
         """
-        # This test doesn't apply to GET endpoints
-        # Keeping it here as placeholder for future POST endpoint tests
-        pass
+        response = requests.post(
+            f"{DASHBOARD_URL}/api/chaos/experiments",
+            headers={**auth_headers, "Content-Type": "application/json"},
+            data="{{invalid json syntax",
+            timeout=REQUEST_TIMEOUT,
+        )
+        # Should return 422 Unprocessable Entity for invalid JSON
+        assert response.status_code == 422, (
+            f"Expected 422 for malformed JSON, got {response.status_code}. "
+            f"Response: {response.text[:200]}"
+        )
 
 
 class TestLambdaConcurrency:
@@ -543,10 +552,15 @@ class TestPerformanceBenchmarks:
     """
 
     def test_benchmark_cold_start_time(self):
-        """BENCHMARK: Measure cold start time."""
-        # This would require forcing a cold start, which is complex
-        # Keeping as placeholder for future work
-        pass
+        """BENCHMARK: Measure cold start time.
+
+        Requires updating Lambda config to force new execution environment.
+        Deferred until cold start optimization becomes a priority.
+        """
+        pytest.skip(
+            "Cold start benchmark requires Lambda config update to force new instance. "
+            "See Spec 003 for future implementation."
+        )
 
     def test_benchmark_metrics_query_time(self, auth_headers):
         """BENCHMARK: Measure metrics endpoint response time."""

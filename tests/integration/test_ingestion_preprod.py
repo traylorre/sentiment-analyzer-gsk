@@ -30,6 +30,7 @@ For Developers:
     - Validates schema compliance
 """
 
+import logging
 import os
 from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
@@ -40,6 +41,8 @@ import responses
 
 from src.lambdas.ingestion.adapters.newsapi import NEWSAPI_BASE_URL
 from src.lambdas.ingestion.handler import lambda_handler
+
+logger = logging.getLogger(__name__)
 
 # Environment variables should be set by CI (do NOT override here)
 # CI sets: DYNAMODB_TABLE=dev-sentiment-items, SNS_TOPIC_ARN=..., etc.
@@ -226,8 +229,8 @@ class TestIngestionE2E:
                             "timestamp": item["timestamp"],
                         }
                     )
-            except Exception:  # noqa: S110
-                pass  # Cleanup is best-effort, exceptions during cleanup don't fail test
+            except Exception as e:  # noqa: S110
+                logger.warning("Cleanup failed (best-effort): %s", e)
 
     @responses.activate
     def test_deduplication_across_invocations(
@@ -324,8 +327,8 @@ class TestIngestionE2E:
                             "timestamp": item["timestamp"],
                         }
                     )
-            except Exception:  # noqa: S110
-                pass
+            except Exception as e:  # noqa: S110
+                logger.warning("Cleanup failed (best-effort): %s", e)
 
     @responses.activate
     def test_item_ttl_set_correctly(
@@ -401,8 +404,8 @@ class TestIngestionE2E:
                             "timestamp": item["timestamp"],
                         }
                     )
-            except Exception:  # noqa: S110
-                pass
+            except Exception as e:  # noqa: S110
+                logger.warning("Cleanup failed (best-effort): %s", e)
 
     @responses.activate
     def test_metadata_preserved(
@@ -476,8 +479,8 @@ class TestIngestionE2E:
                             "timestamp": item["timestamp"],
                         }
                     )
-            except Exception:  # noqa: S110
-                pass
+            except Exception as e:  # noqa: S110
+                logger.warning("Cleanup failed (best-effort): %s", e)
 
     @responses.activate
     def test_text_for_analysis_extraction(
@@ -554,8 +557,8 @@ class TestIngestionE2E:
                             "timestamp": item["timestamp"],
                         }
                     )
-            except Exception:  # noqa: S110
-                pass  # Cleanup is best-effort
+            except Exception as e:  # noqa: S110
+                logger.warning("Cleanup failed (best-effort): %s", e)
 
 
 class TestIngestionEdgeCases:
