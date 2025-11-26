@@ -4,7 +4,7 @@
 
 **Audience:** @traylorre (Admin)
 
-**Last Updated:** 2025-11-15
+**Last Updated:** 2025-11-26
 
 ---
 
@@ -16,10 +16,37 @@
 |-----------------|-------------------|---------------------|-------|
 | **Contributor AWS Keys** | Every 90 days | 7 days before | @traylorre |
 | **Admin AWS Keys** | Every 180 days | Self-managed | @traylorre |
-| **Twitter API Keys** | On compromise only | N/A | @traylorre |
+| **Tiingo API Keys** | Every 180 days | 14 days before | @traylorre |
+| **Finnhub API Keys** | Every 180 days | 14 days before | @traylorre |
+| **SendGrid API Keys** | Managed service | N/A | SendGrid |
 | **API Gateway Keys** | Every 180 days | N/A | @traylorre |
 | **Terraform Cloud Tokens** | Every 365 days | 30 days before | @traylorre |
 | **GitHub PATs** | Every 90 days | Self-managed | Per user |
+
+### Financial API Rotation Notes
+
+**Tiingo API Key** (Primary Financial News):
+- Free tier: 500 symbol lookups/month
+- Rotation impacts: Ingestion Lambda, Analysis Lambda
+- Downtime window: Schedule during market close (after 4 PM EST)
+- Secrets Manager path: `{env}/sentiment-analyzer/tiingo-api-key`
+
+**Finnhub API Key** (Secondary Financial News + Sentiment):
+- Free tier: 60 API calls/minute
+- Rotation impacts: Ingestion Lambda, Analysis Lambda, Dashboard Lambda
+- Downtime window: Schedule during market close (after 4 PM EST)
+- Secrets Manager path: `{env}/sentiment-analyzer/finnhub-api-key`
+
+**SendGrid API Key** (Email Notifications):
+- Managed service - no manual rotation required
+- SendGrid handles key lifecycle
+- Secrets Manager path: `{env}/sentiment-analyzer/sendgrid-api-key`
+
+### Deprecated Credentials (Removed in Feature 006)
+
+The following credentials are no longer used and should be deleted if present:
+- ~~Twitter API Keys~~ - Removed (never used in production)
+- ~~NewsAPI Keys~~ - Removed (pivoted to Tiingo/Finnhub)
 
 ### Emergency Rotation Triggers
 

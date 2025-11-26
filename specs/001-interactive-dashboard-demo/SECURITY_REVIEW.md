@@ -351,9 +351,11 @@ This security review analyzes the **revised regional multi-AZ architecture** tha
 
 - [ ] **CODE-01**: Lambda code signing (cryptographic verification)
 - [ ] **WAF-01**: AWS WAF for dashboard Lambda Function URL
-- [ ] **XRAY-01**: AWS X-Ray for distributed tracing
+- [x] **XRAY-01**: AWS X-Ray for distributed tracing - **MOVED TO DAY 1 MANDATORY (Feature 006)**
 - [ ] **ROTATE-01**: Automated secret rotation (Secrets Manager Lambda)
 - [ ] **PENTEST-01**: Third-party penetration test
+
+> **Note (2025-11-26)**: XRAY-01 has been elevated to Day 1 mandatory requirement per Feature 006 specification. All 4 Lambdas must have X-Ray tracing enabled using AWSXRayDaemonWriteAccess managed policy with SNS message attribute propagation for distributed trace context.
 
 ### Phase 3 (Scale & Compliance)
 
