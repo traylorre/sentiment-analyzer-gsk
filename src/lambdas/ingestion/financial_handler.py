@@ -52,21 +52,29 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import boto3
+from aws_xray_sdk.core import patch_all, xray_recorder
 from botocore.config import Config
 
-from src.lambdas.shared.adapters.base import (
+# Patch boto3 and requests for X-Ray distributed tracing
+# Day 1 mandatory per constitution v1.1 (FR-035)
+patch_all()
+
+from src.lambdas.shared.adapters.base import (  # noqa: E402
     AdapterError,
     NewsArticle,
     RateLimitError,
 )
-from src.lambdas.shared.adapters.finnhub import FinnhubAdapter
-from src.lambdas.shared.adapters.tiingo import TiingoAdapter
-from src.lambdas.shared.circuit_breaker import CircuitBreakerState
-from src.lambdas.shared.dynamodb import get_table, put_item_if_not_exists
-from src.lambdas.shared.logging_utils import get_safe_error_info, sanitize_for_log
-from src.lambdas.shared.quota_tracker import QuotaTracker
-from src.lambdas.shared.secrets import get_api_key
-from src.lib.metrics import emit_metric, emit_metrics_batch
+from src.lambdas.shared.adapters.finnhub import FinnhubAdapter  # noqa: E402
+from src.lambdas.shared.adapters.tiingo import TiingoAdapter  # noqa: E402
+from src.lambdas.shared.circuit_breaker import CircuitBreakerState  # noqa: E402
+from src.lambdas.shared.dynamodb import get_table, put_item_if_not_exists  # noqa: E402
+from src.lambdas.shared.logging_utils import (  # noqa: E402
+    get_safe_error_info,
+    sanitize_for_log,
+)
+from src.lambdas.shared.quota_tracker import QuotaTracker  # noqa: E402
+from src.lambdas.shared.secrets import get_api_key  # noqa: E402
+from src.lib.metrics import emit_metric, emit_metrics_batch  # noqa: E402
 
 # Structured logging
 logger = logging.getLogger(__name__)
@@ -382,6 +390,7 @@ def _get_config() -> dict[str, str]:
     }
 
 
+@xray_recorder.capture("get_active_tickers")
 def _get_active_tickers(table: Any) -> list[str]:
     """Get unique tickers from all active user configurations.
 
@@ -533,6 +542,7 @@ def _save_quota_tracker(table: Any, tracker: QuotaTracker) -> None:
         )
 
 
+@xray_recorder.capture("fetch_tiingo_articles")
 def _fetch_tiingo_articles(
     adapter: TiingoAdapter,
     tickers: list[str],
@@ -565,6 +575,7 @@ def _fetch_tiingo_articles(
     return articles
 
 
+@xray_recorder.capture("fetch_finnhub_articles")
 def _fetch_finnhub_articles(
     adapter: FinnhubAdapter,
     tickers: list[str],
@@ -597,6 +608,7 @@ def _fetch_finnhub_articles(
     return articles
 
 
+@xray_recorder.capture("process_financial_article")
 def _process_article(
     article: NewsArticle,
     source: str,

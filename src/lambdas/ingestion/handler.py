@@ -52,20 +52,25 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import boto3
+from aws_xray_sdk.core import patch_all, xray_recorder
 from botocore.config import Config
 
-from src.lambdas.ingestion.adapters.base import (
+# Patch boto3 and requests for X-Ray distributed tracing
+# Day 1 mandatory per constitution v1.1 (FR-035)
+patch_all()
+
+from src.lambdas.ingestion.adapters.base import (  # noqa: E402
     AdapterError,
     AuthenticationError,
     RateLimitError,
 )
-from src.lambdas.ingestion.adapters.newsapi import NewsAPIAdapter
-from src.lambdas.ingestion.config import ConfigurationError, get_config
-from src.lambdas.shared.chaos_injection import is_chaos_active
-from src.lambdas.shared.dynamodb import get_table, put_item_if_not_exists
-from src.lambdas.shared.secrets import get_api_key
-from src.lib.deduplication import generate_source_id
-from src.lib.metrics import (
+from src.lambdas.ingestion.adapters.newsapi import NewsAPIAdapter  # noqa: E402
+from src.lambdas.ingestion.config import ConfigurationError, get_config  # noqa: E402
+from src.lambdas.shared.chaos_injection import is_chaos_active  # noqa: E402
+from src.lambdas.shared.dynamodb import get_table, put_item_if_not_exists  # noqa: E402
+from src.lambdas.shared.secrets import get_api_key  # noqa: E402
+from src.lib.deduplication import generate_source_id  # noqa: E402
+from src.lib.metrics import (  # noqa: E402
     emit_metric,
     emit_metrics_batch,
     log_structured,
@@ -335,6 +340,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         }
 
 
+@xray_recorder.capture("process_article")
 def _process_article(
     article: dict[str, Any],
     tag: str,
@@ -482,6 +488,7 @@ def _get_text_for_analysis(article: dict[str, Any]) -> str:
         return content[:500] if content else ""
 
 
+@xray_recorder.capture("get_sns_client")
 def _get_sns_client() -> Any:
     """
     Get an SNS client with retry configuration.
