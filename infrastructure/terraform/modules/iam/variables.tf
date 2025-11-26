@@ -46,3 +46,9 @@ variable "ticker_cache_bucket_arn" {
   type        = string
   default     = ""
 }
+
+variable "sendgrid_secret_arn" {
+  description = "ARN of the SendGrid API key secret in Secrets Manager (Feature 006)"
+  type        = string
+  default     = ""
+}

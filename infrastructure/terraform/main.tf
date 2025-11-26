@@ -458,6 +458,59 @@ module "metrics_lambda" {
 }
 
 # ===================================================================
+# Module: Notification Lambda (Feature 006 - Email Alerts)
+# ===================================================================
+
+module "notification_lambda" {
+  source = "./modules/lambda"
+
+  function_name = "${var.environment}-sentiment-notification"
+  description   = "Sends email notifications via SendGrid for alerts, magic links, and digests"
+  iam_role_arn  = module.iam.notification_lambda_role_arn
+  handler       = "handler.lambda_handler"
+  s3_bucket     = "${var.environment}-sentiment-lambda-deployments"
+  s3_key        = "notification/lambda.zip"
+
+  # Force update when package changes (git SHA triggers redeployment)
+  source_code_hash = var.lambda_package_version
+
+  # Resource configuration
+  memory_size          = 256
+  timeout              = 30
+  reserved_concurrency = 5 # Moderate concurrency for email sending
+
+  # X-Ray tracing (Feature 006 - Day 1 mandatory)
+  tracing_mode = "Active"
+
+  # Environment variables
+  environment_variables = {
+    DYNAMODB_TABLE      = module.dynamodb.table_name
+    SENDGRID_SECRET_ARN = module.secrets.sendgrid_secret_arn
+    FROM_EMAIL          = var.notification_from_email
+    DASHBOARD_URL       = var.cloudfront_custom_domain != "" ? "https://${var.cloudfront_custom_domain}" : "https://${module.cloudfront.distribution_domain_name}"
+    ENVIRONMENT         = var.environment
+  }
+
+  # No Function URL needed - triggered by SNS and EventBridge
+  create_function_url = false
+
+  # Logging
+  log_retention_days = var.environment == "prod" ? 90 : 30
+
+  # Alarms
+  create_error_alarm    = true
+  error_alarm_threshold = 10
+  alarm_actions         = [module.monitoring.alarm_topic_arn]
+
+  tags = {
+    Lambda  = "notification"
+    Feature = "006-user-config-dashboard"
+  }
+
+  depends_on = [module.iam, module.cloudfront]
+}
+
+# ===================================================================
 # Module: API Gateway (Dashboard Rate Limiting - P0 Security)
 # ===================================================================
 
@@ -542,6 +595,7 @@ module "iam" {
   model_s3_bucket_arn          = "arn:aws:s3:::${local.model_s3_bucket}"
   chaos_experiments_table_arn  = module.dynamodb.chaos_experiments_table_arn
   ticker_cache_bucket_arn      = aws_s3_bucket.ticker_cache.arn
+  sendgrid_secret_arn          = module.secrets.sendgrid_secret_arn
 }
 
 # ===================================================================
@@ -814,4 +868,15 @@ output "ticker_cache_bucket" {
 output "ticker_cache_bucket_arn" {
   description = "ARN of the ticker cache S3 bucket"
   value       = aws_s3_bucket.ticker_cache.arn
+}
+
+# Notification Lambda outputs
+output "notification_lambda_arn" {
+  description = "ARN of the Notification Lambda function"
+  value       = module.notification_lambda.function_arn
+}
+
+output "notification_lambda_name" {
+  description = "Name of the Notification Lambda function"
+  value       = module.notification_lambda.function_name
 }

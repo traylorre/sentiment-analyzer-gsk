@@ -140,3 +140,13 @@ variable "cloudfront_acm_certificate_arn" {
   type        = string
   default     = ""
 }
+
+# ===================================================================
+# Feature 006: Notification Variables
+# ===================================================================
+
+variable "notification_from_email" {
+  description = "From email address for notifications (must be verified in SendGrid)"
+  type        = string
+  default     = "noreply@sentiment-analyzer.com"
+}

@@ -39,3 +39,13 @@ output "metrics_lambda_role_name" {
   description = "Name of the Metrics Lambda IAM role"
   value       = aws_iam_role.metrics_lambda.name
 }
+
+output "notification_lambda_role_arn" {
+  description = "ARN of the Notification Lambda IAM role (Feature 006)"
+  value       = aws_iam_role.notification_lambda.arn
+}
+
+output "notification_lambda_role_name" {
+  description = "Name of the Notification Lambda IAM role (Feature 006)"
+  value       = aws_iam_role.notification_lambda.name
+}

@@ -474,3 +474,110 @@ resource "aws_iam_role_policy" "metrics_cloudwatch" {
     ]
   })
 }
+
+# ===================================================================
+# Notification Lambda IAM Role (Feature 006 - Email Alerts)
+# ===================================================================
+
+resource "aws_iam_role" "notification_lambda" {
+  name = "${var.environment}-notification-lambda-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+
+  tags = {
+    Environment = var.environment
+    Feature     = "006-user-config-dashboard"
+    Lambda      = "notification"
+  }
+}
+
+# Notification Lambda: DynamoDB access (read/write notifications, user prefs)
+resource "aws_iam_role_policy" "notification_dynamodb" {
+  name = "${var.environment}-notification-dynamodb-policy"
+  role = aws_iam_role.notification_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:Query"
+        ]
+        Resource = [
+          var.dynamodb_table_arn,
+          "${var.dynamodb_table_arn}/index/*"
+        ]
+      }
+    ]
+  })
+}
+
+# Notification Lambda: Secrets Manager (SendGrid API key)
+resource "aws_iam_role_policy" "notification_secrets" {
+  name = "${var.environment}-notification-secrets-policy"
+  role = aws_iam_role.notification_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue"
+        ]
+        Resource = var.sendgrid_secret_arn
+      }
+    ]
+  })
+}
+
+# Notification Lambda: CloudWatch Logs
+resource "aws_iam_role_policy_attachment" "notification_logs" {
+  role       = aws_iam_role.notification_lambda.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+# Notification Lambda: X-Ray tracing
+resource "aws_iam_role_policy_attachment" "notification_xray" {
+  role       = aws_iam_role.notification_lambda.name
+  policy_arn = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"
+}
+
+# Notification Lambda: CloudWatch Metrics
+resource "aws_iam_role_policy" "notification_metrics" {
+  name = "${var.environment}-notification-metrics-policy"
+  role = aws_iam_role.notification_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "cloudwatch:PutMetricData"
+        ]
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "cloudwatch:namespace" = "SentimentAnalyzer"
+          }
+        }
+      }
+    ]
+  })
+}
