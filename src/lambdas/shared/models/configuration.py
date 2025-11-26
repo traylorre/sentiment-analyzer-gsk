@@ -55,7 +55,15 @@ class Configuration(BaseModel):
             "config_id": self.config_id,
             "user_id": self.user_id,
             "name": self.name,
-            "tickers": [t.model_dump() for t in self.tickers],
+            "tickers": [
+                {
+                    "symbol": t.symbol,
+                    "name": t.name,
+                    "exchange": t.exchange,
+                    "added_at": t.added_at.isoformat(),
+                }
+                for t in self.tickers
+            ],
             "timeframe_days": self.timeframe_days,
             "include_extended_hours": self.include_extended_hours,
             "atr_period": self.atr_period,

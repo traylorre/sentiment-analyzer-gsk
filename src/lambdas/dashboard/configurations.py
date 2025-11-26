@@ -288,9 +288,12 @@ def update_configuration(
     # Build update expression
     update_parts = []
     attr_values: dict[str, Any] = {}
+    attr_names: dict[str, str] = {}
 
     if request.name is not None:
-        update_parts.append("name = :name")
+        # 'name' is a reserved keyword in DynamoDB
+        update_parts.append("#n = :name")
+        attr_names["#n"] = "name"
         attr_values[":name"] = request.name
 
     if request.tickers is not None:
@@ -308,7 +311,15 @@ def update_configuration(
             validated_tickers.append(ticker_info)
 
         update_parts.append("tickers = :tickers")
-        attr_values[":tickers"] = [t.model_dump() for t in validated_tickers]
+        attr_values[":tickers"] = [
+            {
+                "symbol": t.symbol,
+                "name": t.name,
+                "exchange": t.exchange,
+                "added_at": t.added_at.isoformat(),
+            }
+            for t in validated_tickers
+        ]
 
     if request.timeframe_days is not None:
         update_parts.append("timeframe_days = :timeframe")
@@ -328,14 +339,18 @@ def update_configuration(
         return existing
 
     try:
-        table.update_item(
-            Key={
+        update_kwargs: dict[str, Any] = {
+            "Key": {
                 "PK": f"USER#{user_id}",
                 "SK": f"CONFIG#{config_id}",
             },
-            UpdateExpression="SET " + ", ".join(update_parts),
-            ExpressionAttributeValues=attr_values,
-        )
+            "UpdateExpression": "SET " + ", ".join(update_parts),
+            "ExpressionAttributeValues": attr_values,
+        }
+        if attr_names:
+            update_kwargs["ExpressionAttributeNames"] = attr_names
+
+        table.update_item(**update_kwargs)
 
         logger.info(
             "Updated configuration",
