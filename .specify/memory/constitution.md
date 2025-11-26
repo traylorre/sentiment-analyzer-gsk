@@ -178,6 +178,65 @@ Acceptance Criteria (serverless stack)
 
 7) Testing & Validation
 
+	Environment & Stage Testing Matrix
+	-----------------------------------
+	The testing strategy follows a strict environment mirroring pattern with clear rules for mocking:
+
+	| Environment | Mirrors | Test Type | Mocking Strategy |
+	|-------------|---------|-----------|------------------|
+	| LOCAL       | DEV     | Unit tests only | ALL mocks (AWS, external APIs) |
+	| DEV         | LOCAL   | Unit tests only | ALL mocks (AWS, external APIs) |
+	| PREPROD     | PROD    | E2E tests only  | Mock external APIs, real AWS |
+	| PROD        | PREPROD | Canary/Smoke only | Mock external APIs, real AWS |
+
+	CRITICAL RULES:
+	a) LOCAL and DEV environments run ONLY unit tests with mocks (moto for AWS, responses/httpx for APIs)
+	b) PREPROD and PROD environments run ONLY E2E tests without AWS mocks (real infrastructure)
+	c) ALWAYS mock external 3rd-party dependencies (ticker APIs, email services) in ALL environments
+	d) EXCEPTION: Canary/smoke tests post-deployment MAY use real external services for validation
+
+	External Dependency Mocking (Mandatory)
+	----------------------------------------
+	External dependencies (Tiingo API, Finnhub API, SendGrid, etc.) MUST be mocked in ALL test environments:
+	- Unit tests: Use responses, httpx-mock, or similar to mock HTTP calls
+	- Integration tests: Use mock adapters or fixtures for external API responses
+	- E2E tests in preprod: Use synthetic data generators for external API behavior
+	- Exception: Post-deployment canary/smoke tests MAY hit real external APIs for true end-to-end validation
+
+	Rationale: External APIs have rate limits, costs, non-deterministic data, and can cause flaky tests.
+	The smoke/canary exception validates production connectivity without risking test suite stability.
+
+	Synthetic Test Data (E2E Requirement)
+	--------------------------------------
+	All E2E tests in preprod MUST use synthetic test data:
+	1. Before each E2E test suite run, generate deterministic synthetic data (tickers, prices, sentiment)
+	2. Configure mock external API adapters to return this synthetic data
+	3. Test assertions MUST compute expected outcomes from the same synthetic data
+	4. The test framework includes a "test oracle" that calculates correct answers from input data
+
+	Pattern:
+	```python
+	# E2E test setup
+	synthetic_data = generate_synthetic_ticker_data(seed=12345)
+	mock_tiingo.configure(synthetic_data)
+	mock_finnhub.configure(synthetic_data)
+
+	# Execute test
+	response = dashboard_api.get_sentiment(config_id)
+
+	# Assert against computed expectations (not hardcoded)
+	expected = compute_expected_sentiment(synthetic_data)
+	assert response.sentiment == expected
+	```
+
+	Implementation Accompaniment Rule
+	----------------------------------
+	ALL implementation code MUST be accompanied by unit tests:
+	- Every new function/module requires corresponding unit tests
+	- Tests must cover happy path AND at least one error path
+	- Coverage threshold: 80% minimum for new code
+	- No PR merges without passing tests for new/modified code
+
 	Functional Integrity Principle
 	-------------------------------
 	The functional integrity of the entire system depends on the integrity of each component which MUST be verified with comprehensive unit tests. Unit tests serve as the first line of defense against both:
@@ -290,11 +349,65 @@ Operational Notes
 - Rollback: Every deployment must support quick rollback to previous model_version and container image.
 - Backups & Logs: Retain logs and metrics per the retention policy; rotate and archive as required.
 
-Amendments & Governance
------------------------
-This constitution is intentionally minimal. Amendments may be added with a short rationale and must include any new acceptance criteria. Maintain a Version and Last Amended date at the bottom.
+8) Git Workflow & CI/CD Rules
 
-**Version**: 1.0 | **Ratified**: [2025-11-14] | **Last Amended**: [2025-11-14]
+	Pre-Push Requirements
+	---------------------
+	ALL git pushes MUST meet these requirements before pushing:
+	a) Code MUST be linted (ruff check)
+	b) Code MUST be formatted (black/ruff format)
+	c) Commits MUST be GPG-signed (git commit -S)
+	d) Push MUST target a feature branch (never push directly to main)
+
+	Pre-push checklist:
+	```bash
+	ruff check src/ tests/        # Lint
+	ruff format src/ tests/       # Format (or black)
+	git commit -S -m "message"    # Sign commit
+	git push origin feature-branch # Push to feature branch
+	```
+
+	Pipeline Monitoring (Background Process)
+	-----------------------------------------
+	After pushing to a feature branch, monitor pipeline promotion as a background process:
+	- Check pipeline status every 30 seconds
+	- Continue implementation work in parallel while monitoring
+	- Respond to pipeline failures promptly but don't block on green status
+
+	Pattern:
+	```bash
+	# Push and monitor in background
+	git push origin feature-branch
+	gh run watch --interval 30 &  # Monitor in background
+	# Continue working on next task
+	```
+
+	Branch Lifecycle
+	----------------
+	a) Feature branches are created for all work
+	b) Pipeline merges feature branch into main after all checks pass
+	c) Remote feature branch is automatically deleted after merge
+	d) Developer MUST clean up local feature branches after merge:
+	   ```bash
+	   git checkout main
+	   git pull origin main
+	   git branch -d feature-branch  # Delete local branch
+	   ```
+
+	Pipeline Check Bypass (NEVER ALLOWED)
+	--------------------------------------
+	CRITICAL: Never bypass pipeline checks. No exceptions.
+	- Do NOT use --no-verify on commits
+	- Do NOT force-push to main
+	- Do NOT merge without required approvals
+	- Do NOT skip required status checks
+
+	If pipeline fails:
+	1. Investigate the failure
+	2. Fix the root cause
+	3. Push the fix to the same feature branch
+	4. Wait for pipeline to pass
+	5. Only then proceed with merge
 
 Design & Diagrams (Canva preferred)
 ----------------------------------
@@ -325,3 +438,11 @@ Design & Diagrams (Canva preferred)
 	- `diagrams/README.md` exists and contains Canva link(s), export file names, and ownership.
 	- At least one canonical architecture diagram is present as SVG and PNG in `diagrams/` and documents the event-driven, serverless stack.
 	- Diagram exports include provenance metadata (Canva link, last editor, date) and a brief changelog for material edits.
+
+Amendments & Governance
+-----------------------
+This constitution is intentionally minimal. Amendments may be added with a short rationale and must include any new acceptance criteria. Maintain a Version and Last Amended date at the bottom.
+
+Amendment 1.1 (2025-11-26): Added Environment & Stage Testing Matrix, External Dependency Mocking rules, Synthetic Test Data requirements for E2E, Implementation Accompaniment Rule, and Git Workflow & CI/CD Rules including pre-push requirements, pipeline monitoring, branch lifecycle, and bypass prohibition.
+
+**Version**: 1.1 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-11-26

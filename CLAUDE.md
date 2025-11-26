@@ -72,6 +72,7 @@ git commit --amend -S --no-edit
 
 ## Recent Changes
 - 006-user-config-dashboard: Added Python 3.13 + FastAPI, boto3, pydantic, aws-lambda-powertools, requests
+- 006-user-config-dashboard: Added Python 3.13 + FastAPI, boto3, pydantic, aws-lambda-powertools, requests
 
 - 001-interactive-dashboard-demo: Added Python 3.13
 
