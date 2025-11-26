@@ -244,3 +244,67 @@ def assert_warning_logged(caplog, pattern: str):
         for record in caplog.records
         if record.levelno == logging.WARNING
     ), f"Expected WARNING log matching '{pattern}' not found"
+
+
+# =============================================================================
+# Synthetic Test Data Fixture (Spec 005 - TD-004)
+# =============================================================================
+
+
+@pytest.fixture(scope="session")
+def synthetic_data():
+    """
+    Generate synthetic test data for preprod E2E tests.
+
+    This fixture creates deterministic test data in DynamoDB with known
+    properties, allowing tests to verify behavior against expected values.
+
+    The fixture is session-scoped to avoid recreating data for each test.
+    Data is automatically cleaned up after the session completes.
+
+    Note: This fixture only activates for preprod tests (requires real AWS).
+    For unit tests with moto, use the sample_sentiment_item fixture instead.
+
+    Yields:
+        Dict containing:
+        - items: List of 6 created items
+        - generator: The SyntheticDataGenerator instance
+        - positive_count: 2
+        - neutral_count: 2
+        - negative_count: 2
+        - total_count: 6
+        - tech_count: 3 (items with "tech" tag)
+        - business_count: 2 (items with "business" tag)
+
+    Example:
+        def test_metrics_returns_correct_counts(auth_headers, synthetic_data):
+            response = requests.get(f"{URL}/api/metrics", headers=auth_headers)
+            data = response.json()
+
+            # Verify against known synthetic data
+            assert data["total"] >= synthetic_data["total_count"]
+            assert data["positive"] >= synthetic_data["positive_count"]
+    """
+    # Only import and use for preprod tests (avoid import errors in unit tests)
+    from tests.fixtures.synthetic_data import SyntheticDataGenerator
+
+    # Get table name from environment (CI sets this for preprod)
+    table_name = os.environ.get("DYNAMODB_TABLE")
+
+    if not table_name or table_name == "test-sentiment-items":
+        # Skip synthetic data for unit tests (mocked DynamoDB)
+        pytest.skip("Synthetic data fixture only available for preprod tests")
+
+    with SyntheticDataGenerator(table_name) as generator:
+        items = generator.create_test_dataset()
+        yield {
+            "items": items,
+            "generator": generator,
+            "positive_count": 2,
+            "neutral_count": 2,
+            "negative_count": 2,
+            "total_count": 6,
+            "tech_count": 3,
+            "business_count": 2,
+        }
+        # Cleanup happens automatically via context manager
