@@ -815,6 +815,36 @@ jobs:
           SNS_TOPIC_ARN=$(terraform output -raw sns_topic_arn 2>/dev/null || echo "")
           echo "sns_topic_arn=${SNS_TOPIC_ARN}" >> $GITHUB_OUTPUT
 
+      - name: Warm Up Lambdas for Metrics (TD-001)
+        env:
+          DASHBOARD_URL: ${{ needs.deploy-preprod.outputs.dashboard_url }}
+          API_KEY: ${{ secrets.DASHBOARD_API_KEY }}
+        run: |
+          echo "🔥 Warming up Lambdas to generate CloudWatch metrics..."
+          echo "This ensures observability tests have real metrics to validate."
+          echo ""
+
+          # Invoke dashboard Lambda multiple times to generate metrics
+          echo "1. Invoking /health endpoint..."
+          curl -s -o /dev/null -w "HTTP %{http_code}\n" "${DASHBOARD_URL}/health" || true
+
+          echo "2. Invoking /api/metrics endpoint (authenticated)..."
+          curl -s -o /dev/null -w "HTTP %{http_code}\n" \
+            -H "Authorization: ${API_KEY}" \
+            "${DASHBOARD_URL}/api/metrics" || true
+
+          echo "3. Invoking /api/items endpoint (authenticated)..."
+          curl -s -o /dev/null -w "HTTP %{http_code}\n" \
+            -H "Authorization: ${API_KEY}" \
+            "${DASHBOARD_URL}/api/items?limit=5" || true
+
+          # Wait for CloudWatch metrics to propagate
+          echo ""
+          echo "⏳ Waiting 60s for CloudWatch metrics to propagate..."
+          sleep 60
+
+          echo "✅ Lambda warmup complete - metrics should now be available"
+
       - name: Run Preprod Integration Tests
         env:
           AWS_REGION: ${{ vars.AWS_REGION }}
@@ -829,7 +859,7 @@ jobs:
         run: |
           # Run tests marked as "preprod" (auto-marked by conftest.py for *_preprod.py files)
           # These tests use REAL AWS resources, not moto mocks
-          timeout 120 pytest tests/ \
+          timeout 180 pytest tests/ \
             -m "preprod" \
             -v \
             --tb=short \
