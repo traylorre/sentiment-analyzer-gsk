@@ -14,6 +14,11 @@ Implements authentication for User Story 1 & 2:
 - POST /api/v2/auth/link-accounts - Link accounts (T098)
 - GET /api/v2/auth/merge-status - Get merge status (T099)
 
+X-Ray tracing enabled (T103) for:
+- request_magic_link, verify_magic_link
+- handle_oauth_callback
+- link_accounts, merge operations
+
 For On-Call Engineers:
     Anonymous sessions are stored in DynamoDB with 30-day TTL.
     If sessions are not persisting:
@@ -37,6 +42,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
+from aws_xray_sdk.core import xray_recorder
 from pydantic import BaseModel, EmailStr, Field
 
 from src.lambdas.shared.auth.cognito import (
@@ -589,6 +595,7 @@ def _verify_magic_link_signature(token_id: str, email: str, signature: str) -> b
 
 
 # T090: Magic Link Request
+@xray_recorder.capture("request_magic_link")
 def request_magic_link(
     table: Any,
     request: MagicLinkRequest,
@@ -673,6 +680,7 @@ def _invalidate_existing_tokens(table: Any, email: str) -> None:
 
 
 # T091: Magic Link Verification
+@xray_recorder.capture("verify_magic_link")
 def verify_magic_link(
     table: Any,
     token_id: str,
@@ -855,6 +863,7 @@ def get_oauth_urls() -> OAuthURLsResponse:
 
 
 # T093: OAuth Callback
+@xray_recorder.capture("handle_oauth_callback")
 def handle_oauth_callback(
     table: Any,
     request: OAuthCallbackRequest,
@@ -1089,6 +1098,7 @@ def check_email_conflict(
 
 
 # T098: Link Accounts
+@xray_recorder.capture("link_accounts")
 def link_accounts(
     table: Any,
     current_user_id: str,

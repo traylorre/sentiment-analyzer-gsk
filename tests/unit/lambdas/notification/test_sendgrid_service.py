@@ -419,3 +419,57 @@ class TestEmailServiceHtmlBuilders:
         )
         assert "#ef4444" in html  # Red color
         assert "dropped below" in html
+
+
+class TestTemplateLoading:
+    """Tests for email template loading (T102)."""
+
+    def test_magic_link_uses_template_file(self, email_service: EmailService):
+        """Test magic link uses the template file when available."""
+        html = email_service._build_magic_link_html(
+            magic_link="https://example.com/auth?token=test123",
+            expires_in_minutes=60,
+            dashboard_url="https://dashboard.example.com",
+        )
+
+        # Template file includes these specific elements
+        assert "Sign in to your account" in html
+        assert "https://example.com/auth?token=test123" in html
+        assert "60 minutes" in html
+        assert "Sign In Securely" in html  # Button text from template
+
+    def test_magic_link_template_substitution(self, email_service: EmailService):
+        """Test all template variables are substituted."""
+        html = email_service._build_magic_link_html(
+            magic_link="https://app.test.com/magic?t=abc",
+            expires_in_minutes=30,
+            dashboard_url="https://app.test.com",
+        )
+
+        # No unsubstituted template variables
+        assert "{{magic_link}}" not in html
+        assert "{{expires_in_minutes}}" not in html
+        assert "{{dashboard_url}}" not in html
+
+        # Values are properly substituted
+        assert "https://app.test.com/magic?t=abc" in html
+        assert "30" in html
+        assert "https://app.test.com" in html
+
+    def test_magic_link_template_fallback(self, email_service: EmailService):
+        """Test fallback HTML when template not found."""
+        # Patch _load_template to return None (template not found)
+        with patch(
+            "src.lambdas.notification.sendgrid_service._load_template",
+            return_value=None,
+        ):
+            html = email_service._build_magic_link_html(
+                magic_link="https://example.com/auth?token=test",
+                expires_in_minutes=60,
+            )
+
+            # Should use fallback inline HTML
+            assert "https://example.com/auth?token=test" in html
+            assert "60 minutes" in html
+            # Fallback has simpler styling
+            assert "Sign in to Sentiment Analyzer" in html

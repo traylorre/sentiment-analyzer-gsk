@@ -13,12 +13,16 @@ Rate limits:
 import json
 import logging
 from functools import lru_cache
+from pathlib import Path
 
 import boto3
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 
 logger = logging.getLogger(__name__)
+
+# Template directory path
+TEMPLATES_DIR = Path(__file__).parent / "templates"
 
 
 class EmailServiceError(Exception):
@@ -213,8 +217,23 @@ class EmailService:
             html_content=html_content,
         )
 
-    def _build_magic_link_html(self, magic_link: str, expires_in_minutes: int) -> str:
-        """Build HTML for magic link email."""
+    def _build_magic_link_html(
+        self, magic_link: str, expires_in_minutes: int, dashboard_url: str = ""
+    ) -> str:
+        """Build HTML for magic link email.
+
+        Loads the template from templates/magic_link.html and substitutes
+        variables. Falls back to inline HTML if template not found.
+        """
+        template = _load_template("magic_link.html")
+        if template:
+            return (
+                template.replace("{{magic_link}}", magic_link)
+                .replace("{{expires_in_minutes}}", str(expires_in_minutes))
+                .replace("{{dashboard_url}}", dashboard_url or "")
+            )
+
+        # Fallback inline template
         return f"""
         <!DOCTYPE html>
         <html>
@@ -273,6 +292,29 @@ class EmailService:
         </body>
         </html>
         """
+
+
+@lru_cache(maxsize=10)
+def _load_template(template_name: str) -> str | None:
+    """Load email template from templates directory.
+
+    Uses LRU cache to avoid repeated file I/O.
+
+    Args:
+        template_name: Name of template file (e.g., 'magic_link.html')
+
+    Returns:
+        Template content string, or None if template not found
+    """
+    template_path = TEMPLATES_DIR / template_name
+    try:
+        if template_path.exists():
+            return template_path.read_text(encoding="utf-8")
+        logger.warning(f"Template not found: {template_path}")
+        return None
+    except Exception as e:
+        logger.error(f"Failed to load template {template_name}: {e}")
+        return None
 
 
 @lru_cache(maxsize=1)
