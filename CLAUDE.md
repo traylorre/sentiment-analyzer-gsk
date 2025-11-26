@@ -3,6 +3,8 @@
 Auto-generated from all feature plans. Last updated: 2025-11-16
 
 ## Active Technologies
+- Python 3.13 + FastAPI, boto3, pydantic, aws-lambda-powertools, requests (006-user-config-dashboard)
+- DynamoDB (users, configurations, sentiment results, alerts), S3 (static assets) (006-user-config-dashboard)
 
 - Python 3.13 (001-interactive-dashboard-demo)
 
@@ -69,6 +71,7 @@ git commit --amend -S --no-edit
 - Never attempt to run preprod tests locally - they require real AWS credentials
 
 ## Recent Changes
+- 006-user-config-dashboard: Added Python 3.13 + FastAPI, boto3, pydantic, aws-lambda-powertools, requests
 
 - 001-interactive-dashboard-demo: Added Python 3.13
 
