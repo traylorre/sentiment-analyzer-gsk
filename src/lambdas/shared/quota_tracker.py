@@ -123,9 +123,12 @@ class QuotaTracker(BaseModel):
         ttl = int(self.updated_at.timestamp()) + (7 * 86400)
 
         def serialize_quota(quota: APIQuotaUsage) -> dict:
-            """Serialize quota with ISO datetime."""
+            """Serialize quota with ISO datetime and convert floats to str."""
             data = quota.model_dump()
             data["reset_at"] = quota.reset_at.isoformat()
+            # Convert floats to strings for DynamoDB compatibility
+            data["warn_threshold"] = str(quota.warn_threshold)
+            data["critical_threshold"] = str(quota.critical_threshold)
             return data
 
         return {
@@ -149,38 +152,32 @@ class QuotaTracker(BaseModel):
         finnhub_data = item.get("finnhub", {})
         sendgrid_data = item.get("sendgrid", {})
 
+        def parse_quota(data: dict, service: str, defaults: dict) -> APIQuotaUsage:
+            """Parse quota data from DynamoDB item."""
+            return APIQuotaUsage(
+                service=service,
+                period=data.get("period", defaults["period"]),
+                limit=data.get("limit", defaults["limit"]),
+                used=data.get("used", 0),
+                remaining=data.get("remaining", defaults["limit"]),
+                reset_at=datetime.fromisoformat(data["reset_at"])
+                if data.get("reset_at")
+                else datetime.utcnow(),
+                warn_threshold=float(data.get("warn_threshold", 0.5)),
+                critical_threshold=float(data.get("critical_threshold", 0.8)),
+            )
+
         return cls(
             tracker_id=item.get("tracker_id", "QUOTA_TRACKER"),
             updated_at=datetime.fromisoformat(item["updated_at"]),
-            tiingo=APIQuotaUsage(
-                service="tiingo",
-                period=tiingo_data.get("period", "month"),
-                limit=tiingo_data.get("limit", 500),
-                used=tiingo_data.get("used", 0),
-                remaining=tiingo_data.get("remaining", 500),
-                reset_at=datetime.fromisoformat(tiingo_data["reset_at"])
-                if tiingo_data.get("reset_at")
-                else datetime.utcnow(),
+            tiingo=parse_quota(
+                tiingo_data, "tiingo", {"period": "month", "limit": 500}
             ),
-            finnhub=APIQuotaUsage(
-                service="finnhub",
-                period=finnhub_data.get("period", "minute"),
-                limit=finnhub_data.get("limit", 60),
-                used=finnhub_data.get("used", 0),
-                remaining=finnhub_data.get("remaining", 60),
-                reset_at=datetime.fromisoformat(finnhub_data["reset_at"])
-                if finnhub_data.get("reset_at")
-                else datetime.utcnow(),
+            finnhub=parse_quota(
+                finnhub_data, "finnhub", {"period": "minute", "limit": 60}
             ),
-            sendgrid=APIQuotaUsage(
-                service="sendgrid",
-                period=sendgrid_data.get("period", "day"),
-                limit=sendgrid_data.get("limit", 100),
-                used=sendgrid_data.get("used", 0),
-                remaining=sendgrid_data.get("remaining", 100),
-                reset_at=datetime.fromisoformat(sendgrid_data["reset_at"])
-                if sendgrid_data.get("reset_at")
-                else datetime.utcnow(),
+            sendgrid=parse_quota(
+                sendgrid_data, "sendgrid", {"period": "day", "limit": 100}
             ),
             total_api_calls_today=item.get("total_api_calls_today", 0),
             estimated_daily_cost=float(item.get("estimated_daily_cost", 0)),

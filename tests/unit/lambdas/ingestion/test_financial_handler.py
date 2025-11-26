@@ -1,0 +1,645 @@
+"""Unit tests for financial ingestion handler (T064).
+
+Tests the Tiingo/Finnhub ticker-based news ingestion workflow.
+"""
+
+import os
+from datetime import UTC, datetime
+from unittest.mock import MagicMock, patch
+
+import boto3
+import pytest
+from moto import mock_aws
+
+from src.lambdas.shared.adapters.base import NewsArticle, RateLimitError
+from src.lambdas.shared.circuit_breaker import CircuitBreakerState
+from src.lambdas.shared.quota_tracker import QuotaTracker
+
+
+@pytest.fixture
+def env_vars():
+    """Set required environment variables."""
+    os.environ["DYNAMODB_TABLE"] = "test-financial-news"
+    os.environ["SNS_TOPIC_ARN"] = "arn:aws:sns:us-east-1:123456789:test-topic"
+    os.environ[
+        "TIINGO_SECRET_ARN"
+    ] = "arn:aws:secretsmanager:us-east-1:123456789:secret:tiingo"
+    os.environ[
+        "FINNHUB_SECRET_ARN"
+    ] = "arn:aws:secretsmanager:us-east-1:123456789:secret:finnhub"
+    os.environ["MODEL_VERSION"] = "v1.0.0"
+    os.environ["AWS_REGION"] = "us-east-1"
+    yield
+    for key in [
+        "DYNAMODB_TABLE",
+        "SNS_TOPIC_ARN",
+        "TIINGO_SECRET_ARN",
+        "FINNHUB_SECRET_ARN",
+        "MODEL_VERSION",
+        "AWS_REGION",
+    ]:
+        os.environ.pop(key, None)
+
+
+@pytest.fixture
+def dynamodb_table():
+    """Create mock DynamoDB table."""
+    with mock_aws():
+        dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
+        table = dynamodb.create_table(
+            TableName="test-financial-news",
+            KeySchema=[
+                {"AttributeName": "PK", "KeyType": "HASH"},
+                {"AttributeName": "SK", "KeyType": "RANGE"},
+            ],
+            AttributeDefinitions=[
+                {"AttributeName": "PK", "AttributeType": "S"},
+                {"AttributeName": "SK", "AttributeType": "S"},
+            ],
+            BillingMode="PAY_PER_REQUEST",
+        )
+        yield table
+
+
+def create_news_article(
+    article_id: str = "test-123",
+    source: str = "tiingo",
+    title: str = "Test Article",
+    tickers: list[str] | None = None,
+) -> NewsArticle:
+    """Create a mock NewsArticle for testing."""
+    return NewsArticle(
+        article_id=article_id,
+        source=source,
+        title=title,
+        description="Test description",
+        url="https://example.com/article",
+        published_at=datetime.now(UTC),
+        tickers=tickers or ["AAPL"],
+        tags=["tech"],
+        source_name="Test Source",
+    )
+
+
+class TestGetActiveTickers:
+    """Tests for _get_active_tickers function."""
+
+    @mock_aws
+    def test_returns_empty_when_no_configurations(self, env_vars):
+        """Should return empty list when no configurations exist."""
+        from src.lambdas.ingestion.financial_handler import _get_active_tickers
+
+        dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
+        table = dynamodb.create_table(
+            TableName="test-financial-news",
+            KeySchema=[
+                {"AttributeName": "PK", "KeyType": "HASH"},
+                {"AttributeName": "SK", "KeyType": "RANGE"},
+            ],
+            AttributeDefinitions=[
+                {"AttributeName": "PK", "AttributeType": "S"},
+                {"AttributeName": "SK", "AttributeType": "S"},
+            ],
+            BillingMode="PAY_PER_REQUEST",
+        )
+
+        tickers = _get_active_tickers(table)
+        assert tickers == []
+
+    @mock_aws
+    def test_extracts_tickers_from_configurations(self, env_vars):
+        """Should extract unique tickers from all active configurations."""
+        from src.lambdas.ingestion.financial_handler import _get_active_tickers
+
+        dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
+        table = dynamodb.create_table(
+            TableName="test-financial-news",
+            KeySchema=[
+                {"AttributeName": "PK", "KeyType": "HASH"},
+                {"AttributeName": "SK", "KeyType": "RANGE"},
+            ],
+            AttributeDefinitions=[
+                {"AttributeName": "PK", "AttributeType": "S"},
+                {"AttributeName": "SK", "AttributeType": "S"},
+            ],
+            BillingMode="PAY_PER_REQUEST",
+        )
+
+        # Add configurations with tickers
+        table.put_item(
+            Item={
+                "PK": "USER#user1",
+                "SK": "CONFIG#config1",
+                "entity_type": "CONFIGURATION",
+                "is_active": True,
+                "tickers": [
+                    {"symbol": "AAPL", "name": "Apple"},
+                    {"symbol": "MSFT", "name": "Microsoft"},
+                ],
+            }
+        )
+        table.put_item(
+            Item={
+                "PK": "USER#user2",
+                "SK": "CONFIG#config2",
+                "entity_type": "CONFIGURATION",
+                "is_active": True,
+                "tickers": [
+                    {"symbol": "GOOGL", "name": "Alphabet"},
+                    {"symbol": "AAPL", "name": "Apple"},  # Duplicate
+                ],
+            }
+        )
+
+        tickers = _get_active_tickers(table)
+        assert sorted(tickers) == ["AAPL", "GOOGL", "MSFT"]
+
+    @mock_aws
+    def test_ignores_inactive_configurations(self, env_vars):
+        """Should ignore inactive configurations."""
+        from src.lambdas.ingestion.financial_handler import _get_active_tickers
+
+        dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
+        table = dynamodb.create_table(
+            TableName="test-financial-news",
+            KeySchema=[
+                {"AttributeName": "PK", "KeyType": "HASH"},
+                {"AttributeName": "SK", "KeyType": "RANGE"},
+            ],
+            AttributeDefinitions=[
+                {"AttributeName": "PK", "AttributeType": "S"},
+                {"AttributeName": "SK", "AttributeType": "S"},
+            ],
+            BillingMode="PAY_PER_REQUEST",
+        )
+
+        # Add active configuration
+        table.put_item(
+            Item={
+                "PK": "USER#user1",
+                "SK": "CONFIG#config1",
+                "entity_type": "CONFIGURATION",
+                "is_active": True,
+                "tickers": [{"symbol": "AAPL"}],
+            }
+        )
+        # Add inactive configuration
+        table.put_item(
+            Item={
+                "PK": "USER#user2",
+                "SK": "CONFIG#config2",
+                "entity_type": "CONFIGURATION",
+                "is_active": False,
+                "tickers": [{"symbol": "MSFT"}],
+            }
+        )
+
+        tickers = _get_active_tickers(table)
+        assert tickers == ["AAPL"]
+
+
+class TestCircuitBreakerManagement:
+    """Tests for circuit breaker state management."""
+
+    @mock_aws
+    def test_creates_default_circuit_breaker(self, env_vars):
+        """Should create default circuit breaker if none exists."""
+        from src.lambdas.ingestion.financial_handler import (
+            _get_or_create_circuit_breaker,
+        )
+
+        dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
+        table = dynamodb.create_table(
+            TableName="test-financial-news",
+            KeySchema=[
+                {"AttributeName": "PK", "KeyType": "HASH"},
+                {"AttributeName": "SK", "KeyType": "RANGE"},
+            ],
+            AttributeDefinitions=[
+                {"AttributeName": "PK", "AttributeType": "S"},
+                {"AttributeName": "SK", "AttributeType": "S"},
+            ],
+            BillingMode="PAY_PER_REQUEST",
+        )
+
+        breaker = _get_or_create_circuit_breaker(table, "tiingo")
+        assert breaker.service == "tiingo"
+        assert breaker.state == "closed"
+
+    @mock_aws
+    def test_loads_existing_circuit_breaker(self, env_vars):
+        """Should load existing circuit breaker from DynamoDB."""
+        from src.lambdas.ingestion.financial_handler import (
+            _get_or_create_circuit_breaker,
+            _save_circuit_breaker,
+        )
+
+        dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
+        table = dynamodb.create_table(
+            TableName="test-financial-news",
+            KeySchema=[
+                {"AttributeName": "PK", "KeyType": "HASH"},
+                {"AttributeName": "SK", "KeyType": "RANGE"},
+            ],
+            AttributeDefinitions=[
+                {"AttributeName": "PK", "AttributeType": "S"},
+                {"AttributeName": "SK", "AttributeType": "S"},
+            ],
+            BillingMode="PAY_PER_REQUEST",
+        )
+
+        # Save a breaker with failures
+        breaker = CircuitBreakerState.create_default("tiingo")
+        breaker.failure_count = 3
+        _save_circuit_breaker(table, breaker)
+
+        # Load it back
+        loaded = _get_or_create_circuit_breaker(table, "tiingo")
+        assert loaded.failure_count == 3
+
+
+class TestQuotaTrackerManagement:
+    """Tests for quota tracker state management."""
+
+    @mock_aws
+    def test_creates_default_quota_tracker(self, env_vars):
+        """Should create default quota tracker if none exists."""
+        from src.lambdas.ingestion.financial_handler import _get_or_create_quota_tracker
+
+        dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
+        table = dynamodb.create_table(
+            TableName="test-financial-news",
+            KeySchema=[
+                {"AttributeName": "PK", "KeyType": "HASH"},
+                {"AttributeName": "SK", "KeyType": "RANGE"},
+            ],
+            AttributeDefinitions=[
+                {"AttributeName": "PK", "AttributeType": "S"},
+                {"AttributeName": "SK", "AttributeType": "S"},
+            ],
+            BillingMode="PAY_PER_REQUEST",
+        )
+
+        tracker = _get_or_create_quota_tracker(table)
+        assert tracker.tiingo.remaining == 500
+        assert tracker.finnhub.remaining == 60
+
+    @mock_aws
+    def test_loads_existing_quota_tracker(self, env_vars):
+        """Should load existing quota tracker from DynamoDB."""
+        from src.lambdas.ingestion.financial_handler import (
+            _get_or_create_quota_tracker,
+        )
+
+        dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
+        table = dynamodb.create_table(
+            TableName="test-financial-news",
+            KeySchema=[
+                {"AttributeName": "PK", "KeyType": "HASH"},
+                {"AttributeName": "SK", "KeyType": "RANGE"},
+            ],
+            AttributeDefinitions=[
+                {"AttributeName": "PK", "AttributeType": "S"},
+                {"AttributeName": "SK", "AttributeType": "S"},
+            ],
+            BillingMode="PAY_PER_REQUEST",
+        )
+
+        # Create and save a tracker with some usage directly
+        tracker = QuotaTracker.create_default()
+        tracker.record_call("tiingo", count=10)
+        table.put_item(Item=tracker.to_dynamodb_item())
+
+        # Load it back
+        loaded = _get_or_create_quota_tracker(table)
+        assert loaded.tiingo.used == 10
+
+
+class TestFetchTiingoArticles:
+    """Tests for _fetch_tiingo_articles function."""
+
+    def test_records_quota_and_fetches_articles(self):
+        """Should record quota and fetch articles."""
+        from src.lambdas.ingestion.financial_handler import _fetch_tiingo_articles
+
+        mock_adapter = MagicMock()
+        mock_adapter.get_news.return_value = [
+            create_news_article("art1", "tiingo", "Article 1"),
+            create_news_article("art2", "tiingo", "Article 2"),
+        ]
+
+        tracker = QuotaTracker.create_default()
+        articles = _fetch_tiingo_articles(mock_adapter, ["AAPL"], tracker)
+
+        assert len(articles) == 2
+        assert tracker.tiingo.used == 1
+        mock_adapter.get_news.assert_called_once()
+
+
+class TestFetchFinnhubArticles:
+    """Tests for _fetch_finnhub_articles function."""
+
+    def test_records_quota_and_fetches_articles(self):
+        """Should record quota and fetch articles."""
+        from src.lambdas.ingestion.financial_handler import _fetch_finnhub_articles
+
+        mock_adapter = MagicMock()
+        mock_adapter.get_news.return_value = [
+            create_news_article("art1", "finnhub", "Article 1"),
+        ]
+
+        tracker = QuotaTracker.create_default()
+        articles = _fetch_finnhub_articles(mock_adapter, ["AAPL"], tracker)
+
+        assert len(articles) == 1
+        assert tracker.finnhub.used == 1
+        mock_adapter.get_news.assert_called_once()
+
+
+class TestProcessArticle:
+    """Tests for _process_article function."""
+
+    @mock_aws
+    def test_inserts_new_article(self, env_vars):
+        """Should insert new article and return 'new'."""
+        from src.lambdas.ingestion.financial_handler import _process_article
+
+        dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
+        table = dynamodb.create_table(
+            TableName="test-financial-news",
+            KeySchema=[
+                {"AttributeName": "source_id", "KeyType": "HASH"},
+            ],
+            AttributeDefinitions=[
+                {"AttributeName": "source_id", "AttributeType": "S"},
+            ],
+            BillingMode="PAY_PER_REQUEST",
+        )
+
+        mock_sns = MagicMock()
+        article = create_news_article("unique-123", "tiingo", "New Article")
+
+        with patch(
+            "src.lambdas.ingestion.financial_handler.put_item_if_not_exists",
+            return_value=True,
+        ):
+            result = _process_article(
+                article=article,
+                source="tiingo",
+                table=table,
+                sns_client=mock_sns,
+                sns_topic_arn="arn:aws:sns:us-east-1:123456789:test-topic",
+                model_version="v1.0.0",
+            )
+
+        assert result == "new"
+        mock_sns.publish.assert_called_once()
+
+    @mock_aws
+    def test_skips_duplicate_article(self, env_vars):
+        """Should skip duplicate article and return 'duplicate'."""
+        from src.lambdas.ingestion.financial_handler import _process_article
+
+        dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
+        table = dynamodb.create_table(
+            TableName="test-financial-news",
+            KeySchema=[
+                {"AttributeName": "source_id", "KeyType": "HASH"},
+            ],
+            AttributeDefinitions=[
+                {"AttributeName": "source_id", "AttributeType": "S"},
+            ],
+            BillingMode="PAY_PER_REQUEST",
+        )
+
+        mock_sns = MagicMock()
+        article = create_news_article("duplicate-123", "tiingo", "Duplicate Article")
+
+        with patch(
+            "src.lambdas.ingestion.financial_handler.put_item_if_not_exists",
+            return_value=False,
+        ):
+            result = _process_article(
+                article=article,
+                source="tiingo",
+                table=table,
+                sns_client=mock_sns,
+                sns_topic_arn="arn:aws:sns:us-east-1:123456789:test-topic",
+                model_version="v1.0.0",
+            )
+
+        assert result == "duplicate"
+        mock_sns.publish.assert_not_called()
+
+
+class TestGetTextForAnalysis:
+    """Tests for _get_text_for_analysis function."""
+
+    def test_combines_title_and_description(self):
+        """Should combine title and description."""
+        from src.lambdas.ingestion.financial_handler import _get_text_for_analysis
+
+        article = create_news_article()
+        article.title = "Breaking News"
+        article.description = "Important development"
+
+        text = _get_text_for_analysis(article)
+        assert text == "Breaking News. Important development"
+
+    def test_uses_title_only_when_no_description(self):
+        """Should use title only when no description."""
+        from src.lambdas.ingestion.financial_handler import _get_text_for_analysis
+
+        article = create_news_article()
+        article.title = "Breaking News"
+        article.description = None
+
+        text = _get_text_for_analysis(article)
+        assert text == "Breaking News"
+
+    def test_uses_description_when_no_title(self):
+        """Should use description when no title."""
+        from src.lambdas.ingestion.financial_handler import _get_text_for_analysis
+
+        article = create_news_article()
+        article.title = None
+        article.description = "Important development"
+
+        text = _get_text_for_analysis(article)
+        assert text == "Important development"
+
+
+class TestLambdaHandler:
+    """Integration tests for lambda_handler function."""
+
+    @mock_aws
+    def test_returns_success_with_no_tickers(self, env_vars):
+        """Should return success when no active tickers."""
+        from src.lambdas.ingestion.financial_handler import lambda_handler
+
+        dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
+        dynamodb.create_table(
+            TableName="test-financial-news",
+            KeySchema=[
+                {"AttributeName": "PK", "KeyType": "HASH"},
+                {"AttributeName": "SK", "KeyType": "RANGE"},
+            ],
+            AttributeDefinitions=[
+                {"AttributeName": "PK", "AttributeType": "S"},
+                {"AttributeName": "SK", "AttributeType": "S"},
+            ],
+            BillingMode="PAY_PER_REQUEST",
+        )
+
+        mock_context = MagicMock()
+        mock_context.aws_request_id = "test-request-id"
+
+        with patch(
+            "src.lambdas.ingestion.financial_handler.get_api_key",
+            return_value="test-key",
+        ), patch(
+            "src.lambdas.ingestion.financial_handler.emit_metrics_batch",
+        ):
+            response = lambda_handler({"source": "test"}, mock_context)
+
+        assert response["statusCode"] == 200
+        assert response["body"]["message"] == "No active tickers"
+
+    @mock_aws
+    def test_processes_tickers_from_configurations(self, env_vars):
+        """Should process tickers from active configurations."""
+        from src.lambdas.ingestion.financial_handler import lambda_handler
+
+        dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
+        table = dynamodb.create_table(
+            TableName="test-financial-news",
+            KeySchema=[
+                {"AttributeName": "PK", "KeyType": "HASH"},
+                {"AttributeName": "SK", "KeyType": "RANGE"},
+            ],
+            AttributeDefinitions=[
+                {"AttributeName": "PK", "AttributeType": "S"},
+                {"AttributeName": "SK", "AttributeType": "S"},
+            ],
+            BillingMode="PAY_PER_REQUEST",
+        )
+
+        # Add a configuration
+        table.put_item(
+            Item={
+                "PK": "USER#user1",
+                "SK": "CONFIG#config1",
+                "entity_type": "CONFIGURATION",
+                "is_active": True,
+                "tickers": [{"symbol": "AAPL"}],
+            }
+        )
+
+        mock_context = MagicMock()
+        mock_context.aws_request_id = "test-request-id"
+
+        mock_tiingo = MagicMock()
+        mock_tiingo.get_news.return_value = [
+            create_news_article("t1", "tiingo", "Tiingo Article", ["AAPL"])
+        ]
+        mock_tiingo.close = MagicMock()
+
+        mock_finnhub = MagicMock()
+        mock_finnhub.get_news.return_value = [
+            create_news_article("f1", "finnhub", "Finnhub Article", ["AAPL"])
+        ]
+        mock_finnhub.close = MagicMock()
+
+        with patch(
+            "src.lambdas.ingestion.financial_handler.get_api_key",
+            return_value="test-key",
+        ), patch(
+            "src.lambdas.ingestion.financial_handler.TiingoAdapter",
+            return_value=mock_tiingo,
+        ), patch(
+            "src.lambdas.ingestion.financial_handler.FinnhubAdapter",
+            return_value=mock_finnhub,
+        ), patch(
+            "src.lambdas.ingestion.financial_handler.put_item_if_not_exists",
+            return_value=True,
+        ), patch(
+            "src.lambdas.ingestion.financial_handler._get_sns_client",
+            return_value=MagicMock(),
+        ), patch(
+            "src.lambdas.ingestion.financial_handler.emit_metrics_batch",
+        ):
+            response = lambda_handler({"source": "test"}, mock_context)
+
+        assert response["statusCode"] == 200
+        assert response["body"]["summary"]["tickers_processed"] == 1
+        assert response["body"]["summary"]["tiingo_articles"] == 1
+        assert response["body"]["summary"]["finnhub_articles"] == 1
+        assert response["body"]["summary"]["new_items"] == 2
+
+    @mock_aws
+    def test_handles_rate_limit_errors(self, env_vars):
+        """Should handle rate limit errors gracefully."""
+        from src.lambdas.ingestion.financial_handler import lambda_handler
+
+        dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
+        table = dynamodb.create_table(
+            TableName="test-financial-news",
+            KeySchema=[
+                {"AttributeName": "PK", "KeyType": "HASH"},
+                {"AttributeName": "SK", "KeyType": "RANGE"},
+            ],
+            AttributeDefinitions=[
+                {"AttributeName": "PK", "AttributeType": "S"},
+                {"AttributeName": "SK", "AttributeType": "S"},
+            ],
+            BillingMode="PAY_PER_REQUEST",
+        )
+
+        # Add a configuration
+        table.put_item(
+            Item={
+                "PK": "USER#user1",
+                "SK": "CONFIG#config1",
+                "entity_type": "CONFIGURATION",
+                "is_active": True,
+                "tickers": [{"symbol": "AAPL"}],
+            }
+        )
+
+        mock_context = MagicMock()
+        mock_context.aws_request_id = "test-request-id"
+
+        mock_tiingo = MagicMock()
+        mock_tiingo.get_news.side_effect = RateLimitError(
+            "Rate limited", retry_after=60
+        )
+        mock_tiingo.close = MagicMock()
+
+        mock_finnhub = MagicMock()
+        mock_finnhub.get_news.return_value = []
+        mock_finnhub.close = MagicMock()
+
+        with patch(
+            "src.lambdas.ingestion.financial_handler.get_api_key",
+            return_value="test-key",
+        ), patch(
+            "src.lambdas.ingestion.financial_handler.TiingoAdapter",
+            return_value=mock_tiingo,
+        ), patch(
+            "src.lambdas.ingestion.financial_handler.FinnhubAdapter",
+            return_value=mock_finnhub,
+        ), patch(
+            "src.lambdas.ingestion.financial_handler._get_sns_client",
+            return_value=MagicMock(),
+        ), patch(
+            "src.lambdas.ingestion.financial_handler.emit_metrics_batch",
+        ), patch(
+            "src.lambdas.ingestion.financial_handler.emit_metric",
+        ):
+            response = lambda_handler({"source": "test"}, mock_context)
+
+        # Should return 207 (partial content) due to errors
+        assert response["statusCode"] == 207
+        assert response["body"]["summary"]["errors"] == 1
+        assert len(response["body"]["errors"]) == 1
+        assert response["body"]["errors"][0]["error"] == "RATE_LIMIT"
