@@ -1,0 +1,157 @@
+{
+  "version": "2025-01-01",
+  "updated_at": "2025-01-01T00:00:00Z",
+  "description": "Sample US stock symbols for Feature 006. Production version will contain ~8K symbols.",
+  "symbols": {
+    "AAPL": {
+      "name": "Apple Inc.",
+      "exchange": "NASDAQ",
+      "sector": "Technology",
+      "industry": "Consumer Electronics",
+      "is_active": true
+    },
+    "MSFT": {
+      "name": "Microsoft Corporation",
+      "exchange": "NASDAQ",
+      "sector": "Technology",
+      "industry": "Software - Infrastructure",
+      "is_active": true
+    },
+    "GOOGL": {
+      "name": "Alphabet Inc.",
+      "exchange": "NASDAQ",
+      "sector": "Technology",
+      "industry": "Internet Content & Information",
+      "is_active": true
+    },
+    "AMZN": {
+      "name": "Amazon.com Inc.",
+      "exchange": "NASDAQ",
+      "sector": "Consumer Cyclical",
+      "industry": "Internet Retail",
+      "is_active": true
+    },
+    "META": {
+      "name": "Meta Platforms Inc.",
+      "exchange": "NASDAQ",
+      "sector": "Technology",
+      "industry": "Internet Content & Information",
+      "is_active": true
+    },
+    "NVDA": {
+      "name": "NVIDIA Corporation",
+      "exchange": "NASDAQ",
+      "sector": "Technology",
+      "industry": "Semiconductors",
+      "is_active": true
+    },
+    "TSLA": {
+      "name": "Tesla Inc.",
+      "exchange": "NASDAQ",
+      "sector": "Consumer Cyclical",
+      "industry": "Auto Manufacturers",
+      "is_active": true
+    },
+    "JPM": {
+      "name": "JPMorgan Chase & Co.",
+      "exchange": "NYSE",
+      "sector": "Financial Services",
+      "industry": "Banks - Diversified",
+      "is_active": true
+    },
+    "V": {
+      "name": "Visa Inc.",
+      "exchange": "NYSE",
+      "sector": "Financial Services",
+      "industry": "Credit Services",
+      "is_active": true
+    },
+    "JNJ": {
+      "name": "Johnson & Johnson",
+      "exchange": "NYSE",
+      "sector": "Healthcare",
+      "industry": "Drug Manufacturers - General",
+      "is_active": true
+    },
+    "WMT": {
+      "name": "Walmart Inc.",
+      "exchange": "NYSE",
+      "sector": "Consumer Defensive",
+      "industry": "Discount Stores",
+      "is_active": true
+    },
+    "PG": {
+      "name": "The Procter & Gamble Company",
+      "exchange": "NYSE",
+      "sector": "Consumer Defensive",
+      "industry": "Household & Personal Products",
+      "is_active": true
+    },
+    "XOM": {
+      "name": "Exxon Mobil Corporation",
+      "exchange": "NYSE",
+      "sector": "Energy",
+      "industry": "Oil & Gas Integrated",
+      "is_active": true
+    },
+    "HD": {
+      "name": "The Home Depot Inc.",
+      "exchange": "NYSE",
+      "sector": "Consumer Cyclical",
+      "industry": "Home Improvement Retail",
+      "is_active": true
+    },
+    "MA": {
+      "name": "Mastercard Incorporated",
+      "exchange": "NYSE",
+      "sector": "Financial Services",
+      "industry": "Credit Services",
+      "is_active": true
+    },
+    "RIVN": {
+      "name": "Rivian Automotive Inc.",
+      "exchange": "NASDAQ",
+      "sector": "Consumer Cyclical",
+      "industry": "Auto Manufacturers",
+      "is_active": true
+    },
+    "LCID": {
+      "name": "Lucid Group Inc.",
+      "exchange": "NASDAQ",
+      "sector": "Consumer Cyclical",
+      "industry": "Auto Manufacturers",
+      "is_active": true
+    },
+    "GME": {
+      "name": "GameStop Corp.",
+      "exchange": "NYSE",
+      "sector": "Consumer Cyclical",
+      "industry": "Specialty Retail",
+      "is_active": true
+    },
+    "AMC": {
+      "name": "AMC Entertainment Holdings Inc.",
+      "exchange": "NYSE",
+      "sector": "Communication Services",
+      "industry": "Entertainment",
+      "is_active": true
+    },
+    "PLTR": {
+      "name": "Palantir Technologies Inc.",
+      "exchange": "NYSE",
+      "sector": "Technology",
+      "industry": "Software - Infrastructure",
+      "is_active": true
+    },
+    "FB": {
+      "name": "Meta Platforms Inc. (former)",
+      "exchange": "NASDAQ",
+      "sector": "Technology",
+      "industry": "Internet Content & Information",
+      "is_active": false,
+      "delisted_at": "2022-06-09T00:00:00Z",
+      "successor_symbol": "META",
+      "delisting_reason": "Ticker changed from FB to META"
+    }
+  }
+}

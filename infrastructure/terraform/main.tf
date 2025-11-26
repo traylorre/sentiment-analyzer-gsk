@@ -170,6 +170,60 @@ locals {
 
   # S3 bucket for ML model storage
   model_s3_bucket = "sentiment-analyzer-models-218795110243"
+
+  # S3 bucket for ticker cache data (Feature 006)
+  ticker_cache_bucket = "${var.environment}-sentiment-ticker-cache-${data.aws_caller_identity.current.account_id}"
+}
+
+# ===================================================================
+# S3 Bucket for Ticker Cache Data (Feature 006)
+# ===================================================================
+# Contains ~8K US stock symbols for autocomplete and validation
+# Loaded by Lambda at cold start
+
+resource "aws_s3_bucket" "ticker_cache" {
+  bucket = local.ticker_cache_bucket
+
+  tags = {
+    Environment = var.environment
+    Feature     = "006-user-config-dashboard"
+    Component   = "ticker-cache"
+  }
+}
+
+resource "aws_s3_bucket_versioning" "ticker_cache" {
+  bucket = aws_s3_bucket.ticker_cache.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "ticker_cache" {
+  bucket = aws_s3_bucket.ticker_cache.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "ticker_cache" {
+  bucket = aws_s3_bucket.ticker_cache.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+# Upload initial ticker cache data
+resource "aws_s3_object" "ticker_cache_symbols" {
+  bucket       = aws_s3_bucket.ticker_cache.id
+  key          = "ticker-cache/us-symbols.json"
+  source       = "${path.module}/../data/us-symbols.json"
+  content_type = "application/json"
+  etag         = filemd5("${path.module}/../data/us-symbols.json")
 }
 
 # ===================================================================
@@ -320,6 +374,7 @@ module "dashboard_lambda" {
     HCAPTCHA_SECRET_ARN          = module.secrets.hcaptcha_secret_arn
     COGNITO_USER_POOL_ID         = module.cognito.user_pool_id
     COGNITO_CLIENT_ID            = module.cognito.client_id
+    TICKER_CACHE_BUCKET          = aws_s3_bucket.ticker_cache.id
     SSE_POLL_INTERVAL            = "5"
     ENVIRONMENT                  = var.environment
     CHAOS_EXPERIMENTS_TABLE      = module.dynamodb.chaos_experiments_table_name
@@ -486,6 +541,7 @@ module "iam" {
   dlq_arn                      = module.sns.dlq_arn
   model_s3_bucket_arn          = "arn:aws:s3:::${local.model_s3_bucket}"
   chaos_experiments_table_arn  = module.dynamodb.chaos_experiments_table_arn
+  ticker_cache_bucket_arn      = aws_s3_bucket.ticker_cache.arn
 }
 
 # ===================================================================
@@ -747,4 +803,15 @@ output "sendgrid_secret_arn" {
 output "hcaptcha_secret_arn" {
   description = "ARN of the hCaptcha secret"
   value       = module.secrets.hcaptcha_secret_arn
+}
+
+# Ticker cache outputs
+output "ticker_cache_bucket" {
+  description = "S3 bucket for ticker cache data"
+  value       = aws_s3_bucket.ticker_cache.id
+}
+
+output "ticker_cache_bucket_arn" {
+  description = "ARN of the ticker cache S3 bucket"
+  value       = aws_s3_bucket.ticker_cache.arn
 }

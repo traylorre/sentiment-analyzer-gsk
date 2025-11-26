@@ -379,6 +379,26 @@ resource "aws_iam_role_policy" "dashboard_chaos" {
   })
 }
 
+# Dashboard Lambda: Ticker Cache S3 Read Access (Feature 006)
+resource "aws_iam_role_policy" "dashboard_ticker_cache" {
+  count = var.ticker_cache_bucket_arn != "" ? 1 : 0
+  name  = "${var.environment}-dashboard-ticker-cache-policy"
+  role  = aws_iam_role.dashboard_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject"
+        ]
+        Resource = "${var.ticker_cache_bucket_arn}/*"
+      }
+    ]
+  })
+}
+
 # ===================================================================
 # Metrics Lambda IAM Role (Operational Monitoring)
 # ===================================================================
