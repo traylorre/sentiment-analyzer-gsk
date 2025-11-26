@@ -327,6 +327,78 @@ Authorization: Bearer {access_token}
 
 ---
 
+## Daily Digest Scheduling
+
+### Get Digest Settings
+
+```http
+GET /api/v2/notifications/digest
+Authorization: Bearer {access_token}
+```
+
+**Response** (200 OK):
+```json
+{
+  "enabled": true,
+  "time": "09:00",
+  "timezone": "America/New_York",
+  "include_all_configs": true,
+  "next_scheduled": "2025-11-27T14:00:00Z"
+}
+```
+
+### Update Digest Settings
+
+```http
+PATCH /api/v2/notifications/digest
+Authorization: Bearer {access_token}
+Content-Type: application/json
+
+{
+  "enabled": true,
+  "time": "08:00",
+  "timezone": "America/Los_Angeles",
+  "include_all_configs": false,
+  "config_ids": ["uuid-1"]
+}
+```
+
+**Response** (200 OK):
+```json
+{
+  "enabled": true,
+  "time": "08:00",
+  "timezone": "America/Los_Angeles",
+  "include_all_configs": false,
+  "config_ids": ["uuid-1"],
+  "next_scheduled": "2025-11-27T16:00:00Z"
+}
+```
+
+**Validation Rules**:
+- `time`: 24-hour format HH:MM
+- `timezone`: Valid IANA timezone string
+- `config_ids`: Only required if `include_all_configs` is false
+
+### Trigger Test Digest
+
+For testing digest email format:
+
+```http
+POST /api/v2/notifications/digest/test
+Authorization: Bearer {access_token}
+```
+
+**Response** (202 Accepted):
+```json
+{
+  "status": "test_queued",
+  "message": "Test digest email will be sent within 1 minute"
+}
+```
+
+---
+
 ## Alert Evaluation (Internal)
 
 ### Evaluate Alerts (Lambda-to-Lambda)
@@ -455,6 +527,95 @@ Unsubscribe from daily digest: {UNSUBSCRIBE_LINK}
 - 10 notification emails per user per day
 - 100 total emails per day (SendGrid free tier)
 - 50% quota alert at 50 emails/day
+
+---
+
+## Email Quota Monitoring (Internal)
+
+### Get Quota Status
+
+Internal endpoint for monitoring SendGrid quota usage.
+
+```http
+GET /api/internal/email-quota
+X-Internal-Auth: {internal_api_key}
+```
+
+**Response** (200 OK):
+```json
+{
+  "daily_limit": 100,
+  "used_today": 47,
+  "remaining": 53,
+  "percent_used": 47.0,
+  "reset_at": "2025-11-27T00:00:00Z",
+  "alert_threshold": 50,
+  "alert_triggered": false,
+  "last_email_sent_at": "2025-11-26T15:30:00Z",
+  "top_users": [
+    {"user_id": "uuid-1", "count": 8},
+    {"user_id": "uuid-2", "count": 6}
+  ]
+}
+```
+
+**Response** (200 OK) - Alert Triggered:
+```json
+{
+  "daily_limit": 100,
+  "used_today": 52,
+  "remaining": 48,
+  "percent_used": 52.0,
+  "reset_at": "2025-11-27T00:00:00Z",
+  "alert_threshold": 50,
+  "alert_triggered": true,
+  "alert_triggered_at": "2025-11-26T14:00:00Z",
+  "alert_sent_to": ["admin@example.com"]
+}
+```
+
+### Quota Alert CloudWatch Alarm
+
+The system automatically creates a CloudWatch alarm for email quota:
+
+```hcl
+# Terraform config
+resource "aws_cloudwatch_metric_alarm" "sendgrid_quota_alert" {
+  alarm_name          = "${var.environment}-sendgrid-quota-50pct"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "EmailsSentToday"
+  namespace           = "SentimentAnalyzer/Notifications"
+  period              = 300
+  statistic           = "Maximum"
+  threshold           = 50
+  alarm_description   = "SendGrid daily quota exceeded 50%"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+}
+```
+
+### Quota Exceeded Behavior
+
+When daily quota (100 emails) is exhausted:
+
+1. **Alert emails** continue to queue (processed next day)
+2. **Magic link emails** are prioritized (auth-critical)
+3. **Digest emails** are skipped for the day
+4. **Users see in-app banner**: "Email quota reached. Alerts will resume tomorrow."
+
+```json
+// API response when quota exceeded
+{
+  "error": {
+    "code": "EMAIL_QUOTA_EXCEEDED",
+    "message": "Daily email limit reached. Your alert has been queued for tomorrow.",
+    "details": {
+      "quota_resets_at": "2025-11-27T00:00:00Z",
+      "queued_alerts": 3
+    }
+  }
+}
+```
 
 ---
 

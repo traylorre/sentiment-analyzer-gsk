@@ -360,6 +360,107 @@ GET /api/v2/configurations/{config_id}/refresh/status
 
 ---
 
+## Market Status & Pre-Market Estimates
+
+### Get Market Status
+
+```http
+GET /api/v2/market/status
+```
+
+**Response** (200 OK) - Market Open:
+```json
+{
+  "status": "open",
+  "exchange": "NYSE",
+  "current_time": "2025-11-26T14:30:00Z",
+  "market_open": "2025-11-26T14:30:00Z",
+  "market_close": "2025-11-26T21:00:00Z",
+  "next_open": null,
+  "is_extended_hours": false
+}
+```
+
+**Response** (200 OK) - Market Closed:
+```json
+{
+  "status": "closed",
+  "exchange": "NYSE",
+  "current_time": "2025-11-26T23:00:00Z",
+  "market_open": null,
+  "market_close": null,
+  "next_open": "2025-11-27T14:30:00Z",
+  "reason": "after_hours",
+  "is_holiday": false
+}
+```
+
+**Response** (200 OK) - Holiday:
+```json
+{
+  "status": "closed",
+  "exchange": "NYSE",
+  "current_time": "2025-11-28T14:00:00Z",
+  "next_open": "2025-11-29T14:30:00Z",
+  "reason": "holiday",
+  "is_holiday": true,
+  "holiday_name": "Thanksgiving Day"
+}
+```
+
+### Get Pre-Market Estimates
+
+Returns predictive sentiment estimates during market closed hours using Finnhub pre-market quotes.
+
+```http
+GET /api/v2/configurations/{config_id}/premarket
+```
+
+**Response** (200 OK):
+```json
+{
+  "config_id": "uuid",
+  "market_status": "closed",
+  "data_source": "finnhub_premarket",
+  "estimates": [
+    {
+      "symbol": "AAPL",
+      "premarket_price": 178.50,
+      "previous_close": 177.25,
+      "change_percent": 0.70,
+      "estimated_sentiment": {
+        "score": 0.42,
+        "label": "positive",
+        "confidence": 0.65,
+        "basis": "premarket_momentum"
+      },
+      "overnight_news_count": 3,
+      "updated_at": "2025-11-27T10:00:00Z"
+    }
+  ],
+  "disclaimer": "Pre-market estimates are predictive and may not reflect market open conditions",
+  "next_market_open": "2025-11-27T14:30:00Z"
+}
+```
+
+**Response** (200 OK) - Market Open (no estimates needed):
+```json
+{
+  "config_id": "uuid",
+  "market_status": "open",
+  "message": "Market is open. Use /sentiment endpoint for live data.",
+  "redirect_to": "/api/v2/configurations/{config_id}/sentiment"
+}
+```
+
+**Notes**:
+- Pre-market data sourced from Finnhub (no additional API cost)
+- Estimates based on pre-market price momentum + overnight news volume
+- Lower confidence scores than live market data
+- Only available during market closed hours
+
+---
+
 ## User Endpoints
 
 ### Get Current User

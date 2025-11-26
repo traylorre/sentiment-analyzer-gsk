@@ -453,6 +453,72 @@ class QuotaManager:
         return self.used_today < self.daily_limit * 0.5
 ```
 
+## CAPTCHA Provider
+
+### Decision: hCaptcha for Bot Protection
+
+**Chosen**: hCaptcha for rate-limit enforcement on anonymous config creation
+
+**Rationale**:
+- Free tier: 1M verifications/month (far exceeds needs)
+- Privacy-focused (GDPR compliant, doesn't track users)
+- Drop-in replacement for reCAPTCHA if needed
+- Works well on mobile
+
+**Alternatives Considered**:
+- Google reCAPTCHA: More recognizable but privacy concerns, Google ecosystem dependency
+- Cloudflare Turnstile: Good option but newer, less documentation
+- AWS WAF Bot Control: More expensive (~$10/mo), overkill for this use case
+
+**Implementation**:
+```javascript
+// Frontend - React component
+import HCaptcha from '@hcaptcha/react-hcaptcha';
+
+function ConfigForm() {
+  const [captchaToken, setCaptchaToken] = useState(null);
+
+  return (
+    <form>
+      {/* Show CAPTCHA after 3rd config creation attempt in 1 hour */}
+      {showCaptcha && (
+        <HCaptcha
+          sitekey={process.env.HCAPTCHA_SITE_KEY}
+          onVerify={setCaptchaToken}
+        />
+      )}
+    </form>
+  );
+}
+```
+
+```python
+# Backend - Lambda validation
+import httpx
+
+async def verify_captcha(token: str) -> bool:
+    """Verify hCaptcha token with server."""
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            "https://hcaptcha.com/siteverify",
+            data={
+                "secret": get_secret("hcaptcha-secret-key"),
+                "response": token
+            }
+        )
+        result = response.json()
+        return result.get("success", False)
+```
+
+**Trigger Conditions**:
+- 3+ anonymous config creations from same IP in 1 hour
+- 10+ ticker validation requests from same IP in 1 minute
+- Any request flagged by rate limiter
+
+**Secrets Manager Path**: `{env}/sentiment-analyzer/hcaptcha-secret-key`
+
+---
+
 ## Summary of Decisions
 
 | Area | Decision | Key Rationale |
@@ -467,3 +533,4 @@ class QuotaManager:
 | Tracing | X-Ray Day 1 | Full observability from launch |
 | Analytics | CloudWatch RUM | Native AWS, ~$5/mo at scale |
 | Cost Control | Aggressive caching + alerts | Stay under $100/mo |
+| CAPTCHA | hCaptcha | Free 1M/mo, privacy-focused, mobile-friendly |

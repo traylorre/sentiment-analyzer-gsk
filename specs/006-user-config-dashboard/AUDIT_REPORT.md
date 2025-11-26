@@ -11,13 +11,20 @@
 | Category | Status | Issues Found |
 |----------|--------|--------------|
 | Spec ↔ Plan Consistency | ✅ PASS | 0 conflicts |
-| Spec ↔ Contracts Coverage | ⚠️ WARN | 3 minor gaps |
+| Spec ↔ Contracts Coverage | ✅ PASS | 0 gaps (all filled) |
 | Spec ↔ Data Model Coverage | ✅ PASS | 0 conflicts |
-| External Dependencies | ⚠️ WARN | 2 items need attention |
-| Missing Components | 🔴 GAPS | 8 components identified |
+| External Dependencies | ✅ PASS | All documented |
+| Missing Components | ✅ DOCUMENTED | 8 components identified & specified |
 | Constitution Compliance | ✅ PASS | All requirements met |
 
-**Overall Assessment**: Ready for implementation with minor documentation gaps to address during development.
+**Overall Assessment**: Ready for implementation. All documentation gaps have been filled.
+
+**Gap Closure Summary** (2025-11-26):
+- ✅ Daily digest scheduling endpoints added to notification-api.md
+- ✅ hCaptcha provider selection added to research.md
+- ✅ Pre-market estimates endpoint added to dashboard-api.md
+- ✅ SendGrid quota alert mechanism added to notification-api.md
+- ✅ TickerCache, QuotaTracker, CircuitBreakerState, DigestSettings entities added to data-model.md
 
 ---
 
@@ -31,13 +38,13 @@
 | TR-001 to TR-008 | Test strategy defined | ✅ |
 | SC-001 to SC-012 | Measurable criteria defined | ✅ |
 
-### Minor Clarifications Needed
+### Minor Clarifications Resolved
 
 | Item | Spec Says | Plan Says | Resolution |
 |------|-----------|-----------|------------|
 | ATR Period | "User configurable" | "14-period default, 5-50 range" | Plan is more specific - ✅ OK |
-| Daily Digest | FR-028 mentions "digest option" | Not in notification-api.md | **GAP** - Add to notification API |
-| CAPTCHA Provider | "CAPTCHA on repeated config creation" | Not specified | **GAP** - Need to select provider |
+| Daily Digest | FR-028 mentions "digest option" | notification-api.md | ✅ RESOLVED - Digest endpoints added |
+| CAPTCHA Provider | "CAPTCHA on repeated config creation" | research.md | ✅ RESOLVED - hCaptcha selected |
 
 ---
 
@@ -57,9 +64,9 @@
 | FR-019: Extended hours toggle | include_extended_hours param | ✅ |
 | FR-021: Refresh status | GET /refresh/status | ✅ |
 
-**Missing from Dashboard API**:
-- FR-046: Pre-market estimates endpoint (market closed hours)
-- FR-022: "All sources unavailable" banner state not in API response
+**Dashboard API - All Gaps Resolved**:
+- ✅ FR-046: Pre-market estimates endpoint added (GET /api/v2/configurations/{config_id}/premarket)
+- ✅ FR-022: Market status endpoint includes `status` field for banner display
 
 ### Auth API (auth-api.md)
 
@@ -73,8 +80,8 @@
 | FR-040: Magic link invalidation | Previous link handling | ✅ |
 | FR-041: Account linking confirmation | POST /auth/link-accounts | ✅ |
 
-**Missing from Auth API**:
-- FR-042: CAPTCHA on repeated anonymous config creation (endpoint needed)
+**Auth API - All Gaps Resolved**:
+- ✅ FR-042: hCaptcha integration documented in research.md with trigger conditions and implementation
 
 ### Notification API (notification-api.md)
 
@@ -87,9 +94,9 @@
 | FR-027: Disable per ticker/global | PATCH /alerts, disable-all | ✅ |
 | FR-028: Max 10 emails/day | daily_email_quota | ✅ |
 
-**Missing from Notification API**:
-- Daily digest scheduling endpoint (FR-028 mentions digest option)
-- 50% SendGrid quota alert mechanism (FR-038 mentions cost alerts)
+**Notification API - All Gaps Resolved**:
+- ✅ Daily digest scheduling endpoints added (GET/PATCH /api/v2/notifications/digest, POST /digest/test)
+- ✅ SendGrid quota alert mechanism added (GET /api/internal/email-quota, CloudWatch alarm config)
 
 ---
 
@@ -108,13 +115,14 @@
 | Notification | Notification class | sentiment-notifications | ✅ |
 | MagicLinkToken | MagicLinkToken class | TTL-managed | ✅ |
 
-### Missing Entity
+### Previously Missing Entities - All Added ✅
 
-| Entity | Purpose | Recommendation |
-|--------|---------|----------------|
-| TickerCache | ~8K symbol cache | Add to data model or document as S3 JSON |
-| QuotaTracker | API quota management | Add to shared models |
-| CircuitBreakerState | Per-API circuit breaker | Add DynamoDB or in-memory cache |
+| Entity | Purpose | Status |
+|--------|---------|--------|
+| TickerCache | ~8K symbol cache | ✅ Added to data-model.md |
+| QuotaTracker | API quota management | ✅ Added to data-model.md |
+| CircuitBreakerState | Per-API circuit breaker | ✅ Added to data-model.md |
+| DigestSettings | Daily digest preferences | ✅ Added to data-model.md |
 
 ---
 
@@ -132,6 +140,7 @@
 | **CloudWatch RUM** | Client analytics | Pay-per-use | 🟢 Low - ~$5/mo |
 | **CloudFront** | CDN for dashboard | Pay-per-use | 🟢 Low - ~$10/mo |
 | **Recharts** | Heat map visualization | Free (MIT) | 🟢 Low |
+| **hCaptcha** | Bot protection | 1M/mo free | 🟢 Low - privacy-focused |
 
 ### Dependencies to Remove
 
@@ -388,6 +397,19 @@
 
 **Verdict**: ✅ **READY FOR IMPLEMENTATION**
 
-The specification and plan artifacts are comprehensive and internally consistent. The 8 identified gaps are implementation details that can be resolved during development. No blocking conflicts exist between spec, plan, data model, and API contracts.
+The specification and plan artifacts are comprehensive and internally consistent. All previously identified documentation gaps have been filled:
+
+| Gap | Resolution |
+|-----|------------|
+| Daily digest endpoints | Added to notification-api.md |
+| CAPTCHA provider | hCaptcha selected in research.md |
+| Pre-market estimates | Added to dashboard-api.md |
+| SendGrid quota alerts | Added to notification-api.md |
+| TickerCache entity | Added to data-model.md |
+| QuotaTracker entity | Added to data-model.md |
+| CircuitBreakerState entity | Added to data-model.md |
+| DigestSettings entity | Added to data-model.md |
+
+No blocking conflicts exist between spec, plan, data model, and API contracts.
 
 **Recommended Next Step**: Run `/speckit.tasks` to generate the detailed task breakdown based on this audit.
