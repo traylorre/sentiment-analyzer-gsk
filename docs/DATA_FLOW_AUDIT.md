@@ -10,6 +10,304 @@ Estimated impact: **30-50% latency reduction**, **20-30% cost reduction** after 
 
 ---
 
+## System Data Flow Diagram
+
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
+flowchart TB
+    subgraph External["External Data Sources"]
+        Tiingo[("Tiingo API<br/>Primary")]
+        Finnhub[("Finnhub API<br/>Secondary")]
+        SendGrid[("SendGrid<br/>Email")]
+    end
+
+    subgraph IngestionFlow["Ingestion Flow (Every 5 min)"]
+        EB[("EventBridge<br/>Scheduler")]
+        ING["Ingestion Lambda"]
+
+        subgraph IngestionCache["Caching Layer"]
+            CB["Circuit Breaker<br/>State Cache"]
+            QT["Quota Tracker<br/>Cache"]
+            APIC["API Response<br/>Cache (1hr TTL)<br/>⚠️ PENDING"]
+        end
+    end
+
+    subgraph ProcessingFlow["Analysis Flow"]
+        SNS[("SNS Topic")]
+        ANA["Analysis Lambda<br/>DistilBERT"]
+        S3M[("S3<br/>ML Model")]
+    end
+
+    subgraph StorageLayer["DynamoDB Storage"]
+        DDB[("sentiment-items<br/>News & Sentiment")]
+        UDDB[("sentiment-users<br/>User Data")]
+
+        subgraph GSIs["Global Secondary Indexes"]
+            GSI1["by_sentiment"]
+            GSI2["by_tag"]
+            GSI3["by_status"]
+            GSI4["by_email<br/>✅ NEW"]
+            GSI5["by_entity_status<br/>✅ NEW"]
+        end
+    end
+
+    subgraph DashboardFlow["Dashboard API Flow"]
+        DASH["Dashboard Lambda<br/>FastAPI"]
+
+        subgraph DashCache["Caching Layer"]
+            MC["Metrics Cache<br/>30s TTL<br/>✅ FIXED"]
+            TC["Table Object<br/>Cache<br/>✅ FIXED"]
+            SC["Secrets Cache<br/>5min TTL"]
+        end
+
+        SSE["SSE Stream<br/>Real-time Updates"]
+    end
+
+    subgraph NotificationFlow["Notification Flow"]
+        NOT["Notification Lambda"]
+        NOTC["SendGrid Client<br/>Cache"]
+    end
+
+    subgraph Clients["Clients"]
+        Browser["Web Browser"]
+        API["API Consumers"]
+    end
+
+    %% Ingestion Flow
+    EB -->|"Trigger"| ING
+    Tiingo -->|"Fetch News"| ING
+    Finnhub -->|"Fetch News"| ING
+    ING -->|"Check State"| CB
+    ING -->|"Check Quota"| QT
+    ING -.->|"Cache Resp"| APIC
+    ING -->|"Store"| DDB
+    ING -->|"Publish"| SNS
+
+    %% Processing Flow
+    SNS -->|"Subscribe"| ANA
+    S3M -->|"Load Model"| ANA
+    ANA -->|"Update"| DDB
+
+    %% Dashboard Flow
+    Browser -->|"HTTPS"| DASH
+    API -->|"REST"| DASH
+    DASH -->|"Check Cache"| MC
+    DASH -->|"Reuse"| TC
+    DASH -->|"Get Key"| SC
+    MC -->|"Cache Miss"| DDB
+    TC -->|"Query"| GSIs
+    DASH -->|"Stream"| SSE
+    SSE -->|"Events"| Browser
+
+    %% Notification Flow
+    DASH -->|"Trigger"| NOT
+    NOT -->|"Lookup"| UDDB
+    NOT -->|"Send"| SendGrid
+    NOT -->|"Reuse"| NOTC
+
+    %% Styling
+    classDef layerBox fill:#fff8e1,stroke:#c9a227,stroke-width:2px,color:#333
+    classDef lambdaStyle fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
+    classDef storageStyle fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px,color:#1e3a1e
+    classDef cacheStyle fill:#b39ddb,stroke:#673ab7,stroke-width:2px,color:#1a0a3e
+    classDef externalStyle fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef pendingStyle fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
+
+    class External,IngestionFlow,ProcessingFlow,StorageLayer,DashboardFlow,NotificationFlow,Clients layerBox
+    class ING,ANA,DASH,NOT lambdaStyle
+    class DDB,UDDB,S3M storageStyle
+    class MC,TC,SC,CB,QT,NOTC cacheStyle
+    class Tiingo,Finnhub,SendGrid,Browser,API externalStyle
+    class APIC pendingStyle
+```
+
+---
+
+## Caching Strategy Diagram
+
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
+flowchart LR
+    subgraph CacheTypes["Cache Types & TTLs"]
+        direction TB
+
+        subgraph InMemory["In-Memory (Lambda Container)"]
+            M1["Metrics Cache<br/>TTL: 30s<br/>✅ IMPLEMENTED"]
+            M2["Table Object<br/>TTL: Container lifetime<br/>✅ IMPLEMENTED"]
+            M3["ML Model<br/>TTL: Container lifetime<br/>✅ EXISTING"]
+            M4["Ticker Cache<br/>TTL: Container lifetime<br/>✅ EXISTING"]
+        end
+
+        subgraph SecretsCache["Secrets Manager Cache"]
+            S1["API Keys<br/>TTL: 5 min<br/>✅ EXISTING"]
+            S2["SendGrid Key<br/>TTL: 5 min<br/>✅ EXISTING"]
+        end
+
+        subgraph Pending["Pending Implementation"]
+            P1["API Response Cache<br/>TTL: 1 hour<br/>⚠️ DFA-004"]
+            P2["Circuit Breaker<br/>TTL: In-memory<br/>⚠️ DFA-008"]
+            P3["Active Tickers<br/>TTL: 1 hour<br/>⚠️ DFA-003"]
+        end
+    end
+
+    subgraph Impact["Query Impact"]
+        direction TB
+
+        subgraph Before["Before Caching"]
+            B1["SSE: 72K queries/min"]
+            B2["API: 500 calls/day"]
+            B3["Config: Scan all items"]
+        end
+
+        subgraph After["After Caching"]
+            A1["SSE: 4 queries/min<br/>99.99% reduction"]
+            A2["API: ~50 calls/day<br/>90% reduction"]
+            A3["Config: Query GSI<br/>100x faster"]
+        end
+    end
+
+    M1 -.->|"Reduces"| B1
+    B1 -->|"To"| A1
+    P1 -.->|"Will Reduce"| B2
+    B2 -->|"To"| A2
+    P3 -.->|"Will Reduce"| B3
+    B3 -->|"To"| A3
+
+    classDef implemented fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px,color:#1e3a1e
+    classDef existing fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
+    classDef pending fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
+    classDef impact fill:#b39ddb,stroke:#673ab7,stroke-width:2px,color:#1a0a3e
+    classDef reduction fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
+
+    class M1,M2 implemented
+    class M3,M4,S1,S2 existing
+    class P1,P2,P3 pending
+    class B1,B2,B3 impact
+    class A1,A2,A3 reduction
+```
+
+---
+
+## SSE Data Flow (Before vs After Fix)
+
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
+sequenceDiagram
+    autonumber
+
+    participant C as Client (Browser)
+    participant L as Dashboard Lambda
+    participant Cache as Metrics Cache
+    participant DB as DynamoDB
+
+    rect rgb(239, 83, 80, 0.1)
+        Note over C,DB: BEFORE FIX (DFA-001)
+        C->>L: SSE Connect
+        loop Every 5 seconds (per client)
+            L->>DB: get_table()
+            L->>DB: Query recent_items
+            L->>DB: Query by_sentiment (positive)
+            L->>DB: Query by_sentiment (neutral)
+            L->>DB: Query by_sentiment (negative)
+            L->>DB: Query ingestion_rate (1h)
+            L->>DB: Query ingestion_rate (24h)
+            DB-->>L: Results (6-7 queries)
+            L->>L: Parse & Sanitize
+            L-->>C: SSE Event
+        end
+        Note over DB: 1000 clients × 12/min × 6 queries = 72,000 queries/min
+    end
+
+    rect rgb(168, 213, 162, 0.2)
+        Note over C,DB: AFTER FIX (with Metrics Cache)
+        C->>L: SSE Connect
+        loop Every 5 seconds (per client)
+            L->>Cache: Check cache (< 30s old?)
+            alt Cache Hit
+                Cache-->>L: Cached metrics
+            else Cache Miss
+                L->>DB: Query recent_items
+                L->>DB: Query by_sentiment (×3)
+                L->>DB: Query ingestion_rate (×2)
+                DB-->>L: Results
+                L->>L: Parse & Sanitize (once)
+                L->>Cache: Store (30s TTL)
+            end
+            L-->>C: SSE Event
+        end
+        Note over DB: Shared cache: ~4 queries/min (99.99% reduction)
+    end
+```
+
+---
+
+## DynamoDB Access Pattern Optimization
+
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
+flowchart TB
+    subgraph Tables["DynamoDB Tables"]
+        subgraph SentimentItems["sentiment-items (Legacy)"]
+            SI_PK["PK: source_id"]
+            SI_SK["SK: timestamp"]
+
+            subgraph SI_GSI["GSIs"]
+                SI_G1["by_sentiment<br/>(sentiment, timestamp)"]
+                SI_G2["by_tag<br/>(tag, timestamp)"]
+                SI_G3["by_status<br/>(status, timestamp)"]
+            end
+        end
+
+        subgraph SentimentUsers["sentiment-users (Feature 006)"]
+            SU_PK["PK: USER#{id}"]
+            SU_SK["SK: CONFIG#/ALERT#/etc"]
+
+            subgraph SU_GSI["GSIs ✅ NEW"]
+                SU_G1["by_email<br/>(email)"]
+                SU_G2["by_cognito_sub<br/>(cognito_sub)"]
+                SU_G3["by_entity_status<br/>(entity_type, status)"]
+            end
+        end
+    end
+
+    subgraph Queries["Query Patterns"]
+        Q1["User Login<br/>→ by_email GSI"]
+        Q2["OAuth Lookup<br/>→ by_cognito_sub GSI"]
+        Q3["Filter Notifications<br/>→ by_entity_status GSI"]
+        Q4["Filter Alerts<br/>→ by_entity_status GSI"]
+        Q5["Get User Data<br/>→ Query PK"]
+    end
+
+    subgraph Optimizations["Optimizations"]
+        O1["❌ BEFORE: Scan all + filter in Python"]
+        O2["✅ AFTER: Query GSI directly"]
+        O3["Impact: 90% faster queries"]
+    end
+
+    Q1 --> SU_G1
+    Q2 --> SU_G2
+    Q3 --> SU_G3
+    Q4 --> SU_G3
+    Q5 --> SU_PK
+
+    O1 -.->|"Replaced by"| O2
+    O2 --> O3
+
+    classDef tableStyle fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px,color:#1e3a1e
+    classDef gsiStyle fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
+    classDef queryStyle fill:#b39ddb,stroke:#673ab7,stroke-width:2px,color:#1a0a3e
+    classDef badStyle fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef goodStyle fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px,color:#1e3a1e
+
+    class SentimentItems,SentimentUsers tableStyle
+    class SI_G1,SI_G2,SI_G3,SU_G1,SU_G2,SU_G3 gsiStyle
+    class Q1,Q2,Q3,Q4,Q5 queryStyle
+    class O1 badStyle
+    class O2,O3 goodStyle
+```
+
+---
+
 ## Issue Tracker
 
 ### CRITICAL (Deploy Week 1)
