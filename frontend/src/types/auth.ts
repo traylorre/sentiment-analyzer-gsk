@@ -32,3 +32,21 @@ export interface AuthState {
   tokens: AuthTokens | null;
   sessionExpiresAt: string | null;
 }
+
+export interface MagicLinkRequest {
+  email: string;
+  captchaToken: string;
+}
+
+export interface MagicLinkResponse {
+  message: string;
+  expiresIn: number;
+}
+
+export type OAuthProvider = 'google' | 'github';
+
+export interface SessionInfo {
+  isValid: boolean;
+  expiresAt: string | null;
+  remainingMs: number;
+}
