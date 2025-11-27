@@ -104,6 +104,12 @@ ignore = [
 "src/lambdas/shared/errors.py" = [
     "S105",  # error code constants are not passwords
 ]
+"src/lambdas/*/handler.py" = [
+    "E402",  # X-Ray must be imported and patched before other imports
+]
+"src/lambdas/dashboard/router_v2.py" = [
+    "B008",  # Depends() in function defaults is FastAPI's recommended pattern
+]
 
 [tool.ruff.isort]
 known-first-party = ["src"]

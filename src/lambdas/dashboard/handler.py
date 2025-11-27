@@ -30,7 +30,16 @@ Security Notes:
     - Use secrets.compare_digest() to prevent timing attacks
     - Static files served without authentication
     - No sensitive data in SSE stream (already sanitized by metrics module)
+
+X-Ray Tracing:
+    X-Ray is enabled for distributed tracing across all Lambda invocations.
+    This is Day 1 mandatory per constitution v1.1.
 """
+
+# X-Ray must be imported and patched before other imports
+from aws_xray_sdk.core import patch_all  # noqa: E402
+
+patch_all()
 
 import asyncio
 import json
@@ -222,6 +231,12 @@ else:
         "CORS not configured - API will reject cross-origin requests",
         extra={"environment": ENVIRONMENT},
     )
+
+# Include Feature 006 API v2 routers
+from src.lambdas.dashboard.router_v2 import include_routers
+
+include_routers(app)
+logger.info("Feature 006 API v2 routers included")
 
 
 def verify_api_key(

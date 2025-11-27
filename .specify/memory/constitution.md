@@ -453,6 +453,22 @@ Design & Diagrams (Canva preferred)
 	- At least one canonical architecture diagram is present as SVG and PNG in `diagrams/` and documents the event-driven, serverless stack.
 	- Diagram exports include provenance metadata (Canva link, last editor, date) and a brief changelog for material edits.
 
+Sensitive Security Documentation
+---------------------------------
+Detailed security documentation including penetration test results, vulnerability assessments, incident response playbooks with internal contact info, and secret rotation schedules are stored in a PRIVATE companion repository:
+
+**Repository**: `../sentiment-analyzer-gsk-security/` (relative to this repo)
+**Access**: Restricted to security team and on-call engineers
+**Contents**:
+- Penetration test reports and remediation tracking
+- Vulnerability disclosure procedures
+- Incident response playbooks with internal escalation contacts
+- Secret rotation schedules and key custodian assignments
+- Security audit logs and compliance evidence
+- Threat models and attack surface analysis
+
+Public-facing security documentation (SECURITY.md, SECURITY_REVIEW.md) remains in this repository.
+
 Amendments & Governance
 -----------------------
 This constitution is intentionally minimal. Amendments may be added with a short rationale and must include any new acceptance criteria. Maintain a Version and Last Amended date at the bottom.
@@ -461,4 +477,6 @@ Amendment 1.1 (2025-11-26): Added Environment & Stage Testing Matrix, External D
 
 Amendment 1.2 (2025-11-27): Strengthened Pipeline Check Bypass section to ABSOLUTE RULE status. Added explicit prohibition of --admin flag bypass, GitHub admin privilege abuse, and branch protection disabling. Clarified that all bypasses result in immediate rollback.
 
-**Version**: 1.2 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-11-27
+Amendment 1.3 (2025-11-27): Added Sensitive Security Documentation section directing to private `../sentiment-analyzer-gsk-security/` repository for confidential security artifacts.
+
+**Version**: 1.3 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-11-27
