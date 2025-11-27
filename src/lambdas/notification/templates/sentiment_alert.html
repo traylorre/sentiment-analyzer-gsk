@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentiment Alert: {{TICKER}}</title>
+    <style>
+        /* Reset */
+        body, table, td, p, a { margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+
+        /* Dark mode support */
+        @media (prefers-color-scheme: dark) {
+            .email-body { background-color: #1f2937 !important; }
+            .email-content { background-color: #111827 !important; }
+            .text-primary { color: #f9fafb !important; }
+            .text-secondary { color: #9ca3af !important; }
+        }
+
+        /* Container */
+        .email-body {
+            background-color: #f3f4f6;
+            padding: 20px;
+        }
+        .email-container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        /* Header */
+        .email-header {
+            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+            padding: 24px;
+            text-align: center;
+            border-radius: 8px 8px 0 0;
+        }
+        .email-header h1 {
+            color: #ffffff;
+            font-size: 24px;
+            font-weight: 600;
+            margin: 0;
+        }
+        .email-header .ticker {
+            color: #bfdbfe;
+            font-size: 14px;
+            margin-top: 4px;
+        }
+
+        /* Content */
+        .email-content {
+            background-color: #ffffff;
+            padding: 32px 24px;
+        }
+        .text-primary {
+            color: #111827;
+        }
+        .text-secondary {
+            color: #6b7280;
+        }
+
+        /* Alert box */
+        .alert-box {
+            background-color: #fef2f2;
+            border: 1px solid #fecaca;
+            border-radius: 8px;
+            padding: 16px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        .alert-box.positive {
+            background-color: #f0fdf4;
+            border-color: #bbf7d0;
+        }
+        .metric-value {
+            font-size: 36px;
+            font-weight: 700;
+            color: #dc2626;
+        }
+        .metric-value.positive {
+            color: #16a34a;
+        }
+        .metric-label {
+            color: #6b7280;
+            font-size: 14px;
+            margin-top: 4px;
+        }
+
+        /* Details table */
+        .details-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        .details-table td {
+            padding: 12px 0;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .details-table .label {
+            color: #6b7280;
+            font-size: 14px;
+        }
+        .details-table .value {
+            color: #111827;
+            font-size: 14px;
+            font-weight: 500;
+            text-align: right;
+        }
+
+        /* Button */
+        .cta-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+            color: #ffffff !important;
+            text-decoration: none;
+            padding: 14px 28px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 16px;
+            margin: 20px 0;
+        }
+        .cta-button:hover {
+            background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+        }
+
+        /* Footer */
+        .email-footer {
+            background-color: #f9fafb;
+            padding: 24px;
+            text-align: center;
+            border-radius: 0 0 8px 8px;
+            border-top: 1px solid #e5e7eb;
+        }
+        .email-footer p {
+            color: #6b7280;
+            font-size: 12px;
+            margin: 4px 0;
+        }
+        .email-footer a {
+            color: #3b82f6;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="email-body">
+        <div class="email-container">
+            <!-- Header -->
+            <div class="email-header">
+                <h1>Sentiment Alert</h1>
+                <div class="ticker">{{TICKER}}</div>
+            </div>
+
+            <!-- Content -->
+            <div class="email-content">
+                <p class="text-primary" style="font-size: 16px; line-height: 1.6;">
+                    The sentiment score for <strong>{{TICKER}}</strong> has
+                    {{DIRECTION_TEXT}} your threshold of <strong>{{THRESHOLD}}</strong>.
+                </p>
+
+                <!-- Metric Box -->
+                <div class="alert-box {{SENTIMENT_CLASS}}">
+                    <div class="metric-value {{SENTIMENT_CLASS}}">{{CURRENT_VALUE}}</div>
+                    <div class="metric-label">Current Sentiment ({{LABEL}})</div>
+                </div>
+
+                <!-- Details -->
+                <table class="details-table">
+                    <tr>
+                        <td class="label">Ticker</td>
+                        <td class="value">{{TICKER}}</td>
+                    </tr>
+                    <tr>
+                        <td class="label">Your Threshold</td>
+                        <td class="value">{{THRESHOLD_DIRECTION}} {{THRESHOLD}}</td>
+                    </tr>
+                    <tr>
+                        <td class="label">Data Source</td>
+                        <td class="value">{{SOURCE}}</td>
+                    </tr>
+                    <tr>
+                        <td class="label">Time</td>
+                        <td class="value">{{TIMESTAMP}}</td>
+                    </tr>
+                </table>
+
+                <!-- CTA -->
+                <div style="text-align: center;">
+                    <a href="{{DEEP_LINK}}" class="cta-button">View on Dashboard</a>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="email-footer">
+                <p>You're receiving this because you set up an alert for {{TICKER}}.</p>
+                <p><a href="{{UNSUBSCRIBE_LINK}}">Unsubscribe</a> | <a href="{{DASHBOARD_URL}}/settings/alerts">Manage Alerts</a></p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

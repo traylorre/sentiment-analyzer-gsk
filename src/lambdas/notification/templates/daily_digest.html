@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily Sentiment Digest - {{DATE}}</title>
+    <style>
+        /* Reset */
+        body, table, td, p, a { margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+
+        /* Dark mode support */
+        @media (prefers-color-scheme: dark) {
+            .email-body { background-color: #1f2937 !important; }
+            .email-content { background-color: #111827 !important; }
+            .text-primary { color: #f9fafb !important; }
+            .text-secondary { color: #9ca3af !important; }
+            .ticker-row { background-color: #1f2937 !important; }
+        }
+
+        /* Container */
+        .email-body {
+            background-color: #f3f4f6;
+            padding: 20px;
+        }
+        .email-container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        /* Header */
+        .email-header {
+            background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+            padding: 24px;
+            text-align: center;
+            border-radius: 8px 8px 0 0;
+        }
+        .email-header h1 {
+            color: #ffffff;
+            font-size: 24px;
+            font-weight: 600;
+            margin: 0;
+        }
+        .email-header .date {
+            color: #a7f3d0;
+            font-size: 14px;
+            margin-top: 4px;
+        }
+
+        /* Content */
+        .email-content {
+            background-color: #ffffff;
+            padding: 32px 24px;
+        }
+        .text-primary {
+            color: #111827;
+        }
+        .text-secondary {
+            color: #6b7280;
+        }
+
+        /* Config section */
+        .config-section {
+            margin: 24px 0;
+            padding: 16px;
+            background-color: #f9fafb;
+            border-radius: 8px;
+        }
+        .config-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #111827;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #e5e7eb;
+        }
+
+        /* Ticker table */
+        .ticker-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .ticker-table th {
+            text-align: left;
+            padding: 8px;
+            font-size: 12px;
+            color: #6b7280;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .ticker-table th:last-child {
+            text-align: right;
+        }
+        .ticker-row {
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .ticker-row td {
+            padding: 12px 8px;
+        }
+        .ticker-symbol {
+            font-weight: 600;
+            color: #111827;
+        }
+        .sentiment-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .sentiment-positive {
+            background-color: #dcfce7;
+            color: #166534;
+        }
+        .sentiment-negative {
+            background-color: #fee2e2;
+            color: #991b1b;
+        }
+        .sentiment-neutral {
+            background-color: #f3f4f6;
+            color: #4b5563;
+        }
+        .volatility-cell {
+            text-align: right;
+            color: #6b7280;
+            font-size: 14px;
+        }
+        .trend-arrow {
+            margin-left: 4px;
+        }
+        .trend-up { color: #dc2626; }
+        .trend-down { color: #16a34a; }
+        .trend-stable { color: #6b7280; }
+
+        /* Alert summary */
+        .alert-summary {
+            background-color: #fef3c7;
+            border: 1px solid #fde68a;
+            border-radius: 8px;
+            padding: 16px;
+            margin: 20px 0;
+        }
+        .alert-summary.has-alerts {
+            background-color: #fee2e2;
+            border-color: #fecaca;
+        }
+        .alert-count {
+            font-size: 24px;
+            font-weight: 700;
+            color: #d97706;
+        }
+        .alert-count.has-alerts {
+            color: #dc2626;
+        }
+
+        /* Button */
+        .cta-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+            color: #ffffff !important;
+            text-decoration: none;
+            padding: 14px 28px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 16px;
+            margin: 20px 0;
+        }
+        .cta-button:hover {
+            background: linear-gradient(135deg, #047857 0%, #059669 100%);
+        }
+
+        /* Footer */
+        .email-footer {
+            background-color: #f9fafb;
+            padding: 24px;
+            text-align: center;
+            border-radius: 0 0 8px 8px;
+            border-top: 1px solid #e5e7eb;
+        }
+        .email-footer p {
+            color: #6b7280;
+            font-size: 12px;
+            margin: 4px 0;
+        }
+        .email-footer a {
+            color: #059669;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="email-body">
+        <div class="email-container">
+            <!-- Header -->
+            <div class="email-header">
+                <h1>Daily Sentiment Digest</h1>
+                <div class="date">{{DATE}}</div>
+            </div>
+
+            <!-- Content -->
+            <div class="email-content">
+                <p class="text-primary" style="font-size: 16px; line-height: 1.6;">
+                    Here's your daily summary for your tracked tickers:
+                </p>
+
+                <!-- Configuration sections - repeated for each config -->
+                {{#CONFIGS}}
+                <div class="config-section">
+                    <div class="config-title">{{CONFIG_NAME}}</div>
+                    <table class="ticker-table">
+                        <thead>
+                            <tr>
+                                <th>Ticker</th>
+                                <th>Sentiment</th>
+                                <th style="text-align: right;">ATR</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {{#TICKERS}}
+                            <tr class="ticker-row">
+                                <td class="ticker-symbol">{{SYMBOL}}</td>
+                                <td>
+                                    <span class="sentiment-badge sentiment-{{SENTIMENT_CLASS}}">
+                                        {{SENTIMENT_SCORE}} ({{SENTIMENT_LABEL}})
+                                    </span>
+                                </td>
+                                <td class="volatility-cell">
+                                    {{ATR_VALUE}}%
+                                    <span class="trend-arrow trend-{{TREND_CLASS}}">{{TREND_ARROW}}</span>
+                                </td>
+                            </tr>
+                            {{/TICKERS}}
+                        </tbody>
+                    </table>
+                </div>
+                {{/CONFIGS}}
+
+                <!-- Alert Summary -->
+                <div class="alert-summary {{ALERT_SUMMARY_CLASS}}">
+                    <p class="text-secondary" style="font-size: 14px; margin-bottom: 8px;">
+                        Alerts Triggered Today
+                    </p>
+                    <span class="alert-count {{ALERT_SUMMARY_CLASS}}">{{ALERT_COUNT}}</span>
+                    {{#ALERT_SUMMARY}}
+                    <p class="text-secondary" style="font-size: 12px; margin-top: 8px;">
+                        {{ALERT_SUMMARY}}
+                    </p>
+                    {{/ALERT_SUMMARY}}
+                </div>
+
+                <!-- CTA -->
+                <div style="text-align: center;">
+                    <a href="{{DASHBOARD_LINK}}" class="cta-button">View Full Dashboard</a>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="email-footer">
+                <p>You're receiving this daily digest at {{DIGEST_TIME}} {{TIMEZONE}}.</p>
+                <p><a href="{{UNSUBSCRIBE_LINK}}">Unsubscribe from daily digest</a> | <a href="{{DASHBOARD_URL}}/settings/digest">Change Settings</a></p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
