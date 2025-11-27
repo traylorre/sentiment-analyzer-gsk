@@ -6,6 +6,7 @@ export {
   getSentimentColor,
   getSentimentGradient,
   getScoreLabel,
+  getSentimentLabel,
   getLabelColor,
   interpolateSentimentColor,
 } from './colors';

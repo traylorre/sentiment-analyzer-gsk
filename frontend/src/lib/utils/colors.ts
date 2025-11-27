@@ -37,6 +37,16 @@ export function getScoreLabel(score: number): SentimentLabel {
 }
 
 /**
+ * Get human-readable sentiment label for a score
+ * @param score - Sentiment score from -1.0 to 1.0
+ */
+export function getSentimentLabel(score: number): string {
+  if (score >= 0.3) return 'Bullish';
+  if (score <= -0.3) return 'Bearish';
+  return 'Neutral';
+}
+
+/**
  * Get the color for a sentiment label
  */
 export function getLabelColor(label: SentimentLabel): string {

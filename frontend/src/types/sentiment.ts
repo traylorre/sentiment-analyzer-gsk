@@ -28,6 +28,13 @@ export interface SentimentTimeSeries {
   timestamp: string;
   score: number;
   source: 'tiingo' | 'finnhub' | 'our_model';
+  articleCount?: number;
+}
+
+export interface ATRData {
+  timestamp: string;
+  atr: number;
+  ticker: string;
 }
 
 export type SentimentSource = 'tiingo' | 'finnhub' | 'our_model';
