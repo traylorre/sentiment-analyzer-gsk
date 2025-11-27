@@ -103,10 +103,18 @@ export const AlertCard = memo(function AlertCard({
               type="button"
               role="switch"
               aria-checked={alert.isEnabled}
+              aria-label={`${alert.isEnabled ? 'Disable' : 'Enable'} alert for ${alert.ticker} ${alert.alertType === 'sentiment_threshold' ? 'sentiment' : 'volatility'} ${alert.thresholdDirection} ${alert.thresholdValue}`}
               onClick={() => onToggle?.(alert.alertId, !alert.isEnabled)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onToggle?.(alert.alertId, !alert.isEnabled);
+                }
+              }}
               disabled={isUpdating}
               className={cn(
                 'relative w-11 h-6 rounded-full transition-colors',
+                'focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background',
                 alert.isEnabled ? 'bg-accent' : 'bg-muted',
                 isUpdating && 'opacity-50 cursor-not-allowed'
               )}
@@ -135,14 +143,15 @@ export const AlertCard = memo(function AlertCard({
           </div>
 
           {/* Actions */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2" role="group" aria-label="Alert actions">
             <Button
               variant="ghost"
               size="sm"
               className="flex-1 gap-2"
               onClick={onEdit}
+              aria-label={`Edit ${alert.ticker} alert settings`}
             >
-              <Settings className="w-4 h-4" />
+              <Settings className="w-4 h-4" aria-hidden="true" />
               Edit
             </Button>
             <Button
@@ -150,8 +159,9 @@ export const AlertCard = memo(function AlertCard({
               size="sm"
               className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
               onClick={onDelete}
+              aria-label={`Delete ${alert.ticker} alert`}
             >
-              <Trash2 className="w-4 h-4" />
+              <Trash2 className="w-4 h-4" aria-hidden="true" />
             </Button>
           </div>
         </div>

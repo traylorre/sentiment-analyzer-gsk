@@ -109,15 +109,9 @@ describe('ConfigCard', () => {
 
     render(<ConfigCard config={mockConfig} onEdit={onEdit} onSelect={onSelect} />);
 
-    // Find and click the settings/edit button
-    const buttons = screen.getAllByRole('button');
-    const editButton = buttons.find((b) =>
-      b.querySelector('svg.lucide-settings')
-    );
-
-    if (editButton) {
-      fireEvent.click(editButton);
-    }
+    // Find and click the edit button by aria-label
+    const editButton = screen.getByRole('button', { name: /edit tech watchlist/i });
+    fireEvent.click(editButton);
 
     expect(onEdit).toHaveBeenCalledTimes(1);
     // Should not trigger select
@@ -130,15 +124,9 @@ describe('ConfigCard', () => {
 
     render(<ConfigCard config={mockConfig} onDelete={onDelete} onSelect={onSelect} />);
 
-    // Find and click the trash/delete button
-    const buttons = screen.getAllByRole('button');
-    const deleteButton = buttons.find((b) =>
-      b.querySelector('svg.lucide-trash-2')
-    );
-
-    if (deleteButton) {
-      fireEvent.click(deleteButton);
-    }
+    // Find and click the delete button by aria-label
+    const deleteButton = screen.getByRole('button', { name: /delete tech watchlist/i });
+    fireEvent.click(deleteButton);
 
     expect(onDelete).toHaveBeenCalledTimes(1);
     // Should not trigger select

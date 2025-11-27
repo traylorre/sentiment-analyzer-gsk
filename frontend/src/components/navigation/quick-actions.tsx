@@ -34,22 +34,31 @@ interface QuickActionsProps {
 // Swipe-reveal quick actions (like iOS mail)
 export function SwipeQuickActions({ actions, className }: QuickActionsProps) {
   return (
-    <div className={cn('flex items-center gap-1', className)}>
+    <div className={cn('flex items-center gap-1', className)} role="toolbar" aria-label="Quick actions">
       {actions.map((action) => {
         const Icon = action.icon;
         return (
           <button
             key={action.id}
             onClick={action.onClick}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                action.onClick();
+              }
+            }}
             className={cn(
               'flex items-center justify-center w-14 h-full',
               'transition-colors',
+              'focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2',
               action.variant === 'destructive'
-                ? 'bg-red-500 hover:bg-red-600 text-white'
-                : 'bg-accent hover:bg-accent/90 text-background'
+                ? 'bg-red-500 hover:bg-red-600 text-white focus-visible:ring-offset-red-500'
+                : 'bg-accent hover:bg-accent/90 text-background focus-visible:ring-offset-accent'
             )}
+            aria-label={action.label}
+            tabIndex={0}
           >
-            <Icon className="w-5 h-5" />
+            <Icon className="w-5 h-5" aria-hidden="true" />
           </button>
         );
       })}
@@ -98,6 +107,8 @@ export function ContextMenu({ isOpen, onClose, position, actions }: ContextMenuP
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
             transition={{ type: 'spring', duration: 0.2 }}
+            role="menu"
+            aria-label="Context menu"
           >
             {actions.map((action, index) => {
               const Icon = action.icon;
@@ -105,17 +116,29 @@ export function ContextMenu({ isOpen, onClose, position, actions }: ContextMenuP
                 <button
                   key={action.id}
                   onClick={() => handleAction(action)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleAction(action);
+                    }
+                    if (e.key === 'Escape') {
+                      onClose();
+                    }
+                  }}
                   className={cn(
                     'w-full px-4 py-3 flex items-center gap-3',
                     'text-left transition-colors',
                     'hover:bg-muted active:bg-muted',
+                    'focus:outline-none focus-visible:bg-muted',
                     index > 0 && 'border-t border-border',
                     action.variant === 'destructive'
                       ? 'text-red-500'
                       : 'text-foreground'
                   )}
+                  role="menuitem"
+                  tabIndex={0}
                 >
-                  <Icon className="w-4 h-4" />
+                  <Icon className="w-4 h-4" aria-hidden="true" />
                   <span className="text-sm font-medium">{action.label}</span>
                 </button>
               );
@@ -223,19 +246,31 @@ export function ExpandableFab({
                     exit={{ opacity: 0, y: 20, scale: 0.8 }}
                     transition={{ delay: index * 0.05 }}
                   >
-                    <span className="px-3 py-1.5 rounded-lg bg-card text-sm font-medium text-foreground shadow-lg">
+                    <span className="px-3 py-1.5 rounded-lg bg-card text-sm font-medium text-foreground shadow-lg" id={`fab-action-label-${action.id}`}>
                       {action.label}
                     </span>
                     <button
                       onClick={() => handleAction(action)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleAction(action);
+                        }
+                        if (e.key === 'Escape') {
+                          setIsExpanded(false);
+                        }
+                      }}
                       className={cn(
                         'w-12 h-12 rounded-full flex items-center justify-center shadow-lg',
+                        'focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background',
                         action.variant === 'destructive'
                           ? 'bg-red-500 text-white'
                           : 'bg-card text-foreground border border-border'
                       )}
+                      aria-labelledby={`fab-action-label-${action.id}`}
+                      tabIndex={0}
                     >
-                      <Icon className="w-5 h-5" />
+                      <Icon className="w-5 h-5" aria-hidden="true" />
                     </button>
                   </motion.div>
                 );
@@ -247,15 +282,28 @@ export function ExpandableFab({
         {/* Main FAB */}
         <motion.button
           onClick={handleToggle}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              handleToggle();
+            }
+            if (e.key === 'Escape' && isExpanded) {
+              setIsExpanded(false);
+            }
+          }}
           className={cn(
             'w-14 h-14 rounded-full flex items-center justify-center',
             'bg-accent text-background shadow-lg shadow-accent/30',
-            'transition-transform'
+            'transition-transform',
+            'focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background'
           )}
           animate={{ rotate: isExpanded ? 45 : 0 }}
           whileTap={{ scale: 0.95 }}
+          aria-label={isExpanded ? 'Close actions menu' : 'Open actions menu'}
+          aria-expanded={isExpanded}
+          tabIndex={0}
         >
-          {isExpanded ? <X className="w-6 h-6" /> : <MainIcon className="w-6 h-6" />}
+          {isExpanded ? <X className="w-6 h-6" aria-hidden="true" /> : <MainIcon className="w-6 h-6" aria-hidden="true" />}
         </motion.button>
       </div>
     </>

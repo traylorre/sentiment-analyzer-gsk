@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, Suspense } from 'react';
+import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
 import { TrendingUp, RefreshCw } from 'lucide-react';
 import { TickerInput } from '@/components/dashboard/ticker-input';
 import { TickerChipList } from '@/components/dashboard/ticker-chip';
-import { SentimentChart } from '@/components/charts/sentiment-chart';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ChartSkeleton } from '@/components/ui/loading-skeleton';
@@ -14,6 +14,15 @@ import { cn } from '@/lib/utils';
 import { useHaptic } from '@/hooks/use-haptic';
 import type { TickerSearchResult } from '@/lib/api/tickers';
 import type { SentimentTimeSeries } from '@/types/sentiment';
+
+// Dynamic import for heavy chart component - reduces initial bundle size
+const SentimentChart = dynamic(
+  () => import('@/components/charts/sentiment-chart').then((mod) => ({ default: mod.SentimentChart })),
+  {
+    loading: () => <ChartSkeleton />,
+    ssr: false, // Lightweight Charts requires browser APIs
+  }
+);
 
 // Mock data for demo (will be replaced with real API calls)
 const generateMockData = (days: number = 30): SentimentTimeSeries[] => {

@@ -39,10 +39,21 @@ export const ConfigCard = memo(function ConfigCard({
         className={cn(
           'relative overflow-hidden cursor-pointer transition-all',
           'hover:border-accent/50',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background',
           isActive && 'border-accent ring-1 ring-accent/30',
           className
         )}
         onClick={onSelect}
+        onKeyDown={(e) => {
+          if ((e.key === 'Enter' || e.key === ' ') && onSelect) {
+            e.preventDefault();
+            onSelect();
+          }
+        }}
+        role="button"
+        tabIndex={0}
+        aria-pressed={isActive}
+        aria-label={`Configuration: ${config.name}. ${config.tickers.length} ticker${config.tickers.length !== 1 ? 's' : ''}: ${config.tickers.map((t) => t.symbol).join(', ')}.${isActive ? ' Currently active.' : ''}`}
       >
         {/* Active indicator */}
         {isActive && (
@@ -65,7 +76,7 @@ export const ConfigCard = memo(function ConfigCard({
             </div>
 
             {/* Actions menu */}
-            <div className="flex items-center gap-1 ml-2">
+            <div className="flex items-center gap-1 ml-2" role="group" aria-label="Configuration actions">
               <Button
                 variant="ghost"
                 size="icon"
@@ -74,8 +85,9 @@ export const ConfigCard = memo(function ConfigCard({
                   e.stopPropagation();
                   onEdit?.();
                 }}
+                aria-label={`Edit ${config.name}`}
               >
-                <Settings className="h-4 w-4 text-muted-foreground" />
+                <Settings className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
               </Button>
               <Button
                 variant="ghost"
@@ -85,8 +97,9 @@ export const ConfigCard = memo(function ConfigCard({
                   e.stopPropagation();
                   onDelete?.();
                 }}
+                aria-label={`Delete ${config.name}`}
               >
-                <Trash2 className="h-4 w-4" />
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
               </Button>
             </div>
           </div>

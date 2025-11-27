@@ -56,7 +56,7 @@ describe('HeatMapCell', () => {
     const onClick = vi.fn();
     render(<HeatMapCell data={mockCell} ticker="AAPL" onClick={onClick} />);
 
-    fireEvent.click(screen.getByRole('button'));
+    fireEvent.click(screen.getByRole('gridcell'));
 
     expect(onClick).toHaveBeenCalled();
   });
@@ -65,7 +65,7 @@ describe('HeatMapCell', () => {
     const onHover = vi.fn();
     render(<HeatMapCell data={mockCell} ticker="AAPL" onHover={onHover} />);
 
-    fireEvent.mouseEnter(screen.getByRole('button'));
+    fireEvent.mouseEnter(screen.getByRole('gridcell'));
 
     expect(onHover).toHaveBeenCalledWith(mockCell);
   });
@@ -74,8 +74,8 @@ describe('HeatMapCell', () => {
     const onHover = vi.fn();
     render(<HeatMapCell data={mockCell} ticker="AAPL" onHover={onHover} />);
 
-    fireEvent.mouseEnter(screen.getByRole('button'));
-    fireEvent.mouseLeave(screen.getByRole('button'));
+    fireEvent.mouseEnter(screen.getByRole('gridcell'));
+    fireEvent.mouseLeave(screen.getByRole('gridcell'));
 
     expect(onHover).toHaveBeenLastCalledWith(null);
   });
@@ -83,11 +83,19 @@ describe('HeatMapCell', () => {
   it('should update chart store hovered cell on hover', () => {
     render(<HeatMapCell data={mockCell} ticker="AAPL" />);
 
-    fireEvent.mouseEnter(screen.getByRole('button'));
+    fireEvent.mouseEnter(screen.getByRole('gridcell'));
 
     const state = useChartStore.getState();
     // source value can be the source name or period name
     expect(state.hoveredCell).toEqual({ ticker: 'AAPL', source: 'tiingo' });
+  });
+
+  it('should have proper accessibility attributes', () => {
+    render(<HeatMapCell data={mockCell} ticker="AAPL" />);
+
+    const cell = screen.getByRole('gridcell');
+    expect(cell).toHaveAttribute('aria-label');
+    expect(cell).toHaveAttribute('tabindex', '0');
   });
 
   it('should apply size classes', () => {

@@ -93,17 +93,18 @@ export function HeatMapGrid({
       <HeatMapLegend />
 
       {/* Grid */}
-      <div className="overflow-x-auto">
-        <table className="border-separate border-spacing-1">
+      <div className="overflow-x-auto" role="region" aria-label="Sentiment heat map">
+        <table className="border-separate border-spacing-1" role="grid" aria-label={`Sentiment scores by ${data.view === 'sources' ? 'data source' : 'time period'}`}>
           {/* Header row */}
           <thead>
             <tr>
-              <th className="w-20 text-left text-xs font-medium text-muted-foreground p-2">
+              <th scope="col" className="w-20 text-left text-xs font-medium text-muted-foreground p-2">
                 Ticker
               </th>
               {columnHeaders.map(({ key, label }) => (
                 <th
                   key={key}
+                  scope="col"
                   className="text-center text-xs font-medium text-muted-foreground p-2 min-w-[56px]"
                 >
                   {label}
@@ -124,11 +125,11 @@ export function HeatMapGrid({
                   transition={{ delay: rowIndex * 0.05 }}
                 >
                   {/* Ticker label */}
-                  <td className="p-2">
+                  <th scope="row" className="p-2">
                     <span className="font-semibold text-foreground text-sm">
                       {row.ticker}
                     </span>
-                  </td>
+                  </th>
 
                   {/* Cells */}
                   {row.cells.map((cell, cellIndex) => (

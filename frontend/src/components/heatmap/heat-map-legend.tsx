@@ -32,9 +32,11 @@ export function HeatMapLegend({
         orientation === 'vertical' && 'flex-col',
         className
       )}
+      role="img"
+      aria-label="Sentiment scale legend: red indicates bearish sentiment (negative values), neutral is gray (near zero), green indicates bullish sentiment (positive values)"
     >
       {showLabels && (
-        <span className="text-xs text-muted-foreground whitespace-nowrap">
+        <span className="text-xs text-muted-foreground whitespace-nowrap" aria-hidden="true">
           Bearish
         </span>
       )}
@@ -48,10 +50,11 @@ export function HeatMapLegend({
         initial={{ opacity: 0, scaleX: 0 }}
         animate={{ opacity: 1, scaleX: 1 }}
         transition={{ duration: 0.5 }}
+        aria-hidden="true"
       />
 
       {showLabels && (
-        <span className="text-xs text-muted-foreground whitespace-nowrap">
+        <span className="text-xs text-muted-foreground whitespace-nowrap" aria-hidden="true">
           Bullish
         </span>
       )}

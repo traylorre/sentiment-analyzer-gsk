@@ -42,6 +42,8 @@ export function MobileNav({ className }: MobileNavProps) {
         'md:hidden', // Hide on desktop
         className
       )}
+      role="tablist"
+      aria-label="Main navigation"
     >
       <div className="flex items-center justify-around h-16">
         {NAV_ITEMS.map((item) => {
@@ -52,11 +54,22 @@ export function MobileNav({ className }: MobileNavProps) {
             <button
               key={item.view}
               onClick={() => handleNavClick(item.view)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  handleNavClick(item.view);
+                }
+              }}
               className={cn(
                 'relative flex flex-col items-center justify-center',
                 'w-16 h-full',
-                'transition-colors duration-200'
+                'transition-colors duration-200',
+                'focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background'
               )}
+              role="tab"
+              aria-selected={isActive}
+              aria-label={`${item.label} tab${isActive ? ', selected' : ''}`}
+              tabIndex={0}
             >
               {/* Active indicator */}
               {isActive && (

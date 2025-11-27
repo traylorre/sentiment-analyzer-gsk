@@ -209,13 +209,16 @@ export function SentimentChart({
       {/* Chart container */}
       <div
         ref={containerRef}
-        className="w-full rounded-lg overflow-hidden"
+        className="w-full rounded-lg overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         style={{ height }}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
         onMouseDown={handleTouchStart}
         onMouseUp={handleTouchEnd}
         onMouseLeave={handleTouchEnd}
+        role="img"
+        aria-label={`Sentiment chart for ${ticker}. Current score: ${formatSentimentScore(currentValue)}. ${data.length} data points from ${data.length > 0 ? formatDateTime(data[0].timestamp) : 'no data'} to ${data.length > 0 ? formatDateTime(data[data.length - 1].timestamp) : 'no data'}.`}
+        tabIndex={interactive ? 0 : -1}
       />
 
       {/* Loading overlay */}

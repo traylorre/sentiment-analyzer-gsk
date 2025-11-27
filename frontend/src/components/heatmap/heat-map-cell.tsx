@@ -59,6 +59,11 @@ export function HeatMapCell({
     }
   };
 
+  // Generate aria-label based on available data
+  const sentimentLabel = data.score >= 0.3 ? 'bullish' : data.score <= -0.3 ? 'bearish' : 'neutral';
+  const sourceLabel = data.source ?? data.period ?? 'unknown';
+  const ariaLabel = `${ticker} ${sourceLabel}: ${formatSentimentScore(data.score)}, ${sentimentLabel} sentiment`;
+
   return (
     <motion.button
       className={cn(
@@ -68,17 +73,29 @@ export function HeatMapCell({
         sizeStyles[size],
         onClick && 'cursor-pointer',
         isHovered && 'ring-2 ring-accent ring-offset-2 ring-offset-background z-10',
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background',
         className
       )}
       style={{ backgroundColor: color }}
       onClick={handleClick}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
+      onFocus={handleMouseEnter}
+      onBlur={handleMouseLeave}
+      onKeyDown={(e) => {
+        if ((e.key === 'Enter' || e.key === ' ') && onClick) {
+          e.preventDefault();
+          handleClick();
+        }
+      }}
       whileHover={{ scale: 1.05 }}
       whileTap={onClick ? { scale: 0.95 } : undefined}
       initial={{ opacity: 0, scale: 0.8 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+      aria-label={ariaLabel}
+      role="gridcell"
+      tabIndex={0}
     >
       {showValue && (
         <span

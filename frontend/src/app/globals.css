@@ -70,3 +70,41 @@
 ::-webkit-scrollbar-thumb:hover {
   background: rgb(var(--accent) / 0.5);
 }
+
+/* Accessibility: Focus visible ring for all interactive elements */
+@layer utilities {
+  .focus-ring {
+    @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  }
+
+  /* High contrast text for better readability */
+  .text-high-contrast {
+    @apply text-foreground;
+    text-shadow: 0 0 1px rgba(255, 255, 255, 0.1);
+  }
+
+  /* Skip link styling */
+  .skip-link {
+    @apply sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50;
+    @apply focus:px-4 focus:py-2 focus:rounded-lg focus:bg-accent focus:text-accent-foreground;
+  }
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: more) {
+  :root {
+    --muted-foreground: 200 200 200;
+    --border: 80 80 80;
+  }
+}
