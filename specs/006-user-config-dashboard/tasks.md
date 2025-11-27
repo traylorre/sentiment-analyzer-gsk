@@ -32,7 +32,8 @@
 - [x] T010 Configure X-Ray tracing on all Lambda functions in infrastructure/terraform/modules/lambda/xray.tf
 - [x] T011 Create CloudWatch RUM application monitor in infrastructure/terraform/modules/cloudwatch-rum/main.tf
 - [x] T012 Update main.tf to include new modules in infrastructure/terraform/main.tf
-- [ ] T013 Run terraform init and apply for dev environment
+- [ ] T013 ⏸️ DEFERRED: Run terraform init and apply for dev environment
+  - **Reason**: Dev environment creates real AWS resources but tests use moto (mocked AWS). Only value is terraform syntax validation, which preprod deploy provides. Cost savings by skipping.
 
 **Checkpoint**: Infrastructure foundation ready - secrets, Cognito, CDN, and X-Ray configured
 
@@ -261,8 +262,10 @@
 
 ### Backend Implementation for User Story 3
 
-- [ ] T117 [US3] Add max 2 config validation to configuration endpoints in src/lambdas/dashboard/api_v2.py
-- [ ] T118 [US3] Implement config count validation on create in src/lambdas/dashboard/api_v2.py
+- [x] T117 [US3] Add max 2 config validation to configuration endpoints in src/lambdas/dashboard/configurations.py
+  - Implemented in create_configuration() lines 106-113: checks existing_count >= max_configs_per_user
+- [x] T118 [US3] Implement config count validation on create in src/lambdas/dashboard/configurations.py
+  - Implemented in _count_user_configurations() lines 429-441: counts active configs
 
 ### Frontend Implementation for User Story 3
 
@@ -304,20 +307,20 @@
 
 ### Backend Implementation for User Story 4
 
-- [ ] T131 [US4] Implement alert list endpoint (GET /api/v2/alerts) in src/lambdas/dashboard/api_v2.py
-- [ ] T132 [US4] Implement alert create endpoint (POST /api/v2/alerts) in src/lambdas/dashboard/api_v2.py
-- [ ] T133 [US4] Implement alert get endpoint (GET /api/v2/alerts/{id}) in src/lambdas/dashboard/api_v2.py
-- [ ] T134 [US4] Implement alert update endpoint (PATCH /api/v2/alerts/{id}) in src/lambdas/dashboard/api_v2.py
-- [ ] T135 [US4] Implement alert delete endpoint (DELETE /api/v2/alerts/{id}) in src/lambdas/dashboard/api_v2.py
-- [ ] T136 [US4] Implement alert toggle endpoint (POST /api/v2/alerts/{id}/toggle) in src/lambdas/dashboard/api_v2.py
-- [ ] T137 [US4] Implement notification list endpoint (GET /api/v2/notifications) in src/lambdas/dashboard/api_v2.py
-- [ ] T138 [US4] Implement notification detail endpoint (GET /api/v2/notifications/{id}) in src/lambdas/dashboard/api_v2.py
-- [ ] T139 [US4] Implement notification preferences endpoints (GET/PATCH /api/v2/notifications/preferences) in src/lambdas/dashboard/api_v2.py
-- [ ] T140 [US4] Implement disable all notifications endpoint (POST /api/v2/notifications/disable-all) in src/lambdas/dashboard/api_v2.py
-- [ ] T141 [US4] Implement unsubscribe endpoint (GET /api/v2/notifications/unsubscribe) in src/lambdas/dashboard/api_v2.py
-- [ ] T142 [US4] Implement resubscribe endpoint (POST /api/v2/notifications/resubscribe) in src/lambdas/dashboard/api_v2.py
-- [ ] T143 [US4] Implement digest settings endpoints (GET/PATCH /api/v2/notifications/digest) in src/lambdas/dashboard/api_v2.py
-- [ ] T144 [US4] Implement test digest endpoint (POST /api/v2/notifications/digest/test) in src/lambdas/dashboard/api_v2.py
+- [x] T131 [US4] Implement alert list endpoint (GET /api/v2/alerts) in src/lambdas/dashboard/alerts.py
+- [x] T132 [US4] Implement alert create endpoint (POST /api/v2/alerts) in src/lambdas/dashboard/alerts.py
+- [x] T133 [US4] Implement alert get endpoint (GET /api/v2/alerts/{id}) in src/lambdas/dashboard/alerts.py
+- [x] T134 [US4] Implement alert update endpoint (PATCH /api/v2/alerts/{id}) in src/lambdas/dashboard/alerts.py
+- [x] T135 [US4] Implement alert delete endpoint (DELETE /api/v2/alerts/{id}) in src/lambdas/dashboard/alerts.py
+- [x] T136 [US4] Implement alert toggle endpoint (POST /api/v2/alerts/{id}/toggle) in src/lambdas/dashboard/alerts.py
+- [x] T137 [US4] Implement notification list endpoint (GET /api/v2/notifications) in src/lambdas/dashboard/notifications.py
+- [x] T138 [US4] Implement notification detail endpoint (GET /api/v2/notifications/{id}) in src/lambdas/dashboard/notifications.py
+- [x] T139 [US4] Implement notification preferences endpoints (GET/PATCH /api/v2/notifications/preferences) in src/lambdas/dashboard/notifications.py
+- [x] T140 [US4] Implement disable all notifications endpoint (POST /api/v2/notifications/disable-all) in src/lambdas/dashboard/notifications.py
+- [x] T141 [US4] Implement unsubscribe endpoint (GET /api/v2/notifications/unsubscribe) in src/lambdas/dashboard/notifications.py
+- [x] T142 [US4] Implement resubscribe endpoint (POST /api/v2/notifications/resubscribe) in src/lambdas/dashboard/notifications.py
+- [x] T143 [US4] Implement digest settings endpoints (GET/PATCH /api/v2/notifications/digest) in src/lambdas/dashboard/notifications.py
+- [x] T144 [US4] Implement test digest endpoint (POST /api/v2/notifications/digest/test) in src/lambdas/dashboard/notifications.py
 - [x] T145 [US4] Implement alert evaluation logic in notification Lambda in src/lambdas/notification/alert_evaluator.py
 - [x] T146 [US4] Implement internal alert evaluation endpoint (POST /api/internal/alerts/evaluate) in src/lambdas/notification/alert_evaluator.py
 - [x] T147 [US4] Implement internal email quota endpoint (GET /api/internal/email-quota) in src/lambdas/notification/alert_evaluator.py
