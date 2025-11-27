@@ -76,7 +76,7 @@ function createMotionComponent(Element: string) {
   return React.forwardRef<HTMLElement, React.PropsWithChildren<Record<string, unknown>>>(
     ({ children, ...props }, ref) => {
       const filteredProps = filterMotionProps(props);
-      return React.createElement(Element, { ...filteredProps, ref }, children);
+      return React.createElement(Element, { ...filteredProps, ref }, children as React.ReactNode);
     }
   );
 }
