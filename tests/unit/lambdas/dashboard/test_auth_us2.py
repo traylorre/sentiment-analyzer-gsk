@@ -144,9 +144,12 @@ class TestVerifyMagicLink:
         response = verify_magic_link(table, token_id, sig)
 
         assert response.status == "verified"
-        assert response.email == email
+        # email is now masked for security
+        assert response.email_masked == "t***@example.com"
         assert response.auth_type == "email"
         assert response.tokens is not None
+        # refresh_token is now separated for HttpOnly cookie
+        assert response.refresh_token_for_cookie is not None
 
     def test_verify_used_token(self):
         """Rejects already used token."""
@@ -416,9 +419,12 @@ class TestGetSessionInfo:
         response = get_session_info(table, user_id)
 
         assert response is not None
-        assert response.user_id == user_id
-        assert response.email == "test@example.com"
+        # Security: user_id no longer in response (frontend has it in header)
+        # email is now masked
+        assert response.email_masked == "t***@example.com"
         assert response.auth_type == "google"
+        # Relative time instead of absolute timestamp
+        assert response.session_expires_in_seconds > 0
 
     def test_returns_none_for_missing_user(self):
         """Returns None for nonexistent user."""
