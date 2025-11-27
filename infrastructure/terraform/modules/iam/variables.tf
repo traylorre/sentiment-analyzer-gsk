@@ -52,3 +52,9 @@ variable "sendgrid_secret_arn" {
   type        = string
   default     = ""
 }
+
+variable "feature_006_users_table_arn" {
+  description = "ARN of the Feature 006 sentiment-users DynamoDB table"
+  type        = string
+  default     = ""
+}

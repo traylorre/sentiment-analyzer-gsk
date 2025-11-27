@@ -399,6 +399,37 @@ resource "aws_iam_role_policy" "dashboard_ticker_cache" {
   })
 }
 
+# Dashboard Lambda: Feature 006 Users Table Access (full CRUD for configs, alerts, users)
+resource "aws_iam_role_policy" "dashboard_feature_006_users" {
+  count = var.feature_006_users_table_arn != "" ? 1 : 0
+  name  = "${var.environment}-dashboard-feature-006-users-policy"
+  role  = aws_iam_role.dashboard_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:Query",
+          "dynamodb:BatchGetItem",
+          "dynamodb:BatchWriteItem"
+        ]
+        Resource = [
+          var.feature_006_users_table_arn,
+          "${var.feature_006_users_table_arn}/index/by_email",
+          "${var.feature_006_users_table_arn}/index/by_cognito_sub",
+          "${var.feature_006_users_table_arn}/index/by_entity_status"
+        ]
+      }
+    ]
+  })
+}
+
 # ===================================================================
 # Metrics Lambda IAM Role (Operational Monitoring)
 # ===================================================================
@@ -503,6 +534,7 @@ resource "aws_iam_role" "notification_lambda" {
 }
 
 # Notification Lambda: DynamoDB access (read/write notifications, user prefs)
+# Uses Feature 006 users table for notifications and user preferences
 resource "aws_iam_role_policy" "notification_dynamodb" {
   name = "${var.environment}-notification-dynamodb-policy"
   role = aws_iam_role.notification_lambda.id
@@ -518,10 +550,20 @@ resource "aws_iam_role_policy" "notification_dynamodb" {
           "dynamodb:UpdateItem",
           "dynamodb:Query"
         ]
-        Resource = [
-          var.dynamodb_table_arn,
-          "${var.dynamodb_table_arn}/index/*"
-        ]
+        Resource = concat(
+          # Legacy sentiment-items table (for reading sentiment data)
+          [
+            var.dynamodb_table_arn,
+            "${var.dynamodb_table_arn}/index/*"
+          ],
+          # Feature 006 users table (for notifications, alerts, user prefs)
+          var.feature_006_users_table_arn != "" ? [
+            var.feature_006_users_table_arn,
+            "${var.feature_006_users_table_arn}/index/by_email",
+            "${var.feature_006_users_table_arn}/index/by_cognito_sub",
+            "${var.feature_006_users_table_arn}/index/by_entity_status"
+          ] : []
+        )
       }
     ]
   })
