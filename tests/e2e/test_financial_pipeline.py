@@ -426,7 +426,7 @@ class TestFullPipelineWithSyntheticData:
         # Reset news generator to same seed as mock adapter for determinism
         news_gen.reset(test_seed)
 
-        # Simulate what financial_handler does: fetch and store
+        # Simulate what handler does: fetch and store
         articles = mock_tiingo.get_news(["AAPL"], limit=5)
 
         # Store in DynamoDB

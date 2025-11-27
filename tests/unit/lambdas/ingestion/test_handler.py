@@ -87,7 +87,7 @@ class TestGetActiveTickers:
     @mock_aws
     def test_returns_empty_when_no_configurations(self, env_vars):
         """Should return empty list when no configurations exist."""
-        from src.lambdas.ingestion.financial_handler import _get_active_tickers
+        from src.lambdas.ingestion.handler import _get_active_tickers
 
         dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
         table = dynamodb.create_table(
@@ -109,7 +109,7 @@ class TestGetActiveTickers:
     @mock_aws
     def test_extracts_tickers_from_configurations(self, env_vars):
         """Should extract unique tickers from all active configurations."""
-        from src.lambdas.ingestion.financial_handler import _get_active_tickers
+        from src.lambdas.ingestion.handler import _get_active_tickers
 
         dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
         table = dynamodb.create_table(
@@ -157,7 +157,7 @@ class TestGetActiveTickers:
     @mock_aws
     def test_ignores_inactive_configurations(self, env_vars):
         """Should ignore inactive configurations."""
-        from src.lambdas.ingestion.financial_handler import _get_active_tickers
+        from src.lambdas.ingestion.handler import _get_active_tickers
 
         dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
         table = dynamodb.create_table(
@@ -204,7 +204,7 @@ class TestCircuitBreakerManagement:
     @mock_aws
     def test_creates_default_circuit_breaker(self, env_vars):
         """Should create default circuit breaker if none exists."""
-        from src.lambdas.ingestion.financial_handler import (
+        from src.lambdas.ingestion.handler import (
             _get_or_create_circuit_breaker,
         )
 
@@ -229,7 +229,7 @@ class TestCircuitBreakerManagement:
     @mock_aws
     def test_loads_existing_circuit_breaker(self, env_vars):
         """Should load existing circuit breaker from DynamoDB."""
-        from src.lambdas.ingestion.financial_handler import (
+        from src.lambdas.ingestion.handler import (
             _get_or_create_circuit_breaker,
             _save_circuit_breaker,
         )
@@ -264,7 +264,7 @@ class TestQuotaTrackerManagement:
     @mock_aws
     def test_creates_default_quota_tracker(self, env_vars):
         """Should create default quota tracker if none exists."""
-        from src.lambdas.ingestion.financial_handler import _get_or_create_quota_tracker
+        from src.lambdas.ingestion.handler import _get_or_create_quota_tracker
 
         dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
         table = dynamodb.create_table(
@@ -287,7 +287,7 @@ class TestQuotaTrackerManagement:
     @mock_aws
     def test_loads_existing_quota_tracker(self, env_vars):
         """Should load existing quota tracker from DynamoDB."""
-        from src.lambdas.ingestion.financial_handler import (
+        from src.lambdas.ingestion.handler import (
             _get_or_create_quota_tracker,
         )
 
@@ -320,7 +320,7 @@ class TestFetchTiingoArticles:
 
     def test_records_quota_and_fetches_articles(self):
         """Should record quota and fetch articles."""
-        from src.lambdas.ingestion.financial_handler import _fetch_tiingo_articles
+        from src.lambdas.ingestion.handler import _fetch_tiingo_articles
 
         mock_adapter = MagicMock()
         mock_adapter.get_news.return_value = [
@@ -341,7 +341,7 @@ class TestFetchFinnhubArticles:
 
     def test_records_quota_and_fetches_articles(self):
         """Should record quota and fetch articles."""
-        from src.lambdas.ingestion.financial_handler import _fetch_finnhub_articles
+        from src.lambdas.ingestion.handler import _fetch_finnhub_articles
 
         mock_adapter = MagicMock()
         mock_adapter.get_news.return_value = [
@@ -362,7 +362,7 @@ class TestProcessArticle:
     @mock_aws
     def test_inserts_new_article(self, env_vars):
         """Should insert new article and return 'new'."""
-        from src.lambdas.ingestion.financial_handler import _process_article
+        from src.lambdas.ingestion.handler import _process_article
 
         dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
         table = dynamodb.create_table(
@@ -380,7 +380,7 @@ class TestProcessArticle:
         article = create_news_article("unique-123", "tiingo", "New Article")
 
         with patch(
-            "src.lambdas.ingestion.financial_handler.put_item_if_not_exists",
+            "src.lambdas.ingestion.handler.put_item_if_not_exists",
             return_value=True,
         ):
             result = _process_article(
@@ -398,7 +398,7 @@ class TestProcessArticle:
     @mock_aws
     def test_skips_duplicate_article(self, env_vars):
         """Should skip duplicate article and return 'duplicate'."""
-        from src.lambdas.ingestion.financial_handler import _process_article
+        from src.lambdas.ingestion.handler import _process_article
 
         dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
         table = dynamodb.create_table(
@@ -416,7 +416,7 @@ class TestProcessArticle:
         article = create_news_article("duplicate-123", "tiingo", "Duplicate Article")
 
         with patch(
-            "src.lambdas.ingestion.financial_handler.put_item_if_not_exists",
+            "src.lambdas.ingestion.handler.put_item_if_not_exists",
             return_value=False,
         ):
             result = _process_article(
@@ -437,7 +437,7 @@ class TestGetTextForAnalysis:
 
     def test_combines_title_and_description(self):
         """Should combine title and description."""
-        from src.lambdas.ingestion.financial_handler import _get_text_for_analysis
+        from src.lambdas.ingestion.handler import _get_text_for_analysis
 
         article = create_news_article()
         article.title = "Breaking News"
@@ -448,7 +448,7 @@ class TestGetTextForAnalysis:
 
     def test_uses_title_only_when_no_description(self):
         """Should use title only when no description."""
-        from src.lambdas.ingestion.financial_handler import _get_text_for_analysis
+        from src.lambdas.ingestion.handler import _get_text_for_analysis
 
         article = create_news_article()
         article.title = "Breaking News"
@@ -459,7 +459,7 @@ class TestGetTextForAnalysis:
 
     def test_uses_description_when_no_title(self):
         """Should use description when no title."""
-        from src.lambdas.ingestion.financial_handler import _get_text_for_analysis
+        from src.lambdas.ingestion.handler import _get_text_for_analysis
 
         article = create_news_article()
         article.title = None
@@ -475,7 +475,7 @@ class TestLambdaHandler:
     @mock_aws
     def test_returns_success_with_no_tickers(self, env_vars):
         """Should return success when no active tickers."""
-        from src.lambdas.ingestion.financial_handler import lambda_handler
+        from src.lambdas.ingestion.handler import lambda_handler
 
         dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
         dynamodb.create_table(
@@ -495,10 +495,10 @@ class TestLambdaHandler:
         mock_context.aws_request_id = "test-request-id"
 
         with patch(
-            "src.lambdas.ingestion.financial_handler.get_api_key",
+            "src.lambdas.ingestion.handler.get_api_key",
             return_value="test-key",
         ), patch(
-            "src.lambdas.ingestion.financial_handler.emit_metrics_batch",
+            "src.lambdas.ingestion.handler.emit_metrics_batch",
         ):
             response = lambda_handler({"source": "test"}, mock_context)
 
@@ -508,7 +508,7 @@ class TestLambdaHandler:
     @mock_aws
     def test_processes_tickers_from_configurations(self, env_vars):
         """Should process tickers from active configurations."""
-        from src.lambdas.ingestion.financial_handler import lambda_handler
+        from src.lambdas.ingestion.handler import lambda_handler
 
         dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
         table = dynamodb.create_table(
@@ -551,22 +551,22 @@ class TestLambdaHandler:
         mock_finnhub.close = MagicMock()
 
         with patch(
-            "src.lambdas.ingestion.financial_handler.get_api_key",
+            "src.lambdas.ingestion.handler.get_api_key",
             return_value="test-key",
         ), patch(
-            "src.lambdas.ingestion.financial_handler.TiingoAdapter",
+            "src.lambdas.ingestion.handler.TiingoAdapter",
             return_value=mock_tiingo,
         ), patch(
-            "src.lambdas.ingestion.financial_handler.FinnhubAdapter",
+            "src.lambdas.ingestion.handler.FinnhubAdapter",
             return_value=mock_finnhub,
         ), patch(
-            "src.lambdas.ingestion.financial_handler.put_item_if_not_exists",
+            "src.lambdas.ingestion.handler.put_item_if_not_exists",
             return_value=True,
         ), patch(
-            "src.lambdas.ingestion.financial_handler._get_sns_client",
+            "src.lambdas.ingestion.handler._get_sns_client",
             return_value=MagicMock(),
         ), patch(
-            "src.lambdas.ingestion.financial_handler.emit_metrics_batch",
+            "src.lambdas.ingestion.handler.emit_metrics_batch",
         ):
             response = lambda_handler({"source": "test"}, mock_context)
 
@@ -579,7 +579,7 @@ class TestLambdaHandler:
     @mock_aws
     def test_handles_rate_limit_errors(self, env_vars):
         """Should handle rate limit errors gracefully."""
-        from src.lambdas.ingestion.financial_handler import lambda_handler
+        from src.lambdas.ingestion.handler import lambda_handler
 
         dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
         table = dynamodb.create_table(
@@ -620,21 +620,21 @@ class TestLambdaHandler:
         mock_finnhub.close = MagicMock()
 
         with patch(
-            "src.lambdas.ingestion.financial_handler.get_api_key",
+            "src.lambdas.ingestion.handler.get_api_key",
             return_value="test-key",
         ), patch(
-            "src.lambdas.ingestion.financial_handler.TiingoAdapter",
+            "src.lambdas.ingestion.handler.TiingoAdapter",
             return_value=mock_tiingo,
         ), patch(
-            "src.lambdas.ingestion.financial_handler.FinnhubAdapter",
+            "src.lambdas.ingestion.handler.FinnhubAdapter",
             return_value=mock_finnhub,
         ), patch(
-            "src.lambdas.ingestion.financial_handler._get_sns_client",
+            "src.lambdas.ingestion.handler._get_sns_client",
             return_value=MagicMock(),
         ), patch(
-            "src.lambdas.ingestion.financial_handler.emit_metrics_batch",
+            "src.lambdas.ingestion.handler.emit_metrics_batch",
         ), patch(
-            "src.lambdas.ingestion.financial_handler.emit_metric",
+            "src.lambdas.ingestion.handler.emit_metric",
         ):
             response = lambda_handler({"source": "test"}, mock_context)
 
