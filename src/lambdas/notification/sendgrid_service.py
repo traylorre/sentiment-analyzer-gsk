@@ -10,14 +10,14 @@ Rate limits:
 - Application limit: 10 alerts/day/user
 """
 
-import json
 import logging
 from functools import lru_cache
 from pathlib import Path
 
-import boto3
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
+
+from src.lambdas.shared.secrets import SecretRetrievalError, get_secret
 
 logger = logging.getLogger(__name__)
 
@@ -317,11 +317,11 @@ def _load_template(template_name: str) -> str | None:
         return None
 
 
-@lru_cache(maxsize=1)
 def _get_sendgrid_api_key(secret_arn: str) -> str:
     """Get SendGrid API key from Secrets Manager.
 
-    Uses LRU cache to avoid repeated API calls.
+    Uses shared secrets module with 5-minute TTL caching to reduce API calls
+    while still supporting secret rotation.
 
     Args:
         secret_arn: ARN of the secret
@@ -336,24 +336,28 @@ def _get_sendgrid_api_key(secret_arn: str) -> str:
         raise EmailServiceError("SendGrid secret ARN not configured")
 
     try:
-        client = boto3.client("secretsmanager")
-        response = client.get_secret_value(SecretId=secret_arn)
-        secret = response.get("SecretString", "{}")
+        secret_data = get_secret(secret_arn)
 
-        # Parse as JSON if it's a JSON object
-        try:
-            data = json.loads(secret)
-            # Support both formats: {"api_key": "..."} or raw string
-            return data.get("api_key", data.get("SENDGRID_API_KEY", secret))
-        except json.JSONDecodeError:
-            # Raw API key string
-            return secret
+        # Support both formats: {"api_key": "..."} or {"SENDGRID_API_KEY": "..."}
+        if isinstance(secret_data, dict):
+            return secret_data.get("api_key", secret_data.get("SENDGRID_API_KEY", ""))
 
-    except Exception as e:
+        # Shouldn't happen, but handle raw string if ever returned
+        return str(secret_data)
+
+    except SecretRetrievalError as e:
         logger.error(f"Failed to get SendGrid API key: {e}")
+        raise EmailServiceError(f"Failed to retrieve SendGrid API key: {e}") from e
+    except Exception as e:
+        logger.error(f"Unexpected error getting SendGrid API key: {e}")
         raise EmailServiceError(f"Failed to retrieve SendGrid API key: {e}") from e
 
 
 def clear_api_key_cache() -> None:
-    """Clear the API key cache (for testing)."""
-    _get_sendgrid_api_key.cache_clear()
+    """Clear the API key cache (for testing).
+
+    This clears the shared secrets cache which has a 5-minute TTL.
+    """
+    from src.lambdas.shared.secrets import clear_cache
+
+    clear_cache()

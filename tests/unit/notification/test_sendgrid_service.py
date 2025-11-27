@@ -1,6 +1,5 @@
 """Unit tests for SendGrid email service."""
 
-import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -58,15 +57,11 @@ class TestEmailServiceApiKey:
         )
         assert service.api_key == "SG.override_key"
 
-    @patch("src.lambdas.notification.sendgrid_service.boto3")
-    def test_api_key_from_secrets_manager_json(self, mock_boto3):
+    @patch("src.lambdas.notification.sendgrid_service.get_secret")
+    def test_api_key_from_secrets_manager_json(self, mock_get_secret):
         """Test API key retrieval from Secrets Manager (JSON format)."""
         clear_api_key_cache()
-        mock_client = MagicMock()
-        mock_boto3.client.return_value = mock_client
-        mock_client.get_secret_value.return_value = {
-            "SecretString": json.dumps({"api_key": "SG.secret_key"})
-        }
+        mock_get_secret.return_value = {"api_key": "SG.secret_key"}
 
         service = EmailService(
             secret_arn="arn:aws:secretsmanager:us-east-1:123:secret:test",
@@ -74,31 +69,11 @@ class TestEmailServiceApiKey:
         )
         assert service.api_key == "SG.secret_key"
 
-    @patch("src.lambdas.notification.sendgrid_service.boto3")
-    def test_api_key_from_secrets_manager_raw_string(self, mock_boto3):
-        """Test API key retrieval from Secrets Manager (raw string format)."""
-        clear_api_key_cache()
-        mock_client = MagicMock()
-        mock_boto3.client.return_value = mock_client
-        mock_client.get_secret_value.return_value = {
-            "SecretString": "SG.raw_string_key"
-        }
-
-        service = EmailService(
-            secret_arn="arn:aws:secretsmanager:us-east-1:123:secret:test2",
-            from_email="test@example.com",
-        )
-        assert service.api_key == "SG.raw_string_key"
-
-    @patch("src.lambdas.notification.sendgrid_service.boto3")
-    def test_api_key_from_secrets_manager_sendgrid_key_format(self, mock_boto3):
+    @patch("src.lambdas.notification.sendgrid_service.get_secret")
+    def test_api_key_from_secrets_manager_sendgrid_key_format(self, mock_get_secret):
         """Test API key with SENDGRID_API_KEY JSON field."""
         clear_api_key_cache()
-        mock_client = MagicMock()
-        mock_boto3.client.return_value = mock_client
-        mock_client.get_secret_value.return_value = {
-            "SecretString": json.dumps({"SENDGRID_API_KEY": "SG.alternate_key"})
-        }
+        mock_get_secret.return_value = {"SENDGRID_API_KEY": "SG.alternate_key"}
 
         service = EmailService(
             secret_arn="arn:aws:secretsmanager:us-east-1:123:secret:test3",
@@ -414,13 +389,11 @@ class TestGetSendgridApiKey:
 
         assert "not configured" in str(exc_info.value)
 
-    @patch("src.lambdas.notification.sendgrid_service.boto3")
-    def test_secrets_manager_error(self, mock_boto3):
+    @patch("src.lambdas.notification.sendgrid_service.get_secret")
+    def test_secrets_manager_error(self, mock_get_secret):
         """Test handling of Secrets Manager errors."""
         clear_api_key_cache()
-        mock_client = MagicMock()
-        mock_boto3.client.return_value = mock_client
-        mock_client.get_secret_value.side_effect = Exception("Access denied")
+        mock_get_secret.side_effect = Exception("Access denied")
 
         with pytest.raises(EmailServiceError) as exc_info:
             _get_sendgrid_api_key(

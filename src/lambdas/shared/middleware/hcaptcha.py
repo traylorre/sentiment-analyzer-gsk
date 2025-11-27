@@ -15,7 +15,6 @@ Security Notes:
 
 import logging
 import os
-from functools import lru_cache
 from typing import Any
 
 import httpx
@@ -49,9 +48,10 @@ class CaptchaVerificationResult(BaseModel):
     error_codes: list[str] = []
 
 
-@lru_cache(maxsize=1)
 def _get_hcaptcha_secret() -> str | None:
     """Get hCaptcha secret from Secrets Manager.
+
+    Uses the shared secrets module which has 5-minute TTL caching built-in.
 
     Returns:
         Secret key or None if not configured
@@ -61,7 +61,11 @@ def _get_hcaptcha_secret() -> str | None:
         from src.lambdas.shared.secrets import get_secret
 
         secret_name = f"{ENVIRONMENT}/sentiment-analyzer/hcaptcha-secret-key"
-        return get_secret(secret_name)
+        secret_data = get_secret(secret_name)
+        # Return the secret key value - handle both dict and string formats
+        if isinstance(secret_data, dict):
+            return secret_data.get("secret_key", secret_data.get("HCAPTCHA_SECRET_KEY"))
+        return str(secret_data)
     except Exception as e:
         logger.warning(
             "Failed to get hCaptcha secret",
