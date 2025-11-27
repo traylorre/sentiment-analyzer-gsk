@@ -44,7 +44,7 @@ describe('Auth Store', () => {
       const user = {
         userId: 'user-123',
         email: 'test@example.com',
-        authType: 'magic_link' as const,
+        authType: 'email' as const,
         createdAt: '2024-01-15T10:00:00Z',
         configurationCount: 0,
         alertCount: 0,
@@ -83,7 +83,7 @@ describe('Auth Store', () => {
 
       setUser({
         userId: 'user-123',
-        authType: 'magic_link',
+        authType: 'email',
         createdAt: '2024-01-15T10:00:00Z',
         configurationCount: 0,
         alertCount: 0,
@@ -105,7 +105,7 @@ describe('Auth Store', () => {
       // Set user first to establish auth state
       setUser({
         userId: 'user-123',
-        authType: 'magic_link',
+        authType: 'email',
         createdAt: '2024-01-15T10:00:00Z',
         configurationCount: 0,
         alertCount: 0,
@@ -113,9 +113,10 @@ describe('Auth Store', () => {
       });
 
       const tokens = {
+        idToken: 'id-token-123',
         accessToken: 'access-token-123',
         refreshToken: 'refresh-token-456',
-        expiresAt: '2024-01-15T11:00:00Z',
+        expiresIn: 3600,
       };
 
       setTokens(tokens);
@@ -238,16 +239,17 @@ describe('Auth Store', () => {
             user: {
               userId: 'user-123',
               email: 'test@example.com',
-              authType: 'magic_link',
+              authType: 'email',
               createdAt: '2024-01-15T10:00:00Z',
               configurationCount: 0,
               alertCount: 0,
               emailNotificationsEnabled: true,
             },
             tokens: {
+              idToken: 'id-123',
               accessToken: 'access-123',
               refreshToken: 'refresh-456',
-              expiresAt: '2024-01-15T11:00:00Z',
+              expiresIn: 3600,
             },
             sessionExpiresAt: '2024-01-15T12:00:00Z',
           }),
@@ -280,16 +282,17 @@ describe('Auth Store', () => {
       // Set up authenticated state
       setUser({
         userId: 'user-123',
-        authType: 'magic_link',
+        authType: 'email',
         createdAt: '2024-01-15T10:00:00Z',
         configurationCount: 0,
         alertCount: 0,
         emailNotificationsEnabled: true,
       });
       setTokens({
+        idToken: 'id-123',
         accessToken: 'access-123',
         refreshToken: 'refresh-456',
-        expiresAt: '2024-01-15T11:00:00Z',
+        expiresIn: 3600,
       });
 
       mockFetch.mockResolvedValueOnce({ ok: true });
@@ -307,16 +310,17 @@ describe('Auth Store', () => {
 
       setUser({
         userId: 'user-123',
-        authType: 'magic_link',
+        authType: 'email',
         createdAt: '2024-01-15T10:00:00Z',
         configurationCount: 0,
         alertCount: 0,
         emailNotificationsEnabled: true,
       });
       setTokens({
+        idToken: 'id-123',
         accessToken: 'access-123',
         refreshToken: 'refresh-456',
-        expiresAt: '2024-01-15T11:00:00Z',
+        expiresIn: 3600,
       });
 
       mockFetch.mockRejectedValueOnce(new Error('Network error'));
@@ -339,7 +343,7 @@ describe('Auth Store', () => {
 
       setUser({
         userId: 'user-123',
-        authType: 'magic_link',
+        authType: 'email',
         createdAt: '2024-01-15T10:00:00Z',
         configurationCount: 0,
         alertCount: 0,
@@ -358,7 +362,7 @@ describe('Auth Store', () => {
 
       setUser({
         userId: 'user-123',
-        authType: 'magic_link',
+        authType: 'email',
         createdAt: '2024-01-15T10:00:00Z',
         configurationCount: 0,
         alertCount: 0,
@@ -396,16 +400,17 @@ describe('Auth Store', () => {
 
       store.setUser({
         userId: 'user-123',
-        authType: 'magic_link',
+        authType: 'email',
         createdAt: '2024-01-15T10:00:00Z',
         configurationCount: 0,
         alertCount: 0,
         emailNotificationsEnabled: true,
       });
       store.setTokens({
+        idToken: 'id-123',
         accessToken: 'access-123',
         refreshToken: 'refresh-456',
-        expiresAt: '2024-01-15T11:00:00Z',
+        expiresIn: 3600,
       });
       store.setError('Some error');
 
@@ -429,7 +434,7 @@ describe('Auth Store Selectors', () => {
     const { setUser } = useAuthStore.getState();
     const user = {
       userId: 'user-123',
-      authType: 'magic_link' as const,
+      authType: 'email' as const,
       createdAt: '2024-01-15T10:00:00Z',
       configurationCount: 0,
       alertCount: 0,

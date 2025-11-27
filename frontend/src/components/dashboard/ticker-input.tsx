@@ -198,3 +198,6 @@ export function TickerInput({
     </div>
   );
 }
+
+// Export alias for backwards compatibility
+export { TickerInput as TickerSearch };

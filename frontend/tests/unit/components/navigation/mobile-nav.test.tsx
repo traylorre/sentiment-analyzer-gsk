@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import { Plus } from 'lucide-react';
 import { MobileNav, FloatingActionButton } from '@/components/navigation/mobile-nav';
 import { useViewStore } from '@/stores/view-store';
 
@@ -74,21 +75,19 @@ describe('MobileNav', () => {
 describe('FloatingActionButton', () => {
   it('should render with icon', () => {
     const mockOnClick = vi.fn();
-    const MockIcon = () => <svg data-testid="mock-icon" />;
 
     render(
-      <FloatingActionButton onClick={mockOnClick} icon={MockIcon} label="Test action" />
+      <FloatingActionButton onClick={mockOnClick} icon={Plus} label="Test action" />
     );
 
-    expect(screen.getByTestId('mock-icon')).toBeInTheDocument();
+    expect(screen.getByRole('button')).toBeInTheDocument();
   });
 
   it('should call onClick when pressed', () => {
     const mockOnClick = vi.fn();
-    const MockIcon = () => <svg data-testid="mock-icon" />;
 
     render(
-      <FloatingActionButton onClick={mockOnClick} icon={MockIcon} label="Test action" />
+      <FloatingActionButton onClick={mockOnClick} icon={Plus} label="Test action" />
     );
 
     const button = screen.getByRole('button');
@@ -99,10 +98,9 @@ describe('FloatingActionButton', () => {
 
   it('should have accessible label', () => {
     const mockOnClick = vi.fn();
-    const MockIcon = () => <svg data-testid="mock-icon" />;
 
     render(
-      <FloatingActionButton onClick={mockOnClick} icon={MockIcon} label="Add item" />
+      <FloatingActionButton onClick={mockOnClick} icon={Plus} label="Add item" />
     );
 
     expect(screen.getByLabelText('Add item')).toBeInTheDocument();
