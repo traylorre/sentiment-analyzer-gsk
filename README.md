@@ -156,7 +156,7 @@ git checkout -b feature/your-feature-name
 
 ### What This Service Does
 
-Ingests text from external sources (NewsAPI, RSS feeds) and returns sentiment analysis:
+Ingests financial news from external sources (Tiingo, Finnhub) and returns sentiment analysis:
 - **Sentiment labels**: positive/neutral/negative
 - **Confidence scores**: 0.0-1.0 range
 - **Real-time & batch processing**: EventBridge scheduler + Lambda processors
@@ -191,8 +191,8 @@ Ingests text from external sources (NewsAPI, RSS feeds) and returns sentiment an
 %%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
 graph TB
     subgraph External["External Sources"]
-        NewsAPI[NewsAPI]
-        RSS[RSS Feeds]
+        Tiingo[Tiingo API<br/>Primary Source]
+        Finnhub[Finnhub API<br/>Secondary Source]
     end
 
     subgraph AWS["AWS Cloud"]
@@ -230,8 +230,8 @@ graph TB
     end
 
     EB -->|Trigger| Ingestion
-    NewsAPI -->|Fetch Articles| Ingestion
-    RSS -->|Fetch Feeds| Ingestion
+    Tiingo -->|Fetch Financial News| Ingestion
+    Finnhub -->|Fetch Market News| Ingestion
 
     Ingestion -->|Publish| SNS
     Ingestion -->|Store| DDB
@@ -269,7 +269,7 @@ graph TB
     class DDB,DLQ,S3Model storageStyle
     class SNS messagingStyle
     class CW,Budget,EBMetrics,EB monitoringStyle
-    class NewsAPI,RSS,Browser externalStyle
+    class Tiingo,Finnhub,Browser externalStyle
 ```
 
 ### Environment Promotion Pipeline
@@ -349,7 +349,8 @@ graph LR
 sequenceDiagram
     participant EB as EventBridge
     participant Ing as Ingestion Lambda
-    participant NA as NewsAPI
+    participant Tiingo as Tiingo API
+    participant Finnhub as Finnhub API
     participant SNS as SNS Topic
     participant Ana as Analysis Lambda
     participant S3 as S3 Model Storage
@@ -358,8 +359,10 @@ sequenceDiagram
     participant User as Browser (SSE)
 
     EB->>Ing: Trigger (every 5 min)
-    Ing->>NA: Fetch latest articles
-    NA-->>Ing: Articles JSON
+    Ing->>Tiingo: Fetch financial news (primary)
+    Tiingo-->>Ing: Articles JSON
+    Ing->>Finnhub: Fetch market news (secondary)
+    Finnhub-->>Ing: Articles JSON
 
     Ing->>DDB: Check for duplicates
     DDB-->>Ing: Dedup results
@@ -388,7 +391,7 @@ sequenceDiagram
 | Attribute | Type | Key Type | Description |
 |-----------|------|----------|-------------|
 | `item_id` | String | Partition Key (PK) | Unique identifier for each item |
-| `source_type` | String | - | Source system (e.g., "newsapi", "rss") |
+| `source_type` | String | - | Source system (e.g., "tiingo", "finnhub") |
 | `source_id` | String | - | External source identifier |
 | `title` | String | - | Article/item title |
 | `content` | String | - | Article text content |
@@ -688,7 +691,7 @@ See [DEPLOYMENT.md](docs/DEPLOYMENT.md) for detailed deployment procedures and r
 - SC-03: Ingestion Failures
 - SC-04: Analysis Failures
 - SC-05: Dashboard Failures
-- SC-07: NewsAPI Rate Limiting
+- SC-07: API Rate Limiting (Tiingo/Finnhub)
 - SC-08: Budget Alerts
 - SC-09: DLQ Accumulation
 - And more...

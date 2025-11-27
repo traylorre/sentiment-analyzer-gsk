@@ -226,30 +226,11 @@ resource "aws_cloudwatch_metric_alarm" "sns_delivery_failures" {
 }
 
 # =============================================================================
-# Custom Metric Alarms (SC-07, SC-10)
+# Custom Metric Alarms (SC-10)
 # =============================================================================
 
-resource "aws_cloudwatch_metric_alarm" "newsapi_rate_limit" {
-  alarm_name          = "${var.environment}-newsapi-rate-limit"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 1
-  metric_name         = "NewsAPIRateLimitHit"
-  namespace           = "SentimentAnalyzer"
-  period              = 300
-  statistic           = "Sum"
-  threshold           = 0
-  alarm_description   = "SC-07: NewsAPI rate limit exceeded"
-  treat_missing_data  = "notBreaching"
-
-  alarm_actions = [aws_sns_topic.alarms.arn]
-  ok_actions    = [aws_sns_topic.alarms.arn]
-
-  tags = {
-    Environment = var.environment
-    Feature     = "001-interactive-dashboard-demo"
-    Scenario    = "SC-07"
-  }
-}
+# NOTE: NewsAPI alarm removed in Feature 006 - replaced by Tiingo/Finnhub alarms
+# See api_alarms.tf for tiingo_error_rate and finnhub_error_rate alarms
 
 resource "aws_cloudwatch_metric_alarm" "no_new_items" {
   alarm_name          = "${var.environment}-no-new-items-1h"
@@ -434,5 +415,57 @@ resource "aws_cloudwatch_metric_alarm" "dynamodb_high_reads" {
     Environment = var.environment
     Security    = "P0-cost-protection"
     Scenario    = "budget-exhaustion-attack"
+  }
+}
+
+# =============================================================================
+# SendGrid Email Quota Alarm (Feature 006 - T152)
+# =============================================================================
+# Monitors the custom metric for SendGrid email quota usage.
+# The notification Lambda writes EmailQuotaUsed metric to CloudWatch.
+# Alert at 50% to allow time to respond before hitting hard limit.
+# =============================================================================
+
+resource "aws_cloudwatch_metric_alarm" "sendgrid_quota_warning" {
+  alarm_name          = "${var.environment}-sendgrid-quota-50-percent"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  metric_name         = "EmailQuotaUsed"
+  namespace           = "SentimentAnalyzer/Notifications"
+  period              = 3600 # 1 hour
+  statistic           = "Maximum"
+  threshold           = 50 # 50 emails = 50% of daily limit
+  alarm_description   = "SendGrid email quota at 50% (50/100). Consider throttling alert notifications."
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alarms.arn]
+  ok_actions    = [aws_sns_topic.alarms.arn]
+
+  tags = {
+    Environment = var.environment
+    Feature     = "006-user-config-dashboard"
+    Scenario    = "sendgrid-quota-warning"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "sendgrid_quota_critical" {
+  alarm_name          = "${var.environment}-sendgrid-quota-80-percent"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  metric_name         = "EmailQuotaUsed"
+  namespace           = "SentimentAnalyzer/Notifications"
+  period              = 3600 # 1 hour
+  statistic           = "Maximum"
+  threshold           = 80 # 80 emails = 80% of daily limit
+  alarm_description   = "CRITICAL: SendGrid email quota at 80% (80/100). Disable non-essential notifications."
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alarms.arn]
+
+  tags = {
+    Environment = var.environment
+    Feature     = "006-user-config-dashboard"
+    Scenario    = "sendgrid-quota-critical"
+    Severity    = "CRITICAL"
   }
 }

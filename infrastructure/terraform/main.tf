@@ -49,6 +49,68 @@ module "secrets" {
 }
 
 # ===================================================================
+# Module: Cognito User Pool (Feature 006)
+# ===================================================================
+
+module "cognito" {
+  source = "./modules/cognito"
+
+  environment   = var.environment
+  domain_suffix = var.cognito_domain_suffix
+
+  callback_urls = var.cognito_callback_urls
+  logout_urls   = var.cognito_logout_urls
+
+  # OAuth providers (configured via variables)
+  enabled_identity_providers = var.cognito_identity_providers
+  google_client_id           = var.google_oauth_client_id
+  google_client_secret       = var.google_oauth_client_secret
+  github_client_id           = var.github_oauth_client_id
+  github_client_secret       = var.github_oauth_client_secret
+}
+
+# ===================================================================
+# Module: CloudFront CDN (Feature 006)
+# ===================================================================
+
+module "cloudfront" {
+  source = "./modules/cloudfront"
+
+  environment    = var.environment
+  account_suffix = data.aws_caller_identity.current.account_id
+
+  # API Gateway integration
+  api_gateway_domain = replace(module.api_gateway.api_endpoint, "https://", "")
+
+  # Custom domain (optional)
+  custom_domain       = var.cloudfront_custom_domain
+  acm_certificate_arn = var.cloudfront_acm_certificate_arn
+
+  depends_on = [module.api_gateway]
+}
+
+# ===================================================================
+# Module: CloudWatch RUM (Feature 006)
+# ===================================================================
+
+module "cloudwatch_rum" {
+  source = "./modules/cloudwatch-rum"
+
+  environment = var.environment
+  domain      = var.cloudfront_custom_domain != "" ? var.cloudfront_custom_domain : module.cloudfront.distribution_domain_name
+
+  # RUM configuration
+  allow_cookies       = true
+  enable_xray         = true
+  session_sample_rate = var.environment == "prod" ? 0.1 : 1.0 # 10% in prod, 100% in dev/preprod
+
+  depends_on = [module.cloudfront]
+}
+
+# Data source for AWS account ID
+data "aws_caller_identity" "current" {}
+
+# ===================================================================
 # Module: DynamoDB Table
 # ===================================================================
 
@@ -108,6 +170,60 @@ locals {
 
   # S3 bucket for ML model storage
   model_s3_bucket = "sentiment-analyzer-models-218795110243"
+
+  # S3 bucket for ticker cache data (Feature 006)
+  ticker_cache_bucket = "${var.environment}-sentiment-ticker-cache-${data.aws_caller_identity.current.account_id}"
+}
+
+# ===================================================================
+# S3 Bucket for Ticker Cache Data (Feature 006)
+# ===================================================================
+# Contains ~8K US stock symbols for autocomplete and validation
+# Loaded by Lambda at cold start
+
+resource "aws_s3_bucket" "ticker_cache" {
+  bucket = local.ticker_cache_bucket
+
+  tags = {
+    Environment = var.environment
+    Feature     = "006-user-config-dashboard"
+    Component   = "ticker-cache"
+  }
+}
+
+resource "aws_s3_bucket_versioning" "ticker_cache" {
+  bucket = aws_s3_bucket.ticker_cache.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "ticker_cache" {
+  bucket = aws_s3_bucket.ticker_cache.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "ticker_cache" {
+  bucket = aws_s3_bucket.ticker_cache.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+# Upload initial ticker cache data
+resource "aws_s3_object" "ticker_cache_symbols" {
+  bucket       = aws_s3_bucket.ticker_cache.id
+  key          = "ticker-cache/us-symbols.json"
+  source       = "${path.module}/../data/us-symbols.json"
+  content_type = "application/json"
+  etag         = filemd5("${path.module}/../data/us-symbols.json")
 }
 
 # ===================================================================
@@ -118,7 +234,7 @@ module "ingestion_lambda" {
   source = "./modules/lambda"
 
   function_name = local.ingestion_lambda_name
-  description   = "Fetches articles from NewsAPI and stores in DynamoDB"
+  description   = "Fetches articles from financial news APIs and stores in DynamoDB"
   iam_role_arn  = module.iam.ingestion_lambda_role_arn
   handler       = "handler.lambda_handler"
   s3_bucket     = "${var.environment}-sentiment-lambda-deployments"
@@ -132,12 +248,17 @@ module "ingestion_lambda" {
   timeout              = 60
   reserved_concurrency = 1
 
+  # X-Ray tracing (Feature 006 - Day 1 mandatory)
+  tracing_mode = "Active"
+
   # Environment variables
   environment_variables = {
     WATCH_TAGS         = var.watch_tags
     DYNAMODB_TABLE     = module.dynamodb.table_name
     SNS_TOPIC_ARN      = module.sns.topic_arn
     NEWSAPI_SECRET_ARN = module.secrets.newsapi_secret_arn
+    TIINGO_SECRET_ARN  = module.secrets.tiingo_secret_arn
+    FINNHUB_SECRET_ARN = module.secrets.finnhub_secret_arn
     ENVIRONMENT        = var.environment
     MODEL_VERSION      = var.model_version
   }
@@ -178,6 +299,9 @@ module "analysis_lambda" {
   memory_size          = 1024
   timeout              = 30
   reserved_concurrency = 5
+
+  # X-Ray tracing (Feature 006 - Day 1 mandatory)
+  tracing_mode = "Active"
 
   # Ephemeral storage for ML model (~250MB extracted, 3GB for headroom)
   ephemeral_storage_size = 3072 # 3GB
@@ -235,6 +359,9 @@ module "dashboard_lambda" {
   timeout              = 60
   reserved_concurrency = 10
 
+  # X-Ray tracing (Feature 006 - Day 1 mandatory)
+  tracing_mode = "Active"
+
   # Environment variables
   # NOTE: FIS template IDs removed to break circular dependency with chaos module.
   # The chaos module needs Lambda ARNs, and Lambda needs chaos outputs = cycle.
@@ -243,6 +370,11 @@ module "dashboard_lambda" {
     DYNAMODB_TABLE               = module.dynamodb.table_name
     API_KEY                      = "" # Will be fetched from Secrets Manager at runtime
     DASHBOARD_API_KEY_SECRET_ARN = module.secrets.dashboard_api_key_secret_arn
+    SENDGRID_SECRET_ARN          = module.secrets.sendgrid_secret_arn
+    HCAPTCHA_SECRET_ARN          = module.secrets.hcaptcha_secret_arn
+    COGNITO_USER_POOL_ID         = module.cognito.user_pool_id
+    COGNITO_CLIENT_ID            = module.cognito.client_id
+    TICKER_CACHE_BUCKET          = aws_s3_bucket.ticker_cache.id
     SSE_POLL_INTERVAL            = "5"
     ENVIRONMENT                  = var.environment
     CHAOS_EXPERIMENTS_TABLE      = module.dynamodb.chaos_experiments_table_name
@@ -298,6 +430,9 @@ module "metrics_lambda" {
   timeout              = 30
   reserved_concurrency = 1 # Only one instance needed
 
+  # X-Ray tracing (Feature 006 - Day 1 mandatory)
+  tracing_mode = "Active"
+
   # Environment variables
   environment_variables = {
     DYNAMODB_TABLE = module.dynamodb.table_name
@@ -320,6 +455,59 @@ module "metrics_lambda" {
   }
 
   depends_on = [module.iam]
+}
+
+# ===================================================================
+# Module: Notification Lambda (Feature 006 - Email Alerts)
+# ===================================================================
+
+module "notification_lambda" {
+  source = "./modules/lambda"
+
+  function_name = "${var.environment}-sentiment-notification"
+  description   = "Sends email notifications via SendGrid for alerts, magic links, and digests"
+  iam_role_arn  = module.iam.notification_lambda_role_arn
+  handler       = "handler.lambda_handler"
+  s3_bucket     = "${var.environment}-sentiment-lambda-deployments"
+  s3_key        = "notification/lambda.zip"
+
+  # Force update when package changes (git SHA triggers redeployment)
+  source_code_hash = var.lambda_package_version
+
+  # Resource configuration
+  memory_size          = 256
+  timeout              = 30
+  reserved_concurrency = 5 # Moderate concurrency for email sending
+
+  # X-Ray tracing (Feature 006 - Day 1 mandatory)
+  tracing_mode = "Active"
+
+  # Environment variables
+  environment_variables = {
+    DYNAMODB_TABLE      = module.dynamodb.table_name
+    SENDGRID_SECRET_ARN = module.secrets.sendgrid_secret_arn
+    FROM_EMAIL          = var.notification_from_email
+    DASHBOARD_URL       = var.cloudfront_custom_domain != "" ? "https://${var.cloudfront_custom_domain}" : "https://${module.cloudfront.distribution_domain_name}"
+    ENVIRONMENT         = var.environment
+  }
+
+  # No Function URL needed - triggered by SNS and EventBridge
+  create_function_url = false
+
+  # Logging
+  log_retention_days = var.environment == "prod" ? 90 : 30
+
+  # Alarms
+  create_error_alarm    = true
+  error_alarm_threshold = 10
+  alarm_actions         = [module.monitoring.alarm_topic_arn]
+
+  tags = {
+    Lambda  = "notification"
+    Feature = "006-user-config-dashboard"
+  }
+
+  depends_on = [module.iam, module.cloudfront]
 }
 
 # ===================================================================
@@ -406,6 +594,8 @@ module "iam" {
   dlq_arn                      = module.sns.dlq_arn
   model_s3_bucket_arn          = "arn:aws:s3:::${local.model_s3_bucket}"
   chaos_experiments_table_arn  = module.dynamodb.chaos_experiments_table_arn
+  ticker_cache_bucket_arn      = aws_s3_bucket.ticker_cache.arn
+  sendgrid_secret_arn          = module.secrets.sendgrid_secret_arn
 }
 
 # ===================================================================
@@ -589,4 +779,104 @@ output "fis_execution_role_arn" {
 output "fis_dynamodb_throttle_template_id" {
   description = "DEPRECATED: DynamoDB throttling not supported by FIS"
   value       = ""
+}
+
+# ===================================================================
+# Feature 006 Outputs
+# ===================================================================
+
+# Cognito outputs
+output "cognito_user_pool_id" {
+  description = "ID of the Cognito User Pool"
+  value       = module.cognito.user_pool_id
+}
+
+output "cognito_client_id" {
+  description = "ID of the Cognito User Pool Client"
+  value       = module.cognito.client_id
+}
+
+output "cognito_hosted_ui_url" {
+  description = "URL for Cognito hosted UI login"
+  value       = module.cognito.hosted_ui_url
+}
+
+output "cognito_oauth_issuer" {
+  description = "OAuth issuer URL for token validation"
+  value       = module.cognito.oauth_issuer
+}
+
+# CloudFront outputs
+output "cloudfront_distribution_id" {
+  description = "ID of the CloudFront distribution"
+  value       = module.cloudfront.distribution_id
+}
+
+output "cloudfront_domain_name" {
+  description = "Domain name of the CloudFront distribution"
+  value       = module.cloudfront.distribution_domain_name
+}
+
+output "dashboard_s3_bucket" {
+  description = "S3 bucket for dashboard static assets"
+  value       = module.cloudfront.s3_bucket_name
+}
+
+output "dashboard_url" {
+  description = "URL for accessing the dashboard via CloudFront"
+  value       = module.cloudfront.dashboard_url
+}
+
+# CloudWatch RUM outputs
+output "rum_app_monitor_id" {
+  description = "ID of the CloudWatch RUM App Monitor"
+  value       = module.cloudwatch_rum.app_monitor_id
+}
+
+output "rum_identity_pool_id" {
+  description = "Cognito Identity Pool ID for RUM"
+  value       = module.cloudwatch_rum.identity_pool_id
+}
+
+# Feature 006 secrets
+output "tiingo_secret_arn" {
+  description = "ARN of the Tiingo API secret"
+  value       = module.secrets.tiingo_secret_arn
+}
+
+output "finnhub_secret_arn" {
+  description = "ARN of the Finnhub API secret"
+  value       = module.secrets.finnhub_secret_arn
+}
+
+output "sendgrid_secret_arn" {
+  description = "ARN of the SendGrid API secret"
+  value       = module.secrets.sendgrid_secret_arn
+}
+
+output "hcaptcha_secret_arn" {
+  description = "ARN of the hCaptcha secret"
+  value       = module.secrets.hcaptcha_secret_arn
+}
+
+# Ticker cache outputs
+output "ticker_cache_bucket" {
+  description = "S3 bucket for ticker cache data"
+  value       = aws_s3_bucket.ticker_cache.id
+}
+
+output "ticker_cache_bucket_arn" {
+  description = "ARN of the ticker cache S3 bucket"
+  value       = aws_s3_bucket.ticker_cache.arn
+}
+
+# Notification Lambda outputs
+output "notification_lambda_arn" {
+  description = "ARN of the Notification Lambda function"
+  value       = module.notification_lambda.function_arn
+}
+
+output "notification_lambda_name" {
+  description = "Name of the Notification Lambda function"
+  value       = module.notification_lambda.function_name
 }

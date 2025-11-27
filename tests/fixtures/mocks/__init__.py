@@ -1,0 +1,1 @@
+# Mock adapters for testing

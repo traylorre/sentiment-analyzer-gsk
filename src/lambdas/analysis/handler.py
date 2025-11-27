@@ -51,16 +51,22 @@ import time
 from decimal import Decimal
 from typing import Any
 
-from src.lambdas.analysis.sentiment import (
+from aws_xray_sdk.core import patch_all, xray_recorder
+
+# Patch boto3 and requests for X-Ray distributed tracing
+# Day 1 mandatory per constitution v1.1 (FR-035)
+patch_all()
+
+from src.lambdas.analysis.sentiment import (  # noqa: E402
     InferenceError,
     ModelLoadError,
     analyze_sentiment,
     get_model_load_time_ms,
     load_model,
 )
-from src.lambdas.shared.chaos_injection import get_chaos_delay_ms
-from src.lambdas.shared.dynamodb import get_table
-from src.lib.metrics import (
+from src.lambdas.shared.chaos_injection import get_chaos_delay_ms  # noqa: E402
+from src.lambdas.shared.dynamodb import get_table  # noqa: E402
+from src.lib.metrics import (  # noqa: E402
     emit_metric,
     emit_metrics_batch,
     log_structured,
@@ -247,6 +253,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         }
 
 
+@xray_recorder.capture("update_item_with_sentiment")
 def _update_item_with_sentiment(
     table: Any,
     source_id: str,

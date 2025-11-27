@@ -20,18 +20,18 @@
 
 **Purpose**: Project initialization, new dependencies, and Terraform modules
 
-- [ ] T001 Create feature branch structure and update requirements.txt with new dependencies (aws-xray-sdk, sendgrid, httpx) in requirements.txt
-- [ ] T002 [P] Create Tiingo API secret in Secrets Manager via Terraform in infrastructure/terraform/modules/secrets/main.tf
-- [ ] T003 [P] Create Finnhub API secret in Secrets Manager via Terraform in infrastructure/terraform/modules/secrets/main.tf
-- [ ] T004 [P] Create SendGrid API secret in Secrets Manager via Terraform in infrastructure/terraform/modules/secrets/main.tf
-- [ ] T005 [P] Create hCaptcha secret in Secrets Manager via Terraform in infrastructure/terraform/modules/secrets/main.tf
-- [ ] T006 Create Cognito User Pool Terraform module in infrastructure/terraform/modules/cognito/main.tf
-- [ ] T007 [P] Configure Cognito Google OAuth identity provider in infrastructure/terraform/modules/cognito/google.tf
-- [ ] T008 [P] Configure Cognito GitHub OAuth identity provider in infrastructure/terraform/modules/cognito/github.tf
-- [ ] T009 Create CloudFront distribution Terraform module in infrastructure/terraform/modules/cloudfront/main.tf
-- [ ] T010 Configure X-Ray tracing on all Lambda functions in infrastructure/terraform/modules/lambda/xray.tf
-- [ ] T011 Create CloudWatch RUM application monitor in infrastructure/terraform/modules/cloudwatch-rum/main.tf
-- [ ] T012 Update main.tf to include new modules in infrastructure/terraform/main.tf
+- [x] T001 Create feature branch structure and update requirements.txt with new dependencies (aws-xray-sdk, sendgrid, httpx) in requirements.txt
+- [x] T002 [P] Create Tiingo API secret in Secrets Manager via Terraform in infrastructure/terraform/modules/secrets/main.tf
+- [x] T003 [P] Create Finnhub API secret in Secrets Manager via Terraform in infrastructure/terraform/modules/secrets/main.tf
+- [x] T004 [P] Create SendGrid API secret in Secrets Manager via Terraform in infrastructure/terraform/modules/secrets/main.tf
+- [x] T005 [P] Create hCaptcha secret in Secrets Manager via Terraform in infrastructure/terraform/modules/secrets/main.tf
+- [x] T006 Create Cognito User Pool Terraform module in infrastructure/terraform/modules/cognito/main.tf
+- [x] T007 [P] Configure Cognito Google OAuth identity provider in infrastructure/terraform/modules/cognito/google.tf
+- [x] T008 [P] Configure Cognito GitHub OAuth identity provider in infrastructure/terraform/modules/cognito/github.tf
+- [x] T009 Create CloudFront distribution Terraform module in infrastructure/terraform/modules/cloudfront/main.tf
+- [x] T010 Configure X-Ray tracing on all Lambda functions in infrastructure/terraform/modules/lambda/xray.tf
+- [x] T011 Create CloudWatch RUM application monitor in infrastructure/terraform/modules/cloudwatch-rum/main.tf
+- [x] T012 Update main.tf to include new modules in infrastructure/terraform/main.tf
 - [ ] T013 Run terraform init and apply for dev environment
 
 **Checkpoint**: Infrastructure foundation ready - secrets, Cognito, CDN, and X-Ray configured
@@ -46,60 +46,60 @@
 
 ### Shared Models & Utilities
 
-- [ ] T014 Create User model with DynamoDB keys in src/lambdas/shared/models/user.py
-- [ ] T015 [P] Create Configuration model with DynamoDB keys in src/lambdas/shared/models/configuration.py
-- [ ] T016 [P] Create AlertRule model with DynamoDB keys in src/lambdas/shared/models/alert_rule.py
-- [ ] T017 [P] Create Notification model with DynamoDB keys in src/lambdas/shared/models/notification.py
-- [ ] T018 [P] Create SentimentResult model with DynamoDB keys in src/lambdas/shared/models/sentiment_result.py
-- [ ] T019 [P] Create VolatilityMetric model with DynamoDB keys in src/lambdas/shared/models/volatility_metric.py
-- [ ] T020 [P] Create MagicLinkToken model with validation in src/lambdas/shared/models/magic_link_token.py
-- [ ] T021 Create models __init__.py exporting all models in src/lambdas/shared/models/__init__.py
+- [x] T014 Create User model with DynamoDB keys in src/lambdas/shared/models/user.py
+- [x] T015 [P] Create Configuration model with DynamoDB keys in src/lambdas/shared/models/configuration.py
+- [x] T016 [P] Create AlertRule model with DynamoDB keys in src/lambdas/shared/models/alert_rule.py
+- [x] T017 [P] Create Notification model with DynamoDB keys in src/lambdas/shared/models/notification.py
+- [x] T018 [P] Create SentimentResult model with DynamoDB keys in src/lambdas/shared/models/sentiment_result.py
+- [x] T019 [P] Create VolatilityMetric model with DynamoDB keys in src/lambdas/shared/models/volatility_metric.py
+- [x] T020 [P] Create MagicLinkToken model with validation in src/lambdas/shared/models/magic_link_token.py
+- [x] T021 Create models __init__.py exporting all models in src/lambdas/shared/models/__init__.py
 
 ### Circuit Breaker & Quota Management
 
-- [ ] T022 Implement CircuitBreakerState class in src/lambdas/shared/circuit_breaker.py
-- [ ] T023 [P] Implement QuotaTracker class in src/lambdas/shared/quota_tracker.py
-- [ ] T024 Unit tests for circuit breaker in tests/unit/shared/test_circuit_breaker.py
-- [ ] T025 [P] Unit tests for quota tracker in tests/unit/shared/test_quota_tracker.py
+- [x] T022 Implement CircuitBreakerState class in src/lambdas/shared/circuit_breaker.py
+- [x] T023 [P] Implement QuotaTracker class in src/lambdas/shared/quota_tracker.py
+- [x] T024 Unit tests for circuit breaker in tests/unit/shared/test_circuit_breaker.py
+- [x] T025 [P] Unit tests for quota tracker in tests/unit/shared/test_quota_tracker.py
 
 ### Ticker Cache
 
-- [ ] T026 Create TickerCache class with S3 loading in src/lambdas/shared/cache/ticker_cache.py
-- [ ] T027 [P] Create initial US symbols JSON file (~8K symbols) in infrastructure/data/us-symbols.json
-- [ ] T028 [P] Upload ticker cache to S3 via Terraform in infrastructure/terraform/modules/s3/ticker_cache.tf
-- [ ] T029 Unit tests for ticker cache in tests/unit/shared/test_ticker_cache.py
+- [x] T026 Create TickerCache class with S3 loading in src/lambdas/shared/cache/ticker_cache.py
+- [x] T027 [P] Create initial US symbols JSON file (~8K symbols) in infrastructure/data/us-symbols.json
+- [x] T028 [P] Upload ticker cache to S3 via Terraform in infrastructure/terraform/modules/s3/ticker_cache.tf
+- [x] T029 Unit tests for ticker cache in tests/unit/shared/test_ticker_cache.py
 
 ### Financial API Adapters
 
-- [ ] T030 Create base adapter interface in src/lambdas/ingestion/adapters/base.py
-- [ ] T031 Implement TiingoAdapter with rate limiting and caching in src/lambdas/ingestion/adapters/tiingo.py
-- [ ] T032 [P] Implement FinnhubAdapter with rate limiting and caching in src/lambdas/ingestion/adapters/finnhub.py
-- [ ] T033 Unit tests for TiingoAdapter with mocked responses in tests/unit/lambdas/ingestion/test_tiingo_adapter.py
-- [ ] T034 [P] Unit tests for FinnhubAdapter with mocked responses in tests/unit/lambdas/ingestion/test_finnhub_adapter.py
+- [x] T030 Create base adapter interface in src/lambdas/ingestion/adapters/base.py
+- [x] T031 Implement TiingoAdapter with rate limiting and caching in src/lambdas/shared/adapters/tiingo.py
+- [x] T032 [P] Implement FinnhubAdapter with rate limiting and caching in src/lambdas/shared/adapters/finnhub.py
+- [x] T033 Unit tests for TiingoAdapter with mocked responses in tests/unit/shared/adapters/test_tiingo.py
+- [x] T034 [P] Unit tests for FinnhubAdapter with mocked responses in tests/unit/shared/adapters/test_finnhub.py
 
 ### ATR Calculation
 
-- [ ] T035 Implement ATR calculator with OHLC input in src/lambdas/analysis/atr.py
-- [ ] T036 Unit tests for ATR calculation in tests/unit/lambdas/analysis/test_atr.py
+- [x] T035 Implement ATR calculator with OHLC input in src/lambdas/shared/volatility.py
+- [x] T036 Unit tests for ATR calculation in tests/unit/shared/test_volatility.py
 
 ### Notification Lambda Scaffold
 
-- [ ] T037 Create notification Lambda handler scaffold in src/lambdas/notification/handler.py
-- [ ] T038 [P] Implement SendGrid email service in src/lambdas/notification/sendgrid_service.py
-- [ ] T039 Unit tests for SendGrid service with mocked API in tests/unit/lambdas/notification/test_sendgrid_service.py
-- [ ] T040 Add notification Lambda to Terraform in infrastructure/terraform/modules/lambda/notification.tf
+- [x] T037 Create notification Lambda handler scaffold in src/lambdas/notification/handler.py
+- [x] T038 [P] Implement SendGrid email service in src/lambdas/notification/sendgrid_service.py
+- [x] T039 Unit tests for SendGrid service with mocked API in tests/unit/lambdas/notification/test_sendgrid_service.py
+- [x] T040 Add notification Lambda to Terraform in infrastructure/terraform/modules/lambda/notification.tf
 
 ### Synthetic Test Data Framework (E2E Testing Infrastructure)
 
-- [ ] T040a Create synthetic data generator for ticker prices/OHLC in tests/fixtures/synthetic/ticker_generator.py
-- [ ] T040b [P] Create synthetic data generator for sentiment scores in tests/fixtures/synthetic/sentiment_generator.py
-- [ ] T040c [P] Create synthetic data generator for news articles in tests/fixtures/synthetic/news_generator.py
-- [ ] T040d Create test oracle that computes expected outcomes from synthetic data in tests/fixtures/synthetic/test_oracle.py
-- [ ] T040e [P] Create mock Tiingo adapter that returns synthetic data in tests/fixtures/mocks/mock_tiingo.py
-- [ ] T040f [P] Create mock Finnhub adapter that returns synthetic data in tests/fixtures/mocks/mock_finnhub.py
-- [ ] T040g [P] Create mock SendGrid adapter for email verification in tests/fixtures/mocks/mock_sendgrid.py
-- [ ] T040h Create E2E test base class with synthetic data setup in tests/e2e/conftest.py
-- [ ] T040i Unit tests for synthetic data generators in tests/unit/fixtures/test_synthetic_generators.py
+- [x] T040a Create synthetic data generator for ticker prices/OHLC in tests/fixtures/synthetic/ticker_generator.py
+- [x] T040b [P] Create synthetic data generator for sentiment scores in tests/fixtures/synthetic/sentiment_generator.py
+- [x] T040c [P] Create synthetic data generator for news articles in tests/fixtures/synthetic/news_generator.py
+- [x] T040d Create test oracle that computes expected outcomes from synthetic data in tests/fixtures/synthetic/test_oracle.py
+- [x] T040e [P] Create mock Tiingo adapter that returns synthetic data in tests/fixtures/mocks/mock_tiingo.py
+- [x] T040f [P] Create mock Finnhub adapter that returns synthetic data in tests/fixtures/mocks/mock_finnhub.py
+- [x] T040g [P] Create mock SendGrid adapter for email verification in tests/fixtures/mocks/mock_sendgrid.py
+- [x] T040h Create E2E test base class with synthetic data setup in tests/e2e/conftest.py
+- [x] T040i Unit tests for synthetic data generators in tests/unit/fixtures/test_synthetic_generators.py
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 
@@ -120,39 +120,39 @@
 
 ### Tests for User Story 1
 
-- [ ] T041 [P] [US1] Contract tests for anonymous session endpoints in tests/contract/test_anonymous_session.py
-- [ ] T042 [P] [US1] Contract tests for configuration CRUD endpoints in tests/contract/test_configuration_api.py
-- [ ] T043 [P] [US1] Contract tests for sentiment data endpoints in tests/contract/test_sentiment_api.py
-- [ ] T044 [P] [US1] Contract tests for volatility endpoints in tests/contract/test_volatility_api.py
-- [ ] T045 [P] [US1] Contract tests for heat map data endpoint in tests/contract/test_heatmap_api.py
-- [ ] T046 [US1] Integration test for anonymous user full journey in tests/integration/test_us1_anonymous_journey.py
+- [x] T041 [P] [US1] Contract tests for anonymous session endpoints in tests/contract/test_anonymous_session.py
+- [x] T042 [P] [US1] Contract tests for configuration CRUD endpoints in tests/contract/test_configuration_api.py
+- [x] T043 [P] [US1] Contract tests for sentiment data endpoints in tests/contract/test_sentiment_api.py
+- [x] T044 [P] [US1] Contract tests for volatility endpoints in tests/contract/test_volatility_api.py
+- [x] T045 [P] [US1] Contract tests for heat map data endpoint in tests/contract/test_heatmap_api.py
+- [x] T046 [US1] Integration test for anonymous user full journey in tests/integration/test_us1_anonymous_journey.py
 
 ### Backend Implementation for User Story 1
 
-- [ ] T047 [US1] Implement anonymous session creation endpoint (POST /api/v2/auth/anonymous) in src/lambdas/dashboard/api_v2.py
-- [ ] T048 [US1] Implement anonymous session validation endpoint (GET /api/v2/auth/validate) in src/lambdas/dashboard/api_v2.py
-- [ ] T049 [US1] Implement configuration creation endpoint (POST /api/v2/configurations) in src/lambdas/dashboard/api_v2.py
-- [ ] T050 [US1] Implement configuration list endpoint (GET /api/v2/configurations) in src/lambdas/dashboard/api_v2.py
-- [ ] T051 [US1] Implement single configuration endpoint (GET /api/v2/configurations/{id}) in src/lambdas/dashboard/api_v2.py
-- [ ] T052 [US1] Implement configuration update endpoint (PATCH /api/v2/configurations/{id}) in src/lambdas/dashboard/api_v2.py
-- [ ] T053 [US1] Implement configuration delete endpoint (DELETE /api/v2/configurations/{id}) in src/lambdas/dashboard/api_v2.py
-- [ ] T054 [US1] Implement ticker validation endpoint (GET /api/v2/tickers/validate) in src/lambdas/dashboard/api_v2.py
-- [ ] T055 [US1] Implement ticker search/autocomplete endpoint (GET /api/v2/tickers/search) in src/lambdas/dashboard/api_v2.py
-- [ ] T056 [US1] Implement sentiment by configuration endpoint (GET /api/v2/configurations/{id}/sentiment) in src/lambdas/dashboard/api_v2.py
-- [ ] T057 [US1] Implement heat map data endpoint (GET /api/v2/configurations/{id}/heatmap) in src/lambdas/dashboard/api_v2.py
-- [ ] T058 [US1] Implement volatility/ATR endpoint (GET /api/v2/configurations/{id}/volatility) in src/lambdas/dashboard/api_v2.py
-- [ ] T059 [US1] Implement sentiment-volatility correlation endpoint (GET /api/v2/configurations/{id}/correlation) in src/lambdas/dashboard/api_v2.py
-- [ ] T060 [US1] Implement refresh status endpoint (GET /api/v2/configurations/{id}/refresh/status) in src/lambdas/dashboard/api_v2.py
-- [ ] T061 [US1] Implement manual refresh trigger endpoint (POST /api/v2/configurations/{id}/refresh) in src/lambdas/dashboard/api_v2.py
-- [ ] T062 [US1] Implement market status endpoint (GET /api/v2/market/status) in src/lambdas/dashboard/api_v2.py
-- [ ] T063 [US1] Implement pre-market estimates endpoint (GET /api/v2/configurations/{id}/premarket) in src/lambdas/dashboard/api_v2.py
+- [x] T047 [US1] Implement anonymous session creation endpoint (POST /api/v2/auth/anonymous) in src/lambdas/dashboard/api_v2.py
+- [x] T048 [US1] Implement anonymous session validation endpoint (GET /api/v2/auth/validate) in src/lambdas/dashboard/api_v2.py
+- [x] T049 [US1] Implement configuration creation endpoint (POST /api/v2/configurations) in src/lambdas/dashboard/api_v2.py
+- [x] T050 [US1] Implement configuration list endpoint (GET /api/v2/configurations) in src/lambdas/dashboard/api_v2.py
+- [x] T051 [US1] Implement single configuration endpoint (GET /api/v2/configurations/{id}) in src/lambdas/dashboard/api_v2.py
+- [x] T052 [US1] Implement configuration update endpoint (PATCH /api/v2/configurations/{id}) in src/lambdas/dashboard/api_v2.py
+- [x] T053 [US1] Implement configuration delete endpoint (DELETE /api/v2/configurations/{id}) in src/lambdas/dashboard/api_v2.py
+- [x] T054 [US1] Implement ticker validation endpoint (GET /api/v2/tickers/validate) in src/lambdas/dashboard/api_v2.py
+- [x] T055 [US1] Implement ticker search/autocomplete endpoint (GET /api/v2/tickers/search) in src/lambdas/dashboard/api_v2.py
+- [x] T056 [US1] Implement sentiment by configuration endpoint (GET /api/v2/configurations/{id}/sentiment) in src/lambdas/dashboard/api_v2.py
+- [x] T057 [US1] Implement heat map data endpoint (GET /api/v2/configurations/{id}/heatmap) in src/lambdas/dashboard/api_v2.py
+- [x] T058 [US1] Implement volatility/ATR endpoint (GET /api/v2/configurations/{id}/volatility) in src/lambdas/dashboard/api_v2.py
+- [x] T059 [US1] Implement sentiment-volatility correlation endpoint (GET /api/v2/configurations/{id}/correlation) in src/lambdas/dashboard/api_v2.py
+- [x] T060 [US1] Implement refresh status endpoint (GET /api/v2/configurations/{id}/refresh/status) in src/lambdas/dashboard/api_v2.py
+- [x] T061 [US1] Implement manual refresh trigger endpoint (POST /api/v2/configurations/{id}/refresh) in src/lambdas/dashboard/api_v2.py
+- [x] T062 [US1] Implement market status endpoint (GET /api/v2/market/status) in src/lambdas/dashboard/api_v2.py
+- [x] T063 [US1] Implement pre-market estimates endpoint (GET /api/v2/configurations/{id}/premarket) in src/lambdas/dashboard/api_v2.py
 
 ### Ingestion Pipeline Updates for User Story 1
 
-- [ ] T064 [US1] Update ingestion handler to use Tiingo/Finnhub adapters in src/lambdas/ingestion/handler.py
-- [ ] T065 [US1] Implement dual-source sentiment aggregation in src/lambdas/analysis/sentiment.py
-- [ ] T066 [US1] Add X-Ray tracing to ingestion handler in src/lambdas/ingestion/handler.py
-- [ ] T067 [US1] Add X-Ray tracing to analysis handler in src/lambdas/analysis/handler.py
+- [x] T064 [US1] Update ingestion handler to use Tiingo/Finnhub adapters in src/lambdas/ingestion/financial_handler.py
+- [x] T065 [US1] Implement dual-source sentiment aggregation in src/lambdas/analysis/sentiment.py
+- [x] T066 [US1] Add X-Ray tracing to ingestion handler in src/lambdas/ingestion/handler.py
+- [x] T067 [US1] Add X-Ray tracing to analysis handler in src/lambdas/analysis/handler.py
 
 ### Frontend Implementation for User Story 1
 
@@ -195,29 +195,29 @@
 
 ### Tests for User Story 2
 
-- [ ] T084 [P] [US2] Contract tests for magic link request/verify in tests/contract/test_magic_link_api.py
-- [ ] T085 [P] [US2] Contract tests for OAuth URLs and callback in tests/contract/test_oauth_api.py
-- [ ] T086 [P] [US2] Contract tests for token refresh in tests/contract/test_token_refresh_api.py
-- [ ] T087 [P] [US2] Contract tests for session management in tests/contract/test_session_api.py
-- [ ] T088 [US2] Integration test for magic link full flow in tests/integration/test_us2_magic_link.py
-- [ ] T089 [US2] Integration test for OAuth flow with Cognito in tests/integration/test_us2_oauth.py
+- [x] T084 [P] [US2] Contract tests for magic link request/verify in tests/contract/test_magic_link_api.py
+- [x] T085 [P] [US2] Contract tests for OAuth URLs and callback in tests/contract/test_oauth_api.py
+- [x] T086 [P] [US2] Contract tests for token refresh in tests/contract/test_token_refresh_api.py
+- [x] T087 [P] [US2] Contract tests for session management in tests/contract/test_session_api.py
+- [x] T088 [US2] Integration test for magic link full flow in tests/integration/test_us2_magic_link.py
+- [x] T089 [US2] Integration test for OAuth flow with Cognito in tests/integration/test_us2_oauth.py
 
 ### Backend Implementation for User Story 2
 
-- [ ] T090 [US2] Implement magic link request endpoint (POST /api/v2/auth/magic-link) in src/lambdas/dashboard/auth.py
-- [ ] T091 [US2] Implement magic link verification endpoint (GET /api/v2/auth/magic-link/verify) in src/lambdas/dashboard/auth.py
-- [ ] T092 [US2] Implement OAuth URLs endpoint (GET /api/v2/auth/oauth/urls) in src/lambdas/dashboard/auth.py
-- [ ] T093 [US2] Implement OAuth callback endpoint (POST /api/v2/auth/oauth/callback) in src/lambdas/dashboard/auth.py
-- [ ] T094 [US2] Implement token refresh endpoint (POST /api/v2/auth/refresh) in src/lambdas/dashboard/auth.py
-- [ ] T095 [US2] Implement sign out endpoint (POST /api/v2/auth/signout) in src/lambdas/dashboard/auth.py
-- [ ] T096 [US2] Implement session info endpoint (GET /api/v2/auth/session) in src/lambdas/dashboard/auth.py
-- [ ] T097 [US2] Implement account linking check endpoint (POST /api/v2/auth/check-email) in src/lambdas/dashboard/auth.py
-- [ ] T098 [US2] Implement account linking endpoint (POST /api/v2/auth/link-accounts) in src/lambdas/dashboard/auth.py
-- [ ] T099 [US2] Implement merge status endpoint (GET /api/v2/auth/merge-status) in src/lambdas/dashboard/auth.py
-- [ ] T100 [US2] Implement anonymous data merge logic in src/lambdas/shared/auth/merge.py
-- [ ] T101 [US2] Implement Cognito token validation helper in src/lambdas/shared/auth/cognito.py
-- [ ] T102 [US2] Create magic link email template for SendGrid in src/lambdas/notification/templates/magic_link.html
-- [ ] T103 [US2] Add X-Ray tracing to auth handler in src/lambdas/dashboard/auth.py
+- [x] T090 [US2] Implement magic link request endpoint (POST /api/v2/auth/magic-link) in src/lambdas/dashboard/auth.py
+- [x] T091 [US2] Implement magic link verification endpoint (GET /api/v2/auth/magic-link/verify) in src/lambdas/dashboard/auth.py
+- [x] T092 [US2] Implement OAuth URLs endpoint (GET /api/v2/auth/oauth/urls) in src/lambdas/dashboard/auth.py
+- [x] T093 [US2] Implement OAuth callback endpoint (POST /api/v2/auth/oauth/callback) in src/lambdas/dashboard/auth.py
+- [x] T094 [US2] Implement token refresh endpoint (POST /api/v2/auth/refresh) in src/lambdas/dashboard/auth.py
+- [x] T095 [US2] Implement sign out endpoint (POST /api/v2/auth/signout) in src/lambdas/dashboard/auth.py
+- [x] T096 [US2] Implement session info endpoint (GET /api/v2/auth/session) in src/lambdas/dashboard/auth.py
+- [x] T097 [US2] Implement account linking check endpoint (POST /api/v2/auth/check-email) in src/lambdas/dashboard/auth.py
+- [x] T098 [US2] Implement account linking endpoint (POST /api/v2/auth/link-accounts) in src/lambdas/dashboard/auth.py
+- [x] T099 [US2] Implement merge status endpoint (GET /api/v2/auth/merge-status) in src/lambdas/dashboard/auth.py
+- [x] T100 [US2] Implement anonymous data merge logic in src/lambdas/shared/auth/merge.py
+- [x] T101 [US2] Implement Cognito token validation helper in src/lambdas/shared/auth/cognito.py
+- [x] T102 [US2] Create magic link email template for SendGrid in src/lambdas/notification/templates/magic_link.html
+- [x] T103 [US2] Add X-Ray tracing to auth handler in src/lambdas/dashboard/auth.py
 
 ### Frontend Implementation for User Story 2
 
@@ -256,8 +256,8 @@
 
 ### Tests for User Story 3
 
-- [ ] T115 [P] [US3] Contract tests for multiple configurations in tests/contract/test_multi_config_api.py
-- [ ] T116 [US3] Integration test for config switching in tests/integration/test_us3_config_switch.py
+- [x] T115 [P] [US3] Contract tests for multiple configurations in tests/contract/test_multi_config_api.py
+- [x] T116 [US3] Integration test for config switching in tests/integration/test_us3_config_switch.py
 
 ### Backend Implementation for User Story 3
 
@@ -297,10 +297,10 @@
 
 ### Tests for User Story 4
 
-- [ ] T127 [P] [US4] Contract tests for alert CRUD endpoints in tests/contract/test_alerts_api.py
-- [ ] T128 [P] [US4] Contract tests for notification endpoints in tests/contract/test_notifications_api.py
-- [ ] T129 [P] [US4] Contract tests for digest endpoints in tests/contract/test_digest_api.py
-- [ ] T130 [US4] Integration test for alert trigger and email delivery in tests/integration/test_us4_alert_flow.py
+- [x] T127 [P] [US4] Contract tests for alert CRUD endpoints in tests/contract/test_alerts_api.py
+- [x] T128 [P] [US4] Contract tests for notification endpoints in tests/contract/test_notifications_api.py
+- [x] T129 [P] [US4] Contract tests for digest endpoints in tests/contract/test_digest_api.py
+- [x] T130 [US4] Integration test for alert trigger and email delivery in tests/integration/test_us4_alert_flow.py
 
 ### Backend Implementation for User Story 4
 
@@ -318,15 +318,15 @@
 - [ ] T142 [US4] Implement resubscribe endpoint (POST /api/v2/notifications/resubscribe) in src/lambdas/dashboard/api_v2.py
 - [ ] T143 [US4] Implement digest settings endpoints (GET/PATCH /api/v2/notifications/digest) in src/lambdas/dashboard/api_v2.py
 - [ ] T144 [US4] Implement test digest endpoint (POST /api/v2/notifications/digest/test) in src/lambdas/dashboard/api_v2.py
-- [ ] T145 [US4] Implement alert evaluation logic in notification Lambda in src/lambdas/notification/handler.py
-- [ ] T146 [US4] Implement internal alert evaluation endpoint (POST /api/internal/alerts/evaluate) in src/lambdas/notification/handler.py
-- [ ] T147 [US4] Implement internal email quota endpoint (GET /api/internal/email-quota) in src/lambdas/notification/handler.py
-- [ ] T148 [US4] Create sentiment alert email template in src/lambdas/notification/templates/sentiment_alert.html
-- [ ] T149 [US4] Create volatility alert email template in src/lambdas/notification/templates/volatility_alert.html
-- [ ] T150 [US4] Create daily digest email template in src/lambdas/notification/templates/daily_digest.html
-- [ ] T151 [US4] Implement daily digest scheduler (EventBridge) in infrastructure/terraform/modules/eventbridge/digest.tf
-- [ ] T152 [US4] Add CloudWatch alarm for SendGrid quota (50%) in infrastructure/terraform/modules/cloudwatch/sendgrid_quota.tf
-- [ ] T153 [US4] Add X-Ray tracing to notification handler in src/lambdas/notification/handler.py
+- [x] T145 [US4] Implement alert evaluation logic in notification Lambda in src/lambdas/notification/alert_evaluator.py
+- [x] T146 [US4] Implement internal alert evaluation endpoint (POST /api/internal/alerts/evaluate) in src/lambdas/notification/alert_evaluator.py
+- [x] T147 [US4] Implement internal email quota endpoint (GET /api/internal/email-quota) in src/lambdas/notification/alert_evaluator.py
+- [x] T148 [US4] Create sentiment alert email template in src/lambdas/notification/templates/sentiment_alert.html
+- [x] T149 [US4] Create volatility alert email template in src/lambdas/notification/templates/volatility_alert.html
+- [x] T150 [US4] Create daily digest email template in src/lambdas/notification/templates/daily_digest.html
+- [x] T151 [US4] Implement daily digest scheduler (EventBridge) in infrastructure/terraform/modules/eventbridge/main.tf
+- [x] T152 [US4] Add CloudWatch alarm for SendGrid quota (50%) in infrastructure/terraform/main.tf
+- [x] T153 [US4] Add X-Ray tracing to notification handler in src/lambdas/notification/handler.py
 
 ### Frontend Implementation for User Story 4
 
@@ -353,9 +353,9 @@
 
 ### Security & Validation
 
-- [ ] T163 [P] Implement hCaptcha integration for anonymous config creation in src/lambdas/dashboard/api_v2.py
-- [ ] T164 [P] Add IP-based rate limiting middleware in src/lambdas/shared/middleware/rate_limit.py
-- [ ] T165 Add security headers to all Lambda responses in src/lambdas/shared/middleware/security_headers.py
+- [x] T163 [P] Implement hCaptcha integration for anonymous config creation in src/lambdas/shared/middleware/hcaptcha.py
+- [x] T164 [P] Add IP-based rate limiting middleware in src/lambdas/shared/middleware/rate_limit.py
+- [x] T165 Add security headers to all Lambda responses in src/lambdas/shared/middleware/security_headers.py
 - [ ] T166 Implement inline field validation error display in src/dashboard/components/FieldError.tsx
 - [ ] T167 Add OWASP security audit checklist validation
 
@@ -534,19 +534,26 @@ With 2+ developers:
 
 ## Summary
 
-| Phase | Tasks | Parallel Opportunities |
-|-------|-------|----------------------|
-| Phase 1: Setup | 13 | 8 |
-| Phase 2: Foundational | 36 | 25 |
-| Phase 3: US1 (MVP) | 43 | 24 |
-| Phase 4: US2 | 31 | 11 |
-| Phase 5: US3 | 12 | 5 |
-| Phase 6: US4 | 36 | 10 |
-| Phase 7: Polish | 20 | 6 |
-| **Total** | **191** | **89** |
+| Phase | Tasks | Completed | Remaining | Notes |
+|-------|-------|-----------|-----------|-------|
+| Phase 1: Setup | 13 | 12 | 1 | Terraform apply pending |
+| Phase 2: Foundational | 36 | 36 | 0 | ✅ Complete |
+| Phase 3: US1 (Backend) | 27 | 27 | 0 | ✅ Backend complete |
+| Phase 3: US1 (Frontend) | 16 | 0 | 16 | Frontend not started |
+| Phase 4: US2 (Backend) | 20 | 20 | 0 | ✅ Backend complete |
+| Phase 4: US2 (Frontend) | 11 | 0 | 11 | Frontend not started |
+| Phase 5: US3 (Backend) | 4 | 2 | 2 | Tests done, backend pending |
+| Phase 5: US3 (Frontend) | 8 | 0 | 8 | Frontend not started |
+| Phase 6: US4 (Backend) | 23 | 13 | 10 | Alert evaluator done, API pending |
+| Phase 6: US4 (Frontend) | 9 | 0 | 9 | Frontend not started |
+| Phase 7: Security | 5 | 3 | 2 | Middleware complete |
+| Phase 7: Observability | 5 | 0 | 5 | Not started |
+| Phase 7: Docs & Final | 10 | 0 | 10 | Not started |
+| **Total** | **191** | **113** | **78** | **59% Complete** |
 
-**MVP Tasks (Phase 1-3)**: 92 tasks
-**Full Feature Tasks**: 191 tasks
+**Backend Status**: ~90% complete (Phase 1-4 backend done, US3/US4 API endpoints remaining)
+**Frontend Status**: 0% complete (No React components created yet)
+**Infrastructure**: ~90% complete (Terraform apply for dev pending)
 
 ## Constitution Compliance Notes
 

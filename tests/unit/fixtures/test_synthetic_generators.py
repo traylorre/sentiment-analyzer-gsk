@@ -1,0 +1,434 @@
+"""Unit tests for synthetic data generators."""
+
+
+import pytest
+
+from tests.fixtures.mocks.mock_finnhub import create_mock_finnhub
+from tests.fixtures.mocks.mock_sendgrid import create_mock_sendgrid
+from tests.fixtures.mocks.mock_tiingo import create_mock_tiingo
+from tests.fixtures.synthetic.news_generator import (
+    create_news_generator,
+)
+from tests.fixtures.synthetic.sentiment_generator import (
+    create_sentiment_generator,
+)
+from tests.fixtures.synthetic.test_oracle import create_test_oracle
+from tests.fixtures.synthetic.ticker_generator import (
+    create_ticker_generator,
+)
+
+
+class TestTickerGenerator:
+    """Tests for ticker/OHLC data generator."""
+
+    def test_create_generator(self):
+        """Test generator factory function."""
+        gen = create_ticker_generator(seed=123, base_price=50.0)
+        assert gen.config.seed == 123
+        assert gen.config.base_price == 50.0
+
+    def test_generate_candles_returns_list(self):
+        """Test that generate_candles returns a list."""
+        gen = create_ticker_generator()
+        candles = gen.generate_candles("AAPL", days=10)
+        assert isinstance(candles, list)
+        assert len(candles) > 0
+
+    def test_generate_candles_deterministic(self):
+        """Test that same seed produces same data."""
+        gen1 = create_ticker_generator(seed=42)
+        gen2 = create_ticker_generator(seed=42)
+
+        candles1 = gen1.generate_candles("AAPL", days=10)
+        candles2 = gen2.generate_candles("AAPL", days=10)
+
+        assert len(candles1) == len(candles2)
+        for c1, c2 in zip(candles1, candles2, strict=True):
+            assert c1.open == c2.open
+            assert c1.high == c2.high
+            assert c1.low == c2.low
+            assert c1.close == c2.close
+
+    def test_generate_candles_different_seeds(self):
+        """Test that different seeds produce different data."""
+        gen1 = create_ticker_generator(seed=42)
+        gen2 = create_ticker_generator(seed=99)
+
+        candles1 = gen1.generate_candles("AAPL", days=10)
+        candles2 = gen2.generate_candles("AAPL", days=10)
+
+        # At least some values should differ
+        different = any(
+            c1.close != c2.close for c1, c2 in zip(candles1, candles2, strict=True)
+        )
+        assert different
+
+    def test_candle_ohlc_relationship(self):
+        """Test that OHLC values are valid."""
+        gen = create_ticker_generator()
+        candles = gen.generate_candles("AAPL", days=10)
+
+        for candle in candles:
+            assert candle.high >= candle.open
+            assert candle.high >= candle.close
+            assert candle.low <= candle.open
+            assert candle.low <= candle.close
+            assert candle.volume > 0
+
+    def test_generate_candles_date_assignment(self):
+        """Test that dates are correctly assigned."""
+        gen = create_ticker_generator()
+        candles = gen.generate_candles("MSFT", days=10)
+
+        # OHLCCandle doesn't have ticker field, but dates should be present
+        assert all(candle.date is not None for candle in candles)
+
+    def test_generate_volatile_period(self):
+        """Test high volatility data generation."""
+        gen = create_ticker_generator()
+        normal = gen.generate_candles("AAPL", days=20)
+        gen.reset()
+        volatile = gen.generate_volatile_period(
+            "AAPL", days=20, volatility_multiplier=5.0
+        )
+
+        # Volatile period should have larger price swings
+        normal_ranges = [c.high - c.low for c in normal]
+        volatile_ranges = [c.high - c.low for c in volatile]
+
+        avg_normal = sum(normal_ranges) / len(normal_ranges)
+        avg_volatile = sum(volatile_ranges) / len(volatile_ranges)
+
+        assert avg_volatile > avg_normal
+
+    def test_generate_trending_period(self):
+        """Test trending data generation."""
+        gen = create_ticker_generator()
+        up = gen.generate_trending_period("AAPL", days=20, trend_direction="up")
+
+        # Uptrend should have higher close at end
+        assert up[-1].close > up[0].open
+
+    def test_reset_generator(self):
+        """Test generator reset."""
+        gen = create_ticker_generator(seed=42)
+        candles1 = gen.generate_candles("AAPL", days=5)
+
+        gen.reset()
+        candles2 = gen.generate_candles("AAPL", days=5)
+
+        for c1, c2 in zip(candles1, candles2, strict=True):
+            assert c1.close == c2.close
+
+
+class TestSentimentGenerator:
+    """Tests for sentiment score generator."""
+
+    def test_create_generator(self):
+        """Test generator factory function."""
+        gen = create_sentiment_generator(seed=123, base_sentiment=0.2)
+        assert gen.config.seed == 123
+        assert gen.config.base_sentiment == 0.2
+
+    def test_generate_sentiment(self):
+        """Test single sentiment generation."""
+        gen = create_sentiment_generator()
+        sentiment = gen.generate_sentiment("AAPL")
+
+        assert sentiment.ticker == "AAPL"
+        assert -1.0 <= sentiment.sentiment_score <= 1.0
+        assert sentiment.buzz_score >= 0
+
+    def test_generate_sentiment_deterministic(self):
+        """Test that same seed produces same data."""
+        gen1 = create_sentiment_generator(seed=42)
+        gen2 = create_sentiment_generator(seed=42)
+
+        s1 = gen1.generate_sentiment("AAPL")
+        s2 = gen2.generate_sentiment("AAPL")
+
+        assert s1.sentiment_score == s2.sentiment_score
+        assert s1.buzz_score == s2.buzz_score
+
+    def test_generate_sentiment_series(self):
+        """Test sentiment series generation."""
+        gen = create_sentiment_generator()
+        series = gen.generate_sentiment_series("AAPL", days=10)
+
+        assert len(series) == 10
+        assert all(s.ticker == "AAPL" for s in series)
+
+    def test_generate_bullish_period(self):
+        """Test bullish sentiment generation."""
+        gen = create_sentiment_generator()
+        bullish = gen.generate_bullish_period("AAPL", days=10)
+
+        avg = sum(s.sentiment_score for s in bullish) / len(bullish)
+        assert avg > 0  # Average should be positive
+
+    def test_generate_bearish_period(self):
+        """Test bearish sentiment generation."""
+        gen = create_sentiment_generator()
+        bearish = gen.generate_bearish_period("AAPL", days=10)
+
+        avg = sum(s.sentiment_score for s in bearish) / len(bearish)
+        assert avg < 0  # Average should be negative
+
+    def test_classify_sentiment(self):
+        """Test sentiment classification."""
+        gen = create_sentiment_generator()
+
+        assert gen.classify_sentiment(0.5) == "positive"
+        assert gen.classify_sentiment(-0.5) == "negative"
+        assert gen.classify_sentiment(0.0) == "neutral"
+        assert gen.classify_sentiment(0.1) == "neutral"
+
+
+class TestNewsGenerator:
+    """Tests for news article generator."""
+
+    def test_create_generator(self):
+        """Test generator factory function."""
+        gen = create_news_generator(seed=123)
+        assert gen.config.seed == 123
+
+    def test_generate_article(self):
+        """Test single article generation."""
+        gen = create_news_generator()
+        article = gen.generate_article(["AAPL"])
+
+        assert "AAPL" in article.tickers
+        assert article.title
+        assert article.url
+        assert article.source
+
+    def test_generate_article_deterministic(self):
+        """Test that same seed produces same articles."""
+        gen1 = create_news_generator(seed=42)
+        gen2 = create_news_generator(seed=42)
+
+        a1 = gen1.generate_article(["AAPL"])
+        a2 = gen2.generate_article(["AAPL"])
+
+        assert a1.title == a2.title
+        assert a1.article_id == a2.article_id
+
+    def test_generate_articles(self):
+        """Test multiple article generation."""
+        gen = create_news_generator()
+        articles = gen.generate_articles(["AAPL", "MSFT"], count=10)
+
+        assert len(articles) == 10
+        # Should be sorted by date descending
+        for i in range(len(articles) - 1):
+            assert articles[i].published_at >= articles[i + 1].published_at
+
+    def test_generate_positive_news_event(self):
+        """Test positive news cluster generation."""
+        gen = create_news_generator()
+        articles = gen.generate_positive_news_event("AAPL", article_count=5)
+
+        assert len(articles) == 5
+        # All should be AAPL-related
+        for a in articles:
+            assert "AAPL" in a.tickers
+
+    def test_generate_negative_news_event(self):
+        """Test negative news cluster generation."""
+        gen = create_news_generator()
+        articles = gen.generate_negative_news_event("TSLA", article_count=3)
+
+        assert len(articles) == 3
+
+
+class TestTestOracle:
+    """Tests for the test oracle."""
+
+    def test_create_oracle(self):
+        """Test oracle factory function."""
+        oracle = create_test_oracle(seed=123)
+        assert oracle.seed == 123
+
+    def test_compute_expected_atr(self):
+        """Test ATR computation from synthetic data."""
+        oracle = create_test_oracle(seed=42)
+        atr = oracle.compute_expected_atr("AAPL", days=30)
+
+        assert atr is not None
+        assert atr > 0
+
+    def test_compute_expected_atr_deterministic(self):
+        """Test that same seed produces same ATR."""
+        oracle1 = create_test_oracle(seed=42)
+        oracle2 = create_test_oracle(seed=42)
+
+        atr1 = oracle1.compute_expected_atr("AAPL", days=30)
+        atr2 = oracle2.compute_expected_atr("AAPL", days=30)
+
+        assert atr1 == atr2
+
+    def test_compute_expected_volatility_level(self):
+        """Test volatility level classification."""
+        oracle = create_test_oracle()
+        vol_level = oracle.compute_expected_volatility_level("AAPL", days=30)
+
+        assert vol_level in ["low", "medium", "high"]
+
+    def test_compute_expected_avg_sentiment(self):
+        """Test average sentiment computation."""
+        oracle = create_test_oracle()
+        avg = oracle.compute_expected_avg_sentiment("AAPL", days=30)
+
+        assert -1.0 <= avg <= 1.0
+
+    def test_generate_test_scenario(self):
+        """Test complete scenario generation."""
+        oracle = create_test_oracle(seed=42)
+        scenario = oracle.generate_test_scenario("AAPL", days=30, news_count=15)
+
+        assert scenario.ticker == "AAPL"
+        assert scenario.seed == 42
+        assert len(scenario.candles) > 0
+        assert len(scenario.sentiment_series) == 30
+        assert len(scenario.news_articles) == 15
+        assert scenario.expected_atr is not None
+
+
+class TestMockTiingoAdapter:
+    """Tests for mock Tiingo adapter."""
+
+    def test_create_mock(self):
+        """Test mock factory function."""
+        mock = create_mock_tiingo(seed=123)
+        assert mock.seed == 123
+
+    def test_get_news(self):
+        """Test mock news retrieval."""
+        mock = create_mock_tiingo()
+        articles = mock.get_news(["AAPL"])
+
+        assert len(articles) > 0
+        assert len(mock.get_news_calls) == 1
+
+    def test_get_ohlc(self):
+        """Test mock OHLC retrieval."""
+        mock = create_mock_tiingo()
+        candles = mock.get_ohlc("AAPL")
+
+        assert len(candles) > 0
+        assert len(mock.get_ohlc_calls) == 1
+
+    def test_get_sentiment_returns_none(self):
+        """Test that Tiingo mock returns None for sentiment."""
+        mock = create_mock_tiingo()
+        sentiment = mock.get_sentiment("AAPL")
+
+        assert sentiment is None
+
+    def test_fail_mode(self):
+        """Test fail mode raises errors."""
+        mock = create_mock_tiingo(fail_mode=True)
+
+        with pytest.raises(RuntimeError):
+            mock.get_news(["AAPL"])
+
+    def test_reset(self):
+        """Test mock reset."""
+        mock = create_mock_tiingo()
+        mock.get_news(["AAPL"])
+        assert len(mock.get_news_calls) == 1
+
+        mock.reset()
+        assert len(mock.get_news_calls) == 0
+
+
+class TestMockFinnhubAdapter:
+    """Tests for mock Finnhub adapter."""
+
+    def test_create_mock(self):
+        """Test mock factory function."""
+        mock = create_mock_finnhub(seed=123)
+        assert mock.seed == 123
+
+    def test_get_sentiment(self):
+        """Test mock sentiment retrieval."""
+        mock = create_mock_finnhub()
+        sentiment = mock.get_sentiment("AAPL")
+
+        assert sentiment is not None
+        assert sentiment.ticker == "AAPL"
+
+    def test_fail_mode(self):
+        """Test fail mode raises errors."""
+        mock = create_mock_finnhub(fail_mode=True)
+
+        with pytest.raises(RuntimeError):
+            mock.get_sentiment("AAPL")
+
+
+class TestMockSendGrid:
+    """Tests for mock SendGrid service."""
+
+    def test_create_mock(self):
+        """Test mock factory function."""
+        mock = create_mock_sendgrid()
+        assert len(mock.sent_emails) == 0
+
+    def test_send_email(self):
+        """Test email capture."""
+        mock = create_mock_sendgrid()
+        result = mock.send_email(
+            to_email="user@example.com",
+            from_email="noreply@app.com",
+            subject="Test",
+            html_content="<p>Hello</p>",
+        )
+
+        assert result["status_code"] == 202
+        assert len(mock.sent_emails) == 1
+
+    def test_assert_email_sent(self):
+        """Test email assertion helper."""
+        mock = create_mock_sendgrid()
+        mock.send_email(
+            to_email="user@example.com",
+            from_email="noreply@app.com",
+            subject="Welcome",
+            html_content="<p>Hello</p>",
+        )
+
+        email = mock.assert_email_sent(to_email="user@example.com")
+        assert email.subject == "Welcome"
+
+    def test_assert_no_emails_sent(self):
+        """Test no-emails assertion."""
+        mock = create_mock_sendgrid()
+        mock.assert_no_emails_sent()  # Should not raise
+
+    def test_fail_mode(self):
+        """Test fail mode raises errors."""
+        mock = create_mock_sendgrid()
+        mock.fail_mode = True
+
+        with pytest.raises(RuntimeError):
+            mock.send_email(
+                to_email="user@example.com",
+                from_email="noreply@app.com",
+                subject="Test",
+                html_content="<p>Hello</p>",
+            )
+
+    def test_rate_limit_mode(self):
+        """Test rate limit mode."""
+        mock = create_mock_sendgrid()
+        mock.rate_limit_mode = True
+
+        result = mock.send_email(
+            to_email="user@example.com",
+            from_email="noreply@app.com",
+            subject="Test",
+            html_content="<p>Hello</p>",
+        )
+
+        assert result["status_code"] == 429
+        assert "retry_after" in result

@@ -150,6 +150,51 @@ Both APIs will be queried for the same tickers. The dashboard displays:
 - Q: CDN/caching strategy? → A: CloudFront + S3 (~$0.085/GB transfer) for dashboard static assets
 - Q: MVP scope for new dependencies? → A: ALL MVP-critical - full observability from day 1
 
+## User Roles
+
+See [roles.md](./roles.md) for detailed role matrix and use-cases.
+
+### Role Summary
+
+| Role | Access Level | MVP | Notes |
+|------|-------------|-----|-------|
+| Anonymous User | Read-only preview (blurred heatmap) | Yes | 30-day localStorage session |
+| Known User | Full features (2 configs) | Yes | Premium tier for expansion |
+| Contributor | Community templates + ticker additions | Yes | Invite-only |
+| Operator/On-Call | System management | Yes | Circuit breakers, cache, alerts |
+| Admin | Full system access | Yes | Impersonation, bulk ops, flags |
+| API Consumer | Programmatic access | Future | No external API for MVP |
+| Auditor/Compliance | Audit trail access | Future | When PII compliance needed |
+| Data Steward | Ticker management | Future | When cache mgmt complex |
+
+### Role Transitions
+
+All elevated roles (Contributor, Operator, Admin) are **invite-only** from existing role holders.
+
+### Session 2025-11-27 (Round 17 - Role Audit)
+
+- Q: Anonymous user preview content? → A: Heatmap teaser with blurred tickers, colors visible
+- Q: Anonymous session expiry handling? → A: Cookie restore - same browser restores preferences
+- Q: Known user comparison features? → A: All four (cross-config, historical replay, correlation matrix, sector benchmark)
+- Q: Known user history granularity? → A: Adaptive (hourly <7d, daily >7d, weekly >30d)
+- Q: Config limit expansion? → A: Premium tier unlocks 5+ configs (future monetization)
+- Q: Contributor template sharing? → A: Public gallery with browse/filter/one-click import
+- Q: Contributor ticker suggestions? → A: Direct add for trusted contributors (audit logged)
+- Q: Operator circuit breaker controls? → A: Confirm dialog safeguard (not two-person rule)
+- Q: Operator alert suppression? → A: Per user opt-in (users can opt-out for critical alerts)
+- Q: Operator user config access? → A: Full access with audit log + justification required
+- Q: Admin user impersonation? → A: Yes, audit logged
+- Q: Admin feature flags? → A: Percentage rollout (gradual enablement)
+- Q: Admin alert debugging? → A: Full toolkit (impersonate + simulator + delivery trace)
+- Q: Notification channels? → A: Email + browser push for all alerts
+- Q: Account deletion? → A: Soft delete with 90-day recovery window
+- Q: Dual failure handling? → A: Show stale data with timestamp badge
+- Q: Price data for correlation? → A: Both merged (Finnhub intraday, Tiingo historical)
+- Q: Sector benchmark? → A: GICS standard (11 sectors)
+- Q: Audit retention? → A: 90 days CloudWatch (standard)
+
+---
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Instant Anonymous Access (Priority: P1)
@@ -226,6 +271,62 @@ A user wants to be notified when stocks they're tracking experience significant 
 3. **Given** user sets volatility alert of 3% ATR for "TSLA", **When** ATR exceeds 3%, **Then** user receives email describing the spike
 4. **Given** user receives notification email, **When** they click the link, **Then** they land on the relevant configuration view showing the triggering data
 5. **Given** user wants to stop notifications, **When** they toggle off alerts for a ticker, **Then** no further emails are sent for that rule
+
+---
+
+### User Story 5 - Community Contributor (Priority: P5)
+
+A power user who has been actively using the dashboard gets invited to become a Contributor. They can now create and share alert template bundles (e.g., "Earnings Season Tech Alerts") in a public gallery. Other users browse the gallery, filter by ticker or alert type, and import templates with one click. The Contributor can also directly add new tickers to the US symbols cache when users report missing symbols.
+
+**Why this priority**: Community engagement feature. Reduces support burden and creates network effects as users share valuable configurations.
+
+**Independent Test**: Can be tested by having a Contributor create a template, share it to the gallery, and verifying another user can find and import it with one click.
+
+**Acceptance Scenarios**:
+
+1. **Given** a Known User, **When** they receive Contributor invitation from existing Contributor or Admin, **Then** they can accept and gain Contributor role
+2. **Given** a Contributor, **When** they create an alert template bundle, **Then** they can share it to the public gallery with name, description, and tags
+3. **Given** any Known User, **When** they browse the template gallery, **Then** they can filter by ticker, alert type, and see import counts
+4. **Given** a user finds a template, **When** they click "Import", **Then** the template's alert rules are added to their configuration in one click
+5. **Given** a Contributor, **When** a user reports a missing ticker (e.g., "PLTR"), **Then** the Contributor can directly add it to the symbols cache (audit logged)
+
+---
+
+### User Story 6 - Operator Incident Response (Priority: P6)
+
+An on-call engineer receives an alert that Tiingo API is returning 429 rate limit errors. They access the operator dashboard, view the circuit breaker status (currently half-open), and manually open it with a confirm dialog to prevent further requests. They check the quota dashboard showing 80% usage and pause non-critical background jobs. Before a scheduled maintenance window, they suppress alerts system-wide, but premium users who opted out still receive their critical alerts.
+
+**Why this priority**: Operational resilience. Enables self-service incident response without code deployments.
+
+**Independent Test**: Can be tested by simulating a rate limit scenario and verifying the operator can open circuit breaker and suppress alerts.
+
+**Acceptance Scenarios**:
+
+1. **Given** an Operator, **When** they view the operator dashboard, **Then** they see circuit breaker status for Tiingo, Finnhub, and SendGrid
+2. **Given** an Operator, **When** they click "Open Circuit Breaker" for Tiingo, **Then** they see a confirm dialog before the state changes
+3. **Given** an Operator, **When** they view quota dashboard, **Then** they see real-time API quota usage with ability to pause non-critical operations
+4. **Given** an Operator, **When** they enable system-wide alert suppression, **Then** most users stop receiving alerts
+5. **Given** a Premium User who opted out of suppression, **When** alert suppression is active, **Then** they still receive their critical alerts
+6. **Given** an Operator debugging a user issue, **When** they view user's config, **Then** the access is audit logged with justification required
+
+---
+
+### User Story 7 - Admin User Management & Debugging (Priority: P7)
+
+An admin receives a support request that a user's alerts never fire. The admin impersonates the user (audit logged) to see exactly what they see. They run the alert simulator in dry-run mode, which shows the alert threshold is set incorrectly. They trace the delivery path showing evaluation passed but SendGrid rejected due to invalid email. The admin also manages a gradual rollout of the new "overlay comparison" feature to 10% of users, then 50%, then 100%.
+
+**Why this priority**: Platform management and quality assurance. Enables efficient debugging and controlled feature releases.
+
+**Independent Test**: Can be tested by impersonating a user, running alert simulator, and verifying feature flag percentage rollout.
+
+**Acceptance Scenarios**:
+
+1. **Given** an Admin, **When** they select a user and click "Impersonate", **Then** they see the dashboard exactly as that user sees it (audit logged)
+2. **Given** an Admin impersonating a user, **When** they click "Alert Simulator", **Then** they see a dry-run showing what would trigger
+3. **Given** an Admin, **When** they click "Delivery Trace" for a notification, **Then** they see: evaluation result → SNS → Lambda → SendGrid → delivery status
+4. **Given** an Admin, **When** they create a feature flag for "overlay-comparison", **Then** they can set it to percentage rollout (10%, then 50%, then 100%)
+5. **Given** an Admin, **When** they view usage analytics, **Then** they see DAU, alert trigger rates, popular tickers, and error rates
+6. **Given** an Admin, **When** they perform bulk operations (delete inactive users, reset quotas), **Then** changes are applied with audit trail
 
 ---
 
@@ -318,6 +419,41 @@ A user wants to be notified when stocks they're tracking experience significant 
 - **FR-046**: During market closed hours, system MUST show predictive estimates using Finnhub pre-market quotes
 - **FR-047**: Historical data (90 days for auth users) MUST be accessible via UI charts only (no API access)
 
+**User Roles & Permissions**
+- **FR-048**: System MUST support 5 MVP roles: Anonymous User, Known User, Contributor, Operator, Admin
+- **FR-049**: Anonymous users MUST see heatmap preview with blurred ticker symbols (colors visible)
+- **FR-050**: Role transitions (Known User → Contributor/Operator) MUST be invite-only from existing role holders
+- **FR-051**: System MUST support Premium tier for Known Users (unlocks 5+ configs, 1yr history, realtime updates, CSV export)
+- **FR-052**: Account deletion MUST be soft delete with 90-day recovery window
+
+**Contributor Features**
+- **FR-053**: Contributors MUST be able to create and share alert template bundles to public gallery
+- **FR-054**: Template gallery MUST support browse, filter by ticker/type, and one-click import
+- **FR-055**: Contributors MUST be able to directly add new tickers to symbol cache (audit logged)
+
+**Operator Features**
+- **FR-056**: Operators MUST have access to circuit breaker controls with confirm dialog safeguard
+- **FR-057**: Operators MUST be able to force cache invalidation (secrets and ticker cache) without Lambda restart
+- **FR-058**: Operators MUST have real-time quota dashboard with ability to pause non-critical operations
+- **FR-059**: Operators MUST be able to enable system-wide alert suppression with user opt-out capability
+- **FR-060**: Operators MUST be able to view and modify any user's configuration (audit logged with justification)
+
+**Admin Features**
+- **FR-061**: Admins MUST be able to impersonate any user to view dashboard as they see it (audit logged)
+- **FR-062**: Admins MUST have access to alert simulator (dry-run showing what would trigger)
+- **FR-063**: Admins MUST be able to trace notification delivery: evaluation → SNS → Lambda → SendGrid → status
+- **FR-064**: Admins MUST be able to create feature flags with percentage rollout capability
+- **FR-065**: Admins MUST have access to usage analytics (DAU, alert rates, popular tickers, error rates)
+- **FR-066**: Admins MUST be able to perform bulk operations (delete inactive users, reset quotas) with audit trail
+- **FR-067**: All admin and operator actions MUST be retained in audit logs for 90 days
+
+**Advanced Known User Features**
+- **FR-068**: Known Users MUST be able to compare sentiment/volatility between their 2 configs via overlay chart
+- **FR-069**: Known Users MUST have access to historical replay with adaptive granularity (hourly <7d, daily >7d, weekly >30d)
+- **FR-070**: Known Users MUST be able to see correlation matrix between sentiment and price movement
+- **FR-071**: Known Users MUST be able to benchmark ticker sentiment against GICS sector average (11 sectors)
+- **FR-072**: Known Users MUST receive notifications via both email AND browser push for all alerts
+
 ### Testing Requirements
 
 All code changes for this feature MUST include automated tests OR provide written rationale for review. This is a mandatory quality gate.
@@ -333,13 +469,19 @@ All code changes for this feature MUST include automated tests OR provide writte
 
 ### Key Entities
 
-- **User**: Dashboard user. Anonymous (localStorage token only) or authenticated (Cognito identity). Owns configurations.
-- **Configuration**: Up to 5 tickers + timeframe. Max 2 per user. Has alert rules.
+- **User**: Dashboard user. Anonymous (localStorage token only) or authenticated (Cognito identity). Has role (Anonymous, Known, Contributor, Operator, Admin). Owns configurations.
+- **Role**: User permission level. MVP roles: Anonymous, Known User, Contributor, Operator, Admin. Future: API Consumer, Auditor, Data Steward.
+- **RoleInvitation**: Pending invitation for role promotion. Created by existing role holder. Expires after 7 days.
+- **Configuration**: Up to 5 tickers + timeframe. Max 2 per user (10 for Premium). Has alert rules.
 - **Ticker**: US stock symbol (NYSE/NASDAQ/AMEX). Validated against ~8K symbol cache.
 - **SentimentResult**: Sentiment scores from Tiingo (our model) and Finnhub (built-in). Per ticker per timestamp.
 - **VolatilityMetric**: ATR calculation for a ticker. Configurable for regular vs extended hours.
 - **AlertRule**: Either "sentiment_threshold" or "volatility_threshold". Has threshold value and enabled status.
-- **Notification**: Sent alert record via SendGrid. Links to rule, user, and triggering data.
+- **AlertTemplate**: Reusable bundle of alert rules. Created by Contributors. Shared via public gallery.
+- **Notification**: Sent alert record via SendGrid/Push. Links to rule, user, and triggering data.
+- **FeatureFlag**: Admin-controlled rollout. Supports percentage-based enablement.
+- **AuditLog**: Record of admin/operator actions. Includes user, action, justification, timestamp. 90-day retention.
+- **CircuitBreakerState**: Per-service circuit breaker status (Tiingo, Finnhub, SendGrid). Open/Closed/Half-Open.
 
 ## Success Criteria *(mandatory)*
 
@@ -357,6 +499,12 @@ All code changes for this feature MUST include automated tests OR provide writte
 - **SC-010**: Zero data loss for authenticated users across device/browser changes
 - **SC-011**: Tiingo vs Finnhub sentiment displayed in heat map matrix for 100% of valid tickers
 - **SC-012**: ATR correlation with sentiment shown via trend arrows for all tickers
+- **SC-013**: Contributors can share alert templates that are imported by 50+ users within first month
+- **SC-014**: Operators can resolve 80% of incidents without engineering escalation using self-service tools
+- **SC-015**: Admin alert debugging toolkit reduces support resolution time by 50%
+- **SC-016**: Feature flag rollouts complete without user-reported issues for 95% of releases
+- **SC-017**: Premium tier conversion rate of 5% among active Known Users
+- **SC-018**: Anonymous users who see heatmap teaser convert to Known User at 2x rate vs no preview
 
 ## Assumptions
 

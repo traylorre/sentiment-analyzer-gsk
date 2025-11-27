@@ -59,3 +59,52 @@ resource "aws_lambda_permission" "eventbridge_invoke_metrics" {
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.metrics_schedule[0].arn
 }
+
+# =============================================================================
+# Daily Digest Schedule (Feature 006 - T151)
+# =============================================================================
+# Triggers the notification Lambda every hour to process users who have their
+# digest scheduled for that hour. The Lambda queries DynamoDB for users with
+# digest_time matching the current hour and sends personalized digest emails.
+# =============================================================================
+
+resource "aws_cloudwatch_event_rule" "daily_digest_schedule" {
+  count = var.create_digest_schedule ? 1 : 0
+
+  name                = "${var.environment}-sentiment-daily-digest"
+  description         = "Trigger daily digest email processing every hour"
+  schedule_expression = "cron(0 * * * ? *)" # Every hour at minute 0
+
+  tags = {
+    Environment = var.environment
+    Feature     = "006-user-config-dashboard"
+  }
+}
+
+resource "aws_cloudwatch_event_target" "daily_digest_notification" {
+  count = var.create_digest_schedule ? 1 : 0
+
+  rule      = aws_cloudwatch_event_rule.daily_digest_schedule[0].name
+  target_id = "DailyDigestNotificationTarget"
+  arn       = var.notification_lambda_arn
+
+  # Pass event to indicate this is a digest trigger
+  input = jsonencode({
+    "detail-type" = "Scheduled Event"
+    "source"      = "aws.events"
+    "detail" = {
+      "notification_type" = "digest"
+    }
+  })
+}
+
+# Lambda permission to allow EventBridge to invoke Notification Lambda for digest
+resource "aws_lambda_permission" "eventbridge_invoke_digest" {
+  count = var.create_digest_schedule ? 1 : 0
+
+  statement_id  = "AllowDigestExecutionFromEventBridge"
+  action        = "lambda:InvokeFunction"
+  function_name = var.notification_lambda_function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.daily_digest_schedule[0].arn
+}

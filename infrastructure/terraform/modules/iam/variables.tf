@@ -40,3 +40,15 @@ variable "chaos_experiments_table_arn" {
   type        = string
   default     = ""
 }
+
+variable "ticker_cache_bucket_arn" {
+  description = "ARN of the S3 bucket containing ticker cache data (Feature 006)"
+  type        = string
+  default     = ""
+}
+
+variable "sendgrid_secret_arn" {
+  description = "ARN of the SendGrid API key secret in Secrets Manager (Feature 006)"
+  type        = string
+  default     = ""
+}

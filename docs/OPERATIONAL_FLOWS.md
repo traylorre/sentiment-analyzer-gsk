@@ -36,8 +36,9 @@ This shows the happy path for article ingestion and sentiment analysis:
 %%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
 flowchart TD
     Start[EventBridge Trigger<br/>Every 5 minutes] --> Ingest[Ingestion Lambda Invoked]
-    Ingest --> FetchAPI[Fetch from NewsAPI]
-    FetchAPI --> CheckDup{Duplicate<br/>Check}
+    Ingest --> FetchTiingo[Fetch from Tiingo<br/>Primary Source]
+    FetchTiingo --> FetchFinnhub[Fetch from Finnhub<br/>Secondary Source]
+    FetchFinnhub --> CheckDup{Duplicate<br/>Check}
     CheckDup -->|New Article| StoreDDB[Store in DynamoDB<br/>status: pending]
     CheckDup -->|Duplicate| Skip[Skip Article]
     StoreDDB --> PublishSNS[Publish to SNS Topic]
@@ -58,7 +59,7 @@ flowchart TD
     classDef storageNode fill:#b39ddb,stroke:#673ab7,stroke-width:2px,color:#1a0a3e
 
     class Start,End successNode
-    class Ingest,AnalysisLambda,FetchAPI,RunInference,CacheModel,LogMetrics,Skip processNode
+    class Ingest,AnalysisLambda,FetchTiingo,FetchFinnhub,RunInference,CacheModel,LogMetrics,Skip processNode
     class CheckDup,LoadModel decisionNode
     class StoreDDB,UpdateDDB,FetchS3,PublishSNS storageNode
 ```
@@ -602,7 +603,7 @@ graph TD
 
 | Alarm | Severity | Response Time | Action |
 |-------|----------|---------------|--------|
-| Ingestion Errors | P1 | 15 minutes | Check NewsAPI status, verify API key |
+| Ingestion Errors | P1 | 15 minutes | Check Tiingo/Finnhub status, verify API keys |
 | Analysis Errors | P1 | 15 minutes | Check S3 model, review Lambda logs |
 | Analysis Duration | P2 | 1 hour | Review memory/timeout settings |
 | Dashboard Errors | P0 | Immediate | Check Function URL, verify dependencies |
