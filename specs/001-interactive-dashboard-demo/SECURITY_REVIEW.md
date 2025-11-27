@@ -1,11 +1,11 @@
 # Security Review: Regional Multi-AZ Architecture
 
-**Feature**: `001-interactive-dashboard-demo` | **Date**: 2025-11-17
+**Feature**: `001-interactive-dashboard-demo` + `006-user-config-dashboard` | **Date**: 2025-11-26 (Updated)
 **Review Type**: Production-Ready Security Analysis
 **Reviewer**: Planning phase - automated security analysis
-**Status**: ✅ **APPROVED FOR DEMO IMPLEMENTATION**
+**Status**: ✅ **APPROVED FOR DEMO IMPLEMENTATION** (Updated for Feature 006 Tiingo/Finnhub)
 
-> **Note**: Phase 2 hardening items (code signing, WAF, X-Ray) are documented but not required for demo scope. All critical security controls are implemented from day 1. This review approves the demo architecture; production deployment will require Phase 2 completion.
+> **Note**: Phase 2 hardening items (code signing, WAF) are documented but not required for demo scope. X-Ray tracing has been elevated to Day 1 mandatory per Feature 006. All critical security controls are implemented from day 1. This review approves the demo architecture; production deployment will require Phase 2 completion.
 
 ---
 
@@ -36,16 +36,20 @@ This security review analyzes the **revised regional multi-AZ architecture** tha
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  TRUST ZONE 1: EXTERNAL (Untrusted)                        │
-│  • NewsAPI (US region only)                                │
+│  • Tiingo API (primary financial news source)              │
+│  • Finnhub API (secondary financial news source)           │
+│  • SendGrid API (email notifications)                      │
 │  • Dashboard user browsers                                 │
+│  • Cognito Identity Providers (Google, GitHub OAuth)       │
 └─────────────────────────────────────────────────────────────┘
                         ↓
 ┌─────────────────────────────────────────────────────────────┐
 │  TRUST ZONE 2: LAMBDA COMPUTE (Validation & Processing)    │
-│  • Ingestion Lambda (scheduled, input validation)          │
+│  • Ingestion Lambda (scheduled, Tiingo/Finnhub adapters)   │
 │  • Analysis Lambda (SNS-triggered, sentiment inference)    │
-│  • Dashboard Lambda (API key auth, rate limited)           │
-│  • Metrics Lambda (scheduled, aggregates)                  │
+│  • Dashboard Lambda (Cognito auth, API v2 endpoints)       │
+│  • Notification Lambda (alerts, magic links, digests)      │
+│  All Lambdas: X-Ray tracing enabled (Day 1 mandatory)      │
 └─────────────────────────────────────────────────────────────┘
                         ↓
 ┌─────────────────────────────────────────────────────────────┐
@@ -61,22 +65,24 @@ This security review analyzes the **revised regional multi-AZ architecture** tha
 │  TRUST ZONE 4: INFRASTRUCTURE (AWS-Managed)                │
 │  • SNS Topic: sentiment-analysis-requests (analysis trigger) │
 │  • EventBridge: ingestion-schedule (every 5 min)           │
-│  • Secrets Manager: api-keys (NewsAPI, dashboard)          │
-│  • CloudWatch: logs, metrics, alarms                       │
-│  • S3: backup replication (us-west-2)                      │
+│  • Secrets Manager: api-keys (Tiingo, Finnhub, SendGrid)   │
+│  • CloudWatch: logs, metrics, alarms, RUM                  │
+│  • S3: backup replication, ticker cache, model storage     │
+│  • Cognito: user pools, OAuth providers, identity pools    │
+│  • CloudFront: CDN for dashboard static assets             │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**Total Components**: 4 Lambdas + 1 DynamoDB table + 5 AWS services = **10 components**
-**Internet-Exposed**: 2 (Ingestion Lambda → NewsAPI, Dashboard Lambda → users)
+**Total Components**: 4 Lambdas + 1 DynamoDB table + 8 AWS services = **13 components**
+**Internet-Exposed**: 4 (Ingestion → Tiingo/Finnhub, Dashboard → users, Notification → SendGrid, CloudFront → CDN)
 
 ---
 
 ## 2. Threat Model & Attack Vectors
 
-### 2.1 External API Compromise (NewsAPI)
+### 2.1 External API Compromise (Tiingo/Finnhub)
 
-**Attack Scenario**: Attacker compromises NewsAPI, injects malicious articles
+**Attack Scenario**: Attacker compromises Tiingo or Finnhub, injects malicious articles
 
 **Attack Vectors**:
 1. **Oversized payloads** (e.g., 100MB article content)
@@ -95,8 +101,10 @@ This security review analyzes the **revised regional multi-AZ architecture** tha
 - ✅ **Size limits**: Lambda payload limit (6MB synchronous) enforced by AWS
 - ✅ **Snippet truncation**: Only store first 200 chars of article text
 - ✅ **Output sanitization**: Dashboard Lambda escapes HTML entities
+- ✅ **Circuit breaker**: Per-service circuit breaker (5 failures / 5 min = open)
+- ✅ **Dual-source fallback**: If Tiingo fails, Finnhub provides backup
 
-**Residual Risk**: 🟢 **LOW** - Input validation prevents injection, truncation limits data exposure
+**Residual Risk**: 🟢 **LOW** - Input validation prevents injection, truncation limits data exposure, circuit breaker limits blast radius
 
 ---
 
@@ -111,15 +119,16 @@ This security review analyzes the **revised regional multi-AZ architecture** tha
 4. **CORS bypass** (cross-origin requests from malicious sites)
 
 **Mitigations**:
-- ✅ **API key authentication**: Required in `Authorization` header
+- ✅ **Cognito authentication**: JWT tokens validated for authenticated users
   ```python
-  def validate_api_key(event):
-      api_key = event['headers'].get('authorization', '').replace('Bearer ', '')
-      expected_key = os.environ['DASHBOARD_API_KEY']
-      if not secrets.compare_digest(api_key, expected_key):
-          raise Unauthorized("Invalid API key")
+  # Anonymous sessions use localStorage-based session tokens
+  # Authenticated users use Cognito JWT with refresh tokens
+  def validate_session(event):
+      token = event['headers'].get('authorization', '').replace('Bearer ', '')
+      # Validate Cognito JWT or anonymous session token
   ```
-- ✅ **Rate limiting**: Reserved concurrency (10 max concurrent invocations)
+- ✅ **Rate limiting**: IP-based rate limiting with DynamoDB tracking
+- ✅ **hCaptcha protection**: Bot detection for sensitive operations (3+ requests/hr)
 - ✅ **Query validation**: Pydantic schema for query parameters
   ```python
   class DashboardQuery(BaseModel):
@@ -272,33 +281,38 @@ This security review analyzes the **revised regional multi-AZ architecture** tha
 
 ### Zone 1: External (Untrusted)
 
-**Components**: NewsAPI, Dashboard user browsers
+**Components**: Tiingo API, Finnhub API, SendGrid API, Dashboard user browsers, Cognito OAuth providers
 
 **Security Posture**: 🔴 **NO TRUST** - Assume all inputs are malicious
 
 **Controls**:
 - Input validation at ingestion Lambda boundary
-- API key authentication for dashboard access
+- Circuit breaker per external service (5 failures / 5 min = open)
+- Cognito JWT authentication for authenticated users
+- Anonymous session tokens for unauthenticated users
 - TLS 1.2+ enforced for all connections
+- hCaptcha for bot protection on sensitive endpoints
 
 ---
 
 ### Zone 2: Lambda Compute (Validation & Processing)
 
-**Components**: 4 Lambda functions
+**Components**: Ingestion Lambda, Analysis Lambda, Dashboard Lambda, Notification Lambda
 
 **Security Posture**: 🟡 **PARTIAL TRUST** - Validate all inputs, least-privilege IAM
 
 **Controls**:
 - Pydantic schemas validate all inputs
 - IAM roles scoped to minimum required permissions
+- X-Ray distributed tracing on all Lambdas (Day 1 mandatory)
 - Reserved concurrency prevents resource exhaustion
 - CloudWatch Logs capture all invocations
+- Quota tracker for external API rate limits (Tiingo 500/day, Finnhub 60/min)
 
 **Cross-Zone Communication**:
-- Zone 1 → Zone 2: HTTPS with input validation
+- Zone 1 → Zone 2: HTTPS with input validation, circuit breaker protection
 - Zone 2 → Zone 3: IAM-authenticated boto3 calls (parameterized)
-- Zone 2 → Zone 4: IAM-authenticated AWS API calls
+- Zone 2 → Zone 4: IAM-authenticated AWS API calls with X-Ray trace context
 
 ---
 
@@ -320,7 +334,7 @@ This security review analyzes the **revised regional multi-AZ architecture** tha
 
 ### Zone 4: Infrastructure (AWS-Managed)
 
-**Components**: SNS, EventBridge, Secrets Manager, CloudWatch, S3
+**Components**: SNS, EventBridge, Secrets Manager, CloudWatch (logs/metrics/RUM), S3, Cognito, CloudFront
 
 **Security Posture**: 🟢 **TRUSTED** - AWS-managed services with SLAs
 
@@ -328,6 +342,9 @@ This security review analyzes the **revised regional multi-AZ architecture** tha
 - AWS responsibility: Physical security, patch management, availability
 - Customer responsibility: IAM policies, secret rotation, log retention
 - Encryption in transit and at rest (AWS defaults)
+- Cognito: MFA support, OAuth provider integration (Google, GitHub)
+- CloudFront: DDoS protection, geo-blocking capabilities, WAF integration
+- S3: OAC for dashboard assets, versioning for ticker cache
 
 ---
 
@@ -335,17 +352,27 @@ This security review analyzes the **revised regional multi-AZ architecture** tha
 
 ### Implemented (Day 1)
 
-- [x] **AUTH-01**: API key authentication on dashboard Lambda
+- [x] **AUTH-01**: Cognito authentication with JWT tokens + anonymous sessions
+- [x] **AUTH-02**: Magic link authentication for passwordless login
+- [x] **AUTH-03**: OAuth providers (Google, GitHub) via Cognito
 - [x] **VALID-01**: Pydantic input validation in all Lambdas
-- [x] **RATE-01**: Reserved concurrency on all Lambdas
-- [x] **SECRET-01**: Secrets Manager for API keys (no environment variables)
+- [x] **RATE-01**: IP-based rate limiting with DynamoDB tracking
+- [x] **RATE-02**: hCaptcha protection for bot detection (3+ requests/hr)
+- [x] **SECRET-01**: Secrets Manager for API keys (Tiingo, Finnhub, SendGrid, hCaptcha)
+- [x] **SECRET-02**: 5-minute TTL cache for secrets with auto-refresh
 - [x] **IAM-01**: Least-privilege IAM roles per Lambda
 - [x] **LOG-01**: Structured JSON logging with correlation IDs
 - [x] **ALARM-01**: CloudWatch alarms for errors, throttles, high invocations
+- [x] **ALARM-02**: Cost burn rate alarm ($3.33/day threshold)
+- [x] **ALARM-03**: Tiingo/Finnhub error rate alarms (>5%)
+- [x] **ALARM-04**: Notification delivery success alarm (<95%)
 - [x] **ENCRYPT-01**: DynamoDB encryption at rest (AWS-managed keys)
 - [x] **BACKUP-01**: Point-in-time recovery (35 days)
 - [x] **TTL-01**: Auto-deletion of old data (30 days)
-- [x] **CORS-01**: Whitelist allowed origins for dashboard Lambda
+- [x] **CORS-01**: Environment-based CORS origins for dashboard Lambda
+- [x] **XRAY-01**: AWS X-Ray distributed tracing on all 4 Lambdas
+- [x] **CB-01**: Circuit breaker per external service (Tiingo, Finnhub, SendGrid)
+- [x] **QUOTA-01**: Quota tracker for external API rate limits
 
 ### Phase 2 (Production Hardening)
 
