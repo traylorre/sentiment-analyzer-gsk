@@ -3,6 +3,7 @@
 Auto-generated from all feature plans. Last updated: 2025-11-26
 
 ## Active Technologies
+- TypeScript 5.x, Node.js 20 LTS (007-sentiment-dashboard-frontend)
 
 - **Python 3.13** with FastAPI, boto3, pydantic, aws-lambda-powertools, httpx
 - **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, CloudFront
@@ -170,6 +171,7 @@ def my_function():
 - **All external APIs mocked**: Tiingo, Finnhub, SendGrid, hCaptcha
 
 ## Recent Changes
+- 007-sentiment-dashboard-frontend: Added TypeScript 5.x, Node.js 20 LTS
 
 - 006-user-config-dashboard: Financial news sentiment dashboard with Tiingo/Finnhub, Cognito auth, CloudFront CDN
 - 001-interactive-dashboard-demo: Added Python 3.13
