@@ -90,6 +90,9 @@ SNS_RETRY_CONFIG = Config(
     read_timeout=10,
 )
 
+# SNS batching configuration (max 10 messages per batch per AWS limit)
+SNS_BATCH_SIZE = 10
+
 # TTL for items (30 days)
 TTL_DAYS = 30
 
@@ -179,6 +182,9 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         # Get SNS client
         sns_client = _get_sns_client(config["aws_region"])
 
+        # DFA-002: Collect messages for batch publishing
+        pending_sns_messages: list[dict[str, Any]] = []
+
         try:
             # Process each ticker
             for ticker in tickers:
@@ -199,19 +205,18 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                             ticker_stats["tiingo"] = len(articles)
                             summary["tiingo_articles"] += len(articles)
 
-                            # Process each article
+                            # Process each article (collect SNS messages)
                             for article in articles:
-                                result = _process_article(
+                                sns_msg = _process_article(
                                     article=article,
                                     source="tiingo",
                                     table=table,
-                                    sns_client=sns_client,
-                                    sns_topic_arn=config["sns_topic_arn"],
                                     model_version=config["model_version"],
                                 )
-                                if result == "new":
+                                if sns_msg is not None:
                                     ticker_stats["new"] += 1
                                     summary["new_items"] += 1
+                                    pending_sns_messages.append(sns_msg)
                                 else:
                                     ticker_stats["duplicates"] += 1
                                     summary["duplicates_skipped"] += 1
@@ -260,19 +265,18 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                             ticker_stats["finnhub"] = len(articles)
                             summary["finnhub_articles"] += len(articles)
 
-                            # Process each article
+                            # Process each article (collect SNS messages)
                             for article in articles:
-                                result = _process_article(
+                                sns_msg = _process_article(
                                     article=article,
                                     source="finnhub",
                                     table=table,
-                                    sns_client=sns_client,
-                                    sns_topic_arn=config["sns_topic_arn"],
                                     model_version=config["model_version"],
                                 )
-                                if result == "new":
+                                if sns_msg is not None:
                                     ticker_stats["new"] += 1
                                     summary["new_items"] += 1
+                                    pending_sns_messages.append(sns_msg)
                                 else:
                                     ticker_stats["duplicates"] += 1
                                     summary["duplicates_skipped"] += 1
@@ -316,6 +320,23 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 )
                 summary["tickers_processed"] += 1
                 per_ticker_stats[ticker] = ticker_stats
+
+            # DFA-002: Batch publish all collected SNS messages
+            if pending_sns_messages:
+                published_count = _publish_sns_batch(
+                    sns_client=sns_client,
+                    sns_topic_arn=config["sns_topic_arn"],
+                    messages=pending_sns_messages,
+                )
+                logger.info(
+                    "SNS batch publish complete",
+                    extra={
+                        "total_messages": len(pending_sns_messages),
+                        "published": published_count,
+                        "batches": (len(pending_sns_messages) + SNS_BATCH_SIZE - 1)
+                        // SNS_BATCH_SIZE,
+                    },
+                )
 
         finally:
             # Save state to DynamoDB
@@ -613,22 +634,22 @@ def _process_article(
     article: NewsArticle,
     source: str,
     table: Any,
-    sns_client: Any,
-    sns_topic_arn: str,
     model_version: str,
-) -> str:
-    """Process a single article: deduplicate, store, and publish to SNS.
+) -> dict[str, Any] | None:
+    """Process a single article: deduplicate and store in DynamoDB.
+
+    DFA-002 optimization: Returns SNS message for batching instead of
+    publishing individually. Caller should batch messages and use
+    _publish_sns_batch() after processing all articles.
 
     Args:
         article: NewsArticle object
         source: Source name (tiingo or finnhub)
         table: DynamoDB table resource
-        sns_client: SNS client
-        sns_topic_arn: SNS topic ARN for analysis requests
         model_version: Current model version
 
     Returns:
-        "new" if article was inserted, "duplicate" if skipped
+        SNS message dict if article is new, None if duplicate
     """
     # Generate source_id for deduplication
     source_id = f"{source}:{article.article_id}"
@@ -637,13 +658,15 @@ def _process_article(
     now = datetime.now(UTC)
     ttl_timestamp = int((now + timedelta(days=TTL_DAYS)).timestamp())
 
+    text_for_analysis = _get_text_for_analysis(article)
+
     item = {
         "source_id": source_id,
         "timestamp": article.published_at.isoformat(),
         "source_type": source,
         "source_url": article.url or "",
         "text_snippet": (article.description or "")[:200],
-        "text_for_analysis": _get_text_for_analysis(article),
+        "text_for_analysis": text_for_analysis,
         "status": "pending",
         "matched_tickers": article.tickers,
         "ttl_timestamp": ttl_timestamp,
@@ -657,46 +680,20 @@ def _process_article(
 
     # Try to insert (conditional write for deduplication)
     if not put_item_if_not_exists(table, item):
-        return "duplicate"
+        return None  # Duplicate
 
-    # Publish to SNS for analysis
-    sns_message = {
-        "source_id": source_id,
+    # Return message for batch publishing (DFA-002 optimization)
+    return {
         "source_type": source,
-        "text_for_analysis": item["text_for_analysis"],
-        "model_version": model_version,
-        "matched_tickers": article.tickers,
-        "timestamp": article.published_at.isoformat(),
+        "body": {
+            "source_id": source_id,
+            "source_type": source,
+            "text_for_analysis": text_for_analysis,
+            "model_version": model_version,
+            "matched_tickers": article.tickers,
+            "timestamp": article.published_at.isoformat(),
+        },
     }
-
-    try:
-        sns_client.publish(
-            TopicArn=sns_topic_arn,
-            Message=json.dumps(sns_message),
-            MessageAttributes={
-                "source_type": {
-                    "DataType": "String",
-                    "StringValue": source,
-                },
-            },
-        )
-
-        logger.debug(
-            "Published to SNS",
-            extra={"source_id": sanitize_for_log(source_id[:20])},
-        )
-
-    except Exception as e:
-        logger.error(
-            "Failed to publish to SNS",
-            extra={
-                "source_id": sanitize_for_log(source_id[:20]),
-                **get_safe_error_info(e),
-            },
-        )
-        emit_metric("SNSPublishErrors", 1)
-
-    return "new"
 
 
 def _get_text_for_analysis(article: NewsArticle) -> str:
@@ -734,6 +731,96 @@ def _get_sns_client(region: str) -> Any:
         region_name=region,
         config=SNS_RETRY_CONFIG,
     )
+
+
+@xray_recorder.capture("publish_sns_batch")
+def _publish_sns_batch(
+    sns_client: Any,
+    sns_topic_arn: str,
+    messages: list[dict[str, Any]],
+) -> int:
+    """Publish a batch of messages to SNS (DFA-002 optimization).
+
+    Uses SNS publish_batch API to send up to 10 messages per call,
+    reducing API calls by 90% compared to individual publishes.
+
+    Args:
+        sns_client: SNS client
+        sns_topic_arn: SNS topic ARN
+        messages: List of SNS messages to publish
+
+    Returns:
+        Number of successfully published messages
+    """
+    if not messages:
+        return 0
+
+    success_count = 0
+    failed_ids: list[str] = []
+
+    # Process in batches of SNS_BATCH_SIZE (max 10 per AWS limit)
+    for i in range(0, len(messages), SNS_BATCH_SIZE):
+        batch = messages[i : i + SNS_BATCH_SIZE]
+
+        # Build batch entries
+        entries = []
+        for idx, msg in enumerate(batch):
+            entry = {
+                "Id": str(i + idx),  # Unique ID within request
+                "Message": json.dumps(msg["body"]),
+                "MessageAttributes": {
+                    "source_type": {
+                        "DataType": "String",
+                        "StringValue": msg["source_type"],
+                    },
+                },
+            }
+            entries.append(entry)
+
+        try:
+            response = sns_client.publish_batch(
+                TopicArn=sns_topic_arn,
+                PublishBatchRequestEntries=entries,
+            )
+
+            # Count successes and failures
+            success_count += len(response.get("Successful", []))
+
+            for failure in response.get("Failed", []):
+                failed_ids.append(failure.get("Id", "unknown"))
+                logger.warning(
+                    "SNS batch publish partial failure",
+                    extra={
+                        "entry_id": failure.get("Id"),
+                        "code": failure.get("Code"),
+                        "message": sanitize_for_log(failure.get("Message", "")[:100]),
+                    },
+                )
+
+        except Exception as e:
+            logger.error(
+                "SNS batch publish failed",
+                extra={
+                    "batch_size": len(batch),
+                    "batch_index": i // SNS_BATCH_SIZE,
+                    **get_safe_error_info(e),
+                },
+            )
+            emit_metric("SNSPublishErrors", len(batch))
+
+    if failed_ids:
+        emit_metric("SNSPublishErrors", len(failed_ids))
+
+    logger.debug(
+        "SNS batch publish complete",
+        extra={
+            "total_messages": len(messages),
+            "successful": success_count,
+            "failed": len(failed_ids),
+        },
+    )
+
+    return success_count
 
 
 def _emit_summary_metrics(summary: dict[str, int], execution_time_ms: float) -> None:

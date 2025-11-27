@@ -357,11 +357,15 @@ class TestFetchFinnhubArticles:
 
 
 class TestProcessArticle:
-    """Tests for _process_article function."""
+    """Tests for _process_article function.
+
+    DFA-002: _process_article now returns SNS message dict for batching
+    instead of publishing immediately. Returns None for duplicates.
+    """
 
     @mock_aws
     def test_inserts_new_article(self, env_vars):
-        """Should insert new article and return 'new'."""
+        """Should insert new article and return SNS message dict for batching."""
         from src.lambdas.ingestion.handler import _process_article
 
         dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
@@ -376,7 +380,6 @@ class TestProcessArticle:
             BillingMode="PAY_PER_REQUEST",
         )
 
-        mock_sns = MagicMock()
         article = create_news_article("unique-123", "tiingo", "New Article")
 
         with patch(
@@ -387,17 +390,19 @@ class TestProcessArticle:
                 article=article,
                 source="tiingo",
                 table=table,
-                sns_client=mock_sns,
-                sns_topic_arn="arn:aws:sns:us-east-1:123456789:test-topic",
                 model_version="v1.0.0",
             )
 
-        assert result == "new"
-        mock_sns.publish.assert_called_once()
+        # DFA-002: Now returns SNS message dict for batch publishing
+        assert result is not None
+        assert result["source_type"] == "tiingo"
+        assert "body" in result
+        assert result["body"]["source_id"] == "tiingo:unique-123"
+        assert result["body"]["model_version"] == "v1.0.0"
 
     @mock_aws
     def test_skips_duplicate_article(self, env_vars):
-        """Should skip duplicate article and return 'duplicate'."""
+        """Should skip duplicate article and return None."""
         from src.lambdas.ingestion.handler import _process_article
 
         dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
@@ -412,7 +417,6 @@ class TestProcessArticle:
             BillingMode="PAY_PER_REQUEST",
         )
 
-        mock_sns = MagicMock()
         article = create_news_article("duplicate-123", "tiingo", "Duplicate Article")
 
         with patch(
@@ -423,13 +427,11 @@ class TestProcessArticle:
                 article=article,
                 source="tiingo",
                 table=table,
-                sns_client=mock_sns,
-                sns_topic_arn="arn:aws:sns:us-east-1:123456789:test-topic",
                 model_version="v1.0.0",
             )
 
-        assert result == "duplicate"
-        mock_sns.publish.assert_not_called()
+        # DFA-002: Now returns None for duplicates
+        assert result is None
 
 
 class TestGetTextForAnalysis:
@@ -467,6 +469,99 @@ class TestGetTextForAnalysis:
 
         text = _get_text_for_analysis(article)
         assert text == "Important development"
+
+
+class TestPublishSnsBatch:
+    """Tests for _publish_sns_batch function (DFA-002)."""
+
+    def test_publishes_batch_successfully(self):
+        """Should publish batch of messages using publish_batch API."""
+        from src.lambdas.ingestion.handler import _publish_sns_batch
+
+        mock_sns = MagicMock()
+        mock_sns.publish_batch.return_value = {
+            "Successful": [{"Id": "0"}, {"Id": "1"}],
+            "Failed": [],
+        }
+
+        messages = [
+            {"source_type": "tiingo", "body": {"source_id": "t:1"}},
+            {"source_type": "finnhub", "body": {"source_id": "f:1"}},
+        ]
+
+        result = _publish_sns_batch(
+            sns_client=mock_sns,
+            sns_topic_arn="arn:aws:sns:us-east-1:123:topic",
+            messages=messages,
+        )
+
+        assert result == 2
+        mock_sns.publish_batch.assert_called_once()
+
+    def test_handles_empty_messages(self):
+        """Should handle empty messages list."""
+        from src.lambdas.ingestion.handler import _publish_sns_batch
+
+        mock_sns = MagicMock()
+
+        result = _publish_sns_batch(
+            sns_client=mock_sns,
+            sns_topic_arn="arn:aws:sns:us-east-1:123:topic",
+            messages=[],
+        )
+
+        assert result == 0
+        mock_sns.publish_batch.assert_not_called()
+
+    def test_batches_large_message_list(self):
+        """Should split large message list into batches of 10."""
+        from src.lambdas.ingestion.handler import _publish_sns_batch
+
+        mock_sns = MagicMock()
+        mock_sns.publish_batch.return_value = {
+            "Successful": [{"Id": str(i)} for i in range(10)],
+            "Failed": [],
+        }
+
+        # 25 messages should result in 3 batches (10 + 10 + 5)
+        messages = [
+            {"source_type": "tiingo", "body": {"source_id": f"t:{i}"}}
+            for i in range(25)
+        ]
+
+        result = _publish_sns_batch(
+            sns_client=mock_sns,
+            sns_topic_arn="arn:aws:sns:us-east-1:123:topic",
+            messages=messages,
+        )
+
+        # 3 batches called
+        assert mock_sns.publish_batch.call_count == 3
+        assert result == 30  # 10 + 10 + 10 from mocked responses
+
+    def test_handles_partial_failures(self):
+        """Should handle partial batch failures and return correct count."""
+        from src.lambdas.ingestion.handler import _publish_sns_batch
+
+        mock_sns = MagicMock()
+        mock_sns.publish_batch.return_value = {
+            "Successful": [{"Id": "0"}, {"Id": "1"}],
+            "Failed": [{"Id": "2", "Code": "InvalidParameter", "Message": "Bad msg"}],
+        }
+
+        messages = [
+            {"source_type": "tiingo", "body": {"source_id": "t:1"}},
+            {"source_type": "tiingo", "body": {"source_id": "t:2"}},
+            {"source_type": "tiingo", "body": {"source_id": "t:3"}},
+        ]
+
+        result = _publish_sns_batch(
+            sns_client=mock_sns,
+            sns_topic_arn="arn:aws:sns:us-east-1:123:topic",
+            messages=messages,
+        )
+
+        assert result == 2  # Only 2 successful
 
 
 class TestLambdaHandler:
