@@ -33,6 +33,8 @@ This document provides clear, unambiguous guidance for handling production incid
 | `analysis-latency-high` | [SC-11](#sc-11-model-performance-degradation) | MEDIUM | Jump |
 | `dashboard-latency-high` | [SC-12](#sc-12-dashboard-slow) | LOW | Jump |
 
+**Other Sections**: [Secrets Management](#secrets-management) (caching, rotation, troubleshooting)
+
 ---
 
 ## Incident Response Framework
@@ -896,6 +898,102 @@ Use this template to document incidents:
 
 [What we learned from this incident]
 ```
+
+---
+
+## Secrets Management
+
+### Secrets Caching Architecture
+
+All Lambdas use a centralized secrets caching module (`src/lambdas/shared/secrets.py`) with:
+
+- **5-minute TTL**: Secrets auto-refresh after 5 minutes
+- **In-memory cache**: Reduces API calls during Lambda warm invocations
+- **Automatic cold start refresh**: Cache clears on Lambda cold start (memory isolation)
+
+### When Secrets Are Refreshed
+
+| Event | Cache Behavior |
+|-------|----------------|
+| Lambda cold start | Cache empty, fetches fresh |
+| Within 5 min of last fetch | Returns cached value |
+| After 5 min TTL expires | Fetches fresh on next access |
+| Manual `force_refresh=True` | Bypasses cache, fetches fresh |
+
+### Forcing Secret Refresh
+
+**Option 1: Wait for TTL (Recommended)**
+- Secrets automatically refresh within 5 minutes
+- No action needed for routine rotations
+
+**Option 2: Force Lambda Cold Start**
+```bash
+# Update an env var to force cold start (reverts instantly)
+aws lambda update-function-configuration \
+  --function-name dev-sentiment-dashboard \
+  --environment "Variables={FORCE_COLD_START=$(date +%s)}"
+```
+
+**Option 3: Use force_refresh in Code**
+```python
+from src.lambdas.shared.secrets import get_secret
+secret = get_secret("dev/sentiment-analyzer/tiingo-api-key", force_refresh=True)
+```
+
+### Clearing All Cached Secrets
+
+If multiple secrets need immediate refresh:
+
+```python
+from src.lambdas.shared.secrets import clear_cache
+clear_cache()  # Next get_secret() call fetches fresh
+```
+
+### Secret Rotation Checklist
+
+When rotating a secret (e.g., API key compromise):
+
+1. **Update in Secrets Manager**:
+   ```bash
+   aws secretsmanager put-secret-value \
+     --secret-id dev/sentiment-analyzer/tiingo-api-key \
+     --secret-string '{"api_key":"NEW_KEY_HERE"}'
+   ```
+
+2. **Wait for cache refresh** (max 5 minutes) OR force cold start
+
+3. **Verify new secret is in use**:
+   ```bash
+   # Invoke Lambda and check logs for successful API call
+   aws lambda invoke \
+     --function-name dev-sentiment-ingestion \
+     --payload '{}' \
+     /tmp/output.json && cat /tmp/output.json
+   ```
+
+### Troubleshooting Secret Issues
+
+| Symptom | Likely Cause | Fix |
+|---------|--------------|-----|
+| "Secret not found" error | Secret doesn't exist or wrong path | Verify with `aws secretsmanager describe-secret` |
+| "Access denied" error | IAM permission missing | Check Lambda role has `secretsmanager:GetSecretValue` |
+| Old secret still used | Cache not expired | Force cold start or wait 5 min |
+| Slow Lambda cold start | Too many secrets fetched | Consolidate secrets, use shared module |
+
+### Cache Configuration
+
+The TTL can be adjusted via environment variable:
+
+```bash
+# Set to 10 minutes (600 seconds)
+aws lambda update-function-configuration \
+  --function-name dev-sentiment-dashboard \
+  --environment "Variables={SECRETS_CACHE_TTL_SECONDS=600}"
+```
+
+**Default**: 300 seconds (5 minutes)
+**Minimum recommended**: 60 seconds (avoid API throttling)
+**Maximum recommended**: 900 seconds (15 minutes for non-critical secrets)
 
 ---
 
