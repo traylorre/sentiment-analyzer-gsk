@@ -1,25 +1,50 @@
 # sentiment-analyzer-gsk Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2025-11-16
+Auto-generated from all feature plans. Last updated: 2025-11-26
 
 ## Active Technologies
-- Python 3.13 + FastAPI, boto3, pydantic, aws-lambda-powertools, requests (006-user-config-dashboard)
-- DynamoDB (users, configurations, sentiment results, alerts), S3 (static assets) (006-user-config-dashboard)
 
-- Python 3.13 (001-interactive-dashboard-demo)
+- **Python 3.13** with FastAPI, boto3, pydantic, aws-lambda-powertools, httpx
+- **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, CloudFront
+- **External APIs**: Tiingo (primary), Finnhub (secondary) for financial news sentiment
+- **Email**: SendGrid (100/day free tier)
+- **Bot Protection**: hCaptcha
 
 ## Project Structure
 
 ```text
 src/
+├── lambdas/
+│   ├── dashboard/       # API endpoints (auth, configs, alerts, notifications)
+│   ├── ingestion/       # Tiingo/Finnhub news ingestion
+│   ├── analysis/        # Sentiment analysis + ATR calculation
+│   ├── notification/    # Email alerts via SendGrid
+│   └── shared/          # Models, middleware, utilities
+│       ├── models/      # Pydantic models with DynamoDB serialization
+│       ├── middleware/  # hCaptcha, rate limiting, security headers
+│       ├── adapters/    # Tiingo/Finnhub API adapters
+│       └── cache/       # Ticker symbol cache
 tests/
+├── unit/                # Mocked tests (moto, responses)
+├── contract/            # API schema validation tests
+├── integration/         # E2E tests with mocked AWS
+└── e2e/                 # Full E2E with synthetic data
+infrastructure/
+└── terraform/
+    └── modules/         # Lambda, DynamoDB, Cognito, CloudFront, etc.
 ```
 
 ## Commands
 
 ```bash
-# Run tests
-pytest
+# Run all unit tests
+pytest tests/unit/ -v
+
+# Run specific test file
+pytest tests/unit/shared/middleware/test_rate_limit.py -v
+
+# Run tests with coverage
+pytest tests/unit/ --cov=src --cov-report=term-missing
 
 # Format code
 black src/ tests/
@@ -29,6 +54,9 @@ ruff check src/ tests/
 
 # Auto-fix lint issues
 ruff check --fix src/ tests/
+
+# Validate Terraform
+cd infrastructure/terraform && terraform fmt -recursive && terraform validate
 ```
 
 ## Code Style
@@ -70,10 +98,80 @@ git commit --amend -S --no-edit
 - Preprod tests are excluded from local runs via pytest marker: `-m "not preprod"`
 - Never attempt to run preprod tests locally - they require real AWS credentials
 
-## Recent Changes
-- 006-user-config-dashboard: Added Python 3.13 + FastAPI, boto3, pydantic, aws-lambda-powertools, requests
-- 006-user-config-dashboard: Added Python 3.13 + FastAPI, boto3, pydantic, aws-lambda-powertools, requests
+## Feature 006 Patterns
 
+### DynamoDB Key Design (Single-Table)
+```python
+# User: pk="USER#{user_id}", sk="PROFILE"
+# Configuration: pk="USER#{user_id}", sk="CONFIG#{config_id}"
+# Alert Rule: pk="CONFIG#{config_id}", sk="ALERT#{alert_id}"
+# Notification: pk="USER#{user_id}", sk="NOTIF#{timestamp}#{notification_id}"
+# Magic Link Token: pk="TOKEN#{token}", sk="TOKEN"
+# Rate Limit: pk="RATE#{client_ip}#{action}", sk="RATE"
+# Circuit Breaker: pk="CB#{service}", sk="STATE"
+# Quota Tracker: pk="QUOTA#{service}", sk="DAILY#{date}"
+```
+
+### Pydantic Model Pattern
+All shared models in `src/lambdas/shared/models/` follow this pattern:
+```python
+class Configuration(BaseModel):
+    config_id: str = Field(default_factory=lambda: str(uuid4()))
+    user_id: str
+    name: str = Field(max_length=100)
+    tickers: list[TickerConfig] = Field(max_length=5)
+
+    @property
+    def pk(self) -> str:
+        return f"USER#{self.user_id}"
+
+    @property
+    def sk(self) -> str:
+        return f"CONFIG#{self.config_id}"
+
+    def to_dynamodb_item(self) -> dict[str, Any]:
+        """Serialize to DynamoDB item format."""
+
+    @classmethod
+    def from_dynamodb_item(cls, item: dict[str, Any]) -> "Configuration":
+        """Deserialize from DynamoDB item format."""
+```
+
+### Middleware Usage
+```python
+from src.lambdas.shared.middleware import (
+    add_security_headers,
+    check_rate_limit,
+    get_client_ip,
+    verify_captcha,
+)
+
+# In handler:
+client_ip = get_client_ip(event)
+rate_result = check_rate_limit(table, client_ip, action="config_create")
+if not rate_result.allowed:
+    return add_security_headers({"statusCode": 429, "body": "..."})
+```
+
+### X-Ray Tracing Pattern
+```python
+from aws_xray_sdk.core import xray_recorder, patch_all
+patch_all()  # After stdlib, before local imports
+
+@xray_recorder.capture("function_name")
+def my_function():
+    pass
+```
+
+### Testing Patterns
+- **Unit tests**: Use `moto` for DynamoDB, `responses` for HTTP mocking
+- **Contract tests**: Validate API response schemas match `specs/006-*/contracts/*.md`
+- **Integration tests**: Use `E2ETestContext` fixture with synthetic data generators
+- **All external APIs mocked**: Tiingo, Finnhub, SendGrid, hCaptcha
+
+## Recent Changes
+
+- 006-user-config-dashboard: Financial news sentiment dashboard with Tiingo/Finnhub, Cognito auth, CloudFront CDN
 - 001-interactive-dashboard-demo: Added Python 3.13
 
 <!-- MANUAL ADDITIONS START -->

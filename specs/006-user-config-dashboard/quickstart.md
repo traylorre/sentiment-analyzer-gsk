@@ -339,6 +339,120 @@ npm run dev
 
 ---
 
+## Security Middleware
+
+### Rate Limiting
+
+```python
+from src.lambdas.shared.middleware.rate_limit import (
+    check_rate_limit,
+    get_client_ip,
+    get_rate_limit_headers,
+)
+
+def handler(event, context):
+    client_ip = get_client_ip(event)
+    result = check_rate_limit(table, client_ip, action="config_create")
+
+    if not result.allowed:
+        return {
+            "statusCode": 429,
+            "headers": get_rate_limit_headers(result),
+            "body": json.dumps({"error": "Rate limit exceeded"})
+        }
+    # ... process request
+```
+
+### hCaptcha Verification
+
+```python
+from src.lambdas.shared.middleware.hcaptcha import (
+    verify_captcha,
+    should_require_captcha,
+)
+
+# Check if captcha should be required (3+ requests/hour)
+if should_require_captcha(table, client_ip, action="config_create"):
+    captcha_token = event.get("headers", {}).get("x-captcha-token")
+    if not captcha_token:
+        return {"statusCode": 400, "body": "Captcha required"}
+
+    result = verify_captcha(captcha_token, client_ip)
+    if not result.success:
+        return {"statusCode": 403, "body": "Captcha verification failed"}
+```
+
+### Security Headers
+
+```python
+from src.lambdas.shared.middleware.security_headers import (
+    add_security_headers,
+    get_preflight_response,
+)
+
+def handler(event, context):
+    # Handle CORS preflight
+    if event.get("httpMethod") == "OPTIONS":
+        return get_preflight_response(origin=event["headers"].get("origin"))
+
+    # Process request...
+    response = {"statusCode": 200, "body": json.dumps(result)}
+
+    # Add security headers before returning
+    return add_security_headers(response, origin=event["headers"].get("origin"))
+```
+
+---
+
+## Synthetic Test Data
+
+The project includes deterministic test data generators for E2E testing:
+
+```python
+from tests.fixtures.synthetic import (
+    TickerGenerator,
+    SentimentGenerator,
+    NewsGenerator,
+    TestOracle,
+)
+
+# Generate deterministic OHLC price data
+ticker_gen = TickerGenerator(seed=42)
+candles = ticker_gen.generate_ohlc("AAPL", days=30, volatility_periods=[(10, 20)])
+
+# Generate sentiment scores with bullish/bearish periods
+sentiment_gen = SentimentGenerator(seed=42)
+scores = sentiment_gen.generate_scores("AAPL", days=30, bullish_periods=[(0, 10)])
+
+# Generate news articles by sentiment
+news_gen = NewsGenerator(seed=42)
+articles = news_gen.generate_articles("AAPL", count=10, sentiment="positive")
+
+# Compute expected outcomes (test oracle)
+oracle = TestOracle()
+expected_atr = oracle.calculate_expected_atr(candles)
+expected_sentiment = oracle.calculate_expected_sentiment(scores)
+```
+
+### E2E Test Context
+
+```python
+from tests.e2e.conftest import E2ETestContext
+
+def test_complete_flow(e2e_context: E2ETestContext):
+    # Mock APIs are pre-configured with synthetic data
+    with e2e_context.tiingo_mock, e2e_context.finnhub_mock:
+        # Create config, fetch data, verify results
+        response = client.get(f"/api/v2/configurations/{config_id}/sentiment")
+        assert response.status_code == 200
+
+        # Verify against test oracle
+        expected = e2e_context.oracle.calculate_expected_sentiment(config.tickers)
+        assert response.json()["score"] == pytest.approx(expected, rel=0.01)
+```
+
+---
+
 ## CI/CD Integration
 
 ### GitHub Actions Workflow

@@ -226,30 +226,11 @@ resource "aws_cloudwatch_metric_alarm" "sns_delivery_failures" {
 }
 
 # =============================================================================
-# Custom Metric Alarms (SC-07, SC-10)
+# Custom Metric Alarms (SC-10)
 # =============================================================================
 
-resource "aws_cloudwatch_metric_alarm" "newsapi_rate_limit" {
-  alarm_name          = "${var.environment}-newsapi-rate-limit"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 1
-  metric_name         = "NewsAPIRateLimitHit"
-  namespace           = "SentimentAnalyzer"
-  period              = 300
-  statistic           = "Sum"
-  threshold           = 0
-  alarm_description   = "SC-07: NewsAPI rate limit exceeded"
-  treat_missing_data  = "notBreaching"
-
-  alarm_actions = [aws_sns_topic.alarms.arn]
-  ok_actions    = [aws_sns_topic.alarms.arn]
-
-  tags = {
-    Environment = var.environment
-    Feature     = "001-interactive-dashboard-demo"
-    Scenario    = "SC-07"
-  }
-}
+# NOTE: NewsAPI alarm removed in Feature 006 - replaced by Tiingo/Finnhub alarms
+# See api_alarms.tf for tiingo_error_rate and finnhub_error_rate alarms
 
 resource "aws_cloudwatch_metric_alarm" "no_new_items" {
   alarm_name          = "${var.environment}-no-new-items-1h"
