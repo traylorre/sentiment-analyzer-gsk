@@ -1,8 +1,12 @@
 """Finnhub API adapter for news sentiment and OHLC data."""
 
+import hashlib
+import json
 import logging
+import os
+import time
 from datetime import datetime, timedelta
-from typing import Literal
+from typing import Any, Literal
 
 import httpx
 
@@ -16,6 +20,56 @@ from src.lambdas.shared.adapters.base import (
 )
 
 logger = logging.getLogger(__name__)
+
+# =============================================================================
+# DFA-004 FIX: API Response Cache
+# =============================================================================
+# Cache TTL in seconds (default 30 minutes for news/sentiment, 1 hour for OHLC)
+API_CACHE_TTL_NEWS_SECONDS = int(os.environ.get("API_CACHE_TTL_NEWS_SECONDS", "1800"))
+API_CACHE_TTL_SENTIMENT_SECONDS = int(
+    os.environ.get("API_CACHE_TTL_SENTIMENT_SECONDS", "1800")
+)
+API_CACHE_TTL_OHLC_SECONDS = int(os.environ.get("API_CACHE_TTL_OHLC_SECONDS", "3600"))
+
+# In-memory cache (survives Lambda warm invocations)
+_finnhub_cache: dict[str, tuple[float, Any]] = {}
+_MAX_CACHE_ENTRIES = 100  # Prevent unbounded memory growth
+
+
+def _get_cache_key(endpoint: str, params: dict) -> str:
+    """Generate cache key from endpoint and params."""
+    param_str = json.dumps(params, sort_keys=True)
+    # MD5 used for cache key (not security) - S324 is a false positive
+    return hashlib.md5(  # noqa: S324
+        f"finnhub:{endpoint}:{param_str}".encode()
+    ).hexdigest()
+
+
+def _get_from_cache(key: str, ttl: int) -> Any | None:
+    """Get value from cache if not expired."""
+    if key in _finnhub_cache:
+        timestamp, value = _finnhub_cache[key]
+        if time.time() - timestamp < ttl:
+            return value
+        # Expired - remove from cache
+        del _finnhub_cache[key]
+    return None
+
+
+def _put_in_cache(key: str, value: Any) -> None:
+    """Put value in cache with current timestamp."""
+    global _finnhub_cache
+    # Evict oldest entries if cache is full
+    if len(_finnhub_cache) >= _MAX_CACHE_ENTRIES:
+        oldest_key = min(_finnhub_cache.keys(), key=lambda k: _finnhub_cache[k][0])
+        del _finnhub_cache[oldest_key]
+    _finnhub_cache[key] = (time.time(), value)
+
+
+def clear_cache() -> None:
+    """Clear the API response cache. Used in tests."""
+    global _finnhub_cache
+    _finnhub_cache = {}
 
 
 class FinnhubAdapter(BaseAdapter):
@@ -101,6 +155,7 @@ class FinnhubAdapter(BaseAdapter):
     ) -> list[NewsArticle]:
         """Fetch company news for given tickers.
 
+        DFA-004 optimization: Results cached for 30 minutes per ticker.
         Note: Finnhub requires one API call per ticker.
 
         Args:
@@ -123,48 +178,60 @@ class FinnhubAdapter(BaseAdapter):
 
         articles = []
         for ticker in tickers:
-            try:
-                response = self.client.get(
-                    "/company-news",
-                    params={
-                        "symbol": ticker,
-                        "from": start_date.strftime("%Y-%m-%d"),
-                        "to": end_date.strftime("%Y-%m-%d"),
-                    },
-                )
-                data = self._handle_response(response)
+            # DFA-004: Check cache first for each ticker
+            cache_params = {
+                "symbol": ticker,
+                "from": start_date.strftime("%Y-%m-%d"),
+                "to": end_date.strftime("%Y-%m-%d"),
+            }
+            cache_key = _get_cache_key("/company-news", cache_params)
+            cached_data = _get_from_cache(cache_key, API_CACHE_TTL_NEWS_SECONDS)
 
-                # Parse response - Finnhub returns array of news
-                for item in data[:limit]:
-                    try:
-                        # Finnhub uses Unix timestamp
-                        published_at = datetime.fromtimestamp(item["datetime"])
-                        articles.append(
-                            NewsArticle(
-                                article_id=str(item.get("id", hash(item["headline"]))),
-                                source="finnhub",
-                                title=item["headline"],
-                                description=item.get("summary"),
-                                url=item.get("url"),
-                                published_at=published_at,
-                                tickers=[ticker],  # Finnhub is per-ticker
-                                tags=item.get("category", "").split(","),
-                                source_name=item.get("source"),
-                            )
+            if cached_data is not None:
+                logger.debug(f"Finnhub news cache hit for {ticker}")
+                data = cached_data
+            else:
+                try:
+                    response = self.client.get(
+                        "/company-news",
+                        params=cache_params,
+                    )
+                    data = self._handle_response(response)
+                    # Cache the raw response
+                    _put_in_cache(cache_key, data)
+                    logger.debug(f"Finnhub news cache miss for {ticker}, cached")
+                except httpx.RequestError as e:
+                    logger.error(f"Finnhub news request failed for {ticker}: {e}")
+                    continue  # Continue with other tickers
+
+            # Parse response - Finnhub returns array of news
+            for item in data[:limit]:
+                try:
+                    # Finnhub uses Unix timestamp
+                    published_at = datetime.fromtimestamp(item["datetime"])
+                    articles.append(
+                        NewsArticle(
+                            article_id=str(item.get("id", hash(item["headline"]))),
+                            source="finnhub",
+                            title=item["headline"],
+                            description=item.get("summary"),
+                            url=item.get("url"),
+                            published_at=published_at,
+                            tickers=[ticker],  # Finnhub is per-ticker
+                            tags=item.get("category", "").split(","),
+                            source_name=item.get("source"),
                         )
-                    except (KeyError, ValueError) as e:
-                        logger.warning(f"Failed to parse Finnhub article: {e}")
-                        continue
-
-            except httpx.RequestError as e:
-                logger.error(f"Finnhub news request failed for {ticker}: {e}")
-                continue  # Continue with other tickers
+                    )
+                except (KeyError, ValueError) as e:
+                    logger.warning(f"Failed to parse Finnhub article: {e}")
+                    continue
 
         return articles
 
     def get_sentiment(self, ticker: str) -> SentimentData | None:
         """Fetch sentiment data for a single ticker.
 
+        DFA-004 optimization: Results cached for 30 minutes.
         Finnhub provides built-in sentiment scores based on news analysis.
 
         Args:
@@ -173,15 +240,27 @@ class FinnhubAdapter(BaseAdapter):
         Returns:
             SentimentData or None if not available
         """
-        try:
-            response = self.client.get(
-                "/news-sentiment",
-                params={"symbol": ticker},
-            )
-            data = self._handle_response(response)
-        except httpx.RequestError as e:
-            logger.error(f"Finnhub sentiment request failed: {e}")
-            raise AdapterError(f"Finnhub sentiment request failed: {e}") from e
+        # DFA-004: Check cache first
+        cache_params = {"symbol": ticker}
+        cache_key = _get_cache_key("/news-sentiment", cache_params)
+        cached_data = _get_from_cache(cache_key, API_CACHE_TTL_SENTIMENT_SECONDS)
+
+        if cached_data is not None:
+            logger.debug(f"Finnhub sentiment cache hit for {ticker}")
+            data = cached_data
+        else:
+            try:
+                response = self.client.get(
+                    "/news-sentiment",
+                    params=cache_params,
+                )
+                data = self._handle_response(response)
+                # Cache the raw response
+                _put_in_cache(cache_key, data)
+                logger.debug(f"Finnhub sentiment cache miss for {ticker}, cached")
+            except httpx.RequestError as e:
+                logger.error(f"Finnhub sentiment request failed: {e}")
+                raise AdapterError(f"Finnhub sentiment request failed: {e}") from e
 
         # Check if data is valid
         if not data or not data.get("sentiment"):
@@ -216,6 +295,9 @@ class FinnhubAdapter(BaseAdapter):
     ) -> list[OHLCCandle]:
         """Fetch daily OHLC price data.
 
+        DFA-004 optimization: Results cached for 1 hour. OHLC data changes
+        infrequently (daily), so longer TTL is safe.
+
         Args:
             ticker: Stock symbol
             start_date: Start date (default: 30 days ago)
@@ -234,20 +316,32 @@ class FinnhubAdapter(BaseAdapter):
         from_ts = int(start_date.timestamp())
         to_ts = int(end_date.timestamp())
 
-        try:
-            response = self.client.get(
-                "/stock/candle",
-                params={
-                    "symbol": ticker,
-                    "resolution": "D",  # Daily
-                    "from": from_ts,
-                    "to": to_ts,
-                },
-            )
-            data = self._handle_response(response)
-        except httpx.RequestError as e:
-            logger.error(f"Finnhub OHLC request failed: {e}")
-            raise AdapterError(f"Finnhub OHLC request failed: {e}") from e
+        # DFA-004: Check cache first
+        cache_params = {
+            "symbol": ticker,
+            "resolution": "D",
+            "from": from_ts,
+            "to": to_ts,
+        }
+        cache_key = _get_cache_key("/stock/candle", cache_params)
+        cached_data = _get_from_cache(cache_key, API_CACHE_TTL_OHLC_SECONDS)
+
+        if cached_data is not None:
+            logger.debug(f"Finnhub OHLC cache hit for {ticker}")
+            data = cached_data
+        else:
+            try:
+                response = self.client.get(
+                    "/stock/candle",
+                    params=cache_params,
+                )
+                data = self._handle_response(response)
+                # Cache the raw response
+                _put_in_cache(cache_key, data)
+                logger.debug(f"Finnhub OHLC cache miss for {ticker}, cached")
+            except httpx.RequestError as e:
+                logger.error(f"Finnhub OHLC request failed: {e}")
+                raise AdapterError(f"Finnhub OHLC request failed: {e}") from e
 
         # Check for no data
         if data.get("s") == "no_data":

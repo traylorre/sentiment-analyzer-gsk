@@ -7,7 +7,15 @@ import httpx
 import pytest
 
 from src.lambdas.shared.adapters.base import AdapterError, RateLimitError
-from src.lambdas.shared.adapters.finnhub import FinnhubAdapter
+from src.lambdas.shared.adapters.finnhub import FinnhubAdapter, clear_cache
+
+
+@pytest.fixture(autouse=True)
+def clear_finnhub_cache():
+    """Clear Finnhub cache before each test to ensure isolation."""
+    clear_cache()
+    yield
+    clear_cache()
 
 
 @pytest.fixture

@@ -7,7 +7,15 @@ import httpx
 import pytest
 
 from src.lambdas.shared.adapters.base import AdapterError, RateLimitError
-from src.lambdas.shared.adapters.tiingo import TiingoAdapter
+from src.lambdas.shared.adapters.tiingo import TiingoAdapter, clear_cache
+
+
+@pytest.fixture(autouse=True)
+def clear_tiingo_cache():
+    """Clear Tiingo cache before each test to ensure isolation."""
+    clear_cache()
+    yield
+    clear_cache()
 
 
 @pytest.fixture
