@@ -94,6 +94,7 @@ jobs:
       - name: Comment coverage on PR
         uses: py-cov-action/python-coverage-comment-action@v3
         if: github.event_name == 'pull_request'
+        continue-on-error: true  # Don't fail build if coverage comment fails (e.g., large PRs)
         with:
           GITHUB_TOKEN: ${{ github.token }}
           MINIMUM_GREEN: 80
