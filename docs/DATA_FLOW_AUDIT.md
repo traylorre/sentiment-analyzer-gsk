@@ -314,8 +314,8 @@ flowchart TB
 
 | ID | Issue | File | Status | PR |
 |----|-------|------|--------|-----|
-| DFA-001 | SSE polling bottleneck (72K queries/min) | handler.py:581-643 | IN PROGRESS | - |
-| DFA-002 | No SNS message batching | handler.py:204-217 | PENDING | - |
+| DFA-001 | SSE polling bottleneck (72K queries/min) | handler.py:581-643 | ✅ RESOLVED | PR #119 |
+| DFA-002 | No SNS message batching | ingestion/handler.py:182-339 | ✅ RESOLVED | PR #119 |
 
 ### HIGH (Deploy Week 2)
 
@@ -388,11 +388,26 @@ for article in articles:  # 100+ articles
 - SNS pricing per publish (could batch 10-25)
 - Sequential publishing is bottleneck
 
-**Fix:**
-1. Batch 10-25 messages per publish cycle
-2. Use async publishing with asyncio.gather()
+**Fix (✅ IMPLEMENTED):**
+```python
+# Collect messages during processing
+pending_sns_messages: list[dict[str, Any]] = []
+for article in articles:
+    sns_msg = _process_article(article, source, table, model_version)
+    if sns_msg is not None:
+        pending_sns_messages.append(sns_msg)
 
-**Estimated Gain:** 80% reduction in SNS costs, 50% latency improvement
+# Batch publish at end using SNS publish_batch API
+_publish_sns_batch(sns_client, sns_topic_arn, pending_sns_messages)
+```
+
+Key changes:
+1. `_process_article()` now returns SNS message dict (or None for duplicates)
+2. Messages collected during article processing loop
+3. `_publish_sns_batch()` uses SNS `publish_batch` API (max 10 per call)
+4. Handles partial failures gracefully
+
+**Actual Gain:** 90% reduction in SNS API calls (100 articles → 10 batch calls)
 
 ---
 
