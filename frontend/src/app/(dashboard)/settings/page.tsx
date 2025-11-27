@@ -1,13 +1,16 @@
 'use client';
 
+import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { User, Bell, Moon, Vibrate, LogOut } from 'lucide-react';
+import { User, Bell, Moon, Vibrate, LogOut, Shield, Mail } from 'lucide-react';
 import { PageTransition } from '@/components/layout/page-transition';
 import { Card } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
+import { NotificationPreferences } from '@/components/dashboard/notification-preferences';
+import { SignOutDialog } from '@/components/auth/sign-out-dialog';
 import { useAnimationStore } from '@/stores/animation-store';
+import { useAuth } from '@/hooks/use-auth';
 import { cn } from '@/lib/utils';
 
 interface SettingItemProps {
@@ -36,6 +39,21 @@ function SettingItem({ icon: Icon, label, description, children }: SettingItemPr
 
 export default function SettingsPage() {
   const { reducedMotion, hapticEnabled, setReducedMotion, setHapticEnabled } = useAnimationStore();
+  const { user, isAuthenticated, isAnonymous, signOut, isLoading } = useAuth();
+  const [signOutOpen, setSignOutOpen] = useState(false);
+
+  const handleNotificationSave = useCallback(async (settings: unknown) => {
+    // TODO: Save to backend
+    console.log('Saving notification settings:', settings);
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }, []);
+
+  const authTypeLabel: Record<string, string> = {
+    anonymous: 'Anonymous',
+    email: 'Email',
+    google: 'Google',
+    github: 'GitHub',
+  };
 
   return (
     <PageTransition>
@@ -46,7 +64,7 @@ export default function SettingsPage() {
           <p className="text-muted-foreground mt-1">Customize your dashboard experience</p>
         </div>
 
-        {/* Profile section */}
+        {/* Account section */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -54,17 +72,80 @@ export default function SettingsPage() {
         >
           <Card className="p-4">
             <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-4">
-              Profile
+              Account
             </h2>
-            <SettingItem
-              icon={User}
-              label="Account"
-              description="Manage your account settings"
-            >
-              <Button variant="outline" size="sm">
-                Edit
-              </Button>
-            </SettingItem>
+
+            {isAuthenticated && user ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center">
+                    <User className="w-6 h-6 text-accent" />
+                  </div>
+                  <div>
+                    {user.email && (
+                      <p className="font-medium text-foreground">{user.email}</p>
+                    )}
+                    <div className="flex items-center gap-2 mt-1">
+                      <span
+                        className={cn(
+                          'px-2 py-0.5 text-xs rounded-full',
+                          isAnonymous
+                            ? 'bg-muted text-muted-foreground'
+                            : 'bg-accent/10 text-accent'
+                        )}
+                      >
+                        {authTypeLabel[user.authType] || user.authType}
+                      </span>
+                      {isAnonymous && (
+                        <span className="text-xs text-muted-foreground">
+                          (limited features)
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {isAnonymous && (
+                  <div className="p-3 rounded-lg bg-accent/5 border border-accent/20">
+                    <p className="text-sm text-foreground mb-2">
+                      <Shield className="w-4 h-4 inline mr-2" />
+                      Upgrade your account
+                    </p>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Sign in with email or social to unlock all features and save
+                      your data across devices.
+                    </p>
+                    <Button size="sm" className="gap-2">
+                      <Mail className="w-4 h-4" />
+                      Upgrade Now
+                    </Button>
+                  </div>
+                )}
+
+                <div className="text-xs text-muted-foreground">
+                  <p>
+                    <strong>Configurations:</strong> {user.configurationCount}
+                  </p>
+                  <p>
+                    <strong>Alerts:</strong> {user.alertCount}
+                  </p>
+                  <p>
+                    <strong>Member since:</strong>{' '}
+                    {new Date(user.createdAt).toLocaleDateString()}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <SettingItem
+                icon={User}
+                label="Account"
+                description="Sign in to save your settings"
+              >
+                <Button variant="outline" size="sm">
+                  Sign In
+                </Button>
+              </SettingItem>
+            )}
           </Card>
         </motion.div>
 
@@ -119,43 +200,38 @@ export default function SettingsPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
         >
-          <Card className="p-4">
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-4">
-              Notifications
-            </h2>
-
-            <SettingItem
-              icon={Bell}
-              label="Push Notifications"
-              description="Receive alerts on your device"
-            >
-              <Switch disabled />
-            </SettingItem>
-
-            <SettingItem
-              icon={Bell}
-              label="Email Notifications"
-              description="Receive alerts via email"
-            >
-              <Switch disabled />
-            </SettingItem>
-          </Card>
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+            Notifications
+          </h2>
+          <NotificationPreferences
+            initialSettings={{
+              emailEnabled: user?.emailNotificationsEnabled ?? true,
+            }}
+            onSave={handleNotificationSave}
+          />
         </motion.div>
 
         {/* Sign out */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-        >
-          <Button
-            variant="outline"
-            className="w-full gap-2 text-red-500 border-red-500/20 hover:bg-red-500/10"
+        {isAuthenticated && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
           >
-            <LogOut className="w-4 h-4" />
-            Sign Out
-          </Button>
-        </motion.div>
+            <Button
+              variant="outline"
+              className="w-full gap-2 text-red-500 border-red-500/20 hover:bg-red-500/10"
+              onClick={() => setSignOutOpen(true)}
+            >
+              <LogOut className="w-4 h-4" />
+              Sign Out
+            </Button>
+            <SignOutDialog
+              open={signOutOpen}
+              onOpenChange={setSignOutOpen}
+            />
+          </motion.div>
+        )}
       </div>
     </PageTransition>
   );
