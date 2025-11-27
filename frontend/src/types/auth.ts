@@ -1,0 +1,34 @@
+export type AuthType = 'anonymous' | 'email' | 'google' | 'github';
+
+export interface User {
+  userId: string;
+  authType: AuthType;
+  email?: string;
+  createdAt: string;
+  configurationCount: number;
+  alertCount: number;
+  emailNotificationsEnabled: boolean;
+}
+
+export interface AuthTokens {
+  idToken: string;
+  accessToken: string;
+  refreshToken: string;
+  expiresIn: number;
+}
+
+export interface AnonymousSession {
+  userId: string;
+  authType: 'anonymous';
+  createdAt: string;
+  sessionExpiresAt: string;
+  storageHint: 'localStorage';
+}
+
+export interface AuthState {
+  isAuthenticated: boolean;
+  isAnonymous: boolean;
+  user: User | null;
+  tokens: AuthTokens | null;
+  sessionExpiresAt: string | null;
+}
