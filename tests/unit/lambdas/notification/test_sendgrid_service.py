@@ -1,6 +1,5 @@
 """Unit tests for SendGrid email service."""
 
-import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -48,10 +47,10 @@ class TestEmailServiceInit:
 
     def test_init_without_api_key(self):
         """Test init without direct API key loads from secrets."""
-        mock_client = MagicMock()
-        mock_client.get_secret_value.return_value = {"SecretString": "secret-key"}
-
-        with patch("boto3.client", return_value=mock_client):
+        with patch(
+            "src.lambdas.notification.sendgrid_service.get_secret"
+        ) as mock_get_secret:
+            mock_get_secret.return_value = {"api_key": "secret-key"}
             service = EmailService(
                 secret_arn="arn:test",
                 from_email="test@example.com",
@@ -292,35 +291,33 @@ class TestGetSendGridApiKey:
     """Tests for _get_sendgrid_api_key function."""
 
     def test_get_api_key_json_format(self):
-        """Test getting API key from JSON secret."""
-        mock_client = MagicMock()
-        mock_client.get_secret_value.return_value = {
-            "SecretString": json.dumps({"api_key": "json-api-key"})
-        }
-
-        with patch("boto3.client", return_value=mock_client):
+        """Test getting API key from JSON secret with api_key field."""
+        with patch(
+            "src.lambdas.notification.sendgrid_service.get_secret"
+        ) as mock_get_secret:
+            mock_get_secret.return_value = {"api_key": "json-api-key"}
             key = _get_sendgrid_api_key("arn:test")
 
         assert key == "json-api-key"
 
     def test_get_api_key_sendgrid_format(self):
         """Test getting API key with SENDGRID_API_KEY format."""
-        mock_client = MagicMock()
-        mock_client.get_secret_value.return_value = {
-            "SecretString": json.dumps({"SENDGRID_API_KEY": "sendgrid-key"})
-        }
-
-        with patch("boto3.client", return_value=mock_client):
+        with patch(
+            "src.lambdas.notification.sendgrid_service.get_secret"
+        ) as mock_get_secret:
+            mock_get_secret.return_value = {"SENDGRID_API_KEY": "sendgrid-key"}
             key = _get_sendgrid_api_key("arn:test2")
 
         assert key == "sendgrid-key"
 
     def test_get_api_key_raw_string(self):
-        """Test getting API key from raw string secret."""
-        mock_client = MagicMock()
-        mock_client.get_secret_value.return_value = {"SecretString": "raw-api-key"}
-
-        with patch("boto3.client", return_value=mock_client):
+        """Test getting API key when get_secret returns a string (fallback)."""
+        # Note: get_secret normally returns dict, but _get_sendgrid_api_key
+        # has a fallback for non-dict returns (line 346 in sendgrid_service.py)
+        with patch(
+            "src.lambdas.notification.sendgrid_service.get_secret"
+        ) as mock_get_secret:
+            mock_get_secret.return_value = "raw-api-key"
             key = _get_sendgrid_api_key("arn:test3")
 
         assert key == "raw-api-key"
@@ -332,24 +329,26 @@ class TestGetSendGridApiKey:
 
     def test_get_api_key_secrets_manager_error(self):
         """Test error handling for Secrets Manager failure."""
-        mock_client = MagicMock()
-        mock_client.get_secret_value.side_effect = Exception("Access denied")
-
-        with patch("boto3.client", return_value=mock_client):
+        with patch(
+            "src.lambdas.notification.sendgrid_service.get_secret"
+        ) as mock_get_secret:
+            mock_get_secret.side_effect = Exception("Access denied")
             with pytest.raises(EmailServiceError, match="Failed to retrieve"):
                 _get_sendgrid_api_key("arn:test4")
 
     def test_get_api_key_caching(self):
-        """Test that API key is cached."""
-        mock_client = MagicMock()
-        mock_client.get_secret_value.return_value = {"SecretString": "cached-key"}
-
-        with patch("boto3.client", return_value=mock_client):
+        """Test that API key caching is delegated to shared secrets module."""
+        # Caching is now handled by the shared get_secret function with 5-min TTL.
+        # This test verifies that _get_sendgrid_api_key properly delegates to get_secret.
+        with patch(
+            "src.lambdas.notification.sendgrid_service.get_secret"
+        ) as mock_get_secret:
+            mock_get_secret.return_value = {"api_key": "cached-key"}
             key1 = _get_sendgrid_api_key("arn:cached")
             key2 = _get_sendgrid_api_key("arn:cached")
 
-        # Should only call Secrets Manager once due to caching
-        assert mock_client.get_secret_value.call_count == 1
+        # get_secret is called each time, but it handles caching internally
+        assert mock_get_secret.call_count == 2
         assert key1 == key2 == "cached-key"
 
 
