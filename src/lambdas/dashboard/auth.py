@@ -453,13 +453,17 @@ class MagicLinkResponse(BaseModel):
 
 
 class MagicLinkVerifyResponse(BaseModel):
-    """Response for GET /api/v2/auth/magic-link/verify."""
+    """Response for GET /api/v2/auth/magic-link/verify.
+
+    Security: email is MASKED, refresh_token is NEVER in body.
+    """
 
     status: str
-    user_id: str | None = None
-    email: str | None = None
+    # user_id intentionally removed - frontend doesn't need it
+    email_masked: str | None = None  # j***@example.com
     auth_type: str | None = None
-    tokens: dict | None = None
+    tokens: dict | None = None  # NO refresh_token - that's HttpOnly cookie
+    refresh_token_for_cookie: str | None = None  # Router sets this as HttpOnly cookie
     merged_anonymous_data: bool = False
     error: str | None = None
     message: str | None = None
@@ -480,13 +484,17 @@ class OAuthCallbackRequest(BaseModel):
 
 
 class OAuthCallbackResponse(BaseModel):
-    """Response for POST /api/v2/auth/oauth/callback."""
+    """Response for POST /api/v2/auth/oauth/callback.
+
+    Security: email is MASKED, refresh_token is NEVER in body.
+    """
 
     status: str
-    user_id: str | None = None
-    email: str | None = None
+    # user_id intentionally removed - frontend doesn't need it
+    email_masked: str | None = None  # j***@example.com
     auth_type: str | None = None
-    tokens: dict | None = None
+    tokens: dict | None = None  # NO refresh_token - that's HttpOnly cookie
+    refresh_token_for_cookie: str | None = None  # Router sets this as HttpOnly cookie
     merged_anonymous_data: bool = False
     is_new_user: bool = False
     conflict: bool = False
@@ -519,15 +527,18 @@ class SignOutResponse(BaseModel):
 
 
 class SessionInfoResponse(BaseModel):
-    """Response for GET /api/v2/auth/session."""
+    """Response for GET /api/v2/auth/session - MINIMAL.
 
-    user_id: str
-    email: str | None
+    Security: No user_id, no absolute timestamps.
+    """
+
+    # user_id intentionally removed - frontend doesn't need internal ID
+    email_masked: str | None = None
     auth_type: str
-    session_started_at: str
-    session_expires_at: str
-    last_activity_at: str
+    # Relative time instead of absolute
+    session_expires_in_seconds: int
     linked_providers: list[str]
+    # session_started_at, last_activity_at removed - not needed by frontend
 
 
 class CheckEmailRequest(BaseModel):
@@ -782,14 +793,15 @@ def verify_magic_link(
             merged_data = result.status == "completed"
 
     # Generate tokens (in production, these would come from Cognito)
-    tokens = _generate_tokens(user)
+    body_tokens, refresh_token = _generate_tokens(user)
 
     return MagicLinkVerifyResponse(
         status="verified",
-        user_id=user.user_id,
-        email=user.email,
+        # user_id removed - frontend doesn't need it
+        email_masked=_mask_email(user.email),
         auth_type="email",
-        tokens=tokens,
+        tokens=body_tokens,  # NO refresh_token in body
+        refresh_token_for_cookie=refresh_token,  # Router sets HttpOnly cookie
         merged_anonymous_data=merged_data,
     )
 
@@ -826,17 +838,39 @@ def _create_authenticated_user(
     return user
 
 
-def _generate_tokens(user: User) -> dict:
+def _generate_tokens(user: User) -> tuple[dict, str]:
     """Generate mock tokens for testing.
 
     In production, tokens come from Cognito.
+
+    Returns:
+        Tuple of (tokens_for_body, refresh_token_for_cookie)
+        - tokens_for_body: NEVER contains refresh_token
+        - refresh_token_for_cookie: For HttpOnly cookie
     """
-    return {
+    refresh_token = f"mock_refresh_token_{user.user_id[:8]}"
+
+    # Body tokens - NO refresh_token (that goes in HttpOnly cookie)
+    body_tokens = {
         "id_token": f"mock_id_token_{user.user_id[:8]}",
         "access_token": f"mock_access_token_{user.user_id[:8]}",
-        "refresh_token": f"mock_refresh_token_{user.user_id[:8]}",
         "expires_in": 3600,
     }
+
+    return body_tokens, refresh_token
+
+
+def _mask_email(email: str | None) -> str | None:
+    """Mask email for frontend: john@example.com -> j***@example.com"""
+    if not email:
+        return None
+    try:
+        local, domain = email.split("@")
+        if len(local) <= 1:
+            return f"*@{domain}"
+        return f"{local[0]}***@{domain}"
+    except ValueError:
+        return "***"
 
 
 # T092: OAuth URLs
@@ -914,12 +948,12 @@ def handle_oauth_callback(
     existing_user = get_user_by_email(table, email)
 
     if existing_user and existing_user.auth_type != request.provider:
-        # Account conflict
+        # Account conflict - mask email in response
         return OAuthCallbackResponse(
             status="conflict",
             conflict=True,
             existing_provider=existing_user.auth_type,
-            email=email,
+            email_masked=_mask_email(email),
             message=f"An account with this email exists via {existing_user.auth_type}. Would you like to link your {request.provider.capitalize()} account?",
         )
 
@@ -950,17 +984,19 @@ def handle_oauth_callback(
             )
             merged_data = result.status == "completed"
 
+    # Security: NO refresh_token in body, masked email
     return OAuthCallbackResponse(
         status="authenticated",
-        user_id=user.user_id,
-        email=user.email,
+        # user_id removed - frontend doesn't need it
+        email_masked=_mask_email(user.email),
         auth_type=request.provider,
         tokens={
             "id_token": tokens.id_token,
             "access_token": tokens.access_token,
-            "refresh_token": tokens.refresh_token,
+            # NO refresh_token in body
             "expires_in": tokens.expires_in,
         },
+        refresh_token_for_cookie=tokens.refresh_token,  # Router sets HttpOnly cookie
         merged_anonymous_data=merged_data,
         is_new_user=is_new_user,
     )
@@ -1038,7 +1074,7 @@ def get_session_info(
     table: Any,
     user_id: str,
 ) -> SessionInfoResponse | None:
-    """Get session information for a user.
+    """Get session information for a user - MINIMAL response.
 
     Args:
         table: DynamoDB Table resource
@@ -1046,6 +1082,11 @@ def get_session_info(
 
     Returns:
         SessionInfoResponse or None if not found
+
+    Security:
+        - No user_id in response (frontend has it in header)
+        - Relative time (expires_in_seconds) not absolute timestamp
+        - Email masked
     """
     user = get_user_by_id(table, user_id)
     if not user:
@@ -1057,14 +1098,17 @@ def get_session_info(
         # User might also have email auth
         linked_providers.append(user.auth_type)
 
+    # Calculate relative expiry time
+    now = datetime.now(UTC)
+    expires_in = max(0, int((user.session_expires_at - now).total_seconds()))
+
     return SessionInfoResponse(
-        user_id=user.user_id,
-        email=user.email,
+        # user_id removed - frontend doesn't need it, they have it in header
+        email_masked=_mask_email(user.email),
         auth_type=user.auth_type,
-        session_started_at=user.created_at.isoformat().replace("+00:00", "Z"),
-        session_expires_at=user.session_expires_at.isoformat().replace("+00:00", "Z"),
-        last_activity_at=user.last_active_at.isoformat().replace("+00:00", "Z"),
+        session_expires_in_seconds=expires_in,  # Relative, not absolute
         linked_providers=linked_providers,
+        # session_started_at, last_activity_at removed - not needed by frontend
     )
 
 

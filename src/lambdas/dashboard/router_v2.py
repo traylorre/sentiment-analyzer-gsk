@@ -37,6 +37,11 @@ from src.lambdas.dashboard import tickers as ticker_service
 from src.lambdas.dashboard import volatility as volatility_service
 from src.lambdas.shared.dynamodb import get_table
 from src.lambdas.shared.logging_utils import get_safe_error_info
+from src.lambdas.shared.response_models import (
+    UserMeResponse,
+    mask_email,
+    seconds_until,
+)
 
 
 # Request models for router endpoints
@@ -187,11 +192,34 @@ async def verify_magic_link(
     token: str,
     table=Depends(get_dynamodb_table),
 ):
-    """Verify magic link token (T091)."""
+    """Verify magic link token (T091).
+
+    Security: refresh_token is set as HttpOnly cookie, NEVER in body.
+    """
     result = auth_service.verify_magic_link(table=table, token=token)
     if isinstance(result, auth_service.ErrorResponse):
         raise HTTPException(status_code=400, detail=result.error.message)
-    return JSONResponse(result.model_dump())
+
+    # Extract refresh_token for HttpOnly cookie
+    refresh_token = result.refresh_token_for_cookie
+
+    # Build response WITHOUT refresh_token in body
+    response_data = result.model_dump(exclude={"refresh_token_for_cookie"})
+    response = JSONResponse(response_data)
+
+    # Set refresh_token as HttpOnly, Secure cookie (NOT in response body)
+    if refresh_token:
+        response.set_cookie(
+            key="refresh_token",
+            value=refresh_token,
+            httponly=True,
+            secure=True,  # HTTPS only
+            samesite="strict",
+            max_age=30 * 24 * 60 * 60,  # 30 days
+            path="/api/v2/auth",  # Only sent to auth endpoints
+        )
+
+    return response
 
 
 @auth_router.get("/oauth/urls")
@@ -213,7 +241,10 @@ async def handle_oauth_callback(
     body: OAuthCallbackRequest,
     table=Depends(get_dynamodb_table),
 ):
-    """Handle OAuth callback (T093)."""
+    """Handle OAuth callback (T093).
+
+    Security: refresh_token is set as HttpOnly cookie, NEVER in body.
+    """
     user_id = request.headers.get("X-User-ID")  # Optional for linking
     result = auth_service.handle_oauth_callback(
         table=table,
@@ -224,7 +255,27 @@ async def handle_oauth_callback(
     )
     if isinstance(result, auth_service.ErrorResponse):
         raise HTTPException(status_code=400, detail=result.error.message)
-    return JSONResponse(result.model_dump())
+
+    # Extract refresh_token for HttpOnly cookie
+    refresh_token = result.refresh_token_for_cookie
+
+    # Build response WITHOUT refresh_token in body
+    response_data = result.model_dump(exclude={"refresh_token_for_cookie"})
+    response = JSONResponse(response_data)
+
+    # Set refresh_token as HttpOnly, Secure cookie (NOT in response body)
+    if refresh_token:
+        response.set_cookie(
+            key="refresh_token",
+            value=refresh_token,
+            httponly=True,
+            secure=True,  # HTTPS only
+            samesite="strict",
+            max_age=30 * 24 * 60 * 60,  # 30 days
+            path="/api/v2/auth",  # Only sent to auth endpoints
+        )
+
+    return response
 
 
 class RefreshTokenRequest(BaseModel):
@@ -864,9 +915,15 @@ async def get_current_user(
     request: Request,
     table=Depends(get_dynamodb_table),
 ):
-    """Get current user info (/api/v2/users/me equivalent).
+    """Get current user info - MINIMAL response to prevent data leakage.
 
-    Returns user context needed by frontend.
+    Returns ONLY what frontend needs:
+    - auth_type: For UI conditional rendering
+    - email_masked: For display (j***@example.com)
+    - configs_count/max_configs: For quota display
+    - session_expires_in_seconds: For session countdown
+
+    NEVER returns: user_id, cognito_sub, created_at, daily_email_count
     """
     user_id = get_user_id_from_request(request)
     user = auth_service.get_user_by_id(table=table, user_id=user_id)
@@ -881,19 +938,15 @@ async def get_current_user(
         else 0
     )
 
-    return JSONResponse(
-        {
-            "user_id": user.user_id,
-            "auth_type": user.auth_type,
-            "email": user.email,
-            "created_at": user.created_at.isoformat(),
-            "session_expires_at": user.session_expires_at.isoformat()
-            if user.session_expires_at
-            else None,
-            "configs_count": config_count,
-            "max_configs": 2,
-        }
+    response = UserMeResponse(
+        auth_type=user.auth_type,
+        email_masked=mask_email(user.email),
+        configs_count=config_count,
+        max_configs=2,
+        session_expires_in_seconds=seconds_until(user.session_expires_at),
     )
+
+    return JSONResponse(response.model_dump())
 
 
 def include_routers(app):
