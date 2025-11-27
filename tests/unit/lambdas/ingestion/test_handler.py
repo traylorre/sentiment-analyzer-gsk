@@ -16,6 +16,23 @@ from src.lambdas.shared.circuit_breaker import CircuitBreakerState
 from src.lambdas.shared.quota_tracker import QuotaTracker
 
 
+@pytest.fixture(autouse=True)
+def reset_active_tickers_cache():
+    """Reset the active tickers cache before each test.
+
+    DFA-003 added caching to _get_active_tickers which persists across tests.
+    This fixture ensures each test starts with a clean cache state.
+    """
+    import src.lambdas.ingestion.handler as handler_module
+
+    handler_module._active_tickers_cache = []
+    handler_module._active_tickers_cache_timestamp = 0.0
+    yield
+    # Clean up after test too
+    handler_module._active_tickers_cache = []
+    handler_module._active_tickers_cache_timestamp = 0.0
+
+
 @pytest.fixture
 def env_vars():
     """Set required environment variables."""
