@@ -6,24 +6,28 @@ Parses and validates configuration from environment variables.
 
 For On-Call Engineers:
     Environment variables:
-    - WATCH_TAGS: Comma-separated tags (max 5)
+    - WATCH_TAGS: Comma-separated tags (max 5) - LEGACY, not used by new handler
     - DATABASE_TABLE: Database table name (or DYNAMODB_TABLE for backward compatibility)
     - SNS_TOPIC_ARN: SNS topic for analysis requests
-    - NEWSAPI_SECRET_ARN: Secret ARN for NewsAPI key
+    - TIINGO_SECRET_ARN: Secret ARN for Tiingo API key (Feature 006+)
+    - FINNHUB_SECRET_ARN: Secret ARN for Finnhub API key (Feature 006+)
     - MODEL_VERSION: Sentiment model version
 
     If ingestion fails with config errors:
     1. Check Lambda environment variables in AWS Console
-    2. Verify WATCH_TAGS format (comma-separated, max 5)
-    3. Check secret ARN exists and Lambda has access
+    2. Verify secret ARNs exist and Lambda has access
 
     See SC-03 in ON_CALL_SOP.md.
 
 For Developers:
     - Use get_config() to load all configuration
-    - Use parse_watch_tags() for tag parsing only
+    - Use parse_watch_tags() for tag parsing only (LEGACY)
     - Configuration is validated on load
     - All required vars must be set
+
+    NOTE: The new handler.py (Feature 006+) uses Tiingo/Finnhub adapters
+    and has its own _get_config() function. This file is retained for
+    backward compatibility with tests and utilities.
 
 Security Notes:
     - Secret ARNs stored in env vars (not actual secrets)
