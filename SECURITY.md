@@ -14,24 +14,32 @@ Please report security vulnerabilities privately to the project maintainers. Do 
 
 ## Security Status
 
-⚠️ **CRITICAL: Dashboard has P0 vulnerabilities - DO NOT deploy to production without mitigations.**
+✅ **Feature 006 Security Enhancements Implemented**
 
-**Last Security Review**: 2025-11-22
-**Status**: BLOCKED FOR PRODUCTION
+**Last Security Review**: 2025-11-26
+**Status**: APPROVED FOR DEMO (Feature 006 Tiingo/Finnhub pivot complete)
 
-### Critical Issues (MUST fix before production)
+### Critical Issues Status
 
-**Dashboard Lambda Function URL** - See `docs/DASHBOARD_SECURITY_ANALYSIS.md` for full details:
-- **P0-1**: No rate limiting on Lambda Function URL → Cost drain attack ($100 budget in ~33 hours)
+**Dashboard Lambda Security** - See `specs/001-interactive-dashboard-demo/SECURITY_REVIEW.md` for full details:
+- **P0-1**: ✅ FIXED - IP-based rate limiting with DynamoDB tracking
 - **P0-2**: ✅ FIXED - SSE connection limits implemented (max 2 per IP)
-- **P0-3**: Static API key with no rotation policy → Long-term unauthorized access
-- **P0-4**: Lambda Function URL has `auth_type = "NONE"` → No AWS-level authentication
-- **P0-5**: ✅ FIXED - CORS wildcard removed, environment-based origins enforced
+- **P0-3**: ✅ FIXED - Cognito authentication replaces static API key
+- **P0-4**: ✅ FIXED - Cognito JWT validation at Lambda level
+- **P0-5**: ✅ FIXED - CORS environment-based origins enforced
 
 ### High Priority Issues
 
-- **P1-1**: No CloudWatch alarms for anomalous request patterns
+- **P1-1**: ✅ FIXED - CloudWatch alarms for error rates, cost burn, notification delivery
 - **P1-2**: ✅ FIXED - IP logging added to authentication failures
+
+### Feature 006 Security Additions
+
+- **Circuit Breaker**: Per-service protection (Tiingo, Finnhub, SendGrid)
+- **Quota Tracking**: External API rate limit management
+- **X-Ray Tracing**: Day 1 mandatory on all 4 Lambdas
+- **hCaptcha**: Bot protection for sensitive endpoints
+- **Magic Links**: HMAC-signed passwordless authentication
 
 ### Recommended Deployment Architecture
 
@@ -48,15 +56,17 @@ Key areas requiring hardening before production deployment:
 - ✅ SSE concurrency exhaustion protection (FIXED)
 - ✅ CORS wildcard removal (FIXED)
 - ✅ IP-based forensic logging (FIXED)
-- ⚠️ Rate limiting and quota management (PENDING - requires API Gateway)
-- ⚠️ API key rotation policy (PENDING)
-- ⚠️ CloudWatch security monitoring alarms (PENDING)
+- ✅ Rate limiting and quota management (FIXED - IP-based with DynamoDB)
+- ✅ Cognito authentication replaces static API keys (FIXED)
+- ✅ CloudWatch security monitoring alarms (FIXED - error rate, cost, delivery alarms)
 
 ## Architecture Overview
 
-- Serverless AWS infrastructure (Lambda, DynamoDB, EventBridge, API Gateway)
-- All secrets managed via AWS Secrets Manager
-- API authentication via API Gateway API Keys
+- Serverless AWS infrastructure (Lambda, DynamoDB, EventBridge, SNS, CloudFront, Cognito)
+- All secrets managed via AWS Secrets Manager with 5-minute TTL caching
+- Authentication via AWS Cognito (JWT tokens, OAuth providers, magic links)
+- External APIs: Tiingo (primary), Finnhub (secondary), SendGrid (notifications)
+- X-Ray distributed tracing on all 4 Lambdas
 - TLS 1.2+ enforced for all external communications
 
 ## Known Limitations
