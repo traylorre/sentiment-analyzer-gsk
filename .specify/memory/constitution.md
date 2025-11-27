@@ -396,18 +396,32 @@ Operational Notes
 
 	Pipeline Check Bypass (NEVER ALLOWED)
 	--------------------------------------
-	CRITICAL: Never bypass pipeline checks. No exceptions.
-	- Do NOT use --no-verify on commits
-	- Do NOT force-push to main
-	- Do NOT merge without required approvals
-	- Do NOT skip required status checks
+	**ABSOLUTE RULE: NEVER BYPASS PIPELINE. NO EXCEPTIONS. NO EXCUSES.**
+
+	This is a non-negotiable requirement. Pipeline checks exist to protect code quality,
+	security, and production stability. Bypassing them undermines the entire CI/CD system.
+
+	PROHIBITED ACTIONS (will result in immediate rollback):
+	- Do NOT use --no-verify on commits or pushes
+	- Do NOT use --admin flag to bypass required checks on merge
+	- Do NOT force-push to main or protected branches
+	- Do NOT merge without required approvals and passing checks
+	- Do NOT skip, dismiss, or override required status checks
+	- Do NOT use GitHub admin privileges to bypass branch protection
+	- Do NOT disable branch protection rules, even temporarily
+	- Do NOT mark failing checks as "expected to fail" to proceed
 
 	If pipeline fails:
-	1. Investigate the failure
-	2. Fix the root cause
-	3. Push the fix to the same feature branch
-	4. Wait for pipeline to pass
-	5. Only then proceed with merge
+	1. STOP - Do not attempt to bypass
+	2. Investigate the failure thoroughly
+	3. Fix the root cause in the code or tests
+	4. Push the fix to the same feature branch
+	5. Wait for ALL pipeline checks to pass
+	6. Only then proceed with merge through normal PR process
+
+	Rationale: Every pipeline bypass introduces risk that compounds over time.
+	A "quick fix" bypass today becomes tomorrow's production incident.
+	The pipeline is the last line of defense before code reaches production.
 
 Design & Diagrams (Canva preferred)
 ----------------------------------
@@ -445,4 +459,6 @@ This constitution is intentionally minimal. Amendments may be added with a short
 
 Amendment 1.1 (2025-11-26): Added Environment & Stage Testing Matrix, External Dependency Mocking rules, Synthetic Test Data requirements for E2E, Implementation Accompaniment Rule, and Git Workflow & CI/CD Rules including pre-push requirements, pipeline monitoring, branch lifecycle, and bypass prohibition.
 
-**Version**: 1.1 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-11-26
+Amendment 1.2 (2025-11-27): Strengthened Pipeline Check Bypass section to ABSOLUTE RULE status. Added explicit prohibition of --admin flag bypass, GitHub admin privilege abuse, and branch protection disabling. Clarified that all bypasses result in immediate rollback.
+
+**Version**: 1.2 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-11-27
