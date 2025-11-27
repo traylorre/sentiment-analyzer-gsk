@@ -14,6 +14,147 @@ Feature 006 pivots the sentiment analyzer from general news (NewsAPI/Guardian) t
 - **Notifications**: Email alerts for sentiment/volatility thresholds via SendGrid
 - **Observability**: X-Ray tracing (Day 1), CloudWatch RUM, full metrics suite
 
+## Architecture Diagram
+
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
+graph TB
+    subgraph External["External Data Sources"]
+        Tiingo[Tiingo API<br/>Financial News<br/>Primary]
+        Finnhub[Finnhub API<br/>Market News + Sentiment<br/>Secondary]
+        SendGrid[SendGrid<br/>Email Service]
+    end
+
+    subgraph Auth["Authentication"]
+        Cognito[AWS Cognito<br/>User Pool]
+        Google[Google OAuth]
+        GitHub[GitHub OAuth]
+        MagicLink[Magic Link<br/>Email Auth]
+    end
+
+    subgraph AWS["AWS Cloud"]
+        subgraph IngestionLayer["Ingestion Layer"]
+            EB[EventBridge<br/>5 min schedule]
+            IngestionLambda[Ingestion Lambda<br/>financial_handler.py<br/>X-Ray Traced]
+            CircuitBreaker[Circuit Breaker<br/>Per-Service]
+            QuotaTracker[Quota Tracker<br/>API Limits]
+        end
+
+        subgraph ProcessingLayer["Processing Layer"]
+            SNS[SNS Topic<br/>sentiment-events]
+            AnalysisLambda[Analysis Lambda<br/>Dual-Source Sentiment<br/>ATR Calculator<br/>X-Ray Traced]
+            S3Model[S3 Bucket<br/>DistilBERT Model<br/>+ Ticker Cache]
+        end
+
+        subgraph APILayer["Dashboard API Layer"]
+            CloudFront[CloudFront CDN<br/>Static Assets + API]
+            DashboardLambda[Dashboard Lambda<br/>FastAPI + Mangum<br/>X-Ray Traced]
+            AuthEndpoints[Auth Endpoints<br/>OAuth, Magic Links]
+            ConfigEndpoints[Config API<br/>CRUD Operations]
+            DataEndpoints[Data API<br/>Sentiment, Volatility<br/>Heat Maps]
+        end
+
+        subgraph NotificationLayer["Notification Layer"]
+            AlertSNS[SNS Alert Topic]
+            NotificationLambda[Notification Lambda<br/>Alert Evaluator<br/>X-Ray Traced]
+            DigestSchedule[EventBridge<br/>Daily Digest]
+        end
+
+        subgraph StorageLayer["Storage Layer"]
+            DDB[(DynamoDB<br/>Users, Configs<br/>Sentiment Results<br/>Alerts, Notifications)]
+            DLQ[SQS DLQ<br/>Failed Messages]
+        end
+
+        subgraph ObservabilityLayer["Observability"]
+            XRay[AWS X-Ray<br/>Distributed Tracing]
+            CW[CloudWatch<br/>Logs & Metrics]
+            RUM[CloudWatch RUM<br/>Client Analytics]
+            Alarms[CloudWatch Alarms<br/>Tiingo/Finnhub/SendGrid]
+        end
+    end
+
+    subgraph Users["Users"]
+        Browser[Web Browser<br/>React Dashboard]
+        Email[Email Client<br/>Alerts & Digests]
+    end
+
+    %% Data Flow - Ingestion
+    EB -->|Trigger| IngestionLambda
+    IngestionLambda -->|Check Quota| QuotaTracker
+    IngestionLambda -->|Check Health| CircuitBreaker
+    CircuitBreaker -->|If Healthy| Tiingo
+    CircuitBreaker -->|If Healthy| Finnhub
+    Tiingo -->|News Articles| IngestionLambda
+    Finnhub -->|News + Sentiment| IngestionLambda
+    IngestionLambda -->|Store Raw| DDB
+    IngestionLambda -->|Publish| SNS
+
+    %% Data Flow - Analysis
+    SNS -->|Trigger| AnalysisLambda
+    AnalysisLambda -->|Load Model| S3Model
+    AnalysisLambda -->|Aggregate Sentiment| DDB
+    AnalysisLambda -->|Calculate ATR| DDB
+    AnalysisLambda -->|Failed| DLQ
+
+    %% Data Flow - API
+    Browser -->|HTTPS| CloudFront
+    CloudFront -->|Static| S3Model
+    CloudFront -->|/api/*| DashboardLambda
+    DashboardLambda --> AuthEndpoints
+    DashboardLambda --> ConfigEndpoints
+    DashboardLambda --> DataEndpoints
+    AuthEndpoints -->|Validate| Cognito
+    Cognito -->|OAuth| Google
+    Cognito -->|OAuth| GitHub
+    AuthEndpoints -->|Magic Link| SendGrid
+    ConfigEndpoints -->|CRUD| DDB
+    DataEndpoints -->|Query| DDB
+    DashboardLambda -->|Evaluate| AlertSNS
+
+    %% Data Flow - Notifications
+    AlertSNS -->|Trigger| NotificationLambda
+    DigestSchedule -->|Daily| NotificationLambda
+    NotificationLambda -->|Query Alerts| DDB
+    NotificationLambda -->|Send Email| SendGrid
+    NotificationLambda -->|Record| DDB
+    SendGrid -->|Deliver| Email
+
+    %% Observability
+    IngestionLambda -.->|Trace| XRay
+    AnalysisLambda -.->|Trace| XRay
+    DashboardLambda -.->|Trace| XRay
+    NotificationLambda -.->|Trace| XRay
+    IngestionLambda -.->|Logs| CW
+    AnalysisLambda -.->|Logs| CW
+    DashboardLambda -.->|Logs| CW
+    NotificationLambda -.->|Logs| CW
+    Browser -.->|Analytics| RUM
+    CW -.->|Alerts| Alarms
+
+    classDef layerBox fill:#fff8e1,stroke:#c9a227,stroke-width:2px,color:#333
+    classDef lambdaStyle fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
+    classDef storageStyle fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px,color:#1e3a1e
+    classDef messagingStyle fill:#b39ddb,stroke:#673ab7,stroke-width:2px,color:#1a0a3e
+    classDef monitoringStyle fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
+    classDef externalStyle fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef authStyle fill:#81d4fa,stroke:#01579b,stroke-width:2px,color:#01579b
+
+    class External,Auth,AWS,IngestionLayer,ProcessingLayer,APILayer,NotificationLayer,StorageLayer,ObservabilityLayer,Users layerBox
+    class IngestionLambda,AnalysisLambda,DashboardLambda,NotificationLambda lambdaStyle
+    class DDB,DLQ,S3Model storageStyle
+    class SNS,AlertSNS messagingStyle
+    class CW,XRay,RUM,Alarms,EB,DigestSchedule monitoringStyle
+    class Tiingo,Finnhub,SendGrid,Browser,Email externalStyle
+    class Cognito,Google,GitHub,MagicLink,AuthEndpoints,ConfigEndpoints,DataEndpoints,CircuitBreaker,QuotaTracker,CloudFront authStyle
+```
+
+### Data Flow Summary
+
+1. **Ingestion**: EventBridge triggers → Circuit breaker checks → Tiingo/Finnhub fetch → DynamoDB store → SNS publish
+2. **Analysis**: SNS trigger → Load DistilBERT model → Aggregate dual-source sentiment → Calculate ATR → Store results
+3. **Dashboard**: CloudFront → Lambda Function URL → Auth validation → Config CRUD → Sentiment/Volatility queries
+4. **Notifications**: Alert evaluation → SendGrid email → Daily digest scheduling
+
 ## Technical Context
 
 **Language/Version**: Python 3.13

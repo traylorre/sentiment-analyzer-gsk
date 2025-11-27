@@ -1,4 +1,4 @@
-# Phase 3: NewsAPI Failure Chaos Testing
+# Phase 3: Financial API Failure Chaos Testing
 
 **Status**: ✅ Implemented
 **PR**: #78
@@ -6,7 +6,9 @@
 
 ## Overview
 
-Phase 3 implements chaos testing for NewsAPI unavailability using DynamoDB-based coordination. Unlike Phase 2 (which uses AWS FIS), Phase 3 uses pure application-level fault injection through DynamoDB status flags.
+Phase 3 implements chaos testing for financial API (Tiingo/Finnhub) unavailability using DynamoDB-based coordination. Unlike Phase 2 (which uses AWS FIS), Phase 3 uses pure application-level fault injection through DynamoDB status flags.
+
+> **Note**: This document was originally written for NewsAPI. The system now uses Tiingo (primary) and Finnhub (secondary) for financial news ingestion. The chaos injection mechanism remains the same.
 
 ## Architecture
 
@@ -18,9 +20,10 @@ Phase 3 implements chaos testing for NewsAPI unavailability using DynamoDB-based
    - Environment-aware: Only active in preprod/dev/test
    - Caches DynamoDB client for Lambda container reuse
 
-2. **Ingestion Lambda Integration** (`src/lambdas/ingestion/handler.py`)
-   - Checks `is_chaos_active("newsapi_failure")` before NewsAPI fetch
-   - Gracefully skips NewsAPI calls if chaos active
+2. **Ingestion Lambda Integration** (`src/lambdas/ingestion/financial_handler.py`)
+   - Checks `is_chaos_active("api_failure")` before Tiingo/Finnhub fetch
+   - Gracefully skips API calls if chaos active
+   - Circuit breaker integration for real failures
    - Logs warning for CloudWatch visibility
    - Continues processing (0 articles fetched)
 
@@ -37,15 +40,16 @@ sequenceDiagram
     participant Dashboard
     participant DynamoDB
     participant Ingestion
-    participant NewsAPI
+    participant Tiingo
+    participant Finnhub
 
-    User->>Dashboard: Start newsapi_failure experiment
+    User->>Dashboard: Start api_failure experiment
     Dashboard->>DynamoDB: Set status="running"
 
     Note over Ingestion: EventBridge trigger (every 5min)
     Ingestion->>DynamoDB: Query by_status GSI
     DynamoDB-->>Ingestion: experiment status="running"
-    Ingestion->>Ingestion: Skip NewsAPI fetch
+    Ingestion->>Ingestion: Skip Tiingo/Finnhub fetch
     Note over Ingestion: Log warning, return 0 articles
 
     User->>Dashboard: Stop experiment
@@ -54,7 +58,8 @@ sequenceDiagram
     Note over Ingestion: Next EventBridge trigger
     Ingestion->>DynamoDB: Query by_status GSI
     DynamoDB-->>Ingestion: No running experiments
-    Ingestion->>NewsAPI: Resume normal fetch
+    Ingestion->>Tiingo: Resume normal fetch (primary)
+    Ingestion->>Finnhub: Resume normal fetch (secondary)
 ```
 
 ## Implementation Details
@@ -62,12 +67,12 @@ sequenceDiagram
 ### Start Experiment
 
 ```python
-elif scenario_type == "newsapi_failure":
+elif scenario_type == "api_failure":
     # Phase 3: DynamoDB-based chaos injection
     results = {
         "started_at": datetime.utcnow().isoformat() + "Z",
         "injection_method": "dynamodb_flag",
-        "note": "Ingestion Lambda will skip NewsAPI calls while experiment is running",
+        "note": "Ingestion Lambda will skip Tiingo/Finnhub calls while experiment is running",
     }
     update_experiment_status(experiment_id, "running", results)
 ```
@@ -75,7 +80,7 @@ elif scenario_type == "newsapi_failure":
 ### Stop Experiment
 
 ```python
-elif scenario_type == "newsapi_failure":
+elif scenario_type == "api_failure":
     # Phase 3: Stop DynamoDB-based chaos injection
     results = experiment.get("results", {})
     results["stopped_at"] = datetime.utcnow().isoformat() + "Z"
@@ -113,15 +118,15 @@ def is_chaos_active(scenario_type: str) -> bool:
 ### Ingestion Lambda Check
 
 ```python
-# Phase 3 Chaos Injection: Check if newsapi_failure experiment is active
-if is_chaos_active("newsapi_failure"):
+# Phase 3 Chaos Injection: Check if api_failure experiment is active
+if is_chaos_active("api_failure"):
     log_structured(
         "WARNING",
-        "Chaos experiment active: skipping NewsAPI fetch",
-        scenario="newsapi_failure",
-        tag=tag,
+        "Chaos experiment active: skipping Tiingo/Finnhub fetch",
+        scenario="api_failure",
+        ticker=ticker,
     )
-    continue  # Skip this tag
+    continue  # Skip this ticker
 ```
 
 ## Safety Features
@@ -148,12 +153,12 @@ if is_chaos_active("newsapi_failure"):
 
 ## Benefits
 
-| Feature | Phase 3 (newsapi_failure) | Phase 2 (dynamodb_throttle) |
+| Feature | Phase 3 (api_failure) | Phase 2 (dynamodb_throttle) |
 |---------|---------------------------|------------------------------|
 | **Activation** | Instant (status change) | ~1-2 seconds (FIS API) |
 | **Infrastructure** | None (DynamoDB only) | AWS FIS templates |
 | **Complexity** | Low | Medium |
-| **Blast Radius** | Configurable (per tag) | Configurable (% throttle) |
+| **Blast Radius** | Configurable (per ticker) | Configurable (% throttle) |
 | **Stop Time** | Instant | ~1-2 seconds |
 | **Cost** | Free (DynamoDB queries) | FIS experiment costs |
 | **Coordination** | DynamoDB status | AWS FIS |
@@ -187,17 +192,17 @@ if is_chaos_active("newsapi_failure"):
    # Via Dashboard UI or API
    POST /api/chaos/experiments
    {
-     "scenario_type": "newsapi_failure",
+     "scenario_type": "api_failure",
      "duration_seconds": 300,
      "blast_radius": 100
    }
    ```
 
-2. **Verify Ingestion Skips NewsAPI**
+2. **Verify Ingestion Skips APIs**
    ```bash
    # Check CloudWatch logs
    aws logs tail /aws/lambda/preprod-sentiment-ingestion --since 5m --follow
-   # Look for: "Chaos experiment active: skipping NewsAPI fetch"
+   # Look for: "Chaos experiment active: skipping Tiingo/Finnhub fetch"
    ```
 
 3. **Verify Graceful Degradation**
@@ -234,9 +239,9 @@ if is_chaos_active("newsapi_failure"):
 ```json
 {
   "level": "WARNING",
-  "message": "Chaos experiment active: skipping NewsAPI fetch",
-  "scenario": "newsapi_failure",
-  "tag": "AI",
+  "message": "Chaos experiment active: skipping Tiingo/Finnhub fetch",
+  "scenario": "api_failure",
+  "ticker": "AAPL",
   "environment": "preprod"
 }
 ```
@@ -246,7 +251,7 @@ if is_chaos_active("newsapi_failure"):
 {
   "level": "ERROR",
   "message": "Failed to check chaos experiment status",
-  "scenario_type": "newsapi_failure",
+  "scenario_type": "api_failure",
   "error": "ResourceNotFoundException: Table not found"
 }
 ```
@@ -261,8 +266,8 @@ if is_chaos_active("newsapi_failure"):
 
 Consider adding alarm for extended chaos:
 ```terraform
-resource "aws_cloudwatch_metric_alarm" "chaos_newsapi_extended" {
-  alarm_name          = "preprod-chaos-newsapi-extended"
+resource "aws_cloudwatch_metric_alarm" "chaos_api_extended" {
+  alarm_name          = "preprod-chaos-api-extended"
   comparison_operator = "LessThanThreshold"
   evaluation_periods  = "6"  # 30 minutes (5min * 6)
   metric_name         = "ArticlesFetched"
@@ -270,7 +275,7 @@ resource "aws_cloudwatch_metric_alarm" "chaos_newsapi_extended" {
   period              = "300"
   statistic           = "Sum"
   threshold           = "1"
-  alarm_description   = "NewsAPI chaos experiment active for 30+ minutes"
+  alarm_description   = "API chaos experiment active for 30+ minutes"
   treat_missing_data  = "notBreaching"
 }
 ```
@@ -279,7 +284,7 @@ resource "aws_cloudwatch_metric_alarm" "chaos_newsapi_extended" {
 
 ### Issue: Chaos not activating
 
-**Symptoms**: Ingestion still fetching from NewsAPI after starting experiment
+**Symptoms**: Ingestion still fetching from Tiingo/Finnhub after starting experiment
 
 **Debug Steps**:
 1. Check experiment status in DynamoDB:
@@ -309,7 +314,7 @@ resource "aws_cloudwatch_metric_alarm" "chaos_newsapi_extended" {
 
 ### Issue: Chaos won't deactivate
 
-**Symptoms**: Ingestion still skipping NewsAPI after stopping experiment
+**Symptoms**: Ingestion still skipping Tiingo/Finnhub after stopping experiment
 
 **Debug Steps**:
 1. Verify experiment status changed to "stopped":
@@ -337,33 +342,32 @@ resource "aws_cloudwatch_metric_alarm" "chaos_newsapi_extended" {
 
 ## Future Enhancements
 
-### 1. Per-Tag Blast Radius
-Currently skips all tags. Could enhance to skip only specific tags:
+### 1. Per-Ticker Blast Radius
+Currently skips all tickers. Could enhance to skip only specific tickers:
 ```python
 {
-  "scenario_type": "newsapi_failure",
-  "blast_radius": 50,  # Skip 50% of tags
-  "affected_tags": ["AI", "climate"]  # Or specific tags only
+  "scenario_type": "api_failure",
+  "blast_radius": 50,  # Skip 50% of tickers
+  "affected_tickers": ["AAPL", "TSLA"]  # Or specific tickers only
 }
 ```
 
 ### 2. Partial Fetch (Degraded Mode)
 Instead of 0 articles, fetch reduced count:
 ```python
-if is_chaos_active("newsapi_failure"):
+if is_chaos_active("api_failure"):
     # Fetch 1 article instead of 10
-    articles = adapter.fetch_items(tag, limit=1)
+    articles = adapter.fetch_items(ticker, limit=1)
 ```
 
-### 3. Retry with Backoff Simulation
-Simulate retries with exponential backoff:
+### 3. Single-Source Failure
+Test resilience when only one source fails:
 ```python
-if is_chaos_active("newsapi_failure"):
-    # Simulate 3 retries
-    for attempt in range(3):
-        log_structured("WARNING", f"NewsAPI retry {attempt+1}/3")
-        time.sleep(2 ** attempt)
-    # Then skip
+if is_chaos_active("tiingo_failure"):
+    # Skip Tiingo, but Finnhub continues
+    tiingo_articles = []
+else:
+    tiingo_articles = tiingo_adapter.fetch_news(ticker)
 ```
 
 ## References

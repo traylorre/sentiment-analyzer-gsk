@@ -25,7 +25,7 @@ This document provides clear, unambiguous guidance for handling production incid
 | `lambda-analysis-errors` | [SC-04](#sc-04-analysis-lambda-failures) | HIGH | Jump |
 | `lambda-dashboard-errors` | [SC-05](#sc-05-dashboard-unavailable) | HIGH | Jump |
 | `sns-delivery-failures` | [SC-06](#sc-06-sns-delivery-failures) | MEDIUM | Jump |
-| `newsapi-rate-limit` | [SC-07](#sc-07-newsapi-rate-limit) | LOW | Jump |
+| `api-rate-limit` | [SC-07](#sc-07-api-rate-limit) | LOW | Jump |
 | `budget-threshold-80` | [SC-08](#sc-08-cost-overrun) | MEDIUM | Jump |
 | `budget-threshold-100` | [SC-08](#sc-08-cost-overrun) | HIGH | Jump |
 | `dlq-depth-exceeded` | [SC-09](#sc-09-dlq-backup) | MEDIUM | Jump |
@@ -183,14 +183,14 @@ aws events disable-rule --name dev-ingestion-schedule
 **Trigger**: Errors > 3 in 5 minutes
 **Severity**: HIGH
 
-**What This Means**: Ingestion Lambda is failing to process NewsAPI data.
+**What This Means**: Ingestion Lambda is failing to process financial news data.
 
 **Possible Causes**:
 
 | # | Cause | Likelihood | How to Verify |
 |---|-------|------------|---------------|
-| 1 | NewsAPI key invalid/expired | HIGH | Check Secrets Manager, test API manually |
-| 2 | NewsAPI service down | MEDIUM | Check https://newsapi.org/status |
+| 1 | Tiingo/Finnhub API key invalid/expired | HIGH | Check Secrets Manager, test APIs manually |
+| 2 | Tiingo or Finnhub service down | MEDIUM | Check https://api.tiingo.com/status, https://finnhub.io/status |
 | 3 | Network timeout | MEDIUM | Check Lambda timeout errors in logs |
 | 4 | Code bug after deployment | MEDIUM | Check recent deployments |
 | 5 | Memory exhaustion | LOW | Check Lambda memory metrics |
@@ -204,13 +204,19 @@ aws logs filter-log-events \
   --filter-pattern "ERROR" \
   --start-time $(date -d '30 minutes ago' +%s)000
 
-# 2. Verify NewsAPI key is valid
+# 2. Verify Tiingo API key is valid
 aws secretsmanager get-secret-value \
-  --secret-id dev/sentiment-analyzer/newsapi \
+  --secret-id dev/sentiment-analyzer/tiingo-api-key \
   --query 'SecretString' --output text | jq -r '.api_key' | \
-  xargs -I {} curl -s "https://newsapi.org/v2/everything?q=test&apiKey={}&pageSize=1" | jq '.status'
+  xargs -I {} curl -s -H "Authorization: Token {}" "https://api.tiingo.com/tiingo/news?limit=1" | jq '.[0].title'
 
-# 3. Check Lambda metrics
+# 3. Verify Finnhub API key is valid
+aws secretsmanager get-secret-value \
+  --secret-id dev/sentiment-analyzer/finnhub-api-key \
+  --query 'SecretString' --output text | jq -r '.api_key' | \
+  xargs -I {} curl -s "https://finnhub.io/api/v1/news?category=general&token={}" | jq '.[0].headline'
+
+# 4. Check Lambda metrics
 aws cloudwatch get-metric-statistics \
   --namespace AWS/Lambda \
   --metric-name Duration \
@@ -223,21 +229,29 @@ aws cloudwatch get-metric-statistics \
 
 **Remediation**:
 
-1. **If NewsAPI key invalid**:
+1. **If Tiingo API key invalid**:
    ```bash
-   # Update secret with new key
+   # Update Tiingo secret with new key
    aws secretsmanager put-secret-value \
-     --secret-id dev/sentiment-analyzer/newsapi \
+     --secret-id dev/sentiment-analyzer/tiingo-api-key \
      --secret-string '{"api_key":"NEW_KEY_HERE"}'
    ```
 
-2. **If NewsAPI down**: Wait for recovery, no action needed
+2. **If Finnhub API key invalid**:
+   ```bash
+   # Update Finnhub secret with new key
+   aws secretsmanager put-secret-value \
+     --secret-id dev/sentiment-analyzer/finnhub-api-key \
+     --secret-string '{"api_key":"NEW_KEY_HERE"}'
+   ```
 
-3. **If timeout**: Increase Lambda timeout or reduce batch size
+3. **If Tiingo/Finnhub down**: Circuit breaker will auto-fallback; wait for recovery
 
-4. **If code bug**: Roll back to previous version
+4. **If timeout**: Increase Lambda timeout or reduce batch size
 
-5. **If memory**: Increase Lambda memory allocation
+5. **If code bug**: Roll back to previous version
+
+6. **If memory**: Increase Lambda memory allocation
 
 **Verify Resolution**: Next scheduled invocation succeeds (check in 5 min)
 
@@ -414,43 +428,68 @@ aws cloudwatch get-metric-statistics \
 
 ---
 
-### SC-07: NewsAPI Rate Limit
+### SC-07: API Rate Limit
 
-**Alarm**: `${environment}-newsapi-rate-limit`
-**Trigger**: Custom metric NewsAPIRateLimitHit > 0
+**Alarm**: `${environment}-api-rate-limit`
+**Trigger**: Custom metric TiingoRateLimitHit > 0 OR FinnhubRateLimitHit > 0
 **Severity**: LOW
 
-**What This Means**: Hit NewsAPI rate limit (100 requests/day on free tier).
+**What This Means**: Hit Tiingo or Finnhub API rate limits.
+
+**Rate Limits**:
+- **Tiingo**: 1000 requests/day (free tier), 50,000/day (Power tier)
+- **Finnhub**: 60 requests/minute, 300/day (free tier)
 
 **Possible Causes**:
 
 | # | Cause | Likelihood | How to Verify |
 |---|-------|------------|---------------|
-| 1 | Too many tags (>5) | MEDIUM | Check WATCH_TAGS env var |
+| 1 | Too many tickers configured | HIGH | Check user configurations |
 | 2 | Schedule too frequent | MEDIUM | Check EventBridge rule |
-| 3 | Free tier exhausted | HIGH | Check NewsAPI dashboard |
+| 3 | Free tier quota exhausted | HIGH | Check CloudWatch metrics |
 
 **Immediate Actions**:
 
 ```bash
-# 1. Check current watch tags count
-aws lambda get-function-configuration \
-  --function-name dev-sentiment-ingestion \
-  --query 'Environment.Variables.WATCH_TAGS'
+# 1. Check circuit breaker status
+aws dynamodb query \
+  --table-name dev-sentiment-items \
+  --index-name by_status \
+  --key-condition-expression "#s = :status" \
+  --expression-attribute-names '{"#s": "status"}' \
+  --expression-attribute-values '{":status": {"S": "circuit_breaker"}}' \
+  --limit 5
 
-# 2. Check schedule frequency
-aws events describe-rule --name dev-ingestion-schedule
+# 2. Check Tiingo quota usage
+aws cloudwatch get-metric-statistics \
+  --namespace SentimentAnalyzer \
+  --metric-name TiingoRequestCount \
+  --start-time $(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ) \
+  --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) \
+  --period 3600 \
+  --statistics Sum
+
+# 3. Check Finnhub quota usage
+aws cloudwatch get-metric-statistics \
+  --namespace SentimentAnalyzer \
+  --metric-name FinnhubRequestCount \
+  --start-time $(date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%SZ) \
+  --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) \
+  --period 60 \
+  --statistics Sum
 ```
 
 **Remediation**:
 
-1. **Reduce tags**: Update WATCH_TAGS to ≤5 tags
+1. **Circuit breaker active**: Wait for auto-recovery (60s half-open timeout)
 
 2. **Reduce frequency**: Change EventBridge to every 15 min instead of 5 min
 
-3. **Upgrade plan**: Purchase NewsAPI business tier ($449/month)
+3. **Upgrade plan**:
+   - Tiingo: Upgrade to Power tier ($30/month)
+   - Finnhub: Upgrade to Basic tier ($29/month)
 
-**Verify Resolution**: Next invocation succeeds without rate limit
+**Verify Resolution**: Circuit breaker closes, next invocation succeeds
 
 ---
 
@@ -568,9 +607,9 @@ aws cloudwatch get-metric-statistics \
 | # | Cause | Likelihood | How to Verify |
 |---|-------|------------|---------------|
 | 1 | EventBridge rule disabled | HIGH | Check rule state |
-| 2 | NewsAPI returning empty | MEDIUM | Test API manually |
+| 2 | Tiingo/Finnhub returning empty | MEDIUM | Test APIs manually |
 | 3 | All articles are duplicates | MEDIUM | Check dedup metrics |
-| 4 | Watch tags return no results | LOW | Test tags in NewsAPI |
+| 4 | Configured tickers return no results | LOW | Test tickers in Tiingo/Finnhub |
 
 **Immediate Actions**:
 
@@ -584,11 +623,18 @@ aws lambda invoke \
   --payload '{}' \
   /tmp/ingestion-output.json && cat /tmp/ingestion-output.json
 
-# 3. Test NewsAPI directly
-API_KEY=$(aws secretsmanager get-secret-value \
-  --secret-id dev/sentiment-analyzer/newsapi \
+# 3. Test Tiingo directly
+TIINGO_KEY=$(aws secretsmanager get-secret-value \
+  --secret-id dev/sentiment-analyzer/tiingo-api-key \
   --query 'SecretString' --output text | jq -r '.api_key')
-curl "https://newsapi.org/v2/everything?q=AI&apiKey=$API_KEY&pageSize=5" | jq '.totalResults'
+curl -s -H "Authorization: Token $TIINGO_KEY" \
+  "https://api.tiingo.com/tiingo/news?tickers=AAPL&limit=5" | jq 'length'
+
+# 4. Test Finnhub directly
+FINNHUB_KEY=$(aws secretsmanager get-secret-value \
+  --secret-id dev/sentiment-analyzer/finnhub-api-key \
+  --query 'SecretString' --output text | jq -r '.api_key')
+curl -s "https://finnhub.io/api/v1/company-news?symbol=AAPL&from=$(date -d '7 days ago' +%Y-%m-%d)&to=$(date +%Y-%m-%d)&token=$FINNHUB_KEY" | jq 'length'
 ```
 
 **Remediation**:
@@ -598,7 +644,7 @@ curl "https://newsapi.org/v2/everything?q=AI&apiKey=$API_KEY&pageSize=5" | jq '.
    aws events enable-rule --name dev-ingestion-schedule
    ```
 
-2. **If NewsAPI empty**: Check if tags are too specific, broaden search
+2. **If Tiingo/Finnhub empty**: Check if tickers are valid, verify market hours
 
 3. **If all duplicates**: This is normal after initial load, wait for new articles
 
@@ -717,7 +763,9 @@ The following alarms are referenced above but may not exist in Terraform yet:
 | `lambda-analysis-errors` | Lambda | Errors | > 3 in 5 min | **MUST CREATE** |
 | `lambda-dashboard-errors` | Lambda | Errors | > 5 in 5 min | **MUST CREATE** |
 | `sns-delivery-failures` | SNS | NumberOfNotificationsFailed | > 5 in 5 min | **MUST CREATE** |
-| `newsapi-rate-limit` | Custom | NewsAPIRateLimitHit | > 0 | **MUST CREATE** |
+| `tiingo-error-rate` | Custom | TiingoErrors | > 5 in 5 min | ✅ EXISTS |
+| `finnhub-error-rate` | Custom | FinnhubErrors | > 5 in 5 min | ✅ EXISTS |
+| `circuit-breaker-open` | Custom | CircuitBreakerOpen | > 0 | ✅ EXISTS |
 | `budget-threshold-80` | Budget | ACTUAL > 80% | - | **MUST CREATE** |
 | `budget-threshold-100` | Budget | ACTUAL > 100% | - | **MUST CREATE** |
 | `dlq-depth-exceeded` | SQS | ApproximateNumberOfMessages | > 100 | **MUST CREATE** |
@@ -870,7 +918,8 @@ No escalation path - @traylorre handles all incidents.
 | Role | Contact | Hours |
 |------|---------|-------|
 | On-Call | @traylorre | 24/7 |
-| NewsAPI Support | support@newsapi.org | Business hours |
+| Tiingo Support | support@tiingo.com | Business hours |
+| Finnhub Support | support@finnhub.io | Business hours |
 | AWS Support | AWS Console | 24/7 (if support plan) |
 
 ---
