@@ -55,6 +55,32 @@ output "cloudwatch_alarm_write_throttles_arn" {
   value       = aws_cloudwatch_metric_alarm.write_throttles.arn
 }
 
+# Feature 006: User Data Table Outputs
+output "feature_006_users_table_name" {
+  description = "Name of the Feature 006 users DynamoDB table"
+  value       = aws_dynamodb_table.feature_006_users.name
+}
+
+output "feature_006_users_table_arn" {
+  description = "ARN of the Feature 006 users DynamoDB table"
+  value       = aws_dynamodb_table.feature_006_users.arn
+}
+
+output "feature_006_gsi_by_email" {
+  description = "Name of the by_email GSI (user lookup)"
+  value       = "by_email"
+}
+
+output "feature_006_gsi_by_cognito_sub" {
+  description = "Name of the by_cognito_sub GSI (OAuth lookup)"
+  value       = "by_cognito_sub"
+}
+
+output "feature_006_gsi_by_entity_status" {
+  description = "Name of the by_entity_status GSI (notification/alert filtering)"
+  value       = "by_entity_status"
+}
+
 # Chaos Testing Outputs
 output "chaos_experiments_table_name" {
   description = "Name of the Chaos Experiments DynamoDB table"

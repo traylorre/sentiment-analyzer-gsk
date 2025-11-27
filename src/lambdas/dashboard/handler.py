@@ -103,6 +103,84 @@ ENVIRONMENT = os.environ["ENVIRONMENT"]
 MAX_SSE_CONNECTIONS_PER_IP = int(os.environ.get("MAX_SSE_CONNECTIONS_PER_IP", "2"))
 sse_connections: dict[str, int] = {}  # ip_address -> active_connection_count
 
+# =============================================================================
+# DFA-001 FIX: Metrics Cache (reduces 72K queries/min to ~2 queries/30s)
+# =============================================================================
+# Cache dashboard metrics to avoid 6+ DynamoDB queries per SSE poll.
+# With 1000 concurrent clients polling every 5s, we'd have:
+#   - Before: 1000 * 12 queries/min * 6 queries/request = 72,000 queries/min
+#   - After: ~2 queries every 30 seconds = 4 queries/min (99.99% reduction)
+#
+# TTL is configurable via METRICS_CACHE_TTL_SECONDS (default: 30s)
+# For On-Call: If metrics appear stale, reduce TTL or restart Lambda container.
+import time
+
+METRICS_CACHE_TTL_SECONDS = int(os.environ.get("METRICS_CACHE_TTL_SECONDS", "30"))
+
+# Global cache state - survives across SSE poll cycles within same Lambda container
+_metrics_cache: dict[str, Any] = {}
+_metrics_cache_timestamp: float = 0.0
+_cached_table: Any = None  # Reuse table object across requests
+
+
+def _get_cached_table():
+    """Get or create cached DynamoDB table object."""
+    global _cached_table
+    if _cached_table is None:
+        _cached_table = get_table(DYNAMODB_TABLE)
+    return _cached_table
+
+
+def _get_cached_metrics(force_refresh: bool = False) -> dict[str, Any]:
+    """
+    Get cached dashboard metrics, refreshing if TTL expired.
+
+    This is the key optimization: instead of querying DynamoDB 6+ times per
+    SSE poll (every 5s per client), we cache for 30s and share across all clients.
+
+    Args:
+        force_refresh: If True, bypass cache and fetch fresh data
+
+    Returns:
+        Dashboard metrics dict (same format as aggregate_dashboard_metrics)
+    """
+    global _metrics_cache, _metrics_cache_timestamp
+
+    now = time.time()
+    cache_age = now - _metrics_cache_timestamp
+
+    # Check if cache is valid
+    if not force_refresh and _metrics_cache and cache_age < METRICS_CACHE_TTL_SECONDS:
+        logger.debug(
+            "Metrics cache hit",
+            extra={"cache_age_seconds": round(cache_age, 1)},
+        )
+        return _metrics_cache
+
+    # Cache miss or expired - fetch fresh data
+    logger.info(
+        "Metrics cache miss - fetching from DynamoDB",
+        extra={
+            "cache_age_seconds": round(cache_age, 1) if _metrics_cache else None,
+            "reason": "force_refresh" if force_refresh else "expired_or_empty",
+        },
+    )
+
+    table = _get_cached_table()
+    metrics = aggregate_dashboard_metrics(table, hours=24)
+
+    # Pre-parse and sanitize items once (avoid repeated parsing in SSE loop)
+    metrics["recent_items"] = [
+        sanitize_item_for_response(parse_dynamodb_item(item))
+        for item in metrics.get("recent_items", [])
+    ]
+
+    # Update cache
+    _metrics_cache = metrics
+    _metrics_cache_timestamp = now
+
+    return _metrics_cache
+
 
 def get_api_key() -> str:
     """
@@ -579,7 +657,13 @@ async def stream_metrics(
     )
 
     async def event_generator():
-        """Generate SSE events with metrics updates."""
+        """
+        Generate SSE events with metrics updates.
+
+        DFA-001 OPTIMIZATION: Uses _get_cached_metrics() to avoid 6+ DynamoDB
+        queries per poll. All clients share a single cached metrics response
+        with 30-second TTL, reducing queries from 72K/min to ~4/min.
+        """
         try:
             while True:
                 # Check if client disconnected
@@ -591,14 +675,9 @@ async def stream_metrics(
                     break
 
                 try:
-                    table = get_table(DYNAMODB_TABLE)
-                    metrics = aggregate_dashboard_metrics(table, hours=24)
-
-                    # Sanitize recent items
-                    metrics["recent_items"] = [
-                        sanitize_item_for_response(parse_dynamodb_item(item))
-                        for item in metrics.get("recent_items", [])
-                    ]
+                    # DFA-001 FIX: Use cached metrics instead of querying DynamoDB
+                    # every 5 seconds. Metrics are already pre-parsed and sanitized.
+                    metrics = _get_cached_metrics()
 
                     # Send metrics event
                     yield {

@@ -3,6 +3,7 @@
 Auto-generated from all feature plans. Last updated: 2025-11-26
 
 ## Active Technologies
+- TypeScript 5.x, Node.js 20 LTS (007-sentiment-dashboard-frontend)
 
 - **Python 3.13** with FastAPI, boto3, pydantic, aws-lambda-powertools, httpx
 - **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, CloudFront
@@ -169,8 +170,81 @@ def my_function():
 - **Integration tests**: Use `E2ETestContext` fixture with synthetic data generators
 - **All external APIs mocked**: Tiingo, Finnhub, SendGrid, hCaptcha
 
-## Recent Changes
+## Feature 007 Frontend Patterns
 
+### Tech Stack
+- **Next.js 14** with App Router (`'use client'` directives)
+- **shadcn/ui** (Tailwind + Radix primitives)
+- **Zustand** for client state with persistence
+- **React Query** (@tanstack/react-query) for server state
+- **Framer Motion** for animations
+- **Lightweight Charts** (TradingView) for sentiment charts
+- **Vitest** for unit tests, **Playwright** for E2E
+
+### Frontend Commands
+```bash
+cd frontend/
+
+# Development
+npm run dev              # Start dev server at localhost:3000
+npm run build            # Production build
+npm run typecheck        # TypeScript type checking
+
+# Testing
+npm test                 # Run unit tests (Vitest)
+npm run test:watch       # Watch mode
+npm run test:e2e         # Run E2E tests (Playwright)
+npm run test:e2e:ui      # Playwright UI mode
+```
+
+### Component Patterns
+```tsx
+// Dynamic import for heavy components (reduces bundle size)
+const SentimentChart = dynamic(
+  () => import('@/components/charts/sentiment-chart').then((mod) => ({ default: mod.SentimentChart })),
+  { loading: () => <ChartSkeleton />, ssr: false }
+);
+
+// Accessibility: All interactive elements need:
+// - role, aria-label, tabIndex
+// - keyboard handlers (Enter/Space)
+// - focus-visible ring styling
+```
+
+### State Management
+```tsx
+// Zustand store with persistence
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+
+const useStore = create(persist((set) => ({
+  value: 'default',
+  setValue: (value) => set({ value }),
+}), { name: 'store-name' }));
+
+// React Query for server state
+const { data, isLoading } = useQuery({
+  queryKey: ['configs'],
+  queryFn: fetchConfigs,
+});
+```
+
+### Testing Patterns
+```tsx
+// Mock framer-motion for unit tests
+vi.mock('framer-motion', () => ({
+  motion: { div: (props) => <div {...props} /> },
+  AnimatePresence: ({ children }) => <>{children}</>,
+}));
+
+// Mock zustand stores
+vi.mock('@/stores/auth-store', () => ({
+  useAuthStore: vi.fn(() => ({ user: mockUser })),
+}));
+```
+
+## Recent Changes
+- 007-sentiment-dashboard-frontend: Mobile-first Next.js 14 dashboard with Robinhood-style dark fintech UI
 - 006-user-config-dashboard: Financial news sentiment dashboard with Tiingo/Finnhub, Cognito auth, CloudFront CDN
 - 001-interactive-dashboard-demo: Added Python 3.13
 

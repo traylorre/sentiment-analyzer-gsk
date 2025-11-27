@@ -367,6 +367,9 @@ module "dashboard_lambda" {
   # The chaos module needs Lambda ARNs, and Lambda needs chaos outputs = cycle.
   # Dashboard can look up FIS templates at runtime via AWS SDK if needed.
   environment_variables = {
+    # Feature 006: Use new sentiment-users table for user data (PK/SK single-table design)
+    DATABASE_TABLE = module.dynamodb.feature_006_users_table_name
+    # Backward compat: Legacy v1 sentiment-items table for news/sentiment data
     DYNAMODB_TABLE               = module.dynamodb.table_name
     API_KEY                      = "" # Will be fetched from Secrets Manager at runtime
     DASHBOARD_API_KEY_SECRET_ARN = module.secrets.dashboard_api_key_secret_arn
@@ -484,7 +487,9 @@ module "notification_lambda" {
 
   # Environment variables
   environment_variables = {
-    DYNAMODB_TABLE      = module.dynamodb.table_name
+    # Feature 006: Use new sentiment-users table for user/notification data
+    DATABASE_TABLE      = module.dynamodb.feature_006_users_table_name
+    DYNAMODB_TABLE      = module.dynamodb.feature_006_users_table_name
     SENDGRID_SECRET_ARN = module.secrets.sendgrid_secret_arn
     FROM_EMAIL          = var.notification_from_email
     DASHBOARD_URL       = var.cloudfront_custom_domain != "" ? "https://${var.cloudfront_custom_domain}" : "https://${module.cloudfront.distribution_domain_name}"
@@ -596,6 +601,7 @@ module "iam" {
   chaos_experiments_table_arn  = module.dynamodb.chaos_experiments_table_arn
   ticker_cache_bucket_arn      = aws_s3_bucket.ticker_cache.arn
   sendgrid_secret_arn          = module.secrets.sendgrid_secret_arn
+  feature_006_users_table_arn  = module.dynamodb.feature_006_users_table_arn
 }
 
 # ===================================================================

@@ -47,6 +47,7 @@ Security Notes:
 
 import json
 import logging
+import os
 import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -90,6 +91,9 @@ SNS_RETRY_CONFIG = Config(
     read_timeout=10,
 )
 
+# SNS batching configuration (max 10 messages per batch per AWS limit)
+SNS_BATCH_SIZE = 10
+
 # TTL for items (30 days)
 TTL_DAYS = 30
 
@@ -100,6 +104,16 @@ CIRCUIT_BREAKER_TIMEOUT = 300  # 5 minutes
 # Quota settings (free tier limits)
 TIINGO_DAILY_LIMIT = 500
 FINNHUB_DAILY_LIMIT = 1000  # 60 calls/minute ≈ 1000 safe calls/day
+
+# =============================================================================
+# DFA-003 FIX: Active Tickers Cache (reduces Scan to cached Query)
+# =============================================================================
+# Configurations change infrequently (user actions), so cache for 5 minutes
+ACTIVE_TICKERS_CACHE_TTL_SECONDS = int(
+    os.environ.get("ACTIVE_TICKERS_CACHE_TTL_SECONDS", "300")
+)
+_active_tickers_cache: list[str] = []
+_active_tickers_cache_timestamp: float = 0.0
 
 
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
@@ -179,6 +193,9 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         # Get SNS client
         sns_client = _get_sns_client(config["aws_region"])
 
+        # DFA-002: Collect messages for batch publishing
+        pending_sns_messages: list[dict[str, Any]] = []
+
         try:
             # Process each ticker
             for ticker in tickers:
@@ -199,19 +216,18 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                             ticker_stats["tiingo"] = len(articles)
                             summary["tiingo_articles"] += len(articles)
 
-                            # Process each article
+                            # Process each article (collect SNS messages)
                             for article in articles:
-                                result = _process_article(
+                                sns_msg = _process_article(
                                     article=article,
                                     source="tiingo",
                                     table=table,
-                                    sns_client=sns_client,
-                                    sns_topic_arn=config["sns_topic_arn"],
                                     model_version=config["model_version"],
                                 )
-                                if result == "new":
+                                if sns_msg is not None:
                                     ticker_stats["new"] += 1
                                     summary["new_items"] += 1
+                                    pending_sns_messages.append(sns_msg)
                                 else:
                                     ticker_stats["duplicates"] += 1
                                     summary["duplicates_skipped"] += 1
@@ -260,19 +276,18 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                             ticker_stats["finnhub"] = len(articles)
                             summary["finnhub_articles"] += len(articles)
 
-                            # Process each article
+                            # Process each article (collect SNS messages)
                             for article in articles:
-                                result = _process_article(
+                                sns_msg = _process_article(
                                     article=article,
                                     source="finnhub",
                                     table=table,
-                                    sns_client=sns_client,
-                                    sns_topic_arn=config["sns_topic_arn"],
                                     model_version=config["model_version"],
                                 )
-                                if result == "new":
+                                if sns_msg is not None:
                                     ticker_stats["new"] += 1
                                     summary["new_items"] += 1
+                                    pending_sns_messages.append(sns_msg)
                                 else:
                                     ticker_stats["duplicates"] += 1
                                     summary["duplicates_skipped"] += 1
@@ -316,6 +331,23 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 )
                 summary["tickers_processed"] += 1
                 per_ticker_stats[ticker] = ticker_stats
+
+            # DFA-002: Batch publish all collected SNS messages
+            if pending_sns_messages:
+                published_count = _publish_sns_batch(
+                    sns_client=sns_client,
+                    sns_topic_arn=config["sns_topic_arn"],
+                    messages=pending_sns_messages,
+                )
+                logger.info(
+                    "SNS batch publish complete",
+                    extra={
+                        "total_messages": len(pending_sns_messages),
+                        "published": published_count,
+                        "batches": (len(pending_sns_messages) + SNS_BATCH_SIZE - 1)
+                        // SNS_BATCH_SIZE,
+                    },
+                )
 
         finally:
             # Save state to DynamoDB
@@ -391,28 +423,71 @@ def _get_config() -> dict[str, str]:
 
 
 @xray_recorder.capture("get_active_tickers")
-def _get_active_tickers(table: Any) -> list[str]:
+def _get_active_tickers(table: Any, force_refresh: bool = False) -> list[str]:
     """Get unique tickers from all active user configurations.
+
+    DFA-003 optimization: Results are cached for 5 minutes since configurations
+    change infrequently (only on user actions). This reduces expensive scans
+    to a single cached lookup per Lambda invocation.
 
     Args:
         table: DynamoDB Table resource
+        force_refresh: Force refresh cache even if not expired
 
     Returns:
         List of unique ticker symbols
     """
+    global _active_tickers_cache, _active_tickers_cache_timestamp
+
+    # Check cache first (DFA-003 optimization)
+    now = time.time()
+    cache_age = now - _active_tickers_cache_timestamp
+    if (
+        not force_refresh
+        and _active_tickers_cache
+        and cache_age < ACTIVE_TICKERS_CACHE_TTL_SECONDS
+    ):
+        logger.debug(
+            "Using cached active tickers",
+            extra={"cache_age_seconds": round(cache_age, 1)},
+        )
+        return _active_tickers_cache
+
+    # Cache miss - fetch from DynamoDB
     tickers_set: set[str] = set()
 
     try:
-        # Query all configurations (using GSI or scan)
-        # For efficiency, we scan with filter on entity_type
-        response = table.scan(
-            FilterExpression="entity_type = :et AND is_active = :active",
-            ExpressionAttributeValues={
-                ":et": "CONFIGURATION",
-                ":active": True,
-            },
-            ProjectionExpression="tickers",
-        )
+        # Try to use GSI query first (by_entity_status), fall back to scan
+        # The GSI query is ~100x faster than scan for large tables
+        try:
+            # Query using by_entity_status GSI (entity_type + is_active composite)
+            response = table.query(
+                IndexName="by_entity_status",
+                KeyConditionExpression="entity_type = :et AND entity_status = :status",
+                ExpressionAttributeValues={
+                    ":et": "CONFIGURATION",
+                    ":status": "active",
+                },
+                ProjectionExpression="tickers",
+            )
+            use_gsi = True
+        except table.meta.client.exceptions.ClientError as e:
+            # GSI may not exist yet - fall back to scan
+            if "ValidationException" in str(e) or "ResourceNotFoundException" in str(e):
+                logger.warning(
+                    "GSI by_entity_status not available, falling back to scan"
+                )
+                response = table.scan(
+                    FilterExpression="entity_type = :et AND is_active = :active",
+                    ExpressionAttributeValues={
+                        ":et": "CONFIGURATION",
+                        ":active": True,
+                    },
+                    ProjectionExpression="tickers",
+                )
+                use_gsi = False
+            else:
+                raise
 
         for item in response.get("Items", []):
             for ticker in item.get("tickers", []):
@@ -425,15 +500,27 @@ def _get_active_tickers(table: Any) -> list[str]:
 
         # Handle pagination
         while "LastEvaluatedKey" in response:
-            response = table.scan(
-                FilterExpression="entity_type = :et AND is_active = :active",
-                ExpressionAttributeValues={
-                    ":et": "CONFIGURATION",
-                    ":active": True,
-                },
-                ProjectionExpression="tickers",
-                ExclusiveStartKey=response["LastEvaluatedKey"],
-            )
+            if use_gsi:
+                response = table.query(
+                    IndexName="by_entity_status",
+                    KeyConditionExpression="entity_type = :et AND entity_status = :status",
+                    ExpressionAttributeValues={
+                        ":et": "CONFIGURATION",
+                        ":status": "active",
+                    },
+                    ProjectionExpression="tickers",
+                    ExclusiveStartKey=response["LastEvaluatedKey"],
+                )
+            else:
+                response = table.scan(
+                    FilterExpression="entity_type = :et AND is_active = :active",
+                    ExpressionAttributeValues={
+                        ":et": "CONFIGURATION",
+                        ":active": True,
+                    },
+                    ProjectionExpression="tickers",
+                    ExclusiveStartKey=response["LastEvaluatedKey"],
+                )
             for item in response.get("Items", []):
                 for ticker in item.get("tickers", []):
                     if isinstance(ticker, dict):
@@ -442,6 +529,18 @@ def _get_active_tickers(table: Any) -> list[str]:
                         symbol = ticker
                     if symbol:
                         tickers_set.add(symbol.upper())
+
+        # Update cache
+        _active_tickers_cache = sorted(tickers_set)
+        _active_tickers_cache_timestamp = now
+
+        logger.debug(
+            "Refreshed active tickers cache",
+            extra={
+                "ticker_count": len(_active_tickers_cache),
+                "used_gsi": use_gsi,
+            },
+        )
 
     except Exception as e:
         logger.error("Failed to get active tickers", extra=get_safe_error_info(e))
@@ -613,22 +712,22 @@ def _process_article(
     article: NewsArticle,
     source: str,
     table: Any,
-    sns_client: Any,
-    sns_topic_arn: str,
     model_version: str,
-) -> str:
-    """Process a single article: deduplicate, store, and publish to SNS.
+) -> dict[str, Any] | None:
+    """Process a single article: deduplicate and store in DynamoDB.
+
+    DFA-002 optimization: Returns SNS message for batching instead of
+    publishing individually. Caller should batch messages and use
+    _publish_sns_batch() after processing all articles.
 
     Args:
         article: NewsArticle object
         source: Source name (tiingo or finnhub)
         table: DynamoDB table resource
-        sns_client: SNS client
-        sns_topic_arn: SNS topic ARN for analysis requests
         model_version: Current model version
 
     Returns:
-        "new" if article was inserted, "duplicate" if skipped
+        SNS message dict if article is new, None if duplicate
     """
     # Generate source_id for deduplication
     source_id = f"{source}:{article.article_id}"
@@ -637,13 +736,15 @@ def _process_article(
     now = datetime.now(UTC)
     ttl_timestamp = int((now + timedelta(days=TTL_DAYS)).timestamp())
 
+    text_for_analysis = _get_text_for_analysis(article)
+
     item = {
         "source_id": source_id,
         "timestamp": article.published_at.isoformat(),
         "source_type": source,
         "source_url": article.url or "",
         "text_snippet": (article.description or "")[:200],
-        "text_for_analysis": _get_text_for_analysis(article),
+        "text_for_analysis": text_for_analysis,
         "status": "pending",
         "matched_tickers": article.tickers,
         "ttl_timestamp": ttl_timestamp,
@@ -657,46 +758,20 @@ def _process_article(
 
     # Try to insert (conditional write for deduplication)
     if not put_item_if_not_exists(table, item):
-        return "duplicate"
+        return None  # Duplicate
 
-    # Publish to SNS for analysis
-    sns_message = {
-        "source_id": source_id,
+    # Return message for batch publishing (DFA-002 optimization)
+    return {
         "source_type": source,
-        "text_for_analysis": item["text_for_analysis"],
-        "model_version": model_version,
-        "matched_tickers": article.tickers,
-        "timestamp": article.published_at.isoformat(),
+        "body": {
+            "source_id": source_id,
+            "source_type": source,
+            "text_for_analysis": text_for_analysis,
+            "model_version": model_version,
+            "matched_tickers": article.tickers,
+            "timestamp": article.published_at.isoformat(),
+        },
     }
-
-    try:
-        sns_client.publish(
-            TopicArn=sns_topic_arn,
-            Message=json.dumps(sns_message),
-            MessageAttributes={
-                "source_type": {
-                    "DataType": "String",
-                    "StringValue": source,
-                },
-            },
-        )
-
-        logger.debug(
-            "Published to SNS",
-            extra={"source_id": sanitize_for_log(source_id[:20])},
-        )
-
-    except Exception as e:
-        logger.error(
-            "Failed to publish to SNS",
-            extra={
-                "source_id": sanitize_for_log(source_id[:20]),
-                **get_safe_error_info(e),
-            },
-        )
-        emit_metric("SNSPublishErrors", 1)
-
-    return "new"
 
 
 def _get_text_for_analysis(article: NewsArticle) -> str:
@@ -734,6 +809,96 @@ def _get_sns_client(region: str) -> Any:
         region_name=region,
         config=SNS_RETRY_CONFIG,
     )
+
+
+@xray_recorder.capture("publish_sns_batch")
+def _publish_sns_batch(
+    sns_client: Any,
+    sns_topic_arn: str,
+    messages: list[dict[str, Any]],
+) -> int:
+    """Publish a batch of messages to SNS (DFA-002 optimization).
+
+    Uses SNS publish_batch API to send up to 10 messages per call,
+    reducing API calls by 90% compared to individual publishes.
+
+    Args:
+        sns_client: SNS client
+        sns_topic_arn: SNS topic ARN
+        messages: List of SNS messages to publish
+
+    Returns:
+        Number of successfully published messages
+    """
+    if not messages:
+        return 0
+
+    success_count = 0
+    failed_ids: list[str] = []
+
+    # Process in batches of SNS_BATCH_SIZE (max 10 per AWS limit)
+    for i in range(0, len(messages), SNS_BATCH_SIZE):
+        batch = messages[i : i + SNS_BATCH_SIZE]
+
+        # Build batch entries
+        entries = []
+        for idx, msg in enumerate(batch):
+            entry = {
+                "Id": str(i + idx),  # Unique ID within request
+                "Message": json.dumps(msg["body"]),
+                "MessageAttributes": {
+                    "source_type": {
+                        "DataType": "String",
+                        "StringValue": msg["source_type"],
+                    },
+                },
+            }
+            entries.append(entry)
+
+        try:
+            response = sns_client.publish_batch(
+                TopicArn=sns_topic_arn,
+                PublishBatchRequestEntries=entries,
+            )
+
+            # Count successes and failures
+            success_count += len(response.get("Successful", []))
+
+            for failure in response.get("Failed", []):
+                failed_ids.append(failure.get("Id", "unknown"))
+                logger.warning(
+                    "SNS batch publish partial failure",
+                    extra={
+                        "entry_id": failure.get("Id"),
+                        "code": failure.get("Code"),
+                        "message": sanitize_for_log(failure.get("Message", "")[:100]),
+                    },
+                )
+
+        except Exception as e:
+            logger.error(
+                "SNS batch publish failed",
+                extra={
+                    "batch_size": len(batch),
+                    "batch_index": i // SNS_BATCH_SIZE,
+                    **get_safe_error_info(e),
+                },
+            )
+            emit_metric("SNSPublishErrors", len(batch))
+
+    if failed_ids:
+        emit_metric("SNSPublishErrors", len(failed_ids))
+
+    logger.debug(
+        "SNS batch publish complete",
+        extra={
+            "total_messages": len(messages),
+            "successful": success_count,
+            "failed": len(failed_ids),
+        },
+    )
+
+    return success_count
 
 
 def _emit_summary_metrics(summary: dict[str, int], execution_time_ms: float) -> None:

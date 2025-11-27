@@ -209,6 +209,13 @@ def item_exists(table: Any, source_id: str, timestamp: str) -> bool:
     """
     Check if an item exists in the table.
 
+    .. deprecated::
+        This function is deprecated and should not be used in new code.
+        Use `put_item_if_not_exists` with conditional writes instead, which
+        atomically handles deduplication without a separate existence check.
+        DFA-007: Calling item_exists before put_item_if_not_exists is redundant
+        and doubles DynamoDB read capacity usage.
+
     Uses projection to minimize read capacity usage.
 
     Args:

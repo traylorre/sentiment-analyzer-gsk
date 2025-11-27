@@ -1,8 +1,12 @@
 """Tiingo API adapter for news and OHLC data."""
 
+import hashlib
+import json
 import logging
+import os
+import time
 from datetime import datetime, timedelta
-from typing import Literal
+from typing import Any, Literal
 
 import httpx
 
@@ -16,6 +20,51 @@ from src.lambdas.shared.adapters.base import (
 )
 
 logger = logging.getLogger(__name__)
+
+# =============================================================================
+# DFA-004 FIX: API Response Cache
+# =============================================================================
+# Cache TTL in seconds (default 30 minutes for news, 1 hour for OHLC)
+API_CACHE_TTL_NEWS_SECONDS = int(os.environ.get("API_CACHE_TTL_NEWS_SECONDS", "1800"))
+API_CACHE_TTL_OHLC_SECONDS = int(os.environ.get("API_CACHE_TTL_OHLC_SECONDS", "3600"))
+
+# In-memory cache (survives Lambda warm invocations)
+_tiingo_cache: dict[str, tuple[float, Any]] = {}
+_MAX_CACHE_ENTRIES = 100  # Prevent unbounded memory growth
+
+
+def _get_cache_key(endpoint: str, params: dict) -> str:
+    """Generate cache key from endpoint and params."""
+    param_str = json.dumps(params, sort_keys=True)
+    # MD5 used for cache key (not security) - S324 is a false positive
+    return hashlib.md5(f"{endpoint}:{param_str}".encode()).hexdigest()  # noqa: S324
+
+
+def _get_from_cache(key: str, ttl: int) -> Any | None:
+    """Get value from cache if not expired."""
+    if key in _tiingo_cache:
+        timestamp, value = _tiingo_cache[key]
+        if time.time() - timestamp < ttl:
+            return value
+        # Expired - remove from cache
+        del _tiingo_cache[key]
+    return None
+
+
+def _put_in_cache(key: str, value: Any) -> None:
+    """Put value in cache with current timestamp."""
+    global _tiingo_cache
+    # Evict oldest entries if cache is full
+    if len(_tiingo_cache) >= _MAX_CACHE_ENTRIES:
+        oldest_key = min(_tiingo_cache.keys(), key=lambda k: _tiingo_cache[k][0])
+        del _tiingo_cache[oldest_key]
+    _tiingo_cache[key] = (time.time(), value)
+
+
+def clear_cache() -> None:
+    """Clear the API response cache. Used in tests."""
+    global _tiingo_cache
+    _tiingo_cache = {}
 
 
 class TiingoAdapter(BaseAdapter):
@@ -104,6 +153,9 @@ class TiingoAdapter(BaseAdapter):
     ) -> list[NewsArticle]:
         """Fetch news articles for given tickers.
 
+        DFA-004 optimization: Results cached for 30 minutes to reduce API calls
+        and preserve rate limits (500 symbol lookups/month on free tier).
+
         Args:
             tickers: List of stock symbols (max 10 per request)
             start_date: Start date for news (default: 7 days ago)
@@ -125,20 +177,31 @@ class TiingoAdapter(BaseAdapter):
         # Tiingo accepts comma-separated tickers
         tickers_param = ",".join(tickers[:10])  # Max 10 per request
 
-        try:
-            response = self.client.get(
-                "/tiingo/news",
-                params={
-                    "tickers": tickers_param,
-                    "startDate": start_date.strftime("%Y-%m-%d"),
-                    "endDate": end_date.strftime("%Y-%m-%d"),
-                    "limit": limit,
-                },
-            )
-            data = self._handle_response(response)
-        except httpx.RequestError as e:
-            logger.error(f"Tiingo request failed: {e}")
-            raise AdapterError(f"Tiingo request failed: {e}") from e
+        # DFA-004: Check cache first
+        cache_params = {
+            "tickers": tickers_param,
+            "startDate": start_date.strftime("%Y-%m-%d"),
+            "endDate": end_date.strftime("%Y-%m-%d"),
+            "limit": limit,
+        }
+        cache_key = _get_cache_key("/tiingo/news", cache_params)
+        cached_data = _get_from_cache(cache_key, API_CACHE_TTL_NEWS_SECONDS)
+        if cached_data is not None:
+            logger.debug(f"Tiingo news cache hit for {tickers_param}")
+            data = cached_data
+        else:
+            try:
+                response = self.client.get(
+                    "/tiingo/news",
+                    params=cache_params,
+                )
+                data = self._handle_response(response)
+                # Cache the raw response
+                _put_in_cache(cache_key, data)
+                logger.debug(f"Tiingo news cache miss for {tickers_param}, cached")
+            except httpx.RequestError as e:
+                logger.error(f"Tiingo request failed: {e}")
+                raise AdapterError(f"Tiingo request failed: {e}") from e
 
         # Parse response
         articles = []
@@ -187,6 +250,9 @@ class TiingoAdapter(BaseAdapter):
     ) -> list[OHLCCandle]:
         """Fetch daily OHLC price data.
 
+        DFA-004 optimization: Results cached for 1 hour. OHLC data changes
+        infrequently (daily), so longer TTL is safe.
+
         Args:
             ticker: Stock symbol
             start_date: Start date (default: 30 days ago)
@@ -201,18 +267,34 @@ class TiingoAdapter(BaseAdapter):
         if start_date is None:
             start_date = end_date - timedelta(days=30)
 
-        try:
-            response = self.client.get(
-                f"/tiingo/daily/{ticker}/prices",
-                params={
-                    "startDate": start_date.strftime("%Y-%m-%d"),
-                    "endDate": end_date.strftime("%Y-%m-%d"),
-                },
-            )
-            data = self._handle_response(response)
-        except httpx.RequestError as e:
-            logger.error(f"Tiingo OHLC request failed: {e}")
-            raise AdapterError(f"Tiingo OHLC request failed: {e}") from e
+        # DFA-004: Check cache first
+        endpoint = f"/tiingo/daily/{ticker}/prices"
+        cache_params = {
+            "ticker": ticker,
+            "startDate": start_date.strftime("%Y-%m-%d"),
+            "endDate": end_date.strftime("%Y-%m-%d"),
+        }
+        cache_key = _get_cache_key(endpoint, cache_params)
+        cached_data = _get_from_cache(cache_key, API_CACHE_TTL_OHLC_SECONDS)
+        if cached_data is not None:
+            logger.debug(f"Tiingo OHLC cache hit for {ticker}")
+            data = cached_data
+        else:
+            try:
+                response = self.client.get(
+                    endpoint,
+                    params={
+                        "startDate": start_date.strftime("%Y-%m-%d"),
+                        "endDate": end_date.strftime("%Y-%m-%d"),
+                    },
+                )
+                data = self._handle_response(response)
+                # Cache the raw response
+                _put_in_cache(cache_key, data)
+                logger.debug(f"Tiingo OHLC cache miss for {ticker}, cached")
+            except httpx.RequestError as e:
+                logger.error(f"Tiingo OHLC request failed: {e}")
+                raise AdapterError(f"Tiingo OHLC request failed: {e}") from e
 
         # Parse response
         candles = []

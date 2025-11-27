@@ -234,6 +234,116 @@ resource "aws_cloudwatch_metric_alarm" "write_throttles" {
 }
 
 # ===================================================================
+# DynamoDB Table: Feature 006 - User Data (Single-Table Design)
+# ===================================================================
+#
+# Stores all Feature 006 user-related data using single-table design:
+# - Users (PK=USER#{user_id}, SK=PROFILE)
+# - Configurations (PK=USER#{user_id}, SK=CONFIG#{config_id})
+# - Alert Rules (PK=USER#{user_id}, SK=ALERT#{alert_id})
+# - Notifications (PK=USER#{user_id}, SK={timestamp})
+# - Digest Settings (PK=USER#{user_id}, SK=DIGEST_SETTINGS)
+# - Magic Links (PK=TOKEN#{token_id}, SK=TOKEN)
+# - Circuit Breakers (PK=CIRCUIT#{service}, SK=STATE)
+# - Quota Trackers (PK=SYSTEM#QUOTA, SK={date})
+#
+# For On-Call Engineers:
+#   Query user's items: PK = USER#{user_id}
+#   Filter by entity_type attribute to get specific types
+
+resource "aws_dynamodb_table" "feature_006_users" {
+  name         = "${var.environment}-sentiment-users"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "PK"
+  range_key    = "SK"
+
+  # Enable point-in-time recovery (35-day retention)
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  # Primary key attributes
+  attribute {
+    name = "PK"
+    type = "S"
+  }
+
+  attribute {
+    name = "SK"
+    type = "S"
+  }
+
+  # GSI attributes
+  attribute {
+    name = "email"
+    type = "S"
+  }
+
+  attribute {
+    name = "cognito_sub"
+    type = "S"
+  }
+
+  attribute {
+    name = "entity_type"
+    type = "S"
+  }
+
+  attribute {
+    name = "status"
+    type = "S"
+  }
+
+  # GSI 1: by_email
+  # Query pattern: Find user by email address (for login/conflict detection)
+  global_secondary_index {
+    name            = "by_email"
+    hash_key        = "email"
+    projection_type = "ALL"
+  }
+
+  # GSI 2: by_cognito_sub
+  # Query pattern: Find user by Cognito sub (OAuth login)
+  global_secondary_index {
+    name            = "by_cognito_sub"
+    hash_key        = "cognito_sub"
+    projection_type = "ALL"
+  }
+
+  # GSI 3: by_entity_status
+  # Query pattern: Filter notifications by status, filter alerts by enabled state
+  # Composite key: entity_type (hash) + status (range) allows:
+  #   - "Find all NOTIFICATION items with status=failed"
+  #   - "Find all ALERT items with is_enabled=true"
+  global_secondary_index {
+    name            = "by_entity_status"
+    hash_key        = "entity_type"
+    range_key       = "status"
+    projection_type = "ALL"
+  }
+
+  # TTL configuration (for magic links, sessions)
+  ttl {
+    attribute_name = "ttl_timestamp"
+    enabled        = true
+  }
+
+  # Encryption at rest
+  server_side_encryption {
+    enabled     = true
+    kms_key_arn = null # AWS-managed keys
+  }
+
+  tags = {
+    Name        = "${var.environment}-sentiment-users"
+    Environment = var.environment
+    Feature     = "006-user-config-dashboard"
+    ManagedBy   = "Terraform"
+    CostCenter  = "demo"
+  }
+}
+
+# ===================================================================
 # DynamoDB Table: Chaos Testing Experiments (Phase 1)
 # ===================================================================
 

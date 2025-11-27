@@ -350,7 +350,7 @@ Session is automatically extended on any authenticated API call.
 Explicit extension endpoint:
 
 ```http
-POST /api/v2/auth/session/extend
+POST /api/v2/auth/extend
 Authorization: Bearer {access_token}
 ```
 
