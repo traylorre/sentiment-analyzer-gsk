@@ -6,14 +6,7 @@ import {
   CompactHeatMapLegend,
 } from '@/components/heatmap/heat-map-legend';
 
-// Mock framer-motion
-vi.mock('framer-motion', () => ({
-  motion: {
-    div: ({ children, style, ...props }: React.PropsWithChildren<Record<string, unknown>>) => (
-      <div style={style as React.CSSProperties} {...props}>{children}</div>
-    ),
-  },
-}));
+// framer-motion is mocked globally in tests/setup.ts
 
 describe('HeatMapLegend', () => {
   it('should render bearish and bullish labels', () => {

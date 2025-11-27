@@ -10,14 +10,7 @@ vi.mock('next/navigation', () => ({
   }),
 }));
 
-// Mock framer-motion
-vi.mock('framer-motion', () => ({
-  motion: {
-    div: ({ children, ...props }: React.PropsWithChildren<object>) => (
-      <div {...props}>{children}</div>
-    ),
-  },
-}));
+// framer-motion is mocked globally in tests/setup.ts
 
 // Mock useAuth hook - will be modified per test
 const mockUseAuth = vi.fn();

@@ -1,5 +1,9 @@
 import '@testing-library/jest-dom';
 import { vi } from 'vitest';
+import { motionMock } from './utils/framer-motion-mock';
+
+// Global mock for framer-motion - prevents React warnings about motion props
+vi.mock('framer-motion', () => motionMock);
 
 // Mock navigator.vibrate for haptics
 Object.defineProperty(navigator, 'vibrate', {

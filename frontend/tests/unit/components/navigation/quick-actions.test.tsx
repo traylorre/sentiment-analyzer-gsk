@@ -7,18 +7,7 @@ import {
   COMMON_ACTIONS,
 } from '@/components/navigation/quick-actions';
 
-// Mock framer-motion
-vi.mock('framer-motion', () => ({
-  motion: {
-    div: ({ children, ...props }: React.PropsWithChildren<Record<string, unknown>>) => (
-      <div {...props}>{children}</div>
-    ),
-    button: ({ children, ...props }: React.PropsWithChildren<Record<string, unknown>>) => (
-      <button {...props}>{children}</button>
-    ),
-  },
-  AnimatePresence: ({ children }: React.PropsWithChildren) => <>{children}</>,
-}));
+// framer-motion is mocked globally in tests/setup.ts
 
 // Mock haptic hook
 vi.mock('@/hooks/use-haptic', () => ({

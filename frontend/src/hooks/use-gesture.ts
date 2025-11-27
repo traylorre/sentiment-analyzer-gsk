@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef, useEffect } from 'react';
+import { useCallback, useRef, useEffect, useMemo } from 'react';
 import { useViewStore } from '@/stores/view-store';
 import { useHaptic } from './use-haptic';
 
@@ -41,7 +41,11 @@ export function useGesture(
   handlers: GestureHandlers = {},
   config: GestureConfig = {}
 ) {
-  const mergedConfig = { ...DEFAULT_CONFIG, ...config };
+  // Memoize merged config to prevent unnecessary re-renders
+  const mergedConfig = useMemo(() => ({
+    ...DEFAULT_CONFIG,
+    ...config,
+  }), [config]);
   const touchState = useRef<TouchState>({
     startX: 0,
     startY: 0,

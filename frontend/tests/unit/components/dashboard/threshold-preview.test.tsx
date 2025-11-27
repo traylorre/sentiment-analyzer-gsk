@@ -2,19 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { ThresholdPreview, ThresholdSparkline } from '@/components/dashboard/threshold-preview';
 
-// Mock framer-motion
-vi.mock('framer-motion', () => ({
-  motion: {
-    div: ({ children, style, ...props }: React.PropsWithChildren<Record<string, unknown>>) => (
-      <div style={style as React.CSSProperties} {...props}>{children}</div>
-    ),
-    line: (props: Record<string, unknown>) => <line {...props} />,
-    g: ({ children, ...props }: React.PropsWithChildren<Record<string, unknown>>) => (
-      <g {...props}>{children}</g>
-    ),
-  },
-  AnimatePresence: ({ children }: React.PropsWithChildren) => <>{children}</>,
-}));
+// framer-motion is mocked globally in tests/setup.ts
 
 describe('ThresholdPreview', () => {
   it('should render threshold label for sentiment', () => {

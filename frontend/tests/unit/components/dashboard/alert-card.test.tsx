@@ -3,18 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { AlertCard, AlertCardCompact, AlertStatusBadge } from '@/components/dashboard/alert-card';
 import type { AlertRule } from '@/types/alert';
 
-// Mock framer-motion
-vi.mock('framer-motion', () => ({
-  motion: {
-    div: ({ children, ...props }: React.PropsWithChildren<Record<string, unknown>>) => (
-      <div {...props}>{children}</div>
-    ),
-    span: ({ children, ...props }: React.PropsWithChildren<Record<string, unknown>>) => (
-      <span {...props}>{children}</span>
-    ),
-  },
-  AnimatePresence: ({ children }: React.PropsWithChildren) => <>{children}</>,
-}));
+// framer-motion is mocked globally in tests/setup.ts
 
 const mockSentimentAlert: AlertRule = {
   alertId: 'alert-1',

@@ -4,21 +4,7 @@ import { Plus } from 'lucide-react';
 import { MobileNav, FloatingActionButton } from '@/components/navigation/mobile-nav';
 import { useViewStore } from '@/stores/view-store';
 
-// Mock framer-motion
-vi.mock('framer-motion', () => ({
-  motion: {
-    div: ({ children, ...props }: React.PropsWithChildren<Record<string, unknown>>) => (
-      <div {...props}>{children}</div>
-    ),
-    span: ({ children, ...props }: React.PropsWithChildren<Record<string, unknown>>) => (
-      <span {...props}>{children}</span>
-    ),
-    button: ({ children, ...props }: React.PropsWithChildren<Record<string, unknown>>) => (
-      <button {...props}>{children}</button>
-    ),
-  },
-  AnimatePresence: ({ children }: React.PropsWithChildren) => <>{children}</>,
-}));
+// framer-motion is mocked globally in tests/setup.ts
 
 // Mock haptic hook
 vi.mock('@/hooks/use-haptic', () => ({

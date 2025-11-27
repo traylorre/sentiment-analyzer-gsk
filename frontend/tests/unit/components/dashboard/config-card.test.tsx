@@ -3,18 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { ConfigCard, ConfigCardCompact } from '@/components/dashboard/config-card';
 import type { Configuration } from '@/types/config';
 
-// Mock framer-motion
-vi.mock('framer-motion', () => ({
-  motion: {
-    div: ({ children, ...props }: React.PropsWithChildren<Record<string, unknown>>) => (
-      <div {...props}>{children}</div>
-    ),
-    button: ({ children, ...props }: React.PropsWithChildren<Record<string, unknown>>) => (
-      <button {...props}>{children}</button>
-    ),
-  },
-  AnimatePresence: ({ children }: React.PropsWithChildren) => <>{children}</>,
-}));
+// framer-motion is mocked globally in tests/setup.ts
 
 const mockConfig: Configuration = {
   configId: 'config-1',

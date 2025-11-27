@@ -7,18 +7,7 @@ import {
   CompactScore,
 } from '@/components/charts/sentiment-pill';
 
-// Mock framer-motion
-vi.mock('framer-motion', () => ({
-  motion: {
-    div: ({ children, style, ...props }: React.PropsWithChildren<Record<string, unknown>>) => (
-      <div style={style as React.CSSProperties} {...props}>{children}</div>
-    ),
-    span: ({ children, style, ...props }: React.PropsWithChildren<Record<string, unknown>>) => (
-      <span style={style as React.CSSProperties} {...props}>{children}</span>
-    ),
-  },
-  AnimatePresence: ({ children }: React.PropsWithChildren) => <>{children}</>,
-}));
+// framer-motion is mocked globally in tests/setup.ts
 
 describe('SentimentPill', () => {
   it('should render score', () => {

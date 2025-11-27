@@ -57,10 +57,10 @@ export function ThresholdPreview({
     return { min: 0, max: 100 };
   }, [alertType]);
 
-  // Normalize value to 0-100 range for positioning
-  const normalizeY = (value: number) => {
-    return ((value - min) / (max - min)) * 100;
-  };
+  // Normalize value to 0-100 range for positioning (memoized)
+  const normalizeY = useMemo(() => {
+    return (value: number) => ((value - min) / (max - min)) * 100;
+  }, [min, max]);
 
   // Generate SVG path
   const pathD = useMemo(() => {
@@ -73,7 +73,7 @@ export function ThresholdPreview({
         return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
       })
       .join(' ');
-  }, [values, min, max]);
+  }, [values, normalizeY]);
 
   // Threshold line position
   const thresholdY = 100 - normalizeY(thresholdValue);

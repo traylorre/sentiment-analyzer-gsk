@@ -12,26 +12,7 @@ vi.mock('@/hooks/use-auth', () => ({
   }),
 }));
 
-// Mock framer-motion - make sure motion components pass through properly
-vi.mock('framer-motion', () => {
-  const MotionDiv = ({ children, ...props }: React.PropsWithChildren<Record<string, unknown>>) => {
-    // Filter out framer-motion specific props
-    const htmlProps: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(props)) {
-      if (!['initial', 'animate', 'exit', 'transition', 'variants', 'whileHover', 'whileTap'].includes(key)) {
-        htmlProps[key] = value;
-      }
-    }
-    return <div {...htmlProps}>{children}</div>;
-  };
-
-  return {
-    motion: {
-      div: MotionDiv,
-    },
-    AnimatePresence: ({ children }: React.PropsWithChildren) => <>{children}</>,
-  };
-});
+// framer-motion is mocked globally in tests/setup.ts
 
 describe('MagicLinkForm', () => {
   beforeEach(() => {

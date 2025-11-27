@@ -8,17 +8,7 @@ import {
 import { useChartStore } from '@/stores/chart-store';
 import type { HeatMapCell as HeatMapCellType } from '@/types/heatmap';
 
-// Mock framer-motion
-vi.mock('framer-motion', () => ({
-  motion: {
-    button: ({ children, style, ...props }: React.PropsWithChildren<Record<string, unknown>>) => (
-      <button style={style as React.CSSProperties} {...props}>{children}</button>
-    ),
-    div: ({ children, ...props }: React.PropsWithChildren<Record<string, unknown>>) => (
-      <div {...props}>{children}</div>
-    ),
-  },
-}));
+// framer-motion is mocked globally in tests/setup.ts
 
 // Mock haptic hook
 vi.mock('@/hooks/use-haptic', () => ({

@@ -9,17 +9,7 @@ import {
   ChartKey,
 } from '@/components/charts/chart-legend';
 
-// Mock framer-motion
-vi.mock('framer-motion', () => ({
-  motion: {
-    div: ({ children, style, ...props }: React.PropsWithChildren<Record<string, unknown>>) => (
-      <div style={style as React.CSSProperties} {...props}>{children}</div>
-    ),
-    button: ({ children, disabled, ...props }: React.PropsWithChildren<{ disabled?: boolean }>) => (
-      <button disabled={disabled} {...props}>{children}</button>
-    ),
-  },
-}));
+// framer-motion is mocked globally in tests/setup.ts
 
 describe('ChartLegend', () => {
   const items = [

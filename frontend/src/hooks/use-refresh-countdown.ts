@@ -45,25 +45,6 @@ export function useRefreshCountdown(options: UseRefreshCountdownOptions = {}) {
     };
   }, []);
 
-  const updateCountdown = useCallback(() => {
-    const now = Date.now();
-    const elapsed = now - lastTickRef.current;
-    lastTickRef.current = now;
-
-    remainingRef.current = Math.max(0, remainingRef.current - elapsed);
-
-    setState((prev) => ({
-      ...prev,
-      remainingMs: remainingRef.current,
-      progress: remainingRef.current / intervalMs,
-    }));
-
-    // Trigger refresh when countdown reaches 0
-    if (remainingRef.current <= 0) {
-      triggerRefresh();
-    }
-  }, [intervalMs]);
-
   const triggerRefresh = useCallback(async () => {
     setState((prev) => ({ ...prev, isRefreshing: true }));
 
@@ -84,6 +65,25 @@ export function useRefreshCountdown(options: UseRefreshCountdownOptions = {}) {
       }));
     }
   }, [onRefresh, intervalMs]);
+
+  const updateCountdown = useCallback(() => {
+    const now = Date.now();
+    const elapsed = now - lastTickRef.current;
+    lastTickRef.current = now;
+
+    remainingRef.current = Math.max(0, remainingRef.current - elapsed);
+
+    setState((prev) => ({
+      ...prev,
+      remainingMs: remainingRef.current,
+      progress: remainingRef.current / intervalMs,
+    }));
+
+    // Trigger refresh when countdown reaches 0
+    if (remainingRef.current <= 0) {
+      triggerRefresh();
+    }
+  }, [intervalMs, triggerRefresh]);
 
   const start = useCallback(() => {
     if (intervalRef.current) {

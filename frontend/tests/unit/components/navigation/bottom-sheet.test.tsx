@@ -3,17 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { BottomSheet, ActionSheet, useBottomSheet } from '@/components/navigation/bottom-sheet';
 import { useViewStore } from '@/stores/view-store';
 
-// Mock framer-motion
-vi.mock('framer-motion', () => ({
-  motion: {
-    div: ({ children, style, ...props }: React.PropsWithChildren<Record<string, unknown>>) => (
-      <div style={style as React.CSSProperties} {...props}>{children}</div>
-    ),
-  },
-  AnimatePresence: ({ children }: React.PropsWithChildren) => <>{children}</>,
-  useMotionValue: () => ({ get: () => 0, set: vi.fn() }),
-  useTransform: () => ({ get: () => 0 }),
-}));
+// framer-motion is mocked globally in tests/setup.ts
 
 // Mock haptic hook
 vi.mock('@/hooks/use-haptic', () => ({
