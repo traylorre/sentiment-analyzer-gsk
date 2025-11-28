@@ -22,14 +22,31 @@ export const tickersApi = {
     }),
 
   /**
-   * Validate a list of ticker symbols
+   * Validate a single ticker symbol
    */
-  validate: (symbols: string[]) =>
-    api.post<TickerValidationResult>('/api/v2/tickers/validate', { symbols }),
+  validate: (symbol: string) =>
+    api.get<{ valid: boolean; ticker?: TickerConfig }>('/api/v2/tickers/validate', {
+      params: { symbol },
+    }),
 
   /**
-   * Get ticker details
+   * Validate multiple ticker symbols (client-side batch)
    */
-  get: (symbol: string) =>
-    api.get<TickerConfig>(`/api/v2/tickers/${symbol}`),
+  validateMany: async (symbols: string[]): Promise<TickerValidationResult> => {
+    const results = await Promise.all(
+      symbols.map(async (symbol) => {
+        try {
+          const result = await tickersApi.validate(symbol);
+          return { symbol, ...result };
+        } catch {
+          return { symbol, valid: false };
+        }
+      })
+    );
+
+    return {
+      valid: results.filter((r) => r.valid && r.ticker).map((r) => r.ticker as TickerConfig),
+      invalid: results.filter((r) => !r.valid).map((r) => r.symbol),
+    };
+  },
 };

@@ -50,16 +50,16 @@ export const authApi = {
     api.post<AuthResponse>('/api/v2/auth/magic-link/verify', { token, sig }),
 
   /**
-   * Get OAuth authorization URL for a provider
+   * Get OAuth authorization URLs for all providers
    */
-  getOAuthUrl: (provider: 'google' | 'github') =>
-    api.get<{ url: string }>(`/api/v2/auth/oauth/${provider}`),
+  getOAuthUrls: () =>
+    api.get<{ google: string; github: string }>('/api/v2/auth/oauth/urls'),
 
   /**
    * Exchange OAuth code for tokens
    */
   exchangeOAuthCode: (provider: 'google' | 'github', code: string) =>
-    api.post<AuthResponse>(`/api/v2/auth/oauth/${provider}/callback`, { code }),
+    api.post<AuthResponse>('/api/v2/auth/oauth/callback', { provider, code }),
 
   /**
    * Refresh access token using refresh token
@@ -77,7 +77,7 @@ export const authApi = {
    * Get current user profile
    */
   getProfile: () =>
-    api.get<User>('/api/v2/auth/profile'),
+    api.get<User>('/api/v2/auth/me'),
 
   /**
    * Sign out and invalidate tokens

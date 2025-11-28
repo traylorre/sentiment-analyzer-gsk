@@ -181,7 +181,7 @@ let sseInstance: SSEClient | null = null;
 
 export function getSSEClient(baseUrl?: string): SSEClient {
   if (!sseInstance) {
-    const url = baseUrl || `${process.env.NEXT_PUBLIC_API_URL || ''}/api/v2/stream/metrics`;
+    const url = baseUrl || `${process.env.NEXT_PUBLIC_API_URL || ''}/api/stream`;
     sseInstance = new SSEClient(url);
   }
   return sseInstance;

@@ -573,6 +573,48 @@ async def get_premarket(
     return JSONResponse(result.model_dump())
 
 
+@config_router.get("/{config_id}/sentiment/{ticker}/history")
+async def get_ticker_sentiment_history(
+    config_id: str,
+    ticker: str,
+    request: Request,
+    source: str = Query(None, pattern="^(tiingo|finnhub)$"),
+    days: int = Query(7, ge=1, le=30),
+    table=Depends(get_dynamodb_table),
+):
+    """Get sentiment history for a specific ticker within a configuration."""
+    user_id = get_user_id_from_request(request)
+    result = sentiment_service.get_ticker_sentiment_history(
+        table=table,
+        user_id=user_id,
+        config_id=config_id,
+        ticker=ticker,
+        source=source,
+        days=days,
+    )
+    if isinstance(result, sentiment_service.ErrorResponse):
+        raise HTTPException(status_code=404, detail=result.error.message)
+    return JSONResponse(result.model_dump())
+
+
+@config_router.get("/{config_id}/alerts")
+async def get_config_alerts(
+    config_id: str,
+    request: Request,
+    table=Depends(get_dynamodb_table),
+):
+    """Get alerts for a specific configuration."""
+    user_id = get_user_id_from_request(request)
+    result = alert_service.get_alerts_by_config(
+        table=table,
+        user_id=user_id,
+        config_id=config_id,
+    )
+    if isinstance(result, alert_service.ErrorResponse):
+        raise HTTPException(status_code=404, detail=result.error.message)
+    return JSONResponse(result.model_dump())
+
+
 # ===================================================================
 # Ticker Endpoints
 # ===================================================================

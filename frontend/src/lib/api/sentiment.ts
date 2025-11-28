@@ -26,5 +26,5 @@ export const sentimentApi = {
    * Force refresh sentiment data for a configuration
    */
   refresh: (configId: string) =>
-    api.post<SentimentData>(`/api/v2/configurations/${configId}/sentiment/refresh`),
+    api.post<SentimentData>(`/api/v2/configurations/${configId}/refresh`),
 };

@@ -503,6 +503,103 @@ async def serve_static(filename: str):
     return FileResponse(safe_path, media_type=media_type)
 
 
+@app.get("/api")
+async def api_index():
+    """
+    API index listing all available endpoints.
+
+    Returns:
+        JSON with categorized list of all API endpoints
+    """
+    return JSONResponse(
+        {
+            "name": "Sentiment Analyzer API",
+            "version": "2.0",
+            "endpoints": {
+                "health": {
+                    "GET /health": "Health check with DynamoDB connectivity test",
+                },
+                "legacy": {
+                    "GET /api/metrics": "Get aggregated dashboard metrics",
+                    "GET /api/stream": "SSE stream for real-time updates",
+                    "GET /api/items": "List sentiment items",
+                    "GET /api/v2/sentiment": "Get sentiment data (legacy)",
+                    "GET /api/v2/trends": "Get sentiment trends",
+                    "GET /api/v2/articles": "Get news articles",
+                },
+                "auth": {
+                    "POST /api/v2/auth/anonymous": "Create anonymous session",
+                    "GET /api/v2/auth/validate": "Validate token",
+                    "POST /api/v2/auth/extend": "Extend session",
+                    "POST /api/v2/auth/magic-link": "Send magic link email",
+                    "GET /api/v2/auth/magic-link/verify": "Verify magic link",
+                    "GET /api/v2/auth/oauth/urls": "Get OAuth authorization URLs",
+                    "POST /api/v2/auth/oauth/callback": "OAuth callback",
+                    "POST /api/v2/auth/refresh": "Refresh access token",
+                    "POST /api/v2/auth/signout": "Sign out",
+                    "GET /api/v2/auth/session": "Get current session",
+                    "GET /api/v2/auth/me": "Get current user profile",
+                },
+                "configurations": {
+                    "POST /api/v2/configurations": "Create configuration",
+                    "GET /api/v2/configurations": "List configurations",
+                    "GET /api/v2/configurations/{id}": "Get configuration",
+                    "PATCH /api/v2/configurations/{id}": "Update configuration",
+                    "DELETE /api/v2/configurations/{id}": "Delete configuration",
+                    "GET /api/v2/configurations/{id}/sentiment": "Get sentiment data",
+                    "GET /api/v2/configurations/{id}/sentiment/{ticker}/history": "Get ticker sentiment history",
+                    "GET /api/v2/configurations/{id}/heatmap": "Get heat map data",
+                    "GET /api/v2/configurations/{id}/volatility": "Get volatility data",
+                    "GET /api/v2/configurations/{id}/correlation": "Get correlation data",
+                    "GET /api/v2/configurations/{id}/alerts": "Get config alerts",
+                    "POST /api/v2/configurations/{id}/refresh": "Trigger refresh",
+                    "GET /api/v2/configurations/{id}/refresh/status": "Get refresh status",
+                    "GET /api/v2/configurations/{id}/premarket": "Get pre-market data",
+                },
+                "tickers": {
+                    "GET /api/v2/tickers/search": "Search tickers",
+                    "GET /api/v2/tickers/validate": "Validate ticker symbol",
+                },
+                "alerts": {
+                    "POST /api/v2/alerts": "Create alert",
+                    "GET /api/v2/alerts": "List alerts",
+                    "GET /api/v2/alerts/{id}": "Get alert",
+                    "PATCH /api/v2/alerts/{id}": "Update alert",
+                    "DELETE /api/v2/alerts/{id}": "Delete alert",
+                    "POST /api/v2/alerts/{id}/toggle": "Toggle alert enabled",
+                },
+                "notifications": {
+                    "GET /api/v2/notifications": "List notifications",
+                    "GET /api/v2/notifications/{id}": "Get notification",
+                    "GET /api/v2/notifications/preferences": "Get notification preferences",
+                    "PATCH /api/v2/notifications/preferences": "Update preferences",
+                    "POST /api/v2/notifications/disable-all": "Disable all notifications",
+                    "GET /api/v2/notifications/unsubscribe": "Unsubscribe from notifications",
+                    "POST /api/v2/notifications/resubscribe": "Resubscribe to notifications",
+                    "GET /api/v2/notifications/digest": "Get digest settings",
+                    "PATCH /api/v2/notifications/digest": "Update digest settings",
+                    "POST /api/v2/notifications/digest/test": "Send test digest",
+                },
+                "market": {
+                    "GET /api/v2/market/status": "Get market status",
+                },
+                "chaos": {
+                    "POST /chaos/experiments": "Create chaos experiment",
+                    "GET /chaos/experiments": "List experiments",
+                    "GET /chaos/experiments/{id}": "Get experiment",
+                    "POST /chaos/experiments/{id}/start": "Start experiment",
+                    "POST /chaos/experiments/{id}/stop": "Stop experiment",
+                    "DELETE /chaos/experiments/{id}": "Delete experiment",
+                },
+            },
+            "docs": {
+                "openapi": "/docs",
+                "redoc": "/redoc",
+            },
+        }
+    )
+
+
 @app.get("/health")
 async def health_check():
     """
