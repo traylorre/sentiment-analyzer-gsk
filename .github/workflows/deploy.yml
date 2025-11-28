@@ -317,14 +317,55 @@ jobs:
           rm -rf packages/metrics-deps packages/metrics-build
 
           # ============================================================
+          # Notification Lambda - SendGrid email notifications (Feature 006)
+          # ============================================================
+          echo ""
+          echo "📦 Packaging Notification Lambda (boto3, sendgrid, pydantic)..."
+
+          # Install notification dependencies
+          pip install \
+            boto3==1.41.0 \
+            sendgrid==6.11.0 \
+            pydantic==2.12.4 \
+            python-json-logger==4.0.0 \
+            -t packages/notification-deps/ \
+            --platform manylinux2014_x86_64 \
+            --implementation cp \
+            --python-version 313 \
+            --only-binary=:all: \
+            --no-cache-dir \
+            --disable-pip-version-check \
+            --quiet
+
+          # Build notification package
+          mkdir -p packages/notification-build/src/lambdas packages/notification-build/src/lib
+          cp -r packages/notification-deps/* packages/notification-build/
+          cp -r src/lambdas/notification/* packages/notification-build/
+          cp -r src/lambdas/shared packages/notification-build/src/lambdas/
+          cp -r src/lib/* packages/notification-build/src/lib/
+          cd packages/notification-build
+          zip -r ../notification-${SHA}.zip . \
+            -x "*.pyc" "__pycache__/*" "*.pytest_cache/*" "tests/*" -q
+          cd ../..
+
+          # Validate package structure before cleanup
+          validate_lambda_package "notification" "handler.py"
+
+          # Show size and cleanup
+          NOTIFICATION_SIZE=$(du -h packages/notification-${SHA}.zip | cut -f1)
+          echo "✅ Notification Lambda: ${NOTIFICATION_SIZE}"
+          rm -rf packages/notification-deps packages/notification-build
+
+          # ============================================================
           # Summary
           # ============================================================
           echo ""
           echo "📊 Package Summary:"
-          echo "  Ingestion:  ${INGESTION_SIZE}"
-          echo "  Dashboard:  ${DASHBOARD_SIZE}"
-          echo "  Analysis:   ${ANALYSIS_SIZE}"
-          echo "  Metrics:    ${METRICS_SIZE}"
+          echo "  Ingestion:     ${INGESTION_SIZE}"
+          echo "  Dashboard:     ${DASHBOARD_SIZE}"
+          echo "  Analysis:      ${ANALYSIS_SIZE}"
+          echo "  Metrics:       ${METRICS_SIZE}"
+          echo "  Notification:  ${NOTIFICATION_SIZE}"
           echo ""
           ls -lh packages/*.zip
           echo ""
@@ -410,6 +451,7 @@ jobs:
           aws s3 cp ../../packages/analysis-${SHA}.zip s3://${BUCKET}/analysis/lambda.zip
           aws s3 cp ../../packages/dashboard-${SHA}.zip s3://${BUCKET}/dashboard/lambda.zip
           aws s3 cp ../../packages/metrics-${SHA}.zip s3://${BUCKET}/metrics/lambda.zip
+          aws s3 cp ../../packages/notification-${SHA}.zip s3://${BUCKET}/notification/lambda.zip
 
           echo "Lambda packages uploaded successfully"
 
@@ -612,6 +654,10 @@ jobs:
 
           aws s3 cp ../../packages/metrics-${SHA}.zip \
             s3://${BUCKET}/metrics/lambda.zip \
+            --metadata "git-sha=${GITHUB_SHA},build-timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+          aws s3 cp ../../packages/notification-${SHA}.zip \
+            s3://${BUCKET}/notification/lambda.zip \
             --metadata "git-sha=${GITHUB_SHA},build-timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
           echo "✅ Lambda packages uploaded to S3"
@@ -1015,6 +1061,10 @@ jobs:
 
           aws s3 cp ../../packages/metrics-${SHA}.zip \
             s3://${BUCKET}/metrics/lambda.zip \
+            --metadata "git-sha=${GITHUB_SHA},build-timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ),validated-in=preprod"
+
+          aws s3 cp ../../packages/notification-${SHA}.zip \
+            s3://${BUCKET}/notification/lambda.zip \
             --metadata "git-sha=${GITHUB_SHA},build-timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ),validated-in=preprod"
 
           echo "✅ Lambda packages uploaded to S3"
