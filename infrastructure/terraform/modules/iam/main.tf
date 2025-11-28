@@ -381,7 +381,7 @@ resource "aws_iam_role_policy" "dashboard_chaos" {
 
 # Dashboard Lambda: Ticker Cache S3 Read Access (Feature 006)
 resource "aws_iam_role_policy" "dashboard_ticker_cache" {
-  count = var.ticker_cache_bucket_arn != "" ? 1 : 0
+  count = var.enable_feature_006 ? 1 : 0
   name  = "${var.environment}-dashboard-ticker-cache-policy"
   role  = aws_iam_role.dashboard_lambda.id
 
@@ -401,7 +401,7 @@ resource "aws_iam_role_policy" "dashboard_ticker_cache" {
 
 # Dashboard Lambda: Feature 006 Users Table Access (full CRUD for configs, alerts, users)
 resource "aws_iam_role_policy" "dashboard_feature_006_users" {
-  count = var.feature_006_users_table_arn != "" ? 1 : 0
+  count = var.enable_feature_006 ? 1 : 0
   name  = "${var.environment}-dashboard-feature-006-users-policy"
   role  = aws_iam_role.dashboard_lambda.id
 

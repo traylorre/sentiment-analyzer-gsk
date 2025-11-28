@@ -602,6 +602,7 @@ module "iam" {
   ticker_cache_bucket_arn      = aws_s3_bucket.ticker_cache.arn
   sendgrid_secret_arn          = module.secrets.sendgrid_secret_arn
   feature_006_users_table_arn  = module.dynamodb.feature_006_users_table_arn
+  enable_feature_006           = true
 }
 
 # ===================================================================

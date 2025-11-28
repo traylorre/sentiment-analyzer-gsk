@@ -58,3 +58,9 @@ variable "feature_006_users_table_arn" {
   type        = string
   default     = ""
 }
+
+variable "enable_feature_006" {
+  description = "Whether Feature 006 resources should be created (ticker cache, users table policies)"
+  type        = bool
+  default     = true
+}
