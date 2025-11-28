@@ -571,3 +571,23 @@ def _alert_to_response(alert: AlertRule) -> AlertResponse:
         trigger_count=alert.trigger_count,
         created_at=alert.created_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
     )
+
+
+def get_alerts_by_config(
+    table: Any,
+    user_id: str,
+    config_id: str,
+) -> AlertListResponse | ErrorResponse:
+    """Get alerts for a specific configuration.
+
+    Convenience wrapper around list_alerts with config_id filter.
+
+    Args:
+        table: DynamoDB Table resource
+        user_id: User ID for access control
+        config_id: Configuration ID to filter by
+
+    Returns:
+        AlertListResponse with alerts for the configuration
+    """
+    return list_alerts(table=table, user_id=user_id, config_id=config_id)

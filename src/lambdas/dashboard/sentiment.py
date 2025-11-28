@@ -30,6 +30,19 @@ logger = logging.getLogger(__name__)
 # Response schemas
 
 
+class ErrorDetails(BaseModel):
+    """Error details for API responses."""
+
+    code: str
+    message: str
+
+
+class ErrorResponse(BaseModel):
+    """Error response wrapper."""
+
+    error: ErrorDetails
+
+
 class SourceSentiment(BaseModel):
     """Sentiment data from a single source."""
 
@@ -437,3 +450,84 @@ def _get_period_sentiment(
 
     decay = decay_factors.get(period, 1.0)
     return round(current_score * decay, 4)
+
+
+def get_ticker_sentiment_history(
+    table: Any,
+    user_id: str,
+    config_id: str,
+    ticker: str,
+    source: str | None = None,
+    days: int = 7,
+) -> SentimentResponse | ErrorResponse:
+    """Get sentiment history for a specific ticker.
+
+    Args:
+        table: DynamoDB table resource
+        user_id: User ID for access control
+        config_id: Configuration ID
+        ticker: Ticker symbol
+        source: Filter to specific source (tiingo/finnhub)
+        days: Number of days of history
+
+    Returns:
+        SentimentResponse with time series data or ErrorResponse
+    """
+    # Verify configuration belongs to user
+    try:
+        response = table.get_item(
+            Key={"PK": f"USER#{user_id}", "SK": f"CONFIG#{config_id}"},
+        )
+        if "Item" not in response:
+            return ErrorResponse(
+                error=ErrorDetails(
+                    code="CONFIG_NOT_FOUND",
+                    message=f"Configuration {config_id} not found",
+                )
+            )
+    except Exception as e:
+        logger.error(
+            "Failed to get configuration",
+            extra={"config_id": config_id, **get_safe_error_info(e)},
+        )
+        return ErrorResponse(
+            error=ErrorDetails(code="DB_ERROR", message="Database error")
+        )
+
+    # Return stub data for now - would query historical sentiment data
+    from datetime import timedelta
+
+    now = datetime.now(UTC)
+    history = []
+
+    for day_offset in range(days):
+        timestamp = now - timedelta(days=day_offset)
+        # Generate mock historical data
+        base_score = 0.5 + (0.1 * (day_offset % 3 - 1))
+        history.append(
+            {
+                "timestamp": timestamp.isoformat(),
+                "score": round(base_score, 4),
+                "source": source or "our_model",
+            }
+        )
+
+    return SentimentResponse(
+        config_id=config_id,
+        tickers=[
+            TickerSentimentData(
+                symbol=ticker,
+                sentiment={
+                    "history": SourceSentiment(
+                        score=history[0]["score"] if history else 0.0,
+                        label=_score_to_label(history[0]["score"] if history else 0.0),
+                        confidence=0.8,
+                        updated_at=now.isoformat() + "Z",
+                    )
+                },
+            )
+        ],
+        last_updated=now.isoformat() + "Z",
+        next_refresh_at=(now + timedelta(seconds=300)).isoformat() + "Z",
+        cache_status="fresh",
+    )

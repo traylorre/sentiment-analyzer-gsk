@@ -181,17 +181,17 @@ export const useAuthStore = create<AuthStore>()(
           setLoading(true);
           setError(null);
 
-          // Get OAuth URL from backend
-          const response = await fetch(`/api/v2/auth/oauth/${provider}/url`);
+          // Get OAuth URLs from backend
+          const response = await fetch('/api/v2/auth/oauth/urls');
 
           if (!response.ok) {
-            throw new Error(`Failed to get ${provider} OAuth URL`);
+            throw new Error(`Failed to get OAuth URLs`);
           }
 
-          const { url } = await response.json();
+          const urls = await response.json();
 
           // Redirect to OAuth provider
-          window.location.href = url;
+          window.location.href = urls[provider];
         } catch (error) {
           setError(error instanceof Error ? error.message : 'Unknown error');
           setLoading(false);
@@ -206,10 +206,10 @@ export const useAuthStore = create<AuthStore>()(
           setLoading(true);
           setError(null);
 
-          const response = await fetch(`/api/v2/auth/oauth/${provider}/callback`, {
+          const response = await fetch('/api/v2/auth/oauth/callback', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ code }),
+            body: JSON.stringify({ provider, code }),
           });
 
           if (!response.ok) {
@@ -263,7 +263,7 @@ export const useAuthStore = create<AuthStore>()(
 
         try {
           if (tokens?.accessToken) {
-            await fetch('/api/v2/auth/logout', {
+            await fetch('/api/v2/auth/signout', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
