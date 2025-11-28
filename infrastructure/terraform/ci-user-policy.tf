@@ -350,6 +350,20 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
     ]
   }
 
+  # IAM User Policy Attachments (for CI deployer users managing their own policies)
+  statement {
+    sid    = "IAMUserPolicyAttachments"
+    effect = "Allow"
+    actions = [
+      "iam:ListAttachedUserPolicies",
+      "iam:AttachUserPolicy",
+      "iam:DetachUserPolicy"
+    ]
+    resources = [
+      "arn:aws:iam::*:user/sentiment-analyzer-*-deployer"
+    ]
+  }
+
   # FIS (Fault Injection Simulator)
   statement {
     sid    = "FIS"

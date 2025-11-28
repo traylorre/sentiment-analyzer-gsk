@@ -85,7 +85,7 @@ Group resources by AWS service:
 - **CloudFront**: `aws_cloudfront_distribution`, `aws_cloudfront_origin_access_control`, `aws_cloudfront_cache_policy`
 - **EventBridge**: `aws_cloudwatch_event_rule`, `aws_cloudwatch_event_target`
 - **Secrets Manager**: `aws_secretsmanager_secret`, `aws_secretsmanager_secret_version`
-- **IAM**: `aws_iam_role`, `aws_iam_policy`, `aws_iam_role_policy_attachment`
+- **IAM**: `aws_iam_role`, `aws_iam_policy`, `aws_iam_role_policy_attachment`, `aws_iam_user_policy_attachment`, `aws_iam_user_policy`
 - **ACM**: `aws_acm_certificate`
 - **RUM**: `aws_rum_app_monitor`
 - **Budgets**: `aws_budgets_budget`
@@ -212,17 +212,28 @@ secretsmanager:UpdateSecret, secretsmanager:PutSecretValue,
 secretsmanager:TagResource, secretsmanager:UntagResource
 ```
 
-#### IAM (scoped to service roles)
+#### IAM (scoped to service roles and CI deployer users)
 ```
+# Role management
 iam:CreateRole, iam:DeleteRole, iam:GetRole, iam:UpdateRole,
 iam:AttachRolePolicy, iam:DetachRolePolicy,
 iam:PutRolePolicy, iam:DeleteRolePolicy, iam:GetRolePolicy,
 iam:ListRolePolicies, iam:ListAttachedRolePolicies,
+iam:TagRole, iam:UntagRole
+
+# Policy management
 iam:CreatePolicy, iam:DeletePolicy, iam:GetPolicy, iam:GetPolicyVersion,
 iam:ListPolicyVersions, iam:CreatePolicyVersion, iam:DeletePolicyVersion,
-iam:PassRole (with conditions for specific services),
-iam:TagRole, iam:UntagRole
+iam:PassRole (with conditions for specific services)
+
+# User policy attachments (for aws_iam_user_policy_attachment resources)
+iam:ListAttachedUserPolicies, iam:AttachUserPolicy, iam:DetachUserPolicy
+
+# Inline user policies (for aws_iam_user_policy resources)
+iam:ListUserPolicies, iam:GetUserPolicy, iam:PutUserPolicy, iam:DeleteUserPolicy
 ```
+
+**IMPORTANT**: If your Terraform manages `aws_iam_user_policy_attachment` resources (attaching managed policies to users), the CI user needs `iam:ListAttachedUserPolicies` on the target user resources, otherwise `terraform plan` will fail with AccessDenied.
 
 #### RUM
 ```
@@ -281,6 +292,41 @@ Check for:
 4. GitHub Actions steps that apply policies
 
 If the policy is a `data` source only (like `data "aws_iam_policy_document"`), flag this as **CRITICAL** - the policy exists but is never applied.
+
+### 6a. Check for Self-Referential IAM Resources
+
+**COMMON ISSUE**: When Terraform manages `aws_iam_user_policy_attachment` resources for CI deployer users, those users need permission to read their own attached policies.
+
+Run this check:
+```bash
+# Find aws_iam_user_policy_attachment resources
+grep -rn "aws_iam_user_policy_attachment" infrastructure/terraform/
+
+# Check if the CI user has permission to list user policies
+grep -A20 "iam:ListAttachedUserPolicies" infrastructure/terraform/
+```
+
+**If `aws_iam_user_policy_attachment` exists but `iam:ListAttachedUserPolicies` is NOT in the policy:**
+This is a **CRITICAL** gap. Terraform will fail with:
+```
+AccessDenied: User is not authorized to perform: iam:ListAttachedUserPolicies
+```
+
+**Required permissions for managing user policy attachments:**
+```hcl
+statement {
+  sid    = "IAMUserPolicyAttachments"
+  effect = "Allow"
+  actions = [
+    "iam:ListAttachedUserPolicies",
+    "iam:AttachUserPolicy",
+    "iam:DetachUserPolicy"
+  ]
+  resources = [
+    "arn:aws:iam::*:user/<your-ci-user-pattern>*"
+  ]
+}
+```
 
 ### 7. Generate Findings Report
 
