@@ -80,7 +80,8 @@ module "cloudfront" {
   account_suffix = data.aws_caller_identity.current.account_id
 
   # API Gateway integration
-  api_gateway_domain = replace(module.api_gateway.api_endpoint, "https://", "")
+  # Extract just the domain from API Gateway endpoint (strip https:// and path like /v1)
+  api_gateway_domain = split("/", replace(module.api_gateway.api_endpoint, "https://", ""))[0]
 
   # Custom domain (optional)
   custom_domain       = var.cloudfront_custom_domain
