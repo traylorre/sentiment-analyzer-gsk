@@ -305,10 +305,12 @@ def get_heatmap_data(
 
         legend = None  # Legend optional for timeperiods view
 
+    # Pre-sanitize config_id to prevent log injection (CodeQL py/log-injection)
+    safe_config_id = sanitize_for_log(config_id[:8] if config_id else "")
     logger.debug(
         "Generated heatmap data",
         extra={
-            "config_id": sanitize_for_log(config_id[:8] if config_id else ""),
+            "config_id": safe_config_id,
             "view": view,
             "ticker_count": len(tickers),
         },
@@ -486,9 +488,11 @@ def get_ticker_sentiment_history(
                 )
             )
     except Exception as e:
+        # Pre-sanitize config_id to prevent log injection (CodeQL py/log-injection)
+        safe_config_id = sanitize_for_log(config_id[:8] if config_id else "")
         logger.error(
             "Failed to get configuration",
-            extra={"config_id": config_id, **get_safe_error_info(e)},
+            extra={"config_id": safe_config_id, **get_safe_error_info(e)},
         )
         return ErrorResponse(
             error=ErrorDetails(code="DB_ERROR", message="Database error")
