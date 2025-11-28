@@ -861,15 +861,34 @@ jobs:
           PREPROD_DASHBOARD_API_KEY: ${{ secrets.DASHBOARD_API_KEY }}
           # Required for E2E Lambda invocation tests (test_e2e_lambda_invocation_preprod.py)
           DASHBOARD_FUNCTION_URL: ${{ needs.deploy-preprod.outputs.dashboard_url }}
+        id: integration-tests
         run: |
           # Run tests marked as "preprod" (auto-marked by conftest.py for *_preprod.py files)
           # These tests use REAL AWS resources, not moto mocks
+          set +e  # Don't exit on error
           timeout 180 pytest tests/ \
             -m "preprod" \
             -v \
             --tb=short \
-            --junitxml=preprod-test-results.xml \
-            || echo "⚠️ Integration tests timed out or failed - proceeding anyway (unit tests passed)"
+            --junitxml=preprod-test-results.xml
+          TEST_EXIT_CODE=$?
+          set -e
+
+          if [ $TEST_EXIT_CODE -eq 0 ]; then
+            echo "✅ Integration tests passed"
+            echo "passed=true" >> $GITHUB_OUTPUT
+          elif [ $TEST_EXIT_CODE -eq 124 ]; then
+            echo "⚠️ Integration tests timed out (180s limit)"
+            echo "passed=false" >> $GITHUB_OUTPUT
+            echo "reason=timeout" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Integration tests failed with exit code $TEST_EXIT_CODE"
+            echo "passed=false" >> $GITHUB_OUTPUT
+            echo "reason=failed" >> $GITHUB_OUTPUT
+          fi
+
+          # Always exit 0 to allow artifact upload, but track status
+          exit 0
 
       - name: Upload Test Results
         if: always()
@@ -879,8 +898,21 @@ jobs:
           path: preprod-test-results.xml
           retention-days: 30
 
+      - name: Check Integration Test Results
+        if: steps.integration-tests.outputs.passed != 'true'
+        run: |
+          echo "::error::Integration tests did not pass: ${{ steps.integration-tests.outputs.reason }}"
+          echo ""
+          echo "Check the preprod-test-results artifact for details."
+          echo ""
+          echo "Common causes:"
+          echo "  - Timeout: Lambda cold start taking too long, increase warmup time"
+          echo "  - Failed: Check test output above for specific failures"
+          echo "  - Auth: Verify DASHBOARD_API_KEY secret is set correctly"
+          exit 1
+
       - name: Create Validation Metadata
-        if: success()
+        if: steps.integration-tests.outputs.passed == 'true'
         run: |
           SHA="${{ needs.build.outputs.artifact-sha }}"
           cat > validated.json <<EOF
