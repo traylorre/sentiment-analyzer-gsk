@@ -334,8 +334,26 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
       "arn:aws:iam::*:role/*-lambda-role",
       "arn:aws:iam::*:role/*-fis-execution-role",
       "arn:aws:iam::*:role/*-backup-role",
-      "arn:aws:iam::*:role/*-cognito-*"
+      "arn:aws:iam::*:role/*-cognito-*",
+      "arn:aws:iam::*:role/*-rum-*"
     ]
+  }
+
+  # Service-Linked Roles (needed for services like RUM)
+  statement {
+    sid    = "ServiceLinkedRoles"
+    effect = "Allow"
+    actions = [
+      "iam:CreateServiceLinkedRole"
+    ]
+    resources = [
+      "arn:aws:iam::*:role/aws-service-role/rum.amazonaws.com/*"
+    ]
+    condition {
+      test     = "StringEquals"
+      variable = "iam:AWSServiceName"
+      values   = ["rum.amazonaws.com"]
+    }
   }
 
   # IAM Policy Management
@@ -366,7 +384,8 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
       "arn:aws:iam::*:role/*-lambda-role",
       "arn:aws:iam::*:role/*-fis-execution-role",
       "arn:aws:iam::*:role/*-backup-role",
-      "arn:aws:iam::*:role/*-cognito-*"
+      "arn:aws:iam::*:role/*-cognito-*",
+      "arn:aws:iam::*:role/*-rum-*"
     ]
   }
 

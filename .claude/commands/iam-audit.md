@@ -256,6 +256,10 @@ iam:ListUserPolicies, iam:GetUserPolicy, iam:PutUserPolicy, iam:DeleteUserPolicy
 rum:CreateAppMonitor, rum:UpdateAppMonitor, rum:DeleteAppMonitor,
 rum:GetAppMonitor, rum:ListAppMonitors,
 rum:TagResource, rum:UntagResource
+
+# IMPORTANT: RUM requires a service-linked role. On first creation, CI needs:
+iam:CreateServiceLinkedRole (with condition: iam:AWSServiceName = rum.amazonaws.com)
+# Resource: arn:aws:iam::*:role/aws-service-role/rum.amazonaws.com/*
 ```
 
 #### Budgets
@@ -284,6 +288,53 @@ fis:TagResource, fis:UntagResource
 ```
 sts:GetCallerIdentity
 ec2:DescribeAvailabilityZones, ec2:DescribeVpcs, ec2:DescribeSubnets, ec2:DescribeSecurityGroups
+```
+
+#### Service-Linked Roles (CRITICAL for first-time resource creation)
+
+Some AWS services require service-linked roles (SLRs) that are auto-created on first use. If your CI user doesn't have `iam:CreateServiceLinkedRole` permission, resource creation will fail with AccessDenied.
+
+**Common services requiring SLRs:**
+
+| Service | SLR Name | When Created |
+|---------|----------|--------------|
+| CloudWatch RUM | `AWSServiceRoleForCloudWatchRUM` | First `aws_rum_app_monitor` |
+| Cognito Email | `AWSServiceRoleForAmazonCognitoIdp` | First email-enabled user pool |
+| Elasticsearch/OpenSearch | `AWSServiceRoleForAmazonElasticsearchService` | First domain |
+| ECS | `AWSServiceRoleForECS` | First cluster/service |
+| RDS | `AWSServiceRoleForRDS` | First enhanced monitoring |
+| CloudTrail | `AWSServiceRoleForCloudTrail` | First trail |
+
+**Required permission pattern:**
+```hcl
+statement {
+  sid    = "ServiceLinkedRoles"
+  effect = "Allow"
+  actions = [
+    "iam:CreateServiceLinkedRole"
+  ]
+  resources = [
+    "arn:aws:iam::*:role/aws-service-role/<service>.amazonaws.com/*"
+  ]
+  condition {
+    test     = "StringEquals"
+    variable = "iam:AWSServiceName"
+    values   = ["<service>.amazonaws.com"]
+  }
+}
+```
+
+**Error signature when SLR permission is missing:**
+```
+AccessDeniedException: User: arn:aws:iam::ACCOUNT:user/CI-USER is not authorized
+to perform: iam:CreateServiceLinkedRole on resource:
+arn:aws:iam::ACCOUNT:role/aws-service-role/SERVICE.amazonaws.com/AWSServiceRoleForSERVICE
+```
+
+**Detection command:**
+```bash
+# Check if SLR permissions exist in current policy
+grep -r "CreateServiceLinkedRole\|service-linked" infrastructure/terraform/*.tf
 ```
 
 ### 5. Analyze Current Policy
@@ -465,6 +516,7 @@ Output a structured report:
 1. [CRITICAL] Chicken-and-egg: Policy manages CI user but lacks self-management permissions
 2. [CRITICAL] Policy not attached - document exists but never applied
 3. [CRITICAL] User name mismatch - `dev-deployer` vs `preprod-ci`
+4. [CRITICAL] Missing service-linked role permissions (iam:CreateServiceLinkedRole) for services like RUM, Cognito, etc.
 ...
 
 ### Bootstrap Status
@@ -472,6 +524,11 @@ Output a structured report:
 - [ ] Self-management permissions included: YES/NO
 - [ ] Bootstrap required before CI can run: YES/NO
 - [ ] Bootstrap command documented: YES/NO
+
+### Service-Linked Role Status
+- [ ] Services requiring SLRs identified: (list services)
+- [ ] iam:CreateServiceLinkedRole permission exists: YES/NO
+- [ ] SLR permissions properly scoped with conditions: YES/NO
 
 ### Coverage Summary
 - Total Terraform resource types: X
