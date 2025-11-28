@@ -293,40 +293,136 @@ Check for:
 
 If the policy is a `data` source only (like `data "aws_iam_policy_document"`), flag this as **CRITICAL** - the policy exists but is never applied.
 
-### 6a. Check for Self-Referential IAM Resources
+### 6a. CRITICAL: Detect Chicken-and-Egg Bootstrapping Problems
 
-**COMMON ISSUE**: When Terraform manages `aws_iam_user_policy_attachment` resources for CI deployer users, those users need permission to read their own attached policies.
+**This is the #1 cause of CI/CD IAM failures that persist across multiple fix attempts.**
 
-Run this check:
+A chicken-and-egg problem occurs when:
+1. Terraform code manages the CI user's own IAM policies/attachments
+2. The policy being attached doesn't include permissions needed to manage itself
+3. Result: CI can never successfully run because it can't read/modify its own permissions
+
+#### Step 1: Identify Self-Referential IAM Resources
+
 ```bash
-# Find aws_iam_user_policy_attachment resources
+# Find all IAM resources that reference CI deployer users
+grep -rn "aws_iam_user_policy_attachment\|aws_iam_user_policy\|aws_iam_policy" infrastructure/terraform/ | grep -i "deployer\|ci-user\|ci_user"
+```
+
+Look for patterns like:
+```hcl
+resource "aws_iam_user_policy_attachment" "ci_deploy" {
+  user       = "my-ci-deployer"      # <- CI user managing itself
+  policy_arn = aws_iam_policy.ci.arn  # <- Policy that may not include self-management perms
+}
+```
+
+#### Step 2: Check for Required Self-Management Permissions
+
+For each self-referential pattern found, verify the policy includes:
+
+| Resource Type | Required Permissions | Why Needed |
+|--------------|---------------------|------------|
+| `aws_iam_user_policy_attachment` | `iam:ListAttachedUserPolicies` | Terraform reads current state |
+| `aws_iam_user_policy_attachment` | `iam:AttachUserPolicy`, `iam:DetachUserPolicy` | Terraform modifies attachments |
+| `aws_iam_user_policy` | `iam:ListUserPolicies`, `iam:GetUserPolicy` | Terraform reads inline policies |
+| `aws_iam_user_policy` | `iam:PutUserPolicy`, `iam:DeleteUserPolicy` | Terraform modifies inline policies |
+| `aws_iam_policy` | `iam:CreatePolicy`, `iam:GetPolicy`, `iam:DeletePolicy` | Terraform manages policy lifecycle |
+| `aws_iam_policy` | `iam:CreatePolicyVersion`, `iam:DeletePolicyVersion` | Terraform updates policy content |
+
+#### Step 3: Verify Bootstrap Safety
+
+Run this comprehensive check:
+```bash
+# 1. Find policy attachment resources
+echo "=== Policy Attachment Resources ==="
 grep -rn "aws_iam_user_policy_attachment" infrastructure/terraform/
 
-# Check if the CI user has permission to list user policies
-grep -A20 "iam:ListAttachedUserPolicies" infrastructure/terraform/
+# 2. Extract user names from attachments
+echo -e "\n=== Users Being Managed ==="
+grep -A5 "aws_iam_user_policy_attachment" infrastructure/terraform/*.tf | grep "user\s*="
+
+# 3. Check if ListAttachedUserPolicies exists in policy
+echo -e "\n=== Self-Management Permissions ==="
+grep -c "iam:ListAttachedUserPolicies" infrastructure/terraform/*.tf
+
+# 4. Check resource scope includes CI users
+echo -e "\n=== IAM Resource Scopes ==="
+grep -A10 "iam:ListAttachedUserPolicies" infrastructure/terraform/*.tf | grep "resources"
 ```
+
+#### Step 4: Identify the Specific Gap
 
 **If `aws_iam_user_policy_attachment` exists but `iam:ListAttachedUserPolicies` is NOT in the policy:**
-This is a **CRITICAL** gap. Terraform will fail with:
+
+This is a **CRITICAL CHICKEN-AND-EGG** problem:
+- The CI user needs `iam:ListAttachedUserPolicies` to run `terraform plan`
+- But that permission is in the policy being attached
+- The policy can't be attached because CI can't run terraform
+- **Result**: Infinite loop of failures
+
+Error signature:
 ```
-AccessDenied: User is not authorized to perform: iam:ListAttachedUserPolicies
+Error: reading IAM User Policy Attachment (...): operation error IAM: ListAttachedUserPolicies
+api error AccessDenied: User: arn:aws:iam::ACCOUNT:user/CI-USER is not authorized to perform:
+iam:ListAttachedUserPolicies on resource: user CI-USER because no identity-based policy allows
+the iam:ListAttachedUserPolicies action
 ```
 
-**Required permissions for managing user policy attachments:**
+#### Step 5: Generate Bootstrap-Safe Fix
+
+When adding `aws_iam_user_policy_attachment` resources, ALWAYS include self-management permissions:
+
 ```hcl
+# REQUIRED: Self-management permissions for CI users
+# Without this, Terraform cannot read its own policy attachments
 statement {
   sid    = "IAMUserPolicyAttachments"
   effect = "Allow"
   actions = [
-    "iam:ListAttachedUserPolicies",
-    "iam:AttachUserPolicy",
-    "iam:DetachUserPolicy"
+    "iam:ListAttachedUserPolicies",  # Required for terraform plan
+    "iam:AttachUserPolicy",           # Required for terraform apply
+    "iam:DetachUserPolicy"            # Required for policy changes
   ]
   resources = [
     "arn:aws:iam::*:user/<your-ci-user-pattern>*"
   ]
 }
 ```
+
+#### Step 6: Bootstrap Procedure for Chicken-and-Egg Fixes
+
+When you've identified a chicken-and-egg problem, the fix requires **admin intervention**:
+
+```bash
+# ADMIN MUST RUN THIS (not CI)
+# This breaks the circular dependency by manually applying the self-management permissions
+
+cd infrastructure/terraform
+terraform init
+
+# Apply ONLY the policy resources (not the attachments)
+terraform apply -var="environment=dev" \
+  -target=aws_iam_policy.ci_deploy_core \
+  -target=aws_iam_policy.ci_deploy_monitoring \
+  -target=aws_iam_policy.ci_deploy_storage
+
+# Then apply the attachments
+terraform apply -var="environment=dev" \
+  -target=aws_iam_user_policy_attachment.ci_deploy_core_dev \
+  -target=aws_iam_user_policy_attachment.ci_deploy_monitoring_dev \
+  -target=aws_iam_user_policy_attachment.ci_deploy_storage_dev
+```
+
+#### Checklist: Preventing Future Chicken-and-Egg Problems
+
+Before merging any PR that modifies CI IAM policies:
+
+- [ ] Does the PR add `aws_iam_user_policy_attachment` resources?
+- [ ] If yes, does the attached policy include `iam:ListAttachedUserPolicies`?
+- [ ] Is the resource scope broad enough to include all CI users?
+- [ ] Is there a bootstrap command documented in the PR description?
+- [ ] Has an admin been notified to run the bootstrap after merge?
 
 ### 7. Generate Findings Report
 
@@ -350,9 +446,16 @@ Output a structured report:
 - [ ] User names match across all files: YES/NO
 
 ### Critical Issues
-1. [CRITICAL] Policy not attached - document exists but never applied
-2. [CRITICAL] User name mismatch - `dev-deployer` vs `preprod-ci`
+1. [CRITICAL] Chicken-and-egg: Policy manages CI user but lacks self-management permissions
+2. [CRITICAL] Policy not attached - document exists but never applied
+3. [CRITICAL] User name mismatch - `dev-deployer` vs `preprod-ci`
 ...
+
+### Bootstrap Status
+- [ ] Self-referential IAM resources exist: YES/NO
+- [ ] Self-management permissions included: YES/NO
+- [ ] Bootstrap required before CI can run: YES/NO
+- [ ] Bootstrap command documented: YES/NO
 
 ### Coverage Summary
 - Total Terraform resource types: X
