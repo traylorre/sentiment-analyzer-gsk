@@ -17,10 +17,21 @@
 #   - Uses squash merge for clean git history
 #   - To disable auto-merge: gh pr merge --disable-auto <PR_NUMBER>
 #
+# IMPORTANT: Workflow Trigger Token
+#   This workflow uses REPO_PAT (Personal Access Token) instead of GITHUB_TOKEN.
+#   When GITHUB_TOKEN merges a PR, the resulting push to main does NOT trigger
+#   other workflows (GitHub security feature to prevent infinite loops).
+#   Using a PAT ensures the Deploy Pipeline triggers on merge.
+#
+#   To set up REPO_PAT:
+#   1. Create a PAT at https://github.com/settings/tokens with 'repo' scope
+#   2. Add it as a repository secret named REPO_PAT
+#   3. If REPO_PAT is not set, falls back to GITHUB_TOKEN (deploy won't auto-trigger)
+#
 # Security Notes:
 #   - All branch protection rules still apply
 #   - Status checks must pass before merge
-#   - Uses GITHUB_TOKEN with minimal permissions
+#   - PAT should have minimal required permissions (repo scope only)
 
 name: Enable Auto-Merge
 
@@ -43,15 +54,24 @@ jobs:
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Use REPO_PAT to trigger Deploy Pipeline on merge, fallback to GITHUB_TOKEN
+          GH_TOKEN: ${{ secrets.REPO_PAT || secrets.GITHUB_TOKEN }}
 
       - name: Comment on PR
         run: |
+          if [ -n "${{ secrets.REPO_PAT }}" ]; then
+            DEPLOY_MSG="Deploy Pipeline will trigger automatically on merge."
+          else
+            DEPLOY_MSG="⚠️ REPO_PAT not configured - Deploy Pipeline will NOT auto-trigger. Run manually after merge."
+          fi
+
           gh pr comment "$PR_URL" --body "🤖 Auto-merge enabled. This PR will automatically merge once all required checks pass:
           - ✅ Run Tests
           - ✅ Code Quality
           - ✅ Dependency Vulnerability Scan
           - ✅ Analyze (CodeQL)
+
+          ${DEPLOY_MSG}
 
           To disable auto-merge: \`gh pr merge --disable-auto ${{ github.event.pull_request.number }}\`"
         env:
