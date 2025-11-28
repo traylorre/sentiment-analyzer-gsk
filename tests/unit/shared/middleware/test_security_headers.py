@@ -308,9 +308,13 @@ class TestHtmlCsp:
     def test_allows_hcaptcha(self):
         """Allows hCaptcha domains."""
         # Check hCaptcha domain is in CSP whitelist (not URL validation)
-        # Using explicit domain check to avoid CodeQL false positive
+        # Using endswith() to satisfy CodeQL py/incomplete-url-substring-sanitization
         csp_domains = HTML_CSP.split()
-        assert any("hcaptcha.com" in domain for domain in csp_domains)
+        hcaptcha_allowed = any(
+            domain.endswith("hcaptcha.com") or domain.endswith("hcaptcha.com;")
+            for domain in csp_domains
+        )
+        assert hcaptcha_allowed, f"hcaptcha.com not found in CSP: {HTML_CSP}"
 
     def test_frame_ancestors_none(self):
         """Frame-ancestors is 'none' (prevent framing)."""

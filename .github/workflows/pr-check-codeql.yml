@@ -53,6 +53,8 @@ jobs:
           languages: ${{ matrix.language }}
           # Use security-extended for more comprehensive scanning
           queries: security-extended
+          # Custom config to exclude test file false positives
+          config-file: ./.github/codeql/codeql-config.yml
 
       # Autobuild attempts to build any compiled languages
       - name: Autobuild
