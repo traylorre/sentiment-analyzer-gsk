@@ -82,7 +82,7 @@ Group resources by AWS service:
 - **SQS**: `aws_sqs_queue`
 - **CloudWatch**: `aws_cloudwatch_log_group`, `aws_cloudwatch_metric_alarm`, `aws_cloudwatch_dashboard`
 - **Cognito**: `aws_cognito_user_pool`, `aws_cognito_user_pool_client`, `aws_cognito_user_pool_domain`, `aws_cognito_identity_pool`, `aws_cognito_identity_provider`
-- **CloudFront**: `aws_cloudfront_distribution`, `aws_cloudfront_origin_access_control`, `aws_cloudfront_cache_policy`
+- **CloudFront**: `aws_cloudfront_distribution`, `aws_cloudfront_origin_access_control`, `aws_cloudfront_cache_policy`, `aws_cloudfront_response_headers_policy`
 - **EventBridge**: `aws_cloudwatch_event_rule`, `aws_cloudwatch_event_target`
 - **Secrets Manager**: `aws_secretsmanager_secret`, `aws_secretsmanager_secret_version`
 - **IAM**: `aws_iam_role`, `aws_iam_policy`, `aws_iam_role_policy_attachment`, `aws_iam_user_policy_attachment`, `aws_iam_user_policy`
@@ -181,6 +181,9 @@ cloudfront:CreateOriginAccessControl, cloudfront:UpdateOriginAccessControl,
 cloudfront:DeleteOriginAccessControl, cloudfront:GetOriginAccessControl,
 cloudfront:CreateCachePolicy, cloudfront:UpdateCachePolicy, cloudfront:DeleteCachePolicy,
 cloudfront:GetCachePolicy, cloudfront:ListCachePolicies,
+cloudfront:CreateResponseHeadersPolicy, cloudfront:UpdateResponseHeadersPolicy,
+cloudfront:DeleteResponseHeadersPolicy, cloudfront:GetResponseHeadersPolicy,
+cloudfront:ListResponseHeadersPolicies,
 cloudfront:TagResource, cloudfront:UntagResource
 ```
 

@@ -493,7 +493,12 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
       "cloudfront:UpdateCachePolicy",
       "cloudfront:DeleteCachePolicy",
       "cloudfront:GetCachePolicy",
-      "cloudfront:ListCachePolicies"
+      "cloudfront:ListCachePolicies",
+      "cloudfront:CreateResponseHeadersPolicy",
+      "cloudfront:UpdateResponseHeadersPolicy",
+      "cloudfront:DeleteResponseHeadersPolicy",
+      "cloudfront:GetResponseHeadersPolicy",
+      "cloudfront:ListResponseHeadersPolicies"
     ]
     resources = ["*"]
   }
