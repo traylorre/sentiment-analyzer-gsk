@@ -379,6 +379,333 @@ data "aws_iam_policy_document" "ci_deploy" {
     resources = ["*"]
   }
 
+  # CloudWatch Dashboards (Feature 006)
+  statement {
+    sid    = "CloudWatchDashboards"
+    effect = "Allow"
+
+    actions = [
+      "cloudwatch:PutDashboard",
+      "cloudwatch:DeleteDashboards",
+      "cloudwatch:GetDashboard",
+      "cloudwatch:ListDashboards"
+    ]
+
+    resources = ["*"]
+  }
+
+  # CloudWatch Metrics Discovery
+  statement {
+    sid    = "CloudWatchMetrics"
+    effect = "Allow"
+
+    actions = [
+      "cloudwatch:ListMetrics",
+      "cloudwatch:GetMetricStatistics",
+      "cloudwatch:DescribeAlarmHistory"
+    ]
+
+    resources = ["*"]
+  }
+
+  # CloudWatch Log Metric Filters
+  statement {
+    sid    = "CloudWatchLogMetricFilters"
+    effect = "Allow"
+
+    actions = [
+      "logs:PutMetricFilter",
+      "logs:DeleteMetricFilter",
+      "logs:DescribeMetricFilters"
+    ]
+
+    resources = ["*"]
+  }
+
+  # ==================================================================
+  # Cognito - User Pool Management (Feature 006)
+  # ==================================================================
+  # References:
+  # - https://docs.aws.amazon.com/cognito/latest/developerguide/security-iam.html
+  # - https://docs.aws.amazon.com/service-authorization/latest/reference/list_amazoncognitouserpools.html
+
+  statement {
+    sid    = "CognitoUserPoolManagement"
+    effect = "Allow"
+
+    actions = [
+      "cognito-idp:CreateUserPool",
+      "cognito-idp:UpdateUserPool",
+      "cognito-idp:DeleteUserPool",
+      "cognito-idp:DescribeUserPool",
+      "cognito-idp:ListUserPools",
+      "cognito-idp:GetUserPoolMfaConfig",
+      "cognito-idp:SetUserPoolMfaConfig"
+    ]
+
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "CognitoUserPoolClient"
+    effect = "Allow"
+
+    actions = [
+      "cognito-idp:CreateUserPoolClient",
+      "cognito-idp:UpdateUserPoolClient",
+      "cognito-idp:DeleteUserPoolClient",
+      "cognito-idp:DescribeUserPoolClient",
+      "cognito-idp:ListUserPoolClients"
+    ]
+
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "CognitoUserPoolDomain"
+    effect = "Allow"
+
+    actions = [
+      "cognito-idp:CreateUserPoolDomain",
+      "cognito-idp:UpdateUserPoolDomain",
+      "cognito-idp:DeleteUserPoolDomain",
+      "cognito-idp:DescribeUserPoolDomain"
+    ]
+
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "CognitoResourceServer"
+    effect = "Allow"
+
+    actions = [
+      "cognito-idp:CreateResourceServer",
+      "cognito-idp:UpdateResourceServer",
+      "cognito-idp:DeleteResourceServer",
+      "cognito-idp:DescribeResourceServer",
+      "cognito-idp:ListResourceServers"
+    ]
+
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "CognitoIdentityProvider"
+    effect = "Allow"
+
+    actions = [
+      "cognito-idp:CreateIdentityProvider",
+      "cognito-idp:UpdateIdentityProvider",
+      "cognito-idp:DeleteIdentityProvider",
+      "cognito-idp:DescribeIdentityProvider",
+      "cognito-idp:ListIdentityProviders"
+    ]
+
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "CognitoTagging"
+    effect = "Allow"
+
+    actions = [
+      "cognito-idp:TagResource",
+      "cognito-idp:UntagResource",
+      "cognito-idp:ListTagsForResource"
+    ]
+
+    resources = ["*"]
+  }
+
+  # ==================================================================
+  # Cognito Identity Pools (for CloudWatch RUM)
+  # ==================================================================
+
+  statement {
+    sid    = "CognitoIdentityPools"
+    effect = "Allow"
+
+    actions = [
+      "cognito-identity:CreateIdentityPool",
+      "cognito-identity:UpdateIdentityPool",
+      "cognito-identity:DeleteIdentityPool",
+      "cognito-identity:DescribeIdentityPool",
+      "cognito-identity:ListIdentityPools",
+      "cognito-identity:GetIdentityPoolRoles",
+      "cognito-identity:SetIdentityPoolRoles",
+      "cognito-identity:TagResource",
+      "cognito-identity:UntagResource",
+      "cognito-identity:ListTagsForResource"
+    ]
+
+    resources = ["*"]
+  }
+
+  # ==================================================================
+  # CloudFront - Distribution Management (Feature 006)
+  # ==================================================================
+
+  statement {
+    sid    = "CloudFrontDistribution"
+    effect = "Allow"
+
+    actions = [
+      "cloudfront:CreateDistribution",
+      "cloudfront:UpdateDistribution",
+      "cloudfront:DeleteDistribution",
+      "cloudfront:GetDistribution",
+      "cloudfront:GetDistributionConfig",
+      "cloudfront:ListDistributions",
+      "cloudfront:TagResource",
+      "cloudfront:UntagResource",
+      "cloudfront:ListTagsForResource"
+    ]
+
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "CloudFrontOriginAccessControl"
+    effect = "Allow"
+
+    actions = [
+      "cloudfront:CreateOriginAccessControl",
+      "cloudfront:UpdateOriginAccessControl",
+      "cloudfront:DeleteOriginAccessControl",
+      "cloudfront:GetOriginAccessControl",
+      "cloudfront:GetOriginAccessControlConfig",
+      "cloudfront:ListOriginAccessControls"
+    ]
+
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "CloudFrontCachePolicy"
+    effect = "Allow"
+
+    actions = [
+      "cloudfront:CreateCachePolicy",
+      "cloudfront:UpdateCachePolicy",
+      "cloudfront:DeleteCachePolicy",
+      "cloudfront:GetCachePolicy",
+      "cloudfront:ListCachePolicies"
+    ]
+
+    resources = ["*"]
+  }
+
+  # ==================================================================
+  # CloudWatch RUM - Real User Monitoring (Feature 006)
+  # ==================================================================
+
+  statement {
+    sid    = "CloudWatchRUM"
+    effect = "Allow"
+
+    actions = [
+      "rum:CreateAppMonitor",
+      "rum:UpdateAppMonitor",
+      "rum:DeleteAppMonitor",
+      "rum:GetAppMonitor",
+      "rum:ListAppMonitors",
+      "rum:TagResource",
+      "rum:UntagResource",
+      "rum:ListTagsForResource"
+    ]
+
+    resources = ["*"]
+  }
+
+  # ==================================================================
+  # AWS Budgets - Cost Monitoring (Feature 006)
+  # ==================================================================
+
+  statement {
+    sid    = "AWSBudgets"
+    effect = "Allow"
+
+    actions = [
+      "budgets:CreateBudget",
+      "budgets:ModifyBudget",
+      "budgets:DeleteBudget",
+      "budgets:ViewBudget",
+      "budgets:DescribeBudgets",
+      "budgets:DescribeBudgetActionsForBudget"
+    ]
+
+    resources = ["*"]
+  }
+
+  # ==================================================================
+  # ACM - Certificate Management (for CloudFront custom domains)
+  # ==================================================================
+
+  statement {
+    sid    = "ACMCertificates"
+    effect = "Allow"
+
+    actions = [
+      "acm:DescribeCertificate",
+      "acm:ListCertificates",
+      "acm:ListTagsForCertificate",
+      "acm:GetCertificate"
+    ]
+
+    resources = ["*"]
+  }
+
+  # ==================================================================
+  # AWS Backup - DynamoDB Backup Management
+  # ==================================================================
+
+  statement {
+    sid    = "AWSBackupManagement"
+    effect = "Allow"
+
+    actions = [
+      "backup:CreateBackupVault",
+      "backup:DeleteBackupVault",
+      "backup:DescribeBackupVault",
+      "backup:ListBackupVaults",
+      "backup:CreateBackupPlan",
+      "backup:UpdateBackupPlan",
+      "backup:DeleteBackupPlan",
+      "backup:GetBackupPlan",
+      "backup:ListBackupPlans",
+      "backup:CreateBackupSelection",
+      "backup:DeleteBackupSelection",
+      "backup:GetBackupSelection",
+      "backup:ListBackupSelections",
+      "backup:TagResource",
+      "backup:UntagResource",
+      "backup:ListTags"
+    ]
+
+    resources = ["*"]
+  }
+
+  # IAM PassRole for AWS Backup
+  statement {
+    sid    = "IAMPassRoleForBackup"
+    effect = "Allow"
+
+    actions = [
+      "iam:PassRole"
+    ]
+
+    resources = [
+      "arn:aws:iam::*:role/*-backup-role"
+    ]
+
+    condition {
+      test     = "StringEquals"
+      variable = "iam:PassedToService"
+      values   = ["backup.amazonaws.com"]
+    }
+  }
+
   # ==================================================================
   # EventBridge - Rules Management
   # ==================================================================
@@ -445,11 +772,24 @@ data "aws_iam_policy_document" "ci_deploy" {
       "s3:PutBucketTagging",
       "s3:GetBucketPolicy",
       "s3:PutBucketPolicy",
-      "s3:DeleteBucketPolicy"
+      "s3:DeleteBucketPolicy",
+      "s3:GetEncryptionConfiguration",
+      "s3:PutEncryptionConfiguration",
+      "s3:GetBucketCORS",
+      "s3:PutBucketCORS",
+      "s3:DeleteBucketCORS",
+      "s3:GetBucketWebsite",
+      "s3:PutBucketWebsite",
+      "s3:DeleteBucketWebsite",
+      "s3:GetLifecycleConfiguration",
+      "s3:PutLifecycleConfiguration",
+      "s3:GetBucketAcl",
+      "s3:PutBucketAcl"
     ]
 
     resources = [
-      "arn:aws:s3:::sentiment-analyzer-*"
+      "arn:aws:s3:::sentiment-analyzer-*",
+      "arn:aws:s3:::*-sentiment-*"
     ]
   }
 
@@ -462,11 +802,14 @@ data "aws_iam_policy_document" "ci_deploy" {
       "s3:PutObject",
       "s3:GetObject",
       "s3:DeleteObject",
-      "s3:ListBucket"
+      "s3:ListBucket",
+      "s3:GetObjectAcl",
+      "s3:PutObjectAcl"
     ]
 
     resources = [
-      "arn:aws:s3:::sentiment-analyzer-*/*"
+      "arn:aws:s3:::sentiment-analyzer-*/*",
+      "arn:aws:s3:::*-sentiment-*/*"
     ]
   }
 
