@@ -76,6 +76,7 @@ grep -rh "^resource\s" infrastructure/terraform/ | sort | uniq
 
 Group resources by AWS service:
 - **Lambda**: `aws_lambda_function`, `aws_lambda_alias`, `aws_lambda_layer_version`, `aws_lambda_event_source_mapping`, `aws_lambda_function_url`, `aws_lambda_permission`
+- **API Gateway**: `aws_api_gateway_rest_api`, `aws_api_gateway_resource`, `aws_api_gateway_method`, `aws_api_gateway_integration`, `aws_api_gateway_deployment`, `aws_api_gateway_stage`, `aws_api_gateway_usage_plan`
 - **DynamoDB**: `aws_dynamodb_table`
 - **S3**: `aws_s3_bucket`, `aws_s3_bucket_*`, `aws_s3_object`
 - **SNS**: `aws_sns_topic`, `aws_sns_topic_subscription`
@@ -109,6 +110,18 @@ lambda:CreateEventSourceMapping, lambda:UpdateEventSourceMapping,
 lambda:DeleteEventSourceMapping, lambda:GetEventSourceMapping,
 lambda:PublishLayerVersion, lambda:DeleteLayerVersion, lambda:GetLayerVersion,
 lambda:TagResource, lambda:UntagResource, lambda:ListTags
+```
+
+#### API Gateway
+```
+# API Gateway uses HTTP-verb-style permissions on resource ARNs
+apigateway:GET, apigateway:POST, apigateway:PUT, apigateway:DELETE, apigateway:PATCH,
+apigateway:TagResource, apigateway:UntagResource
+
+# Resource ARN patterns:
+# - arn:aws:apigateway:REGION::/restapis
+# - arn:aws:apigateway:REGION::/restapis/*
+# - arn:aws:apigateway:REGION::/tags/*
 ```
 
 #### DynamoDB

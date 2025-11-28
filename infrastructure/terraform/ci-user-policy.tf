@@ -156,6 +156,26 @@ data "aws_iam_policy_document" "ci_deploy_core" {
     resources = ["*"]
   }
 
+  # API Gateway Management
+  statement {
+    sid    = "APIGateway"
+    effect = "Allow"
+    actions = [
+      "apigateway:GET",
+      "apigateway:POST",
+      "apigateway:PUT",
+      "apigateway:DELETE",
+      "apigateway:PATCH",
+      "apigateway:TagResource",
+      "apigateway:UntagResource"
+    ]
+    resources = [
+      "arn:aws:apigateway:*::/restapis",
+      "arn:aws:apigateway:*::/restapis/*",
+      "arn:aws:apigateway:*::/tags/*"
+    ]
+  }
+
   # Secrets Manager
   statement {
     sid    = "SecretsManager"
