@@ -500,6 +500,7 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Run Unit Tests (Mocked AWS with moto)
+        id: unit-tests
         env:
           AWS_REGION: us-east-1
           ENVIRONMENT: dev
@@ -510,8 +511,26 @@ jobs:
         run: |
           # Dev environment uses mocked AWS resources (LOCAL mirrors DEV)
           # Fake AWS credentials prevent accidental real AWS access
-          pytest tests/unit/ -v --tb=short -m "not preprod" \
-            || echo "⚠️ Some unit tests failed - review before deploying"
+          set +e
+          pytest tests/unit/ -v --tb=short -m "not preprod"
+          TEST_EXIT_CODE=$?
+          set -e
+
+          if [ $TEST_EXIT_CODE -eq 0 ]; then
+            echo "✅ All unit tests passed"
+            echo "passed=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Unit tests failed with exit code $TEST_EXIT_CODE"
+            echo "passed=false" >> $GITHUB_OUTPUT
+          fi
+          # Exit successfully to allow result check step
+          exit 0
+
+      - name: Check Unit Test Results
+        if: steps.unit-tests.outputs.passed != 'true'
+        run: |
+          echo "::error::Unit tests failed - cannot proceed with deployment"
+          exit 1
 
       - name: Validate Build Artifacts
         uses: actions/download-artifact@v4
