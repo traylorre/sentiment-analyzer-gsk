@@ -1,18 +1,28 @@
 # CI User IAM Policy for GitHub Actions Deploy Pipeline
 # =====================================================
 #
-# This file defines the IAM policy attached to the manually-created CI users:
-# - sentiment-analyzer-preprod-ci (preprod environment)
-# - sentiment-analyzer-prod-ci (prod environment)
+# This file defines and ATTACHES the IAM policy to CI deployer users:
+# - sentiment-analyzer-dev-deployer (dev environment)
+# - sentiment-analyzer-preprod-deployer (preprod environment)
+# - sentiment-analyzer-prod-deployer (prod environment)
 #
-# These users are created manually outside of Terraform, but their policies
-# are managed here to ensure consistency and track permission changes.
+# The policy is managed as an aws_iam_policy resource and attached via
+# aws_iam_user_policy_attachment resources (see bottom of file).
 #
-# To apply this policy to the CI users, run:
-#   aws iam put-user-policy \
-#     --user-name sentiment-analyzer-preprod-ci \
-#     --policy-name TerraformDeployPolicy \
-#     --policy-document file://ci-policy.json
+# BOOTSTRAP REQUIREMENT:
+# ----------------------
+# For FIRST-TIME SETUP, an admin must manually attach this policy because
+# the deployer user doesn't have iam:CreatePolicy permission yet.
+#
+# Run this ONE TIME with admin credentials:
+#   cd infrastructure/terraform
+#   terraform init
+#   terraform apply -target=aws_iam_policy.ci_deploy \
+#                   -target=aws_iam_user_policy_attachment.ci_deploy_dev \
+#                   -target=aws_iam_user_policy_attachment.ci_deploy_preprod \
+#                   -target=aws_iam_user_policy_attachment.ci_deploy_prod
+#
+# After bootstrap, the deployer users can manage their own policy updates.
 
 # Generate the CI policy as a data source so it can be exported
 data "aws_iam_policy_document" "ci_deploy" {
@@ -856,37 +866,66 @@ data "aws_iam_policy_document" "ci_deploy" {
   }
 }
 
-# Output the policy as JSON for easy application via AWS CLI
+# ==================================================================
+# IAM Policy Resource and Attachments
+# ==================================================================
+# CRITICAL: The policy document above is just a data source - it must
+# be attached to IAM users to have any effect. The resources below
+# create a managed policy and attach it to all deployer users.
+#
+# Without these attachments, deploys fail with "User is not authorized"
+# even though the policy document contains the correct permissions.
+
+# Create managed policy from the document
+resource "aws_iam_policy" "ci_deploy" {
+  name        = "CIDeployPolicy"
+  description = "Policy for GitHub Actions CI/CD deployments (Terraform and infrastructure changes)"
+  policy      = data.aws_iam_policy_document.ci_deploy.json
+
+  tags = {
+    Purpose   = "ci-deployment"
+    ManagedBy = "Terraform"
+  }
+}
+
+# Attach policy to dev deployer
+resource "aws_iam_user_policy_attachment" "ci_deploy_dev" {
+  user       = "sentiment-analyzer-dev-deployer"
+  policy_arn = aws_iam_policy.ci_deploy.arn
+}
+
+# Attach policy to preprod deployer
+resource "aws_iam_user_policy_attachment" "ci_deploy_preprod" {
+  user       = "sentiment-analyzer-preprod-deployer"
+  policy_arn = aws_iam_policy.ci_deploy.arn
+}
+
+# Attach policy to prod deployer
+resource "aws_iam_user_policy_attachment" "ci_deploy_prod" {
+  user       = "sentiment-analyzer-prod-deployer"
+  policy_arn = aws_iam_policy.ci_deploy.arn
+}
+
+# ==================================================================
+# Outputs
+# ==================================================================
+
+output "ci_policy_arn" {
+  description = "ARN of the CI deployment managed policy"
+  value       = aws_iam_policy.ci_deploy.arn
+}
+
+output "ci_policy_attached_users" {
+  description = "List of IAM users with CI deployment policy attached"
+  value = [
+    "sentiment-analyzer-dev-deployer",
+    "sentiment-analyzer-preprod-deployer",
+    "sentiment-analyzer-prod-deployer"
+  ]
+}
+
+# Keep JSON output for debugging/verification
 output "ci_deploy_policy_json" {
-  description = "CI deploy policy in JSON format for manual application"
+  description = "CI deploy policy in JSON format (for verification)"
   value       = data.aws_iam_policy_document.ci_deploy.json
-}
-
-# Output AWS CLI command for easy copy-paste
-output "apply_preprod_policy_command" {
-  description = "Command to apply policy to preprod CI user"
-  value       = <<-EOT
-    # Save policy to file first:
-    terraform output -raw ci_deploy_policy_json > /tmp/ci-policy.json
-
-    # Apply to preprod CI user:
-    aws iam put-user-policy \
-      --user-name sentiment-analyzer-preprod-ci \
-      --policy-name TerraformDeployPolicy \
-      --policy-document file:///tmp/ci-policy.json
-  EOT
-}
-
-output "apply_prod_policy_command" {
-  description = "Command to apply policy to prod CI user"
-  value       = <<-EOT
-    # Save policy to file first:
-    terraform output -raw ci_deploy_policy_json > /tmp/ci-policy.json
-
-    # Apply to prod CI user:
-    aws iam put-user-policy \
-      --user-name sentiment-analyzer-prod-ci \
-      --policy-name TerraformDeployPolicy \
-      --policy-document file:///tmp/ci-policy.json
-  EOT
 }
