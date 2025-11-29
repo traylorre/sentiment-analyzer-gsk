@@ -28,6 +28,7 @@ from aws_xray_sdk.core import xray_recorder
 from boto3.dynamodb.conditions import Key
 from pydantic import BaseModel
 
+from src.lambdas.dashboard.quota import get_daily_quota
 from src.lambdas.shared.logging_utils import get_safe_error_info, sanitize_for_log
 from src.lambdas.shared.models.alert_rule import (
     ALERT_LIMITS,
@@ -540,18 +541,15 @@ def _validate_threshold(
 def _get_daily_email_quota(table: Any, user_id: str) -> dict[str, Any]:
     """Get user's daily email quota status.
 
-    Returns dict with used, limit, and resets_at.
+    Returns dict with used, limit, remaining, and resets_at.
     """
-    # For now, return defaults
-    # TODO: Implement actual quota tracking in T145+
-    today = datetime.now(UTC).date()
-    tomorrow = datetime(today.year, today.month, today.day, tzinfo=UTC)
-    tomorrow = tomorrow.replace(day=today.day + 1 if today.day < 28 else 1)
-
+    quota = get_daily_quota(table, user_id)
     return {
-        "used": 0,
-        "limit": ALERT_LIMITS["max_emails_per_day"],
-        "resets_at": tomorrow.strftime("%Y-%m-%dT00:00:00Z"),
+        "used": quota.used,
+        "limit": quota.limit,
+        "remaining": quota.remaining,
+        "resets_at": quota.resets_at,
+        "is_exceeded": quota.is_exceeded,
     }
 
 

@@ -21,6 +21,7 @@ from src.lambdas.dashboard.alerts import (
     toggle_alert,
     update_alert,
 )
+from src.lambdas.dashboard.quota import QuotaStatus
 from src.lambdas.shared.models.alert_rule import ALERT_LIMITS, AlertRuleCreate
 
 
@@ -196,10 +197,31 @@ class TestCreateAlert:
 class TestListAlerts:
     """Tests for list_alerts function."""
 
+    @pytest.fixture
+    def mock_quota(self):
+        """Create a mock quota status."""
+        return QuotaStatus(
+            used=0,
+            limit=10,
+            remaining=10,
+            resets_at="2025-01-01T00:00:00+00:00",
+            is_exceeded=False,
+        )
+
+    @patch("src.lambdas.dashboard.alerts.get_daily_quota")
     @patch("src.lambdas.dashboard.alerts.xray_recorder")
-    def test_lists_all_alerts(self, mock_xray, mock_table, user_id, sample_alert_item):
+    def test_lists_all_alerts(
+        self,
+        mock_xray,
+        mock_get_quota,
+        mock_table,
+        user_id,
+        sample_alert_item,
+        mock_quota,
+    ):
         """Lists all user alerts."""
         mock_table.query.return_value = {"Items": [sample_alert_item]}
+        mock_get_quota.return_value = mock_quota
 
         result = list_alerts(mock_table, user_id)
 
@@ -208,13 +230,21 @@ class TestListAlerts:
         assert result.total == 1
         assert result.alerts[0].ticker == "AAPL"
 
+    @patch("src.lambdas.dashboard.alerts.get_daily_quota")
     @patch("src.lambdas.dashboard.alerts.xray_recorder")
     def test_filters_by_config_id(
-        self, mock_xray, mock_table, user_id, sample_alert_item
+        self,
+        mock_xray,
+        mock_get_quota,
+        mock_table,
+        user_id,
+        sample_alert_item,
+        mock_quota,
     ):
         """Filters alerts by config_id."""
         config_id = sample_alert_item["config_id"]
         other_config = str(uuid.uuid4())
+        mock_get_quota.return_value = mock_quota
 
         # Add another alert with different config
         other_alert = {**sample_alert_item}
@@ -228,11 +258,21 @@ class TestListAlerts:
         assert len(result.alerts) == 1
         assert result.alerts[0].ticker == "AAPL"
 
+    @patch("src.lambdas.dashboard.alerts.get_daily_quota")
     @patch("src.lambdas.dashboard.alerts.xray_recorder")
-    def test_filters_by_ticker(self, mock_xray, mock_table, user_id, sample_alert_item):
+    def test_filters_by_ticker(
+        self,
+        mock_xray,
+        mock_get_quota,
+        mock_table,
+        user_id,
+        sample_alert_item,
+        mock_quota,
+    ):
         """Filters alerts by ticker."""
         other_alert = {**sample_alert_item}
         other_alert["ticker"] = "TSLA"
+        mock_get_quota.return_value = mock_quota
 
         mock_table.query.return_value = {"Items": [sample_alert_item, other_alert]}
 
@@ -241,13 +281,21 @@ class TestListAlerts:
         assert len(result.alerts) == 1
         assert result.alerts[0].ticker == "AAPL"
 
+    @patch("src.lambdas.dashboard.alerts.get_daily_quota")
     @patch("src.lambdas.dashboard.alerts.xray_recorder")
     def test_filters_by_enabled(
-        self, mock_xray, mock_table, user_id, sample_alert_item
+        self,
+        mock_xray,
+        mock_get_quota,
+        mock_table,
+        user_id,
+        sample_alert_item,
+        mock_quota,
     ):
         """Filters alerts by enabled status."""
         disabled_alert = {**sample_alert_item}
         disabled_alert["is_enabled"] = False
+        mock_get_quota.return_value = mock_quota
 
         mock_table.query.return_value = {"Items": [sample_alert_item, disabled_alert]}
 
@@ -256,22 +304,34 @@ class TestListAlerts:
         assert len(result.alerts) == 1
         assert result.alerts[0].is_enabled is True
 
+    @patch("src.lambdas.dashboard.alerts.get_daily_quota")
     @patch("src.lambdas.dashboard.alerts.xray_recorder")
-    def test_returns_empty_list(self, mock_xray, mock_table, user_id):
+    def test_returns_empty_list(
+        self, mock_xray, mock_get_quota, mock_table, user_id, mock_quota
+    ):
         """Returns empty list when no alerts."""
         mock_table.query.return_value = {"Items": []}
+        mock_get_quota.return_value = mock_quota
 
         result = list_alerts(mock_table, user_id)
 
         assert len(result.alerts) == 0
         assert result.total == 0
 
+    @patch("src.lambdas.dashboard.alerts.get_daily_quota")
     @patch("src.lambdas.dashboard.alerts.xray_recorder")
     def test_includes_daily_email_quota(
-        self, mock_xray, mock_table, user_id, sample_alert_item
+        self,
+        mock_xray,
+        mock_get_quota,
+        mock_table,
+        user_id,
+        sample_alert_item,
+        mock_quota,
     ):
         """Response includes daily email quota info."""
         mock_table.query.return_value = {"Items": [sample_alert_item]}
+        mock_get_quota.return_value = mock_quota
 
         result = list_alerts(mock_table, user_id)
 
@@ -513,8 +573,17 @@ class TestCountConfigAlerts:
 class TestGetDailyEmailQuota:
     """Tests for _get_daily_email_quota helper."""
 
-    def test_returns_quota_info(self, mock_table, user_id):
+    @patch("src.lambdas.dashboard.alerts.get_daily_quota")
+    def test_returns_quota_info(self, mock_get_quota, mock_table, user_id):
         """Returns quota info dict."""
+        mock_get_quota.return_value = QuotaStatus(
+            used=5,
+            limit=10,
+            remaining=5,
+            resets_at="2025-01-01T00:00:00+00:00",
+            is_exceeded=False,
+        )
+
         quota = _get_daily_email_quota(mock_table, user_id)
 
         assert "used" in quota
