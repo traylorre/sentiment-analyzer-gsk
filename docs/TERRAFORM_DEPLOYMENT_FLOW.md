@@ -5,7 +5,7 @@ This document explains the Terraform deployment process with visual diagrams for
 ## Overview Diagram
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#e8f4fd', 'primaryTextColor': '#1a365d', 'primaryBorderColor': '#3182ce', 'lineColor': '#4a5568'}}}%%
 flowchart TB
     subgraph DevWorkflow["Developer Workflow"]
         A[Push to main] --> B{Paths changed?}
@@ -42,11 +42,11 @@ flowchart TB
         X -->|No| Z[Tests Failed]
     end
 
-    classDef stageBox fill:#fff8e1,stroke:#c9a227,stroke-width:2px,color:#333
-    classDef processNode fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
-    classDef decisionNode fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
-    classDef successNode fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px,color:#1e3a1e
-    classDef failNode fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef stageBox fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#78350f
+    classDef processNode fill:#ddd6fe,stroke:#7c3aed,stroke-width:2px,color:#2e1065
+    classDef decisionNode fill:#fed7aa,stroke:#ea580c,stroke-width:2px,color:#7c2d12
+    classDef successNode fill:#bbf7d0,stroke:#16a34a,stroke-width:2px,color:#14532d
+    classDef failNode fill:#fecaca,stroke:#dc2626,stroke-width:2px,color:#7f1d1d
 
     class DevWorkflow,DeployWorkflow,IntegrationTests stageBox
     class A,C,D,E,F,G,I,J,K,L,M,N,O,P,Q,S,U,V,W processNode
@@ -58,7 +58,7 @@ flowchart TB
 ## Resource Creation Order
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#e8f4fd', 'primaryTextColor': '#1a365d', 'primaryBorderColor': '#3182ce', 'lineColor': '#4a5568'}}}%%
 flowchart LR
     subgraph Phase1["Phase 1: Foundation"]
         A[S3 Buckets<br/>Lambda Deployments<br/>ML Model Storage]
@@ -103,12 +103,12 @@ flowchart LR
     G --> L
     G --> M
 
-    classDef stageBox fill:#fff8e1,stroke:#c9a227,stroke-width:2px,color:#333
-    classDef phase1Node fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
-    classDef phase2Node fill:#b39ddb,stroke:#673ab7,stroke-width:2px,color:#1a0a3e
-    classDef phase3Node fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px,color:#1e3a1e
-    classDef phase4Node fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
-    classDef phase5Node fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef stageBox fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#78350f
+    classDef phase1Node fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
+    classDef phase2Node fill:#e0e7ff,stroke:#4f46e5,stroke-width:2px,color:#1e1b4b
+    classDef phase3Node fill:#d1fae5,stroke:#059669,stroke-width:2px,color:#064e3b
+    classDef phase4Node fill:#fed7aa,stroke:#ea580c,stroke-width:2px,color:#7c2d12
+    classDef phase5Node fill:#fce7f3,stroke:#db2777,stroke-width:2px,color:#831843
 
     class Phase1,Phase2,Phase3,Phase4,Phase5 stageBox
     class A,B,C,D phase1Node
@@ -161,7 +161,7 @@ sequenceDiagram
 **What you need to know:**
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#e8f4fd', 'primaryTextColor': '#1a365d', 'primaryBorderColor': '#3182ce', 'lineColor': '#4a5568'}}}%%
 flowchart LR
     A[Your Code Change] --> B[Push to main]
     B --> C[CI Runs Automatically]
@@ -172,10 +172,10 @@ flowchart LR
     G -->|Yes| H[Done!]
     G -->|No| I[Check Test Logs]
 
-    classDef processNode fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
-    classDef decisionNode fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
-    classDef successNode fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px,color:#1e3a1e
-    classDef errorNode fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef processNode fill:#ddd6fe,stroke:#7c3aed,stroke-width:2px,color:#2e1065
+    classDef decisionNode fill:#fed7aa,stroke:#ea580c,stroke-width:2px,color:#7c2d12
+    classDef successNode fill:#bbf7d0,stroke:#16a34a,stroke-width:2px,color:#14532d
+    classDef errorNode fill:#fecaca,stroke:#dc2626,stroke-width:2px,color:#7f1d1d
 
     class A,B,C,E processNode
     class D,G decisionNode
@@ -194,7 +194,7 @@ flowchart LR
 **Incident Response Flow:**
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#e8f4fd', 'primaryTextColor': '#1a365d', 'primaryBorderColor': '#3182ce', 'lineColor': '#4a5568'}}}%%
 flowchart TB
     A[Alert: Deploy Failed] --> B{Check Error Type}
 
@@ -213,10 +213,10 @@ flowchart TB
     B -->|S3 NoSuchKey| L[Lambda package missing]
     L --> M[Check S3 upload step succeeded]
 
-    classDef alertNode fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
-    classDef decisionNode fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
-    classDef processNode fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
-    classDef actionNode fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px,color:#1e3a1e
+    classDef alertNode fill:#fecaca,stroke:#dc2626,stroke-width:2px,color:#7f1d1d
+    classDef decisionNode fill:#fed7aa,stroke:#ea580c,stroke-width:2px,color:#7c2d12
+    classDef processNode fill:#ddd6fe,stroke:#7c3aed,stroke-width:2px,color:#2e1065
+    classDef actionNode fill:#bbf7d0,stroke:#16a34a,stroke-width:2px,color:#14532d
 
     class A alertNode
     class B,D decisionNode
@@ -246,7 +246,7 @@ terraform refresh -var="environment=dev"
 **Infrastructure Dependencies:**
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#e8f4fd', 'primaryTextColor': '#1a365d', 'primaryBorderColor': '#3182ce', 'lineColor': '#4a5568'}}}%%
 graph TB
     subgraph StateBackend["Terraform State Backend"]
         A[S3 Bucket<br/>sentiment-analyzer-tfstate-*]
@@ -279,10 +279,10 @@ graph TB
     E --> G
     F --> G
 
-    classDef stageBox fill:#fff8e1,stroke:#c9a227,stroke-width:2px,color:#333
-    classDef stateNode fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
-    classDef secretNode fill:#b39ddb,stroke:#673ab7,stroke-width:2px,color:#1a0a3e
-    classDef resourceNode fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px,color:#1e3a1e
+    classDef stageBox fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#78350f
+    classDef stateNode fill:#ddd6fe,stroke:#7c3aed,stroke-width:2px,color:#2e1065
+    classDef secretNode fill:#e0e7ff,stroke:#4f46e5,stroke-width:2px,color:#1e1b4b
+    classDef resourceNode fill:#d1fae5,stroke:#059669,stroke-width:2px,color:#064e3b
 
     class StateBackend,GHSecrets,AWSResources stageBox
     class A,B stateNode
@@ -293,7 +293,7 @@ graph TB
 **Terraform Module Structure:**
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#e8f4fd', 'primaryTextColor': '#1a365d', 'primaryBorderColor': '#3182ce', 'lineColor': '#4a5568'}}}%%
 graph LR
     subgraph MainTF["main.tf"]
         A[Root Module]
@@ -317,9 +317,9 @@ graph LR
     A --> G
     A --> H
 
-    classDef stageBox fill:#fff8e1,stroke:#c9a227,stroke-width:2px,color:#333
-    classDef rootModule fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
-    classDef childModule fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
+    classDef stageBox fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#78350f
+    classDef rootModule fill:#fecaca,stroke:#dc2626,stroke-width:2px,color:#7f1d1d
+    classDef childModule fill:#ddd6fe,stroke:#7c3aed,stroke-width:2px,color:#2e1065
 
     class MainTF,Modules stageBox
     class A rootModule
@@ -362,7 +362,7 @@ gantt
 ## Troubleshooting Decision Tree
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#e8f4fd', 'primaryTextColor': '#1a365d', 'primaryBorderColor': '#3182ce', 'lineColor': '#4a5568'}}}%%
 flowchart TD
     A[Deployment Failed] --> B{Which step failed?}
 
@@ -393,10 +393,10 @@ flowchart TD
     H --> H1[Verify functions exist]
     H --> H2[Check S3 key paths match]
 
-    classDef errorNode fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
-    classDef decisionNode fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
-    classDef checkNode fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
-    classDef actionNode fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px,color:#1e3a1e
+    classDef errorNode fill:#fecaca,stroke:#dc2626,stroke-width:2px,color:#7f1d1d
+    classDef decisionNode fill:#fed7aa,stroke:#ea580c,stroke-width:2px,color:#7c2d12
+    classDef checkNode fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
+    classDef actionNode fill:#bbf7d0,stroke:#16a34a,stroke-width:2px,color:#14532d
 
     class A errorNode
     class B,G1 decisionNode

@@ -6,6 +6,26 @@ This directory contains comprehensive system architecture diagrams for the Senti
 
 ## Available Diagrams
 
+### 0. Use Case Sequence Diagrams (NEW)
+**File:** `../USE-CASE-DIAGRAMS.md`
+**Audience:** All roles (developers, operators, product managers, stakeholders)
+**Purpose:** UML sequence diagrams for the top 5 system use cases
+**Focus:** End-to-end flows with actor interactions
+
+**What It Shows:**
+- UC1: User Configures Sentiment Alerts
+- UC2: System Processes News and Triggers Alerts
+- UC3: Anonymous User Authentication Flow
+- UC4: CI/CD Deployment Pipeline
+- UC5: Notification Delivery Flow
+
+**Features:**
+- Unified color palette with WCAG 2.1 AA accessibility
+- Mermaid sequence diagrams (render in GitHub/VSCode)
+- Autonumbered steps for easy reference
+
+---
+
 ### 1. High-Level System Overview
 **File:** `diagram-1-high-level-overview.md`
 **Audience:** Non-technical stakeholders, product managers, executives
@@ -142,7 +162,47 @@ This directory contains comprehensive system architecture diagrams for the Senti
 
 ## Color Palettes
 
-### Diagram 1 (High-Level Overview) - Pastel Colors
+### Unified Mermaid Color Palette (for all flowcharts/sequence diagrams)
+
+All Mermaid diagrams use this consistent palette optimized for WCAG 2.1 AA accessibility:
+
+**Theme Configuration:**
+```
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#e8f4fd', 'primaryTextColor': '#1a365d', 'primaryBorderColor': '#3182ce', 'lineColor': '#4a5568'}}}%%
+```
+
+**Node Class Definitions:**
+
+| Class | Purpose | Fill | Border | Text | Contrast |
+|-------|---------|------|--------|------|----------|
+| `userNode` | User/Actor | `#dbeafe` | `#2563eb` | `#1e3a5f` | 7.2:1 |
+| `systemNode` | System Component | `#e0e7ff` | `#4f46e5` | `#1e1b4b` | 8.1:1 |
+| `apiNode` | API Gateway | `#fef3c7` | `#d97706` | `#78350f` | 6.8:1 |
+| `lambdaNode` | Lambda Function | `#ddd6fe` | `#7c3aed` | `#2e1065` | 7.5:1 |
+| `storageNode` | Database/S3 | `#d1fae5` | `#059669` | `#064e3b` | 6.2:1 |
+| `queueNode` | SNS/SQS | `#fce7f3` | `#db2777` | `#831843` | 5.8:1 |
+| `successNode` | Success State | `#bbf7d0` | `#16a34a` | `#14532d` | 5.4:1 |
+| `errorNode` | Error State | `#fecaca` | `#dc2626` | `#7f1d1d` | 5.1:1 |
+| `decisionNode` | Decision Point | `#fed7aa` | `#ea580c` | `#7c2d12` | 5.6:1 |
+| `externalNode` | External Service | `#e5e7eb` | `#6b7280` | `#1f2937` | 9.4:1 |
+
+**Copy-paste class definitions:**
+```
+classDef userNode fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
+classDef systemNode fill:#e0e7ff,stroke:#4f46e5,stroke-width:2px,color:#1e1b4b
+classDef apiNode fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#78350f
+classDef lambdaNode fill:#ddd6fe,stroke:#7c3aed,stroke-width:2px,color:#2e1065
+classDef storageNode fill:#d1fae5,stroke:#059669,stroke-width:2px,color:#064e3b
+classDef queueNode fill:#fce7f3,stroke:#db2777,stroke-width:2px,color:#831843
+classDef successNode fill:#bbf7d0,stroke:#16a34a,stroke-width:2px,color:#14532d
+classDef errorNode fill:#fecaca,stroke:#dc2626,stroke-width:2px,color:#7f1d1d
+classDef decisionNode fill:#fed7aa,stroke:#ea580c,stroke-width:2px,color:#7c2d12
+classDef externalNode fill:#e5e7eb,stroke:#6b7280,stroke-width:2px,color:#1f2937
+```
+
+---
+
+### Diagram 1 (High-Level Overview) - Pastel Colors (Canva)
 
 | Component Type | Fill Color | Border Color | Hex Code (Fill) |
 |----------------|------------|--------------|-----------------|
@@ -317,6 +377,6 @@ Keep Canva project active for future diagrams:
 
 ---
 
-**Last Updated:** 2025-11-24
-**Diagram Count:** 2 (+ 6 planned)
+**Last Updated:** 2025-11-29
+**Diagram Count:** 3 specs + 5 use-case sequences (+ 6 planned component diagrams)
 **Status:** Ready for Canva creation
