@@ -12,6 +12,7 @@ import pytest
 from tests.e2e.helpers.api_client import PreprodAPIClient
 from tests.e2e.helpers.cloudwatch import get_cloudwatch_metrics, query_cloudwatch_logs
 from tests.e2e.helpers.xray import get_xray_trace
+from tests.fixtures.synthetic.config_generator import SyntheticConfiguration
 
 pytestmark = [pytest.mark.e2e, pytest.mark.preprod, pytest.mark.us11]
 
@@ -132,7 +133,7 @@ async def test_xray_trace_exists(
 @pytest.mark.asyncio
 async def test_xray_cross_lambda_trace(
     api_client: PreprodAPIClient,
-    test_run_id: str,
+    synthetic_config: SyntheticConfiguration,
 ) -> None:
     """T103: Verify X-Ray traces cross Lambda boundaries.
 
@@ -153,10 +154,7 @@ async def test_xray_cross_lambda_trace(
         # Create config (may trigger multiple Lambdas)
         config_response = await api_client.post(
             "/api/v2/configurations",
-            json={
-                "name": f"X-Ray Test {test_run_id[:8]}",
-                "tickers": ["AAPL"],
-            },
+            json=synthetic_config.to_api_payload(),
         )
 
         if config_response.status_code not in (200, 201):

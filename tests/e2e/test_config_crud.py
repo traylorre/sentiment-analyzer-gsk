@@ -10,6 +10,10 @@
 import pytest
 
 from tests.e2e.helpers.api_client import PreprodAPIClient
+from tests.fixtures.synthetic.config_generator import (
+    ConfigGenerator,
+    SyntheticConfiguration,
+)
 
 pytestmark = [pytest.mark.e2e, pytest.mark.preprod, pytest.mark.us3]
 
@@ -28,7 +32,7 @@ async def create_auth_session(api_client: PreprodAPIClient) -> str:
 @pytest.mark.asyncio
 async def test_config_create_success(
     api_client: PreprodAPIClient,
-    test_run_id: str,
+    synthetic_config: SyntheticConfiguration,
 ) -> None:
     """T055: Verify configuration can be created.
 
@@ -40,10 +44,8 @@ async def test_config_create_success(
     api_client.set_access_token(token)
 
     try:
-        config_payload = {
-            "name": f"Test Config {test_run_id[:8]}",
-            "tickers": ["AAPL", "MSFT"],
-        }
+        # Use synthetic config for deterministic test data
+        config_payload = synthetic_config.to_api_payload()
 
         response = await api_client.post("/api/v2/configurations", json=config_payload)
 
@@ -60,9 +62,12 @@ async def test_config_create_success(
         assert "config_id" in data, "Response missing config_id"
         assert data.get("name") == config_payload["name"]
 
-        # Verify tickers are present
+        # Verify tickers are present (synthetic config has 3 by default)
         tickers = data.get("tickers", [])
-        assert len(tickers) == 2, f"Expected 2 tickers, got {len(tickers)}"
+        expected_count = len(synthetic_config.tickers)
+        assert (
+            len(tickers) == expected_count
+        ), f"Expected {expected_count} tickers, got {len(tickers)}"
 
     finally:
         api_client.clear_access_token()
@@ -71,6 +76,7 @@ async def test_config_create_success(
 @pytest.mark.asyncio
 async def test_config_create_with_ticker_metadata(
     api_client: PreprodAPIClient,
+    config_generator: ConfigGenerator,
     test_run_id: str,
 ) -> None:
     """T056: Verify configuration includes ticker metadata.
@@ -83,10 +89,9 @@ async def test_config_create_with_ticker_metadata(
     api_client.set_access_token(token)
 
     try:
-        config_payload = {
-            "name": f"Metadata Test {test_run_id[:8]}",
-            "tickers": ["GOOGL"],
-        }
+        # Generate single-ticker config for metadata test
+        synthetic_cfg = config_generator.generate_config(test_run_id, ticker_count=1)
+        config_payload = synthetic_cfg.to_api_payload()
 
         response = await api_client.post("/api/v2/configurations", json=config_payload)
         if response.status_code == 500:
@@ -98,10 +103,11 @@ async def test_config_create_with_ticker_metadata(
 
         if tickers:
             ticker = tickers[0]
+            expected_symbol = synthetic_cfg.tickers[0].symbol
             # Metadata might be included in response
             # Check for optional metadata fields
             if "company_name" in ticker or "exchange" in ticker:
-                assert ticker.get("symbol") == "GOOGL"
+                assert ticker.get("symbol") == expected_symbol
 
     finally:
         api_client.clear_access_token()
@@ -110,6 +116,7 @@ async def test_config_create_with_ticker_metadata(
 @pytest.mark.asyncio
 async def test_config_read_by_id(
     api_client: PreprodAPIClient,
+    config_generator: ConfigGenerator,
     test_run_id: str,
 ) -> None:
     """T057: Verify configuration can be read by ID.
@@ -122,14 +129,13 @@ async def test_config_read_by_id(
     api_client.set_access_token(token)
 
     try:
-        # Create config first
-        config_name = f"Read Test {test_run_id[:8]}"
+        # Create config first using synthetic data
+        synthetic_cfg = config_generator.generate_config(test_run_id, ticker_count=1)
+        config_payload = synthetic_cfg.to_api_payload()
+
         create_response = await api_client.post(
             "/api/v2/configurations",
-            json={
-                "name": config_name,
-                "tickers": ["NVDA"],
-            },
+            json=config_payload,
         )
         if create_response.status_code == 500:
             pytest.skip("Config creation endpoint returning 500 - API issue")
@@ -146,7 +152,7 @@ async def test_config_read_by_id(
 
         data = read_response.json()
         assert data.get("config_id") == config_id
-        assert data.get("name") == config_name
+        assert data.get("name") == config_payload["name"]
 
     finally:
         api_client.clear_access_token()
@@ -155,6 +161,7 @@ async def test_config_read_by_id(
 @pytest.mark.asyncio
 async def test_config_update_name_and_tickers(
     api_client: PreprodAPIClient,
+    config_generator: ConfigGenerator,
     test_run_id: str,
 ) -> None:
     """T058: Verify configuration can be updated.
@@ -167,13 +174,11 @@ async def test_config_update_name_and_tickers(
     api_client.set_access_token(token)
 
     try:
-        # Create config
+        # Create original config
+        original_cfg = config_generator.generate_config(test_run_id, ticker_count=1)
         create_response = await api_client.post(
             "/api/v2/configurations",
-            json={
-                "name": f"Original {test_run_id[:8]}",
-                "tickers": ["AAPL"],
-            },
+            json=original_cfg.to_api_payload(),
         )
         if create_response.status_code == 500:
             pytest.skip("Config creation endpoint returning 500 - API issue")
@@ -181,14 +186,15 @@ async def test_config_update_name_and_tickers(
 
         config_id = create_response.json()["config_id"]
 
-        # Update config
-        new_name = f"Updated {test_run_id[:8]}"
+        # Generate updated config (different from original)
+        updated_cfg = config_generator.generate_config(
+            f"{test_run_id}-updated", ticker_count=2
+        )
+        update_payload = updated_cfg.to_api_payload()
+
         update_response = await api_client.put(
             f"/api/v2/configurations/{config_id}",
-            json={
-                "name": new_name,
-                "tickers": ["MSFT", "AMZN"],
-            },
+            json=update_payload,
         )
 
         assert (
@@ -200,7 +206,7 @@ async def test_config_update_name_and_tickers(
         assert verify_response.status_code == 200
 
         data = verify_response.json()
-        assert data.get("name") == new_name
+        assert data.get("name") == update_payload["name"]
         assert len(data.get("tickers", [])) == 2
 
     finally:
@@ -210,6 +216,7 @@ async def test_config_update_name_and_tickers(
 @pytest.mark.asyncio
 async def test_config_delete(
     api_client: PreprodAPIClient,
+    config_generator: ConfigGenerator,
     test_run_id: str,
 ) -> None:
     """T059: Verify configuration can be deleted.
@@ -222,13 +229,11 @@ async def test_config_delete(
     api_client.set_access_token(token)
 
     try:
-        # Create config
+        # Create config using synthetic data
+        synthetic_cfg = config_generator.generate_config(test_run_id, ticker_count=1)
         create_response = await api_client.post(
             "/api/v2/configurations",
-            json={
-                "name": f"Delete Test {test_run_id[:8]}",
-                "tickers": ["TSLA"],
-            },
+            json=synthetic_cfg.to_api_payload(),
         )
         if create_response.status_code == 500:
             pytest.skip("Config creation endpoint returning 500 - API issue")
@@ -257,6 +262,7 @@ async def test_config_delete(
 @pytest.mark.asyncio
 async def test_config_max_limit_enforced(
     api_client: PreprodAPIClient,
+    config_generator: ConfigGenerator,
     test_run_id: str,
 ) -> None:
     """T060: Verify maximum configuration limit is enforced.
@@ -274,12 +280,13 @@ async def test_config_max_limit_enforced(
         max_attempts = 15  # Try to exceed typical limits
 
         for i in range(max_attempts):
+            # Generate unique config for each attempt
+            cfg = config_generator.generate_config(
+                f"{test_run_id}-limit-{i}", ticker_count=1
+            )
             response = await api_client.post(
                 "/api/v2/configurations",
-                json={
-                    "name": f"Limit Test {i} {test_run_id[:6]}",
-                    "tickers": ["AAPL"],
-                },
+                json=cfg.to_api_payload(),
             )
 
             if response.status_code == 500:
@@ -348,6 +355,7 @@ async def test_config_invalid_ticker_rejected(
 @pytest.mark.asyncio
 async def test_config_list_pagination(
     api_client: PreprodAPIClient,
+    config_generator: ConfigGenerator,
     test_run_id: str,
 ) -> None:
     """Verify configuration list supports pagination.
@@ -360,14 +368,14 @@ async def test_config_list_pagination(
     api_client.set_access_token(token)
 
     try:
-        # Create a couple configs
+        # Create a couple configs using synthetic data
         for i in range(3):
+            cfg = config_generator.generate_config(
+                f"{test_run_id}-page-{i}", ticker_count=1
+            )
             resp = await api_client.post(
                 "/api/v2/configurations",
-                json={
-                    "name": f"Pagination Test {i} {test_run_id[:6]}",
-                    "tickers": ["AAPL"],
-                },
+                json=cfg.to_api_payload(),
             )
             if resp.status_code == 500:
                 pytest.skip("Config creation endpoint returning 500 - API issue")

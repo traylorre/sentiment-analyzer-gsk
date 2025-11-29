@@ -10,13 +10,14 @@
 import pytest
 
 from tests.e2e.helpers.api_client import PreprodAPIClient
+from tests.fixtures.synthetic.config_generator import SyntheticConfiguration
 
 pytestmark = [pytest.mark.e2e, pytest.mark.preprod, pytest.mark.us10]
 
 
 async def create_session_and_config(
     api_client: PreprodAPIClient,
-    test_run_id: str,
+    synthetic_config: SyntheticConfiguration,
 ) -> tuple[str, str]:
     """Helper to create session and config."""
     session_response = await api_client.post("/api/v2/auth/anonymous", json={})
@@ -27,10 +28,7 @@ async def create_session_and_config(
     api_client.set_access_token(token)
     config_response = await api_client.post(
         "/api/v2/configurations",
-        json={
-            "name": f"SSE Test {test_run_id[:8]}",
-            "tickers": ["AAPL"],
-        },
+        json=synthetic_config.to_api_payload(),
     )
 
     if config_response.status_code not in (200, 201):
@@ -44,7 +42,7 @@ async def create_session_and_config(
 @pytest.mark.asyncio
 async def test_sse_connection_established(
     api_client: PreprodAPIClient,
-    test_run_id: str,
+    synthetic_config: SyntheticConfiguration,
 ) -> None:
     """T095: Verify SSE connection can be established.
 
@@ -52,7 +50,7 @@ async def test_sse_connection_established(
     When: GET /api/v2/configurations/{id}/stream is called
     Then: Connection is established with text/event-stream content type
     """
-    token, config_id = await create_session_and_config(api_client, test_run_id)
+    token, config_id = await create_session_and_config(api_client, synthetic_config)
 
     try:
         # Try to establish SSE connection
@@ -79,7 +77,7 @@ async def test_sse_connection_established(
 @pytest.mark.asyncio
 async def test_sse_receives_sentiment_update(
     api_client: PreprodAPIClient,
-    test_run_id: str,
+    synthetic_config: SyntheticConfiguration,
 ) -> None:
     """T096: Verify SSE receives sentiment update events.
 
@@ -87,7 +85,7 @@ async def test_sse_receives_sentiment_update(
     When: Sentiment data changes
     Then: Client receives sentiment_update event with data
     """
-    token, config_id = await create_session_and_config(api_client, test_run_id)
+    token, config_id = await create_session_and_config(api_client, synthetic_config)
 
     try:
         # This test validates the SSE endpoint contract
@@ -110,7 +108,7 @@ async def test_sse_receives_sentiment_update(
 @pytest.mark.asyncio
 async def test_sse_receives_refresh_event(
     api_client: PreprodAPIClient,
-    test_run_id: str,
+    synthetic_config: SyntheticConfiguration,
 ) -> None:
     """T097: Verify SSE receives refresh events.
 
@@ -118,7 +116,7 @@ async def test_sse_receives_refresh_event(
     When: Server triggers a refresh
     Then: Client receives refresh event
     """
-    token, config_id = await create_session_and_config(api_client, test_run_id)
+    token, config_id = await create_session_and_config(api_client, synthetic_config)
 
     try:
         response = await api_client.get(
@@ -139,7 +137,7 @@ async def test_sse_receives_refresh_event(
 @pytest.mark.asyncio
 async def test_sse_reconnection_with_last_event_id(
     api_client: PreprodAPIClient,
-    test_run_id: str,
+    synthetic_config: SyntheticConfiguration,
 ) -> None:
     """T098: Verify SSE reconnection with Last-Event-ID.
 
@@ -147,7 +145,7 @@ async def test_sse_reconnection_with_last_event_id(
     When: Reconnecting with Last-Event-ID header
     Then: Server resumes from that event ID
     """
-    token, config_id = await create_session_and_config(api_client, test_run_id)
+    token, config_id = await create_session_and_config(api_client, synthetic_config)
 
     try:
         # Test reconnection header support
@@ -172,7 +170,7 @@ async def test_sse_reconnection_with_last_event_id(
 @pytest.mark.asyncio
 async def test_sse_unauthenticated_rejected(
     api_client: PreprodAPIClient,
-    test_run_id: str,
+    synthetic_config: SyntheticConfiguration,
 ) -> None:
     """T099: Verify unauthenticated SSE requests are rejected.
 
@@ -181,7 +179,7 @@ async def test_sse_unauthenticated_rejected(
     Then: Response is 401 Unauthorized
     """
     # First create a config to get a valid config_id
-    token, config_id = await create_session_and_config(api_client, test_run_id)
+    token, config_id = await create_session_and_config(api_client, synthetic_config)
     api_client.clear_access_token()
 
     # Try to access without token

@@ -9,13 +9,14 @@
 import pytest
 
 from tests.e2e.helpers.api_client import PreprodAPIClient
+from tests.fixtures.synthetic.config_generator import SyntheticConfiguration
 
 pytestmark = [pytest.mark.e2e, pytest.mark.preprod, pytest.mark.us6]
 
 
 async def create_session_with_config(
     api_client: PreprodAPIClient,
-    test_run_id: str,
+    synthetic_config: SyntheticConfiguration,
 ) -> tuple[str, str]:
     """Helper to create session and config."""
     session_response = await api_client.post("/api/v2/auth/anonymous", json={})
@@ -26,10 +27,7 @@ async def create_session_with_config(
     api_client.set_access_token(token)
     config_response = await api_client.post(
         "/api/v2/configurations",
-        json={
-            "name": f"Notification Test {test_run_id[:8]}",
-            "tickers": ["AAPL"],
-        },
+        json=synthetic_config.to_api_payload(),
     )
 
     if config_response.status_code not in (200, 201):
@@ -43,7 +41,7 @@ async def create_session_with_config(
 @pytest.mark.asyncio
 async def test_alert_trigger_creates_notification(
     api_client: PreprodAPIClient,
-    test_run_id: str,
+    synthetic_config: SyntheticConfiguration,
 ) -> None:
     """T075: Verify alert trigger creates notification.
 
@@ -54,7 +52,7 @@ async def test_alert_trigger_creates_notification(
     When: Notification list is queried
     Then: Notification exists with correct metadata
     """
-    token, config_id = await create_session_with_config(api_client, test_run_id)
+    token, config_id = await create_session_with_config(api_client, synthetic_config)
 
     try:
         # Check notification list endpoint exists
@@ -81,7 +79,7 @@ async def test_alert_trigger_creates_notification(
 @pytest.mark.asyncio
 async def test_notification_status_sent(
     api_client: PreprodAPIClient,
-    test_run_id: str,
+    synthetic_config: SyntheticConfiguration,
 ) -> None:
     """T076: Verify notification shows 'sent' status after delivery.
 
@@ -89,7 +87,7 @@ async def test_notification_status_sent(
     When: Notification detail is queried
     Then: Status shows 'sent' or 'delivered'
     """
-    token, config_id = await create_session_with_config(api_client, test_run_id)
+    token, config_id = await create_session_with_config(api_client, synthetic_config)
 
     try:
         # Get notification list
@@ -122,7 +120,7 @@ async def test_notification_status_sent(
 @pytest.mark.asyncio
 async def test_notification_list(
     api_client: PreprodAPIClient,
-    test_run_id: str,
+    synthetic_config: SyntheticConfiguration,
 ) -> None:
     """T077: Verify notification list returns paginated results.
 
@@ -130,7 +128,7 @@ async def test_notification_list(
     When: GET /api/v2/notifications is called
     Then: Response contains notification list with pagination
     """
-    token, config_id = await create_session_with_config(api_client, test_run_id)
+    token, config_id = await create_session_with_config(api_client, synthetic_config)
 
     try:
         response = await api_client.get(
@@ -155,7 +153,7 @@ async def test_notification_list(
 @pytest.mark.asyncio
 async def test_notification_detail_with_tracking(
     api_client: PreprodAPIClient,
-    test_run_id: str,
+    synthetic_config: SyntheticConfiguration,
 ) -> None:
     """T078: Verify notification detail includes tracking info.
 
@@ -163,7 +161,7 @@ async def test_notification_detail_with_tracking(
     When: GET /api/v2/notifications/{id} is called
     Then: Response contains notification with tracking metadata
     """
-    token, config_id = await create_session_with_config(api_client, test_run_id)
+    token, config_id = await create_session_with_config(api_client, synthetic_config)
 
     try:
         # First get list to find a notification ID
@@ -204,7 +202,7 @@ async def test_notification_detail_with_tracking(
 @pytest.mark.asyncio
 async def test_notification_quota_exceeded(
     api_client: PreprodAPIClient,
-    test_run_id: str,
+    synthetic_config: SyntheticConfiguration,
 ) -> None:
     """T079: Verify notification quota is enforced.
 
@@ -216,7 +214,7 @@ async def test_notification_quota_exceeded(
     When: Attempting to trigger more notifications
     Then: Appropriate quota error is returned
     """
-    token, config_id = await create_session_with_config(api_client, test_run_id)
+    token, config_id = await create_session_with_config(api_client, synthetic_config)
 
     try:
         # Check if there's a quota endpoint
@@ -243,7 +241,7 @@ async def test_notification_quota_exceeded(
 @pytest.mark.asyncio
 async def test_notification_mark_read(
     api_client: PreprodAPIClient,
-    test_run_id: str,
+    synthetic_config: SyntheticConfiguration,
 ) -> None:
     """Verify notification can be marked as read.
 
@@ -251,7 +249,7 @@ async def test_notification_mark_read(
     When: PATCH /api/v2/notifications/{id} with read=true
     Then: Notification is marked as read
     """
-    token, config_id = await create_session_with_config(api_client, test_run_id)
+    token, config_id = await create_session_with_config(api_client, synthetic_config)
 
     try:
         # Get list to find a notification

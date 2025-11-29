@@ -10,6 +10,7 @@
 import pytest
 
 from tests.e2e.helpers.api_client import PreprodAPIClient
+from tests.fixtures.synthetic.config_generator import SyntheticConfiguration
 
 pytestmark = [pytest.mark.e2e, pytest.mark.preprod, pytest.mark.us12]
 
@@ -131,7 +132,7 @@ async def test_market_status_holiday(
 @pytest.mark.asyncio
 async def test_premarket_estimates_returned(
     api_client: PreprodAPIClient,
-    test_run_id: str,
+    synthetic_config: SyntheticConfiguration,
 ) -> None:
     """T108: Verify pre-market estimates are returned.
 
@@ -151,10 +152,7 @@ async def test_premarket_estimates_returned(
     try:
         config_response = await api_client.post(
             "/api/v2/configurations",
-            json={
-                "name": f"Pre-market Test {test_run_id[:8]}",
-                "tickers": ["AAPL"],
-            },
+            json=synthetic_config.to_api_payload(),
         )
 
         if config_response.status_code not in (200, 201):

@@ -12,13 +12,16 @@
 import pytest
 
 from tests.e2e.helpers.api_client import PreprodAPIClient
+from tests.fixtures.synthetic.config_generator import (
+    SyntheticConfiguration,
+)
 
 pytestmark = [pytest.mark.e2e, pytest.mark.preprod, pytest.mark.us5]
 
 
 async def create_config_and_session(
     api_client: PreprodAPIClient,
-    test_run_id: str,
+    synthetic_config: SyntheticConfiguration,
 ) -> tuple[str, str]:
     """Helper to create session and config.
 
@@ -32,10 +35,7 @@ async def create_config_and_session(
     api_client.set_access_token(token)
     config_response = await api_client.post(
         "/api/v2/configurations",
-        json={
-            "name": f"Alert Test {test_run_id[:8]}",
-            "tickers": ["AAPL"],
-        },
+        json=synthetic_config.to_api_payload(),
     )
 
     if config_response.status_code == 500:
@@ -52,7 +52,7 @@ async def create_config_and_session(
 @pytest.mark.asyncio
 async def test_alert_create_sentiment_threshold(
     api_client: PreprodAPIClient,
-    test_run_id: str,
+    synthetic_config: SyntheticConfiguration,
 ) -> None:
     """T068: Verify sentiment threshold alert can be created.
 
@@ -60,12 +60,13 @@ async def test_alert_create_sentiment_threshold(
     When: POST /api/v2/configurations/{id}/alerts is called with sentiment alert
     Then: Alert is created and returned with alert_id
     """
-    token, config_id = await create_config_and_session(api_client, test_run_id)
+    token, config_id = await create_config_and_session(api_client, synthetic_config)
+    ticker_symbol = synthetic_config.tickers[0].symbol
 
     try:
         alert_payload = {
             "type": "sentiment",
-            "ticker": "AAPL",
+            "ticker": ticker_symbol,
             "threshold": 0.7,
             "condition": "above",  # or "below"
             "enabled": True,
@@ -96,7 +97,7 @@ async def test_alert_create_sentiment_threshold(
 @pytest.mark.asyncio
 async def test_alert_create_volatility_threshold(
     api_client: PreprodAPIClient,
-    test_run_id: str,
+    synthetic_config: SyntheticConfiguration,
 ) -> None:
     """T069: Verify volatility threshold alert can be created.
 
@@ -104,12 +105,13 @@ async def test_alert_create_volatility_threshold(
     When: POST /api/v2/configurations/{id}/alerts is called with volatility alert
     Then: Alert is created for ATR-based volatility
     """
-    token, config_id = await create_config_and_session(api_client, test_run_id)
+    token, config_id = await create_config_and_session(api_client, synthetic_config)
+    ticker_symbol = synthetic_config.tickers[0].symbol
 
     try:
         alert_payload = {
             "type": "volatility",
-            "ticker": "AAPL",
+            "ticker": ticker_symbol,
             "threshold": 5.0,  # ATR threshold
             "condition": "above",
             "enabled": True,
@@ -139,7 +141,7 @@ async def test_alert_create_volatility_threshold(
 @pytest.mark.asyncio
 async def test_alert_toggle_off(
     api_client: PreprodAPIClient,
-    test_run_id: str,
+    synthetic_config: SyntheticConfiguration,
 ) -> None:
     """T070: Verify alert can be toggled off.
 
@@ -147,7 +149,8 @@ async def test_alert_toggle_off(
     When: PATCH /api/v2/alerts/{id} with enabled=false
     Then: Alert is disabled
     """
-    token, config_id = await create_config_and_session(api_client, test_run_id)
+    token, config_id = await create_config_and_session(api_client, synthetic_config)
+    ticker_symbol = synthetic_config.tickers[0].symbol
 
     try:
         # Create alert
@@ -155,7 +158,7 @@ async def test_alert_toggle_off(
             f"/api/v2/configurations/{config_id}/alerts",
             json={
                 "type": "sentiment",
-                "ticker": "AAPL",
+                "ticker": ticker_symbol,
                 "threshold": 0.5,
                 "condition": "above",
                 "enabled": True,
@@ -189,7 +192,7 @@ async def test_alert_toggle_off(
 @pytest.mark.asyncio
 async def test_alert_update_threshold(
     api_client: PreprodAPIClient,
-    test_run_id: str,
+    synthetic_config: SyntheticConfiguration,
 ) -> None:
     """T071: Verify alert threshold can be updated.
 
@@ -197,7 +200,8 @@ async def test_alert_update_threshold(
     When: PATCH /api/v2/alerts/{id} with new threshold
     Then: Alert threshold is updated
     """
-    token, config_id = await create_config_and_session(api_client, test_run_id)
+    token, config_id = await create_config_and_session(api_client, synthetic_config)
+    ticker_symbol = synthetic_config.tickers[0].symbol
 
     try:
         # Create alert with initial threshold
@@ -205,7 +209,7 @@ async def test_alert_update_threshold(
             f"/api/v2/configurations/{config_id}/alerts",
             json={
                 "type": "sentiment",
-                "ticker": "AAPL",
+                "ticker": ticker_symbol,
                 "threshold": 0.5,
                 "condition": "above",
                 "enabled": True,
@@ -237,7 +241,7 @@ async def test_alert_update_threshold(
 @pytest.mark.asyncio
 async def test_alert_delete(
     api_client: PreprodAPIClient,
-    test_run_id: str,
+    synthetic_config: SyntheticConfiguration,
 ) -> None:
     """T072: Verify alert can be deleted.
 
@@ -245,7 +249,8 @@ async def test_alert_delete(
     When: DELETE /api/v2/alerts/{id} is called
     Then: Alert is deleted and no longer accessible
     """
-    token, config_id = await create_config_and_session(api_client, test_run_id)
+    token, config_id = await create_config_and_session(api_client, synthetic_config)
+    ticker_symbol = synthetic_config.tickers[0].symbol
 
     try:
         # Create alert
@@ -253,7 +258,7 @@ async def test_alert_delete(
             f"/api/v2/configurations/{config_id}/alerts",
             json={
                 "type": "sentiment",
-                "ticker": "AAPL",
+                "ticker": ticker_symbol,
                 "threshold": 0.6,
                 "condition": "below",
                 "enabled": True,
@@ -285,7 +290,7 @@ async def test_alert_delete(
 @pytest.mark.asyncio
 async def test_alert_max_limit_enforced(
     api_client: PreprodAPIClient,
-    test_run_id: str,
+    synthetic_config: SyntheticConfiguration,
 ) -> None:
     """T073: Verify maximum alert limit is enforced.
 
@@ -293,7 +298,8 @@ async def test_alert_max_limit_enforced(
     When: Creating another alert
     Then: Request is rejected with limit error
     """
-    token, config_id = await create_config_and_session(api_client, test_run_id)
+    token, config_id = await create_config_and_session(api_client, synthetic_config)
+    ticker_symbol = synthetic_config.tickers[0].symbol
 
     try:
         created_alerts = []
@@ -304,7 +310,7 @@ async def test_alert_max_limit_enforced(
                 f"/api/v2/configurations/{config_id}/alerts",
                 json={
                     "type": "sentiment",
-                    "ticker": "AAPL",
+                    "ticker": ticker_symbol,
                     "threshold": 0.5 + (i * 0.02),
                     "condition": "above",
                     "enabled": True,
@@ -335,7 +341,7 @@ async def test_alert_max_limit_enforced(
 @pytest.mark.asyncio
 async def test_alert_anonymous_forbidden(
     api_client: PreprodAPIClient,
-    test_run_id: str,
+    synthetic_config: SyntheticConfiguration,
 ) -> None:
     """T074: Verify anonymous users cannot create alerts.
 
@@ -346,7 +352,8 @@ async def test_alert_anonymous_forbidden(
     When: Attempting to create an alert
     Then: Request is rejected or requires authentication upgrade
     """
-    token, config_id = await create_config_and_session(api_client, test_run_id)
+    token, config_id = await create_config_and_session(api_client, synthetic_config)
+    ticker_symbol = synthetic_config.tickers[0].symbol
 
     try:
         # Try to create alert as anonymous
@@ -354,7 +361,7 @@ async def test_alert_anonymous_forbidden(
             f"/api/v2/configurations/{config_id}/alerts",
             json={
                 "type": "sentiment",
-                "ticker": "AAPL",
+                "ticker": ticker_symbol,
                 "threshold": 0.5,
                 "condition": "above",
                 "enabled": True,
@@ -382,7 +389,7 @@ async def test_alert_anonymous_forbidden(
 @pytest.mark.asyncio
 async def test_alert_list(
     api_client: PreprodAPIClient,
-    test_run_id: str,
+    synthetic_config: SyntheticConfiguration,
 ) -> None:
     """Verify alerts can be listed for a configuration.
 
@@ -390,7 +397,8 @@ async def test_alert_list(
     When: GET /api/v2/configurations/{id}/alerts is called
     Then: List of alerts is returned
     """
-    token, config_id = await create_config_and_session(api_client, test_run_id)
+    token, config_id = await create_config_and_session(api_client, synthetic_config)
+    ticker_symbol = synthetic_config.tickers[0].symbol
 
     try:
         # Create a couple alerts
@@ -399,7 +407,7 @@ async def test_alert_list(
                 f"/api/v2/configurations/{config_id}/alerts",
                 json={
                     "type": "sentiment",
-                    "ticker": "AAPL",
+                    "ticker": ticker_symbol,
                     "threshold": threshold,
                     "condition": "above",
                     "enabled": True,
@@ -425,7 +433,7 @@ async def test_alert_list(
 @pytest.mark.asyncio
 async def test_alert_invalid_threshold(
     api_client: PreprodAPIClient,
-    test_run_id: str,
+    synthetic_config: SyntheticConfiguration,
 ) -> None:
     """Verify invalid threshold values are rejected.
 
@@ -433,14 +441,15 @@ async def test_alert_invalid_threshold(
     When: POST to create alert
     Then: Request is rejected with validation error
     """
-    token, config_id = await create_config_and_session(api_client, test_run_id)
+    token, config_id = await create_config_and_session(api_client, synthetic_config)
+    ticker_symbol = synthetic_config.tickers[0].symbol
 
     try:
         response = await api_client.post(
             f"/api/v2/configurations/{config_id}/alerts",
             json={
                 "type": "sentiment",
-                "ticker": "AAPL",
+                "ticker": ticker_symbol,
                 "threshold": 999,  # Invalid for sentiment (-1 to 1)
                 "condition": "above",
                 "enabled": True,
