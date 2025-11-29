@@ -35,6 +35,7 @@ from src.lambdas.dashboard import notifications as notification_service
 from src.lambdas.dashboard import sentiment as sentiment_service
 from src.lambdas.dashboard import tickers as ticker_service
 from src.lambdas.dashboard import volatility as volatility_service
+from src.lambdas.shared.cache.ticker_cache import TickerCache, get_ticker_cache
 from src.lambdas.shared.dynamodb import get_table
 from src.lambdas.shared.logging_utils import get_safe_error_info
 from src.lambdas.shared.response_models import (
@@ -69,6 +70,7 @@ logger = logging.getLogger(__name__)
 DYNAMODB_TABLE = os.environ.get("DATABASE_TABLE") or os.environ.get(
     "DYNAMODB_TABLE", ""
 )
+TICKER_CACHE_BUCKET = os.environ.get("TICKER_CACHE_BUCKET", "")
 
 # Create routers
 auth_router = APIRouter(prefix="/api/v2/auth", tags=["auth"])
@@ -82,6 +84,23 @@ market_router = APIRouter(prefix="/api/v2/market", tags=["market"])
 def get_dynamodb_table():
     """Dependency to get DynamoDB table."""
     return get_table(DYNAMODB_TABLE)
+
+
+def get_ticker_cache_dependency() -> TickerCache | None:
+    """Dependency to get ticker cache instance.
+
+    Returns None if TICKER_CACHE_BUCKET is not configured,
+    allowing graceful degradation (service functions will
+    fall back to external API validation).
+    """
+    if not TICKER_CACHE_BUCKET:
+        logger.debug("TICKER_CACHE_BUCKET not configured, ticker cache disabled")
+        return None
+    try:
+        return get_ticker_cache(TICKER_CACHE_BUCKET)
+    except Exception as e:
+        logger.warning(f"Failed to load ticker cache: {e}")
+        return None
 
 
 def get_user_id_from_request(request: Request) -> str:
@@ -374,6 +393,7 @@ async def create_configuration(
     request: Request,
     body: config_service.ConfigurationCreate,
     table=Depends(get_dynamodb_table),
+    ticker_cache: TickerCache | None = Depends(get_ticker_cache_dependency),
 ):
     """Create configuration (T049)."""
     user_id = get_user_id_from_request(request)
@@ -381,7 +401,7 @@ async def create_configuration(
         table=table,
         user_id=user_id,
         request=body,
-        ticker_cache=None,  # TODO: Add ticker cache dependency
+        ticker_cache=ticker_cache,
     )
     if isinstance(result, config_service.ErrorResponse):
         if result.error.code == "MAX_CONFIGS_REACHED":
@@ -425,6 +445,7 @@ async def update_configuration(
     request: Request,
     body: config_service.ConfigurationUpdate,
     table=Depends(get_dynamodb_table),
+    ticker_cache: TickerCache | None = Depends(get_ticker_cache_dependency),
 ):
     """Update configuration (T052)."""
     user_id = get_user_id_from_request(request)
@@ -433,7 +454,7 @@ async def update_configuration(
         user_id=user_id,
         config_id=config_id,
         request=body,
-        ticker_cache=None,
+        ticker_cache=ticker_cache,
     )
     if isinstance(result, config_service.ErrorResponse):
         raise HTTPException(status_code=400, detail=result.error.message)
@@ -623,11 +644,12 @@ async def get_config_alerts(
 @ticker_router.get("/validate")
 async def validate_ticker(
     symbol: str = Query(..., min_length=1, max_length=5),
+    ticker_cache: TickerCache | None = Depends(get_ticker_cache_dependency),
 ):
     """Validate ticker symbol (T054)."""
     result = ticker_service.validate_ticker(
         symbol=symbol,
-        ticker_cache=None,  # TODO: Add ticker cache
+        ticker_cache=ticker_cache,
     )
     return JSONResponse(result.model_dump())
 
@@ -636,12 +658,13 @@ async def validate_ticker(
 async def search_tickers(
     q: str = Query(..., min_length=1, max_length=50),
     limit: int = Query(10, ge=1, le=20),
+    ticker_cache: TickerCache | None = Depends(get_ticker_cache_dependency),
 ):
     """Search tickers (T055)."""
     result = ticker_service.search_tickers(
         query=q,
         limit=limit,
-        ticker_cache=None,
+        ticker_cache=ticker_cache,
     )
     return JSONResponse(result.model_dump())
 
