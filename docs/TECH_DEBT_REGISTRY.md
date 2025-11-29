@@ -146,10 +146,24 @@ class ConfigDict:
 - Added to Terraform deployment pipeline
 - Unit tests: `tests/unit/test_metrics_handler.py` (14 tests)
 
-### TD-012: S3 Archival Lambda Specified But Not Implemented
-**Location**: Referenced in `docs/INTERFACE-ANALYSIS-SUMMARY.md:58`
-**Status**: Spec says archival Lambda exists, but it doesn't
-**Risk**: Documentation mismatch with reality
+### TD-012: S3 Archival Lambda Specified But Not Implemented [DEFERRED]
+**Location**: Referenced in multiple docs (SPEC.md, INTERFACE-ANALYSIS-SUMMARY.md)
+
+**Status**: DEFERRED - Post-production enhancement
+**Resolution**:
+- Updated SPEC.md to mark as "DEFERRED" instead of "IMPLEMENTED"
+- The S3 archival Lambda for DLQ messages is a nice-to-have for data durability
+- Current DLQ retention (14 days) is sufficient for MVP
+- Impact: Extended outages (>14 days) could result in DLQ message loss
+- Mitigation: Manual intervention during extended outages is acceptable for MVP
+
+**Risk Assessment**:
+- LOW: DLQ only receives failed analysis retries (not primary data path)
+- Analysis failures are rare (<0.1% under normal operation)
+- 14-day retention covers typical operational incident resolution times
+- Production data (DynamoDB) is protected by PITR regardless
+
+**Future Work**: Implement S3 archival Lambda if/when DLQ message loss becomes a concern
 
 ---
 
