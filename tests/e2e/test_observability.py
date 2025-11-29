@@ -20,7 +20,6 @@ pytestmark = [pytest.mark.e2e, pytest.mark.preprod, pytest.mark.us11]
 async def test_cloudwatch_logs_created(
     api_client: PreprodAPIClient,
     test_run_id: str,
-    cloudwatch_logs_client,
 ) -> None:
     """T100: Verify CloudWatch logs are created for API requests.
 
@@ -38,10 +37,8 @@ async def test_cloudwatch_logs_created(
     try:
         log_group = "/aws/lambda/sentiment-analyzer-dashboard"
         results = await query_cloudwatch_logs(
-            cloudwatch_logs_client,
-            log_group,
-            query="fields @timestamp, @message | filter @message like /auth/",
-            limit=10,
+            log_group=log_group,
+            query="fields @timestamp, @message | filter @message like /auth/ | limit 10",
         )
 
         # Should find some auth-related logs
@@ -59,7 +56,6 @@ async def test_cloudwatch_logs_created(
 async def test_cloudwatch_metrics_incremented(
     api_client: PreprodAPIClient,
     test_run_id: str,
-    cloudwatch_client,
 ) -> None:
     """T101: Verify CloudWatch metrics are incremented.
 
@@ -74,10 +70,10 @@ async def test_cloudwatch_metrics_incremented(
     # Query metrics
     try:
         metrics = await get_cloudwatch_metrics(
-            cloudwatch_client,
             namespace="SentimentAnalyzer",
             metric_name="ApiRequests",
-            period_seconds=60,
+            dimensions=[{"Name": "Environment", "Value": "preprod"}],
+            period=60,
         )
 
         # Should get metric data (may be empty initially)
@@ -239,7 +235,6 @@ async def test_cloudwatch_alarm_triggers(
 @pytest.mark.asyncio
 async def test_error_logs_captured(
     api_client: PreprodAPIClient,
-    cloudwatch_logs_client,
 ) -> None:
     """Verify error conditions are logged to CloudWatch.
 
@@ -253,10 +248,8 @@ async def test_error_logs_captured(
     try:
         log_group = "/aws/lambda/sentiment-analyzer-dashboard"
         results = await query_cloudwatch_logs(
-            cloudwatch_logs_client,
-            log_group,
-            query="fields @timestamp, @message | filter @message like /ERROR/ or @message like /error/",
-            limit=10,
+            log_group=log_group,
+            query="fields @timestamp, @message | filter @message like /ERROR/ or @message like /error/ | limit 10",
         )
 
         # Should be able to query logs (results may vary)
