@@ -491,21 +491,24 @@ jobs:
         id: outputs
         run: |
           dashboard_url=$(terraform output -raw dashboard_url || echo "")
+          api_url=$(terraform output -raw dashboard_api_url || echo "")
           sns_topic_arn=$(terraform output -raw sns_topic_arn || echo "")
 
           echo "dashboard_url=${dashboard_url}" >> $GITHUB_OUTPUT
+          echo "api_url=${api_url}" >> $GITHUB_OUTPUT
           echo "sns_topic_arn=${sns_topic_arn}" >> $GITHUB_OUTPUT
 
       - name: Smoke Test (Post-Deployment)
         run: |
-          dashboard_url="${{ steps.outputs.outputs.dashboard_url }}"
-          if [ -z "$dashboard_url" ]; then
-            echo "Dashboard URL not available, skipping smoke test"
+          # Use API Gateway URL for health check (CloudFront only routes /api/* to API Gateway)
+          api_url="${{ steps.outputs.outputs.api_url }}"
+          if [ -z "$api_url" ]; then
+            echo "API URL not available, skipping smoke test"
             exit 0
           fi
 
-          echo "Testing Dashboard Lambda at: $dashboard_url"
-          status_code=$(curl -s -o /dev/null -w "%{http_code}" "${dashboard_url}/health" || echo "000")
+          echo "Testing Dashboard Lambda at: $api_url"
+          status_code=$(curl -s -o /dev/null -w "%{http_code}" "${api_url}/health" || echo "000")
 
           if [ "$status_code" == "200" ]; then
             echo "✓ Dashboard Lambda is responding (HTTP $status_code)"
@@ -765,29 +768,32 @@ jobs:
         id: outputs
         run: |
           DASHBOARD_URL=$(terraform output -raw dashboard_function_url 2>/dev/null || echo "")
+          API_URL=$(terraform output -raw dashboard_api_url 2>/dev/null || echo "")
           SNS_TOPIC_ARN=$(terraform output -raw sns_topic_arn 2>/dev/null || echo "")
 
           echo "dashboard_url=${DASHBOARD_URL}" >> $GITHUB_OUTPUT
+          echo "api_url=${API_URL}" >> $GITHUB_OUTPUT
           echo "sns_topic_arn=${SNS_TOPIC_ARN}" >> $GITHUB_OUTPUT
 
       - name: Smoke Test (Post-Deployment)
         id: smoke_test
         timeout-minutes: 2
         run: |
-          DASHBOARD_URL="${{ steps.outputs.outputs.dashboard_url }}"
+          # Use API Gateway URL for health check (CloudFront only routes /api/* to API Gateway)
+          API_URL="${{ steps.outputs.outputs.api_url }}"
 
-          if [ -z "$DASHBOARD_URL" ]; then
-            echo "⚠️ Dashboard URL not found - skipping smoke test"
+          if [ -z "$API_URL" ]; then
+            echo "⚠️ API URL not found - skipping smoke test"
             exit 0
           fi
 
           echo "🧪 Running post-deployment smoke test..."
-          echo "Dashboard URL: $DASHBOARD_URL"
+          echo "API URL: $API_URL"
 
           # Test 1: Health endpoint (unauthenticated)
           echo ""
           echo "Test 1: Health endpoint..."
-          HEALTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "${DASHBOARD_URL}/health")
+          HEALTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "${API_URL}/health")
 
           if [ "$HEALTH_STATUS" != "200" ]; then
             echo "❌ SMOKE TEST FAILED: Health endpoint returned HTTP $HEALTH_STATUS"
@@ -820,7 +826,7 @@ jobs:
           # Test 3: Verify response body is valid JSON
           echo ""
           echo "Test 3: Validating response format..."
-          HEALTH_RESPONSE=$(curl -s --max-time 30 "${DASHBOARD_URL}/health")
+          HEALTH_RESPONSE=$(curl -s --max-time 30 "${API_URL}/health")
 
           if ! echo "$HEALTH_RESPONSE" | jq . >/dev/null 2>&1; then
             echo "❌ SMOKE TEST FAILED: Health endpoint returned invalid JSON"
@@ -1166,8 +1172,11 @@ jobs:
         id: outputs
         run: |
           DASHBOARD_URL=$(terraform output -raw dashboard_function_url 2>/dev/null || echo "")
+          API_URL=$(terraform output -raw dashboard_api_url 2>/dev/null || echo "")
           echo "dashboard_url=${DASHBOARD_URL}" >> $GITHUB_OUTPUT
+          echo "api_url=${API_URL}" >> $GITHUB_OUTPUT
           echo "Production Dashboard URL: ${DASHBOARD_URL}"
+          echo "Production API URL: ${API_URL}"
 
   # ========================================================================
   # JOB 6: Production Canary Test
@@ -1182,13 +1191,14 @@ jobs:
       - name: Run Canary Health Check
         timeout-minutes: 2
         run: |
-          DASHBOARD_URL="${{ needs.deploy-production.outputs.dashboard_url }}"
+          # Use API Gateway URL for health check (more reliable than CloudFront for canary)
+          API_URL="${{ needs.deploy-production.outputs.api_url }}"
           API_KEY="${{ secrets.DASHBOARD_API_KEY }}"
 
-          echo "🔍 Running canary test against: ${DASHBOARD_URL}"
+          echo "🔍 Running canary test against: ${API_URL}"
 
           response=$(curl -f -s -w "\n%{http_code}" \
-            "${DASHBOARD_URL}/health" \
+            "${API_URL}/health" \
             -H "X-API-Key: ${API_KEY}" || echo "FAILED")
 
           http_code=$(echo "$response" | tail -1)
