@@ -72,7 +72,7 @@ class TestCanaryPreprod:
             )
         return key
 
-    def test_health_endpoint_structure(self, dashboard_url, api_key):
+    def test_health_endpoint_structure(self, dashboard_url):
         """
         Verify the health endpoint returns the expected structure.
 
@@ -80,10 +80,10 @@ class TestCanaryPreprod:
         If this fails, the canary won't work in prod.
 
         CRITICAL: This test validates the canary itself, not just the app.
+        Note: Health endpoint is PUBLIC (no auth required).
         """
         response = requests.get(
             f"{dashboard_url}/health",
-            headers={"X-API-Key": api_key},
             timeout=10,
         )
 
@@ -115,7 +115,7 @@ class TestCanaryPreprod:
 
         print(f"✅ Health endpoint structure valid: {data}")
 
-    def test_health_endpoint_performance(self, dashboard_url, api_key):
+    def test_health_endpoint_performance(self, dashboard_url):
         """
         Verify the health endpoint responds quickly.
 
@@ -124,12 +124,12 @@ class TestCanaryPreprod:
         that could cause spurious canary failures in prod.
 
         CRITICAL: Slow health checks will cause false alarms in prod.
+        Note: Health endpoint is PUBLIC (no auth required).
         """
         start = time.time()
 
         response = requests.get(
             f"{dashboard_url}/health",
-            headers={"X-API-Key": api_key},
             timeout=10,
         )
 
@@ -146,53 +146,41 @@ class TestCanaryPreprod:
 
         print(f"✅ Health endpoint responded in {duration:.2f}s")
 
-    def test_health_endpoint_without_auth(self, dashboard_url):
+    def test_health_endpoint_public_access(self, dashboard_url):
         """
-        Verify the health endpoint rejects requests without API key.
+        Verify the health endpoint is publicly accessible (no auth required).
 
-        This ensures we're actually testing authentication, not an open endpoint.
+        Health checks MUST be public for:
+        - Load balancer health checks
+        - Kubernetes liveness/readiness probes
+        - Monitoring systems (CloudWatch, Datadog, etc.)
 
-        If health endpoint is publicly accessible, we're not testing
-        the full prod configuration (which requires auth).
+        Authentication on health endpoints prevents infrastructure from
+        verifying application health.
         """
         response = requests.get(
             f"{dashboard_url}/health",
             timeout=10,
         )
 
-        # Health endpoint MUST require authentication
-        assert response.status_code == 401, (
-            f"Health endpoint should return 401 without auth, got {response.status_code}. "
-            f"If endpoint is public, canary is not testing auth correctly."
+        # Health endpoint MUST be publicly accessible
+        assert response.status_code == 200, (
+            f"Health endpoint should return 200 without auth, got {response.status_code}. "
+            f"Health checks must be public for load balancers and monitoring."
         )
 
-        print("✅ Health endpoint correctly requires authentication")
+        data = response.json()
+        assert data["status"] in ["healthy", "degraded"], f"Unexpected status: {data}"
 
-    def test_health_endpoint_with_invalid_auth(self, dashboard_url):
-        """
-        Verify the health endpoint rejects invalid API keys.
+        print("✅ Health endpoint is publicly accessible (correct for health checks)")
 
-        This ensures authentication is actually being validated,
-        not just checked for presence.
-        """
-        response = requests.get(
-            f"{dashboard_url}/health",
-            headers={"X-API-Key": "invalid-key-12345"},
-            timeout=10,
-        )
-
-        assert (
-            response.status_code == 401
-        ), f"Health endpoint should reject invalid API key, got {response.status_code}"
-
-        print("✅ Health endpoint correctly rejects invalid API key")
-
-    def test_health_endpoint_idempotency(self, dashboard_url, api_key):
+    def test_health_endpoint_idempotency(self, dashboard_url):
         """
         Verify the health endpoint is idempotent (multiple calls return same result).
 
         Prod canary runs hourly. If health check mutates state,
         it could cause issues over time.
+        Note: Health endpoint is PUBLIC (no auth required).
         """
         responses = []
 
@@ -200,7 +188,6 @@ class TestCanaryPreprod:
         for i in range(3):
             response = requests.get(
                 f"{dashboard_url}/health",
-                headers={"X-API-Key": api_key},
                 timeout=10,
             )
             assert response.status_code == 200, f"Call {i+1} failed"
@@ -214,19 +201,19 @@ class TestCanaryPreprod:
 
         print("✅ Health endpoint is idempotent (3 calls, all returned 'healthy')")
 
-    def test_health_endpoint_concurrent_requests(self, dashboard_url, api_key):
+    def test_health_endpoint_concurrent_requests(self, dashboard_url):
         """
         Verify the health endpoint handles concurrent requests.
 
         If multiple canary checks run simultaneously (e.g., from different regions),
         they shouldn't interfere with each other.
+        Note: Health endpoint is PUBLIC (no auth required).
         """
         import concurrent.futures
 
         def check_health():
             response = requests.get(
                 f"{dashboard_url}/health",
-                headers={"X-API-Key": api_key},
                 timeout=10,
             )
             return response.status_code
@@ -243,16 +230,16 @@ class TestCanaryPreprod:
 
         print("✅ Health endpoint handles concurrent requests (5 parallel calls)")
 
-    def test_health_endpoint_error_messages(self, dashboard_url, api_key):
+    def test_health_endpoint_error_messages(self, dashboard_url):
         """
         Verify the health endpoint provides useful error messages.
 
         If canary fails in prod, we need to know WHY it failed.
         Good error messages help with debugging.
+        Note: Health endpoint is PUBLIC (no auth required).
         """
         response = requests.get(
             f"{dashboard_url}/health",
-            headers={"X-API-Key": api_key},
             timeout=10,
         )
 
