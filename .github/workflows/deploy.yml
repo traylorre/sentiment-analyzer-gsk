@@ -141,6 +141,7 @@ jobs:
             requests==2.32.5 \
             pydantic==2.12.4 \
             python-json-logger==4.0.0 \
+            aws-xray-sdk==2.14.0 \
             -t packages/ingestion-deps/ \
             --platform manylinux2014_x86_64 \
             --implementation cp \
@@ -186,6 +187,7 @@ jobs:
             pydantic==2.12.4 \
             boto3==1.41.0 \
             python-json-logger==4.0.0 \
+            aws-xray-sdk==2.14.0 \
             -t packages/dashboard-deps/ \
             --platform manylinux2014_x86_64 \
             --implementation cp \
@@ -248,6 +250,7 @@ jobs:
             boto3==1.41.0 \
             pydantic==2.12.4 \
             python-json-logger==4.0.0 \
+            aws-xray-sdk==2.14.0 \
             -t packages/analysis-deps/ \
             --platform manylinux2014_x86_64 \
             --implementation cp \
