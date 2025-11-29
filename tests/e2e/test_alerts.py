@@ -38,6 +38,9 @@ async def create_config_and_session(
         },
     )
 
+    if config_response.status_code == 500:
+        api_client.clear_access_token()
+        pytest.skip("Config creation endpoint returning 500 - API issue")
     if config_response.status_code not in (200, 201):
         api_client.clear_access_token()
         pytest.skip("Config creation not available")
