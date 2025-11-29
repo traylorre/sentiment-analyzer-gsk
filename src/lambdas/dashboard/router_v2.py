@@ -32,6 +32,7 @@ from src.lambdas.dashboard import auth as auth_service
 from src.lambdas.dashboard import configurations as config_service
 from src.lambdas.dashboard import market as market_service
 from src.lambdas.dashboard import notifications as notification_service
+from src.lambdas.dashboard import quota as quota_service
 from src.lambdas.dashboard import sentiment as sentiment_service
 from src.lambdas.dashboard import tickers as ticker_service
 from src.lambdas.dashboard import volatility as volatility_service
@@ -795,6 +796,27 @@ async def toggle_alert(
     )
     if isinstance(result, alert_service.ErrorResponse):
         raise HTTPException(status_code=404, detail=result.error.message)
+    return JSONResponse(result.model_dump())
+
+
+@alert_router.get("/quota")
+async def get_alert_quota(
+    request: Request,
+    table=Depends(get_dynamodb_table),
+):
+    """Get alert email quota usage (T145).
+
+    Returns daily email quota status including:
+    - used: Number of emails sent today
+    - limit: Maximum emails per day
+    - remaining: Emails left today
+    - resets_at: When quota resets (ISO datetime)
+    """
+    user_id = get_authenticated_user_id(request)
+    result = quota_service.get_daily_quota(
+        table=table,
+        user_id=user_id,
+    )
     return JSONResponse(result.model_dump())
 
 
