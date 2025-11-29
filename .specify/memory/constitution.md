@@ -469,6 +469,59 @@ Detailed security documentation including penetration test results, vulnerabilit
 
 Public-facing security documentation (SECURITY.md, SECURITY_REVIEW.md) remains in this repository.
 
+9) Tech Debt Tracking
+
+	Registry & GitHub Issues Workflow
+	----------------------------------
+	All technical debt MUST be tracked using a dual-system approach:
+
+	a) Registry File (`docs/TECH_DEBT_REGISTRY.md`)
+		- Single source of truth for detailed tech debt documentation
+		- Contains: root cause analysis, proposed fixes, effort estimates, risk assessments
+		- Organized by priority: Critical, High, Medium, Low, Future Work
+		- Tracks commit history that introduced shortcuts or workarounds
+		- Updated whenever tech debt is discovered, resolved, or deferred
+
+	b) GitHub Issues
+		- All actionable tech debt items SHOULD have corresponding GitHub Issues
+		- Issues enable: assignability, milestone tracking, and cross-referencing in PRs
+		- Label with `tech-debt` and appropriate priority label
+		- Link to specific registry section in issue description
+
+	Required Fields for Registry Entries
+	-------------------------------------
+	Each tech debt item MUST include:
+	- **ID**: Unique identifier (TD-XXX format)
+	- **Location**: File path and line number(s)
+	- **Status**: Open | Resolved | Deferred | Blocked | Acceptable
+	- **Root Cause**: Why this debt was introduced
+	- **Proposed Fix**: How to properly resolve it
+	- **Effort**: Estimated time to fix
+	- **Risk**: Impact of leaving unfixed vs. fixing
+
+	When to Create Tech Debt Entries
+	---------------------------------
+	Create entries for:
+	- Workarounds (e.g., noqa comments, suppressed warnings)
+	- Test expectation changes without fixing root cause
+	- Security shortcuts with documented acceptance criteria
+	- Deferred features or incomplete implementations
+	- Known limitations or edge cases not handled
+	- Dependency issues requiring future attention
+
+	Review Requirements
+	-------------------
+	- Tech debt registry MUST be reviewed before production deployments
+	- Items marked "Critical" or "High" with status "Open" MUST be addressed or explicitly accepted
+	- Acceptance of deferred items requires documented rationale
+
+	Acceptance Criteria
+	-------------------
+	- `docs/TECH_DEBT_REGISTRY.md` exists and follows the documented format
+	- New shortcuts/workarounds result in registry entries before PR merge
+	- GitHub Issues exist for actionable items with `tech-debt` label
+	- Registry is reviewed in production deployment checklist
+
 Amendments & Governance
 -----------------------
 This constitution is intentionally minimal. Amendments may be added with a short rationale and must include any new acceptance criteria. Maintain a Version and Last Amended date at the bottom.
@@ -479,4 +532,6 @@ Amendment 1.2 (2025-11-27): Strengthened Pipeline Check Bypass section to ABSOLU
 
 Amendment 1.3 (2025-11-27): Added Sensitive Security Documentation section directing to private `../sentiment-analyzer-gsk-security/` repository for confidential security artifacts.
 
-**Version**: 1.3 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-11-27
+Amendment 1.4 (2025-11-28): Added Tech Debt Tracking section formalizing the dual-system approach using `docs/TECH_DEBT_REGISTRY.md` as detailed documentation and GitHub Issues for actionability. Defines required fields, entry criteria, and review requirements.
+
+**Version**: 1.4 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-11-28
