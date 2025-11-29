@@ -10,7 +10,7 @@
 import pytest
 
 from tests.e2e.helpers.api_client import PreprodAPIClient
-from tests.e2e.helpers.cloudwatch import query_cloudwatch_logs, query_metrics
+from tests.e2e.helpers.cloudwatch import get_cloudwatch_metrics, query_cloudwatch_logs
 from tests.e2e.helpers.xray import get_trace_summaries
 
 pytestmark = [pytest.mark.e2e, pytest.mark.preprod, pytest.mark.us11]
@@ -72,15 +72,15 @@ async def test_cloudwatch_metrics_incremented(
 
     # Query metrics
     try:
-        metrics = await query_metrics(
+        metrics = await get_cloudwatch_metrics(
             cloudwatch_client,
             namespace="SentimentAnalyzer",
             metric_name="ApiRequests",
-            period=60,
+            period_seconds=60,
         )
 
         # Should get metric data (may be empty initially)
-        assert isinstance(metrics, dict)
+        assert isinstance(metrics, list)
 
     except Exception as e:
         if "AccessDenied" in str(e):
