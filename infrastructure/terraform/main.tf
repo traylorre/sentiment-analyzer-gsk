@@ -382,19 +382,29 @@ module "dashboard_lambda" {
     SSE_POLL_INTERVAL            = "5"
     ENVIRONMENT                  = var.environment
     CHAOS_EXPERIMENTS_TABLE      = module.dynamodb.chaos_experiments_table_name
-    CORS_ORIGINS                 = join(",", var.cors_allowed_origins)
+    # CORS: Pass explicit origins from tfvars (no wildcard fallback)
+    # CloudFront domain is dynamically determined by Lambda at runtime
+    CORS_ORIGINS = join(",", var.cors_allowed_origins)
   }
 
   # Function URL with CORS
+  # SECURITY: No wildcard fallback - require explicit origins
+  # The Lambda Function URL CORS is for browser preflight checks
+  # The Python code handles actual CORS header validation
   create_function_url    = true
   function_url_auth_type = "NONE"
   function_url_cors = {
     allow_credentials = false
     allow_headers     = ["content-type", "authorization", "x-api-key"]
     allow_methods     = ["GET"] # AWS handles OPTIONS preflight automatically; not in allowed values
-    allow_origins     = length(var.cors_allowed_origins) > 0 ? var.cors_allowed_origins : ["*"]
-    expose_headers    = []
-    max_age           = 86400
+    # SECURITY: Require explicit origins - no wildcard fallback
+    # For new deployments, cors_allowed_origins MUST be set in tfvars
+    allow_origins = length(var.cors_allowed_origins) > 0 ? var.cors_allowed_origins : (
+      # Only allow localhost in non-prod if no origins specified (for local development)
+      var.environment != "prod" ? ["http://localhost:3000", "http://localhost:8080"] : []
+    )
+    expose_headers = []
+    max_age        = 86400
   }
 
   # Logging

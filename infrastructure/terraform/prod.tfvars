@@ -38,6 +38,8 @@ monthly_budget_limit = 100
 model_layer_arns = []
 
 # CORS: Production requires explicit origins - NO WILDCARDS
-# Add your production domain(s) here before deploying to production
-# Example: ["https://dashboard.example.com", "https://example.com"]
+# IMPORTANT: Set this to your CloudFront domain before deploying to production
+# The CloudFront domain is output after first deployment as cloudfront_domain_name
+# Example: ["https://d1234567890.cloudfront.net"]
+# You can also add custom domains: ["https://dashboard.example.com", "https://d1234567890.cloudfront.net"]
 cors_allowed_origins = []

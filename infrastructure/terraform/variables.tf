@@ -54,7 +54,13 @@ variable "model_layer_arns" {
 }
 
 variable "cors_allowed_origins" {
-  description = "List of allowed CORS origins for the dashboard Lambda. Use specific domains in production."
+  description = <<-EOT
+    List of allowed CORS origins for the dashboard Lambda.
+    SECURITY: Wildcards are NOT allowed - specify exact origins.
+    For production: Include your CloudFront domain (output as cloudfront_domain_name after first deploy).
+    For preprod: localhost origins are auto-added if this is empty.
+    Example: ["https://d1234567890.cloudfront.net", "https://mydomain.com"]
+  EOT
   type        = list(string)
   default     = []
   validation {
