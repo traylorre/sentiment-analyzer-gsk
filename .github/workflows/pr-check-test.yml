@@ -62,12 +62,14 @@ jobs:
         run: |
           # Exclude preprod tests (they require real AWS preprod credentials)
           # Preprod tests run in build-and-promote.yml workflow only
+          # Exclude tests/e2e (E2E validation suite - runs separately in e2e-preprod.yml)
           pytest --ignore=tests/integration/test_analysis_preprod.py \
             --ignore=tests/integration/test_dashboard_preprod.py \
             --ignore=tests/integration/test_canary_preprod.py \
             --ignore=tests/integration/test_ingestion_preprod.py \
             --ignore=tests/integration/test_e2e_lambda_invocation_preprod.py \
             --ignore=tests/integration/test_observability_preprod.py \
+            --ignore=tests/e2e \
             --cov=src --cov-report=term-missing --cov-report=xml --junitxml=test-results.xml
         env:
           # Test environment variables
