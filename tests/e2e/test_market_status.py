@@ -142,7 +142,7 @@ async def test_premarket_estimates_returned(
     Note: This validates the API supports pre-market data.
     """
     # Create session and config
-    session_response = await api_client.post("/api/v2/auth/anonymous")
+    session_response = await api_client.post("/api/v2/auth/anonymous", json={})
     assert session_response.status_code == 200
     token = session_response.json()["token"]
 
@@ -269,4 +269,5 @@ async def test_market_status_includes_timestamp(
         or "as_of" in data
         or "updated_at" in data
         or "server_time" in data
+        or "current_time" in data
     ), f"Missing timestamp in market status: {data}"

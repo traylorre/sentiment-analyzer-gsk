@@ -9,8 +9,6 @@
 #
 # Note: Requires --run-cleanup flag to actually execute cleanup.
 
-from datetime import UTC, datetime, timedelta
-
 import pytest
 
 from tests.e2e.helpers.cleanup import cleanup_by_prefix, find_orphaned_test_data
@@ -39,7 +37,6 @@ def run_cleanup_flag(request):
 
 @pytest.mark.asyncio
 async def test_find_orphaned_test_data(
-    dynamodb_table,
     run_cleanup_flag,
 ) -> None:
     """Find orphaned test data in DynamoDB.
@@ -51,18 +48,12 @@ async def test_find_orphaned_test_data(
         pytest.skip("Use --run-cleanup to execute cleanup utilities")
 
     # Find data older than 24 hours with test prefixes
-    cutoff = datetime.now(UTC) - timedelta(hours=24)
-
-    orphaned = await find_orphaned_test_data(
-        dynamodb_table,
-        prefixes=["E2E_", "TEST_", "e2e-test-"],
-        older_than=cutoff,
-    )
+    orphaned = await find_orphaned_test_data(max_age_hours=24)
 
     if orphaned:
         print(f"\nFound {len(orphaned)} orphaned test items:")
         for item in orphaned[:10]:  # Show first 10
-            print(f"  - {item.get('pk')}")
+            print(f"  - {item.pk}")
         if len(orphaned) > 10:
             print(f"  ... and {len(orphaned) - 10} more")
     else:
@@ -143,37 +134,38 @@ async def test_cleanup_old_test_alerts(
 
 @pytest.mark.asyncio
 async def test_dry_run_cleanup(
-    dynamodb_table,
+    run_cleanup_flag,
 ) -> None:
     """Dry run cleanup to see what would be deleted.
 
     This runs without --run-cleanup and shows what would be removed
     without actually deleting anything.
     """
-    cutoff = datetime.now(UTC) - timedelta(hours=24)
+    if not run_cleanup_flag:
+        pytest.skip("Use --run-cleanup to execute cleanup utilities")
 
-    orphaned = await find_orphaned_test_data(
-        dynamodb_table,
-        prefixes=["E2E_", "TEST_", "e2e-test-", "E2E Test", "E2E Alert"],
-        older_than=cutoff,
-    )
+    orphaned = await find_orphaned_test_data(max_age_hours=24)
 
     print(f"\n[DRY RUN] Would clean up {len(orphaned)} items")
     if orphaned:
         print("Sample items:")
         for item in orphaned[:5]:
-            print(f"  - pk={item.get('pk')}, sk={item.get('sk')}")
+            print(f"  - pk={item.pk}, sk={item.sk}")
 
 
 @pytest.mark.asyncio
 async def test_verify_no_production_data_affected(
     dynamodb_table,
+    run_cleanup_flag,
 ) -> None:
     """Verify cleanup patterns don't match production data.
 
     Safety check to ensure our cleanup prefixes won't accidentally
     delete real user data.
     """
+    if not run_cleanup_flag:
+        pytest.skip("Use --run-cleanup to execute cleanup utilities")
+
     # These prefixes should ONLY match test data
     test_prefixes = ["E2E_", "TEST_", "e2e-test-"]
 

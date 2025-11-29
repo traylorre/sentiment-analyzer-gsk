@@ -46,12 +46,14 @@ class ErrorResponse(BaseModel):
 class SourceSentiment(BaseModel):
     """Sentiment data from a single source."""
 
+    model_config = {"populate_by_name": True}
+
     score: float = Field(..., ge=-1.0, le=1.0)
     label: str = Field(..., pattern="^(positive|negative|neutral)$")
     confidence: float | None = None
     bullish_percent: float | None = None
     bearish_percent: float | None = None
-    model_version: str | None = None
+    inference_version: str | None = Field(default=None, alias="model_version")
     updated_at: str
 
 

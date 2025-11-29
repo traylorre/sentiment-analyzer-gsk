@@ -52,9 +52,7 @@ jobs:
     environment: preprod
     timeout-minutes: 30
 
-    # Security: Use OIDC for AWS authentication
     permissions:
-      id-token: write
       contents: read
       checks: write
 
@@ -75,12 +73,12 @@ jobs:
           # Install package in editable mode for src imports
           pip install -e .
 
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
         with:
-          role-to-assume: ${{ secrets.AWS_PREPROD_ROLE_ARN }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-          role-session-name: e2e-tests-${{ github.run_id }}
 
       - name: Create reports directory
         run: mkdir -p reports
@@ -106,7 +104,7 @@ jobs:
 
           pytest $PYTEST_ARGS
         env:
-          PREPROD_API_BASE_URL: ${{ secrets.PREPROD_API_BASE_URL }}
+          PREPROD_API_URL: ${{ secrets.PREPROD_API_URL }}
           PREPROD_DYNAMODB_TABLE: ${{ secrets.PREPROD_DYNAMODB_TABLE }}
           TEST_EMAIL_DOMAIN: ${{ secrets.TEST_EMAIL_DOMAIN }}
 

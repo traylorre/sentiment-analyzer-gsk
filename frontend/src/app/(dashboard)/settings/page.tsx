@@ -12,6 +12,7 @@ import { SignOutDialog } from '@/components/auth/sign-out-dialog';
 import { useAnimationStore } from '@/stores/animation-store';
 import { useAuth } from '@/hooks/use-auth';
 import { cn } from '@/lib/utils';
+import { notificationsApi } from '@/lib/api';
 
 interface SettingItemProps {
   icon: typeof User;
@@ -42,10 +43,10 @@ export default function SettingsPage() {
   const { user, isAuthenticated, isAnonymous, signOut, isLoading } = useAuth();
   const [signOutOpen, setSignOutOpen] = useState(false);
 
-  const handleNotificationSave = useCallback(async (settings: unknown) => {
-    // TODO: Save to backend
-    console.log('Saving notification settings:', settings);
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+  const handleNotificationSave = useCallback(async (settings: { emailEnabled: boolean }) => {
+    await notificationsApi.updatePreferences({
+      email_enabled: settings.emailEnabled,
+    });
   }, []);
 
   const authTypeLabel: Record<string, string> = {

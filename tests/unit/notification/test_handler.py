@@ -281,15 +281,34 @@ class TestLambdaHandlerMagicLink:
 class TestLambdaHandlerDigest:
     """Test Lambda handler daily digest notifications."""
 
-    def test_handle_digest_not_implemented(self):
-        """Test digest handler returns not implemented."""
+    @patch("src.lambdas.notification.handler.process_daily_digests")
+    @patch("src.lambdas.notification.handler._get_email_service")
+    @patch("boto3.resource")
+    def test_handle_digest_processes_successfully(
+        self, mock_boto3_resource, mock_get_service, mock_process_digests
+    ):
+        """Test digest handler processes digests and returns stats."""
+        mock_process_digests.return_value = {
+            "processed": 5,
+            "sent": 3,
+            "skipped": 1,
+            "failed": 1,
+        }
+        mock_table = MagicMock()
+        mock_boto3_resource.return_value.Table.return_value = mock_table
+        mock_email_service = MagicMock()
+        mock_get_service.return_value = mock_email_service
+
         event = {"detail-type": "Scheduled Event", "source": "aws.events"}
 
         result = lambda_handler(event, None)
 
         assert result["statusCode"] == 200
         body = json.loads(result["body"])
-        assert body["implemented"] is False
+        assert body["message"] == "Digest processing complete"
+        assert body["stats"]["processed"] == 5
+        assert body["stats"]["sent"] == 3
+        mock_process_digests.assert_called_once()
 
 
 class TestLambdaHandlerErrors:

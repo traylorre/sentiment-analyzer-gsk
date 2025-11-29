@@ -8,6 +8,7 @@ from src.lambdas.dashboard.tickers import (
     search_tickers,
     validate_ticker,
 )
+from src.lambdas.shared.cache.ticker_cache import TickerInfo
 
 
 class TestValidateTicker:
@@ -63,11 +64,11 @@ class TestValidateTicker:
     def test_uses_ticker_cache_when_provided(self):
         """Should use ticker cache for validation."""
         mock_cache = MagicMock()
-        mock_cache.validate.return_value = {
-            "status": "valid",
-            "name": "Apple Inc",
-            "exchange": "NASDAQ",
-        }
+        # validate() returns tuple: (status, TickerInfo)
+        mock_cache.validate.return_value = (
+            "valid",
+            TickerInfo(symbol="AAPL", name="Apple Inc", exchange="NASDAQ"),
+        )
 
         response = validate_ticker("AAPL", ticker_cache=mock_cache)
 
@@ -78,11 +79,18 @@ class TestValidateTicker:
     def test_returns_delisted_from_cache(self):
         """Should return delisted status from cache."""
         mock_cache = MagicMock()
-        mock_cache.validate.return_value = {
-            "status": "delisted",
-            "successor": "META",
-            "message": "Symbol changed to META",
-        }
+        # validate() returns tuple: (status, TickerInfo)
+        mock_cache.validate.return_value = (
+            "delisted",
+            TickerInfo(
+                symbol="FB",
+                name="Facebook Inc",
+                exchange="NASDAQ",
+                is_active=False,
+                successor_symbol="META",
+                delisting_reason="Symbol changed to META",
+            ),
+        )
 
         response = validate_ticker("FB", ticker_cache=mock_cache)
 
@@ -92,7 +100,8 @@ class TestValidateTicker:
     def test_returns_invalid_from_cache(self):
         """Should return invalid from cache."""
         mock_cache = MagicMock()
-        mock_cache.validate.return_value = {"status": "invalid"}
+        # validate() returns tuple: (status, None) for invalid
+        mock_cache.validate.return_value = ("invalid", None)
 
         response = validate_ticker("INVALID", ticker_cache=mock_cache)
 
@@ -140,9 +149,10 @@ class TestSearchTickers:
     def test_uses_ticker_cache_when_provided(self):
         """Should use ticker cache for search."""
         mock_cache = MagicMock()
+        # search() returns list[TickerInfo]
         mock_cache.search.return_value = [
-            {"symbol": "AAPL", "name": "Apple Inc", "exchange": "NASDAQ"},
-            {"symbol": "AMZN", "name": "Amazon.com Inc", "exchange": "NASDAQ"},
+            TickerInfo(symbol="AAPL", name="Apple Inc", exchange="NASDAQ"),
+            TickerInfo(symbol="AMZN", name="Amazon.com Inc", exchange="NASDAQ"),
         ]
 
         response = search_tickers("A", ticker_cache=mock_cache)
