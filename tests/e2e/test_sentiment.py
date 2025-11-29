@@ -36,7 +36,7 @@ async def create_config_with_tickers(
         "/api/v2/configurations",
         json={
             "name": f"Sentiment Test {test_run_id[:8]}",
-            "tickers": [{"symbol": t, "enabled": True} for t in tickers],
+            "tickers": tickers,
         },
     )
 

@@ -31,12 +31,16 @@ async def test_oauth_urls_returned(api_client: PreprodAPIClient) -> None:
     assert response.status_code == 200, f"Expected 200, got {response.status_code}"
 
     data = response.json()
-    assert "google" in data, "Response missing 'google' OAuth URL"
-    assert "github" in data, "Response missing 'github' OAuth URL"
+
+    # Response may have providers nested under "providers" key
+    providers = data.get("providers", data)
+
+    assert "google" in providers, "Response missing 'google' OAuth URL"
+    assert "github" in providers, "Response missing 'github' OAuth URL"
 
     # URLs should be non-empty strings
-    assert isinstance(data["google"], str) and len(data["google"]) > 0
-    assert isinstance(data["github"], str) and len(data["github"]) > 0
+    assert isinstance(providers["google"], str) and len(providers["google"]) > 0
+    assert isinstance(providers["github"], str) and len(providers["github"]) > 0
 
 
 @pytest.mark.asyncio
@@ -50,7 +54,9 @@ async def test_oauth_url_structure_google(api_client: PreprodAPIClient) -> None:
     response = await api_client.get("/api/v2/auth/oauth/urls")
     assert response.status_code == 200
 
-    google_url = response.json()["google"]
+    data = response.json()
+    providers = data.get("providers", data)
+    google_url = providers["google"]
 
     # Google OAuth URL should contain:
     # - accounts.google.com domain
@@ -82,7 +88,9 @@ async def test_oauth_url_structure_github(api_client: PreprodAPIClient) -> None:
     response = await api_client.get("/api/v2/auth/oauth/urls")
     assert response.status_code == 200
 
-    github_url = response.json()["github"]
+    data = response.json()
+    providers = data.get("providers", data)
+    github_url = providers["github"]
 
     # GitHub OAuth URL should contain:
     # - github.com domain

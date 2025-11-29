@@ -28,7 +28,7 @@ async def create_session_with_config(
         "/api/v2/configurations",
         json={
             "name": f"Notification Test {test_run_id[:8]}",
-            "tickers": [{"symbol": "AAPL", "enabled": True}],
+            "tickers": ["AAPL"],
         },
     )
 

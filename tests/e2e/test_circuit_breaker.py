@@ -29,7 +29,7 @@ async def create_session_and_config(
         "/api/v2/configurations",
         json={
             "name": f"CB Test {test_run_id[:8]}",
-            "tickers": [{"symbol": "AAPL", "enabled": True}],
+            "tickers": ["AAPL"],
         },
     )
 
