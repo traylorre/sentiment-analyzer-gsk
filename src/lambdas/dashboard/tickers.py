@@ -90,21 +90,22 @@ def validate_ticker(
         )
 
     if ticker_cache:
-        result = ticker_cache.validate(symbol)
+        # validate() returns tuple: (status, ticker_info)
+        status, ticker_info = ticker_cache.validate(symbol)
 
-        if result["status"] == "valid":
+        if status == "valid" and ticker_info:
             return TickerValidateResponse(
                 symbol=symbol,
                 status="valid",
-                name=result.get("name"),
-                exchange=result.get("exchange"),
+                name=ticker_info.name,
+                exchange=ticker_info.exchange,
             )
-        elif result["status"] == "delisted":
+        elif status == "delisted" and ticker_info:
             return TickerValidateResponse(
                 symbol=symbol,
                 status="delisted",
-                successor=result.get("successor"),
-                message=result.get("message"),
+                successor=ticker_info.successor_symbol,
+                message=ticker_info.delisting_reason or "Symbol has been delisted",
             )
         else:
             return TickerValidateResponse(
@@ -157,13 +158,14 @@ def search_tickers(
     limit = min(limit, MAX_SEARCH_RESULTS)
 
     if ticker_cache:
+        # search() returns list[TickerInfo] - Pydantic models, not dicts
         results = ticker_cache.search(query, limit=limit)
         return TickerSearchResponse(
             results=[
                 TickerSearchResult(
-                    symbol=r["symbol"],
-                    name=r["name"],
-                    exchange=r["exchange"],
+                    symbol=r.symbol,
+                    name=r.name,
+                    exchange=r.exchange,
                 )
                 for r in results
             ]
