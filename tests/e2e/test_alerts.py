@@ -24,7 +24,7 @@ async def create_config_and_session(
 
     Returns (token, config_id).
     """
-    session_response = await api_client.post("/api/v2/auth/anonymous")
+    session_response = await api_client.post("/api/v2/auth/anonymous", json={})
     assert session_response.status_code == 200
     token = session_response.json()["token"]
 

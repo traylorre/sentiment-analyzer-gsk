@@ -171,7 +171,7 @@ async def test_anonymous_data_merge(
     Then: The anonymous configuration is accessible in the authenticated session
     """
     # Step 1: Create anonymous session
-    anon_response = await api_client.post("/api/v2/auth/anonymous")
+    anon_response = await api_client.post("/api/v2/auth/anonymous", json={})
     assert anon_response.status_code == 200
 
     anon_data = anon_response.json()
@@ -268,7 +268,7 @@ async def test_full_anonymous_to_authenticated_journey(
     config_name = f"Journey Config {test_run_id}"
 
     # === Phase 1: Anonymous Session ===
-    anon_response = await api_client.post("/api/v2/auth/anonymous")
+    anon_response = await api_client.post("/api/v2/auth/anonymous", json={})
     assert anon_response.status_code == 200, "Failed to create anonymous session"
 
     anon_data = anon_response.json()

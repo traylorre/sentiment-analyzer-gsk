@@ -24,7 +24,7 @@ async def create_anonymous_session(
     Returns:
         Access token for the anonymous session
     """
-    response = await api_client.post("/api/v2/auth/anonymous")
+    response = await api_client.post("/api/v2/auth/anonymous", json={})
     assert response.status_code == 200, f"Anonymous session failed: {response.text}"
     return response.json()["token"]
 

@@ -27,7 +27,7 @@ async def test_requests_within_limit_succeed(
     Then: All requests succeed with 200
     """
     # Create session
-    session_response = await api_client.post("/api/v2/auth/anonymous")
+    session_response = await api_client.post("/api/v2/auth/anonymous", json={})
     assert session_response.status_code == 200
     token = session_response.json()["token"]
 
@@ -58,7 +58,7 @@ async def test_rate_limit_triggers_429(
     Then: Some requests return 429 Too Many Requests
     """
     # Create session
-    session_response = await api_client.post("/api/v2/auth/anonymous")
+    session_response = await api_client.post("/api/v2/auth/anonymous", json={})
     assert session_response.status_code == 200
     token = session_response.json()["token"]
 
@@ -98,7 +98,7 @@ async def test_retry_after_header_present(
     Then: Retry-After header indicates when to retry
     """
     # Create session
-    session_response = await api_client.post("/api/v2/auth/anonymous")
+    session_response = await api_client.post("/api/v2/auth/anonymous", json={})
     assert session_response.status_code == 200
     token = session_response.json()["token"]
 
@@ -154,7 +154,7 @@ async def test_rate_limit_recovery(
     Then: Subsequent requests succeed
     """
     # Create session
-    session_response = await api_client.post("/api/v2/auth/anonymous")
+    session_response = await api_client.post("/api/v2/auth/anonymous", json={})
     assert session_response.status_code == 200
     token = session_response.json()["token"]
 
@@ -244,7 +244,7 @@ async def test_rate_limit_per_endpoint(
     When: Accessing a different endpoint
     Then: Second endpoint may not be rate limited
     """
-    session_response = await api_client.post("/api/v2/auth/anonymous")
+    session_response = await api_client.post("/api/v2/auth/anonymous", json={})
     assert session_response.status_code == 200
     token = session_response.json()["token"]
 
