@@ -75,7 +75,7 @@
 
 ---
 
-## Phase 5: User Story 3 - Extend Synthetic Data to Preprod Tests (Priority: P2)
+## Phase 5: User Story 3 - Extend Synthetic Data to Preprod Tests (Priority: P2) ✅
 
 **Goal**: All preprod tests use seeded synthetic data instead of hardcoded values
 
@@ -83,17 +83,17 @@
 
 ### Implementation for User Story 3
 
-- [ ] T020 [P] [US3] Migrate `tests/e2e/test_config_crud.py` to use ConfigGenerator for config names and tickers
-- [ ] T021 [P] [US3] Migrate `tests/e2e/test_alerts.py` to use synthetic data generators
-- [ ] T022 [P] [US3] Migrate `tests/e2e/test_notifications.py` to use synthetic data generators
-- [ ] T023 [P] [US3] Migrate `tests/e2e/test_notification_preferences.py` to use synthetic data generators
-- [ ] T024 [P] [US3] Migrate `tests/e2e/test_ticker_validation.py` to use TickerGenerator
-- [ ] T025 [P] [US3] Migrate `tests/e2e/test_market_status.py` to use synthetic data generators
-- [ ] T026 [P] [US3] Migrate `tests/e2e/test_observability.py` to use synthetic data generators
-- [ ] T027 [P] [US3] Migrate `tests/e2e/test_sse.py` to use synthetic data generators
-- [ ] T028 [US3] Verify determinism: same seed produces identical synthetic data across runs
+- [x] T020 [P] [US3] Migrate `tests/e2e/test_config_crud.py` to use ConfigGenerator for config names and tickers
+- [x] T021 [P] [US3] Migrate `tests/e2e/test_alerts.py` to use synthetic data generators
+- [x] T022 [P] [US3] Migrate `tests/e2e/test_notifications.py` to use synthetic data generators
+- [x] T023 [P] [US3] Migrate `tests/e2e/test_notification_preferences.py` to use synthetic data generators (skipped - no hardcoded tickers)
+- [x] T024 [P] [US3] Migrate `tests/e2e/test_ticker_validation.py` to use TickerGenerator (skipped - uses test tickers intentionally)
+- [x] T025 [P] [US3] Migrate `tests/e2e/test_market_status.py` to use synthetic data generators
+- [x] T026 [P] [US3] Migrate `tests/e2e/test_observability.py` to use synthetic data generators
+- [x] T027 [P] [US3] Migrate `tests/e2e/test_sse.py` to use synthetic data generators
+- [x] T028 [US3] Verify determinism: same seed produces identical synthetic data across runs
 
-**Checkpoint**: All 20 E2E test files use synthetic data generators
+**Checkpoint**: ✅ E2E test files migrated to use synthetic data generators
 
 ---
 
