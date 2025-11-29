@@ -977,7 +977,7 @@ This section documents known operational fragilities, attack vectors, and mitiga
 
 **YES** - If the following protections are implemented:
 1. ✅ OAuth token caching + refresh jitter (IMPLEMENTED)
-2. ✅ DLQ S3 archival (IMPLEMENTED)
+2. ⚠️ DLQ S3 archival (DEFERRED - post-production enhancement, see TD-012)
 3. ✅ Twitter quota auto-throttling (IMPLEMENTED)
 4. ✅ EventBridge rule monitoring (IMPLEMENTED)
 5. ✅ Deployment circuit breakers (IMPLEMENTED)
