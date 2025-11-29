@@ -377,6 +377,11 @@ def pytest_configure(config):
         "markers",
         "preprod: mark test as preprod-only (requires AWS credentials)",
     )
+    config.addinivalue_line(
+        "markers",
+        "integration_optional: mark test as requiring specific preprod resources "
+        "(may skip if resource not available)",
+    )
 
 
 # =============================================================================
@@ -606,3 +611,109 @@ async def cleanup_test_data(test_run_id: str) -> AsyncGenerator[None, None]:
     # Log summary for debugging
     print(f"\nTest run {test_run_id} completed.")
     print("Data preserved for debugging. Will expire automatically via TTL.")
+
+
+# =============================================================================
+# Test Metrics Tracking (US5 - Skip Rate Monitoring)
+# =============================================================================
+
+
+@dataclass
+class TestMetrics:
+    """Track test execution metrics for skip rate analysis.
+
+    Collects statistics during test run for reporting:
+    - Total tests executed
+    - Tests passed
+    - Tests failed
+    - Tests skipped (with categorization)
+
+    Target: Skip rate below 15% (SC-003)
+    """
+
+    total: int = 0
+    passed: int = 0
+    failed: int = 0
+    skipped: int = 0
+    skip_reasons: dict = None  # Categorized skip reasons
+
+    def __post_init__(self):
+        """Initialize skip_reasons dict."""
+        if self.skip_reasons is None:
+            self.skip_reasons = {}
+
+    @property
+    def skip_rate(self) -> float:
+        """Calculate skip rate as percentage."""
+        if self.total == 0:
+            return 0.0
+        return (self.skipped / self.total) * 100
+
+    @property
+    def is_within_threshold(self) -> bool:
+        """Check if skip rate is below 15% threshold."""
+        return self.skip_rate < 15.0
+
+    def record_skip(self, reason: str) -> None:
+        """Record a skip with categorized reason."""
+        self.skipped += 1
+        self.total += 1
+        # Categorize by common patterns
+        if "not implemented" in reason.lower():
+            category = "endpoint_not_implemented"
+        elif "500" in reason or "api issue" in reason.lower():
+            category = "api_error"
+        elif "not available" in reason.lower():
+            category = "resource_unavailable"
+        elif "access" in reason.lower():
+            category = "access_denied"
+        else:
+            category = "other"
+        self.skip_reasons[category] = self.skip_reasons.get(category, 0) + 1
+
+    def summary(self) -> str:
+        """Generate human-readable summary."""
+        lines = [
+            "Test Metrics Summary:",
+            f"  Total: {self.total}",
+            f"  Passed: {self.passed}",
+            f"  Failed: {self.failed}",
+            f"  Skipped: {self.skipped} ({self.skip_rate:.1f}%)",
+            f"  Skip rate threshold: {'✅ PASS' if self.is_within_threshold else '❌ FAIL'} (<15%)",
+        ]
+        if self.skip_reasons:
+            lines.append("  Skip reasons:")
+            for reason, count in sorted(self.skip_reasons.items(), key=lambda x: -x[1]):
+                lines.append(f"    - {reason}: {count}")
+        return "\n".join(lines)
+
+
+# Global metrics instance for session-wide tracking
+_test_metrics = TestMetrics()
+
+
+def get_test_metrics() -> TestMetrics:
+    """Get the global test metrics instance."""
+    return _test_metrics
+
+
+def pytest_runtest_makereport(item, call):
+    """Hook to track test results for metrics."""
+    if call.when == "call":
+        _test_metrics.total += 1
+        if call.excinfo is None:
+            _test_metrics.passed += 1
+        elif call.excinfo.typename == "Skipped":
+            # Skipped is already counted via record_skip or here
+            reason = str(call.excinfo.value) if call.excinfo.value else "unknown"
+            if _test_metrics.skipped < _test_metrics.total:
+                # Only record if not already recorded via SkipInfo
+                _test_metrics.record_skip(reason)
+        else:
+            _test_metrics.failed += 1
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Hook to print metrics summary at end of session."""
+    if _test_metrics.total > 0:
+        print(f"\n{_test_metrics.summary()}")
