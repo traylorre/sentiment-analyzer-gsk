@@ -36,13 +36,15 @@ class User(BaseModel):
         return "PROFILE"
 
     def to_dynamodb_item(self) -> dict:
-        """Convert to DynamoDB item format."""
-        return {
+        """Convert to DynamoDB item format.
+
+        Note: email and cognito_sub are excluded when None because they are
+        GSI key attributes, and DynamoDB GSI keys cannot be NULL type.
+        """
+        item = {
             "PK": self.pk,
             "SK": self.sk,
             "user_id": self.user_id,
-            "email": self.email,
-            "cognito_sub": self.cognito_sub,
             "auth_type": self.auth_type,
             "created_at": self.created_at.isoformat(),
             "last_active_at": self.last_active_at.isoformat(),
@@ -52,6 +54,13 @@ class User(BaseModel):
             "daily_email_count": self.daily_email_count,
             "entity_type": "USER",
         }
+        # Only include GSI key attributes if they have values
+        # DynamoDB GSI keys cannot be NULL type
+        if self.email is not None:
+            item["email"] = self.email
+        if self.cognito_sub is not None:
+            item["cognito_sub"] = self.cognito_sub
+        return item
 
     @classmethod
     def from_dynamodb_item(cls, item: dict) -> "User":
