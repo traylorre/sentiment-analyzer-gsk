@@ -18,6 +18,7 @@ from typing import Any
 
 from aws_xray_sdk.core import patch_all, xray_recorder
 
+from src.lambdas.notification.digest_service import process_daily_digests
 from src.lambdas.notification.sendgrid_service import (
     EmailService,
     EmailServiceError,
@@ -205,21 +206,42 @@ def _handle_magic_link(event: dict[str, Any]) -> dict[str, Any]:
 def _handle_daily_digest(event: dict[str, Any]) -> dict[str, Any]:
     """Handle daily digest email generation.
 
+    Processes all users due for digest based on their timezone and
+    configured delivery time. Sends personalized sentiment summaries.
+
     Args:
         event: EventBridge scheduled event
 
     Returns:
-        Response dict
+        Response dict with processing stats
     """
-    # TODO: Implement daily digest logic
-    # 1. Query users with digest enabled at current time
-    # 2. For each user, fetch their configurations
-    # 3. Get sentiment/volatility data for their tickers
-    # 4. Generate personalized digest email
-    # 5. Send via SendGrid
+    import boto3
 
-    logger.info("Daily digest handler invoked - not yet implemented")
-    return _response(200, {"message": "Digest scheduled", "implemented": False})
+    logger.info("Daily digest handler invoked")
+
+    # Get DynamoDB table
+    dynamodb = boto3.resource("dynamodb")
+    table = dynamodb.Table(DYNAMODB_TABLE)
+
+    # Get email service
+    email_service = _get_email_service()
+
+    # Process digests
+    stats = process_daily_digests(
+        table=table,
+        email_service=email_service,
+        dashboard_url=DASHBOARD_URL,
+    )
+
+    logger.info("Daily digest processing complete", extra=stats)
+
+    return _response(
+        200,
+        {
+            "message": "Digest processing complete",
+            "stats": stats,
+        },
+    )
 
 
 def _get_email_service() -> EmailService:
