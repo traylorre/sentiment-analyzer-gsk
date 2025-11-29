@@ -6,7 +6,9 @@ and computes expected values, so tests can assert actual == expected.
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any, Literal
+
+# Import for type hints (avoid circular import with TYPE_CHECKING)
+from typing import TYPE_CHECKING, Any, Literal
 
 from src.lambdas.shared.adapters.base import NewsArticle, OHLCCandle, SentimentData
 from src.lambdas.shared.volatility import (
@@ -26,6 +28,9 @@ from tests.fixtures.synthetic.ticker_generator import (
     TickerGenerator,
     create_ticker_generator,
 )
+
+if TYPE_CHECKING:
+    from tests.fixtures.synthetic.config_generator import SyntheticConfiguration
 
 
 @dataclass
@@ -333,6 +338,202 @@ class SyntheticTestOracle:
             distribution[sentiment] += 1
 
         return distribution
+
+    def compute_expected_api_sentiment(
+        self,
+        config: "SyntheticConfiguration",
+        news_articles: list[NewsArticle],
+    ) -> OracleExpectation:
+        """Compute expected sentiment as returned by API.
+
+        Uses weighted averaging across tickers, matching the production
+        sentiment calculation pipeline.
+
+        Args:
+            config: Configuration with ticker weights
+            news_articles: News articles to compute sentiment from
+
+        Returns:
+            OracleExpectation with expected sentiment score
+        """
+        if not news_articles:
+            return OracleExpectation(
+                metric_name="sentiment_score",
+                expected_value=0.0,
+                tolerance=0.01,
+                metadata={"reason": "no_articles", "article_count": 0},
+            )
+
+        # Group articles by ticker and compute average sentiment per ticker
+        ticker_sentiments: dict[str, list[float]] = {}
+        for article in news_articles:
+            for ticker in article.tickers:
+                if ticker not in ticker_sentiments:
+                    ticker_sentiments[ticker] = []
+                # Use embedded sentiment if available, otherwise estimate from content
+                sentiment = getattr(article, "sentiment_score", None)
+                if sentiment is None:
+                    # Fallback: estimate from article properties
+                    sentiment = self._estimate_article_sentiment(article)
+                ticker_sentiments[ticker].append(sentiment)
+
+        # Build ticker weight map from config
+        ticker_weights = {t.symbol: t.weight for t in config.tickers}
+
+        # Compute weighted average
+        total_weight = 0.0
+        weighted_sum = 0.0
+
+        for ticker, sentiments in ticker_sentiments.items():
+            if ticker in ticker_weights and sentiments:
+                avg_sentiment = sum(sentiments) / len(sentiments)
+                weight = ticker_weights[ticker]
+                weighted_sum += avg_sentiment * weight
+                total_weight += weight
+
+        if total_weight == 0:
+            expected_score = 0.0
+        else:
+            expected_score = weighted_sum / total_weight
+
+        # Clamp to valid range
+        expected_score = max(-1.0, min(1.0, expected_score))
+
+        return OracleExpectation(
+            metric_name="sentiment_score",
+            expected_value=expected_score,
+            tolerance=0.01,
+            metadata={
+                "ticker_count": len(ticker_sentiments),
+                "article_count": len(news_articles),
+                "weighted": total_weight > 0,
+            },
+        )
+
+    def _estimate_article_sentiment(self, article: NewsArticle) -> float:
+        """Estimate sentiment from article properties.
+
+        Used as fallback when sentiment_score is not embedded.
+
+        Args:
+            article: NewsArticle to estimate sentiment for
+
+        Returns:
+            Estimated sentiment score in [-1.0, 1.0]
+        """
+        # Check for embedded expected sentiment (from synthetic generator)
+        if hasattr(article, "_expected_sentiment"):
+            return article._expected_sentiment
+
+        # Simple heuristic based on title keywords
+        title_lower = article.title.lower()
+        positive_words = ["surge", "gain", "rise", "profit", "growth", "beat"]
+        negative_words = ["fall", "drop", "loss", "miss", "decline", "crash"]
+
+        positive_count = sum(1 for word in positive_words if word in title_lower)
+        negative_count = sum(1 for word in negative_words if word in title_lower)
+
+        if positive_count > negative_count:
+            return 0.3  # Mild positive
+        elif negative_count > positive_count:
+            return -0.3  # Mild negative
+        else:
+            return 0.0  # Neutral
+
+    def validate_api_response(
+        self,
+        response: dict[str, Any],
+        expected: OracleExpectation,
+        tolerance: float | None = None,
+    ) -> ValidationResult:
+        """Validate API response against oracle expectation.
+
+        Args:
+            response: Parsed JSON response from API
+            expected: Oracle-computed expectation
+            tolerance: Optional override for tolerance (default uses expectation's)
+
+        Returns:
+            ValidationResult with validation outcome
+        """
+        if tolerance is not None:
+            # Create new expectation with overridden tolerance
+            expected = OracleExpectation(
+                metric_name=expected.metric_name,
+                expected_value=expected.expected_value,
+                tolerance=tolerance,
+                metadata=expected.metadata,
+            )
+
+        # Extract actual sentiment from response
+        actual_value = self._extract_sentiment_from_response(response)
+
+        if actual_value is None:
+            return ValidationResult(
+                expectation=expected,
+                actual_value=0.0,
+                passed=False,
+                difference=abs(expected.expected_value),
+                message=(
+                    f"Could not extract {expected.metric_name} from API response. "
+                    f"Response keys: {list(response.keys()) if response else 'empty'}"
+                ),
+            )
+
+        return ValidationResult.from_comparison(expected, actual_value)
+
+    def _extract_sentiment_from_response(
+        self, response: dict[str, Any]
+    ) -> float | None:
+        """Extract sentiment score from API response.
+
+        Handles various response formats.
+
+        Args:
+            response: Parsed JSON response
+
+        Returns:
+            Sentiment score or None if not found
+        """
+        if not response:
+            return None
+
+        # Direct sentiment_score field
+        if "sentiment_score" in response:
+            return float(response["sentiment_score"])
+
+        # Nested in 'data' field
+        if "data" in response and isinstance(response["data"], dict):
+            if "sentiment_score" in response["data"]:
+                return float(response["data"]["sentiment_score"])
+
+        # List of sentiments - average them
+        if "sentiments" in response and isinstance(response["sentiments"], list):
+            scores = [
+                s.get("score", s.get("sentiment_score"))
+                for s in response["sentiments"]
+                if isinstance(s, dict)
+            ]
+            valid_scores = [s for s in scores if s is not None]
+            if valid_scores:
+                return sum(valid_scores) / len(valid_scores)
+
+        # Single ticker result
+        if isinstance(response, list) and response:
+            first = response[0]
+            if isinstance(first, dict):
+                score = first.get("sentiment_score") or first.get("score")
+                if score is not None:
+                    return float(score)
+
+        # Aggregate score field
+        if "aggregate_score" in response:
+            return float(response["aggregate_score"])
+
+        if "average_sentiment" in response:
+            return float(response["average_sentiment"])
+
+        return None
 
     def generate_test_scenario(
         self,

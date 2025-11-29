@@ -556,6 +556,165 @@ class TestConfigGenerator:
         assert all("symbol" in t and "weight" in t for t in payload["tickers"])
 
 
+class TestOracleApiSentiment:
+    """Tests for oracle API sentiment computation and validation."""
+
+    def test_compute_expected_api_sentiment_empty_articles(self):
+        """Test sentiment computation with no articles."""
+        oracle = create_test_oracle(seed=42)
+        config = create_config_generator(seed=42).generate_config("test-run")
+
+        result = oracle.compute_expected_api_sentiment(config, [])
+
+        assert result.expected_value == 0.0
+        assert result.metadata["article_count"] == 0
+        assert result.metadata["reason"] == "no_articles"
+
+    def test_compute_expected_api_sentiment_with_articles(self):
+        """Test sentiment computation with articles."""
+        oracle = create_test_oracle(seed=42)
+        config = create_config_generator(seed=42).generate_config("test-run")
+
+        # Generate synthetic news
+        from tests.fixtures.synthetic.news_generator import create_news_generator
+
+        news_gen = create_news_generator(seed=42)
+        tickers = [t.symbol for t in config.tickers]
+        articles = news_gen.generate_articles(tickers, count=10, days_back=7)
+
+        result = oracle.compute_expected_api_sentiment(config, articles)
+
+        assert isinstance(result, OracleExpectation)
+        assert result.metric_name == "sentiment_score"
+        assert -1.0 <= result.expected_value <= 1.0
+        assert result.tolerance == 0.01
+        assert result.metadata["article_count"] == 10
+
+    def test_compute_expected_api_sentiment_deterministic(self):
+        """Test that same inputs produce same output."""
+        oracle1 = create_test_oracle(seed=42)
+        oracle2 = create_test_oracle(seed=42)
+
+        config1 = create_config_generator(seed=42).generate_config("test-run")
+        config2 = create_config_generator(seed=42).generate_config("test-run")
+
+        from tests.fixtures.synthetic.news_generator import create_news_generator
+
+        news1 = create_news_generator(seed=42).generate_articles(
+            [t.symbol for t in config1.tickers], 10
+        )
+        news2 = create_news_generator(seed=42).generate_articles(
+            [t.symbol for t in config2.tickers], 10
+        )
+
+        result1 = oracle1.compute_expected_api_sentiment(config1, news1)
+        result2 = oracle2.compute_expected_api_sentiment(config2, news2)
+
+        assert result1.expected_value == result2.expected_value
+
+    def test_validate_api_response_passing(self):
+        """Test validation when response matches expectation."""
+        oracle = create_test_oracle()
+
+        expectation = OracleExpectation(
+            metric_name="sentiment_score",
+            expected_value=0.5,
+            tolerance=0.01,
+        )
+
+        response = {"sentiment_score": 0.505}
+        result = oracle.validate_api_response(response, expectation)
+
+        assert result.passed is True
+        assert "matches" in result.message
+
+    def test_validate_api_response_failing(self):
+        """Test validation when response differs from expectation."""
+        oracle = create_test_oracle()
+
+        expectation = OracleExpectation(
+            metric_name="sentiment_score",
+            expected_value=0.5,
+            tolerance=0.01,
+        )
+
+        response = {"sentiment_score": 0.7}
+        result = oracle.validate_api_response(response, expectation)
+
+        assert result.passed is False
+        assert "differs" in result.message
+
+    def test_validate_api_response_missing_field(self):
+        """Test validation when response missing sentiment."""
+        oracle = create_test_oracle()
+
+        expectation = OracleExpectation(
+            metric_name="sentiment_score",
+            expected_value=0.5,
+        )
+
+        response = {"other_field": "value"}
+        result = oracle.validate_api_response(response, expectation)
+
+        assert result.passed is False
+        assert "Could not extract" in result.message
+
+    def test_validate_api_response_tolerance_override(self):
+        """Test that tolerance can be overridden."""
+        oracle = create_test_oracle()
+
+        expectation = OracleExpectation(
+            metric_name="sentiment_score",
+            expected_value=0.5,
+            tolerance=0.01,  # Default tight tolerance
+        )
+
+        # This would fail with 0.01 tolerance but pass with 0.1
+        response = {"sentiment_score": 0.55}
+
+        # Fail with default tolerance
+        result1 = oracle.validate_api_response(response, expectation)
+        assert result1.passed is False
+
+        # Pass with relaxed tolerance
+        result2 = oracle.validate_api_response(response, expectation, tolerance=0.1)
+        assert result2.passed is True
+
+    def test_extract_sentiment_nested_data(self):
+        """Test extraction from nested response format."""
+        oracle = create_test_oracle()
+
+        response = {"data": {"sentiment_score": 0.75}}
+
+        expectation = OracleExpectation(
+            metric_name="sentiment_score",
+            expected_value=0.75,
+        )
+
+        result = oracle.validate_api_response(response, expectation)
+        assert result.passed is True
+
+    def test_extract_sentiment_sentiments_list(self):
+        """Test extraction from list of sentiments."""
+        oracle = create_test_oracle()
+
+        response = {
+            "sentiments": [
+                {"score": 0.4},
+                {"score": 0.6},
+            ]
+        }
+
+        # Average is 0.5
+        expectation = OracleExpectation(
+            metric_name="sentiment_score",
+            expected_value=0.5,
+        )
+
+        result = oracle.validate_api_response(response, expectation)
+        assert result.passed is True
+
+
 class TestOracleExpectation:
     """Tests for OracleExpectation dataclass."""
 
