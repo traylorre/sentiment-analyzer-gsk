@@ -43,7 +43,9 @@ from tests.e2e.fixtures.finnhub import SyntheticFinnhubHandler
 from tests.e2e.fixtures.sendgrid import SyntheticSendGridHandler
 from tests.e2e.fixtures.tiingo import SyntheticTiingoHandler
 from tests.e2e.helpers.api_client import PreprodAPIClient
-from tests.e2e.helpers.cleanup import cleanup_by_prefix
+
+# Note: cleanup_by_prefix is available for manual cleanup if needed:
+# from tests.e2e.helpers.cleanup import cleanup_by_prefix
 
 # Default test seed for reproducibility
 DEFAULT_TEST_SEED = 42
@@ -402,21 +404,49 @@ def synthetic_data(
     }
 
 
+# TTL-based cleanup configuration (7 days)
+# Test data is NOT auto-deleted. Instead, all test data items include a TTL
+# attribute set to 7 days in the future. DynamoDB automatically removes
+# expired items via TTL. This allows:
+# - Re-using test data for debugging
+# - Avoiding cleanup failures during tests
+# - Automatic garbage collection after 7 days
+
+E2E_TEST_TTL_DAYS = 7  # TTL for E2E test data (7 days)
+
+
+def calculate_ttl_timestamp(days: int = E2E_TEST_TTL_DAYS) -> int:
+    """Calculate TTL timestamp for test data.
+
+    Args:
+        days: Number of days until expiration (default: 7)
+
+    Returns:
+        Unix timestamp for TTL attribute
+    """
+    from datetime import UTC, datetime, timedelta
+
+    return int((datetime.now(UTC) + timedelta(days=days)).timestamp())
+
+
 @pytest_asyncio.fixture(scope="session", autouse=True)
 async def cleanup_test_data(test_run_id: str) -> AsyncGenerator[None, None]:
-    """Cleanup all test data after test session completes.
+    """Log test run ID for reference (no auto-cleanup).
 
-    This fixture runs automatically (autouse=True) and deletes all
-    DynamoDB items with keys containing the test run ID.
+    Test data uses TTL-based expiration (7 days) instead of immediate cleanup.
+    This fixture logs the test run ID for debugging and artifact inspection.
+
+    To manually cleanup if needed:
+        from tests.e2e.helpers.cleanup import cleanup_by_prefix
+        await cleanup_by_prefix("e2e-XXXXXXXX")
     """
+    print(f"\nE2E Test Run ID: {test_run_id}")
+    print(f"Test data will auto-expire in {E2E_TEST_TTL_DAYS} days via DynamoDB TTL")
+
     # Setup: nothing to do
     yield
 
-    # Teardown: cleanup all test data
-    try:
-        deleted = await cleanup_by_prefix(test_run_id)
-        if deleted > 0:
-            print(f"\nCleaned up {deleted} test items with prefix: {test_run_id}")
-    except Exception as e:
-        # Log but don't fail tests on cleanup errors
-        print(f"\nWarning: Cleanup failed for {test_run_id}: {e}")
+    # Teardown: No cleanup - TTL handles expiration
+    # Log summary for debugging
+    print(f"\nTest run {test_run_id} completed.")
+    print("Data preserved for debugging. Will expire automatically via TTL.")
