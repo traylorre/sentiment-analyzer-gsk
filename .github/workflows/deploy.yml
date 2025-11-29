@@ -833,6 +833,8 @@ jobs:
           # Required for canary tests (test_canary_preprod.py)
           PREPROD_DASHBOARD_URL: ${{ needs.deploy-preprod.outputs.dashboard_url }}
           PREPROD_DASHBOARD_API_KEY: ${{ secrets.DASHBOARD_API_KEY }}
+          # Required for E2E tests (tests/e2e/helpers/api_client.py uses PREPROD_API_URL)
+          PREPROD_API_URL: ${{ needs.deploy-preprod.outputs.dashboard_url }}
           # Required for E2E Lambda invocation tests (test_e2e_lambda_invocation_preprod.py)
           DASHBOARD_FUNCTION_URL: ${{ needs.deploy-preprod.outputs.dashboard_url }}
         id: integration-tests
