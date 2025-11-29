@@ -739,6 +739,101 @@ Add a step to the deploy workflow to ensure policy is current:
       --policy-document file:///tmp/policy.json
 ```
 
+### 8b. Detect Lambda Execution Role Permission Gaps
+
+**This check identifies when Lambda functions lack required DynamoDB permissions, particularly `DescribeTable` which is needed for health checks.**
+
+Lambda functions often need `dynamodb:DescribeTable` permission to validate table connectivity during health checks. This permission is frequently forgotten because:
+1. It's not required for normal CRUD operations (GetItem, PutItem, Query, etc.)
+2. Health checks call `table.table_status` which requires `DescribeTable`
+3. The error manifests as "unhealthy" status, not an explicit IAM error
+
+#### Step 1: Find Lambda IAM Role Policies with DynamoDB Access
+
+```bash
+# Find all Lambda role policies that grant DynamoDB access
+grep -rn "dynamodb:" infrastructure/terraform/modules/iam/*.tf | grep -v "DescribeTable"
+```
+
+This shows policies that have DynamoDB actions but may be missing DescribeTable.
+
+#### Step 2: Check for Health Check Patterns in Lambda Code
+
+```bash
+# Find Lambda handlers that call table.table_status (requires DescribeTable)
+grep -rn "table_status\|describe_table\|DescribeTable" src/lambdas/
+```
+
+#### Step 3: Cross-Reference Policy vs Usage
+
+For each Lambda function that uses `table_status` or similar:
+1. Identify which DynamoDB table(s) it accesses (check env vars like `DATABASE_TABLE`, `DYNAMODB_TABLE`)
+2. Find the IAM policy that grants access to that table
+3. Verify `dynamodb:DescribeTable` is included
+
+**Common missing permission pattern:**
+```hcl
+# INCORRECT - Missing DescribeTable (health check will fail)
+Action = [
+  "dynamodb:GetItem",
+  "dynamodb:PutItem",
+  "dynamodb:UpdateItem",
+  "dynamodb:DeleteItem",
+  "dynamodb:Query"
+]
+
+# CORRECT - Includes DescribeTable for health checks
+Action = [
+  "dynamodb:GetItem",
+  "dynamodb:PutItem",
+  "dynamodb:UpdateItem",
+  "dynamodb:DeleteItem",
+  "dynamodb:Query",
+  "dynamodb:DescribeTable"  # Required for table.table_status
+]
+```
+
+#### Step 4: Check CloudWatch Logs for Permission Errors
+
+```bash
+# Check for DynamoDB permission errors in Lambda logs
+aws logs filter-log-events \
+  --log-group-name "/aws/lambda/preprod-dashboard" \
+  --filter-pattern "AccessDeniedException dynamodb" \
+  --limit 10
+
+# Check for unhealthy status responses
+aws logs filter-log-events \
+  --log-group-name "/aws/lambda/preprod-dashboard" \
+  --filter-pattern '"unhealthy"' \
+  --limit 10
+```
+
+#### Error Signatures
+
+**Health check failure due to missing DescribeTable:**
+```json
+{"status": "unhealthy", "error": "An error occurred processing your request", "table": "preprod-sentiment-users"}
+```
+
+**CloudWatch log entry:**
+```
+AccessDeniedException: User: arn:aws:sts::ACCOUNT:assumed-role/LAMBDA-ROLE/FUNCTION
+is not authorized to perform: dynamodb:DescribeTable on resource: TABLE-ARN
+```
+
+#### Step 5: Generate Fix
+
+When DescribeTable is missing from a Lambda role policy:
+
+```hcl
+# Add to the Lambda role policy statement
+Action = [
+  # ... existing actions ...
+  "dynamodb:DescribeTable"  # Required for health check validation
+]
+```
+
 ### 9. Validate Fix
 
 After applying the fix, provide verification commands:
