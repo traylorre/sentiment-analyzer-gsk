@@ -434,6 +434,8 @@ async def get_configuration(
         user_id=user_id,
         config_id=config_id,
     )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Configuration not found")
     if isinstance(result, config_service.ErrorResponse):
         raise HTTPException(status_code=404, detail=result.error.message)
     return JSONResponse(result.model_dump())
@@ -456,6 +458,8 @@ async def update_configuration(
         request=body,
         ticker_cache=ticker_cache,
     )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Configuration not found")
     if isinstance(result, config_service.ErrorResponse):
         raise HTTPException(status_code=400, detail=result.error.message)
     return JSONResponse(result.model_dump())
@@ -474,8 +478,9 @@ async def delete_configuration(
         user_id=user_id,
         config_id=config_id,
     )
-    if isinstance(result, config_service.ErrorResponse):
-        raise HTTPException(status_code=404, detail=result.error.message)
+    # delete_configuration returns bool: True if deleted, False if not found
+    if not result:
+        raise HTTPException(status_code=404, detail="Configuration not found")
     return JSONResponse({"message": "Configuration deleted"})
 
 
