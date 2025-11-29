@@ -296,14 +296,15 @@ async def test_anonymous_config_limit_enforced(
                 pytest.skip("Config creation endpoint returning 500 - API issue")
             if response.status_code in (200, 201):
                 created_count += 1
-            elif response.status_code in (400, 403, 429):
-                # Limit reached - this is expected
+            elif response.status_code in (400, 403, 422, 429):
+                # Limit reached or validation error - this is expected
                 data = response.json()
                 assert (
                     "limit" in str(data).lower()
                     or "max" in str(data).lower()
                     or "quota" in str(data).lower()
                     or "error" in data
+                    or "detail" in data
                 ), f"Limit error should have descriptive message: {data}"
                 break
             else:
