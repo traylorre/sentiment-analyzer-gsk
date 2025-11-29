@@ -36,9 +36,9 @@ Search for and analyze:
 - Terraform backend configuration (state bucket access)
 
 Extract:
-- **IAM User Names**: The actual usernames used in each environment (dev, preprod, prod)
+- **IAM User Names**: The actual usernames used in each environment (preprod, prod)
 - **AWS Region**: Default region for resources
-- **Environments**: List of deployment environments
+- **Environments**: List of deployment environments (preprod, prod)
 
 ### 2. Identify All IAM Users
 
@@ -64,7 +64,7 @@ Create a table of all IAM users:
 | Environment | IAM User Name | Source File | Policy Attachment Method |
 |-------------|---------------|-------------|--------------------------|
 
-Flag any naming inconsistencies (e.g., `dev-deployer` vs `preprod-ci`).
+Flag any naming inconsistencies (e.g., `preprod-deployer` vs `prod-ci`).
 
 ### 3. Catalog All Terraform Resources
 
@@ -469,16 +469,16 @@ cd infrastructure/terraform
 terraform init
 
 # Apply ONLY the policy resources (not the attachments)
-terraform apply -var="environment=dev" \
+terraform apply -var="environment=preprod" \
   -target=aws_iam_policy.ci_deploy_core \
   -target=aws_iam_policy.ci_deploy_monitoring \
   -target=aws_iam_policy.ci_deploy_storage
 
 # Then apply the attachments
-terraform apply -var="environment=dev" \
-  -target=aws_iam_user_policy_attachment.ci_deploy_core_dev \
-  -target=aws_iam_user_policy_attachment.ci_deploy_monitoring_dev \
-  -target=aws_iam_user_policy_attachment.ci_deploy_storage_dev
+terraform apply -var="environment=preprod" \
+  -target=aws_iam_user_policy_attachment.ci_deploy_core_preprod \
+  -target=aws_iam_user_policy_attachment.ci_deploy_monitoring_preprod \
+  -target=aws_iam_user_policy_attachment.ci_deploy_storage_preprod
 ```
 
 #### Checklist: Preventing Future Chicken-and-Egg Problems
@@ -515,7 +515,7 @@ Output a structured report:
 ### Critical Issues
 1. [CRITICAL] Chicken-and-egg: Policy manages CI user but lacks self-management permissions
 2. [CRITICAL] Policy not attached - document exists but never applied
-3. [CRITICAL] User name mismatch - `dev-deployer` vs `preprod-ci`
+3. [CRITICAL] User name mismatch - `preprod-deployer` vs `prod-ci`
 4. [CRITICAL] Missing service-linked role permissions (iam:CreateServiceLinkedRole) for services like RUM, Cognito, etc.
 ...
 
@@ -547,9 +547,15 @@ Based on findings, provide ONE of these fix options:
 Add `aws_iam_user_policy` resources to automatically attach the policy:
 
 ```hcl
-resource "aws_iam_user_policy" "ci_deploy_dev" {
+resource "aws_iam_user_policy" "ci_deploy_preprod" {
   name   = "TerraformDeployPolicy"
-  user   = "sentiment-analyzer-dev-deployer"
+  user   = "sentiment-analyzer-preprod-deployer"
+  policy = data.aws_iam_policy_document.ci_deploy.json
+}
+
+resource "aws_iam_user_policy" "ci_deploy_prod" {
+  name   = "TerraformDeployPolicy"
+  user   = "sentiment-analyzer-prod-deployer"
   policy = data.aws_iam_policy_document.ci_deploy.json
 }
 ```
@@ -559,15 +565,21 @@ resource "aws_iam_user_policy" "ci_deploy_dev" {
 Provide exact commands for each user:
 
 ```bash
-# For dev environment
+# For preprod environment
 aws iam put-user-policy \
-  --user-name sentiment-analyzer-dev-deployer \
+  --user-name sentiment-analyzer-preprod-deployer \
+  --policy-name TerraformDeployPolicy \
+  --policy-document file://ci-policy.json
+
+# For prod environment
+aws iam put-user-policy \
+  --user-name sentiment-analyzer-prod-deployer \
   --policy-name TerraformDeployPolicy \
   --policy-document file://ci-policy.json
 
 # Verify attachment
 aws iam get-user-policy \
-  --user-name sentiment-analyzer-dev-deployer \
+  --user-name sentiment-analyzer-preprod-deployer \
   --policy-name TerraformDeployPolicy
 ```
 
