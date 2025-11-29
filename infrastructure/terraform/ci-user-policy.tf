@@ -2,7 +2,6 @@
 # ======================================================
 #
 # This file defines and ATTACHES IAM policies to CI deployer users:
-# - sentiment-analyzer-dev-deployer (dev environment)
 # - sentiment-analyzer-preprod-deployer (preprod environment)
 # - sentiment-analyzer-prod-deployer (prod environment)
 #
@@ -17,17 +16,14 @@
 # For FIRST-TIME SETUP, an admin must manually apply these policies:
 #   cd infrastructure/terraform
 #   terraform init
-#   terraform apply -var="environment=dev" -var="aws_region=us-east-1" \
+#   terraform apply -var="environment=preprod" -var="aws_region=us-east-1" \
 #     -target=aws_iam_policy.ci_deploy_core \
 #     -target=aws_iam_policy.ci_deploy_monitoring \
 #     -target=aws_iam_policy.ci_deploy_storage \
-#     -target=aws_iam_user_policy_attachment.ci_deploy_core_dev \
 #     -target=aws_iam_user_policy_attachment.ci_deploy_core_preprod \
 #     -target=aws_iam_user_policy_attachment.ci_deploy_core_prod \
-#     -target=aws_iam_user_policy_attachment.ci_deploy_monitoring_dev \
 #     -target=aws_iam_user_policy_attachment.ci_deploy_monitoring_preprod \
 #     -target=aws_iam_user_policy_attachment.ci_deploy_monitoring_prod \
-#     -target=aws_iam_user_policy_attachment.ci_deploy_storage_dev \
 #     -target=aws_iam_user_policy_attachment.ci_deploy_storage_preprod \
 #     -target=aws_iam_user_policy_attachment.ci_deploy_storage_prod
 
@@ -654,25 +650,6 @@ resource "aws_iam_policy" "ci_deploy_storage" {
 }
 
 # ==================================================================
-# Policy Attachments - Dev Deployer
-# ==================================================================
-
-resource "aws_iam_user_policy_attachment" "ci_deploy_core_dev" {
-  user       = "sentiment-analyzer-dev-deployer"
-  policy_arn = aws_iam_policy.ci_deploy_core.arn
-}
-
-resource "aws_iam_user_policy_attachment" "ci_deploy_monitoring_dev" {
-  user       = "sentiment-analyzer-dev-deployer"
-  policy_arn = aws_iam_policy.ci_deploy_monitoring.arn
-}
-
-resource "aws_iam_user_policy_attachment" "ci_deploy_storage_dev" {
-  user       = "sentiment-analyzer-dev-deployer"
-  policy_arn = aws_iam_policy.ci_deploy_storage.arn
-}
-
-# ==================================================================
 # Policy Attachments - Preprod Deployer
 # ==================================================================
 
@@ -726,7 +703,6 @@ output "ci_policy_arns" {
 output "ci_policy_attached_users" {
   description = "List of IAM users with CI deployment policies attached"
   value = [
-    "sentiment-analyzer-dev-deployer",
     "sentiment-analyzer-preprod-deployer",
     "sentiment-analyzer-prod-deployer"
   ]
