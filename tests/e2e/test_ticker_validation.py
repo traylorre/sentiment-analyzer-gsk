@@ -109,7 +109,7 @@ async def test_invalid_ticker_returns_invalid(
     elif response.status_code == 400:
         # Bad request for invalid ticker is acceptable
         data = response.json()
-        assert "error" in data or "message" in data
+        assert "error" in data or "message" in data or "detail" in data
     elif response.status_code == 200:
         # Some APIs return 200 with is_valid=false
         data = response.json()

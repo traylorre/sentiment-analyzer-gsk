@@ -74,10 +74,16 @@ class PreprodAPIClient:
     def _build_headers(
         self, extra_headers: dict[str, str] | None = None
     ) -> dict[str, str]:
-        """Build request headers including auth if set."""
+        """Build request headers including auth if set.
+
+        The API v2 router uses X-User-ID header for user identification,
+        not Authorization: Bearer. The access_token is the user_id returned
+        from the anonymous session creation endpoint.
+        """
         headers: dict[str, str] = {}
         if self._access_token:
-            headers["Authorization"] = f"Bearer {self._access_token}"
+            # API v2 uses X-User-ID header for authentication
+            headers["X-User-ID"] = self._access_token
         if extra_headers:
             headers.update(extra_headers)
         return headers

@@ -172,7 +172,9 @@ async def test_magic_link_invalid_token(api_client: PreprodAPIClient) -> None:
     ), f"Invalid token should be rejected: {response.status_code}"
 
     data = response.json()
-    assert "error" in data or "message" in data, "Error response missing message"
+    assert (
+        "error" in data or "message" in data or "detail" in data
+    ), "Error response missing message"
 
 
 @pytest.mark.asyncio

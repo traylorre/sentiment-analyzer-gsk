@@ -317,7 +317,10 @@ async def test_alert_max_limit_enforced(
                 # Limit reached
                 data = response.json()
                 assert (
-                    "error" in data or "message" in data or "limit" in str(data).lower()
+                    "error" in data
+                    or "message" in data
+                    or "detail" in data
+                    or "limit" in str(data).lower()
                 ), f"Limit error should have message: {data}"
                 break
         # If no limit hit, that's also acceptable
@@ -364,7 +367,7 @@ async def test_alert_anonymous_forbidden(
         if response.status_code == 403:
             data = response.json()
             # Should indicate authentication required
-            assert "error" in data or "message" in data
+            assert "error" in data or "message" in data or "detail" in data
         elif response.status_code in (200, 201):
             # Anonymous alerts allowed - that's fine too
             pass
