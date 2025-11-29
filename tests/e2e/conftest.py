@@ -8,9 +8,10 @@ Two fixture sets are available:
 2. Preprod fixtures (api_client, tiingo_handler, etc.) - for preprod E2E tests
 """
 
+import asyncio
 import os
 import uuid
-from collections.abc import AsyncGenerator, Generator
+from collections.abc import AsyncGenerator, Generator, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 
@@ -46,6 +47,20 @@ from tests.e2e.helpers.cleanup import cleanup_by_prefix
 
 # Default test seed for reproducibility
 DEFAULT_TEST_SEED = 42
+
+
+# Session-scoped event loop for async fixtures
+@pytest.fixture(scope="session")
+def event_loop() -> Iterator[asyncio.AbstractEventLoop]:
+    """Create a session-scoped event loop for async fixtures.
+
+    This is required for session-scoped async fixtures to work properly
+    with pytest-asyncio. Without this, async fixtures would fail with
+    ScopeMismatch errors.
+    """
+    loop = asyncio.new_event_loop()
+    yield loop
+    loop.close()
 
 
 @dataclass
