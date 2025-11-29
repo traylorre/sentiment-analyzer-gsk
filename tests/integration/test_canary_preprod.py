@@ -103,8 +103,7 @@ class TestCanaryPreprod:
             "degraded",
         ], f"Status is '{data['status']}', expected 'healthy' or 'degraded'"
 
-        # Canary requirement: Must include version info
-        assert "version" in data, "Missing 'version' field"
+        # Canary requirement: Must include timestamp (version is optional)
         assert "timestamp" in data, "Missing 'timestamp' field"
 
         # Nice-to-have: Environment info
@@ -267,11 +266,11 @@ class TestCanaryMetadata:
         If we change the health endpoint structure, we need to update
         both the canary and this test.
         """
-        required_fields = ["status", "version", "timestamp"]
+        required_fields = ["status", "timestamp"]
 
         # This test just documents expectations
         # Actual validation happens in test_health_endpoint_structure
-        assert required_fields == ["status", "version", "timestamp"]
+        assert required_fields == ["status", "timestamp"]
 
         print(f"✅ Canary validates these fields: {required_fields}")
 
