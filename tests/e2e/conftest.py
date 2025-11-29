@@ -43,9 +43,98 @@ from tests.e2e.fixtures.finnhub import SyntheticFinnhubHandler
 from tests.e2e.fixtures.sendgrid import SyntheticSendGridHandler
 from tests.e2e.fixtures.tiingo import SyntheticTiingoHandler
 from tests.e2e.helpers.api_client import PreprodAPIClient
+from tests.fixtures.synthetic.config_generator import (
+    ConfigGenerator,
+    SyntheticConfiguration,
+    create_config_generator,
+)
 
 # Note: cleanup_by_prefix is available for manual cleanup if needed:
 # from tests.e2e.helpers.cleanup import cleanup_by_prefix
+
+
+@dataclass
+class SkipInfo:
+    """Standardized skip message for E2E tests.
+
+    Provides structured information about why a test was skipped
+    and how to run it if desired.
+
+    Format: SKIPPED: {condition}
+            Reason: {reason}
+            To run: {remediation}
+    """
+
+    condition: str
+    reason: str
+    remediation: str
+
+    def __str__(self) -> str:
+        """Format as standardized skip message."""
+        return (
+            f"SKIPPED: {self.condition}\n"
+            f"Reason: {self.reason}\n"
+            f"To run: {self.remediation}"
+        )
+
+    def skip(self) -> None:
+        """Call pytest.skip with formatted message."""
+        pytest.skip(str(self))
+
+
+@dataclass
+class FailureInjectionConfig:
+    """Configuration for failure injection tests.
+
+    Controls which failure modes are active for testing error handling
+    paths in the processing layer.
+    """
+
+    tiingo_fail: bool = False
+    finnhub_fail: bool = False
+    sendgrid_fail: bool = False
+    tiingo_timeout: bool = False
+    finnhub_timeout: bool = False
+    tiingo_malformed: bool = False
+    finnhub_malformed: bool = False
+    sendgrid_rate_limit: bool = False
+
+    def has_any_failure(self) -> bool:
+        """Check if any failure mode is enabled."""
+        return any(
+            [
+                self.tiingo_fail,
+                self.finnhub_fail,
+                self.sendgrid_fail,
+                self.tiingo_timeout,
+                self.finnhub_timeout,
+                self.tiingo_malformed,
+                self.finnhub_malformed,
+                self.sendgrid_rate_limit,
+            ]
+        )
+
+    def describe(self) -> str:
+        """Return human-readable description of active failure modes."""
+        active = []
+        if self.tiingo_fail:
+            active.append("Tiingo API failure")
+        if self.finnhub_fail:
+            active.append("Finnhub API failure")
+        if self.sendgrid_fail:
+            active.append("SendGrid failure")
+        if self.tiingo_timeout:
+            active.append("Tiingo timeout")
+        if self.finnhub_timeout:
+            active.append("Finnhub timeout")
+        if self.tiingo_malformed:
+            active.append("Tiingo malformed response")
+        if self.finnhub_malformed:
+            active.append("Finnhub malformed response")
+        if self.sendgrid_rate_limit:
+            active.append("SendGrid rate limit")
+        return ", ".join(active) if active else "No failures configured"
+
 
 # Default test seed for reproducibility
 DEFAULT_TEST_SEED = 42
@@ -288,6 +377,11 @@ def pytest_configure(config):
         "markers",
         "preprod: mark test as preprod-only (requires AWS credentials)",
     )
+    config.addinivalue_line(
+        "markers",
+        "integration_optional: mark test as requiring specific preprod resources "
+        "(may skip if resource not available)",
+    )
 
 
 # =============================================================================
@@ -365,6 +459,45 @@ def finnhub_handler(synthetic_seed: int) -> SyntheticFinnhubHandler:
 def sendgrid_handler(synthetic_seed: int) -> SyntheticSendGridHandler:
     """Synthetic SendGrid handler for email testing."""
     return SyntheticSendGridHandler(seed=synthetic_seed)
+
+
+@pytest.fixture
+def config_generator(synthetic_seed: int) -> ConfigGenerator:
+    """Provide config generator seeded from test run.
+
+    Args:
+        synthetic_seed: Seed derived from test run ID
+
+    Returns:
+        ConfigGenerator instance
+    """
+    return create_config_generator(seed=synthetic_seed)
+
+
+@pytest.fixture
+def synthetic_config(
+    config_generator: ConfigGenerator,
+    test_run_id: str,
+) -> SyntheticConfiguration:
+    """Provide synthetic configuration for test.
+
+    Args:
+        config_generator: ConfigGenerator fixture
+        test_run_id: Unique test run identifier
+
+    Returns:
+        SyntheticConfiguration with unique name and tickers
+    """
+    return config_generator.generate_config(test_run_id)
+
+
+@pytest.fixture
+def failure_config() -> FailureInjectionConfig:
+    """Provide default failure injection config (no failures).
+
+    Tests can modify this to enable specific failure modes.
+    """
+    return FailureInjectionConfig()
 
 
 @pytest.fixture(scope="session")
@@ -478,3 +611,109 @@ async def cleanup_test_data(test_run_id: str) -> AsyncGenerator[None, None]:
     # Log summary for debugging
     print(f"\nTest run {test_run_id} completed.")
     print("Data preserved for debugging. Will expire automatically via TTL.")
+
+
+# =============================================================================
+# Test Metrics Tracking (US5 - Skip Rate Monitoring)
+# =============================================================================
+
+
+@dataclass
+class TestMetrics:
+    """Track test execution metrics for skip rate analysis.
+
+    Collects statistics during test run for reporting:
+    - Total tests executed
+    - Tests passed
+    - Tests failed
+    - Tests skipped (with categorization)
+
+    Target: Skip rate below 15% (SC-003)
+    """
+
+    total: int = 0
+    passed: int = 0
+    failed: int = 0
+    skipped: int = 0
+    skip_reasons: dict = None  # Categorized skip reasons
+
+    def __post_init__(self):
+        """Initialize skip_reasons dict."""
+        if self.skip_reasons is None:
+            self.skip_reasons = {}
+
+    @property
+    def skip_rate(self) -> float:
+        """Calculate skip rate as percentage."""
+        if self.total == 0:
+            return 0.0
+        return (self.skipped / self.total) * 100
+
+    @property
+    def is_within_threshold(self) -> bool:
+        """Check if skip rate is below 15% threshold."""
+        return self.skip_rate < 15.0
+
+    def record_skip(self, reason: str) -> None:
+        """Record a skip with categorized reason."""
+        self.skipped += 1
+        self.total += 1
+        # Categorize by common patterns
+        if "not implemented" in reason.lower():
+            category = "endpoint_not_implemented"
+        elif "500" in reason or "api issue" in reason.lower():
+            category = "api_error"
+        elif "not available" in reason.lower():
+            category = "resource_unavailable"
+        elif "access" in reason.lower():
+            category = "access_denied"
+        else:
+            category = "other"
+        self.skip_reasons[category] = self.skip_reasons.get(category, 0) + 1
+
+    def summary(self) -> str:
+        """Generate human-readable summary."""
+        lines = [
+            "Test Metrics Summary:",
+            f"  Total: {self.total}",
+            f"  Passed: {self.passed}",
+            f"  Failed: {self.failed}",
+            f"  Skipped: {self.skipped} ({self.skip_rate:.1f}%)",
+            f"  Skip rate threshold: {'✅ PASS' if self.is_within_threshold else '❌ FAIL'} (<15%)",
+        ]
+        if self.skip_reasons:
+            lines.append("  Skip reasons:")
+            for reason, count in sorted(self.skip_reasons.items(), key=lambda x: -x[1]):
+                lines.append(f"    - {reason}: {count}")
+        return "\n".join(lines)
+
+
+# Global metrics instance for session-wide tracking
+_test_metrics = TestMetrics()
+
+
+def get_test_metrics() -> TestMetrics:
+    """Get the global test metrics instance."""
+    return _test_metrics
+
+
+def pytest_runtest_makereport(item, call):
+    """Hook to track test results for metrics."""
+    if call.when == "call":
+        _test_metrics.total += 1
+        if call.excinfo is None:
+            _test_metrics.passed += 1
+        elif call.excinfo.typename == "Skipped":
+            # Skipped is already counted via record_skip or here
+            reason = str(call.excinfo.value) if call.excinfo.value else "unknown"
+            if _test_metrics.skipped < _test_metrics.total:
+                # Only record if not already recorded via SkipInfo
+                _test_metrics.record_skip(reason)
+        else:
+            _test_metrics.failed += 1
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Hook to print metrics summary at end of session."""
+    if _test_metrics.total > 0:
+        print(f"\n{_test_metrics.summary()}")

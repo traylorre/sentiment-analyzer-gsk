@@ -173,8 +173,9 @@ async def test_oauth_callback_tokens_returned(
         },
     )
 
-    # Should return 400 (invalid code), 401 (unauthorized), 422 (validation error)
-    # Some implementations might return 200 with error in body
+    # Should return error status for invalid code
+    # 400 (invalid code), 401 (unauthorized), 422 (validation error)
+    # Some implementations return 200 with error in body
     assert response.status_code in (
         400,
         401,
@@ -183,11 +184,14 @@ async def test_oauth_callback_tokens_returned(
     ), f"Unexpected callback response: {response.status_code}"
 
     if response.status_code == 200:
-        # If 200, should have error indicator or tokens
+        # If 200, MUST have error indicator (not tokens) for invalid code
         data = response.json()
         has_error = "error" in data or "message" in data or "detail" in data
         has_tokens = "access_token" in data
-        assert has_error or has_tokens, f"Unexpected 200 response: {data}"
+
+        # Single-outcome: invalid code should return error, not tokens
+        assert has_error, f"Expected error in response for invalid code: {data}"
+        assert not has_tokens, f"Invalid code should not return tokens: {data}"
 
 
 @pytest.mark.asyncio

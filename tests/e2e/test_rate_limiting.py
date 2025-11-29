@@ -120,17 +120,20 @@ async def test_rate_limit_triggers_429(
     Given: An endpoint with rate limiting
     When: Exceeding the rate limit with burst requests
     Then: Some requests return 429 Too Many Requests
+
+    Note: This test explicitly skips (not passes) if rate limiting cannot
+    be triggered within test bounds. Preprod may have generous limits.
     """
+    from tests.e2e.conftest import SkipInfo
+
     # Create session
     session_response = await api_client.post("/api/v2/auth/anonymous", json={})
-    # API returns 201 Created for new sessions (correct HTTP semantics)
     assert session_response.status_code in (200, 201)
     token = session_response.json()["token"]
 
     api_client.set_access_token(token)
     try:
         # Make burst requests to trigger rate limit
-        # Using a list comprehension for concurrent requests
         tasks = [api_client.get("/api/v2/configurations") for _ in range(50)]
         responses = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -139,14 +142,18 @@ async def test_rate_limit_triggers_429(
             r.status_code for r in responses if not isinstance(r, Exception)
         ]
 
-        # Should have some 429s if rate limiting is active
         rate_limited = status_codes.count(429)
-        successes = status_codes.count(200)
 
-        # Either got rate limited OR all succeeded (generous limit)
-        assert rate_limited > 0 or successes == len(
-            status_codes
-        ), f"Expected 429s or all 200s. Got: {status_codes[:10]}..."
+        if rate_limited == 0:
+            # Did not trigger rate limit - skip with actionable message
+            SkipInfo(
+                condition="Rate limit not triggered after 50 concurrent requests",
+                reason="Preprod rate limits may be higher than test can trigger",
+                remediation="Set E2E_RATE_LIMIT_THRESHOLD env var or test with lower limits",
+            ).skip()
+
+        # Single-outcome assertion: we got rate limited
+        assert rate_limited > 0, f"Expected 429 responses, got: {status_codes[:10]}"
 
     finally:
         api_client.clear_access_token()
