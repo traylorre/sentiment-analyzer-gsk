@@ -491,6 +491,135 @@ Before merging any PR that modifies CI IAM policies:
 - [ ] Is there a bootstrap command documented in the PR description?
 - [ ] Has an admin been notified to run the bootstrap after merge?
 
+### 6b. CRITICAL: Detect Terraform vs AWS State Mismatch
+
+**This check identifies when Terraform expects policies that don't exist in AWS, or when different policies are attached than what Terraform defines.**
+
+This is a common failure mode when:
+1. Policy structure changes (e.g., split from 1 policy to 3 policies)
+2. The new policies were never bootstrapped after the code change was merged
+3. Deploy keeps failing because CI lacks permissions to create the policies it now needs
+
+#### Step 1: Extract Expected Policies from Terraform
+
+```bash
+# Find all aws_iam_policy resources defined in Terraform
+echo "=== Terraform-Defined Policies ==="
+grep -rn "^resource \"aws_iam_policy\"" infrastructure/terraform/*.tf
+
+# Find all aws_iam_user_policy_attachment resources
+echo -e "\n=== Terraform-Defined Attachments ==="
+grep -rn "^resource \"aws_iam_user_policy_attachment\"" infrastructure/terraform/*.tf
+```
+
+#### Step 2: Check What Exists in AWS
+
+For EACH CI deployer user, verify the expected policies exist and are attached:
+
+```bash
+# List policies attached to preprod deployer
+echo "=== Preprod Deployer - Attached Policies ==="
+aws iam list-attached-user-policies --user-name sentiment-analyzer-preprod-deployer
+
+# List policies attached to prod deployer
+echo -e "\n=== Prod Deployer - Attached Policies ==="
+aws iam list-attached-user-policies --user-name sentiment-analyzer-prod-deployer
+
+# Check if Terraform-expected policies exist
+echo -e "\n=== Checking Expected Policies Exist ==="
+aws iam get-policy --policy-arn arn:aws:iam::ACCOUNT:policy/CIDeployCore 2>&1 || echo "CIDeployCore: DOES NOT EXIST"
+aws iam get-policy --policy-arn arn:aws:iam::ACCOUNT:policy/CIDeployMonitoring 2>&1 || echo "CIDeployMonitoring: DOES NOT EXIST"
+aws iam get-policy --policy-arn arn:aws:iam::ACCOUNT:policy/CIDeployStorage 2>&1 || echo "CIDeployStorage: DOES NOT EXIST"
+```
+
+#### Step 3: Compare and Identify Mismatch
+
+Create a comparison table:
+
+| Policy | Terraform Expects | Exists in AWS | Attached to preprod | Attached to prod |
+|--------|-------------------|---------------|---------------------|------------------|
+| CIDeployCore | ✅ | ❌/✅ | ❌/✅ | ❌/✅ |
+| CIDeployMonitoring | ✅ | ❌/✅ | ❌/✅ | ❌/✅ |
+| CIDeployStorage | ✅ | ❌/✅ | ❌/✅ | ❌/✅ |
+| Legacy Policy (PreprodCIDeploymentPolicy) | ❌ | ✅ | ✅ | N/A |
+| Legacy Policy (ProdCIDeploymentPolicy) | ❌ | ✅ | N/A | ✅ |
+
+**Mismatch Patterns:**
+
+| Pattern | Symptom | Root Cause | Fix |
+|---------|---------|------------|-----|
+| Terraform expects policy, AWS doesn't have it | `iam:CreatePolicy` denied | Policy never bootstrapped | Admin bootstrap |
+| AWS has legacy policy, Terraform expects new | Deploy fails on policy creation | Policy structure changed, not bootstrapped | Admin bootstrap |
+| Policy exists but not attached | Permissions missing at runtime | Attachment never applied | Admin attach |
+
+#### Step 4: Generate Bootstrap Commands
+
+If mismatch detected, generate the COMPLETE bootstrap command for ALL environments:
+
+```bash
+# HOLISTIC BOOTSTRAP - Run for BOTH preprod and prod
+# ADMIN MUST RUN THIS - CI user cannot bootstrap itself
+
+cd infrastructure/terraform
+
+# === PREPROD ===
+terraform init -backend-config=backend-preprod.hcl -backend-config="region=us-east-1" -reconfigure
+
+# Create policies first (they're shared across environments)
+terraform apply -var="environment=preprod" -var="aws_region=us-east-1" \
+  -target=aws_iam_policy.ci_deploy_core \
+  -target=aws_iam_policy.ci_deploy_monitoring \
+  -target=aws_iam_policy.ci_deploy_storage \
+  -auto-approve
+
+# Then attach to preprod user
+terraform apply -var="environment=preprod" -var="aws_region=us-east-1" \
+  -target=aws_iam_user_policy_attachment.ci_deploy_core_preprod \
+  -target=aws_iam_user_policy_attachment.ci_deploy_monitoring_preprod \
+  -target=aws_iam_user_policy_attachment.ci_deploy_storage_preprod \
+  -auto-approve
+
+# === PROD ===
+terraform init -backend-config=backend-prod.hcl -backend-config="region=us-east-1" -reconfigure
+
+# Attach to prod user (policies already exist from preprod)
+terraform apply -var="environment=prod" -var="aws_region=us-east-1" \
+  -target=aws_iam_user_policy_attachment.ci_deploy_core_prod \
+  -target=aws_iam_user_policy_attachment.ci_deploy_monitoring_prod \
+  -target=aws_iam_user_policy_attachment.ci_deploy_storage_prod \
+  -auto-approve
+
+# === VERIFY ===
+echo "Verifying attachments..."
+aws iam list-attached-user-policies --user-name sentiment-analyzer-preprod-deployer
+aws iam list-attached-user-policies --user-name sentiment-analyzer-prod-deployer
+```
+
+#### Step 5: Check Deploy Pipeline History
+
+Verify whether the mismatch has been causing failures:
+
+```bash
+# Check last N deploys for same error pattern
+gh run list --branch main --workflow "Deploy Pipeline" --limit 10 --json conclusion,createdAt
+
+# If ALL recent deploys failed, likely a bootstrap issue
+```
+
+**Error signatures indicating Terraform/AWS mismatch:**
+
+```
+Error: creating IAM Policy (PolicyName): operation error IAM: CreatePolicy...
+AccessDenied: User is not authorized to perform: iam:CreatePolicy
+```
+
+```
+Error: creating Cognito User Pool: AccessDeniedException...
+User is not authorized to perform: cognito-idp:CreateUserPool
+```
+
+**These errors after a policy structure change = Bootstrap Required**
+
 ### 7. Generate Findings Report
 
 Output a structured report:
@@ -513,17 +642,30 @@ Output a structured report:
 - [ ] User names match across all files: YES/NO
 
 ### Critical Issues
-1. [CRITICAL] Chicken-and-egg: Policy manages CI user but lacks self-management permissions
-2. [CRITICAL] Policy not attached - document exists but never applied
-3. [CRITICAL] User name mismatch - `preprod-deployer` vs `prod-ci`
-4. [CRITICAL] Missing service-linked role permissions (iam:CreateServiceLinkedRole) for services like RUM, Cognito, etc.
+1. [CRITICAL] Terraform/AWS mismatch: Terraform expects policies that don't exist in AWS
+2. [CRITICAL] Bootstrap required: New policy structure merged but never applied
+3. [CRITICAL] Chicken-and-egg: Policy manages CI user but lacks self-management permissions
+4. [CRITICAL] Policy not attached - document exists but never applied
+5. [CRITICAL] User name mismatch - `preprod-deployer` vs `prod-ci`
+6. [CRITICAL] Missing service-linked role permissions (iam:CreateServiceLinkedRole) for services like RUM, Cognito, etc.
 ...
+
+### Terraform vs AWS Policy State
+| Policy | In Terraform | Exists in AWS | Attached (preprod) | Attached (prod) |
+|--------|--------------|---------------|-------------------|-----------------|
+| CIDeployCore | ✅/❌ | ✅/❌ | ✅/❌ | ✅/❌ |
+| CIDeployMonitoring | ✅/❌ | ✅/❌ | ✅/❌ | ✅/❌ |
+| CIDeployStorage | ✅/❌ | ✅/❌ | ✅/❌ | ✅/❌ |
+| Legacy policies | ❌ | ✅/❌ | ✅/❌ | ✅/❌ |
+
+**If ANY row shows Terraform=✅ but AWS=❌: BOOTSTRAP REQUIRED**
 
 ### Bootstrap Status
 - [ ] Self-referential IAM resources exist: YES/NO
 - [ ] Self-management permissions included: YES/NO
 - [ ] Bootstrap required before CI can run: YES/NO
 - [ ] Bootstrap command documented: YES/NO
+- [ ] Deploy pipeline has been failing consistently: YES/NO (check last 10 runs)
 
 ### Service-Linked Role Status
 - [ ] Services requiring SLRs identified: (list services)
