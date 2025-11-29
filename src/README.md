@@ -27,7 +27,7 @@ If you're here during an incident:
 
 3. **Dashboard issues** → Check `lambdas/dashboard/handler.py`
    - API key validation: Look for `compare_digest` calls
-   - SSE timeouts: Check polling interval in `/api/stream`
+   - API v2 endpoints: Check `/api/v2/*` routes
 
 See `specs/001-interactive-dashboard-demo/ON_CALL_SOP.md` for full runbooks.
 

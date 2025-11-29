@@ -184,7 +184,7 @@ class SentimentItemResponse(BaseModel):
     """
     Schema for sentiment item in API responses.
 
-    Used by dashboard Lambda for /api/metrics responses.
+    Used by dashboard Lambda for /api/v2/articles responses.
 
     For Developers:
         This is the public-facing schema. It includes all fields
@@ -282,7 +282,7 @@ class SNSAnalysisMessage(BaseModel):
 
 class MetricsResponse(BaseModel):
     """
-    Schema for dashboard /api/metrics response.
+    Schema for dashboard /api/v2/sentiment response.
 
     Aggregated metrics for the dashboard display.
     """

@@ -277,13 +277,13 @@ def synthetic_data():
         - business_count: 2 (items with "business" tag)
 
     Example:
-        def test_metrics_returns_correct_counts(auth_headers, synthetic_data):
-            response = requests.get(f"{URL}/api/metrics", headers=auth_headers)
+        def test_sentiment_returns_data(auth_headers, synthetic_data):
+            response = requests.get(f"{URL}/api/v2/sentiment?tags=tech", headers=auth_headers)
             data = response.json()
 
             # Verify against known synthetic data
-            assert data["total"] >= synthetic_data["total_count"]
-            assert data["positive"] >= synthetic_data["positive_count"]
+            assert data["total_count"] >= 0
+            assert "tags" in data
     """
     # Only import and use for preprod tests (avoid import errors in unit tests)
     from tests.fixtures.synthetic_data import SyntheticDataGenerator

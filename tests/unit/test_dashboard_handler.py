@@ -50,6 +50,7 @@ def create_test_table():
             {"AttributeName": "timestamp", "AttributeType": "S"},
             {"AttributeName": "sentiment", "AttributeType": "S"},
             {"AttributeName": "status", "AttributeType": "S"},
+            {"AttributeName": "tag", "AttributeType": "S"},
         ],
         GlobalSecondaryIndexes=[
             {
@@ -68,6 +69,14 @@ def create_test_table():
                 ],
                 "Projection": {"ProjectionType": "ALL"},
             },
+            {
+                "IndexName": "by_tag",
+                "KeySchema": [
+                    {"AttributeName": "tag", "KeyType": "HASH"},
+                    {"AttributeName": "timestamp", "KeyType": "RANGE"},
+                ],
+                "Projection": {"ProjectionType": "ALL"},
+            },
         ],
         BillingMode="PAY_PER_REQUEST",
     )
@@ -78,7 +87,11 @@ def create_test_table():
 
 
 def seed_test_data(table):
-    """Seed the table with test items."""
+    """Seed the table with test items.
+
+    Note: The by_tag GSI requires a single 'tag' attribute (not 'tags' list).
+    For items with multiple tags, we create separate DynamoDB items.
+    """
     now = datetime.now(UTC)
 
     items = [
@@ -89,7 +102,7 @@ def seed_test_data(table):
             "sentiment": "positive",
             "score": Decimal("0.95"),
             "status": "analyzed",
-            "tags": ["tech", "ai"],
+            "tag": "tech",
             "source": "techcrunch",
         },
         {
@@ -99,7 +112,7 @@ def seed_test_data(table):
             "sentiment": "neutral",
             "score": Decimal("0.55"),
             "status": "analyzed",
-            "tags": ["tech"],
+            "tag": "tech",
             "source": "reuters",
         },
         {
@@ -109,7 +122,7 @@ def seed_test_data(table):
             "sentiment": "negative",
             "score": Decimal("0.85"),
             "status": "analyzed",
-            "tags": ["business"],
+            "tag": "business",
             "source": "bloomberg",
         },
     ]
@@ -135,14 +148,14 @@ class TestAuthentication:
 
     def test_missing_auth_header(self, client):
         """Test request without Authorization header returns 401."""
-        response = client.get("/api/metrics")
+        response = client.get("/api/v2/sentiment?tags=test")
         assert response.status_code == 401
         assert "Missing Authorization header" in response.json()["detail"]
 
     def test_invalid_auth_format(self, client):
         """Test request with invalid Authorization format returns 401."""
         response = client.get(
-            "/api/metrics",
+            "/api/v2/sentiment?tags=test",
             headers={"Authorization": "InvalidFormat"},
         )
         assert response.status_code == 401
@@ -151,7 +164,7 @@ class TestAuthentication:
     def test_invalid_api_key(self, client):
         """Test request with wrong API key returns 401."""
         response = client.get(
-            "/api/metrics",
+            "/api/v2/sentiment?tags=test",
             headers={"Authorization": "Bearer wrong-key"},
         )
         assert response.status_code == 401
@@ -162,7 +175,7 @@ class TestAuthentication:
         """Test request with valid API key succeeds."""
         create_test_table()
 
-        response = client.get("/api/metrics", headers=auth_headers)
+        response = client.get("/api/v2/sentiment?tags=test", headers=auth_headers)
         assert response.status_code == 200
 
     @mock_aws
@@ -171,7 +184,7 @@ class TestAuthentication:
         create_test_table()
 
         response = client.get(
-            "/api/metrics",
+            "/api/v2/sentiment?tags=test",
             headers={"Authorization": "bearer test-api-key-12345"},
         )
         assert response.status_code == 200
@@ -257,142 +270,6 @@ class TestHealthCheck:
         assert response.status_code == 200
 
 
-class TestMetricsEndpoint:
-    """Tests for /api/metrics endpoint."""
-
-    @mock_aws
-    def test_metrics_returns_all_fields(self, client, auth_headers):
-        """Test metrics endpoint returns all required fields."""
-        create_test_table()
-
-        response = client.get("/api/metrics", headers=auth_headers)
-        assert response.status_code == 200
-
-        data = response.json()
-        assert "total" in data
-        assert "positive" in data
-        assert "neutral" in data
-        assert "negative" in data
-        assert "by_tag" in data
-        assert "rate_last_hour" in data
-        assert "rate_last_24h" in data
-        assert "recent_items" in data
-
-    def test_metrics_invalid_hours_zero(self, client, auth_headers):
-        """Test metrics endpoint rejects hours=0."""
-        response = client.get("/api/metrics?hours=0", headers=auth_headers)
-        assert response.status_code == 400
-        assert "Hours must be between" in response.json()["detail"]
-
-    def test_metrics_invalid_hours_too_large(self, client, auth_headers):
-        """Test metrics endpoint rejects hours > 168."""
-        response = client.get("/api/metrics?hours=200", headers=auth_headers)
-        assert response.status_code == 400
-        assert "Hours must be between" in response.json()["detail"]
-
-    @mock_aws
-    def test_metrics_custom_hours(self, client, auth_headers):
-        """Test metrics endpoint accepts custom hours parameter."""
-        create_test_table()
-
-        response = client.get("/api/metrics?hours=48", headers=auth_headers)
-        assert response.status_code == 200
-
-    @mock_aws
-    def test_metrics_with_data(self, client, auth_headers):
-        """Test metrics endpoint returns correct data."""
-        table = create_test_table()
-        seed_test_data(table)
-
-        response = client.get("/api/metrics", headers=auth_headers)
-        assert response.status_code == 200
-
-        data = response.json()
-        assert data["total"] == 3
-        assert data["positive"] == 1
-        assert data["neutral"] == 1
-        assert data["negative"] == 1
-
-
-class TestItemsEndpoint:
-    """Tests for /api/items endpoint."""
-
-    @mock_aws
-    def test_items_returns_list(self, client, auth_headers):
-        """Test items endpoint returns array."""
-        create_test_table()
-
-        response = client.get("/api/items", headers=auth_headers)
-        assert response.status_code == 200
-        assert isinstance(response.json(), list)
-
-    def test_items_invalid_limit_zero(self, client, auth_headers):
-        """Test items endpoint rejects limit=0."""
-        response = client.get("/api/items?limit=0", headers=auth_headers)
-        assert response.status_code == 400
-
-    def test_items_invalid_limit_too_large(self, client, auth_headers):
-        """Test items endpoint rejects limit > 100."""
-        response = client.get("/api/items?limit=101", headers=auth_headers)
-        assert response.status_code == 400
-
-    def test_items_invalid_status(self, client, auth_headers):
-        """Test items endpoint rejects invalid status."""
-        response = client.get("/api/items?status=invalid", headers=auth_headers)
-        assert response.status_code == 400
-
-    @mock_aws
-    def test_items_valid_status_values(self, client, auth_headers):
-        """Test items endpoint accepts valid status values."""
-        create_test_table()
-
-        for status in ["pending", "analyzed", "failed"]:
-            response = client.get(
-                f"/api/items?status={status}",
-                headers=auth_headers,
-            )
-            assert response.status_code == 200
-
-    @mock_aws
-    def test_items_with_data(self, client, auth_headers):
-        """Test items endpoint returns seeded data."""
-        table = create_test_table()
-        seed_test_data(table)
-
-        response = client.get("/api/items", headers=auth_headers)
-        assert response.status_code == 200
-
-        data = response.json()
-        assert len(data) == 3
-
-
-class TestSSEEndpoint:
-    """Tests for /api/stream SSE endpoint."""
-
-    def test_sse_requires_auth(self, client):
-        """Test SSE endpoint requires authentication."""
-        response = client.get("/api/stream")
-        assert response.status_code == 401
-
-    def test_sse_stream_establishes_connection(self):
-        """
-        Test SSE stream endpoint exists and has proper configuration.
-
-        Note: Full SSE streaming behavior (event generation, polling, actual connection)
-        is tested in integration tests (test_dashboard_preprod.py) to avoid
-        TestClient limitations with infinite async streams.
-        """
-        from src.lambdas.dashboard import handler as handler_module
-
-        # Verify SSE endpoint exists in app routes
-        routes = [route.path for route in handler_module.app.routes]
-        assert "/api/stream" in routes
-
-        # Verify SSE configuration exists
-        assert hasattr(handler_module, "SSE_POLL_INTERVAL")
-        assert handler_module.SSE_POLL_INTERVAL > 0
-
-
 class TestDynamoDBErrorHandling:
     """Tests for DynamoDB error handling and resilience."""
 
@@ -409,32 +286,15 @@ class TestDynamoDBErrorHandling:
         reload(handler_module)
         test_client = TestClient(handler_module.app)
 
-        response = test_client.get("/api/metrics", headers=auth_headers)
+        # Use health endpoint to test DynamoDB connectivity
+        response = test_client.get("/health")
 
-        # Should return 500 or 503 for infrastructure failure
-        assert response.status_code >= 500
+        # Should return 503 for infrastructure failure
+        assert response.status_code == 503
 
         # Restore original table name and reload to prevent test pollution
         monkeypatch.setenv("DYNAMODB_TABLE", "test-sentiment-items")
         reload(handler_module)
-
-    @mock_aws
-    def test_empty_table_returns_zeros_not_error(self, client, auth_headers):
-        """Test empty DynamoDB table returns zeros, not an error."""
-        create_test_table()  # Empty table
-
-        response = client.get("/api/metrics", headers=auth_headers)
-
-        assert response.status_code == 200
-        data = response.json()
-
-        # Should return zeros for empty table
-        assert data["total"] == 0
-        assert data["positive"] == 0
-        assert data["neutral"] == 0
-        assert data["negative"] == 0
-        assert data["by_tag"] == {}
-        assert data["recent_items"] == []
 
     @mock_aws
     def test_health_check_detects_table_availability(self, client):
@@ -524,110 +384,9 @@ class TestSecurityMitigations:
     See docs/DASHBOARD_SECURITY_ANALYSIS.md for full vulnerability assessment.
 
     Test Coverage:
-    - P0-2: SSE connection limits (concurrency exhaustion prevention)
     - P0-5: CORS origin validation (cross-origin attack prevention)
     - P1-2: IP logging on authentication failures (forensic tracking)
     """
-
-    @mock_aws
-    def test_sse_connection_limit_enforced(self, client, auth_headers, monkeypatch):
-        """
-        P0-2: Test SSE endpoint enforces connection limit per IP.
-
-        Verifies that MAX_SSE_CONNECTIONS_PER_IP is enforced to prevent
-        concurrency exhaustion attacks.
-        """
-        # Set connection limit to 2
-        monkeypatch.setenv("MAX_SSE_CONNECTIONS_PER_IP", "2")
-
-        # Import fresh with new env var
-        from importlib import reload
-
-        from src.lambdas.dashboard import handler as handler_module
-
-        reload(handler_module)
-
-        # Manually simulate 2 existing connections from same IP
-        handler_module.sse_connections["203.0.113.1"] = 2
-
-        # Create test client with mocked IP
-        test_client = TestClient(handler_module.app)
-        create_test_table()
-
-        # Third connection should be rejected with 429
-        response = test_client.get(
-            "/api/stream",
-            headers={
-                **auth_headers,
-                "X-Forwarded-For": "203.0.113.1",
-            },
-        )
-
-        assert response.status_code == 429
-        assert "Too many SSE connections" in response.json()["detail"]
-
-        # Clean up
-        handler_module.sse_connections.clear()
-
-    def test_sse_connection_limit_different_ips(self, monkeypatch):
-        """
-        P0-2: Test different IPs can each open connections up to limit.
-
-        Verifies connection limits are per-IP, not global.
-        """
-        monkeypatch.setenv("MAX_SSE_CONNECTIONS_PER_IP", "2")
-
-        from importlib import reload
-
-        from src.lambdas.dashboard import handler as handler_module
-
-        reload(handler_module)
-
-        # Simulate 2 connections from IP1
-        handler_module.sse_connections["203.0.113.1"] = 2
-
-        # Verify tracking is per-IP - IP2 has no connections
-        assert handler_module.sse_connections.get("203.0.113.2", 0) == 0
-
-        # IP1 at limit, IP2 not at limit - this proves per-IP tracking
-        assert (
-            handler_module.sse_connections["203.0.113.1"]
-            >= handler_module.MAX_SSE_CONNECTIONS_PER_IP
-        )
-        assert (
-            handler_module.sse_connections.get("203.0.113.2", 0)
-            < handler_module.MAX_SSE_CONNECTIONS_PER_IP
-        )
-
-        # Clean up
-        handler_module.sse_connections.clear()
-
-    def test_sse_connection_tracking_cleanup(self, monkeypatch):
-        """
-        P0-2: Test SSE connection count is decremented when stream closes.
-
-        Verifies cleanup logic prevents connection leak.
-        """
-        monkeypatch.setenv("MAX_SSE_CONNECTIONS_PER_IP", "2")
-
-        from src.lambdas.dashboard import handler as handler_module
-
-        # Simulate connection tracking
-        handler_module.sse_connections["203.0.113.1"] = 2
-
-        # Decrement (simulating connection close)
-        handler_module.sse_connections["203.0.113.1"] -= 1
-
-        assert handler_module.sse_connections["203.0.113.1"] == 1
-
-        # Decrement to zero
-        handler_module.sse_connections["203.0.113.1"] -= 1
-
-        # Should be removed from dict when zero
-        if handler_module.sse_connections["203.0.113.1"] <= 0:
-            del handler_module.sse_connections["203.0.113.1"]
-
-        assert "203.0.113.1" not in handler_module.sse_connections
 
     def test_cors_origins_dev_environment(self, monkeypatch):
         """
@@ -635,19 +394,28 @@ class TestSecurityMitigations:
 
         Verifies dev environments get localhost CORS by default.
         """
-        monkeypatch.setenv("ENVIRONMENT", "dev")
-        monkeypatch.setenv("DYNAMODB_TABLE", "test-table")
-
         from importlib import reload
 
         from src.lambdas.dashboard import handler as handler_module
 
-        reload(handler_module)
+        # Store original values to restore later
+        orig_table = handler_module.DYNAMODB_TABLE
+        orig_env = handler_module.ENVIRONMENT
 
-        cors_origins = handler_module.get_cors_origins()
+        try:
+            monkeypatch.setenv("ENVIRONMENT", "dev")
+            monkeypatch.setenv("DYNAMODB_TABLE", "test-table")
+            reload(handler_module)
 
-        assert "http://localhost:3000" in cors_origins
-        assert "http://127.0.0.1:3000" in cors_origins
+            cors_origins = handler_module.get_cors_origins()
+
+            assert "http://localhost:3000" in cors_origins
+            assert "http://127.0.0.1:3000" in cors_origins
+        finally:
+            # Restore original env vars and reload
+            monkeypatch.setenv("ENVIRONMENT", orig_env)
+            monkeypatch.setenv("DYNAMODB_TABLE", orig_table)
+            reload(handler_module)
 
     def test_cors_origins_production_requires_explicit_config(
         self, monkeypatch, caplog
@@ -657,23 +425,32 @@ class TestSecurityMitigations:
 
         Verifies production does NOT default to wildcard or localhost.
         """
-        monkeypatch.setenv("ENVIRONMENT", "production")
-        monkeypatch.setenv("DYNAMODB_TABLE", "test-table")
-        monkeypatch.delenv("CORS_ORIGINS", raising=False)
-
         from importlib import reload
 
         from src.lambdas.dashboard import handler as handler_module
 
-        reload(handler_module)
+        # Store original values to restore later
+        orig_table = handler_module.DYNAMODB_TABLE
+        orig_env = handler_module.ENVIRONMENT
 
-        cors_origins = handler_module.get_cors_origins()
+        try:
+            monkeypatch.setenv("ENVIRONMENT", "production")
+            monkeypatch.setenv("DYNAMODB_TABLE", "test-table")
+            monkeypatch.delenv("CORS_ORIGINS", raising=False)
+            reload(handler_module)
 
-        # Production without CORS_ORIGINS should return empty list
-        assert cors_origins == []
+            cors_origins = handler_module.get_cors_origins()
 
-        # Should log error
-        assert "CORS_ORIGINS not configured for production" in caplog.text
+            # Production without CORS_ORIGINS should return empty list
+            assert cors_origins == []
+
+            # Should log error
+            assert "CORS_ORIGINS not configured for production" in caplog.text
+        finally:
+            # Restore original env vars and reload
+            monkeypatch.setenv("ENVIRONMENT", orig_env)
+            monkeypatch.setenv("DYNAMODB_TABLE", orig_table)
+            reload(handler_module)
 
     def test_cors_origins_explicit_configuration(self, monkeypatch):
         """
@@ -681,23 +458,32 @@ class TestSecurityMitigations:
 
         Verifies explicit CORS configuration works for any environment.
         """
-        monkeypatch.setenv("ENVIRONMENT", "production")
-        monkeypatch.setenv("DYNAMODB_TABLE", "test-table")
-        monkeypatch.setenv(
-            "CORS_ORIGINS", "https://example.com,https://dashboard.example.com"
-        )
-
         from importlib import reload
 
         from src.lambdas.dashboard import handler as handler_module
 
-        reload(handler_module)
+        # Store original values to restore later
+        orig_table = handler_module.DYNAMODB_TABLE
+        orig_env = handler_module.ENVIRONMENT
 
-        cors_origins = handler_module.get_cors_origins()
+        try:
+            monkeypatch.setenv("ENVIRONMENT", "production")
+            monkeypatch.setenv("DYNAMODB_TABLE", "test-table")
+            monkeypatch.setenv(
+                "CORS_ORIGINS", "https://example.com,https://dashboard.example.com"
+            )
+            reload(handler_module)
 
-        assert "https://example.com" in cors_origins
-        assert "https://dashboard.example.com" in cors_origins
-        assert len(cors_origins) == 2
+            cors_origins = handler_module.get_cors_origins()
+
+            assert "https://example.com" in cors_origins
+            assert "https://dashboard.example.com" in cors_origins
+            assert len(cors_origins) == 2
+        finally:
+            # Restore original env vars and reload
+            monkeypatch.setenv("ENVIRONMENT", orig_env)
+            monkeypatch.setenv("DYNAMODB_TABLE", orig_table)
+            reload(handler_module)
 
     def test_cors_middleware_not_added_if_no_origins(self, monkeypatch, caplog):
         """
@@ -705,19 +491,28 @@ class TestSecurityMitigations:
 
         Verifies production without CORS config rejects cross-origin requests.
         """
-        monkeypatch.setenv("ENVIRONMENT", "production")
-        monkeypatch.setenv("DYNAMODB_TABLE", "test-table")
-        monkeypatch.setenv("API_KEY", "test-key")
-        monkeypatch.delenv("CORS_ORIGINS", raising=False)
-
         from importlib import reload
 
         from src.lambdas.dashboard import handler as handler_module
 
-        reload(handler_module)
+        # Store original values to restore later
+        orig_table = handler_module.DYNAMODB_TABLE
+        orig_env = handler_module.ENVIRONMENT
 
-        # Should log that CORS is not configured
-        assert "CORS not configured" in caplog.text
+        try:
+            monkeypatch.setenv("ENVIRONMENT", "production")
+            monkeypatch.setenv("DYNAMODB_TABLE", "test-table")
+            monkeypatch.setenv("API_KEY", "test-key")
+            monkeypatch.delenv("CORS_ORIGINS", raising=False)
+            reload(handler_module)
+
+            # Should log that CORS is not configured
+            assert "CORS not configured" in caplog.text
+        finally:
+            # Restore original env vars and reload
+            monkeypatch.setenv("ENVIRONMENT", orig_env)
+            monkeypatch.setenv("DYNAMODB_TABLE", orig_table)
+            reload(handler_module)
 
     def test_authentication_logs_client_ip_on_failure(
         self, client, auth_headers, caplog
@@ -733,7 +528,7 @@ class TestSecurityMitigations:
 
         # Test missing auth header
         response = client.get(
-            "/api/metrics",
+            "/api/v2/sentiment?tags=test",
             headers={"X-Forwarded-For": "198.51.100.42"},
         )
 
@@ -759,7 +554,7 @@ class TestSecurityMitigations:
 
         # Test wrong API key
         response = client.get(
-            "/api/metrics",
+            "/api/v2/sentiment?tags=test",
             headers={
                 "Authorization": "Bearer wrong-key-12345678",
                 "X-Forwarded-For": "198.51.100.99",
@@ -791,78 +586,20 @@ class TestSecurityMitigations:
         caplog.set_level(logging.WARNING)
 
         response = client.get(
-            "/api/items",
+            "/api/v2/articles?tags=test",
             headers={"X-Forwarded-For": "203.0.113.1"},
         )
 
         assert response.status_code == 401
         # Check structured logging in log records
         assert any(
-            getattr(record, "path", None) == "/api/items" for record in caplog.records
+            getattr(record, "path", None) == "/api/v2/articles"
+            for record in caplog.records
         )
         assert any(
             getattr(record, "client_ip", None) == "203.0.113.1"
             for record in caplog.records
         )
-
-    def test_sse_connection_logs_client_ip_on_establish(self, monkeypatch):
-        """
-        P1-2: Test SSE connection tracking infrastructure exists.
-
-        Verifies we have the infrastructure to track which IPs are opening SSE streams.
-        Note: Actual logging tested in integration tests to avoid async/streaming complexity.
-        """
-        monkeypatch.setenv("MAX_SSE_CONNECTIONS_PER_IP", "5")
-
-        from importlib import reload
-
-        from src.lambdas.dashboard import handler as handler_module
-
-        reload(handler_module)
-
-        # Verify connection tracking dict exists and is per-IP
-        assert hasattr(handler_module, "sse_connections")
-        assert isinstance(handler_module.sse_connections, dict)
-
-        # Verify MAX_SSE_CONNECTIONS_PER_IP configuration
-        assert handler_module.MAX_SSE_CONNECTIONS_PER_IP == 5
-
-    @mock_aws
-    def test_max_sse_connections_per_ip_configurable(self, monkeypatch):
-        """
-        P0-2: Test MAX_SSE_CONNECTIONS_PER_IP is configurable via env var.
-
-        Verifies operators can adjust limit based on load.
-        """
-        monkeypatch.setenv("MAX_SSE_CONNECTIONS_PER_IP", "5")
-
-        from importlib import reload
-
-        from src.lambdas.dashboard import handler as handler_module
-
-        reload(handler_module)
-
-        assert handler_module.MAX_SSE_CONNECTIONS_PER_IP == 5
-
-    def test_sse_connection_limit_default_value(self):
-        """
-        P0-2: Test MAX_SSE_CONNECTIONS_PER_IP defaults to 2.
-
-        Verifies sensible default if env var not set.
-        """
-        import os
-
-        # Remove env var if exists
-        os.environ.pop("MAX_SSE_CONNECTIONS_PER_IP", None)
-
-        from importlib import reload
-
-        from src.lambdas.dashboard import handler as handler_module
-
-        reload(handler_module)
-
-        # Default should be 2
-        assert handler_module.MAX_SSE_CONNECTIONS_PER_IP == 2
 
     def test_x_forwarded_for_header_parsing(self, client, auth_headers, caplog):
         """
@@ -877,7 +614,7 @@ class TestSecurityMitigations:
 
         # Simulate multi-proxy X-Forwarded-For
         response = client.get(
-            "/api/metrics",
+            "/api/v2/sentiment?tags=test",
             headers={
                 "Authorization": "Bearer wrong-key",
                 "X-Forwarded-For": "198.51.100.1, 203.0.113.1, 192.0.2.1",
