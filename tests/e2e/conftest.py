@@ -384,6 +384,34 @@ def dynamodb_table():
     return dynamodb.Table(table_name)
 
 
+@pytest.fixture(scope="session")
+def cloudwatch_logs_client():
+    """CloudWatch Logs client for observability tests.
+
+    Used for:
+    - Querying Lambda function logs
+    - Verifying log messages
+    """
+    return boto3.client(
+        "logs",
+        region_name=os.environ.get("AWS_REGION", "us-east-1"),
+    )
+
+
+@pytest.fixture(scope="session")
+def cloudwatch_client():
+    """CloudWatch client for metrics and alarms.
+
+    Used for:
+    - Querying custom metrics
+    - Checking alarm states
+    """
+    return boto3.client(
+        "cloudwatch",
+        region_name=os.environ.get("AWS_REGION", "us-east-1"),
+    )
+
+
 @pytest.fixture
 def synthetic_data(
     synthetic_seed: int,
