@@ -43,9 +43,44 @@ from tests.e2e.fixtures.finnhub import SyntheticFinnhubHandler
 from tests.e2e.fixtures.sendgrid import SyntheticSendGridHandler
 from tests.e2e.fixtures.tiingo import SyntheticTiingoHandler
 from tests.e2e.helpers.api_client import PreprodAPIClient
+from tests.fixtures.synthetic.config_generator import (
+    ConfigGenerator,
+    SyntheticConfiguration,
+    create_config_generator,
+)
 
 # Note: cleanup_by_prefix is available for manual cleanup if needed:
 # from tests.e2e.helpers.cleanup import cleanup_by_prefix
+
+
+@dataclass
+class SkipInfo:
+    """Standardized skip message for E2E tests.
+
+    Provides structured information about why a test was skipped
+    and how to run it if desired.
+
+    Format: SKIPPED: {condition}
+            Reason: {reason}
+            To run: {remediation}
+    """
+
+    condition: str
+    reason: str
+    remediation: str
+
+    def __str__(self) -> str:
+        """Format as standardized skip message."""
+        return (
+            f"SKIPPED: {self.condition}\n"
+            f"Reason: {self.reason}\n"
+            f"To run: {self.remediation}"
+        )
+
+    def skip(self) -> None:
+        """Call pytest.skip with formatted message."""
+        pytest.skip(str(self))
+
 
 # Default test seed for reproducibility
 DEFAULT_TEST_SEED = 42
@@ -365,6 +400,36 @@ def finnhub_handler(synthetic_seed: int) -> SyntheticFinnhubHandler:
 def sendgrid_handler(synthetic_seed: int) -> SyntheticSendGridHandler:
     """Synthetic SendGrid handler for email testing."""
     return SyntheticSendGridHandler(seed=synthetic_seed)
+
+
+@pytest.fixture
+def config_generator(synthetic_seed: int) -> ConfigGenerator:
+    """Provide config generator seeded from test run.
+
+    Args:
+        synthetic_seed: Seed derived from test run ID
+
+    Returns:
+        ConfigGenerator instance
+    """
+    return create_config_generator(seed=synthetic_seed)
+
+
+@pytest.fixture
+def synthetic_config(
+    config_generator: ConfigGenerator,
+    test_run_id: str,
+) -> SyntheticConfiguration:
+    """Provide synthetic configuration for test.
+
+    Args:
+        config_generator: ConfigGenerator fixture
+        test_run_id: Unique test run identifier
+
+    Returns:
+        SyntheticConfiguration with unique name and tickers
+    """
+    return config_generator.generate_config(test_run_id)
 
 
 @pytest.fixture(scope="session")

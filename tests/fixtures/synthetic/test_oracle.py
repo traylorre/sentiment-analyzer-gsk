@@ -4,9 +4,9 @@ The test oracle generates the same synthetic data as the generators
 and computes expected values, so tests can assert actual == expected.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Any, Literal
 
 from src.lambdas.shared.adapters.base import NewsArticle, OHLCCandle, SentimentData
 from src.lambdas.shared.volatility import (
@@ -26,6 +26,96 @@ from tests.fixtures.synthetic.ticker_generator import (
     TickerGenerator,
     create_ticker_generator,
 )
+
+
+@dataclass
+class OracleExpectation:
+    """Expected value from oracle computation with tolerance.
+
+    Represents what the oracle expects for a given metric, including
+    acceptable tolerance for floating point comparisons.
+    """
+
+    metric_name: str
+    expected_value: float
+    tolerance: float = 0.01
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def is_within_tolerance(self, actual_value: float) -> bool:
+        """Check if actual value is within tolerance of expected.
+
+        Args:
+            actual_value: The actual value from API response
+
+        Returns:
+            True if within tolerance, False otherwise
+        """
+        return abs(actual_value - self.expected_value) <= self.tolerance
+
+    def difference(self, actual_value: float) -> float:
+        """Calculate difference between actual and expected.
+
+        Args:
+            actual_value: The actual value from API response
+
+        Returns:
+            Absolute difference
+        """
+        return abs(actual_value - self.expected_value)
+
+
+@dataclass
+class ValidationResult:
+    """Result of validating API response against oracle expectation.
+
+    Provides detailed information about validation outcome for
+    diagnostic purposes.
+    """
+
+    expectation: OracleExpectation
+    actual_value: float
+    passed: bool
+    difference: float
+    message: str = ""
+
+    @classmethod
+    def from_comparison(
+        cls,
+        expectation: OracleExpectation,
+        actual_value: float,
+    ) -> "ValidationResult":
+        """Create ValidationResult from comparing expectation to actual.
+
+        Args:
+            expectation: The oracle expectation
+            actual_value: The actual value from API
+
+        Returns:
+            ValidationResult with computed fields
+        """
+        passed = expectation.is_within_tolerance(actual_value)
+        difference = expectation.difference(actual_value)
+
+        if passed:
+            message = (
+                f"{expectation.metric_name}: {actual_value:.4f} matches "
+                f"expected {expectation.expected_value:.4f} "
+                f"(diff: {difference:.4f}, tolerance: {expectation.tolerance})"
+            )
+        else:
+            message = (
+                f"{expectation.metric_name}: {actual_value:.4f} differs from "
+                f"expected {expectation.expected_value:.4f} by {difference:.4f} "
+                f"(exceeds tolerance: {expectation.tolerance})"
+            )
+
+        return cls(
+            expectation=expectation,
+            actual_value=actual_value,
+            passed=passed,
+            difference=difference,
+            message=message,
+        )
 
 
 @dataclass

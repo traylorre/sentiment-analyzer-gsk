@@ -6,6 +6,7 @@ Auto-generated from all feature plans. Last updated: 2025-11-26
 - TypeScript 5.x, Node.js 20 LTS (007-sentiment-dashboard-frontend)
 - Python 3.13 + pytest, pytest-asyncio, httpx, boto3, moto (for local unit tests only), aws-xray-sdk (008-e2e-validation-suite)
 - DynamoDB (preprod - real AWS, no mocks for E2E) (008-e2e-validation-suite)
+- Python 3.13 + pytest, pytest-asyncio, httpx, boto3, moto (unit tests only) (009-e2e-test-oracle-validation)
 
 - **Python 3.13** with FastAPI, boto3, pydantic, aws-lambda-powertools, httpx
 - **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, CloudFront
@@ -246,9 +247,9 @@ vi.mock('@/stores/auth-store', () => ({
 ```
 
 ## Recent Changes
+- 009-e2e-test-oracle-validation: Added Python 3.13 + pytest, pytest-asyncio, httpx, boto3, moto (unit tests only)
 - 008-e2e-validation-suite: Added Python 3.13 + pytest, pytest-asyncio, httpx, boto3, moto (for local unit tests only), aws-xray-sdk
 - 007-sentiment-dashboard-frontend: Mobile-first Next.js 14 dashboard with Robinhood-style dark fintech UI
-- 006-user-config-dashboard: Financial news sentiment dashboard with Tiingo/Finnhub, Cognito auth, CloudFront CDN
 
 <!-- MANUAL ADDITIONS START -->
 

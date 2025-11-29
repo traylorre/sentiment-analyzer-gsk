@@ -6,13 +6,21 @@ import pytest
 from tests.fixtures.mocks.mock_finnhub import create_mock_finnhub
 from tests.fixtures.mocks.mock_sendgrid import create_mock_sendgrid
 from tests.fixtures.mocks.mock_tiingo import create_mock_tiingo
+from tests.fixtures.synthetic.config_generator import (
+    SyntheticConfiguration,
+    create_config_generator,
+)
 from tests.fixtures.synthetic.news_generator import (
     create_news_generator,
 )
 from tests.fixtures.synthetic.sentiment_generator import (
     create_sentiment_generator,
 )
-from tests.fixtures.synthetic.test_oracle import create_test_oracle
+from tests.fixtures.synthetic.test_oracle import (
+    OracleExpectation,
+    ValidationResult,
+    create_test_oracle,
+)
 from tests.fixtures.synthetic.ticker_generator import (
     create_ticker_generator,
 )
@@ -432,3 +440,184 @@ class TestMockSendGrid:
 
         assert result["status_code"] == 429
         assert "retry_after" in result
+
+
+class TestConfigGenerator:
+    """Tests for configuration generator."""
+
+    def test_create_generator(self):
+        """Test generator factory function."""
+        gen = create_config_generator(seed=123)
+        assert gen._seed == 123
+
+    def test_generate_config_returns_configuration(self):
+        """Test that generate_config returns SyntheticConfiguration."""
+        gen = create_config_generator()
+        config = gen.generate_config("test-run-1")
+
+        assert isinstance(config, SyntheticConfiguration)
+        assert config.name.startswith("Test-Config-")
+        assert len(config.tickers) == 3  # Default ticker_count
+
+    def test_generate_config_deterministic(self):
+        """Test that same seed produces same config."""
+        gen1 = create_config_generator(seed=12345)
+        gen2 = create_config_generator(seed=12345)
+
+        config1 = gen1.generate_config("test-run-1")
+        config2 = gen2.generate_config("test-run-1")
+
+        assert config1.name == config2.name
+        assert config1.config_id == config2.config_id
+        assert len(config1.tickers) == len(config2.tickers)
+        for t1, t2 in zip(config1.tickers, config2.tickers, strict=True):
+            assert t1.symbol == t2.symbol
+            assert t1.weight == t2.weight
+
+    def test_generate_config_different_seeds(self):
+        """Test that different seeds produce different configs."""
+        gen1 = create_config_generator(seed=42)
+        gen2 = create_config_generator(seed=99)
+
+        config1 = gen1.generate_config("test-run-1")
+        config2 = gen2.generate_config("test-run-1")
+
+        # Names should differ (different hex suffix)
+        assert config1.name != config2.name
+
+    def test_generate_tickers_normalized_weights(self):
+        """Test that ticker weights sum to 1.0."""
+        gen = create_config_generator()
+        tickers = gen.generate_tickers(count=4)
+
+        total_weight = sum(t.weight for t in tickers)
+        assert abs(total_weight - 1.0) < 0.0001
+
+    def test_generate_tickers_no_duplicates(self):
+        """Test that generated tickers are unique."""
+        gen = create_config_generator()
+        tickers = gen.generate_tickers(count=5)
+
+        symbols = [t.symbol for t in tickers]
+        assert len(symbols) == len(set(symbols))
+
+    def test_ticker_count_validation_min(self):
+        """Test that ticker_count < 1 raises ValueError."""
+        gen = create_config_generator()
+        with pytest.raises(ValueError, match="min 1 ticker"):
+            gen.generate_config("test-run-1", ticker_count=0)
+
+    def test_ticker_count_validation_max(self):
+        """Test that ticker_count > 5 raises ValueError."""
+        gen = create_config_generator()
+        with pytest.raises(ValueError, match="max 5 tickers"):
+            gen.generate_config("test-run-1", ticker_count=6)
+
+    def test_invalid_seed_type(self):
+        """Test that non-int seed raises TypeError."""
+        with pytest.raises(TypeError):
+            create_config_generator(seed="not an int")
+
+    def test_reset_generator(self):
+        """Test generator reset restores state."""
+        gen = create_config_generator(seed=42)
+        config1 = gen.generate_config("test-run-1")
+
+        gen.reset(42)
+        config2 = gen.generate_config("test-run-1")
+
+        assert config1.name == config2.name
+        assert config1.config_id == config2.config_id
+
+    def test_generate_user_id_format(self):
+        """Test user ID format includes test run ID."""
+        gen = create_config_generator()
+        user_id = gen.generate_user_id("e2e-abc123")
+
+        assert user_id.startswith("e2e-abc123-user-")
+        assert len(user_id) > len("e2e-abc123-user-")
+
+    def test_generate_name_custom_prefix(self):
+        """Test name generation with custom prefix."""
+        gen = create_config_generator()
+        name = gen.generate_name("My-Custom-Prefix")
+
+        assert name.startswith("My-Custom-Prefix-")
+
+    def test_to_api_payload(self):
+        """Test SyntheticConfiguration.to_api_payload()."""
+        gen = create_config_generator()
+        config = gen.generate_config("test-run-1", ticker_count=2)
+        payload = config.to_api_payload()
+
+        assert "name" in payload
+        assert "tickers" in payload
+        assert len(payload["tickers"]) == 2
+        assert all("symbol" in t and "weight" in t for t in payload["tickers"])
+
+
+class TestOracleExpectation:
+    """Tests for OracleExpectation dataclass."""
+
+    def test_is_within_tolerance_pass(self):
+        """Test value within tolerance passes."""
+        expectation = OracleExpectation(
+            metric_name="sentiment_score",
+            expected_value=0.75,
+            tolerance=0.01,
+        )
+        assert expectation.is_within_tolerance(0.755) is True
+        assert expectation.is_within_tolerance(0.745) is True
+        assert expectation.is_within_tolerance(0.75) is True
+
+    def test_is_within_tolerance_fail(self):
+        """Test value outside tolerance fails."""
+        expectation = OracleExpectation(
+            metric_name="sentiment_score",
+            expected_value=0.75,
+            tolerance=0.01,
+        )
+        assert expectation.is_within_tolerance(0.77) is False
+        assert expectation.is_within_tolerance(0.73) is False
+
+    def test_difference_calculation(self):
+        """Test difference is absolute."""
+        expectation = OracleExpectation(
+            metric_name="atr",
+            expected_value=10.0,
+        )
+        assert expectation.difference(10.5) == 0.5
+        assert expectation.difference(9.5) == 0.5
+
+
+class TestValidationResult:
+    """Tests for ValidationResult dataclass."""
+
+    def test_from_comparison_pass(self):
+        """Test ValidationResult for passing comparison."""
+        expectation = OracleExpectation(
+            metric_name="sentiment",
+            expected_value=0.5,
+            tolerance=0.01,
+        )
+        result = ValidationResult.from_comparison(expectation, 0.505)
+
+        assert result.passed is True
+        assert result.actual_value == 0.505
+        assert result.difference == pytest.approx(0.005)
+        assert "matches" in result.message
+
+    def test_from_comparison_fail(self):
+        """Test ValidationResult for failing comparison."""
+        expectation = OracleExpectation(
+            metric_name="sentiment",
+            expected_value=0.5,
+            tolerance=0.01,
+        )
+        result = ValidationResult.from_comparison(expectation, 0.6)
+
+        assert result.passed is False
+        assert result.actual_value == 0.6
+        assert result.difference == pytest.approx(0.1)
+        assert "differs" in result.message
+        assert "exceeds tolerance" in result.message
