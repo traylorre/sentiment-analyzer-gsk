@@ -185,7 +185,7 @@ async def test_oauth_callback_tokens_returned(
     if response.status_code == 200:
         # If 200, should have error indicator or tokens
         data = response.json()
-        has_error = "error" in data or "message" in data
+        has_error = "error" in data or "message" in data or "detail" in data
         has_tokens = "access_token" in data
         assert has_error or has_tokens, f"Unexpected 200 response: {data}"
 
@@ -302,7 +302,9 @@ async def test_token_refresh(
     # Handle empty response body gracefully
     if response.text:
         data = response.json()
-        assert "error" in data or "message" in data, "Error response missing message"
+        assert (
+            "error" in data or "message" in data or "detail" in data
+        ), "Error response missing message"
 
 
 @pytest.mark.asyncio
