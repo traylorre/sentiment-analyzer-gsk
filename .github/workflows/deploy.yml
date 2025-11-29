@@ -322,17 +322,27 @@ jobs:
           echo ""
           echo "📦 Packaging Notification Lambda (boto3, sendgrid, pydantic)..."
 
-          # Install notification dependencies
+          # Install notification dependencies in two steps:
+          # 1. Binary packages with platform-specific flags (pydantic-core needs correct binary)
+          # 2. SendGrid separately (starkbank-ecdsa is pure Python, no binary available for py313)
           pip install \
             boto3==1.41.0 \
-            sendgrid==6.11.0 \
             pydantic==2.12.4 \
             python-json-logger==4.0.0 \
+            aws-xray-sdk==2.14.0 \
             -t packages/notification-deps/ \
             --platform manylinux2014_x86_64 \
             --implementation cp \
             --python-version 313 \
             --only-binary=:all: \
+            --no-cache-dir \
+            --disable-pip-version-check \
+            --quiet
+
+          # Install sendgrid without binary restriction (starkbank-ecdsa is pure Python)
+          pip install \
+            sendgrid==6.11.0 \
+            -t packages/notification-deps/ \
             --no-cache-dir \
             --disable-pip-version-check \
             --quiet
