@@ -57,13 +57,38 @@ gh pr list --state open --json number,title,headRefName,url
 
 ### Step 4: Clean Up Merged Branches
 
-For branches whose PRs are merged:
+Detect branches that are fully merged into main. This includes:
+1. **Fast-forward/regular merges**: Detected by `git branch --merged`
+2. **Squash merges**: Detected by comparing tree content (branch diff vs main is empty)
+
 ```bash
-# Find merged branches
+# Method 1: Find traditionally merged branches
 git branch --merged origin/main | grep -v "main\|master\|\*"
 
+# Method 2: Find squash-merged branches (content already in main)
+# A branch is squash-merged if cherry-picking it onto main produces no changes
+for branch in $(git branch --format='%(refname:short)' | grep -v "^main$"); do
+  # Skip if traditionally merged (already caught above)
+  if git branch --merged origin/main | grep -q "^[* ]*${branch}$"; then
+    continue
+  fi
+
+  # Check if branch content is already in main by comparing commits
+  # Use two dots (..) to compare the branch tip to main tip
+  # If git diff shows nothing, the branch content is fully in main
+  if git diff origin/main.."$branch" --quiet 2>/dev/null; then
+    echo "$branch (squash-merged)"
+  fi
+done
+```
+
+For each merged branch:
+```bash
 # Delete local merged branches
 git branch -d <branch-name>
+
+# For squash-merged branches, may need -D since git doesn't recognize the merge
+git branch -D <branch-name>
 
 # Delete remote merged branches (optional, with confirmation)
 git push origin --delete <branch-name>
@@ -83,8 +108,8 @@ git push origin --delete <branch-name>
 |------|-------|--------|-----|
 
 ### Cleaned Up (Merged)
-| Branch | Deleted Local | Deleted Remote |
-|--------|---------------|----------------|
+| Branch | Merge Type | Deleted Local | Deleted Remote |
+|--------|------------|---------------|----------------|
 
 ### Errors/Warnings
 - ...
@@ -93,9 +118,10 @@ git push origin --delete <branch-name>
 ## Safety Guards
 
 - Never force push without explicit user confirmation
-- Never delete branches that aren't fully merged
+- Never delete branches that aren't fully merged (check both regular and squash merges)
 - Always rebase on main before pushing (to avoid merge conflicts in PR)
 - Skip branches with uncommitted changes (warn user)
+- For squash-merged branches, confirm with user before deletion (since `git branch -d` won't work)
 
 ## Quick Commands
 
@@ -131,6 +157,15 @@ When invoked, automatically:
 3. Push each branch to origin
 4. Create PRs for branches ahead of main without existing PRs
 5. List all open PRs for review
-6. Offer to clean up merged branches
+6. Detect merged branches (both regular and squash merges)
+7. Offer to clean up merged branches (with user confirmation for squash merges)
 
 Report results in a clear table format.
+
+### Squash Merge Detection Logic
+
+A branch is considered squash-merged when:
+- `git diff origin/main..<branch>` produces no output (branch tip is identical to main tip)
+- But `git branch --merged origin/main` doesn't list it (commits weren't fast-forwarded)
+
+This catches the common GitHub "Squash and merge" workflow where commit SHAs change.
