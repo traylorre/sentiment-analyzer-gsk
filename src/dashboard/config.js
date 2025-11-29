@@ -19,20 +19,15 @@ const CONFIG = {
     // Empty string means same origin (Lambda Function URL serves both static and API)
     API_BASE_URL: '',
 
-    // Endpoints
+    // Endpoints (API v2)
     ENDPOINTS: {
-        METRICS: '/api/metrics',
-        STREAM: '/api/stream',
-        ITEMS: '/api/items'
+        SENTIMENT: '/api/v2/sentiment',
+        TRENDS: '/api/v2/trends',
+        ARTICLES: '/api/v2/articles'
     },
 
-    // Polling interval for metrics (milliseconds)
-    // Used as fallback when SSE is not available
-    METRICS_POLL_INTERVAL: 30000, // 30 seconds
-
-    // SSE reconnection settings
-    SSE_RECONNECT_DELAY: 3000, // 3 seconds
-    SSE_MAX_RETRIES: 5,
+    // Polling interval for sentiment data (milliseconds)
+    SENTIMENT_POLL_INTERVAL: 30000, // 30 seconds
 
     // Chart colors (must match CSS custom properties)
     COLORS: {

@@ -14,8 +14,9 @@ HTTP requests via Function URL (CORS enabled)
 |--------|------|---------|------|
 | GET | `/` | Serve index.html | None |
 | GET | `/health` | Health check + DynamoDB connectivity | None |
-| GET | `/api/metrics` | Aggregated sentiment metrics | API Key |
-| GET | `/api/stream` | SSE real-time updates | API Key |
+| GET | `/api/v2/sentiment` | Get sentiment data by tags | API Key |
+| GET | `/api/v2/trends` | Get sentiment trends | API Key |
+| GET | `/api/v2/articles` | Get news articles | API Key |
 
 ## For On-Call Engineers
 
@@ -47,20 +48,13 @@ aws secretsmanager get-secret-value \
 
 | Error Code | Cause | Fix |
 |------------|-------|-----|
-| 401 Unauthorized | Invalid API key | Check `X-API-Key` header matches secret |
+| 401 Unauthorized | Invalid API key | Check `Authorization` header matches secret |
 | `DATABASE_ERROR` | DynamoDB query failed | Check GSI `by_status` exists |
-| SSE timeout | Client disconnected | Normal behavior, client will reconnect |
 
 ## Authentication
 
-API key passed via `X-API-Key` header, validated with `secrets.compare_digest()`
+API key passed via `Authorization: Bearer <key>` header, validated with `secrets.compare_digest()`
 to prevent timing attacks.
 
 **Security Note**: The `/health` endpoint is unauthenticated intentionally for
 monitoring systems. It only returns connectivity status, no sensitive data.
-
-## SSE Behavior
-
-- Poll interval: 5 seconds
-- Sends `data: {metrics}` events
-- Client should handle reconnection on disconnect

@@ -101,9 +101,9 @@ class TestLambdaColdStart:
         assert data["status"] == "healthy"
         assert "sentiment-items" in data["table"]
 
-    def test_metrics_endpoint_requires_dependencies(self, auth_headers):
+    def test_sentiment_endpoint_requires_dependencies(self, auth_headers):
         """
-        E2E: Metrics endpoint works with all FastAPI/Pydantic dependencies.
+        E2E: Sentiment endpoint works with all FastAPI/Pydantic dependencies.
 
         This test verifies:
         - FastAPI can process requests
@@ -115,27 +115,22 @@ class TestLambdaColdStart:
         more of the dependency tree.
         """
         response = requests.get(
-            f"{DASHBOARD_URL}/api/metrics",
+            f"{DASHBOARD_URL}/api/v2/sentiment?tags=tech",
             headers=auth_headers,
             timeout=REQUEST_TIMEOUT,
         )
 
         assert response.status_code == 200, (
-            f"Metrics endpoint failed with {response.status_code}. "
+            f"Sentiment endpoint failed with {response.status_code}. "
             f"Response: {response.text[:500]}"
         )
 
-        # Verify response schema
+        # Verify response schema (v2 format)
         data = response.json()
         required_fields = [
-            "total",
-            "positive",
-            "neutral",
-            "negative",
-            "by_tag",
-            "rate_last_hour",
-            "rate_last_24h",
-            "recent_items",
+            "tags",
+            "overall",
+            "total_count",
         ]
         for field in required_fields:
             assert field in data, f"Missing field: {field}"
@@ -171,7 +166,7 @@ class TestLambdaHTTPRouting:
         Verifies CORS configuration works through the full stack.
         """
         response = requests.get(
-            f"{DASHBOARD_URL}/api/metrics",
+            f"{DASHBOARD_URL}/api/v2/sentiment?tags=tech",
             headers={
                 **auth_headers,
                 "Origin": "http://localhost:3000",
@@ -209,7 +204,7 @@ class TestLambdaAuthentication:
         E2E: Requests without Authorization header are rejected.
         """
         response = requests.get(
-            f"{DASHBOARD_URL}/api/metrics",
+            f"{DASHBOARD_URL}/api/v2/sentiment?tags=tech",
             timeout=REQUEST_TIMEOUT,
         )
 
@@ -221,7 +216,7 @@ class TestLambdaAuthentication:
         E2E: Requests with invalid API key are rejected.
         """
         response = requests.get(
-            f"{DASHBOARD_URL}/api/metrics",
+            f"{DASHBOARD_URL}/api/v2/sentiment?tags=tech",
             headers={"Authorization": "Bearer invalid-key-12345"},
             timeout=REQUEST_TIMEOUT,
         )
@@ -239,7 +234,7 @@ class TestLambdaAuthentication:
         - Environment variables are set correctly
         """
         response = requests.get(
-            f"{DASHBOARD_URL}/api/metrics",
+            f"{DASHBOARD_URL}/api/v2/sentiment?tags=tech",
             headers=auth_headers,
             timeout=REQUEST_TIMEOUT,
         )
@@ -252,9 +247,9 @@ class TestLambdaDynamoDBIntegration:
     Tests that verify DynamoDB integration works through deployed Lambda.
     """
 
-    def test_metrics_queries_dynamodb(self, auth_headers):
+    def test_sentiment_queries_dynamodb(self, auth_headers):
         """
-        E2E: Metrics endpoint successfully queries DynamoDB.
+        E2E: Sentiment endpoint successfully queries DynamoDB.
 
         Verifies:
         - Lambda has DynamoDB permissions
@@ -263,7 +258,7 @@ class TestLambdaDynamoDBIntegration:
         - Results are aggregated correctly
         """
         response = requests.get(
-            f"{DASHBOARD_URL}/api/metrics",
+            f"{DASHBOARD_URL}/api/v2/sentiment?tags=tech",
             headers=auth_headers,
             timeout=REQUEST_TIMEOUT,
         )
@@ -272,19 +267,19 @@ class TestLambdaDynamoDBIntegration:
 
         data = response.json()
 
-        # Verify metrics were computed (may be 0 if table empty)
-        assert isinstance(data["total"], int)
-        assert data["total"] >= 0
-        assert data["total"] == data["positive"] + data["neutral"] + data["negative"]
+        # Verify sentiment data returned (may be 0 if table empty)
+        assert "total_count" in data
+        assert isinstance(data["total_count"], int)
+        assert data["total_count"] >= 0
 
-    def test_items_endpoint_queries_dynamodb(self, auth_headers):
+    def test_articles_endpoint_queries_dynamodb(self, auth_headers):
         """
-        E2E: Items endpoint successfully queries DynamoDB.
+        E2E: Articles endpoint successfully queries DynamoDB.
 
         Verifies Scan operations work through Lambda.
         """
         response = requests.get(
-            f"{DASHBOARD_URL}/api/items?limit=10",
+            f"{DASHBOARD_URL}/api/v2/articles?tags=tech&limit=10",
             headers=auth_headers,
             timeout=REQUEST_TIMEOUT,
         )
@@ -292,13 +287,9 @@ class TestLambdaDynamoDBIntegration:
         assert response.status_code == 200
 
         data = response.json()
-        assert isinstance(data, list)
-
-        # Verify item structure if data exists
-        if len(data) > 0:
-            item = data[0]
-            assert "item_id" in item
-            assert "status" in item
+        # v2 articles endpoint returns object with articles list
+        assert "articles" in data
+        assert isinstance(data["articles"], list)
 
 
 class TestLambdaPerformance:
@@ -324,15 +315,15 @@ class TestLambdaPerformance:
             duration < 5.0
         ), f"Health check took {duration:.2f}s (>5s indicates cold start issue)"
 
-    def test_metrics_responds_within_timeout(self, auth_headers):
+    def test_sentiment_responds_within_timeout(self, auth_headers):
         """
-        E2E: Metrics endpoint responds before Lambda timeout.
+        E2E: Sentiment endpoint responds before Lambda timeout.
 
         Lambda timeout is 60s, response should be much faster.
         """
         start_time = time.time()
         response = requests.get(
-            f"{DASHBOARD_URL}/api/metrics",
+            f"{DASHBOARD_URL}/api/v2/sentiment?tags=tech",
             headers=auth_headers,
             timeout=REQUEST_TIMEOUT,
         )
@@ -341,7 +332,7 @@ class TestLambdaPerformance:
         assert response.status_code == 200
         assert (
             duration < 30.0
-        ), f"Metrics took {duration:.2f}s (>30s indicates performance issue)"
+        ), f"Sentiment took {duration:.2f}s (>30s indicates performance issue)"
 
 
 class TestLambdaErrorHandling:
@@ -349,18 +340,18 @@ class TestLambdaErrorHandling:
     Tests that verify Lambda error handling works correctly.
     """
 
-    def test_invalid_query_params_return_400(self, auth_headers):
+    def test_invalid_query_params_return_422(self, auth_headers):
         """
-        E2E: Invalid query parameters return 400 Bad Request.
+        E2E: Invalid query parameters return 422 Unprocessable Entity.
         """
         response = requests.get(
-            f"{DASHBOARD_URL}/api/metrics?hours=999",
+            f"{DASHBOARD_URL}/api/v2/sentiment",  # Missing required tags param
             headers=auth_headers,
             timeout=REQUEST_TIMEOUT,
         )
 
-        assert response.status_code == 400
-        assert "Hours must be between" in response.text
+        # FastAPI returns 422 for validation errors
+        assert response.status_code == 422
 
     def test_malformed_json_handled_gracefully(self, auth_headers):
         """
@@ -400,7 +391,7 @@ class TestLambdaConcurrency:
 
         def make_request():
             response = requests.get(
-                f"{DASHBOARD_URL}/api/metrics",
+                f"{DASHBOARD_URL}/api/v2/sentiment?tags=tech",
                 headers=auth_headers,
                 timeout=REQUEST_TIMEOUT,
             )
@@ -424,7 +415,7 @@ class TestLambdaConcurrency:
         """
         for _ in range(5):
             response = requests.get(
-                f"{DASHBOARD_URL}/api/metrics",
+                f"{DASHBOARD_URL}/api/v2/sentiment?tags=tech",
                 headers=auth_headers,
                 timeout=REQUEST_TIMEOUT,
             )
@@ -440,10 +431,14 @@ class TestLambdaResponseFormats:
         """
         E2E: All API endpoints return JSON content type.
         """
-        endpoints = ["/health", "/api/metrics", "/api/items"]
+        endpoints = [
+            ("/health", False),
+            ("/api/v2/sentiment?tags=tech", True),
+            ("/api/v2/articles?tags=tech", True),
+        ]
 
-        for endpoint in endpoints:
-            headers = auth_headers if endpoint.startswith("/api/") else {}
+        for endpoint, needs_auth in endpoints:
+            headers = auth_headers if needs_auth else {}
             response = requests.get(
                 f"{DASHBOARD_URL}{endpoint}",
                 headers=headers,
@@ -460,7 +455,7 @@ class TestLambdaResponseFormats:
         Verifies serialization works correctly.
         """
         response = requests.get(
-            f"{DASHBOARD_URL}/api/metrics",
+            f"{DASHBOARD_URL}/api/v2/sentiment?tags=tech",
             headers=auth_headers,
             timeout=REQUEST_TIMEOUT,
         )
@@ -529,10 +524,10 @@ class TestSmokeTests:
         response = requests.get(f"{DASHBOARD_URL}/health", timeout=REQUEST_TIMEOUT)
         assert response.status_code == 200
 
-    def test_smoke_metrics_authenticated(self, auth_headers):
-        """SMOKE: Metrics endpoint returns 200 OK with valid auth."""
+    def test_smoke_sentiment_authenticated(self, auth_headers):
+        """SMOKE: Sentiment endpoint returns 200 OK with valid auth."""
         response = requests.get(
-            f"{DASHBOARD_URL}/api/metrics",
+            f"{DASHBOARD_URL}/api/v2/sentiment?tags=tech",
             headers=auth_headers,
             timeout=REQUEST_TIMEOUT,
         )
@@ -540,7 +535,9 @@ class TestSmokeTests:
 
     def test_smoke_auth_rejection(self):
         """SMOKE: Unauthenticated requests are rejected."""
-        response = requests.get(f"{DASHBOARD_URL}/api/metrics", timeout=REQUEST_TIMEOUT)
+        response = requests.get(
+            f"{DASHBOARD_URL}/api/v2/sentiment?tags=tech", timeout=REQUEST_TIMEOUT
+        )
         assert response.status_code == 401
 
 
@@ -569,14 +566,14 @@ class TestPerformanceBenchmarks:
             "See Spec 003 for future implementation."
         )
 
-    def test_benchmark_metrics_query_time(self, auth_headers):
-        """BENCHMARK: Measure metrics endpoint response time."""
+    def test_benchmark_sentiment_query_time(self, auth_headers):
+        """BENCHMARK: Measure sentiment endpoint response time."""
         times = []
 
         for _ in range(5):
             start = time.time()
             response = requests.get(
-                f"{DASHBOARD_URL}/api/metrics",
+                f"{DASHBOARD_URL}/api/v2/sentiment?tags=tech",
                 headers=auth_headers,
                 timeout=REQUEST_TIMEOUT,
             )
@@ -586,7 +583,7 @@ class TestPerformanceBenchmarks:
             times.append(duration)
 
         avg_time = sum(times) / len(times)
-        print(f"\\nAverage metrics response time: {avg_time:.3f}s")
+        print(f"\\nAverage sentiment response time: {avg_time:.3f}s")
 
         # Track but don't assert (for monitoring)
         assert avg_time < 10.0, f"Average time {avg_time:.3f}s exceeded 10s threshold"

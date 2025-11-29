@@ -18,20 +18,20 @@ Client-side UI for the sentiment analysis dashboard.
 If users report dashboard issues:
 
 1. **Charts not loading** → Check browser console for API errors
-2. **SSE not updating** → Check `/api/stream` endpoint in Network tab
+2. **Data not updating** → Check `/api/v2/sentiment` endpoint in Network tab
 3. **CORS errors** → Verify Function URL CORS configuration
 
 ### Browser Console Commands
 
 ```javascript
 // Check last API response
-console.log(window.lastMetricsResponse);
+console.log(window.lastSentimentResponse);
 
 // Force refresh
 window.location.reload(true);
 
 // Test API manually
-fetch('/api/metrics', {headers: {'X-API-Key': 'YOUR_KEY'}})
+fetch('/api/v2/sentiment?tags=AI', {headers: {'Authorization': 'Bearer YOUR_KEY'}})
   .then(r => r.json())
   .then(console.log);
 ```

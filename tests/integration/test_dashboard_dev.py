@@ -83,9 +83,9 @@ class TestDashboardDevE2E:
         assert data["table"] == "test-sentiment-items"
 
     @mock_aws
-    def test_metrics_endpoint_schema(self, env_vars, client, auth_headers):
-        """E2E: Metrics endpoint returns correct schema."""
-        # Create mock table
+    def test_sentiment_endpoint_schema(self, env_vars, client, auth_headers):
+        """E2E: Sentiment endpoint returns correct schema."""
+        # Create mock table with by_tag GSI required for v2 API
         import boto3
 
         dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
@@ -100,6 +100,7 @@ class TestDashboardDevE2E:
                 {"AttributeName": "timestamp", "AttributeType": "S"},
                 {"AttributeName": "sentiment", "AttributeType": "S"},
                 {"AttributeName": "status", "AttributeType": "S"},
+                {"AttributeName": "tag", "AttributeType": "S"},
             ],
             GlobalSecondaryIndexes=[
                 {
@@ -118,25 +119,28 @@ class TestDashboardDevE2E:
                     ],
                     "Projection": {"ProjectionType": "ALL"},
                 },
+                {
+                    "IndexName": "by_tag",
+                    "KeySchema": [
+                        {"AttributeName": "tag", "KeyType": "HASH"},
+                        {"AttributeName": "timestamp", "KeyType": "RANGE"},
+                    ],
+                    "Projection": {"ProjectionType": "ALL"},
+                },
             ],
             BillingMode="PAY_PER_REQUEST",
         )
 
-        response = client.get("/api/metrics", headers=auth_headers)
+        response = client.get("/api/v2/sentiment?tags=test", headers=auth_headers)
 
         assert response.status_code == 200
         data = response.json()
 
         # Verify schema
         required_fields = [
-            "total",
-            "positive",
-            "neutral",
-            "negative",
-            "by_tag",
-            "rate_last_hour",
-            "rate_last_24h",
-            "recent_items",
+            "tags",
+            "overall",
+            "total_count",
         ]
         for field in required_fields:
             assert field in data
@@ -161,11 +165,11 @@ class TestDashboardDevE2E:
         )
 
         # Missing auth
-        response = client.get("/api/metrics")
+        response = client.get("/api/v2/sentiment?tags=test")
         assert response.status_code == 401
 
         # Wrong key
         response = client.get(
-            "/api/metrics", headers={"Authorization": "Bearer wrong-key"}
+            "/api/v2/sentiment?tags=test", headers={"Authorization": "Bearer wrong-key"}
         )
         assert response.status_code == 401
