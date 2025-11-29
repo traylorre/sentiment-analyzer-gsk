@@ -4,13 +4,11 @@ name: "Deploy Pipeline"
 # instead of multiple workflow_run triggers.
 #
 # ARCHITECTURAL NOTE:
-# Previous implementation used 4 separate workflows chained with workflow_run triggers.
-# This violated GitHub Actions' 3-level workflow_run nesting limit and caused
-# "startup_failure" issues. The correct pattern is multiple jobs with dependencies
-# within a single workflow.
+# Simplified 2-environment flow (preprod + prod). Dev environment removed to reduce
+# complexity and cost. Mocked tests provide fast feedback, preprod validates real AWS.
 #
 # Flow:
-#   push to main → build → deploy-dev → test-dev → deploy-preprod → test-preprod → deploy-prod
+#   push to main → build → test (mocked) → deploy-preprod → test-preprod → deploy-prod → canary
 #
 # Benefits:
 # - No workflow_run nesting limits
@@ -18,6 +16,8 @@ name: "Deploy Pipeline"
 # - Single workflow run view
 # - Automatic progression through stages
 # - Environment-based approval gates
+# - Lower AWS costs (no dev environment)
+# - Clearer separation: mocked tests vs real AWS tests
 
 on:
   push:
@@ -417,124 +417,12 @@ jobs:
           retention-days: 90
 
   # ========================================================================
-  # JOB 2: Deploy to Dev
+  # JOB 2: Unit Tests (Mocked AWS)
   # ========================================================================
-  deploy-dev:
-    name: Deploy to Dev
+  test:
+    name: Unit Tests (Mocked AWS)
     needs: build
     runs-on: ubuntu-latest
-    environment:
-      name: dev
-      url: ${{ steps.outputs.outputs.dashboard_url }}
-
-    outputs:
-      dashboard_url: ${{ steps.outputs.outputs.dashboard_url }}
-      sns_topic_arn: ${{ steps.outputs.outputs.sns_topic_arn }}
-
-    defaults:
-      run:
-        working-directory: infrastructure/terraform
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Download Lambda Packages
-        uses: actions/download-artifact@v5
-        with:
-          pattern: lambda-packages-*
-          path: packages
-          merge-multiple: true
-
-      - name: Configure AWS Credentials (Dev)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
-
-      - name: Upload Lambda Packages to S3 (Dev)
-        run: |
-          set -e
-          SHA="${GITHUB_SHA::7}"
-          BUCKET="dev-sentiment-lambda-deployments"
-
-          echo "Uploading Lambda packages to S3..."
-          aws s3 cp ../../packages/ingestion-${SHA}.zip s3://${BUCKET}/ingestion/lambda.zip
-          aws s3 cp ../../packages/analysis-${SHA}.zip s3://${BUCKET}/analysis/lambda.zip
-          aws s3 cp ../../packages/dashboard-${SHA}.zip s3://${BUCKET}/dashboard/lambda.zip
-          aws s3 cp ../../packages/metrics-${SHA}.zip s3://${BUCKET}/metrics/lambda.zip
-          aws s3 cp ../../packages/notification-${SHA}.zip s3://${BUCKET}/notification/lambda.zip
-
-          echo "Lambda packages uploaded successfully"
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.10.0
-          terraform_wrapper: false
-
-      - name: Terraform Init (Dev)
-        run: |
-          terraform init -backend-config=backend-dev.hcl -reconfigure
-
-      - name: Terraform Plan (Dev)
-        run: |
-          SHA="${GITHUB_SHA::7}"
-          terraform plan \
-            -var-file=dev.tfvars \
-            -var="lambda_package_version=${SHA}" \
-            -out=dev.tfplan
-
-      - name: Terraform Apply (Dev)
-        run: |
-          terraform apply -auto-approve dev.tfplan
-
-      - name: Capture Terraform Outputs
-        id: outputs
-        run: |
-          dashboard_url=$(terraform output -raw dashboard_url || echo "")
-          api_url=$(terraform output -raw dashboard_api_url || echo "")
-          sns_topic_arn=$(terraform output -raw sns_topic_arn || echo "")
-
-          echo "dashboard_url=${dashboard_url}" >> $GITHUB_OUTPUT
-          echo "api_url=${api_url}" >> $GITHUB_OUTPUT
-          echo "sns_topic_arn=${sns_topic_arn}" >> $GITHUB_OUTPUT
-
-      - name: Smoke Test (Post-Deployment)
-        run: |
-          # Use API Gateway URL for health check (CloudFront only routes /api/* to API Gateway)
-          api_url="${{ steps.outputs.outputs.api_url }}"
-          if [ -z "$api_url" ]; then
-            echo "API URL not available, skipping smoke test"
-            exit 0
-          fi
-
-          echo "Testing Dashboard Lambda at: $api_url"
-          status_code=$(curl -s -o /dev/null -w "%{http_code}" "${api_url}/health" || echo "000")
-
-          if [ "$status_code" == "200" ]; then
-            echo "✓ Dashboard Lambda is responding (HTTP $status_code)"
-          else
-            echo "✗ Dashboard Lambda health check failed (HTTP $status_code)"
-            exit 1
-          fi
-
-      - name: Record Deployment
-        if: success()
-        run: |
-          echo "Dev deployment completed at $(date)"
-          echo "Commit: ${{ github.sha }}"
-          echo "Dashboard URL: ${{ steps.outputs.outputs.dashboard_url }}"
-
-  # ========================================================================
-  # JOB 3: Test Dev (Local/Mocked)
-  # ========================================================================
-  test-dev:
-    name: Dev Tests (Mocked AWS)
-    needs: [build, deploy-dev]
-    runs-on: ubuntu-latest
-    environment: dev
 
     permissions:
       contents: read
@@ -611,14 +499,14 @@ jobs:
             fi
           done
 
-          echo "✅ Dev validation complete"
+          echo "✅ Package validation complete"
 
   # ========================================================================
-  # JOB 4: Deploy to Preprod
+  # JOB 3: Deploy to Preprod
   # ========================================================================
   deploy-preprod:
     name: Deploy to Preprod
-    needs: [build, test-dev]
+    needs: [build, test]
     runs-on: ubuntu-latest
     environment:
       name: preprod
@@ -851,7 +739,7 @@ jobs:
           echo "Smoke test result: ${{ steps.smoke_test.outcome }}"
 
   # ========================================================================
-  # JOB 4: Test Preprod
+  # JOB 4: Test Preprod (Real AWS)
   # ========================================================================
   test-preprod:
     name: Preprod Integration Tests
@@ -1023,7 +911,7 @@ jobs:
   # ========================================================================
   # JOB 5: Deploy to Production
   # ========================================================================
-  deploy-production:
+  deploy-prod:
     name: Deploy to Production
     needs: [build, deploy-preprod, test-preprod]
     runs-on: ubuntu-latest
@@ -1184,9 +1072,9 @@ jobs:
   # ========================================================================
   # JOB 6: Production Canary Test
   # ========================================================================
-  canary-test:
+  canary:
     name: Production Canary Test
-    needs: [build, deploy-production]
+    needs: [build, deploy-prod]
     runs-on: ubuntu-latest
     environment: production
 
@@ -1195,7 +1083,7 @@ jobs:
         timeout-minutes: 2
         run: |
           # Use API Gateway URL for health check (more reliable than CloudFront for canary)
-          API_URL="${{ needs.deploy-production.outputs.api_url }}"
+          API_URL="${{ needs.deploy-prod.outputs.api_url }}"
           API_KEY="${{ secrets.DASHBOARD_API_KEY }}"
 
           echo "🔍 Running canary test against: ${API_URL}"
@@ -1227,7 +1115,7 @@ jobs:
   # ========================================================================
   summary:
     name: Deployment Summary
-    needs: [build, test-dev, deploy-preprod, test-preprod, deploy-production, canary-test]
+    needs: [build, test, deploy-preprod, test-preprod, deploy-prod, canary]
     if: always()
     runs-on: ubuntu-latest
 
@@ -1237,11 +1125,11 @@ jobs:
           echo "## Deployment Pipeline Summary"
           echo ""
           echo "- Build: ${{ needs.build.result }}"
-          echo "- Test Dev: ${{ needs.test-dev.result }}"
+          echo "- Unit Tests (Mocked): ${{ needs.test.result }}"
           echo "- Deploy Preprod: ${{ needs.deploy-preprod.result }}"
-          echo "- Test Preprod: ${{ needs.test-preprod.result }}"
-          echo "- Deploy Production: ${{ needs.deploy-production.result }}"
-          echo "- Canary Test: ${{ needs.canary-test.result }}"
+          echo "- Test Preprod (Real AWS): ${{ needs.test-preprod.result }}"
+          echo "- Deploy Production: ${{ needs.deploy-prod.result }}"
+          echo "- Canary Test: ${{ needs.canary.result }}"
           echo ""
           echo "Artifact SHA: ${{ needs.build.outputs.artifact-sha }}"
-          echo "Production Dashboard: ${{ needs.deploy-production.outputs.dashboard_url }}"
+          echo "Production Dashboard: ${{ needs.deploy-prod.outputs.dashboard_url }}"
