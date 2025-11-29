@@ -79,6 +79,7 @@ class AnonymousSessionResponse(BaseModel):
     """Response for POST /api/v2/auth/anonymous."""
 
     user_id: str
+    token: str  # Alias for user_id - used by clients as auth token
     auth_type: str = "anonymous"
     created_at: str
     session_expires_at: str
@@ -161,6 +162,7 @@ def create_anonymous_session(
 
         return AnonymousSessionResponse(
             user_id=user_id,
+            token=user_id,  # Token is the same as user_id for anonymous sessions
             auth_type="anonymous",
             created_at=now.isoformat().replace("+00:00", "Z"),
             session_expires_at=expires_at.isoformat().replace("+00:00", "Z"),

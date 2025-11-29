@@ -145,8 +145,7 @@ async def create_anonymous_session(
     try:
         result = auth_service.create_anonymous_session(
             table=table,
-            timezone=body.timezone,
-            device_fingerprint=body.device_fingerprint,
+            request=body,
         )
         return JSONResponse(result.model_dump(), status_code=201)
     except Exception as e:
