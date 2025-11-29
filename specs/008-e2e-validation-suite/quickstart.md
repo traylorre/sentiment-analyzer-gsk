@@ -2,6 +2,11 @@
 
 **Feature**: 008-e2e-validation-suite
 **Date**: 2025-11-28
+**Status**: Implementation Complete
+
+## Overview
+
+This E2E validation suite provides comprehensive testing against the preprod AWS environment. It covers 12 user stories with 94+ test cases across authentication, configuration, sentiment analysis, alerts, notifications, and observability.
 
 ## Prerequisites
 
@@ -178,21 +183,41 @@ async def test_logs_emitted(
 ```python
 # Available markers
 @pytest.mark.e2e          # All E2E tests (required)
-@pytest.mark.auth         # Authentication tests
-@pytest.mark.config       # Configuration CRUD tests
-@pytest.mark.sentiment    # Sentiment/volatility tests
-@pytest.mark.alerts       # Alert rule tests
-@pytest.mark.notifications # Notification pipeline tests
-@pytest.mark.observability # CloudWatch/X-Ray tests
+@pytest.mark.preprod      # Preprod-only tests (requires AWS credentials)
 @pytest.mark.slow         # Tests > 30 seconds
+@pytest.mark.cleanup      # Manual cleanup utilities
+@pytest.mark.manual       # Tests requiring manual triggering
+
+# User story markers
+@pytest.mark.us1          # Anonymous to Authenticated flow
+@pytest.mark.us2          # OAuth authentication flows
+@pytest.mark.us3          # Configuration CRUD operations
+@pytest.mark.us4          # Sentiment and Volatility data
+@pytest.mark.us5          # Alert rule lifecycle
+@pytest.mark.us6          # Notification delivery pipeline
+@pytest.mark.us7          # Rate limiting enforcement
+@pytest.mark.us8          # Circuit breaker behavior
+@pytest.mark.us9          # Ticker validation
+@pytest.mark.us10         # Real-time SSE updates
+@pytest.mark.us11         # CloudWatch observability
+@pytest.mark.us12         # Market status
 ```
 
 ### Running by Marker
 
 ```bash
-pytest tests/e2e/ -m "auth" -v
-pytest tests/e2e/ -m "not slow" -v
-pytest tests/e2e/ -m "e2e and not observability" -v
+# Run specific user story tests
+pytest tests/e2e/ -m "us1" -v
+pytest tests/e2e/ -m "us1 or us2" -v
+
+# Exclude slow tests
+pytest tests/e2e/ -m "preprod and not slow" -v
+
+# Run auth-related tests
+pytest tests/e2e/ -m "us1 or us2" -v
+
+# Skip cleanup utilities
+pytest tests/e2e/ -m "not cleanup" -v
 ```
 
 ---
@@ -242,21 +267,25 @@ aws dynamodb scan \
 ### Manual Cleanup (if needed)
 
 ```bash
-# Run cleanup script
-python -m tests.e2e.helpers.cleanup --run-id e2e-abc123
+# Dry run - see what would be cleaned up
+pytest tests/e2e/test_cleanup.py::test_dry_run_cleanup -v
 
-# Or via pytest fixture
-pytest tests/e2e/test_cleanup.py::test_force_cleanup -v
+# Run actual cleanup (requires --run-cleanup flag)
+pytest tests/e2e/test_cleanup.py --run-cleanup -v
+
+# Cleanup specific types
+pytest tests/e2e/test_cleanup.py::test_cleanup_old_test_sessions --run-cleanup -v
+pytest tests/e2e/test_cleanup.py::test_cleanup_old_test_configs --run-cleanup -v
 ```
 
 ### Orphan Detection
 
 ```bash
 # Find stale test data (>24h old)
-python -m tests.e2e.helpers.cleanup --find-orphans
+pytest tests/e2e/test_cleanup.py::test_find_orphaned_test_data --run-cleanup -v
 
-# Cleanup orphans
-python -m tests.e2e.helpers.cleanup --cleanup-orphans
+# Verify cleanup patterns are safe
+pytest tests/e2e/test_cleanup.py::test_verify_no_production_data_affected -v
 ```
 
 ---
