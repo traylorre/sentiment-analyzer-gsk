@@ -104,7 +104,7 @@ jobs:
 
           pytest $PYTEST_ARGS
         env:
-          PREPROD_API_BASE_URL: ${{ secrets.PREPROD_API_BASE_URL }}
+          PREPROD_API_URL: ${{ secrets.PREPROD_API_URL }}
           PREPROD_DYNAMODB_TABLE: ${{ secrets.PREPROD_DYNAMODB_TABLE }}
           TEST_EMAIL_DOMAIN: ${{ secrets.TEST_EMAIL_DOMAIN }}
 
