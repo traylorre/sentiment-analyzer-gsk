@@ -188,7 +188,7 @@ async def test_anonymous_data_merge(
             "/api/v2/configurations",
             json={
                 "name": config_name,
-                "tickers": [{"symbol": "GOOGL", "enabled": True}],
+                "tickers": ["GOOGL"],
             },
         )
 
@@ -286,10 +286,7 @@ async def test_full_anonymous_to_authenticated_journey(
             "/api/v2/configurations",
             json={
                 "name": config_name,
-                "tickers": [
-                    {"symbol": "NVDA", "enabled": True},
-                    {"symbol": "AMD", "enabled": True},
-                ],
+                "tickers": ["NVDA", "AMD"],
             },
         )
 

@@ -159,7 +159,7 @@ async def test_xray_cross_lambda_trace(
             "/api/v2/configurations",
             json={
                 "name": f"X-Ray Test {test_run_id[:8]}",
-                "tickers": [{"symbol": "AAPL", "enabled": True}],
+                "tickers": ["AAPL"],
             },
         )
 

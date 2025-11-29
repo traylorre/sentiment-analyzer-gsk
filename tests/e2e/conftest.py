@@ -310,9 +310,9 @@ def test_email_domain(test_run_id: str) -> str:
     """Unique email domain for this test run.
 
     Returns a domain pattern for generating test user emails:
-    {user}@{test_run_id}.test.sentiment-analyzer.local
+    {user}@{test_run_id}.example.com
     """
-    return f"{test_run_id}.test.sentiment-analyzer.local"
+    return f"{test_run_id}.example.com"
 
 
 def generate_test_email(test_email_domain: str, username: str = "user") -> str:

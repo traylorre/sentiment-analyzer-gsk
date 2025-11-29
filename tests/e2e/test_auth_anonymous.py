@@ -110,10 +110,7 @@ async def test_anonymous_config_creation(
     try:
         config_payload = {
             "name": f"Test Config {test_run_id}",
-            "tickers": [
-                {"symbol": "AAPL", "enabled": True},
-                {"symbol": "MSFT", "enabled": True},
-            ],
+            "tickers": ["AAPL", "MSFT"],
         }
 
         config_response = await api_client.post(
@@ -211,7 +208,7 @@ async def test_anonymous_multiple_sessions_isolated(
     try:
         config_response = await api_client.post(
             "/api/v2/configurations",
-            json={"name": "Session 1 Config", "tickers": [{"symbol": "AAPL"}]},
+            json={"name": "Session 1 Config", "tickers": ["AAPL"]},
         )
         if config_response.status_code in (200, 201):
             config_id = config_response.json()["config_id"]

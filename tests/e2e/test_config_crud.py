@@ -42,10 +42,7 @@ async def test_config_create_success(
     try:
         config_payload = {
             "name": f"Test Config {test_run_id[:8]}",
-            "tickers": [
-                {"symbol": "AAPL", "enabled": True},
-                {"symbol": "MSFT", "enabled": True},
-            ],
+            "tickers": ["AAPL", "MSFT"],
         }
 
         response = await api_client.post("/api/v2/configurations", json=config_payload)
@@ -84,7 +81,7 @@ async def test_config_create_with_ticker_metadata(
     try:
         config_payload = {
             "name": f"Metadata Test {test_run_id[:8]}",
-            "tickers": [{"symbol": "GOOGL", "enabled": True}],
+            "tickers": ["GOOGL"],
         }
 
         response = await api_client.post("/api/v2/configurations", json=config_payload)
@@ -125,7 +122,7 @@ async def test_config_read_by_id(
             "/api/v2/configurations",
             json={
                 "name": config_name,
-                "tickers": [{"symbol": "NVDA", "enabled": True}],
+                "tickers": ["NVDA"],
             },
         )
         assert create_response.status_code in (200, 201)
@@ -167,7 +164,7 @@ async def test_config_update_name_and_tickers(
             "/api/v2/configurations",
             json={
                 "name": f"Original {test_run_id[:8]}",
-                "tickers": [{"symbol": "AAPL", "enabled": True}],
+                "tickers": ["AAPL"],
             },
         )
         assert create_response.status_code in (200, 201)
@@ -180,10 +177,7 @@ async def test_config_update_name_and_tickers(
             f"/api/v2/configurations/{config_id}",
             json={
                 "name": new_name,
-                "tickers": [
-                    {"symbol": "MSFT", "enabled": True},
-                    {"symbol": "AMZN", "enabled": True},
-                ],
+                "tickers": ["MSFT", "AMZN"],
             },
         )
 
@@ -223,7 +217,7 @@ async def test_config_delete(
             "/api/v2/configurations",
             json={
                 "name": f"Delete Test {test_run_id[:8]}",
-                "tickers": [{"symbol": "TSLA", "enabled": True}],
+                "tickers": ["TSLA"],
             },
         )
         assert create_response.status_code in (200, 201)
@@ -272,7 +266,7 @@ async def test_config_max_limit_enforced(
                 "/api/v2/configurations",
                 json={
                     "name": f"Limit Test {i} {test_run_id[:6]}",
-                    "tickers": [{"symbol": "AAPL", "enabled": True}],
+                    "tickers": ["AAPL"],
                 },
             )
 
@@ -317,9 +311,7 @@ async def test_config_invalid_ticker_rejected(
             "/api/v2/configurations",
             json={
                 "name": f"Invalid Ticker Test {test_run_id[:8]}",
-                "tickers": [
-                    {"symbol": "INVALID12345XYZ", "enabled": True},
-                ],
+                "tickers": ["INVALID12345XYZ"],
             },
         )
 
@@ -360,7 +352,7 @@ async def test_config_list_pagination(
                 "/api/v2/configurations",
                 json={
                     "name": f"Pagination Test {i} {test_run_id[:6]}",
-                    "tickers": [{"symbol": "AAPL", "enabled": True}],
+                    "tickers": ["AAPL"],
                 },
             )
 

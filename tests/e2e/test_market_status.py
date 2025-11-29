@@ -153,7 +153,7 @@ async def test_premarket_estimates_returned(
             "/api/v2/configurations",
             json={
                 "name": f"Pre-market Test {test_run_id[:8]}",
-                "tickers": [{"symbol": "AAPL", "enabled": True}],
+                "tickers": ["AAPL"],
             },
         )
 
