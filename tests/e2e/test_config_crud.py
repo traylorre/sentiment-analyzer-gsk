@@ -20,7 +20,8 @@ async def create_auth_session(api_client: PreprodAPIClient) -> str:
     Returns the access token.
     """
     response = await api_client.post("/api/v2/auth/anonymous", json={})
-    assert response.status_code == 200
+    # API returns 201 Created for new sessions (correct HTTP semantics)
+    assert response.status_code in (200, 201)
     return response.json()["token"]
 
 

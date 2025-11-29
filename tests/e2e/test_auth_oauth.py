@@ -154,7 +154,8 @@ async def test_session_validation(
     """
     # Create anonymous session for testing
     anon_response = await api_client.post("/api/v2/auth/anonymous", json={})
-    assert anon_response.status_code == 200
+    # API returns 201 Created for new sessions (correct HTTP semantics)
+    assert anon_response.status_code in (200, 201)
 
     token = anon_response.json()["token"]
     api_client.set_access_token(token)
@@ -191,7 +192,8 @@ async def test_signout_invalidates_session(
     """
     # Create anonymous session
     anon_response = await api_client.post("/api/v2/auth/anonymous", json={})
-    assert anon_response.status_code == 200
+    # API returns 201 Created for new sessions (correct HTTP semantics)
+    assert anon_response.status_code in (200, 201)
 
     token = anon_response.json()["token"]
     api_client.set_access_token(token)

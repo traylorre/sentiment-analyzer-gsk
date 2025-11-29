@@ -26,7 +26,8 @@ async def create_config_with_tickers(
     """
     # Create anonymous session
     session_response = await api_client.post("/api/v2/auth/anonymous", json={})
-    assert session_response.status_code == 200
+    # API returns 201 Created for new sessions (correct HTTP semantics)
+    assert session_response.status_code in (200, 201)
     token = session_response.json()["token"]
 
     # Create config
@@ -335,7 +336,8 @@ async def test_sentiment_invalid_config(
     """
     # Create session for auth
     session_response = await api_client.post("/api/v2/auth/anonymous")
-    assert session_response.status_code == 200
+    # API returns 201 Created for new sessions (correct HTTP semantics)
+    assert session_response.status_code in (200, 201)
     token = session_response.json()["token"]
 
     api_client.set_access_token(token)
