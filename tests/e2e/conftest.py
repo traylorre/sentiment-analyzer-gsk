@@ -82,6 +82,60 @@ class SkipInfo:
         pytest.skip(str(self))
 
 
+@dataclass
+class FailureInjectionConfig:
+    """Configuration for failure injection tests.
+
+    Controls which failure modes are active for testing error handling
+    paths in the processing layer.
+    """
+
+    tiingo_fail: bool = False
+    finnhub_fail: bool = False
+    sendgrid_fail: bool = False
+    tiingo_timeout: bool = False
+    finnhub_timeout: bool = False
+    tiingo_malformed: bool = False
+    finnhub_malformed: bool = False
+    sendgrid_rate_limit: bool = False
+
+    def has_any_failure(self) -> bool:
+        """Check if any failure mode is enabled."""
+        return any(
+            [
+                self.tiingo_fail,
+                self.finnhub_fail,
+                self.sendgrid_fail,
+                self.tiingo_timeout,
+                self.finnhub_timeout,
+                self.tiingo_malformed,
+                self.finnhub_malformed,
+                self.sendgrid_rate_limit,
+            ]
+        )
+
+    def describe(self) -> str:
+        """Return human-readable description of active failure modes."""
+        active = []
+        if self.tiingo_fail:
+            active.append("Tiingo API failure")
+        if self.finnhub_fail:
+            active.append("Finnhub API failure")
+        if self.sendgrid_fail:
+            active.append("SendGrid failure")
+        if self.tiingo_timeout:
+            active.append("Tiingo timeout")
+        if self.finnhub_timeout:
+            active.append("Finnhub timeout")
+        if self.tiingo_malformed:
+            active.append("Tiingo malformed response")
+        if self.finnhub_malformed:
+            active.append("Finnhub malformed response")
+        if self.sendgrid_rate_limit:
+            active.append("SendGrid rate limit")
+        return ", ".join(active) if active else "No failures configured"
+
+
 # Default test seed for reproducibility
 DEFAULT_TEST_SEED = 42
 
@@ -430,6 +484,15 @@ def synthetic_config(
         SyntheticConfiguration with unique name and tickers
     """
     return config_generator.generate_config(test_run_id)
+
+
+@pytest.fixture
+def failure_config() -> FailureInjectionConfig:
+    """Provide default failure injection config (no failures).
+
+    Tests can modify this to enable specific failure modes.
+    """
+    return FailureInjectionConfig()
 
 
 @pytest.fixture(scope="session")
