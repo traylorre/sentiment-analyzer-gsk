@@ -9,8 +9,10 @@ from pydantic import BaseModel, Field
 class SentimentSource(BaseModel):
     """Source metadata for sentiment."""
 
+    model_config = {"populate_by_name": True}
+
     source_type: Literal["tiingo", "finnhub", "our_model"]
-    model_version: str | None = None
+    inference_version: str | None = Field(default=None, alias="model_version")
     fetched_at: datetime
 
 
@@ -54,7 +56,7 @@ class SentimentResult(BaseModel):
             "sentiment_label": self.sentiment_label,
             "confidence": str(self.confidence),
             "source_type": self.source.source_type,
-            "model_version": self.source.model_version,
+            "model_version": self.source.inference_version,  # DynamoDB attr name
             "fetched_at": self.source.fetched_at.isoformat(),
             "news_article_ids": self.news_article_ids,
             "entity_type": "SENTIMENT_RESULT",
@@ -65,7 +67,7 @@ class SentimentResult(BaseModel):
         """Create SentimentResult from DynamoDB item."""
         source = SentimentSource(
             source_type=item["source_type"],
-            model_version=item.get("model_version"),
+            inference_version=item.get("model_version"),  # Read from DynamoDB attr
             fetched_at=datetime.fromisoformat(item["fetched_at"]),
         )
 

@@ -147,7 +147,7 @@ class SentimentItemUpdate(BaseModel):
         score must be: 0.0 to 1.0
     """
 
-    model_config = ConfigDict(protected_namespaces=())
+    model_config = ConfigDict(populate_by_name=True)
 
     sentiment: Literal["positive", "neutral", "negative"] = Field(
         ...,
@@ -161,8 +161,9 @@ class SentimentItemUpdate(BaseModel):
         le=1.0,
     )
 
-    model_version: str = Field(
+    inference_version: str = Field(
         ...,
+        alias="model_version",  # Backward compatible with DynamoDB/API
         description="Version of sentiment model used",
         examples=["v1.0.0"],
         pattern=r"^v\d+\.\d+\.\d+$",
@@ -191,7 +192,7 @@ class SentimentItemResponse(BaseModel):
         that are safe to expose to dashboard users.
     """
 
-    model_config = ConfigDict(protected_namespaces=())
+    model_config = ConfigDict(populate_by_name=True)
 
     source_id: str = Field(
         ...,
@@ -241,8 +242,9 @@ class SentimentItemResponse(BaseModel):
         le=1.0,
     )
 
-    model_version: str | None = Field(
+    inference_version: str | None = Field(
         default=None,
+        alias="model_version",  # Backward compatible with DynamoDB/API
         description="Model version used for analysis",
     )
 

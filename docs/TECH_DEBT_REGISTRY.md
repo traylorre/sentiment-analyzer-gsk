@@ -125,15 +125,24 @@ filterwarnings = [
 **Root Cause**: moto 5.0 upgrade caused warning spam
 **Better Fix**: Address specific deprecations, not blanket ignore
 
-### TD-010: Protected Namespace Workaround
+### TD-010: Protected Namespace Workaround [RESOLVED]
 **Location**: `src/lambdas/shared/schemas.py`
 **Commit**: b90bc06
-```python
-class ConfigDict:
-    protected_namespaces = ()  # Suppress warning for model_version field
-```
-**Why**: Pydantic complains about `model_*` field names
-**Better Fix**: Rename `model_version` to `ml_model_version` or `version`
+
+**Status**: RESOLVED
+**Resolution**:
+- Renamed Python field `model_version` → `inference_version` in Pydantic models
+- Used `Field(alias="model_version")` for backward compatibility with:
+  - DynamoDB attribute names (no migration needed)
+  - API response JSON keys (no frontend breaking changes)
+  - SNS message payloads (no cross-Lambda changes needed)
+- Replaced `protected_namespaces=()` with `populate_by_name=True`
+- All existing tests pass (33 schema tests verified)
+
+**Files Changed**:
+- `src/lambdas/shared/schemas.py`
+- `src/lambdas/dashboard/sentiment.py`
+- `src/lambdas/shared/models/sentiment_result.py`
 
 ### TD-011: Metrics Lambda Not Implemented [RESOLVED]
 **Location**: `src/lambdas/metrics/handler.py`
