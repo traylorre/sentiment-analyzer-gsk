@@ -186,6 +186,7 @@ jobs:
             sse-starlette==3.0.3 \
             pydantic==2.12.4 \
             email-validator==2.2.0 \
+            httpx==0.28.1 \
             boto3==1.41.0 \
             python-json-logger==4.0.0 \
             aws-xray-sdk==2.14.0 \
