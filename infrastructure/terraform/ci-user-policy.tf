@@ -423,6 +423,40 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
     ]
     resources = ["*"]
   }
+
+  # X-Ray Tracing
+  statement {
+    sid    = "XRay"
+    effect = "Allow"
+    actions = [
+      "xray:PutTraceSegments",
+      "xray:PutTelemetryRecords",
+      "xray:GetSamplingRules",
+      "xray:GetSamplingTargets",
+      "xray:GetSamplingStatisticSummaries",
+      "xray:GetServiceGraph",
+      "xray:GetTraceGraph",
+      "xray:GetTraceSummaries",
+      "xray:GetGroups",
+      "xray:GetGroup",
+      "xray:CreateGroup",
+      "xray:UpdateGroup",
+      "xray:DeleteGroup",
+      "xray:GetEncryptionConfig",
+      "xray:PutEncryptionConfig",
+      "xray:GetInsight",
+      "xray:GetInsightEvents",
+      "xray:GetInsightImpactGraph",
+      "xray:GetInsightSummaries",
+      "xray:CreateSamplingRule",
+      "xray:UpdateSamplingRule",
+      "xray:DeleteSamplingRule",
+      "xray:TagResource",
+      "xray:UntagResource",
+      "xray:ListTagsForResource"
+    ]
+    resources = ["*"]
+  }
 }
 
 # ==================================================================
