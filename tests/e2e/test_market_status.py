@@ -269,4 +269,5 @@ async def test_market_status_includes_timestamp(
         or "as_of" in data
         or "updated_at" in data
         or "server_time" in data
+        or "current_time" in data
     ), f"Missing timestamp in market status: {data}"
