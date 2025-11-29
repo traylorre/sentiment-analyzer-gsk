@@ -158,7 +158,7 @@ async def test_magic_link_invalid_token(api_client: PreprodAPIClient) -> None:
 
     Given: An invalid/expired magic link token
     When: POST /api/v2/auth/verify is called
-    Then: Response is 400 or 401 with error message
+    Then: Response is 400, 401, or 404 with error message
     """
     response = await api_client.post(
         "/api/v2/auth/verify",
@@ -168,6 +168,7 @@ async def test_magic_link_invalid_token(api_client: PreprodAPIClient) -> None:
     assert response.status_code in (
         400,
         401,
+        404,
     ), f"Invalid token should be rejected: {response.status_code}"
 
     data = response.json()

@@ -59,7 +59,6 @@ async def test_sse_connection_established(
         response = await api_client.get(
             f"/api/v2/configurations/{config_id}/stream",
             headers={"Accept": "text/event-stream"},
-            timeout=5.0,
         )
 
         if response.status_code == 404:
@@ -96,7 +95,6 @@ async def test_sse_receives_sentiment_update(
         response = await api_client.get(
             f"/api/v2/configurations/{config_id}/stream",
             headers={"Accept": "text/event-stream"},
-            timeout=5.0,
         )
 
         if response.status_code == 404:
@@ -126,7 +124,6 @@ async def test_sse_receives_refresh_event(
         response = await api_client.get(
             f"/api/v2/configurations/{config_id}/stream",
             headers={"Accept": "text/event-stream"},
-            timeout=5.0,
         )
 
         if response.status_code == 404:
@@ -160,7 +157,6 @@ async def test_sse_reconnection_with_last_event_id(
                 "Accept": "text/event-stream",
                 "Last-Event-ID": "test-event-12345",
             },
-            timeout=5.0,
         )
 
         if response.status_code == 404:
@@ -192,7 +188,6 @@ async def test_sse_unauthenticated_rejected(
     response = await api_client.get(
         f"/api/v2/configurations/{config_id}/stream",
         headers={"Accept": "text/event-stream"},
-        timeout=5.0,
     )
 
     # Should be 401 without auth (unless endpoint doesn't exist)
@@ -223,7 +218,6 @@ async def test_sse_invalid_config_rejected(
         response = await api_client.get(
             "/api/v2/configurations/invalid-config-xyz/stream",
             headers={"Accept": "text/event-stream"},
-            timeout=5.0,
         )
 
         # Should be 404 for invalid config

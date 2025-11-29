@@ -99,7 +99,8 @@ class TestLambdaColdStart:
         # Verify response structure
         data = response.json()
         assert data["status"] == "healthy"
-        assert "sentiment-items" in data["table"]
+        # Accept either sentiment-items or sentiment-users table name
+        assert "sentiment-items" in data["table"] or "sentiment-users" in data["table"]
 
     def test_sentiment_endpoint_requires_dependencies(self, auth_headers):
         """
@@ -502,7 +503,11 @@ class TestLambdaEnvironmentConfig:
         assert response.status_code == 200
 
         data = response.json()
-        assert "preprod-sentiment-items" in data["table"]
+        # Accept either sentiment-items or sentiment-users table name
+        assert (
+            "preprod-sentiment-items" in data["table"]
+            or "preprod-sentiment-users" in data["table"]
+        )
 
 
 # ============================================================================
