@@ -417,7 +417,8 @@ resource "aws_iam_role_policy" "dashboard_feature_006_users" {
           "dynamodb:DeleteItem",
           "dynamodb:Query",
           "dynamodb:BatchGetItem",
-          "dynamodb:BatchWriteItem"
+          "dynamodb:BatchWriteItem",
+          "dynamodb:DescribeTable"
         ]
         Resource = [
           var.feature_006_users_table_arn,
