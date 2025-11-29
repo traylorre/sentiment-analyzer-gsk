@@ -33,7 +33,7 @@ This document provides operational flow diagrams and troubleshooting guides for 
 This shows the happy path for article ingestion and sentiment analysis:
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#e8f4fd', 'primaryTextColor': '#1a365d', 'primaryBorderColor': '#3182ce', 'lineColor': '#4a5568'}}}%%
 flowchart TD
     Start[EventBridge Trigger<br/>Every 5 minutes] --> Ingest[Ingestion Lambda Invoked]
     Ingest --> FetchTiingo[Fetch from Tiingo<br/>Primary Source]
@@ -53,10 +53,10 @@ flowchart TD
     LogMetrics --> End[Complete]
     Skip --> End
 
-    classDef successNode fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px,color:#1e3a1e
-    classDef processNode fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
-    classDef decisionNode fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
-    classDef storageNode fill:#b39ddb,stroke:#673ab7,stroke-width:2px,color:#1a0a3e
+    classDef successNode fill:#bbf7d0,stroke:#16a34a,stroke-width:2px,color:#14532d
+    classDef processNode fill:#ddd6fe,stroke:#7c3aed,stroke-width:2px,color:#2e1065
+    classDef decisionNode fill:#fed7aa,stroke:#ea580c,stroke-width:2px,color:#7c2d12
+    classDef storageNode fill:#d1fae5,stroke:#059669,stroke-width:2px,color:#064e3b
 
     class Start,End successNode
     class Ingest,AnalysisLambda,FetchTiingo,FetchFinnhub,RunInference,CacheModel,LogMetrics,Skip processNode
@@ -77,7 +77,7 @@ flowchart TD
 This shows the operational monitoring flow for detecting stuck items:
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#e8f4fd', 'primaryTextColor': '#1a365d', 'primaryBorderColor': '#3182ce', 'lineColor': '#4a5568'}}}%%
 flowchart TD
     Start[EventBridge Trigger<br/>Every 1 minute] --> MetricsLambda[Metrics Lambda Invoked]
     MetricsLambda --> QueryGSI[Query by_status GSI<br/>status = 'pending']
@@ -93,10 +93,10 @@ flowchart TD
     TriggerAlarm --> NotifyOnCall[Notify On-Call<br/>via Email/PagerDuty]
     NotifyOnCall --> End
 
-    classDef successNode fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px,color:#1e3a1e
-    classDef processNode fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
-    classDef decisionNode fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
-    classDef alertNode fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef successNode fill:#bbf7d0,stroke:#16a34a,stroke-width:2px,color:#14532d
+    classDef processNode fill:#ddd6fe,stroke:#7c3aed,stroke-width:2px,color:#2e1065
+    classDef decisionNode fill:#fed7aa,stroke:#ea580c,stroke-width:2px,color:#7c2d12
+    classDef alertNode fill:#fecaca,stroke:#dc2626,stroke-width:2px,color:#7f1d1d
 
     class Start,End successNode
     class MetricsLambda,QueryGSI,FilterOld,EmitMetric,EmitZero,LogResults processNode
@@ -149,7 +149,7 @@ aws dynamodb query \
 This shows the CI/CD deployment process from PR to production:
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#e8f4fd', 'primaryTextColor': '#1a365d', 'primaryBorderColor': '#3182ce', 'lineColor': '#4a5568'}}}%%
 flowchart TD
     PR[Create Pull Request] --> CIChecks{CI Checks<br/>Pass?}
     CIChecks -->|No| FixCode[Fix Code]
@@ -171,10 +171,10 @@ flowchart TD
     RollbackProd --> IncidentResponse
     SmokeTests -->|Yes| Complete[Deployment Complete]
 
-    classDef cicdNode fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
-    classDef decisionNode fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
-    classDef dangerNode fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
-    classDef successNode fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px,color:#1e3a1e
+    classDef cicdNode fill:#ddd6fe,stroke:#7c3aed,stroke-width:2px,color:#2e1065
+    classDef decisionNode fill:#fed7aa,stroke:#ea580c,stroke-width:2px,color:#7c2d12
+    classDef dangerNode fill:#fecaca,stroke:#dc2626,stroke-width:2px,color:#7f1d1d
+    classDef successNode fill:#bbf7d0,stroke:#16a34a,stroke-width:2px,color:#14532d
 
     class PR,BuildPackages,UploadS3,TerraformPlan,ApplyPreprod,DeployProd,Merge,FixCode,WaitApproval cicdNode
     class CIChecks,IntegrationTests,ManualGate,SmokeTests decisionNode
@@ -195,7 +195,7 @@ flowchart TD
 This shows the decision tree for responding to production incidents:
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#e8f4fd', 'primaryTextColor': '#1a365d', 'primaryBorderColor': '#3182ce', 'lineColor': '#4a5568'}}}%%
 flowchart TD
     Alert[CloudWatch Alarm<br/>or User Report] --> Assess{Severity<br/>Assessment}
     Assess -->|P0: Complete Outage| P0Response[P0: Immediate Response]
@@ -237,10 +237,10 @@ flowchart TD
     PostMortem --> CloseIncident[Close Incident]
     Escalate --> CodeFix
 
-    classDef alertNode fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
-    classDef decisionNode fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
-    classDef actionNode fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
-    classDef successNode fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px,color:#1e3a1e
+    classDef alertNode fill:#fecaca,stroke:#dc2626,stroke-width:2px,color:#7f1d1d
+    classDef decisionNode fill:#fed7aa,stroke:#ea580c,stroke-width:2px,color:#7c2d12
+    classDef actionNode fill:#e0e7ff,stroke:#4f46e5,stroke-width:2px,color:#1e1b4b
+    classDef successNode fill:#bbf7d0,stroke:#16a34a,stroke-width:2px,color:#14532d
 
     class Alert,P0Response alertNode
     class Assess,CheckDashboard,IdentifyError,S3Exists,Throttled,TestFix decisionNode
@@ -265,7 +265,7 @@ flowchart TD
 #### 1. Lambda Timeout
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#e8f4fd', 'primaryTextColor': '#1a365d', 'primaryBorderColor': '#3182ce', 'lineColor': '#4a5568'}}}%%
 flowchart LR
     Timeout[Lambda Timeout Error] --> CheckLogs[Check CloudWatch Logs]
     CheckLogs --> FindDuration[Find execution duration]
@@ -276,9 +276,9 @@ flowchart LR
     CheckLogic --> OptimizeCode[Optimize code]
     OptimizeCode --> Deploy
 
-    classDef errorNode fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
-    classDef decisionNode fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
-    classDef actionNode fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
+    classDef errorNode fill:#fecaca,stroke:#dc2626,stroke-width:2px,color:#7f1d1d
+    classDef decisionNode fill:#fed7aa,stroke:#ea580c,stroke-width:2px,color:#7c2d12
+    classDef actionNode fill:#e0e7ff,stroke:#4f46e5,stroke-width:2px,color:#1e1b4b
 
     class Timeout errorNode
     class Compare decisionNode
@@ -300,7 +300,7 @@ terraform apply
 #### 2. Out of Memory Error
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#e8f4fd', 'primaryTextColor': '#1a365d', 'primaryBorderColor': '#3182ce', 'lineColor': '#4a5568'}}}%%
 flowchart LR
     OOM[Out of Memory Error] --> CheckMetrics[Check CloudWatch<br/>Memory Metrics]
     CheckMetrics --> MemUsage{Memory usage<br/>>90%?}
@@ -311,9 +311,9 @@ flowchart LR
     ProfileCode --> FixLeak[Fix leak]
     FixLeak --> Deploy
 
-    classDef errorNode fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
-    classDef decisionNode fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
-    classDef actionNode fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
+    classDef errorNode fill:#fecaca,stroke:#dc2626,stroke-width:2px,color:#7f1d1d
+    classDef decisionNode fill:#fed7aa,stroke:#ea580c,stroke-width:2px,color:#7c2d12
+    classDef actionNode fill:#e0e7ff,stroke:#4f46e5,stroke-width:2px,color:#1e1b4b
 
     class OOM errorNode
     class MemUsage decisionNode
@@ -344,7 +344,7 @@ terraform apply
 #### Throttling Errors
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#e8f4fd', 'primaryTextColor': '#1a365d', 'primaryBorderColor': '#3182ce', 'lineColor': '#4a5568'}}}%%
 flowchart TD
     Throttle[DynamoDB<br/>Throttling Error] --> CheckMetrics[Check CloudWatch<br/>DynamoDB Metrics]
     CheckMetrics --> TableOrIndex{Table or<br/>GSI throttled?}
@@ -363,9 +363,9 @@ flowchart TD
     RefactorKeys --> Deploy
     OptimizeQueries --> Deploy
 
-    classDef errorNode fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
-    classDef decisionNode fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
-    classDef actionNode fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
+    classDef errorNode fill:#fecaca,stroke:#dc2626,stroke-width:2px,color:#7f1d1d
+    classDef decisionNode fill:#fed7aa,stroke:#ea580c,stroke-width:2px,color:#7c2d12
+    classDef actionNode fill:#e0e7ff,stroke:#4f46e5,stroke-width:2px,color:#1e1b4b
 
     class Throttle errorNode
     class TableOrIndex,AtLimit,GSILimit decisionNode
@@ -399,7 +399,7 @@ terraform apply
 #### Model Load Failures
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#e8f4fd', 'primaryTextColor': '#1a365d', 'primaryBorderColor': '#3182ce', 'lineColor': '#4a5568'}}}%%
 flowchart TD
     LoadFail[S3 Model Load<br/>Failure] --> CheckLogs[Check Lambda Logs<br/>for S3 error]
     CheckLogs --> ErrorType{Error Type?}
@@ -433,10 +433,10 @@ flowchart TD
     Success -->|Yes| Complete[Issue Resolved]
     Success -->|No| Escalate[Escalate to<br/>Engineering]
 
-    classDef errorNode fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
-    classDef decisionNode fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
-    classDef actionNode fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
-    classDef successNode fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px,color:#1e3a1e
+    classDef errorNode fill:#fecaca,stroke:#dc2626,stroke-width:2px,color:#7f1d1d
+    classDef decisionNode fill:#fed7aa,stroke:#ea580c,stroke-width:2px,color:#7c2d12
+    classDef actionNode fill:#e0e7ff,stroke:#4f46e5,stroke-width:2px,color:#1e1b4b
+    classDef successNode fill:#bbf7d0,stroke:#16a34a,stroke-width:2px,color:#14532d
 
     class LoadFail errorNode
     class ErrorType,BucketExists,HasS3Perms,InVPC,Success decisionNode
@@ -471,7 +471,7 @@ cd infrastructure/scripts
 #### Dashboard Debugging Flow
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#e8f4fd', 'primaryTextColor': '#1a365d', 'primaryBorderColor': '#3182ce', 'lineColor': '#4a5568'}}}%%
 flowchart TD
     NotResponding[Dashboard Not<br/>Responding] --> CheckURL{Function URL<br/>accessible?}
     CheckURL -->|No| CheckLambda[Check Lambda<br/>Function URL config]
@@ -514,10 +514,10 @@ flowchart TD
     Verify -->|Yes| Complete[Dashboard Working]
     Verify -->|No| Escalate[Escalate to<br/>Engineering]
 
-    classDef errorNode fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
-    classDef decisionNode fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
-    classDef actionNode fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
-    classDef successNode fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px,color:#1e3a1e
+    classDef errorNode fill:#fecaca,stroke:#dc2626,stroke-width:2px,color:#7f1d1d
+    classDef decisionNode fill:#fed7aa,stroke:#ea580c,stroke-width:2px,color:#7c2d12
+    classDef actionNode fill:#e0e7ff,stroke:#4f46e5,stroke-width:2px,color:#1e1b4b
+    classDef successNode fill:#bbf7d0,stroke:#16a34a,stroke-width:2px,color:#14532d
 
     class NotResponding errorNode
     class CheckURL,URLExists,HealthOK,ImportError,MetricsOK,KeyValid,SSEWorks,Verify decisionNode
@@ -553,7 +553,7 @@ aws logs tail /aws/lambda/preprod-sentiment-dashboard --follow
 The system has the following CloudWatch alarms configured:
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#e8f4fd', 'primaryTextColor': '#1a365d', 'primaryBorderColor': '#3182ce', 'lineColor': '#4a5568'}}}%%
 graph TD
     subgraph LambdaAlarms["Lambda Alarms"]
         IngestionErrors[Ingestion Errors<br/>>5 in 5 min]
@@ -588,10 +588,10 @@ graph TD
 
     SNSTopic --> Email[Email Notification<br/>to On-Call]
 
-    classDef stageBox fill:#fff8e1,stroke:#c9a227,stroke-width:2px,color:#333
-    classDef alarmNode fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
-    classDef notificationNode fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
-    classDef operationalNode fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
+    classDef stageBox fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#78350f
+    classDef alarmNode fill:#fecaca,stroke:#dc2626,stroke-width:2px,color:#7f1d1d
+    classDef notificationNode fill:#fce7f3,stroke:#db2777,stroke-width:2px,color:#831843
+    classDef operationalNode fill:#fed7aa,stroke:#ea580c,stroke-width:2px,color:#7c2d12
 
     class LambdaAlarms,DDBAlarms,OpsAlarms,CostAlarms stageBox
     class IngestionErrors,AnalysisErrors,AnalysisDuration,DashboardErrors,MetricsErrors,ReadThrottle,WriteThrottle,BudgetAlert alarmNode
