@@ -146,9 +146,14 @@ async def test_ticker_search_returns_matches(
     data = response.json()
     results = data if isinstance(data, list) else data.get("results", [])
 
-    # Should find AAPL
-    symbols = [r.get("symbol", r.get("ticker", "")).upper() for r in results]
-    assert "AAPL" in symbols or len(results) > 0
+    # Should find AAPL when searching for "apple"
+    if results:
+        symbols = [r.get("symbol", r.get("ticker", "")).upper() for r in results]
+        all_text = str(results).lower()
+        # Accept AAPL symbol or "apple" in company name
+        assert (
+            "AAPL" in symbols or "apple" in all_text
+        ), f"Expected AAPL/Apple in results for 'apple' search: {results[:3]}"
 
 
 @pytest.mark.asyncio
@@ -207,10 +212,14 @@ async def test_ticker_search_partial_match(
     if response.status_code == 200:
         data = response.json()
         results = data if isinstance(data, list) else data.get("results", [])
-        # Should find Microsoft (MSFT)
+        # Should find Microsoft (MSFT) when searching for "micro"
         if results:
             all_text = str(results).lower()
-            assert "msft" in all_text or "microsoft" in all_text or len(results) > 0
+            # Search for "micro" should return MSFT/Microsoft
+            # Accept either symbol or company name match
+            assert (
+                "msft" in all_text or "microsoft" in all_text
+            ), f"Expected MSFT/Microsoft in results for 'micro' search: {results[:3]}"
 
 
 @pytest.mark.asyncio
