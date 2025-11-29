@@ -22,7 +22,7 @@ async def test_anonymous_session_creation(api_client: PreprodAPIClient) -> None:
     When: POST /api/v2/auth/anonymous is called
     Then: Response contains session_id, token, and expires_at
     """
-    response = await api_client.post("/api/v2/auth/anonymous")
+    response = await api_client.post("/api/v2/auth/anonymous", json={})
 
     assert response.status_code == 200, f"Expected 200, got {response.status_code}"
 
@@ -49,7 +49,7 @@ async def test_anonymous_session_validation(api_client: PreprodAPIClient) -> Non
     Then: Response confirms the session is anonymous and returns session info
     """
     # Create anonymous session
-    create_response = await api_client.post("/api/v2/auth/anonymous")
+    create_response = await api_client.post("/api/v2/auth/anonymous", json={})
     assert create_response.status_code == 200
 
     data = create_response.json()
@@ -87,7 +87,7 @@ async def test_anonymous_config_creation(
     Then: Configuration is created and returns config_id
     """
     # Create anonymous session
-    session_response = await api_client.post("/api/v2/auth/anonymous")
+    session_response = await api_client.post("/api/v2/auth/anonymous", json={})
     assert session_response.status_code == 200
 
     session_data = session_response.json()
@@ -143,7 +143,7 @@ async def test_anonymous_session_expires_header(api_client: PreprodAPIClient) ->
     """
     from datetime import UTC, datetime
 
-    response = await api_client.post("/api/v2/auth/anonymous")
+    response = await api_client.post("/api/v2/auth/anonymous", json={})
     assert response.status_code == 200
 
     data = response.json()
@@ -178,12 +178,12 @@ async def test_anonymous_multiple_sessions_isolated(
     Then: One session cannot access the other's data
     """
     # Create first anonymous session
-    response1 = await api_client.post("/api/v2/auth/anonymous")
+    response1 = await api_client.post("/api/v2/auth/anonymous", json={})
     assert response1.status_code == 200
     token1 = response1.json()["token"]
 
     # Create second anonymous session
-    response2 = await api_client.post("/api/v2/auth/anonymous")
+    response2 = await api_client.post("/api/v2/auth/anonymous", json={})
     assert response2.status_code == 200
     token2 = response2.json()["token"]
 

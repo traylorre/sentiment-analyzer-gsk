@@ -29,7 +29,7 @@ async def test_cloudwatch_logs_created(
     Then: CloudWatch log entry exists with request details
     """
     # Make a request that should generate logs
-    session_response = await api_client.post("/api/v2/auth/anonymous")
+    session_response = await api_client.post("/api/v2/auth/anonymous", json={})
     assert session_response.status_code == 200
 
     # Query CloudWatch Logs for evidence of the request
@@ -68,7 +68,7 @@ async def test_cloudwatch_metrics_incremented(
     """
     # Make a few requests
     for _ in range(3):
-        await api_client.post("/api/v2/auth/anonymous")
+        await api_client.post("/api/v2/auth/anonymous", json={})
 
     # Query metrics
     try:
@@ -100,7 +100,7 @@ async def test_xray_trace_exists(
     Then: Trace exists with correct service name
     """
     # Make a request
-    session_response = await api_client.post("/api/v2/auth/anonymous")
+    session_response = await api_client.post("/api/v2/auth/anonymous", json={})
     assert session_response.status_code == 200
 
     # Get trace ID from response header
@@ -143,7 +143,7 @@ async def test_xray_cross_lambda_trace(
     Then: Trace shows connected subsegments across Lambdas
     """
     # Create session and config to trigger multiple Lambda calls
-    session_response = await api_client.post("/api/v2/auth/anonymous")
+    session_response = await api_client.post("/api/v2/auth/anonymous", json={})
     if session_response.status_code != 200:
         pytest.skip("Cannot create session for cross-lambda test")
 

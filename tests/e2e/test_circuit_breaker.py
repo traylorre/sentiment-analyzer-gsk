@@ -19,7 +19,7 @@ async def create_session_and_config(
     test_run_id: str,
 ) -> tuple[str, str]:
     """Helper to create session and config."""
-    session_response = await api_client.post("/api/v2/auth/anonymous")
+    session_response = await api_client.post("/api/v2/auth/anonymous", json={})
     assert session_response.status_code == 200
     token = session_response.json()["token"]
 
