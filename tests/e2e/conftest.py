@@ -1,24 +1,48 @@
 """E2E test configuration with synthetic data setup.
 
-Provides fixtures for E2E tests that use synthetic deterministic data.
-Ensures tests are reproducible and don't depend on external API state.
+Provides fixtures for E2E tests against preprod environment.
+Tests run ONLY in CI pipeline with real AWS resources and synthetic external API data.
+
+Two fixture sets are available:
+1. Legacy fixtures (mock_tiingo, mock_finnhub, etc.) - for local mocked tests
+2. Preprod fixtures (api_client, tiingo_handler, etc.) - for preprod E2E tests
 """
 
 import os
-from collections.abc import Generator
+import uuid
+from collections.abc import AsyncGenerator, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 
+import boto3
 import pytest
+import pytest_asyncio
 
-from tests.fixtures.mocks.mock_finnhub import MockFinnhubAdapter, create_mock_finnhub
-from tests.fixtures.mocks.mock_sendgrid import MockSendGrid, create_mock_sendgrid
-from tests.fixtures.mocks.mock_tiingo import MockTiingoAdapter, create_mock_tiingo
-from tests.fixtures.synthetic.test_oracle import (
-    TestOracle,
-    TestScenario,
-    create_test_oracle,
-)
+# Legacy mock imports (for backwards compatibility with existing tests)
+try:
+    from tests.fixtures.mocks.mock_finnhub import (
+        MockFinnhubAdapter,
+        create_mock_finnhub,
+    )
+    from tests.fixtures.mocks.mock_sendgrid import MockSendGrid, create_mock_sendgrid
+    from tests.fixtures.mocks.mock_tiingo import MockTiingoAdapter, create_mock_tiingo
+    from tests.fixtures.synthetic.test_oracle import (
+        TestOracle,
+        TestScenario,
+        create_test_oracle,
+    )
+
+    LEGACY_FIXTURES_AVAILABLE = True
+except ImportError:
+    # Legacy fixtures not available, skip them
+    LEGACY_FIXTURES_AVAILABLE = False
+
+# Preprod fixture imports (008-e2e-validation-suite)
+from tests.e2e.fixtures.finnhub import SyntheticFinnhubHandler
+from tests.e2e.fixtures.sendgrid import SyntheticSendGridHandler
+from tests.e2e.fixtures.tiingo import SyntheticTiingoHandler
+from tests.e2e.helpers.api_client import PreprodAPIClient
+from tests.e2e.helpers.cleanup import cleanup_by_prefix
 
 # Default test seed for reproducibility
 DEFAULT_TEST_SEED = 42
@@ -243,3 +267,141 @@ def pytest_configure(config):
         "markers",
         "slow: mark test as slow running",
     )
+    config.addinivalue_line(
+        "markers",
+        "preprod: mark test as preprod-only (requires AWS credentials)",
+    )
+
+
+# =============================================================================
+# Preprod E2E Fixtures (008-e2e-validation-suite)
+# =============================================================================
+
+
+@pytest.fixture(scope="session")
+def test_run_id() -> str:
+    """Unique identifier for this test run.
+
+    Used for test data isolation - all test data is prefixed with this ID
+    and cleaned up at the end of the session.
+    """
+    return f"e2e-{uuid.uuid4().hex[:8]}"
+
+
+@pytest.fixture(scope="session")
+def test_email_domain(test_run_id: str) -> str:
+    """Unique email domain for this test run.
+
+    Returns a domain pattern for generating test user emails:
+    {user}@{test_run_id}.test.sentiment-analyzer.local
+    """
+    return f"{test_run_id}.test.sentiment-analyzer.local"
+
+
+def generate_test_email(test_email_domain: str, username: str = "user") -> str:
+    """Generate a test email address.
+
+    Args:
+        test_email_domain: Domain from fixture
+        username: Local part of email
+
+    Returns:
+        Full test email address
+    """
+    return f"{username}@{test_email_domain}"
+
+
+@pytest_asyncio.fixture(scope="session")
+async def api_client() -> AsyncGenerator[PreprodAPIClient, None]:
+    """Preprod API client for making HTTP requests.
+
+    Session-scoped to reuse connections across tests.
+    """
+    async with PreprodAPIClient() as client:
+        yield client
+
+
+@pytest.fixture(scope="session")
+def synthetic_seed(test_run_id: str) -> int:
+    """Deterministic seed derived from test run ID.
+
+    Ensures synthetic data is reproducible for a given test run.
+    """
+    # Extract hex portion and convert to int
+    hex_part = test_run_id.split("-")[1]
+    return int(hex_part, 16)
+
+
+@pytest.fixture
+def tiingo_handler(synthetic_seed: int) -> SyntheticTiingoHandler:
+    """Synthetic Tiingo API handler for generating test data."""
+    return SyntheticTiingoHandler(seed=synthetic_seed)
+
+
+@pytest.fixture
+def finnhub_handler(synthetic_seed: int) -> SyntheticFinnhubHandler:
+    """Synthetic Finnhub API handler for generating test data."""
+    return SyntheticFinnhubHandler(seed=synthetic_seed)
+
+
+@pytest.fixture
+def sendgrid_handler(synthetic_seed: int) -> SyntheticSendGridHandler:
+    """Synthetic SendGrid handler for email testing."""
+    return SyntheticSendGridHandler(seed=synthetic_seed)
+
+
+@pytest.fixture(scope="session")
+def dynamodb_table():
+    """DynamoDB table resource for direct database access.
+
+    Used for:
+    - Verifying data persistence
+    - Testing circuit breaker state
+    - Cleanup operations
+    """
+    dynamodb = boto3.resource(
+        "dynamodb",
+        region_name=os.environ.get("AWS_REGION", "us-east-1"),
+    )
+    table_name = os.environ.get("DYNAMODB_TABLE", "sentiment-analyzer-preprod")
+    return dynamodb.Table(table_name)
+
+
+@pytest.fixture
+def synthetic_data(
+    synthetic_seed: int,
+    tiingo_handler: SyntheticTiingoHandler,
+    finnhub_handler: SyntheticFinnhubHandler,
+    sendgrid_handler: SyntheticSendGridHandler,
+) -> dict:
+    """Bundle of all synthetic data generators.
+
+    Returns:
+        Dict with 'tiingo', 'finnhub', 'sendgrid', and 'seed' keys
+    """
+    return {
+        "seed": synthetic_seed,
+        "tiingo": tiingo_handler,
+        "finnhub": finnhub_handler,
+        "sendgrid": sendgrid_handler,
+    }
+
+
+@pytest_asyncio.fixture(scope="session", autouse=True)
+async def cleanup_test_data(test_run_id: str) -> AsyncGenerator[None, None]:
+    """Cleanup all test data after test session completes.
+
+    This fixture runs automatically (autouse=True) and deletes all
+    DynamoDB items with keys containing the test run ID.
+    """
+    # Setup: nothing to do
+    yield
+
+    # Teardown: cleanup all test data
+    try:
+        deleted = await cleanup_by_prefix(test_run_id)
+        if deleted > 0:
+            print(f"\nCleaned up {deleted} test items with prefix: {test_run_id}")
+    except Exception as e:
+        # Log but don't fail tests on cleanup errors
+        print(f"\nWarning: Cleanup failed for {test_run_id}: {e}")
