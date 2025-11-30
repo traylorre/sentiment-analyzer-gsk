@@ -183,6 +183,7 @@ data "aws_iam_policy_document" "ci_deploy_core" {
       "secretsmanager:CreateSecret",
       "secretsmanager:DeleteSecret",
       "secretsmanager:DescribeSecret",
+      "secretsmanager:GetResourcePolicy",
       "secretsmanager:UpdateSecret",
       "secretsmanager:PutSecretValue",
       "secretsmanager:TagResource",
