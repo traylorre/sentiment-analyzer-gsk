@@ -15,23 +15,9 @@ tags = {
   CostCenter  = "testing"
 }
 
-# Lambda Configuration
-# Note: Same settings as prod to ensure accurate testing
-lambda_memory_mb       = 512
-lambda_timeout_seconds = 60
-
-# DynamoDB Configuration
-# Note: On-demand billing, no reserved capacity (cost optimization)
-# Prod will use provisioned capacity or on-demand based on traffic
-
-# EventBridge Schedule
-# Run ingestion every 2 hours (less frequent than prod)
-# Prod runs every 15 minutes
-ingestion_schedule = "rate(2 hours)"
-
-# Monitoring and Alerting
-# Preprod has same alarms as prod but with higher thresholds
-# This prevents alert fatigue while still catching major issues
+# Note: Lambda memory/timeout and EventBridge schedule are configured
+# in the Terraform modules with environment-appropriate defaults.
+# DynamoDB uses on-demand billing (no reserved capacity).
 
 # CORS: Preprod allows the CloudFront dashboard domain and localhost for testing.
 # No wildcard allowed per security policy.
