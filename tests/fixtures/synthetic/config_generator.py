@@ -52,7 +52,10 @@ class ConfigGenerator:
     """
 
     # Tickers validated against preprod ticker cache (S3)
-    # Removed: UNH (not in preprod cache), V (single-char may have issues)
+    # Only includes tickers confirmed to work in preprod E2E tests:
+    # - AAPL, MSFT, GOOGL confirmed via test_valid_ticker_returns_metadata
+    # - AMZN, NVDA, META, TSLA used in traffic_generator.py
+    # Removed: UNH, V, INTC, DIS, JPM, JNJ, WMT, PG, HD, NFLX (not in preprod cache)
     TICKER_POOL: ClassVar[list[str]] = [
         "AAPL",
         "MSFT",
@@ -61,14 +64,6 @@ class ConfigGenerator:
         "META",
         "NVDA",
         "TSLA",
-        "JPM",
-        "JNJ",
-        "WMT",
-        "PG",
-        "HD",
-        "DIS",
-        "NFLX",
-        "INTC",
     ]
 
     def __init__(self, seed: int = 42) -> None:
