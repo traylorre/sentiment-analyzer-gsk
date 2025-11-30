@@ -134,7 +134,7 @@ dynamodb:DescribeContinuousBackups, dynamodb:UpdateContinuousBackups,
 dynamodb:TagResource, dynamodb:UntagResource, dynamodb:ListTagsOfResource,
 
 # Data operations (needed for integration tests)
-dynamodb:PutItem, dynamodb:GetItem, dynamodb:Query, dynamodb:Scan, dynamodb:DeleteItem
+dynamodb:PutItem, dynamodb:GetItem, dynamodb:UpdateItem, dynamodb:Query, dynamodb:Scan, dynamodb:DeleteItem
 ```
 
 #### S3
