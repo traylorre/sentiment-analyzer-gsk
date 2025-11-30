@@ -18,13 +18,20 @@ async def create_session_with_config(
     api_client: PreprodAPIClient,
     synthetic_config: SyntheticConfiguration,
 ) -> tuple[str, str]:
-    """Helper to create session and config."""
+    """Helper to create session and config.
+
+    Sets auth_type to 'email' to simulate authenticated user for
+    endpoints that require non-anonymous authentication.
+    """
     session_response = await api_client.post("/api/v2/auth/anonymous", json={})
     # API returns 201 Created for new sessions (correct HTTP semantics)
     assert session_response.status_code in (200, 201)
     token = session_response.json()["token"]
 
     api_client.set_access_token(token)
+    # Set auth_type to simulate authenticated user
+    api_client.set_auth_type("email")
+
     config_response = await api_client.post(
         "/api/v2/configurations",
         json=synthetic_config.to_api_payload(),
