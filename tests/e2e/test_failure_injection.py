@@ -159,11 +159,11 @@ async def test_circuit_breaker_opens_on_failures(
     """
     try:
         # Query DynamoDB for circuit breaker state
-        # Circuit breaker items have pk="CB#{service}" sk="STATE"
+        # Circuit breaker items have PK="CB#{service}" SK="STATE"
         response = dynamodb_table.get_item(
             Key={
-                "pk": "CB#tiingo",
-                "sk": "STATE",
+                "PK": "CB#tiingo",
+                "SK": "STATE",
             }
         )
 
