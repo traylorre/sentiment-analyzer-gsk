@@ -180,6 +180,7 @@ data "aws_iam_policy_document" "ci_deploy_core" {
       "secretsmanager:CreateSecret",
       "secretsmanager:DeleteSecret",
       "secretsmanager:DescribeSecret",
+      "secretsmanager:GetResourcePolicy",
       "secretsmanager:UpdateSecret",
       "secretsmanager:PutSecretValue",
       "secretsmanager:TagResource",
@@ -471,6 +472,7 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
     actions = [
       "s3:CreateBucket",
       "s3:DeleteBucket",
+      "s3:GetAccelerateConfiguration",
       "s3:GetBucketLocation",
       "s3:GetBucketVersioning",
       "s3:PutBucketVersioning",
@@ -620,7 +622,8 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
       "budgets:DeleteBudget",
       "budgets:ViewBudget",
       "budgets:DescribeBudgets",
-      "budgets:DescribeBudgetActionsForBudget"
+      "budgets:DescribeBudgetActionsForBudget",
+      "budgets:ListTagsForResource"
     ]
     resources = ["*"]
   }
