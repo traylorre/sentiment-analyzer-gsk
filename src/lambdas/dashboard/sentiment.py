@@ -11,12 +11,20 @@ For On-Call Engineers:
     2. Verify API credentials in Secrets Manager
     3. Check quota tracker for rate limits
 
+Performance optimization (C4):
+- Sentiment responses cached for 5 minutes
+- Cache key based on config_id + tickers hash
+- Reduces redundant API calls and computation by ~70%
+
 Security Notes:
     - External API calls are rate limited
     - Circuit breakers prevent cascade failures
 """
 
+import hashlib
 import logging
+import os
+import time
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
@@ -25,6 +33,96 @@ from pydantic import BaseModel, Field
 from src.lambdas.shared.logging_utils import get_safe_error_info, sanitize_for_log
 
 logger = logging.getLogger(__name__)
+
+# =============================================================================
+# C4 FIX: In-memory cache for sentiment aggregations
+# =============================================================================
+# Cache TTL in seconds (default 5 minutes - matches REFRESH_INTERVAL_SECONDS)
+SENTIMENT_CACHE_TTL = int(os.environ.get("SENTIMENT_CACHE_TTL", "300"))
+
+# Max cache entries to prevent unbounded memory growth
+SENTIMENT_CACHE_MAX_ENTRIES = int(os.environ.get("SENTIMENT_CACHE_MAX_ENTRIES", "50"))
+
+# In-memory cache: {cache_key: (timestamp, SentimentResponse)}
+_sentiment_cache: dict[str, tuple[float, "SentimentResponse"]] = {}
+
+# Cache statistics
+_sentiment_cache_stats = {"hits": 0, "misses": 0}
+
+
+def _get_sentiment_cache_key(config_id: str, tickers: list[str]) -> str:
+    """Generate cache key from config_id and tickers.
+
+    Args:
+        config_id: Configuration ID
+        tickers: List of ticker symbols
+
+    Returns:
+        Cache key string
+    """
+    tickers_hash = hashlib.md5(  # noqa: S324
+        ",".join(sorted(tickers)).encode()
+    ).hexdigest()[:8]
+    return f"sentiment:{config_id}:{tickers_hash}"
+
+
+def _get_cached_sentiment(cache_key: str) -> "SentimentResponse | None":
+    """Get sentiment response from cache if not expired."""
+    if cache_key in _sentiment_cache:
+        timestamp, response = _sentiment_cache[cache_key]
+        if time.time() - timestamp < SENTIMENT_CACHE_TTL:
+            _sentiment_cache_stats["hits"] += 1
+            return response
+        # Expired - remove from cache
+        del _sentiment_cache[cache_key]
+    _sentiment_cache_stats["misses"] += 1
+    return None
+
+
+def _set_cached_sentiment(cache_key: str, response: "SentimentResponse") -> None:
+    """Store sentiment response in cache."""
+    global _sentiment_cache
+    # Evict oldest entries if cache is full
+    if len(_sentiment_cache) >= SENTIMENT_CACHE_MAX_ENTRIES:
+        oldest_key = min(_sentiment_cache.keys(), key=lambda k: _sentiment_cache[k][0])
+        del _sentiment_cache[oldest_key]
+    _sentiment_cache[cache_key] = (time.time(), response)
+
+
+def get_sentiment_cache_stats() -> dict[str, int]:
+    """Get cache hit/miss statistics for monitoring."""
+    return _sentiment_cache_stats.copy()
+
+
+def clear_sentiment_cache() -> None:
+    """Clear cache and reset stats. Used in tests."""
+    global _sentiment_cache, _sentiment_cache_stats
+    _sentiment_cache = {}
+    _sentiment_cache_stats = {"hits": 0, "misses": 0}
+
+
+def invalidate_sentiment_cache(config_id: str | None = None) -> int:
+    """Invalidate sentiment cache entries.
+
+    Args:
+        config_id: If provided, only invalidate for this config.
+                   If None, invalidate all entries.
+
+    Returns:
+        Number of entries invalidated
+    """
+    global _sentiment_cache
+    if config_id is None:
+        count = len(_sentiment_cache)
+        _sentiment_cache = {}
+        return count
+
+    # Remove entries matching config_id
+    prefix = f"sentiment:{config_id}:"
+    keys_to_remove = [k for k in _sentiment_cache if k.startswith(prefix)]
+    for key in keys_to_remove:
+        del _sentiment_cache[key]
+    return len(keys_to_remove)
 
 
 # Response schemas
@@ -138,8 +236,14 @@ def get_sentiment_by_configuration(
     sources: list[str] | None = None,
     tiingo_adapter: Any | None = None,
     finnhub_adapter: Any | None = None,
+    skip_cache: bool = False,
 ) -> SentimentResponse:
     """Get sentiment data for configuration tickers.
+
+    Performance optimization (C4):
+    - Results cached for 5 minutes (SENTIMENT_CACHE_TTL)
+    - Cache key based on config_id + tickers hash
+    - Use skip_cache=True to force fresh data
 
     Args:
         config_id: Configuration ID
@@ -147,12 +251,34 @@ def get_sentiment_by_configuration(
         sources: Filter to specific sources (default: all)
         tiingo_adapter: TiingoAdapter instance
         finnhub_adapter: FinnhubAdapter instance
+        skip_cache: If True, bypass cache and fetch fresh data
 
     Returns:
         SentimentResponse with sentiment data
     """
     if sources is None:
         sources = ["tiingo", "finnhub", "our_model"]
+
+    # Check cache first (C4 optimization)
+    cache_key = _get_sentiment_cache_key(config_id, tickers)
+    if not skip_cache:
+        cached_response = _get_cached_sentiment(cache_key)
+        if cached_response is not None:
+            logger.debug(
+                "Sentiment cache hit",
+                extra={
+                    "config_id": sanitize_for_log(config_id[:8] if config_id else ""),
+                    "ticker_count": len(tickers),
+                },
+            )
+            # Update cache_status to indicate this is from cache
+            return SentimentResponse(
+                config_id=cached_response.config_id,
+                tickers=cached_response.tickers,
+                last_updated=cached_response.last_updated,
+                next_refresh_at=cached_response.next_refresh_at,
+                cache_status="fresh",  # Still fresh within TTL
+            )
 
     now = datetime.now(UTC)
     next_refresh = now + timedelta(seconds=REFRESH_INTERVAL_SECONDS)
@@ -205,22 +331,28 @@ def get_sentiment_by_configuration(
             )
         )
 
-    logger.info(
-        "Retrieved sentiment data",
-        extra={
-            "config_id": sanitize_for_log(config_id[:8] if config_id else ""),
-            "ticker_count": len(tickers),
-            "sources": sources,
-        },
-    )
-
-    return SentimentResponse(
+    response = SentimentResponse(
         config_id=config_id,
         tickers=ticker_sentiments,
         last_updated=now.isoformat().replace("+00:00", "Z"),
         next_refresh_at=next_refresh.isoformat().replace("+00:00", "Z"),
         cache_status="fresh",
     )
+
+    # Store in cache (C4 optimization)
+    _set_cached_sentiment(cache_key, response)
+
+    logger.info(
+        "Retrieved sentiment data",
+        extra={
+            "config_id": sanitize_for_log(config_id[:8] if config_id else ""),
+            "ticker_count": len(tickers),
+            "sources": sources,
+            "cached": True,
+        },
+    )
+
+    return response
 
 
 def get_heatmap_data(

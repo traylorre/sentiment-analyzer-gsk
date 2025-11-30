@@ -30,6 +30,7 @@ from src.lambdas.dashboard.metrics import (
     calculate_ingestion_rate,
     calculate_sentiment_distribution,
     calculate_tag_distribution,
+    clear_metrics_cache,
     get_items_by_sentiment,
     get_recent_items,
     sanitize_item_for_response,
@@ -39,6 +40,9 @@ from src.lambdas.dashboard.metrics import (
 @pytest.fixture
 def dynamodb_table():
     """Create a mocked DynamoDB table with GSIs for testing."""
+    # Clear metrics cache before each test to ensure isolation
+    clear_metrics_cache()
+
     with mock_aws():
         dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
 

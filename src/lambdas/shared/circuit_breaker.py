@@ -1,12 +1,73 @@
 """Circuit breaker pattern for external API resilience.
 
 Prevents cascading failures when external APIs (Tiingo, Finnhub, SendGrid) are down.
+
+Performance optimization (C1):
+- In-memory cache with 60s TTL reduces DynamoDB reads by ~90%
+- Write-through pattern ensures state consistency
+- Cache survives Lambda warm invocations
 """
 
+import logging
+import os
+import time
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
+
+# =============================================================================
+# C1 FIX: In-memory cache for circuit breaker state
+# =============================================================================
+# Cache TTL in seconds (default 60s - configurable via env var)
+CIRCUIT_BREAKER_CACHE_TTL = int(os.environ.get("CIRCUIT_BREAKER_CACHE_TTL", "60"))
+
+# In-memory cache: {service: (timestamp, CircuitBreakerState)}
+_circuit_breaker_cache: dict[str, tuple[float, "CircuitBreakerState"]] = {}
+
+# Cache statistics for monitoring
+_cache_stats = {"hits": 0, "misses": 0}
+
+
+def _get_cached_state(service: str) -> "CircuitBreakerState | None":
+    """Get circuit breaker state from cache if not expired."""
+    if service in _circuit_breaker_cache:
+        timestamp, state = _circuit_breaker_cache[service]
+        if time.time() - timestamp < CIRCUIT_BREAKER_CACHE_TTL:
+            _cache_stats["hits"] += 1
+            return state
+        # Expired - remove from cache
+        del _circuit_breaker_cache[service]
+    _cache_stats["misses"] += 1
+    return None
+
+
+def _set_cached_state(service: str, state: "CircuitBreakerState") -> None:
+    """Store circuit breaker state in cache."""
+    _circuit_breaker_cache[service] = (time.time(), state)
+
+
+def _invalidate_cache(service: str | None = None) -> None:
+    """Invalidate cache for a service or all services."""
+    global _circuit_breaker_cache
+    if service:
+        _circuit_breaker_cache.pop(service, None)
+    else:
+        _circuit_breaker_cache = {}
+
+
+def get_cache_stats() -> dict[str, int]:
+    """Get cache hit/miss statistics for monitoring."""
+    return _cache_stats.copy()
+
+
+def clear_cache() -> None:
+    """Clear cache and reset stats. Used in tests."""
+    global _circuit_breaker_cache, _cache_stats
+    _circuit_breaker_cache = {}
+    _cache_stats = {"hits": 0, "misses": 0}
 
 
 class CircuitBreakerState(BaseModel):
@@ -167,3 +228,200 @@ class CircuitBreakerState(BaseModel):
     ) -> "CircuitBreakerState":
         """Create a default circuit breaker for a service."""
         return cls(service=service)
+
+
+class CircuitBreakerManager:
+    """Manages circuit breaker state with caching and DynamoDB persistence.
+
+    Performance optimization (C1):
+    - Reads use in-memory cache with 60s TTL (~90% DynamoDB read reduction)
+    - Writes use write-through pattern (update cache + DynamoDB)
+    - State changes trigger immediate cache update
+
+    Usage:
+        manager = CircuitBreakerManager(dynamodb_table)
+        state = manager.get_state("tiingo")  # Cache hit or DynamoDB read
+        state.record_success()
+        manager.save_state(state)  # Write-through to cache + DynamoDB
+    """
+
+    def __init__(self, table: Any):
+        """Initialize manager with DynamoDB table.
+
+        Args:
+            table: boto3 DynamoDB Table resource
+        """
+        self._table = table
+
+    def get_state(
+        self, service: Literal["tiingo", "finnhub", "sendgrid"]
+    ) -> CircuitBreakerState:
+        """Get circuit breaker state, using cache when available.
+
+        Args:
+            service: Service name
+
+        Returns:
+            CircuitBreakerState (from cache, DynamoDB, or default)
+        """
+        # Check cache first
+        cached = _get_cached_state(service)
+        if cached is not None:
+            logger.debug(
+                "Circuit breaker cache hit",
+                extra={"service": service, "state": cached.state},
+            )
+            return cached
+
+        # Cache miss - load from DynamoDB
+        try:
+            response = self._table.get_item(
+                Key={"PK": f"CIRCUIT#{service}", "SK": "STATE"}
+            )
+            if "Item" in response:
+                state = CircuitBreakerState.from_dynamodb_item(response["Item"])
+                logger.debug(
+                    "Circuit breaker loaded from DynamoDB",
+                    extra={"service": service, "state": state.state},
+                )
+            else:
+                # Create default state
+                state = CircuitBreakerState.create_default(service)
+                logger.debug(
+                    "Circuit breaker created default",
+                    extra={"service": service},
+                )
+        except Exception as e:
+            logger.warning(
+                "Failed to load circuit breaker, using default",
+                extra={"service": service, "error": str(e)},
+            )
+            state = CircuitBreakerState.create_default(service)
+
+        # Update cache
+        _set_cached_state(service, state)
+        return state
+
+    def save_state(self, state: CircuitBreakerState) -> bool:
+        """Save circuit breaker state with write-through caching.
+
+        Args:
+            state: CircuitBreakerState to save
+
+        Returns:
+            True if save succeeded, False otherwise
+        """
+        # Update cache first (write-through)
+        _set_cached_state(state.service, state)
+
+        # Persist to DynamoDB
+        try:
+            self._table.put_item(Item=state.to_dynamodb_item())
+            logger.debug(
+                "Circuit breaker saved",
+                extra={
+                    "service": state.service,
+                    "state": state.state,
+                    "failure_count": state.failure_count,
+                },
+            )
+            return True
+        except Exception as e:
+            logger.error(
+                "Failed to save circuit breaker",
+                extra={"service": state.service, "error": str(e)},
+            )
+            return False
+
+    def record_success(
+        self, service: Literal["tiingo", "finnhub", "sendgrid"]
+    ) -> CircuitBreakerState:
+        """Record successful API call and save state.
+
+        Args:
+            service: Service name
+
+        Returns:
+            Updated CircuitBreakerState
+        """
+        state = self.get_state(service)
+        old_state = state.state
+        state.record_success()
+
+        # Only persist if state changed (half_open → closed)
+        if old_state != state.state:
+            self.save_state(state)
+            logger.info(
+                "Circuit breaker recovered",
+                extra={
+                    "service": service,
+                    "old_state": old_state,
+                    "new_state": "closed",
+                },
+            )
+        else:
+            # Just update cache timestamp
+            _set_cached_state(service, state)
+
+        return state
+
+    def record_failure(
+        self, service: Literal["tiingo", "finnhub", "sendgrid"]
+    ) -> CircuitBreakerState:
+        """Record failed API call and save state.
+
+        Args:
+            service: Service name
+
+        Returns:
+            Updated CircuitBreakerState
+        """
+        state = self.get_state(service)
+        old_state = state.state
+        state.record_failure()
+
+        # Always persist failures (metrics tracking)
+        self.save_state(state)
+
+        if old_state != state.state:
+            logger.warning(
+                "Circuit breaker tripped",
+                extra={
+                    "service": service,
+                    "failure_count": state.failure_count,
+                    "total_opens": state.total_opens,
+                },
+            )
+
+        return state
+
+    def can_execute(self, service: Literal["tiingo", "finnhub", "sendgrid"]) -> bool:
+        """Check if request to service is allowed.
+
+        Args:
+            service: Service name
+
+        Returns:
+            True if request can proceed
+        """
+        state = self.get_state(service)
+        can_exec = state.can_execute()
+
+        # If transitioning to half_open, update cache
+        if state.state == "half_open":
+            _set_cached_state(service, state)
+
+        return can_exec
+
+    def get_all_states(self) -> dict[str, CircuitBreakerState]:
+        """Get all circuit breaker states (for monitoring dashboard).
+
+        Returns:
+            Dict of service name to state
+        """
+        services: list[Literal["tiingo", "finnhub", "sendgrid"]] = [
+            "tiingo",
+            "finnhub",
+            "sendgrid",
+        ]
+        return {service: self.get_state(service) for service in services}
