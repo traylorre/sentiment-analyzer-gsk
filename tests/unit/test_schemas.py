@@ -7,7 +7,7 @@ Tests all schema models with valid and invalid inputs.
 For On-Call Engineers:
     If validation errors occur in production, check these tests
     for expected input formats. Common issues:
-    - source_id must start with "newsapi#"
+    - source_id must start with "tiingo#" or "finnhub#"
     - timestamp must be ISO8601
     - sentiment must be positive/neutral/negative
     - score must be 0.0-1.0
@@ -36,9 +36,9 @@ class TestSentimentItemCreate:
     """Tests for SentimentItemCreate schema."""
 
     def test_valid_item(self):
-        """Test valid item creation."""
+        """Test valid item creation with tiingo source."""
         item = SentimentItemCreate(
-            source_id="newsapi#abc123def456",
+            source_id="tiingo#abc123def456",
             timestamp="2025-11-17T14:30:00.000Z",
             title="Test Article Title",
             snippet="Test article content for analysis...",
@@ -47,13 +47,13 @@ class TestSentimentItemCreate:
             ttl_timestamp=1734444600,
         )
 
-        assert item.source_id == "newsapi#abc123def456"
+        assert item.source_id == "tiingo#abc123def456"
         assert item.status == "pending"  # default
 
     def test_valid_item_with_optional_fields(self):
-        """Test valid item with optional fields."""
+        """Test valid item with optional fields using finnhub source."""
         item = SentimentItemCreate(
-            source_id="newsapi#abc123",
+            source_id="finnhub#abc123",
             timestamp="2025-11-17T14:30:00.000Z",
             title="Test Article",
             snippet="Content",
@@ -68,7 +68,7 @@ class TestSentimentItemCreate:
         assert item.source_name == "Test News"
 
     def test_invalid_source_id_prefix(self):
-        """Test that source_id must start with 'newsapi#'."""
+        """Test that source_id must start with a valid source prefix."""
         with pytest.raises(ValidationError) as exc_info:
             SentimentItemCreate(
                 source_id="invalid#abc123",
@@ -80,13 +80,13 @@ class TestSentimentItemCreate:
                 ttl_timestamp=1734444600,
             )
 
-        assert "source_id must start with 'newsapi#'" in str(exc_info.value)
+        assert "source_id must start with one of" in str(exc_info.value)
 
     def test_invalid_timestamp_format(self):
         """Test that timestamp must be ISO8601."""
         with pytest.raises(ValidationError) as exc_info:
             SentimentItemCreate(
-                source_id="newsapi#abc123",
+                source_id="tiingo#abc123",
                 timestamp="invalid-timestamp",
                 title="Test",
                 snippet="Content",
@@ -101,7 +101,7 @@ class TestSentimentItemCreate:
         """Test that URL must start with http/https."""
         with pytest.raises(ValidationError) as exc_info:
             SentimentItemCreate(
-                source_id="newsapi#abc123",
+                source_id="tiingo#abc123",
                 timestamp="2025-11-17T14:30:00.000Z",
                 title="Test",
                 snippet="Content",
@@ -116,7 +116,7 @@ class TestSentimentItemCreate:
         """Test that snippet is limited to 200 chars."""
         with pytest.raises(ValidationError):
             SentimentItemCreate(
-                source_id="newsapi#abc123",
+                source_id="tiingo#abc123",
                 timestamp="2025-11-17T14:30:00.000Z",
                 title="Test",
                 snippet="x" * 201,  # Too long
@@ -129,7 +129,7 @@ class TestSentimentItemCreate:
         """Test that empty title is rejected."""
         with pytest.raises(ValidationError):
             SentimentItemCreate(
-                source_id="newsapi#abc123",
+                source_id="tiingo#abc123",
                 timestamp="2025-11-17T14:30:00.000Z",
                 title="",  # Empty
                 snippet="Content",
@@ -142,7 +142,7 @@ class TestSentimentItemCreate:
         """Test that missing required field raises error."""
         with pytest.raises(ValidationError):
             SentimentItemCreate(
-                source_id="newsapi#abc123",
+                source_id="tiingo#abc123",
                 # missing timestamp
                 title="Test",
                 snippet="Content",
@@ -247,7 +247,7 @@ class TestSentimentItemResponse:
     def test_valid_analyzed_item(self):
         """Test valid analyzed item response."""
         response = SentimentItemResponse(
-            source_id="newsapi#abc123",
+            source_id="tiingo#abc123",
             timestamp="2025-11-17T14:30:00.000Z",
             title="Test Article",
             snippet="Content",
@@ -264,7 +264,7 @@ class TestSentimentItemResponse:
     def test_valid_pending_item(self):
         """Test valid pending item response (no analysis fields)."""
         response = SentimentItemResponse(
-            source_id="newsapi#abc123",
+            source_id="tiingo#abc123",
             timestamp="2025-11-17T14:30:00.000Z",
             title="Test Article",
             snippet="Content",
@@ -284,22 +284,22 @@ class TestSNSAnalysisMessage:
     def test_valid_message(self):
         """Test valid SNS message."""
         message = SNSAnalysisMessage(
-            source_id="newsapi#abc123",
+            source_id="tiingo#abc123",
             timestamp="2025-11-17T14:30:00.000Z",
             text_for_analysis="Test Article Title. Content for analysis.",
-            correlation_id="newsapi#abc123-request-123",
+            correlation_id="tiingo#abc123-request-123",
         )
 
-        assert message.source_id == "newsapi#abc123"
+        assert message.source_id == "tiingo#abc123"
 
     def test_empty_text_rejected(self):
         """Test that empty analysis text is rejected."""
         with pytest.raises(ValidationError):
             SNSAnalysisMessage(
-                source_id="newsapi#abc123",
+                source_id="tiingo#abc123",
                 timestamp="2025-11-17T14:30:00.000Z",
                 text_for_analysis="",  # Empty
-                correlation_id="newsapi#abc123-request-123",
+                correlation_id="tiingo#abc123-request-123",
             )
 
 
@@ -340,7 +340,7 @@ class TestMetricsResponse:
         # Create 21 items
         items = [
             SentimentItemResponse(
-                source_id=f"newsapi#item{i}",
+                source_id=f"tiingo#item{i}",
                 timestamp="2025-11-17T14:30:00.000Z",
                 title=f"Item {i}",
                 snippet="Content",
@@ -449,7 +449,7 @@ class TestEdgeCases:
     def test_unicode_in_title(self):
         """Test unicode characters in title."""
         item = SentimentItemCreate(
-            source_id="newsapi#abc123",
+            source_id="tiingo#abc123",
             timestamp="2025-11-17T14:30:00.000Z",
             title="Test Article with émojis 🚀 and ñ",
             snippet="Content with special chars: αβγ",
@@ -464,7 +464,7 @@ class TestEdgeCases:
         """Test various timezone formats."""
         # UTC with Z
         item1 = SentimentItemCreate(
-            source_id="newsapi#abc123",
+            source_id="tiingo#abc123",
             timestamp="2025-11-17T14:30:00.000Z",
             title="Test",
             snippet="Content",
@@ -476,7 +476,7 @@ class TestEdgeCases:
 
         # With offset
         item2 = SentimentItemCreate(
-            source_id="newsapi#abc123",
+            source_id="tiingo#abc123",
             timestamp="2025-11-17T14:30:00+00:00",
             title="Test",
             snippet="Content",
@@ -489,7 +489,7 @@ class TestEdgeCases:
     def test_http_url_allowed(self):
         """Test that http:// URLs are allowed (not just https)."""
         item = SentimentItemCreate(
-            source_id="newsapi#abc123",
+            source_id="tiingo#abc123",
             timestamp="2025-11-17T14:30:00.000Z",
             title="Test",
             snippet="Content",
@@ -503,7 +503,7 @@ class TestEdgeCases:
     def test_model_dict_serialization(self):
         """Test that models serialize to dict correctly."""
         item = SentimentItemCreate(
-            source_id="newsapi#abc123",
+            source_id="tiingo#abc123",
             timestamp="2025-11-17T14:30:00.000Z",
             title="Test",
             snippet="Content",
@@ -514,5 +514,5 @@ class TestEdgeCases:
 
         data = item.model_dump()
         assert isinstance(data, dict)
-        assert data["source_id"] == "newsapi#abc123"
+        assert data["source_id"] == "tiingo#abc123"
         assert data["status"] == "pending"

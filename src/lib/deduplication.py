@@ -17,7 +17,7 @@ For On-Call Engineers:
     See SC-03 in ON_CALL_SOP.md for ingestion issues.
 
 For Developers:
-    - source_id = "newsapi#{sha256[:16]}"
+    - source_id = "{source}#{sha256[:16]}" where source is tiingo or finnhub
     - Prefer URL for hashing, fallback to title+publishedAt
     - Hash is truncated to 16 chars for readability (still 64 bits of entropy)
 
@@ -29,16 +29,21 @@ Security Notes:
 
 import hashlib
 import logging
-from typing import Any
+from typing import Any, Literal
 
 # Structured logging for CloudWatch
 logger = logging.getLogger(__name__)
 
-# Source prefix for NewsAPI articles
-SOURCE_PREFIX = "newsapi"
+# Valid source prefixes for financial news APIs
+SourceType = Literal["tiingo", "finnhub"]
+VALID_SOURCES: tuple[SourceType, ...] = ("tiingo", "finnhub")
+DEFAULT_SOURCE: SourceType = "tiingo"
 
 
-def generate_source_id(article: dict[str, Any]) -> str:
+def generate_source_id(
+    article: dict[str, Any],
+    source: SourceType = DEFAULT_SOURCE,
+) -> str:
     """
     Generate a unique, deterministic source_id for an article.
 
@@ -50,24 +55,28 @@ def generate_source_id(article: dict[str, Any]) -> str:
     5. Prepend source prefix
 
     Args:
-        article: NewsAPI article dict with url, title, publishedAt fields
+        article: Article dict with url, title, publishedAt fields
+        source: Source API identifier ("tiingo" or "finnhub")
 
     Returns:
-        source_id in format "newsapi#{hash16}"
+        source_id in format "{source}#{hash16}"
 
     Raises:
-        ValueError: If article lacks required fields for hashing
+        ValueError: If article lacks required fields for hashing or invalid source
 
     Examples:
         >>> article = {"url": "https://example.com/article/123", "title": "Test", "publishedAt": "2025-11-17T14:30:00Z"}
-        >>> source_id = generate_source_id(article)
+        >>> source_id = generate_source_id(article, source="tiingo")
         >>> source_id
-        'newsapi#a1b2c3d4e5f6g7h8'
+        'tiingo#a1b2c3d4e5f6g7h8'
 
     On-Call Note:
         Same article will always produce same source_id.
         If duplicates appear, check if articles have different URLs.
     """
+    if source not in VALID_SOURCES:
+        raise ValueError(f"Invalid source '{source}'. Must be one of: {VALID_SOURCES}")
+
     # Get content to hash
     hash_content = _get_hash_content(article)
 
@@ -78,12 +87,13 @@ def generate_source_id(article: dict[str, Any]) -> str:
     hash_truncated = hash_bytes[:16]
 
     # Build source_id
-    source_id = f"{SOURCE_PREFIX}#{hash_truncated}"
+    source_id = f"{source}#{hash_truncated}"
 
     logger.debug(
         "Generated source_id",
         extra={
             "source_id": source_id,
+            "source": source,
             "hash_input_length": len(hash_content),
         },
     )
@@ -100,7 +110,7 @@ def _get_hash_content(article: dict[str, Any]) -> str:
     2. title + publishedAt (fallback if URL missing)
 
     Args:
-        article: NewsAPI article dict
+        article: Article dict from Tiingo or Finnhub API
 
     Returns:
         String content to hash
@@ -144,10 +154,10 @@ def is_duplicate(source_id: str, existing_ids: set[str]) -> bool:
         True if duplicate, False if new
 
     Example:
-        >>> existing = {"newsapi#abc123", "newsapi#def456"}
-        >>> is_duplicate("newsapi#abc123", existing)
+        >>> existing = {"tiingo#abc123", "finnhub#def456"}
+        >>> is_duplicate("tiingo#abc123", existing)
         True
-        >>> is_duplicate("newsapi#new789", existing)
+        >>> is_duplicate("tiingo#new789", existing)
         False
     """
     return source_id in existing_ids
@@ -158,7 +168,7 @@ def extract_hash(source_id: str) -> str:
     Extract the hash portion from a source_id.
 
     Args:
-        source_id: Full source_id (e.g., "newsapi#abc123def456")
+        source_id: Full source_id (e.g., "tiingo#abc123def456")
 
     Returns:
         Hash portion (e.g., "abc123def456")
@@ -181,10 +191,10 @@ def get_source_prefix(source_id: str) -> str:
     Extract the source prefix from a source_id.
 
     Args:
-        source_id: Full source_id (e.g., "newsapi#abc123def456")
+        source_id: Full source_id (e.g., "tiingo#abc123def456")
 
     Returns:
-        Source prefix (e.g., "newsapi")
+        Source prefix (e.g., "tiingo")
 
     Raises:
         ValueError: If source_id format is invalid
@@ -213,12 +223,12 @@ def generate_correlation_id(source_id: str, request_id: str) -> str:
         Correlation ID for logging
 
     Example:
-        >>> generate_correlation_id("newsapi#abc123", "req-456")
-        'newsapi#abc123-req-456'
+        >>> generate_correlation_id("tiingo#abc123", "req-456")
+        'tiingo#abc123-req-456'
 
     On-Call Note:
         Use this ID to search CloudWatch logs across all Lambdas:
-        filter @message like /newsapi#abc123-req-456/
+        filter @message like /tiingo#abc123-req-456/
     """
     return f"{source_id}-{request_id}"
 
@@ -226,6 +236,7 @@ def generate_correlation_id(source_id: str, request_id: str) -> str:
 def batch_deduplicate(
     articles: list[dict[str, Any]],
     existing_ids: set[str] | None = None,
+    source: SourceType = DEFAULT_SOURCE,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], set[str]]:
     """
     Deduplicate a batch of articles.
@@ -234,8 +245,9 @@ def batch_deduplicate(
     Also deduplicates within the batch itself.
 
     Args:
-        articles: List of NewsAPI article dicts
+        articles: List of article dicts from Tiingo or Finnhub
         existing_ids: Optional set of already-known source_ids
+        source: Source API identifier ("tiingo" or "finnhub")
 
     Returns:
         Tuple of (new_articles, duplicate_articles, all_ids)
@@ -265,7 +277,7 @@ def batch_deduplicate(
 
     for article in articles:
         try:
-            source_id = generate_source_id(article)
+            source_id = generate_source_id(article, source=source)
         except ValueError as e:
             logger.warning(
                 "Skipping article - cannot generate source_id",

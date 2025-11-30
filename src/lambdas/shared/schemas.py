@@ -35,17 +35,17 @@ class SentimentItemCreate(BaseModel):
     """
     Schema for creating a new sentiment item during ingestion.
 
-    Used by ingestion Lambda to validate NewsAPI articles before storing.
+    Used by ingestion Lambda to validate articles from Tiingo/Finnhub before storing.
 
     On-Call Note:
-        If validation fails, check the NewsAPI response format.
+        If validation fails, check the API response format from Tiingo or Finnhub.
         Required fields: title, url, publishedAt
     """
 
     source_id: str = Field(
         ...,
-        description="Unique identifier: newsapi#{hash}",
-        examples=["newsapi#abc123def456"],
+        description="Unique identifier: {source}#{hash} where source is tiingo or finnhub",
+        examples=["tiingo#abc123def456", "finnhub#xyz789"],
         min_length=1,
         max_length=100,
     )
@@ -110,9 +110,12 @@ class SentimentItemCreate(BaseModel):
     @field_validator("source_id")
     @classmethod
     def validate_source_id_format(cls, v: str) -> str:
-        """Validate source_id starts with expected prefix."""
-        if not v.startswith("newsapi#"):
-            raise ValueError("source_id must start with 'newsapi#'")
+        """Validate source_id starts with a valid source prefix."""
+        valid_prefixes = ("tiingo#", "finnhub#")
+        if not any(v.startswith(prefix) for prefix in valid_prefixes):
+            raise ValueError(
+                f"source_id must start with one of: {', '.join(valid_prefixes)}"
+            )
         return v
 
     @field_validator("timestamp")
