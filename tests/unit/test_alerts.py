@@ -374,15 +374,14 @@ class TestUpdateAlert:
     ):
         """Updates alert threshold value."""
         alert_id = sample_alert_item["alert_id"]
+        # get_item is called once to check existing alert
         mock_table.get_item.return_value = {"Item": sample_alert_item}
 
         request = AlertUpdateRequest(threshold_value=-0.5)
 
-        # First call for existing check, second for updated result
-        mock_table.get_item.side_effect = [
-            {"Item": sample_alert_item},
-            {"Item": {**sample_alert_item, "threshold_value": "-0.5"}},
-        ]
+        # update_item now returns the updated attributes with ReturnValues='ALL_NEW'
+        updated_item = {**sample_alert_item, "threshold_value": "-0.5"}
+        mock_table.update_item.return_value = {"Attributes": updated_item}
 
         result = update_alert(mock_table, user_id, alert_id, request)
 
@@ -395,16 +394,19 @@ class TestUpdateAlert:
     ):
         """Updates alert enabled status."""
         alert_id = sample_alert_item["alert_id"]
-        mock_table.get_item.side_effect = [
-            {"Item": sample_alert_item},
-            {"Item": {**sample_alert_item, "is_enabled": False}},
-        ]
+        # get_item is called once to check existing alert
+        mock_table.get_item.return_value = {"Item": sample_alert_item}
 
         request = AlertUpdateRequest(is_enabled=False)
+
+        # update_item now returns the updated attributes with ReturnValues='ALL_NEW'
+        updated_item = {**sample_alert_item, "is_enabled": False}
+        mock_table.update_item.return_value = {"Attributes": updated_item}
 
         result = update_alert(mock_table, user_id, alert_id, request)
 
         assert isinstance(result, AlertResponse)
+        assert result.is_enabled is False
         mock_table.update_item.assert_called_once()
 
     @patch("src.lambdas.dashboard.alerts.xray_recorder")
