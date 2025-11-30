@@ -51,6 +51,8 @@ class ConfigGenerator:
     weights, and user ID.
     """
 
+    # Tickers validated against preprod ticker cache (S3)
+    # Removed: UNH (not in preprod cache), V (single-char may have issues)
     TICKER_POOL: ClassVar[list[str]] = [
         "AAPL",
         "MSFT",
@@ -60,13 +62,13 @@ class ConfigGenerator:
         "NVDA",
         "TSLA",
         "JPM",
-        "V",
         "JNJ",
         "WMT",
         "PG",
-        "UNH",
         "HD",
         "DIS",
+        "NFLX",
+        "INTC",
     ]
 
     def __init__(self, seed: int = 42) -> None:
