@@ -389,11 +389,20 @@ class TestSignOut:
     """Tests for T095: sign_out."""
 
     def test_sign_out_returns_success(self):
-        """Returns success response."""
-        response = sign_out("access_token")
+        """Returns success response and invalidates session."""
+        table = MagicMock()
+        table.update_item.return_value = {}
+        user_id = str(uuid.uuid4())
+
+        response = sign_out(table, user_id, "access_token")
 
         assert response.status == "signed_out"
         assert "this device" in response.message.lower()
+
+        # Verify session was invalidated
+        table.update_item.assert_called_once()
+        call_args = table.update_item.call_args
+        assert f"USER#{user_id}" in call_args.kwargs["Key"]["PK"]
 
 
 class TestGetSessionInfo:

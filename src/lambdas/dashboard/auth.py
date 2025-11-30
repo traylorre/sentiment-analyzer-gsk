@@ -1051,19 +1051,47 @@ def refresh_access_tokens(
 
 # T095: Sign Out
 def sign_out(
+    table: Any,
+    user_id: str,
     access_token: str,  # noqa: ARG001 - reserved for future Cognito integration
 ) -> SignOutResponse:
     """Sign out user (current device only).
 
     Args:
+        table: DynamoDB Table resource
+        user_id: User ID from session
         access_token: User's access token
 
     Returns:
         SignOutResponse
     """
-    # In production, could revoke the refresh token via Cognito
-    # In practice, client should also clear localStorage
-    logger.info("User signed out")
+    # Invalidate the session by setting expiry to past
+    try:
+        now = datetime.now(UTC)
+        past_time = now - timedelta(days=1)
+
+        table.update_item(
+            Key={
+                "PK": f"USER#{user_id}",
+                "SK": "PROFILE",
+            },
+            UpdateExpression="SET session_expires_at = :expires",
+            ExpressionAttributeValues={
+                ":expires": past_time.isoformat(),
+            },
+        )
+
+        logger.info(
+            "User signed out - session invalidated",
+            extra={"user_id_prefix": sanitize_for_log(user_id[:8])},
+        )
+
+    except Exception as e:
+        logger.warning(
+            "Failed to invalidate session in database",
+            extra=get_safe_error_info(e),
+        )
+        # Still return success - client will clear tokens
 
     return SignOutResponse(
         status="signed_out",

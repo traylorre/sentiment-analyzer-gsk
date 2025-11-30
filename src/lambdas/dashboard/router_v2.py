@@ -356,12 +356,18 @@ async def refresh_tokens(body: RefreshTokenRequest):
 @auth_router.post("/signout")
 async def sign_out(
     request: Request,
+    table=Depends(get_dynamodb_table),
 ):
     """Sign out current device (T095)."""
     # Extract access token from Authorization header
     auth_header = request.headers.get("Authorization", "")
     access_token = auth_header.replace("Bearer ", "") if auth_header else ""
-    result = auth_service.sign_out(access_token=access_token)
+    user_id = get_user_id_from_request(request)
+    result = auth_service.sign_out(
+        table=table,
+        user_id=user_id,
+        access_token=access_token,
+    )
     return JSONResponse(result.model_dump())
 
 
