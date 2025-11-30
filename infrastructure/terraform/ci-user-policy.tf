@@ -473,6 +473,7 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
       "s3:CreateBucket",
       "s3:DeleteBucket",
       "s3:GetAccelerateConfiguration",
+      "s3:GetBucketRequestPayment",
       "s3:GetBucketLocation",
       "s3:GetBucketVersioning",
       "s3:PutBucketVersioning",
