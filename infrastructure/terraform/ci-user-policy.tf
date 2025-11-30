@@ -500,7 +500,13 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
       "s3:GetBucketAcl",
       "s3:PutBucketAcl",
       "s3:GetAccelerateConfiguration",
-      "s3:PutAccelerateConfiguration"
+      "s3:PutAccelerateConfiguration",
+      "s3:GetBucketRequestPayment",
+      "s3:GetBucketLogging",
+      "s3:GetBucketNotification",
+      "s3:GetReplicationConfiguration",
+      "s3:GetBucketObjectLockConfiguration",
+      "s3:GetBucketOwnershipControls"
     ]
     resources = [
       "arn:aws:s3:::sentiment-analyzer-*",
