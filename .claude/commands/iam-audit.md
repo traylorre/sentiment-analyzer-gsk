@@ -135,6 +135,7 @@ dynamodb:TagResource, dynamodb:UntagResource, dynamodb:ListTagsOfResource
 
 #### S3
 ```
+# Bucket management
 s3:CreateBucket, s3:DeleteBucket, s3:GetBucketLocation,
 s3:GetBucketVersioning, s3:PutBucketVersioning,
 s3:GetBucketPublicAccessBlock, s3:PutBucketPublicAccessBlock,
@@ -145,6 +146,18 @@ s3:GetBucketCORS, s3:PutBucketCORS, s3:DeleteBucketCORS,
 s3:GetBucketWebsite, s3:PutBucketWebsite, s3:DeleteBucketWebsite,
 s3:GetLifecycleConfiguration, s3:PutLifecycleConfiguration,
 s3:GetBucketAcl, s3:PutBucketAcl,
+
+# Terraform state refresh requires these Get* permissions
+# (AWS provider reads all bucket attributes during terraform plan)
+s3:GetAccelerateConfiguration, s3:PutAccelerateConfiguration,
+s3:GetBucketRequestPayment,
+s3:GetBucketLogging,
+s3:GetBucketNotification,
+s3:GetReplicationConfiguration,
+s3:GetBucketObjectLockConfiguration,
+s3:GetBucketOwnershipControls,
+
+# Object operations
 s3:PutObject, s3:GetObject, s3:DeleteObject, s3:ListBucket,
 s3:GetObjectAcl, s3:PutObjectAcl
 ```
@@ -265,7 +278,10 @@ iam:CreateServiceLinkedRole (with condition: iam:AWSServiceName = rum.amazonaws.
 #### Budgets
 ```
 budgets:CreateBudget, budgets:ModifyBudget, budgets:DeleteBudget,
-budgets:ViewBudget, budgets:DescribeBudgets
+budgets:ViewBudget, budgets:DescribeBudgets,
+budgets:DescribeBudgetActionsForBudget,
+# Tagging permissions (required for Terraform state refresh)
+budgets:TagResource, budgets:UntagResource, budgets:ListTagsForResource
 ```
 
 #### Backup
