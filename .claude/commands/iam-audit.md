@@ -159,7 +159,8 @@ s3:GetBucketOwnershipControls,
 
 # Object operations
 s3:PutObject, s3:GetObject, s3:DeleteObject, s3:ListBucket,
-s3:GetObjectAcl, s3:PutObjectAcl
+s3:GetObjectAcl, s3:PutObjectAcl,
+s3:GetObjectTagging, s3:PutObjectTagging
 ```
 
 #### Cognito User Pools
@@ -196,7 +197,7 @@ cloudwatch:TagResource, cloudwatch:UntagResource
 logs:CreateLogGroup, logs:DeleteLogGroup, logs:DescribeLogGroups,
 logs:PutRetentionPolicy, logs:DeleteRetentionPolicy,
 logs:PutMetricFilter, logs:DeleteMetricFilter, logs:DescribeMetricFilters,
-logs:TagLogGroup, logs:UntagLogGroup
+logs:TagLogGroup, logs:UntagLogGroup, logs:ListTagsForResource
 ```
 
 #### CloudFront
