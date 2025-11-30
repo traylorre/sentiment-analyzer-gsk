@@ -608,14 +608,14 @@ def _validate_ticker(symbol: str, ticker_cache: Any | None) -> Ticker | None:
 
     # If we have a ticker cache, validate against it
     if ticker_cache:
-        validation = ticker_cache.validate(symbol)
-        if validation.get("status") != "valid":
+        status, ticker_info = ticker_cache.validate(symbol)
+        if status != "valid":
             return None
 
         return Ticker(
             symbol=symbol,
-            name=validation.get("name"),
-            exchange=validation.get("exchange", "NASDAQ"),
+            name=ticker_info.name if ticker_info else f"{symbol} Inc",
+            exchange=ticker_info.exchange if ticker_info else "NASDAQ",
             added_at=datetime.now(UTC),
         )
 
