@@ -26,7 +26,7 @@ from typing import Any, Literal
 
 from aws_xray_sdk.core import xray_recorder
 from boto3.dynamodb.conditions import Key
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from src.lambdas.dashboard.quota import get_daily_quota
 from src.lambdas.shared.logging_utils import get_safe_error_info, sanitize_for_log
@@ -74,11 +74,19 @@ class AlertToggleResponse(BaseModel):
 
 
 class AlertUpdateRequest(BaseModel):
-    """Request for PATCH /api/v2/alerts/{id}."""
+    """Request for PATCH /api/v2/alerts/{id}.
 
-    threshold_value: float | None = None
-    threshold_direction: Literal["above", "below"] | None = None
-    is_enabled: bool | None = None
+    Accepts both internal names (is_enabled, threshold_value) and
+    client-facing names (enabled, threshold) for flexibility.
+    """
+
+    threshold_value: float | None = Field(default=None, alias="threshold")
+    threshold_direction: Literal["above", "below"] | None = Field(
+        default=None, alias="condition"
+    )
+    is_enabled: bool | None = Field(default=None, alias="enabled")
+
+    model_config = {"populate_by_name": True}
 
 
 class ErrorDetail(BaseModel):
