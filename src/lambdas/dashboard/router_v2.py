@@ -20,6 +20,7 @@ Endpoint Groups:
 
 import logging
 import os
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
@@ -63,6 +64,22 @@ class DigestSettingsUpdate(BaseModel):
     timezone: str | None = None
     include_all_configs: bool | None = None
     config_ids: list[str] | None = None
+
+
+class ConfigAlertCreateRequest(BaseModel):
+    """Request body for POST /api/v2/configurations/{config_id}/alerts.
+
+    Maps test-style field names to AlertRuleCreate fields:
+    - type -> alert_type (with "_threshold" suffix)
+    - threshold -> threshold_value
+    - condition -> threshold_direction
+    """
+
+    type: Literal["sentiment", "volatility"]
+    ticker: str
+    threshold: float
+    condition: Literal["above", "below"]
+    enabled: bool | None = True
 
 
 logger = logging.getLogger(__name__)
@@ -128,6 +145,30 @@ def get_authenticated_user_id(request: Request) -> str:
             status_code=403, detail="This endpoint requires authenticated user"
         )
     return user_id
+
+
+async def get_config_with_tickers(
+    table, user_id: str, config_id: str
+) -> tuple[str, list[str]]:
+    """Fetch configuration and extract ticker symbols.
+
+    Returns:
+        Tuple of (config_id, list of ticker symbols)
+
+    Raises:
+        HTTPException 404 if config not found
+    """
+    config = config_service.get_configuration(
+        table=table, user_id=user_id, config_id=config_id
+    )
+    if config is None:
+        raise HTTPException(status_code=404, detail="Configuration not found")
+    if isinstance(config, config_service.ErrorResponse):
+        raise HTTPException(status_code=404, detail=config.error.message)
+
+    # Extract ticker symbols from configuration
+    tickers = [t.symbol for t in config.tickers]
+    return config_id, tickers
 
 
 # ===================================================================
@@ -315,11 +356,12 @@ async def refresh_tokens(body: RefreshTokenRequest):
 @auth_router.post("/signout")
 async def sign_out(
     request: Request,
-    table=Depends(get_dynamodb_table),
 ):
     """Sign out current device (T095)."""
-    user_id = get_user_id_from_request(request)
-    result = auth_service.sign_out(table=table, user_id=user_id)
+    # Extract access token from Authorization header
+    auth_header = request.headers.get("Authorization", "")
+    access_token = auth_header.replace("Bearer ", "") if auth_header else ""
+    result = auth_service.sign_out(access_token=access_token)
     return JSONResponse(result.model_dump())
 
 
@@ -524,13 +566,12 @@ async def get_sentiment(
 ):
     """Get sentiment data for configuration (T056)."""
     user_id = get_user_id_from_request(request)
+    # Fetch config to get tickers
+    _, tickers = await get_config_with_tickers(table, user_id, config_id)
     result = sentiment_service.get_sentiment_by_configuration(
-        table=table,
-        user_id=user_id,
         config_id=config_id,
+        tickers=tickers,
     )
-    if isinstance(result, sentiment_service.ErrorResponse):
-        raise HTTPException(status_code=404, detail=result.error.message)
     return JSONResponse(result.model_dump())
 
 
@@ -543,16 +584,16 @@ async def get_heatmap(
 ):
     """Get heat map data (T057)."""
     user_id = get_user_id_from_request(request)
+    # Fetch config to get tickers
+    _, tickers = await get_config_with_tickers(table, user_id, config_id)
     # Normalize view parameter (accept both "timeperiods" and "time_periods")
-    normalized_view = "time_periods" if view == "timeperiods" else view
+    # Service expects "timeperiods" (no underscore)
+    normalized_view = "timeperiods" if view == "time_periods" else view
     result = sentiment_service.get_heatmap_data(
-        table=table,
-        user_id=user_id,
         config_id=config_id,
+        tickers=tickers,
         view=normalized_view,
     )
-    if isinstance(result, sentiment_service.ErrorResponse):
-        raise HTTPException(status_code=404, detail=result.error.message)
     return JSONResponse(result.model_dump())
 
 
@@ -564,13 +605,12 @@ async def get_volatility(
 ):
     """Get volatility data (T058)."""
     user_id = get_user_id_from_request(request)
+    # Fetch config to get tickers
+    _, tickers = await get_config_with_tickers(table, user_id, config_id)
     result = volatility_service.get_volatility_by_configuration(
-        table=table,
-        user_id=user_id,
         config_id=config_id,
+        tickers=tickers,
     )
-    if isinstance(result, volatility_service.ErrorResponse):
-        raise HTTPException(status_code=404, detail=result.error.message)
     return JSONResponse(result.model_dump())
 
 
@@ -582,13 +622,12 @@ async def get_correlation(
 ):
     """Get correlation data (T059)."""
     user_id = get_user_id_from_request(request)
+    # Fetch config to get tickers
+    _, tickers = await get_config_with_tickers(table, user_id, config_id)
     result = volatility_service.get_correlation_data(
-        table=table,
-        user_id=user_id,
         config_id=config_id,
+        tickers=tickers,
     )
-    if isinstance(result, volatility_service.ErrorResponse):
-        raise HTTPException(status_code=404, detail=result.error.message)
     return JSONResponse(result.model_dump())
 
 
@@ -666,6 +705,110 @@ async def get_config_alerts(
         table=table,
         user_id=user_id,
         config_id=config_id,
+    )
+    if isinstance(result, alert_service.ErrorResponse):
+        raise HTTPException(status_code=404, detail=result.error.message)
+    return JSONResponse(result.model_dump())
+
+
+@config_router.post("/{config_id}/alerts")
+async def create_config_alert(
+    config_id: str,
+    request: Request,
+    body: ConfigAlertCreateRequest,
+    table=Depends(get_dynamodb_table),
+):
+    """Create alert for a specific configuration.
+
+    Maps test-style request fields to AlertRuleCreate:
+    - type (sentiment/volatility) -> alert_type (sentiment_threshold/volatility_threshold)
+    - threshold -> threshold_value
+    - condition -> threshold_direction
+    """
+    user_id = get_authenticated_user_id(request)
+    # Map test-style fields to AlertRuleCreate fields
+    alert_type = f"{body.type}_threshold"  # "sentiment" -> "sentiment_threshold"
+    alert_request = alert_service.AlertRuleCreate(
+        config_id=config_id,
+        ticker=body.ticker,
+        alert_type=alert_type,
+        threshold_value=body.threshold,
+        threshold_direction=body.condition,
+    )
+    result = alert_service.create_alert(
+        table=table,
+        user_id=user_id,
+        request=alert_request,
+    )
+    if isinstance(result, alert_service.ErrorResponse):
+        if result.error.code == "MAX_ALERTS_REACHED":
+            raise HTTPException(status_code=409, detail=result.error.message)
+        raise HTTPException(status_code=400, detail=result.error.message)
+    # Map response fields to match test expectations
+    response_data = result.model_dump()
+    # Map alert_type back to type (remove "_threshold" suffix)
+    if "alert_type" in response_data:
+        response_data["type"] = response_data["alert_type"].replace("_threshold", "")
+    if "is_enabled" in response_data:
+        response_data["enabled"] = response_data["is_enabled"]
+    return JSONResponse(response_data, status_code=201)
+
+
+@config_router.patch("/{config_id}/alerts/{alert_id}")
+async def update_config_alert(
+    config_id: str,
+    alert_id: str,
+    request: Request,
+    body: alert_service.AlertUpdateRequest,
+    table=Depends(get_dynamodb_table),
+):
+    """Update alert for a specific configuration."""
+    user_id = get_authenticated_user_id(request)
+    result = alert_service.update_alert(
+        table=table,
+        user_id=user_id,
+        alert_id=alert_id,
+        threshold_value=body.threshold_value,
+        threshold_direction=body.threshold_direction,
+        is_enabled=body.is_enabled,
+    )
+    if isinstance(result, alert_service.ErrorResponse):
+        raise HTTPException(status_code=404, detail=result.error.message)
+    return JSONResponse(result.model_dump())
+
+
+@config_router.delete("/{config_id}/alerts/{alert_id}")
+async def delete_config_alert(
+    config_id: str,
+    alert_id: str,
+    request: Request,
+    table=Depends(get_dynamodb_table),
+):
+    """Delete alert for a specific configuration."""
+    user_id = get_authenticated_user_id(request)
+    result = alert_service.delete_alert(
+        table=table,
+        user_id=user_id,
+        alert_id=alert_id,
+    )
+    if isinstance(result, alert_service.ErrorResponse):
+        raise HTTPException(status_code=404, detail=result.error.message)
+    return JSONResponse({"message": "Alert deleted"})
+
+
+@config_router.post("/{config_id}/alerts/{alert_id}/toggle")
+async def toggle_config_alert(
+    config_id: str,
+    alert_id: str,
+    request: Request,
+    table=Depends(get_dynamodb_table),
+):
+    """Toggle alert enabled status for a specific configuration."""
+    user_id = get_authenticated_user_id(request)
+    result = alert_service.toggle_alert(
+        table=table,
+        user_id=user_id,
+        alert_id=alert_id,
     )
     if isinstance(result, alert_service.ErrorResponse):
         raise HTTPException(status_code=404, detail=result.error.message)
