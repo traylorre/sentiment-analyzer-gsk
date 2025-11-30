@@ -17,7 +17,7 @@ resource "aws_dynamodb_table" "sentiment_items" {
   # Primary table attributes
   attribute {
     name = "source_id"
-    type = "S" # String (e.g., "newsapi#abc123def456")
+    type = "S" # String (e.g., "tiingo#abc123def456" or "finnhub#abc123def456")
   }
 
   attribute {

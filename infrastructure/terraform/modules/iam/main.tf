@@ -47,7 +47,7 @@ resource "aws_iam_role_policy" "ingestion_dynamodb" {
   })
 }
 
-# Ingestion Lambda: Secrets Manager access (NewsAPI key)
+# Ingestion Lambda: Secrets Manager access (Tiingo/Finnhub API keys)
 resource "aws_iam_role_policy" "ingestion_secrets" {
   name = "${var.environment}-ingestion-secrets-policy"
   role = aws_iam_role.ingestion_lambda.id
@@ -60,7 +60,10 @@ resource "aws_iam_role_policy" "ingestion_secrets" {
         Action = [
           "secretsmanager:GetSecretValue"
         ]
-        Resource = var.newsapi_secret_arn
+        Resource = [
+          var.tiingo_secret_arn,
+          var.finnhub_secret_arn
+        ]
       }
     ]
   })

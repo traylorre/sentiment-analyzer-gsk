@@ -64,8 +64,11 @@ import_resource() {
 
 echo ""
 echo "========== Importing Secrets Manager =========="
-import_resource "module.secrets.aws_secretsmanager_secret.newsapi" "$ENVIRONMENT/sentiment-analyzer/newsapi" || true
 import_resource "module.secrets.aws_secretsmanager_secret.dashboard_api_key" "$ENVIRONMENT/sentiment-analyzer/dashboard-api-key" || true
+import_resource "module.secrets.aws_secretsmanager_secret.tiingo" "$ENVIRONMENT/sentiment-analyzer/tiingo" || true
+import_resource "module.secrets.aws_secretsmanager_secret.finnhub" "$ENVIRONMENT/sentiment-analyzer/finnhub" || true
+import_resource "module.secrets.aws_secretsmanager_secret.sendgrid" "$ENVIRONMENT/sentiment-analyzer/sendgrid" || true
+import_resource "module.secrets.aws_secretsmanager_secret.hcaptcha" "$ENVIRONMENT/sentiment-analyzer/hcaptcha" || true
 
 echo ""
 echo "========== Importing DynamoDB =========="

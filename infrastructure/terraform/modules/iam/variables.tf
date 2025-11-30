@@ -10,8 +10,13 @@ variable "dynamodb_table_arn" {
   type        = string
 }
 
-variable "newsapi_secret_arn" {
-  description = "ARN of the NewsAPI secret in Secrets Manager"
+variable "tiingo_secret_arn" {
+  description = "ARN of the Tiingo API secret in Secrets Manager"
+  type        = string
+}
+
+variable "finnhub_secret_arn" {
+  description = "ARN of the Finnhub API secret in Secrets Manager"
   type        = string
 }
 
