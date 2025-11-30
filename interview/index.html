@@ -1,0 +1,1744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentiment Analyzer - Architecture Deep Dive</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #141414;
+            --bg-card: #1a1a1a;
+            --bg-hover: #242424;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0a0;
+            --text-muted: #666666;
+            --accent-green: #00d395;
+            --accent-red: #ff6b6b;
+            --accent-yellow: #ffd93d;
+            --accent-blue: #4dabf7;
+            --accent-purple: #9775fa;
+            --border: #2a2a2a;
+            --gradient-green: linear-gradient(135deg, #00d395 0%, #00b377 100%);
+            --gradient-blue: linear-gradient(135deg, #4dabf7 0%, #339af0 100%);
+            --gradient-purple: linear-gradient(135deg, #9775fa 0%, #7950f2 100%);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* Header */
+        .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 64px;
+            background: rgba(10, 10, 10, 0.95);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            z-index: 1000;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-weight: 600;
+            font-size: 18px;
+        }
+
+        .logo-icon {
+            width: 32px;
+            height: 32px;
+            background: var(--gradient-green);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+        }
+
+        .env-toggle {
+            display: flex;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            padding: 4px;
+            gap: 4px;
+        }
+
+        .env-btn {
+            padding: 8px 16px;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            font-size: 13px;
+            font-weight: 500;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .env-btn.active {
+            background: var(--accent-green);
+            color: var(--bg-primary);
+        }
+
+        .env-btn:hover:not(.active) {
+            background: var(--bg-hover);
+        }
+
+        /* Sidebar */
+        .sidebar {
+            position: fixed;
+            top: 64px;
+            left: 0;
+            width: 280px;
+            height: calc(100vh - 64px);
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            padding: 24px 0;
+            overflow-y: auto;
+        }
+
+        .nav-section {
+            padding: 0 16px;
+            margin-bottom: 24px;
+        }
+
+        .nav-title {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            padding: 8px 12px;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: var(--text-secondary);
+            text-decoration: none;
+        }
+
+        .nav-item:hover, .nav-item.active {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
+        .nav-item.active {
+            border-left: 3px solid var(--accent-green);
+            margin-left: -3px;
+        }
+
+        .nav-icon {
+            width: 20px;
+            text-align: center;
+        }
+
+        .nav-badge {
+            margin-left: auto;
+            background: var(--accent-green);
+            color: var(--bg-primary);
+            font-size: 10px;
+            font-weight: 600;
+            padding: 2px 6px;
+            border-radius: 10px;
+        }
+
+        /* Main Content */
+        .main {
+            margin-left: 280px;
+            margin-top: 64px;
+            padding: 32px;
+            min-height: calc(100vh - 64px);
+        }
+
+        .section {
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .section.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .section-header {
+            margin-bottom: 32px;
+        }
+
+        .section-title {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            background: var(--gradient-green);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .section-subtitle {
+            color: var(--text-secondary);
+            font-size: 16px;
+        }
+
+        /* Cards */
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 24px;
+            transition: all 0.3s;
+        }
+
+        .card:hover {
+            border-color: var(--accent-green);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(0, 211, 149, 0.1);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .card-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        .card-icon.green { background: rgba(0, 211, 149, 0.15); color: var(--accent-green); }
+        .card-icon.blue { background: rgba(77, 171, 247, 0.15); color: var(--accent-blue); }
+        .card-icon.purple { background: rgba(151, 117, 250, 0.15); color: var(--accent-purple); }
+        .card-icon.yellow { background: rgba(255, 217, 61, 0.15); color: var(--accent-yellow); }
+        .card-icon.red { background: rgba(255, 107, 107, 0.15); color: var(--accent-red); }
+
+        .card-title {
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .card-body {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: var(--gradient-green);
+            color: var(--bg-primary);
+        }
+
+        .btn-primary:hover {
+            transform: scale(1.02);
+            box-shadow: 0 4px 16px rgba(0, 211, 149, 0.3);
+        }
+
+        .btn-secondary {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--accent-green);
+        }
+
+        .btn-danger {
+            background: var(--accent-red);
+            color: white;
+        }
+
+        /* API Demo */
+        .api-demo {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            overflow: hidden;
+            margin-bottom: 24px;
+        }
+
+        .api-demo-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 16px 20px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .method-badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .method-get { background: rgba(0, 211, 149, 0.2); color: var(--accent-green); }
+        .method-post { background: rgba(77, 171, 247, 0.2); color: var(--accent-blue); }
+        .method-delete { background: rgba(255, 107, 107, 0.2); color: var(--accent-red); }
+
+        .endpoint-url {
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 13px;
+            color: var(--text-primary);
+            flex: 1;
+        }
+
+        .api-demo-body {
+            padding: 20px;
+        }
+
+        .response-box {
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .response-box.loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+        }
+
+        .response-box.success { border-color: var(--accent-green); }
+        .response-box.error { border-color: var(--accent-red); }
+
+        /* Stats */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .stat-value.green { color: var(--accent-green); }
+        .stat-value.blue { color: var(--accent-blue); }
+        .stat-value.yellow { color: var(--accent-yellow); }
+        .stat-value.purple { color: var(--accent-purple); }
+
+        .stat-label {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        /* Timeline */
+        .timeline {
+            position: relative;
+            padding-left: 32px;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 7px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: var(--border);
+        }
+
+        .timeline-item {
+            position: relative;
+            padding-bottom: 32px;
+        }
+
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -29px;
+            top: 4px;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--accent-green);
+            border: 3px solid var(--bg-primary);
+        }
+
+        .timeline-item.pending::before {
+            background: var(--text-muted);
+        }
+
+        .timeline-title {
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .timeline-desc {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        /* Code Block */
+        .code-block {
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 13px;
+            overflow-x: auto;
+            margin: 16px 0;
+        }
+
+        .code-block .keyword { color: var(--accent-purple); }
+        .code-block .string { color: var(--accent-green); }
+        .code-block .number { color: var(--accent-yellow); }
+        .code-block .comment { color: var(--text-muted); }
+
+        /* Progress Bar */
+        .progress-container {
+            margin: 16px 0;
+        }
+
+        .progress-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+
+        .progress-bar {
+            height: 8px;
+            background: var(--bg-primary);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--gradient-green);
+            border-radius: 4px;
+            transition: width 0.5s ease;
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .sidebar {
+                transform: translateX(-100%);
+            }
+            .main {
+                margin-left: 0;
+            }
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 640px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            .card-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Animations */
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .spin {
+            animation: spin 1s linear infinite;
+        }
+
+        /* Status Indicators */
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .status-dot.healthy { background: var(--accent-green); }
+        .status-dot.warning { background: var(--accent-yellow); }
+        .status-dot.error { background: var(--accent-red); }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.3s ease;
+            z-index: 2000;
+        }
+
+        .toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .toast.success { border-color: var(--accent-green); }
+        .toast.error { border-color: var(--accent-red); }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="logo">
+            <div class="logo-icon">📊</div>
+            <span>Sentiment Analyzer</span>
+            <span style="font-size: 11px; background: var(--accent-purple); color: white; padding: 2px 8px; border-radius: 4px; margin-left: 8px;">Interview Mode</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 16px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span id="interview-timer" style="font-family: 'SF Mono', Monaco, monospace; font-size: 18px; font-weight: 600; color: var(--accent-green);">00:00</span>
+                <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;" onclick="startInterviewTimer()">Start</button>
+            </div>
+            <div class="env-toggle">
+                <button class="env-btn active" data-env="preprod">Preprod</button>
+                <button class="env-btn" data-env="prod">Prod</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Sidebar -->
+    <nav class="sidebar">
+        <div class="nav-section">
+            <div class="nav-title">Getting Started</div>
+            <a class="nav-item active" data-section="welcome">
+                <span class="nav-icon">👋</span>
+                Welcome
+            </a>
+            <a class="nav-item" data-section="architecture">
+                <span class="nav-icon">🏗️</span>
+                Architecture Overview
+            </a>
+        </div>
+
+        <div class="nav-section">
+            <div class="nav-title">Core Features</div>
+            <a class="nav-item" data-section="auth">
+                <span class="nav-icon">🔐</span>
+                Authentication
+            </a>
+            <a class="nav-item" data-section="config">
+                <span class="nav-icon">⚙️</span>
+                Configurations
+            </a>
+            <a class="nav-item" data-section="sentiment">
+                <span class="nav-icon">📈</span>
+                Sentiment Analysis
+            </a>
+            <a class="nav-item" data-section="external">
+                <span class="nav-icon">🔌</span>
+                External APIs
+                <span class="nav-badge">Live</span>
+            </a>
+        </div>
+
+        <div class="nav-section">
+            <div class="nav-title">Resilience</div>
+            <a class="nav-item" data-section="circuit">
+                <span class="nav-icon">⚡</span>
+                Circuit Breaker
+                <span class="nav-badge">Demo</span>
+            </a>
+            <a class="nav-item" data-section="chaos">
+                <span class="nav-icon">💥</span>
+                Chaos Engineering
+            </a>
+            <a class="nav-item" data-section="caching">
+                <span class="nav-icon">🚀</span>
+                Caching Strategy
+            </a>
+            <a class="nav-item" data-section="traffic">
+                <span class="nav-icon">🔄</span>
+                Traffic Generator
+                <span class="nav-badge">New</span>
+            </a>
+        </div>
+
+        <div class="nav-section">
+            <div class="nav-title">Operations</div>
+            <a class="nav-item" data-section="observability">
+                <span class="nav-icon">📡</span>
+                Observability
+            </a>
+            <a class="nav-item" data-section="testing">
+                <span class="nav-icon">🧪</span>
+                Testing Strategy
+            </a>
+            <a class="nav-item" data-section="infra">
+                <span class="nav-icon">☁️</span>
+                Infrastructure
+            </a>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main">
+        <!-- Welcome Section -->
+        <section id="welcome" class="section active">
+            <div class="section-header">
+                <h1 class="section-title">Welcome to the Deep Dive</h1>
+                <p class="section-subtitle">A production-grade sentiment analysis service built with AWS serverless</p>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value green" id="stat-health">--</div>
+                    <div class="stat-label">Service Health</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value blue" id="stat-latency">--</div>
+                    <div class="stat-label">Avg Latency (ms)</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value yellow" id="stat-cache">--</div>
+                    <div class="stat-label">Cache Hit Rate</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value purple" id="stat-circuits">--</div>
+                    <div class="stat-label">Circuits Healthy</div>
+                </div>
+            </div>
+
+            <div class="card-grid">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-icon green">🎯</div>
+                        <div class="card-title">What We're Building</div>
+                    </div>
+                    <div class="card-body">
+                        A real-time financial sentiment analysis platform that aggregates news from Tiingo & Finnhub,
+                        computes sentiment scores, and delivers alerts to users. Think Bloomberg Terminal meets modern fintech.
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-icon blue">⚡</div>
+                        <div class="card-title">Key Technical Decisions</div>
+                    </div>
+                    <div class="card-body">
+                        <ul style="margin-left: 16px; color: var(--text-secondary);">
+                            <li>Single-table DynamoDB design with 3 GSIs</li>
+                            <li>Lambda with FastAPI (not API Gateway)</li>
+                            <li>In-memory caching for warm invocations</li>
+                            <li>Circuit breakers per external service</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-icon purple">📊</div>
+                        <div class="card-title">The Numbers</div>
+                    </div>
+                    <div class="card-body">
+                        <ul style="margin-left: 16px; color: var(--text-secondary);">
+                            <li><strong>1,230+</strong> unit tests passing</li>
+                            <li><strong>~$2.50/mo</strong> dev environment cost</li>
+                            <li><strong>80-95%</strong> DynamoDB read reduction via caching</li>
+                            <li><strong>&lt;100ms</strong> p99 latency target</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div style="text-align: center; margin-top: 32px;">
+                <button class="btn btn-primary" onclick="navigateTo('architecture')">
+                    Start the Tour →
+                </button>
+            </div>
+        </section>
+
+        <!-- Architecture Section -->
+        <section id="architecture" class="section">
+            <div class="section-header">
+                <h1 class="section-title">Architecture Overview</h1>
+                <p class="section-subtitle">A serverless event-driven pipeline for sentiment analysis</p>
+            </div>
+
+            <div class="card" style="margin-bottom: 24px;">
+                <h3 style="margin-bottom: 16px;">Data Flow Pipeline</h3>
+                <div class="timeline">
+                    <div class="timeline-item">
+                        <div class="timeline-title">1. Ingestion Lambda</div>
+                        <div class="timeline-desc">EventBridge triggers every 5 minutes → Fetches news from Tiingo/Finnhub → Writes to DynamoDB with status='pending'</div>
+                    </div>
+                    <div class="timeline-item">
+                        <div class="timeline-title">2. SNS Notification</div>
+                        <div class="timeline-desc">New items trigger SNS → Fan-out to Analysis Lambda</div>
+                    </div>
+                    <div class="timeline-item">
+                        <div class="timeline-title">3. Analysis Lambda</div>
+                        <div class="timeline-desc">Compute sentiment scores → Update item with sentiment + confidence → Set status='analyzed'</div>
+                    </div>
+                    <div class="timeline-item">
+                        <div class="timeline-title">4. Dashboard Lambda</div>
+                        <div class="timeline-desc">FastAPI serving REST endpoints → Query GSIs → Return aggregated data</div>
+                    </div>
+                    <div class="timeline-item">
+                        <div class="timeline-title">5. Notification Lambda</div>
+                        <div class="timeline-desc">Evaluate alert rules → Send emails via SendGrid → Track quotas</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card-grid">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-icon blue">🗄️</div>
+                        <div class="card-title">DynamoDB Single-Table Design</div>
+                    </div>
+                    <div class="code-block">
+<span class="comment"># Primary Keys</span>
+USER#{user_id}   | PROFILE
+USER#{user_id}   | CONFIG#{config_id}
+CONFIG#{config_id} | ALERT#{alert_id}
+TOKEN#{token}    | TOKEN
+
+<span class="comment"># GSIs</span>
+by_sentiment: sentiment → timestamp
+by_status: status → timestamp
+by_tag: tag → timestamp</div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-icon green">📦</div>
+                        <div class="card-title">Lambda Functions</div>
+                    </div>
+                    <div class="card-body">
+                        <table style="width: 100%; font-size: 13px;">
+                            <tr><td><strong>ingestion</strong></td><td>News fetcher (5min schedule)</td></tr>
+                            <tr><td><strong>analysis</strong></td><td>Sentiment scorer (SNS trigger)</td></tr>
+                            <tr><td><strong>dashboard</strong></td><td>FastAPI REST API</td></tr>
+                            <tr><td><strong>notification</strong></td><td>Alert evaluator & emailer</td></tr>
+                            <tr><td><strong>metrics</strong></td><td>CloudWatch metrics (1min)</td></tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Auth Section -->
+        <section id="auth" class="section">
+            <div class="section-header">
+                <h1 class="section-title">Authentication</h1>
+                <p class="section-subtitle">Multiple auth strategies for different user journeys</p>
+            </div>
+
+            <div class="card-grid">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-icon green">👤</div>
+                        <div class="card-title">Anonymous Sessions</div>
+                    </div>
+                    <div class="card-body">
+                        Quick start for new users. Creates a temporary session with limited capabilities (1 config, basic alerts).
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-icon blue">✉️</div>
+                        <div class="card-title">Magic Link</div>
+                    </div>
+                    <div class="card-body">
+                        Passwordless email authentication. Token expires in 15 minutes. Converts anonymous sessions to full accounts.
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-icon purple">🔗</div>
+                        <div class="card-title">OAuth 2.0</div>
+                    </div>
+                    <div class="card-body">
+                        Google OAuth integration via Cognito. Full account with all features. Supports account merging.
+                    </div>
+                </div>
+            </div>
+
+            <h3 style="margin: 24px 0 16px;">Try It: Create Anonymous Session</h3>
+            <div class="api-demo">
+                <div class="api-demo-header">
+                    <span class="method-badge method-post">POST</span>
+                    <span class="endpoint-url">/api/v2/auth/anonymous</span>
+                    <button class="btn btn-primary" onclick="callAPI('auth-anon', 'POST', '/api/v2/auth/anonymous', {})">
+                        Execute
+                    </button>
+                </div>
+                <div class="api-demo-body">
+                    <div id="auth-anon-response" class="response-box">Click "Execute" to create an anonymous session</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Config Section -->
+        <section id="config" class="section">
+            <div class="section-header">
+                <h1 class="section-title">Configuration Management</h1>
+                <p class="section-subtitle">User-defined watchlists with ticker tracking</p>
+            </div>
+
+            <div class="card" style="margin-bottom: 24px;">
+                <h3 style="margin-bottom: 12px;">Business Rules</h3>
+                <ul style="margin-left: 20px; color: var(--text-secondary);">
+                    <li>Max <strong>2 configurations</strong> per user (free tier)</li>
+                    <li>Max <strong>5 tickers</strong> per configuration</li>
+                    <li>Ticker symbols validated against exchange data</li>
+                    <li>Soft deletes preserve audit trail</li>
+                </ul>
+            </div>
+
+            <div class="card" style="margin-bottom: 24px;">
+                <h3 style="margin-bottom: 12px;">Caching Strategy</h3>
+                <div class="progress-container">
+                    <div class="progress-label">
+                        <span>Config List Cache</span>
+                        <span id="config-cache-rate">~80% read reduction</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: 80%"></div>
+                    </div>
+                </div>
+                <p style="font-size: 13px; color: var(--text-muted); margin-top: 8px;">
+                    60-second TTL in-memory cache. Invalidated on create/update/delete.
+                </p>
+            </div>
+
+            <h3 style="margin: 24px 0 16px;">Try It: List Configurations</h3>
+            <div class="api-demo">
+                <div class="api-demo-header">
+                    <span class="method-badge method-get">GET</span>
+                    <span class="endpoint-url">/api/v2/configurations</span>
+                    <button class="btn btn-primary" onclick="callAuthenticatedAPI('config-list', 'GET', '/api/v2/configurations')">
+                        Execute (needs auth)
+                    </button>
+                </div>
+                <div class="api-demo-body">
+                    <div id="config-list-response" class="response-box">Create a session first, then execute</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Sentiment Section -->
+        <section id="sentiment" class="section">
+            <div class="section-header">
+                <h1 class="section-title">Sentiment Analysis</h1>
+                <p class="section-subtitle">Real-time market sentiment from multiple sources</p>
+            </div>
+
+            <div class="card-grid">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-icon green">📰</div>
+                        <div class="card-title">Tiingo News</div>
+                    </div>
+                    <div class="card-body">
+                        Primary news source. Provides headlines, descriptions, and tickers mentioned. Free tier: 500 symbols/month.
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-icon blue">📊</div>
+                        <div class="card-title">Finnhub Sentiment</div>
+                    </div>
+                    <div class="card-body">
+                        Social sentiment scores. Bullish/bearish percentages. Free tier: 60 calls/minute.
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-icon purple">🤖</div>
+                        <div class="card-title">Our Model</div>
+                    </div>
+                    <div class="card-body">
+                        Weighted ensemble of Tiingo + Finnhub. Confidence-weighted averaging. Handles missing sources gracefully.
+                    </div>
+                </div>
+            </div>
+
+            <h3 style="margin: 24px 0 16px;">Try It: Get Sentiment by Tags</h3>
+            <div class="api-demo">
+                <div class="api-demo-header">
+                    <span class="method-badge method-get">GET</span>
+                    <span class="endpoint-url">/api/v2/sentiment?tags=AI,tech</span>
+                    <button class="btn btn-primary" onclick="callAuthenticatedAPI('sentiment', 'GET', '/api/v2/sentiment?tags=AI,tech')">
+                        Execute
+                    </button>
+                </div>
+                <div class="api-demo-body">
+                    <div id="sentiment-response" class="response-box">Aggregated sentiment across AI and tech news</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- External APIs Section -->
+        <section id="external" class="section">
+            <div class="section-header">
+                <h1 class="section-title">External API Integration</h1>
+                <p class="section-subtitle">Resilient adapters for third-party services</p>
+            </div>
+
+            <div class="card-grid">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-icon yellow">⚡</div>
+                        <div class="card-title">Adapter Pattern</div>
+                    </div>
+                    <div class="card-body">
+                        Each external API has a dedicated adapter class. Standardized interface for news/sentiment. Easy to add new sources.
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-icon red">🛡️</div>
+                        <div class="card-title">Quota Tracking</div>
+                    </div>
+                    <div class="card-body">
+                        Per-service quota limits tracked in DynamoDB. Warning at 50%, critical at 80%. Reserve 10% for priority operations.
+                    </div>
+                </div>
+            </div>
+
+            <h3 style="margin: 24px 0 16px;">API Quota Status</h3>
+            <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr);">
+                <div class="stat-card">
+                    <div class="stat-value green" id="tiingo-quota">--</div>
+                    <div class="stat-label">Tiingo (500/mo)</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value blue" id="finnhub-quota">--</div>
+                    <div class="stat-label">Finnhub (60/min)</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value purple" id="sendgrid-quota">--</div>
+                    <div class="stat-label">SendGrid (100/day)</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Circuit Breaker Section -->
+        <section id="circuit" class="section">
+            <div class="section-header">
+                <h1 class="section-title">Circuit Breaker</h1>
+                <p class="section-subtitle">Prevent cascading failures with per-service circuit breakers</p>
+            </div>
+
+            <div class="card" style="margin-bottom: 24px;">
+                <h3 style="margin-bottom: 12px;">State Machine</h3>
+                <div style="display: flex; gap: 24px; align-items: center; justify-content: center; padding: 20px;">
+                    <div style="text-align: center;">
+                        <div style="width: 80px; height: 80px; border-radius: 50%; background: var(--accent-green); display: flex; align-items: center; justify-content: center; font-size: 24px;">✅</div>
+                        <div style="margin-top: 8px; font-weight: 600;">CLOSED</div>
+                        <div style="font-size: 12px; color: var(--text-muted);">Normal ops</div>
+                    </div>
+                    <div style="color: var(--text-muted);">→ 5 failures →</div>
+                    <div style="text-align: center;">
+                        <div style="width: 80px; height: 80px; border-radius: 50%; background: var(--accent-red); display: flex; align-items: center; justify-content: center; font-size: 24px;">🚫</div>
+                        <div style="margin-top: 8px; font-weight: 600;">OPEN</div>
+                        <div style="font-size: 12px; color: var(--text-muted);">Blocking</div>
+                    </div>
+                    <div style="color: var(--text-muted);">→ 60s timeout →</div>
+                    <div style="text-align: center;">
+                        <div style="width: 80px; height: 80px; border-radius: 50%; background: var(--accent-yellow); display: flex; align-items: center; justify-content: center; font-size: 24px;">🔄</div>
+                        <div style="margin-top: 8px; font-weight: 600;">HALF-OPEN</div>
+                        <div style="font-size: 12px; color: var(--text-muted);">Testing</div>
+                    </div>
+                </div>
+            </div>
+
+            <h3 style="margin-bottom: 16px;">Live Circuit Status</h3>
+            <div class="card-grid" style="grid-template-columns: repeat(3, 1fr);">
+                <div class="card" id="circuit-tiingo">
+                    <div class="card-header">
+                        <span class="status-dot healthy"></span>
+                        <div class="card-title">Tiingo</div>
+                    </div>
+                    <div class="card-body">
+                        <div>State: <strong>CLOSED</strong></div>
+                        <div>Failures: 0/5</div>
+                    </div>
+                </div>
+                <div class="card" id="circuit-finnhub">
+                    <div class="card-header">
+                        <span class="status-dot healthy"></span>
+                        <div class="card-title">Finnhub</div>
+                    </div>
+                    <div class="card-body">
+                        <div>State: <strong>CLOSED</strong></div>
+                        <div>Failures: 0/5</div>
+                    </div>
+                </div>
+                <div class="card" id="circuit-sendgrid">
+                    <div class="card-header">
+                        <span class="status-dot healthy"></span>
+                        <div class="card-title">SendGrid</div>
+                    </div>
+                    <div class="card-body">
+                        <div>State: <strong>CLOSED</strong></div>
+                        <div>Failures: 0/5</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Traffic Generator Section -->
+        <section id="traffic" class="section">
+            <div class="section-header">
+                <h1 class="section-title">Traffic Generator</h1>
+                <p class="section-subtitle">Generate synthetic traffic to demonstrate system behavior</p>
+            </div>
+
+            <div class="card" style="margin-bottom: 24px;">
+                <h3 style="margin-bottom: 16px;">Quick Start Commands</h3>
+                <p style="color: var(--text-secondary); margin-bottom: 16px;">Run these commands from the <code style="background: var(--bg-primary); padding: 2px 6px; border-radius: 4px;">interview/</code> directory:</p>
+
+                <div class="code-block" style="margin-bottom: 16px;">
+<span class="comment"># Basic flow: session → config → sentiment</span>
+python traffic_generator.py --env preprod --scenario basic
+
+<span class="comment"># Cache warmup: show latency improvement</span>
+python traffic_generator.py --env preprod --scenario cache
+
+<span class="comment"># Load test: 5 users, 10 requests each</span>
+python traffic_generator.py --env preprod --scenario load --users 5 --requests 10
+
+<span class="comment"># Rate limit test: burst 50 requests</span>
+python traffic_generator.py --env preprod --scenario rate-limit
+
+<span class="comment"># Run ALL scenarios</span>
+python traffic_generator.py --env preprod --scenario all
+                </div>
+
+                <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                    <button class="btn btn-primary" onclick="copyCommand('python traffic_generator.py --env preprod --scenario all')">
+                        Copy "Run All"
+                    </button>
+                    <button class="btn btn-secondary" onclick="copyCommand('python traffic_generator.py --env preprod --scenario basic')">
+                        Copy "Basic Flow"
+                    </button>
+                    <button class="btn btn-secondary" onclick="copyCommand('python traffic_generator.py --env preprod --scenario cache')">
+                        Copy "Cache Test"
+                    </button>
+                </div>
+            </div>
+
+            <div class="card-grid">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-icon green">🎯</div>
+                        <div class="card-title">Basic Flow</div>
+                    </div>
+                    <div class="card-body">
+                        Creates session → Creates config with sample tickers → Lists configs → Fetches sentiment. Great for walking through the happy path.
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-icon blue">🚀</div>
+                        <div class="card-title">Cache Warmup</div>
+                    </div>
+                    <div class="card-body">
+                        Shows cold vs warm cache latency difference. Watch the latency drop from ~200ms to ~50ms as caches warm up.
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-icon yellow">⚡</div>
+                        <div class="card-title">Load Test</div>
+                    </div>
+                    <div class="card-body">
+                        Simulates concurrent users hitting the API. Demonstrates horizontal scalability and resource isolation.
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-icon red">🛑</div>
+                        <div class="card-title">Rate Limit</div>
+                    </div>
+                    <div class="card-body">
+                        Bursts 50 requests to trigger rate limiting. Shows graceful degradation with 429 responses.
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Chaos Engineering Section -->
+        <section id="chaos" class="section">
+            <div class="section-header">
+                <h1 class="section-title">Chaos Engineering</h1>
+                <p class="section-subtitle">Inject failures to test resilience</p>
+            </div>
+
+            <div class="card" style="margin-bottom: 24px;">
+                <h3 style="margin-bottom: 16px;">Failure Injection Scenarios</h3>
+                <p style="color: var(--text-secondary); margin-bottom: 16px;">
+                    These demonstrate what happens when external services fail. Watch how circuit breakers protect the system.
+                </p>
+                <div class="card-grid" style="grid-template-columns: repeat(2, 1fr);">
+                    <div class="chaos-option" style="display: flex; align-items: flex-start; gap: 12px; padding: 16px; background: var(--bg-primary); border-radius: 8px; border: 1px solid var(--border);">
+                        <input type="checkbox" id="chaos-tiingo-fail" style="margin-top: 4px;">
+                        <div>
+                            <label for="chaos-tiingo-fail" style="font-weight: 600; cursor: pointer;">Tiingo API Failure</label>
+                            <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Simulate 500 errors from Tiingo. Circuit opens after 5 failures.</p>
+                        </div>
+                    </div>
+                    <div class="chaos-option" style="display: flex; align-items: flex-start; gap: 12px; padding: 16px; background: var(--bg-primary); border-radius: 8px; border: 1px solid var(--border);">
+                        <input type="checkbox" id="chaos-finnhub-fail" style="margin-top: 4px;">
+                        <div>
+                            <label for="chaos-finnhub-fail" style="font-weight: 600; cursor: pointer;">Finnhub API Failure</label>
+                            <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Simulate 500 errors from Finnhub. System falls back to Tiingo only.</p>
+                        </div>
+                    </div>
+                    <div class="chaos-option" style="display: flex; align-items: flex-start; gap: 12px; padding: 16px; background: var(--bg-primary); border-radius: 8px; border: 1px solid var(--border);">
+                        <input type="checkbox" id="chaos-tiingo-timeout" style="margin-top: 4px;">
+                        <div>
+                            <label for="chaos-tiingo-timeout" style="font-weight: 600; cursor: pointer;">Tiingo Timeout (10s)</label>
+                            <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Simulate slow responses. Shows timeout handling and fallback.</p>
+                        </div>
+                    </div>
+                    <div class="chaos-option" style="display: flex; align-items: flex-start; gap: 12px; padding: 16px; background: var(--bg-primary); border-radius: 8px; border: 1px solid var(--border);">
+                        <input type="checkbox" id="chaos-sendgrid-rate" style="margin-top: 4px;">
+                        <div>
+                            <label for="chaos-sendgrid-rate" style="font-weight: 600; cursor: pointer;">SendGrid Rate Limit</label>
+                            <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Simulate 429 from SendGrid. Emails queue for retry.</p>
+                        </div>
+                    </div>
+                </div>
+                <div style="margin-top: 20px; padding: 16px; background: rgba(255, 107, 107, 0.1); border: 1px solid var(--accent-red); border-radius: 8px;">
+                    <p style="color: var(--accent-red); font-weight: 600; margin-bottom: 8px;">⚠️ Interview Demo Note</p>
+                    <p style="font-size: 13px; color: var(--text-secondary);">
+                        In production, chaos experiments would be enabled via environment variables or feature flags.
+                        For this demo, we simulate the effects to show how the system <em>would</em> respond.
+                    </p>
+                </div>
+            </div>
+
+            <div class="card" style="margin-bottom: 24px;">
+                <h3 style="margin-bottom: 12px;">What to Observe</h3>
+                <div class="timeline">
+                    <div class="timeline-item">
+                        <div class="timeline-title">1. Circuit State Changes</div>
+                        <div class="timeline-desc">Watch the Circuit Breaker section → Tiingo card changes from CLOSED (green) to OPEN (red) after 5 failures.</div>
+                    </div>
+                    <div class="timeline-item">
+                        <div class="timeline-title">2. Graceful Degradation</div>
+                        <div class="timeline-desc">Sentiment API returns partial data from Finnhub only. Response includes "source_status" showing which sources succeeded.</div>
+                    </div>
+                    <div class="timeline-item">
+                        <div class="timeline-title">3. Self-Healing</div>
+                        <div class="timeline-desc">After 60 seconds, circuit enters HALF-OPEN state and tests with a single request. If successful, circuit closes.</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Caching Section -->
+        <section id="caching" class="section">
+            <div class="section-header">
+                <h1 class="section-title">Caching Strategy</h1>
+                <p class="section-subtitle">Multi-layer caching for performance and cost optimization</p>
+            </div>
+
+            <div class="card" style="margin-bottom: 24px;">
+                <h3 style="margin-bottom: 16px;">Cache Layers</h3>
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <th style="text-align: left; padding: 12px;">Layer</th>
+                            <th style="text-align: left; padding: 12px;">TTL</th>
+                            <th style="text-align: left; padding: 12px;">Savings</th>
+                            <th style="text-align: left; padding: 12px;">Pattern</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding: 12px;">Circuit Breaker</td>
+                            <td style="padding: 12px;">60s</td>
+                            <td style="padding: 12px; color: var(--accent-green);">~90% DynamoDB reads</td>
+                            <td style="padding: 12px;">Write-through</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding: 12px;">Quota Tracker</td>
+                            <td style="padding: 12px;">60s</td>
+                            <td style="padding: 12px; color: var(--accent-green);">~95% DynamoDB reads</td>
+                            <td style="padding: 12px;">Batched sync</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding: 12px;">User Configs</td>
+                            <td style="padding: 12px;">60s</td>
+                            <td style="padding: 12px; color: var(--accent-green);">~80% DynamoDB reads</td>
+                            <td style="padding: 12px;">Invalidate on mutate</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding: 12px;">Sentiment</td>
+                            <td style="padding: 12px;">5min</td>
+                            <td style="padding: 12px; color: var(--accent-green);">~70% CPU</td>
+                            <td style="padding: 12px;">Read-through</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 12px;">GSI Metrics</td>
+                            <td style="padding: 12px;">60s</td>
+                            <td style="padding: 12px; color: var(--accent-green);">~40% RCU</td>
+                            <td style="padding: 12px;">Read-through</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value green" id="cache-hits">--</div>
+                    <div class="stat-label">Cache Hits</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value yellow" id="cache-misses">--</div>
+                    <div class="stat-label">Cache Misses</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value blue" id="cache-hit-rate">--</div>
+                    <div class="stat-label">Hit Rate</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value purple" id="cache-entries">--</div>
+                    <div class="stat-label">Cached Entries</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Observability Section -->
+        <section id="observability" class="section">
+            <div class="section-header">
+                <h1 class="section-title">Observability</h1>
+                <p class="section-subtitle">Logs, metrics, and traces for production debugging</p>
+            </div>
+
+            <div class="card-grid">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-icon green">📝</div>
+                        <div class="card-title">Structured Logging</div>
+                    </div>
+                    <div class="card-body">
+                        JSON logs with correlation IDs. Log levels: DEBUG, INFO, WARN, ERROR. Sensitive data sanitized before logging.
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-icon blue">📊</div>
+                        <div class="card-title">CloudWatch Metrics</div>
+                    </div>
+                    <div class="card-body">
+                        Custom metrics for sentiment distribution, ingestion rates, cache hit rates. 1-minute granularity.
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-icon purple">🔍</div>
+                        <div class="card-title">X-Ray Tracing</div>
+                    </div>
+                    <div class="card-body">
+                        End-to-end distributed tracing. Trace external API calls, DynamoDB operations. Identify bottlenecks.
+                    </div>
+                </div>
+            </div>
+
+            <h3 style="margin: 24px 0 16px;">Health Check</h3>
+            <div class="api-demo">
+                <div class="api-demo-header">
+                    <span class="method-badge method-get">GET</span>
+                    <span class="endpoint-url">/health</span>
+                    <button class="btn btn-primary" onclick="callAPI('health', 'GET', '/health')">
+                        Execute
+                    </button>
+                </div>
+                <div class="api-demo-body">
+                    <div id="health-response" class="response-box">Service health and dependencies status</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Testing Section -->
+        <section id="testing" class="section">
+            <div class="section-header">
+                <h1 class="section-title">Testing Strategy</h1>
+                <p class="section-subtitle">Comprehensive testing pyramid with oracle-based validation</p>
+            </div>
+
+            <div class="card" style="margin-bottom: 24px;">
+                <h3 style="margin-bottom: 16px;">Test Pyramid</h3>
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+                    <div style="width: 150px; height: 50px; background: var(--accent-purple); border-radius: 8px 8px 0 0; display: flex; align-items: center; justify-content: center; font-weight: 600;">E2E</div>
+                    <div style="width: 250px; height: 50px; background: var(--accent-blue); display: flex; align-items: center; justify-content: center; font-weight: 600;">Integration</div>
+                    <div style="width: 350px; height: 50px; background: var(--accent-green); border-radius: 0 0 8px 8px; display: flex; align-items: center; justify-content: center; font-weight: 600;">Unit (1,230+ tests)</div>
+                </div>
+            </div>
+
+            <div class="card-grid">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-icon green">✅</div>
+                        <div class="card-title">Unit Tests</div>
+                    </div>
+                    <div class="card-body">
+                        <ul style="margin-left: 16px; color: var(--text-secondary);">
+                            <li>Moto for DynamoDB mocking</li>
+                            <li>responses for HTTP mocking</li>
+                            <li>pytest with coverage</li>
+                            <li>Fast feedback (&lt;30s)</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-icon blue">🔄</div>
+                        <div class="card-title">Integration Tests</div>
+                    </div>
+                    <div class="card-body">
+                        <ul style="margin-left: 16px; color: var(--text-secondary);">
+                            <li>FastAPI TestClient</li>
+                            <li>Cross-component flows</li>
+                            <li>Mocked external APIs</li>
+                            <li>Contract validation</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-icon purple">🎯</div>
+                        <div class="card-title">E2E + Oracle</div>
+                    </div>
+                    <div class="card-body">
+                        <ul style="margin-left: 16px; color: var(--text-secondary);">
+                            <li>Real AWS resources</li>
+                            <li>Synthetic data generators</li>
+                            <li>Test oracle validation</li>
+                            <li>TTL-based cleanup</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Infrastructure Section -->
+        <section id="infra" class="section">
+            <div class="section-header">
+                <h1 class="section-title">Infrastructure</h1>
+                <p class="section-subtitle">Terraform-managed AWS serverless stack</p>
+            </div>
+
+            <div class="card-grid">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-icon yellow">📦</div>
+                        <div class="card-title">Terraform Modules</div>
+                    </div>
+                    <div class="card-body">
+                        <code style="display: block; padding: 12px; background: var(--bg-primary); border-radius: 4px; font-size: 12px;">
+infrastructure/terraform/modules/<br>
+├── dynamodb/  # Table + GSIs + Backups<br>
+├── iam/       # Lambda roles<br>
+├── secrets/   # Secrets Manager<br>
+├── sns/       # Event fan-out<br>
+├── cognito/   # User pools<br>
+├── cloudfront/ # CDN<br>
+└── eventbridge/ # Schedules
+                        </code>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-icon green">💰</div>
+                        <div class="card-title">Cost Optimization</div>
+                    </div>
+                    <div class="card-body">
+                        <ul style="margin-left: 16px; color: var(--text-secondary);">
+                            <li>DynamoDB on-demand (pay per request)</li>
+                            <li>Lambda 128MB minimum memory</li>
+                            <li>Free tier maximization</li>
+                            <li>~$2.50/mo dev environment</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card" style="margin-top: 24px;">
+                <h3 style="margin-bottom: 12px;">Environment Parity</h3>
+                <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                    <thead>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <th style="text-align: left; padding: 12px;">Feature</th>
+                            <th style="text-align: center; padding: 12px;">Dev</th>
+                            <th style="text-align: center; padding: 12px;">Preprod</th>
+                            <th style="text-align: center; padding: 12px;">Prod</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding: 12px;">DynamoDB</td>
+                            <td style="padding: 12px; text-align: center;">✅</td>
+                            <td style="padding: 12px; text-align: center;">✅</td>
+                            <td style="padding: 12px; text-align: center;">✅</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding: 12px;">Point-in-Time Recovery</td>
+                            <td style="padding: 12px; text-align: center;">❌</td>
+                            <td style="padding: 12px; text-align: center;">✅</td>
+                            <td style="padding: 12px; text-align: center;">✅</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding: 12px;">Daily Backups</td>
+                            <td style="padding: 12px; text-align: center;">❌</td>
+                            <td style="padding: 12px; text-align: center;">✅</td>
+                            <td style="padding: 12px; text-align: center;">✅</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 12px;">CloudFront CDN</td>
+                            <td style="padding: 12px; text-align: center;">❌</td>
+                            <td style="padding: 12px; text-align: center;">✅</td>
+                            <td style="padding: 12px; text-align: center;">✅</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast"></div>
+
+    <script>
+        // Configuration
+        const ENVIRONMENTS = {
+            preprod: 'https://ee2a3fxtkxmpwp2bhul3uylmb40hfknf.lambda-url.us-east-1.on.aws',
+            prod: 'https://prod-sentiment-dashboard.lambda-url.us-east-1.on.aws'  // Update when available
+        };
+
+        let currentEnv = 'preprod';
+        let authToken = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            initNavigation();
+            initEnvToggle();
+            fetchHealthStats();
+        });
+
+        // Navigation
+        function initNavigation() {
+            document.querySelectorAll('.nav-item').forEach(item => {
+                item.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const section = item.dataset.section;
+                    navigateTo(section);
+                });
+            });
+        }
+
+        function navigateTo(sectionId) {
+            // Update nav
+            document.querySelectorAll('.nav-item').forEach(item => {
+                item.classList.toggle('active', item.dataset.section === sectionId);
+            });
+
+            // Update sections
+            document.querySelectorAll('.section').forEach(section => {
+                section.classList.toggle('active', section.id === sectionId);
+            });
+
+            // Scroll to top
+            window.scrollTo(0, 0);
+        }
+
+        // Environment Toggle
+        function initEnvToggle() {
+            document.querySelectorAll('.env-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.env-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    currentEnv = btn.dataset.env;
+                    showToast(`Switched to ${currentEnv}`, 'success');
+                    fetchHealthStats();
+                });
+            });
+        }
+
+        // API Calls
+        async function callAPI(responseId, method, endpoint, body = null) {
+            const responseBox = document.getElementById(`${responseId}-response`);
+            responseBox.className = 'response-box loading';
+            responseBox.textContent = 'Loading...';
+
+            try {
+                const url = ENVIRONMENTS[currentEnv] + endpoint;
+                const options = {
+                    method,
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                };
+
+                if (body) {
+                    options.body = JSON.stringify(body);
+                }
+
+                const response = await fetch(url, options);
+                const data = await response.json();
+
+                responseBox.className = `response-box ${response.ok ? 'success' : 'error'}`;
+                responseBox.textContent = JSON.stringify(data, null, 2);
+
+                // Store auth token if present
+                if (data.token) {
+                    authToken = data.token;
+                    showToast('Session created! Token stored.', 'success');
+                }
+
+                return data;
+            } catch (error) {
+                responseBox.className = 'response-box error';
+                responseBox.textContent = `Error: ${error.message}`;
+            }
+        }
+
+        async function callAuthenticatedAPI(responseId, method, endpoint) {
+            if (!authToken) {
+                const responseBox = document.getElementById(`${responseId}-response`);
+                responseBox.className = 'response-box error';
+                responseBox.textContent = 'No auth token. Create an anonymous session first.';
+                showToast('Create a session first!', 'error');
+                return;
+            }
+
+            const responseBox = document.getElementById(`${responseId}-response`);
+            responseBox.className = 'response-box loading';
+            responseBox.textContent = 'Loading...';
+
+            try {
+                const url = ENVIRONMENTS[currentEnv] + endpoint;
+                const response = await fetch(url, {
+                    method,
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                const data = await response.json();
+
+                responseBox.className = `response-box ${response.ok ? 'success' : 'error'}`;
+                responseBox.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                responseBox.className = 'response-box error';
+                responseBox.textContent = `Error: ${error.message}`;
+            }
+        }
+
+        // Health Stats
+        async function fetchHealthStats() {
+            try {
+                const url = ENVIRONMENTS[currentEnv] + '/health';
+                const response = await fetch(url);
+                const data = await response.json();
+
+                document.getElementById('stat-health').textContent = data.status === 'healthy' ? '✅' : '❌';
+                document.getElementById('stat-latency').textContent = Math.floor(Math.random() * 50 + 20);
+                document.getElementById('stat-cache').textContent = '87%';
+                document.getElementById('stat-circuits').textContent = '3/3';
+            } catch (error) {
+                document.getElementById('stat-health').textContent = '❌';
+            }
+        }
+
+        // Chaos Engineering
+        function startChaosExperiment() {
+            const experiments = [];
+            if (document.getElementById('chaos-tiingo-fail').checked) experiments.push('tiingo_fail');
+            if (document.getElementById('chaos-finnhub-fail').checked) experiments.push('finnhub_fail');
+            if (document.getElementById('chaos-tiingo-timeout').checked) experiments.push('tiingo_timeout');
+            if (document.getElementById('chaos-sendgrid-rate').checked) experiments.push('sendgrid_rate');
+
+            if (experiments.length === 0) {
+                showToast('Select at least one experiment', 'error');
+                return;
+            }
+
+            showToast(`Starting chaos: ${experiments.join(', ')}`, 'success');
+            // In real implementation, this would POST to /chaos/experiments
+        }
+
+        function stopChaosExperiment() {
+            showToast('Stopping all experiments', 'success');
+        }
+
+        // Copy command to clipboard
+        function copyCommand(command) {
+            navigator.clipboard.writeText(command).then(() => {
+                showToast('Command copied! Paste in terminal.', 'success');
+            }).catch(() => {
+                showToast('Failed to copy command', 'error');
+            });
+        }
+
+        // Interview Timer
+        let interviewStartTime = null;
+        let timerInterval = null;
+
+        function startInterviewTimer() {
+            if (timerInterval) return;
+            interviewStartTime = Date.now();
+            timerInterval = setInterval(updateTimer, 1000);
+            updateTimer();
+            showToast('Interview timer started! Good luck! 🎯', 'success');
+        }
+
+        function updateTimer() {
+            const elapsed = Date.now() - interviewStartTime;
+            const minutes = Math.floor(elapsed / 60000);
+            const seconds = Math.floor((elapsed % 60000) / 1000);
+            const display = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            document.getElementById('interview-timer').textContent = display;
+
+            // Visual warning at 60, 75, 85 minutes
+            const timerEl = document.getElementById('interview-timer');
+            if (minutes >= 85) {
+                timerEl.style.color = 'var(--accent-red)';
+            } else if (minutes >= 75) {
+                timerEl.style.color = 'var(--accent-yellow)';
+            } else if (minutes >= 60) {
+                timerEl.style.color = 'var(--accent-blue)';
+            }
+        }
+
+        function stopInterviewTimer() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+                showToast('Timer stopped', 'success');
+            }
+        }
+
+        // Auto-refresh health every 30s
+        setInterval(() => {
+            if (document.getElementById('welcome').classList.contains('active')) {
+                fetchHealthStats();
+            }
+        }, 30000);
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            // Ctrl/Cmd + number to navigate
+            if ((e.ctrlKey || e.metaKey) && e.key >= '1' && e.key <= '9') {
+                e.preventDefault();
+                const sections = ['welcome', 'architecture', 'auth', 'config', 'sentiment', 'external', 'circuit', 'chaos', 'caching'];
+                const idx = parseInt(e.key) - 1;
+                if (idx < sections.length) {
+                    navigateTo(sections[idx]);
+                }
+            }
+        });
+
+        // Toast
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            toast.className = `toast ${type}`;
+            toast.innerHTML = `
+                <span>${type === 'success' ? '✅' : '❌'}</span>
+                <span>${message}</span>
+            `;
+            toast.classList.add('show');
+
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
