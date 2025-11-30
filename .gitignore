@@ -184,3 +184,6 @@ model/
 *-credentials.json
 
 model.tar.gz
+
+# Local documentation (not committed)
+*.local.md
