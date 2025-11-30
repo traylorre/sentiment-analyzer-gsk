@@ -96,6 +96,7 @@ data "aws_iam_policy_document" "ci_deploy_core" {
       # Data operations needed for integration tests
       "dynamodb:PutItem",
       "dynamodb:GetItem",
+      "dynamodb:UpdateItem",
       "dynamodb:Query",
       "dynamodb:Scan",
       "dynamodb:DeleteItem"
