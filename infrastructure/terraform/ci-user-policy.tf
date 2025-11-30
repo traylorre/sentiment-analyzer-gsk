@@ -107,6 +107,7 @@ data "aws_iam_policy_document" "ci_deploy_core" {
       "sns:Subscribe",
       "sns:Unsubscribe",
       "sns:ListSubscriptionsByTopic",
+      "sns:GetSubscriptionAttributes",
       "sns:TagResource",
       "sns:UntagResource",
       "sns:ListTagsForResource"
@@ -168,6 +169,8 @@ data "aws_iam_policy_document" "ci_deploy_core" {
     resources = [
       "arn:aws:apigateway:*::/restapis",
       "arn:aws:apigateway:*::/restapis/*",
+      "arn:aws:apigateway:*::/usageplans",
+      "arn:aws:apigateway:*::/usageplans/*",
       "arn:aws:apigateway:*::/tags/*"
     ]
   }
