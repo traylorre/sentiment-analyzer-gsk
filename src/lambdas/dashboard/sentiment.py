@@ -307,13 +307,14 @@ def get_heatmap_data(
 
         legend = None  # Legend optional for timeperiods view
 
-    # Pre-sanitize config_id to prevent log injection (CodeQL py/log-injection)
+    # Pre-sanitize inputs to prevent log injection (CodeQL py/log-injection)
     safe_config_id = sanitize_for_log(config_id[:8] if config_id else "")
+    safe_view = sanitize_for_log(view)
     logger.debug(
         "Generated heatmap data",
         extra={
             "config_id": safe_config_id,
-            "view": view,
+            "view": safe_view,
             "ticker_count": len(tickers),
         },
     )
