@@ -6,7 +6,7 @@ Provides consistent error response formatting across all Lambda functions.
 
 For On-Call Engineers:
     Error codes and their meanings:
-    - RATE_LIMIT_EXCEEDED: External API throttling (NewsAPI, etc.)
+    - RATE_LIMIT_EXCEEDED: External API throttling (Tiingo/Finnhub, etc.)
     - VALIDATION_ERROR: Input validation failure
     - NOT_FOUND: Resource not found
     - SECRET_ERROR: Secrets Manager failure
@@ -274,7 +274,7 @@ def rate_limit_error(
         Lambda error response dict
 
     On-Call Note:
-        See SC-07 in ON_CALL_SOP.md for NewsAPI rate limit handling.
+        See SC-07 in ON_CALL_SOP.md for API rate limit handling.
     """
     details = {"service": service}
     if retry_after:

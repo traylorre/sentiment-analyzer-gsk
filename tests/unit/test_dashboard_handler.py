@@ -654,7 +654,7 @@ class TestChaosUIEndpoint:
         # Check for key UI elements
         assert "Chaos Testing" in content
         assert "DynamoDB Throttle" in content
-        assert "NewsAPI Failure" in content
+        assert "API Failure" in content
         assert "Lambda" in content or "Cold Start" in content
         assert "Blast Radius" in content
         assert "Duration" in content

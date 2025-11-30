@@ -67,10 +67,10 @@ def _sanitize_secret_id_for_log(secret_id: str) -> str:
     - Information disclosure for reconnaissance attacks
 
     Args:
-        secret_id: Full secret ID (e.g., "dev/sentiment-analyzer/newsapi")
+        secret_id: Full secret ID (e.g., "dev/sentiment-analyzer/tiingo")
 
     Returns:
-        Sanitized secret name (e.g., "newsapi")
+        Sanitized secret name (e.g., "tiingo")
 
     Security:
         - Prevents exposing full secret paths in logs
@@ -78,8 +78,8 @@ def _sanitize_secret_id_for_log(secret_id: str) -> str:
         - Still provides enough context for debugging
 
     Example:
-        >>> _sanitize_secret_id_for_log("dev/sentiment-analyzer/newsapi")
-        'newsapi'
+        >>> _sanitize_secret_id_for_log("dev/sentiment-analyzer/tiingo")
+        'tiingo'
         >>> _sanitize_secret_id_for_log("arn:aws:secretsmanager:us-east-1:123:secret:api-key-abc123")
         'api-key'
     """
@@ -138,7 +138,7 @@ def get_secret(
     Cache is automatically cleared on Lambda cold start.
 
     Args:
-        secret_id: Secret name or ARN (e.g., "dev/sentiment-analyzer/newsapi")
+        secret_id: Secret name or ARN (e.g., "dev/sentiment-analyzer/tiingo")
         region_name: AWS region
         force_refresh: If True, bypass cache and fetch from Secrets Manager
 
@@ -249,7 +249,7 @@ def get_api_key(secret_id: str, key_field: str = "api_key") -> str:
         SecretRetrievalError: If key_field not found in secret
 
     Example:
-        >>> api_key = get_api_key("dev/sentiment-analyzer/newsapi")
+        >>> api_key = get_api_key("dev/sentiment-analyzer/tiingo")
         >>> # Returns value of "api_key" field from secret
     """
     secret = get_secret(secret_id)

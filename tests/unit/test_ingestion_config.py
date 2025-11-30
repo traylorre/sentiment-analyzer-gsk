@@ -35,7 +35,11 @@ def valid_env_vars(monkeypatch):
     monkeypatch.setenv("DYNAMODB_TABLE", "dev-sentiment-items")
     monkeypatch.setenv("SNS_TOPIC_ARN", "arn:aws:sns:us-east-1:123456789:test-topic")
     monkeypatch.setenv(
-        "NEWSAPI_SECRET_ARN", "arn:aws:secretsmanager:us-east-1:123456789:secret:test"
+        "TIINGO_SECRET_ARN", "arn:aws:secretsmanager:us-east-1:123456789:secret:tiingo"
+    )
+    monkeypatch.setenv(
+        "FINNHUB_SECRET_ARN",
+        "arn:aws:secretsmanager:us-east-1:123456789:secret:finnhub",
     )
     monkeypatch.setenv("MODEL_VERSION", "v1.0.0")
     monkeypatch.setenv("AWS_REGION", "us-east-1")
@@ -150,7 +154,8 @@ class TestIngestionConfig:
             watch_tags=["AI", "climate"],
             dynamodb_table="test-table",
             sns_topic_arn="arn:aws:sns:us-east-1:123456789:topic",
-            newsapi_secret_arn="arn:aws:secretsmanager:us-east-1:123456789:secret:test",
+            tiingo_secret_arn="arn:aws:secretsmanager:us-east-1:123456789:secret:tiingo",
+            finnhub_secret_arn="arn:aws:secretsmanager:us-east-1:123456789:secret:finnhub",
             model_version="v1.0.0",
             aws_region="us-east-1",
         )
@@ -165,7 +170,8 @@ class TestIngestionConfig:
                 watch_tags=[],
                 dynamodb_table="test-table",
                 sns_topic_arn="arn:aws:sns:us-east-1:123456789:topic",
-                newsapi_secret_arn="arn:aws:secretsmanager:us-east-1:123456789:secret:test",
+                tiingo_secret_arn="arn:aws:secretsmanager:us-east-1:123456789:secret:tiingo",
+                finnhub_secret_arn="arn:aws:secretsmanager:us-east-1:123456789:secret:finnhub",
                 model_version="v1.0.0",
                 aws_region="us-east-1",
             )
@@ -177,7 +183,8 @@ class TestIngestionConfig:
                 watch_tags=["a", "b", "c", "d", "e", "f"],
                 dynamodb_table="test-table",
                 sns_topic_arn="arn:aws:sns:us-east-1:123456789:topic",
-                newsapi_secret_arn="arn:aws:secretsmanager:us-east-1:123456789:secret:test",
+                tiingo_secret_arn="arn:aws:secretsmanager:us-east-1:123456789:secret:tiingo",
+                finnhub_secret_arn="arn:aws:secretsmanager:us-east-1:123456789:secret:finnhub",
                 model_version="v1.0.0",
                 aws_region="us-east-1",
             )
@@ -189,7 +196,8 @@ class TestIngestionConfig:
                 watch_tags=["AI"],
                 dynamodb_table="",
                 sns_topic_arn="arn:aws:sns:us-east-1:123456789:topic",
-                newsapi_secret_arn="arn:aws:secretsmanager:us-east-1:123456789:secret:test",
+                tiingo_secret_arn="arn:aws:secretsmanager:us-east-1:123456789:secret:tiingo",
+                finnhub_secret_arn="arn:aws:secretsmanager:us-east-1:123456789:secret:finnhub",
                 model_version="v1.0.0",
                 aws_region="us-east-1",
             )
@@ -201,7 +209,8 @@ class TestIngestionConfig:
                 watch_tags=["AI"],
                 dynamodb_table="test-table",
                 sns_topic_arn="",
-                newsapi_secret_arn="arn:aws:secretsmanager:us-east-1:123456789:secret:test",
+                tiingo_secret_arn="arn:aws:secretsmanager:us-east-1:123456789:secret:tiingo",
+                finnhub_secret_arn="arn:aws:secretsmanager:us-east-1:123456789:secret:finnhub",
                 model_version="v1.0.0",
                 aws_region="us-east-1",
             )
@@ -213,7 +222,8 @@ class TestIngestionConfig:
                 watch_tags=["AI"],
                 dynamodb_table="test-table",
                 sns_topic_arn="invalid-arn",
-                newsapi_secret_arn="arn:aws:secretsmanager:us-east-1:123456789:secret:test",
+                tiingo_secret_arn="arn:aws:secretsmanager:us-east-1:123456789:secret:tiingo",
+                finnhub_secret_arn="arn:aws:secretsmanager:us-east-1:123456789:secret:finnhub",
                 model_version="v1.0.0",
                 aws_region="us-east-1",
             )
@@ -225,7 +235,8 @@ class TestIngestionConfig:
                 watch_tags=["AI"],
                 dynamodb_table="test-table",
                 sns_topic_arn="arn:aws:sns:us-east-1:123456789:topic",
-                newsapi_secret_arn="arn:aws:secretsmanager:us-east-1:123456789:secret:test",
+                tiingo_secret_arn="arn:aws:secretsmanager:us-east-1:123456789:secret:tiingo",
+                finnhub_secret_arn="arn:aws:secretsmanager:us-east-1:123456789:secret:finnhub",
                 model_version="1.0.0",  # Missing 'v'
                 aws_region="us-east-1",
             )
@@ -248,8 +259,12 @@ class TestGetConfig:
         monkeypatch.setenv("DYNAMODB_TABLE", "test")
         monkeypatch.setenv("SNS_TOPIC_ARN", "arn:aws:sns:us-east-1:123456789:topic")
         monkeypatch.setenv(
-            "NEWSAPI_SECRET_ARN",
-            "arn:aws:secretsmanager:us-east-1:123456789:secret:test",
+            "TIINGO_SECRET_ARN",
+            "arn:aws:secretsmanager:us-east-1:123456789:secret:tiingo",
+        )
+        monkeypatch.setenv(
+            "FINNHUB_SECRET_ARN",
+            "arn:aws:secretsmanager:us-east-1:123456789:secret:finnhub",
         )
 
         with pytest.raises(ConfigurationError):

@@ -373,11 +373,11 @@ class TestStartExperimentWithFIS:
 
         assert "must be in 'pending' status" in str(exc_info.value)
 
-    def test_start_experiment_newsapi_failure_success(
+    def test_start_experiment_api_failure_success(
         self, mock_environment_preprod, mock_dynamodb_table, sample_experiment
     ):
-        """Test starting newsapi_failure scenario succeeds (Phase 3)."""
-        sample_experiment["scenario_type"] = "newsapi_failure"
+        """Test starting api_failure scenario succeeds (Phase 3)."""
+        sample_experiment["scenario_type"] = "api_failure"
         mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
 
         # Mock the update_item call that sets status = "running"
@@ -475,13 +475,13 @@ class TestStopExperimentWithFIS:
 
         assert "must be in 'running' status" in str(exc_info.value)
 
-    def test_stop_experiment_newsapi_failure_success(
+    def test_stop_experiment_api_failure_success(
         self, mock_environment_preprod, mock_dynamodb_table, sample_experiment
     ):
-        """Test stopping newsapi_failure experiment succeeds (Phase 3)."""
-        # Mock running newsapi_failure experiment
+        """Test stopping api_failure experiment succeeds (Phase 3)."""
+        # Mock running api_failure experiment
         sample_experiment["status"] = "running"
-        sample_experiment["scenario_type"] = "newsapi_failure"
+        sample_experiment["scenario_type"] = "api_failure"
         sample_experiment["results"] = {
             "started_at": "2025-01-01T00:00:00Z",
             "injection_method": "dynamodb_flag",
@@ -649,7 +649,7 @@ class TestCreateExperiment:
         from src.lambdas.dashboard.chaos import create_experiment
 
         result = create_experiment(
-            scenario_type="newsapi_failure",
+            scenario_type="api_failure",
             blast_radius=50,
             duration_seconds=120,
             parameters={"custom_key": "custom_value"},
@@ -743,7 +743,7 @@ class TestCreateExperiment:
         """Test all valid scenario types can be created."""
         from src.lambdas.dashboard.chaos import create_experiment
 
-        valid_scenarios = ["dynamodb_throttle", "newsapi_failure", "lambda_cold_start"]
+        valid_scenarios = ["dynamodb_throttle", "api_failure", "lambda_cold_start"]
 
         for scenario in valid_scenarios:
             mock_dynamodb_table.reset_mock()

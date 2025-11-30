@@ -5,10 +5,10 @@ Chaos Injection Helper
 Helper module for detecting active chaos experiments and coordinating
 chaos injection across Lambda functions.
 
-Phase 3: NewsAPI Failure Simulation
-------------------------------------
-Allows ingestion Lambda to detect when newsapi_failure experiment is active
-and skip NewsAPI calls gracefully.
+Phase 3: API Failure Simulation
+--------------------------------
+Allows ingestion Lambda to detect when api_failure experiment is active
+and skip Tiingo/Finnhub API calls gracefully.
 
 Phase 4: Lambda Cold Start Delays
 ----------------------------------
@@ -49,7 +49,7 @@ def is_chaos_active(scenario_type: str) -> bool:
     Check if a chaos experiment of given type is currently active.
 
     Args:
-        scenario_type: Type of chaos scenario (e.g., "newsapi_failure", "dynamodb_throttle")
+        scenario_type: Type of chaos scenario (e.g., "api_failure", "dynamodb_throttle")
 
     Returns:
         True if active experiment found, False otherwise
@@ -61,8 +61,8 @@ def is_chaos_active(scenario_type: str) -> bool:
         - Logs warnings when chaos is active for visibility
 
     Example:
-        >>> if is_chaos_active("newsapi_failure"):
-        ...     logger.warning("Skipping NewsAPI due to active chaos experiment")
+        >>> if is_chaos_active("api_failure"):
+        ...     logger.warning("Skipping Tiingo/Finnhub due to active chaos experiment")
         ...     return empty_result
     """
     # Read environment variables at call time for testability
