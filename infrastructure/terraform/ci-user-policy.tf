@@ -92,7 +92,13 @@ data "aws_iam_policy_document" "ci_deploy_core" {
       "dynamodb:UpdateContinuousBackups",
       "dynamodb:TagResource",
       "dynamodb:UntagResource",
-      "dynamodb:ListTagsOfResource"
+      "dynamodb:ListTagsOfResource",
+      # Data operations needed for integration tests
+      "dynamodb:PutItem",
+      "dynamodb:GetItem",
+      "dynamodb:Query",
+      "dynamodb:Scan",
+      "dynamodb:DeleteItem"
     ]
     resources = ["*"]
   }
@@ -222,6 +228,7 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
       "logs:CreateLogGroup",
       "logs:DeleteLogGroup",
       "logs:DescribeLogGroups",
+      "logs:DescribeLogStreams",
       "logs:PutRetentionPolicy",
       "logs:DeleteRetentionPolicy",
       "logs:TagLogGroup",
