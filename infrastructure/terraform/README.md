@@ -73,7 +73,10 @@ terraform apply -var-file=dev.tfvars
 **What gets deployed**:
 - DynamoDB table: `dev-sentiment-items`
 - Secrets Manager:
-  - `dev/sentiment-analyzer/newsapi`
+  - `dev/sentiment-analyzer/tiingo`
+  - `dev/sentiment-analyzer/finnhub`
+  - `dev/sentiment-analyzer/sendgrid`
+  - `dev/sentiment-analyzer/hcaptcha`
   - `dev/sentiment-analyzer/dashboard-api-key`
 - AWS Backup vault and plan
 - CloudWatch alarms
@@ -177,7 +180,8 @@ After successful deployment, Terraform outputs:
 ```
 dynamodb_table_name           = "dev-sentiment-items"
 dynamodb_table_arn            = "arn:aws:dynamodb:us-east-1:..."
-newsapi_secret_arn            = "arn:aws:secretsmanager:us-east-1:..."
+tiingo_secret_arn             = "arn:aws:secretsmanager:us-east-1:..."
+finnhub_secret_arn            = "arn:aws:secretsmanager:us-east-1:..."
 dashboard_api_key_secret_arn  = "arn:aws:secretsmanager:us-east-1:..."
 gsi_by_sentiment              = "by_sentiment"
 gsi_by_tag                    = "by_tag"

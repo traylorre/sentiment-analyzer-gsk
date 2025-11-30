@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Fetches articles from NewsAPI, deduplicates, stores in DynamoDB, publishes to SNS for analysis.
+Fetches financial news articles from Tiingo (primary) and Finnhub (secondary), deduplicates, stores in DynamoDB, publishes to SNS for analysis.
 
 ## Trigger
 
@@ -11,9 +11,9 @@ EventBridge schedule: Every 5 minutes
 ## Flow
 
 ```
-EventBridge → Lambda → NewsAPI → DynamoDB → SNS
-                         ↓
-                   (deduplicate)
+EventBridge → Lambda → Tiingo/Finnhub → DynamoDB → SNS
+                              ↓
+                        (deduplicate)
 ```
 
 ## For On-Call Engineers
@@ -31,9 +31,9 @@ aws logs filter-log-events \
   --filter-pattern "ERROR" \
   --start-time $(date -d '30 minutes ago' +%s)000
 
-# 2. Verify NewsAPI key
+# 2. Verify Tiingo API key
 aws secretsmanager get-secret-value \
-  --secret-id dev/sentiment-analyzer/newsapi \
+  --secret-id dev/sentiment-analyzer/tiingo \
   --query 'SecretString' --output text | jq -r '.api_key' | head -c 8
 # Should show first 8 chars of API key
 
@@ -45,19 +45,22 @@ aws events describe-rule --name dev-sentiment-ingestion-schedule
 
 | Error Code | Cause | Fix |
 |------------|-------|-----|
-| `RATE_LIMIT_EXCEEDED` | NewsAPI 429 | Wait for rate limit reset (hourly) |
+| `RATE_LIMIT_EXCEEDED` | Tiingo/Finnhub 429 | Wait for rate limit reset |
 | `SECRET_ERROR` | API key missing/invalid | Rotate key in Secrets Manager |
 | `DATABASE_ERROR` | DynamoDB throttle | Check write capacity alarm |
 
 ## Configuration
 
 - `WATCH_TAGS`: Comma-separated tags (max 5)
-- `NEWSAPI_SECRET_ARN`: Secret path for API key
+- `TIINGO_SECRET_ARN`: Tiingo API key secret path
+- `FINNHUB_SECRET_ARN`: Finnhub API key secret path
 - `SNS_TOPIC_ARN`: Topic for analysis requests
 
 ## Adapters
 
-`adapters/newsapi.py` - NewsAPI implementation with:
+- `adapters/tiingo.py` - Tiingo implementation (primary source)
+- `adapters/finnhub.py` - Finnhub implementation (secondary source)
+
+Both adapters include:
 - Exponential backoff on rate limits
 - Circuit breaker after 3 consecutive failures
-- 100 articles per request (max allowed)

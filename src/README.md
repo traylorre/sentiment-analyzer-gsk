@@ -5,7 +5,7 @@
 ```
 src/
 ├── lambdas/           # AWS Lambda function handlers
-│   ├── ingestion/     # NewsAPI data ingestion (EventBridge triggered)
+│   ├── ingestion/     # Tiingo/Finnhub data ingestion (EventBridge triggered)
 │   ├── analysis/      # Sentiment analysis (SNS triggered)
 │   ├── dashboard/     # FastAPI dashboard (Function URL)
 │   └── shared/        # Common utilities (DynamoDB, Secrets, schemas)
@@ -18,7 +18,7 @@ src/
 If you're here during an incident:
 
 1. **Ingestion failures** → Check `lambdas/ingestion/handler.py`
-   - NewsAPI rate limits: Look for `RATE_LIMIT_EXCEEDED` errors
+   - Tiingo/Finnhub rate limits: Look for `RATE_LIMIT_EXCEEDED` errors
    - Secret issues: Check `shared/secrets.py` caching logic
 
 2. **Analysis failures** → Check `lambdas/analysis/handler.py`
