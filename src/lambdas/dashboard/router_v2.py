@@ -1027,7 +1027,7 @@ async def list_notifications(
         user_id=user_id,
         limit=limit,
         offset=offset,
-        status_filter=status,
+        status=status,
         alert_id=alert_id,
     )
     return JSONResponse(result.model_dump())
