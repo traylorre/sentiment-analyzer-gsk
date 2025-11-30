@@ -69,7 +69,9 @@ data "aws_iam_policy_document" "ci_deploy_core" {
       "lambda:DeleteLayerVersion",
       "lambda:GetLayerVersion",
       "lambda:ListLayerVersions",
-      "lambda:ListLayers"
+      "lambda:ListLayers",
+      "lambda:GetFunctionCodeSigningConfig",
+      "lambda:ListFunctionUrlConfigs"
     ]
     resources = ["*"]
   }
