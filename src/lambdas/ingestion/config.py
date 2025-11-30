@@ -62,7 +62,8 @@ class IngestionConfig:
     watch_tags: list[str]
     dynamodb_table: str
     sns_topic_arn: str
-    newsapi_secret_arn: str
+    tiingo_secret_arn: str
+    finnhub_secret_arn: str
     model_version: str
     aws_region: str  # No default - must be provided via CLOUD_REGION or AWS_REGION env var
 
@@ -93,8 +94,11 @@ class IngestionConfig:
         if not self.sns_topic_arn:
             raise ConfigurationError("SNS_TOPIC_ARN is required")
 
-        if not self.newsapi_secret_arn:
-            raise ConfigurationError("NEWSAPI_SECRET_ARN is required")
+        if not self.tiingo_secret_arn:
+            raise ConfigurationError("TIINGO_SECRET_ARN is required")
+
+        if not self.finnhub_secret_arn:
+            raise ConfigurationError("FINNHUB_SECRET_ARN is required")
 
         # Validate ARN formats
         if not self.sns_topic_arn.startswith("arn:aws:sns:"):
@@ -155,7 +159,8 @@ def get_config() -> IngestionConfig:
         "DYNAMODB_TABLE", ""
     )
     sns_topic_arn = os.environ.get("SNS_TOPIC_ARN", "")
-    newsapi_secret_arn = os.environ.get("NEWSAPI_SECRET_ARN", "")
+    tiingo_secret_arn = os.environ.get("TIINGO_SECRET_ARN", "")
+    finnhub_secret_arn = os.environ.get("FINNHUB_SECRET_ARN", "")
 
     # Get optional variables with defaults
     model_version = os.environ.get("MODEL_VERSION", DEFAULT_MODEL_VERSION)
@@ -169,7 +174,8 @@ def get_config() -> IngestionConfig:
         watch_tags=watch_tags,
         dynamodb_table=dynamodb_table,
         sns_topic_arn=sns_topic_arn,
-        newsapi_secret_arn=newsapi_secret_arn,
+        tiingo_secret_arn=tiingo_secret_arn,
+        finnhub_secret_arn=finnhub_secret_arn,
         model_version=model_version,
         aws_region=aws_region,
     )
