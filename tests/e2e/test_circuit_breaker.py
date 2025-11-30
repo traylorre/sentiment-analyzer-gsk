@@ -101,7 +101,7 @@ async def test_circuit_opens_after_failures(
             # Try querying DynamoDB directly for CB state
             try:
                 response = dynamodb_table.get_item(
-                    Key={"pk": "CB#tiingo", "sk": "STATE"}
+                    Key={"PK": "CB#tiingo", "SK": "STATE"}
                 )
                 if "Item" in response:
                     state = response["Item"].get("state")
@@ -177,7 +177,7 @@ async def test_circuit_half_open_after_timeout(
 
     # We can verify the circuit breaker configuration exists
     try:
-        response = dynamodb_table.get_item(Key={"pk": "CB#tiingo", "sk": "STATE"})
+        response = dynamodb_table.get_item(Key={"PK": "CB#tiingo", "SK": "STATE"})
         if "Item" in response:
             # Item exists - circuit breaker state is tracked
             # Would contain timeout-related fields: opened_at, timeout, etc.
