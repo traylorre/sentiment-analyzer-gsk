@@ -222,6 +222,7 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
       "logs:TagLogGroup",
       "logs:UntagLogGroup",
       "logs:ListTagsLogGroup",
+      "logs:ListTagsForResource",
       "logs:PutMetricFilter",
       "logs:DeleteMetricFilter",
       "logs:DescribeMetricFilters"
@@ -513,12 +514,14 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
     sid    = "S3Objects"
     effect = "Allow"
     actions = [
-      "s3:PutObject",
-      "s3:GetObject",
       "s3:DeleteObject",
-      "s3:ListBucket",
+      "s3:GetObject",
       "s3:GetObjectAcl",
-      "s3:PutObjectAcl"
+      "s3:GetObjectTagging",
+      "s3:ListBucket",
+      "s3:PutObject",
+      "s3:PutObjectAcl",
+      "s3:PutObjectTagging"
     ]
     resources = [
       "arn:aws:s3:::sentiment-analyzer-*",
