@@ -498,7 +498,9 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
       "s3:GetLifecycleConfiguration",
       "s3:PutLifecycleConfiguration",
       "s3:GetBucketAcl",
-      "s3:PutBucketAcl"
+      "s3:PutBucketAcl",
+      "s3:GetAccelerateConfiguration",
+      "s3:PutAccelerateConfiguration"
     ]
     resources = [
       "arn:aws:s3:::sentiment-analyzer-*",
@@ -626,7 +628,10 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
       "budgets:DeleteBudget",
       "budgets:ViewBudget",
       "budgets:DescribeBudgets",
-      "budgets:DescribeBudgetActionsForBudget"
+      "budgets:DescribeBudgetActionsForBudget",
+      "budgets:TagResource",
+      "budgets:UntagResource",
+      "budgets:ListTagsForResource"
     ]
     resources = ["*"]
   }
