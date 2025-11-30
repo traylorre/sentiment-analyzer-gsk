@@ -36,6 +36,7 @@ class PreprodAPIClient:
         self.timeout = timeout
         self._client: httpx.AsyncClient | None = None
         self._access_token: str | None = None
+        self._auth_type: str | None = None
         self._last_trace_id: str | None = None
         self._last_request_id: str | None = None
 
@@ -57,9 +58,18 @@ class PreprodAPIClient:
         """Set the access token for authenticated requests."""
         self._access_token = token
 
+    def set_auth_type(self, auth_type: str) -> None:
+        """Set the auth type for authenticated requests.
+
+        Args:
+            auth_type: Authentication type (e.g., 'email', 'oauth', 'anonymous')
+        """
+        self._auth_type = auth_type
+
     def clear_access_token(self) -> None:
         """Clear the access token (for testing unauthenticated endpoints)."""
         self._access_token = None
+        self._auth_type = None
 
     @property
     def last_trace_id(self) -> str | None:
@@ -79,11 +89,17 @@ class PreprodAPIClient:
         The API v2 router uses X-User-ID header for user identification,
         not Authorization: Bearer. The access_token is the user_id returned
         from the anonymous session creation endpoint.
+
+        X-Auth-Type header indicates the authentication method used
+        (e.g., 'email', 'oauth', 'anonymous').
         """
         headers: dict[str, str] = {}
         if self._access_token:
             # API v2 uses X-User-ID header for authentication
             headers["X-User-ID"] = self._access_token
+        if self._auth_type:
+            # API v2 uses X-Auth-Type to distinguish auth methods
+            headers["X-Auth-Type"] = self._auth_type
         if extra_headers:
             headers.update(extra_headers)
         return headers

@@ -22,8 +22,15 @@ pytestmark = [pytest.mark.e2e, pytest.mark.preprod, pytest.mark.us5]
 async def create_config_and_session(
     api_client: PreprodAPIClient,
     synthetic_config: SyntheticConfiguration,
+    authenticated: bool = True,
 ) -> tuple[str, str]:
     """Helper to create session and config.
+
+    Args:
+        api_client: The preprod API client
+        synthetic_config: Configuration to create
+        authenticated: If True, set auth_type to 'email' to simulate
+            authenticated user. If False, leave as anonymous.
 
     Returns (token, config_id).
     """
@@ -33,6 +40,10 @@ async def create_config_and_session(
     token = session_response.json()["token"]
 
     api_client.set_access_token(token)
+    if authenticated:
+        # Simulate authenticated user for endpoints that require it
+        api_client.set_auth_type("email")
+
     config_response = await api_client.post(
         "/api/v2/configurations",
         json=synthetic_config.to_api_payload(),
@@ -348,11 +359,14 @@ async def test_alert_anonymous_forbidden(
     Note: This depends on business logic - some systems may allow
     anonymous alerts while others require full authentication.
 
-    Given: An anonymous session
+    Given: An anonymous session (without auth_type set)
     When: Attempting to create an alert
     Then: Request is rejected or requires authentication upgrade
     """
-    token, config_id = await create_config_and_session(api_client, synthetic_config)
+    # Use authenticated=False to test anonymous access
+    token, config_id = await create_config_and_session(
+        api_client, synthetic_config, authenticated=False
+    )
     ticker_symbol = synthetic_config.tickers[0].symbol
 
     try:
