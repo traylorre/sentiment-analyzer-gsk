@@ -126,11 +126,15 @@ apigateway:TagResource, apigateway:UntagResource
 
 #### DynamoDB
 ```
+# Table management
 dynamodb:CreateTable, dynamodb:UpdateTable, dynamodb:DeleteTable,
 dynamodb:DescribeTable, dynamodb:ListTables,
 dynamodb:DescribeTimeToLive, dynamodb:UpdateTimeToLive,
 dynamodb:DescribeContinuousBackups, dynamodb:UpdateContinuousBackups,
-dynamodb:TagResource, dynamodb:UntagResource, dynamodb:ListTagsOfResource
+dynamodb:TagResource, dynamodb:UntagResource, dynamodb:ListTagsOfResource,
+
+# Data operations (needed for integration tests)
+dynamodb:PutItem, dynamodb:GetItem, dynamodb:Query, dynamodb:Scan, dynamodb:DeleteItem
 ```
 
 #### S3
@@ -194,7 +198,7 @@ cloudwatch:PutMetricAlarm, cloudwatch:DeleteAlarms, cloudwatch:DescribeAlarms,
 cloudwatch:PutDashboard, cloudwatch:DeleteDashboards, cloudwatch:GetDashboard,
 cloudwatch:ListDashboards, cloudwatch:ListMetrics, cloudwatch:GetMetricStatistics,
 cloudwatch:TagResource, cloudwatch:UntagResource
-logs:CreateLogGroup, logs:DeleteLogGroup, logs:DescribeLogGroups,
+logs:CreateLogGroup, logs:DeleteLogGroup, logs:DescribeLogGroups, logs:DescribeLogStreams,
 logs:PutRetentionPolicy, logs:DeleteRetentionPolicy,
 logs:PutMetricFilter, logs:DeleteMetricFilter, logs:DescribeMetricFilters,
 logs:TagLogGroup, logs:UntagLogGroup, logs:ListTagsForResource
