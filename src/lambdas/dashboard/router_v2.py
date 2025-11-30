@@ -778,6 +778,10 @@ async def update_config_alert(
     response_data = result.model_dump()
     if "is_enabled" in response_data:
         response_data["enabled"] = response_data["is_enabled"]
+    if "threshold_value" in response_data:
+        response_data["threshold"] = response_data["threshold_value"]
+    if "threshold_direction" in response_data:
+        response_data["condition"] = response_data["threshold_direction"]
     return JSONResponse(response_data)
 
 
@@ -918,6 +922,8 @@ async def get_alert(
         user_id=user_id,
         alert_id=alert_id,
     )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Alert not found")
     if isinstance(result, alert_service.ErrorResponse):
         raise HTTPException(status_code=404, detail=result.error.message)
     return JSONResponse(result.model_dump())
@@ -946,6 +952,10 @@ async def update_alert(
     response_data = result.model_dump()
     if "is_enabled" in response_data:
         response_data["enabled"] = response_data["is_enabled"]
+    if "threshold_value" in response_data:
+        response_data["threshold"] = response_data["threshold_value"]
+    if "threshold_direction" in response_data:
+        response_data["condition"] = response_data["threshold_direction"]
     return JSONResponse(response_data)
 
 
