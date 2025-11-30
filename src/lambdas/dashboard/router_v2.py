@@ -768,13 +768,17 @@ async def update_config_alert(
         table=table,
         user_id=user_id,
         alert_id=alert_id,
-        threshold_value=body.threshold_value,
-        threshold_direction=body.threshold_direction,
-        is_enabled=body.is_enabled,
+        request=body,
     )
     if isinstance(result, alert_service.ErrorResponse):
         raise HTTPException(status_code=404, detail=result.error.message)
-    return JSONResponse(result.model_dump())
+    if result is None:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    # Map internal field names to client-facing names
+    response_data = result.model_dump()
+    if "is_enabled" in response_data:
+        response_data["enabled"] = response_data["is_enabled"]
+    return JSONResponse(response_data)
 
 
 @config_router.delete("/{config_id}/alerts/{alert_id}")
@@ -932,13 +936,17 @@ async def update_alert(
         table=table,
         user_id=user_id,
         alert_id=alert_id,
-        threshold_value=body.threshold_value,
-        threshold_direction=body.threshold_direction,
-        is_enabled=body.is_enabled,
+        request=body,
     )
     if isinstance(result, alert_service.ErrorResponse):
         raise HTTPException(status_code=404, detail=result.error.message)
-    return JSONResponse(result.model_dump())
+    if result is None:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    # Map internal field names to client-facing names
+    response_data = result.model_dump()
+    if "is_enabled" in response_data:
+        response_data["enabled"] = response_data["is_enabled"]
+    return JSONResponse(response_data)
 
 
 @alert_router.delete("/{alert_id}")
