@@ -121,15 +121,35 @@ def get_ticker_cache_dependency() -> TickerCache | None:
         return None
 
 
-def get_user_id_from_request(request: Request) -> str:
-    """Extract user_id from request headers/session.
+def get_user_id_from_request(
+    request: Request, table=None, validate_session: bool = True
+) -> str:
+    """Extract user_id from request headers/session and optionally validate.
 
     In production, this would verify the JWT token and extract the user_id.
     For now, we use X-User-ID header for testing.
+
+    Args:
+        request: FastAPI Request object
+        table: DynamoDB table for session validation (optional)
+        validate_session: Whether to validate session is still active
+
+    Returns:
+        user_id if valid
+
+    Raises:
+        HTTPException 401 if user_id missing or session expired
     """
     user_id = request.headers.get("X-User-ID")
     if not user_id:
         raise HTTPException(status_code=401, detail="Missing user identification")
+
+    # Validate session is still active (not signed out/expired)
+    if validate_session and table is not None:
+        validation = auth_service.validate_session(table=table, anonymous_id=user_id)
+        if not validation.valid:
+            raise HTTPException(status_code=401, detail="Session expired or invalid")
+
     return user_id
 
 
@@ -466,7 +486,7 @@ async def list_configurations(
     table=Depends(get_dynamodb_table),
 ):
     """List configurations (T050)."""
-    user_id = get_user_id_from_request(request)
+    user_id = get_user_id_from_request(request, table=table)
     result = config_service.list_configurations(table=table, user_id=user_id)
     return JSONResponse(result.model_dump())
 
