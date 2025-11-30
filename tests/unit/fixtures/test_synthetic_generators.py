@@ -545,7 +545,10 @@ class TestConfigGenerator:
         assert name.startswith("My-Custom-Prefix-")
 
     def test_to_api_payload(self):
-        """Test SyntheticConfiguration.to_api_payload()."""
+        """Test SyntheticConfiguration.to_api_payload().
+
+        API v2 expects tickers as simple string list (not objects with weight).
+        """
         gen = create_config_generator()
         config = gen.generate_config("test-run-1", ticker_count=2)
         payload = config.to_api_payload()
@@ -553,7 +556,10 @@ class TestConfigGenerator:
         assert "name" in payload
         assert "tickers" in payload
         assert len(payload["tickers"]) == 2
-        assert all("symbol" in t and "weight" in t for t in payload["tickers"])
+        # API v2 expects simple strings, not objects
+        assert all(isinstance(t, str) for t in payload["tickers"])
+        # Verify tickers match the symbols from the config
+        assert payload["tickers"] == [t.symbol for t in config.tickers]
 
 
 class TestOracleApiSentiment:
