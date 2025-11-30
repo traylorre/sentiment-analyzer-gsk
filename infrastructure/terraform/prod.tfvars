@@ -23,10 +23,6 @@ watch_tags = "AI,climate,economy,health,sports"
 # Model Configuration
 model_version = "v1.0.0"
 
-# EventBridge Schedule
-# Run ingestion every 15 minutes for near-real-time analysis
-ingestion_schedule = "rate(15 minutes)"
-
 # Monitoring and Alerting
 alarm_email = "" # Set to production email or PagerDuty endpoint
 
