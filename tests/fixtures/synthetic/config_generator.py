@@ -32,10 +32,14 @@ class SyntheticConfiguration:
     user_id: str
 
     def to_api_payload(self) -> dict:
-        """Convert to API request payload."""
+        """Convert to API request payload.
+
+        Note: API v2 expects tickers as simple string list, not objects.
+        The weight field is only used for internal test calculations.
+        """
         return {
             "name": self.name,
-            "tickers": [t.to_dict() for t in self.tickers],
+            "tickers": [t.symbol for t in self.tickers],
         }
 
 
