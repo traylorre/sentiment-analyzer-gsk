@@ -200,8 +200,10 @@ async def request_magic_link(
     user_id = request.headers.get("X-User-ID")  # Optional for linking
     result = auth_service.request_magic_link(
         table=table,
-        email=body.email,
-        anonymous_user_id=user_id,
+        request=auth_service.MagicLinkRequest(
+            email=body.email,
+            anonymous_user_id=user_id,
+        ),
     )
     return JSONResponse(result.model_dump())
 
@@ -441,15 +443,14 @@ async def get_configuration(
     return JSONResponse(result.model_dump())
 
 
-@config_router.patch("/{config_id}")
-async def update_configuration(
+async def _update_configuration_impl(
     config_id: str,
     request: Request,
     body: config_service.ConfigurationUpdate,
-    table=Depends(get_dynamodb_table),
-    ticker_cache: TickerCache | None = Depends(get_ticker_cache_dependency),
+    table,
+    ticker_cache: TickerCache | None,
 ):
-    """Update configuration (T052)."""
+    """Internal implementation for config update (supports both PUT and PATCH)."""
     user_id = get_user_id_from_request(request)
     result = config_service.update_configuration(
         table=table,
@@ -463,6 +464,34 @@ async def update_configuration(
     if isinstance(result, config_service.ErrorResponse):
         raise HTTPException(status_code=400, detail=result.error.message)
     return JSONResponse(result.model_dump())
+
+
+@config_router.patch("/{config_id}")
+async def update_configuration_patch(
+    config_id: str,
+    request: Request,
+    body: config_service.ConfigurationUpdate,
+    table=Depends(get_dynamodb_table),
+    ticker_cache: TickerCache | None = Depends(get_ticker_cache_dependency),
+):
+    """Update configuration via PATCH (T052)."""
+    return await _update_configuration_impl(
+        config_id, request, body, table, ticker_cache
+    )
+
+
+@config_router.put("/{config_id}")
+async def update_configuration_put(
+    config_id: str,
+    request: Request,
+    body: config_service.ConfigurationUpdate,
+    table=Depends(get_dynamodb_table),
+    ticker_cache: TickerCache | None = Depends(get_ticker_cache_dependency),
+):
+    """Update configuration via PUT (T052)."""
+    return await _update_configuration_impl(
+        config_id, request, body, table, ticker_cache
+    )
 
 
 @config_router.delete("/{config_id}")
@@ -509,16 +538,18 @@ async def get_sentiment(
 async def get_heatmap(
     config_id: str,
     request: Request,
-    view: str = Query("sources", pattern="^(sources|time_periods)$"),
+    view: str = Query("sources", pattern="^(sources|time_periods|timeperiods)$"),
     table=Depends(get_dynamodb_table),
 ):
     """Get heat map data (T057)."""
     user_id = get_user_id_from_request(request)
+    # Normalize view parameter (accept both "timeperiods" and "time_periods")
+    normalized_view = "time_periods" if view == "timeperiods" else view
     result = sentiment_service.get_heatmap_data(
         table=table,
         user_id=user_id,
         config_id=config_id,
-        view=view,
+        view=normalized_view,
     )
     if isinstance(result, sentiment_service.ErrorResponse):
         raise HTTPException(status_code=404, detail=result.error.message)
