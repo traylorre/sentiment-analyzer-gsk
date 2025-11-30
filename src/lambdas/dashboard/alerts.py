@@ -357,13 +357,16 @@ def update_alert(
         return existing
 
     try:
-        table.update_item(
+        # Use ReturnValues='ALL_NEW' to get updated item directly,
+        # avoiding eventual consistency issues with a separate read
+        response = table.update_item(
             Key={
                 "PK": f"USER#{user_id}",
                 "SK": f"ALERT#{alert_id}",
             },
             UpdateExpression="SET " + ", ".join(update_parts),
             ExpressionAttributeValues=attr_values,
+            ReturnValues="ALL_NEW",
         )
 
         logger.info(
@@ -374,8 +377,14 @@ def update_alert(
             },
         )
 
-        # Return updated alert
-        return get_alert(table, user_id, alert_id)
+        # Parse the updated item from response
+        updated_item = response.get("Attributes", {})
+        if not updated_item:
+            # Fallback to get_alert if no attributes returned (shouldn't happen)
+            return get_alert(table, user_id, alert_id)
+
+        alert = AlertRule.from_dynamodb_item(updated_item)
+        return _alert_to_response(alert)
 
     except Exception as e:
         logger.error(
