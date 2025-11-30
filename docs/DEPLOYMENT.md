@@ -128,8 +128,8 @@ The Deploy Dev workflow should now have access to AWS credentials.
 
 ### Troubleshooting CI Failures
 
-1. **Lint fails on black**: Install CI version locally: `pip3 install black==23.11.0`
-2. **Lint fails on ruff**: Install CI version locally: `pip3 install ruff==0.1.6`
+1. **Lint fails on black**: Install CI version locally: `pip3 install black==25.11.0`
+2. **Lint fails on ruff**: Install CI version locally: `pip3 install ruff==0.14.5`
 3. **Tests fail**: Ensure `requirements-dev.txt` is installed: `pip3 install -r requirements-dev.txt`
 4. **Deploy fails on credentials**: Verify all three secrets are configured correctly
 

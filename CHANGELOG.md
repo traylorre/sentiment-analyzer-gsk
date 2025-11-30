@@ -5,7 +5,50 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - Feature 006
+## [Unreleased] - Feature 009
+
+### Added
+
+- **E2E Test Oracle Validation** (Feature 009)
+  - `SyntheticTestOracle` with deterministic sentiment computation
+  - `OracleExpectation` and `ValidationResult` dataclasses for tolerance-based assertions (±0.01)
+  - `ConfigGenerator` for reproducible seeded test data
+  - 7 failure injection tests for error handling paths (Tiingo/Finnhub failures, circuit breaker, timeouts)
+  - `TestMetrics` class with 15% skip rate threshold tracking
+  - Eliminated dual-outcome assertion anti-patterns (`assert A or B`)
+
+---
+
+## [2.1.0] - Feature 008 (2025-11-28)
+
+### Added
+
+- **E2E Validation Suite** (Feature 008)
+  - Full E2E test infrastructure with `pytest-asyncio` and `httpx`
+  - `PreprodAPIClient` for authenticated API testing against real AWS
+  - Synthetic data generators (`TickerGenerator`, `NewsGenerator`, `SentimentGenerator`)
+  - `SyntheticTiingoHandler` and `SyntheticFinnhubHandler` for deterministic test data
+  - 117 E2E test tasks covering all API endpoints
+  - `@pytest.mark.preprod` marker for real AWS tests (excluded from local runs)
+
+---
+
+## [2.0.0] - Feature 007 (2025-11-25)
+
+### Added
+
+- **Sentiment Dashboard Frontend** (Feature 007)
+  - Next.js 14 with App Router and TypeScript 5.x
+  - Robinhood-style dark fintech UI with shadcn/ui components
+  - Zustand for client state management with persistence
+  - React Query (@tanstack/react-query) for server state
+  - Framer Motion animations and Lightweight Charts (TradingView)
+  - Mobile-first responsive design
+  - Vitest for unit tests, Playwright for E2E
+
+---
+
+## [1.5.0] - Feature 006
 
 ### Breaking Changes
 

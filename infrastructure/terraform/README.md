@@ -1,7 +1,7 @@
 # Terraform Infrastructure: Sentiment Analyzer
 
 **Architecture**: Regional Multi-AZ (region configured via aws_region variable)
-**Feature**: `001-interactive-dashboard-demo`
+**Active Features**: 006-009 (Tiingo/Finnhub pivot, Dashboard, E2E Testing)
 
 ## Overview
 
@@ -36,15 +36,18 @@ This Terraform configuration deploys the infrastructure for the sentiment analys
 infrastructure/terraform/
 ├── main.tf                    # Main Terraform configuration
 ├── variables.tf               # Variable definitions
+├── dev.tfvars                 # Development environment variables
+├── preprod.tfvars             # Pre-production environment variables
+├── prod.tfvars                # Production environment variables
 ├── .gitignore                 # Terraform-specific gitignore
-├── environments/
-│   ├── dev.tfvars            # Development environment variables
-│   └── prod.tfvars           # Production environment variables
+├── bootstrap/                 # S3 state backend setup
 └── modules/
     ├── dynamodb/             # DynamoDB table + backups + alarms
     ├── iam/                  # Lambda IAM roles
-    ├── secrets/              # Secrets Manager
+    ├── secrets/              # Secrets Manager (Tiingo, Finnhub, SendGrid, hCaptcha)
     ├── sns/                  # SNS topics
+    ├── cognito/              # User authentication
+    ├── cloudfront/           # CDN distribution
     └── eventbridge/          # EventBridge schedules
 ```
 
@@ -61,10 +64,10 @@ cd infrastructure/terraform
 terraform init
 
 # Plan deployment (dev environment)
-terraform plan -var-file=environments/dev.tfvars
+terraform plan -var-file=dev.tfvars
 
 # Apply deployment
-terraform apply -var-file=environments/dev.tfvars
+terraform apply -var-file=dev.tfvars
 ```
 
 **What gets deployed**:
@@ -94,8 +97,8 @@ After Lambda functions are deployed, uncomment the following sections in `main.t
 Then re-run Terraform:
 
 ```bash
-terraform plan -var-file=environments/dev.tfvars
-terraform apply -var-file=environments/dev.tfvars
+terraform plan -var-file=dev.tfvars
+terraform apply -var-file=dev.tfvars
 ```
 
 **What gets deployed**:
@@ -109,15 +112,25 @@ terraform apply -var-file=environments/dev.tfvars
 
 Secrets are created but NOT populated by Terraform (security best practice). Set them manually:
 
-### NewsAPI Secret
+### Tiingo API Secret (Primary News Source)
 
 ```bash
 aws secretsmanager put-secret-value \
-  --secret-id dev/sentiment-analyzer/newsapi \
-  --secret-string '{"api_key":"YOUR_NEWSAPI_KEY_HERE"}'
+  --secret-id dev/sentiment-analyzer/tiingo \
+  --secret-string '{"api_key":"YOUR_TIINGO_API_KEY"}'
 ```
 
-**Get NewsAPI key**: https://newsapi.org/register
+**Get Tiingo key**: https://www.tiingo.com/account/api/token
+
+### Finnhub API Secret (Secondary News Source)
+
+```bash
+aws secretsmanager put-secret-value \
+  --secret-id dev/sentiment-analyzer/finnhub \
+  --secret-string '{"api_key":"YOUR_FINNHUB_API_KEY"}'
+```
+
+**Get Finnhub key**: https://finnhub.io/dashboard
 
 ### Dashboard API Key
 

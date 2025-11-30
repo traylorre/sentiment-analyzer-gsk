@@ -8,16 +8,16 @@ This service is in pre-production development. Security support will be provided
 
 Please report security vulnerabilities privately to the project maintainers. Do not create public issues for security concerns.
 
-**Contact:** [Configure your security contact email]
+**Contact:** Use [GitHub Security Advisories](https://github.com/traylorre/sentiment-analyzer-gsk/security/advisories/new) to report vulnerabilities privately.
 
 **Response Time:** We aim to acknowledge reports within 48 hours.
 
 ## Security Status
 
-✅ **Feature 006 Security Enhancements Implemented**
+✅ **Features 006-009 Security Enhancements Implemented**
 
-**Last Security Review**: 2025-11-26
-**Status**: APPROVED FOR DEMO (Feature 006 Tiingo/Finnhub pivot complete)
+**Last Security Review**: 2025-11-29
+**Status**: PREPROD DEPLOYED (Features 006-009 complete, E2E validated)
 
 ### Critical Issues Status
 

@@ -59,8 +59,8 @@ All PRs trigger the following required status checks:
 - Manual dispatch
 
 **Tools:**
-- `black==23.11.0` - Code formatting
-- `ruff==0.1.6` - Fast Python linter with security checks
+- `black==25.11.0` - Code formatting
+- `ruff==0.14.5` - Fast Python linter with security checks
 
 ---
 
