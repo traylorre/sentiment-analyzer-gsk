@@ -3,15 +3,24 @@
 from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
+import pytest
+
 from src.lambdas.dashboard.sentiment import (
     COLOR_SCHEME,
     HeatMapResponse,
     SentimentResponse,
     SourceSentiment,
     TickerSentimentData,
+    clear_sentiment_cache,
     get_heatmap_data,
     get_sentiment_by_configuration,
 )
+
+
+@pytest.fixture(autouse=True)
+def reset_sentiment_cache():
+    """Clear sentiment cache before each test for isolation."""
+    clear_sentiment_cache()
 
 
 class TestGetSentimentByConfiguration:
