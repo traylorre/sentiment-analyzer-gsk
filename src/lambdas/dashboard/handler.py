@@ -130,8 +130,14 @@ def get_cors_origins() -> list[str]:
 
     # Default: environment-based CORS (dev/test only)
     if ENVIRONMENT in ("dev", "test", "preprod"):
-        # Allow localhost for local development and preprod testing
-        return ["http://localhost:3000", "http://127.0.0.1:3000"]
+        # Allow localhost for local development, preprod testing, and file:// for interview demo
+        # "null" origin is sent by browsers when opening HTML files via file:// protocol
+        return [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:8080",
+            "null",
+        ]
     else:
         # Production: no defaults, must be explicitly configured via CORS_ORIGINS
         logger.error(
@@ -198,8 +204,8 @@ if cors_origins:
         CORSMiddleware,
         allow_origins=cors_origins,
         allow_credentials=False,  # Not needed for Bearer token auth
-        allow_methods=["GET", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "X-User-ID", "X-Auth-Type"],
     )
     logger.info(
         "CORS configured",
