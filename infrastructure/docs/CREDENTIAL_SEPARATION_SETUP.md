@@ -251,44 +251,77 @@ aws iam put-user-policy \
 
 ## Step 3: Create AWS Secrets Manager Secrets
 
-### Preprod NewsAPI Secret
+> **Note**: Feature 006 pivoted from NewsAPI to Tiingo/Finnhub for financial news. The following secrets are required:
+
+### 3.1 Tiingo API Secret (Primary News Source)
 
 ```bash
-# Create preprod NewsAPI secret
+# Create preprod Tiingo secret
 aws secretsmanager create-secret \
-  --name preprod/sentiment-analyzer/newsapi \
-  --description "NewsAPI key for preprod environment (free tier)" \
-  --secret-string '{"api_key":"YOUR_PREPROD_NEWSAPI_KEY"}' \
+  --name preprod/sentiment-analyzer/tiingo \
+  --description "Tiingo API key for preprod (free tier: 500 symbols/month)" \
+  --secret-string '{"api_key":"YOUR_TIINGO_API_KEY"}' \
   --region us-east-1 \
-  --tags Key=Environment,Value=preprod \
-         Key=ManagedBy,Value=Manual \
-         Key=Purpose,Value=newsapi-integration
+  --tags Key=Environment,Value=preprod
 
-# Get the ARN for GitHub secrets
-aws secretsmanager describe-secret \
-  --secret-id preprod/sentiment-analyzer/newsapi \
-  --query ARN \
-  --output text
+# Get Tiingo API key: https://www.tiingo.com/account/api/token
 ```
 
-### Prod NewsAPI Secret
+### 3.2 Finnhub API Secret (Secondary News Source)
 
 ```bash
-# Create prod NewsAPI secret
+# Create preprod Finnhub secret
 aws secretsmanager create-secret \
-  --name prod/sentiment-analyzer/newsapi \
-  --description "NewsAPI key for production environment (paid tier)" \
-  --secret-string '{"api_key":"YOUR_PROD_NEWSAPI_KEY"}' \
+  --name preprod/sentiment-analyzer/finnhub \
+  --description "Finnhub API key for preprod (free tier: 60 calls/min)" \
+  --secret-string '{"api_key":"YOUR_FINNHUB_API_KEY"}' \
   --region us-east-1 \
-  --tags Key=Environment,Value=prod \
-         Key=ManagedBy,Value=Manual \
-         Key=Purpose,Value=newsapi-integration
+  --tags Key=Environment,Value=preprod
 
-# Get the ARN for GitHub secrets
-aws secretsmanager describe-secret \
-  --secret-id prod/sentiment-analyzer/newsapi \
-  --query ARN \
-  --output text
+# Get Finnhub API key: https://finnhub.io/dashboard
+```
+
+### 3.3 SendGrid API Secret (Email Notifications)
+
+```bash
+# Create preprod SendGrid secret
+aws secretsmanager create-secret \
+  --name preprod/sentiment-analyzer/sendgrid \
+  --description "SendGrid API key for preprod (free tier: 100 emails/day)" \
+  --secret-string '{"api_key":"YOUR_SENDGRID_API_KEY"}' \
+  --region us-east-1 \
+  --tags Key=Environment,Value=preprod
+
+# Get SendGrid API key: https://app.sendgrid.com/settings/api_keys
+```
+
+### 3.4 hCaptcha Secret (Bot Protection)
+
+```bash
+# Create preprod hCaptcha secret
+aws secretsmanager create-secret \
+  --name preprod/sentiment-analyzer/hcaptcha \
+  --description "hCaptcha secret key for preprod" \
+  --secret-string '{"secret_key":"YOUR_HCAPTCHA_SECRET"}' \
+  --region us-east-1 \
+  --tags Key=Environment,Value=preprod
+
+# Get hCaptcha keys: https://dashboard.hcaptcha.com/sites
+```
+
+### 3.5 Legacy: NewsAPI Secret (Archived - Feature 001-005)
+
+> **Deprecated**: Only needed if running legacy features from `legacy/v1-newsapi-features` branch.
+
+```bash
+# Create preprod NewsAPI secret (legacy)
+aws secretsmanager create-secret \
+  --name preprod/sentiment-analyzer/newsapi \
+  --description "NewsAPI key for preprod environment (LEGACY - archived)" \
+  --secret-string '{"api_key":"YOUR_NEWSAPI_KEY"}' \
+  --region us-east-1 \
+  --tags Key=Environment,Value=preprod \
+         Key=Status,Value=legacy
 ```
 
 ### Preprod Dashboard API Key Secret

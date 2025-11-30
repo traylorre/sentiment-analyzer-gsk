@@ -421,18 +421,20 @@ sequenceDiagram
 
 ---
 
-## Demo: Interactive Dashboard
+## Current Features
 
-**Current Feature**: Real-time sentiment analysis with live dashboard
+**Active Development**: Features 006-009 (Tiingo/Finnhub financial news sentiment)
 
 ### Quick Links
 
-| Document | Purpose |
-|----------|---------|
-| [Quickstart Guide](./specs/001-interactive-dashboard-demo/quickstart.md) | Step-by-step deployment |
-| [Implementation Plan](./specs/001-interactive-dashboard-demo/plan.md) | Architecture & design decisions |
-| [Feature Spec](./specs/001-interactive-dashboard-demo/spec.md) | Requirements & acceptance criteria |
-| [On-Call SOP](./specs/001-interactive-dashboard-demo/ON_CALL_SOP.md) | Incident response runbooks |
+| Feature | Document | Purpose |
+|---------|----------|---------|
+| 009 | [Quickstart](./specs/009-e2e-test-oracle-validation/quickstart.md) | E2E test oracle validation |
+| 008 | [Quickstart](./specs/008-e2e-validation-suite/quickstart.md) | E2E validation suite |
+| 007 | [Quickstart](./specs/007-sentiment-dashboard-frontend/quickstart.md) | Next.js frontend |
+| 006 | [Quickstart](./specs/006-user-config-dashboard/quickstart.md) | User config dashboard API |
+
+> **Note**: Features 001-005 (NewsAPI) are archived in `legacy/v1-newsapi-features` branch.
 
 ### Running Locally
 

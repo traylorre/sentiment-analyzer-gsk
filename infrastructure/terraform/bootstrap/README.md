@@ -1,6 +1,6 @@
 # Terraform Backend Bootstrap
 
-This directory contains Terraform configuration to create the S3 bucket and DynamoDB table required for remote state management.
+This directory contains Terraform configuration to create the S3 bucket required for remote state management with S3 native locking.
 
 ## One-Time Setup
 
@@ -12,6 +12,9 @@ cd infrastructure/terraform/bootstrap
 # Initialize and apply
 terraform init
 terraform apply
+
+# Note the bucket name from output
+terraform output state_bucket_name
 ```
 
 After successful creation, the main Terraform configuration will use S3 backend automatically.
@@ -27,8 +30,8 @@ cd infrastructure/terraform
 terraform init -migrate-state
 
 # Import existing secrets (if they exist)
-terraform import module.secrets.aws_secretsmanager_secret.newsapi dev/sentiment-analyzer/newsapi
-terraform import module.secrets.aws_secretsmanager_secret.dashboard_api_key dev/sentiment-analyzer/dashboard-api-key
+terraform import module.secrets.aws_secretsmanager_secret.tiingo dev/sentiment-analyzer/tiingo
+terraform import module.secrets.aws_secretsmanager_secret.finnhub dev/sentiment-analyzer/finnhub
 
 # Verify state
 terraform plan
@@ -36,11 +39,8 @@ terraform plan
 
 ## Resources Created
 
-- **S3 Bucket**: `sentiment-analyzer-terraform-state`
+- **S3 Bucket**: `sentiment-analyzer-tfstate-{ACCOUNT_ID}`
   - Versioning enabled for state history
   - Server-side encryption (AES256)
   - Public access blocked
-
-- **DynamoDB Table**: `terraform-state-lock`
-  - Used for state locking to prevent concurrent modifications
-  - Pay-per-request billing
+  - **S3 Native Locking**: Uses `.tflock` files for state locking (no DynamoDB required)
