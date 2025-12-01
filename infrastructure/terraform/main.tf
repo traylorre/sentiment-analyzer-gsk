@@ -390,7 +390,8 @@ module "dashboard_lambda" {
   # Function URL with CORS
   # SECURITY: No wildcard fallback - require explicit origins
   # The Lambda Function URL CORS is for browser preflight checks
-  # The Python code handles actual CORS header validation
+  # Lambda Function URL handles ALL CORS - no app-level CORS headers needed
+  # This prevents duplicate Access-Control-Allow-Origin headers
   create_function_url    = true
   function_url_auth_type = "NONE"
   function_url_cors = {
@@ -403,7 +404,8 @@ module "dashboard_lambda" {
       # Only allow localhost in non-prod if no origins specified (for local development)
       var.environment != "prod" ? ["http://localhost:3000", "http://localhost:8080"] : []
     )
-    expose_headers = []
+    # Expose rate-limit and request tracking headers to frontend
+    expose_headers = ["x-ratelimit-limit", "x-ratelimit-remaining", "x-ratelimit-reset", "x-request-id", "retry-after"]
     max_age        = 86400
   }
 

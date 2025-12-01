@@ -1,4 +1,10 @@
-"""Unit tests for security headers middleware (T165)."""
+"""Unit tests for security headers middleware (T165).
+
+CORS Architecture Note:
+    CORS is handled by Lambda Function URL configuration in Terraform, NOT by the
+    middleware. The get_cors_headers function returns an empty dict (deprecated).
+    Tests verify CORS headers are NOT added by the middleware to prevent duplicates.
+"""
 
 from unittest.mock import patch
 
@@ -14,71 +20,24 @@ from src.lambdas.shared.middleware.security_headers import (
 
 
 class TestGetCorsHeaders:
-    """Tests for get_cors_headers function."""
+    """Tests for get_cors_headers function (deprecated - CORS handled by Lambda URL)."""
 
-    def test_returns_cors_headers(self):
-        """Returns standard CORS headers."""
+    def test_returns_empty_dict(self):
+        """Returns empty dict - CORS handled by Lambda Function URL."""
         headers = get_cors_headers()
+        assert headers == {}
 
-        assert "Access-Control-Allow-Origin" in headers
-        assert "Access-Control-Allow-Methods" in headers
-        assert "Access-Control-Allow-Headers" in headers
-        assert "Access-Control-Max-Age" in headers
-
-    def test_allows_credentials_by_default(self):
-        """Allows credentials by default."""
-        headers = get_cors_headers()
-        assert headers["Access-Control-Allow-Credentials"] == "true"
-
-    def test_no_credentials_when_disabled(self):
-        """No credentials header when disabled."""
-        headers = get_cors_headers(allow_credentials=False)
-        assert "Access-Control-Allow-Credentials" not in headers
-
-    @patch(
-        "src.lambdas.shared.middleware.security_headers.DASHBOARD_URL",
-        "https://myapp.com",
-    )
-    def test_uses_dashboard_url_for_unknown_origin(self):
-        """Uses dashboard URL for unknown origin."""
-        headers = get_cors_headers(origin="https://evil.com")
-        assert headers["Access-Control-Allow-Origin"] == "https://myapp.com"
-
-    @patch(
-        "src.lambdas.shared.middleware.security_headers.DASHBOARD_URL",
-        "https://myapp.com",
-    )
-    def test_allows_dashboard_url_origin(self):
-        """Allows dashboard URL as origin."""
-        headers = get_cors_headers(origin="https://myapp.com")
-        assert headers["Access-Control-Allow-Origin"] == "https://myapp.com"
-
-    def test_allows_localhost_development(self):
-        """Allows localhost for development."""
+    def test_returns_empty_dict_with_origin(self):
+        """Returns empty dict even with origin - CORS handled by Lambda Function URL."""
         headers = get_cors_headers(origin="http://localhost:3000")
-        assert headers["Access-Control-Allow-Origin"] == "http://localhost:3000"
+        assert headers == {}
 
-    @patch("src.lambdas.shared.middleware.security_headers.ENVIRONMENT", "dev")
-    def test_allows_any_localhost_in_dev(self):
-        """Allows any localhost port in dev mode."""
-        headers = get_cors_headers(origin="http://localhost:8080")
-        assert headers["Access-Control-Allow-Origin"] == "http://localhost:8080"
-
-    def test_exposes_rate_limit_headers(self):
-        """Exposes rate limit headers."""
-        headers = get_cors_headers()
-        exposed = headers["Access-Control-Expose-Headers"]
-        assert "X-RateLimit-Limit" in exposed
-        assert "X-RateLimit-Remaining" in exposed
-        assert "Retry-After" in exposed
-
-    def test_allows_custom_headers(self):
-        """Allows custom headers for auth tokens."""
-        headers = get_cors_headers()
-        allowed = headers["Access-Control-Allow-Headers"]
-        assert "X-Session-Token" in allowed
-        assert "X-Anonymous-Token" in allowed
-        assert "X-Captcha-Token" in allowed
+    def test_returns_empty_dict_with_credentials(self):
+        """Returns empty dict regardless of credentials setting."""
+        headers = get_cors_headers(allow_credentials=True)
+        assert headers == {}
+        headers = get_cors_headers(allow_credentials=False)
+        assert headers == {}
 
 
 class TestAddSecurityHeaders:
@@ -141,13 +100,16 @@ class TestAddSecurityHeaders:
 
         assert result["headers"]["Content-Security-Policy"] == HTML_CSP
 
-    def test_adds_cors_headers(self):
-        """Adds CORS headers."""
+    def test_does_not_add_cors_headers(self):
+        """Does NOT add CORS headers - handled by Lambda Function URL."""
         response = {"statusCode": 200, "body": "{}"}
 
         result = add_security_headers(response, origin="http://localhost:3000")
 
-        assert "Access-Control-Allow-Origin" in result["headers"]
+        # CORS headers should NOT be present - Lambda URL handles them
+        assert "Access-Control-Allow-Origin" not in result["headers"]
+        assert "Access-Control-Allow-Methods" not in result["headers"]
+        assert "Access-Control-Allow-Headers" not in result["headers"]
 
     def test_adds_cache_control(self):
         """Adds Cache-Control header."""
@@ -176,11 +138,12 @@ class TestGetPreflightResponse:
         response = get_preflight_response()
         assert response["statusCode"] == 204
 
-    def test_has_cors_headers(self):
-        """Has CORS headers."""
+    def test_does_not_have_cors_headers(self):
+        """Does NOT have CORS headers - Lambda Function URL handles preflight."""
         response = get_preflight_response()
-        assert "Access-Control-Allow-Origin" in response["headers"]
-        assert "Access-Control-Allow-Methods" in response["headers"]
+        # CORS headers are NOT added - Lambda URL handles OPTIONS preflight
+        assert "Access-Control-Allow-Origin" not in response["headers"]
+        assert "Access-Control-Allow-Methods" not in response["headers"]
 
     def test_has_security_headers(self):
         """Has security headers."""
