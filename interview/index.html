@@ -899,6 +899,20 @@ by_tag: tag → timestamp</div>
                 </p>
             </div>
 
+            <h3 style="margin: 24px 0 16px;">Try It: Create Configuration</h3>
+            <div class="api-demo">
+                <div class="api-demo-header">
+                    <span class="method-badge method-post">POST</span>
+                    <span class="endpoint-url">/api/v2/configurations</span>
+                    <button class="btn btn-primary" onclick="createConfiguration()">
+                        Create Tech Watchlist
+                    </button>
+                </div>
+                <div class="api-demo-body">
+                    <div id="config-create-response" class="response-box">Creates a watchlist with AAPL, MSFT, NVDA</div>
+                </div>
+            </div>
+
             <h3 style="margin: 24px 0 16px;">Try It: List Configurations</h3>
             <div class="api-demo">
                 <div class="api-demo-header">
@@ -951,17 +965,17 @@ by_tag: tag → timestamp</div>
                 </div>
             </div>
 
-            <h3 style="margin: 24px 0 16px;">Try It: Get Sentiment by Tags</h3>
+            <h3 style="margin: 24px 0 16px;">Try It: Get Sentiment for Configuration</h3>
             <div class="api-demo">
                 <div class="api-demo-header">
                     <span class="method-badge method-get">GET</span>
-                    <span class="endpoint-url">/api/v2/sentiment?tags=AI,tech</span>
-                    <button class="btn btn-primary" onclick="callAuthenticatedAPI('sentiment', 'GET', '/api/v2/sentiment?tags=AI,tech')">
-                        Execute
+                    <span class="endpoint-url" id="sentiment-endpoint">/api/v2/configurations/{config_id}/sentiment</span>
+                    <button class="btn btn-primary" onclick="getConfigSentiment()">
+                        Get Sentiment
                     </button>
                 </div>
                 <div class="api-demo-body">
-                    <div id="sentiment-response" class="response-box">Aggregated sentiment across AI and tech news</div>
+                    <div id="sentiment-response" class="response-box">Create a configuration first, then get sentiment for its tickers</div>
                 </div>
             </div>
         </section>
@@ -1510,6 +1524,7 @@ infrastructure/terraform/modules/<br>
 
         let currentEnv = 'preprod';
         let authToken = null;
+        let currentConfigId = null;
 
         // Deployment metadata URL (S3 bucket with public read)
         const METADATA_URL = 'https://preprod-sentiment-lambda-deployments.s3.amazonaws.com/deployment-metadata.json';
@@ -1659,6 +1674,96 @@ infrastructure/terraform/modules/<br>
                 const url = ENVIRONMENTS[currentEnv] + endpoint;
                 const response = await fetch(url, {
                     method,
+                    headers: {
+                        'X-User-ID': authToken,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                const data = await response.json();
+
+                responseBox.className = `response-box ${response.ok ? 'success' : 'error'}`;
+                responseBox.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                responseBox.className = 'response-box error';
+                responseBox.textContent = `Error: ${error.message}`;
+            }
+        }
+
+        // Create Configuration with tech tickers
+        async function createConfiguration() {
+            if (!authToken) {
+                const responseBox = document.getElementById('config-create-response');
+                responseBox.className = 'response-box error';
+                responseBox.textContent = 'No auth token. Create an anonymous session first.';
+                showToast('Create a session first!', 'error');
+                return;
+            }
+
+            const responseBox = document.getElementById('config-create-response');
+            responseBox.className = 'response-box loading';
+            responseBox.textContent = 'Creating configuration...';
+
+            try {
+                const url = ENVIRONMENTS[currentEnv] + '/api/v2/configurations';
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'X-User-ID': authToken,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name: 'Tech Watchlist',
+                        tickers: [
+                            { symbol: 'AAPL', weight: 0.4 },
+                            { symbol: 'MSFT', weight: 0.35 },
+                            { symbol: 'NVDA', weight: 0.25 }
+                        ]
+                    })
+                });
+                const data = await response.json();
+
+                if (response.ok && data.config_id) {
+                    currentConfigId = data.config_id;
+                    // Update sentiment endpoint display
+                    document.getElementById('sentiment-endpoint').textContent =
+                        `/api/v2/configurations/${currentConfigId}/sentiment`;
+                    showToast('Configuration created! Config ID stored.', 'success');
+                }
+
+                responseBox.className = `response-box ${response.ok ? 'success' : 'error'}`;
+                responseBox.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                responseBox.className = 'response-box error';
+                responseBox.textContent = `Error: ${error.message}`;
+            }
+        }
+
+        // Get sentiment for current configuration
+        async function getConfigSentiment() {
+            if (!authToken) {
+                const responseBox = document.getElementById('sentiment-response');
+                responseBox.className = 'response-box error';
+                responseBox.textContent = 'No auth token. Create an anonymous session first.';
+                showToast('Create a session first!', 'error');
+                return;
+            }
+
+            if (!currentConfigId) {
+                const responseBox = document.getElementById('sentiment-response');
+                responseBox.className = 'response-box error';
+                responseBox.textContent = 'No configuration. Create a configuration first.';
+                showToast('Create a configuration first!', 'error');
+                return;
+            }
+
+            const responseBox = document.getElementById('sentiment-response');
+            responseBox.className = 'response-box loading';
+            responseBox.textContent = 'Loading sentiment data...';
+
+            try {
+                const url = ENVIRONMENTS[currentEnv] + `/api/v2/configurations/${currentConfigId}/sentiment`;
+                const response = await fetch(url, {
+                    method: 'GET',
                     headers: {
                         'X-User-ID': authToken,
                         'Content-Type': 'application/json'

@@ -221,7 +221,9 @@ class TestAPIEndpoints:
     def test_sentiment_endpoint(self):
         """Sentiment endpoint should be referenced."""
         content = get_html_content()
-        assert "/api/v2/sentiment" in content
+        # Sentiment is now accessed via configuration endpoint
+        assert "/sentiment" in content
+        assert "config_id" in content  # Dynamic endpoint reference
 
 
 class TestInteractiveElements:
