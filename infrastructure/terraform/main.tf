@@ -395,8 +395,8 @@ module "dashboard_lambda" {
   function_url_auth_type = "NONE"
   function_url_cors = {
     allow_credentials = false
-    allow_headers     = ["content-type", "authorization", "x-api-key"]
-    allow_methods     = ["GET"] # AWS handles OPTIONS preflight automatically; not in allowed values
+    allow_headers     = ["content-type", "authorization", "x-api-key", "x-user-id", "x-auth-type"]
+    allow_methods     = ["GET", "POST", "PUT", "PATCH", "DELETE"] # AWS handles OPTIONS preflight automatically
     # SECURITY: Require explicit origins - no wildcard fallback
     # For new deployments, cors_allowed_origins MUST be set in tfvars
     allow_origins = length(var.cors_allowed_origins) > 0 ? var.cors_allowed_origins : (
