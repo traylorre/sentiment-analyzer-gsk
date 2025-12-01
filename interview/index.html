@@ -488,25 +488,109 @@
             transition: width 0.5s ease;
         }
 
+        /* Mobile Navigation */
+        .hamburger {
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            gap: 5px;
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+            padding: 2px;
+        }
+
+        .hamburger span {
+            display: block;
+            width: 100%;
+            height: 2px;
+            background: var(--text-primary);
+            border-radius: 2px;
+            transition: all 0.3s ease;
+        }
+
+        .hamburger.active span:nth-child(1) {
+            transform: rotate(45deg) translate(5px, 5px);
+        }
+
+        .hamburger.active span:nth-child(2) {
+            opacity: 0;
+        }
+
+        .hamburger.active span:nth-child(3) {
+            transform: rotate(-45deg) translate(5px, -5px);
+        }
+
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            top: 64px;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 998;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .sidebar-overlay.active {
+            opacity: 1;
+        }
+
         /* Responsive */
         @media (max-width: 1024px) {
+            .hamburger {
+                display: flex;
+            }
+
             .sidebar {
                 transform: translateX(-100%);
+                transition: transform 0.3s ease;
+                z-index: 999;
             }
+
+            .sidebar.open {
+                transform: translateX(0);
+            }
+
+            .sidebar-overlay {
+                display: block;
+                pointer-events: none;
+            }
+
+            .sidebar-overlay.active {
+                pointer-events: auto;
+            }
+
             .main {
                 margin-left: 0;
             }
+
             .stats-grid {
                 grid-template-columns: repeat(2, 1fr);
             }
         }
 
         @media (max-width: 640px) {
+            .sidebar {
+                width: 260px;
+            }
+
             .stats-grid {
                 grid-template-columns: 1fr;
             }
+
             .card-grid {
                 grid-template-columns: 1fr;
+            }
+
+            .header {
+                padding: 0 16px;
+            }
+
+            .logo span {
+                display: none;
             }
         }
 
@@ -572,10 +656,17 @@
 <body>
     <!-- Header -->
     <header class="header">
-        <div class="logo">
-            <div class="logo-icon">📊</div>
-            <span>Sentiment Analyzer</span>
-            <span style="font-size: 11px; background: var(--accent-purple); color: white; padding: 2px 8px; border-radius: 4px; margin-left: 8px;">Interview Mode</span>
+        <div style="display: flex; align-items: center; gap: 16px;">
+            <div class="hamburger" id="hamburger" onclick="toggleSidebar()">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+            <div class="logo">
+                <div class="logo-icon">📊</div>
+                <span>Sentiment Analyzer</span>
+                <span style="font-size: 11px; background: var(--accent-purple); color: white; padding: 2px 8px; border-radius: 4px; margin-left: 8px;">Interview Mode</span>
+            </div>
         </div>
         <div style="display: flex; align-items: center; gap: 16px;">
             <div style="display: flex; align-items: center; gap: 8px; margin-right: 16px;">
@@ -596,7 +687,10 @@
     </header>
 
     <!-- Sidebar -->
-    <nav class="sidebar">
+    <!-- Sidebar Overlay (for mobile) -->
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+
+    <nav class="sidebar" id="sidebar">
         <div class="nav-section">
             <div class="nav-title">Getting Started</div>
             <a class="nav-item active" data-section="welcome">
@@ -1527,6 +1621,74 @@ infrastructure/terraform/modules/<br>
         let authToken = null;
         let currentConfigId = null;
 
+        // Mobile sidebar state
+        let sidebarOpen = false;
+        let touchStartX = 0;
+        let touchEndX = 0;
+
+        // Toggle sidebar (hamburger click)
+        function toggleSidebar() {
+            sidebarOpen = !sidebarOpen;
+            updateSidebarState();
+        }
+
+        // Open sidebar
+        function openSidebar() {
+            sidebarOpen = true;
+            updateSidebarState();
+        }
+
+        // Close sidebar
+        function closeSidebar() {
+            sidebarOpen = false;
+            updateSidebarState();
+        }
+
+        // Update sidebar visual state
+        function updateSidebarState() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            const hamburger = document.getElementById('hamburger');
+
+            if (sidebarOpen) {
+                sidebar.classList.add('open');
+                overlay.classList.add('active');
+                hamburger.classList.add('active');
+            } else {
+                sidebar.classList.remove('open');
+                overlay.classList.remove('active');
+                hamburger.classList.remove('active');
+            }
+        }
+
+        // Swipe gesture handling
+        function handleTouchStart(e) {
+            touchStartX = e.touches[0].clientX;
+        }
+
+        function handleTouchEnd(e) {
+            touchEndX = e.changedTouches[0].clientX;
+            handleSwipe();
+        }
+
+        function handleSwipe() {
+            const swipeDistance = touchEndX - touchStartX;
+            const minSwipeDistance = 50;
+
+            // Swipe right from left edge to open
+            if (touchStartX < 30 && swipeDistance > minSwipeDistance && !sidebarOpen) {
+                openSidebar();
+            }
+            // Swipe left to close
+            else if (swipeDistance < -minSwipeDistance && sidebarOpen) {
+                closeSidebar();
+            }
+        }
+
+        // Initialize swipe gestures
+        document.addEventListener('touchstart', handleTouchStart, { passive: true });
+        document.addEventListener('touchend', handleTouchEnd, { passive: true });
+
         // Deployment metadata URL (S3 bucket with public read)
         const METADATA_URL = 'https://preprod-sentiment-lambda-deployments.s3.amazonaws.com/deployment-metadata.json';
 
@@ -1596,6 +1758,11 @@ infrastructure/terraform/modules/<br>
 
             // Scroll to top
             window.scrollTo(0, 0);
+
+            // Close sidebar on mobile after navigation
+            if (window.innerWidth <= 1024) {
+                closeSidebar();
+            }
         }
 
         // Environment Toggle

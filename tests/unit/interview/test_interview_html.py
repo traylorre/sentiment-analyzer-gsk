@@ -398,3 +398,55 @@ class TestDashboardLink:
         """Metadata URL constant should be defined."""
         content = get_html_content()
         assert "METADATA_URL" in content
+
+
+class TestMobileNavigation:
+    """Tests for mobile navigation features."""
+
+    def test_hamburger_element_exists(self):
+        """Hamburger menu element should exist."""
+        content = get_html_content()
+        assert 'id="hamburger"' in content
+        assert 'class="hamburger"' in content
+
+    def test_sidebar_overlay_exists(self):
+        """Sidebar overlay for mobile should exist."""
+        content = get_html_content()
+        assert 'id="sidebarOverlay"' in content
+        assert 'class="sidebar-overlay"' in content
+
+    def test_toggle_sidebar_function(self):
+        """toggleSidebar function should be defined."""
+        content = get_html_content()
+        assert "function toggleSidebar()" in content
+
+    def test_open_sidebar_function(self):
+        """openSidebar function should be defined."""
+        content = get_html_content()
+        assert "function openSidebar()" in content
+
+    def test_close_sidebar_function(self):
+        """closeSidebar function should be defined."""
+        content = get_html_content()
+        assert "function closeSidebar()" in content
+
+    def test_swipe_gesture_handlers(self):
+        """Touch event handlers should be defined for swipe gestures."""
+        content = get_html_content()
+        assert "function handleTouchStart" in content
+        assert "function handleTouchEnd" in content
+        assert "function handleSwipe" in content
+
+    def test_mobile_css_breakpoints(self):
+        """Mobile CSS should have proper breakpoints."""
+        content = get_html_content()
+        # Check for hamburger display on mobile
+        assert ".hamburger {" in content
+        # Check for media query
+        assert "@media (max-width:" in content
+
+    def test_sidebar_closes_on_navigation(self):
+        """navigateTo should close sidebar on mobile."""
+        content = get_html_content()
+        # Check that navigateTo includes closeSidebar call
+        assert "closeSidebar()" in content
