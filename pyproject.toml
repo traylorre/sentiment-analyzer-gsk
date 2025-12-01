@@ -116,6 +116,10 @@ ignore = [
 "src/lambdas/dashboard/router_v2.py" = [
     "B008",  # Depends() in function defaults is FastAPI's recommended pattern
 ]
+"src/lambdas/dashboard/ohlc.py" = [
+    "B008",  # Query/Depends in function defaults is FastAPI's recommended pattern
+    "S311",  # random module used for synthetic test data generation
+]
 
 [tool.ruff.isort]
 known-first-party = ["src"]

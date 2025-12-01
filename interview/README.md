@@ -15,7 +15,7 @@ Interactive tools for demonstrating the Sentiment Analyzer architecture during t
 2. **Run Traffic Generator**
    ```bash
    cd interview
-   python traffic_generator.py --env preprod --scenario all
+   python3 traffic_generator.py --env preprod --scenario all
    ```
 
 ## Components
@@ -48,10 +48,10 @@ Generates realistic traffic patterns to demonstrate system behavior.
 **Example:**
 ```bash
 # Run all scenarios with verbose output
-python traffic_generator.py --env preprod --scenario all
+python3 traffic_generator.py --env preprod --scenario all
 
 # Custom load test
-python traffic_generator.py --env preprod --scenario load --users 10 --requests 20
+python3 traffic_generator.py --env preprod --scenario load --users 10 --requests 20
 ```
 
 ## Interview Flow (90 minutes)

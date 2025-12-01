@@ -31,6 +31,17 @@ from src.lambdas.shared.models.notification import (
     DigestSettings,
     Notification,
 )
+from src.lambdas.shared.models.ohlc import (
+    TIME_RANGE_DAYS,
+    OHLCResponse,
+    PriceCandle,
+    TimeRange,
+)
+from src.lambdas.shared.models.sentiment_history import (
+    SentimentHistoryResponse,
+    SentimentPoint,
+    SentimentSourceType,
+)
 from src.lambdas.shared.models.sentiment_result import (
     SentimentResult,
     SentimentSource,
@@ -75,4 +86,13 @@ __all__ = [
     # Auth models
     "MagicLinkToken",
     "SESSION_LIMITS",
+    # OHLC models
+    "OHLCResponse",
+    "PriceCandle",
+    "TimeRange",
+    "TIME_RANGE_DAYS",
+    # Sentiment history models
+    "SentimentHistoryResponse",
+    "SentimentPoint",
+    "SentimentSourceType",
 ]

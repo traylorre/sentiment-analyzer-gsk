@@ -2,9 +2,13 @@
 
 Used for testing without hitting the real Finnhub API.
 Returns deterministic data based on seed for reproducibility.
+Supports failure injection for error resilience testing.
 """
 
+from __future__ import annotations
+
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from src.lambdas.shared.adapters.base import NewsArticle, OHLCCandle, SentimentData
 from src.lambdas.shared.adapters.finnhub import FinnhubAdapter
@@ -12,12 +16,21 @@ from tests.fixtures.synthetic.news_generator import create_news_generator
 from tests.fixtures.synthetic.sentiment_generator import create_sentiment_generator
 from tests.fixtures.synthetic.ticker_generator import create_ticker_generator
 
+if TYPE_CHECKING:
+    from tests.fixtures.mocks.failure_injector import FailureInjector
+
 
 class MockFinnhubAdapter(FinnhubAdapter):
     """Mock Finnhub adapter returning synthetic data.
 
     Overrides API calls to return deterministic synthetic data
     instead of making real HTTP requests.
+
+    Supports failure injection for testing error handling:
+        - HTTP errors (500, 502, 503, 504, 429)
+        - Connection errors (timeout, refused, DNS)
+        - Malformed responses (invalid JSON, empty, truncated)
+        - Field-level errors (missing fields, null/NaN/Infinity values)
     """
 
     def __init__(
@@ -25,18 +38,21 @@ class MockFinnhubAdapter(FinnhubAdapter):
         seed: int = 42,
         fail_mode: bool = False,
         latency_ms: int = 0,
+        failure_injector: FailureInjector | None = None,
     ):
         """Initialize mock adapter.
 
         Args:
             seed: Random seed for synthetic data
-            fail_mode: If True, all calls raise errors
+            fail_mode: If True, all calls raise errors (legacy, use failure_injector)
             latency_ms: Simulated latency (not implemented in mock)
+            failure_injector: Optional FailureInjector for fine-grained failure control
         """
         # Don't call super().__init__ to avoid needing real API key
         self.seed = seed
         self.fail_mode = fail_mode
         self.latency_ms = latency_ms
+        self.failure_injector = failure_injector
         self._ticker_gen = create_ticker_generator(seed=seed)
         self._sentiment_gen = create_sentiment_generator(seed=seed)
         self._news_gen = create_news_generator(seed=seed)
@@ -60,6 +76,19 @@ class MockFinnhubAdapter(FinnhubAdapter):
         self.get_news_calls.clear()
         self.get_ohlc_calls.clear()
         self.get_sentiment_calls.clear()
+        if self.failure_injector:
+            self.failure_injector.reset()
+
+    def _check_failure_injection(self) -> None:
+        """Check if failure should be injected and raise if configured.
+
+        Raises:
+            Various exceptions based on failure_injector configuration
+        """
+        if self.failure_injector:
+            self.failure_injector.increment_call_count()
+            if self.failure_injector.should_fail():
+                self.failure_injector.raise_if_configured()
 
     def get_news(
         self,
@@ -87,6 +116,9 @@ class MockFinnhubAdapter(FinnhubAdapter):
                 "limit": limit,
             }
         )
+
+        # Check for injected failures first
+        self._check_failure_injection()
 
         if self.fail_mode:
             raise RuntimeError("Mock Finnhub API failure (fail_mode=True)")
@@ -116,6 +148,9 @@ class MockFinnhubAdapter(FinnhubAdapter):
             SentimentData with synthetic values
         """
         self.get_sentiment_calls.append({"ticker": ticker})
+
+        # Check for injected failures first
+        self._check_failure_injection()
 
         if self.fail_mode:
             raise RuntimeError("Mock Finnhub API failure (fail_mode=True)")
@@ -149,6 +184,9 @@ class MockFinnhubAdapter(FinnhubAdapter):
             }
         )
 
+        # Check for injected failures first
+        self._check_failure_injection()
+
         if self.fail_mode:
             raise RuntimeError("Mock Finnhub API failure (fail_mode=True)")
 
@@ -171,14 +209,18 @@ class MockFinnhubAdapter(FinnhubAdapter):
 def create_mock_finnhub(
     seed: int = 42,
     fail_mode: bool = False,
+    failure_injector: FailureInjector | None = None,
 ) -> MockFinnhubAdapter:
     """Factory function to create a mock Finnhub adapter.
 
     Args:
         seed: Random seed for synthetic data
-        fail_mode: If True, all calls raise errors
+        fail_mode: If True, all calls raise errors (legacy)
+        failure_injector: Optional FailureInjector for fine-grained control
 
     Returns:
         Configured MockFinnhubAdapter
     """
-    return MockFinnhubAdapter(seed=seed, fail_mode=fail_mode)
+    return MockFinnhubAdapter(
+        seed=seed, fail_mode=fail_mode, failure_injector=failure_injector
+    )

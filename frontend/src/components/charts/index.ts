@@ -1,6 +1,7 @@
 export { SentimentChart } from './sentiment-chart';
 export { SentimentTimeline } from './sentiment-timeline';
 export { ATRChart } from './atr-chart';
+export { PriceSentimentChart } from './price-sentiment-chart';
 export { ChartCrosshair } from './chart-crosshair';
 export { Sparkline } from './sparkline';
 export { ChartTooltip, InlineTooltip } from './chart-tooltip';
