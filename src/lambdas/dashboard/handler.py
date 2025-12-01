@@ -132,10 +132,12 @@ def get_cors_origins() -> list[str]:
     if ENVIRONMENT in ("dev", "test", "preprod"):
         # Allow localhost for local development, preprod testing, and file:// for interview demo
         # "null" origin is sent by browsers when opening HTML files via file:// protocol
+        # GitHub Pages hosts the interview demo for external access
         return [
             "http://localhost:3000",
             "http://127.0.0.1:3000",
             "http://localhost:8080",
+            "https://traylorre.github.io",
             "null",
         ]
     else:
