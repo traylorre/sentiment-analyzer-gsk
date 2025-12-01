@@ -184,14 +184,14 @@ class TrafficGenerator:
         return None
 
     async def create_configuration(
-        self, client: httpx.AsyncClient, token: str, name: str, tickers: list[str]
+        self, client: httpx.AsyncClient, user_id: str, name: str, tickers: list[str]
     ) -> dict | None:
         """Create a configuration."""
         self.log(f"Creating config: {name}", "")
-        headers = {"Authorization": f"Bearer {token}"}
+        headers = {"X-User-ID": user_id}
         payload = {
             "name": name,
-            "tickers": [{"symbol": t, "weight": 1.0} for t in tickers],
+            "tickers": tickers,  # API expects list of strings, not objects
         }
         status, data = await self.make_request(
             client, "POST", "/api/v2/configurations", headers=headers, json_data=payload
@@ -203,10 +203,10 @@ class TrafficGenerator:
         return None
 
     async def get_configurations(
-        self, client: httpx.AsyncClient, token: str
+        self, client: httpx.AsyncClient, user_id: str
     ) -> list | None:
         """Get all configurations for a user."""
-        headers = {"Authorization": f"Bearer {token}"}
+        headers = {"X-User-ID": user_id}
         status, data = await self.make_request(
             client, "GET", "/api/v2/configurations", headers=headers
         )
@@ -217,12 +217,15 @@ class TrafficGenerator:
         return None
 
     async def get_sentiment(
-        self, client: httpx.AsyncClient, token: str, config_id: str
+        self, client: httpx.AsyncClient, user_id: str, config_id: str
     ) -> dict | None:
         """Get sentiment for a configuration."""
-        headers = {"Authorization": f"Bearer {token}"}
+        headers = {"X-User-ID": user_id}
         status, data = await self.make_request(
-            client, "GET", f"/api/v2/sentiment/{config_id}", headers=headers
+            client,
+            "GET",
+            f"/api/v2/configurations/{config_id}/sentiment",
+            headers=headers,
         )
         if status == 200:
             self.log(f"Retrieved sentiment for {config_id[:8]}...", "")
@@ -251,17 +254,17 @@ class TrafficGenerator:
         config_name = random.choice(SAMPLE_CONFIG_NAMES)  # noqa: S311
         config = await self.create_configuration(
             client,
-            session["token"],
+            session["user_id"],
             config_name,
             tickers,
         )
 
         # List configurations
-        await self.get_configurations(client, session["token"])
+        await self.get_configurations(client, session["user_id"])
 
         # Get sentiment if config was created
         if config and config.get("config_id"):
-            await self.get_sentiment(client, session["token"], config["config_id"])
+            await self.get_sentiment(client, session["user_id"], config["config_id"])
 
         self.log("Basic flow completed", "")
 
@@ -288,13 +291,13 @@ class TrafficGenerator:
                 if op == "health":
                     await self.check_health(client)
                 elif op == "list_configs":
-                    await self.get_configurations(client, session["token"])
+                    await self.get_configurations(client, session["user_id"])
                 elif op == "create_config":
                     if i < 2:  # Limit config creation per user
                         tickers = random.sample(SAMPLE_TICKERS, 2)  # noqa: S311
                         await self.create_configuration(
                             client,
-                            session["token"],
+                            session["user_id"],
                             f"Test Config {user_num}-{i}",
                             tickers,
                         )
@@ -326,7 +329,7 @@ class TrafficGenerator:
                 client,
                 "GET",
                 "/api/v2/configurations",
-                headers={"Authorization": f"Bearer {session['token']}"},
+                headers={"X-User-ID": session["user_id"]},
             )
             if status == 429:
                 rate_limited_count += 1
@@ -361,20 +364,23 @@ class TrafficGenerator:
 
         tickers = ["AAPL", "MSFT", "GOOGL"]
         config = await self.create_configuration(
-            client, session["token"], "Cache Test Config", tickers
+            client, session["user_id"], "Cache Test Config", tickers
         )
 
         if not config:
             return
 
         config_id = config.get("config_id")
-        headers = {"Authorization": f"Bearer {session['token']}"}
+        headers = {"X-User-ID": session["user_id"]}
 
         # First request (cache miss)
         self.log("First request (cold cache)...", "")
         start = time.time()
         await self.make_request(
-            client, "GET", f"/api/v2/sentiment/{config_id}", headers=headers
+            client,
+            "GET",
+            f"/api/v2/configurations/{config_id}/sentiment",
+            headers=headers,
         )
         cold_latency = (time.time() - start) * 1000
         self.log(f"Cold cache latency: {cold_latency:.1f}ms", "")
@@ -385,7 +391,10 @@ class TrafficGenerator:
             await asyncio.sleep(0.5)
             start = time.time()
             await self.make_request(
-                client, "GET", f"/api/v2/sentiment/{config_id}", headers=headers
+                client,
+                "GET",
+                f"/api/v2/configurations/{config_id}/sentiment",
+                headers=headers,
             )
             latency = (time.time() - start) * 1000
             warm_latencies.append(latency)
