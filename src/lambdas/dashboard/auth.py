@@ -58,6 +58,11 @@ from src.lambdas.shared.auth.merge import (
     get_merge_status,
     merge_anonymous_data,
 )
+from src.lambdas.shared.errors.session_errors import (
+    SessionRevokedException,
+    TokenAlreadyUsedError,
+    TokenExpiredError,
+)
 from src.lambdas.shared.logging_utils import get_safe_error_info, sanitize_for_log
 from src.lambdas.shared.models.magic_link_token import MagicLinkToken
 from src.lambdas.shared.models.user import User
@@ -238,6 +243,25 @@ def validate_session(
             )
 
         user = User.from_dynamodb_item(item)
+
+        # Feature 014: Check if session has been revoked (FR-016, FR-017)
+        if user.revoked:
+            logger.info(
+                "Session revoked",
+                extra={
+                    "user_id_prefix": sanitize_for_log(anonymous_id[:8]),
+                    "revoked_at": user.revoked_at.isoformat()
+                    if user.revoked_at
+                    else None,
+                    "reason": sanitize_for_log(user.revoked_reason)
+                    if user.revoked_reason
+                    else None,
+                },
+            )
+            raise SessionRevokedException(
+                reason=user.revoked_reason,
+                revoked_at=user.revoked_at,
+            )
 
         # Check if session has expired
         now = datetime.now(UTC)
@@ -690,6 +714,134 @@ def _invalidate_existing_tokens(table: Any, email: str) -> None:
             "Failed to invalidate existing tokens",
             extra=get_safe_error_info(e),
         )
+
+
+# Feature 014 (T031): Atomic Token Verification
+@xray_recorder.capture("verify_and_consume_token")
+def verify_and_consume_token(
+    table: Any,
+    token_id: str,
+    client_ip: str,
+) -> MagicLinkToken | None:
+    """Atomically verify and consume a magic link token (FR-004, FR-005, FR-006).
+
+    Uses DynamoDB conditional update to ensure token can only be consumed once,
+    even under concurrent verification attempts. This prevents race conditions
+    where multiple requests try to use the same token.
+
+    Args:
+        table: DynamoDB Table resource
+        token_id: Token UUID from magic link URL
+        client_ip: Client IP address for audit logging
+
+    Returns:
+        MagicLinkToken if successfully consumed, None if token not found
+
+    Raises:
+        TokenAlreadyUsedError: If token was already consumed (FR-005)
+        TokenExpiredError: If token has expired (FR-006)
+    """
+    logger.info(
+        "Attempting atomic token verification",
+        extra={"token_prefix": sanitize_for_log(token_id[:8])},
+    )
+
+    # Get token from database
+    try:
+        response = table.get_item(
+            Key={
+                "PK": f"TOKEN#{token_id}",
+                "SK": "MAGIC_LINK",
+            }
+        )
+    except Exception as e:
+        logger.error("Failed to get token", extra=get_safe_error_info(e))
+        return None
+
+    item = response.get("Item")
+    if not item:
+        logger.warning(
+            "Token not found",
+            extra={"token_prefix": sanitize_for_log(token_id[:8])},
+        )
+        return None
+
+    token = MagicLinkToken.from_dynamodb_item(item)
+
+    # Check if already used (before attempting update)
+    if token.used:
+        logger.warning(
+            "Token already used",
+            extra={
+                "token_prefix": sanitize_for_log(token_id[:8]),
+                "used_at": token.used_at.isoformat() if token.used_at else None,
+            },
+        )
+        raise TokenAlreadyUsedError(token_id=token_id, used_at=token.used_at)
+
+    # Check expiry (before attempting update - saves a write)
+    now = datetime.now(UTC)
+    token_expires = (
+        token.expires_at.replace(tzinfo=UTC)
+        if token.expires_at.tzinfo is None
+        else token.expires_at
+    )
+    if now > token_expires:
+        logger.info(
+            "Token expired",
+            extra={
+                "token_prefix": sanitize_for_log(token_id[:8]),
+                "expired_at": token.expires_at.isoformat(),
+            },
+        )
+        raise TokenExpiredError(token_id=token_id, expired_at=token.expires_at)
+
+    # Atomic conditional update - only succeeds if used=false
+    try:
+        table.update_item(
+            Key={
+                "PK": f"TOKEN#{token_id}",
+                "SK": "MAGIC_LINK",
+            },
+            UpdateExpression="SET used = :true, used_at = :now, used_by_ip = :ip",
+            ConditionExpression="used = :false",
+            ExpressionAttributeValues={
+                ":true": True,
+                ":false": False,
+                ":now": now.isoformat(),
+                ":ip": client_ip,
+            },
+        )
+
+        logger.info(
+            "Token consumed successfully",
+            extra={
+                "token_prefix": sanitize_for_log(token_id[:8]),
+                "client_ip": sanitize_for_log(client_ip),
+            },
+        )
+
+        # Update token object with consumed state
+        token.used = True
+        token.used_at = now
+        token.used_by_ip = client_ip
+
+        return token
+
+    except table.meta.client.exceptions.ConditionalCheckFailedException:
+        # Race condition - another request consumed the token
+        logger.warning(
+            "Token consumption race condition detected",
+            extra={"token_prefix": sanitize_for_log(token_id[:8])},
+        )
+        raise TokenAlreadyUsedError(token_id=token_id, used_at=None) from None
+
+    except Exception as e:
+        logger.error(
+            "Failed to consume token",
+            extra=get_safe_error_info(e),
+        )
+        raise RuntimeError("Failed to consume token") from e
 
 
 # T091: Magic Link Verification

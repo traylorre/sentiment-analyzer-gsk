@@ -23,6 +23,7 @@ interface RequestOptions extends RequestInit {
 }
 
 let accessToken: string | null = null;
+let userId: string | null = null;
 
 export function setAccessToken(token: string | null) {
   accessToken = token;
@@ -30,6 +31,18 @@ export function setAccessToken(token: string | null) {
 
 export function getAccessToken(): string | null {
   return accessToken;
+}
+
+/**
+ * Feature 014: Set user ID for X-User-ID header (anonymous sessions).
+ * Used as fallback when no access token is available.
+ */
+export function setUserId(id: string | null) {
+  userId = id;
+}
+
+export function getUserId(): string | null {
+  return userId;
 }
 
 async function handleResponse<T>(response: Response): Promise<T> {
@@ -81,9 +94,12 @@ export async function apiClient<T>(
     headers.set('Content-Type', 'application/json');
   }
 
-  // Add auth token if available
+  // Feature 014: Hybrid auth header support (FR-001)
+  // Prefer Bearer token when available, fall back to X-User-ID for anonymous
   if (accessToken) {
     headers.set('Authorization', `Bearer ${accessToken}`);
+  } else if (userId) {
+    headers.set('X-User-ID', userId);
   }
 
   const response = await fetch(url.toString(), {

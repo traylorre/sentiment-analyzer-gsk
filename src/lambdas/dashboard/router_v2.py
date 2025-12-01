@@ -40,7 +40,13 @@ from src.lambdas.dashboard import tickers as ticker_service
 from src.lambdas.dashboard import volatility as volatility_service
 from src.lambdas.shared.cache.ticker_cache import TickerCache, get_ticker_cache
 from src.lambdas.shared.dynamodb import get_table
+from src.lambdas.shared.errors import (
+    SessionRevokedException,
+    TokenAlreadyUsedError,
+    TokenExpiredError,
+)
 from src.lambdas.shared.logging_utils import get_safe_error_info
+from src.lambdas.shared.middleware import extract_auth_context
 from src.lambdas.shared.response_models import (
     UserMeResponse,
     mask_email,
@@ -127,8 +133,9 @@ def get_user_id_from_request(
 ) -> str:
     """Extract user_id from request headers/session and optionally validate.
 
-    In production, this would verify the JWT token and extract the user_id.
-    For now, we use X-User-ID header for testing.
+    Feature 014: Supports hybrid authentication approach:
+    1. Authorization: Bearer {token} - preferred for new code
+    2. X-User-ID header - legacy, backward compatible
 
     Args:
         request: FastAPI Request object
@@ -140,16 +147,33 @@ def get_user_id_from_request(
 
     Raises:
         HTTPException 401 if user_id missing or session expired
+        HTTPException 403 if session has been revoked
     """
-    user_id = request.headers.get("X-User-ID")
+    # Feature 014: Use hybrid auth middleware to extract user_id
+    # Build event dict for middleware compatibility
+    event = {"headers": dict(request.headers)}
+    auth_context = extract_auth_context(event)
+
+    user_id = auth_context.get("user_id")
     if not user_id:
         raise HTTPException(status_code=401, detail="Missing user identification")
 
     # Validate session is still active (not signed out/expired)
     if validate_session and table is not None:
-        validation = auth_service.validate_session(table=table, anonymous_id=user_id)
-        if not validation.valid:
-            raise HTTPException(status_code=401, detail="Session expired or invalid")
+        try:
+            validation = auth_service.validate_session(
+                table=table, anonymous_id=user_id
+            )
+            if not validation.valid:
+                raise HTTPException(
+                    status_code=401, detail="Session expired or invalid"
+                )
+        except SessionRevokedException as e:
+            # Feature 014: Handle server-side session revocation
+            raise HTTPException(
+                status_code=403,
+                detail=f"Session revoked: {e.reason or 'Security policy'}",
+            ) from e
 
     return user_id
 
@@ -273,13 +297,33 @@ async def request_magic_link(
 @auth_router.get("/magic-link/verify")
 async def verify_magic_link(
     token: str,
+    request: Request,
     table=Depends(get_dynamodb_table),
 ):
     """Verify magic link token (T091).
 
     Security: refresh_token is set as HttpOnly cookie, NEVER in body.
+
+    Feature 014 (T034): Returns appropriate error codes for race conditions:
+    - 409 Conflict: Token already used by another request
+    - 410 Gone: Token has expired
     """
-    result = auth_service.verify_magic_link(table=table, token=token)
+    # Try atomic verification first for race condition protection
+    try:
+        result = auth_service.verify_magic_link(table=table, token=token)
+    except TokenAlreadyUsedError as e:
+        # Feature 014 (FR-005): 409 for token already used
+        raise HTTPException(
+            status_code=409,
+            detail="This magic link has already been verified",
+        ) from e
+    except TokenExpiredError as e:
+        # Feature 014 (FR-006): 410 for expired token
+        raise HTTPException(
+            status_code=410,
+            detail="This magic link has expired. Please request a new one.",
+        ) from e
+
     if isinstance(result, auth_service.ErrorResponse):
         raise HTTPException(status_code=400, detail=result.error.message)
 

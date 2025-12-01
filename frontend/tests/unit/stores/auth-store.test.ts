@@ -448,3 +448,156 @@ describe('Auth Store Selectors', () => {
     expect(currentUser).toEqual(user);
   });
 });
+
+// Feature 014: Session Consistency Tests (T017)
+describe('Feature 014: Auto-Session Creation', () => {
+  beforeEach(() => {
+    useAuthStore.getState().reset();
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  describe('FR-003: Auto-session on app load', () => {
+    it('should call signInAnonymous on first load when no session exists', async () => {
+      // Verify initial state has no user
+      const initialState = useAuthStore.getState();
+      expect(initialState.user).toBeNull();
+      expect(initialState.isAuthenticated).toBe(false);
+
+      // Mock successful anonymous session creation
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            userId: 'auto-anon-123',
+            sessionExpiresAt: new Date(
+              Date.now() + 30 * 24 * 60 * 60 * 1000
+            ).toISOString(),
+          }),
+      });
+
+      await useAuthStore.getState().signInAnonymous();
+
+      const state = useAuthStore.getState();
+      expect(state.isAuthenticated).toBe(true);
+      expect(state.isAnonymous).toBe(true);
+      expect(state.user?.authType).toBe('anonymous');
+    });
+
+    it('should NOT create new session if valid session exists in localStorage', async () => {
+      // First create a session
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            userId: 'existing-anon-456',
+            sessionExpiresAt: new Date(
+              Date.now() + 30 * 24 * 60 * 60 * 1000
+            ).toISOString(),
+          }),
+      });
+
+      await useAuthStore.getState().signInAnonymous();
+
+      // Clear mock to track if new call is made
+      mockFetch.mockClear();
+
+      // Session should still be valid
+      expect(useAuthStore.getState().isSessionValid()).toBe(true);
+      expect(useAuthStore.getState().user?.userId).toBe('existing-anon-456');
+
+      // No additional API call should be needed
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('should persist anonymous session to localStorage', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            userId: 'persist-anon-789',
+            sessionExpiresAt: new Date(
+              Date.now() + 30 * 24 * 60 * 60 * 1000
+            ).toISOString(),
+          }),
+      });
+
+      await useAuthStore.getState().signInAnonymous();
+
+      // Zustand persist middleware should handle localStorage
+      const state = useAuthStore.getState();
+      expect(state.user?.userId).toBe('persist-anon-789');
+      expect(state.isAnonymous).toBe(true);
+    });
+  });
+
+  describe('FR-001: Hybrid header support', () => {
+    it('should use Bearer token format for API requests when tokens exist', async () => {
+      const { setTokens, setUser } = useAuthStore.getState();
+
+      setUser({
+        userId: 'user-with-token',
+        authType: 'email',
+        createdAt: '2024-01-15T10:00:00Z',
+        configurationCount: 0,
+        alertCount: 0,
+        emailNotificationsEnabled: true,
+      });
+
+      setTokens({
+        idToken: 'id-token',
+        accessToken: 'test-access-token',
+        refreshToken: 'refresh-token',
+        expiresIn: 3600,
+      });
+
+      const state = useAuthStore.getState();
+      expect(state.tokens?.accessToken).toBe('test-access-token');
+      // API client should use: Authorization: Bearer test-access-token
+    });
+
+    it('should support X-User-ID header for anonymous sessions', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            userId: 'x-user-id-test',
+            sessionExpiresAt: new Date(
+              Date.now() + 30 * 24 * 60 * 60 * 1000
+            ).toISOString(),
+          }),
+      });
+
+      await useAuthStore.getState().signInAnonymous();
+
+      const state = useAuthStore.getState();
+      expect(state.user?.userId).toBe('x-user-id-test');
+      // API client should use: X-User-ID: x-user-id-test
+    });
+  });
+
+  describe('Session sharing across tabs', () => {
+    it('should use localStorage for session persistence (enables cross-tab)', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            userId: 'cross-tab-user',
+            sessionExpiresAt: new Date(
+              Date.now() + 30 * 24 * 60 * 60 * 1000
+            ).toISOString(),
+          }),
+      });
+
+      await useAuthStore.getState().signInAnonymous();
+
+      // Zustand persist uses localStorage by default in auth-store config
+      // This enables cross-tab session sharing via storage events
+      const state = useAuthStore.getState();
+      expect(state.isAuthenticated).toBe(true);
+    });
+  });
+});

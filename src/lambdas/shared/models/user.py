@@ -25,6 +25,24 @@ class User(BaseModel):
     email_notifications_enabled: bool = True
     daily_email_count: int = 0  # Reset daily, max 10
 
+    # Feature 014: Entity type for GSI (required for email-index GSI sort key)
+    entity_type: str = Field(default="USER", description="Entity type for GSI queries")
+
+    # Feature 014: Session revocation fields (FR-016, FR-017)
+    revoked: bool = Field(
+        default=False, description="Whether session has been revoked server-side"
+    )
+    revoked_at: datetime | None = Field(None, description="When session was revoked")
+    revoked_reason: str | None = Field(
+        None, description="Reason for revocation (incident ID, admin action)"
+    )
+
+    # Feature 014: Merge tracking fields (FR-013, FR-014, FR-015)
+    merged_to: str | None = Field(
+        None, description="Target user ID if this account was merged"
+    )
+    merged_at: datetime | None = Field(None, description="When merge occurred")
+
     @property
     def pk(self) -> str:
         """DynamoDB partition key."""
@@ -60,11 +78,34 @@ class User(BaseModel):
             item["email"] = self.email
         if self.cognito_sub is not None:
             item["cognito_sub"] = self.cognito_sub
+
+        # Feature 014: Session revocation fields
+        item["revoked"] = self.revoked
+        if self.revoked_at is not None:
+            item["revoked_at"] = self.revoked_at.isoformat()
+        if self.revoked_reason is not None:
+            item["revoked_reason"] = self.revoked_reason
+
+        # Feature 014: Merge tracking fields
+        if self.merged_to is not None:
+            item["merged_to"] = self.merged_to
+        if self.merged_at is not None:
+            item["merged_at"] = self.merged_at.isoformat()
+
         return item
 
     @classmethod
     def from_dynamodb_item(cls, item: dict) -> "User":
         """Create User from DynamoDB item."""
+        # Parse optional datetime fields
+        revoked_at = None
+        if item.get("revoked_at"):
+            revoked_at = datetime.fromisoformat(item["revoked_at"])
+
+        merged_at = None
+        if item.get("merged_at"):
+            merged_at = datetime.fromisoformat(item["merged_at"])
+
         return cls(
             user_id=item["user_id"],
             email=item.get("email"),
@@ -76,6 +117,13 @@ class User(BaseModel):
             timezone=item.get("timezone", "America/New_York"),
             email_notifications_enabled=item.get("email_notifications_enabled", True),
             daily_email_count=item.get("daily_email_count", 0),
+            entity_type=item.get("entity_type", "USER"),
+            # Feature 014 fields
+            revoked=item.get("revoked", False),
+            revoked_at=revoked_at,
+            revoked_reason=item.get("revoked_reason"),
+            merged_to=item.get("merged_to"),
+            merged_at=merged_at,
         )
 
 

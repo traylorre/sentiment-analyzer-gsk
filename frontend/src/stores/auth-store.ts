@@ -4,6 +4,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { User, AuthTokens, AuthState, OAuthProvider } from '@/types/auth';
 import { setAuthCookies, clearAuthCookies } from '@/lib/cookies';
+import { setUserId, setAccessToken } from '@/lib/api/client';
 
 interface AuthStore extends AuthState {
   // Loading states
@@ -62,10 +63,14 @@ export const useAuthStore = create<AuthStore>()(
           isAuthenticated: !!user,
           isAnonymous,
         });
+        // Feature 014: Sync userId with API client for X-User-ID header
+        setUserId(user?.userId ?? null);
       },
 
       setTokens: (tokens) => {
         set({ tokens });
+        // Feature 014: Sync accessToken with API client for Bearer header
+        setAccessToken(tokens?.accessToken ?? null);
         // Sync cookies for middleware
         if (tokens?.accessToken) {
           const { isAnonymous } = get();
@@ -301,6 +306,9 @@ export const useAuthStore = create<AuthStore>()(
 
       reset: () => {
         clearAuthCookies();
+        // Feature 014: Clear API client auth state
+        setUserId(null);
+        setAccessToken(null);
         set(initialState);
       },
     }),
