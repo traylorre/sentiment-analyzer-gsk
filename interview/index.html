@@ -1198,29 +1198,29 @@ by_tag: tag → timestamp</div>
 
                 <div class="code-block" style="margin-bottom: 16px;">
 <span class="comment"># Basic flow: session → config → sentiment</span>
-python traffic_generator.py --env preprod --scenario basic
+python3 traffic_generator.py --env preprod --scenario basic
 
 <span class="comment"># Cache warmup: show latency improvement</span>
-python traffic_generator.py --env preprod --scenario cache
+python3 traffic_generator.py --env preprod --scenario cache
 
 <span class="comment"># Load test: 5 users, 10 requests each</span>
-python traffic_generator.py --env preprod --scenario load --users 5 --requests 10
+python3 traffic_generator.py --env preprod --scenario load --users 5 --requests 10
 
 <span class="comment"># Rate limit test: burst 50 requests</span>
-python traffic_generator.py --env preprod --scenario rate-limit
+python3 traffic_generator.py --env preprod --scenario rate-limit
 
 <span class="comment"># Run ALL scenarios</span>
-python traffic_generator.py --env preprod --scenario all
+python3 traffic_generator.py --env preprod --scenario all
                 </div>
 
                 <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-                    <button class="btn btn-primary" onclick="copyCommand('python traffic_generator.py --env preprod --scenario all')">
+                    <button class="btn btn-primary" onclick="copyCommand('python3 traffic_generator.py --env preprod --scenario all')">
                         Copy "Run All"
                     </button>
-                    <button class="btn btn-secondary" onclick="copyCommand('python traffic_generator.py --env preprod --scenario basic')">
+                    <button class="btn btn-secondary" onclick="copyCommand('python3 traffic_generator.py --env preprod --scenario basic')">
                         Copy "Basic Flow"
                     </button>
-                    <button class="btn btn-secondary" onclick="copyCommand('python traffic_generator.py --env preprod --scenario cache')">
+                    <button class="btn btn-secondary" onclick="copyCommand('python3 traffic_generator.py --env preprod --scenario cache')">
                         Copy "Cache Test"
                     </button>
                 </div>

@@ -11,9 +11,9 @@ Generates realistic traffic patterns to demonstrate:
 - Quota tracking
 
 Usage:
-    python traffic_generator.py --env preprod --scenario all
-    python traffic_generator.py --env preprod --scenario circuit-breaker
-    python traffic_generator.py --env preprod --scenario rate-limit
+    python3 traffic_generator.py --env preprod --scenario all
+    python3 traffic_generator.py --env preprod --scenario circuit-breaker
+    python3 traffic_generator.py --env preprod --scenario rate-limit
 """
 
 import argparse
