@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Literal
 
 from src.lambdas.shared.adapters.base import OHLCCandle
+from src.lambdas.shared.logging_utils import sanitize_for_log
 
 logger = logging.getLogger(__name__)
 
@@ -118,7 +119,12 @@ def calculate_atr_result(
     """
     if len(candles) < period:
         logger.warning(
-            f"Insufficient candles for {ticker}: got {len(candles)}, need {period}"
+            "Insufficient candles for ticker",
+            extra={
+                "ticker": sanitize_for_log(ticker),
+                "candle_count": len(candles),
+                "period_required": period,
+            },
         )
         return None
 
@@ -130,7 +136,13 @@ def calculate_atr_result(
     # Get current price for percentage calculation
     current_price = candles[-1].close
     if current_price <= 0:
-        logger.warning(f"Invalid closing price for {ticker}: {current_price}")
+        logger.warning(
+            "Invalid closing price for ticker",
+            extra={
+                "ticker": sanitize_for_log(ticker),
+                "current_price": current_price,
+            },
+        )
         return None
 
     atr_percent = atr / current_price
