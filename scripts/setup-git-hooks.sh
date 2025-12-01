@@ -19,7 +19,10 @@ mkdir -p "$HOOKS_DIR"
 cat > "$HOOKS_DIR/pre-push" << 'HOOK_EOF'
 #!/bin/bash
 #
-# Pre-push hook to ensure feature branches are rebased on main
+# Pre-push hook to:
+# 1. Ensure feature branches are rebased on main
+# 2. Run unit tests before pushing (prevents CI failures)
+#
 # This prevents merge commits and ensures Deploy Pipeline triggers correctly
 #
 
@@ -64,14 +67,49 @@ if [[ "$current_branch" =~ ^(feat|fix|docs|chore|refactor|test|style|perf)/ ]]; 
         echo "After resolving any conflicts:"
         echo -e "${YELLOW}  git push origin $current_branch --force-with-lease${NC}"
         echo ""
-        echo "To bypass this check (NOT RECOMMENDED):"
-        echo -e "${YELLOW}  git push --no-verify${NC}"
-        echo ""
         exit 1
     fi
 
     echo -e "${GREEN}✓ Branch is rebased on latest main${NC}"
 fi
+
+# ============================================================================
+# Run Unit Tests Before Push
+# ============================================================================
+# This catches test failures BEFORE they reach CI, saving time and preventing
+# broken builds on main.
+#
+# Skip with: git push --no-verify (NOT recommended)
+# ============================================================================
+
+echo ""
+echo -e "${YELLOW}🧪 Running unit tests before push...${NC}"
+echo ""
+
+# Run pytest with:
+# - tests/unit/ only (fast, no preprod tests)
+# - -x: stop on first failure (fast feedback)
+# - --tb=short: concise tracebacks
+# - -q: quiet output
+# - -m "not preprod": exclude preprod tests (require real AWS)
+if ! python3 -m pytest tests/unit/ -x --tb=short -q -m "not preprod" 2>&1; then
+    echo ""
+    echo -e "${RED}✗ ERROR: Unit tests failed!${NC}"
+    echo ""
+    echo "Fix the failing tests before pushing."
+    echo ""
+    echo "To run tests manually:"
+    echo -e "${YELLOW}  pytest tests/unit/ -v${NC}"
+    echo ""
+    echo "To skip this check (NOT recommended):"
+    echo -e "${YELLOW}  git push --no-verify${NC}"
+    echo ""
+    exit 1
+fi
+
+echo ""
+echo -e "${GREEN}✓ All unit tests passed${NC}"
+echo ""
 
 exit 0
 HOOK_EOF
@@ -84,7 +122,7 @@ echo "Git hooks installed successfully!"
 echo ""
 echo "The pre-push hook will:"
 echo "  - Ensure feature branches are rebased on main before pushing"
+echo "  - Run unit tests to catch failures before CI"
 echo "  - Prevent accidental merge commits"
-echo "  - Ensure Deploy Pipeline triggers correctly"
 echo ""
 echo "To bypass the hook (not recommended): git push --no-verify"

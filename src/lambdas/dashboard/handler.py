@@ -42,7 +42,8 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.middleware.cors import CORSMiddleware
+
+# CORSMiddleware removed - CORS handled by Lambda Function URL
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.security import APIKeyHeader
 from mangum import Mangum
@@ -117,36 +118,8 @@ def get_api_key() -> str:
     return ""
 
 
-def get_cors_origins() -> list[str]:
-    """
-    Get CORS allowed origins from environment.
-
-    Returns localhost for dev/test, specific domains for production.
-    Production REQUIRES explicit CORS_ORIGINS configuration.
-    """
-    cors_origins = os.environ.get("CORS_ORIGINS", "")
-    if cors_origins:
-        return [origin.strip() for origin in cors_origins.split(",")]
-
-    # Default: environment-based CORS (dev/test only)
-    if ENVIRONMENT in ("dev", "test", "preprod"):
-        # Allow localhost for local development, preprod testing, and file:// for interview demo
-        # "null" origin is sent by browsers when opening HTML files via file:// protocol
-        # GitHub Pages hosts the interview demo for external access
-        return [
-            "http://localhost:3000",
-            "http://127.0.0.1:3000",
-            "http://localhost:8080",
-            "https://traylorre.github.io",
-            "null",
-        ]
-    else:
-        # Production: no defaults, must be explicitly configured via CORS_ORIGINS
-        logger.error(
-            "CORS_ORIGINS not configured for production - dashboard will reject cross-origin requests",
-            extra={"environment": ENVIRONMENT},
-        )
-        return []
+# CORS configuration removed - handled by Lambda Function URL
+# See infrastructure/terraform/main.tf for CORS allowed origins
 
 
 # Path to static dashboard files
@@ -198,26 +171,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Configure CORS (P0-5 mitigation: no wildcard in production)
-# Environment-based CORS configuration
-cors_origins = get_cors_origins()
-if cors_origins:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=cors_origins,
-        allow_credentials=False,  # Not needed for Bearer token auth
-        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", "X-User-ID", "X-Auth-Type"],
-    )
-    logger.info(
-        "CORS configured",
-        extra={"allowed_origins": cors_origins, "environment": ENVIRONMENT},
-    )
-else:
-    logger.error(
-        "CORS not configured - API will reject cross-origin requests",
-        extra={"environment": ENVIRONMENT},
-    )
+# CORS is handled by Lambda Function URL configuration in Terraform
+# DO NOT add CORSMiddleware here - it causes duplicate Access-Control-Allow-Origin headers
+# which browsers reject with "Failed to fetch" errors.
+# See infrastructure/terraform/main.tf for CORS configuration.
+logger.info(
+    "CORS handled by Lambda Function URL",
+    extra={"environment": ENVIRONMENT},
+)
 
 # Include Feature 006 API v2 routers
 from src.lambdas.dashboard.router_v2 import include_routers
