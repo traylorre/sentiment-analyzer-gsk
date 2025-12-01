@@ -1660,7 +1660,7 @@ infrastructure/terraform/modules/<br>
                 const response = await fetch(url, {
                     method,
                     headers: {
-                        'Authorization': `Bearer ${authToken}`,
+                        'X-User-ID': authToken,
                         'Content-Type': 'application/json'
                     }
                 });
