@@ -1197,8 +1197,11 @@ by_tag: tag → timestamp</div>
                 <p style="color: var(--text-secondary); margin-bottom: 16px;">Run these commands from the <code style="background: var(--bg-primary); padding: 2px 6px; border-radius: 4px;">interview/</code> directory:</p>
 
                 <div class="code-block" style="margin-bottom: 16px;">
-<span class="comment"># Basic flow: session → config → sentiment</span>
+<span class="comment"># Basic flow: session → config → sentiment + OHLC</span>
 python3 traffic_generator.py --env preprod --scenario basic
+
+<span class="comment"># Price-Sentiment Overlay: OHLC + historical sentiment</span>
+python3 traffic_generator.py --env preprod --scenario price-sentiment
 
 <span class="comment"># Cache warmup: show latency improvement</span>
 python3 traffic_generator.py --env preprod --scenario cache
@@ -1220,6 +1223,9 @@ python3 traffic_generator.py --env preprod --scenario all
                     <button class="btn btn-secondary" onclick="copyCommand('python3 traffic_generator.py --env preprod --scenario basic')">
                         Copy "Basic Flow"
                     </button>
+                    <button class="btn btn-secondary" onclick="copyCommand('python3 traffic_generator.py --env preprod --scenario price-sentiment')">
+                        Copy "Price-Sentiment"
+                    </button>
                     <button class="btn btn-secondary" onclick="copyCommand('python3 traffic_generator.py --env preprod --scenario cache')">
                         Copy "Cache Test"
                     </button>
@@ -1233,7 +1239,16 @@ python3 traffic_generator.py --env preprod --scenario all
                         <div class="card-title">Basic Flow</div>
                     </div>
                     <div class="card-body">
-                        Creates session → Creates config with sample tickers → Lists configs → Fetches sentiment. Great for walking through the happy path.
+                        Creates session → Creates config → Lists configs → Fetches sentiment + OHLC + sentiment history. Great for walking through the happy path.
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-icon purple">📈</div>
+                        <div class="card-title">Price-Sentiment Overlay</div>
+                    </div>
+                    <div class="card-body">
+                        Tests OHLC and sentiment history endpoints with multiple tickers (AAPL, MSFT, NVDA) and time ranges (1W, 1M, 3M). Validates response shapes.
                     </div>
                 </div>
                 <div class="card">

@@ -39,7 +39,8 @@ Generates realistic traffic patterns to demonstrate system behavior.
 
 | Scenario | Command | What It Shows |
 |----------|---------|---------------|
-| Basic Flow | `--scenario basic` | Happy path: session → config → sentiment |
+| Basic Flow | `--scenario basic` | Happy path: session → config → sentiment + OHLC |
+| Price-Sentiment | `--scenario price-sentiment` | OHLC + historical sentiment with shape validation |
 | Cache Warmup | `--scenario cache` | Cold vs warm latency (~200ms → ~50ms) |
 | Load Test | `--scenario load` | Concurrent users, horizontal scaling |
 | Rate Limit | `--scenario rate-limit` | Burst traffic, 429 responses |
