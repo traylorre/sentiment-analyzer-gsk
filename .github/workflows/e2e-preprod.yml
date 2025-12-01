@@ -109,7 +109,7 @@ jobs:
           TEST_EMAIL_DOMAIN: ${{ secrets.TEST_EMAIL_DOMAIN }}
 
       - name: Upload test results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         if: always()
         with:
           name: e2e-test-results
