@@ -2,14 +2,21 @@
 
 Used for testing without hitting the real Tiingo API.
 Returns deterministic data based on seed for reproducibility.
+Supports failure injection for error resilience testing.
 """
 
+from __future__ import annotations
+
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from src.lambdas.shared.adapters.base import NewsArticle, OHLCCandle, SentimentData
 from src.lambdas.shared.adapters.tiingo import TiingoAdapter
 from tests.fixtures.synthetic.news_generator import create_news_generator
 from tests.fixtures.synthetic.ticker_generator import create_ticker_generator
+
+if TYPE_CHECKING:
+    from tests.fixtures.mocks.failure_injector import FailureInjector
 
 
 class MockTiingoAdapter(TiingoAdapter):
@@ -17,6 +24,12 @@ class MockTiingoAdapter(TiingoAdapter):
 
     Overrides API calls to return deterministic synthetic data
     instead of making real HTTP requests.
+
+    Supports failure injection for testing error handling:
+        - HTTP errors (500, 502, 503, 504, 429)
+        - Connection errors (timeout, refused, DNS)
+        - Malformed responses (invalid JSON, empty, truncated)
+        - Field-level errors (missing fields, null/NaN/Infinity values)
     """
 
     def __init__(
@@ -24,18 +37,21 @@ class MockTiingoAdapter(TiingoAdapter):
         seed: int = 42,
         fail_mode: bool = False,
         latency_ms: int = 0,
+        failure_injector: FailureInjector | None = None,
     ):
         """Initialize mock adapter.
 
         Args:
             seed: Random seed for synthetic data
-            fail_mode: If True, all calls raise errors
+            fail_mode: If True, all calls raise errors (legacy, use failure_injector)
             latency_ms: Simulated latency (not implemented in mock)
+            failure_injector: Optional FailureInjector for fine-grained failure control
         """
         # Don't call super().__init__ to avoid needing real API key
         self.seed = seed
         self.fail_mode = fail_mode
         self.latency_ms = latency_ms
+        self.failure_injector = failure_injector
         self._ticker_gen = create_ticker_generator(seed=seed)
         self._news_gen = create_news_generator(seed=seed)
 
@@ -57,6 +73,19 @@ class MockTiingoAdapter(TiingoAdapter):
         self.get_news_calls.clear()
         self.get_ohlc_calls.clear()
         self.get_sentiment_calls.clear()
+        if self.failure_injector:
+            self.failure_injector.reset()
+
+    def _check_failure_injection(self) -> None:
+        """Check if failure should be injected and raise if configured.
+
+        Raises:
+            Various exceptions based on failure_injector configuration
+        """
+        if self.failure_injector:
+            self.failure_injector.increment_call_count()
+            if self.failure_injector.should_fail():
+                self.failure_injector.raise_if_configured()
 
     def get_news(
         self,
@@ -84,6 +113,9 @@ class MockTiingoAdapter(TiingoAdapter):
                 "limit": limit,
             }
         )
+
+        # Check for injected failures first
+        self._check_failure_injection()
 
         if self.fail_mode:
             raise RuntimeError("Mock Tiingo API failure (fail_mode=True)")
@@ -113,6 +145,9 @@ class MockTiingoAdapter(TiingoAdapter):
             None (Tiingo doesn't provide sentiment data)
         """
         self.get_sentiment_calls.append({"ticker": ticker})
+
+        # Check for injected failures first
+        self._check_failure_injection()
 
         if self.fail_mode:
             raise RuntimeError("Mock Tiingo API failure (fail_mode=True)")
@@ -147,6 +182,9 @@ class MockTiingoAdapter(TiingoAdapter):
             }
         )
 
+        # Check for injected failures first
+        self._check_failure_injection()
+
         if self.fail_mode:
             raise RuntimeError("Mock Tiingo API failure (fail_mode=True)")
 
@@ -169,14 +207,18 @@ class MockTiingoAdapter(TiingoAdapter):
 def create_mock_tiingo(
     seed: int = 42,
     fail_mode: bool = False,
+    failure_injector: FailureInjector | None = None,
 ) -> MockTiingoAdapter:
     """Factory function to create a mock Tiingo adapter.
 
     Args:
         seed: Random seed for synthetic data
-        fail_mode: If True, all calls raise errors
+        fail_mode: If True, all calls raise errors (legacy)
+        failure_injector: Optional FailureInjector for fine-grained control
 
     Returns:
         Configured MockTiingoAdapter
     """
-    return MockTiingoAdapter(seed=seed, fail_mode=fail_mode)
+    return MockTiingoAdapter(
+        seed=seed, fail_mode=fail_mode, failure_injector=failure_injector
+    )

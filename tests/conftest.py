@@ -308,3 +308,206 @@ def synthetic_data():
             "business_count": 2,
         }
         # Cleanup happens automatically via context manager
+
+
+# =============================================================================
+# Feature 012: OHLC & Sentiment History Test Infrastructure
+# =============================================================================
+#
+# Fixtures for testing OHLC and sentiment history endpoints with:
+# - Failure injection for error resilience testing
+# - Mock adapters with configurable behavior
+# - Validators for response verification
+# - Test oracle for expected value computation
+
+
+@pytest.fixture
+def failure_injector():
+    """Default (no failure) injector."""
+    from tests.fixtures.mocks.failure_injector import FailureInjector
+
+    return FailureInjector()
+
+
+@pytest.fixture
+def tiingo_500_error():
+    """Failure injector: Tiingo returns HTTP 500."""
+    from tests.fixtures.mocks.failure_injector import create_http_500_injector
+
+    return create_http_500_injector()
+
+
+@pytest.fixture
+def tiingo_502_error():
+    """Failure injector: Tiingo returns HTTP 502 Bad Gateway."""
+    from tests.fixtures.mocks.failure_injector import create_http_502_injector
+
+    return create_http_502_injector()
+
+
+@pytest.fixture
+def tiingo_503_error():
+    """Failure injector: Tiingo returns HTTP 503 Service Unavailable."""
+    from tests.fixtures.mocks.failure_injector import create_http_503_injector
+
+    return create_http_503_injector()
+
+
+@pytest.fixture
+def tiingo_504_error():
+    """Failure injector: Tiingo returns HTTP 504 Gateway Timeout."""
+    from tests.fixtures.mocks.failure_injector import create_http_504_injector
+
+    return create_http_504_injector()
+
+
+@pytest.fixture
+def tiingo_429_error():
+    """Failure injector: Tiingo returns HTTP 429 Rate Limited."""
+    from tests.fixtures.mocks.failure_injector import create_http_429_injector
+
+    return create_http_429_injector()
+
+
+@pytest.fixture
+def tiingo_timeout():
+    """Failure injector: Tiingo connection timeout."""
+    from tests.fixtures.mocks.failure_injector import create_timeout_injector
+
+    return create_timeout_injector()
+
+
+@pytest.fixture
+def tiingo_connection_refused():
+    """Failure injector: Tiingo connection refused."""
+    from tests.fixtures.mocks.failure_injector import create_connection_refused_injector
+
+    return create_connection_refused_injector()
+
+
+@pytest.fixture
+def tiingo_dns_failure():
+    """Failure injector: Tiingo DNS resolution failure."""
+    from tests.fixtures.mocks.failure_injector import create_dns_failure_injector
+
+    return create_dns_failure_injector()
+
+
+@pytest.fixture
+def tiingo_invalid_json():
+    """Failure injector: Tiingo returns invalid JSON."""
+    from tests.fixtures.mocks.failure_injector import create_invalid_json_injector
+
+    return create_invalid_json_injector()
+
+
+@pytest.fixture
+def tiingo_empty_response():
+    """Failure injector: Tiingo returns empty object."""
+    from tests.fixtures.mocks.failure_injector import create_empty_response_injector
+
+    return create_empty_response_injector()
+
+
+@pytest.fixture
+def tiingo_empty_array():
+    """Failure injector: Tiingo returns empty array."""
+    from tests.fixtures.mocks.failure_injector import create_empty_array_injector
+
+    return create_empty_array_injector()
+
+
+@pytest.fixture
+def mock_tiingo(failure_injector):
+    """Mock Tiingo adapter with optional failure injection."""
+    from tests.fixtures.mocks.mock_tiingo import MockTiingoAdapter
+
+    return MockTiingoAdapter(seed=42, failure_injector=failure_injector)
+
+
+@pytest.fixture
+def mock_finnhub(failure_injector):
+    """Mock Finnhub adapter with optional failure injection."""
+    from tests.fixtures.mocks.mock_finnhub import MockFinnhubAdapter
+
+    return MockFinnhubAdapter(seed=42, failure_injector=failure_injector)
+
+
+@pytest.fixture
+def mock_tiingo_failing(tiingo_500_error):
+    """Mock Tiingo adapter that always fails with HTTP 500."""
+    from tests.fixtures.mocks.mock_tiingo import MockTiingoAdapter
+
+    return MockTiingoAdapter(seed=42, failure_injector=tiingo_500_error)
+
+
+@pytest.fixture
+def mock_finnhub_failing(tiingo_500_error):
+    """Mock Finnhub adapter that always fails with HTTP 500."""
+    from tests.fixtures.mocks.mock_finnhub import MockFinnhubAdapter
+
+    return MockFinnhubAdapter(seed=42, failure_injector=tiingo_500_error)
+
+
+@pytest.fixture
+def ohlc_validator():
+    """OHLC response validator."""
+    from tests.fixtures.validators import OHLCValidator
+
+    return OHLCValidator()
+
+
+@pytest.fixture
+def sentiment_validator():
+    """Sentiment response validator."""
+    from tests.fixtures.validators import SentimentValidator
+
+    return SentimentValidator()
+
+
+@pytest.fixture
+def test_oracle():
+    """Test oracle for computing expected responses."""
+    from tests.fixtures.oracles import TestOracle
+
+    return TestOracle(seed=42)
+
+
+@pytest.fixture
+def edge_case_generator():
+    """Edge case generator for boundary testing."""
+    from datetime import date
+
+    from tests.fixtures.synthetic.edge_case_generator import EdgeCaseGenerator
+
+    return EdgeCaseGenerator(base_date=date.today())
+
+
+@pytest.fixture
+def ohlc_test_client(mock_tiingo, mock_finnhub):
+    """Test client for OHLC endpoint with mock adapters injected.
+
+    Uses FastAPI's dependency override to inject mock adapters
+    instead of real Tiingo/Finnhub adapters.
+    """
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from src.lambdas.dashboard.ohlc import (
+        get_finnhub_adapter,
+        get_tiingo_adapter,
+        router,
+    )
+
+    app = FastAPI()
+    app.include_router(router)
+
+    # Override adapter dependencies with mocks
+    app.dependency_overrides[get_tiingo_adapter] = lambda: mock_tiingo
+    app.dependency_overrides[get_finnhub_adapter] = lambda: mock_finnhub
+
+    with TestClient(app) as client:
+        yield client
+
+    # Cleanup
+    app.dependency_overrides.clear()
