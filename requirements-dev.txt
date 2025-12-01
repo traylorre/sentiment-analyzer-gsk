@@ -31,7 +31,7 @@ responses==0.25.8
 
 # Code Quality
 black==25.11.0          # Code formatter
-ruff==0.14.5             # Fast linter (replaces flake8, isort)
+ruff==0.14.7             # Fast linter (replaces flake8, isort)
 pre-commit==3.6.0       # Git hooks framework
 bandit==1.7.10          # Security vulnerability scanner (local CodeQL alternative)
 
