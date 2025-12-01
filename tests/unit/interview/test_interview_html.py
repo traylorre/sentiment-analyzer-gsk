@@ -367,3 +367,32 @@ class TestContentIntegrity:
             assert (
                 f'id="{stat_id}"' in content
             ), f"Stat element '{stat_id}' should exist"
+
+
+class TestDashboardLink:
+    """Tests for live dashboard link feature."""
+
+    def test_dashboard_link_exists(self):
+        """Live dashboard link element should exist."""
+        content = get_html_content()
+        assert 'id="live-dashboard-link"' in content
+
+    def test_last_deployed_element_exists(self):
+        """Last deployed date element should exist."""
+        content = get_html_content()
+        assert 'id="last-deployed"' in content
+
+    def test_fetch_deployment_metadata_function(self):
+        """fetchDeploymentMetadata function should be defined."""
+        content = get_html_content()
+        assert "function fetchDeploymentMetadata" in content
+
+    def test_update_dashboard_link_function(self):
+        """updateDashboardLink function should be defined."""
+        content = get_html_content()
+        assert "function updateDashboardLink" in content
+
+    def test_metadata_url_defined(self):
+        """Metadata URL constant should be defined."""
+        content = get_html_content()
+        assert "METADATA_URL" in content
