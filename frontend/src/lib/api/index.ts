@@ -7,3 +7,4 @@ export { sentimentApi } from './sentiment';
 export { alertsApi } from './alerts';
 export { tickersApi } from './tickers';
 export { notificationsApi } from './notifications';
+export { ohlcApi, fetchOHLCData, fetchSentimentHistory } from './ohlc';

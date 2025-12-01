@@ -33,6 +33,7 @@ from src.lambdas.dashboard import auth as auth_service
 from src.lambdas.dashboard import configurations as config_service
 from src.lambdas.dashboard import market as market_service
 from src.lambdas.dashboard import notifications as notification_service
+from src.lambdas.dashboard import ohlc as ohlc_module
 from src.lambdas.dashboard import quota as quota_service
 from src.lambdas.dashboard import sentiment as sentiment_service
 from src.lambdas.dashboard import tickers as ticker_service
@@ -1266,3 +1267,5 @@ def include_routers(app):
     app.include_router(alert_router)
     app.include_router(notification_router)
     app.include_router(market_router)
+    # Feature 011: Price-Sentiment Overlay
+    app.include_router(ohlc_module.router)

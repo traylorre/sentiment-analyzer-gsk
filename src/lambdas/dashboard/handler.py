@@ -426,6 +426,8 @@ async def api_index():
                 "tickers": {
                     "GET /api/v2/tickers/search": "Search tickers",
                     "GET /api/v2/tickers/validate": "Validate ticker symbol",
+                    "GET /api/v2/tickers/{ticker}/ohlc": "Get OHLC price data",
+                    "GET /api/v2/tickers/{ticker}/sentiment/history": "Get sentiment history",
                 },
                 "alerts": {
                     "POST /api/v2/alerts": "Create alert",
