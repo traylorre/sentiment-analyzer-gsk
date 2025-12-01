@@ -420,7 +420,7 @@ class TestCreateConfiguration:
         mock_client.request.return_value = mock_response
 
         config = await generator.create_configuration(
-            mock_client, "valid-token", "Tech Stocks", ["AAPL", "MSFT"]
+            mock_client, "valid-user-id", "Tech Stocks", ["AAPL", "MSFT"]
         )
 
         assert config is not None
@@ -428,7 +428,7 @@ class TestCreateConfiguration:
 
         # Verify correct headers were sent
         call_args = mock_client.request.call_args
-        assert call_args.kwargs["headers"]["Authorization"] == "Bearer valid-token"
+        assert call_args.kwargs["headers"]["X-User-ID"] == "valid-user-id"
 
     @pytest.mark.asyncio
     async def test_config_unauthorized(self, generator):
@@ -537,10 +537,10 @@ class TestChickenAndEggHazards:
 
         await generator.run_scenario_basic_flow(mock_client)
 
-        # Verify config request used session token
+        # Verify config request used session user_id
         calls = mock_client.request.call_args_list
         config_call = calls[2]  # Third call is config creation
-        assert "Bearer test-token-123" in str(config_call)
+        assert "user-abc12345" in str(config_call)  # X-User-ID header
 
 
 class TestTimingHazards:
