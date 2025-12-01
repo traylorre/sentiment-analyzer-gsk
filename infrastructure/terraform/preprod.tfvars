@@ -19,10 +19,11 @@ tags = {
 # in the Terraform modules with environment-appropriate defaults.
 # DynamoDB uses on-demand billing (no reserved capacity).
 
-# CORS: Preprod allows the CloudFront dashboard domain and localhost for testing.
+# CORS: Preprod allows the CloudFront dashboard domain, GitHub Pages, and localhost for testing.
 # No wildcard allowed per security policy.
 cors_allowed_origins = [
   "https://d2z9uvoj5xlbd2.cloudfront.net", # CloudFront dashboard
+  "https://traylorre.github.io",           # GitHub Pages interview demo
   "http://localhost:3000",                 # Local development
   "http://localhost:8080"                  # Alternative local dev
 ]
