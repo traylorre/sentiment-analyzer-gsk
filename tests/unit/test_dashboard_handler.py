@@ -388,131 +388,46 @@ class TestSecurityMitigations:
     - P1-2: IP logging on authentication failures (forensic tracking)
     """
 
-    def test_cors_origins_dev_environment(self, monkeypatch):
+    def test_cors_handled_by_lambda_function_url(self, caplog):
         """
-        P0-5: Test CORS returns localhost for dev/test environments.
+        P0-5: Test CORS is delegated to Lambda Function URL.
 
-        Verifies dev environments get localhost CORS by default.
+        CORS is now handled at the infrastructure level (Lambda Function URL
+        configuration in Terraform), NOT at the application level. This prevents
+        duplicate CORS headers which browsers reject.
+
+        See: infrastructure/terraform/main.tf for CORS configuration.
         """
+        import logging
+
+        caplog.set_level(logging.INFO)
+
         from importlib import reload
 
         from src.lambdas.dashboard import handler as handler_module
 
-        # Store original values to restore later
-        orig_table = handler_module.DYNAMODB_TABLE
-        orig_env = handler_module.ENVIRONMENT
+        reload(handler_module)
 
-        try:
-            monkeypatch.setenv("ENVIRONMENT", "dev")
-            monkeypatch.setenv("DYNAMODB_TABLE", "test-table")
-            reload(handler_module)
+        # Should log that CORS is handled by Lambda Function URL
+        assert "CORS handled by Lambda Function URL" in caplog.text
 
-            cors_origins = handler_module.get_cors_origins()
-
-            assert "http://localhost:3000" in cors_origins
-            assert "http://127.0.0.1:3000" in cors_origins
-        finally:
-            # Restore original env vars and reload
-            monkeypatch.setenv("ENVIRONMENT", orig_env)
-            monkeypatch.setenv("DYNAMODB_TABLE", orig_table)
-            reload(handler_module)
-
-    def test_cors_origins_production_requires_explicit_config(
-        self, monkeypatch, caplog
-    ):
+    def test_no_cors_middleware_in_app(self):
         """
-        P0-5: Test production environment requires explicit CORS_ORIGINS.
+        P0-5: Test FastAPI app does NOT have CORSMiddleware.
 
-        Verifies production does NOT default to wildcard or localhost.
+        CORSMiddleware was removed to prevent duplicate CORS headers.
+        Lambda Function URL handles CORS exclusively.
         """
-        from importlib import reload
+        from starlette.middleware.cors import CORSMiddleware
 
-        from src.lambdas.dashboard import handler as handler_module
+        from src.lambdas.dashboard.handler import app
 
-        # Store original values to restore later
-        orig_table = handler_module.DYNAMODB_TABLE
-        orig_env = handler_module.ENVIRONMENT
-
-        try:
-            monkeypatch.setenv("ENVIRONMENT", "production")
-            monkeypatch.setenv("DYNAMODB_TABLE", "test-table")
-            monkeypatch.delenv("CORS_ORIGINS", raising=False)
-            reload(handler_module)
-
-            cors_origins = handler_module.get_cors_origins()
-
-            # Production without CORS_ORIGINS should return empty list
-            assert cors_origins == []
-
-            # Should log error
-            assert "CORS_ORIGINS not configured for production" in caplog.text
-        finally:
-            # Restore original env vars and reload
-            monkeypatch.setenv("ENVIRONMENT", orig_env)
-            monkeypatch.setenv("DYNAMODB_TABLE", orig_table)
-            reload(handler_module)
-
-    def test_cors_origins_explicit_configuration(self, monkeypatch):
-        """
-        P0-5: Test CORS_ORIGINS env var is respected.
-
-        Verifies explicit CORS configuration works for any environment.
-        """
-        from importlib import reload
-
-        from src.lambdas.dashboard import handler as handler_module
-
-        # Store original values to restore later
-        orig_table = handler_module.DYNAMODB_TABLE
-        orig_env = handler_module.ENVIRONMENT
-
-        try:
-            monkeypatch.setenv("ENVIRONMENT", "production")
-            monkeypatch.setenv("DYNAMODB_TABLE", "test-table")
-            monkeypatch.setenv(
-                "CORS_ORIGINS", "https://example.com,https://dashboard.example.com"
+        # Check that no CORSMiddleware is in the middleware stack
+        for middleware in app.user_middleware:
+            assert middleware.cls != CORSMiddleware, (
+                "CORSMiddleware should not be added - "
+                "CORS is handled by Lambda Function URL"
             )
-            reload(handler_module)
-
-            cors_origins = handler_module.get_cors_origins()
-
-            assert "https://example.com" in cors_origins
-            assert "https://dashboard.example.com" in cors_origins
-            assert len(cors_origins) == 2
-        finally:
-            # Restore original env vars and reload
-            monkeypatch.setenv("ENVIRONMENT", orig_env)
-            monkeypatch.setenv("DYNAMODB_TABLE", orig_table)
-            reload(handler_module)
-
-    def test_cors_middleware_not_added_if_no_origins(self, monkeypatch, caplog):
-        """
-        P0-5: Test CORS middleware is not added if origins list is empty.
-
-        Verifies production without CORS config rejects cross-origin requests.
-        """
-        from importlib import reload
-
-        from src.lambdas.dashboard import handler as handler_module
-
-        # Store original values to restore later
-        orig_table = handler_module.DYNAMODB_TABLE
-        orig_env = handler_module.ENVIRONMENT
-
-        try:
-            monkeypatch.setenv("ENVIRONMENT", "production")
-            monkeypatch.setenv("DYNAMODB_TABLE", "test-table")
-            monkeypatch.setenv("API_KEY", "test-key")
-            monkeypatch.delenv("CORS_ORIGINS", raising=False)
-            reload(handler_module)
-
-            # Should log that CORS is not configured
-            assert "CORS not configured" in caplog.text
-        finally:
-            # Restore original env vars and reload
-            monkeypatch.setenv("ENVIRONMENT", orig_env)
-            monkeypatch.setenv("DYNAMODB_TABLE", orig_table)
-            reload(handler_module)
 
     def test_authentication_logs_client_ip_on_failure(
         self, client, auth_headers, caplog
