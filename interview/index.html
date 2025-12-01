@@ -578,6 +578,12 @@
             <span style="font-size: 11px; background: var(--accent-purple); color: white; padding: 2px 8px; border-radius: 4px; margin-left: 8px;">Interview Mode</span>
         </div>
         <div style="display: flex; align-items: center; gap: 16px;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-right: 16px;">
+                <a id="live-dashboard-link" href="#" target="_blank" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px; text-decoration: none;">
+                    View Live Dashboard
+                </a>
+                <span id="last-deployed" style="font-size: 11px; color: var(--text-muted);"></span>
+            </div>
             <div style="display: flex; align-items: center; gap: 8px;">
                 <span id="interview-timer" style="font-family: 'SF Mono', Monaco, monospace; font-size: 18px; font-weight: 600; color: var(--accent-green);">00:00</span>
                 <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;" onclick="startInterviewTimer()">Start</button>
@@ -1505,6 +1511,44 @@ infrastructure/terraform/modules/<br>
         let currentEnv = 'preprod';
         let authToken = null;
 
+        // Deployment metadata URL (S3 bucket with public read)
+        const METADATA_URL = 'https://preprod-sentiment-lambda-deployments.s3.amazonaws.com/deployment-metadata.json';
+
+        // Cache for deployment metadata
+        let deploymentMetadata = null;
+
+        // Fetch deployment metadata from S3
+        async function fetchDeploymentMetadata() {
+            if (deploymentMetadata) return deploymentMetadata;
+
+            try {
+                const response = await fetch(METADATA_URL + '?t=' + Date.now());
+                if (!response.ok) throw new Error('Failed to fetch metadata');
+                deploymentMetadata = await response.json();
+                return deploymentMetadata;
+            } catch (error) {
+                console.warn('Could not fetch deployment metadata:', error);
+                return null;
+            }
+        }
+
+        // Update dashboard link and deployment date
+        function updateDashboardLink(env, metadata) {
+            const linkEl = document.getElementById('live-dashboard-link');
+            const dateEl = document.getElementById('last-deployed');
+
+            // Always update the link URL
+            linkEl.href = ENVIRONMENTS[env];
+
+            if (metadata && metadata[env]) {
+                const date = new Date(metadata[env].last_deployed);
+                const formatted = date.toISOString().slice(0, 16).replace('T', ' ');
+                dateEl.textContent = `Deployed: ${formatted} UTC`;
+            } else {
+                dateEl.textContent = '';
+            }
+        }
+
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
             initNavigation();
@@ -1540,13 +1584,22 @@ infrastructure/terraform/modules/<br>
 
         // Environment Toggle
         function initEnvToggle() {
+            // Fetch metadata on initial load
+            fetchDeploymentMetadata().then(metadata => {
+                updateDashboardLink(currentEnv, metadata);
+            });
+
             document.querySelectorAll('.env-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
+                btn.addEventListener('click', async () => {
                     document.querySelectorAll('.env-btn').forEach(b => b.classList.remove('active'));
                     btn.classList.add('active');
                     currentEnv = btn.dataset.env;
                     showToast(`Switched to ${currentEnv}`, 'success');
                     fetchHealthStats();
+
+                    // Update dashboard link
+                    const metadata = await fetchDeploymentMetadata();
+                    updateDashboardLink(currentEnv, metadata);
                 });
             });
         }

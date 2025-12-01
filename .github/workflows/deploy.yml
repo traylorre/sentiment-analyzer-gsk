@@ -731,6 +731,34 @@ jobs:
           echo ""
           echo "🎉 All smoke tests passed! Deployment is healthy."
 
+      - name: Update Deployment Metadata (Preprod)
+        if: success()
+        run: |
+          ENV="preprod"
+          BUCKET="preprod-sentiment-lambda-deployments"
+          DASHBOARD_URL="${{ steps.outputs.outputs.dashboard_url }}"
+          TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          SHA="${GITHUB_SHA:0:7}"
+
+          echo "📝 Updating deployment metadata for ${ENV}..."
+
+          # Download existing metadata or create empty
+          aws s3 cp s3://${BUCKET}/deployment-metadata.json /tmp/metadata.json 2>/dev/null || echo '{}' > /tmp/metadata.json
+
+          # Update metadata for this environment
+          jq --arg env "$ENV" \
+             --arg url "$DASHBOARD_URL" \
+             --arg ts "$TIMESTAMP" \
+             --arg sha "$SHA" \
+             '.[$env] = {"dashboard_url": $url, "last_deployed": $ts, "git_sha": $sha}' \
+             /tmp/metadata.json > /tmp/metadata-new.json
+
+          # Upload to S3
+          aws s3 cp /tmp/metadata-new.json s3://${BUCKET}/deployment-metadata.json \
+            --content-type "application/json"
+
+          echo "✅ Metadata updated: $(cat /tmp/metadata-new.json)"
+
       - name: Record Deployment
         if: always()
         run: |
@@ -1072,6 +1100,34 @@ jobs:
           echo "api_url=${API_URL}" >> $GITHUB_OUTPUT
           echo "Production Dashboard URL: ${DASHBOARD_URL}"
           echo "Production API URL: ${API_URL}"
+
+      - name: Update Deployment Metadata (Production)
+        if: success()
+        run: |
+          ENV="prod"
+          BUCKET="preprod-sentiment-lambda-deployments"
+          DASHBOARD_URL="${{ steps.outputs.outputs.dashboard_url }}"
+          TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          SHA="${GITHUB_SHA:0:7}"
+
+          echo "📝 Updating deployment metadata for ${ENV}..."
+
+          # Download existing metadata or create empty
+          aws s3 cp s3://${BUCKET}/deployment-metadata.json /tmp/metadata.json 2>/dev/null || echo '{}' > /tmp/metadata.json
+
+          # Update metadata for this environment
+          jq --arg env "$ENV" \
+             --arg url "$DASHBOARD_URL" \
+             --arg ts "$TIMESTAMP" \
+             --arg sha "$SHA" \
+             '.[$env] = {"dashboard_url": $url, "last_deployed": $ts, "git_sha": $sha}' \
+             /tmp/metadata.json > /tmp/metadata-new.json
+
+          # Upload to S3
+          aws s3 cp /tmp/metadata-new.json s3://${BUCKET}/deployment-metadata.json \
+            --content-type "application/json"
+
+          echo "✅ Metadata updated: $(cat /tmp/metadata-new.json)"
 
   # ========================================================================
   # JOB 6: Production Canary Test
