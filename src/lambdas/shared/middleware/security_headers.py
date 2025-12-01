@@ -12,6 +12,17 @@ Security Notes:
     - X-Content-Type-Options: Prevents MIME sniffing
     - X-Frame-Options: Prevents clickjacking
     - Referrer-Policy: Controls referrer information
+
+CORS Architecture (as of 2024-12):
+    CORS is handled by Lambda Function URL configuration in Terraform, NOT by this
+    middleware. This prevents duplicate Access-Control-Allow-Origin headers which
+    cause browser errors. The Lambda URL CORS config handles:
+    - Access-Control-Allow-Origin (from cors_allowed_origins in tfvars)
+    - Access-Control-Allow-Methods
+    - Access-Control-Allow-Headers
+    - Access-Control-Expose-Headers (rate-limit headers)
+    - Access-Control-Max-Age
+    - Preflight (OPTIONS) requests are handled automatically by AWS
 """
 
 import os
@@ -62,49 +73,19 @@ def get_cors_headers(
 ) -> dict[str, str]:
     """Get CORS headers for response.
 
+    DEPRECATED: CORS is now handled by Lambda Function URL configuration.
+    This function is kept for backwards compatibility but returns an empty dict.
+    See module docstring for CORS architecture details.
+
     Args:
-        origin: Request origin header
-        allow_credentials: Whether to allow credentials
+        origin: Request origin header (ignored)
+        allow_credentials: Whether to allow credentials (ignored)
 
     Returns:
-        Dict of CORS headers
+        Empty dict - CORS headers are added by Lambda Function URL
     """
-    # Define allowed origins
-    allowed_origins = [
-        DASHBOARD_URL,
-        "http://localhost:3000",  # Local development
-        "http://localhost:5173",  # Vite dev server
-    ]
-
-    # In dev/test, also allow localhost with any port
-    if ENVIRONMENT in ("dev", "test", "local"):
-        if origin and origin.startswith("http://localhost"):
-            allowed_origins.append(origin)
-
-    # Check if origin is allowed
-    if origin and origin in allowed_origins:
-        cors_origin = origin
-    else:
-        cors_origin = DASHBOARD_URL
-
-    headers = {
-        "Access-Control-Allow-Origin": cors_origin,
-        "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-        "Access-Control-Allow-Headers": (
-            "Content-Type, Authorization, X-Requested-With, "
-            "X-Session-Token, X-Anonymous-Token, X-Captcha-Token"
-        ),
-        "Access-Control-Expose-Headers": (
-            "X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, "
-            "X-Request-Id, Retry-After"
-        ),
-        "Access-Control-Max-Age": "86400",  # 24 hours
-    }
-
-    if allow_credentials:
-        headers["Access-Control-Allow-Credentials"] = "true"
-
-    return headers
+    # CORS is handled by Lambda Function URL - don't add duplicate headers
+    return {}
 
 
 def add_security_headers(
@@ -137,11 +118,8 @@ def add_security_headers(
     if "Content-Security-Policy" not in headers:
         headers["Content-Security-Policy"] = HTML_CSP if is_html else API_CSP
 
-    # Add CORS headers
-    cors_headers = get_cors_headers(origin)
-    for header, value in cors_headers.items():
-        if header not in headers:
-            headers[header] = value
+    # NOTE: CORS headers are NOT added here - they are handled by Lambda Function URL
+    # configuration in Terraform. Adding them here would cause duplicate headers.
 
     # Add Cache-Control for API responses (no caching by default)
     if "Cache-Control" not in headers:
@@ -153,19 +131,22 @@ def add_security_headers(
 def get_preflight_response(origin: str | None = None) -> dict[str, Any]:
     """Get response for CORS preflight (OPTIONS) request.
 
+    NOTE: When using Lambda Function URL with CORS configured, AWS handles
+    OPTIONS preflight requests automatically before invoking the Lambda.
+    This function is kept for backwards compatibility but Lambda URL CORS
+    should handle preflight in production.
+
     Args:
-        origin: Request origin header
+        origin: Request origin header (ignored - CORS handled by Lambda URL)
 
     Returns:
-        Lambda response for OPTIONS request
+        Lambda response for OPTIONS request with security headers only
     """
-    cors_headers = get_cors_headers(origin)
     security_headers = dict(SECURITY_HEADERS)
 
     return {
         "statusCode": 204,
         "headers": {
-            **cors_headers,
             **security_headers,
             "Content-Length": "0",
         },
