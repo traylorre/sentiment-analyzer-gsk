@@ -909,7 +909,8 @@ by_tag: tag → timestamp</div>
                     </button>
                 </div>
                 <div class="api-demo-body">
-                    <div id="config-create-response" class="response-box">Creates a watchlist with AAPL, MSFT, NVDA</div>
+                    <pre style="margin-bottom: 8px; padding: 8px; background: var(--bg-secondary); border-radius: 4px; font-size: 12px; color: var(--text-secondary);">{"name": "Tech Watchlist", "tickers": ["AAPL", "MSFT", "NVDA"]}</pre>
+                    <div id="config-create-response" class="response-box">Click "Create Tech Watchlist" to create a configuration</div>
                 </div>
             </div>
 
@@ -1713,11 +1714,7 @@ infrastructure/terraform/modules/<br>
                     },
                     body: JSON.stringify({
                         name: 'Tech Watchlist',
-                        tickers: [
-                            { symbol: 'AAPL', weight: 0.4 },
-                            { symbol: 'MSFT', weight: 0.35 },
-                            { symbol: 'NVDA', weight: 0.25 }
-                        ]
+                        tickers: ['AAPL', 'MSFT', 'NVDA']
                     })
                 });
                 const data = await response.json();
