@@ -6,12 +6,15 @@ Generates realistic traffic patterns to demonstrate:
 - Authentication flows
 - Configuration management
 - Sentiment analysis
+- Price-sentiment overlay (OHLC + historical sentiment)
 - Circuit breaker behavior
 - Rate limiting
 - Quota tracking
 
 Usage:
     python3 traffic_generator.py --env preprod --scenario all
+    python3 traffic_generator.py --env preprod --scenario basic
+    python3 traffic_generator.py --env preprod --scenario price-sentiment
     python3 traffic_generator.py --env preprod --scenario circuit-breaker
     python3 traffic_generator.py --env preprod --scenario rate-limit
 """
@@ -232,6 +235,53 @@ class TrafficGenerator:
             return data
         return None
 
+    async def get_ohlc(
+        self,
+        client: httpx.AsyncClient,
+        user_id: str,
+        ticker: str,
+        time_range: str = "1M",
+    ) -> dict | None:
+        """Get OHLC price data for a ticker."""
+        headers = {"X-User-ID": user_id}
+        status, data = await self.make_request(
+            client,
+            "GET",
+            f"/api/v2/tickers/{ticker}/ohlc?range={time_range}",
+            headers=headers,
+        )
+        if status == 200 and data:
+            candle_count = data.get("count", 0)
+            self.log(f"Retrieved {candle_count} OHLC candles for {ticker}", "")
+            return data
+        elif status == 404:
+            self.log(f"No OHLC data for {ticker}", "")
+        return None
+
+    async def get_sentiment_history(
+        self,
+        client: httpx.AsyncClient,
+        user_id: str,
+        ticker: str,
+        time_range: str = "1M",
+        source: str = "aggregated",
+    ) -> dict | None:
+        """Get historical sentiment data for a ticker."""
+        headers = {"X-User-ID": user_id}
+        status, data = await self.make_request(
+            client,
+            "GET",
+            f"/api/v2/tickers/{ticker}/sentiment/history?range={time_range}&source={source}",
+            headers=headers,
+        )
+        if status == 200 and data:
+            point_count = data.get("count", 0)
+            self.log(f"Retrieved {point_count} sentiment points for {ticker}", "")
+            return data
+        elif status == 404:
+            self.log(f"No sentiment history for {ticker}", "")
+        return None
+
     async def run_scenario_basic_flow(self, client: httpx.AsyncClient) -> None:
         """Run a basic user flow: create session, config, get sentiment."""
         self.log("Starting BASIC FLOW scenario", "")
@@ -266,7 +316,78 @@ class TrafficGenerator:
         if config and config.get("config_id"):
             await self.get_sentiment(client, session["user_id"], config["config_id"])
 
+        # Get OHLC and sentiment history for first ticker
+        if tickers:
+            ticker = tickers[0]
+            await self.get_ohlc(client, session["user_id"], ticker)
+            await self.get_sentiment_history(client, session["user_id"], ticker)
+
         self.log("Basic flow completed", "")
+
+    async def run_scenario_price_sentiment_overlay(
+        self, client: httpx.AsyncClient
+    ) -> None:
+        """Demo the Price-Sentiment Overlay feature (OHLC + sentiment history)."""
+        self.log("Starting PRICE-SENTIMENT OVERLAY scenario", "")
+        print("-" * 40)
+
+        # Create session
+        session = await self.create_session(client)
+        if not session:
+            return
+
+        user_id = session["user_id"]
+
+        # Test multiple tickers with different time ranges
+        test_tickers = ["AAPL", "MSFT", "NVDA"]
+        time_ranges = ["1W", "1M", "3M"]
+
+        for ticker in test_tickers:
+            self.log(f"Fetching price-sentiment data for {ticker}...", "")
+
+            # Get OHLC data for different ranges
+            for time_range in time_ranges:
+                ohlc_data = await self.get_ohlc(client, user_id, ticker, time_range)
+                if ohlc_data:
+                    # Validate response shape
+                    candles = ohlc_data.get("candles", [])
+                    if candles:
+                        first_candle = candles[0]
+                        # Verify expected fields exist
+                        expected_fields = ["date", "open", "high", "low", "close"]
+                        missing = [f for f in expected_fields if f not in first_candle]
+                        if missing:
+                            self.log(f"OHLC missing fields: {missing}", "")
+                        else:
+                            self.log(
+                                f"OHLC shape OK: {len(candles)} candles, "
+                                f"range={time_range}",
+                                "",
+                            )
+
+            # Get sentiment history
+            for source in ["aggregated", "tiingo"]:
+                history_data = await self.get_sentiment_history(
+                    client, user_id, ticker, "1M", source
+                )
+                if history_data:
+                    history = history_data.get("history", [])
+                    if history:
+                        first_point = history[0]
+                        expected_fields = ["date", "score", "source"]
+                        missing = [f for f in expected_fields if f not in first_point]
+                        if missing:
+                            self.log(f"Sentiment history missing fields: {missing}", "")
+                        else:
+                            self.log(
+                                f"Sentiment history OK: {len(history)} points, "
+                                f"source={source}",
+                                "",
+                            )
+
+            await asyncio.sleep(0.2)  # Small delay between tickers
+
+        self.log("Price-sentiment overlay scenario completed", "")
 
     async def run_scenario_load_test(
         self, client: httpx.AsyncClient, num_users: int = 5, requests_per_user: int = 10
@@ -413,6 +534,9 @@ class TrafficGenerator:
         await self.run_scenario_basic_flow(client)
         print()
 
+        await self.run_scenario_price_sentiment_overlay(client)
+        print()
+
         await self.run_scenario_cache_warmup(client, iterations=10)
         print()
 
@@ -444,6 +568,7 @@ async def main():
             "rate-limit",
             "circuit-breaker",
             "cache",
+            "price-sentiment",
         ],
         default="basic",
         help="Scenario to run",
@@ -502,6 +627,8 @@ Scenario:    {args.scenario}
             await generator.run_scenario_circuit_breaker(client)
         elif args.scenario == "cache":
             await generator.run_scenario_cache_warmup(client)
+        elif args.scenario == "price-sentiment":
+            await generator.run_scenario_price_sentiment_overlay(client)
 
     generator.stats.print_summary()
 
