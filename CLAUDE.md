@@ -7,6 +7,8 @@ Auto-generated from all feature plans. Last updated: 2025-11-26
 - Python 3.13 + pytest, pytest-asyncio, httpx, boto3, moto (for local unit tests only), aws-xray-sdk (008-e2e-validation-suite)
 - DynamoDB (preprod - real AWS, no mocks for E2E) (008-e2e-validation-suite)
 - Python 3.13 + pytest, pytest-asyncio, httpx, boto3, moto (unit tests only) (009-e2e-test-oracle-validation)
+- Python 3.13 (backend), TypeScript 5 (frontend) + FastAPI 0.121.3, httpx 0.28.1, TradingView Lightweight Charts 5.0.9, React 18, Next.js 14.2.21, Zustand 5.0.8, React Query 5.90.11 (011-price-sentiment-overlay)
+- DynamoDB (single-table design), in-memory cache for OHLC data (011-price-sentiment-overlay)
 
 - **Python 3.13** with FastAPI, boto3, pydantic, aws-lambda-powertools, httpx
 - **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, CloudFront
@@ -247,9 +249,9 @@ vi.mock('@/stores/auth-store', () => ({
 ```
 
 ## Recent Changes
+- 011-price-sentiment-overlay: Added Python 3.13 (backend), TypeScript 5 (frontend) + FastAPI 0.121.3, httpx 0.28.1, TradingView Lightweight Charts 5.0.9, React 18, Next.js 14.2.21, Zustand 5.0.8, React Query 5.90.11
 - 009-e2e-test-oracle-validation: Added Python 3.13 + pytest, pytest-asyncio, httpx, boto3, moto (unit tests only)
 - 008-e2e-validation-suite: Added Python 3.13 + pytest, pytest-asyncio, httpx, boto3, moto (for local unit tests only), aws-xray-sdk
-- 007-sentiment-dashboard-frontend: Mobile-first Next.js 14 dashboard with Robinhood-style dark fintech UI
 
 <!-- MANUAL ADDITIONS START -->
 
