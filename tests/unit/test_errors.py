@@ -246,20 +246,20 @@ class TestInternalError:
         assert body["error"] == "Internal server error"
 
     def test_internal_error_no_details_exposed(self, caplog):
-        """Test that internal error details are not exposed."""
+        """Test that internal error details are not exposed in response."""
         response = internal_error(
             "req-123",
-            details={"stack_trace": "sensitive info"},
+            message="Something went wrong",
         )
 
         body = json.loads(response["body"])
         # Details should NOT be in response (security)
         assert "details" not in body
 
-        # Verify expected error was logged
+        # Verify expected error was logged (only message, no sensitive details)
         from tests.conftest import assert_error_logged
 
-        assert_error_logged(caplog, "Internal error details")
+        assert_error_logged(caplog, "Internal error: Something went wrong")
 
 
 class TestDatabaseError:

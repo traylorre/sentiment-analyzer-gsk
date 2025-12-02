@@ -230,16 +230,16 @@
 
 **Purpose**: E2E validation, documentation, final cleanup
 
-- [ ] T077 [P] E2E test for full auth flow in tests/e2e/test_session_consistency_preprod.py
-- [ ] T078 [P] E2E test for anonymous session creation in tests/e2e/test_session_consistency_preprod.py
-- [ ] T079 [P] E2E test for magic link race condition (10 concurrent) in tests/e2e/test_session_consistency_preprod.py
-- [ ] T080 [P] E2E test for email uniqueness race condition (10 concurrent) in tests/e2e/test_session_consistency_preprod.py
-- [ ] T081 [P] E2E test for merge idempotency in tests/e2e/test_session_consistency_preprod.py
-- [ ] T082 Run coverage report and verify 80%+ coverage
-- [ ] T083 Update API documentation with new endpoints
-- [ ] T084 Run quickstart.md validation checklist
-- [ ] T085 Performance test: 100 concurrent auth requests
-- [ ] T086 Security review: verify no race condition vulnerabilities remain
+- [x] T077 [P] E2E test for full auth flow in tests/e2e/test_session_consistency_preprod.py
+- [x] T078 [P] E2E test for anonymous session creation in tests/e2e/test_session_consistency_preprod.py
+- [x] T079 [P] E2E test for magic link race condition (10 concurrent) in tests/e2e/test_session_consistency_preprod.py
+- [x] T080 [P] E2E test for email uniqueness race condition (10 concurrent) in tests/e2e/test_session_consistency_preprod.py
+- [x] T081 [P] E2E test for merge idempotency in tests/e2e/test_session_consistency_preprod.py
+- [x] T082 Run coverage report and verify 80%+ coverage (153 session_consistency tests, 1411 total)
+- [ ] T083 Update API documentation with new endpoints (deferred: docs sprint)
+- [ ] T084 Run quickstart.md validation checklist (deferred: deployment)
+- [ ] T085 Performance test: 100 concurrent auth requests (deferred: load testing)
+- [ ] T086 Security review: verify no race condition vulnerabilities remain (deferred: security review)
 
 ---
 

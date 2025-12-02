@@ -62,7 +62,7 @@ class ErrorCode(str, Enum):
     NOT_FOUND = "NOT_FOUND"
 
     # Infrastructure errors
-    SECRET_ERROR = "SECRET_ERROR"
+    SECRET_ERROR = "SECRET_ERROR"  # noqa: S105 - Not a password, error code name
     DATABASE_ERROR = "DATABASE_ERROR"
 
     # Authentication/authorization
@@ -140,7 +140,8 @@ def error_response(
     if details:
         body["details"] = details
 
-    # Log the error
+    # Log error metadata only - no user-provided details to prevent sensitive data leakage
+    # Details are returned in response body for debugging but not logged
     if log_error:
         log_level = logging.ERROR if status_code >= 500 else logging.WARNING
         logger.log(
@@ -150,7 +151,6 @@ def error_response(
                 "status_code": status_code,
                 "error_code": error_code,
                 "request_id": request_id,
-                "details": details,
             },
         )
 
@@ -298,33 +298,31 @@ def rate_limit_error(
 def internal_error(
     request_id: str,
     message: str = "Internal server error",
-    details: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Create a 500 internal server error response.
 
-    Use for unexpected errors. Full details are logged but not returned.
+    Use for unexpected errors. Only request_id is logged for correlation.
 
     Args:
         request_id: Lambda request ID
         message: Error message (generic for security)
-        details: Details for logging only
 
     Returns:
         Lambda error response dict
 
     Security Note:
         Never expose internal error details to end users.
-        Details are logged server-side only.
+        No details are logged to prevent sensitive data leakage.
+        Use request_id to correlate with application-level debugging.
     """
-    # Log full details
-    if details:
-        logger.error(
-            f"Internal error details: {details}",
-            extra={"request_id": request_id},
-        )
+    # Log only the message and request_id - no details to prevent sensitive data leakage
+    logger.error(
+        f"Internal error: {message}",
+        extra={"request_id": request_id},
+    )
 
-    # Return sanitized response (no details)
+    # Return sanitized response (no details exposed to user)
     return error_response(
         500,
         message,
