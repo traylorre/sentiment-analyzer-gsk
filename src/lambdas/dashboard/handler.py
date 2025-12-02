@@ -518,6 +518,67 @@ async def health_check():
 # ===================================================================
 
 
+@app.get("/api/v2/metrics")
+async def get_metrics_v2(
+    request: Request,
+    hours: int = 24,
+    _: bool = Depends(verify_api_key),
+):
+    """
+    Get aggregated dashboard metrics.
+
+    Query Parameters:
+        hours: Time window for metrics (default: 24 hours, max: 168)
+
+    Returns:
+        JSON with aggregated metrics including:
+        - total: Total items
+        - positive/neutral/negative: Sentiment counts
+        - by_tag: Tag distribution
+        - rate_last_hour: Items in last hour
+        - rate_last_24h: Items in last 24 hours
+        - recent_items: Recent analyzed items
+
+    On-Call Note:
+        If metrics return zeros:
+        1. Verify DynamoDB table has data
+        2. Check GSIs exist (by_sentiment, by_status)
+        3. Verify items have status='analyzed'
+    """
+    from src.lambdas.dashboard.metrics import aggregate_dashboard_metrics
+
+    # Validate hours parameter
+    if hours < 1:
+        hours = 1
+    elif hours > 168:  # Max 7 days
+        hours = 168
+
+    try:
+        table = get_table(DYNAMODB_TABLE)
+        metrics = aggregate_dashboard_metrics(table, hours=hours)
+
+        # Sanitize recent items for response
+        if "recent_items" in metrics:
+            metrics["recent_items"] = [
+                sanitize_item_for_response(item) for item in metrics["recent_items"]
+            ]
+
+        return JSONResponse(metrics)
+
+    except Exception as e:
+        logger.error(
+            "Failed to get dashboard metrics",
+            extra={
+                "hours": hours,
+                **get_safe_error_info(e),
+            },
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to retrieve dashboard metrics",
+        ) from e
+
+
 @app.get("/api/v2/sentiment")
 async def get_sentiment_v2(
     request: Request,
