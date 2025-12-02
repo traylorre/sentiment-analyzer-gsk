@@ -67,7 +67,7 @@ jobs:
   # JOB 2: Test (pytest + coverage)
   # ========================================================================
   test:
-    name: Test
+    name: Run Tests
     runs-on: ubuntu-latest
 
     permissions:
@@ -131,7 +131,7 @@ jobs:
   # JOB 3: Security (pip-audit)
   # ========================================================================
   security:
-    name: Security
+    name: Dependency Vulnerability Scan
     runs-on: ubuntu-latest
 
     permissions:
@@ -177,7 +177,7 @@ jobs:
   # JOB 4: CodeQL Analysis
   # ========================================================================
   codeql:
-    name: CodeQL
+    name: Analyze (python)
     runs-on: ubuntu-latest
 
     permissions:
