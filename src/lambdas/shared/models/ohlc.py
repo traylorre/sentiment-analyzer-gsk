@@ -47,7 +47,9 @@ class PriceCandle(BaseModel):
     def from_ohlc_candle(cls, candle: OHLCCandle) -> "PriceCandle":
         """Convert from internal OHLCCandle model."""
         return cls(
-            date=candle.date.date() if isinstance(candle.date, datetime) else candle.date,  # type: ignore[arg-type]
+            date=candle.date.date()
+            if isinstance(candle.date, datetime)
+            else candle.date,  # type: ignore[arg-type]
             open=candle.open,
             high=candle.high,
             low=candle.low,

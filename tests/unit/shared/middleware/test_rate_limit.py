@@ -128,7 +128,10 @@ class TestCheckRateLimit:
         mock_table.query.return_value = {"Items": []}
 
         result = check_rate_limit(
-            mock_table, "1.2.3.4", "default", custom_window=300  # 5 minutes
+            mock_table,
+            "1.2.3.4",
+            "default",
+            custom_window=300,  # 5 minutes
         )
 
         assert result.allowed is True

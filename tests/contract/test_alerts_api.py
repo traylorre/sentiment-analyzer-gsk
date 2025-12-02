@@ -653,7 +653,9 @@ class TestUpdateAlert:
         )
 
         status, response = mock_api.update_alert(
-            user_id, created["alert_id"], threshold_value=2.0  # Invalid
+            user_id,
+            created["alert_id"],
+            threshold_value=2.0,  # Invalid
         )
 
         assert status == 400
