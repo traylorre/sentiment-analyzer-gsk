@@ -1,0 +1,194 @@
+# Consolidated PR Merge Workflow
+# ==============================
+#
+# Handles approval enforcement, auto-merge, and Dependabot PRs.
+# Consolidates: pr-approval-enforcement.yml, pr-auto-merge-enable.yml, dependabot-auto-merge.yml
+#
+# For On-Call Engineers:
+#   - Auto-merge is enabled for all PRs once checks pass
+#   - Dependabot patch/minor updates auto-merge
+#   - Major version updates require manual review
+#
+# For Developers:
+#   - PRs auto-merge when all checks pass
+#   - Uses squash merge for clean git history
+#   - To disable: gh pr merge --disable-auto <PR_NUMBER>
+
+name: PR Merge
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+  pull_request_review:
+    types: [submitted, dismissed]
+  pull_request_target:
+    types: [opened, reopened, ready_for_review]
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: write
+
+jobs:
+  # ========================================================================
+  # JOB 1: Approval Enforcement
+  # ========================================================================
+  enforce-approval:
+    name: Approval Check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || github.event_name == 'pull_request_review'
+
+    permissions:
+      contents: read
+      pull-requests: read
+      checks: write
+
+    steps:
+      - name: Check for required approval
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const pr = context.payload.pull_request;
+            const prNumber = pr ? pr.number : context.payload.pull_request_review.pull_request.number;
+            const prAuthor = pr ? pr.user.login : context.payload.pull_request_review.pull_request.user.login;
+
+            // Allow Dependabot PRs to skip manual approval
+            if (prAuthor === 'dependabot[bot]') {
+              core.info('Dependabot PR - manual approval not required');
+              return;
+            }
+
+            // Allow repo owner's PRs to skip manual approval
+            if (prAuthor === 'traylorre') {
+              core.info('Repo owner PR - manual approval not required');
+              return;
+            }
+
+            // Get reviews for external contributors
+            const { data: reviews } = await github.rest.pulls.listReviews({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_request_number: prNumber
+            });
+
+            const requiredReviewer = 'traylorre';
+            const hasApproval = reviews.some(review =>
+              review.user.login === requiredReviewer &&
+              review.state === 'APPROVED'
+            );
+
+            if (!hasApproval) {
+              core.setFailed(`Pull request requires approval from @${requiredReviewer}`);
+            } else {
+              core.info(`Required approval from @${requiredReviewer} is present`);
+            }
+
+  # ========================================================================
+  # JOB 2: Verify CODEOWNERS
+  # ========================================================================
+  verify-codeowners:
+    name: CODEOWNERS Check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || github.event_name == 'pull_request_review'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Verify CODEOWNERS file exists
+        run: |
+          if [ ! -f .github/CODEOWNERS ]; then
+            echo "CODEOWNERS file is missing!"
+            exit 1
+          fi
+          if ! grep -q "@traylorre" .github/CODEOWNERS; then
+            echo "@traylorre is not listed in CODEOWNERS!"
+            exit 1
+          fi
+          echo "CODEOWNERS verification passed"
+
+  # ========================================================================
+  # JOB 3: Enable Auto-Merge (non-Dependabot)
+  # ========================================================================
+  enable-auto-merge:
+    name: Enable Auto-Merge
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request_target' && github.actor != 'dependabot[bot]'
+
+    steps:
+      - name: Enable auto-merge
+        uses: peter-evans/enable-pull-request-automerge@v3
+        with:
+          token: ${{ secrets.REPO_PAT }}
+          pull-request-number: ${{ github.event.pull_request.number }}
+          merge-method: squash
+
+      - name: Comment on PR
+        run: |
+          gh pr comment "$PR_URL" --body "Auto-merge enabled. This PR will automatically merge once all required checks pass."
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ========================================================================
+  # JOB 4: Dependabot Auto-Merge
+  # ========================================================================
+  dependabot-auto-merge:
+    name: Dependabot Auto-Merge
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request_target' && github.actor == 'dependabot[bot]'
+
+    steps:
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Auto-merge patch and minor updates
+        if: steps.metadata.outputs.update-type == 'version-update:semver-patch' || steps.metadata.outputs.update-type == 'version-update:semver-minor'
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Auto-merge GitHub Actions major version updates
+        if: |
+          steps.metadata.outputs.update-type == 'version-update:semver-major' &&
+          steps.metadata.outputs.package-ecosystem == 'github_actions'
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Auto-merge security updates
+        if: steps.metadata.outputs.dependency-type == 'direct:production' && contains(github.event.pull_request.title, 'security')
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Approve PR (patch/minor or GitHub Actions)
+        if: |
+          steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+          steps.metadata.outputs.update-type == 'version-update:semver-minor' ||
+          (steps.metadata.outputs.update-type == 'version-update:semver-major' && steps.metadata.outputs.package-ecosystem == 'github_actions')
+        run: gh pr review --approve "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Comment on Python major version updates
+        if: |
+          steps.metadata.outputs.update-type == 'version-update:semver-major' &&
+          steps.metadata.outputs.package-ecosystem == 'pip'
+        run: |
+          gh pr comment "$PR_URL" --body "**Major Python dependency update detected**
+
+          This PR updates \`${{ steps.metadata.outputs.dependency-names }}\` to a new major version.
+          Major updates may contain breaking changes and require manual review.
+          This PR will NOT be auto-merged."
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

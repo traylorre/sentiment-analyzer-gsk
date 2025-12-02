@@ -62,13 +62,19 @@ repos:
         args: [--fix]
       - id: ruff-format
 
-  # Terraform formatter
+  # Terraform formatter and security scanners
   - repo: https://github.com/antonbabenko/pre-commit-terraform
     rev: v1.83.6
     hooks:
       - id: terraform_fmt
         args:
           - --args=-recursive
+      - id: terraform_tfsec
+        args:
+          - --args=--soft-fail
+      - id: terraform_checkov
+        args:
+          - --args=--quiet --compact -d infrastructure/terraform/
 
   # Security checks - detect hardcoded secrets
   - repo: https://github.com/Yelp/detect-secrets

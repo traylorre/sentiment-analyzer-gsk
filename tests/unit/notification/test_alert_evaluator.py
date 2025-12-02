@@ -269,7 +269,9 @@ class TestEvaluateAlertsForTicker:
         mock_queue.return_value = str(uuid.uuid4())
 
         result = evaluate_alerts_for_ticker(
-            mock_table, "AAPL", sentiment_score=-0.5  # Below -0.3 threshold
+            mock_table,
+            "AAPL",
+            sentiment_score=-0.5,  # Below -0.3 threshold
         )
 
         assert isinstance(result, EvaluateAlertsResponse)
@@ -342,7 +344,9 @@ class TestEvaluateAlertsForTicker:
         mock_find.return_value = [sample_alert]
 
         result = evaluate_alerts_for_ticker(
-            mock_table, "AAPL", sentiment_score=0.5  # Above -0.3, not triggered
+            mock_table,
+            "AAPL",
+            sentiment_score=0.5,  # Above -0.3, not triggered
         )
 
         assert result.triggered == 0
