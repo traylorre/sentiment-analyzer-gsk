@@ -1,0 +1,71 @@
+# CI/CD Test Dependencies
+# =======================
+#
+# Lightweight requirements for CI unit tests (excludes heavy ML dependencies).
+# Tests mock transformers/torch so they're not needed.
+#
+# For On-Call Engineers:
+#   - CI uses this file for PR checks (fast, no ML deps)
+#   - Production Lambda uses requirements.txt (full deps in Lambda layer)
+#
+# For Developers:
+#   - Use requirements-dev.txt locally for full setup
+#   - This file saves ~15min in CI by excluding 2GB+ torch
+
+# AWS SDK - Lambda runtime includes boto3, but we pin for local testing
+boto3==1.42.0
+botocore==1.41.6
+
+# Web Framework - Dashboard Lambda
+fastapi==0.123.0
+mangum==0.19.0
+uvicorn==0.38.0
+sse-starlette==3.0.3
+
+# HTTP Client - Financial API adapters (Tiingo, Finnhub)
+requests==2.32.5
+httpx==0.28.1
+
+# Data Validation - Input/output schemas
+pydantic==2.12.5
+email-validator==2.3.0
+
+# Logging - Structured JSON logs for CloudWatch
+python-json-logger==4.0.0
+
+# AWS X-Ray - Distributed tracing (Feature 006)
+aws-xray-sdk==2.15.0
+
+# Email Notifications - SendGrid (Feature 006)
+sendgrid==6.12.5
+
+# AWS Lambda Powertools - Enhanced observability
+aws-lambda-powertools==3.23.0
+
+# =============================================================================
+# Testing Dependencies (from requirements-dev.txt)
+# =============================================================================
+
+# Testing Framework
+pytest==8.3.4
+pytest-cov==7.0.0
+pytest-asyncio==1.3.0
+
+# AWS Mocking - Critical for unit tests
+moto[all]==5.1.18
+
+# HTTP Mocking - For NewsAPI adapter tests
+responses==0.25.8
+
+# Code Quality
+black==25.11.0
+ruff==0.14.7
+pre-commit==3.6.0
+bandit==1.9.2
+
+# Type Checking
+mypy==1.19.0
+boto3-stubs==1.41.5
+
+# Testing Utilities
+freezegun==1.5.5
