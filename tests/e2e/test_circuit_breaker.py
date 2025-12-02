@@ -21,7 +21,7 @@ async def create_session_and_config(
     """Helper to create session and config."""
     session_response = await api_client.post("/api/v2/auth/anonymous", json={})
     # API returns 201 Created for new sessions (correct HTTP semantics)
-    assert session_response.status_code in (200, 201)
+    assert session_response.status_code == 201
     token = session_response.json()["token"]
 
     api_client.set_access_token(token)
@@ -33,7 +33,7 @@ async def create_session_and_config(
         },
     )
 
-    if config_response.status_code not in (200, 201):
+    if config_response.status_code != 201:
         api_client.clear_access_token()
         pytest.skip("Config creation not available")
 

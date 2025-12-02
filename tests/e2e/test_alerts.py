@@ -36,7 +36,7 @@ async def create_config_and_session(
     """
     session_response = await api_client.post("/api/v2/auth/anonymous", json={})
     # API returns 201 Created for new sessions (correct HTTP semantics)
-    assert session_response.status_code in (200, 201)
+    assert session_response.status_code == 201
     token = session_response.json()["token"]
 
     api_client.set_access_token(token)
@@ -52,7 +52,7 @@ async def create_config_and_session(
     if config_response.status_code == 500:
         api_client.clear_access_token()
         pytest.skip("Config creation endpoint returning 500 - API issue")
-    if config_response.status_code not in (200, 201):
+    if config_response.status_code != 201:
         api_client.clear_access_token()
         pytest.skip("Config creation not available")
 
@@ -179,7 +179,7 @@ async def test_alert_toggle_off(
         if create_response.status_code == 404:
             pytest.skip("Alerts endpoint not implemented")
 
-        assert create_response.status_code in (200, 201)
+        assert create_response.status_code == 201
         alert_id = create_response.json()["alert_id"]
 
         # Toggle off
@@ -230,7 +230,7 @@ async def test_alert_update_threshold(
         if create_response.status_code == 404:
             pytest.skip("Alerts endpoint not implemented")
 
-        assert create_response.status_code in (200, 201)
+        assert create_response.status_code == 201
         alert_id = create_response.json()["alert_id"]
 
         # Update threshold
@@ -279,7 +279,7 @@ async def test_alert_delete(
         if create_response.status_code == 404:
             pytest.skip("Alerts endpoint not implemented")
 
-        assert create_response.status_code in (200, 201)
+        assert create_response.status_code == 201
         alert_id = create_response.json()["alert_id"]
 
         # Delete alert
@@ -331,7 +331,7 @@ async def test_alert_max_limit_enforced(
             if response.status_code == 404:
                 pytest.skip("Alerts endpoint not implemented")
 
-            if response.status_code in (200, 201):
+            if response.status_code == 201:
                 created_alerts.append(response.json()["alert_id"])
             elif response.status_code in (400, 403, 429):
                 # Limit reached
@@ -392,7 +392,7 @@ async def test_alert_anonymous_forbidden(
             data = response.json()
             # Should indicate authentication required
             assert "error" in data or "message" in data or "detail" in data
-        elif response.status_code in (200, 201):
+        elif response.status_code == 201:
             # Anonymous alerts allowed - that's fine too
             pass
 

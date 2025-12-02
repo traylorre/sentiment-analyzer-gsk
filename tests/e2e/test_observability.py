@@ -31,7 +31,7 @@ async def test_cloudwatch_logs_created(
     # Make a request that should generate logs
     session_response = await api_client.post("/api/v2/auth/anonymous", json={})
     # API returns 201 Created for new sessions (correct HTTP semantics)
-    assert session_response.status_code in (200, 201)
+    assert session_response.status_code == 201
 
     # Query CloudWatch Logs for evidence of the request
     # Note: Logs may take a few seconds to appear
@@ -100,7 +100,7 @@ async def test_xray_trace_exists(
     # Make a request
     session_response = await api_client.post("/api/v2/auth/anonymous", json={})
     # API returns 201 Created for new sessions (correct HTTP semantics)
-    assert session_response.status_code in (200, 201)
+    assert session_response.status_code == 201
 
     # Get trace ID from response header
     trace_header = session_response.headers.get("x-amzn-trace-id", "")
@@ -144,7 +144,7 @@ async def test_xray_cross_lambda_trace(
     # Create session and config to trigger multiple Lambda calls
     session_response = await api_client.post("/api/v2/auth/anonymous", json={})
     # API returns 201 Created for new sessions (correct HTTP semantics)
-    if session_response.status_code not in (200, 201):
+    if session_response.status_code != 201:
         pytest.skip("Cannot create session for cross-lambda test")
 
     token = session_response.json()["token"]
@@ -157,7 +157,7 @@ async def test_xray_cross_lambda_trace(
             json=synthetic_config.to_api_payload(),
         )
 
-        if config_response.status_code not in (200, 201):
+        if config_response.status_code != 201:
             pytest.skip("Config creation not available")
 
         # Get trace ID from response header

@@ -24,11 +24,8 @@ async def test_anonymous_session_creation(api_client: PreprodAPIClient) -> None:
     """
     response = await api_client.post("/api/v2/auth/anonymous", json={})
 
-    # API returns 201 Created for new sessions (correct HTTP semantics)
-    assert response.status_code in (
-        200,
-        201,
-    ), f"Expected 200/201, got {response.status_code}"
+    # 201 Created is the correct status for resource creation
+    assert response.status_code == 201, f"Expected 201, got {response.status_code}"
 
     data = response.json()
     # Response may use user_id or session_id depending on implementation
@@ -62,7 +59,7 @@ async def test_anonymous_session_validation(api_client: PreprodAPIClient) -> Non
     """
     # Create anonymous session
     create_response = await api_client.post("/api/v2/auth/anonymous", json={})
-    assert create_response.status_code in (200, 201)
+    assert create_response.status_code == 201
 
     data = create_response.json()
     token = data["token"]
@@ -100,7 +97,7 @@ async def test_anonymous_config_creation(
     """
     # Create anonymous session
     session_response = await api_client.post("/api/v2/auth/anonymous", json={})
-    assert session_response.status_code in (200, 201)
+    assert session_response.status_code == 201
 
     session_data = session_response.json()
     token = session_data["token"]
@@ -124,10 +121,10 @@ async def test_anonymous_config_creation(
         if config_response.status_code == 500:
             pytest.skip("Config creation endpoint returning 500 - API issue")
 
-        assert config_response.status_code in (
-            200,
-            201,
-        ), f"Expected 200/201, got {config_response.status_code}"
+        # 201 Created is the correct status for resource creation
+        assert (
+            config_response.status_code == 201
+        ), f"Expected 201, got {config_response.status_code}"
 
         config_data = config_response.json()
         assert "config_id" in config_data, "Response missing config_id"
@@ -158,7 +155,7 @@ async def test_anonymous_session_expires_header(api_client: PreprodAPIClient) ->
 
     response = await api_client.post("/api/v2/auth/anonymous", json={})
     # API returns 201 Created for new sessions (correct HTTP semantics)
-    assert response.status_code in (200, 201)
+    assert response.status_code == 201
 
     data = response.json()
     # Response may use session_expires_at or expires_at
@@ -195,13 +192,13 @@ async def test_anonymous_multiple_sessions_isolated(
     # Create first anonymous session
     response1 = await api_client.post("/api/v2/auth/anonymous", json={})
     # API returns 201 Created for new sessions (correct HTTP semantics)
-    assert response1.status_code in (200, 201)
+    assert response1.status_code == 201
     token1 = response1.json()["token"]
 
     # Create second anonymous session
     response2 = await api_client.post("/api/v2/auth/anonymous", json={})
     # API returns 201 Created for new sessions (correct HTTP semantics)
-    assert response2.status_code in (200, 201)
+    assert response2.status_code == 201
     token2 = response2.json()["token"]
 
     # Tokens should be different
@@ -216,7 +213,7 @@ async def test_anonymous_multiple_sessions_isolated(
         )
         if config_response.status_code == 500:
             pytest.skip("Config creation endpoint returning 500 - API issue")
-        if config_response.status_code in (200, 201):
+        if config_response.status_code == 201:
             config_id = config_response.json()["config_id"]
 
             # Try to access with second session - should fail

@@ -42,7 +42,7 @@ async def test_requests_within_limit_succeed(
     # Create session
     session_response = await api_client.post("/api/v2/auth/anonymous", json={})
     # API returns 201 Created for new sessions (correct HTTP semantics)
-    assert session_response.status_code in (200, 201)
+    assert session_response.status_code == 201
     token = session_response.json()["token"]
 
     api_client.set_access_token(token)
@@ -76,7 +76,7 @@ async def test_rate_limit_headers_on_normal_response(
     """
     # Create session
     session_response = await api_client.post("/api/v2/auth/anonymous", json={})
-    assert session_response.status_code in (200, 201)
+    assert session_response.status_code == 201
     token = session_response.json()["token"]
 
     api_client.set_access_token(token)
@@ -128,7 +128,7 @@ async def test_rate_limit_triggers_429(
 
     # Create session
     session_response = await api_client.post("/api/v2/auth/anonymous", json={})
-    assert session_response.status_code in (200, 201)
+    assert session_response.status_code == 201
     token = session_response.json()["token"]
 
     api_client.set_access_token(token)
@@ -172,7 +172,7 @@ async def test_retry_after_header_present(
     # Create session
     session_response = await api_client.post("/api/v2/auth/anonymous", json={})
     # API returns 201 Created for new sessions (correct HTTP semantics)
-    assert session_response.status_code in (200, 201)
+    assert session_response.status_code == 201
     token = session_response.json()["token"]
 
     api_client.set_access_token(token)
@@ -229,7 +229,7 @@ async def test_rate_limit_recovery(
     # Create session
     session_response = await api_client.post("/api/v2/auth/anonymous", json={})
     # API returns 201 Created for new sessions (correct HTTP semantics)
-    assert session_response.status_code in (200, 201)
+    assert session_response.status_code == 201
     token = session_response.json()["token"]
 
     api_client.set_access_token(token)
@@ -323,7 +323,7 @@ async def test_rate_limit_per_endpoint(
     """
     session_response = await api_client.post("/api/v2/auth/anonymous", json={})
     # API returns 201 Created for new sessions (correct HTTP semantics)
-    assert session_response.status_code in (200, 201)
+    assert session_response.status_code == 201
     token = session_response.json()["token"]
 
     api_client.set_access_token(token)

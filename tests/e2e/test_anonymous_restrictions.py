@@ -130,7 +130,7 @@ async def test_anonymous_cannot_access_other_users_config(
 
     if config_response.status_code == 500:
         pytest.skip("Config creation endpoint returning 500 - API issue")
-    if config_response.status_code not in (200, 201):
+    if config_response.status_code != 201:
         pytest.skip("Config creation not available")
 
     config_id = config_response.json()["config_id"]
@@ -179,7 +179,7 @@ async def test_anonymous_cannot_modify_other_users_config(
 
     if config_response.status_code == 500:
         pytest.skip("Config creation endpoint returning 500 - API issue")
-    if config_response.status_code not in (200, 201):
+    if config_response.status_code != 201:
         pytest.skip("Config creation not available")
 
     config_id = config_response.json()["config_id"]
@@ -231,7 +231,7 @@ async def test_anonymous_cannot_delete_other_users_config(
 
     if config_response.status_code == 500:
         pytest.skip("Config creation endpoint returning 500 - API issue")
-    if config_response.status_code not in (200, 201):
+    if config_response.status_code != 201:
         pytest.skip("Config creation not available")
 
     config_id = config_response.json()["config_id"]
@@ -294,7 +294,7 @@ async def test_anonymous_config_limit_enforced(
 
             if response.status_code == 500:
                 pytest.skip("Config creation endpoint returning 500 - API issue")
-            if response.status_code in (200, 201):
+            if response.status_code == 201:
                 created_count += 1
             elif response.status_code in (400, 403, 422, 429):
                 # Limit reached or validation error - this is expected
@@ -343,7 +343,7 @@ async def test_anonymous_alert_limit_enforced(
 
         if config_response.status_code == 500:
             pytest.skip("Config creation endpoint returning 500 - API issue")
-        if config_response.status_code not in (200, 201):
+        if config_response.status_code != 201:
             pytest.skip("Config creation not available")
 
         config_id = config_response.json()["config_id"]
@@ -367,7 +367,7 @@ async def test_anonymous_alert_limit_enforced(
             if response.status_code == 404:
                 pytest.skip("Alerts endpoint not implemented")
 
-            if response.status_code in (200, 201):
+            if response.status_code == 201:
                 created_count += 1
             elif response.status_code in (400, 403, 429):
                 # Limit reached
