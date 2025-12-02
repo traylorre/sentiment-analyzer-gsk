@@ -466,11 +466,12 @@ def generate_test_email(test_email_domain: str, username: str = "user") -> str:
     return f"{username}@{test_email_domain}"
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture
 async def api_client() -> AsyncGenerator[PreprodAPIClient, None]:
     """Preprod API client for making HTTP requests.
 
-    Session-scoped to reuse connections across tests.
+    Function-scoped due to pytest-asyncio's asyncio_default_fixture_loop_scope=function.
+    httpx.AsyncClient is lightweight, so per-test creation is acceptable.
     """
     async with PreprodAPIClient() as client:
         yield client
