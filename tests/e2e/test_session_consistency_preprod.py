@@ -73,7 +73,7 @@ class TestAnonymousSessionCreation:
 
         # Validate response structure
         assert "user_id" in data
-        assert "access_token" in data
+        assert "token" in data
         assert "session_expires_at" in data
         assert data["auth_type"] == "anonymous"
 
@@ -82,7 +82,7 @@ class TestAnonymousSessionCreation:
         assert user_uuid.version == 4
 
         # Validate token is JWT format
-        token_parts = data["access_token"].split(".")
+        token_parts = data["token"].split(".")
         assert len(token_parts) == 3
 
     @pytest.mark.asyncio
@@ -104,7 +104,7 @@ class TestAnonymousSessionCreation:
         # Validate session
         validate_response = await http_client.get(
             f"{preprod_base_url}/api/v2/auth/session",
-            headers={"Authorization": f"Bearer {session_data['access_token']}"},
+            headers={"Authorization": f"Bearer {session_data['token']}"},
         )
 
         assert validate_response.status_code == 200
@@ -132,7 +132,7 @@ class TestFullAuthFlow:
         # 201 Created is the correct status for resource creation
         assert anon_response.status_code == 201
         anon_data = anon_response.json()
-        anon_token = anon_data["access_token"]
+        anon_token = anon_data["token"]
         # anon_user_id would be used for merge after magic link verification
         _ = anon_data["user_id"]
 
@@ -188,7 +188,7 @@ class TestEmailUniquenessRaceCondition:
             if anon.status_code != 201:
                 return {"success": False, "error": "anon_failed"}
 
-            token = anon.json()["access_token"]
+            token = anon.json()["token"]
 
             # Request magic link with email
             result = await client.post(
@@ -263,7 +263,7 @@ class TestSessionRefresh:
         # 201 Created is the correct status for resource creation
         assert create_response.status_code == 201
         session_data = create_response.json()
-        token = session_data["access_token"]
+        token = session_data["token"]
         user_id = session_data["user_id"]
 
         # Refresh session
