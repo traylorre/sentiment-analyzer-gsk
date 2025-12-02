@@ -23,11 +23,20 @@ const CONFIG = {
     ENDPOINTS: {
         SENTIMENT: '/api/v2/sentiment',
         TRENDS: '/api/v2/trends',
-        ARTICLES: '/api/v2/articles'
+        ARTICLES: '/api/v2/articles',
+        METRICS: '/api/v2/metrics',
+        STREAM: '/api/v2/stream'  // SSE endpoint (may not be implemented)
     },
 
     // Polling interval for sentiment data (milliseconds)
     SENTIMENT_POLL_INTERVAL: 30000, // 30 seconds
+
+    // Metrics polling interval (milliseconds) - used as fallback when SSE fails
+    METRICS_POLL_INTERVAL: 30000, // 30 seconds
+
+    // SSE connection settings
+    SSE_MAX_RETRIES: 3,
+    SSE_RECONNECT_DELAY: 1000, // 1 second (doubles with each retry)
 
     // Chart colors (must match CSS custom properties)
     COLORS: {
