@@ -261,9 +261,12 @@ async def get_sentiment_history(
     history: list[SentimentPoint] = []
     current_date = start_date
 
+    import hashlib
     import random
 
-    random.seed(hash(ticker))  # Deterministic based on ticker
+    # Use hashlib for deterministic seed (hash() is randomized by PYTHONHASHSEED)
+    ticker_hash = int(hashlib.sha256(ticker.encode()).hexdigest(), 16)
+    random.seed(ticker_hash)
 
     base_score = 0.3  # Slightly positive base
     while current_date <= end_date:

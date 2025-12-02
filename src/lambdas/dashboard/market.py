@@ -346,9 +346,9 @@ def get_premarket_estimates(
                             "score": round(sentiment_score, 2),
                             "label": (
                                 "positive"
-                                if sentiment_score > 0.33
+                                if sentiment_score >= 0.33
                                 else "negative"
-                                if sentiment_score < -0.33
+                                if sentiment_score <= -0.33
                                 else "neutral"
                             ),
                             "confidence": 0.65,
