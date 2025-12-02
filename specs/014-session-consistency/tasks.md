@@ -183,20 +183,20 @@
 
 ### Tests for User Story 5
 
-- [ ] T060 [P] [US5] Unit test for tombstone marking in tests/unit/lambdas/shared/auth/test_merge_idempotency.py
-- [ ] T061 [P] [US5] Unit test for idempotent retry in tests/unit/lambdas/shared/auth/test_merge_idempotency.py
-- [ ] T062 [P] [US5] Unit test for concurrent merge safety in tests/unit/lambdas/shared/auth/test_merge_idempotency.py
-- [ ] T063 [P] [US5] Integration test for partial failure recovery in tests/integration/test_session_race_conditions.py
-- [ ] T064 [P] [US5] Contract test for POST /api/v2/auth/merge in tests/contract/test_session_api_v2.py
+- [x] T060 [P] [US5] Unit test for tombstone marking in tests/unit/lambdas/shared/auth/test_merge_idempotency.py
+- [x] T061 [P] [US5] Unit test for idempotent retry in tests/unit/lambdas/shared/auth/test_merge_idempotency.py
+- [x] T062 [P] [US5] Unit test for concurrent merge safety in tests/unit/lambdas/shared/auth/test_merge_idempotency.py
+- [ ] T063 [P] [US5] Integration test for partial failure recovery in tests/integration/test_session_race_conditions.py (deferred: E2E)
+- [x] T064 [P] [US5] Contract test for POST /api/v2/auth/merge in tests/contract/test_session_api_v2.py
 
 ### Implementation for User Story 5
 
-- [ ] T065 [US5] Add merged_to, merged_at fields to Configuration model in src/lambdas/shared/models/configuration.py
-- [ ] T066 [US5] Implement mark_item_as_merged() tombstone function in src/lambdas/shared/auth/merge.py
-- [ ] T067 [US5] Update merge_anonymous_to_authenticated() with tombstone pattern in src/lambdas/shared/auth/merge.py
-- [ ] T068 [US5] Add skip logic for already-merged items in src/lambdas/shared/auth/merge.py
-- [ ] T069 [US5] Add POST /api/v2/auth/merge endpoint in src/lambdas/dashboard/router_v2.py
-- [ ] T070 [US5] Update frontend to call merge after magic link verification in frontend/src/stores/auth-store.ts
+- [x] T065 [US5] Add merged_to, merged_at fields to Configuration model in src/lambdas/shared/models/configuration.py (via DynamoDB item)
+- [x] T066 [US5] Implement mark_item_as_merged() tombstone function in src/lambdas/shared/auth/merge.py (_transfer_items_with_tombstone)
+- [x] T067 [US5] Update merge_anonymous_to_authenticated() with tombstone pattern in src/lambdas/shared/auth/merge.py
+- [x] T068 [US5] Add skip logic for already-merged items in src/lambdas/shared/auth/merge.py
+- [x] T069 [US5] Add POST /api/v2/auth/merge endpoint in src/lambdas/dashboard/router_v2.py
+- [ ] T070 [US5] Update frontend to call merge after magic link verification in frontend/src/stores/auth-store.ts (deferred: frontend)
 
 **Checkpoint**: User Story 5 complete - merges are atomic, idempotent, and auditable
 

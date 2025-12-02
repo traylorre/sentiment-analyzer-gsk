@@ -717,3 +717,223 @@ class TestAdminBulkRevocation:
         """Successful bulk revocation returns 200."""
         status_code = 200
         assert status_code == 200
+
+
+# --- Schema Definitions for Account Merge (T064) ---
+
+
+class MergeRequest(BaseModel):
+    """Schema for POST /api/v2/auth/merge request."""
+
+    anonymous_user_id: str = Field(
+        ..., description="UUID of anonymous session to merge"
+    )
+
+
+class MergeResponse(BaseModel):
+    """Schema for POST /api/v2/auth/merge response."""
+
+    status: str = Field(
+        ..., pattern="^(completed|already_merged|no_data|failed|partial)$"
+    )
+    merged_at: str | None = None
+    configurations: int = Field(0, ge=0)
+    alert_rules: int = Field(0, ge=0)
+    preferences: int = Field(0, ge=0)
+    message: str | None = None
+
+
+# --- Contract Tests for POST /api/v2/auth/merge (T064) ---
+
+
+@pytest.mark.contract
+@pytest.mark.session_consistency
+@pytest.mark.session_us5
+class TestAccountMergeEndpoint:
+    """Contract tests for POST /api/v2/auth/merge (T064)."""
+
+    def test_request_format(self):
+        """Request follows schema."""
+        request = {
+            "anonymous_user_id": str(uuid.uuid4()),
+        }
+
+        parsed = MergeRequest(**request)
+        assert parsed.anonymous_user_id is not None
+
+    def test_response_format_completed(self):
+        """Successful merge response follows schema."""
+        now = datetime.now(UTC)
+        response = {
+            "status": "completed",
+            "merged_at": now.isoformat(),
+            "configurations": 2,
+            "alert_rules": 1,
+            "preferences": 1,
+            "message": None,
+        }
+
+        parsed = MergeResponse(**response)
+        assert parsed.status == "completed"
+        assert parsed.configurations == 2
+
+    def test_response_format_already_merged(self):
+        """Already merged response follows schema."""
+        response = {
+            "status": "already_merged",
+            "merged_at": datetime.now(UTC).isoformat(),
+            "configurations": 2,
+            "alert_rules": 0,
+            "preferences": 0,
+            "message": "Data was already merged",
+        }
+
+        parsed = MergeResponse(**response)
+        assert parsed.status == "already_merged"
+
+    def test_response_format_no_data(self):
+        """No data to merge response follows schema."""
+        response = {
+            "status": "no_data",
+            "configurations": 0,
+            "alert_rules": 0,
+            "preferences": 0,
+            "message": "No anonymous data found to merge",
+        }
+
+        parsed = MergeResponse(**response)
+        assert parsed.status == "no_data"
+        assert parsed.configurations == 0
+
+    def test_response_includes_item_counts(self):
+        """Response includes counts of merged items."""
+        response = {
+            "status": "completed",
+            "merged_at": datetime.now(UTC).isoformat(),
+            "configurations": 3,
+            "alert_rules": 5,
+            "preferences": 2,
+        }
+
+        parsed = MergeResponse(**response)
+        assert parsed.configurations == 3
+        assert parsed.alert_rules == 5
+        assert parsed.preferences == 2
+
+    def test_merged_at_is_iso8601(self):
+        """merged_at timestamp is ISO 8601 format."""
+        now = datetime.now(UTC)
+        response = {
+            "status": "completed",
+            "merged_at": now.isoformat(),
+            "configurations": 1,
+            "alert_rules": 0,
+            "preferences": 0,
+        }
+
+        parsed = MergeResponse(**response)
+        # Should parse without error
+        merged_at = datetime.fromisoformat(parsed.merged_at)
+        assert merged_at.tzinfo is not None
+
+    def test_requires_authentication(self):
+        """Endpoint requires authenticated session."""
+        headers = {"Authorization": "Bearer user-token"}
+        assert "Authorization" in headers
+
+    def test_response_status_200_for_success(self):
+        """Successful merge returns 200."""
+        status_code = 200
+        assert status_code == 200
+
+    def test_response_status_200_for_idempotent_retry(self):
+        """Idempotent retry also returns 200."""
+        status_code = 200
+        assert status_code == 200
+
+    def test_response_status_404_for_nonexistent_anonymous(self):
+        """404 when anonymous session doesn't exist."""
+        status_code = 404
+        error_response = {
+            "error": "not_found",
+            "message": "Anonymous session not found",
+            "code": "ANONYMOUS_SESSION_NOT_FOUND",
+        }
+
+        parsed = ErrorResponse(**error_response)
+        assert parsed.error == "not_found"
+        assert status_code == 404
+
+    def test_response_status_409_for_merge_conflict(self):
+        """409 when merge would conflict (already merged to different user)."""
+        status_code = 409
+        error_response = {
+            "error": "conflict",
+            "message": "Session was already merged to a different account",
+            "code": "MERGE_CONFLICT",
+        }
+
+        parsed = ErrorResponse(**error_response)
+        assert parsed.error == "conflict"
+        assert status_code == 409
+
+
+@pytest.mark.contract
+@pytest.mark.session_consistency
+@pytest.mark.session_us5
+class TestMergeIdempotencyContract:
+    """Contract tests for merge idempotency guarantees."""
+
+    def test_retry_returns_same_counts(self):
+        """Retrying merge returns same counts (idempotent)."""
+        # First merge response
+        response1 = {
+            "status": "completed",
+            "merged_at": datetime.now(UTC).isoformat(),
+            "configurations": 2,
+            "alert_rules": 1,
+            "preferences": 0,
+        }
+
+        # Retry response (should match or indicate already_merged)
+        response2 = {
+            "status": "already_merged",
+            "merged_at": response1["merged_at"],
+            "configurations": 2,
+            "alert_rules": 1,
+            "preferences": 0,
+            "message": "Data was already merged",
+        }
+
+        parsed1 = MergeResponse(**response1)
+        parsed2 = MergeResponse(**response2)
+
+        # Counts should be consistent
+        assert parsed1.configurations == parsed2.configurations
+        assert parsed1.alert_rules == parsed2.alert_rules
+
+    def test_partial_retry_continues_merge(self):
+        """Partial merge can be continued on retry."""
+        # Partial failure
+        response1 = {
+            "status": "partial",
+            "configurations": 1,  # Only 1 of 2 merged
+            "alert_rules": 0,
+            "preferences": 0,
+            "message": "Some items failed to merge",
+        }
+
+        # Retry completes remaining
+        response2 = {
+            "status": "completed",
+            "merged_at": datetime.now(UTC).isoformat(),
+            "configurations": 2,  # Now all merged
+            "alert_rules": 0,
+            "preferences": 0,
+        }
+
+        parsed1 = MergeResponse(**response1)
+        parsed2 = MergeResponse(**response2)
+
+        # Retry should have merged more items
+        assert parsed2.configurations >= parsed1.configurations

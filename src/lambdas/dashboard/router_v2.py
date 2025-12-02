@@ -548,6 +548,81 @@ async def get_merge_status(
     return JSONResponse(result.model_dump())
 
 
+class MergeRequest(BaseModel):
+    """Request body for POST /api/v2/auth/merge."""
+
+    anonymous_user_id: str
+
+
+@auth_router.post("/merge")
+async def merge_anonymous_data(
+    request: Request,
+    body: MergeRequest,
+    table=Depends(get_dynamodb_table),
+):
+    """Merge anonymous session data into authenticated account (T069).
+
+    Feature 014 (US5): Atomic and idempotent account merge.
+    - FR-013: Idempotent - retrying has no side effects
+    - FR-014: Uses tombstone pattern for audit trail
+    - FR-015: Safe for concurrent calls
+
+    Requires authenticated session.
+
+    Returns:
+        MergeResponse with status and counts of merged items
+    """
+    from src.lambdas.shared.auth.merge import merge_anonymous_data as do_merge
+
+    authenticated_user_id = get_user_id_from_request(request)
+
+    # Validate the authenticated user exists and is authenticated (not anonymous)
+    user = auth_service.get_user_by_id(table=table, user_id=authenticated_user_id)
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required",
+        )
+
+    if user.auth_type == "anonymous":
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot merge into anonymous account. Please authenticate first.",
+        )
+
+    # Perform the merge
+    result = do_merge(
+        table=table,
+        anonymous_user_id=body.anonymous_user_id,
+        authenticated_user_id=authenticated_user_id,
+    )
+
+    # Map result status to HTTP status
+    if result.status == "failed" and result.error == "merge_conflict":
+        raise HTTPException(
+            status_code=409,
+            detail=result.message or "Merge conflict",
+        )
+
+    if result.status == "failed":
+        raise HTTPException(
+            status_code=500,
+            detail=result.message or "Merge failed",
+        )
+
+    # Return successful response
+    response_data = {
+        "status": result.status,
+        "merged_at": result.merged_at.isoformat() if result.merged_at else None,
+        "configurations": result.configurations,
+        "alert_rules": result.alert_rules,
+        "preferences": result.preferences,
+        "message": result.message,
+    }
+
+    return JSONResponse(response_data)
+
+
 # ===================================================================
 # Users Endpoints (Feature 014)
 # ===================================================================
