@@ -185,15 +185,23 @@ def create_anonymous_session(
 def validate_session(
     table: Any,
     anonymous_id: str | None,
+    extend_on_valid: bool = False,
 ) -> ValidateSessionResponse | InvalidSessionResponse:
     """Validate an anonymous session.
+
+    Feature 014 (T052, T055): Checks for revocation and optionally extends
+    session expiry on valid sessions (sliding window).
 
     Args:
         table: DynamoDB Table resource
         anonymous_id: User ID from X-Anonymous-ID header
+        extend_on_valid: If True, extend session expiry when session is valid (FR-011)
 
     Returns:
         ValidateSessionResponse if valid, InvalidSessionResponse if not
+
+    Raises:
+        SessionRevokedException: If session has been revoked (FR-016)
     """
     if not anonymous_id:
         return InvalidSessionResponse(
@@ -282,6 +290,10 @@ def validate_session(
         # Update last_active_at
         _update_last_active(table, user)
 
+        # Feature 014 (T052): Extend session expiry on valid session (sliding window)
+        if extend_on_valid:
+            _extend_session_expiry_on_validation(table, user)
+
         logger.debug(
             "Session validated",
             extra={"user_id_prefix": sanitize_for_log(anonymous_id[:8])},
@@ -323,6 +335,41 @@ def _update_last_active(table: Any, user: User) -> None:
         # Log but don't fail the validation
         logger.warning(
             "Failed to update last_active_at",
+            extra=get_safe_error_info(e),
+        )
+
+
+def _extend_session_expiry_on_validation(table: Any, user: User) -> None:
+    """Extend session expiry during validation (FR-011, T052).
+
+    Called when extend_on_valid=True in validate_session.
+    Silent failure - don't break validation on extension failure.
+    """
+    try:
+        now = datetime.now(UTC)
+        new_expiry = now + timedelta(days=SESSION_DURATION_DAYS)
+
+        table.update_item(
+            Key={"PK": user.pk, "SK": user.sk},
+            UpdateExpression="SET session_expires_at = :expires, #ttl = :ttl",
+            ExpressionAttributeNames={"#ttl": "ttl"},
+            ExpressionAttributeValues={
+                ":expires": new_expiry.isoformat(),
+                ":ttl": int(new_expiry.timestamp()) + (90 * 24 * 3600),
+            },
+        )
+
+        # Update the user object in place
+        user.session_expires_at = new_expiry
+
+        logger.debug(
+            "Extended session during validation",
+            extra={"user_id_prefix": sanitize_for_log(user.user_id[:8])},
+        )
+    except Exception as e:
+        # Log but don't fail the validation
+        logger.warning(
+            "Failed to extend session during validation",
             extra=get_safe_error_info(e),
         )
 
@@ -674,6 +721,235 @@ def extend_session(table: Any, user_id: str) -> User | None:
             extra=get_safe_error_info(e),
         )
         return None
+
+
+# =============================================================================
+# Feature 014 User Story 4: Session Refresh & Revocation (T051-T059)
+# =============================================================================
+
+
+class SessionRefreshResponse(BaseModel):
+    """Response for POST /api/v2/auth/session/refresh."""
+
+    user_id: str
+    session_expires_at: str
+    remaining_seconds: int
+    refreshed: bool
+
+
+class BulkRevocationResponse(BaseModel):
+    """Response for POST /api/v2/admin/sessions/revoke."""
+
+    revoked_count: int
+    failed_count: int
+    failed_user_ids: list[str]
+
+
+@xray_recorder.capture("extend_session_expiry")
+def extend_session_expiry(table: Any, user_id: str) -> User | None:
+    """Extend session expiry by 30 days (FR-010, T051).
+
+    Only extends if session is valid (not expired, not revoked).
+
+    Args:
+        table: DynamoDB Table resource
+        user_id: User UUID
+
+    Returns:
+        Updated User if successful, None if invalid/expired/revoked
+    """
+    user = get_user_by_id(table, user_id)
+    if not user:
+        logger.debug(
+            "User not found for session extension",
+            extra={"user_id_prefix": sanitize_for_log(user_id[:8])},
+        )
+        return None
+
+    now = datetime.now(UTC)
+
+    # Check if session is expired
+    if user.session_expires_at < now:
+        logger.debug(
+            "Cannot extend expired session",
+            extra={"user_id_prefix": sanitize_for_log(user_id[:8])},
+        )
+        return None
+
+    # Check if session is revoked
+    if user.revoked:
+        logger.debug(
+            "Cannot extend revoked session",
+            extra={"user_id_prefix": sanitize_for_log(user_id[:8])},
+        )
+        return None
+
+    new_expiry = now + timedelta(days=SESSION_DURATION_DAYS)
+
+    try:
+        table.update_item(
+            Key={"PK": user.pk, "SK": user.sk},
+            UpdateExpression="SET session_expires_at = :expires, last_active_at = :last_active, #ttl = :ttl",
+            ExpressionAttributeNames={"#ttl": "ttl"},
+            ExpressionAttributeValues={
+                ":expires": new_expiry.isoformat(),
+                ":last_active": now.isoformat(),
+                ":ttl": int(new_expiry.timestamp()) + (90 * 24 * 3600),
+            },
+        )
+
+        user.session_expires_at = new_expiry
+        user.last_active_at = now
+
+        logger.info(
+            "Extended session expiry",
+            extra={
+                "user_id_prefix": sanitize_for_log(user_id[:8]),
+                "new_expiry_days": SESSION_DURATION_DAYS,
+            },
+        )
+
+        return user
+
+    except Exception as e:
+        logger.error("Failed to extend session expiry", extra=get_safe_error_info(e))
+        return None
+
+
+@xray_recorder.capture("refresh_session")
+def refresh_session(table: Any, user_id: str) -> SessionRefreshResponse | None:
+    """Refresh session and return new expiry info (T056).
+
+    Args:
+        table: DynamoDB Table resource
+        user_id: User UUID
+
+    Returns:
+        SessionRefreshResponse if successful, None if invalid
+    """
+    user = extend_session_expiry(table, user_id)
+    if not user:
+        return None
+
+    remaining = int((user.session_expires_at - datetime.now(UTC)).total_seconds())
+
+    return SessionRefreshResponse(
+        user_id=user.user_id,
+        session_expires_at=user.session_expires_at.isoformat(),
+        remaining_seconds=max(0, remaining),
+        refreshed=True,
+    )
+
+
+@xray_recorder.capture("revoke_user_session")
+def revoke_user_session(
+    table: Any,
+    user_id: str,
+    reason: str,
+) -> bool:
+    """Revoke a single user's session (FR-016, T053).
+
+    Args:
+        table: DynamoDB Table resource
+        user_id: User UUID
+        reason: Reason for revocation (audit trail)
+
+    Returns:
+        True if revoked (or already revoked), False if user not found
+    """
+    user = get_user_by_id(table, user_id)
+    if not user:
+        logger.warning(
+            "Cannot revoke session - user not found",
+            extra={"user_id_prefix": sanitize_for_log(user_id[:8])},
+        )
+        return False
+
+    # Idempotent: if already revoked, just return success
+    if user.revoked:
+        logger.debug(
+            "Session already revoked",
+            extra={"user_id_prefix": sanitize_for_log(user_id[:8])},
+        )
+        return True
+
+    now = datetime.now(UTC)
+
+    try:
+        table.update_item(
+            Key={"PK": user.pk, "SK": user.sk},
+            UpdateExpression="SET revoked = :revoked, revoked_at = :revoked_at, revoked_reason = :reason",
+            ExpressionAttributeValues={
+                ":revoked": True,
+                ":revoked_at": now.isoformat(),
+                ":reason": reason,
+            },
+        )
+
+        logger.info(
+            "Revoked user session",
+            extra={
+                "user_id_prefix": sanitize_for_log(user_id[:8]),
+                "reason": sanitize_for_log(reason[:50]),
+            },
+        )
+
+        return True
+
+    except Exception as e:
+        logger.error("Failed to revoke session", extra=get_safe_error_info(e))
+        return False
+
+
+@xray_recorder.capture("revoke_sessions_bulk")
+def revoke_sessions_bulk(
+    table: Any,
+    user_ids: list[str],
+    reason: str,
+) -> BulkRevocationResponse:
+    """Revoke multiple sessions (andon cord pattern) (FR-017, T054).
+
+    Args:
+        table: DynamoDB Table resource
+        user_ids: List of user UUIDs to revoke
+        reason: Reason for revocation (audit trail)
+
+    Returns:
+        BulkRevocationResponse with counts and failed IDs
+    """
+    if not user_ids:
+        return BulkRevocationResponse(
+            revoked_count=0,
+            failed_count=0,
+            failed_user_ids=[],
+        )
+
+    revoked_count = 0
+    failed_count = 0
+    failed_user_ids = []
+
+    for user_id in user_ids:
+        success = revoke_user_session(table, user_id, reason)
+        if success:
+            revoked_count += 1
+        else:
+            failed_count += 1
+            failed_user_ids.append(user_id)
+
+    logger.info(
+        "Bulk session revocation completed",
+        extra={
+            "revoked_count": revoked_count,
+            "failed_count": failed_count,
+            "reason": sanitize_for_log(reason[:50]),
+        },
+    )
+
+    return BulkRevocationResponse(
+        revoked_count=revoked_count,
+        failed_count=failed_count,
+        failed_user_ids=failed_user_ids,
+    )
 
 
 # =============================================================================

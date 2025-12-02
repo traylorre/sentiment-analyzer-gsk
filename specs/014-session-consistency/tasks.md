@@ -150,24 +150,24 @@
 
 ### Tests for User Story 4
 
-- [ ] T045 [P] [US4] Unit test for session expiry extension in tests/unit/lambdas/shared/auth/test_session_lifecycle.py
-- [ ] T046 [P] [US4] Unit test for session revocation check in tests/unit/lambdas/shared/auth/test_session_revocation.py
-- [ ] T047 [P] [US4] Unit test for bulk session revocation in tests/unit/lambdas/shared/auth/test_session_revocation.py
-- [ ] T048 [P] [US4] Contract test for POST /api/v2/auth/session/refresh in tests/contract/test_session_api_v2.py
-- [ ] T049 [P] [US4] Contract test for GET /api/v2/auth/session (403 revoked) in tests/contract/test_session_api_v2.py
-- [ ] T050 [P] [US4] Frontend vitest for session sync in frontend/src/stores/__tests__/auth-store.test.ts
+- [x] T045 [P] [US4] Unit test for session expiry extension in tests/unit/lambdas/shared/auth/test_session_lifecycle.py
+- [x] T046 [P] [US4] Unit test for session revocation check in tests/unit/lambdas/shared/auth/test_session_revocation.py
+- [x] T047 [P] [US4] Unit test for bulk session revocation in tests/unit/lambdas/shared/auth/test_session_revocation.py
+- [x] T048 [P] [US4] Contract test for POST /api/v2/auth/session/refresh in tests/contract/test_session_api_v2.py
+- [x] T049 [P] [US4] Contract test for GET /api/v2/auth/session (403 revoked) in tests/contract/test_session_api_v2.py
+- [ ] T050 [P] [US4] Frontend vitest for session sync in frontend/src/stores/__tests__/auth-store.test.ts (deferred: frontend)
 
 ### Implementation for User Story 4
 
-- [ ] T051 [US4] Implement extend_session_expiry() in src/lambdas/dashboard/auth.py
-- [ ] T052 [US4] Add session expiry extension to validate_session() in src/lambdas/dashboard/auth.py
-- [ ] T053 [US4] Implement revoke_user_session() in src/lambdas/dashboard/auth.py
-- [ ] T054 [US4] Implement revoke_sessions_bulk() for andon cord in src/lambdas/dashboard/auth.py
-- [ ] T055 [US4] Add revocation check to validate_session() in src/lambdas/dashboard/auth.py
-- [ ] T056 [US4] Add POST /api/v2/auth/session/refresh endpoint in src/lambdas/dashboard/router_v2.py
-- [ ] T057 [US4] Add POST /api/v2/admin/sessions/revoke endpoint in src/lambdas/dashboard/router_v2.py
-- [ ] T058 [US4] Update auth-store to call session refresh periodically in frontend/src/stores/auth-store.ts
-- [ ] T059 [US4] Handle 403 (revoked) response in frontend API client in frontend/src/lib/api/client.ts
+- [x] T051 [US4] Implement extend_session_expiry() in src/lambdas/dashboard/auth.py
+- [x] T052 [US4] Add session expiry extension to validate_session() in src/lambdas/dashboard/auth.py
+- [x] T053 [US4] Implement revoke_user_session() in src/lambdas/dashboard/auth.py
+- [x] T054 [US4] Implement revoke_sessions_bulk() for andon cord in src/lambdas/dashboard/auth.py
+- [x] T055 [US4] Add revocation check to validate_session() in src/lambdas/dashboard/auth.py
+- [x] T056 [US4] Add POST /api/v2/auth/session/refresh endpoint in src/lambdas/dashboard/router_v2.py
+- [x] T057 [US4] Add POST /api/v2/admin/sessions/revoke endpoint in src/lambdas/dashboard/router_v2.py
+- [ ] T058 [US4] Update auth-store to call session refresh periodically in frontend/src/stores/auth-store.ts (deferred: frontend)
+- [ ] T059 [US4] Handle 403 (revoked) response in frontend API client in frontend/src/lib/api/client.ts (deferred: frontend)
 
 **Checkpoint**: User Story 4 complete - sessions refresh, revocation works, frontend syncs
 

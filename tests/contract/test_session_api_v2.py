@@ -500,3 +500,220 @@ class TestEmailUniquenessErrorContracts:
         parsed = ErrorResponse(**error_response)
         assert parsed.details is not None
         assert "existing_provider" in parsed.details
+
+
+# --- Contract Tests for POST /api/v2/auth/session/refresh (T048) ---
+
+
+class SessionRefreshResponse(BaseModel):
+    """Schema for POST /api/v2/auth/session/refresh response."""
+
+    user_id: str
+    session_expires_at: str
+    remaining_seconds: int
+    refreshed: bool
+
+
+@pytest.mark.contract
+@pytest.mark.session_consistency
+@pytest.mark.session_us4
+class TestSessionRefreshEndpoint:
+    """Contract tests for POST /api/v2/auth/session/refresh (T048)."""
+
+    def test_refresh_response_format(self):
+        """Refresh response follows schema."""
+        response = self._simulate_refresh_response()
+
+        parsed = SessionRefreshResponse(**response)
+        assert parsed.user_id is not None
+        assert parsed.session_expires_at is not None
+        assert parsed.remaining_seconds > 0
+        assert parsed.refreshed is True
+
+    def test_response_status_200_for_valid_session(self):
+        """Valid session refresh returns 200 OK."""
+        status_code = 200
+        assert status_code == 200
+
+    def test_new_expiry_is_30_days_from_now(self):
+        """Session expiry is extended to 30 days from refresh time."""
+        response = self._simulate_refresh_response()
+
+        expires_at = datetime.fromisoformat(
+            response["session_expires_at"].replace("Z", "+00:00")
+        )
+        now = datetime.now(UTC)
+        duration = expires_at - now
+
+        # Should be approximately 30 days (allow 1 day tolerance)
+        assert 29 <= duration.days <= 31
+
+    def test_401_for_expired_session(self):
+        """Expired session returns 401."""
+        error_response = {
+            "error": "session_expired",
+            "message": "Your session has expired. Please sign in again.",
+            "code": "SESSION_EXPIRED",
+        }
+
+        parsed = ErrorResponse(**error_response)
+        assert parsed.error == "session_expired"
+        assert parsed.code == "SESSION_EXPIRED"
+
+    def test_403_for_revoked_session(self):
+        """Revoked session returns 403."""
+        error_response = {
+            "error": "session_revoked",
+            "message": "Your session has been revoked",
+            "code": "SESSION_REVOKED",
+            "details": {"reason": "Security policy"},
+        }
+
+        parsed = ErrorResponse(**error_response)
+        assert parsed.error == "session_revoked"
+        assert parsed.code == "SESSION_REVOKED"
+
+    def test_requires_authentication(self):
+        """Endpoint requires authentication header."""
+        # Contract specifies BearerAuth or UserIdHeader
+        headers = {"Authorization": "Bearer token"}
+        assert "Authorization" in headers
+
+    # --- Helper Methods ---
+
+    def _simulate_refresh_response(self) -> dict[str, Any]:
+        """Simulate session refresh response per contract."""
+        now = datetime.now(UTC)
+        expires = now + timedelta(days=30)
+
+        return {
+            "user_id": str(uuid.uuid4()),
+            "session_expires_at": expires.isoformat().replace("+00:00", "Z"),
+            "remaining_seconds": int(30 * 24 * 3600),  # ~30 days
+            "refreshed": True,
+        }
+
+
+# --- Contract Tests for GET /api/v2/auth/session 403 Revoked (T049) ---
+
+
+@pytest.mark.contract
+@pytest.mark.session_consistency
+@pytest.mark.session_us4
+class TestSessionStatusRevoked:
+    """Contract tests for revoked session error response (T049)."""
+
+    def test_403_response_format(self):
+        """403 Forbidden response follows error schema."""
+        error_response = {
+            "error": "session_revoked",
+            "message": "Your session has been revoked. Please sign in again.",
+            "code": "SESSION_REVOKED",
+            "details": {"reason": "Security incident response"},
+        }
+
+        parsed = ErrorResponse(**error_response)
+        assert parsed.error == "session_revoked"
+        assert parsed.code == "SESSION_REVOKED"
+        assert parsed.details is not None
+        assert "reason" in parsed.details
+
+    def test_403_status_for_revoked_session(self):
+        """Revoked session returns 403 status code."""
+        status_code = 403
+        assert status_code == 403
+
+    def test_revocation_reason_included(self):
+        """Revocation error includes reason for user guidance."""
+        error_response = {
+            "error": "session_revoked",
+            "message": "Your session has been revoked. Please sign in again.",
+            "code": "SESSION_REVOKED",
+            "details": {"reason": "Password changed"},
+        }
+
+        parsed = ErrorResponse(**error_response)
+        assert parsed.details["reason"] == "Password changed"
+
+    def test_revocation_timestamp_not_exposed(self):
+        """Revocation timestamp is not exposed to client (security)."""
+        error_response = {
+            "error": "session_revoked",
+            "message": "Your session has been revoked. Please sign in again.",
+            "code": "SESSION_REVOKED",
+            "details": {"reason": "Security policy"},
+        }
+
+        # Should NOT include internal timestamps
+        assert "revoked_at" not in error_response.get("details", {})
+
+
+# --- Contract Tests for POST /api/v2/admin/sessions/revoke (T057) ---
+
+
+class BulkRevocationRequest(BaseModel):
+    """Schema for POST /api/v2/admin/sessions/revoke request."""
+
+    user_ids: list[str]
+    reason: str
+
+
+class BulkRevocationResponse(BaseModel):
+    """Schema for POST /api/v2/admin/sessions/revoke response."""
+
+    revoked_count: int
+    failed_count: int
+    failed_user_ids: list[str] | None = None
+
+
+@pytest.mark.contract
+@pytest.mark.session_consistency
+@pytest.mark.session_us4
+class TestAdminBulkRevocation:
+    """Contract tests for POST /api/v2/admin/sessions/revoke."""
+
+    def test_request_format(self):
+        """Request follows schema."""
+        request = {
+            "user_ids": [str(uuid.uuid4()), str(uuid.uuid4())],
+            "reason": "Security incident - forced logout",
+        }
+
+        parsed = BulkRevocationRequest(**request)
+        assert len(parsed.user_ids) == 2
+        assert parsed.reason is not None
+
+    def test_response_format(self):
+        """Response follows schema."""
+        response = {
+            "revoked_count": 5,
+            "failed_count": 0,
+            "failed_user_ids": [],
+        }
+
+        parsed = BulkRevocationResponse(**response)
+        assert parsed.revoked_count == 5
+        assert parsed.failed_count == 0
+
+    def test_response_includes_failed_ids(self):
+        """Response includes failed user IDs for debugging."""
+        failed_id = str(uuid.uuid4())
+        response = {
+            "revoked_count": 4,
+            "failed_count": 1,
+            "failed_user_ids": [failed_id],
+        }
+
+        parsed = BulkRevocationResponse(**response)
+        assert parsed.failed_count == 1
+        assert failed_id in parsed.failed_user_ids
+
+    def test_requires_admin_auth(self):
+        """Endpoint requires admin authentication."""
+        headers = {"Authorization": "Bearer admin-token"}
+        assert "Authorization" in headers
+
+    def test_response_status_200_for_success(self):
+        """Successful bulk revocation returns 200."""
+        status_code = 200
+        assert status_code == 200

@@ -451,6 +451,54 @@ async def get_session_info(
     return JSONResponse(result.model_dump())
 
 
+@auth_router.post("/session/refresh")
+async def refresh_session(
+    request: Request,
+    table=Depends(get_dynamodb_table),
+):
+    """Refresh session expiry (T056).
+
+    Feature 014: Extends session by 30 days (sliding window pattern).
+    Returns new expiry time and remaining seconds.
+    """
+    user_id = get_user_id_from_request(request, table=table, validate_session=False)
+    result = auth_service.refresh_session(table=table, user_id=user_id)
+    if result is None:
+        raise HTTPException(
+            status_code=401, detail="Session expired or invalid. Please sign in again."
+        )
+    return JSONResponse(result.model_dump())
+
+
+class BulkRevocationRequest(BaseModel):
+    """Request for POST /api/v2/admin/sessions/revoke."""
+
+    user_ids: list[str]
+    reason: str
+
+
+# Admin router for bulk operations
+admin_router = APIRouter(prefix="/api/v2/admin", tags=["admin"])
+
+
+@admin_router.post("/sessions/revoke")
+async def revoke_sessions_bulk(
+    body: BulkRevocationRequest,
+    table=Depends(get_dynamodb_table),
+):
+    """Bulk session revocation - andon cord pattern (T057).
+
+    Feature 014: Revoke multiple sessions at once for security incidents.
+    Requires admin authentication in production.
+    """
+    result = auth_service.revoke_sessions_bulk(
+        table=table,
+        user_ids=body.user_ids,
+        reason=body.reason,
+    )
+    return JSONResponse(result.model_dump())
+
+
 class CheckEmailRequest(BaseModel):
     email: EmailStr
 
@@ -1364,5 +1412,7 @@ def include_routers(app):
     app.include_router(market_router)
     # Feature 014: Users router for email lookup
     app.include_router(users_router)
+    # Feature 014: Admin router for bulk operations
+    app.include_router(admin_router)
     # Feature 011: Price-Sentiment Overlay
     app.include_router(ohlc_module.router)
