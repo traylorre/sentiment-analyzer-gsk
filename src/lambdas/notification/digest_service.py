@@ -318,10 +318,10 @@ class DigestService:
                 ]
                 prev_score = sum(prev_scores) / len(prev_scores) if prev_scores else 0.0
 
-                # Determine label
-                if current_score > 0.33:
+                # Determine label (inclusive thresholds per project standard)
+                if current_score >= 0.33:
                     label = "positive"
-                elif current_score < -0.33:
+                elif current_score <= -0.33:
                     label = "negative"
                 else:
                     label = "neutral"

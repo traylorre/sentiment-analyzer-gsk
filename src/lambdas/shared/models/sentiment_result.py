@@ -94,8 +94,8 @@ def sentiment_label_from_score(
     Returns:
         Sentiment label: positive, neutral, or negative
     """
-    if score < -0.33:
+    if score <= -0.33:
         return "negative"
-    elif score > 0.33:
+    elif score >= 0.33:
         return "positive"
     return "neutral"
