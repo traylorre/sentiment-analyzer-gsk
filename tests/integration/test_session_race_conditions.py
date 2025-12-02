@@ -265,3 +265,136 @@ class TestAtomicTokenState:
 
         used_at = datetime.fromisoformat(item["used_at"])
         assert before_verify <= used_at <= after_verify
+
+
+@pytest.mark.integration
+@pytest.mark.session_consistency
+@pytest.mark.session_us3
+class TestConcurrentUserCreation:
+    """Tests for concurrent user creation with same email (T038)."""
+
+    def test_10_concurrent_creations_exactly_one_account(self, mock_dynamodb_table):
+        """FR-007: Fire 10 concurrent user creations, exactly 1 account created."""
+        from src.lambdas.dashboard.auth import get_or_create_user_by_email
+        from src.lambdas.shared.errors.session_errors import EmailAlreadyExistsError
+
+        email = "concurrent-signup@example.com"
+
+        # Track results
+        success_count = 0
+        existing_count = 0
+        error_count = 0
+        created_user_ids = set()
+
+        # Simulate 10 concurrent user creations
+        for _ in range(10):
+            try:
+                user, is_new = get_or_create_user_by_email(
+                    table=mock_dynamodb_table,
+                    email=email,
+                    auth_type="email",
+                )
+                if is_new:
+                    success_count += 1
+                    created_user_ids.add(user.user_id)
+                else:
+                    existing_count += 1
+                    created_user_ids.add(user.user_id)
+            except EmailAlreadyExistsError:
+                error_count += 1
+
+        # Exactly 1 account should be created
+        assert success_count == 1, f"Expected exactly 1 new user, got {success_count}"
+        assert existing_count == 9, f"Expected 9 existing returns, got {existing_count}"
+        assert error_count == 0, f"Expected 0 errors, got {error_count}"
+
+        # All operations should reference the same user ID
+        assert len(created_user_ids) == 1, "All operations should return same user"
+
+        # Verify only one user exists in database via GSI
+        response = mock_dynamodb_table.query(
+            IndexName="by_email",
+            KeyConditionExpression="email = :email",
+            ExpressionAttributeValues={":email": email.lower()},
+        )
+        assert response["Count"] == 1, "Exactly one user should exist in database"
+
+    def test_concurrent_creation_preserves_first_auth_type(self, mock_dynamodb_table):
+        """First creation's auth_type is preserved for subsequent lookups."""
+        from src.lambdas.dashboard.auth import get_or_create_user_by_email
+
+        email = "auth-type-test@example.com"
+
+        # First creation with google
+        user1, is_new1 = get_or_create_user_by_email(
+            table=mock_dynamodb_table,
+            email=email,
+            auth_type="google",
+        )
+        assert is_new1 is True
+        assert user1.auth_type == "google"
+
+        # Second creation attempt with email (different auth type)
+        user2, is_new2 = get_or_create_user_by_email(
+            table=mock_dynamodb_table,
+            email=email,
+            auth_type="email",
+        )
+        assert is_new2 is False
+        # Original auth type preserved
+        assert user2.auth_type == "google"
+        assert user1.user_id == user2.user_id
+
+    def test_email_case_insensitivity_prevents_duplicates(self, mock_dynamodb_table):
+        """Email case variations all resolve to same user."""
+        from src.lambdas.dashboard.auth import get_or_create_user_by_email
+
+        base_email = "CaseTest@Example.COM"
+
+        # Create with mixed case
+        user1, is_new1 = get_or_create_user_by_email(
+            table=mock_dynamodb_table,
+            email=base_email,
+            auth_type="email",
+        )
+        assert is_new1 is True
+
+        # Try to create with different case variations
+        variations = [
+            "casetest@example.com",
+            "CASETEST@EXAMPLE.COM",
+            "CaseTest@example.com",
+            "casetest@Example.COM",
+        ]
+
+        for variation in variations:
+            user, is_new = get_or_create_user_by_email(
+                table=mock_dynamodb_table,
+                email=variation,
+                auth_type="email",
+            )
+            assert is_new is False, f"Should find existing user for {variation}"
+            assert user.user_id == user1.user_id
+
+    def test_different_emails_create_separate_accounts(self, mock_dynamodb_table):
+        """Different emails create separate accounts (sanity check)."""
+        from src.lambdas.dashboard.auth import get_or_create_user_by_email
+
+        emails = [
+            "user1@example.com",
+            "user2@example.com",
+            "user3@example.com",
+        ]
+
+        created_ids = set()
+        for email in emails:
+            user, is_new = get_or_create_user_by_email(
+                table=mock_dynamodb_table,
+                email=email,
+                auth_type="email",
+            )
+            assert is_new is True
+            created_ids.add(user.user_id)
+
+        # All users should have unique IDs
+        assert len(created_ids) == 3

@@ -122,19 +122,19 @@
 
 ### Tests for User Story 3
 
-- [ ] T035 [P] [US3] Unit test for email GSI lookup in tests/unit/lambdas/shared/auth/test_email_uniqueness.py
-- [ ] T036 [P] [US3] Unit test for conditional write rejection in tests/unit/lambdas/shared/auth/test_email_uniqueness.py
-- [ ] T037 [P] [US3] Unit test for existing email returns user in tests/unit/lambdas/shared/auth/test_email_uniqueness.py
-- [ ] T038 [P] [US3] Integration test for 10 concurrent user creations in tests/integration/test_session_race_conditions.py
-- [ ] T039 [P] [US3] Contract test for GET /api/v2/users/lookup in tests/contract/test_session_api_v2.py
+- [x] T035 [P] [US3] Unit test for email GSI lookup in tests/unit/lambdas/shared/auth/test_email_uniqueness.py
+- [x] T036 [P] [US3] Unit test for conditional write rejection in tests/unit/lambdas/shared/auth/test_email_uniqueness.py
+- [x] T037 [P] [US3] Unit test for existing email returns user in tests/unit/lambdas/shared/auth/test_email_uniqueness.py
+- [x] T038 [P] [US3] Integration test for 10 concurrent user creations in tests/integration/test_session_race_conditions.py
+- [x] T039 [P] [US3] Contract test for GET /api/v2/users/lookup in tests/contract/test_session_api_v2.py
 
 ### Implementation for User Story 3
 
-- [ ] T040 [US3] Implement get_user_by_email() using GSI query in src/lambdas/dashboard/auth.py
-- [ ] T041 [US3] Implement create_user_with_email() with conditional write in src/lambdas/dashboard/auth.py
-- [ ] T042 [US3] Add EmailAlreadyExistsError handling to OAuth callback in src/lambdas/dashboard/auth.py
-- [ ] T043 [US3] Add EmailAlreadyExistsError handling to magic link verification in src/lambdas/dashboard/auth.py
-- [ ] T044 [US3] Add /api/v2/users/lookup endpoint in src/lambdas/dashboard/router_v2.py
+- [x] T040 [US3] Implement get_user_by_email_gsi() using GSI query in src/lambdas/dashboard/auth.py
+- [x] T041 [US3] Implement create_user_with_email() with conditional write in src/lambdas/dashboard/auth.py
+- [x] T042 [US3] Implement get_or_create_user_by_email() for atomic get-or-create in src/lambdas/dashboard/auth.py
+- [x] T043 [US3] Add EmailAlreadyExistsError import to router_v2.py
+- [x] T044 [US3] Add /api/v2/users/lookup endpoint in src/lambdas/dashboard/router_v2.py
 
 **Checkpoint**: User Story 3 complete - email uniqueness enforced, GSI enables fast lookup
 

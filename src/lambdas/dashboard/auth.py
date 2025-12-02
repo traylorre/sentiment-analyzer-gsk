@@ -399,6 +399,228 @@ def get_user_by_email(table: Any, email: str) -> User | None:
         return None
 
 
+# =============================================================================
+# Feature 014 User Story 3: Email Uniqueness (T040-T044)
+# =============================================================================
+
+
+@xray_recorder.capture("get_user_by_email_gsi")
+def get_user_by_email_gsi(table: Any, email: str) -> User | None:
+    """Get user by email using GSI query (FR-009, T040).
+
+    Uses the by_email GSI for O(1) lookup performance instead of table scan.
+    Case-insensitive: all emails are normalized to lowercase.
+
+    Args:
+        table: DynamoDB Table resource
+        email: User's email address
+
+    Returns:
+        User if found, None otherwise
+    """
+    normalized_email = email.lower()
+
+    logger.debug(
+        "GSI email lookup",
+        extra={"email_domain": sanitize_for_log(normalized_email.split("@")[-1])},
+    )
+
+    try:
+        # GSI by_email has email as HASH and SK as RANGE
+        # Filter by entity_type to only return USER records
+        response = table.query(
+            IndexName="by_email",
+            KeyConditionExpression="email = :email",
+            FilterExpression="entity_type = :type",
+            ExpressionAttributeValues={
+                ":email": normalized_email,
+                ":type": "USER",
+            },
+            Limit=1,  # We only need one result for uniqueness check
+        )
+
+        items = response.get("Items", [])
+        if not items:
+            return None
+
+        return User.from_dynamodb_item(items[0])
+
+    except Exception as e:
+        logger.error(
+            "Failed GSI email lookup",
+            extra=get_safe_error_info(e),
+        )
+        return None
+
+
+@xray_recorder.capture("create_user_with_email")
+def create_user_with_email(
+    table: Any,
+    email: str,
+    auth_type: str,
+    cognito_sub: str | None = None,
+) -> User:
+    """Create user with email uniqueness enforcement (FR-007, T041).
+
+    Checks for existing user via GSI first, then creates with conditional write
+    to prevent race conditions where two requests try to create the same email.
+
+    Args:
+        table: DynamoDB Table resource
+        email: User's email (case-insensitive)
+        auth_type: Authentication type (email, google, github)
+        cognito_sub: Optional Cognito sub identifier
+
+    Returns:
+        Created User
+
+    Raises:
+        EmailAlreadyExistsError: If email already registered
+    """
+    from src.lambdas.shared.errors.session_errors import EmailAlreadyExistsError
+
+    normalized_email = email.lower()
+
+    # First check via GSI (fast O(1) lookup)
+    existing_user = get_user_by_email_gsi(table, normalized_email)
+    if existing_user:
+        logger.info(
+            "Email already exists during creation",
+            extra={
+                "email_domain": sanitize_for_log(normalized_email.split("@")[-1]),
+                "existing_user_id_prefix": sanitize_for_log(existing_user.user_id[:8]),
+            },
+        )
+        raise EmailAlreadyExistsError(
+            email=normalized_email,
+            existing_user_id=existing_user.user_id,
+        )
+
+    # Create new user
+    now = datetime.now(UTC)
+    expires_at = now + timedelta(days=SESSION_DURATION_DAYS)
+
+    user = User(
+        user_id=str(uuid.uuid4()),
+        email=normalized_email,
+        cognito_sub=cognito_sub,
+        auth_type=auth_type,
+        created_at=now,
+        last_active_at=now,
+        session_expires_at=expires_at,
+        timezone="America/New_York",
+        email_notifications_enabled=True,
+        daily_email_count=0,
+        entity_type="USER",
+    )
+
+    item = user.to_dynamodb_item()
+    item["ttl"] = int(expires_at.timestamp()) + (90 * 24 * 3600)  # 90 days for auth
+
+    try:
+        # Conditional write to prevent race condition
+        # This fails if another request created a user with the same PK
+        table.put_item(
+            Item=item,
+            ConditionExpression="attribute_not_exists(PK)",
+        )
+
+        logger.info(
+            "Created user with email",
+            extra={
+                "user_id_prefix": sanitize_for_log(user.user_id[:8]),
+                "email_domain": sanitize_for_log(normalized_email.split("@")[-1]),
+                "auth_type": auth_type,
+            },
+        )
+
+        return user
+
+    except table.meta.client.exceptions.ConditionalCheckFailedException:
+        # Race condition - another request created the user
+        logger.warning(
+            "User creation race condition detected",
+            extra={"email_domain": sanitize_for_log(normalized_email.split("@")[-1])},
+        )
+        raise EmailAlreadyExistsError(email=normalized_email) from None
+
+    except Exception as e:
+        logger.error(
+            "Failed to create user with email",
+            extra=get_safe_error_info(e),
+        )
+        raise
+
+
+@xray_recorder.capture("get_or_create_user_by_email")
+def get_or_create_user_by_email(
+    table: Any,
+    email: str,
+    auth_type: str,
+    cognito_sub: str | None = None,
+) -> tuple[User, bool]:
+    """Get existing user or create new one by email (FR-008, T042).
+
+    Atomically handles the get-or-create pattern to prevent race conditions.
+    If multiple requests try to create the same email concurrently, exactly
+    one will succeed and others will return the existing user.
+
+    Args:
+        table: DynamoDB Table resource
+        email: User's email (case-insensitive)
+        auth_type: Authentication type for new user
+        cognito_sub: Optional Cognito sub identifier
+
+    Returns:
+        Tuple of (User, is_new) where is_new=True if user was created
+    """
+    from src.lambdas.shared.errors.session_errors import EmailAlreadyExistsError
+
+    normalized_email = email.lower()
+
+    # First try to find existing user
+    existing_user = get_user_by_email_gsi(table, normalized_email)
+    if existing_user:
+        logger.debug(
+            "Found existing user by email",
+            extra={
+                "user_id_prefix": sanitize_for_log(existing_user.user_id[:8]),
+                "auth_type": existing_user.auth_type,
+            },
+        )
+        return existing_user, False
+
+    # Try to create new user
+    try:
+        user = create_user_with_email(
+            table=table,
+            email=normalized_email,
+            auth_type=auth_type,
+            cognito_sub=cognito_sub,
+        )
+        return user, True
+
+    except EmailAlreadyExistsError:
+        # Race condition - another request created the user, fetch it
+        logger.info(
+            "Race condition handled - fetching created user",
+            extra={"email_domain": sanitize_for_log(normalized_email.split("@")[-1])},
+        )
+        user = get_user_by_email_gsi(table, normalized_email)
+        if user:
+            return user, False
+
+        # Extremely rare: creation failed but user still not found
+        # This could happen if the other request also failed
+        logger.error(
+            "User not found after race condition",
+            extra={"email_domain": sanitize_for_log(normalized_email.split("@")[-1])},
+        )
+        raise RuntimeError(
+            "Failed to get or create user: concurrent creation failed"
+        ) from None
+
+
 def extend_session(table: Any, user_id: str) -> User | None:
     """Extend user session by 30 days.
 

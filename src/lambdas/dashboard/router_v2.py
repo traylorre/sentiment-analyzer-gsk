@@ -104,6 +104,8 @@ ticker_router = APIRouter(prefix="/api/v2/tickers", tags=["tickers"])
 alert_router = APIRouter(prefix="/api/v2/alerts", tags=["alerts"])
 notification_router = APIRouter(prefix="/api/v2/notifications", tags=["notifications"])
 market_router = APIRouter(prefix="/api/v2/market", tags=["market"])
+# Feature 014: Users router for email lookup (T044)
+users_router = APIRouter(prefix="/api/v2/users", tags=["users"])
 
 
 def get_dynamodb_table():
@@ -496,6 +498,55 @@ async def get_merge_status(
     user_id = get_user_id_from_request(request)
     result = auth_service.get_merge_status_endpoint(table=table, user_id=user_id)
     return JSONResponse(result.model_dump())
+
+
+# ===================================================================
+# Users Endpoints (Feature 014)
+# ===================================================================
+
+
+class UserLookupResponse(BaseModel):
+    """Response for GET /api/v2/users/lookup."""
+
+    found: bool
+    user_id: str | None = None
+    auth_type: str | None = None
+    email_masked: str | None = None
+
+
+@users_router.get("/lookup")
+async def lookup_user_by_email(
+    email: EmailStr = Query(..., description="Email address to look up"),
+    table=Depends(get_dynamodb_table),
+):
+    """Look up user by email address (T044).
+
+    Feature 014: Uses GSI for O(1) lookup performance.
+    Requires admin authentication in production.
+
+    Returns:
+        UserLookupResponse with found=true if user exists
+    """
+    user = auth_service.get_user_by_email_gsi(table=table, email=email)
+
+    if user:
+        return JSONResponse(
+            UserLookupResponse(
+                found=True,
+                user_id=user.user_id,
+                auth_type=user.auth_type,
+                email_masked=auth_service._mask_email(user.email),
+            ).model_dump()
+        )
+
+    return JSONResponse(
+        UserLookupResponse(
+            found=False,
+            user_id=None,
+            auth_type=None,
+            email_masked=None,
+        ).model_dump()
+    )
 
 
 # ===================================================================
@@ -1311,5 +1362,7 @@ def include_routers(app):
     app.include_router(alert_router)
     app.include_router(notification_router)
     app.include_router(market_router)
+    # Feature 014: Users router for email lookup
+    app.include_router(users_router)
     # Feature 011: Price-Sentiment Overlay
     app.include_router(ohlc_module.router)
