@@ -634,8 +634,8 @@ def calculate_ttl_timestamp(days: int = E2E_TEST_TTL_DAYS) -> int:
     return int((datetime.now(UTC) + timedelta(days=days)).timestamp())
 
 
-@pytest_asyncio.fixture(scope="session", autouse=True)
-async def cleanup_test_data(test_run_id: str) -> AsyncGenerator[None, None]:
+@pytest.fixture(scope="session", autouse=True)
+def cleanup_test_data(test_run_id: str) -> Generator[None, None, None]:
     """Log test run ID for reference (no auto-cleanup).
 
     Test data uses TTL-based expiration (7 days) instead of immediate cleanup.
