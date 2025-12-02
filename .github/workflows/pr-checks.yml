@@ -177,7 +177,7 @@ jobs:
   # JOB 4: CodeQL Analysis
   # ========================================================================
   codeql:
-    name: Analyze (python)
+    name: Analyze
     runs-on: ubuntu-latest
 
     permissions:
