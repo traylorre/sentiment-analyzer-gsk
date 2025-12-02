@@ -18,6 +18,7 @@ class TestMergeAnonymousData:
         """Returns no_data when anonymous user has no items."""
         table = MagicMock()
         table.query.return_value = {"Items": []}
+        table.get_item.return_value = {}  # No existing merge status
 
         anon_id = str(uuid.uuid4())
         auth_id = str(uuid.uuid4())
@@ -60,6 +61,7 @@ class TestMergeAnonymousData:
             return {"Items": []}
 
         table.query.side_effect = query_side_effect
+        table.get_item.return_value = {}  # No existing merge status
         table.put_item.return_value = {}
         table.delete_item.return_value = {}
         table.update_item.return_value = {}
@@ -100,6 +102,7 @@ class TestMergeAnonymousData:
             return {"Items": []}
 
         table.query.side_effect = query_side_effect
+        table.get_item.return_value = {}  # No existing merge status
         table.put_item.return_value = {}
         table.delete_item.return_value = {}
         table.update_item.return_value = {}
@@ -134,6 +137,7 @@ class TestMergeAnonymousData:
             return {"Items": []}
 
         table.query.side_effect = query_side_effect
+        table.get_item.return_value = {}  # No existing merge status
         table.put_item.return_value = {}
         table.delete_item.return_value = {}
         table.update_item.return_value = {}
@@ -148,8 +152,8 @@ class TestMergeAnonymousData:
         assert new_item["merged_from"] == anon_id
         assert "merged_at" in new_item
 
-    def test_merge_deletes_old_items(self):
-        """Verifies old items are deleted after transfer."""
+    def test_merge_marks_old_items_as_tombstone(self):
+        """Verifies old items are marked as tombstone (not deleted) - Feature 014."""
         table = MagicMock()
         anon_id = str(uuid.uuid4())
         auth_id = str(uuid.uuid4())
@@ -171,16 +175,21 @@ class TestMergeAnonymousData:
             return {"Items": []}
 
         table.query.side_effect = query_side_effect
+        table.get_item.return_value = {}  # No existing merge status
         table.put_item.return_value = {}
         table.delete_item.return_value = {}
         table.update_item.return_value = {}
 
         merge_anonymous_data(table, anon_id, auth_id)
 
-        # Check delete_item was called with old key
-        delete_call = table.delete_item.call_args
-        assert delete_call.kwargs["Key"]["PK"] == f"USER#{anon_id}"
-        assert delete_call.kwargs["Key"]["SK"] == "CONFIG#test"
+        # Check update_item was called to mark tombstone (Feature 014)
+        # delete_item should NOT be called with tombstone pattern
+        update_calls = [
+            c
+            for c in table.update_item.call_args_list
+            if c.kwargs.get("Key", {}).get("SK") == "CONFIG#test"
+        ]
+        assert len(update_calls) >= 1, "Should mark item as tombstone"
 
     def test_merge_marks_user_as_merged(self):
         """Verifies anonymous user is marked as merged."""
@@ -205,6 +214,7 @@ class TestMergeAnonymousData:
             return {"Items": []}
 
         table.query.side_effect = query_side_effect
+        table.get_item.return_value = {}  # No existing merge status
         table.put_item.return_value = {}
         table.delete_item.return_value = {}
         table.update_item.return_value = {}
@@ -237,6 +247,7 @@ class TestMergeAnonymousData:
             return {"Items": []}
 
         table.query.side_effect = query_side_effect
+        table.get_item.return_value = {}  # No existing merge status
 
         # First put succeeds, second fails
         put_call_count = [0]
@@ -253,13 +264,14 @@ class TestMergeAnonymousData:
 
         result = merge_anonymous_data(table, anon_id, auth_id)
 
-        # Should complete with partial success
-        assert result.status == "completed"
+        # Should report partial status since one of two items failed
+        assert result.status == "partial"
         assert result.configurations == 1  # Only one succeeded
 
     def test_merge_returns_failed_on_query_error(self):
         """Returns failed status when query fails."""
         table = MagicMock()
+        table.get_item.return_value = {}  # No existing merge status
         table.query.side_effect = Exception("DynamoDB error")
 
         anon_id = str(uuid.uuid4())

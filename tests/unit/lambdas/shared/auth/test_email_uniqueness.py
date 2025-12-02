@@ -316,3 +316,95 @@ class TestEmailAlreadyExistsError:
 
         assert error.existing_user_id is None
         assert "race@example.com" in str(error)
+
+
+@pytest.mark.unit
+@pytest.mark.session_consistency
+@pytest.mark.session_us6
+class TestEmailGSIPerformance:
+    """Tests for GSI query performance optimization (T071)."""
+
+    def test_gsi_query_uses_limit_one(self):
+        """GSI query uses Limit=1 for performance (only need one result)."""
+        from src.lambdas.dashboard.auth import get_user_by_email_gsi
+
+        mock_table = MagicMock()
+        mock_table.query.return_value = {"Items": []}
+
+        get_user_by_email_gsi(table=mock_table, email="test@example.com")
+
+        # Verify Limit=1 is used
+        call_kwargs = mock_table.query.call_args.kwargs
+        assert call_kwargs.get("Limit") == 1
+
+    def test_gsi_query_uses_index_name(self):
+        """GSI query specifies correct index name."""
+        from src.lambdas.dashboard.auth import get_user_by_email_gsi
+
+        mock_table = MagicMock()
+        mock_table.query.return_value = {"Items": []}
+
+        get_user_by_email_gsi(table=mock_table, email="test@example.com")
+
+        call_kwargs = mock_table.query.call_args.kwargs
+        assert call_kwargs.get("IndexName") == "by_email"
+
+    def test_gsi_query_normalizes_email_to_lowercase(self):
+        """GSI query normalizes email to lowercase for consistent lookups."""
+        from src.lambdas.dashboard.auth import get_user_by_email_gsi
+
+        mock_table = MagicMock()
+        mock_table.query.return_value = {"Items": []}
+
+        get_user_by_email_gsi(table=mock_table, email="TeSt@EXAMPLE.COM")
+
+        call_kwargs = mock_table.query.call_args.kwargs
+        # Email in ExpressionAttributeValues should be lowercase
+        assert call_kwargs["ExpressionAttributeValues"][":email"] == "test@example.com"
+
+    def test_gsi_query_filters_by_entity_type(self):
+        """GSI query filters by entity_type=USER."""
+        from src.lambdas.dashboard.auth import get_user_by_email_gsi
+
+        mock_table = MagicMock()
+        mock_table.query.return_value = {"Items": []}
+
+        get_user_by_email_gsi(table=mock_table, email="test@example.com")
+
+        call_kwargs = mock_table.query.call_args.kwargs
+        # Should have FilterExpression for entity_type
+        assert "entity_type" in call_kwargs.get("FilterExpression", "")
+        assert call_kwargs["ExpressionAttributeValues"][":type"] == "USER"
+
+    def test_gsi_lookup_handles_no_results(self):
+        """GSI lookup returns None when no user found."""
+        from src.lambdas.dashboard.auth import get_user_by_email_gsi
+
+        mock_table = MagicMock()
+        mock_table.query.return_value = {"Items": [], "Count": 0}
+
+        result = get_user_by_email_gsi(table=mock_table, email="notfound@example.com")
+
+        assert result is None
+
+    def test_gsi_lookup_returns_first_result(self):
+        """GSI lookup returns first result (there should only be one)."""
+        from src.lambdas.dashboard.auth import get_user_by_email_gsi
+
+        now = datetime.now(UTC)
+        user = User(
+            user_id=str(uuid.uuid4()),
+            email="test@example.com",
+            auth_type="email",
+            created_at=now,
+            last_active_at=now,
+            session_expires_at=now + timedelta(days=30),
+        )
+
+        mock_table = MagicMock()
+        mock_table.query.return_value = {"Items": [user.to_dynamodb_item()]}
+
+        result = get_user_by_email_gsi(table=mock_table, email="test@example.com")
+
+        assert result is not None
+        assert result.email == "test@example.com"

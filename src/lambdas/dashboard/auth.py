@@ -453,10 +453,12 @@ def get_user_by_email(table: Any, email: str) -> User | None:
 
 @xray_recorder.capture("get_user_by_email_gsi")
 def get_user_by_email_gsi(table: Any, email: str) -> User | None:
-    """Get user by email using GSI query (FR-009, T040).
+    """Get user by email using GSI query (FR-009, T040, T076).
 
     Uses the by_email GSI for O(1) lookup performance instead of table scan.
     Case-insensitive: all emails are normalized to lowercase.
+
+    Feature 014 (T076): X-Ray subsegment for timing and performance monitoring.
 
     Args:
         table: DynamoDB Table resource
