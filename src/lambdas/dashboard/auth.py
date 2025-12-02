@@ -58,6 +58,11 @@ from src.lambdas.shared.auth.merge import (
     get_merge_status,
     merge_anonymous_data,
 )
+from src.lambdas.shared.errors.session_errors import (
+    SessionRevokedException,
+    TokenAlreadyUsedError,
+    TokenExpiredError,
+)
 from src.lambdas.shared.logging_utils import get_safe_error_info, sanitize_for_log
 from src.lambdas.shared.models.magic_link_token import MagicLinkToken
 from src.lambdas.shared.models.user import User
@@ -180,15 +185,23 @@ def create_anonymous_session(
 def validate_session(
     table: Any,
     anonymous_id: str | None,
+    extend_on_valid: bool = False,
 ) -> ValidateSessionResponse | InvalidSessionResponse:
     """Validate an anonymous session.
+
+    Feature 014 (T052, T055): Checks for revocation and optionally extends
+    session expiry on valid sessions (sliding window).
 
     Args:
         table: DynamoDB Table resource
         anonymous_id: User ID from X-Anonymous-ID header
+        extend_on_valid: If True, extend session expiry when session is valid (FR-011)
 
     Returns:
         ValidateSessionResponse if valid, InvalidSessionResponse if not
+
+    Raises:
+        SessionRevokedException: If session has been revoked (FR-016)
     """
     if not anonymous_id:
         return InvalidSessionResponse(
@@ -239,6 +252,25 @@ def validate_session(
 
         user = User.from_dynamodb_item(item)
 
+        # Feature 014: Check if session has been revoked (FR-016, FR-017)
+        if user.revoked:
+            logger.info(
+                "Session revoked",
+                extra={
+                    "user_id_prefix": sanitize_for_log(anonymous_id[:8]),
+                    "revoked_at": user.revoked_at.isoformat()
+                    if user.revoked_at
+                    else None,
+                    "reason": sanitize_for_log(user.revoked_reason)
+                    if user.revoked_reason
+                    else None,
+                },
+            )
+            raise SessionRevokedException(
+                reason=user.revoked_reason,
+                revoked_at=user.revoked_at,
+            )
+
         # Check if session has expired
         now = datetime.now(UTC)
         if user.session_expires_at < now:
@@ -257,6 +289,10 @@ def validate_session(
 
         # Update last_active_at
         _update_last_active(table, user)
+
+        # Feature 014 (T052): Extend session expiry on valid session (sliding window)
+        if extend_on_valid:
+            _extend_session_expiry_on_validation(table, user)
 
         logger.debug(
             "Session validated",
@@ -299,6 +335,41 @@ def _update_last_active(table: Any, user: User) -> None:
         # Log but don't fail the validation
         logger.warning(
             "Failed to update last_active_at",
+            extra=get_safe_error_info(e),
+        )
+
+
+def _extend_session_expiry_on_validation(table: Any, user: User) -> None:
+    """Extend session expiry during validation (FR-011, T052).
+
+    Called when extend_on_valid=True in validate_session.
+    Silent failure - don't break validation on extension failure.
+    """
+    try:
+        now = datetime.now(UTC)
+        new_expiry = now + timedelta(days=SESSION_DURATION_DAYS)
+
+        table.update_item(
+            Key={"PK": user.pk, "SK": user.sk},
+            UpdateExpression="SET session_expires_at = :expires, #ttl = :ttl",
+            ExpressionAttributeNames={"#ttl": "ttl"},
+            ExpressionAttributeValues={
+                ":expires": new_expiry.isoformat(),
+                ":ttl": int(new_expiry.timestamp()) + (90 * 24 * 3600),
+            },
+        )
+
+        # Update the user object in place
+        user.session_expires_at = new_expiry
+
+        logger.debug(
+            "Extended session during validation",
+            extra={"user_id_prefix": sanitize_for_log(user.user_id[:8])},
+        )
+    except Exception as e:
+        # Log but don't fail the validation
+        logger.warning(
+            "Failed to extend session during validation",
             extra=get_safe_error_info(e),
         )
 
@@ -375,6 +446,230 @@ def get_user_by_email(table: Any, email: str) -> User | None:
         return None
 
 
+# =============================================================================
+# Feature 014 User Story 3: Email Uniqueness (T040-T044)
+# =============================================================================
+
+
+@xray_recorder.capture("get_user_by_email_gsi")
+def get_user_by_email_gsi(table: Any, email: str) -> User | None:
+    """Get user by email using GSI query (FR-009, T040, T076).
+
+    Uses the by_email GSI for O(1) lookup performance instead of table scan.
+    Case-insensitive: all emails are normalized to lowercase.
+
+    Feature 014 (T076): X-Ray subsegment for timing and performance monitoring.
+
+    Args:
+        table: DynamoDB Table resource
+        email: User's email address
+
+    Returns:
+        User if found, None otherwise
+    """
+    normalized_email = email.lower()
+
+    logger.debug(
+        "GSI email lookup",
+        extra={"email_domain": sanitize_for_log(normalized_email.split("@")[-1])},
+    )
+
+    try:
+        # GSI by_email has email as HASH and SK as RANGE
+        # Filter by entity_type to only return USER records
+        response = table.query(
+            IndexName="by_email",
+            KeyConditionExpression="email = :email",
+            FilterExpression="entity_type = :type",
+            ExpressionAttributeValues={
+                ":email": normalized_email,
+                ":type": "USER",
+            },
+            Limit=1,  # We only need one result for uniqueness check
+        )
+
+        items = response.get("Items", [])
+        if not items:
+            return None
+
+        return User.from_dynamodb_item(items[0])
+
+    except Exception as e:
+        logger.error(
+            "Failed GSI email lookup",
+            extra=get_safe_error_info(e),
+        )
+        return None
+
+
+@xray_recorder.capture("create_user_with_email")
+def create_user_with_email(
+    table: Any,
+    email: str,
+    auth_type: str,
+    cognito_sub: str | None = None,
+) -> User:
+    """Create user with email uniqueness enforcement (FR-007, T041).
+
+    Checks for existing user via GSI first, then creates with conditional write
+    to prevent race conditions where two requests try to create the same email.
+
+    Args:
+        table: DynamoDB Table resource
+        email: User's email (case-insensitive)
+        auth_type: Authentication type (email, google, github)
+        cognito_sub: Optional Cognito sub identifier
+
+    Returns:
+        Created User
+
+    Raises:
+        EmailAlreadyExistsError: If email already registered
+    """
+    from src.lambdas.shared.errors.session_errors import EmailAlreadyExistsError
+
+    normalized_email = email.lower()
+
+    # First check via GSI (fast O(1) lookup)
+    existing_user = get_user_by_email_gsi(table, normalized_email)
+    if existing_user:
+        logger.info(
+            "Email already exists during creation",
+            extra={
+                "email_domain": sanitize_for_log(normalized_email.split("@")[-1]),
+                "existing_user_id_prefix": sanitize_for_log(existing_user.user_id[:8]),
+            },
+        )
+        raise EmailAlreadyExistsError(
+            email=normalized_email,
+            existing_user_id=existing_user.user_id,
+        )
+
+    # Create new user
+    now = datetime.now(UTC)
+    expires_at = now + timedelta(days=SESSION_DURATION_DAYS)
+
+    user = User(
+        user_id=str(uuid.uuid4()),
+        email=normalized_email,
+        cognito_sub=cognito_sub,
+        auth_type=auth_type,
+        created_at=now,
+        last_active_at=now,
+        session_expires_at=expires_at,
+        timezone="America/New_York",
+        email_notifications_enabled=True,
+        daily_email_count=0,
+        entity_type="USER",
+    )
+
+    item = user.to_dynamodb_item()
+    item["ttl"] = int(expires_at.timestamp()) + (90 * 24 * 3600)  # 90 days for auth
+
+    try:
+        # Conditional write to prevent race condition
+        # This fails if another request created a user with the same PK
+        table.put_item(
+            Item=item,
+            ConditionExpression="attribute_not_exists(PK)",
+        )
+
+        logger.info(
+            "Created user with email",
+            extra={
+                "user_id_prefix": sanitize_for_log(user.user_id[:8]),
+                "email_domain": sanitize_for_log(normalized_email.split("@")[-1]),
+                "auth_type": auth_type,
+            },
+        )
+
+        return user
+
+    except table.meta.client.exceptions.ConditionalCheckFailedException:
+        # Race condition - another request created the user
+        logger.warning(
+            "User creation race condition detected",
+            extra={"email_domain": sanitize_for_log(normalized_email.split("@")[-1])},
+        )
+        raise EmailAlreadyExistsError(email=normalized_email) from None
+
+    except Exception as e:
+        logger.error(
+            "Failed to create user with email",
+            extra=get_safe_error_info(e),
+        )
+        raise
+
+
+@xray_recorder.capture("get_or_create_user_by_email")
+def get_or_create_user_by_email(
+    table: Any,
+    email: str,
+    auth_type: str,
+    cognito_sub: str | None = None,
+) -> tuple[User, bool]:
+    """Get existing user or create new one by email (FR-008, T042).
+
+    Atomically handles the get-or-create pattern to prevent race conditions.
+    If multiple requests try to create the same email concurrently, exactly
+    one will succeed and others will return the existing user.
+
+    Args:
+        table: DynamoDB Table resource
+        email: User's email (case-insensitive)
+        auth_type: Authentication type for new user
+        cognito_sub: Optional Cognito sub identifier
+
+    Returns:
+        Tuple of (User, is_new) where is_new=True if user was created
+    """
+    from src.lambdas.shared.errors.session_errors import EmailAlreadyExistsError
+
+    normalized_email = email.lower()
+
+    # First try to find existing user
+    existing_user = get_user_by_email_gsi(table, normalized_email)
+    if existing_user:
+        logger.debug(
+            "Found existing user by email",
+            extra={
+                "user_id_prefix": sanitize_for_log(existing_user.user_id[:8]),
+                "auth_type": existing_user.auth_type,
+            },
+        )
+        return existing_user, False
+
+    # Try to create new user
+    try:
+        user = create_user_with_email(
+            table=table,
+            email=normalized_email,
+            auth_type=auth_type,
+            cognito_sub=cognito_sub,
+        )
+        return user, True
+
+    except EmailAlreadyExistsError:
+        # Race condition - another request created the user, fetch it
+        logger.info(
+            "Race condition handled - fetching created user",
+            extra={"email_domain": sanitize_for_log(normalized_email.split("@")[-1])},
+        )
+        user = get_user_by_email_gsi(table, normalized_email)
+        if user:
+            return user, False
+
+        # Extremely rare: creation failed but user still not found
+        # This could happen if the other request also failed
+        logger.error(
+            "User not found after race condition",
+            extra={"email_domain": sanitize_for_log(normalized_email.split("@")[-1])},
+        )
+        raise RuntimeError(
+            "Failed to get or create user: concurrent creation failed"
+        ) from None
+
+
 def extend_session(table: Any, user_id: str) -> User | None:
     """Extend user session by 30 days.
 
@@ -428,6 +723,235 @@ def extend_session(table: Any, user_id: str) -> User | None:
             extra=get_safe_error_info(e),
         )
         return None
+
+
+# =============================================================================
+# Feature 014 User Story 4: Session Refresh & Revocation (T051-T059)
+# =============================================================================
+
+
+class SessionRefreshResponse(BaseModel):
+    """Response for POST /api/v2/auth/session/refresh."""
+
+    user_id: str
+    session_expires_at: str
+    remaining_seconds: int
+    refreshed: bool
+
+
+class BulkRevocationResponse(BaseModel):
+    """Response for POST /api/v2/admin/sessions/revoke."""
+
+    revoked_count: int
+    failed_count: int
+    failed_user_ids: list[str]
+
+
+@xray_recorder.capture("extend_session_expiry")
+def extend_session_expiry(table: Any, user_id: str) -> User | None:
+    """Extend session expiry by 30 days (FR-010, T051).
+
+    Only extends if session is valid (not expired, not revoked).
+
+    Args:
+        table: DynamoDB Table resource
+        user_id: User UUID
+
+    Returns:
+        Updated User if successful, None if invalid/expired/revoked
+    """
+    user = get_user_by_id(table, user_id)
+    if not user:
+        logger.debug(
+            "User not found for session extension",
+            extra={"user_id_prefix": sanitize_for_log(user_id[:8])},
+        )
+        return None
+
+    now = datetime.now(UTC)
+
+    # Check if session is expired
+    if user.session_expires_at < now:
+        logger.debug(
+            "Cannot extend expired session",
+            extra={"user_id_prefix": sanitize_for_log(user_id[:8])},
+        )
+        return None
+
+    # Check if session is revoked
+    if user.revoked:
+        logger.debug(
+            "Cannot extend revoked session",
+            extra={"user_id_prefix": sanitize_for_log(user_id[:8])},
+        )
+        return None
+
+    new_expiry = now + timedelta(days=SESSION_DURATION_DAYS)
+
+    try:
+        table.update_item(
+            Key={"PK": user.pk, "SK": user.sk},
+            UpdateExpression="SET session_expires_at = :expires, last_active_at = :last_active, #ttl = :ttl",
+            ExpressionAttributeNames={"#ttl": "ttl"},
+            ExpressionAttributeValues={
+                ":expires": new_expiry.isoformat(),
+                ":last_active": now.isoformat(),
+                ":ttl": int(new_expiry.timestamp()) + (90 * 24 * 3600),
+            },
+        )
+
+        user.session_expires_at = new_expiry
+        user.last_active_at = now
+
+        logger.info(
+            "Extended session expiry",
+            extra={
+                "user_id_prefix": sanitize_for_log(user_id[:8]),
+                "new_expiry_days": SESSION_DURATION_DAYS,
+            },
+        )
+
+        return user
+
+    except Exception as e:
+        logger.error("Failed to extend session expiry", extra=get_safe_error_info(e))
+        return None
+
+
+@xray_recorder.capture("refresh_session")
+def refresh_session(table: Any, user_id: str) -> SessionRefreshResponse | None:
+    """Refresh session and return new expiry info (T056).
+
+    Args:
+        table: DynamoDB Table resource
+        user_id: User UUID
+
+    Returns:
+        SessionRefreshResponse if successful, None if invalid
+    """
+    user = extend_session_expiry(table, user_id)
+    if not user:
+        return None
+
+    remaining = int((user.session_expires_at - datetime.now(UTC)).total_seconds())
+
+    return SessionRefreshResponse(
+        user_id=user.user_id,
+        session_expires_at=user.session_expires_at.isoformat(),
+        remaining_seconds=max(0, remaining),
+        refreshed=True,
+    )
+
+
+@xray_recorder.capture("revoke_user_session")
+def revoke_user_session(
+    table: Any,
+    user_id: str,
+    reason: str,
+) -> bool:
+    """Revoke a single user's session (FR-016, T053).
+
+    Args:
+        table: DynamoDB Table resource
+        user_id: User UUID
+        reason: Reason for revocation (audit trail)
+
+    Returns:
+        True if revoked (or already revoked), False if user not found
+    """
+    user = get_user_by_id(table, user_id)
+    if not user:
+        logger.warning(
+            "Cannot revoke session - user not found",
+            extra={"user_id_prefix": sanitize_for_log(user_id[:8])},
+        )
+        return False
+
+    # Idempotent: if already revoked, just return success
+    if user.revoked:
+        logger.debug(
+            "Session already revoked",
+            extra={"user_id_prefix": sanitize_for_log(user_id[:8])},
+        )
+        return True
+
+    now = datetime.now(UTC)
+
+    try:
+        table.update_item(
+            Key={"PK": user.pk, "SK": user.sk},
+            UpdateExpression="SET revoked = :revoked, revoked_at = :revoked_at, revoked_reason = :reason",
+            ExpressionAttributeValues={
+                ":revoked": True,
+                ":revoked_at": now.isoformat(),
+                ":reason": reason,
+            },
+        )
+
+        logger.info(
+            "Revoked user session",
+            extra={
+                "user_id_prefix": sanitize_for_log(user_id[:8]),
+                "reason": sanitize_for_log(reason[:50]),
+            },
+        )
+
+        return True
+
+    except Exception as e:
+        logger.error("Failed to revoke session", extra=get_safe_error_info(e))
+        return False
+
+
+@xray_recorder.capture("revoke_sessions_bulk")
+def revoke_sessions_bulk(
+    table: Any,
+    user_ids: list[str],
+    reason: str,
+) -> BulkRevocationResponse:
+    """Revoke multiple sessions (andon cord pattern) (FR-017, T054).
+
+    Args:
+        table: DynamoDB Table resource
+        user_ids: List of user UUIDs to revoke
+        reason: Reason for revocation (audit trail)
+
+    Returns:
+        BulkRevocationResponse with counts and failed IDs
+    """
+    if not user_ids:
+        return BulkRevocationResponse(
+            revoked_count=0,
+            failed_count=0,
+            failed_user_ids=[],
+        )
+
+    revoked_count = 0
+    failed_count = 0
+    failed_user_ids = []
+
+    for user_id in user_ids:
+        success = revoke_user_session(table, user_id, reason)
+        if success:
+            revoked_count += 1
+        else:
+            failed_count += 1
+            failed_user_ids.append(user_id)
+
+    logger.info(
+        "Bulk session revocation completed",
+        extra={
+            "revoked_count": revoked_count,
+            "failed_count": failed_count,
+            "reason": sanitize_for_log(reason[:50]),
+        },
+    )
+
+    return BulkRevocationResponse(
+        revoked_count=revoked_count,
+        failed_count=failed_count,
+        failed_user_ids=failed_user_ids,
+    )
 
 
 # =============================================================================
@@ -690,6 +1214,134 @@ def _invalidate_existing_tokens(table: Any, email: str) -> None:
             "Failed to invalidate existing tokens",
             extra=get_safe_error_info(e),
         )
+
+
+# Feature 014 (T031): Atomic Token Verification
+@xray_recorder.capture("verify_and_consume_token")
+def verify_and_consume_token(
+    table: Any,
+    token_id: str,
+    client_ip: str,
+) -> MagicLinkToken | None:
+    """Atomically verify and consume a magic link token (FR-004, FR-005, FR-006).
+
+    Uses DynamoDB conditional update to ensure token can only be consumed once,
+    even under concurrent verification attempts. This prevents race conditions
+    where multiple requests try to use the same token.
+
+    Args:
+        table: DynamoDB Table resource
+        token_id: Token UUID from magic link URL
+        client_ip: Client IP address for audit logging
+
+    Returns:
+        MagicLinkToken if successfully consumed, None if token not found
+
+    Raises:
+        TokenAlreadyUsedError: If token was already consumed (FR-005)
+        TokenExpiredError: If token has expired (FR-006)
+    """
+    logger.info(
+        "Attempting atomic token verification",
+        extra={"token_prefix": sanitize_for_log(token_id[:8])},
+    )
+
+    # Get token from database
+    try:
+        response = table.get_item(
+            Key={
+                "PK": f"TOKEN#{token_id}",
+                "SK": "MAGIC_LINK",
+            }
+        )
+    except Exception as e:
+        logger.error("Failed to get token", extra=get_safe_error_info(e))
+        return None
+
+    item = response.get("Item")
+    if not item:
+        logger.warning(
+            "Token not found",
+            extra={"token_prefix": sanitize_for_log(token_id[:8])},
+        )
+        return None
+
+    token = MagicLinkToken.from_dynamodb_item(item)
+
+    # Check if already used (before attempting update)
+    if token.used:
+        logger.warning(
+            "Token already used",
+            extra={
+                "token_prefix": sanitize_for_log(token_id[:8]),
+                "used_at": token.used_at.isoformat() if token.used_at else None,
+            },
+        )
+        raise TokenAlreadyUsedError(token_id=token_id, used_at=token.used_at)
+
+    # Check expiry (before attempting update - saves a write)
+    now = datetime.now(UTC)
+    token_expires = (
+        token.expires_at.replace(tzinfo=UTC)
+        if token.expires_at.tzinfo is None
+        else token.expires_at
+    )
+    if now > token_expires:
+        logger.info(
+            "Token expired",
+            extra={
+                "token_prefix": sanitize_for_log(token_id[:8]),
+                "expired_at": token.expires_at.isoformat(),
+            },
+        )
+        raise TokenExpiredError(token_id=token_id, expired_at=token.expires_at)
+
+    # Atomic conditional update - only succeeds if used=false
+    try:
+        table.update_item(
+            Key={
+                "PK": f"TOKEN#{token_id}",
+                "SK": "MAGIC_LINK",
+            },
+            UpdateExpression="SET used = :true, used_at = :now, used_by_ip = :ip",
+            ConditionExpression="used = :false",
+            ExpressionAttributeValues={
+                ":true": True,
+                ":false": False,
+                ":now": now.isoformat(),
+                ":ip": client_ip,
+            },
+        )
+
+        logger.info(
+            "Token consumed successfully",
+            extra={
+                "token_prefix": sanitize_for_log(token_id[:8]),
+                "client_ip": sanitize_for_log(client_ip),
+            },
+        )
+
+        # Update token object with consumed state
+        token.used = True
+        token.used_at = now
+        token.used_by_ip = client_ip
+
+        return token
+
+    except table.meta.client.exceptions.ConditionalCheckFailedException:
+        # Race condition - another request consumed the token
+        logger.warning(
+            "Token consumption race condition detected",
+            extra={"token_prefix": sanitize_for_log(token_id[:8])},
+        )
+        raise TokenAlreadyUsedError(token_id=token_id, used_at=None) from None
+
+    except Exception as e:
+        logger.error(
+            "Failed to consume token",
+            extra=get_safe_error_info(e),
+        )
+        raise RuntimeError("Failed to consume token") from e
 
 
 # T091: Magic Link Verification

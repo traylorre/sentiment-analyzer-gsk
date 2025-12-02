@@ -13,6 +13,8 @@ Auto-generated from all feature plans. Last updated: 2025-11-26
 - N/A (test suite - no storage requirements) (012-ohlc-sentiment-e2e-tests)
 - JavaScript ES6+ (vanilla, no framework) + Hammer.js or custom touch event handling (research needed) (013-interview-swipe-gestures)
 - N/A (stateless UI feature) (013-interview-swipe-gestures)
+- Python 3.13 (backend), TypeScript 5 (frontend) + FastAPI 0.121.3, boto3, pydantic, aws-lambda-powertools (backend); React 18, Next.js 14.2.21, Zustand 5.0.8, React Query 5.90.11 (frontend) (014-session-consistency)
+- DynamoDB (single-table design with GSIs for email lookup) (014-session-consistency)
 
 - **Python 3.13** with FastAPI, boto3, pydantic, aws-lambda-powertools, httpx
 - **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, CloudFront
@@ -253,9 +255,15 @@ vi.mock('@/stores/auth-store', () => ({
 ```
 
 ## Recent Changes
+<<<<<<< HEAD
 - 013-interview-swipe-gestures: Added JavaScript ES6+ (vanilla, no framework) + Hammer.js or custom touch event handling (research needed)
 - 012-ohlc-sentiment-e2e-tests: Added Python 3.13 + pytest, pytest-asyncio, httpx, responses, moto (unit tests only)
 - 011-price-sentiment-overlay: Added Python 3.13 (backend), TypeScript 5 (frontend) + FastAPI 0.121.3, httpx 0.28.1, TradingView Lightweight Charts 5.0.9, React 18, Next.js 14.2.21, Zustand 5.0.8, React Query 5.90.11
+=======
+- 014-session-consistency: Added Python 3.13 (backend), TypeScript 5 (frontend) + FastAPI 0.121.3, boto3, pydantic, aws-lambda-powertools (backend); React 18, Next.js 14.2.21, Zustand 5.0.8, React Query 5.90.11 (frontend)
+- 013-interview-swipe-gestures: Added JavaScript ES6+ (vanilla, no framework) + Hammer.js or custom touch event handling (research needed)
+- 012-ohlc-sentiment-e2e-tests: Added Python 3.13 + pytest, pytest-asyncio, httpx, responses, moto (unit tests only)
+>>>>>>> c951724 (feat(014): Implement User Stories 1-2 (Session Consistency))
 
 <!-- MANUAL ADDITIONS START -->
 

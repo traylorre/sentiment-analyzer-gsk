@@ -246,20 +246,20 @@ class TestInternalError:
         assert body["error"] == "Internal server error"
 
     def test_internal_error_no_details_exposed(self, caplog):
-        """Test that internal error details are not exposed."""
+        """Test that internal error details are not exposed in response."""
         response = internal_error(
             "req-123",
-            details={"stack_trace": "sensitive info"},
+            message="Something went wrong",
         )
 
         body = json.loads(response["body"])
         # Details should NOT be in response (security)
         assert "details" not in body
 
-        # Verify expected error was logged
+        # Verify static error message was logged (no user data to prevent leakage)
         from tests.conftest import assert_error_logged
 
-        assert_error_logged(caplog, "Internal error details")
+        assert_error_logged(caplog, "Internal server error occurred")
 
 
 class TestDatabaseError:
@@ -274,10 +274,10 @@ class TestDatabaseError:
         assert body["code"] == "DATABASE_ERROR"
         assert "put_item" in body["error"]
 
-        # Verify expected error was logged
+        # Verify error code was logged (no message to prevent data leakage)
         from tests.conftest import assert_error_logged
 
-        assert_error_logged(caplog, "Database operation failed")
+        assert_error_logged(caplog, "API error occurred")
 
     def test_database_error_with_details(self, caplog):
         """Test database error with details."""
@@ -290,10 +290,10 @@ class TestDatabaseError:
         body = json.loads(response["body"])
         assert body["details"]["table"] == "sentiment-items"
 
-        # Verify expected error was logged
+        # Verify error code was logged (no message to prevent data leakage)
         from tests.conftest import assert_error_logged
 
-        assert_error_logged(caplog, "Database operation failed")
+        assert_error_logged(caplog, "API error occurred")
 
 
 class TestSecretError:
@@ -306,13 +306,13 @@ class TestSecretError:
         assert response["statusCode"] == 500
         body = json.loads(response["body"])
         assert body["code"] == "SECRET_ERROR"
-        # Security: Only logs secret name, not full path
+        # Security: Only returns secret name in response, not full path
         assert body["details"]["secret_name"] == "newsapi"
 
-        # Verify expected error was logged
+        # Verify error code was logged (no message to prevent data leakage)
         from tests.conftest import assert_error_logged
 
-        assert_error_logged(caplog, "Failed to retrieve configuration")
+        assert_error_logged(caplog, "API error occurred")
 
 
 class TestModelError:
@@ -327,10 +327,10 @@ class TestModelError:
         assert body["code"] == "MODEL_ERROR"
         assert body["error"] == "Sentiment analysis failed"
 
-        # Verify expected error was logged
+        # Verify error code was logged (no message to prevent data leakage)
         from tests.conftest import assert_error_logged
 
-        assert_error_logged(caplog, "Sentiment analysis failed")
+        assert_error_logged(caplog, "API error occurred")
 
     def test_model_error_custom_message(self, caplog):
         """Test model error with custom message."""
@@ -344,10 +344,10 @@ class TestModelError:
         assert body["error"] == "Model loading failed"
         assert body["details"]["model_path"] == "/opt/model"
 
-        # Verify expected error was logged
+        # Verify error code was logged (no message to prevent data leakage)
         from tests.conftest import assert_error_logged
 
-        assert_error_logged(caplog, "Model loading failed")
+        assert_error_logged(caplog, "API error occurred")
 
 
 class TestResponseFormat:

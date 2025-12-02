@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import { Providers } from './providers';
+import { SessionProvider } from '@/components/providers/session-provider';
 import { SkipLink } from '@/components/ui/skip-link';
 import './globals.css';
 
@@ -50,9 +51,11 @@ export default function RootLayout({
         {/* Skip link for keyboard navigation */}
         <SkipLink targetId="main-content">Skip to main content</SkipLink>
         <Providers>
-          <main id="main-content" tabIndex={-1}>
-            {children}
-          </main>
+          <SessionProvider>
+            <main id="main-content" tabIndex={-1}>
+              {children}
+            </main>
+          </SessionProvider>
         </Providers>
       </body>
     </html>

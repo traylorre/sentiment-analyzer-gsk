@@ -40,7 +40,13 @@ from src.lambdas.dashboard import tickers as ticker_service
 from src.lambdas.dashboard import volatility as volatility_service
 from src.lambdas.shared.cache.ticker_cache import TickerCache, get_ticker_cache
 from src.lambdas.shared.dynamodb import get_table
+from src.lambdas.shared.errors import (
+    SessionRevokedException,
+    TokenAlreadyUsedError,
+    TokenExpiredError,
+)
 from src.lambdas.shared.logging_utils import get_safe_error_info
+from src.lambdas.shared.middleware import extract_auth_context
 from src.lambdas.shared.response_models import (
     UserMeResponse,
     mask_email,
@@ -98,6 +104,8 @@ ticker_router = APIRouter(prefix="/api/v2/tickers", tags=["tickers"])
 alert_router = APIRouter(prefix="/api/v2/alerts", tags=["alerts"])
 notification_router = APIRouter(prefix="/api/v2/notifications", tags=["notifications"])
 market_router = APIRouter(prefix="/api/v2/market", tags=["market"])
+# Feature 014: Users router for email lookup (T044)
+users_router = APIRouter(prefix="/api/v2/users", tags=["users"])
 
 
 def get_dynamodb_table():
@@ -127,8 +135,9 @@ def get_user_id_from_request(
 ) -> str:
     """Extract user_id from request headers/session and optionally validate.
 
-    In production, this would verify the JWT token and extract the user_id.
-    For now, we use X-User-ID header for testing.
+    Feature 014: Supports hybrid authentication approach:
+    1. Authorization: Bearer {token} - preferred for new code
+    2. X-User-ID header - legacy, backward compatible
 
     Args:
         request: FastAPI Request object
@@ -140,16 +149,33 @@ def get_user_id_from_request(
 
     Raises:
         HTTPException 401 if user_id missing or session expired
+        HTTPException 403 if session has been revoked
     """
-    user_id = request.headers.get("X-User-ID")
+    # Feature 014: Use hybrid auth middleware to extract user_id
+    # Build event dict for middleware compatibility
+    event = {"headers": dict(request.headers)}
+    auth_context = extract_auth_context(event)
+
+    user_id = auth_context.get("user_id")
     if not user_id:
         raise HTTPException(status_code=401, detail="Missing user identification")
 
     # Validate session is still active (not signed out/expired)
     if validate_session and table is not None:
-        validation = auth_service.validate_session(table=table, anonymous_id=user_id)
-        if not validation.valid:
-            raise HTTPException(status_code=401, detail="Session expired or invalid")
+        try:
+            validation = auth_service.validate_session(
+                table=table, anonymous_id=user_id
+            )
+            if not validation.valid:
+                raise HTTPException(
+                    status_code=401, detail="Session expired or invalid"
+                )
+        except SessionRevokedException as e:
+            # Feature 014: Handle server-side session revocation
+            raise HTTPException(
+                status_code=403,
+                detail=f"Session revoked: {e.reason or 'Security policy'}",
+            ) from e
 
     return user_id
 
@@ -273,13 +299,33 @@ async def request_magic_link(
 @auth_router.get("/magic-link/verify")
 async def verify_magic_link(
     token: str,
+    request: Request,
     table=Depends(get_dynamodb_table),
 ):
     """Verify magic link token (T091).
 
     Security: refresh_token is set as HttpOnly cookie, NEVER in body.
+
+    Feature 014 (T034): Returns appropriate error codes for race conditions:
+    - 409 Conflict: Token already used by another request
+    - 410 Gone: Token has expired
     """
-    result = auth_service.verify_magic_link(table=table, token=token)
+    # Try atomic verification first for race condition protection
+    try:
+        result = auth_service.verify_magic_link(table=table, token=token)
+    except TokenAlreadyUsedError as e:
+        # Feature 014 (FR-005): 409 for token already used
+        raise HTTPException(
+            status_code=409,
+            detail="This magic link has already been verified",
+        ) from e
+    except TokenExpiredError as e:
+        # Feature 014 (FR-006): 410 for expired token
+        raise HTTPException(
+            status_code=410,
+            detail="This magic link has expired. Please request a new one.",
+        ) from e
+
     if isinstance(result, auth_service.ErrorResponse):
         raise HTTPException(status_code=400, detail=result.error.message)
 
@@ -405,6 +451,54 @@ async def get_session_info(
     return JSONResponse(result.model_dump())
 
 
+@auth_router.post("/session/refresh")
+async def refresh_session(
+    request: Request,
+    table=Depends(get_dynamodb_table),
+):
+    """Refresh session expiry (T056).
+
+    Feature 014: Extends session by 30 days (sliding window pattern).
+    Returns new expiry time and remaining seconds.
+    """
+    user_id = get_user_id_from_request(request, table=table, validate_session=False)
+    result = auth_service.refresh_session(table=table, user_id=user_id)
+    if result is None:
+        raise HTTPException(
+            status_code=401, detail="Session expired or invalid. Please sign in again."
+        )
+    return JSONResponse(result.model_dump())
+
+
+class BulkRevocationRequest(BaseModel):
+    """Request for POST /api/v2/admin/sessions/revoke."""
+
+    user_ids: list[str]
+    reason: str
+
+
+# Admin router for bulk operations
+admin_router = APIRouter(prefix="/api/v2/admin", tags=["admin"])
+
+
+@admin_router.post("/sessions/revoke")
+async def revoke_sessions_bulk(
+    body: BulkRevocationRequest,
+    table=Depends(get_dynamodb_table),
+):
+    """Bulk session revocation - andon cord pattern (T057).
+
+    Feature 014: Revoke multiple sessions at once for security incidents.
+    Requires admin authentication in production.
+    """
+    result = auth_service.revoke_sessions_bulk(
+        table=table,
+        user_ids=body.user_ids,
+        reason=body.reason,
+    )
+    return JSONResponse(result.model_dump())
+
+
 class CheckEmailRequest(BaseModel):
     email: EmailStr
 
@@ -452,6 +546,130 @@ async def get_merge_status(
     user_id = get_user_id_from_request(request)
     result = auth_service.get_merge_status_endpoint(table=table, user_id=user_id)
     return JSONResponse(result.model_dump())
+
+
+class MergeRequest(BaseModel):
+    """Request body for POST /api/v2/auth/merge."""
+
+    anonymous_user_id: str
+
+
+@auth_router.post("/merge")
+async def merge_anonymous_data(
+    request: Request,
+    body: MergeRequest,
+    table=Depends(get_dynamodb_table),
+):
+    """Merge anonymous session data into authenticated account (T069).
+
+    Feature 014 (US5): Atomic and idempotent account merge.
+    - FR-013: Idempotent - retrying has no side effects
+    - FR-014: Uses tombstone pattern for audit trail
+    - FR-015: Safe for concurrent calls
+
+    Requires authenticated session.
+
+    Returns:
+        MergeResponse with status and counts of merged items
+    """
+    from src.lambdas.shared.auth.merge import merge_anonymous_data as do_merge
+
+    authenticated_user_id = get_user_id_from_request(request)
+
+    # Validate the authenticated user exists and is authenticated (not anonymous)
+    user = auth_service.get_user_by_id(table=table, user_id=authenticated_user_id)
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required",
+        )
+
+    if user.auth_type == "anonymous":
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot merge into anonymous account. Please authenticate first.",
+        )
+
+    # Perform the merge
+    result = do_merge(
+        table=table,
+        anonymous_user_id=body.anonymous_user_id,
+        authenticated_user_id=authenticated_user_id,
+    )
+
+    # Map result status to HTTP status
+    if result.status == "failed" and result.error == "merge_conflict":
+        raise HTTPException(
+            status_code=409,
+            detail=result.message or "Merge conflict",
+        )
+
+    if result.status == "failed":
+        raise HTTPException(
+            status_code=500,
+            detail=result.message or "Merge failed",
+        )
+
+    # Return successful response
+    response_data = {
+        "status": result.status,
+        "merged_at": result.merged_at.isoformat() if result.merged_at else None,
+        "configurations": result.configurations,
+        "alert_rules": result.alert_rules,
+        "preferences": result.preferences,
+        "message": result.message,
+    }
+
+    return JSONResponse(response_data)
+
+
+# ===================================================================
+# Users Endpoints (Feature 014)
+# ===================================================================
+
+
+class UserLookupResponse(BaseModel):
+    """Response for GET /api/v2/users/lookup."""
+
+    found: bool
+    user_id: str | None = None
+    auth_type: str | None = None
+    email_masked: str | None = None
+
+
+@users_router.get("/lookup")
+async def lookup_user_by_email(
+    email: EmailStr = Query(..., description="Email address to look up"),
+    table=Depends(get_dynamodb_table),
+):
+    """Look up user by email address (T044).
+
+    Feature 014: Uses GSI for O(1) lookup performance.
+    Requires admin authentication in production.
+
+    Returns:
+        UserLookupResponse with found=true if user exists
+    """
+    user = auth_service.get_user_by_email_gsi(table=table, email=email)
+
+    if user:
+        return JSONResponse(
+            UserLookupResponse(
+                found=True,
+                user_id=user.user_id,
+                auth_type=user.auth_type,
+                email_masked=auth_service._mask_email(user.email),
+            ).model_dump()
+        )
+
+    return JSONResponse(
+        UserLookupResponse(
+            found=False,
+            user_id=None,
+            auth_type=None,
+            email_masked=None,
+        ).model_dump()
+    )
 
 
 # ===================================================================
@@ -1267,5 +1485,9 @@ def include_routers(app):
     app.include_router(alert_router)
     app.include_router(notification_router)
     app.include_router(market_router)
+    # Feature 014: Users router for email lookup
+    app.include_router(users_router)
+    # Feature 014: Admin router for bulk operations
+    app.include_router(admin_router)
     # Feature 011: Price-Sentiment Overlay
     app.include_router(ohlc_module.router)

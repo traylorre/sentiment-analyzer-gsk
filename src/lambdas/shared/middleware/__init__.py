@@ -1,5 +1,10 @@
 """Shared middleware for Lambda handlers."""
 
+from src.lambdas.shared.middleware.auth_middleware import (
+    extract_auth_context,
+    extract_user_id,
+    require_auth,
+)
 from src.lambdas.shared.middleware.hcaptcha import (
     CaptchaRequired,
     verify_captcha,
@@ -19,7 +24,10 @@ __all__ = [
     "RateLimitExceeded",
     "add_security_headers",
     "check_rate_limit",
+    "extract_auth_context",
+    "extract_user_id",
     "get_client_ip",
     "get_cors_headers",
+    "require_auth",
     "verify_captcha",
 ]

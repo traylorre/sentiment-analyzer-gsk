@@ -19,6 +19,10 @@ class MagicLinkToken(BaseModel):
     # Link to anonymous user to merge
     anonymous_user_id: str | None = None
 
+    # Feature 014: Atomic verification tracking (FR-004, FR-005, FR-006)
+    used_at: datetime | None = Field(None, description="Exact time of verification")
+    used_by_ip: str | None = Field(None, description="IP address that verified (audit)")
+
     @property
     def pk(self) -> str:
         """DynamoDB partition key."""
@@ -52,11 +56,23 @@ class MagicLinkToken(BaseModel):
         }
         if self.anonymous_user_id:
             item["anonymous_user_id"] = self.anonymous_user_id
+
+        # Feature 014: Atomic verification tracking
+        if self.used_at is not None:
+            item["used_at"] = self.used_at.isoformat()
+        if self.used_by_ip is not None:
+            item["used_by_ip"] = self.used_by_ip
+
         return item
 
     @classmethod
     def from_dynamodb_item(cls, item: dict) -> "MagicLinkToken":
         """Create MagicLinkToken from DynamoDB item."""
+        # Parse optional datetime fields
+        used_at = None
+        if item.get("used_at"):
+            used_at = datetime.fromisoformat(item["used_at"])
+
         return cls(
             token_id=item["token_id"],
             email=item["email"],
@@ -65,6 +81,9 @@ class MagicLinkToken(BaseModel):
             expires_at=datetime.fromisoformat(item["expires_at"]),
             used=item.get("used", False),
             anonymous_user_id=item.get("anonymous_user_id"),
+            # Feature 014 fields
+            used_at=used_at,
+            used_by_ip=item.get("used_by_ip"),
         )
 
 

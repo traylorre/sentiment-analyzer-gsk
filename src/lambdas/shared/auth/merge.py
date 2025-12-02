@@ -1,13 +1,19 @@
-"""Anonymous data merge logic for Feature 006 (T100).
+"""Anonymous data merge logic for Feature 006 (T100), Feature 014 (T065-T068).
 
 Merges anonymous user's configurations, alert rules, and preferences
-into an authenticated account.
+into an authenticated account using tombstone pattern for idempotency.
+
+Feature 014 Enhancements (US5 - Atomic Account Merge):
+- FR-013: Merge is idempotent - retrying has no side effects
+- FR-014: Tombstone pattern - original items marked, not deleted
+- FR-015: Concurrent safety via conditional writes
 
 For On-Call Engineers:
     If merges fail partially:
-    1. Check DynamoDB BatchWriteItem results for unprocessed items
-    2. Items may be left in inconsistent state - manual cleanup may be needed
-    3. Merge status is tracked in USER record for auditability
+    1. Check items with merged_to field to see what was transferred
+    2. Items use tombstone pattern - original items remain for audit
+    3. Merge status tracked in USER record for auditability
+    4. Retrying merge is safe - skips already-merged items
 
 Per auth-api.md merge strategy:
 1. Configurations: All anonymous configs transferred to authenticated account
@@ -19,6 +25,8 @@ import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
+
+from botocore.exceptions import ClientError
 
 from src.lambdas.shared.logging_utils import get_safe_error_info, sanitize_for_log
 
@@ -45,6 +53,11 @@ def merge_anonymous_data(
 ) -> MergeResult:
     """Merge anonymous user's data into authenticated account.
 
+    Feature 014 (T065-T068): Uses tombstone pattern for idempotency.
+    - Items are marked as merged (not deleted)
+    - Already-merged items are skipped
+    - Safe for concurrent calls and retries
+
     Args:
         table: DynamoDB Table resource
         anonymous_user_id: UUID of anonymous user to merge from
@@ -62,6 +75,37 @@ def merge_anonymous_data(
     )
 
     try:
+        # Check if already fully merged (FR-013: idempotent)
+        user_status = _check_user_merge_status(table, anonymous_user_id)
+        if user_status.get("merged_to") == authenticated_user_id:
+            logger.info(
+                "Merge already completed",
+                extra={
+                    "anonymous_user_prefix": sanitize_for_log(anonymous_user_id[:8])
+                },
+            )
+            # Return existing merge info for idempotency
+            return _get_existing_merge_result(
+                table, anonymous_user_id, authenticated_user_id
+            )
+
+        # Check for conflict (merged to different user)
+        if (
+            user_status.get("merged_to")
+            and user_status["merged_to"] != authenticated_user_id
+        ):
+            logger.warning(
+                "Merge conflict - already merged to different user",
+                extra={
+                    "anonymous_user_prefix": sanitize_for_log(anonymous_user_id[:8])
+                },
+            )
+            return MergeResult(
+                status="failed",
+                error="merge_conflict",
+                message="Session was already merged to a different account",
+            )
+
         # Find all items belonging to anonymous user
         items_to_merge = _query_user_items(table, anonymous_user_id)
 
@@ -77,40 +121,60 @@ def merge_anonymous_data(
                 message="No anonymous data found to merge",
             )
 
-        # Categorize items
-        configs = [i for i in items_to_merge if i.get("entity_type") == "CONFIGURATION"]
-        alerts = [i for i in items_to_merge if i.get("entity_type") == "ALERT_RULE"]
-        preferences = [
-            i for i in items_to_merge if i.get("entity_type") == "PREFERENCE"
-        ]
+        # Filter out already-merged items (FR-013: skip logic)
+        pending_items = [i for i in items_to_merge if not i.get("merged_to")]
+        already_merged = len(items_to_merge) - len(pending_items)
 
-        # Transfer items to new owner
-        merged_configs = _transfer_items(
+        if not pending_items and already_merged > 0:
+            # All items already merged
+            return _get_existing_merge_result(
+                table, anonymous_user_id, authenticated_user_id
+            )
+
+        # Categorize pending items
+        configs = [i for i in pending_items if i.get("entity_type") == "CONFIGURATION"]
+        alerts = [i for i in pending_items if i.get("entity_type") == "ALERT_RULE"]
+        preferences = [i for i in pending_items if i.get("entity_type") == "PREFERENCE"]
+
+        # Transfer items using tombstone pattern (FR-014)
+        merged_configs = _transfer_items_with_tombstone(
             table, configs, anonymous_user_id, authenticated_user_id
         )
-        merged_alerts = _transfer_items(
+        merged_alerts = _transfer_items_with_tombstone(
             table, alerts, anonymous_user_id, authenticated_user_id
         )
-        merged_prefs = _transfer_items(
+        merged_prefs = _transfer_items_with_tombstone(
             table, preferences, anonymous_user_id, authenticated_user_id
         )
 
-        # Mark anonymous user as merged
-        _mark_user_merged(table, anonymous_user_id, authenticated_user_id)
+        total_merged = merged_configs + merged_alerts + merged_prefs
+        total_pending = len(configs) + len(alerts) + len(preferences)
+
+        # Determine status
+        if total_merged == 0 and total_pending > 0:
+            status = "failed"
+        elif total_merged < total_pending:
+            status = "partial"
+        else:
+            status = "completed"
+            # Mark anonymous user as merged only on full completion
+            _mark_user_merged(table, anonymous_user_id, authenticated_user_id)
 
         merged_at = datetime.now(UTC)
 
         logger.info(
             "Data merge completed",
             extra={
+                "status": status,
                 "configurations": merged_configs,
                 "alert_rules": merged_alerts,
                 "preferences": merged_prefs,
+                "already_merged": already_merged,
             },
         )
 
         return MergeResult(
-            status="completed",
+            status=status,
             merged_at=merged_at,
             configurations=merged_configs,
             alert_rules=merged_alerts,
@@ -127,6 +191,76 @@ def merge_anonymous_data(
             error="merge_failed",
             message="Failed to merge data. Please contact support.",
         )
+
+
+def _check_user_merge_status(table: Any, user_id: str) -> dict:
+    """Check if user has already been merged.
+
+    Returns dict with merged_to and merged_at if already merged.
+    """
+    try:
+        response = table.get_item(
+            Key={
+                "PK": f"USER#{user_id}",
+                "SK": "PROFILE",
+            }
+        )
+        item = response.get("Item", {})
+        return {
+            "merged_to": item.get("merged_to"),
+            "merged_at": item.get("merged_at"),
+        }
+    except Exception:
+        return {}
+
+
+def _get_existing_merge_result(
+    table: Any,
+    anonymous_user_id: str,
+    authenticated_user_id: str,
+) -> MergeResult:
+    """Get result for already-merged data (idempotent response)."""
+    # Count items that were merged
+    items = _query_user_items(table, authenticated_user_id)
+
+    configs = len(
+        [
+            i
+            for i in items
+            if i.get("merged_from") == anonymous_user_id
+            and i.get("entity_type") == "CONFIGURATION"
+        ]
+    )
+    alerts = len(
+        [
+            i
+            for i in items
+            if i.get("merged_from") == anonymous_user_id
+            and i.get("entity_type") == "ALERT_RULE"
+        ]
+    )
+    prefs = len(
+        [
+            i
+            for i in items
+            if i.get("merged_from") == anonymous_user_id
+            and i.get("entity_type") == "PREFERENCE"
+        ]
+    )
+
+    # Get merge timestamp
+    user_status = _check_user_merge_status(table, anonymous_user_id)
+    merged_at_str = user_status.get("merged_at")
+    merged_at = datetime.fromisoformat(merged_at_str) if merged_at_str else None
+
+    return MergeResult(
+        status="already_merged",
+        merged_at=merged_at,
+        configurations=configs,
+        alert_rules=alerts,
+        preferences=prefs,
+        message="Data was already merged",
+    )
 
 
 def _query_user_items(table: Any, user_id: str) -> list[dict]:
@@ -169,13 +303,106 @@ def _query_user_items(table: Any, user_id: str) -> list[dict]:
     return items
 
 
+def _transfer_items_with_tombstone(
+    table: Any,
+    items: list[dict],
+    from_user_id: str,
+    to_user_id: str,
+) -> int:
+    """Transfer items using tombstone pattern (FR-014).
+
+    Feature 014 (T065-T068):
+    1. Creates new item in target user's namespace
+    2. Marks original item as tombstone (merged_to, merged_at)
+    3. Uses conditional writes for concurrent safety (FR-015)
+
+    Returns count of successfully transferred items.
+    """
+    if not items:
+        return 0
+
+    transferred = 0
+
+    for item in items:
+        try:
+            old_pk = item["PK"]
+            old_sk = item["SK"]
+            now = datetime.now(UTC)
+
+            # Create new item with updated PK
+            new_item = dict(item)
+            new_item["PK"] = old_pk.replace(from_user_id, to_user_id)
+            new_item["user_id"] = to_user_id
+            new_item["merged_from"] = from_user_id
+            new_item["merged_at"] = now.isoformat()
+
+            # Write new item with condition (FR-015: concurrent safety)
+            # Prevents duplicate if concurrent merge
+            try:
+                table.put_item(
+                    Item=new_item,
+                    ConditionExpression="attribute_not_exists(PK)",
+                )
+            except ClientError as e:
+                if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                    # Item already exists - likely concurrent merge
+                    logger.info(
+                        "Item already transferred (concurrent merge)",
+                        extra={"pk": sanitize_for_log(new_item["PK"][:20])},
+                    )
+                    # Mark original as tombstone anyway
+                else:
+                    raise
+
+            # Mark original as tombstone (FR-014)
+            # Uses conditional to ensure idempotency
+            try:
+                table.update_item(
+                    Key={
+                        "PK": old_pk,
+                        "SK": old_sk,
+                    },
+                    UpdateExpression="SET merged_to = :merged_to, merged_at = :merged_at",
+                    ConditionExpression="attribute_not_exists(merged_to)",
+                    ExpressionAttributeValues={
+                        ":merged_to": to_user_id,
+                        ":merged_at": now.isoformat(),
+                    },
+                )
+            except ClientError as e:
+                if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                    # Already marked as tombstone - idempotent
+                    logger.info(
+                        "Item already marked as tombstone",
+                        extra={"pk": sanitize_for_log(old_pk[:20])},
+                    )
+                else:
+                    raise
+
+            transferred += 1
+
+        except Exception as e:
+            logger.warning(
+                "Failed to transfer item",
+                extra={
+                    "pk": sanitize_for_log(item.get("PK", "")[:20]),
+                    **get_safe_error_info(e),
+                },
+            )
+
+    return transferred
+
+
 def _transfer_items(
     table: Any,
     items: list[dict],
     from_user_id: str,
     to_user_id: str,
 ) -> int:
-    """Transfer items from one user to another.
+    """Transfer items from one user to another (legacy method).
+
+    DEPRECATED: Use _transfer_items_with_tombstone for Feature 014.
+    Kept for backward compatibility.
 
     Creates new items with updated PK, deletes old items.
     Returns count of successfully transferred items.
