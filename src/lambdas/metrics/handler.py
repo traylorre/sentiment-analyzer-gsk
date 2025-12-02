@@ -209,8 +209,11 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 dimensions={"Environment": environment},
                 namespace=METRIC_NAMESPACE,
             )
-        except Exception:  # noqa: S110
-            pass  # Don't fail on metric emission failure - primary error already logged
+        except Exception as metric_err:
+            # Log but don't fail - primary error already handled above
+            log_structured(
+                "warning", "Failed to emit error metric", error=str(metric_err)
+            )
 
         return {
             "statusCode": 500,
