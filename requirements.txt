@@ -17,12 +17,12 @@ botocore==1.41.6
 # ML/NLP - DistilBERT sentiment analysis
 # Note: torch is large (~2GB); Lambda layer built separately
 # See infrastructure/scripts/build-model-layer.sh
-transformers==4.57.1
+transformers==4.57.3
 torch==2.9.1
 
 # Web Framework - Dashboard Lambda
 # FastAPI for endpoints, Mangum for Lambda adapter
-fastapi==0.121.3
+fastapi==0.123.0
 mangum==0.19.0
 uvicorn==0.38.0  # Local development only
 sse-starlette==3.0.3  # Server-Sent Events for real-time updates
@@ -32,17 +32,17 @@ requests==2.32.5
 httpx==0.28.1  # Async HTTP client for financial APIs
 
 # Data Validation - Input/output schemas
-pydantic==2.12.4
-email-validator==2.2.0  # Required for Pydantic EmailStr type
+pydantic==2.12.5
+email-validator==2.3.0  # Required for Pydantic EmailStr type
 
 # Logging - Structured JSON logs for CloudWatch
 python-json-logger==4.0.0
 
 # AWS X-Ray - Distributed tracing (Feature 006)
-aws-xray-sdk==2.14.0
+aws-xray-sdk==2.15.0
 
 # Email Notifications - SendGrid (Feature 006)
-sendgrid==6.11.0
+sendgrid==6.12.5
 
 # AWS Lambda Powertools - Enhanced observability
-aws-lambda-powertools==3.9.0
+aws-lambda-powertools==3.23.0
