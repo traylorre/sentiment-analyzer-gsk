@@ -67,8 +67,8 @@ class TestAnonymousSessionCreation:
             json={},
         )
 
-        # 201 Created is correct for resource creation, 200 OK also acceptable
-        assert response.status_code in (200, 201)
+        # 201 Created is the correct status for resource creation
+        assert response.status_code == 201
         data = response.json()
 
         # Validate response structure
@@ -97,8 +97,8 @@ class TestAnonymousSessionCreation:
             f"{preprod_base_url}/api/v2/auth/anonymous",
             json={},
         )
-        # 201 Created is correct for resource creation, 200 OK also acceptable
-        assert create_response.status_code in (200, 201)
+        # 201 Created is the correct status for resource creation
+        assert create_response.status_code == 201
         session_data = create_response.json()
 
         # Validate session
@@ -129,8 +129,8 @@ class TestFullAuthFlow:
             f"{preprod_base_url}/api/v2/auth/anonymous",
             json={},
         )
-        # 201 Created is correct for resource creation, 200 OK also acceptable
-        assert anon_response.status_code in (200, 201)
+        # 201 Created is the correct status for resource creation
+        assert anon_response.status_code == 201
         anon_data = anon_response.json()
         anon_token = anon_data["access_token"]
         # anon_user_id would be used for merge after magic link verification
@@ -184,8 +184,8 @@ class TestEmailUniquenessRaceCondition:
                 f"{preprod_base_url}/api/v2/auth/anonymous",
                 json={},
             )
-            # 201 Created is correct for resource creation, 200 OK also acceptable
-            if anon.status_code not in (200, 201):
+            # 201 Created is the correct status for resource creation
+            if anon.status_code != 201:
                 return {"success": False, "error": "anon_failed"}
 
             token = anon.json()["access_token"]
@@ -260,8 +260,8 @@ class TestSessionRefresh:
             f"{preprod_base_url}/api/v2/auth/anonymous",
             json={},
         )
-        # 201 Created is correct for resource creation, 200 OK also acceptable
-        assert create_response.status_code in (200, 201)
+        # 201 Created is the correct status for resource creation
+        assert create_response.status_code == 201
         session_data = create_response.json()
         token = session_data["access_token"]
         user_id = session_data["user_id"]
