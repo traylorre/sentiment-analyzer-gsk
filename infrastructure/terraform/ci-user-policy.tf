@@ -79,8 +79,31 @@ data "aws_iam_policy_document" "ci_deploy_core" {
       "lambda:ListFunctionUrlConfigs"
     ]
     resources = [
+      # Pattern: sentiment-analyzer-* (legacy)
       "arn:aws:lambda:*:*:function:sentiment-analyzer-*",
-      "arn:aws:lambda:*:*:function:sentiment-analyzer-*:*"
+      "arn:aws:lambda:*:*:function:sentiment-analyzer-*:*",
+      # Pattern: {env}-sentiment-* (preprod-sentiment-ingestion, prod-sentiment-dashboard, etc.)
+      "arn:aws:lambda:*:*:function:*-sentiment-*",
+      "arn:aws:lambda:*:*:function:*-sentiment-*:*"
+    ]
+  }
+
+  # Lambda Layers (scoped to sentiment-analyzer-* layer names)
+  statement {
+    sid    = "LambdaLayers"
+    effect = "Allow"
+    actions = [
+      "lambda:PublishLayerVersion",
+      "lambda:DeleteLayerVersion",
+      "lambda:GetLayerVersion",
+      "lambda:ListLayerVersions",
+      "lambda:ListLayers"
+    ]
+    resources = [
+      "arn:aws:lambda:*:*:layer:sentiment-analyzer-*",
+      "arn:aws:lambda:*:*:layer:sentiment-analyzer-*:*",
+      "arn:aws:lambda:*:*:layer:*-sentiment-*",
+      "arn:aws:lambda:*:*:layer:*-sentiment-*:*"
     ]
   }
 
@@ -347,10 +370,16 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
       "logs:DescribeMetricFilters"
     ]
     resources = [
+      # Pattern: sentiment-analyzer-* (legacy)
       "arn:aws:logs:*:*:log-group:/aws/lambda/sentiment-analyzer-*",
       "arn:aws:logs:*:*:log-group:/aws/lambda/sentiment-analyzer-*:*",
       "arn:aws:logs:*:*:log-group:/aws/apigateway/sentiment-analyzer-*",
-      "arn:aws:logs:*:*:log-group:/aws/apigateway/sentiment-analyzer-*:*"
+      "arn:aws:logs:*:*:log-group:/aws/apigateway/sentiment-analyzer-*:*",
+      # Pattern: {env}-sentiment-* (preprod-sentiment-dashboard, prod-sentiment-ingestion, etc.)
+      "arn:aws:logs:*:*:log-group:/aws/lambda/*-sentiment-*",
+      "arn:aws:logs:*:*:log-group:/aws/lambda/*-sentiment-*:*",
+      "arn:aws:logs:*:*:log-group:/aws/apigateway/*-sentiment-*",
+      "arn:aws:logs:*:*:log-group:/aws/apigateway/*-sentiment-*:*"
     ]
   }
 
