@@ -55,9 +55,8 @@ async def get_ohlc_data(
     ticker: str,
     request: Request,
     range: TimeRange = Query(TimeRange.ONE_MONTH, description="Time range for data"),
-    start_date: date | None = Query(
-        None, description="Custom start date (overrides range)"
-    ),
+    start_date: date
+    | None = Query(None, description="Custom start date (overrides range)"),
     end_date: date | None = Query(None, description="Custom end date"),
     tiingo: TiingoAdapter = Depends(get_tiingo_adapter),
     finnhub: FinnhubAdapter = Depends(get_finnhub_adapter),
