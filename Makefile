@@ -60,6 +60,9 @@ security: ## Run security scanners
 	@if command -v tfsec &>/dev/null && [ -d "$(TF_DIR)" ]; then tfsec $(TF_DIR) --soft-fail; fi
 	@echo "$(YELLOW)⚠ Review security findings above$(NC)"
 
+check-iam-patterns: ## Validate IAM ARN patterns match Terraform resource names
+	@./scripts/check-iam-patterns.sh
+
 # ============================================================================
 # Testing
 # ============================================================================

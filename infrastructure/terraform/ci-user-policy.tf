@@ -2,8 +2,11 @@
 # ======================================================
 #
 # This file defines and ATTACHES IAM policies to CI deployer users:
-# - sentiment-analyzer-preprod-deployer (preprod environment)
-# - sentiment-analyzer-prod-deployer (prod environment)
+# - sentiment-analyzer-preprod-deployer (preprod environment) - NOTE: legacy user name
+# - sentiment-analyzer-prod-deployer (prod environment) - NOTE: legacy user name
+#
+# NAMING CONVENTION: All resource ARN patterns use {env}-sentiment-* pattern
+# (e.g., preprod-sentiment-dashboard, prod-sentiment-ingestion)
 #
 # POLICY SIZE LIMIT: AWS limits managed policies to 6,144 characters.
 # To stay under this limit, permissions are split into 4 policies:
@@ -79,16 +82,13 @@ data "aws_iam_policy_document" "ci_deploy_core" {
       "lambda:ListFunctionUrlConfigs"
     ]
     resources = [
-      # Pattern: sentiment-analyzer-* (legacy)
-      "arn:aws:lambda:*:*:function:sentiment-analyzer-*",
-      "arn:aws:lambda:*:*:function:sentiment-analyzer-*:*",
       # Pattern: {env}-sentiment-* (preprod-sentiment-ingestion, prod-sentiment-dashboard, etc.)
       "arn:aws:lambda:*:*:function:*-sentiment-*",
       "arn:aws:lambda:*:*:function:*-sentiment-*:*"
     ]
   }
 
-  # Lambda Layers (scoped to sentiment-analyzer-* layer names)
+  # Lambda Layers (scoped to *-sentiment-* layer names)
   statement {
     sid    = "LambdaLayers"
     effect = "Allow"
@@ -100,15 +100,13 @@ data "aws_iam_policy_document" "ci_deploy_core" {
       "lambda:ListLayers"
     ]
     resources = [
-      "arn:aws:lambda:*:*:layer:sentiment-analyzer-*",
-      "arn:aws:lambda:*:*:layer:sentiment-analyzer-*:*",
       "arn:aws:lambda:*:*:layer:*-sentiment-*",
       "arn:aws:lambda:*:*:layer:*-sentiment-*:*"
     ]
   }
 
   # DynamoDB Table Management
-  # SECURITY: Scoped to sentiment-analyzer-* naming pattern (FR-002)
+  # SECURITY: Scoped to {env}-sentiment-* naming pattern (FR-002)
   statement {
     sid    = "DynamoDB"
     effect = "Allow"
@@ -134,10 +132,6 @@ data "aws_iam_policy_document" "ci_deploy_core" {
       "dynamodb:DeleteItem"
     ]
     resources = [
-      # Pattern: sentiment-analyzer-* (legacy)
-      "arn:aws:dynamodb:*:*:table/sentiment-analyzer-*",
-      "arn:aws:dynamodb:*:*:table/sentiment-analyzer-*/stream/*",
-      "arn:aws:dynamodb:*:*:table/sentiment-analyzer-*/index/*",
       # Pattern: {env}-sentiment-* (preprod-sentiment-items, prod-sentiment-users, etc.)
       "arn:aws:dynamodb:*:*:table/*-sentiment-*",
       "arn:aws:dynamodb:*:*:table/*-sentiment-*/stream/*",
@@ -150,7 +144,7 @@ data "aws_iam_policy_document" "ci_deploy_core" {
   }
 
   # SNS Topic Management
-  # SECURITY: Scoped to sentiment-analyzer-* naming pattern (FR-003)
+  # SECURITY: Scoped to {env}-sentiment-* naming pattern (FR-003)
   statement {
     sid    = "SNS"
     effect = "Allow"
@@ -168,15 +162,13 @@ data "aws_iam_policy_document" "ci_deploy_core" {
       "sns:ListTagsForResource"
     ]
     resources = [
-      # Pattern: sentiment-analyzer-* (legacy)
-      "arn:aws:sns:*:*:sentiment-analyzer-*",
       # Pattern: {env}-sentiment-* (preprod-sentiment-alarms, prod-sentiment-analysis-requests, etc.)
       "arn:aws:sns:*:*:*-sentiment-*"
     ]
   }
 
   # SQS Queue Management
-  # SECURITY: Scoped to sentiment-analyzer-* naming pattern (FR-004)
+  # SECURITY: Scoped to {env}-sentiment-* naming pattern (FR-004)
   statement {
     sid    = "SQS"
     effect = "Allow"
@@ -192,15 +184,13 @@ data "aws_iam_policy_document" "ci_deploy_core" {
       "sqs:ListQueueTags"
     ]
     resources = [
-      # Pattern: sentiment-analyzer-* (legacy)
-      "arn:aws:sqs:*:*:sentiment-analyzer-*",
       # Pattern: {env}-sentiment-* (preprod-sentiment-analysis-dlq, etc.)
       "arn:aws:sqs:*:*:*-sentiment-*"
     ]
   }
 
   # EventBridge Rules Management
-  # SECURITY: Scoped to sentiment-analyzer-* naming pattern (FR-005)
+  # SECURITY: Scoped to {env}-sentiment-* naming pattern (FR-005)
   statement {
     sid    = "EventBridge"
     effect = "Allow"
@@ -218,7 +208,7 @@ data "aws_iam_policy_document" "ci_deploy_core" {
       "events:ListTagsForResource"
     ]
     resources = [
-      "arn:aws:events:*:*:rule/sentiment-analyzer-*"
+      "arn:aws:events:*:*:rule/*-sentiment-*"
     ]
   }
 
@@ -245,7 +235,7 @@ data "aws_iam_policy_document" "ci_deploy_core" {
   }
 
   # Secrets Manager
-  # SECURITY: Scoped to sentiment-analyzer-* naming pattern (FR-006)
+  # SECURITY: Scoped to {env}/sentiment-analyzer/* naming pattern (FR-006)
   statement {
     sid    = "SecretsManager"
     effect = "Allow"
@@ -260,8 +250,6 @@ data "aws_iam_policy_document" "ci_deploy_core" {
       "secretsmanager:UntagResource"
     ]
     resources = [
-      # Pattern: sentiment-analyzer-* (legacy)
-      "arn:aws:secretsmanager:*:*:secret:sentiment-analyzer-*",
       # Pattern: {env}/sentiment-analyzer/* (preprod/sentiment-analyzer/newsapi, etc.)
       "arn:aws:secretsmanager:*:*:secret:*/sentiment-analyzer/*"
     ]
@@ -282,7 +270,7 @@ data "aws_iam_policy_document" "ci_deploy_core" {
   }
 
   # ECR Repository Management (for Docker-based Lambdas like SSE streaming)
-  # SECURITY: Scoped to sentiment-analyzer-* and preprod/prod naming patterns (FR-012)
+  # SECURITY: Scoped to {env}-sentiment-* naming pattern (FR-012)
   statement {
     sid    = "ECR"
     effect = "Allow"
@@ -304,9 +292,7 @@ data "aws_iam_policy_document" "ci_deploy_core" {
       "ecr:PutImageTagMutability"
     ]
     resources = [
-      "arn:aws:ecr:*:*:repository/sentiment-analyzer-*",
-      "arn:aws:ecr:*:*:repository/preprod-*",
-      "arn:aws:ecr:*:*:repository/prod-*"
+      "arn:aws:ecr:*:*:repository/*-sentiment-*"
     ]
   }
 
@@ -327,9 +313,7 @@ data "aws_iam_policy_document" "ci_deploy_core" {
       "ecr:ListImages"
     ]
     resources = [
-      "arn:aws:ecr:*:*:repository/sentiment-analyzer-*",
-      "arn:aws:ecr:*:*:repository/preprod-*",
-      "arn:aws:ecr:*:*:repository/prod-*"
+      "arn:aws:ecr:*:*:repository/*-sentiment-*"
     ]
   }
 
@@ -350,7 +334,7 @@ data "aws_iam_policy_document" "ci_deploy_core" {
 
 data "aws_iam_policy_document" "ci_deploy_monitoring" {
   # CloudWatch Logs
-  # SECURITY: Scoped to sentiment-analyzer-* log groups (FR-007)
+  # SECURITY: Scoped to {env}-sentiment-* log groups (FR-007)
   statement {
     sid    = "CloudWatchLogs"
     effect = "Allow"
@@ -370,23 +354,20 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
       "logs:DescribeMetricFilters"
     ]
     resources = [
-      # Pattern: sentiment-analyzer-* (legacy)
-      "arn:aws:logs:*:*:log-group:/aws/lambda/sentiment-analyzer-*",
-      "arn:aws:logs:*:*:log-group:/aws/lambda/sentiment-analyzer-*:*",
-      "arn:aws:logs:*:*:log-group:/aws/apigateway/sentiment-analyzer-*",
-      "arn:aws:logs:*:*:log-group:/aws/apigateway/sentiment-analyzer-*:*",
       # Pattern: {env}-sentiment-* (preprod-sentiment-dashboard, prod-sentiment-ingestion, etc.)
       "arn:aws:logs:*:*:log-group:/aws/lambda/*-sentiment-*",
       "arn:aws:logs:*:*:log-group:/aws/lambda/*-sentiment-*:*",
       "arn:aws:logs:*:*:log-group:/aws/apigateway/*-sentiment-*",
-      "arn:aws:logs:*:*:log-group:/aws/apigateway/*-sentiment-*:*"
+      "arn:aws:logs:*:*:log-group:/aws/apigateway/*-sentiment-*:*",
+      # FIS chaos experiment logs
+      "arn:aws:logs:*:*:log-group:/aws/fis/*-chaos-*",
+      "arn:aws:logs:*:*:log-group:/aws/fis/*-chaos-*:*"
     ]
   }
 
   # CloudWatch Alarms and Dashboards
-  # SECURITY: Scoped to sentiment-analyzer-* alarms via condition (FR-008)
-  # Note: CloudWatch alarms don't support resource-level ARNs for all actions,
-  # so we use condition keys to restrict to sentiment-analyzer-* alarm names
+  # SECURITY: Scoped to {env}-sentiment-* alarms (FR-008)
+  # Note: CloudWatch alarms don't support resource-level ARNs for all actions
   statement {
     sid    = "CloudWatch"
     effect = "Allow"
@@ -406,8 +387,8 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
       "cloudwatch:DescribeAlarmHistory"
     ]
     resources = [
-      "arn:aws:cloudwatch:*:*:alarm:sentiment-analyzer-*",
-      "arn:aws:cloudwatch::*:dashboard/sentiment-analyzer-*"
+      "arn:aws:cloudwatch:*:*:alarm:*-sentiment-*",
+      "arn:aws:cloudwatch::*:dashboard/*-sentiment-*"
     ]
   }
 
@@ -424,7 +405,7 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
   }
 
   # Cognito User Pools
-  # SECURITY: Scoped to sentiment-analyzer-* user pools (FR-009)
+  # SECURITY: Scoped to *-sentiment-* user pools via tag (FR-009)
   statement {
     sid    = "CognitoIDP"
     effect = "Allow"
@@ -465,7 +446,7 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
     condition {
       test     = "StringLike"
       variable = "cognito-idp:ResourceTag/Name"
-      values   = ["sentiment-analyzer-*"]
+      values   = ["*-sentiment-*"]
     }
   }
 
@@ -481,7 +462,7 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
   }
 
   # Cognito Identity Pools
-  # SECURITY: Scoped to sentiment-analyzer-* identity pools (FR-009)
+  # SECURITY: Scoped to *-sentiment-* identity pools via tag (FR-009)
   statement {
     sid    = "CognitoIdentity"
     effect = "Allow"
@@ -503,7 +484,7 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
     condition {
       test     = "StringLike"
       variable = "cognito-identity:ResourceTag/Name"
-      values   = ["sentiment-analyzer-*"]
+      values   = ["*-sentiment-*"]
     }
   }
 
@@ -570,7 +551,7 @@ data "aws_iam_policy_document" "ci_deploy_iam" {
   }
 
   # IAM Policy Management
-  # SECURITY: Scoped to sentiment-analyzer-* and CIDeploy* policies (FR-010)
+  # SECURITY: Scoped to *-sentiment-* and CIDeploy* policies (FR-010)
   statement {
     sid    = "IAMPolicies"
     effect = "Allow"
@@ -585,7 +566,7 @@ data "aws_iam_policy_document" "ci_deploy_iam" {
       "iam:SetDefaultPolicyVersion"
     ]
     resources = [
-      "arn:aws:iam::*:policy/sentiment-analyzer-*",
+      "arn:aws:iam::*:policy/*-sentiment-*",
       "arn:aws:iam::*:policy/CIDeploy*"
     ]
   }
@@ -626,12 +607,12 @@ data "aws_iam_policy_document" "ci_deploy_iam" {
       "iam:DetachUserPolicy"
     ]
     resources = [
-      "arn:aws:iam::*:user/sentiment-analyzer-*-deployer"
+      "arn:aws:iam::*:user/*-sentiment-*-deployer"
     ]
   }
 
   # FIS (Fault Injection Simulator)
-  # SECURITY: Scoped to sentiment-analyzer-* templates via tag condition (FR-011)
+  # SECURITY: Scoped to *-sentiment-* templates via tag condition (FR-011)
   statement {
     sid    = "FIS"
     effect = "Allow"
@@ -660,7 +641,7 @@ data "aws_iam_policy_document" "ci_deploy_iam" {
     condition {
       test     = "StringLike"
       variable = "aws:ResourceTag/Name"
-      values   = ["sentiment-analyzer-*"]
+      values   = ["*-sentiment-*"]
     }
   }
 
@@ -680,7 +661,7 @@ data "aws_iam_policy_document" "ci_deploy_iam" {
   }
 
   # X-Ray Tracing
-  # SECURITY: Scoped to sentiment-analyzer-* groups (FR-011)
+  # SECURITY: Scoped to *-sentiment-* groups (FR-011)
   statement {
     sid    = "XRay"
     effect = "Allow"
@@ -693,7 +674,7 @@ data "aws_iam_policy_document" "ci_deploy_iam" {
       "xray:ListTagsForResource"
     ]
     resources = [
-      "arn:aws:xray:*:*:group/sentiment-analyzer-*/*"
+      "arn:aws:xray:*:*:group/*-sentiment-*/*"
     ]
   }
 
@@ -707,7 +688,7 @@ data "aws_iam_policy_document" "ci_deploy_iam" {
       "xray:DeleteSamplingRule"
     ]
     resources = [
-      "arn:aws:xray:*:*:sampling-rule/sentiment-analyzer-*"
+      "arn:aws:xray:*:*:sampling-rule/*-sentiment-*"
     ]
   }
 
@@ -743,6 +724,7 @@ data "aws_iam_policy_document" "ci_deploy_iam" {
 
 data "aws_iam_policy_document" "ci_deploy_storage" {
   # S3 Bucket Management
+  # SECURITY: Scoped to *-sentiment-* naming pattern
   statement {
     sid    = "S3Buckets"
     effect = "Allow"
@@ -781,7 +763,6 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
       "s3:GetBucketOwnershipControls"
     ]
     resources = [
-      "arn:aws:s3:::sentiment-analyzer-*",
       "arn:aws:s3:::*-sentiment-*"
     ]
   }
@@ -801,14 +782,12 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
       "s3:PutObjectTagging"
     ]
     resources = [
-      "arn:aws:s3:::sentiment-analyzer-*",
-      "arn:aws:s3:::sentiment-analyzer-*/*",
       "arn:aws:s3:::*-sentiment-*",
       "arn:aws:s3:::*-sentiment-*/*"
     ]
   }
 
-  # Terraform State S3 Access
+  # Terraform State S3 Access (keep legacy pattern for tfstate buckets until renamed)
   statement {
     sid    = "TerraformState"
     effect = "Allow"
@@ -819,15 +798,15 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
       "s3:DeleteObject"
     ]
     resources = [
-      "arn:aws:s3:::sentiment-analyzer-tfstate-*",
-      "arn:aws:s3:::sentiment-analyzer-tfstate-*/*",
-      "arn:aws:s3:::sentiment-analyzer-terraform-*",
-      "arn:aws:s3:::sentiment-analyzer-terraform-*/*"
+      "arn:aws:s3:::*-sentiment-tfstate-*",
+      "arn:aws:s3:::*-sentiment-tfstate-*/*",
+      "arn:aws:s3:::*-sentiment-terraform-*",
+      "arn:aws:s3:::*-sentiment-terraform-*/*"
     ]
   }
 
   # CloudFront Distribution
-  # SECURITY: Scoped via tag condition (FR-011)
+  # SECURITY: Scoped via tag condition to *-sentiment-* (FR-011)
   # Note: CloudFront distributions don't support resource-level permissions
   # for most actions, so we use tag-based conditions where possible
   statement {
@@ -865,7 +844,7 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
     condition {
       test     = "StringLike"
       variable = "aws:ResourceTag/Name"
-      values   = ["sentiment-analyzer-*"]
+      values   = ["*-sentiment-*"]
     }
   }
 
@@ -896,7 +875,7 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
   }
 
   # AWS Backup
-  # SECURITY: Scoped to sentiment-analyzer-* backup resources (FR-011)
+  # SECURITY: Scoped to *-sentiment-* backup resources (FR-011)
   statement {
     sid    = "Backup"
     effect = "Allow"
@@ -917,7 +896,7 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
       "backup:ListTags"
     ]
     resources = [
-      "arn:aws:backup:*:*:backup-vault:sentiment-analyzer-*",
+      "arn:aws:backup:*:*:backup-vault:*-sentiment-*",
       "arn:aws:backup:*:*:backup-plan:*"
     ]
   }
@@ -934,7 +913,7 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
   }
 
   # AWS Budgets
-  # SECURITY: Scoped to sentiment-analyzer-* budgets via condition (FR-011)
+  # SECURITY: Scoped to *-sentiment-* budgets (FR-011)
   # Note: Budget ARNs use account ID, not resource name pattern
   statement {
     sid    = "Budgets"
@@ -950,7 +929,7 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
       "budgets:ListTagsForResource"
     ]
     resources = [
-      "arn:aws:budgets::*:budget/sentiment-analyzer-*"
+      "arn:aws:budgets::*:budget/*-sentiment-*"
     ]
   }
 
@@ -965,7 +944,7 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
   }
 
   # CloudWatch RUM
-  # SECURITY: Scoped to sentiment-analyzer-* app monitors (FR-011)
+  # SECURITY: Scoped to *-sentiment-* app monitors (FR-011)
   statement {
     sid    = "RUM"
     effect = "Allow"
@@ -979,7 +958,7 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
       "rum:ListTagsForResource"
     ]
     resources = [
-      "arn:aws:rum:*:*:appmonitor/sentiment-analyzer-*"
+      "arn:aws:rum:*:*:appmonitor/*-sentiment-*"
     ]
   }
 
@@ -994,7 +973,7 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
   }
 
   # KMS Key Management (for shared encryption key)
-  # SECURITY: Scoped to sentiment-analyzer-* keys via alias pattern (FR-013)
+  # SECURITY: Scoped to *-sentiment-* keys via alias pattern (FR-013)
   statement {
     sid    = "KMS"
     effect = "Allow"
@@ -1016,7 +995,7 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
     condition {
       test     = "StringLike"
       variable = "kms:RequestAlias"
-      values   = ["alias/sentiment-analyzer-*"]
+      values   = ["alias/*-sentiment-*"]
     }
   }
 
@@ -1041,7 +1020,7 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
       "kms:UpdateAlias"
     ]
     resources = [
-      "arn:aws:kms:*:*:alias/sentiment-analyzer-*"
+      "arn:aws:kms:*:*:alias/*-sentiment-*"
     ]
   }
 
