@@ -2,6 +2,8 @@
 #
 # Tests Server-Sent Events functionality:
 # - SSE connection establishment
+# - Global metrics stream
+# - Config-specific stream
 # - Sentiment update events
 # - Refresh events
 # - Reconnection with Last-Event-ID
@@ -13,6 +15,48 @@ from tests.e2e.helpers.api_client import PreprodAPIClient
 from tests.fixtures.synthetic.config_generator import SyntheticConfiguration
 
 pytestmark = [pytest.mark.e2e, pytest.mark.preprod, pytest.mark.us10]
+
+
+@pytest.mark.asyncio
+async def test_global_stream_available(
+    api_client: PreprodAPIClient,
+) -> None:
+    """T095b: Verify global SSE stream is available.
+
+    Given: The API is running
+    When: GET /api/v2/stream is called
+    Then: Connection is established with text/event-stream content type
+    """
+    response = await api_client.get(
+        "/api/v2/stream",
+        headers={"Accept": "text/event-stream"},
+    )
+
+    # Should return 200 with event-stream content type
+    assert response.status_code == 200, f"Expected 200, got {response.status_code}"
+    content_type = response.headers.get("content-type", "")
+    assert (
+        "text/event-stream" in content_type
+    ), f"Expected text/event-stream, got: {content_type}"
+
+
+@pytest.mark.asyncio
+async def test_stream_status_endpoint(
+    api_client: PreprodAPIClient,
+) -> None:
+    """Verify /api/v2/stream/status returns connection info.
+
+    Given: The API is running
+    When: GET /api/v2/stream/status is called
+    Then: Response contains connection count and limits
+    """
+    response = await api_client.get("/api/v2/stream/status")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "connections" in data
+    assert "max_connections" in data
+    assert "available" in data
 
 
 async def create_session_and_config(
