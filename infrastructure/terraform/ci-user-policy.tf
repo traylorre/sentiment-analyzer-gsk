@@ -333,7 +333,7 @@ data "aws_iam_policy_document" "ci_deploy_core" {
 # ==================================================================
 
 data "aws_iam_policy_document" "ci_deploy_monitoring" {
-  # CloudWatch Logs
+  # CloudWatch Logs - Scoped operations
   # SECURITY: Scoped to {env}-sentiment-* log groups (FR-007)
   statement {
     sid    = "CloudWatchLogs"
@@ -341,7 +341,6 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
     actions = [
       "logs:CreateLogGroup",
       "logs:DeleteLogGroup",
-      "logs:DescribeLogGroups",
       "logs:DescribeLogStreams",
       "logs:PutRetentionPolicy",
       "logs:DeleteRetentionPolicy",
@@ -365,9 +364,21 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
     ]
   }
 
+  # CloudWatch Logs - Read operations that require wildcard resource
+  # Note: logs:DescribeLogGroups requires * resource for listing
+  statement {
+    sid    = "CloudWatchLogsReadOnly"
+    effect = "Allow"
+    actions = [
+      "logs:DescribeLogGroups",
+      "logs:DescribeMetricFilters"
+    ]
+    resources = ["*"]
+  }
+
   # CloudWatch Alarms and Dashboards
-  # SECURITY: Scoped to {env}-sentiment-* alarms (FR-008)
-  # Note: CloudWatch alarms don't support resource-level ARNs for all actions
+  # SECURITY: Scoped to {env}-sentiment-* and {env}-* alarms (FR-008)
+  # Note: Some alarms use {env}-dynamodb-*, {env}-lambda-*, etc. naming
   statement {
     sid    = "CloudWatch"
     effect = "Allow"
@@ -387,7 +398,41 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
       "cloudwatch:DescribeAlarmHistory"
     ]
     resources = [
+      # Primary pattern: {env}-sentiment-* alarms
       "arn:aws:cloudwatch:*:*:alarm:*-sentiment-*",
+      # DynamoDB module alarms: {env}-dynamodb-*
+      "arn:aws:cloudwatch:*:*:alarm:preprod-dynamodb-*",
+      "arn:aws:cloudwatch:*:*:alarm:prod-dynamodb-*",
+      # Lambda alarms: {env}-lambda-*
+      "arn:aws:cloudwatch:*:*:alarm:preprod-lambda-*",
+      "arn:aws:cloudwatch:*:*:alarm:prod-lambda-*",
+      # SNS alarms: {env}-sns-*
+      "arn:aws:cloudwatch:*:*:alarm:preprod-sns-*",
+      "arn:aws:cloudwatch:*:*:alarm:prod-sns-*",
+      # API provider alarms: {env}-tiingo-*, {env}-finnhub-*
+      "arn:aws:cloudwatch:*:*:alarm:preprod-tiingo-*",
+      "arn:aws:cloudwatch:*:*:alarm:prod-tiingo-*",
+      "arn:aws:cloudwatch:*:*:alarm:preprod-finnhub-*",
+      "arn:aws:cloudwatch:*:*:alarm:prod-finnhub-*",
+      # Circuit breaker alarms: {env}-circuit-*
+      "arn:aws:cloudwatch:*:*:alarm:preprod-circuit-*",
+      "arn:aws:cloudwatch:*:*:alarm:prod-circuit-*",
+      # Notification alarms: {env}-notification-*
+      "arn:aws:cloudwatch:*:*:alarm:preprod-notification-*",
+      "arn:aws:cloudwatch:*:*:alarm:prod-notification-*",
+      # Alert alarms: {env}-alert-*
+      "arn:aws:cloudwatch:*:*:alarm:preprod-alert-*",
+      "arn:aws:cloudwatch:*:*:alarm:prod-alert-*",
+      # DLQ alarms: {env}-dlq-*
+      "arn:aws:cloudwatch:*:*:alarm:preprod-dlq-*",
+      "arn:aws:cloudwatch:*:*:alarm:prod-dlq-*",
+      # SendGrid quota alarms: {env}-sendgrid-*
+      "arn:aws:cloudwatch:*:*:alarm:preprod-sendgrid-*",
+      "arn:aws:cloudwatch:*:*:alarm:prod-sendgrid-*",
+      # No new items alarm: {env}-no-*
+      "arn:aws:cloudwatch:*:*:alarm:preprod-no-*",
+      "arn:aws:cloudwatch:*:*:alarm:prod-no-*",
+      # Dashboard pattern
       "arn:aws:cloudwatch::*:dashboard/*-sentiment-*"
     ]
   }
@@ -399,46 +444,36 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
     actions = [
       "cloudwatch:ListMetrics",
       "cloudwatch:GetMetricStatistics",
-      "cloudwatch:DescribeAlarms"
+      "cloudwatch:DescribeAlarms",
+      "cloudwatch:ListTagsForResource"
     ]
     resources = ["*"]
   }
 
-  # Cognito User Pools
+  # Cognito User Pools - Write operations (scoped by tag)
   # SECURITY: Scoped to *-sentiment-* user pools via tag (FR-009)
   statement {
-    sid    = "CognitoIDP"
+    sid    = "CognitoIDPWrite"
     effect = "Allow"
     actions = [
       "cognito-idp:CreateUserPool",
       "cognito-idp:UpdateUserPool",
       "cognito-idp:DeleteUserPool",
-      "cognito-idp:DescribeUserPool",
-      "cognito-idp:ListUserPools",
-      "cognito-idp:GetUserPoolMfaConfig",
       "cognito-idp:SetUserPoolMfaConfig",
       "cognito-idp:CreateUserPoolClient",
       "cognito-idp:UpdateUserPoolClient",
       "cognito-idp:DeleteUserPoolClient",
-      "cognito-idp:DescribeUserPoolClient",
-      "cognito-idp:ListUserPoolClients",
       "cognito-idp:CreateUserPoolDomain",
       "cognito-idp:UpdateUserPoolDomain",
       "cognito-idp:DeleteUserPoolDomain",
-      "cognito-idp:DescribeUserPoolDomain",
       "cognito-idp:CreateResourceServer",
       "cognito-idp:UpdateResourceServer",
       "cognito-idp:DeleteResourceServer",
-      "cognito-idp:DescribeResourceServer",
-      "cognito-idp:ListResourceServers",
       "cognito-idp:CreateIdentityProvider",
       "cognito-idp:UpdateIdentityProvider",
       "cognito-idp:DeleteIdentityProvider",
-      "cognito-idp:DescribeIdentityProvider",
-      "cognito-idp:ListIdentityProviders",
       "cognito-idp:TagResource",
-      "cognito-idp:UntagResource",
-      "cognito-idp:ListTagsForResource"
+      "cognito-idp:UntagResource"
     ]
     resources = [
       "arn:aws:cognito-idp:*:*:userpool/*"
@@ -450,13 +485,24 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
     }
   }
 
-  # Cognito User Pools - List operations (require wildcard)
+  # Cognito User Pools - Read operations (no tag condition for reads)
+  # Note: Read operations need wildcard because tag condition blocks reads
+  # during Terraform refresh when the resource may not be tagged yet
   statement {
-    sid    = "CognitoIDPList"
+    sid    = "CognitoIDPRead"
     effect = "Allow"
     actions = [
+      "cognito-idp:DescribeUserPool",
       "cognito-idp:ListUserPools",
-      "cognito-idp:DescribeUserPool"
+      "cognito-idp:GetUserPoolMfaConfig",
+      "cognito-idp:DescribeUserPoolClient",
+      "cognito-idp:ListUserPoolClients",
+      "cognito-idp:DescribeUserPoolDomain",
+      "cognito-idp:DescribeResourceServer",
+      "cognito-idp:ListResourceServers",
+      "cognito-idp:DescribeIdentityProvider",
+      "cognito-idp:ListIdentityProviders",
+      "cognito-idp:ListTagsForResource"
     ]
     resources = ["*"]
   }
