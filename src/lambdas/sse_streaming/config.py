@@ -10,6 +10,7 @@ import os
 import boto3
 from botocore.exceptions import ClientError
 
+from src.lambdas.shared.logging_utils import sanitize_for_log
 from src.lambdas.shared.models.configuration import Configuration
 
 logger = logging.getLogger(__name__)
@@ -67,8 +68,12 @@ class ConfigLookupService:
                 logger.debug(
                     "Configuration not found",
                     extra={
-                        "config_id": config_id[:8] if config_id else "",
-                        "user_id_prefix": user_id[:8] if user_id else "",
+                        "config_id": sanitize_for_log(
+                            config_id[:8] if config_id else ""
+                        ),
+                        "user_id_prefix": sanitize_for_log(
+                            user_id[:8] if user_id else ""
+                        ),
                     },
                 )
                 return None
@@ -77,7 +82,11 @@ class ConfigLookupService:
             if not item.get("is_active", True):
                 logger.debug(
                     "Configuration is inactive",
-                    extra={"config_id": config_id[:8] if config_id else ""},
+                    extra={
+                        "config_id": sanitize_for_log(
+                            config_id[:8] if config_id else ""
+                        )
+                    },
                 )
                 return None
 
@@ -85,7 +94,7 @@ class ConfigLookupService:
             logger.debug(
                 "Configuration found",
                 extra={
-                    "config_id": config_id[:8] if config_id else "",
+                    "config_id": sanitize_for_log(config_id[:8] if config_id else ""),
                     "ticker_count": len(config.tickers),
                 },
             )
@@ -96,7 +105,7 @@ class ConfigLookupService:
                 "DynamoDB get_item failed",
                 extra={
                     "error": str(e),
-                    "config_id": config_id[:8] if config_id else "",
+                    "config_id": sanitize_for_log(config_id[:8] if config_id else ""),
                 },
             )
             return None

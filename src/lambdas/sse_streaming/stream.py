@@ -12,6 +12,8 @@ import time
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 
+from src.lambdas.shared.logging_utils import sanitize_for_log
+
 from .connection import ConnectionManager, SSEConnection, connection_manager
 from .metrics import metrics_emitter
 from .models import (
@@ -155,7 +157,9 @@ class SSEStreamGenerator:
             "Starting global stream",
             extra={
                 "connection_id": connection.connection_id,
-                "last_event_id": last_event_id,
+                "last_event_id": sanitize_for_log(last_event_id)
+                if last_event_id
+                else None,
             },
         )
 
@@ -238,9 +242,13 @@ class SSEStreamGenerator:
             "Starting config stream",
             extra={
                 "connection_id": connection.connection_id,
-                "config_id": connection.config_id,
+                "config_id": sanitize_for_log(connection.config_id)
+                if connection.config_id
+                else None,
                 "ticker_filters": connection.ticker_filters,
-                "last_event_id": last_event_id,
+                "last_event_id": sanitize_for_log(last_event_id)
+                if last_event_id
+                else None,
             },
         )
 

@@ -17,6 +17,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sse_starlette.sse import EventSourceResponse
 
+from src.lambdas.shared.logging_utils import sanitize_for_log
+
 from .config import config_lookup_service
 from .connection import connection_manager
 from .metrics import metrics_emitter
@@ -92,8 +94,10 @@ async def global_stream(
     logger.info(
         "Global stream connection attempt",
         extra={
-            "client_host": request.client.host if request.client else "unknown",
-            "last_event_id": last_event_id,
+            "client_host": sanitize_for_log(
+                request.client.host if request.client else "unknown"
+            ),
+            "last_event_id": sanitize_for_log(last_event_id) if last_event_id else None,
         },
     )
 
@@ -187,7 +191,7 @@ async def config_stream(
     if not x_user_id or not x_user_id.strip():
         logger.warning(
             "Config stream rejected - missing X-User-ID",
-            extra={"config_id": config_id[:8] if config_id else ""},
+            extra={"config_id": sanitize_for_log(config_id[:8] if config_id else "")},
         )
         return JSONResponse(
             status_code=401,
@@ -200,10 +204,12 @@ async def config_stream(
     logger.info(
         "Config stream connection attempt",
         extra={
-            "config_id": config_id[:8] if config_id else "",
-            "user_id_prefix": user_id[:8] if user_id else "",
-            "client_host": request.client.host if request.client else "unknown",
-            "last_event_id": last_event_id,
+            "config_id": sanitize_for_log(config_id[:8] if config_id else ""),
+            "user_id_prefix": sanitize_for_log(user_id[:8] if user_id else ""),
+            "client_host": sanitize_for_log(
+                request.client.host if request.client else "unknown"
+            ),
+            "last_event_id": sanitize_for_log(last_event_id) if last_event_id else None,
         },
     )
 
@@ -215,8 +221,8 @@ async def config_stream(
         logger.warning(
             "Config stream rejected - configuration not found",
             extra={
-                "config_id": config_id[:8] if config_id else "",
-                "user_id_prefix": user_id[:8] if user_id else "",
+                "config_id": sanitize_for_log(config_id[:8] if config_id else ""),
+                "user_id_prefix": sanitize_for_log(user_id[:8] if user_id else ""),
             },
         )
         return JSONResponse(
@@ -236,7 +242,7 @@ async def config_stream(
             "Connection limit reached for config stream, rejecting request",
             extra={
                 "max_connections": connection_manager.max_connections,
-                "config_id": config_id[:8] if config_id else "",
+                "config_id": sanitize_for_log(config_id[:8] if config_id else ""),
             },
         )
         metrics_emitter.emit_connection_acquire_failure()
@@ -255,7 +261,7 @@ async def config_stream(
         "Config stream connection established",
         extra={
             "connection_id": connection.connection_id,
-            "config_id": config_id,
+            "config_id": sanitize_for_log(config_id),
             "ticker_filters": ticker_filters,
             "total_connections": connection_manager.count,
         },
@@ -277,7 +283,7 @@ async def config_stream(
                 "Config stream connection closed",
                 extra={
                     "connection_id": connection.connection_id,
-                    "config_id": config_id,
+                    "config_id": sanitize_for_log(config_id),
                     "total_connections": connection_manager.count,
                 },
             )

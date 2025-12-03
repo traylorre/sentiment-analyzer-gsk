@@ -12,6 +12,8 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
+from src.lambdas.shared.logging_utils import sanitize_for_log
+
 logger = logging.getLogger(__name__)
 
 
@@ -137,8 +139,8 @@ class ConnectionManager:
                 "Connection acquired",
                 extra={
                     "connection_id": connection.connection_id,
-                    "user_id": user_id,
-                    "config_id": config_id,
+                    "user_id": sanitize_for_log(user_id) if user_id else None,
+                    "config_id": sanitize_for_log(config_id) if config_id else None,
                     "current_count": len(self._connections),
                 },
             )

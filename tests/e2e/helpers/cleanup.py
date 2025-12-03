@@ -4,6 +4,7 @@
 # Ensures test isolation and prevents data accumulation in preprod.
 
 import os
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
@@ -127,10 +128,8 @@ async def find_orphaned_test_data(
 
             created_at = None
             if "created_at" in item:
-                try:
+                with suppress(ValueError, TypeError):
                     created_at = datetime.fromisoformat(item["created_at"])
-                except (ValueError, TypeError):
-                    pass
 
             orphaned.append(
                 OrphanedTestData(

@@ -4,6 +4,7 @@ Tests SSEStreamGenerator for generating heartbeats, metrics, and sentiment event
 """
 
 import asyncio
+from contextlib import suppress
 from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
@@ -205,13 +206,11 @@ class TestGlobalStreamGeneration:
         )
 
         events = []
-        try:
+        with suppress(asyncio.CancelledError):
             async for event in generator.generate_global_stream(connection):
                 events.append(event)
                 if len(events) >= 2:
                     break
-        except asyncio.CancelledError:
-            pass
 
         # Should have initial heartbeat and metrics event
         assert len(events) >= 1
@@ -258,13 +257,11 @@ class TestGlobalStreamGeneration:
         generator._event_buffer.add(event2)
 
         events = []
-        try:
+        with suppress(asyncio.CancelledError):
             async for event in generator.generate_global_stream(
                 connection, last_event_id=event1.id
             ):
                 events.append(event)
-        except asyncio.CancelledError:
-            pass
 
         # Should replay event2 (after event1), then send heartbeat
         assert len(events) >= 2
@@ -301,15 +298,13 @@ class TestConfigStreamGeneration:
         )
 
         events = []
-        try:
+        with suppress(asyncio.CancelledError):
             async for event in generator.generate_config_stream(
                 connection_with_filters
             ):
                 events.append(event)
                 if len(events) >= 1:
                     raise asyncio.CancelledError()
-        except asyncio.CancelledError:
-            pass
 
         # Should have initial heartbeat
         assert len(events) >= 1
@@ -359,15 +354,13 @@ class TestConfigStreamGeneration:
 
         # Reconnect after event1
         events = []
-        try:
+        with suppress(asyncio.CancelledError):
             async for event in generator.generate_config_stream(
                 connection_with_filters, last_event_id=event1.id
             ):
                 events.append(event)
                 if len(events) >= 2:
                     raise asyncio.CancelledError()
-        except asyncio.CancelledError:
-            pass
 
         # Should NOT include GOOGL event (filtered out)
         # Should include heartbeat

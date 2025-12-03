@@ -11,9 +11,28 @@
 # Note: Full OAuth flow testing requires real provider integration.
 # These tests validate API contract and structure, not actual OAuth redirects.
 
+from urllib.parse import urlparse
+
 import pytest
 
 from tests.e2e.helpers.api_client import PreprodAPIClient
+
+
+def _host_matches_domain(url: str, domain: str) -> bool:
+    """Check if URL host matches or is subdomain of the given domain.
+
+    Uses proper URL parsing to prevent domain spoofing attacks.
+    Example: _host_matches_domain("https://auth.amazoncognito.com/...", "amazoncognito.com") -> True
+    """
+    try:
+        parsed = urlparse(url)
+        host = parsed.netloc.lower()
+        domain = domain.lower()
+        # Host matches exactly or is subdomain (host ends with .domain)
+        return host == domain or host.endswith(f".{domain}")
+    except Exception:
+        return False
+
 
 pytestmark = [pytest.mark.e2e, pytest.mark.preprod, pytest.mark.us2, pytest.mark.auth]
 
@@ -88,10 +107,11 @@ async def test_oauth_url_structure_google(api_client: PreprodAPIClient) -> None:
 
     # OAuth URLs may go through Cognito (federated identity)
     # Check for either direct Google URLs or Cognito federated URLs
-    is_cognito = "amazoncognito.com" in google_url
-    is_google_direct = (
-        "accounts.google.com" in google_url or "googleapis.com" in google_url
-    )
+    # Using proper URL parsing to prevent domain spoofing (CodeQL py/incomplete-url-substring-sanitization)
+    is_cognito = _host_matches_domain(google_url, "amazoncognito.com")
+    is_google_direct = _host_matches_domain(
+        google_url, "accounts.google.com"
+    ) or _host_matches_domain(google_url, "googleapis.com")
 
     assert (
         is_cognito or is_google_direct
@@ -130,8 +150,9 @@ async def test_oauth_url_structure_github(api_client: PreprodAPIClient) -> None:
 
     # OAuth URLs may go through Cognito (federated identity)
     # Check for either direct GitHub URLs or Cognito federated URLs
-    is_cognito = "amazoncognito.com" in github_url
-    is_github_direct = "github.com" in github_url
+    # Using proper URL parsing to prevent domain spoofing (CodeQL py/incomplete-url-substring-sanitization)
+    is_cognito = _host_matches_domain(github_url, "amazoncognito.com")
+    is_github_direct = _host_matches_domain(github_url, "github.com")
 
     assert (
         is_cognito or is_github_direct
