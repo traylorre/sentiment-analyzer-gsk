@@ -36,6 +36,7 @@ from src.lambdas.dashboard import notifications as notification_service
 from src.lambdas.dashboard import ohlc as ohlc_module
 from src.lambdas.dashboard import quota as quota_service
 from src.lambdas.dashboard import sentiment as sentiment_service
+from src.lambdas.dashboard import sse as sse_module
 from src.lambdas.dashboard import tickers as ticker_service
 from src.lambdas.dashboard import volatility as volatility_service
 from src.lambdas.shared.cache.ticker_cache import TickerCache, get_ticker_cache
@@ -1491,3 +1492,5 @@ def include_routers(app):
     app.include_router(admin_router)
     # Feature 011: Price-Sentiment Overlay
     app.include_router(ohlc_module.router)
+    # Feature 015: SSE Streaming
+    app.include_router(sse_module.router)
