@@ -319,7 +319,6 @@ module "analysis_lambda" {
   # Resource configuration per task spec
   # JUSTIFICATION (FR-024): 1024MB required for ML model inference (DistilBERT)
   memory_size          = 1024
-  allow_high_memory    = true # ML model requires more memory
   timeout              = 30
   reserved_concurrency = 5
 
@@ -380,7 +379,6 @@ module "dashboard_lambda" {
   # Resource configuration per task spec
   # JUSTIFICATION (FR-024): 1024MB required for FastAPI+Mangum with async handlers
   memory_size          = 1024
-  allow_high_memory    = true # Dashboard API requires more memory for concurrent requests
   timeout              = 60
   reserved_concurrency = 10
 

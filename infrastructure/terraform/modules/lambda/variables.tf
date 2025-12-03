@@ -58,22 +58,14 @@ variable "timeout" {
 }
 
 variable "memory_size" {
-  description = "Lambda memory in MB"
+  description = "Lambda memory in MB. COST CONTROL (FR-024): Keep at 512MB unless justified."
   type        = number
   default     = 512
 
-  # COST CONTROL (FR-024): Warn when memory exceeds 512MB
-  # Higher memory = higher cost. Use allow_high_memory to acknowledge.
   validation {
-    condition     = var.memory_size <= 512 || var.allow_high_memory
-    error_message = "Memory > 512MB requires allow_high_memory = true with justification in code comments."
+    condition     = var.memory_size >= 128 && var.memory_size <= 10240
+    error_message = "Memory must be between 128 MB and 10240 MB."
   }
-}
-
-variable "allow_high_memory" {
-  description = "Explicitly allow memory > 512MB (FR-024). Set to true with justification comment."
-  type        = bool
-  default     = false
 }
 
 variable "ephemeral_storage_size" {
