@@ -114,6 +114,124 @@ class TestPollingInterval:
         assert service.poll_interval == 10
 
 
+class TestPollMethod:
+    """Tests for the async poll method."""
+
+    @pytest.fixture
+    def mock_dynamodb_table(self):
+        """Create mock DynamoDB table."""
+        mock_table = MagicMock()
+        mock_table.scan.return_value = {
+            "Items": [
+                {
+                    "pk": "SENTIMENT#item1",
+                    "ticker": "AAPL",
+                    "sentiment": "positive",
+                },
+            ]
+        }
+        return mock_table
+
+    @pytest.mark.asyncio
+    async def test_poll_returns_metrics_and_changed_flag(self, mock_dynamodb_table):
+        """Poll should return metrics and changed flag."""
+        from src.lambdas.sse_streaming.polling import PollingService
+
+        service = PollingService(table_name="test-table")
+        service._table = mock_dynamodb_table
+
+        metrics, changed = await service.poll()
+
+        assert metrics is not None
+        assert metrics.total == 1
+        assert changed is True  # First poll always changed
+
+    @pytest.mark.asyncio
+    async def test_poll_second_call_returns_not_changed(self, mock_dynamodb_table):
+        """Second poll with same data should return changed=False."""
+        from src.lambdas.sse_streaming.polling import PollingService
+
+        service = PollingService(table_name="test-table")
+        service._table = mock_dynamodb_table
+
+        # First poll
+        await service.poll()
+
+        # Second poll - same data
+        metrics, changed = await service.poll()
+
+        assert changed is False
+
+    @pytest.mark.asyncio
+    async def test_poll_handles_dynamodb_error(self, mock_dynamodb_table):
+        """Poll should handle DynamoDB errors gracefully."""
+        from botocore.exceptions import ClientError
+
+        from src.lambdas.sse_streaming.polling import PollingService
+
+        mock_dynamodb_table.scan.side_effect = ClientError(
+            {"Error": {"Code": "InternalError", "Message": "Test error"}},
+            "Scan",
+        )
+
+        service = PollingService(table_name="test-table")
+        service._table = mock_dynamodb_table
+
+        # Should not raise, should return empty metrics
+        metrics, changed = await service.poll()
+
+        assert metrics.total == 0
+        assert changed is False
+
+    @pytest.mark.asyncio
+    async def test_poll_returns_cached_metrics_on_error(self, mock_dynamodb_table):
+        """Poll should return cached metrics when error occurs after first poll."""
+        from botocore.exceptions import ClientError
+
+        from src.lambdas.sse_streaming.polling import PollingService
+
+        service = PollingService(table_name="test-table")
+        service._table = mock_dynamodb_table
+
+        # First successful poll
+        metrics1, _ = await service.poll()
+        assert metrics1.total == 1
+
+        # Second poll fails
+        mock_dynamodb_table.scan.side_effect = ClientError(
+            {"Error": {"Code": "InternalError", "Message": "Test error"}},
+            "Scan",
+        )
+
+        metrics2, changed = await service.poll()
+
+        # Should return cached metrics
+        assert metrics2.total == 1
+        assert changed is False
+
+
+class TestScanTable:
+    """Tests for _scan_table method."""
+
+    def test_scan_table_uses_filter_expression(self):
+        """Scan should filter for SENTIMENT# prefix."""
+        from src.lambdas.sse_streaming.polling import PollingService
+
+        mock_table = MagicMock()
+        mock_table.scan.return_value = {"Items": []}
+
+        service = PollingService(table_name="test-table")
+        service._table = mock_table
+
+        service._scan_table()
+
+        mock_table.scan.assert_called_once()
+        call_kwargs = mock_table.scan.call_args[1]
+        assert "FilterExpression" in call_kwargs
+        assert "begins_with(pk, :prefix)" in call_kwargs["FilterExpression"]
+        assert call_kwargs["ExpressionAttributeValues"][":prefix"] == "SENTIMENT#"
+
+
 class TestMetricsChange:
     """Tests for detecting metrics changes."""
 
