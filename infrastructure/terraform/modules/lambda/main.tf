@@ -101,11 +101,13 @@ resource "aws_lambda_function" "this" {
 
 # Lambda Function URL (optional)
 # Creates a public HTTPS endpoint for the Lambda
+# Note: For SSE/streaming responses, set invoke_mode = "RESPONSE_STREAM"
 resource "aws_lambda_function_url" "this" {
   count = var.create_function_url ? 1 : 0
 
   function_name      = aws_lambda_function.this.function_name
   authorization_type = var.function_url_auth_type
+  invoke_mode        = var.function_url_invoke_mode
 
   cors {
     allow_credentials = var.function_url_cors.allow_credentials
