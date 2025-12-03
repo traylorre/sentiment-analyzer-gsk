@@ -6,10 +6,11 @@
 # - sentiment-analyzer-prod-deployer (prod environment)
 #
 # POLICY SIZE LIMIT: AWS limits managed policies to 6,144 characters.
-# To stay under this limit, permissions are split into 3 policies:
-# - ci_deploy_core: Lambda, DynamoDB, SNS, SQS, EventBridge, Secrets
-# - ci_deploy_monitoring: CloudWatch, Cognito, IAM, FIS
-# - ci_deploy_storage: S3, CloudFront, ACM, Backup, Budgets, RUM
+# To stay under this limit, permissions are split into 4 policies:
+# - ci_deploy_core: Lambda, DynamoDB, SNS, SQS, EventBridge, Secrets, ECR
+# - ci_deploy_monitoring: CloudWatch, Cognito
+# - ci_deploy_iam: IAM, FIS, X-Ray
+# - ci_deploy_storage: S3, CloudFront, ACM, Backup, Budgets, RUM, KMS
 #
 # BOOTSTRAP REQUIREMENT:
 # ----------------------
@@ -20,12 +21,15 @@
 #     -target=aws_iam_policy.ci_deploy_core \
 #     -target=aws_iam_policy.ci_deploy_monitoring \
 #     -target=aws_iam_policy.ci_deploy_storage \
+#     -target=aws_iam_policy.ci_deploy_iam \
 #     -target=aws_iam_user_policy_attachment.ci_deploy_core_preprod \
 #     -target=aws_iam_user_policy_attachment.ci_deploy_core_prod \
 #     -target=aws_iam_user_policy_attachment.ci_deploy_monitoring_preprod \
 #     -target=aws_iam_user_policy_attachment.ci_deploy_monitoring_prod \
 #     -target=aws_iam_user_policy_attachment.ci_deploy_storage_preprod \
-#     -target=aws_iam_user_policy_attachment.ci_deploy_storage_prod
+#     -target=aws_iam_user_policy_attachment.ci_deploy_storage_prod \
+#     -target=aws_iam_user_policy_attachment.ci_deploy_iam_preprod \
+#     -target=aws_iam_user_policy_attachment.ci_deploy_iam_prod
 
 # ==================================================================
 # POLICY 1: Core Infrastructure (Lambda, DynamoDB, SNS, SQS, Events, Secrets)
@@ -235,6 +239,68 @@ data "aws_iam_policy_document" "ci_deploy_core" {
     ]
     resources = ["*"]
   }
+
+  # ECR Repository Management (for Docker-based Lambdas like SSE streaming)
+  # SECURITY: Scoped to sentiment-analyzer-* and preprod/prod naming patterns (FR-012)
+  statement {
+    sid    = "ECR"
+    effect = "Allow"
+    actions = [
+      "ecr:CreateRepository",
+      "ecr:DeleteRepository",
+      "ecr:DescribeRepositories",
+      "ecr:ListTagsForResource",
+      "ecr:TagResource",
+      "ecr:UntagResource",
+      "ecr:SetRepositoryPolicy",
+      "ecr:GetRepositoryPolicy",
+      "ecr:DeleteRepositoryPolicy",
+      "ecr:PutLifecyclePolicy",
+      "ecr:GetLifecyclePolicy",
+      "ecr:DeleteLifecyclePolicy",
+      "ecr:GetLifecyclePolicyPreview",
+      "ecr:PutImageScanningConfiguration",
+      "ecr:PutImageTagMutability"
+    ]
+    resources = [
+      "arn:aws:ecr:*:*:repository/sentiment-analyzer-*",
+      "arn:aws:ecr:*:*:repository/preprod-*",
+      "arn:aws:ecr:*:*:repository/prod-*"
+    ]
+  }
+
+  # ECR Image Operations
+  statement {
+    sid    = "ECRImages"
+    effect = "Allow"
+    actions = [
+      "ecr:GetDownloadUrlForLayer",
+      "ecr:BatchGetImage",
+      "ecr:BatchCheckLayerAvailability",
+      "ecr:PutImage",
+      "ecr:InitiateLayerUpload",
+      "ecr:UploadLayerPart",
+      "ecr:CompleteLayerUpload",
+      "ecr:BatchDeleteImage",
+      "ecr:DescribeImages",
+      "ecr:ListImages"
+    ]
+    resources = [
+      "arn:aws:ecr:*:*:repository/sentiment-analyzer-*",
+      "arn:aws:ecr:*:*:repository/preprod-*",
+      "arn:aws:ecr:*:*:repository/prod-*"
+    ]
+  }
+
+  # ECR Authorization Token (required for docker login)
+  statement {
+    sid    = "ECRAuth"
+    effect = "Allow"
+    actions = [
+      "ecr:GetAuthorizationToken"
+    ]
+    resources = ["*"]
+  }
 }
 
 # ==================================================================
@@ -404,7 +470,13 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
     ]
     resources = ["*"]
   }
+}
 
+# ==================================================================
+# POLICY 2b: IAM, FIS, X-Ray (split from monitoring due to size limit)
+# ==================================================================
+
+data "aws_iam_policy_document" "ci_deploy_iam" {
   # IAM Role and Policy Management (scoped)
   statement {
     sid    = "IAMRoles"
@@ -451,7 +523,7 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
   }
 
   # IAM Policy Management
-  # SECURITY: Scoped to sentiment-analyzer-* policies (FR-010)
+  # SECURITY: Scoped to sentiment-analyzer-* and CIDeploy* policies (FR-010)
   statement {
     sid    = "IAMPolicies"
     effect = "Allow"
@@ -466,7 +538,8 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
       "iam:SetDefaultPolicyVersion"
     ]
     resources = [
-      "arn:aws:iam::*:policy/sentiment-analyzer-*"
+      "arn:aws:iam::*:policy/sentiment-analyzer-*",
+      "arn:aws:iam::*:policy/CIDeploy*"
     ]
   }
 
@@ -872,6 +945,69 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
     ]
     resources = ["*"]
   }
+
+  # KMS Key Management (for shared encryption key)
+  # SECURITY: Scoped to sentiment-analyzer-* keys via alias pattern (FR-013)
+  statement {
+    sid    = "KMS"
+    effect = "Allow"
+    actions = [
+      "kms:CreateKey",
+      "kms:DescribeKey",
+      "kms:GetKeyPolicy",
+      "kms:GetKeyRotationStatus",
+      "kms:ListResourceTags",
+      "kms:TagResource",
+      "kms:UntagResource",
+      "kms:EnableKeyRotation",
+      "kms:DisableKeyRotation",
+      "kms:ScheduleKeyDeletion",
+      "kms:CancelKeyDeletion",
+      "kms:PutKeyPolicy"
+    ]
+    resources = ["*"]
+    condition {
+      test     = "StringLike"
+      variable = "kms:RequestAlias"
+      values   = ["alias/sentiment-analyzer-*"]
+    }
+  }
+
+  # KMS Key creation (requires different condition)
+  statement {
+    sid    = "KMSCreate"
+    effect = "Allow"
+    actions = [
+      "kms:CreateKey",
+      "kms:TagResource"
+    ]
+    resources = ["*"]
+  }
+
+  # KMS Alias Management
+  statement {
+    sid    = "KMSAlias"
+    effect = "Allow"
+    actions = [
+      "kms:CreateAlias",
+      "kms:DeleteAlias",
+      "kms:UpdateAlias"
+    ]
+    resources = [
+      "arn:aws:kms:*:*:alias/sentiment-analyzer-*"
+    ]
+  }
+
+  # KMS List operations
+  statement {
+    sid    = "KMSList"
+    effect = "Allow"
+    actions = [
+      "kms:ListKeys",
+      "kms:ListAliases"
+    ]
+    resources = ["*"]
+  }
 }
 
 # ==================================================================
@@ -904,13 +1040,25 @@ resource "aws_iam_policy" "ci_deploy_monitoring" {
 
 resource "aws_iam_policy" "ci_deploy_storage" {
   name        = "CIDeployStorage"
-  description = "CI/CD storage and CDN: S3, CloudFront, ACM, Backup, Budgets, RUM"
+  description = "CI/CD storage and CDN: S3, CloudFront, ACM, Backup, Budgets, RUM, KMS"
   policy      = data.aws_iam_policy_document.ci_deploy_storage.json
 
   tags = {
     Purpose   = "ci-deployment"
     ManagedBy = "Terraform"
     Category  = "storage"
+  }
+}
+
+resource "aws_iam_policy" "ci_deploy_iam" {
+  name        = "CIDeployIAM"
+  description = "CI/CD IAM, FIS, and X-Ray management"
+  policy      = data.aws_iam_policy_document.ci_deploy_iam.json
+
+  tags = {
+    Purpose   = "ci-deployment"
+    ManagedBy = "Terraform"
+    Category  = "iam"
   }
 }
 
@@ -933,6 +1081,11 @@ resource "aws_iam_user_policy_attachment" "ci_deploy_storage_preprod" {
   policy_arn = aws_iam_policy.ci_deploy_storage.arn
 }
 
+resource "aws_iam_user_policy_attachment" "ci_deploy_iam_preprod" {
+  user       = "sentiment-analyzer-preprod-deployer"
+  policy_arn = aws_iam_policy.ci_deploy_iam.arn
+}
+
 # ==================================================================
 # Policy Attachments - Prod Deployer
 # ==================================================================
@@ -952,6 +1105,11 @@ resource "aws_iam_user_policy_attachment" "ci_deploy_storage_prod" {
   policy_arn = aws_iam_policy.ci_deploy_storage.arn
 }
 
+resource "aws_iam_user_policy_attachment" "ci_deploy_iam_prod" {
+  user       = "sentiment-analyzer-prod-deployer"
+  policy_arn = aws_iam_policy.ci_deploy_iam.arn
+}
+
 # ==================================================================
 # Outputs
 # ==================================================================
@@ -962,6 +1120,7 @@ output "ci_policy_arns" {
     core       = aws_iam_policy.ci_deploy_core.arn
     monitoring = aws_iam_policy.ci_deploy_monitoring.arn
     storage    = aws_iam_policy.ci_deploy_storage.arn
+    iam        = aws_iam_policy.ci_deploy_iam.arn
   }
 }
 
