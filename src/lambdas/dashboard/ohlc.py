@@ -55,8 +55,9 @@ async def get_ohlc_data(
     ticker: str,
     request: Request,
     range: TimeRange = Query(TimeRange.ONE_MONTH, description="Time range for data"),
-    start_date: date
-    | None = Query(None, description="Custom start date (overrides range)"),
+    start_date: date | None = Query(
+        None, description="Custom start date (overrides range)"
+    ),
     end_date: date | None = Query(None, description="Custom end date"),
     tiingo: TiingoAdapter = Depends(get_tiingo_adapter),
     finnhub: FinnhubAdapter = Depends(get_finnhub_adapter),
@@ -114,7 +115,7 @@ async def get_ohlc_data(
         "Fetching OHLC data",
         extra={
             "ticker": sanitize_for_log(ticker),
-            "range": time_range_str,
+            "range": sanitize_for_log(time_range_str),
             "start_date": str(start_date),
             "end_date": str(end_date),
         },
@@ -249,7 +250,7 @@ async def get_sentiment_history(
         "Fetching sentiment history",
         extra={
             "ticker": sanitize_for_log(ticker),
-            "source": source,
+            "source": sanitize_for_log(source),
             "start_date": str(start_date),
             "end_date": str(end_date),
         },
@@ -307,7 +308,7 @@ async def get_sentiment_history(
         "Sentiment history retrieved",
         extra={
             "ticker": sanitize_for_log(ticker),
-            "source": source,
+            "source": sanitize_for_log(source),
             "point_count": len(history),
         },
     )

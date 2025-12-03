@@ -18,6 +18,7 @@ from src.lambdas.shared.adapters.base import (
     RateLimitError,
     SentimentData,
 )
+from src.lambdas.shared.logging_utils import sanitize_for_log
 
 logger = logging.getLogger(__name__)
 
@@ -277,7 +278,7 @@ class TiingoAdapter(BaseAdapter):
         cache_key = _get_cache_key(endpoint, cache_params)
         cached_data = _get_from_cache(cache_key, API_CACHE_TTL_OHLC_SECONDS)
         if cached_data is not None:
-            logger.debug(f"Tiingo OHLC cache hit for {ticker}")
+            logger.debug("Tiingo OHLC cache hit for %s", sanitize_for_log(ticker))
             data = cached_data
         else:
             try:
@@ -291,7 +292,9 @@ class TiingoAdapter(BaseAdapter):
                 data = self._handle_response(response)
                 # Cache the raw response
                 _put_in_cache(cache_key, data)
-                logger.debug(f"Tiingo OHLC cache miss for {ticker}, cached")
+                logger.debug(
+                    "Tiingo OHLC cache miss for %s, cached", sanitize_for_log(ticker)
+                )
             except httpx.RequestError as e:
                 logger.error(f"Tiingo OHLC request failed: {e}")
                 raise AdapterError(f"Tiingo OHLC request failed: {e}") from e

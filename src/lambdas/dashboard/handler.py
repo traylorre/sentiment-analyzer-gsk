@@ -569,7 +569,7 @@ async def get_metrics_v2(
         logger.error(
             "Failed to get dashboard metrics",
             extra={
-                "hours": hours,
+                "hours": sanitize_for_log(hours),
                 **get_safe_error_info(e),
             },
         )

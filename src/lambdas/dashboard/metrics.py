@@ -108,7 +108,7 @@ def calculate_sentiment_distribution(items: list[dict[str, Any]]) -> dict[str, i
         If all counts are 0, verify items have 'sentiment' field populated.
         Items with status='pending' won't have sentiment yet.
     """
-    distribution = {sentiment: 0 for sentiment in SENTIMENT_VALUES}
+    distribution = dict.fromkeys(SENTIMENT_VALUES, 0)
 
     for item in items:
         sentiment = item.get("sentiment", "").lower()
@@ -421,7 +421,7 @@ def aggregate_dashboard_metrics(
         if cached is not None:
             logger.debug(
                 "Dashboard metrics cache hit",
-                extra={"hours": hours},
+                extra={"hours": sanitize_for_log(hours)},
             )
             return cached
 
