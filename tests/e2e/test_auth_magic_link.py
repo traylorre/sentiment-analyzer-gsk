@@ -203,7 +203,7 @@ async def test_anonymous_data_merge(
     # Step 1: Create anonymous session
     anon_response = await api_client.post("/api/v2/auth/anonymous", json={})
     # API returns 201 Created for new sessions (correct HTTP semantics)
-    assert anon_response.status_code in (200, 201)
+    assert anon_response.status_code == 201
 
     anon_data = anon_response.json()
     anon_token = anon_data["token"]
@@ -222,7 +222,7 @@ async def test_anonymous_data_merge(
             },
         )
 
-        if config_response.status_code not in (200, 201):
+        if config_response.status_code != 201:
             pytest.skip("Anonymous config creation not supported")
 
         # Config ID not used directly - we verify by listing configs with auth token
@@ -307,7 +307,7 @@ async def test_full_anonymous_to_authenticated_journey(
     # === Phase 1: Anonymous Session ===
     anon_response = await api_client.post("/api/v2/auth/anonymous", json={})
     # API returns 201 Created for new sessions (correct HTTP semantics)
-    assert anon_response.status_code in (200, 201), "Failed to create anonymous session"
+    assert anon_response.status_code == 201, "Failed to create anonymous session"
 
     anon_data = anon_response.json()
     anon_token = anon_data["token"]
@@ -325,7 +325,7 @@ async def test_full_anonymous_to_authenticated_journey(
             },
         )
 
-        if config_response.status_code not in (200, 201):
+        if config_response.status_code != 201:
             api_client.clear_access_token()
             pytest.skip("Anonymous configuration not supported")
 

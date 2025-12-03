@@ -25,7 +25,7 @@ async def create_auth_session(api_client: PreprodAPIClient) -> str:
     Returns the access token.
     """
     response = await api_client.post("/api/v2/auth/anonymous", json={})
-    assert response.status_code in (200, 201)
+    assert response.status_code == 201
     return response.json()["token"]
 
 
@@ -58,7 +58,7 @@ async def test_tiingo_failure_graceful_degradation(
         if create_response.status_code == 500:
             pytest.skip("Config creation endpoint returning 500 - API issue")
 
-        if create_response.status_code not in (200, 201):
+        if create_response.status_code != 201:
             pytest.skip("Config creation not available")
 
         config_id = create_response.json()["config_id"]
@@ -114,7 +114,7 @@ async def test_finnhub_failure_fallback(
             json=config_payload,
         )
 
-        if create_response.status_code not in (200, 201):
+        if create_response.status_code != 201:
             pytest.skip("Config creation not available")
 
         config_id = create_response.json()["config_id"]
@@ -230,7 +230,7 @@ async def test_malformed_response_handling(
             json=config_payload,
         )
 
-        if create_response.status_code not in (200, 201):
+        if create_response.status_code != 201:
             pytest.skip("Config creation not available")
 
         config_id = create_response.json()["config_id"]
@@ -285,7 +285,7 @@ async def test_timeout_retry_behavior(
             json=config_payload,
         )
 
-        if create_response.status_code not in (200, 201):
+        if create_response.status_code != 201:
             pytest.skip("Config creation not available")
 
         config_id = create_response.json()["config_id"]

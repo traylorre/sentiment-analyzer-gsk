@@ -33,7 +33,7 @@ async def create_config_with_tickers(
     # Create anonymous session
     session_response = await api_client.post("/api/v2/auth/anonymous", json={})
     # API returns 201 Created for new sessions (correct HTTP semantics)
-    assert session_response.status_code in (200, 201)
+    assert session_response.status_code == 201
     token = session_response.json()["token"]
 
     # Create config
@@ -46,7 +46,7 @@ async def create_config_with_tickers(
         },
     )
 
-    if config_response.status_code not in (200, 201):
+    if config_response.status_code != 201:
         api_client.clear_access_token()
         pytest.skip("Config creation not available")
 
@@ -429,7 +429,7 @@ async def test_sentiment_invalid_config(
     # API returns 201 Created for new sessions (correct HTTP semantics)
     if session_response.status_code == 422:
         pytest.skip("Anonymous session requires JSON body")
-    assert session_response.status_code in (200, 201)
+    assert session_response.status_code == 201
     token = session_response.json()["token"]
 
     api_client.set_access_token(token)

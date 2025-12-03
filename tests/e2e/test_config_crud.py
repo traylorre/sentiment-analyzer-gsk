@@ -25,7 +25,7 @@ async def create_auth_session(api_client: PreprodAPIClient) -> str:
     """
     response = await api_client.post("/api/v2/auth/anonymous", json={})
     # API returns 201 Created for new sessions (correct HTTP semantics)
-    assert response.status_code in (200, 201)
+    assert response.status_code == 201
     return response.json()["token"]
 
 
@@ -96,7 +96,7 @@ async def test_config_create_with_ticker_metadata(
         response = await api_client.post("/api/v2/configurations", json=config_payload)
         if response.status_code == 500:
             pytest.skip("Config creation endpoint returning 500 - API issue")
-        assert response.status_code in (200, 201)
+        assert response.status_code == 201
 
         data = response.json()
         tickers = data.get("tickers", [])
@@ -139,7 +139,7 @@ async def test_config_read_by_id(
         )
         if create_response.status_code == 500:
             pytest.skip("Config creation endpoint returning 500 - API issue")
-        assert create_response.status_code in (200, 201)
+        assert create_response.status_code == 201
 
         config_id = create_response.json()["config_id"]
 
@@ -182,7 +182,7 @@ async def test_config_update_name_and_tickers(
         )
         if create_response.status_code == 500:
             pytest.skip("Config creation endpoint returning 500 - API issue")
-        assert create_response.status_code in (200, 201)
+        assert create_response.status_code == 201
 
         config_id = create_response.json()["config_id"]
 
@@ -237,7 +237,7 @@ async def test_config_delete(
         )
         if create_response.status_code == 500:
             pytest.skip("Config creation endpoint returning 500 - API issue")
-        assert create_response.status_code in (200, 201)
+        assert create_response.status_code == 201
 
         config_id = create_response.json()["config_id"]
 
@@ -291,7 +291,7 @@ async def test_config_max_limit_enforced(
 
             if response.status_code == 500:
                 pytest.skip("Config creation endpoint returning 500 - API issue")
-            if response.status_code in (200, 201):
+            if response.status_code == 201:
                 created_configs.append(response.json()["config_id"])
             elif response.status_code in (400, 403, 429):
                 # Limit reached
