@@ -25,3 +25,9 @@ variable "ingestion_lambda_role_arn" {
   description = "ARN of the Ingestion Lambda IAM role (for least-privilege SNS topic policy)"
   type        = string
 }
+
+variable "kms_key_arn" {
+  description = "ARN of KMS key for topic encryption (FR-020). If null, uses AWS-managed key."
+  type        = string
+  default     = null
+}

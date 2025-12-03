@@ -43,3 +43,22 @@ variable "logging_bucket" {
   type        = string
   default     = ""
 }
+
+# ===================================================================
+# Cost Controls (FR-023)
+# ===================================================================
+
+variable "price_class_override" {
+  description = "Override the default price class. Empty uses default (PriceClass_100 for non-prod, PriceClass_All for prod)"
+  type        = string
+  default     = ""
+
+  validation {
+    condition = var.price_class_override == "" || contains([
+      "PriceClass_100", # US, Canada, Europe
+      "PriceClass_200", # + Asia, Middle East, Africa
+      "PriceClass_All"  # All edge locations
+    ], var.price_class_override)
+    error_message = "price_class_override must be empty or one of: PriceClass_100, PriceClass_200, PriceClass_All"
+  }
+}

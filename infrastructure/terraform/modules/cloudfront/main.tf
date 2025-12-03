@@ -140,8 +140,10 @@ resource "aws_cloudfront_distribution" "dashboard" {
   is_ipv6_enabled     = true
   comment             = "${var.environment} sentiment dashboard"
   default_root_object = "index.html"
-  price_class         = var.environment == "prod" ? "PriceClass_All" : "PriceClass_100"
-  http_version        = "http2and3"
+  # COST CONTROL (FR-023): Default to PriceClass_100 (US/Canada/Europe only)
+  # Override with price_class_override variable if global distribution needed
+  price_class  = var.price_class_override != "" ? var.price_class_override : "PriceClass_100"
+  http_version = "http2and3"
 
   # S3 origin for static assets
   origin {

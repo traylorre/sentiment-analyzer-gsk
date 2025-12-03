@@ -8,3 +8,9 @@ variable "rotation_lambda_arn" {
   type        = string
   default     = null
 }
+
+variable "kms_key_arn" {
+  description = "ARN of KMS key for secret encryption (FR-019). If null, uses AWS-managed key."
+  type        = string
+  default     = null
+}

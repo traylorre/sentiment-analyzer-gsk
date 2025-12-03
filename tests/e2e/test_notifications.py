@@ -59,7 +59,8 @@ async def test_alert_trigger_creates_notification(
     When: Notification list is queried
     Then: Notification exists with correct metadata
     """
-    token, config_id = await create_session_with_config(api_client, synthetic_config)
+    # Create session to authenticate - return values not used but authenticates client
+    await create_session_with_config(api_client, synthetic_config)
 
     try:
         # Check notification list endpoint exists
@@ -94,7 +95,8 @@ async def test_notification_status_sent(
     When: Notification detail is queried
     Then: Status shows 'sent' or 'delivered'
     """
-    token, config_id = await create_session_with_config(api_client, synthetic_config)
+    # Create session to authenticate - return values not used but authenticates client
+    await create_session_with_config(api_client, synthetic_config)
 
     try:
         # Get notification list
@@ -135,7 +137,8 @@ async def test_notification_list(
     When: GET /api/v2/notifications is called
     Then: Response contains notification list with pagination
     """
-    token, config_id = await create_session_with_config(api_client, synthetic_config)
+    # Create session to authenticate - return values not used but authenticates client
+    await create_session_with_config(api_client, synthetic_config)
 
     try:
         response = await api_client.get(
@@ -168,7 +171,8 @@ async def test_notification_detail_with_tracking(
     When: GET /api/v2/notifications/{id} is called
     Then: Response contains notification with tracking metadata
     """
-    token, config_id = await create_session_with_config(api_client, synthetic_config)
+    # Create session to authenticate - return values not used but authenticates client
+    await create_session_with_config(api_client, synthetic_config)
 
     try:
         # First get list to find a notification ID
@@ -221,7 +225,8 @@ async def test_notification_quota_exceeded(
     When: Attempting to trigger more notifications
     Then: Appropriate quota error is returned
     """
-    token, config_id = await create_session_with_config(api_client, synthetic_config)
+    # Create session to authenticate - return values not used but authenticates client
+    await create_session_with_config(api_client, synthetic_config)
 
     try:
         # Check if there's a quota endpoint
@@ -256,7 +261,8 @@ async def test_notification_mark_read(
     When: PATCH /api/v2/notifications/{id} with read=true
     Then: Notification is marked as read
     """
-    token, config_id = await create_session_with_config(api_client, synthetic_config)
+    # Create session to authenticate - return values not used but authenticates client
+    await create_session_with_config(api_client, synthetic_config)
 
     try:
         # Get list to find a notification

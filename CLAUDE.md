@@ -15,6 +15,8 @@ Auto-generated from all feature plans. Last updated: 2025-11-26
 - N/A (stateless UI feature) (013-interview-swipe-gestures)
 - Python 3.13 (backend), TypeScript 5 (frontend) + FastAPI 0.121.3, boto3, pydantic, aws-lambda-powertools (backend); React 18, Next.js 14.2.21, Zustand 5.0.8, React Query 5.90.11 (frontend) (014-session-consistency)
 - DynamoDB (single-table design with GSIs for email lookup) (014-session-consistency)
+- Python 3.13 + FastAPI, sse-starlette, boto3, aws-xray-sdk, AWS Lambda Web Adapter (016-sse-streaming-lambda)
+- DynamoDB (existing tables - read-only access for SSE Lambda) (016-sse-streaming-lambda)
 
 - **Python 3.13** with FastAPI, boto3, pydantic, aws-lambda-powertools, httpx
 - **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, CloudFront
@@ -254,16 +256,150 @@ vi.mock('@/stores/auth-store', () => ({
 }));
 ```
 
+## Feature 016 SSE Lambda Patterns
+
+### Two-Lambda Architecture
+The project uses two Lambdas for different concerns:
+- **Dashboard Lambda**: REST APIs with BUFFERED invoke mode (Mangum adapter)
+- **SSE Lambda**: Streaming with RESPONSE_STREAM invoke mode (AWS Lambda Web Adapter)
+
+```text
+src/lambdas/
+├── dashboard/           # REST APIs (BUFFERED mode via Mangum)
+│   ├── handler.py       # FastAPI app wrapped with Mangum
+│   └── ...
+└── sse_streaming/       # SSE streaming (RESPONSE_STREAM mode via Lambda Web Adapter)
+    ├── Dockerfile       # Docker image with Lambda Web Adapter
+    ├── handler.py       # FastAPI app with SSE endpoints
+    ├── connection.py    # Thread-safe ConnectionManager
+    ├── stream.py        # SSE event generators
+    ├── polling.py       # DynamoDB polling service
+    ├── config.py        # Configuration lookup service
+    ├── models.py        # SSE event models (Pydantic)
+    └── metrics.py       # CloudWatch metrics helper
+```
+
+### SSE Lambda Commands
+```bash
+# Run SSE streaming unit tests
+PYTHONPATH=. pytest tests/unit/sse_streaming/ -v
+
+# Run specific SSE test file
+PYTHONPATH=. pytest tests/unit/sse_streaming/test_connection.py -v
+
+# Run E2E SSE tests (requires preprod)
+pytest tests/e2e/test_sse.py -v -m preprod
+
+# Local development (requires Docker)
+cd src/lambdas/sse_streaming
+docker build -t sse-lambda .
+docker run -p 8080:8080 -e AWS_LAMBDA_FUNCTION_NAME=local sse-lambda
+```
+
+### SSE Endpoint Patterns
+```python
+# Global stream (public, no auth)
+@app.get("/api/v2/stream")
+async def global_stream(request: Request):
+    # Available to all users, broadcasts all metrics
+    return EventSourceResponse(sse_event_generator(connection))
+
+# Config-specific stream (requires X-User-ID header)
+@app.get("/api/v2/configurations/{config_id}/stream")
+async def config_stream(
+    request: Request,
+    config_id: str,
+    x_user_id: Optional[str] = Header(None, alias="X-User-ID"),
+):
+    # Validates X-User-ID (401 if missing)
+    # Validates config ownership (404 if not found)
+    # Filters events to config's tickers only
+    return EventSourceResponse(sse_event_generator(connection, ticker_filters))
+
+# Stream status (connection info)
+@app.get("/api/v2/stream/status")
+async def stream_status():
+    return {"connections": count, "max_connections": 100, "available": 100 - count}
+```
+
+### Connection Management
+```python
+from src.lambdas.sse_streaming.connection import connection_manager
+
+# Thread-safe connection tracking (100 max per Lambda instance)
+connection = connection_manager.add_connection(config_id, ticker_filters)
+try:
+    async for event in sse_event_generator(connection):
+        yield event
+finally:
+    connection_manager.remove_connection(connection.connection_id)
+```
+
+### SSE Event Models
+```python
+# Event types: heartbeat, metrics, sentiment_update
+from src.lambdas.sse_streaming.models import (
+    HeartbeatData,      # {"type": "heartbeat", "timestamp": "..."}
+    MetricsEventData,   # {"type": "metrics", "total": N, ...}
+    SentimentUpdateData # {"type": "sentiment_update", "ticker": "...", ...}
+)
+```
+
+### Testing SSE Endpoints
+**IMPORTANT**: FastAPI's TestClient hangs on SSE endpoints because streams never complete. Use these patterns:
+
+```python
+# DON'T: Hit SSE endpoint directly (causes hanging)
+# response = client.get("/api/v2/stream")  # HANGS FOREVER!
+
+# DO: Test route registration instead
+from starlette.routing import Route
+from src.lambdas.sse_streaming.handler import app
+
+def test_global_stream_endpoint_registered():
+    stream_route = None
+    for route in app.routes:
+        if isinstance(route, Route) and route.path == "/api/v2/stream":
+            stream_route = route
+            break
+    assert stream_route is not None
+    assert "GET" in stream_route.methods
+
+# DO: Test non-streaming endpoints normally
+def test_stream_status():
+    client = TestClient(app)
+    response = client.get("/api/v2/stream/status")
+    assert response.status_code == 200
+
+# DO: Test error responses (non-streaming)
+def test_config_stream_requires_auth():
+    client = TestClient(app)
+    response = client.get("/api/v2/configurations/test/stream")
+    assert response.status_code == 401  # Returns immediately (not streaming)
+```
+
+### Frontend SSE Integration
+```javascript
+// config.js - Two-Lambda architecture
+const CONFIG = {
+    API_BASE_URL: '',      // Dashboard Lambda (REST)
+    SSE_BASE_URL: '',      // SSE Lambda (streaming) - set in production
+    ENDPOINTS: {
+        STREAM: '/api/v2/stream'
+    }
+};
+
+// app.js - Use SSE_BASE_URL for streaming
+const baseUrl = CONFIG.SSE_BASE_URL || CONFIG.API_BASE_URL;
+const streamUrl = `${baseUrl}${CONFIG.ENDPOINTS.STREAM}`;
+const eventSource = new EventSource(streamUrl);
+```
+
 ## Recent Changes
-<<<<<<< HEAD
-- 013-interview-swipe-gestures: Added JavaScript ES6+ (vanilla, no framework) + Hammer.js or custom touch event handling (research needed)
+- 016-sse-streaming-lambda: Added Python 3.13 + FastAPI, sse-starlette, boto3, aws-xray-sdk, AWS Lambda Web Adapter
+- 014-session-consistency: Added Python 3.13 + FastAPI, boto3, pydantic, aws-lambda-powertools with DynamoDB GSIs for email lookup
+- 013-interview-swipe-gestures: Added JavaScript ES6+ (vanilla, no framework) + Hammer.js or custom touch event handling
 - 012-ohlc-sentiment-e2e-tests: Added Python 3.13 + pytest, pytest-asyncio, httpx, responses, moto (unit tests only)
-- 011-price-sentiment-overlay: Added Python 3.13 (backend), TypeScript 5 (frontend) + FastAPI 0.121.3, httpx 0.28.1, TradingView Lightweight Charts 5.0.9, React 18, Next.js 14.2.21, Zustand 5.0.8, React Query 5.90.11
-=======
-- 014-session-consistency: Added Python 3.13 (backend), TypeScript 5 (frontend) + FastAPI 0.121.3, boto3, pydantic, aws-lambda-powertools (backend); React 18, Next.js 14.2.21, Zustand 5.0.8, React Query 5.90.11 (frontend)
-- 013-interview-swipe-gestures: Added JavaScript ES6+ (vanilla, no framework) + Hammer.js or custom touch event handling (research needed)
-- 012-ohlc-sentiment-e2e-tests: Added Python 3.13 + pytest, pytest-asyncio, httpx, responses, moto (unit tests only)
->>>>>>> c951724 (feat(014): Implement User Stories 1-2 (Session Consistency))
 
 <!-- MANUAL ADDITIONS START -->
 

@@ -40,6 +40,64 @@ resource "aws_api_gateway_rest_api" "dashboard" {
   })
 }
 
+# ===================================================================
+# Cognito Authorizer (FR-012)
+# ===================================================================
+# Validates JWT tokens from Cognito User Pool
+# - Native JWT validation with zero Lambda overhead
+# - Built-in caching (300-second TTL default)
+# - No additional compute charges
+
+resource "aws_api_gateway_authorizer" "cognito" {
+  count = var.enable_cognito_auth ? 1 : 0
+
+  name            = "cognito-authorizer"
+  rest_api_id     = aws_api_gateway_rest_api.dashboard.id
+  type            = "COGNITO_USER_POOLS"
+  provider_arns   = [var.cognito_user_pool_arn]
+  identity_source = "method.request.header.Authorization"
+}
+
+# Gateway Response: UNAUTHORIZED (FR-013)
+resource "aws_api_gateway_gateway_response" "unauthorized" {
+  count = var.enable_cognito_auth ? 1 : 0
+
+  rest_api_id   = aws_api_gateway_rest_api.dashboard.id
+  response_type = "UNAUTHORIZED"
+  status_code   = "401"
+
+  response_parameters = {
+    "gatewayresponse.header.WWW-Authenticate" = "'Bearer realm=\"sentiment-analyzer\"'"
+  }
+
+  response_templates = {
+    "application/json" = jsonencode({
+      message = "Unauthorized: Invalid or missing authentication token"
+      code    = "UNAUTHORIZED"
+    })
+  }
+}
+
+# Gateway Response: MISSING_AUTHENTICATION_TOKEN (FR-013)
+resource "aws_api_gateway_gateway_response" "missing_auth_token" {
+  count = var.enable_cognito_auth ? 1 : 0
+
+  rest_api_id   = aws_api_gateway_rest_api.dashboard.id
+  response_type = "MISSING_AUTHENTICATION_TOKEN"
+  status_code   = "401"
+
+  response_parameters = {
+    "gatewayresponse.header.WWW-Authenticate" = "'Bearer realm=\"sentiment-analyzer\"'"
+  }
+
+  response_templates = {
+    "application/json" = jsonencode({
+      message = "Unauthorized: Authentication token required"
+      code    = "MISSING_AUTHENTICATION_TOKEN"
+    })
+  }
+}
+
 # API Gateway Resource (proxy all requests to Lambda)
 resource "aws_api_gateway_resource" "proxy" {
   rest_api_id = aws_api_gateway_rest_api.dashboard.id
@@ -48,11 +106,13 @@ resource "aws_api_gateway_resource" "proxy" {
 }
 
 # API Gateway Method (ANY method for proxy)
+# SECURITY: Requires Cognito authentication when enabled (FR-012)
 resource "aws_api_gateway_method" "proxy" {
   rest_api_id   = aws_api_gateway_rest_api.dashboard.id
   resource_id   = aws_api_gateway_resource.proxy.id
   http_method   = "ANY"
-  authorization = "NONE"
+  authorization = var.enable_cognito_auth ? "COGNITO_USER_POOLS" : "NONE"
+  authorizer_id = var.enable_cognito_auth ? aws_api_gateway_authorizer.cognito[0].id : null
 
   request_parameters = {
     "method.request.path.proxy" = true
@@ -60,11 +120,13 @@ resource "aws_api_gateway_method" "proxy" {
 }
 
 # API Gateway Method (ANY method for root)
+# SECURITY: Requires Cognito authentication when enabled (FR-012)
 resource "aws_api_gateway_method" "root" {
   rest_api_id   = aws_api_gateway_rest_api.dashboard.id
   resource_id   = aws_api_gateway_rest_api.dashboard.root_resource_id
   http_method   = "ANY"
-  authorization = "NONE"
+  authorization = var.enable_cognito_auth ? "COGNITO_USER_POOLS" : "NONE"
+  authorizer_id = var.enable_cognito_auth ? aws_api_gateway_authorizer.cognito[0].id : null
 }
 
 # API Gateway Integration (Lambda proxy integration)

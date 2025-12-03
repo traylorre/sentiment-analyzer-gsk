@@ -19,13 +19,19 @@ const CONFIG = {
     // Empty string means same origin (Lambda Function URL serves both static and API)
     API_BASE_URL: '',
 
+    // SSE Configuration (Two-Lambda Architecture)
+    // SSE stream comes from a separate Lambda with RESPONSE_STREAM invoke mode
+    // Set this to the SSE Lambda Function URL in production
+    // Empty string means same origin (for local development or single-Lambda fallback)
+    SSE_BASE_URL: '',
+
     // Endpoints (API v2)
     ENDPOINTS: {
         SENTIMENT: '/api/v2/sentiment',
         TRENDS: '/api/v2/trends',
         ARTICLES: '/api/v2/articles',
         METRICS: '/api/v2/metrics',
-        STREAM: '/api/v2/stream'  // SSE endpoint (may not be implemented)
+        STREAM: '/api/v2/stream'  // SSE endpoint (served by SSE Lambda)
     },
 
     // Polling interval for sentiment data (milliseconds)

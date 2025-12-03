@@ -87,7 +87,8 @@ async def test_circuit_opens_after_failures(
     When: Circuit breaker state is checked
     Then: Circuit shows OPEN state
     """
-    token, config_id = await create_session_and_config(api_client, test_run_id)
+    # Create session to authenticate - values not used but authenticates client
+    await create_session_and_config(api_client, test_run_id)
 
     try:
         # In preprod E2E, we can only observe circuit breaker behavior

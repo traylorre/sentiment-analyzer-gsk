@@ -96,3 +96,19 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+# ===================================================================
+# Authentication Configuration (FR-012 to FR-014)
+# ===================================================================
+
+variable "cognito_user_pool_arn" {
+  description = "ARN of the Cognito User Pool for JWT authorization. If set, enables Cognito authorizer."
+  type        = string
+  default     = null
+}
+
+variable "enable_cognito_auth" {
+  description = "Enable Cognito JWT authorization for API Gateway endpoints"
+  type        = bool
+  default     = false
+}

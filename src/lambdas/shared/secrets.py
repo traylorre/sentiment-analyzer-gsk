@@ -182,7 +182,9 @@ def get_secret(
                     "error_code": error_code,
                 },
             )
-            raise SecretNotFoundError(f"Secret not found: {secret_id}") from e
+            raise SecretNotFoundError(
+                f"Secret not found: {_sanitize_secret_id_for_log(secret_id)}"
+            ) from e
 
         elif error_code in ("AccessDeniedException", "UnauthorizedAccess"):
             logger.error(
@@ -193,7 +195,7 @@ def get_secret(
                 },
             )
             raise SecretAccessDeniedError(
-                f"Access denied to secret: {secret_id}"
+                f"Access denied to secret: {_sanitize_secret_id_for_log(secret_id)}"
             ) from e
 
         else:
@@ -204,13 +206,17 @@ def get_secret(
                     "error_code": error_code,
                 },
             )
-            raise SecretRetrievalError(f"Failed to retrieve secret: {secret_id}") from e
+            raise SecretRetrievalError(
+                f"Failed to retrieve secret: {_sanitize_secret_id_for_log(secret_id)}"
+            ) from e
 
     # Parse secret value
     secret_string = response.get("SecretString")
     if not secret_string:
         # Binary secrets not supported
-        raise SecretRetrievalError(f"Secret is binary, not string: {secret_id}")
+        raise SecretRetrievalError(
+            f"Secret is binary, not string: {_sanitize_secret_id_for_log(secret_id)}"
+        )
 
     try:
         secret_value = json.loads(secret_string)
@@ -219,7 +225,9 @@ def get_secret(
             "Failed to parse secret as JSON",
             extra={"secret_name": _sanitize_secret_id_for_log(secret_id)},
         )
-        raise SecretRetrievalError(f"Secret is not valid JSON: {secret_id}") from e
+        raise SecretRetrievalError(
+            f"Secret is not valid JSON: {_sanitize_secret_id_for_log(secret_id)}"
+        ) from e
 
     # Cache the secret
     _set_in_cache(secret_id, secret_value)

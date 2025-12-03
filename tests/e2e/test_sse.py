@@ -110,15 +110,14 @@ async def test_sse_connection_established(
             timeout=10.0,
         )
 
-        if status_code == 404:
-            pytest.skip("SSE streaming endpoint not implemented")
+        # SSE streaming endpoint is implemented - 404 is a real failure
+        assert status_code == 200, f"Expected 200, got {status_code}"
 
         # Should return 200 with event-stream content type
-        if status_code == 200:
-            content_type = headers.get("content-type", "")
-            assert (
-                "text/event-stream" in content_type or "stream" in content_type.lower()
-            ), f"Expected event-stream content type, got: {content_type}"
+        content_type = headers.get("content-type", "")
+        assert (
+            "text/event-stream" in content_type or "stream" in content_type.lower()
+        ), f"Expected event-stream content type, got: {content_type}"
 
     finally:
         api_client.clear_access_token()
@@ -148,11 +147,8 @@ async def test_sse_receives_sentiment_update(
             timeout=10.0,
         )
 
-        if status_code == 404:
-            pytest.skip("SSE streaming endpoint not implemented")
-
-        # Verify endpoint responds appropriately
-        assert status_code in (200, 204)
+        # SSE streaming endpoint is implemented - 404 is a real failure
+        assert status_code == 200, f"Expected 200, got {status_code}"
 
     finally:
         api_client.clear_access_token()
@@ -180,11 +176,8 @@ async def test_sse_receives_refresh_event(
             timeout=10.0,
         )
 
-        if status_code == 404:
-            pytest.skip("SSE streaming endpoint not implemented")
-
-        # Validate endpoint contract
-        assert status_code in (200, 204)
+        # SSE streaming endpoint is implemented - 404 is a real failure
+        assert status_code == 200, f"Expected 200, got {status_code}"
 
     finally:
         api_client.clear_access_token()
@@ -214,11 +207,8 @@ async def test_sse_reconnection_with_last_event_id(
             timeout=10.0,
         )
 
-        if status_code == 404:
-            pytest.skip("SSE streaming endpoint not implemented")
-
-        # Should accept reconnection request
-        assert status_code in (200, 204)
+        # SSE streaming endpoint is implemented - 404 is a real failure
+        assert status_code == 200, f"Expected 200, got {status_code}"
 
     finally:
         api_client.clear_access_token()
@@ -283,3 +273,34 @@ async def test_sse_invalid_config_rejected(
 
     finally:
         api_client.clear_access_token()
+
+
+@pytest.mark.asyncio
+async def test_stream_status_shows_connection_limit(
+    api_client: PreprodAPIClient,
+) -> None:
+    """T042: Verify stream status shows connection limits.
+
+    Given: The SSE Lambda is running
+    When: GET /api/v2/stream/status is called
+    Then: Response shows max_connections limit (100 per FR-008)
+
+    Note: Testing actual 503 response would require exhausting 100 connections
+    which is not practical for E2E tests. We verify the limit is correctly
+    reported via the status endpoint instead.
+    """
+    response = await api_client.get("/api/v2/stream/status")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    # Verify connection limit is configured correctly per FR-008
+    assert "max_connections" in data, "Status should include max_connections"
+    assert (
+        data["max_connections"] == 100
+    ), f"Max connections should be 100 per FR-008, got {data['max_connections']}"
+
+    # Verify available slots calculation
+    assert "available" in data, "Status should include available slots"
+    assert "connections" in data, "Status should include current connections"
+    assert data["available"] == data["max_connections"] - data["connections"]

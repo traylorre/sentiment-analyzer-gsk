@@ -329,14 +329,14 @@ class TestTickerCacheGlobalInstance:
         mock_s3.get_object.return_value = {"Body": mock_body}
 
         with patch("boto3.client", return_value=mock_s3):
-            # Load cache
-            _cache1 = get_ticker_cache("test-bucket", "test-key")
+            # Load cache - call triggers S3 get
+            get_ticker_cache("test-bucket", "test-key")
 
             # Clear cache
             clear_ticker_cache()
 
             # Load again - should make new S3 call
-            _cache2 = get_ticker_cache("test-bucket", "test-key")
+            get_ticker_cache("test-bucket", "test-key")
 
             # Should have called S3 twice
             assert mock_s3.get_object.call_count == 2

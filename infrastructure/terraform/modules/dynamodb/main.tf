@@ -89,6 +89,11 @@ resource "aws_dynamodb_table" "sentiment_items" {
     ManagedBy   = "Terraform"
     CostCenter  = "demo"
   }
+
+  # SECURITY: Prevent accidental deletion of data (FR-015)
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # On-demand backup schedule (daily at 02:00 UTC)
@@ -341,6 +346,11 @@ resource "aws_dynamodb_table" "feature_006_users" {
     ManagedBy   = "Terraform"
     CostCenter  = "demo"
   }
+
+  # SECURITY: Prevent accidental deletion of user data (FR-015)
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # ===================================================================
@@ -400,5 +410,10 @@ resource "aws_dynamodb_table" "chaos_experiments" {
     Feature     = "chaos-testing"
     ManagedBy   = "Terraform"
     CostCenter  = "demo"
+  }
+
+  # SECURITY: Prevent accidental deletion of experiment history (FR-015)
+  lifecycle {
+    prevent_destroy = true
   }
 }

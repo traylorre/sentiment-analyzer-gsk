@@ -260,8 +260,8 @@ class TestTiingoContextManager:
     def test_context_manager_closes_client(self):
         """Test that context manager closes client."""
         with TiingoAdapter(api_key="test") as adapter:
-            # Access client to ensure it's created
-            _client = adapter.client
+            # Access client property to trigger lazy initialization
+            _ = adapter.client
             assert adapter._client is not None
 
         assert adapter._client is None

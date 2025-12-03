@@ -1,0 +1,276 @@
+"""Unit tests for DynamoDB polling service.
+
+Tests polling and metrics aggregation per FR-015.
+"""
+
+from decimal import Decimal
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from src.lambdas.sse_streaming.models import MetricsEventData
+
+
+class TestPollingService:
+    """Tests for DynamoDB polling service."""
+
+    @pytest.fixture
+    def mock_dynamodb_table(self):
+        """Create mock DynamoDB table."""
+        mock_table = MagicMock()
+        mock_table.scan.return_value = {
+            "Items": [
+                {
+                    "pk": "SENTIMENT#item1",
+                    "sk": "2025-12-02T10:00:00Z",
+                    "ticker": "AAPL",
+                    "sentiment": "positive",
+                    "score": Decimal("0.85"),
+                    "timestamp": "2025-12-02T10:00:00Z",
+                },
+                {
+                    "pk": "SENTIMENT#item2",
+                    "sk": "2025-12-02T10:01:00Z",
+                    "ticker": "MSFT",
+                    "sentiment": "neutral",
+                    "score": Decimal("0.05"),
+                    "timestamp": "2025-12-02T10:01:00Z",
+                },
+                {
+                    "pk": "SENTIMENT#item3",
+                    "sk": "2025-12-02T10:02:00Z",
+                    "ticker": "AAPL",
+                    "sentiment": "negative",
+                    "score": Decimal("-0.65"),
+                    "timestamp": "2025-12-02T10:02:00Z",
+                },
+            ]
+        }
+        return mock_table
+
+    def test_aggregate_metrics_counts_sentiments(self, mock_dynamodb_table):
+        """Should count positive/neutral/negative sentiments."""
+        from src.lambdas.sse_streaming.polling import PollingService
+
+        with patch.object(
+            PollingService, "_get_table", return_value=mock_dynamodb_table
+        ):
+            service = PollingService()
+            service._table = mock_dynamodb_table
+            metrics = service._aggregate_metrics(mock_dynamodb_table.scan()["Items"])
+
+        assert metrics.total == 3
+        assert metrics.positive == 1
+        assert metrics.neutral == 1
+        assert metrics.negative == 1
+
+    def test_aggregate_metrics_counts_by_tag(self, mock_dynamodb_table):
+        """Should count items per ticker tag."""
+        from src.lambdas.sse_streaming.polling import PollingService
+
+        with patch.object(
+            PollingService, "_get_table", return_value=mock_dynamodb_table
+        ):
+            service = PollingService()
+            metrics = service._aggregate_metrics(mock_dynamodb_table.scan()["Items"])
+
+        assert metrics.by_tag["AAPL"] == 2
+        assert metrics.by_tag["MSFT"] == 1
+
+    def test_aggregate_metrics_empty_items(self):
+        """Should handle empty item list."""
+        from src.lambdas.sse_streaming.polling import PollingService
+
+        with patch.object(PollingService, "_get_table", return_value=MagicMock()):
+            service = PollingService()
+            metrics = service._aggregate_metrics([])
+
+        assert metrics.total == 0
+        assert metrics.positive == 0
+        assert metrics.by_tag == {}
+
+
+class TestPollingInterval:
+    """Tests for polling interval configuration."""
+
+    def test_default_poll_interval(self):
+        """Default poll interval should be 5 seconds."""
+        from src.lambdas.sse_streaming.polling import PollingService
+
+        with patch.object(PollingService, "_get_table", return_value=MagicMock()):
+            with patch.dict("os.environ", {}, clear=True):
+                service = PollingService()
+
+        assert service.poll_interval == 5
+
+    def test_custom_poll_interval(self):
+        """Should respect SSE_POLL_INTERVAL env var."""
+        from src.lambdas.sse_streaming.polling import PollingService
+
+        with patch.object(PollingService, "_get_table", return_value=MagicMock()):
+            with patch.dict("os.environ", {"SSE_POLL_INTERVAL": "10"}):
+                service = PollingService()
+
+        assert service.poll_interval == 10
+
+
+class TestPollMethod:
+    """Tests for the async poll method."""
+
+    @pytest.fixture
+    def mock_dynamodb_table(self):
+        """Create mock DynamoDB table."""
+        mock_table = MagicMock()
+        mock_table.scan.return_value = {
+            "Items": [
+                {
+                    "pk": "SENTIMENT#item1",
+                    "ticker": "AAPL",
+                    "sentiment": "positive",
+                },
+            ]
+        }
+        return mock_table
+
+    @pytest.mark.asyncio
+    async def test_poll_returns_metrics_and_changed_flag(self, mock_dynamodb_table):
+        """Poll should return metrics and changed flag."""
+        from src.lambdas.sse_streaming.polling import PollingService
+
+        service = PollingService(table_name="test-table")
+        service._table = mock_dynamodb_table
+
+        metrics, changed = await service.poll()
+
+        assert metrics is not None
+        assert metrics.total == 1
+        assert changed is True  # First poll always changed
+
+    @pytest.mark.asyncio
+    async def test_poll_second_call_returns_not_changed(self, mock_dynamodb_table):
+        """Second poll with same data should return changed=False."""
+        from src.lambdas.sse_streaming.polling import PollingService
+
+        service = PollingService(table_name="test-table")
+        service._table = mock_dynamodb_table
+
+        # First poll
+        await service.poll()
+
+        # Second poll - same data
+        metrics, changed = await service.poll()
+
+        assert changed is False
+
+    @pytest.mark.asyncio
+    async def test_poll_handles_dynamodb_error(self, mock_dynamodb_table):
+        """Poll should handle DynamoDB errors gracefully."""
+        from botocore.exceptions import ClientError
+
+        from src.lambdas.sse_streaming.polling import PollingService
+
+        mock_dynamodb_table.scan.side_effect = ClientError(
+            {"Error": {"Code": "InternalError", "Message": "Test error"}},
+            "Scan",
+        )
+
+        service = PollingService(table_name="test-table")
+        service._table = mock_dynamodb_table
+
+        # Should not raise, should return empty metrics
+        metrics, changed = await service.poll()
+
+        assert metrics.total == 0
+        assert changed is False
+
+    @pytest.mark.asyncio
+    async def test_poll_returns_cached_metrics_on_error(self, mock_dynamodb_table):
+        """Poll should return cached metrics when error occurs after first poll."""
+        from botocore.exceptions import ClientError
+
+        from src.lambdas.sse_streaming.polling import PollingService
+
+        service = PollingService(table_name="test-table")
+        service._table = mock_dynamodb_table
+
+        # First successful poll
+        metrics1, _ = await service.poll()
+        assert metrics1.total == 1
+
+        # Second poll fails
+        mock_dynamodb_table.scan.side_effect = ClientError(
+            {"Error": {"Code": "InternalError", "Message": "Test error"}},
+            "Scan",
+        )
+
+        metrics2, changed = await service.poll()
+
+        # Should return cached metrics
+        assert metrics2.total == 1
+        assert changed is False
+
+
+class TestScanTable:
+    """Tests for _scan_table method."""
+
+    def test_scan_table_uses_filter_expression(self):
+        """Scan should filter for SENTIMENT# prefix."""
+        from src.lambdas.sse_streaming.polling import PollingService
+
+        mock_table = MagicMock()
+        mock_table.scan.return_value = {"Items": []}
+
+        service = PollingService(table_name="test-table")
+        service._table = mock_table
+
+        service._scan_table()
+
+        mock_table.scan.assert_called_once()
+        call_kwargs = mock_table.scan.call_args[1]
+        assert "FilterExpression" in call_kwargs
+        assert "begins_with(pk, :prefix)" in call_kwargs["FilterExpression"]
+        assert call_kwargs["ExpressionAttributeValues"][":prefix"] == "SENTIMENT#"
+
+
+class TestMetricsChange:
+    """Tests for detecting metrics changes."""
+
+    def test_detects_change_in_total(self):
+        """Should detect when total changes."""
+        from src.lambdas.sse_streaming.polling import PollingService
+
+        with patch.object(PollingService, "_get_table", return_value=MagicMock()):
+            service = PollingService()
+
+        old = MetricsEventData(total=100, positive=50, neutral=30, negative=20)
+        new = MetricsEventData(total=101, positive=51, neutral=30, negative=20)
+
+        assert service._metrics_changed(old, new) is True
+
+    def test_no_change_when_same(self):
+        """Should return False when metrics unchanged."""
+        from src.lambdas.sse_streaming.polling import PollingService
+
+        with patch.object(PollingService, "_get_table", return_value=MagicMock()):
+            service = PollingService()
+
+        old = MetricsEventData(total=100, positive=50, neutral=30, negative=20)
+        new = MetricsEventData(total=100, positive=50, neutral=30, negative=20)
+
+        assert service._metrics_changed(old, new) is False
+
+    def test_detects_change_in_by_tag(self):
+        """Should detect when by_tag changes."""
+        from src.lambdas.sse_streaming.polling import PollingService
+
+        with patch.object(PollingService, "_get_table", return_value=MagicMock()):
+            service = PollingService()
+
+        old = MetricsEventData(
+            total=100, positive=50, neutral=30, negative=20, by_tag={"AAPL": 50}
+        )
+        new = MetricsEventData(
+            total=100, positive=50, neutral=30, negative=20, by_tag={"AAPL": 51}
+        )
+
+        assert service._metrics_changed(old, new) is True
