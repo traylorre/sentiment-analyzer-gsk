@@ -34,12 +34,14 @@ class ConfigLookupService:
         self._table_name = table_name or os.environ.get(
             "DYNAMODB_TABLE", "sentiment-data"
         )
-        self._table = self._get_table()
+        self._table = None  # Lazy initialization
 
     def _get_table(self):
-        """Get DynamoDB table resource."""
-        dynamodb = boto3.resource("dynamodb")
-        return dynamodb.Table(self._table_name)
+        """Get DynamoDB table resource (lazy initialization)."""
+        if self._table is None:
+            dynamodb = boto3.resource("dynamodb")
+            self._table = dynamodb.Table(self._table_name)
+        return self._table
 
     def get_configuration(self, user_id: str, config_id: str) -> Configuration | None:
         """Get a configuration by user ID and config ID.
@@ -52,7 +54,8 @@ class ConfigLookupService:
             Configuration if found and active, None otherwise
         """
         try:
-            response = self._table.get_item(
+            table = self._get_table()
+            response = table.get_item(
                 Key={
                     "PK": f"USER#{user_id}",
                     "SK": f"CONFIG#{config_id}",

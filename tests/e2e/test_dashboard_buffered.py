@@ -153,7 +153,7 @@ async def test_sentiment_endpoint_returns_json(
 
         # Verify response is valid JSON
         data = response.json()
-        assert isinstance(data, (dict, list))
+        assert isinstance(data, dict | list)
 
     finally:
         api_client.clear_access_token()
@@ -349,5 +349,5 @@ async def test_multiple_requests_all_return_json(
         # All should be parseable
         data = response.json()
         assert isinstance(
-            data, (dict, list)
+            data, dict | list
         ), f"Endpoint {endpoint} returned invalid JSON"

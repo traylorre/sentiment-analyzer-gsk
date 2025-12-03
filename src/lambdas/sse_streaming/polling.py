@@ -43,7 +43,7 @@ class PollingService:
         self._poll_interval = poll_interval or int(
             os.environ.get("SSE_POLL_INTERVAL", "5")
         )
-        self._table = self._get_table()
+        self._table = None  # Lazy initialization
         self._last_metrics: MetricsEventData | None = None
 
     @property
@@ -52,9 +52,11 @@ class PollingService:
         return self._poll_interval
 
     def _get_table(self):
-        """Get DynamoDB table resource."""
-        dynamodb = boto3.resource("dynamodb")
-        return dynamodb.Table(self._table_name)
+        """Get DynamoDB table resource (lazy initialization)."""
+        if self._table is None:
+            dynamodb = boto3.resource("dynamodb")
+            self._table = dynamodb.Table(self._table_name)
+        return self._table
 
     def _aggregate_metrics(self, items: list[dict]) -> MetricsEventData:
         """Aggregate sentiment items into metrics.
@@ -171,7 +173,8 @@ class PollingService:
             DynamoDB scan response
         """
         # Filter for sentiment items only
-        response = self._table.scan(
+        table = self._get_table()
+        response = table.scan(
             FilterExpression="begins_with(pk, :prefix)",
             ExpressionAttributeValues={":prefix": "SENTIMENT#"},
             Limit=1000,  # Reasonable limit for metrics aggregation

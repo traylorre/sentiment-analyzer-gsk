@@ -22,12 +22,15 @@ class TestConfigLookupService:
 
     @pytest.fixture
     def service(self, mock_table):
-        """Create ConfigLookupService with mocked table."""
-        with patch("src.lambdas.sse_streaming.config.boto3") as mock_boto3:
-            mock_resource = MagicMock()
-            mock_resource.Table.return_value = mock_table
-            mock_boto3.resource.return_value = mock_resource
-            return ConfigLookupService(table_name="test-table")
+        """Create ConfigLookupService with mocked table.
+
+        Note: We manually inject the mock table into the service
+        to support lazy initialization without boto3 calls.
+        """
+        service = ConfigLookupService(table_name="test-table")
+        # Manually inject mock table to bypass lazy boto3 initialization
+        service._table = mock_table
+        return service
 
     @pytest.fixture
     def sample_config_item(self):
@@ -163,9 +166,14 @@ class TestConfigLookupServiceInit:
         with patch.dict("os.environ", {"DYNAMODB_TABLE": "my-custom-table"}):
             with patch("src.lambdas.sse_streaming.config.boto3") as mock_boto3:
                 mock_resource = MagicMock()
+                mock_table = MagicMock()
+                mock_table.get_item.return_value = {}
+                mock_resource.Table.return_value = mock_table
                 mock_boto3.resource.return_value = mock_resource
 
-                ConfigLookupService()
+                service = ConfigLookupService()
+                # Trigger lazy initialization by calling a method
+                service.get_configuration("test-user", "test-config")
 
                 mock_resource.Table.assert_called_once_with("my-custom-table")
 
@@ -174,8 +182,13 @@ class TestConfigLookupServiceInit:
         with patch.dict("os.environ", {"DYNAMODB_TABLE": "env-table"}):
             with patch("src.lambdas.sse_streaming.config.boto3") as mock_boto3:
                 mock_resource = MagicMock()
+                mock_table = MagicMock()
+                mock_table.get_item.return_value = {}
+                mock_resource.Table.return_value = mock_table
                 mock_boto3.resource.return_value = mock_resource
 
-                ConfigLookupService(table_name="explicit-table")
+                service = ConfigLookupService(table_name="explicit-table")
+                # Trigger lazy initialization by calling a method
+                service.get_configuration("test-user", "test-config")
 
                 mock_resource.Table.assert_called_once_with("explicit-table")
