@@ -255,3 +255,61 @@ class PreprodAPIClient:
             return response.status_code == 200
         except httpx.HTTPError:
             return False
+
+    async def stream_sse(
+        self,
+        path: str,
+        headers: dict[str, str] | None = None,
+        timeout: float = 5.0,
+    ) -> tuple[int, dict[str, str], str]:
+        """Make a GET request to an SSE endpoint with streaming support.
+
+        SSE endpoints never complete - they keep the connection open indefinitely.
+        This method reads only the initial response (headers + first event) with
+        a short timeout to validate the endpoint is working.
+
+        Args:
+            path: API path (e.g., "/api/v2/stream")
+            headers: Additional headers
+            timeout: Read timeout in seconds (default: 5s)
+
+        Returns:
+            Tuple of (status_code, response_headers, initial_content)
+        """
+        if not self._client:
+            raise RuntimeError("Client not initialized. Use 'async with' context.")
+
+        # Merge default SSE headers
+        request_headers = self._build_headers(headers)
+        if "Accept" not in request_headers:
+            request_headers["Accept"] = "text/event-stream"
+
+        # Create a client with short read timeout for SSE
+        async with httpx.AsyncClient(
+            base_url=self.base_url,
+            timeout=httpx.Timeout(timeout, read=timeout),
+        ) as stream_client:
+            async with stream_client.stream(
+                "GET",
+                path,
+                headers=request_headers,
+            ) as response:
+                self._capture_response_headers(response)
+
+                # Read initial content (first event or timeout)
+                content_parts = []
+                try:
+                    async for chunk in response.aiter_text():
+                        content_parts.append(chunk)
+                        # Stop after receiving some content
+                        if len("".join(content_parts)) > 100:
+                            break
+                except httpx.ReadTimeout:
+                    # Expected - SSE streams don't complete
+                    pass
+
+                return (
+                    response.status_code,
+                    dict(response.headers),
+                    "".join(content_parts),
+                )
