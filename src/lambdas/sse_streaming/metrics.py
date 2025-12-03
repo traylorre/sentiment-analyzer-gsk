@@ -11,7 +11,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 
 import boto3
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, NoRegionError
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +85,7 @@ class MetricsEmitter:
                 "Metric emitted",
                 extra={"metric": metric_name, "value": value, "unit": unit},
             )
-        except ClientError as e:
+        except (ClientError, NoRegionError) as e:
             logger.warning(
                 "Failed to emit CloudWatch metric",
                 extra={"metric": metric_name, "error": str(e)},
