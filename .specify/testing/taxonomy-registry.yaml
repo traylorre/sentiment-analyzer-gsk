@@ -60,6 +60,27 @@ concerns:
       - integration
     status: documented
 
+  canonical_source_verification:
+    display_name: "Canonical Source Verification"
+    description: "Verify external system behavior claims against authoritative documentation before proposing changes"
+    keywords:
+      - canonical
+      - source
+      - verification
+      - documentation
+      - aws
+      - iam
+      - api
+      - library
+    natural_language_triggers:
+      - "verify canonical source"
+      - "check documentation"
+      - "external system verification"
+    layers:
+      - unit
+    status: stub
+    todo: "Full formalization in future /speckit.specify - see TAXGAP1"
+
 # Property rules/invariants
 properties:
   resource_name_pattern:
@@ -100,6 +121,27 @@ properties:
       - resource_naming_consistency
     status: documented
 
+  external_behavior_claims_cited:
+    display_name: "External Behavior Claims Cited"
+    description: "All claims about external system behavior (IAM permissions, API behavior, library functions) must cite canonical sources"
+    keywords:
+      - canonical
+      - source
+      - citation
+      - external
+      - behavior
+      - claim
+      - pr
+      - review
+    natural_language_triggers:
+      - "check source citations"
+      - "verify claims cited"
+      - "canonical source in PR"
+    concerns:
+      - canonical_source_verification
+    status: stub
+    todo: "Full formalization in future /speckit.specify - see TAXGAP1"
+
 # Validator implementations
 validators:
   iam_resource_pattern_validator:
@@ -123,3 +165,25 @@ validators:
     implementation_path: "scripts/check-iam-patterns.sh"
     makefile_target: "check-iam-patterns"
     status: documented
+
+  canonical_source_citation_validator:
+    display_name: "Canonical Source Citation Validator"
+    description: "Validates that PRs modifying external system configurations include canonical source citations in the PR description"
+    keywords:
+      - canonical
+      - source
+      - citation
+      - pr
+      - review
+      - validation
+      - gate
+    natural_language_triggers:
+      - "check PR citations"
+      - "validate canonical sources"
+      - "PR source verification"
+    properties:
+      - external_behavior_claims_cited
+    implementation_path: null
+    makefile_target: null
+    status: stub
+    todo: "Full formalization in future /speckit.specify - see TAXGAP1"

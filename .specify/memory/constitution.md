@@ -522,6 +522,54 @@ Public-facing security documentation (SECURITY.md, SECURITY_REVIEW.md) remains i
 	- GitHub Issues exist for actionable items with `tech-debt` label
 	- Registry is reviewed in production deployment checklist
 
+10) Canonical Source Verification & Cognitive Discipline
+
+	Cognitive Anti-Patterns (ABSOLUTE RULES)
+	-----------------------------------------
+	When troubleshooting external system behaviors (AWS IAM, APIs, libraries),
+	developers MUST avoid these cognitive traps:
+
+	a) Do Not Succumb under Time Pressure
+		- Accuracy, precision, and consistency take priority over speed
+		- A failing pipeline is NOT an excuse to skip verification
+		- "Make it work" is NOT acceptable without "make it right"
+
+	b) Methodology over Heuristics
+		- This repository's methodology is the final word
+		- Pattern matching ("list operations need wildcard") is NOT verification
+		- Familiar patterns require the same verification as unfamiliar ones
+
+	c) Question ALL Confirmation Bias Results
+		- "some A → some B" does NOT mean "all B ← A"
+		- Finding evidence that supports your assumption is NOT verification
+		- Actively seek evidence that REFUTES your assumption
+
+	d) Gatekeeper Seals Verification
+		- Defense in depth: reviewers catch violations that slipped past
+		- PR template requires canonical source citations
+		- Reviewers MUST verify citations support the proposed change
+
+	Canonical Source Requirements
+	-----------------------------
+	Before proposing ANY change to external system configurations:
+
+	1. IDENTIFY the specific action/behavior being modified
+	2. CONSULT the canonical source for that external system:
+		- AWS: Service Authorization Reference (docs.aws.amazon.com/service-authorization/)
+		- GCP: IAM permissions reference
+		- Azure: RBAC documentation
+		- Libraries: Official documentation or source code
+		- APIs: OpenAPI specs or official API documentation
+	3. VERIFY the source supports your proposed change
+	4. CITE the source in your PR description
+	5. DOCUMENT any wildcards as "verified required per [source link]"
+
+	Verification Gate (PR Template)
+	-------------------------------
+	All PRs modifying external system configurations MUST include:
+	- [ ] Cited canonical source for external system behavior claims
+	- Canonical Sources Cited section with links and verification notes
+
 Amendments & Governance
 -----------------------
 This constitution is intentionally minimal. Amendments may be added with a short rationale and must include any new acceptance criteria. Maintain a Version and Last Amended date at the bottom.
@@ -534,4 +582,6 @@ Amendment 1.3 (2025-11-27): Added Sensitive Security Documentation section direc
 
 Amendment 1.4 (2025-11-28): Added Tech Debt Tracking section formalizing the dual-system approach using `docs/TECH_DEBT_REGISTRY.md` as detailed documentation and GitHub Issues for actionability. Defines required fields, entry criteria, and review requirements.
 
-**Version**: 1.4 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-11-28
+Amendment 1.5 (2025-12-03): Added Canonical Source Verification & Cognitive Discipline section establishing four cognitive anti-patterns as absolute rules for troubleshooting external system behaviors. Requires canonical source citation for IAM, API, and library changes. Adds PR template verification gate.
+
+**Version**: 1.5 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-12-03
