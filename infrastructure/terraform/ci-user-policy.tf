@@ -111,9 +111,18 @@ data "aws_iam_policy_document" "ci_deploy_core" {
       "dynamodb:DeleteItem"
     ]
     resources = [
+      # Pattern: sentiment-analyzer-* (legacy)
       "arn:aws:dynamodb:*:*:table/sentiment-analyzer-*",
       "arn:aws:dynamodb:*:*:table/sentiment-analyzer-*/stream/*",
-      "arn:aws:dynamodb:*:*:table/sentiment-analyzer-*/index/*"
+      "arn:aws:dynamodb:*:*:table/sentiment-analyzer-*/index/*",
+      # Pattern: {env}-sentiment-* (preprod-sentiment-items, prod-sentiment-users, etc.)
+      "arn:aws:dynamodb:*:*:table/*-sentiment-*",
+      "arn:aws:dynamodb:*:*:table/*-sentiment-*/stream/*",
+      "arn:aws:dynamodb:*:*:table/*-sentiment-*/index/*",
+      # Pattern: {env}-chaos-* (preprod-chaos-experiments, prod-chaos-experiments)
+      "arn:aws:dynamodb:*:*:table/*-chaos-*",
+      "arn:aws:dynamodb:*:*:table/*-chaos-*/stream/*",
+      "arn:aws:dynamodb:*:*:table/*-chaos-*/index/*"
     ]
   }
 
@@ -136,7 +145,10 @@ data "aws_iam_policy_document" "ci_deploy_core" {
       "sns:ListTagsForResource"
     ]
     resources = [
-      "arn:aws:sns:*:*:sentiment-analyzer-*"
+      # Pattern: sentiment-analyzer-* (legacy)
+      "arn:aws:sns:*:*:sentiment-analyzer-*",
+      # Pattern: {env}-sentiment-* (preprod-sentiment-alarms, prod-sentiment-analysis-requests, etc.)
+      "arn:aws:sns:*:*:*-sentiment-*"
     ]
   }
 
@@ -157,7 +169,10 @@ data "aws_iam_policy_document" "ci_deploy_core" {
       "sqs:ListQueueTags"
     ]
     resources = [
-      "arn:aws:sqs:*:*:sentiment-analyzer-*"
+      # Pattern: sentiment-analyzer-* (legacy)
+      "arn:aws:sqs:*:*:sentiment-analyzer-*",
+      # Pattern: {env}-sentiment-* (preprod-sentiment-analysis-dlq, etc.)
+      "arn:aws:sqs:*:*:*-sentiment-*"
     ]
   }
 
@@ -222,7 +237,10 @@ data "aws_iam_policy_document" "ci_deploy_core" {
       "secretsmanager:UntagResource"
     ]
     resources = [
-      "arn:aws:secretsmanager:*:*:secret:sentiment-analyzer-*"
+      # Pattern: sentiment-analyzer-* (legacy)
+      "arn:aws:secretsmanager:*:*:secret:sentiment-analyzer-*",
+      # Pattern: {env}/sentiment-analyzer/* (preprod/sentiment-analyzer/newsapi, etc.)
+      "arn:aws:secretsmanager:*:*:secret:*/sentiment-analyzer/*"
     ]
   }
 
