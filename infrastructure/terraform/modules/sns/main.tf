@@ -15,8 +15,8 @@ resource "aws_sqs_queue" "dlq" {
 resource "aws_sns_topic" "analysis_requests" {
   name = "${var.environment}-sentiment-analysis-requests"
 
-  # Enable encryption at rest
-  kms_master_key_id = "alias/aws/sns"
+  # Enable encryption at rest (FR-020: Customer-managed key if provided)
+  kms_master_key_id = var.kms_key_arn != null ? var.kms_key_arn : "alias/aws/sns"
 
   tags = {
     Name        = "${var.environment}-analysis-requests"

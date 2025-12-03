@@ -1,0 +1,193 @@
+"""DynamoDB polling service for SSE streaming Lambda.
+
+Polls DynamoDB at configurable intervals to detect new sentiment data.
+Per FR-015: Poll at 5-second intervals (configurable via SSE_POLL_INTERVAL).
+"""
+
+import asyncio
+import logging
+import os
+from datetime import UTC, datetime
+
+import boto3
+from botocore.exceptions import ClientError
+
+from .models import MetricsEventData
+
+logger = logging.getLogger(__name__)
+
+
+class PollingService:
+    """Polls DynamoDB for sentiment data and aggregates metrics.
+
+    Uses the same aggregation logic as the dashboard Lambda to ensure
+    consistency between REST API and SSE streaming data.
+    """
+
+    def __init__(
+        self,
+        table_name: str | None = None,
+        poll_interval: int | None = None,
+    ):
+        """Initialize polling service.
+
+        Args:
+            table_name: DynamoDB table name.
+                       Defaults to DYNAMODB_TABLE env var.
+            poll_interval: Poll interval in seconds.
+                          Defaults to SSE_POLL_INTERVAL env var or 5.
+        """
+        self._table_name = table_name or os.environ.get(
+            "DYNAMODB_TABLE", "sentiment-data"
+        )
+        self._poll_interval = poll_interval or int(
+            os.environ.get("SSE_POLL_INTERVAL", "5")
+        )
+        self._table = self._get_table()
+        self._last_metrics: MetricsEventData | None = None
+
+    @property
+    def poll_interval(self) -> int:
+        """Get poll interval in seconds."""
+        return self._poll_interval
+
+    def _get_table(self):
+        """Get DynamoDB table resource."""
+        dynamodb = boto3.resource("dynamodb")
+        return dynamodb.Table(self._table_name)
+
+    def _aggregate_metrics(self, items: list[dict]) -> MetricsEventData:
+        """Aggregate sentiment items into metrics.
+
+        Args:
+            items: List of DynamoDB items
+
+        Returns:
+            Aggregated MetricsEventData
+        """
+        total = len(items)
+        positive = 0
+        neutral = 0
+        negative = 0
+        by_tag: dict[str, int] = {}
+
+        for item in items:
+            sentiment = item.get("sentiment", "").lower()
+            if sentiment == "positive":
+                positive += 1
+            elif sentiment == "neutral":
+                neutral += 1
+            elif sentiment == "negative":
+                negative += 1
+
+            ticker = item.get("ticker")
+            if ticker:
+                by_tag[ticker] = by_tag.get(ticker, 0) + 1
+
+        return MetricsEventData(
+            total=total,
+            positive=positive,
+            neutral=neutral,
+            negative=negative,
+            by_tag=by_tag,
+            rate_last_hour=0,  # Would need timestamp filtering
+            rate_last_24h=total,  # Simplified for now
+            timestamp=datetime.now(UTC),
+        )
+
+    def _metrics_changed(
+        self, old: MetricsEventData | None, new: MetricsEventData
+    ) -> bool:
+        """Check if metrics have changed.
+
+        Args:
+            old: Previous metrics (None if first poll)
+            new: Current metrics
+
+        Returns:
+            True if metrics changed, False otherwise
+        """
+        if old is None:
+            return True
+
+        # Compare key fields (ignore timestamp)
+        if old.total != new.total:
+            return True
+        if old.positive != new.positive:
+            return True
+        if old.neutral != new.neutral:
+            return True
+        if old.negative != new.negative:
+            return True
+        if old.by_tag != new.by_tag:
+            return True
+
+        return False
+
+    async def poll(self) -> tuple[MetricsEventData, bool]:
+        """Poll DynamoDB and return current metrics.
+
+        Returns:
+            Tuple of (metrics, changed) where changed indicates if
+            metrics are different from last poll.
+        """
+        try:
+            # Run DynamoDB scan in executor to avoid blocking
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(None, self._scan_table)
+
+            items = response.get("Items", [])
+            metrics = self._aggregate_metrics(items)
+
+            changed = self._metrics_changed(self._last_metrics, metrics)
+            self._last_metrics = metrics
+
+            logger.debug(
+                "DynamoDB poll complete",
+                extra={
+                    "total_items": metrics.total,
+                    "changed": changed,
+                },
+            )
+
+            return metrics, changed
+
+        except ClientError as e:
+            logger.error(
+                "DynamoDB poll failed",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
+            # Return last known metrics if available
+            if self._last_metrics:
+                return self._last_metrics, False
+            # Return empty metrics on first poll failure
+            return MetricsEventData(total=0, positive=0, neutral=0, negative=0), False
+
+    def _scan_table(self) -> dict:
+        """Scan DynamoDB table for sentiment items.
+
+        Returns:
+            DynamoDB scan response
+        """
+        # Filter for sentiment items only
+        response = self._table.scan(
+            FilterExpression="begins_with(pk, :prefix)",
+            ExpressionAttributeValues={":prefix": "SENTIMENT#"},
+            Limit=1000,  # Reasonable limit for metrics aggregation
+        )
+        return response
+
+    async def poll_loop(self):
+        """Continuous polling loop generator.
+
+        Yields:
+            Tuple of (metrics, changed) on each poll interval
+        """
+        while True:
+            yield await self.poll()
+            await asyncio.sleep(self._poll_interval)
+
+
+# Global polling service instance
+polling_service = PollingService()

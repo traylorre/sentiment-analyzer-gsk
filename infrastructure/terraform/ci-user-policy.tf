@@ -33,6 +33,7 @@
 
 data "aws_iam_policy_document" "ci_deploy_core" {
   # Lambda Function Management
+  # SECURITY: Scoped to sentiment-analyzer-* naming pattern (FR-001)
   statement {
     sid    = "Lambda"
     effect = "Allow"
@@ -73,10 +74,14 @@ data "aws_iam_policy_document" "ci_deploy_core" {
       "lambda:GetFunctionCodeSigningConfig",
       "lambda:ListFunctionUrlConfigs"
     ]
-    resources = ["*"]
+    resources = [
+      "arn:aws:lambda:*:*:function:sentiment-analyzer-*",
+      "arn:aws:lambda:*:*:function:sentiment-analyzer-*:*"
+    ]
   }
 
   # DynamoDB Table Management
+  # SECURITY: Scoped to sentiment-analyzer-* naming pattern (FR-002)
   statement {
     sid    = "DynamoDB"
     effect = "Allow"
@@ -101,10 +106,15 @@ data "aws_iam_policy_document" "ci_deploy_core" {
       "dynamodb:Scan",
       "dynamodb:DeleteItem"
     ]
-    resources = ["*"]
+    resources = [
+      "arn:aws:dynamodb:*:*:table/sentiment-analyzer-*",
+      "arn:aws:dynamodb:*:*:table/sentiment-analyzer-*/stream/*",
+      "arn:aws:dynamodb:*:*:table/sentiment-analyzer-*/index/*"
+    ]
   }
 
   # SNS Topic Management
+  # SECURITY: Scoped to sentiment-analyzer-* naming pattern (FR-003)
   statement {
     sid    = "SNS"
     effect = "Allow"
@@ -121,10 +131,13 @@ data "aws_iam_policy_document" "ci_deploy_core" {
       "sns:UntagResource",
       "sns:ListTagsForResource"
     ]
-    resources = ["*"]
+    resources = [
+      "arn:aws:sns:*:*:sentiment-analyzer-*"
+    ]
   }
 
   # SQS Queue Management
+  # SECURITY: Scoped to sentiment-analyzer-* naming pattern (FR-004)
   statement {
     sid    = "SQS"
     effect = "Allow"
@@ -139,10 +152,13 @@ data "aws_iam_policy_document" "ci_deploy_core" {
       "sqs:UntagQueue",
       "sqs:ListQueueTags"
     ]
-    resources = ["*"]
+    resources = [
+      "arn:aws:sqs:*:*:sentiment-analyzer-*"
+    ]
   }
 
   # EventBridge Rules Management
+  # SECURITY: Scoped to sentiment-analyzer-* naming pattern (FR-005)
   statement {
     sid    = "EventBridge"
     effect = "Allow"
@@ -159,7 +175,9 @@ data "aws_iam_policy_document" "ci_deploy_core" {
       "events:UntagResource",
       "events:ListTagsForResource"
     ]
-    resources = ["*"]
+    resources = [
+      "arn:aws:events:*:*:rule/sentiment-analyzer-*"
+    ]
   }
 
   # API Gateway Management
@@ -185,6 +203,7 @@ data "aws_iam_policy_document" "ci_deploy_core" {
   }
 
   # Secrets Manager
+  # SECURITY: Scoped to sentiment-analyzer-* naming pattern (FR-006)
   statement {
     sid    = "SecretsManager"
     effect = "Allow"
@@ -198,7 +217,9 @@ data "aws_iam_policy_document" "ci_deploy_core" {
       "secretsmanager:TagResource",
       "secretsmanager:UntagResource"
     ]
-    resources = ["*"]
+    resources = [
+      "arn:aws:secretsmanager:*:*:secret:sentiment-analyzer-*"
+    ]
   }
 
   # General Read Permissions
@@ -222,6 +243,7 @@ data "aws_iam_policy_document" "ci_deploy_core" {
 
 data "aws_iam_policy_document" "ci_deploy_monitoring" {
   # CloudWatch Logs
+  # SECURITY: Scoped to sentiment-analyzer-* log groups (FR-007)
   statement {
     sid    = "CloudWatchLogs"
     effect = "Allow"
@@ -240,10 +262,18 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
       "logs:DeleteMetricFilter",
       "logs:DescribeMetricFilters"
     ]
-    resources = ["*"]
+    resources = [
+      "arn:aws:logs:*:*:log-group:/aws/lambda/sentiment-analyzer-*",
+      "arn:aws:logs:*:*:log-group:/aws/lambda/sentiment-analyzer-*:*",
+      "arn:aws:logs:*:*:log-group:/aws/apigateway/sentiment-analyzer-*",
+      "arn:aws:logs:*:*:log-group:/aws/apigateway/sentiment-analyzer-*:*"
+    ]
   }
 
   # CloudWatch Alarms and Dashboards
+  # SECURITY: Scoped to sentiment-analyzer-* alarms via condition (FR-008)
+  # Note: CloudWatch alarms don't support resource-level ARNs for all actions,
+  # so we use condition keys to restrict to sentiment-analyzer-* alarm names
   statement {
     sid    = "CloudWatch"
     effect = "Allow"
@@ -262,10 +292,26 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
       "cloudwatch:GetMetricStatistics",
       "cloudwatch:DescribeAlarmHistory"
     ]
+    resources = [
+      "arn:aws:cloudwatch:*:*:alarm:sentiment-analyzer-*",
+      "arn:aws:cloudwatch::*:dashboard/sentiment-analyzer-*"
+    ]
+  }
+
+  # CloudWatch read-only actions that require wildcard resource
+  statement {
+    sid    = "CloudWatchReadOnly"
+    effect = "Allow"
+    actions = [
+      "cloudwatch:ListMetrics",
+      "cloudwatch:GetMetricStatistics",
+      "cloudwatch:DescribeAlarms"
+    ]
     resources = ["*"]
   }
 
   # Cognito User Pools
+  # SECURITY: Scoped to sentiment-analyzer-* user pools (FR-009)
   statement {
     sid    = "CognitoIDP"
     effect = "Allow"
@@ -300,10 +346,29 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
       "cognito-idp:UntagResource",
       "cognito-idp:ListTagsForResource"
     ]
+    resources = [
+      "arn:aws:cognito-idp:*:*:userpool/*"
+    ]
+    condition {
+      test     = "StringLike"
+      variable = "cognito-idp:ResourceTag/Name"
+      values   = ["sentiment-analyzer-*"]
+    }
+  }
+
+  # Cognito User Pools - List operations (require wildcard)
+  statement {
+    sid    = "CognitoIDPList"
+    effect = "Allow"
+    actions = [
+      "cognito-idp:ListUserPools",
+      "cognito-idp:DescribeUserPool"
+    ]
     resources = ["*"]
   }
 
   # Cognito Identity Pools
+  # SECURITY: Scoped to sentiment-analyzer-* identity pools (FR-009)
   statement {
     sid    = "CognitoIdentity"
     effect = "Allow"
@@ -318,6 +383,24 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
       "cognito-identity:TagResource",
       "cognito-identity:UntagResource",
       "cognito-identity:ListTagsForResource"
+    ]
+    resources = [
+      "arn:aws:cognito-identity:*:*:identitypool/*"
+    ]
+    condition {
+      test     = "StringLike"
+      variable = "cognito-identity:ResourceTag/Name"
+      values   = ["sentiment-analyzer-*"]
+    }
+  }
+
+  # Cognito Identity Pools - List operations (require wildcard)
+  statement {
+    sid    = "CognitoIdentityList"
+    effect = "Allow"
+    actions = [
+      "cognito-identity:ListIdentityPools",
+      "cognito-identity:DescribeIdentityPool"
     ]
     resources = ["*"]
   }
@@ -368,6 +451,7 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
   }
 
   # IAM Policy Management
+  # SECURITY: Scoped to sentiment-analyzer-* policies (FR-010)
   statement {
     sid    = "IAMPolicies"
     effect = "Allow"
@@ -380,6 +464,18 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
       "iam:CreatePolicyVersion",
       "iam:DeletePolicyVersion",
       "iam:SetDefaultPolicyVersion"
+    ]
+    resources = [
+      "arn:aws:iam::*:policy/sentiment-analyzer-*"
+    ]
+  }
+
+  # IAM List Policies - requires wildcard for ListPolicies action
+  statement {
+    sid    = "IAMPoliciesList"
+    effect = "Allow"
+    actions = [
+      "iam:ListPolicies"
     ]
     resources = ["*"]
   }
@@ -415,6 +511,7 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
   }
 
   # FIS (Fault Injection Simulator)
+  # SECURITY: Scoped to sentiment-analyzer-* templates via tag condition (FR-011)
   statement {
     sid    = "FIS"
     effect = "Allow"
@@ -436,12 +533,67 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
       "fis:UntagResource",
       "fis:ListTagsForResource"
     ]
+    resources = [
+      "arn:aws:fis:*:*:experiment-template/*",
+      "arn:aws:fis:*:*:experiment/*"
+    ]
+    condition {
+      test     = "StringLike"
+      variable = "aws:ResourceTag/Name"
+      values   = ["sentiment-analyzer-*"]
+    }
+  }
+
+  # FIS List/Describe operations - require wildcard
+  statement {
+    sid    = "FISReadOnly"
+    effect = "Allow"
+    actions = [
+      "fis:GetAction",
+      "fis:ListActions",
+      "fis:GetTargetResourceType",
+      "fis:ListTargetResourceTypes",
+      "fis:ListExperimentTemplates",
+      "fis:ListExperiments"
+    ]
     resources = ["*"]
   }
 
   # X-Ray Tracing
+  # SECURITY: Scoped to sentiment-analyzer-* groups (FR-011)
   statement {
     sid    = "XRay"
+    effect = "Allow"
+    actions = [
+      "xray:CreateGroup",
+      "xray:UpdateGroup",
+      "xray:DeleteGroup",
+      "xray:TagResource",
+      "xray:UntagResource",
+      "xray:ListTagsForResource"
+    ]
+    resources = [
+      "arn:aws:xray:*:*:group/sentiment-analyzer-*/*"
+    ]
+  }
+
+  # X-Ray Sampling Rules - scoped
+  statement {
+    sid    = "XRaySamplingRules"
+    effect = "Allow"
+    actions = [
+      "xray:CreateSamplingRule",
+      "xray:UpdateSamplingRule",
+      "xray:DeleteSamplingRule"
+    ]
+    resources = [
+      "arn:aws:xray:*:*:sampling-rule/sentiment-analyzer-*"
+    ]
+  }
+
+  # X-Ray Read operations - require wildcard
+  statement {
+    sid    = "XRayReadOnly"
     effect = "Allow"
     actions = [
       "xray:PutTraceSegments",
@@ -454,21 +606,12 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
       "xray:GetTraceSummaries",
       "xray:GetGroups",
       "xray:GetGroup",
-      "xray:CreateGroup",
-      "xray:UpdateGroup",
-      "xray:DeleteGroup",
       "xray:GetEncryptionConfig",
       "xray:PutEncryptionConfig",
       "xray:GetInsight",
       "xray:GetInsightEvents",
       "xray:GetInsightImpactGraph",
-      "xray:GetInsightSummaries",
-      "xray:CreateSamplingRule",
-      "xray:UpdateSamplingRule",
-      "xray:DeleteSamplingRule",
-      "xray:TagResource",
-      "xray:UntagResource",
-      "xray:ListTagsForResource"
+      "xray:GetInsightSummaries"
     ]
     resources = ["*"]
   }
@@ -564,6 +707,9 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
   }
 
   # CloudFront Distribution
+  # SECURITY: Scoped via tag condition (FR-011)
+  # Note: CloudFront distributions don't support resource-level permissions
+  # for most actions, so we use tag-based conditions where possible
   statement {
     sid    = "CloudFront"
     effect = "Allow"
@@ -573,7 +719,6 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
       "cloudfront:DeleteDistribution",
       "cloudfront:GetDistribution",
       "cloudfront:GetDistributionConfig",
-      "cloudfront:ListDistributions",
       "cloudfront:TagResource",
       "cloudfront:UntagResource",
       "cloudfront:ListTagsForResource",
@@ -582,16 +727,36 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
       "cloudfront:DeleteOriginAccessControl",
       "cloudfront:GetOriginAccessControl",
       "cloudfront:GetOriginAccessControlConfig",
-      "cloudfront:ListOriginAccessControls",
       "cloudfront:CreateCachePolicy",
       "cloudfront:UpdateCachePolicy",
       "cloudfront:DeleteCachePolicy",
       "cloudfront:GetCachePolicy",
-      "cloudfront:ListCachePolicies",
       "cloudfront:CreateResponseHeadersPolicy",
       "cloudfront:UpdateResponseHeadersPolicy",
       "cloudfront:DeleteResponseHeadersPolicy",
-      "cloudfront:GetResponseHeadersPolicy",
+      "cloudfront:GetResponseHeadersPolicy"
+    ]
+    resources = [
+      "arn:aws:cloudfront::*:distribution/*",
+      "arn:aws:cloudfront::*:origin-access-control/*",
+      "arn:aws:cloudfront::*:cache-policy/*",
+      "arn:aws:cloudfront::*:response-headers-policy/*"
+    ]
+    condition {
+      test     = "StringLike"
+      variable = "aws:ResourceTag/Name"
+      values   = ["sentiment-analyzer-*"]
+    }
+  }
+
+  # CloudFront List operations - require wildcard
+  statement {
+    sid    = "CloudFrontList"
+    effect = "Allow"
+    actions = [
+      "cloudfront:ListDistributions",
+      "cloudfront:ListOriginAccessControls",
+      "cloudfront:ListCachePolicies",
       "cloudfront:ListResponseHeadersPolicies"
     ]
     resources = ["*"]
@@ -611,6 +776,7 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
   }
 
   # AWS Backup
+  # SECURITY: Scoped to sentiment-analyzer-* backup resources (FR-011)
   statement {
     sid    = "Backup"
     effect = "Allow"
@@ -618,12 +784,10 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
       "backup:CreateBackupVault",
       "backup:DeleteBackupVault",
       "backup:DescribeBackupVault",
-      "backup:ListBackupVaults",
       "backup:CreateBackupPlan",
       "backup:UpdateBackupPlan",
       "backup:DeleteBackupPlan",
       "backup:GetBackupPlan",
-      "backup:ListBackupPlans",
       "backup:CreateBackupSelection",
       "backup:DeleteBackupSelection",
       "backup:GetBackupSelection",
@@ -632,10 +796,26 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
       "backup:UntagResource",
       "backup:ListTags"
     ]
+    resources = [
+      "arn:aws:backup:*:*:backup-vault:sentiment-analyzer-*",
+      "arn:aws:backup:*:*:backup-plan:*"
+    ]
+  }
+
+  # AWS Backup List operations - require wildcard
+  statement {
+    sid    = "BackupList"
+    effect = "Allow"
+    actions = [
+      "backup:ListBackupVaults",
+      "backup:ListBackupPlans"
+    ]
     resources = ["*"]
   }
 
   # AWS Budgets
+  # SECURITY: Scoped to sentiment-analyzer-* budgets via condition (FR-011)
+  # Note: Budget ARNs use account ID, not resource name pattern
   statement {
     sid    = "Budgets"
     effect = "Allow"
@@ -644,16 +824,28 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
       "budgets:ModifyBudget",
       "budgets:DeleteBudget",
       "budgets:ViewBudget",
-      "budgets:DescribeBudgets",
       "budgets:DescribeBudgetActionsForBudget",
       "budgets:TagResource",
       "budgets:UntagResource",
       "budgets:ListTagsForResource"
     ]
+    resources = [
+      "arn:aws:budgets::*:budget/sentiment-analyzer-*"
+    ]
+  }
+
+  # Budgets List operations - require wildcard
+  statement {
+    sid    = "BudgetsList"
+    effect = "Allow"
+    actions = [
+      "budgets:DescribeBudgets"
+    ]
     resources = ["*"]
   }
 
   # CloudWatch RUM
+  # SECURITY: Scoped to sentiment-analyzer-* app monitors (FR-011)
   statement {
     sid    = "RUM"
     effect = "Allow"
@@ -662,10 +854,21 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
       "rum:UpdateAppMonitor",
       "rum:DeleteAppMonitor",
       "rum:GetAppMonitor",
-      "rum:ListAppMonitors",
       "rum:TagResource",
       "rum:UntagResource",
       "rum:ListTagsForResource"
+    ]
+    resources = [
+      "arn:aws:rum:*:*:appmonitor/sentiment-analyzer-*"
+    ]
+  }
+
+  # RUM List operations - require wildcard
+  statement {
+    sid    = "RUMList"
+    effect = "Allow"
+    actions = [
+      "rum:ListAppMonitors"
     ]
     resources = ["*"]
   }

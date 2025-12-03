@@ -33,16 +33,23 @@ resource "aws_lambda_function" "this" {
   function_name = var.function_name
   description   = var.description
   role          = var.iam_role_arn
-  handler       = var.handler
-  runtime       = var.runtime
   timeout       = var.timeout
   memory_size   = var.memory_size
 
-  # Deployment package from S3
-  s3_bucket = var.s3_bucket
-  s3_key    = var.s3_key
+  # Package type: Image for Docker, Zip for S3
+  package_type = var.image_uri != null ? "Image" : "Zip"
 
-  # Optional: specific version of the package
+  # Docker-based Lambda (ECR image)
+  image_uri = var.image_uri
+
+  # Zip-based Lambda (S3 deployment)
+  # Only set these when not using Docker
+  handler   = var.image_uri == null ? var.handler : null
+  runtime   = var.image_uri == null ? var.runtime : null
+  s3_bucket = var.image_uri == null ? var.s3_bucket : null
+  s3_key    = var.image_uri == null ? var.s3_key : null
+
+  # Optional: specific version of the package (works for both Zip and Image)
   source_code_hash = var.source_code_hash
 
   # Environment variables

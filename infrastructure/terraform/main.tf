@@ -38,6 +38,23 @@ provider "aws" {
 }
 
 # ===================================================================
+# ===================================================================
+# Module: KMS (FR-018 to FR-022)
+# ===================================================================
+# Shared customer-managed encryption key for S3, Secrets Manager, SNS
+# Cost: $1/month fixed (unlimited encrypt/decrypt operations)
+
+module "kms" {
+  source = "./modules/kms"
+
+  environment = var.environment
+
+  tags = {
+    Feature = "007-security-hardening"
+  }
+}
+
+# ===================================================================
 # Module: Secrets Manager
 # ===================================================================
 
@@ -45,7 +62,10 @@ module "secrets" {
   source = "./modules/secrets"
 
   environment         = var.environment
-  rotation_lambda_arn = null # No rotation Lambda for Demo 1
+  rotation_lambda_arn = null               # No rotation Lambda for Demo 1
+  kms_key_arn         = module.kms.key_arn # Customer-managed encryption (FR-019)
+
+  depends_on = [module.kms]
 }
 
 # ===================================================================
@@ -297,7 +317,9 @@ module "analysis_lambda" {
   source_code_hash = var.lambda_package_version
 
   # Resource configuration per task spec
+  # JUSTIFICATION (FR-024): 1024MB required for ML model inference (DistilBERT)
   memory_size          = 1024
+  allow_high_memory    = true # ML model requires more memory
   timeout              = 30
   reserved_concurrency = 5
 
@@ -356,7 +378,9 @@ module "dashboard_lambda" {
   source_code_hash = var.lambda_package_version
 
   # Resource configuration per task spec
+  # JUSTIFICATION (FR-024): 1024MB required for FastAPI+Mangum with async handlers
   memory_size          = 1024
+  allow_high_memory    = true # Dashboard API requires more memory for concurrent requests
   timeout              = 60
   reserved_concurrency = 10
 
@@ -394,9 +418,9 @@ module "dashboard_lambda" {
   # This prevents duplicate Access-Control-Allow-Origin headers
   create_function_url    = true
   function_url_auth_type = "NONE"
-  # RESPONSE_STREAM required for SSE endpoints (FR-001, FR-002, FR-003)
-  # Without this, Lambda buffers the response which breaks SSE streaming
-  function_url_invoke_mode = "RESPONSE_STREAM"
+  # BUFFERED mode for Mangum-based REST API (per research.md decision #2)
+  # SSE streaming is handled by separate sse_streaming Lambda with RESPONSE_STREAM
+  function_url_invoke_mode = "BUFFERED"
   function_url_cors = {
     allow_credentials = false
     allow_headers     = ["content-type", "authorization", "x-api-key", "x-user-id", "x-auth-type"]
@@ -532,6 +556,120 @@ module "notification_lambda" {
 }
 
 # ===================================================================
+# Module: SSE Streaming Lambda (Feature 016 - Real-time SSE)
+# ===================================================================
+# Uses AWS Lambda Web Adapter with RESPONSE_STREAM invoke mode
+# Separate from dashboard Lambda which uses Mangum/BUFFERED mode
+
+locals {
+  sse_lambda_name = "${var.environment}-sentiment-sse-streaming"
+}
+
+# ECR Repository for SSE Lambda container image
+resource "aws_ecr_repository" "sse_streaming" {
+  name                 = "${var.environment}-sse-streaming-lambda"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  encryption_configuration {
+    encryption_type = "AES256"
+  }
+
+  tags = {
+    Environment = var.environment
+    Feature     = "016-sse-streaming-lambda"
+    Component   = "sse-streaming"
+  }
+}
+
+# ECR Lifecycle policy - keep last 5 images
+resource "aws_ecr_lifecycle_policy" "sse_streaming" {
+  repository = aws_ecr_repository.sse_streaming.name
+
+  policy = jsonencode({
+    rules = [
+      {
+        rulePriority = 1
+        description  = "Keep last 5 images"
+        selection = {
+          tagStatus   = "any"
+          countType   = "imageCountMoreThan"
+          countNumber = 5
+        }
+        action = {
+          type = "expire"
+        }
+      }
+    ]
+  })
+}
+
+module "sse_streaming_lambda" {
+  source = "./modules/lambda"
+
+  function_name = local.sse_lambda_name
+  description   = "Real-time SSE streaming for sentiment updates (Feature 016)"
+  iam_role_arn  = module.iam.dashboard_lambda_role_arn # Reuse dashboard role for DynamoDB access
+  handler       = null                                 # Not used for Docker-based Lambda
+
+  # Docker-based deployment via ECR
+  # Image URI will be updated by CI/CD pipeline after first terraform apply
+  image_uri = "${aws_ecr_repository.sse_streaming.repository_url}:latest"
+
+  # Resource configuration per spec
+  memory_size          = 512
+  timeout              = 900 # 15 minutes - max Lambda timeout for SSE connections
+  reserved_concurrency = 10  # Start with 10 concurrent instances
+
+  # X-Ray tracing (FR-016)
+  tracing_mode = "Active"
+
+  # Environment variables
+  environment_variables = {
+    DYNAMODB_TABLE         = module.dynamodb.table_name
+    DATABASE_TABLE         = module.dynamodb.feature_006_users_table_name
+    SSE_HEARTBEAT_INTERVAL = "30"
+    SSE_MAX_CONNECTIONS    = "100"
+    SSE_POLL_INTERVAL      = "5"
+    ENVIRONMENT            = var.environment
+    AWS_LWA_INVOKE_MODE    = "RESPONSE_STREAM"
+  }
+
+  # Function URL with RESPONSE_STREAM for true SSE streaming
+  create_function_url      = true
+  function_url_auth_type   = "NONE"
+  function_url_invoke_mode = "RESPONSE_STREAM"
+  function_url_cors = {
+    allow_credentials = false
+    allow_headers     = ["content-type", "x-user-id", "last-event-id"]
+    allow_methods     = ["GET"]
+    allow_origins = length(var.cors_allowed_origins) > 0 ? var.cors_allowed_origins : (
+      var.environment != "prod" ? ["http://localhost:3000", "http://localhost:8080"] : []
+    )
+    expose_headers = ["x-request-id"]
+    max_age        = 86400
+  }
+
+  # Logging
+  log_retention_days = var.environment == "prod" ? 90 : 30
+
+  # Alarms
+  create_error_alarm    = true
+  error_alarm_threshold = 10
+  alarm_actions         = [module.monitoring.alarm_topic_arn]
+
+  tags = {
+    Lambda  = "sse-streaming"
+    Feature = "016-sse-streaming-lambda"
+  }
+
+  depends_on = [module.iam, aws_ecr_repository.sse_streaming]
+}
+
+# ===================================================================
 # Module: API Gateway (Dashboard Rate Limiting - P0 Security)
 # ===================================================================
 
@@ -581,6 +719,9 @@ module "sns" {
   # Subscription created separately below to avoid circular dependency
   # (ingestion needs topic_arn, but subscription needs analysis lambda)
   create_subscription = false
+
+  # Customer-managed encryption (FR-020)
+  kms_key_arn = module.kms.key_arn
 }
 
 # SNS subscription for Analysis Lambda
@@ -902,4 +1043,28 @@ output "notification_lambda_arn" {
 output "notification_lambda_name" {
   description = "Name of the Notification Lambda function"
   value       = module.notification_lambda.function_name
+}
+
+# ===================================================================
+# Feature 016: SSE Streaming Lambda Outputs
+# ===================================================================
+
+output "sse_lambda_function_url" {
+  description = "Function URL for SSE streaming Lambda (RESPONSE_STREAM mode)"
+  value       = module.sse_streaming_lambda.function_url
+}
+
+output "sse_lambda_arn" {
+  description = "ARN of the SSE streaming Lambda function"
+  value       = module.sse_streaming_lambda.function_arn
+}
+
+output "sse_lambda_name" {
+  description = "Name of the SSE streaming Lambda function"
+  value       = module.sse_streaming_lambda.function_name
+}
+
+output "sse_ecr_repository_url" {
+  description = "ECR repository URL for SSE Lambda container images"
+  value       = aws_ecr_repository.sse_streaming.repository_url
 }

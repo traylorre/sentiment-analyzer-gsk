@@ -283,3 +283,34 @@ async def test_sse_invalid_config_rejected(
 
     finally:
         api_client.clear_access_token()
+
+
+@pytest.mark.asyncio
+async def test_stream_status_shows_connection_limit(
+    api_client: PreprodAPIClient,
+) -> None:
+    """T042: Verify stream status shows connection limits.
+
+    Given: The SSE Lambda is running
+    When: GET /api/v2/stream/status is called
+    Then: Response shows max_connections limit (100 per FR-008)
+
+    Note: Testing actual 503 response would require exhausting 100 connections
+    which is not practical for E2E tests. We verify the limit is correctly
+    reported via the status endpoint instead.
+    """
+    response = await api_client.get("/api/v2/stream/status")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    # Verify connection limit is configured correctly per FR-008
+    assert "max_connections" in data, "Status should include max_connections"
+    assert (
+        data["max_connections"] == 100
+    ), f"Max connections should be 100 per FR-008, got {data['max_connections']}"
+
+    # Verify available slots calculation
+    assert "available" in data, "Status should include available slots"
+    assert "connections" in data, "Status should include current connections"
+    assert data["available"] == data["max_connections"] - data["connections"]

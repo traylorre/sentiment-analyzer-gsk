@@ -265,6 +265,9 @@ function updateRecentItems(items) {
 
 /**
  * Connect to Server-Sent Events stream
+ *
+ * Uses SSE_BASE_URL for the SSE Lambda (two-Lambda architecture).
+ * Falls back to API_BASE_URL if SSE_BASE_URL is not configured.
  */
 function connectSSE() {
     if (state.eventSource) {
@@ -273,7 +276,10 @@ function connectSSE() {
 
     console.log('Connecting to SSE stream...');
 
-    const streamUrl = `${CONFIG.API_BASE_URL}${CONFIG.ENDPOINTS.STREAM}`;
+    // Use SSE_BASE_URL if configured, otherwise fall back to API_BASE_URL
+    const baseUrl = CONFIG.SSE_BASE_URL || CONFIG.API_BASE_URL;
+    const streamUrl = `${baseUrl}${CONFIG.ENDPOINTS.STREAM}`;
+    console.log('SSE stream URL:', streamUrl);
     state.eventSource = new EventSource(streamUrl);
 
     state.eventSource.onopen = () => {

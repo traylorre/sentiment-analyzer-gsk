@@ -4,6 +4,7 @@
 resource "aws_secretsmanager_secret" "newsapi" {
   name        = "${var.environment}/sentiment-analyzer/newsapi"
   description = "NewsAPI key for sentiment analysis ingestion"
+  kms_key_id  = var.kms_key_arn # Customer-managed encryption (FR-019)
 
   recovery_window_in_days = 7 # Allow 7-day recovery if accidentally deleted
 
@@ -11,6 +12,11 @@ resource "aws_secretsmanager_secret" "newsapi" {
     Environment = var.environment
     Feature     = "001-interactive-dashboard-demo"
     Purpose     = "newsapi-key"
+  }
+
+  # SECURITY: Prevent accidental deletion of credentials (FR-016)
+  lifecycle {
+    prevent_destroy = true
   }
 }
 
@@ -31,6 +37,7 @@ resource "aws_secretsmanager_secret_rotation" "newsapi" {
 resource "aws_secretsmanager_secret" "dashboard_api_key" {
   name        = "${var.environment}/sentiment-analyzer/dashboard-api-key"
   description = "API key for dashboard Lambda Function URL authentication"
+  kms_key_id  = var.kms_key_arn # Customer-managed encryption (FR-019)
 
   recovery_window_in_days = 7
 
@@ -38,6 +45,11 @@ resource "aws_secretsmanager_secret" "dashboard_api_key" {
     Environment = var.environment
     Feature     = "001-interactive-dashboard-demo"
     Purpose     = "dashboard-auth"
+  }
+
+  # SECURITY: Prevent accidental deletion of credentials (FR-016)
+  lifecycle {
+    prevent_destroy = true
   }
 }
 
@@ -61,6 +73,7 @@ resource "aws_secretsmanager_secret_rotation" "dashboard_api_key" {
 resource "aws_secretsmanager_secret" "tiingo" {
   name        = "${var.environment}/sentiment-analyzer/tiingo"
   description = "Tiingo API key for financial news and market data"
+  kms_key_id  = var.kms_key_arn # Customer-managed encryption (FR-019)
 
   recovery_window_in_days = 7
 
@@ -68,6 +81,11 @@ resource "aws_secretsmanager_secret" "tiingo" {
     Environment = var.environment
     Feature     = "006-user-config-dashboard"
     Purpose     = "tiingo-api-key"
+  }
+
+  # SECURITY: Prevent accidental deletion of credentials (FR-016)
+  lifecycle {
+    prevent_destroy = true
   }
 }
 
@@ -86,6 +104,7 @@ resource "aws_secretsmanager_secret_rotation" "tiingo" {
 resource "aws_secretsmanager_secret" "finnhub" {
   name        = "${var.environment}/sentiment-analyzer/finnhub"
   description = "Finnhub API key for financial news and sentiment data"
+  kms_key_id  = var.kms_key_arn # Customer-managed encryption (FR-019)
 
   recovery_window_in_days = 7
 
@@ -93,6 +112,11 @@ resource "aws_secretsmanager_secret" "finnhub" {
     Environment = var.environment
     Feature     = "006-user-config-dashboard"
     Purpose     = "finnhub-api-key"
+  }
+
+  # SECURITY: Prevent accidental deletion of credentials (FR-016)
+  lifecycle {
+    prevent_destroy = true
   }
 }
 
@@ -111,6 +135,7 @@ resource "aws_secretsmanager_secret_rotation" "finnhub" {
 resource "aws_secretsmanager_secret" "sendgrid" {
   name        = "${var.environment}/sentiment-analyzer/sendgrid"
   description = "SendGrid API key for email notifications and magic links"
+  kms_key_id  = var.kms_key_arn # Customer-managed encryption (FR-019)
 
   recovery_window_in_days = 7
 
@@ -118,6 +143,11 @@ resource "aws_secretsmanager_secret" "sendgrid" {
     Environment = var.environment
     Feature     = "006-user-config-dashboard"
     Purpose     = "sendgrid-api-key"
+  }
+
+  # SECURITY: Prevent accidental deletion of credentials (FR-016)
+  lifecycle {
+    prevent_destroy = true
   }
 }
 
@@ -136,6 +166,7 @@ resource "aws_secretsmanager_secret_rotation" "sendgrid" {
 resource "aws_secretsmanager_secret" "hcaptcha" {
   name        = "${var.environment}/sentiment-analyzer/hcaptcha"
   description = "hCaptcha secret key for bot protection"
+  kms_key_id  = var.kms_key_arn # Customer-managed encryption (FR-019)
 
   recovery_window_in_days = 7
 
@@ -143,6 +174,11 @@ resource "aws_secretsmanager_secret" "hcaptcha" {
     Environment = var.environment
     Feature     = "006-user-config-dashboard"
     Purpose     = "hcaptcha-secret"
+  }
+
+  # SECURITY: Prevent accidental deletion of credentials (FR-016)
+  lifecycle {
+    prevent_destroy = true
   }
 }
 

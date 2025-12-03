@@ -1,0 +1,7 @@
+# SSE Streaming Lambda Dependencies
+fastapi>=0.121.0,<1.0.0
+uvicorn[standard]>=0.34.0,<1.0.0
+sse-starlette>=2.0.0,<3.0.0
+boto3>=1.35.0,<2.0.0
+pydantic>=2.9.0,<3.0.0
+aws-xray-sdk>=2.14.0,<3.0.0
