@@ -26,15 +26,19 @@ async def test_global_stream_available(
     Given: The API is running
     When: GET /api/v2/stream is called
     Then: Connection is established with text/event-stream content type
+
+    Note: SSE endpoints are streaming and never complete. We use stream_sse()
+    to validate headers and receive first events without blocking.
     """
-    response = await api_client.get(
+    # Use streaming mode for SSE (regular GET would timeout waiting for stream to end)
+    status_code, headers, content = await api_client.stream_sse(
         "/api/v2/stream",
-        headers={"Accept": "text/event-stream"},
+        timeout=10.0,
     )
 
     # Should return 200 with event-stream content type
-    assert response.status_code == 200, f"Expected 200, got {response.status_code}"
-    content_type = response.headers.get("content-type", "")
+    assert status_code == 200, f"Expected 200, got {status_code}"
+    content_type = headers.get("content-type", "")
     assert (
         "text/event-stream" in content_type
     ), f"Expected text/event-stream, got: {content_type}"
@@ -93,23 +97,25 @@ async def test_sse_connection_established(
     Given: An authenticated user with a configuration
     When: GET /api/v2/configurations/{id}/stream is called
     Then: Connection is established with text/event-stream content type
+
+    Note: SSE endpoints are streaming and never complete. We use stream_sse()
+    to validate headers and receive first events without blocking.
     """
     token, config_id = await create_session_and_config(api_client, synthetic_config)
 
     try:
-        # Try to establish SSE connection
-        response = await api_client.get(
+        # Try to establish SSE connection using streaming mode
+        status_code, headers, content = await api_client.stream_sse(
             f"/api/v2/configurations/{config_id}/stream",
-            headers={"Accept": "text/event-stream"},
+            timeout=10.0,
         )
 
-        if response.status_code == 404:
+        if status_code == 404:
             pytest.skip("SSE streaming endpoint not implemented")
 
         # Should return 200 with event-stream content type
-        # or upgrade to streaming
-        if response.status_code == 200:
-            content_type = response.headers.get("content-type", "")
+        if status_code == 200:
+            content_type = headers.get("content-type", "")
             assert (
                 "text/event-stream" in content_type or "stream" in content_type.lower()
             ), f"Expected event-stream content type, got: {content_type}"
@@ -128,22 +134,25 @@ async def test_sse_receives_sentiment_update(
     Given: An established SSE connection
     When: Sentiment data changes
     Then: Client receives sentiment_update event with data
+
+    Note: SSE endpoints are streaming and never complete. We use stream_sse()
+    to validate headers and receive first events without blocking.
     """
     token, config_id = await create_session_and_config(api_client, synthetic_config)
 
     try:
         # This test validates the SSE endpoint contract
         # In preprod, we may not be able to trigger real sentiment updates
-        response = await api_client.get(
+        status_code, headers, content = await api_client.stream_sse(
             f"/api/v2/configurations/{config_id}/stream",
-            headers={"Accept": "text/event-stream"},
+            timeout=10.0,
         )
 
-        if response.status_code == 404:
+        if status_code == 404:
             pytest.skip("SSE streaming endpoint not implemented")
 
         # Verify endpoint responds appropriately
-        assert response.status_code in (200, 204)
+        assert status_code in (200, 204)
 
     finally:
         api_client.clear_access_token()
@@ -159,20 +168,23 @@ async def test_sse_receives_refresh_event(
     Given: An established SSE connection
     When: Server triggers a refresh
     Then: Client receives refresh event
+
+    Note: SSE endpoints are streaming and never complete. We use stream_sse()
+    to validate headers and receive first events without blocking.
     """
     token, config_id = await create_session_and_config(api_client, synthetic_config)
 
     try:
-        response = await api_client.get(
+        status_code, headers, content = await api_client.stream_sse(
             f"/api/v2/configurations/{config_id}/stream",
-            headers={"Accept": "text/event-stream"},
+            timeout=10.0,
         )
 
-        if response.status_code == 404:
+        if status_code == 404:
             pytest.skip("SSE streaming endpoint not implemented")
 
         # Validate endpoint contract
-        assert response.status_code in (200, 204)
+        assert status_code in (200, 204)
 
     finally:
         api_client.clear_access_token()
@@ -188,24 +200,25 @@ async def test_sse_reconnection_with_last_event_id(
     Given: A previous SSE session with event ID
     When: Reconnecting with Last-Event-ID header
     Then: Server resumes from that event ID
+
+    Note: SSE endpoints are streaming and never complete. We use stream_sse()
+    to validate headers and receive first events without blocking.
     """
     token, config_id = await create_session_and_config(api_client, synthetic_config)
 
     try:
         # Test reconnection header support
-        response = await api_client.get(
+        status_code, headers, content = await api_client.stream_sse(
             f"/api/v2/configurations/{config_id}/stream",
-            headers={
-                "Accept": "text/event-stream",
-                "Last-Event-ID": "test-event-12345",
-            },
+            headers={"Last-Event-ID": "test-event-12345"},
+            timeout=10.0,
         )
 
-        if response.status_code == 404:
+        if status_code == 404:
             pytest.skip("SSE streaming endpoint not implemented")
 
         # Should accept reconnection request
-        assert response.status_code in (200, 204)
+        assert status_code in (200, 204)
 
     finally:
         api_client.clear_access_token()
