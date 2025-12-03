@@ -159,6 +159,17 @@ variable "function_url_auth_type" {
   }
 }
 
+variable "function_url_invoke_mode" {
+  description = "Invoke mode for Function URL (BUFFERED or RESPONSE_STREAM). Use RESPONSE_STREAM for SSE/streaming responses."
+  type        = string
+  default     = "BUFFERED"
+
+  validation {
+    condition     = contains(["BUFFERED", "RESPONSE_STREAM"], var.function_url_invoke_mode)
+    error_message = "Function URL invoke mode must be BUFFERED or RESPONSE_STREAM."
+  }
+}
+
 variable "function_url_cors" {
   description = "CORS configuration for Function URL"
   type = object({

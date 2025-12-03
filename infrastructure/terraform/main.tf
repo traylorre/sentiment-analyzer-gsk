@@ -394,6 +394,9 @@ module "dashboard_lambda" {
   # This prevents duplicate Access-Control-Allow-Origin headers
   create_function_url    = true
   function_url_auth_type = "NONE"
+  # RESPONSE_STREAM required for SSE endpoints (FR-001, FR-002, FR-003)
+  # Without this, Lambda buffers the response which breaks SSE streaming
+  function_url_invoke_mode = "RESPONSE_STREAM"
   function_url_cors = {
     allow_credentials = false
     allow_headers     = ["content-type", "authorization", "x-api-key", "x-user-id", "x-auth-type"]
