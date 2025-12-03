@@ -1,0 +1,125 @@
+# Testing Taxonomy Registry
+# Source of truth for LAYER → CONCERN → PROPERTY → VALIDATOR hierarchy
+
+meta:
+  version: "1.0.0"
+  last_updated: "2025-12-03T00:00:00Z"
+
+# Pre-defined testing layers
+layers:
+  unit:
+    display_name: "Unit Testing"
+    description: "Isolated component testing with mocked dependencies"
+    directory: "tests/unit"
+
+  integration:
+    display_name: "Integration Testing"
+    description: "Multi-component testing with LocalStack"
+    directory: "tests/integration"
+
+  property:
+    display_name: "Property-Based Testing"
+    description: "Invariant verification using Hypothesis"
+    directory: "tests/property"
+
+  mutation:
+    display_name: "Mutation Testing"
+    description: "Test quality verification via code mutation"
+    directory: "tests/mutation"
+
+  chaos:
+    display_name: "Chaos Testing"
+    description: "Resilience testing with AWS FIS"
+    directory: "tests/chaos"
+
+  e2e:
+    display_name: "End-to-End Testing"
+    description: "Full workflow tests against real infrastructure"
+    directory: "tests/e2e"
+
+# Concern categories
+concerns:
+  resource_naming_consistency:
+    display_name: "Resource Naming Consistency"
+    description: "Verify IAM policy ARN patterns match actual Terraform resource names to prevent deployment permission failures"
+    keywords:
+      - iam
+      - arn
+      - naming
+      - pattern
+      - resource
+      - terraform
+      - permissions
+      - deployment
+    natural_language_triggers:
+      - "check IAM patterns match resources"
+      - "validate resource naming"
+      - "ARN pattern consistency"
+    layers:
+      - unit
+      - integration
+    status: documented
+
+# Property rules/invariants
+properties:
+  resource_name_pattern:
+    display_name: "Resources Use {env}-sentiment-{service} Pattern"
+    description: "All Terraform resources must use {env}-sentiment-{service} naming pattern where env is preprod or prod"
+    keywords:
+      - naming
+      - pattern
+      - env
+      - preprod
+      - prod
+      - terraform
+      - resource
+    natural_language_triggers:
+      - "check resource naming pattern"
+      - "validate env-sentiment naming"
+      - "resource name convention"
+    concerns:
+      - resource_naming_consistency
+    status: documented
+
+  iam_pattern_coverage:
+    display_name: "IAM ARN Patterns Cover All Resources"
+    description: "IAM ARN patterns must cover all Terraform resource names - every resource must have a matching IAM policy pattern"
+    keywords:
+      - iam
+      - arn
+      - pattern
+      - coverage
+      - terraform
+      - resource
+      - permissions
+    natural_language_triggers:
+      - "check IAM pattern coverage"
+      - "IAM patterns match resources"
+      - "ARN pattern validation"
+    concerns:
+      - resource_naming_consistency
+    status: documented
+
+# Validator implementations
+validators:
+  iam_resource_pattern_validator:
+    display_name: "IAM Resource Pattern Validator"
+    description: "Extracts resource names from Terraform files, extracts ARN patterns from ci-user-policy.tf, validates all resources match patterns and follow {env}-sentiment-{service} convention"
+    keywords:
+      - iam
+      - arn
+      - pattern
+      - terraform
+      - resource
+      - validation
+      - naming
+    natural_language_triggers:
+      - "check IAM patterns"
+      - "validate resource naming"
+      - "run IAM audit"
+    properties:
+      - resource_name_pattern
+      - iam_pattern_coverage
+    implementation_path: "scripts/check-iam-patterns.sh"
+    makefile_target: "check-iam-patterns"
+    status: documented
