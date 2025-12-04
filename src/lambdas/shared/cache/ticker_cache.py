@@ -122,9 +122,11 @@ class TickerCache(BaseModel):
 
         return cls(
             version=data.get("version", datetime.utcnow().strftime("%Y-%m-%d")),
-            updated_at=datetime.fromisoformat(data["updated_at"])
-            if data.get("updated_at")
-            else datetime.utcnow(),
+            updated_at=(
+                datetime.fromisoformat(data["updated_at"])
+                if data.get("updated_at")
+                else datetime.utcnow()
+            ),
             symbols=symbols,
             total_active=total_active,
             total_delisted=total_delisted,

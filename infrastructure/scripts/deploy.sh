@@ -86,15 +86,15 @@ mkdir -p "${BUILD_DIR}"
 
 for lambda in "${LAMBDAS[@]}"; do
     log_info "Packaging ${lambda} Lambda..."
-    
+
     LAMBDA_SRC="${SRC_DIR}/lambdas/${lambda}"
     PACKAGE_DIR="${BUILD_DIR}/${lambda}"
     ZIP_FILE="${BUILD_DIR}/${lambda}.zip"
-    
+
     # Clean previous build
     rm -rf "${PACKAGE_DIR}" "${ZIP_FILE}"
     mkdir -p "${PACKAGE_DIR}"
-    
+
     # Copy Lambda code
     if [[ -d "${LAMBDA_SRC}" ]]; then
         cp -r "${LAMBDA_SRC}"/* "${PACKAGE_DIR}/"
@@ -102,29 +102,29 @@ for lambda in "${LAMBDAS[@]}"; do
         log_warn "Lambda source directory not found: ${LAMBDA_SRC}"
         continue
     fi
-    
+
     # Copy shared modules
     SHARED_DIR="${SRC_DIR}/lambdas/shared"
     if [[ -d "${SHARED_DIR}" ]]; then
         cp -r "${SHARED_DIR}" "${PACKAGE_DIR}/"
     fi
-    
+
     # Copy lib modules
     LIB_DIR="${SRC_DIR}/lib"
     if [[ -d "${LIB_DIR}" ]]; then
         cp -r "${LIB_DIR}" "${PACKAGE_DIR}/"
     fi
-    
+
     # Install dependencies (if requirements.txt exists)
     if [[ -f "${LAMBDA_SRC}/requirements.txt" ]]; then
         pip install -r "${LAMBDA_SRC}/requirements.txt" -t "${PACKAGE_DIR}" --quiet
     fi
-    
+
     # Create ZIP package
     cd "${PACKAGE_DIR}"
     zip -r "${ZIP_FILE}" . -x "*.pyc" -x "__pycache__/*" -x "*.egg-info/*" > /dev/null
     cd - > /dev/null
-    
+
     log_info "Created ${ZIP_FILE}"
 done
 

@@ -444,7 +444,7 @@ class EdgeCaseGenerator:
 
     def ticker_unicode(self) -> str:
         """Generate ticker with unicode characters (invalid)."""
-        return "AA\u03A9L"  # Greek letter Omega
+        return "AA\u03a9L"  # Greek letter Omega
 
     def ticker_unknown(self) -> str:
         """Generate ticker that doesn't exist (for 404 testing)."""

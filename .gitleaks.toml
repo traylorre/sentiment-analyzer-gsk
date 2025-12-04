@@ -1,0 +1,27 @@
+title = "Gitleaks Configuration"
+
+# Gitleaks configuration for sentiment-analyzer-gsk
+# See: https://github.com/gitleaks/gitleaks
+
+[allowlist]
+  description = "Allowed patterns for documentation examples and placeholders"
+
+  # AWS official example credentials (safe to use in docs)
+  regexes = [
+    '''AKIAIOSFODNN7EXAMPLE''',  # pragma: allowlist secret
+    '''wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY''',  # pragma: allowlist secret
+    '''123456789012''',
+    '''example-token-do-not-use''',
+  ]
+
+  # Paths that may contain example credentials in documentation
+  paths = [
+    '''\.secrets\.baseline$''',
+    '''tests/.*''',
+  ]
+
+# To add a new allowlist entry for false positives:
+# 1. Identify the exact pattern or file path causing the false positive
+# 2. Add the pattern to regexes = [...] or path to paths = [...]
+# 3. Run: gitleaks detect --no-git to verify the allowlist works
+# 4. Document why the pattern is safe in a comment above the entry

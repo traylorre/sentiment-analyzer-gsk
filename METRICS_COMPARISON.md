@@ -413,4 +413,3 @@ Accuracy:  96%
 Setup:     1 hour
 Scaling:   Automatic (API-based)
 ```
-

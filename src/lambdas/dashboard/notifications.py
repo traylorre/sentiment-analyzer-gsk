@@ -921,12 +921,16 @@ def _notification_to_response(
     tracking = None
     if include_detail and (notification.opened_at or notification.clicked_at):
         tracking = TrackingInfo(
-            opened_at=notification.opened_at.strftime("%Y-%m-%dT%H:%M:%SZ")
-            if notification.opened_at
-            else None,
-            clicked_at=notification.clicked_at.strftime("%Y-%m-%dT%H:%M:%SZ")
-            if notification.clicked_at
-            else None,
+            opened_at=(
+                notification.opened_at.strftime("%Y-%m-%dT%H:%M:%SZ")
+                if notification.opened_at
+                else None
+            ),
+            clicked_at=(
+                notification.clicked_at.strftime("%Y-%m-%dT%H:%M:%SZ")
+                if notification.clicked_at
+                else None
+            ),
         )
 
     return NotificationResponse(
@@ -952,7 +956,9 @@ def _digest_to_response(settings: DigestSettings) -> DigestSettingsResponse:
         timezone=settings.timezone,
         include_all_configs=settings.include_all_configs,
         config_ids=settings.config_ids if settings.config_ids else None,
-        next_scheduled=settings.next_scheduled.strftime("%Y-%m-%dT%H:%M:%SZ")
-        if settings.next_scheduled
-        else _calculate_next_scheduled(settings.time, settings.timezone),
+        next_scheduled=(
+            settings.next_scheduled.strftime("%Y-%m-%dT%H:%M:%SZ")
+            if settings.next_scheduled
+            else _calculate_next_scheduled(settings.time, settings.timezone)
+        ),
     )

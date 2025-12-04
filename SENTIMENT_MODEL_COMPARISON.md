@@ -470,4 +470,3 @@ CMD [ "inference.lambda_handler" ]
 | **HuggingFace** | 2-4 hours | $2.50 | 100-150ms | 91% | ✅ PRIMARY |
 | Comprehend | 30 mins | $36 | 300-600ms | 92% | Alternative |
 | OpenAI GPT-3.5 | 1 hour | $45 | 400-800ms | 96% | Only if nuance needed |
-

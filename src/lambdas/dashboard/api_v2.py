@@ -455,9 +455,9 @@ def get_articles_by_tags(
         extra={
             "tags": len(tags),
             "articles": len(all_articles),
-            "sentiment_filter": sanitize_for_log(sentiment_filter)
-            if sentiment_filter
-            else "none",
+            "sentiment_filter": (
+                sanitize_for_log(sentiment_filter) if sentiment_filter else "none"
+            ),
         },
     )
 

@@ -517,12 +517,16 @@ def get_fis_experiment_status(fis_experiment_id: str) -> dict[str, Any]:
             "state": experiment["state"]["status"],
             "reason": experiment["state"].get("reason", ""),
             "created_time": experiment["creationTime"].isoformat(),
-            "start_time": experiment.get("startTime", {}).isoformat()
-            if experiment.get("startTime")
-            else None,
-            "end_time": experiment.get("endTime", {}).isoformat()
-            if experiment.get("endTime")
-            else None,
+            "start_time": (
+                experiment.get("startTime", {}).isoformat()
+                if experiment.get("startTime")
+                else None
+            ),
+            "end_time": (
+                experiment.get("endTime", {}).isoformat()
+                if experiment.get("endTime")
+                else None
+            ),
         }
 
     except ClientError as e:

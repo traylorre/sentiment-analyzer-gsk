@@ -193,9 +193,11 @@ def get_market_status() -> MarketStatusResponse:
             current_time=now_utc.isoformat().replace("+00:00", "Z"),
             market_open=None,
             market_close=None,
-            next_open=next_open.astimezone(UTC).isoformat().replace("+00:00", "Z")
-            if next_open
-            else None,
+            next_open=(
+                next_open.astimezone(UTC).isoformat().replace("+00:00", "Z")
+                if next_open
+                else None
+            ),
             reason="holiday",
             is_holiday=True,
             holiday_name=holiday_name,
@@ -211,9 +213,11 @@ def get_market_status() -> MarketStatusResponse:
             current_time=now_utc.isoformat().replace("+00:00", "Z"),
             market_open=None,
             market_close=None,
-            next_open=next_open.astimezone(UTC).isoformat().replace("+00:00", "Z")
-            if next_open
-            else None,
+            next_open=(
+                next_open.astimezone(UTC).isoformat().replace("+00:00", "Z")
+                if next_open
+                else None
+            ),
             reason="weekend",
         )
 
@@ -264,9 +268,11 @@ def get_market_status() -> MarketStatusResponse:
         current_time=now_utc.isoformat().replace("+00:00", "Z"),
         market_open=None,
         market_close=None,
-        next_open=next_open.astimezone(UTC).isoformat().replace("+00:00", "Z")
-        if next_open
-        else None,
+        next_open=(
+            next_open.astimezone(UTC).isoformat().replace("+00:00", "Z")
+            if next_open
+            else None
+        ),
         reason=reason,
         is_extended_hours=is_extended,
     )
@@ -347,9 +353,11 @@ def get_premarket_estimates(
                             "label": (
                                 "positive"
                                 if sentiment_score >= 0.33
-                                else "negative"
-                                if sentiment_score <= -0.33
-                                else "neutral"
+                                else (
+                                    "negative"
+                                    if sentiment_score <= -0.33
+                                    else "neutral"
+                                )
                             ),
                             "confidence": 0.65,
                             "basis": "premarket_momentum",

@@ -4,7 +4,6 @@ Tests that config streams only include sentiment updates for
 tickers in the user's configuration per FR-015.
 """
 
-
 from src.lambdas.sse_streaming.connection import SSEConnection
 
 

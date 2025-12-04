@@ -535,8 +535,8 @@ components:
           pattern: "^[a-f0-9]{64}$"
           description: HMAC-SHA256 signature from email
       example:
-        token: "550e8400-e29b-41d4-a716-446655440001"
-        signature: "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456"
+        token: "example-uuid-00000000-0000-0000-0000-000000000001"
+        signature: "0000000000000000000000000000000000000000000000000000000000000000"
 
     MergeRequest:
       type: object

@@ -16,7 +16,6 @@ For Developers:
     - Test edge cases (empty, duplicates, whitespace)
 """
 
-
 import pytest
 
 from src.lambdas.ingestion.config import (

@@ -645,7 +645,9 @@ def _config_to_response(config: Configuration) -> ConfigurationResponse:
         timeframe_days=config.timeframe_days,
         include_extended_hours=config.include_extended_hours,
         created_at=config.created_at.isoformat().replace("+00:00", "Z"),
-        updated_at=config.updated_at.isoformat().replace("+00:00", "Z")
-        if config.updated_at
-        else None,
+        updated_at=(
+            config.updated_at.isoformat().replace("+00:00", "Z")
+            if config.updated_at
+            else None
+        ),
     )

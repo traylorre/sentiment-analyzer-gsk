@@ -81,7 +81,7 @@ INVOKE_RESULT=$(aws lambda invoke \
 
 if [[ $? -eq 0 ]]; then
     log_info "Ingestion triggered successfully"
-    
+
     # Check response
     if [[ -f /tmp/demo-setup-response.json ]]; then
         RESPONSE=$(cat /tmp/demo-setup-response.json)
@@ -134,7 +134,7 @@ DASHBOARD_URL=$(aws lambda get-function-url-config \
 
 if [[ -n "${DASHBOARD_URL}" ]]; then
     log_info "Dashboard URL: ${DASHBOARD_URL}"
-    
+
     # Test dashboard health
     HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${DASHBOARD_URL}health" || echo "000")
     if [[ "${HTTP_CODE}" == "200" ]]; then

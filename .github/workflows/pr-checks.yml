@@ -104,7 +104,7 @@ jobs:
         env:
           AWS_REGION: us-east-1
           AWS_ACCESS_KEY_ID: testing
-          AWS_SECRET_ACCESS_KEY: testing
+          AWS_SECRET_ACCESS_KEY: testing  # pragma: allowlist secret
 
       - name: Check coverage threshold
         run: coverage report --fail-under=80
@@ -211,7 +211,29 @@ jobs:
           category: "/language:${{matrix.language}}"
 
   # ========================================================================
-  # JOB 5: Cost Analysis (Infracost - PR only)
+  # JOB 5: Secrets Scan (Gitleaks)
+  # ========================================================================
+  secrets-scan:
+    name: Secrets Scan
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      pull-requests: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ========================================================================
+  # JOB 6: Cost Analysis (Infracost - PR only)
   # ========================================================================
   cost:
     name: Cost
