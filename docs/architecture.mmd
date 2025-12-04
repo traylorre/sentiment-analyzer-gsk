@@ -39,16 +39,16 @@ flowchart TB
     Secrets -->|API Key| Ingestion
     Ingestion -->|Store Items| DynamoDB
     Ingestion -->|Publish| SNS
-    
+
     SNS -->|Trigger| Analysis
     SNS -->|Failed| DLQ
     Analysis -->|Update Items| DynamoDB
     Secrets -->|Model Config| Analysis
-    
+
     Browser -->|HTTP| Dashboard
     Dashboard -->|Query| DynamoDB
     Secrets -->|API Key| Dashboard
-    
+
     %% Monitoring
     Ingestion -->|Logs| CloudWatch
     Analysis -->|Logs| CloudWatch
@@ -61,7 +61,7 @@ flowchart TB
     classDef storage fill:#D4F2D4,stroke:#7ED321,stroke-width:2px
     classDef messaging fill:#F2E4D4,stroke:#D0021B,stroke-width:2px
     classDef monitoring fill:#E8E4F2,stroke:#9013FE,stroke-width:2px
-    
+
     class NewsAPI external
     class Ingestion,Analysis,Dashboard lambda
     class DynamoDB,Secrets storage

@@ -153,4 +153,3 @@ Recommendation is clear:
 - Nuanced sentiment analysis becomes critical requirement
 - 4-label sentiment (neutral) becomes must-have feature
 - Setup complexity becomes blocker (then choose Comprehend)
-

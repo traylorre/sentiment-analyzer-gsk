@@ -258,12 +258,14 @@ def validate_session(
                 "Session revoked",
                 extra={
                     "user_id_prefix": sanitize_for_log(anonymous_id[:8]),
-                    "revoked_at": user.revoked_at.isoformat()
-                    if user.revoked_at
-                    else None,
-                    "reason": sanitize_for_log(user.revoked_reason)
-                    if user.revoked_reason
-                    else None,
+                    "revoked_at": (
+                        user.revoked_at.isoformat() if user.revoked_at else None
+                    ),
+                    "reason": (
+                        sanitize_for_log(user.revoked_reason)
+                        if user.revoked_reason
+                        else None
+                    ),
                 },
             )
             raise SessionRevokedException(
@@ -1899,9 +1901,11 @@ def get_merge_status_endpoint(
     if result.status == "completed":
         return MergeStatusResponse(
             status="completed",
-            merged_at=result.merged_at.isoformat().replace("+00:00", "Z")
-            if result.merged_at
-            else None,
+            merged_at=(
+                result.merged_at.isoformat().replace("+00:00", "Z")
+                if result.merged_at
+                else None
+            ),
             items_merged={
                 "configurations": result.configurations,
                 "alert_rules": result.alert_rules,

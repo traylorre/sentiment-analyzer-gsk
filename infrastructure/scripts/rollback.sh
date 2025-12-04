@@ -148,7 +148,7 @@ if [[ "${LAMBDA_NAME}" == "dashboard" ]]; then
     FUNCTION_URL=$(aws lambda get-function-url-config \
         --function-name "${FUNCTION_NAME}" \
         --query 'FunctionUrl' --output text 2>/dev/null || echo "")
-    
+
     if [[ -n "${FUNCTION_URL}" ]]; then
         HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${FUNCTION_URL}health" || echo "000")
         if [[ "${HTTP_CODE}" == "200" ]]; then
@@ -164,7 +164,7 @@ else
         --payload '{"test": true}' \
         --log-type Tail \
         /tmp/rollback-test-response.json > /dev/null 2>&1 || true
-    
+
     log_info "Test invocation completed"
 fi
 

@@ -606,11 +606,14 @@ class TestLambdaHandler:
         mock_context = MagicMock()
         mock_context.aws_request_id = "test-request-id"
 
-        with patch(
-            "src.lambdas.ingestion.handler.get_api_key",
-            return_value="test-key",
-        ), patch(
-            "src.lambdas.ingestion.handler.emit_metrics_batch",
+        with (
+            patch(
+                "src.lambdas.ingestion.handler.get_api_key",
+                return_value="test-key",
+            ),
+            patch(
+                "src.lambdas.ingestion.handler.emit_metrics_batch",
+            ),
         ):
             response = lambda_handler({"source": "test"}, mock_context)
 
@@ -662,23 +665,30 @@ class TestLambdaHandler:
         ]
         mock_finnhub.close = MagicMock()
 
-        with patch(
-            "src.lambdas.ingestion.handler.get_api_key",
-            return_value="test-key",
-        ), patch(
-            "src.lambdas.ingestion.handler.TiingoAdapter",
-            return_value=mock_tiingo,
-        ), patch(
-            "src.lambdas.ingestion.handler.FinnhubAdapter",
-            return_value=mock_finnhub,
-        ), patch(
-            "src.lambdas.ingestion.handler.put_item_if_not_exists",
-            return_value=True,
-        ), patch(
-            "src.lambdas.ingestion.handler._get_sns_client",
-            return_value=MagicMock(),
-        ), patch(
-            "src.lambdas.ingestion.handler.emit_metrics_batch",
+        with (
+            patch(
+                "src.lambdas.ingestion.handler.get_api_key",
+                return_value="test-key",
+            ),
+            patch(
+                "src.lambdas.ingestion.handler.TiingoAdapter",
+                return_value=mock_tiingo,
+            ),
+            patch(
+                "src.lambdas.ingestion.handler.FinnhubAdapter",
+                return_value=mock_finnhub,
+            ),
+            patch(
+                "src.lambdas.ingestion.handler.put_item_if_not_exists",
+                return_value=True,
+            ),
+            patch(
+                "src.lambdas.ingestion.handler._get_sns_client",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "src.lambdas.ingestion.handler.emit_metrics_batch",
+            ),
         ):
             response = lambda_handler({"source": "test"}, mock_context)
 
@@ -731,22 +741,29 @@ class TestLambdaHandler:
         mock_finnhub.get_news.return_value = []
         mock_finnhub.close = MagicMock()
 
-        with patch(
-            "src.lambdas.ingestion.handler.get_api_key",
-            return_value="test-key",
-        ), patch(
-            "src.lambdas.ingestion.handler.TiingoAdapter",
-            return_value=mock_tiingo,
-        ), patch(
-            "src.lambdas.ingestion.handler.FinnhubAdapter",
-            return_value=mock_finnhub,
-        ), patch(
-            "src.lambdas.ingestion.handler._get_sns_client",
-            return_value=MagicMock(),
-        ), patch(
-            "src.lambdas.ingestion.handler.emit_metrics_batch",
-        ), patch(
-            "src.lambdas.ingestion.handler.emit_metric",
+        with (
+            patch(
+                "src.lambdas.ingestion.handler.get_api_key",
+                return_value="test-key",
+            ),
+            patch(
+                "src.lambdas.ingestion.handler.TiingoAdapter",
+                return_value=mock_tiingo,
+            ),
+            patch(
+                "src.lambdas.ingestion.handler.FinnhubAdapter",
+                return_value=mock_finnhub,
+            ),
+            patch(
+                "src.lambdas.ingestion.handler._get_sns_client",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "src.lambdas.ingestion.handler.emit_metrics_batch",
+            ),
+            patch(
+                "src.lambdas.ingestion.handler.emit_metric",
+            ),
         ):
             response = lambda_handler({"source": "test"}, mock_context)
 

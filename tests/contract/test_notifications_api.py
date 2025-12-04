@@ -132,9 +132,9 @@ class MockNotificationAPI:
             "alert_type": alert_type,
             "triggered_value": triggered_value,
             "threshold_value": threshold_value,
-            "threshold_direction": "below"
-            if triggered_value < threshold_value
-            else "above",
+            "threshold_direction": (
+                "below" if triggered_value < threshold_value else "above"
+            ),
             "subject": f"Alert: {ticker} {alert_type.replace('_', ' ')} threshold crossed",
             "body_preview": f"The {alert_type.replace('_', ' ')} for {ticker} has changed...",
             "sent_at": now,

@@ -228,9 +228,11 @@ class QuotaTracker(BaseModel):
                 limit=data.get("limit", defaults["limit"]),
                 used=data.get("used", 0),
                 remaining=data.get("remaining", defaults["limit"]),
-                reset_at=datetime.fromisoformat(data["reset_at"])
-                if data.get("reset_at")
-                else datetime.utcnow(),
+                reset_at=(
+                    datetime.fromisoformat(data["reset_at"])
+                    if data.get("reset_at")
+                    else datetime.utcnow()
+                ),
                 warn_threshold=float(data.get("warn_threshold", 0.5)),
                 critical_threshold=float(data.get("critical_threshold", 0.8)),
             )

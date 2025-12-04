@@ -64,7 +64,9 @@ class IngestionConfig:
     sns_topic_arn: str
     newsapi_secret_arn: str
     model_version: str
-    aws_region: str  # No default - must be provided via CLOUD_REGION or AWS_REGION env var
+    aws_region: (
+        str  # No default - must be provided via CLOUD_REGION or AWS_REGION env var
+    )
 
     def __post_init__(self):
         """Validate configuration after initialization."""

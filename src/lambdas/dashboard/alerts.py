@@ -580,9 +580,11 @@ def _alert_to_response(alert: AlertRule) -> AlertResponse:
         threshold_value=alert.threshold_value,
         threshold_direction=alert.threshold_direction,
         is_enabled=alert.is_enabled,
-        last_triggered_at=alert.last_triggered_at.strftime("%Y-%m-%dT%H:%M:%SZ")
-        if alert.last_triggered_at
-        else None,
+        last_triggered_at=(
+            alert.last_triggered_at.strftime("%Y-%m-%dT%H:%M:%SZ")
+            if alert.last_triggered_at
+            else None
+        ),
         trigger_count=alert.trigger_count,
         created_at=alert.created_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
     )

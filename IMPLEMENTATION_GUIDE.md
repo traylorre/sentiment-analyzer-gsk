@@ -696,4 +696,3 @@ resource "aws_lambda_provisioned_concurrent_executions" "sentiment" {
 # Use quantized DistilBERT for 20% faster inference
 # Intel optimized: distilbert-base-uncased-finetuned-sst-2-english-int8-static-inc
 ```
-

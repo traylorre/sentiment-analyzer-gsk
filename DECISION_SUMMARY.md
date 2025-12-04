@@ -188,4 +188,3 @@ Refer to:
 - **Executive summary:** `/RECOMMENDATION.md` (5KB, high-level rationale)
 - **Implementation:** `/IMPLEMENTATION_GUIDE.md` (18KB, code + deployment)
 - **This document:** `/DECISION_SUMMARY.md` (quick reference)
-

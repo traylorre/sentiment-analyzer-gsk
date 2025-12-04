@@ -72,11 +72,11 @@ if aws dynamodb describe-table --table-name "${TABLE_NAME}" > /dev/null 2>&1; th
         --query 'Table.TableStatus' --output text)
     ITEM_COUNT=$(aws dynamodb scan --table-name "${TABLE_NAME}" \
         --select "COUNT" --query 'Count' --output text 2>/dev/null || echo "0")
-    
+
     if [[ "${TABLE_STATUS}" == "ACTIVE" ]]; then
         log_pass "Table status: ${TABLE_STATUS}"
         log_info "Item count: ${ITEM_COUNT}"
-        
+
         if [[ "${ITEM_COUNT}" -eq 0 ]]; then
             log_warn "No items in table - run demo-setup.sh first"
         fi
@@ -84,7 +84,7 @@ if aws dynamodb describe-table --table-name "${TABLE_NAME}" > /dev/null 2>&1; th
         log_fail "Table status: ${TABLE_STATUS}"
         ((FAILURES++))
     fi
-    
+
     # Check GSIs
     for gsi in "by_sentiment" "by_tag" "by_status"; do
         GSI_STATUS=$(aws dynamodb describe-table --table-name "${TABLE_NAME}" \
@@ -112,7 +112,7 @@ DASHBOARD_URL=$(aws lambda get-function-url-config \
 
 if [[ -n "${DASHBOARD_URL}" ]]; then
     log_pass "Function URL: ${DASHBOARD_URL}"
-    
+
     # Health check
     HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
         --max-time 10 "${DASHBOARD_URL}health" 2>/dev/null || echo "000")
@@ -122,7 +122,7 @@ if [[ -n "${DASHBOARD_URL}" ]]; then
         log_fail "Health check: HTTP ${HTTP_CODE}"
         ((FAILURES++))
     fi
-    
+
     # Main page
     HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
         --max-time 10 "${DASHBOARD_URL}" 2>/dev/null || echo "000")
@@ -161,7 +161,7 @@ TOPIC_ARN=$(aws sns list-topics --query "Topics[?contains(TopicArn, '${TOPIC_NAM
     --output text 2>/dev/null || echo "")
 if [[ -n "${TOPIC_ARN}" ]]; then
     log_pass "SNS Topic: ${TOPIC_ARN}"
-    
+
     # Check subscriptions
     SUB_COUNT=$(aws sns list-subscriptions-by-topic --topic-arn "${TOPIC_ARN}" \
         --query 'length(Subscriptions)' --output text 2>/dev/null || echo "0")

@@ -4,7 +4,6 @@ Tests the EventBuffer and stream generator's support for
 reconnection resumption per FR-007.
 """
 
-
 from src.lambdas.sse_streaming.models import HeartbeatData, MetricsEventData, SSEEvent
 from src.lambdas.sse_streaming.stream import EventBuffer
 

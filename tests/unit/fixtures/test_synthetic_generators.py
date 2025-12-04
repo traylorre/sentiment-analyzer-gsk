@@ -1,6 +1,5 @@
 """Unit tests for synthetic data generators."""
 
-
 import pytest
 
 from tests.fixtures.mocks.mock_finnhub import create_mock_finnhub

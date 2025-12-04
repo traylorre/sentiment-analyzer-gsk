@@ -87,7 +87,7 @@ echo "=== S3 Bucket ==="
 BUCKET_NAME="${ENVIRONMENT}-sentiment-lambda-deployments"
 if aws s3api head-bucket --bucket "${BUCKET_NAME}" 2>/dev/null; then
     log_pass "Deployment bucket exists: ${BUCKET_NAME}"
-    
+
     # Check versioning
     VERSIONING=$(aws s3api get-bucket-versioning --bucket "${BUCKET_NAME}" \
         --query 'Status' --output text 2>/dev/null || echo "Disabled")
@@ -111,7 +111,7 @@ TERRAFORM_DIR="${SCRIPT_DIR}/../terraform"
 
 if [[ -d "${TERRAFORM_DIR}" ]]; then
     cd "${TERRAFORM_DIR}"
-    
+
     # Check if initialized
     if [[ -d ".terraform" ]]; then
         log_pass "Terraform initialized"
@@ -119,7 +119,7 @@ if [[ -d "${TERRAFORM_DIR}" ]]; then
         log_warn "Terraform not initialized - run 'terraform init'"
         ((WARNINGS++))
     fi
-    
+
     # Check workspace
     CURRENT_WORKSPACE=$(terraform workspace show 2>/dev/null || echo "default")
     if [[ "${CURRENT_WORKSPACE}" == "${ENVIRONMENT}" ]]; then
@@ -158,7 +158,7 @@ echo "=== Python Environment ==="
 if command -v python3 &> /dev/null; then
     PYTHON_VERSION=$(python3 --version 2>&1)
     log_pass "Python: ${PYTHON_VERSION}"
-    
+
     # Check for required packages
     REQUIRED_PACKAGES=("boto3" "pytest" "moto")
     for pkg in "${REQUIRED_PACKAGES[@]}"; do
@@ -179,7 +179,7 @@ echo ""
 if [[ "${ENVIRONMENT}" == "prod" ]]; then
     echo "=== Git Status ==="
     cd "${SCRIPT_DIR}/../.."
-    
+
     # Check for uncommitted changes
     if git diff-index --quiet HEAD -- 2>/dev/null; then
         log_pass "No uncommitted changes"
@@ -188,7 +188,7 @@ if [[ "${ENVIRONMENT}" == "prod" ]]; then
         log_error "  Commit or stash changes before deploying to production"
         ((FAILURES++))
     fi
-    
+
     # Check branch
     BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
     if [[ "${BRANCH}" == "main" || "${BRANCH}" == "master" ]]; then

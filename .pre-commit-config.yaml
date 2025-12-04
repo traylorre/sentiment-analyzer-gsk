@@ -88,6 +88,12 @@ repos:
             \.secrets\.baseline
           )$
 
+  # Gitleaks - additional secret detection with broader patterns
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.0
+    hooks:
+      - id: gitleaks
+
   # Local hooks for project-specific checks
   - repo: local
     hooks:

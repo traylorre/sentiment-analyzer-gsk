@@ -71,12 +71,12 @@ if [[ "${ITEM_COUNT}" -gt 0 ]]; then
     echo "${ITEMS}" | jq -c '.Items[]' | while read -r item; do
         source_id=$(echo "${item}" | jq -r '.source_id.S')
         timestamp=$(echo "${item}" | jq -r '.timestamp.S')
-        
+
         aws dynamodb delete-item \
             --table-name "${TABLE_NAME}" \
             --key "{\"source_id\": {\"S\": \"${source_id}\"}, \"timestamp\": {\"S\": \"${timestamp}\"}}" \
             > /dev/null 2>&1
-        
+
         echo -n "."
     done
     echo ""

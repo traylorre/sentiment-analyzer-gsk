@@ -286,9 +286,11 @@ class TestSentimentAggregation:
         finnhub_score = SourceSentimentScore(
             source=SentimentSource.FINNHUB,
             score=finnhub_sentiment.sentiment_score,
-            label=SentimentLabel.POSITIVE
-            if finnhub_sentiment.sentiment_score > 0.2
-            else SentimentLabel.NEUTRAL,
+            label=(
+                SentimentLabel.POSITIVE
+                if finnhub_sentiment.sentiment_score > 0.2
+                else SentimentLabel.NEUTRAL
+            ),
             confidence=0.9,
             timestamp=now,
         )
@@ -510,9 +512,11 @@ class TestFullPipelineWithSyntheticData:
             ExpressionAttributeValues={
                 ":analyzed": "analyzed",
                 ":score": Decimal(str(round(avg_sentiment, 4))),
-                ":label": "positive"
-                if avg_sentiment > 0.2
-                else ("negative" if avg_sentiment < -0.2 else "neutral"),
+                ":label": (
+                    "positive"
+                    if avg_sentiment > 0.2
+                    else ("negative" if avg_sentiment < -0.2 else "neutral")
+                ),
                 ":at": datetime.now(UTC).isoformat(),
                 ":gsi1pk": "STATUS#analyzed",
             },
