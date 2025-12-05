@@ -368,6 +368,7 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
   # CloudWatch Alarms and Dashboards
   # SECURITY: Scoped to {env}-sentiment-* alarms (FR-008)
   # Note: CloudWatch alarms don't support resource-level ARNs for all actions
+  # TEMPORARY: Also allow preprod-* and prod-* for legacy alarm migration
   statement {
     sid    = "CloudWatch"
     effect = "Allow"
@@ -388,7 +389,9 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
     ]
     resources = [
       "arn:aws:cloudwatch:*:*:alarm:*-sentiment-*",
-      "arn:aws:cloudwatch::*:dashboard/*-sentiment-*"
+      "arn:aws:cloudwatch::*:dashboard/*-sentiment-*",
+      "arn:aws:cloudwatch:*:*:alarm:preprod-*",
+      "arn:aws:cloudwatch:*:*:alarm:prod-*"
     ]
   }
 
@@ -400,6 +403,18 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
       "cloudwatch:ListMetrics",
       "cloudwatch:GetMetricStatistics",
       "cloudwatch:DescribeAlarms"
+    ]
+    resources = ["*"]
+  }
+
+  # CloudWatch Logs - DescribeLogGroups/DescribeMetricFilters require wildcard for resource enumeration
+  # This is needed for Terraform to refresh state on log groups and metric filters
+  statement {
+    sid    = "CloudWatchLogsDescribe"
+    effect = "Allow"
+    actions = [
+      "logs:DescribeLogGroups",
+      "logs:DescribeMetricFilters"
     ]
     resources = ["*"]
   }
@@ -450,13 +465,15 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
     }
   }
 
-  # Cognito User Pools - List operations (require wildcard)
+  # Cognito User Pools - List/Describe operations (require wildcard)
+  # Note: GetUserPoolMfaConfig requires unconditional access for Terraform refresh
   statement {
     sid    = "CognitoIDPList"
     effect = "Allow"
     actions = [
       "cognito-idp:ListUserPools",
-      "cognito-idp:DescribeUserPool"
+      "cognito-idp:DescribeUserPool",
+      "cognito-idp:GetUserPoolMfaConfig"
     ]
     resources = ["*"]
   }
@@ -933,12 +950,15 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
     ]
   }
 
-  # Budgets List operations - require wildcard
+  # Budgets List/View operations - require wildcard
+  # ViewBudget and DescribeBudget may need wildcard for Terraform state refresh
   statement {
     sid    = "BudgetsList"
     effect = "Allow"
     actions = [
-      "budgets:DescribeBudgets"
+      "budgets:DescribeBudgets",
+      "budgets:ViewBudget",
+      "budgets:DescribeBudget"
     ]
     resources = ["*"]
   }
