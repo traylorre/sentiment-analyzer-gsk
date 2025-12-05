@@ -283,6 +283,17 @@
             ]
         },
         {
+            "Sid": "DenyInsecureTransport",
+            "Effect": "Deny",
+            "Action": "sqs:*",
+            "Resource": "arn:aws:sqs:*:*:*-sentiment-*",
+            "Condition": {
+                "Bool": {
+                    "aws:SecureTransport": "false"
+                }
+            }
+        },
+        {
             "Sid": "DenyPreprodResources",
             "Effect": "Deny",
             "Action": [
