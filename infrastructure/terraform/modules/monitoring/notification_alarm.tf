@@ -15,7 +15,7 @@
 # =============================================================================
 
 resource "aws_cloudwatch_metric_alarm" "notification_delivery_rate" {
-  alarm_name          = "${var.environment}-notification-delivery-low"
+  alarm_name          = "${var.environment}-sentiment-notification-delivery-low"
   comparison_operator = "LessThanThreshold"
   evaluation_periods  = 3
   threshold           = 95 # 95% success rate
@@ -65,7 +65,7 @@ resource "aws_cloudwatch_metric_alarm" "notification_delivery_rate" {
 # =============================================================================
 
 resource "aws_cloudwatch_metric_alarm" "alert_trigger_rate_high" {
-  alarm_name          = "${var.environment}-alert-triggers-high"
+  alarm_name          = "${var.environment}-sentiment-alert-triggers-high"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
   metric_name         = "AlertsTriggered"
@@ -90,7 +90,7 @@ resource "aws_cloudwatch_metric_alarm" "alert_trigger_rate_high" {
 # =============================================================================
 
 resource "aws_cloudwatch_metric_alarm" "notification_lambda_errors" {
-  alarm_name          = "${var.environment}-notification-lambda-errors"
+  alarm_name          = "${var.environment}-sentiment-notification-lambda-errors"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
   metric_name         = "Errors"

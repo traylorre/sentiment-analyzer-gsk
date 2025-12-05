@@ -1,0 +1,66 @@
+# IAM Allowlist for Sentiment Analyzer GSK
+# Follows 034-allowlist-architecture pattern from template methodology
+#
+# Classification:
+#   - runtime: Active exemption, synced to validators
+#   - documentation: Reference only, not synced to runtime validators
+#
+# Context requirements can make exemptions conditional on policy context
+
+version: "1.0"
+last_updated: "2025-12-05"
+
+patterns:
+  # CI/CD Lambda deployment - requires CreateFunction + PassRole
+  # PassRole is scoped to specific role patterns, mitigating privilege escalation
+  - id: lambda-cicd-deployment
+    pattern: "lambda:CreateFunction.*iam:PassRole"
+    classification: runtime
+    finding_ids:
+      - LAMBDA-007
+    justification: >
+      CI/CD pipelines legitimately require lambda:CreateFunction + iam:PassRole for Lambda deployments.
+      Privilege escalation risk is mitigated by PassRole resource constraint limited to:
+      *-lambda-role, *-fis-execution-role, *-backup-role, *-cognito-*, *-rum-*.
+      This follows AWS CI/CD best practices for automated deployments.
+    canonical_source: "https://docs.aws.amazon.com/prescriptive-guidance/latest/strategy-cicd-litmus/cicd-best-practices.html"
+    context_required:
+      passrole_scoped: true
+
+  # CI/CD Event Source Mapping - requires CreateEventSourceMapping + PassRole
+  - id: lambda-event-source-mapping
+    pattern: "lambda:CreateEventSourceMapping.*iam:PassRole"
+    classification: runtime
+    finding_ids:
+      - LAMBDA-011
+    justification: >
+      Event-driven architectures require lambda:CreateEventSourceMapping + iam:PassRole for
+      connecting Lambda functions to SQS/DynamoDB/Kinesis triggers. PassRole scope is restricted
+      to predefined role patterns, limiting the escalation surface.
+    canonical_source: "https://docs.aws.amazon.com/lambda/latest/dg/access-control-resource-based.html"
+    context_required:
+      passrole_scoped: true
+
+  # Preprod sqs:DeleteQueue - required for terraform destroy testing
+  - id: preprod-sqs-delete
+    pattern: "sqs:DeleteQueue"
+    classification: runtime
+    finding_ids:
+      - SQS-009
+    justification: >
+      Preprod CI deployer requires sqs:DeleteQueue for terraform destroy operations during
+      infrastructure testing. Per AWS CI/CD and OWASP best practices, preprod environments
+      have broader permissions for testing while prod has restrictive permissions.
+      Prod CI deployer does NOT have this permission - prod destroy requires break-glass.
+    canonical_source: "https://cheatsheetseries.owasp.org/cheatsheets/CI_CD_Security_Cheat_Sheet.html"
+    context_required:
+      environment: preprod
+
+paths:
+  # Test fixtures may contain intentional policy violations
+  - pattern: "tests/fixtures/.*"
+    justification: "Test fixtures may contain intentional policy violations for testing"
+
+  # Terraform provider cache
+  - pattern: "\\.terraform/.*"
+    justification: "Terraform provider cache - auto-generated, not user code"

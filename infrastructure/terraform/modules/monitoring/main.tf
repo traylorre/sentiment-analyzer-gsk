@@ -28,7 +28,7 @@ resource "aws_sns_topic_subscription" "alarm_email" {
 # Alarm: Lambda ImportModuleError (critical packaging issue)
 # Catches binary incompatibility issues like pydantic ImportModuleError
 resource "aws_cloudwatch_log_metric_filter" "dashboard_import_errors" {
-  name           = "${var.environment}-dashboard-import-errors"
+  name           = "${var.environment}-sentiment-dashboard-import-errors"
   log_group_name = "/aws/lambda/${var.environment}-sentiment-dashboard"
   pattern        = "[time, request_id, level=ERROR*, msg=\"*ImportModuleError*\" || msg=\"*No module named*\" || msg=\"*cannot import name*\"]"
 
@@ -41,7 +41,7 @@ resource "aws_cloudwatch_log_metric_filter" "dashboard_import_errors" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "dashboard_import_errors" {
-  alarm_name          = "${var.environment}-dashboard-import-errors"
+  alarm_name          = "${var.environment}-sentiment-dashboard-import-errors"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
   metric_name         = "DashboardImportErrors"
@@ -62,7 +62,7 @@ resource "aws_cloudwatch_metric_alarm" "dashboard_import_errors" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "ingestion_errors" {
-  alarm_name          = "${var.environment}-lambda-ingestion-errors"
+  alarm_name          = "${var.environment}-sentiment-lambda-ingestion-errors"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
   metric_name         = "Errors"
@@ -88,7 +88,7 @@ resource "aws_cloudwatch_metric_alarm" "ingestion_errors" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "analysis_errors" {
-  alarm_name          = "${var.environment}-lambda-analysis-errors"
+  alarm_name          = "${var.environment}-sentiment-lambda-analysis-errors"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
   metric_name         = "Errors"
@@ -114,7 +114,7 @@ resource "aws_cloudwatch_metric_alarm" "analysis_errors" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "dashboard_errors" {
-  alarm_name          = "${var.environment}-lambda-dashboard-errors"
+  alarm_name          = "${var.environment}-sentiment-lambda-dashboard-errors"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
   metric_name         = "Errors"
@@ -144,7 +144,7 @@ resource "aws_cloudwatch_metric_alarm" "dashboard_errors" {
 # =============================================================================
 
 resource "aws_cloudwatch_metric_alarm" "analysis_latency" {
-  alarm_name          = "${var.environment}-analysis-latency-high"
+  alarm_name          = "${var.environment}-sentiment-analysis-latency-high"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 3
   metric_name         = "Duration"
@@ -170,7 +170,7 @@ resource "aws_cloudwatch_metric_alarm" "analysis_latency" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "dashboard_latency" {
-  alarm_name          = "${var.environment}-dashboard-latency-high"
+  alarm_name          = "${var.environment}-sentiment-dashboard-latency-high"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 3
   metric_name         = "Duration"
@@ -200,7 +200,7 @@ resource "aws_cloudwatch_metric_alarm" "dashboard_latency" {
 # =============================================================================
 
 resource "aws_cloudwatch_metric_alarm" "sns_delivery_failures" {
-  alarm_name          = "${var.environment}-sns-delivery-failures"
+  alarm_name          = "${var.environment}-sentiment-sns-delivery-failures"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
   metric_name         = "NumberOfNotificationsFailed"
@@ -233,7 +233,7 @@ resource "aws_cloudwatch_metric_alarm" "sns_delivery_failures" {
 # See api_alarms.tf for tiingo_error_rate and finnhub_error_rate alarms
 
 resource "aws_cloudwatch_metric_alarm" "no_new_items" {
-  alarm_name          = "${var.environment}-no-new-items-1h"
+  alarm_name          = "${var.environment}-sentiment-no-new-items-1h"
   comparison_operator = "LessThanOrEqualToThreshold"
   evaluation_periods  = 6 # 6 x 10 min = 1 hour
   metric_name         = "NewItemsIngested"
@@ -259,7 +259,7 @@ resource "aws_cloudwatch_metric_alarm" "no_new_items" {
 # =============================================================================
 
 resource "aws_cloudwatch_metric_alarm" "dlq_depth" {
-  alarm_name          = "${var.environment}-dlq-depth-exceeded"
+  alarm_name          = "${var.environment}-sentiment-dlq-depth-exceeded"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
   metric_name         = "ApproximateNumberOfMessagesVisible"
@@ -393,7 +393,7 @@ resource "aws_budgets_budget" "monthly" {
 
 # Alarm: High DynamoDB read capacity (primary cost driver in attacks)
 resource "aws_cloudwatch_metric_alarm" "dynamodb_high_reads" {
-  alarm_name          = "${var.environment}-dynamodb-high-read-capacity"
+  alarm_name          = "${var.environment}-sentiment-dynamodb-high-read-capacity"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
   metric_name         = "ConsumedReadCapacityUnits"
@@ -427,7 +427,7 @@ resource "aws_cloudwatch_metric_alarm" "dynamodb_high_reads" {
 # =============================================================================
 
 resource "aws_cloudwatch_metric_alarm" "sendgrid_quota_warning" {
-  alarm_name          = "${var.environment}-sendgrid-quota-50-percent"
+  alarm_name          = "${var.environment}-sentiment-sendgrid-quota-50-percent"
   comparison_operator = "GreaterThanOrEqualToThreshold"
   evaluation_periods  = 1
   metric_name         = "EmailQuotaUsed"
@@ -449,7 +449,7 @@ resource "aws_cloudwatch_metric_alarm" "sendgrid_quota_warning" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "sendgrid_quota_critical" {
-  alarm_name          = "${var.environment}-sendgrid-quota-80-percent"
+  alarm_name          = "${var.environment}-sentiment-sendgrid-quota-80-percent"
   comparison_operator = "GreaterThanOrEqualToThreshold"
   evaluation_periods  = 1
   metric_name         = "EmailQuotaUsed"

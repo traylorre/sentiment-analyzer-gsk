@@ -1,9 +1,14 @@
 # SNS Topic for Analysis Triggers
 
 # Dead Letter Queue for failed Lambda invocations
+# FR-011: Enable SSE-SQS encryption per AWS Security Hub SQS.1
 resource "aws_sqs_queue" "dlq" {
   name                      = "${var.environment}-sentiment-analysis-dlq"
   message_retention_seconds = 1209600 # 14 days
+
+  # Enable Server-Side Encryption with SQS-managed key (SSE-SQS)
+  # Per AWS SQS Security Best Practices: https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-security-best-practices.html
+  sqs_managed_sse_enabled = true
 
   tags = {
     Name        = "${var.environment}-analysis-dlq"

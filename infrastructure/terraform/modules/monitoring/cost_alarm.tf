@@ -20,7 +20,7 @@
 
 # DynamoDB cost proxy - high read/write = high cost
 resource "aws_cloudwatch_metric_alarm" "dynamodb_daily_cost_proxy" {
-  alarm_name          = "${var.environment}-dynamodb-daily-cost-high"
+  alarm_name          = "${var.environment}-sentiment-dynamodb-daily-cost-high"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
   threshold           = 100000 # ~100K RCU/day = ~$1-2/day
@@ -60,7 +60,7 @@ resource "aws_cloudwatch_metric_alarm" "dynamodb_daily_cost_proxy" {
 
 # Lambda cost proxy - high invocations = higher cost
 resource "aws_cloudwatch_metric_alarm" "lambda_daily_invocations" {
-  alarm_name          = "${var.environment}-lambda-daily-invocations-high"
+  alarm_name          = "${var.environment}-sentiment-lambda-daily-invocations-high"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
   threshold           = 50000 # 50K invocations/day
@@ -139,7 +139,7 @@ resource "aws_cloudwatch_metric_alarm" "lambda_daily_invocations" {
 
 # SNS cost proxy - message volume
 resource "aws_cloudwatch_metric_alarm" "sns_daily_messages" {
-  alarm_name          = "${var.environment}-sns-daily-messages-high"
+  alarm_name          = "${var.environment}-sentiment-sns-daily-messages-high"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
   metric_name         = "NumberOfMessagesPublished"
