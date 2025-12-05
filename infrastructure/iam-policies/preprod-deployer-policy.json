@@ -193,6 +193,9 @@
         "logs:DeleteLogGroup",
         "logs:DescribeLogGroups",
         "logs:DescribeLogStreams",
+        "logs:DescribeMetricFilters",
+        "logs:PutMetricFilter",
+        "logs:DeleteMetricFilter",
         "logs:PutRetentionPolicy",
         "logs:DeleteRetentionPolicy",
         "logs:TagLogGroup",
@@ -231,6 +234,42 @@
       "Resource": [
         "arn:aws:s3:::sentiment-analyzer-tfstate-*",
         "arn:aws:s3:::sentiment-analyzer-tfstate-*/preprod/*"
+      ]
+    },
+    {
+      "Sid": "CognitoPreprodResources",
+      "Effect": "Allow",
+      "Action": [
+        "cognito-idp:DescribeUserPool",
+        "cognito-idp:GetUserPoolMfaConfig",
+        "cognito-idp:SetUserPoolMfaConfig",
+        "cognito-idp:CreateUserPool",
+        "cognito-idp:DeleteUserPool",
+        "cognito-idp:UpdateUserPool",
+        "cognito-idp:CreateUserPoolClient",
+        "cognito-idp:DeleteUserPoolClient",
+        "cognito-idp:UpdateUserPoolClient",
+        "cognito-idp:DescribeUserPoolClient",
+        "cognito-idp:ListUserPoolClients",
+        "cognito-idp:TagResource",
+        "cognito-idp:UntagResource"
+      ],
+      "Resource": [
+        "arn:aws:cognito-idp:*:*:userpool/*"
+      ]
+    },
+    {
+      "Sid": "BudgetsPreprodResources",
+      "Effect": "Allow",
+      "Action": [
+        "budgets:ViewBudget",
+        "budgets:DescribeBudget",
+        "budgets:CreateBudget",
+        "budgets:ModifyBudget",
+        "budgets:DeleteBudget"
+      ],
+      "Resource": [
+        "arn:aws:budgets::*:budget/preprod-*"
       ]
     },
     {

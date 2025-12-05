@@ -173,7 +173,7 @@ resource "aws_iam_role_policy_attachment" "backup" {
 
 # CloudWatch alarms for DynamoDB
 resource "aws_cloudwatch_metric_alarm" "user_errors" {
-  alarm_name          = "${var.environment}-dynamodb-user-errors"
+  alarm_name          = "${var.environment}-sentiment-dynamodb-user-errors"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
   metric_name         = "UserErrors"
@@ -195,7 +195,7 @@ resource "aws_cloudwatch_metric_alarm" "user_errors" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "system_errors" {
-  alarm_name          = "${var.environment}-dynamodb-system-errors"
+  alarm_name          = "${var.environment}-sentiment-dynamodb-system-errors"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
   metric_name         = "SystemErrors"
@@ -217,7 +217,7 @@ resource "aws_cloudwatch_metric_alarm" "system_errors" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "write_throttles" {
-  alarm_name          = "${var.environment}-dynamodb-write-throttles"
+  alarm_name          = "${var.environment}-sentiment-dynamodb-write-throttles"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
   metric_name         = "ConsumedWriteCapacityUnits"

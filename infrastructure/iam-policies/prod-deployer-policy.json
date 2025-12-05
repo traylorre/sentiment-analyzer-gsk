@@ -179,6 +179,9 @@
         "logs:CreateLogGroup",
         "logs:DescribeLogGroups",
         "logs:DescribeLogStreams",
+        "logs:DescribeMetricFilters",
+        "logs:PutMetricFilter",
+        "logs:DeleteMetricFilter",
         "logs:PutRetentionPolicy",
         "logs:TagLogGroup",
         "logs:UntagLogGroup",
@@ -214,6 +217,39 @@
       "Resource": [
         "arn:aws:s3:::sentiment-analyzer-tfstate-*",
         "arn:aws:s3:::sentiment-analyzer-tfstate-*/prod/*"
+      ]
+    },
+    {
+      "Sid": "CognitoProdResources",
+      "Effect": "Allow",
+      "Action": [
+        "cognito-idp:DescribeUserPool",
+        "cognito-idp:GetUserPoolMfaConfig",
+        "cognito-idp:SetUserPoolMfaConfig",
+        "cognito-idp:CreateUserPool",
+        "cognito-idp:UpdateUserPool",
+        "cognito-idp:CreateUserPoolClient",
+        "cognito-idp:UpdateUserPoolClient",
+        "cognito-idp:DescribeUserPoolClient",
+        "cognito-idp:ListUserPoolClients",
+        "cognito-idp:TagResource",
+        "cognito-idp:UntagResource"
+      ],
+      "Resource": [
+        "arn:aws:cognito-idp:*:*:userpool/*"
+      ]
+    },
+    {
+      "Sid": "BudgetsProdResources",
+      "Effect": "Allow",
+      "Action": [
+        "budgets:ViewBudget",
+        "budgets:DescribeBudget",
+        "budgets:CreateBudget",
+        "budgets:ModifyBudget"
+      ],
+      "Resource": [
+        "arn:aws:budgets::*:budget/prod-*"
       ]
     },
     {
