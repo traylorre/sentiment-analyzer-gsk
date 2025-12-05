@@ -15,7 +15,7 @@
 # =============================================================================
 
 resource "aws_cloudwatch_metric_alarm" "tiingo_error_rate" {
-  alarm_name          = "${var.environment}-tiingo-error-rate-high"
+  alarm_name          = "${var.environment}-sentiment-tiingo-error-rate-high"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 3
   threshold           = 5 # 5% error rate
@@ -66,7 +66,7 @@ resource "aws_cloudwatch_metric_alarm" "tiingo_error_rate" {
 # =============================================================================
 
 resource "aws_cloudwatch_metric_alarm" "finnhub_error_rate" {
-  alarm_name          = "${var.environment}-finnhub-error-rate-high"
+  alarm_name          = "${var.environment}-sentiment-finnhub-error-rate-high"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 3
   threshold           = 5 # 5% error rate
@@ -117,7 +117,7 @@ resource "aws_cloudwatch_metric_alarm" "finnhub_error_rate" {
 # =============================================================================
 
 resource "aws_cloudwatch_metric_alarm" "circuit_breaker_open" {
-  alarm_name          = "${var.environment}-circuit-breaker-open"
+  alarm_name          = "${var.environment}-sentiment-circuit-breaker-open"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
   metric_name         = "CircuitBreakerOpen"
