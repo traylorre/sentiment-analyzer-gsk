@@ -41,20 +41,22 @@ patterns:
     context_required:
       passrole_scoped: true
 
-  # Preprod sqs:DeleteQueue - required for terraform destroy testing
-  - id: preprod-sqs-delete
+  # Dev/Preprod sqs:DeleteQueue - required for terraform destroy testing
+  - id: dev-preprod-sqs-delete
     pattern: "sqs:DeleteQueue"
     classification: runtime
     finding_ids:
       - SQS-009
     justification: >
-      Preprod CI deployer requires sqs:DeleteQueue for terraform destroy operations during
-      infrastructure testing. Per AWS CI/CD and OWASP best practices, preprod environments
-      have broader permissions for testing while prod has restrictive permissions.
+      Dev and preprod CI deployers require sqs:DeleteQueue for terraform destroy operations
+      during infrastructure testing. Per AWS CI/CD and OWASP best practices, non-prod
+      environments have broader permissions for testing while prod has restrictive permissions.
       Prod CI deployer does NOT have this permission - prod destroy requires break-glass.
     canonical_source: "https://cheatsheetseries.owasp.org/cheatsheets/CI_CD_Security_Cheat_Sheet.html"
     context_required:
-      environment: preprod
+      environment:
+        - dev
+        - preprod
 
 paths:
   # Test fixtures may contain intentional policy violations
