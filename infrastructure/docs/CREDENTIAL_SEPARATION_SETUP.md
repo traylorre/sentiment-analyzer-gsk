@@ -117,8 +117,8 @@ Create file: `preprod-deployer-policy.json`
         "s3:ListBucket"
       ],
       "Resource": [
-        "arn:aws:s3:::sentiment-analyzer-tfstate-*",
-        "arn:aws:s3:::sentiment-analyzer-tfstate-*/preprod/*"
+        "arn:aws:s3:::sentiment-analyzer-terraform-state-*",
+        "arn:aws:s3:::sentiment-analyzer-terraform-state-*/preprod/*"
       ]
     },
     {
@@ -206,8 +206,8 @@ Create file: `prod-deployer-policy.json`
         "s3:ListBucket"
       ],
       "Resource": [
-        "arn:aws:s3:::sentiment-analyzer-tfstate-*",
-        "arn:aws:s3:::sentiment-analyzer-tfstate-*/prod/*"
+        "arn:aws:s3:::sentiment-analyzer-terraform-state-*",
+        "arn:aws:s3:::sentiment-analyzer-terraform-state-*/prod/*"
       ]
     },
     {
