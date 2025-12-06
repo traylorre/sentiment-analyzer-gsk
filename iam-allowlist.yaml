@@ -58,6 +58,21 @@ patterns:
         - dev
         - preprod
 
+  # CI User Policy sqs:DeleteQueue - CI/CD policies manage multiple environments
+  - id: ci-user-sqs-delete
+    pattern: "sqs:DeleteQueue"
+    classification: runtime
+    finding_ids:
+      - SQS-009
+    justification: >
+      CI/CD user policies (ci-user-policy.tf) require sqs:DeleteQueue for terraform destroy
+      operations across dev and preprod environments. The permission is scoped to *-sentiment-*
+      queue patterns, preventing accidental deletion of production queues.
+      Prod destroy requires separate break-glass access.
+    canonical_source: "https://cheatsheetseries.owasp.org/cheatsheets/CI_CD_Security_Cheat_Sheet.html"
+    context_required:
+      ci_policy: true
+
 paths:
   # Test fixtures may contain intentional policy violations
   - pattern: "tests/fixtures/.*"
