@@ -71,6 +71,35 @@ resource "aws_kms_key" "main" {
           "kms:DescribeKey"
         ]
         Resource = "*"
+      },
+      # CI Deployer Key Administration (FR-002, FR-005)
+      # Required: AWS rejects key creation if creating principal cannot manage the key
+      {
+        Sid    = "CIDeployerKeyAdmin"
+        Effect = "Allow"
+        Principal = {
+          AWS = [
+            "arn:aws:iam::${data.aws_caller_identity.current.account_id}:user/sentiment-analyzer-preprod-deployer",
+            "arn:aws:iam::${data.aws_caller_identity.current.account_id}:user/sentiment-analyzer-prod-deployer"
+          ]
+        }
+        Action = [
+          "kms:Create*",
+          "kms:Describe*",
+          "kms:Enable*",
+          "kms:List*",
+          "kms:Put*",
+          "kms:Update*",
+          "kms:Revoke*",
+          "kms:Disable*",
+          "kms:Get*",
+          "kms:Delete*",
+          "kms:TagResource",
+          "kms:UntagResource",
+          "kms:ScheduleKeyDeletion",
+          "kms:CancelKeyDeletion"
+        ]
+        Resource = "*"
       }
     ]
   })
