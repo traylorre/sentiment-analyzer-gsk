@@ -100,6 +100,26 @@ resource "aws_kms_key" "main" {
           "kms:CancelKeyDeletion"
         ]
         Resource = "*"
+      },
+      # CI Deployer Encryption Operations
+      # Required for Secrets Manager UpdateSecret when secrets use KMS encryption
+      # Canonical Source: https://docs.aws.amazon.com/kms/latest/developerguide/services-secrets-manager.html
+      {
+        Sid    = "CIDeployerEncryption"
+        Effect = "Allow"
+        Principal = {
+          AWS = [
+            "arn:aws:iam::${data.aws_caller_identity.current.account_id}:user/sentiment-analyzer-preprod-deployer",
+            "arn:aws:iam::${data.aws_caller_identity.current.account_id}:user/sentiment-analyzer-prod-deployer"
+          ]
+        }
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:GenerateDataKey",
+          "kms:GenerateDataKeyWithoutPlaintext"
+        ]
+        Resource = "*"
       }
     ]
   })

@@ -1075,6 +1075,10 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
     ]
     resources = ["*"]
   }
+
+  # NOTE: KMS encryption operations (Encrypt, Decrypt, GenerateDataKey) are granted
+  # via KMS key policy in modules/kms/main.tf (CIDeployerEncryption statement).
+  # Key policies are authoritative and don't require IAM policy grants.
 }
 
 # ==================================================================
