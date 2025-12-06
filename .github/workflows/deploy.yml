@@ -453,7 +453,7 @@ jobs:
           AWS_REGION: us-east-1
           ENVIRONMENT: dev
           AWS_ACCESS_KEY_ID: testing
-          AWS_SECRET_ACCESS_KEY: testing
+          AWS_SECRET_ACCESS_KEY: testing  # pragma: allowlist secret - fake credential for moto mocks
           AWS_SECURITY_TOKEN: testing
           AWS_SESSION_TOKEN: testing
         run: |
@@ -504,11 +504,45 @@ jobs:
           echo "✅ Package validation complete"
 
   # ========================================================================
-  # JOB 3: Deploy to Preprod
+  # JOB 3: Build SSE Lambda Image (Preprod)
+  # ========================================================================
+  build-sse-image-preprod:
+    name: Build SSE Lambda Image (Preprod)
+    runs-on: ubuntu-latest
+    needs: [build, test]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Configure AWS Credentials (Preprod)
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and Push SSE Lambda Image
+        uses: docker/build-push-action@v6
+        with:
+          context: src/lambdas/sse_streaming
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/preprod-sse-streaming-lambda:latest
+            ${{ steps.login-ecr.outputs.registry }}/preprod-sse-streaming-lambda:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ========================================================================
+  # JOB 4: Deploy to Preprod
   # ========================================================================
   deploy-preprod:
     name: Deploy to Preprod
-    needs: [build, test]
+    needs: [build, test, build-sse-image-preprod]
     runs-on: ubuntu-latest
     environment:
       name: preprod
@@ -941,11 +975,45 @@ jobs:
           retention-days: 90
 
   # ========================================================================
-  # JOB 5: Deploy to Production
+  # JOB 5: Build SSE Lambda Image (Production)
+  # ========================================================================
+  build-sse-image-prod:
+    name: Build SSE Lambda Image (Production)
+    runs-on: ubuntu-latest
+    needs: [build, deploy-preprod, test-preprod]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Configure AWS Credentials (Production)
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and Push SSE Lambda Image
+        uses: docker/build-push-action@v6
+        with:
+          context: src/lambdas/sse_streaming
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/prod-sse-streaming-lambda:latest
+            ${{ steps.login-ecr.outputs.registry }}/prod-sse-streaming-lambda:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ========================================================================
+  # JOB 6: Deploy to Production
   # ========================================================================
   deploy-prod:
     name: Deploy to Production
-    needs: [build, deploy-preprod, test-preprod]
+    needs: [build, deploy-preprod, test-preprod, build-sse-image-prod]
     runs-on: ubuntu-latest
 
     # Conditional environment based on PR author
@@ -1130,7 +1198,7 @@ jobs:
           echo "✅ Metadata updated: $(cat /tmp/metadata-new.json)"
 
   # ========================================================================
-  # JOB 6: Production Canary Test
+  # JOB 7: Production Canary Test
   # ========================================================================
   canary:
     name: Production Canary Test
@@ -1171,11 +1239,11 @@ jobs:
           echo "✅ Canary test PASSED"
 
   # ========================================================================
-  # JOB 7: Summary
+  # JOB 8: Summary
   # ========================================================================
   summary:
     name: Deployment Summary
-    needs: [build, test, deploy-preprod, test-preprod, deploy-prod, canary]
+    needs: [build, test, build-sse-image-preprod, deploy-preprod, test-preprod, build-sse-image-prod, deploy-prod, canary]
     if: always()
     runs-on: ubuntu-latest
 
@@ -1186,8 +1254,10 @@ jobs:
           echo ""
           echo "- Build: ${{ needs.build.result }}"
           echo "- Unit Tests (Mocked): ${{ needs.test.result }}"
+          echo "- Build SSE Image (Preprod): ${{ needs.build-sse-image-preprod.result }}"
           echo "- Deploy Preprod: ${{ needs.deploy-preprod.result }}"
           echo "- Test Preprod (Real AWS): ${{ needs.test-preprod.result }}"
+          echo "- Build SSE Image (Prod): ${{ needs.build-sse-image-prod.result }}"
           echo "- Deploy Production: ${{ needs.deploy-prod.result }}"
           echo "- Canary Test: ${{ needs.canary.result }}"
           echo ""
