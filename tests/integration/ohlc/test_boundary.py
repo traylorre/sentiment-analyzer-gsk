@@ -145,9 +145,11 @@ class TestOHLCDateBoundaries:
     @pytest.mark.boundary
     def test_ohlc_single_day_range(self, test_client, auth_headers, ohlc_validator):
         """OHLC accepts single-day range (start == end)."""
-        today = date.today()
+        # Use a fixed historical trading day to avoid weekend/holiday issues
+        # 2024-01-02 was a Tuesday (trading day)
+        trading_day = date(2024, 1, 2)
         response = test_client.get(
-            f"/api/v2/tickers/AAPL/ohlc?start_date={today}&end_date={today}",
+            f"/api/v2/tickers/AAPL/ohlc?start_date={trading_day}&end_date={trading_day}",
             headers=auth_headers,
         )
 
