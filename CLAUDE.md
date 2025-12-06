@@ -17,6 +17,8 @@ Auto-generated from all feature plans. Last updated: 2025-11-26
 - DynamoDB (single-table design with GSIs for email lookup) (014-session-consistency)
 - Python 3.13 + FastAPI, sse-starlette, boto3, aws-xray-sdk, AWS Lambda Web Adapter (016-sse-streaming-lambda)
 - DynamoDB (existing tables - read-only access for SSE Lambda) (016-sse-streaming-lambda)
+- N/A (IAM Policy JSON, HCL configuration) + AWS IAM, S3, Terraform (018-tfstate-bucket-fix)
+- S3 (Terraform state bucket) (018-tfstate-bucket-fix)
 
 - **Python 3.13** with FastAPI, boto3, pydantic, aws-lambda-powertools, httpx
 - **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, CloudFront
@@ -396,10 +398,9 @@ const eventSource = new EventSource(streamUrl);
 ```
 
 ## Recent Changes
+- 018-tfstate-bucket-fix: Added N/A (IAM Policy JSON, HCL configuration) + AWS IAM, S3, Terraform
+- 018-tfstate-bucket-fix: Added N/A (IAM Policy JSON, HCL configuration) + AWS IAM, S3, Terraform
 - 016-sse-streaming-lambda: Added Python 3.13 + FastAPI, sse-starlette, boto3, aws-xray-sdk, AWS Lambda Web Adapter
-- 014-session-consistency: Added Python 3.13 + FastAPI, boto3, pydantic, aws-lambda-powertools with DynamoDB GSIs for email lookup
-- 013-interview-swipe-gestures: Added JavaScript ES6+ (vanilla, no framework) + Hammer.js or custom touch event handling
-- 012-ohlc-sentiment-e2e-tests: Added Python 3.13 + pytest, pytest-asyncio, httpx, responses, moto (unit tests only)
 
 <!-- MANUAL ADDITIONS START -->
 
@@ -449,7 +450,7 @@ terraform output state_bucket_name
 
 # 3. Update main.tf with your bucket name
 # Edit infrastructure/terraform/main.tf and replace
-# "sentiment-analyzer-tfstate-YOUR_ACCOUNT_ID" with the actual bucket name
+# "sentiment-analyzer-terraform-state-YOUR_ACCOUNT_ID" with the actual bucket name
 
 # 4. Initialize main terraform with S3 backend
 cd ../

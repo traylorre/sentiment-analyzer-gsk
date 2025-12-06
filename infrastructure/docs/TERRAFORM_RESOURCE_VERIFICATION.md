@@ -62,7 +62,7 @@ resource "aws_secretsmanager_secret" "newsapi" {
 | Bucket | Purpose | Name Pattern | Verified? |
 |--------|---------|--------------|-----------|
 | Lambda Packages | Deployment artifacts | `${var.environment}-sentiment-lambda-deployments` | ✅ |
-| Terraform State | State storage | `sentiment-analyzer-tfstate-*` | ✅ |
+| Terraform State | State storage | `sentiment-analyzer-terraform-state-*` | ✅ |
 
 **Note**: Terraform state bucket is shared but uses separate keys:
 - Preprod: `preprod/terraform.tfstate`

@@ -804,7 +804,7 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
     ]
   }
 
-  # Terraform State S3 Access (keep legacy pattern for tfstate buckets until renamed)
+  # Terraform State S3 Access
   statement {
     sid    = "TerraformState"
     effect = "Allow"
@@ -815,10 +815,8 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
       "s3:DeleteObject"
     ]
     resources = [
-      "arn:aws:s3:::*-sentiment-tfstate-*",
-      "arn:aws:s3:::*-sentiment-tfstate-*/*",
-      "arn:aws:s3:::*-sentiment-terraform-*",
-      "arn:aws:s3:::*-sentiment-terraform-*/*"
+      "arn:aws:s3:::*-sentiment-terraform-state-*",
+      "arn:aws:s3:::*-sentiment-terraform-state-*/*"
     ]
   }
 

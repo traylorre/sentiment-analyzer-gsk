@@ -249,7 +249,7 @@ terraform refresh -var="environment=dev"
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#e8f4fd', 'primaryTextColor': '#1a365d', 'primaryBorderColor': '#3182ce', 'lineColor': '#4a5568'}}}%%
 graph TB
     subgraph StateBackend["Terraform State Backend"]
-        A[S3 Bucket<br/>sentiment-analyzer-tfstate-*]
+        A[S3 Bucket<br/>sentiment-analyzer-terraform-state-*]
         B[S3 Lock Files<br/>*.tfstate.tflock]
     end
 

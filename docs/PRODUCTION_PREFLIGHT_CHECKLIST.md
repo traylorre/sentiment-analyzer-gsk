@@ -8,8 +8,8 @@
 
 - [ ] Verify dev deployment succeeded first
 - [ ] Confirm dev and prod use separate state files:
-  - Dev: `s3://sentiment-analyzer-tfstate-218795110243/dev/terraform.tfstate`
-  - Prod: `s3://sentiment-analyzer-tfstate-218795110243/prod/terraform.tfstate`
+  - Dev: `s3://sentiment-analyzer-terraform-state-218795110243/dev/terraform.tfstate`
+  - Prod: `s3://sentiment-analyzer-terraform-state-218795110243/prod/terraform.tfstate`
 - [ ] Confirm dev and prod use separate lock tables:
   - Dev: `dev/terraform.tfstate.tflock`
   - Prod: `prod/terraform.tfstate.tflock`

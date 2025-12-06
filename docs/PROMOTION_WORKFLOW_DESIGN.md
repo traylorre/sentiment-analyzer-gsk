@@ -424,7 +424,7 @@ jobs:
         "s3:GetObject",
         "s3:PutObject"
       ],
-      "Resource": "arn:aws:s3:::sentiment-analyzer-terraform-state/preprod/*"
+      "Resource": "arn:aws:s3:::sentiment-analyzer-terraform-state-*/preprod/*"
     },
     {
       "Sid": "TerraformLockAccess",
@@ -491,7 +491,7 @@ jobs:
         "s3:GetObject",
         "s3:PutObject"
       ],
-      "Resource": "arn:aws:s3:::sentiment-analyzer-terraform-state/prod/*"
+      "Resource": "arn:aws:s3:::sentiment-analyzer-terraform-state-*/prod/*"
     },
     {
       "Sid": "TerraformLockAccess",
