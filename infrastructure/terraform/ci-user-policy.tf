@@ -270,7 +270,7 @@ data "aws_iam_policy_document" "ci_deploy_core" {
   }
 
   # ECR Repository Management (for Docker-based Lambdas like SSE streaming)
-  # SECURITY: Scoped to {env}-sentiment-* naming pattern (FR-012)
+  # SECURITY: Scoped to {env}-sentiment-* and {env}-sse-streaming-* patterns (FR-012)
   statement {
     sid    = "ECR"
     effect = "Allow"
@@ -292,7 +292,8 @@ data "aws_iam_policy_document" "ci_deploy_core" {
       "ecr:PutImageTagMutability"
     ]
     resources = [
-      "arn:aws:ecr:*:*:repository/*-sentiment-*"
+      "arn:aws:ecr:*:*:repository/*-sentiment-*",
+      "arn:aws:ecr:*:*:repository/*-sse-streaming-*"
     ]
   }
 
@@ -313,7 +314,8 @@ data "aws_iam_policy_document" "ci_deploy_core" {
       "ecr:ListImages"
     ]
     resources = [
-      "arn:aws:ecr:*:*:repository/*-sentiment-*"
+      "arn:aws:ecr:*:*:repository/*-sentiment-*",
+      "arn:aws:ecr:*:*:repository/*-sse-streaming-*"
     ]
   }
 
@@ -466,13 +468,20 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
   }
 
   # Cognito User Pools - List/Describe operations (require wildcard)
-  # Note: GetUserPoolMfaConfig requires unconditional access for Terraform refresh
+  # Note: These require unconditional access for Terraform state refresh
   statement {
     sid    = "CognitoIDPList"
     effect = "Allow"
     actions = [
       "cognito-idp:ListUserPools",
+      "cognito-idp:ListUserPoolClients",
+      "cognito-idp:ListResourceServers",
+      "cognito-idp:ListIdentityProviders",
       "cognito-idp:DescribeUserPool",
+      "cognito-idp:DescribeUserPoolClient",
+      "cognito-idp:DescribeUserPoolDomain",
+      "cognito-idp:DescribeResourceServer",
+      "cognito-idp:DescribeIdentityProvider",
       "cognito-idp:GetUserPoolMfaConfig"
     ]
     resources = ["*"]
@@ -505,13 +514,16 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
     }
   }
 
-  # Cognito Identity Pools - List operations (require wildcard)
+  # Cognito Identity Pools - List/Get operations (require wildcard)
+  # Note: These require unconditional access for Terraform state refresh
   statement {
     sid    = "CognitoIdentityList"
     effect = "Allow"
     actions = [
       "cognito-identity:ListIdentityPools",
-      "cognito-identity:DescribeIdentityPool"
+      "cognito-identity:DescribeIdentityPool",
+      "cognito-identity:GetIdentityPoolRoles",
+      "cognito-identity:ListTagsForResource"
     ]
     resources = ["*"]
   }
@@ -624,7 +636,7 @@ data "aws_iam_policy_document" "ci_deploy_iam" {
       "iam:DetachUserPolicy"
     ]
     resources = [
-      "arn:aws:iam::*:user/*-sentiment-*-deployer"
+      "arn:aws:iam::*:user/sentiment-analyzer-*-deployer"
     ]
   }
 
@@ -815,8 +827,8 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
       "s3:DeleteObject"
     ]
     resources = [
-      "arn:aws:s3:::*-sentiment-terraform-state-*",
-      "arn:aws:s3:::*-sentiment-terraform-state-*/*"
+      "arn:aws:s3:::sentiment-analyzer-terraform-state-*",
+      "arn:aws:s3:::sentiment-analyzer-terraform-state-*/*"
     ]
   }
 
@@ -863,15 +875,22 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
     }
   }
 
-  # CloudFront List operations - require wildcard
+  # CloudFront List/Get operations - require wildcard for Terraform state refresh
   statement {
-    sid    = "CloudFrontList"
+    sid    = "CloudFrontRead"
     effect = "Allow"
     actions = [
       "cloudfront:ListDistributions",
       "cloudfront:ListOriginAccessControls",
       "cloudfront:ListCachePolicies",
-      "cloudfront:ListResponseHeadersPolicies"
+      "cloudfront:ListResponseHeadersPolicies",
+      "cloudfront:ListTagsForResource",
+      "cloudfront:GetDistribution",
+      "cloudfront:GetDistributionConfig",
+      "cloudfront:GetOriginAccessControl",
+      "cloudfront:GetOriginAccessControlConfig",
+      "cloudfront:GetCachePolicy",
+      "cloudfront:GetResponseHeadersPolicy"
     ]
     resources = ["*"]
   }
