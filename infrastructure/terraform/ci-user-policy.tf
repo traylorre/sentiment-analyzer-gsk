@@ -1048,6 +1048,9 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
   }
 
   # KMS Alias Management
+  # Note: Supports both patterns:
+  # - *-sentiment-* (preprod-sentiment-shared-key)
+  # - sentiment-analyzer-* (sentiment-analyzer-preprod)
   statement {
     sid    = "KMSAlias"
     effect = "Allow"
@@ -1057,7 +1060,8 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
       "kms:UpdateAlias"
     ]
     resources = [
-      "arn:aws:kms:*:*:alias/*-sentiment-*"
+      "arn:aws:kms:*:*:alias/*-sentiment-*",
+      "arn:aws:kms:*:*:alias/sentiment-analyzer-*"
     ]
   }
 
