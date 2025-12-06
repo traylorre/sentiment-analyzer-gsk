@@ -6,9 +6,10 @@ established patterns and security requirements.
 
 import re
 
-from conftest import alarm_name, iam_policy_resource_pattern
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
+
+from .conftest import alarm_name, iam_policy_resource_pattern
 
 
 class TestIamPolicyPatterns:

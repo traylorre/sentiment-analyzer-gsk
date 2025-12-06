@@ -4,9 +4,10 @@ These tests verify that Lambda handlers always produce valid proxy integration
 responses regardless of input, ensuring API Gateway compatibility.
 """
 
-from conftest import lambda_response, sentiment_response
 from hypothesis import given, settings
 from hypothesis import strategies as st
+
+from .conftest import lambda_response, sentiment_response
 
 
 class TestLambdaResponseStructure:

@@ -6,9 +6,10 @@ contracts, ensuring client compatibility across all inputs.
 
 import json
 
-from conftest import dynamodb_item, sentiment_response
 from hypothesis import given, settings
 from hypothesis import strategies as st
+
+from .conftest import dynamodb_item, sentiment_response
 
 
 class TestSentimentApiContract:
