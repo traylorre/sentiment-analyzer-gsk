@@ -318,6 +318,55 @@ Acceptance Criteria (serverless stack)
 	- Integration test verifying end-to-end inference against a deterministic test fixture and asserting schema + performance (latency under a small synthetic load).
 	- Model evaluation: report precision/recall/F1 (or other chosen metrics) on a held-out test set and include baseline numbers in repo.
 
+	Deterministic Time Handling (No Flaky Dates)
+	---------------------------------------------
+	Tests MUST use deterministic, fixed dates instead of runtime-dependent time functions.
+
+	PROHIBITED in tests:
+	- `date.today()` - Changes daily, fails on weekends/holidays
+	- `datetime.now()` - Non-deterministic, causes race conditions
+	- `time.time()` - Epoch timestamps vary per execution
+	- `datetime.utcnow()` - Deprecated in Python 3.12+, non-deterministic
+
+	REQUIRED patterns:
+	- Use fixed historical dates known to be valid for the test context
+	- For market data tests: Use known trading days (e.g., `date(2024, 1, 2)` - a Tuesday)
+	- For time-sensitive tests: Use `freezegun` or `time_machine` to freeze time
+	- For date ranges: Use ISO 8601 format (YYYY-MM-DD) for CodeQL compatibility
+
+	Example (correct):
+	```python
+	# GOOD: Fixed, deterministic date
+	trading_day = date(2024, 1, 2)  # Known Tuesday, market open
+	response = client.get(f"/api/ohlc?date={trading_day}")
+
+	# GOOD: Frozen time for time-sensitive tests
+	@freeze_time("2024-01-02 10:30:00")
+	def test_market_hours():
+	    assert is_market_open() == True
+	```
+
+	Example (incorrect):
+	```python
+	# BAD: Flaky - fails on weekends, holidays, or end of day
+	today = date.today()
+	response = client.get(f"/api/ohlc?date={today}")  # 404 on Saturday!
+
+	# BAD: Non-deterministic, deprecated
+	now = datetime.utcnow()  # Python 3.12+ deprecation warning
+	```
+
+	Date Format Standards (CodeQL Compatible):
+	- Dates: ISO 8601 format `YYYY-MM-DD` (e.g., "2024-01-02")
+	- Timestamps: ISO 8601 with timezone `YYYY-MM-DDTHH:MM:SSZ` (e.g., "2024-01-02T10:30:00Z")
+	- Use `datetime.now(timezone.utc)` instead of deprecated `datetime.utcnow()`
+
+	Acceptance Criteria:
+	- No tests use `date.today()`, `datetime.now()`, `time.time()`, or `datetime.utcnow()` for assertions
+	- All date-dependent tests use fixed, documented dates with rationale
+	- Time-sensitive tests use freezegun or equivalent time-freezing library
+	- All date strings follow ISO 8601 format for CodeQL static analysis compatibility
+
 
 
 Interfaces (Minimal Contract)
@@ -534,4 +583,6 @@ Amendment 1.3 (2025-11-27): Added Sensitive Security Documentation section direc
 
 Amendment 1.4 (2025-11-28): Added Tech Debt Tracking section formalizing the dual-system approach using `docs/TECH_DEBT_REGISTRY.md` as detailed documentation and GitHub Issues for actionability. Defines required fields, entry criteria, and review requirements.
 
-**Version**: 1.4 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-11-28
+Amendment 1.5 (2025-12-06): Added Deterministic Time Handling section prohibiting flaky date/time functions (`date.today()`, `datetime.now()`, `datetime.utcnow()`) in tests. Mandates fixed historical dates, freezegun for time-sensitive tests, and ISO 8601 format for CodeQL compatibility.
+
+**Version**: 1.5 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-12-06
