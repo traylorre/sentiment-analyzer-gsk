@@ -27,7 +27,7 @@ Supported Scenarios (Phase 1):
 import logging
 import os
 import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -134,8 +134,8 @@ def create_experiment(
 
     # Generate experiment
     experiment_id = str(uuid.uuid4())
-    created_at = datetime.utcnow().isoformat() + "Z"
-    ttl_timestamp = int((datetime.utcnow() + timedelta(days=7)).timestamp())
+    created_at = datetime.now(UTC).isoformat() + "Z"
+    ttl_timestamp = int((datetime.now(UTC) + timedelta(days=7)).timestamp())
 
     experiment = {
         "experiment_id": experiment_id,
@@ -284,7 +284,7 @@ def update_experiment_status(
         expr_attr_names = {"#status": "status"}
         expr_attr_values = {
             ":status": status,
-            ":updated_at": datetime.utcnow().isoformat() + "Z",
+            ":updated_at": datetime.now(UTC).isoformat() + "Z",
         }
 
         if results:
@@ -587,7 +587,7 @@ def start_experiment(experiment_id: str) -> dict[str, Any]:
             # Update experiment with FIS experiment ID
             results = {
                 "fis_experiment_id": fis_experiment_id,
-                "started_at": datetime.utcnow().isoformat() + "Z",
+                "started_at": datetime.now(UTC).isoformat() + "Z",
             }
             update_experiment_status(experiment_id, "running", results)
 
@@ -596,7 +596,7 @@ def start_experiment(experiment_id: str) -> dict[str, Any]:
             # Ingestion Lambda queries chaos_experiments table and skips NewsAPI if active
             # No AWS FIS needed - pure application-level fault injection
             results = {
-                "started_at": datetime.utcnow().isoformat() + "Z",
+                "started_at": datetime.now(UTC).isoformat() + "Z",
                 "injection_method": "dynamodb_flag",
                 "note": "Ingestion Lambda will skip NewsAPI calls while experiment is running",
             }
@@ -617,7 +617,7 @@ def start_experiment(experiment_id: str) -> dict[str, Any]:
         update_experiment_status(
             experiment_id,
             "failed",
-            {"error": str(e), "failed_at": datetime.utcnow().isoformat() + "Z"},
+            {"error": str(e), "failed_at": datetime.now(UTC).isoformat() + "Z"},
         )
         raise
 
@@ -661,14 +661,14 @@ def stop_experiment(experiment_id: str) -> dict[str, Any]:
 
             # Update experiment status
             results = experiment.get("results", {})
-            results["stopped_at"] = datetime.utcnow().isoformat() + "Z"
+            results["stopped_at"] = datetime.now(UTC).isoformat() + "Z"
             update_experiment_status(experiment_id, "stopped", results)
 
         elif scenario_type == "newsapi_failure":
             # Phase 3: Stop DynamoDB-based chaos injection
             # Simply mark experiment as stopped - Ingestion Lambda checks status
             results = experiment.get("results", {})
-            results["stopped_at"] = datetime.utcnow().isoformat() + "Z"
+            results["stopped_at"] = datetime.now(UTC).isoformat() + "Z"
             update_experiment_status(experiment_id, "stopped", results)
 
         elif scenario_type == "lambda_cold_start":
@@ -686,6 +686,6 @@ def stop_experiment(experiment_id: str) -> dict[str, Any]:
         update_experiment_status(
             experiment_id,
             "failed",
-            {"error": str(e), "failed_at": datetime.utcnow().isoformat() + "Z"},
+            {"error": str(e), "failed_at": datetime.now(UTC).isoformat() + "Z"},
         )
         raise

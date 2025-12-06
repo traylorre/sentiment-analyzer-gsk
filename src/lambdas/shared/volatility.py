@@ -7,7 +7,7 @@ for technical analysis.
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Literal
 
 from src.lambdas.shared.adapters.base import OHLCCandle
@@ -189,7 +189,7 @@ def calculate_atr_result(
         atr=round(atr, 4),
         atr_percent=round(atr_percent, 6),
         period=period,
-        calculated_at=datetime.utcnow(),
+        calculated_at=datetime.now(UTC),
         candle_count=len(candles),
         trend=trend,
         trend_arrow=trend_arrow,

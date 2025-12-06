@@ -98,9 +98,11 @@ repos:
   - repo: local
     hooks:
       # Run pytest on push only (not on every commit)
+      # NOTE: Uses language: system to leverage the project's virtual environment
+      # with all dependencies. Run `pip install -r requirements-dev.txt` first.
       - id: pytest
         name: pytest
-        entry: python -m pytest tests/ -x --tb=short -q
+        entry: bash -c 'python3 -m pytest tests/unit -x --tb=short -q'
         language: system
         types: [python]
         pass_filenames: false

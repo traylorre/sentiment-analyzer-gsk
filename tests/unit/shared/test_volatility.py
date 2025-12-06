@@ -1,6 +1,6 @@
 """Unit tests for ATR volatility calculator."""
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -23,7 +23,7 @@ def make_candle(
 ) -> OHLCCandle:
     """Helper to create test candles."""
     return OHLCCandle(
-        date=datetime.utcnow() - timedelta(days=days_ago),
+        date=datetime.now(UTC) - timedelta(days=days_ago),
         open=open_ or low,
         high=high,
         low=low,
@@ -388,7 +388,7 @@ class TestATRResultDataclass:
             atr=5.5,
             atr_percent=0.025,
             period=14,
-            calculated_at=datetime.utcnow(),
+            calculated_at=datetime.now(UTC),
             candle_count=30,
             trend="stable",
             trend_arrow="→",

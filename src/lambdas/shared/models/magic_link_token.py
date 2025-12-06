@@ -1,6 +1,6 @@
 """MagicLinkToken model with DynamoDB keys for Feature 006."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -35,7 +35,7 @@ class MagicLinkToken(BaseModel):
 
     def is_valid(self) -> bool:
         """Check if token is still valid."""
-        return not self.used and datetime.utcnow() < self.expires_at
+        return not self.used and datetime.now(UTC) < self.expires_at
 
     def to_dynamodb_item(self) -> dict:
         """Convert to DynamoDB item format."""

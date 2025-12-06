@@ -1,6 +1,6 @@
 """Unit tests for QuotaTracker."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from src.lambdas.shared.quota_tracker import APIQuotaUsage, QuotaTracker
 
@@ -16,7 +16,7 @@ class TestAPIQuotaUsage:
             limit=100,
             used=25,
             remaining=75,
-            reset_at=datetime.utcnow(),
+            reset_at=datetime.now(UTC),
         )
 
         assert quota.percent_used == 25.0
@@ -29,7 +29,7 @@ class TestAPIQuotaUsage:
             limit=0,
             used=0,
             remaining=0,
-            reset_at=datetime.utcnow(),
+            reset_at=datetime.now(UTC),
         )
 
         assert quota.percent_used == 0
@@ -42,7 +42,7 @@ class TestAPIQuotaUsage:
             limit=100,
             used=50,
             remaining=50,
-            reset_at=datetime.utcnow(),
+            reset_at=datetime.now(UTC),
             warn_threshold=0.5,
         )
 
@@ -60,7 +60,7 @@ class TestAPIQuotaUsage:
             limit=100,
             used=80,
             remaining=20,
-            reset_at=datetime.utcnow(),
+            reset_at=datetime.now(UTC),
             critical_threshold=0.8,
         )
 
@@ -156,7 +156,7 @@ class TestQuotaTracker:
         tracker = QuotaTracker.create_default()
 
         assert tracker.pk == "SYSTEM#QUOTA"
-        assert tracker.sk == datetime.utcnow().strftime("%Y-%m-%d")
+        assert tracker.sk == datetime.now(UTC).strftime("%Y-%m-%d")
 
     def test_to_dynamodb_item(self):
         """Test conversion to DynamoDB item."""
@@ -173,7 +173,7 @@ class TestQuotaTracker:
 
     def test_from_dynamodb_item(self):
         """Test creating from DynamoDB item."""
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         item = {
             "PK": "SYSTEM#QUOTA",
             "SK": "2025-01-01",
