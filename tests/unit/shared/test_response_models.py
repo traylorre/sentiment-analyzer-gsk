@@ -57,7 +57,7 @@ class TestSecondsUntil:
 
     def test_seconds_until_naive_datetime(self):
         """Should handle naive datetime by assuming UTC."""
-        future = datetime.utcnow() + timedelta(seconds=60)  # noqa: DTZ003
+        future = datetime.now(UTC) + timedelta(seconds=60)
         result = seconds_until(future)
         assert result is not None
         # Should be approximately 60 seconds (with some tolerance for test execution)

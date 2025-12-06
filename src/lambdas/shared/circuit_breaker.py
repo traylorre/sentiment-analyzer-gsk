@@ -11,7 +11,7 @@ Performance optimization (C1):
 import logging
 import os
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel
@@ -115,7 +115,7 @@ class CircuitBreakerState(BaseModel):
 
     def record_success(self) -> None:
         """Record successful API call."""
-        self.last_success_at = datetime.utcnow()
+        self.last_success_at = datetime.now(UTC)
         if self.state == "half_open":
             self.state = "closed"
             self.failure_count = 0
@@ -123,7 +123,7 @@ class CircuitBreakerState(BaseModel):
 
     def record_failure(self) -> None:
         """Record failed API call."""
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         self.last_failure_at = now
         self.total_failures += 1
 
@@ -154,7 +154,7 @@ class CircuitBreakerState(BaseModel):
         if self.state == "open":
             # Check if recovery timeout has passed
             if self.opened_at:
-                elapsed = (datetime.utcnow() - self.opened_at).total_seconds()
+                elapsed = (datetime.now(UTC) - self.opened_at).total_seconds()
                 if elapsed >= self.recovery_timeout_seconds:
                     self.state = "half_open"
                     return True

@@ -11,7 +11,7 @@ Performance optimization (C2):
 import logging
 import os
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel
@@ -140,7 +140,7 @@ class QuotaTracker(BaseModel):
     @property
     def sk(self) -> str:
         """DynamoDB sort key (daily partitioning)."""
-        return datetime.utcnow().strftime("%Y-%m-%d")
+        return datetime.now(UTC).strftime("%Y-%m-%d")
 
     def can_call(self, service: Literal["tiingo", "finnhub", "sendgrid"]) -> bool:
         """Check if we can make another API call to service.
@@ -167,7 +167,7 @@ class QuotaTracker(BaseModel):
         quota.used += count
         quota.remaining = max(0, quota.limit - quota.used)
         self.total_api_calls_today += count
-        self.updated_at = datetime.utcnow()
+        self.updated_at = datetime.now(UTC)
 
     def get_reserve_allocation(
         self, service: Literal["tiingo", "finnhub", "sendgrid"]
@@ -231,7 +231,7 @@ class QuotaTracker(BaseModel):
                 reset_at=(
                     datetime.fromisoformat(data["reset_at"])
                     if data.get("reset_at")
-                    else datetime.utcnow()
+                    else datetime.now(UTC)
                 ),
                 warn_threshold=float(data.get("warn_threshold", 0.5)),
                 critical_threshold=float(data.get("critical_threshold", 0.8)),
@@ -256,7 +256,7 @@ class QuotaTracker(BaseModel):
     @classmethod
     def create_default(cls) -> "QuotaTracker":
         """Create a default quota tracker with standard limits."""
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         return cls(
             updated_at=now,
             tiingo=APIQuotaUsage(
@@ -322,7 +322,7 @@ class QuotaTrackerManager:
             return cached
 
         # Cache miss - load from DynamoDB
-        today = datetime.utcnow().strftime("%Y-%m-%d")
+        today = datetime.now(UTC).strftime("%Y-%m-%d")
         try:
             response = self._table.get_item(Key={"PK": "SYSTEM#QUOTA", "SK": today})
             if "Item" in response:

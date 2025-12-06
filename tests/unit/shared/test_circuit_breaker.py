@@ -1,6 +1,6 @@
 """Unit tests for CircuitBreakerState."""
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from src.lambdas.shared.circuit_breaker import CircuitBreakerState
 
@@ -81,7 +81,7 @@ class TestCircuitBreakerState:
         assert cb.state == "open"
 
         # With 0 second timeout, should transition immediately
-        cb.opened_at = datetime.utcnow() - timedelta(seconds=1)
+        cb.opened_at = datetime.now(UTC) - timedelta(seconds=1)
         assert cb.can_execute() is True
         assert cb.state == "half_open"
 
@@ -121,7 +121,7 @@ class TestCircuitBreakerState:
         assert cb.failure_count == 2
 
         # Simulate time passing outside window
-        cb.opened_at = datetime.utcnow() - timedelta(seconds=20)
+        cb.opened_at = datetime.now(UTC) - timedelta(seconds=20)
         cb.record_failure()
 
         # Count should reset to 1
@@ -158,7 +158,7 @@ class TestCircuitBreakerState:
 
     def test_from_dynamodb_item(self):
         """Test creating from DynamoDB item."""
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         item = {
             "PK": "CIRCUIT#finnhub",
             "SK": "STATE",

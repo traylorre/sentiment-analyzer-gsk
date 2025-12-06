@@ -5,7 +5,7 @@ import json
 import logging
 import os
 import time
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
 import httpx
@@ -171,7 +171,7 @@ class TiingoAdapter(BaseAdapter):
 
         # Default date range
         if end_date is None:
-            end_date = datetime.utcnow()
+            end_date = datetime.now(UTC)
         if start_date is None:
             start_date = end_date - timedelta(days=7)
 
@@ -264,7 +264,7 @@ class TiingoAdapter(BaseAdapter):
         """
         # Default date range
         if end_date is None:
-            end_date = datetime.utcnow()
+            end_date = datetime.now(UTC)
         if start_date is None:
             start_date = end_date - timedelta(days=30)
 

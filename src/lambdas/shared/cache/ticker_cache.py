@@ -6,7 +6,7 @@ Provides fast symbol validation and company name search.
 
 import json
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from functools import lru_cache
 from typing import Literal
 
@@ -121,11 +121,11 @@ class TickerCache(BaseModel):
                 total_delisted += 1
 
         return cls(
-            version=data.get("version", datetime.utcnow().strftime("%Y-%m-%d")),
+            version=data.get("version", datetime.now(UTC).strftime("%Y-%m-%d")),
             updated_at=(
                 datetime.fromisoformat(data["updated_at"])
                 if data.get("updated_at")
-                else datetime.utcnow()
+                else datetime.now(UTC)
             ),
             symbols=symbols,
             total_active=total_active,
