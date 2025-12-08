@@ -1,0 +1,219 @@
+# Bidirectional Validation Allowlist for Sentiment Analyzer GSK
+# Follows 034-allowlist-architecture pattern from template methodology
+#
+# Classifications:
+#   - vaporware: Spec exists but implementation not planned (frontend/mobile specs for backend project)
+#   - infrastructure: Infrastructure specs where semantic matching is known to fail (SC-005 exemption)
+#   - test-infrastructure: E2E/testing specs with no corresponding production code
+#
+# All entries require justification for why the finding is suppressed.
+
+version: "1.0"
+last_updated: "2025-12-07"
+
+# Specs excluded from bidirectional validation entirely
+specs:
+  # Frontend/Mobile UI Specs - VAPORWARE (backend-only project)
+  - id: "002-mobile-sentiment-dashboard"
+    classification: vaporware
+    justification: >
+      Mobile-first sentiment dashboard spec for frontend implementation.
+      This is a backend-only project with no frontend code. The spec documents
+      future frontend requirements but no implementation is planned.
+    finding_ids:
+      - BIDIR-001
+
+  - id: "006-user-config-dashboard"
+    classification: vaporware
+    justification: >
+      User configuration dashboard spec for frontend implementation.
+      No frontend code exists in this backend-only project.
+    finding_ids:
+      - BIDIR-001
+
+  - id: "007-sentiment-dashboard-frontend"
+    classification: vaporware
+    justification: >
+      Sentiment dashboard frontend spec. No frontend code planned
+      for this backend-focused project.
+    finding_ids:
+      - BIDIR-001
+
+  - id: "011-price-sentiment-overlay"
+    classification: vaporware
+    justification: >
+      Price sentiment overlay UI component. Frontend feature not
+      implemented in backend-only project.
+    finding_ids:
+      - BIDIR-001
+
+  - id: "013-interview-swipe-gestures"
+    classification: vaporware
+    justification: >
+      Mobile swipe gesture spec for interview UI. No mobile frontend
+      implementation planned.
+    finding_ids:
+      - BIDIR-001
+
+  # E2E Test Infrastructure Specs
+  - id: "008-e2e-validation-suite"
+    classification: test-infrastructure
+    justification: >
+      E2E validation suite spec. Test infrastructure is implemented in
+      tests/ directory but semantic matching fails due to test fixture
+      patterns not matching spec requirements.
+    finding_ids:
+      - BIDIR-001
+
+  - id: "009-e2e-test-oracle-validation"
+    classification: test-infrastructure
+    justification: >
+      Test oracle validation patterns. Spec describes testing methodology
+      rather than production code. E2E tests exist but semantic matching
+      fails for test helper patterns.
+    finding_ids:
+      - BIDIR-001
+
+  - id: "012-ohlc-sentiment-e2e-tests"
+    classification: test-infrastructure
+    justification: >
+      OHLC sentiment E2E test spec. Test methodology spec rather than
+      production code. Tests may exist but semantic matching fails.
+    finding_ids:
+      - BIDIR-001
+
+  # Infrastructure Specs - SC-005 Exemption (JSON/Terraform semantic matching limitation)
+  - id: "014-session-consistency"
+    classification: infrastructure
+    justification: >
+      Session consistency spec. Infrastructure changes are in JSON/Terraform
+      files where semantic matching is known to fail (SC-005 exemption).
+      File matching passes, semantic matching exempt.
+    finding_ids:
+      - BIDIR-001
+
+  - id: "015-sse-endpoint-fix"
+    classification: infrastructure
+    justification: >
+      SSE endpoint fix spec. Lambda and API Gateway changes in Terraform.
+      SC-005 infrastructure exemption applies.
+    finding_ids:
+      - BIDIR-001
+
+  - id: "016-sse-streaming-lambda"
+    classification: infrastructure
+    justification: >
+      SSE streaming Lambda spec. Lambda infrastructure in Terraform/JSON.
+      SC-005 infrastructure exemption applies.
+    finding_ids:
+      - BIDIR-001
+
+  - id: "017-naming-consistency"
+    classification: infrastructure
+    justification: >
+      Naming consistency spec. Resource naming changes across Terraform.
+      SC-005 infrastructure exemption applies.
+    finding_ids:
+      - BIDIR-001
+
+  - id: "018-tfstate-bucket-fix"
+    classification: infrastructure
+    justification: >
+      Terraform state bucket fix spec. IAM policy changes in JSON files
+      where semantic matching fails. File matching passes (17 modules found),
+      but semantic matching exempt per SC-005.
+    finding_ids:
+      - BIDIR-001
+
+  - id: "019-iam-bootstrap-fix"
+    classification: infrastructure
+    justification: >
+      IAM bootstrap fix spec. IAM policy changes in JSON/Terraform.
+      SC-005 infrastructure exemption applies.
+    finding_ids:
+      - BIDIR-001
+
+  - id: "038-ecr-docker-build"
+    classification: infrastructure
+    justification: >
+      ECR Docker build spec. CI/CD infrastructure changes in GitHub Actions
+      workflows and Terraform. SC-005 infrastructure exemption applies.
+    finding_ids:
+      - BIDIR-001
+
+  - id: "041-pipeline-blockers"
+    classification: infrastructure
+    justification: >
+      Pipeline blocker fixes spec. IAM policy and Terraform changes.
+      SC-005 infrastructure exemption applies.
+    finding_ids:
+      - BIDIR-001
+
+  - id: "051-validation-bypass-audit"
+    classification: infrastructure
+    justification: >
+      Validation bypass audit spec. CI/CD and pre-commit configuration changes.
+      SC-005 infrastructure exemption applies.
+    finding_ids:
+      - BIDIR-001
+
+# Code paths excluded from BIDIR-002 (undocumented code detection)
+paths:
+  # Pre-existing Lambda code - predates spec-driven development
+  # These are core production features that were implemented before speckit adoption.
+  # Adding specs retroactively is a separate initiative (SPECOVERHAUL:UNDOCUMENTED).
+  - pattern: "src/lambdas/.*"
+    justification: >
+      Pre-existing Lambda code that predates spec-driven development.
+      Core production features require separate spec migration initiative.
+      Tagged as SPECOVERHAUL:UNDOCUMENTED for future work.
+
+  - pattern: "src/lib/.*"
+    justification: >
+      Shared library code that predates spec-driven development.
+      Tagged as SPECOVERHAUL:UNDOCUMENTED for future work.
+
+  # Test fixtures and helpers - don't need spec coverage
+  - pattern: "tests/fixtures/.*"
+    justification: "Test fixtures contain mock data, not production code requiring specs"
+
+  - pattern: "tests/.*/conftest\\.py"
+    justification: "Pytest configuration and fixtures, not production features"
+
+  - pattern: "tests/e2e/helpers/.*"
+    justification: "E2E test helper utilities, not production code"
+
+  - pattern: "tests/e2e/fixtures/.*"
+    justification: "E2E test fixtures and mock data, not production code"
+
+  - pattern: "tests/property/.*"
+    justification: "Property test generators, methodology infrastructure not production code"
+
+  - pattern: "tests/unit/.*"
+    justification: "Unit test files, not production code requiring specs"
+
+  - pattern: "tests/integration/.*"
+    justification: "Integration test files, not production code requiring specs"
+
+  # Infrastructure configuration
+  - pattern: "infrastructure/terraform/modules/.*/outputs\\.tf"
+    justification: "Terraform output definitions, part of module interface not requiring separate spec"
+
+  - pattern: "infrastructure/terraform/modules/.*/variables\\.tf"
+    justification: "Terraform variable definitions, part of module interface not requiring separate spec"
+
+  - pattern: "infrastructure/terraform/modules/.*/main\\.tf"
+    justification: "Terraform module implementations, infrastructure code not requiring separate specs"
+
+  - pattern: "infrastructure/terraform/.*\\.tf"
+    justification: "Root Terraform configurations, infrastructure code documented by infra specs"
+
+  - pattern: "infrastructure/terraform/.*\\.hcl"
+    justification: "Terraform backend configurations, infrastructure code documented by infra specs"
+
+  - pattern: "infrastructure/iam-policies/.*"
+    justification: "IAM policy files, infrastructure code documented by infra specs"
+
+  # Build/CI artifacts
+  - pattern: "scripts/.*"
+    justification: "Build and deployment scripts, operational tooling not production features"
