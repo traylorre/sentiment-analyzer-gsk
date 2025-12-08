@@ -1,5 +1,8 @@
 # SSE Streaming Lambda - Docker Image
 # Uses AWS Lambda Web Adapter for RESPONSE_STREAM mode
+#
+# Build context: src/lambdas (parent directory)
+# This allows importing from shared modules
 FROM python:3.13-slim AS builder
 
 WORKDIR /app
@@ -9,8 +12,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy and install Python dependencies
-COPY requirements.txt .
+# Copy and install Python dependencies from sse_streaming subdirectory
+COPY sse_streaming/requirements.txt .
 RUN pip install --no-cache-dir --target /app/packages -r requirements.txt
 
 # Production image
@@ -24,10 +27,14 @@ COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.9.1 /lambda-adapter /opt
 # Copy installed packages
 COPY --from=builder /app/packages /app/packages
 
-# Copy application code
-COPY . .
+# Copy shared module for logging utilities
+# Structure: /app/src/lambdas/shared/
+COPY shared /app/src/lambdas/shared
 
-# Set Python path to include packages
+# Copy application code from sse_streaming subdirectory
+COPY sse_streaming /app
+
+# Set Python path to include packages and app root for imports
 ENV PYTHONPATH=/app/packages:/app
 ENV AWS_LWA_INVOKE_MODE=RESPONSE_STREAM
 
