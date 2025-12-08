@@ -273,6 +273,34 @@
       ]
     },
     {
+      "Sid": "CloudFrontDistributions",
+      "Effect": "Allow",
+      "Action": [
+        "cloudfront:GetDistribution",
+        "cloudfront:GetDistributionConfig",
+        "cloudfront:UpdateDistribution",
+        "cloudfront:CreateDistribution",
+        "cloudfront:DeleteDistribution",
+        "cloudfront:TagResource",
+        "cloudfront:UntagResource",
+        "cloudfront:ListTagsForResource"
+      ],
+      "Resource": [
+        "arn:aws:cloudfront::*:distribution/*"
+      ]
+    },
+    {
+      "Sid": "CloudFrontCachePolicies",
+      "Effect": "Allow",
+      "Action": [
+        "cloudfront:GetCachePolicy",
+        "cloudfront:GetOriginRequestPolicy",
+        "cloudfront:ListCachePolicies",
+        "cloudfront:ListOriginRequestPolicies"
+      ],
+      "Resource": "*"
+    },
+    {
       "Sid": "DenyInsecureTransport",
       "Effect": "Deny",
       "Action": "sqs:*",
