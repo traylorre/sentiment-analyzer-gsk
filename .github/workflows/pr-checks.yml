@@ -268,7 +268,7 @@ jobs:
         continue-on-error: true
 
       - name: Post Infracost comment
-        uses: infracost/actions/comment@v1
+        uses: infracost/actions/comment@v3
         with:
           path: /tmp/infracost-diff.json
           behavior: update
