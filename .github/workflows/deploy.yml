@@ -533,7 +533,8 @@ jobs:
       - name: Build and Push SSE Lambda Image
         uses: docker/build-push-action@v6
         with:
-          context: src/lambdas/sse_streaming
+          context: src/lambdas
+          file: src/lambdas/sse_streaming/Dockerfile
           push: true
           tags: |
             ${{ steps.login-ecr.outputs.registry }}/preprod-sse-streaming-lambda:latest
@@ -1009,7 +1010,8 @@ jobs:
       - name: Build and Push SSE Lambda Image
         uses: docker/build-push-action@v6
         with:
-          context: src/lambdas/sse_streaming
+          context: src/lambdas
+          file: src/lambdas/sse_streaming/Dockerfile
           push: true
           tags: |
             ${{ steps.login-ecr.outputs.registry }}/prod-sse-streaming-lambda:latest
