@@ -510,6 +510,7 @@ jobs:
     name: Build SSE Lambda Image (Preprod)
     runs-on: ubuntu-latest
     needs: [build, test]
+    environment: preprod
 
     steps:
       - name: Checkout code
@@ -981,6 +982,7 @@ jobs:
     name: Build SSE Lambda Image (Production)
     runs-on: ubuntu-latest
     needs: [build, deploy-preprod, test-preprod]
+    environment: production
 
     steps:
       - name: Checkout code
