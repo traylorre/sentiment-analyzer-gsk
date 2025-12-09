@@ -22,7 +22,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from src.lambdas.shared.adapters.finnhub import FinnhubAdapter
 from src.lambdas.shared.adapters.tiingo import TiingoAdapter
-from src.lambdas.shared.logging_utils import get_safe_error_info, sanitize_for_log
+from src.lambdas.shared.logging_utils import get_safe_error_info
 from src.lambdas.shared.models import (
     TIME_RANGE_DAYS,
     OHLCResponse,
@@ -112,9 +112,12 @@ async def get_ohlc_data(
         time_range_str = range.value
 
     # Sanitize user input before logging to prevent log injection (CWE-117)
-    # Breaking data flow explicitly for CodeQL py/log-injection recognition
-    safe_ticker = sanitize_for_log(ticker)
-    safe_range = sanitize_for_log(time_range_str)
+    # Using inline .replace() pattern that CodeQL recognizes as taint barrier
+    # See: https://codeql.github.com/codeql-query-help/python/py-log-injection/
+    safe_ticker = ticker.replace("\r\n", "").replace("\n", "").replace("\r", "")[:200]
+    safe_range = (
+        time_range_str.replace("\r\n", "").replace("\n", "").replace("\r", "")[:50]
+    )
 
     logger.info(
         "Fetching OHLC data",
@@ -252,9 +255,10 @@ async def get_sentiment_history(
         start_date = end_date - timedelta(days=days)
 
     # Sanitize user input before logging to prevent log injection (CWE-117)
-    # Breaking data flow explicitly for CodeQL py/log-injection recognition
-    safe_ticker = sanitize_for_log(ticker)
-    safe_source = sanitize_for_log(source)
+    # Using inline .replace() pattern that CodeQL recognizes as taint barrier
+    # See: https://codeql.github.com/codeql-query-help/python/py-log-injection/
+    safe_ticker = ticker.replace("\r\n", "").replace("\n", "").replace("\r", "")[:200]
+    safe_source = source.replace("\r\n", "").replace("\n", "").replace("\r", "")[:50]
 
     logger.info(
         "Fetching sentiment history",
