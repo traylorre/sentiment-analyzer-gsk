@@ -57,9 +57,7 @@ DEFAULT_MODEL_S3_BUCKET = os.environ.get(
     "MODEL_S3_BUCKET", "sentiment-analyzer-models-218795110243"
 )
 DEFAULT_MODEL_S3_KEY = "distilbert/v1.0.0/model.tar.gz"
-LOCAL_MODEL_PATH = (
-    "/tmp/model"  # noqa: S108 - Lambda /tmp storage (configurable up to 10GB)
-)
+LOCAL_MODEL_PATH = "/tmp/model"  # nosec B108 - Lambda /tmp storage
 MAX_TEXT_LENGTH = 512  # DistilBERT token limit
 NEUTRAL_THRESHOLD = 0.6  # Below this confidence → neutral
 
@@ -101,7 +99,7 @@ def _download_model_from_s3() -> None:
     try:
         # Download model tar.gz from S3
         s3_client = boto3.client("s3")
-        tar_path = "/tmp/model.tar.gz"  # noqa: S108 - Lambda /tmp storage
+        tar_path = "/tmp/model.tar.gz"  # nosec B108 - Lambda /tmp
 
         download_start = time.perf_counter()
         s3_client.download_file(
@@ -117,7 +115,7 @@ def _download_model_from_s3() -> None:
         # Extract tar.gz to /tmp/model
         extract_start = time.perf_counter()
         with tarfile.open(tar_path, "r:gz") as tar:
-            tar.extractall(path="/tmp")  # noqa: S108 - Lambda /tmp storage
+            tar.extractall(path="/tmp")  # noqa: S202 # nosec B108 B202 - Lambda /tmp
         extract_time_ms = (time.perf_counter() - extract_start) * 1000
 
         logger.info(

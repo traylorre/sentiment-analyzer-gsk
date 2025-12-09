@@ -25,6 +25,8 @@ Auto-generated from all feature plans. Last updated: 2025-11-26
 - N/A (configuration files only) (067-dependabot-automerge-audit)
 - YAML (GitHub Actions workflow syntax), Bash (slash command) + GitHub Actions, GitHub CLI (`gh`), GitHub REST API (069-stale-pr-autoupdate)
 - N/A (workflow configuration only) (069-stale-pr-autoupdate)
+- Python 3.13 (existing project standard) + Semgrep (SAST), Bandit (Python security linter), pre-commit, Make (070-validation-blindspot-audit)
+- N/A (tooling configuration only) (070-validation-blindspot-audit)
 
 - **Python 3.13** with FastAPI, boto3, pydantic, aws-lambda-powertools, httpx
 - **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, CloudFront
@@ -84,9 +86,39 @@ cd infrastructure/terraform && terraform fmt -recursive && terraform validate
 ## Code Style
 
 - Python 3.13: Follow PEP 8, use black for formatting
-- Linting: ruff (replaces flake8, isort, bandit)
+- Linting: ruff (replaces flake8, isort - but NOT bandit)
 - Line length: 88 characters
 - Configuration: pyproject.toml (single source of truth)
+
+## SAST (Static Application Security Testing)
+
+Local security scanning runs before code reaches CI. Two-tier approach:
+
+### Pre-commit: Bandit (fast, every commit)
+```bash
+# Runs automatically on commit via pre-commit hook
+# Blocks HIGH and MEDIUM severity issues
+# Config: pyproject.toml [tool.bandit]
+bandit -c pyproject.toml -r src/ -ll
+```
+
+### Make validate: Semgrep (comprehensive, before push)
+```bash
+# Run as part of make validate or standalone
+make sast                    # Run SAST only
+make validate                # Full validation including SAST
+```
+
+### Common SAST Patterns Fixed in This Repo
+- **Log injection (CWE-117)**: Use `sanitize_for_log()` from `src/lambdas/shared/logging_utils.py`
+- **Clear-text logging (CWE-312)**: Never log sensitive data; use `redact_sensitive_fields()`
+- **Hardcoded secrets (CWE-798)**: Use AWS Secrets Manager, never hardcode
+
+### When SAST Flags Issues
+1. Understand the vulnerability pattern (check CWE reference)
+2. Fix with proper sanitization or redesign
+3. Do NOT suppress without documented justification
+4. Do NOT rename variables to avoid detection
 
 ## Git Commit Security Requirements
 
@@ -404,9 +436,9 @@ const eventSource = new EventSource(streamUrl);
 ```
 
 ## Recent Changes
+- 070-validation-blindspot-audit: Added Python 3.13 (existing project standard) + Semgrep (SAST), Bandit (Python security linter), pre-commit, Make
 - 069-stale-pr-autoupdate: Added YAML (GitHub Actions workflow syntax), Bash (slash command) + GitHub Actions, GitHub CLI (`gh`), GitHub REST API
 - 067-dependabot-automerge-audit: Added YAML (GitHub Actions workflows, Dependabot config) + GitHub Dependabot service, dependabot/fetch-metadata@v2 action, GitHub CLI (gh)
-- 066-fix-latency-timing: Added Python 3.13 + None (stdlib `time` module only)
 
 <!-- MANUAL ADDITIONS START -->
 

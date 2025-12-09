@@ -453,7 +453,7 @@ class DigestService:
                     <span style="color: {change_color};">{change_arrow}{change:.2f}</span>
                 </td>
                 <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: right;">
-                    {data['article_count']}
+                    {data["article_count"]}
                 </td>
             </tr>
             """

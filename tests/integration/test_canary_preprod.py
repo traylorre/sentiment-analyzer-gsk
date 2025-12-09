@@ -196,7 +196,7 @@ class TestCanaryPreprod:
                 f"{dashboard_url}/health",
                 timeout=10,
             )
-            assert response.status_code == 200, f"Call {i+1} failed"
+            assert response.status_code == 200, f"Call {i + 1} failed"
             responses.append(response.json())
 
         # All responses should have 'status': 'healthy'

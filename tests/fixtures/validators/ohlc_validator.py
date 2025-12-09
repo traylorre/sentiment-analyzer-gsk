@@ -225,7 +225,7 @@ class OHLCValidator:
                     errors.append(
                         ValidationError(
                             field=f"candles[{i}].date",
-                            message=f"Candles not sorted: {dates[i-1]} > {dates[i]}",
+                            message=f"Candles not sorted: {dates[i - 1]} > {dates[i]}",
                             value={"prev": dates[i - 1], "curr": dates[i]},
                         )
                     )

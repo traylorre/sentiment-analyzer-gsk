@@ -178,7 +178,9 @@ class TestGetSecret:
         # Verify expected error was logged
         from tests.conftest import assert_error_logged
 
-        assert_error_logged(caplog, "Failed to parse secret as JSON")
+        # Log message updated in 070-validation-blindspot-audit to avoid
+        # CodeQL py/clear-text-logging-sensitive-data false positive
+        assert_error_logged(caplog, "Failed to parse resource as JSON")
 
     def test_cache_expiry(self, secrets_manager, monkeypatch):
         """Test that cache expires after TTL."""

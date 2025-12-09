@@ -270,7 +270,7 @@ def validate_tag_format(tag: str) -> bool:
 
     # Allow alphanumeric, hyphens, underscores, and spaces
     allowed_chars = set(
-        "abcdefghijklmnopqrstuvwxyz" "ABCDEFGHIJKLMNOPQRSTUVWXYZ" "0123456789" "-_ "
+        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_ "
     )
 
     return all(c in allowed_chars for c in tag)

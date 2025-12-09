@@ -55,8 +55,9 @@ async def get_ohlc_data(
     ticker: str,
     request: Request,
     range: TimeRange = Query(TimeRange.ONE_MONTH, description="Time range for data"),
-    start_date: date
-    | None = Query(None, description="Custom start date (overrides range)"),
+    start_date: date | None = Query(
+        None, description="Custom start date (overrides range)"
+    ),
     end_date: date | None = Query(None, description="Custom end date"),
     tiingo: TiingoAdapter = Depends(get_tiingo_adapter),
     finnhub: FinnhubAdapter = Depends(get_finnhub_adapter),
@@ -110,11 +111,16 @@ async def get_ohlc_data(
         start_date = end_date - timedelta(days=days)
         time_range_str = range.value
 
+    # Sanitize user input before logging to prevent log injection (CWE-117)
+    # Breaking data flow explicitly for CodeQL py/log-injection recognition
+    safe_ticker = sanitize_for_log(ticker)
+    safe_range = sanitize_for_log(time_range_str)
+
     logger.info(
         "Fetching OHLC data",
         extra={
-            "ticker": sanitize_for_log(ticker),
-            "range": sanitize_for_log(time_range_str),
+            "ticker": safe_ticker,
+            "range": safe_range,
             "start_date": str(start_date),
             "end_date": str(end_date),
         },
@@ -132,7 +138,7 @@ async def get_ohlc_data(
         logger.warning(
             "Tiingo OHLC fetch failed, trying Finnhub",
             extra={
-                "ticker": sanitize_for_log(ticker),
+                "ticker": safe_ticker,
                 **get_safe_error_info(e),
             },
         )
@@ -148,7 +154,7 @@ async def get_ohlc_data(
             logger.warning(
                 "Finnhub OHLC fetch failed",
                 extra={
-                    "ticker": sanitize_for_log(ticker),
+                    "ticker": safe_ticker,
                     **get_safe_error_info(e),
                 },
             )
@@ -157,7 +163,7 @@ async def get_ohlc_data(
     if not candles:
         logger.warning(
             "No OHLC data available from any source",
-            extra={"ticker": sanitize_for_log(ticker)},
+            extra={"ticker": safe_ticker},
         )
         raise HTTPException(
             status_code=404,
@@ -173,7 +179,7 @@ async def get_ohlc_data(
     logger.info(
         "OHLC data retrieved successfully",
         extra={
-            "ticker": sanitize_for_log(ticker),
+            "ticker": safe_ticker,
             "source": source,
             "candle_count": len(candles),
         },
@@ -245,11 +251,16 @@ async def get_sentiment_history(
         days = TIME_RANGE_DAYS.get(range, 30)
         start_date = end_date - timedelta(days=days)
 
+    # Sanitize user input before logging to prevent log injection (CWE-117)
+    # Breaking data flow explicitly for CodeQL py/log-injection recognition
+    safe_ticker = sanitize_for_log(ticker)
+    safe_source = sanitize_for_log(source)
+
     logger.info(
         "Fetching sentiment history",
         extra={
-            "ticker": sanitize_for_log(ticker),
-            "source": sanitize_for_log(source),
+            "ticker": safe_ticker,
+            "source": safe_source,
             "start_date": str(start_date),
             "end_date": str(end_date),
         },
@@ -306,8 +317,8 @@ async def get_sentiment_history(
     logger.info(
         "Sentiment history retrieved",
         extra={
-            "ticker": sanitize_for_log(ticker),
-            "source": sanitize_for_log(source),
+            "ticker": safe_ticker,
+            "source": safe_source,
             "point_count": len(history),
         },
     )

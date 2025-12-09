@@ -50,6 +50,9 @@ dev = [
     "httpx-sse>=0.4.0",
     "boto3>=1.34.0",
     "aws-xray-sdk>=2.12.0",
+    # SAST tools (070-validation-blindspot-audit)
+    "bandit>=1.7.0",
+    "semgrep>=1.50.0",
 ]
 
 [project.urls]
@@ -120,6 +123,12 @@ ignore = [
     "B008",  # Query/Depends in function defaults is FastAPI's recommended pattern
     "S311",  # random module used for synthetic test data generation
 ]
+# MD5 used for cache keys (non-cryptographic) - pre-existing code
+"src/lambdas/shared/adapters/tiingo.py" = ["S324"]
+"src/lambdas/shared/adapters/finnhub.py" = ["S324"]
+"src/lambdas/dashboard/sentiment.py" = ["S324"]
+# Lambda requires /tmp storage; S202 (tarfile.extractall) handled via inline # noqa
+"src/lambdas/analysis/sentiment.py" = ["S108"]
 
 [tool.ruff.isort]
 known-first-party = ["src"]
@@ -199,6 +208,14 @@ omit = [
 ]
 branch = true
 relative_files = true
+
+[tool.bandit]
+# Bandit security linter configuration (070-validation-blindspot-audit)
+# Block HIGH and MEDIUM severity; report LOW
+targets = ["src/"]
+exclude_dirs = ["tests/", "infrastructure/", ".venv/", "venv/"]
+severity = "medium"  # Report MEDIUM and above
+confidence = "medium"  # Report MEDIUM confidence and above
 
 [tool.coverage.report]
 # On-Call Note: Coverage below 80% will fail CI/CD pipeline
