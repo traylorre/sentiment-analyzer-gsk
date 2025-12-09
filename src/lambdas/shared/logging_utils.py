@@ -9,6 +9,22 @@ This module provides functions to sanitize data before logging, preventing:
 Security References:
 - OWASP Logging Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html
 - CodeQL Log Injection: https://codeql.github.com/codeql-query-help/python/py-log-injection/
+
+CodeQL Taint Barrier Requirements:
+    CodeQL's static analysis doesn't automatically recognize custom sanitizer functions
+    as taint barriers. To satisfy CodeQL's py/log-injection and py/clear-text-logging
+    queries, use one of these patterns:
+
+    1. Inline sanitization (preferred for CodeQL compliance):
+       safe_value = user_input.replace("\\r\\n", "").replace("\\n", "").replace("\\r", "")
+       logger.info("Message", extra={"field": safe_value})
+
+    2. Break taint flow with intermediate variable (for sensitive data):
+       safe_identifier = _sanitize_function(secret_id)
+       logger.info("Message", extra={"id": safe_identifier})
+
+    The helper functions in this module are still useful for additional sanitization
+    beyond what CodeQL requires (control character removal, length limiting).
 """
 
 import re
@@ -51,6 +67,21 @@ def sanitize_for_log(value: Any, max_length: int = MAX_LOG_INPUT_LENGTH) -> str:
         - Removes \\r, \\n, \\t to prevent CRLF injection
         - Limits length to prevent log flooding
         - Replaces control characters with spaces
+
+    CodeQL Note:
+        CodeQL's py/log-injection query does NOT recognize this function as a
+        taint barrier because it performs inter-procedural analysis but doesn't
+        automatically trust custom sanitizer functions. For CodeQL compliance,
+        use inline sanitization at the call site instead:
+
+            # CodeQL-recognized pattern:
+            safe_value = value.replace("\\r\\n", "").replace("\\n", "").replace("\\r", "")[:200]
+            logger.info("Message", extra={"field": safe_value})
+
+        This function is still useful for:
+        - Additional sanitization beyond CRLF (control characters, length)
+        - Non-CodeQL contexts where the helper improves readability
+        - Consistent sanitization across the codebase
 
     Example:
         >>> sanitize_for_log("error\\n[FAKE] Admin logged in")
@@ -118,7 +149,7 @@ def redact_sensitive_fields(data: dict[str, Any]) -> dict[str, Any]:
         - Creates a copy, doesn't modify original
 
     Example:
-        >>> redact_sensitive_fields({"user": "john", "api_key": "secret123"})
+        >>> redact_sensitive_fields({"user": "john", "api_key": "secret123"})  # pragma: allowlist secret
         {'user': 'john', 'api_key': '***REDACTED***'}
     """
     result = {}
