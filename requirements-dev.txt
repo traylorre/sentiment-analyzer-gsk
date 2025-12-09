@@ -17,7 +17,7 @@
 -r requirements.txt
 
 # Testing Framework
-pytest==8.3.4           # Compatible with pytest-asyncio 1.3.0
+pytest==9.0.2           # Compatible with pytest-asyncio 1.3.0
 pytest-cov==7.0.0       # Coverage reporting
 pytest-asyncio==1.3.0  # Async test support for SSE endpoints
 
