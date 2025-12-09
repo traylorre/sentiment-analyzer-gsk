@@ -11,7 +11,7 @@
 #
 # For Developers:
 #   - Run locally: make validate && make test-unit
-#   - Fix lint: black src/ tests/ && ruff check src/ tests/ --fix
+#   - Fix lint: ruff format src/ tests/ && ruff check src/ tests/ --fix
 
 name: PR Checks
 
@@ -30,7 +30,7 @@ env:
 
 jobs:
   # ========================================================================
-  # JOB 1: Lint (black + ruff)
+  # JOB 1: Lint (ruff format + ruff check)
   # ========================================================================
   lint:
     name: Lint
@@ -52,10 +52,11 @@ jobs:
       - name: Install linting tools
         run: |
           python -m pip install --upgrade pip
-          pip install black==23.11.0 ruff==0.1.6
+          pip install ruff==0.8.4
 
-      - name: Check formatting with black
-        run: black --check --diff src/ tests/
+      - name: Check formatting with ruff
+        # Note: Black removed in feat(057) - Ruff formatter preserves pragma comments
+        run: ruff format --check --diff src/ tests/
 
       - name: Check linting with ruff
         run: ruff check src/ tests/
