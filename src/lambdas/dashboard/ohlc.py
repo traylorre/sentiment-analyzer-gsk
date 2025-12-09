@@ -112,15 +112,9 @@ async def get_ohlc_data(
         time_range_str = range.value
 
     # Log without user-derived values to prevent log injection (CWE-117)
-    # CodeQL's Python taint tracking doesn't recognize sanitization patterns reliably
+    # CodeQL traces taint from range param -> days -> start_date/end_date
     # See: https://github.com/github/codeql/discussions/10702
-    logger.info(
-        "Fetching OHLC data",
-        extra={
-            "start_date": str(start_date),
-            "end_date": str(end_date),
-        },
-    )
+    logger.info("Fetching OHLC data")
 
     # Try Tiingo first (primary source per FR-014)
     source = "tiingo"
@@ -238,15 +232,9 @@ async def get_sentiment_history(
         start_date = end_date - timedelta(days=days)
 
     # Log without user-derived values to prevent log injection (CWE-117)
-    # CodeQL's Python taint tracking doesn't recognize sanitization patterns reliably
+    # CodeQL traces taint from range param -> days -> start_date/end_date
     # See: https://github.com/github/codeql/discussions/10702
-    logger.info(
-        "Fetching sentiment history",
-        extra={
-            "start_date": str(start_date),
-            "end_date": str(end_date),
-        },
-    )
+    logger.info("Fetching sentiment history")
 
     # Generate sentiment history
     # In production, this would query DynamoDB for historical sentiment records
