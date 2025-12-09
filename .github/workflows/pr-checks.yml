@@ -268,8 +268,11 @@ jobs:
         continue-on-error: true
 
       - name: Post Infracost comment
-        uses: infracost/actions/comment@v1
-        with:
-          path: /tmp/infracost-diff.json
-          behavior: update
+        run: |
+          infracost comment github \
+            --path /tmp/infracost-diff.json \
+            --repo $GITHUB_REPOSITORY \
+            --github-token ${{ github.token }} \
+            --pull-request ${{ github.event.pull_request.number }} \
+            --behavior update
         continue-on-error: true
