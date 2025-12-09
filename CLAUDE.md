@@ -21,6 +21,10 @@ Auto-generated from all feature plans. Last updated: 2025-11-26
 - S3 (Terraform state bucket) (018-tfstate-bucket-fix)
 - Python 3.13 + None (stdlib `time` module only) (066-fix-latency-timing)
 - N/A (in-memory latency tracking) (066-fix-latency-timing)
+- YAML (GitHub Actions workflows, Dependabot config) + GitHub Dependabot service, dependabot/fetch-metadata@v2 action, GitHub CLI (gh) (067-dependabot-automerge-audit)
+- N/A (configuration files only) (067-dependabot-automerge-audit)
+- YAML (GitHub Actions workflow syntax), Bash (slash command) + GitHub Actions, GitHub CLI (`gh`), GitHub REST API (069-stale-pr-autoupdate)
+- N/A (workflow configuration only) (069-stale-pr-autoupdate)
 
 - **Python 3.13** with FastAPI, boto3, pydantic, aws-lambda-powertools, httpx
 - **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, CloudFront
@@ -400,9 +404,9 @@ const eventSource = new EventSource(streamUrl);
 ```
 
 ## Recent Changes
+- 069-stale-pr-autoupdate: Added YAML (GitHub Actions workflow syntax), Bash (slash command) + GitHub Actions, GitHub CLI (`gh`), GitHub REST API
+- 067-dependabot-automerge-audit: Added YAML (GitHub Actions workflows, Dependabot config) + GitHub Dependabot service, dependabot/fetch-metadata@v2 action, GitHub CLI (gh)
 - 066-fix-latency-timing: Added Python 3.13 + None (stdlib `time` module only)
-- 018-tfstate-bucket-fix: Added N/A (IAM Policy JSON, HCL configuration) + AWS IAM, S3, Terraform
-- 018-tfstate-bucket-fix: Added N/A (IAM Policy JSON, HCL configuration) + AWS IAM, S3, Terraform
 
 <!-- MANUAL ADDITIONS START -->
 
