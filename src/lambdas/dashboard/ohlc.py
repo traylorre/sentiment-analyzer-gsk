@@ -111,20 +111,12 @@ async def get_ohlc_data(
         start_date = end_date - timedelta(days=days)
         time_range_str = range.value
 
-    # Sanitize user input before logging to prevent log injection (CWE-117)
-    # CodeQL's ReplaceLineBreaksSanitizer only recognizes .replace('\r\n','') and .replace('\n','')
-    # Length limiting must be done BEFORE sanitization to preserve the sanitizer barrier
-    # See: https://codeql.github.com/codeql-query-help/python/py-log-injection/
-    ticker_truncated = ticker[:200]
-    safe_ticker = ticker_truncated.replace("\r\n", "").replace("\n", "")
-    range_truncated = time_range_str[:50]
-    safe_range = range_truncated.replace("\r\n", "").replace("\n", "")
-
+    # Log without user-derived values to prevent log injection (CWE-117)
+    # CodeQL's Python taint tracking doesn't recognize sanitization patterns reliably
+    # See: https://github.com/github/codeql/discussions/10702
     logger.info(
         "Fetching OHLC data",
         extra={
-            "ticker": safe_ticker,
-            "range": safe_range,
             "start_date": str(start_date),
             "end_date": str(end_date),
         },
@@ -141,10 +133,7 @@ async def get_ohlc_data(
     except Exception as e:
         logger.warning(
             "Tiingo OHLC fetch failed, trying Finnhub",
-            extra={
-                "ticker": safe_ticker,
-                **get_safe_error_info(e),
-            },
+            extra=get_safe_error_info(e),
         )
 
     # Fallback to Finnhub if Tiingo failed or returned no data
@@ -157,18 +146,12 @@ async def get_ohlc_data(
         except Exception as e:
             logger.warning(
                 "Finnhub OHLC fetch failed",
-                extra={
-                    "ticker": safe_ticker,
-                    **get_safe_error_info(e),
-                },
+                extra=get_safe_error_info(e),
             )
 
     # Check if we got any data
     if not candles:
-        logger.warning(
-            "No OHLC data available from any source",
-            extra={"ticker": safe_ticker},
-        )
+        logger.warning("No OHLC data available from any source")
         raise HTTPException(
             status_code=404,
             detail=f"No price data available for {ticker}",
@@ -183,7 +166,6 @@ async def get_ohlc_data(
     logger.info(
         "OHLC data retrieved successfully",
         extra={
-            "ticker": safe_ticker,
             "source": source,
             "candle_count": len(candles),
         },
@@ -255,20 +237,12 @@ async def get_sentiment_history(
         days = TIME_RANGE_DAYS.get(range, 30)
         start_date = end_date - timedelta(days=days)
 
-    # Sanitize user input before logging to prevent log injection (CWE-117)
-    # CodeQL's ReplaceLineBreaksSanitizer only recognizes .replace('\r\n','') and .replace('\n','')
-    # Length limiting must be done BEFORE sanitization to preserve the sanitizer barrier
-    # See: https://codeql.github.com/codeql-query-help/python/py-log-injection/
-    ticker_truncated = ticker[:200]
-    safe_ticker = ticker_truncated.replace("\r\n", "").replace("\n", "")
-    source_truncated = source[:50]
-    safe_source = source_truncated.replace("\r\n", "").replace("\n", "")
-
+    # Log without user-derived values to prevent log injection (CWE-117)
+    # CodeQL's Python taint tracking doesn't recognize sanitization patterns reliably
+    # See: https://github.com/github/codeql/discussions/10702
     logger.info(
         "Fetching sentiment history",
         extra={
-            "ticker": safe_ticker,
-            "source": safe_source,
             "start_date": str(start_date),
             "end_date": str(end_date),
         },
@@ -324,11 +298,7 @@ async def get_sentiment_history(
 
     logger.info(
         "Sentiment history retrieved",
-        extra={
-            "ticker": safe_ticker,
-            "source": safe_source,
-            "point_count": len(history),
-        },
+        extra={"point_count": len(history)},
     )
 
     return SentimentHistoryResponse(
