@@ -1,0 +1,74 @@
+# Auto-update PR branches when workflow files change
+# ===================================================
+#
+# When workflow files are fixed in main, existing PRs still run the
+# old workflow from their branch. This workflow automatically updates
+# all open PR branches when workflow files change.
+#
+# For On-Call Engineers:
+#   - This workflow runs automatically on workflow file changes
+#   - Check job logs to see which PRs were updated/skipped
+#   - PRs with merge conflicts are skipped (not an error)
+#
+# For Developers:
+#   - Manual alternative: /poke-stale-prs slash command
+#   - PRs skipped due to conflicts need manual rebase
+
+name: Update PR Branches
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/**'
+
+jobs:
+  update-prs:
+    name: Update Open PRs
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Update all open PR branches
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "=== Stale PR Auto-Update ==="
+          echo "Triggered by workflow file changes in main"
+          echo ""
+
+          echo "Fetching open PRs..."
+          prs=$(gh pr list --repo ${{ github.repository }} --state open --json number -q '.[].number')
+
+          if [ -z "$prs" ]; then
+            echo "No open PRs to update"
+            echo ""
+            echo "Summary: 0 updated, 0 skipped"
+            exit 0
+          fi
+
+          echo "Found PRs: $prs"
+          echo ""
+
+          updated=0
+          skipped=0
+
+          for pr in $prs; do
+            echo "Updating PR #$pr..."
+            if gh api repos/${{ github.repository }}/pulls/$pr/update-branch -X PUT 2>/dev/null; then
+              echo "  ✓ PR #$pr updated successfully"
+              ((updated++))
+            else
+              echo "  ⚠ PR #$pr skipped (likely has conflicts or is up to date)"
+              ((skipped++))
+            fi
+          done
+
+          echo ""
+          echo "=== Summary ==="
+          echo "Updated: $updated"
+          echo "Skipped: $skipped"
+          echo "Total PRs processed: $((updated + skipped))"
