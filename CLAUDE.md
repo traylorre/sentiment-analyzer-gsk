@@ -19,6 +19,8 @@ Auto-generated from all feature plans. Last updated: 2025-11-26
 - DynamoDB (existing tables - read-only access for SSE Lambda) (016-sse-streaming-lambda)
 - N/A (IAM Policy JSON, HCL configuration) + AWS IAM, S3, Terraform (018-tfstate-bucket-fix)
 - S3 (Terraform state bucket) (018-tfstate-bucket-fix)
+- Python 3.13 + None (stdlib `time` module only) (066-fix-latency-timing)
+- N/A (in-memory latency tracking) (066-fix-latency-timing)
 
 - **Python 3.13** with FastAPI, boto3, pydantic, aws-lambda-powertools, httpx
 - **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, CloudFront
@@ -398,9 +400,9 @@ const eventSource = new EventSource(streamUrl);
 ```
 
 ## Recent Changes
+- 066-fix-latency-timing: Added Python 3.13 + None (stdlib `time` module only)
 - 018-tfstate-bucket-fix: Added N/A (IAM Policy JSON, HCL configuration) + AWS IAM, S3, Terraform
 - 018-tfstate-bucket-fix: Added N/A (IAM Policy JSON, HCL configuration) + AWS IAM, S3, Terraform
-- 016-sse-streaming-lambda: Added Python 3.13 + FastAPI, sse-starlette, boto3, aws-xray-sdk, AWS Lambda Web Adapter
 
 <!-- MANUAL ADDITIONS START -->
 
