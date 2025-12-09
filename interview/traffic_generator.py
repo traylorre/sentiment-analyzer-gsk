@@ -121,7 +121,7 @@ class TrafficGenerator:
     ) -> tuple[int, dict | None]:
         """Make an HTTP request and track statistics."""
         url = f"{self.base_url}{endpoint}"
-        start = time.time()
+        start = time.monotonic()
 
         try:
             self.stats.requests_sent += 1
@@ -132,7 +132,7 @@ class TrafficGenerator:
                 json=json_data,
                 timeout=30.0,
             )
-            latency = (time.time() - start) * 1000
+            latency = (time.monotonic() - start) * 1000
             self.stats.total_latency_ms += latency
 
             if response.status_code in (200, 201):
@@ -496,28 +496,28 @@ class TrafficGenerator:
 
         # First request (cache miss)
         self.log("First request (cold cache)...", "")
-        start = time.time()
+        start = time.monotonic()
         await self.make_request(
             client,
             "GET",
             f"/api/v2/configurations/{config_id}/sentiment",
             headers=headers,
         )
-        cold_latency = (time.time() - start) * 1000
+        cold_latency = (time.monotonic() - start) * 1000
         self.log(f"Cold cache latency: {cold_latency:.1f}ms", "")
 
         # Subsequent requests (should be faster)
         warm_latencies = []
         for _ in range(iterations - 1):
             await asyncio.sleep(0.5)
-            start = time.time()
+            start = time.monotonic()
             await self.make_request(
                 client,
                 "GET",
                 f"/api/v2/configurations/{config_id}/sentiment",
                 headers=headers,
             )
-            latency = (time.time() - start) * 1000
+            latency = (time.monotonic() - start) * 1000
             warm_latencies.append(latency)
 
         avg_warm = sum(warm_latencies) / len(warm_latencies) if warm_latencies else 0
