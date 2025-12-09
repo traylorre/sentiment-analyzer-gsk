@@ -121,6 +121,36 @@ make validate                # Full validation including SAST
 3. Do NOT suppress without documented justification
 4. Do NOT rename variables to avoid detection
 
+## SAST (Static Application Security Testing)
+
+Local security scanning runs before code reaches CI. Two-tier approach:
+
+### Pre-commit: Bandit (fast, every commit)
+```bash
+# Runs automatically on commit via pre-commit hook
+# Blocks HIGH and MEDIUM severity issues
+# Config: pyproject.toml [tool.bandit]
+bandit -c pyproject.toml -r src/ -ll
+```
+
+### Make validate: Semgrep (comprehensive, before push)
+```bash
+# Run as part of make validate or standalone
+make sast                    # Run SAST only
+make validate                # Full validation including SAST
+```
+
+### Common SAST Patterns Fixed in This Repo
+- **Log injection (CWE-117)**: Use `sanitize_for_log()` from `src/lambdas/shared/logging_utils.py`
+- **Clear-text logging (CWE-312)**: Never log sensitive data; use `redact_sensitive_fields()`
+- **Hardcoded secrets (CWE-798)**: Use AWS Secrets Manager, never hardcode
+
+### When SAST Flags Issues
+1. Understand the vulnerability pattern (check CWE reference)
+2. Fix with proper sanitization or redesign
+3. Do NOT suppress without documented justification
+4. Do NOT rename variables to avoid detection
+
 ## Git Commit Security Requirements
 
 **CRITICAL SECURITY POLICY - NEVER BYPASS**:
@@ -437,9 +467,10 @@ const eventSource = new EventSource(streamUrl);
 ```
 
 ## Recent Changes
-- 057-pragma-comment-stability: Added [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
+- 057-pragma-comment-stability: Added Ruff formatter (pragma comment preservation)
 - 070-validation-blindspot-audit: Added Python 3.13 (existing project standard) + Semgrep (SAST), Bandit (Python security linter), pre-commit, Make
 - 069-stale-pr-autoupdate: Added YAML (GitHub Actions workflow syntax), Bash (slash command) + GitHub Actions, GitHub CLI (`gh`), GitHub REST API
+- 067-dependabot-automerge-audit: Added YAML (GitHub Actions workflows, Dependabot config) + GitHub Dependabot service, dependabot/fetch-metadata@v2 action, GitHub CLI (gh)
 
 <!-- MANUAL ADDITIONS START -->
 
