@@ -349,7 +349,7 @@ def test_scenario(e2e_context: E2ETestContext) -> TestScenario:
 @contextmanager
 def fail_mode_tiingo(
     mock: MockTiingoAdapter,
-) -> Generator[MockTiingoAdapter, None, None]:
+) -> Generator[MockTiingoAdapter]:
     """Context manager to temporarily enable Tiingo fail mode.
 
     Args:
@@ -369,7 +369,7 @@ def fail_mode_tiingo(
 @contextmanager
 def fail_mode_finnhub(
     mock: MockFinnhubAdapter,
-) -> Generator[MockFinnhubAdapter, None, None]:
+) -> Generator[MockFinnhubAdapter]:
     """Context manager to temporarily enable Finnhub fail mode.
 
     Args:
@@ -387,7 +387,7 @@ def fail_mode_finnhub(
 
 
 @contextmanager
-def rate_limit_sendgrid(mock: MockSendGrid) -> Generator[MockSendGrid, None, None]:
+def rate_limit_sendgrid(mock: MockSendGrid) -> Generator[MockSendGrid]:
     """Context manager to simulate SendGrid rate limiting.
 
     Args:
@@ -467,7 +467,7 @@ def generate_test_email(test_email_domain: str, username: str = "user") -> str:
 
 
 @pytest_asyncio.fixture
-async def api_client() -> AsyncGenerator[PreprodAPIClient, None]:
+async def api_client() -> AsyncGenerator[PreprodAPIClient]:
     """Preprod API client for making HTTP requests.
 
     Function-scoped due to pytest-asyncio's asyncio_default_fixture_loop_scope=function.
@@ -636,7 +636,7 @@ def calculate_ttl_timestamp(days: int = E2E_TEST_TTL_DAYS) -> int:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def cleanup_test_data(test_run_id: str) -> Generator[None, None, None]:
+def cleanup_test_data(test_run_id: str) -> Generator[None]:
     """Log test run ID for reference (no auto-cleanup).
 
     Test data uses TTL-based expiration (7 days) instead of immediate cleanup.

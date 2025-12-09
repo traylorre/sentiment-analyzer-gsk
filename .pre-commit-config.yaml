@@ -47,16 +47,11 @@ repos:
       - id: check-json
       - id: check-toml
 
-  # Python code formatter
-  - repo: https://github.com/psf/black
-    rev: 25.11.0
-    hooks:
-      - id: black
-        language_version: python3.13
-
-  # Python linter (replaces flake8, isort - but NOT bandit, see below)
+  # Python formatter and linter (Ruff)
+  # Note: Black removed in feat(057) - Ruff formatter preserves pragma comments
+  # (# noqa, # nosec, # type:) by excluding them from line length calculations
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.1.6
+    rev: v0.8.4
     hooks:
       - id: ruff
         args: [--fix]

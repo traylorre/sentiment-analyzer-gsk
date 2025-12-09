@@ -21,7 +21,7 @@ import pytest
 interview_path = Path(__file__).parent.parent.parent.parent / "interview"
 sys.path.insert(0, str(interview_path))
 
-from traffic_generator import (  # noqa: E402
+from traffic_generator import (
     ENVIRONMENTS,
     SAMPLE_CONFIG_NAMES,
     SAMPLE_TICKERS,

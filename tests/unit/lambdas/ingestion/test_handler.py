@@ -38,12 +38,12 @@ def env_vars():
     """Set required environment variables."""
     os.environ["DYNAMODB_TABLE"] = "test-financial-news"
     os.environ["SNS_TOPIC_ARN"] = "arn:aws:sns:us-east-1:123456789:test-topic"
-    os.environ[
-        "TIINGO_SECRET_ARN"
-    ] = "arn:aws:secretsmanager:us-east-1:123456789:secret:tiingo"
-    os.environ[
-        "FINNHUB_SECRET_ARN"
-    ] = "arn:aws:secretsmanager:us-east-1:123456789:secret:finnhub"
+    os.environ["TIINGO_SECRET_ARN"] = (
+        "arn:aws:secretsmanager:us-east-1:123456789:secret:tiingo"
+    )
+    os.environ["FINNHUB_SECRET_ARN"] = (
+        "arn:aws:secretsmanager:us-east-1:123456789:secret:finnhub"
+    )
     os.environ["MODEL_VERSION"] = "v1.0.0"
     os.environ["AWS_REGION"] = "us-east-1"
     yield

@@ -62,7 +62,7 @@ class ErrorCode(str, Enum):
     NOT_FOUND = "NOT_FOUND"
 
     # Infrastructure errors
-    SECRET_ERROR = "SECRET_ERROR"  # noqa: S105 - Not a password, error code name
+    SECRET_ERROR = "SECRET_ERROR"  # pragma: allowlist secret
     DATABASE_ERROR = "DATABASE_ERROR"
 
     # Authentication/authorization

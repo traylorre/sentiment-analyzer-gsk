@@ -39,7 +39,7 @@ _original_transformers = sys.modules.get("transformers")
 # Inject mock into sys.modules
 sys.modules["transformers"] = _mock_transformers
 
-from src.lambdas.analysis.sentiment import (  # noqa: E402
+from src.lambdas.analysis.sentiment import (
     InferenceError,
     ModelLoadError,
     analyze_sentiment,
@@ -127,7 +127,7 @@ class TestLoadModel:
         load_model()
 
         call_args = _mock_pipeline.call_args
-        assert call_args[1]["model"] == "/tmp/model"  # noqa: S108
+        assert call_args[1]["model"] == "/tmp/model"
 
     def test_load_model_failure(self, caplog):
         """Test error handling when model load fails."""

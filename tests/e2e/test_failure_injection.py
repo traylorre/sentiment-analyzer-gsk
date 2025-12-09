@@ -308,7 +308,7 @@ async def test_timeout_retry_behavior(
                 504,
             ), f"Unexpected status: {response.status_code}"
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pytest.fail("API request timed out after 30s - no timeout handling")
 
     finally:
@@ -397,7 +397,7 @@ async def test_rate_limit_returns_retry_info(
                     )
                     # Either header or body should have retry info
                     # (but don't fail - some APIs don't include this)
-                except Exception:  # noqa: S110
+                except Exception:
                     # JSON parsing failed - that's ok for error responses
                     pass
 

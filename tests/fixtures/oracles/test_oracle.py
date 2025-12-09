@@ -74,12 +74,12 @@ class TestOracle:
 
         while current_date <= end_date:
             # Same variability as endpoint
-            daily_variation = random.uniform(-0.3, 0.3)  # noqa: S311
+            daily_variation = random.uniform(-0.3, 0.3)
             score = max(-1.0, min(1.0, base_score + daily_variation))
             score = round(score, 4)
 
             label = self.expected_sentiment_label(score)
-            confidence = round(random.uniform(0.6, 0.95), 4)  # noqa: S311
+            confidence = round(random.uniform(0.6, 0.95), 4)
 
             history.append(
                 {

@@ -70,8 +70,8 @@ pytest tests/unit/shared/middleware/test_rate_limit.py -v
 # Run tests with coverage
 pytest tests/unit/ --cov=src --cov-report=term-missing
 
-# Format code
-black src/ tests/
+# Format code (Ruff - migrated from Black in feat(057))
+ruff format src/ tests/
 
 # Lint code
 ruff check src/ tests/
@@ -85,10 +85,11 @@ cd infrastructure/terraform && terraform fmt -recursive && terraform validate
 
 ## Code Style
 
-- Python 3.13: Follow PEP 8, use black for formatting
-- Linting: ruff (replaces flake8, isort - but NOT bandit)
-- Line length: 88 characters
+- Python 3.13: Follow PEP 8, use Ruff for formatting (Black removed in feat(057))
+- Linting: Ruff (replaces flake8, isort - but NOT bandit)
+- Line length: 88 characters (pragma comments excluded from limit)
 - Configuration: pyproject.toml (single source of truth)
+- Pragma audit: `make audit-pragma` validates # noqa and # nosec comments
 
 ## SAST (Static Application Security Testing)
 
@@ -436,9 +437,9 @@ const eventSource = new EventSource(streamUrl);
 ```
 
 ## Recent Changes
+- 057-pragma-comment-stability: Added [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
 - 070-validation-blindspot-audit: Added Python 3.13 (existing project standard) + Semgrep (SAST), Bandit (Python security linter), pre-commit, Make
 - 069-stale-pr-autoupdate: Added YAML (GitHub Actions workflow syntax), Bash (slash command) + GitHub Actions, GitHub CLI (`gh`), GitHub REST API
-- 067-dependabot-automerge-audit: Added YAML (GitHub Actions workflows, Dependabot config) + GitHub Dependabot service, dependabot/fetch-metadata@v2 action, GitHub CLI (gh)
 
 <!-- MANUAL ADDITIONS START -->
 

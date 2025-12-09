@@ -298,9 +298,7 @@ class TrafficGenerator:
 
         # Create configuration
         # Using random for demo traffic generation (not security-sensitive)
-        tickers = random.sample(  # noqa: S311
-            SAMPLE_TICKERS, min(3, len(SAMPLE_TICKERS))
-        )
+        tickers = random.sample(SAMPLE_TICKERS, min(3, len(SAMPLE_TICKERS)))
         config_name = random.choice(SAMPLE_CONFIG_NAMES)  # noqa: S311
         config = await self.create_configuration(
             client,
@@ -415,7 +413,7 @@ class TrafficGenerator:
                     await self.get_configurations(client, session["user_id"])
                 elif op == "create_config":
                     if i < 2:  # Limit config creation per user
-                        tickers = random.sample(SAMPLE_TICKERS, 2)  # noqa: S311
+                        tickers = random.sample(SAMPLE_TICKERS, 2)
                         await self.create_configuration(
                             client,
                             session["user_id"],
@@ -600,13 +598,13 @@ async def main():
 
     print(
         f"""
-{'=' * 50}
+{"=" * 50}
 SENTIMENT ANALYZER - TRAFFIC GENERATOR
-{'=' * 50}
+{"=" * 50}
 Environment: {args.env.upper()}
 URL:         {base_url}
 Scenario:    {args.scenario}
-{'=' * 50}
+{"=" * 50}
     """
     )
 

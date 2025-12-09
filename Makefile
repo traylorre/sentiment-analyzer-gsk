@@ -1,4 +1,4 @@
-.PHONY: help install install-tools validate fmt fmt-check lint security sast test test-local test-unit test-integration test-e2e \
+.PHONY: help install install-tools validate fmt fmt-check lint security sast audit-pragma test test-local test-unit test-integration test-e2e \
         localstack-up localstack-down localstack-wait localstack-logs localstack-status \
         tf-init tf-plan tf-apply tf-destroy tf-init-local tf-plan-local tf-apply-local tf-destroy-local \
         cost cost-diff cost-baseline clean clean-all
@@ -42,13 +42,11 @@ install-tools: ## Install CLI tools via aqua
 validate: fmt lint security sast ## Run all validation (fmt + lint + security + sast)
 	@echo "$(GREEN)✓ All validation passed$(NC)"
 
-fmt: ## Format Python code
-	black src tests
+fmt: ## Format Python code (Ruff only - Black removed in feat(057))
 	ruff format src tests
 	@echo "$(GREEN)✓ Formatting complete$(NC)"
 
 fmt-check: ## Check formatting without changes
-	black --check src tests
 	ruff format --check src tests
 
 lint: ## Run linters
@@ -73,6 +71,15 @@ sast: ## Run SAST (Static Application Security Testing) - Bandit + Semgrep
 		echo "$(YELLOW)Semgrep not installed, skipping. Install with: pip install semgrep$(NC)"; \
 	fi
 	@echo "$(GREEN)✓ SAST scan complete$(NC)"
+
+audit-pragma: ## Audit pragma comments (# noqa, # nosec) for validity
+	@echo "$(YELLOW)=== Checking for unused # noqa comments (RUF100) ===$(NC)"
+	ruff check --select RUF100 src/ tests/
+	@echo ""
+	@echo "$(YELLOW)=== Auditing # nosec usage (Bandit with suppressions disabled) ===$(NC)"
+	bandit -r src/ --ignore-nosec 2>/dev/null | grep -E "^(>>|Issue)" || echo "No issues found"
+	@echo ""
+	@echo "$(GREEN)✓ Pragma audit complete$(NC)"
 
 check-iam-patterns: ## Validate IAM ARN patterns match Terraform resource names
 	@./scripts/check-iam-patterns.sh

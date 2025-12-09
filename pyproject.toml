@@ -7,7 +7,7 @@
 #
 # For Developers:
 # - Use pyproject.toml for all tool configuration (single source of truth)
-# - Run formatters: black src/ tests/
+# - Run formatters: ruff format src/ tests/
 # - Run linters: ruff check src/ tests/
 
 [build-system]
@@ -43,8 +43,7 @@ dev = [
     "pytest>=7.4.3",
     "pytest-asyncio>=0.23.0",
     "moto>=4.2.0",
-    "black>=23.11.0",
-    "ruff>=0.1.6",
+    "ruff>=0.8.0",
     # E2E test dependencies (008-e2e-validation-suite)
     "httpx>=0.27.0",
     "httpx-sse>=0.4.0",
@@ -63,55 +62,52 @@ dev = [
 # Tool Configuration
 # =============================================================================
 
-[tool.black]
-line-length = 88
-target-version = ['py312']  # Black doesn't have py313 target yet, py312 is latest
-include = '\.pyi?$'
-extend-exclude = '''
-/(
-  # defaults
-  \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | _build
-  | buck-out
-  | build
-  | dist
-  # project-specific
-  | node_modules
-  | infrastructure
-)/
-'''
+# Note: Black configuration removed in feat(057) - migrated to Ruff formatter
+# Ruff formatter preserves pragma comments (# noqa, # nosec, # type:) by excluding
+# them from line length calculations, preventing drift on long lines.
 
 [tool.ruff]
 line-length = 88
-target-version = "py312"  # Ruff doesn't have py313 target yet, py312 is latest
+target-version = "py313"
+
+[tool.ruff.lint]
 select = [
-    "E",   # pycodestyle errors
-    "W",   # pycodestyle warnings
-    "F",   # pyflakes
-    "I",   # isort
-    "B",   # flake8-bugbear
-    "C4",  # flake8-comprehensions
-    "UP",  # pyupgrade
-    "S",   # flake8-bandit (security)
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+    "S",      # flake8-bandit (security)
+    "RUF100", # Detect unused noqa directives
 ]
 ignore = [
-    "E501",  # line too long (handled by black)
+    "E501",  # line too long (handled by ruff format)
     "S101",  # assert used (OK in tests)
 ]
+# Tell Ruff about external rule codes used by Bandit (not Ruff-native)
+external = ["B108", "B202", "B324"]
 
-[tool.ruff.per-file-ignores]
+[tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = [
     "S101",  # assert allowed in tests
     "S105",  # hardcoded passwords OK in test fixtures
     "S106",  # hardcoded passwords OK in test fixtures
+    "S108",  # /tmp paths OK in tests (mocked)
+    "S110",  # try-except-pass OK in test cleanup/chaos tests
+    "S311",  # random module OK for test data generation
+    "E402",  # Module-level imports OK after sys.path manipulation
+    "C420",  # dict comprehension style OK in tests
 ]
 "src/lambdas/shared/errors.py" = [
     "S105",  # error code constants are not passwords
+]
+"src/lambdas/shared/errors_module.py" = [
+    "S105",  # error code constants are not passwords
+]
+"src/lambdas/shared/auth/cognito.py" = [
+    "S105",  # token_type = "Bearer" is not a password
 ]
 "src/lambdas/*/handler.py" = [
     "E402",  # X-Ray must be imported and patched before other imports
@@ -127,10 +123,10 @@ ignore = [
 "src/lambdas/shared/adapters/tiingo.py" = ["S324"]
 "src/lambdas/shared/adapters/finnhub.py" = ["S324"]
 "src/lambdas/dashboard/sentiment.py" = ["S324"]
-# Lambda requires /tmp storage; S202 (tarfile.extractall) handled via inline # noqa
-"src/lambdas/analysis/sentiment.py" = ["S108"]
+# Lambda requires /tmp storage and tarfile.extractall from trusted S3 source
+"src/lambdas/analysis/sentiment.py" = ["S108", "S202"]
 
-[tool.ruff.isort]
+[tool.ruff.lint.isort]
 known-first-party = ["src"]
 
 [tool.mypy]

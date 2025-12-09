@@ -115,7 +115,7 @@ def _download_model_from_s3() -> None:
         # Extract tar.gz to /tmp/model
         extract_start = time.perf_counter()
         with tarfile.open(tar_path, "r:gz") as tar:
-            tar.extractall(path="/tmp")  # noqa: S202 # nosec B108 B202 - Lambda /tmp
+            tar.extractall(path="/tmp")  # nosec B108 B202 - Lambda /tmp
         extract_time_ms = (time.perf_counter() - extract_start) * 1000
 
         logger.info(

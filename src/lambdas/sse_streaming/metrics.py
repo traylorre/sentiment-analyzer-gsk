@@ -131,7 +131,7 @@ class MetricsEmitter:
         self._put_metric("PollDurationMs", duration_ms, unit="Milliseconds")
 
     @contextmanager
-    def measure_latency(self) -> Generator[None, None, None]:
+    def measure_latency(self) -> Generator[None]:
         """Context manager to measure and emit latency.
 
         Example:

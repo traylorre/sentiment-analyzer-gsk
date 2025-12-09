@@ -204,7 +204,7 @@ async def test_retry_after_header_present(
                             or "retryAfter" in data
                             or "retry" in str(data).lower()
                         ), "429 response missing retry information"
-                    except Exception:  # noqa: S110
+                    except Exception:
                         pass  # No JSON body is also acceptable
 
                 return  # Test passed - found a 429
