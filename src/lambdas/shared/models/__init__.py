@@ -16,6 +16,7 @@ from src.lambdas.shared.models.alert_rule import (
     AlertRule,
     AlertRuleCreate,
 )
+from src.lambdas.shared.models.collection_event import CollectionEvent
 from src.lambdas.shared.models.configuration import (
     CONFIG_LIMITS,
     Configuration,
@@ -23,9 +24,17 @@ from src.lambdas.shared.models.configuration import (
     ConfigurationUpdate,
     Ticker,
 )
+from src.lambdas.shared.models.data_source import (
+    ApiConfig,
+    DataSourceConfig,
+)
 from src.lambdas.shared.models.magic_link_token import (
     SESSION_LIMITS,
     MagicLinkToken,
+)
+from src.lambdas.shared.models.news_item import (
+    NewsItem,
+    SentimentScore,
 )
 from src.lambdas.shared.models.notification import (
     DigestSettings,
@@ -95,4 +104,10 @@ __all__ = [
     "SentimentHistoryResponse",
     "SentimentPoint",
     "SentimentSourceType",
+    # Ingestion models (Feature 072)
+    "NewsItem",
+    "SentimentScore",
+    "CollectionEvent",
+    "DataSourceConfig",
+    "ApiConfig",
 ]

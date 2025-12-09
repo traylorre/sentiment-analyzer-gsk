@@ -1,0 +1,109 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://sentiment-analyzer.example.com/schemas/data-source-config.json",
+  "title": "DataSourceConfig",
+  "description": "Configuration and availability status for a data source",
+  "type": "object",
+  "required": [
+    "source_id",
+    "display_name",
+    "priority",
+    "is_available",
+    "consecutive_failures"
+  ],
+  "properties": {
+    "source_id": {
+      "type": "string",
+      "enum": ["tiingo", "finnhub"],
+      "description": "Unique identifier for the data source"
+    },
+    "display_name": {
+      "type": "string",
+      "maxLength": 50,
+      "description": "Human-readable name for display"
+    },
+    "priority": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10,
+      "description": "Priority order (1=primary, 2=secondary)"
+    },
+    "is_available": {
+      "type": "boolean",
+      "description": "Whether the source is currently available"
+    },
+    "last_success_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp of last successful collection"
+    },
+    "last_failure_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp of last failed collection"
+    },
+    "consecutive_failures": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of consecutive failures in current window"
+    },
+    "failure_window_start": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Start of the 15-minute failure tracking window"
+    },
+    "api_config": {
+      "type": "object",
+      "properties": {
+        "base_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "API base URL"
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 60,
+          "default": 10,
+          "description": "Request timeout"
+        },
+        "rate_limit_per_minute": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum requests per minute"
+        }
+      },
+      "description": "API-specific configuration"
+    }
+  },
+  "examples": [
+    {
+      "source_id": "tiingo",
+      "display_name": "Tiingo",
+      "priority": 1,
+      "is_available": true,
+      "last_success_at": "2025-12-09T14:30:00Z",
+      "consecutive_failures": 0,
+      "api_config": {
+        "base_url": "https://api.tiingo.com",
+        "timeout_seconds": 10,
+        "rate_limit_per_minute": 500
+      }
+    },
+    {
+      "source_id": "finnhub",
+      "display_name": "Finnhub",
+      "priority": 2,
+      "is_available": true,
+      "last_success_at": "2025-12-09T14:25:00Z",
+      "last_failure_at": "2025-12-09T14:20:00Z",
+      "consecutive_failures": 1,
+      "failure_window_start": "2025-12-09T14:15:00Z",
+      "api_config": {
+        "base_url": "https://finnhub.io/api/v1",
+        "timeout_seconds": 10,
+        "rate_limit_per_minute": 60
+      }
+    }
+  ]
+}

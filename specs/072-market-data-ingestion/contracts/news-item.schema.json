@@ -1,0 +1,140 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://sentiment-analyzer.example.com/schemas/news-item.json",
+  "title": "NewsItem",
+  "description": "Deduplicated news article with embedded sentiment",
+  "type": "object",
+  "required": [
+    "dedup_key",
+    "source",
+    "headline",
+    "published_at",
+    "ingested_at",
+    "tickers",
+    "entity_type"
+  ],
+  "properties": {
+    "dedup_key": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$",
+      "description": "SHA256 hash of headline|source|date, truncated to 32 chars"
+    },
+    "source": {
+      "type": "string",
+      "enum": ["tiingo", "finnhub"],
+      "description": "Data source identifier"
+    },
+    "headline": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "description": "Article headline/title"
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 5000,
+      "description": "Article summary or body text"
+    },
+    "url": {
+      "type": "string",
+      "format": "uri",
+      "maxLength": 2048,
+      "description": "Original article URL"
+    },
+    "published_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO8601 publication timestamp"
+    },
+    "ingested_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO8601 timestamp when collected"
+    },
+    "tickers": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Z]{1,5}$"
+      },
+      "description": "Associated stock ticker symbols"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 50
+      },
+      "description": "Article categories/tags"
+    },
+    "source_name": {
+      "type": "string",
+      "maxLength": 100,
+      "description": "Original publisher name (e.g., 'reuters')"
+    },
+    "sentiment": {
+      "$ref": "#/definitions/SentimentScore"
+    },
+    "entity_type": {
+      "type": "string",
+      "const": "NEWS_ITEM",
+      "description": "Entity type discriminator"
+    }
+  },
+  "definitions": {
+    "SentimentScore": {
+      "type": "object",
+      "required": ["score", "confidence", "label"],
+      "properties": {
+        "score": {
+          "type": "number",
+          "minimum": -1.0,
+          "maximum": 1.0,
+          "description": "Sentiment score (-1 = negative, +1 = positive)"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "description": "Model confidence in the score"
+        },
+        "label": {
+          "type": "string",
+          "enum": ["positive", "neutral", "negative"],
+          "description": "Derived sentiment label"
+        },
+        "model_version": {
+          "type": "string",
+          "description": "Sentiment model version identifier"
+        },
+        "calculated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When sentiment was calculated"
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "dedup_key": "a1b2c3d4e5f6789012345678901234ab",
+      "source": "tiingo",
+      "headline": "Apple Reports Record Q4 Earnings",
+      "description": "Apple Inc. reported quarterly earnings that exceeded analyst expectations...",
+      "url": "https://example.com/apple-earnings",
+      "published_at": "2025-12-09T14:30:00Z",
+      "ingested_at": "2025-12-09T14:35:00Z",
+      "tickers": ["AAPL"],
+      "tags": ["earnings", "technology"],
+      "source_name": "reuters",
+      "sentiment": {
+        "score": 0.72,
+        "confidence": 0.89,
+        "label": "positive"
+      },
+      "entity_type": "NEWS_ITEM"
+    }
+  ]
+}

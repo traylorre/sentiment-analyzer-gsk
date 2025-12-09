@@ -1,0 +1,97 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://sentiment-analyzer.example.com/schemas/collection-event.json",
+  "title": "CollectionEvent",
+  "description": "Audit log entry for a data collection attempt",
+  "type": "object",
+  "required": [
+    "event_id",
+    "source",
+    "timestamp",
+    "success",
+    "item_count",
+    "new_item_count",
+    "duration_ms",
+    "is_failover"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for this collection event"
+    },
+    "source": {
+      "type": "string",
+      "enum": ["tiingo", "finnhub"],
+      "description": "Data source that was queried"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO8601 timestamp when collection started"
+    },
+    "success": {
+      "type": "boolean",
+      "description": "Whether the collection succeeded"
+    },
+    "item_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Total items received from source (0 if failed)"
+    },
+    "new_item_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Items that passed deduplication"
+    },
+    "duration_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 60000,
+      "description": "Collection duration in milliseconds"
+    },
+    "error_code": {
+      "type": "string",
+      "maxLength": 50,
+      "description": "Error code if collection failed",
+      "examples": ["TIMEOUT", "RATE_LIMIT", "AUTH_FAILED", "MALFORMED_RESPONSE"]
+    },
+    "error_message": {
+      "type": "string",
+      "maxLength": 1000,
+      "description": "Human-readable error description"
+    },
+    "is_failover": {
+      "type": "boolean",
+      "description": "True if this was a failover to secondary source"
+    },
+    "ttl": {
+      "type": "integer",
+      "description": "DynamoDB TTL epoch timestamp (30 days from creation)"
+    }
+  },
+  "examples": [
+    {
+      "event_id": "550e8400-e29b-41d4-a716-446655440000",
+      "source": "tiingo",
+      "timestamp": "2025-12-09T14:30:00Z",
+      "success": true,
+      "item_count": 47,
+      "new_item_count": 12,
+      "duration_ms": 2340,
+      "is_failover": false
+    },
+    {
+      "event_id": "550e8400-e29b-41d4-a716-446655440001",
+      "source": "finnhub",
+      "timestamp": "2025-12-09T14:35:00Z",
+      "success": false,
+      "item_count": 0,
+      "new_item_count": 0,
+      "duration_ms": 10023,
+      "error_code": "TIMEOUT",
+      "error_message": "Request timed out after 10 seconds",
+      "is_failover": true
+    }
+  ]
+}
