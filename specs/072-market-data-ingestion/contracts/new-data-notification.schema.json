@@ -1,0 +1,80 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://sentiment-analyzer.example.com/schemas/new-data-notification.json",
+  "title": "NewDataNotification",
+  "description": "SNS message sent to downstream systems when new data is available",
+  "type": "object",
+  "required": [
+    "event_type",
+    "timestamp",
+    "source",
+    "item_count",
+    "tickers"
+  ],
+  "properties": {
+    "event_type": {
+      "type": "string",
+      "const": "NEW_MARKET_DATA",
+      "description": "Event type discriminator"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO8601 timestamp when data was stored"
+    },
+    "source": {
+      "type": "string",
+      "enum": ["tiingo", "finnhub"],
+      "description": "Data source that provided the data"
+    },
+    "item_count": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Number of new items stored"
+    },
+    "tickers": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Z]{1,5}$"
+      },
+      "description": "Unique tickers affected by this data"
+    },
+    "date_range": {
+      "type": "object",
+      "required": ["start", "end"],
+      "properties": {
+        "start": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Earliest publication date in batch"
+        },
+        "end": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Latest publication date in batch"
+        }
+      },
+      "description": "Publication date range of new items"
+    },
+    "collection_event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Reference to the CollectionEvent that produced this data"
+    }
+  },
+  "examples": [
+    {
+      "event_type": "NEW_MARKET_DATA",
+      "timestamp": "2025-12-09T14:35:30Z",
+      "source": "tiingo",
+      "item_count": 12,
+      "tickers": ["AAPL", "MSFT", "GOOGL", "AMZN"],
+      "date_range": {
+        "start": "2025-12-09T13:00:00Z",
+        "end": "2025-12-09T14:30:00Z"
+      },
+      "collection_event_id": "550e8400-e29b-41d4-a716-446655440000"
+    }
+  ]
+}
