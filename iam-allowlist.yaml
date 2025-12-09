@@ -8,7 +8,7 @@
 # Context requirements can make exemptions conditional on policy context
 
 version: "1.0"
-last_updated: "2025-12-05"
+last_updated: "2025-12-08"
 
 patterns:
   # CI/CD Lambda deployment - requires CreateFunction + PassRole
@@ -21,7 +21,7 @@ patterns:
     justification: >
       CI/CD pipelines legitimately require lambda:CreateFunction + iam:PassRole for Lambda deployments.
       Privilege escalation risk is mitigated by PassRole resource constraint limited to:
-      *-lambda-role, *-fis-execution-role, *-backup-role, *-cognito-*, *-rum-*.
+      arn:aws:iam::*:role/{env}-* (environment-prefixed roles only).
       This follows AWS CI/CD best practices for automated deployments.
     canonical_source: "https://docs.aws.amazon.com/prescriptive-guidance/latest/strategy-cicd-litmus/cicd-best-practices.html"
     context_required:
@@ -36,7 +36,7 @@ patterns:
     justification: >
       Event-driven architectures require lambda:CreateEventSourceMapping + iam:PassRole for
       connecting Lambda functions to SQS/DynamoDB/Kinesis triggers. PassRole scope is restricted
-      to predefined role patterns, limiting the escalation surface.
+      to arn:aws:iam::*:role/{env}-* (environment-prefixed roles only).
     canonical_source: "https://docs.aws.amazon.com/lambda/latest/dg/access-control-resource-based.html"
     context_required:
       passrole_scoped: true
