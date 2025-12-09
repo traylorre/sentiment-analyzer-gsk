@@ -210,7 +210,7 @@ class TestFullPipeline:
         stored_items = []
         for i, article in enumerate(test_articles):
             source_id = generate_source_id(article["url"])
-            timestamp = f"2025-01-15T{10+i:02d}:00:00Z"
+            timestamp = f"2025-01-15T{10 + i:02d}:00:00Z"
 
             item = {
                 "source_id": source_id,

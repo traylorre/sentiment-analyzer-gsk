@@ -1707,7 +1707,7 @@ def refresh_access_tokens(
 def sign_out(
     table: Any,
     user_id: str,
-    access_token: str,  # noqa: ARG001 - reserved for future Cognito integration
+    access_token: str,
 ) -> SignOutResponse:
     """Sign out user (current device only).
 

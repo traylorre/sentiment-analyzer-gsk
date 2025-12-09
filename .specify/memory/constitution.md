@@ -585,4 +585,57 @@ Amendment 1.4 (2025-11-28): Added Tech Debt Tracking section formalizing the dua
 
 Amendment 1.5 (2025-12-06): Added Deterministic Time Handling section prohibiting flaky date/time functions (`date.today()`, `datetime.now()`, `datetime.utcnow()`) in tests. Mandates fixed historical dates, freezegun for time-sensitive tests, and ISO 8601 format for CodeQL compatibility.
 
-**Version**: 1.5 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-12-06
+Amendment 1.6 (2025-12-09): Added Local SAST Requirement section mandating local security scanning before code leaves developer machines.
+
+10) Local SAST Requirement
+
+	Security vulnerabilities MUST be detected locally BEFORE code is pushed:
+
+	Two-Tier Local Security Scanning
+	--------------------------------
+	a) Pre-commit (Bandit): Fast Python security linting on every commit
+	   - Blocks HIGH and MEDIUM severity issues
+	   - Completes in <15 seconds
+	   - Configured via pyproject.toml [tool.bandit] section
+
+	b) Make validate (Semgrep): Comprehensive SAST before push
+	   - Runs `make sast` as part of `make validate`
+	   - Detects OWASP patterns, log injection, sensitive data exposure
+	   - Completes in <60 seconds
+	   - Configured via Semgrep auto-rules
+
+	Required Patterns
+	-----------------
+	Local SAST MUST detect these patterns before remote CI:
+	- Log injection (CWE-117) - User input in log messages
+	- Clear-text logging of sensitive data (CWE-312, CWE-532)
+	- Hardcoded secrets (CWE-798)
+	- SQL injection (CWE-89) where applicable
+	- Path traversal (CWE-22)
+
+	Fixing Security Findings
+	------------------------
+	When SAST tools flag an issue:
+	1. DO understand the vulnerability pattern
+	2. DO implement proper sanitization or redesign
+	3. DO NOT suppress without documented justification
+	4. DO NOT rename variables just to avoid detection
+
+	Pre-Push Checklist (updated)
+	----------------------------
+	```bash
+	make validate        # Includes SAST (fmt + lint + security + sast)
+	make test-local      # Unit + integration tests
+	git commit -S        # GPG-signed commit
+	git push             # Push to feature branch
+	```
+
+	Acceptance Criteria
+	-------------------
+	- Bandit pre-commit hook is installed and runs on every commit
+	- `make sast` runs Bandit + Semgrep and completes in <60 seconds
+	- `make validate` includes `make sast` in its targets
+	- No new code merged with HIGH/MEDIUM SAST findings without documented exception
+	- Local SAST achieves ≥70% coverage of CodeQL patterns for Python
+
+**Version**: 1.6 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-12-09

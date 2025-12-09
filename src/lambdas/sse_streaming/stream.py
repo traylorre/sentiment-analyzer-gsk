@@ -141,7 +141,7 @@ class SSEStreamGenerator:
         self,
         connection: SSEConnection,
         last_event_id: str | None = None,
-    ) -> AsyncGenerator[str, None]:
+    ) -> AsyncGenerator[str]:
         """Generate SSE events for global stream.
 
         Yields heartbeats and metrics updates.
@@ -226,7 +226,7 @@ class SSEStreamGenerator:
         self,
         connection: SSEConnection,
         last_event_id: str | None = None,
-    ) -> AsyncGenerator[str, None]:
+    ) -> AsyncGenerator[str]:
         """Generate SSE events for configuration-specific stream.
 
         Yields heartbeats and filtered sentiment updates.

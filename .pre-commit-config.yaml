@@ -47,16 +47,11 @@ repos:
       - id: check-json
       - id: check-toml
 
-  # Python code formatter
-  - repo: https://github.com/psf/black
-    rev: 25.11.0
-    hooks:
-      - id: black
-        language_version: python3.13
-
-  # Python linter (replaces flake8, isort, bandit)
+  # Python formatter and linter (Ruff)
+  # Note: Black removed in feat(057) - Ruff formatter preserves pragma comments
+  # (# noqa, # nosec, # type:) by excluding them from line length calculations
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.1.6
+    rev: v0.8.4
     hooks:
       - id: ruff
         args: [--fix]
@@ -93,6 +88,15 @@ repos:
     rev: v8.18.0
     hooks:
       - id: gitleaks
+
+  # Bandit - Python security linter (SAST)
+  # Added in 070-validation-blindspot-audit to catch security vulnerabilities locally
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.10
+    hooks:
+      - id: bandit
+        args: ["-c", "pyproject.toml", "-ll", "-r", "src/"]
+        pass_filenames: false
 
   # Local hooks for project-specific checks
   - repo: local

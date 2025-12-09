@@ -41,7 +41,7 @@ def _get_cache_key(endpoint: str, params: dict) -> str:
     """Generate cache key from endpoint and params."""
     param_str = json.dumps(params, sort_keys=True)
     # MD5 used for cache key (not security) - S324 is a false positive
-    return hashlib.md5(  # noqa: S324
+    return hashlib.md5(  # nosec B324
         f"finnhub:{endpoint}:{param_str}".encode()
     ).hexdigest()
 

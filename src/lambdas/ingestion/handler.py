@@ -60,22 +60,22 @@ from botocore.config import Config
 # Day 1 mandatory per constitution v1.1 (FR-035)
 patch_all()
 
-from src.lambdas.shared.adapters.base import (  # noqa: E402
+from src.lambdas.shared.adapters.base import (
     AdapterError,
     NewsArticle,
     RateLimitError,
 )
-from src.lambdas.shared.adapters.finnhub import FinnhubAdapter  # noqa: E402
-from src.lambdas.shared.adapters.tiingo import TiingoAdapter  # noqa: E402
-from src.lambdas.shared.circuit_breaker import CircuitBreakerState  # noqa: E402
-from src.lambdas.shared.dynamodb import get_table, put_item_if_not_exists  # noqa: E402
-from src.lambdas.shared.logging_utils import (  # noqa: E402
+from src.lambdas.shared.adapters.finnhub import FinnhubAdapter
+from src.lambdas.shared.adapters.tiingo import TiingoAdapter
+from src.lambdas.shared.circuit_breaker import CircuitBreakerState
+from src.lambdas.shared.dynamodb import get_table, put_item_if_not_exists
+from src.lambdas.shared.logging_utils import (
     get_safe_error_info,
     sanitize_for_log,
 )
-from src.lambdas.shared.quota_tracker import QuotaTracker  # noqa: E402
-from src.lambdas.shared.secrets import get_api_key  # noqa: E402
-from src.lib.metrics import emit_metric, emit_metrics_batch  # noqa: E402
+from src.lambdas.shared.quota_tracker import QuotaTracker
+from src.lambdas.shared.secrets import get_api_key
+from src.lib.metrics import emit_metric, emit_metrics_batch
 
 # Structured logging
 logger = logging.getLogger(__name__)

@@ -521,7 +521,7 @@ class TestSecurityIntegration:
                 assert status_code in [200, 429], f"Unexpected status: {status_code}"
                 connection_established = True
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 # Timeout means connection was established and is streaming
                 # This is SUCCESS - SSE connections hang waiting for events
                 connection_established = True

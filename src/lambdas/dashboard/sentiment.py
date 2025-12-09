@@ -60,7 +60,7 @@ def _get_sentiment_cache_key(config_id: str, tickers: list[str]) -> str:
     Returns:
         Cache key string
     """
-    tickers_hash = hashlib.md5(  # noqa: S324
+    tickers_hash = hashlib.md5(  # nosec B324
         ",".join(sorted(tickers)).encode()
     ).hexdigest()[:8]
     return f"sentiment:{config_id}:{tickers_hash}"

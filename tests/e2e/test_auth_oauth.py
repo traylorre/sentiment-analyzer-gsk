@@ -342,7 +342,7 @@ async def test_token_refresh(
             assert (
                 "error" in data or "message" in data or "detail" in data
             ), "Error response missing message"
-        except Exception:  # noqa: S110
+        except Exception:
             # If response is not JSON, that's acceptable for error responses
             pass
 

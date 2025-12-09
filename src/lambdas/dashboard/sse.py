@@ -183,7 +183,7 @@ async def create_event_generator(
     last_event_id: str | None = None,
     config_id: str | None = None,
     tickers: list[str] | None = None,
-) -> AsyncGenerator[dict[str, Any], None]:
+) -> AsyncGenerator[dict[str, Any]]:
     """
     Create an async generator that yields SSE events.
 

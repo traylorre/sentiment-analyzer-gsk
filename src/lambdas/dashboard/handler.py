@@ -30,7 +30,7 @@ X-Ray Tracing:
 """
 
 # X-Ray must be imported and patched before other imports
-from aws_xray_sdk.core import patch_all  # noqa: E402
+from aws_xray_sdk.core import patch_all
 
 patch_all()
 

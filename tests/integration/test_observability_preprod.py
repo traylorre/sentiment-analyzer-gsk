@@ -184,10 +184,9 @@ class TestCloudWatchLogsExist:
                 last_event_dt = datetime.fromtimestamp(last_event_time / 1000, tz=UTC)
                 age = datetime.now(UTC) - last_event_dt
 
-                assert age < timedelta(hours=1), (
-                    f"Most recent log event is {age} old. "
-                    f"Expected logs from last hour."
-                )
+                assert age < timedelta(
+                    hours=1
+                ), f"Most recent log event is {age} old. Expected logs from last hour."
 
         except logs_client.exceptions.ResourceNotFoundException:
             pytest.fail(f"Log group {log_group_name} does not exist")

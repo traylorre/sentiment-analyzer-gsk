@@ -535,11 +535,14 @@ async def test_access_nonexistent_config_returns_404(
 
         # May return 404 (not found), 401 (auth check first), 403 (forbidden),
         # or 500 (if error handling not complete)
-        assert response.status_code in (
-            401,
-            403,
-            404,
-            500,
+        assert (
+            response.status_code
+            in (
+                401,
+                403,
+                404,
+                500,
+            )
         ), f"Nonexistent config should return 401/403/404/500, got {response.status_code}"
 
     finally:
@@ -567,11 +570,14 @@ async def test_access_nonexistent_alert_returns_404(
         if response.status_code == 405:
             pytest.skip("Alerts endpoint not implemented")
 
-        assert response.status_code in (
-            401,
-            403,
-            404,
-            500,
+        assert (
+            response.status_code
+            in (
+                401,
+                403,
+                404,
+                500,
+            )
         ), f"Nonexistent alert should return 401/403/404/500, got {response.status_code}"
 
     finally:

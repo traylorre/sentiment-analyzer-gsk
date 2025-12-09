@@ -234,7 +234,7 @@ class SentimentValidator:
                     errors.append(
                         ValidationError(
                             field=f"history[{i}].date",
-                            message=f"History not sorted: {dates[i-1]} > {dates[i]}",
+                            message=f"History not sorted: {dates[i - 1]} > {dates[i]}",
                             value={"prev": dates[i - 1], "curr": dates[i]},
                         )
                     )
