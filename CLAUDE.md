@@ -466,6 +466,58 @@ const streamUrl = `${baseUrl}${CONFIG.ENDPOINTS.STREAM}`;
 const eventSource = new EventSource(streamUrl);
 ```
 
+## Lessons Learned (Agent Workflow)
+
+### CRITICAL: Follow Slash Command Semantics
+
+When a user invokes `/speckit.specify`, ALWAYS follow the specify workflow - even if prior context suggests implementation is in progress. The slash command itself is the instruction.
+
+**Bad pattern**: User says `/speckit.specify fix PR #319` → Agent jumps straight to rebasing and pushing
+**Good pattern**: User says `/speckit.specify fix PR #319` → Agent creates/updates spec, waits for approval
+
+### Pre-Push Checklist (MANDATORY)
+
+Before ANY push to remote, check these in order:
+
+```bash
+# 1. Security alerts (CodeQL, Dependabot)
+gh api repos/{owner}/{repo}/code-scanning/alerts --jq '.[] | select(.state == "open") | {rule: .rule.id, file: .most_recent_instance.location.path}'
+
+# 2. Local validation
+make validate
+
+# 3. Unit tests
+make test-unit
+
+# 4. Check PR CI status won't break
+gh pr checks <PR_NUMBER>  # if updating existing PR
+```
+
+**Never conflate "CI passed" with "ready to merge"** - CodeQL security alerts exist independently of PR checks.
+
+### Escalate Early, Report Honestly
+
+In a blameless postmortem culture:
+- Report blockers immediately rather than pushing past them
+- Share root causes honestly, even if they reflect poorly
+- Ask for clarification when instructions seem ambiguous
+- Don't let continuation context override explicit user commands
+
+### Common Failure Modes
+
+| Symptom | Root Cause | Prevention |
+|---------|------------|------------|
+| Push succeeds, security alerts remain | Didn't check `/security` tab | Add `gh api` security check to pre-push |
+| Merged PR breaks deploy | IAM permissions not tested | Run `/iam-audit` before merge |
+| Context continuation bypasses workflow | Over-indexed on "continue without asking" | Slash commands override context |
+| Log injection warnings | User input logged directly | Use `sanitize_for_log()` helper |
+
+### When Resuming from Context Summary
+
+1. Read the summary, but don't let it override explicit user instructions
+2. If the user invokes a slash command, follow that command's workflow
+3. When in doubt, ask: "Should I continue the prior work or start the new workflow?"
+
 ## Recent Changes
 - 057-pragma-comment-stability: Added Ruff formatter (pragma comment preservation)
 - 070-validation-blindspot-audit: Added Python 3.13 (existing project standard) + Semgrep (SAST), Bandit (Python security linter), pre-commit, Make
