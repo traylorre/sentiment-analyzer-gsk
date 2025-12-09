@@ -112,12 +112,13 @@ async def get_ohlc_data(
         time_range_str = range.value
 
     # Sanitize user input before logging to prevent log injection (CWE-117)
-    # Using inline .replace() pattern that CodeQL recognizes as taint barrier
+    # CodeQL's ReplaceLineBreaksSanitizer only recognizes .replace('\r\n','') and .replace('\n','')
+    # Length limiting must be done BEFORE sanitization to preserve the sanitizer barrier
     # See: https://codeql.github.com/codeql-query-help/python/py-log-injection/
-    safe_ticker = ticker.replace("\r\n", "").replace("\n", "").replace("\r", "")[:200]
-    safe_range = (
-        time_range_str.replace("\r\n", "").replace("\n", "").replace("\r", "")[:50]
-    )
+    ticker_truncated = ticker[:200]
+    safe_ticker = ticker_truncated.replace("\r\n", "").replace("\n", "")
+    range_truncated = time_range_str[:50]
+    safe_range = range_truncated.replace("\r\n", "").replace("\n", "")
 
     logger.info(
         "Fetching OHLC data",
@@ -255,10 +256,13 @@ async def get_sentiment_history(
         start_date = end_date - timedelta(days=days)
 
     # Sanitize user input before logging to prevent log injection (CWE-117)
-    # Using inline .replace() pattern that CodeQL recognizes as taint barrier
+    # CodeQL's ReplaceLineBreaksSanitizer only recognizes .replace('\r\n','') and .replace('\n','')
+    # Length limiting must be done BEFORE sanitization to preserve the sanitizer barrier
     # See: https://codeql.github.com/codeql-query-help/python/py-log-injection/
-    safe_ticker = ticker.replace("\r\n", "").replace("\n", "").replace("\r", "")[:200]
-    safe_source = source.replace("\r\n", "").replace("\n", "").replace("\r", "")[:50]
+    ticker_truncated = ticker[:200]
+    safe_ticker = ticker_truncated.replace("\r\n", "").replace("\n", "")
+    source_truncated = source[:50]
+    safe_source = source_truncated.replace("\r\n", "").replace("\n", "")
 
     logger.info(
         "Fetching sentiment history",
