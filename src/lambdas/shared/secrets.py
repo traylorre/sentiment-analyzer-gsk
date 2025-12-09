@@ -221,27 +221,21 @@ def get_secret(
     try:
         secret_value = json.loads(secret_string)
     except json.JSONDecodeError as e:
-        # Break taint flow by storing sanitized value in intermediate variable
-        # This prevents CodeQL py/clear-text-logging-sensitive-data from flagging
+        # Log with generic message to avoid taint flow from secret_id
+        # CodeQL py/clear-text-logging-sensitive-data traces taint through function calls,
+        # so we cannot use ANY value derived from secret_id in the log extra context
         # See: https://codeql.github.com/codeql-query-help/python/py-clear-text-logging-sensitive-data/
-        resource_identifier = _sanitize_secret_id_for_log(secret_id)
-        logger.error(
-            "Failed to parse resource as JSON",
-            extra={"resource_name": resource_identifier},
-        )
+        logger.error("Failed to parse resource as JSON")
         raise SecretRetrievalError(
-            f"Secret is not valid JSON: {resource_identifier}"
+            f"Secret is not valid JSON: {_sanitize_secret_id_for_log(secret_id)}"
         ) from e
 
     # Cache the secret
     _set_in_cache(secret_id, secret_value)
 
-    # Break taint flow for success logging as well
-    resource_identifier = _sanitize_secret_id_for_log(secret_id)
-    logger.info(
-        "Secret retrieved from Secrets Manager",
-        extra={"secret_name": resource_identifier},
-    )
+    # Log success with generic message (no secret-derived values in log context)
+    # The calling code knows which secret was requested
+    logger.info("Secret retrieved from Secrets Manager")
 
     return secret_value
 
