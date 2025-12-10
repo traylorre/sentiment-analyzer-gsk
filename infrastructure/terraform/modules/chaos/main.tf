@@ -43,6 +43,7 @@ resource "aws_iam_role" "fis_execution" {
   })
 
   tags = {
+    Name        = "${var.environment}-sentiment-fis-execution"
     Environment = var.environment
     Purpose     = "chaos-testing"
     ManagedBy   = "Terraform"
@@ -109,6 +110,7 @@ resource "aws_cloudwatch_log_group" "fis_experiments" {
   retention_in_days = 14 # 2 weeks for chaos testing analysis
 
   tags = {
+    Name        = "${var.environment}-sentiment-fis-logs"
     Environment = var.environment
     Purpose     = "chaos-testing"
     ManagedBy   = "Terraform"
