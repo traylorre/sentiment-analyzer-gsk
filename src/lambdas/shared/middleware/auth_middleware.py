@@ -2,15 +2,137 @@
 
 Supports both X-User-ID header (legacy) and Authorization: Bearer token
 formats for backward compatibility and gradual migration.
+
+JWT authentication added in Feature 075 for authenticated sessions.
 """
 
+from __future__ import annotations
+
 import logging
+import os
 import uuid
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
+import jwt
 from aws_xray_sdk.core import xray_recorder
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class JWTClaim:
+    """Represents validated claims from a JWT token.
+
+    Attributes:
+        subject: User ID (from 'sub' claim)
+        expiration: Token expiration timestamp
+        issued_at: Token issued timestamp
+        issuer: Token issuer (optional)
+    """
+
+    subject: str
+    expiration: datetime
+    issued_at: datetime
+    issuer: str | None = None
+
+
+@dataclass(frozen=True)
+class JWTConfig:
+    """Configuration for JWT validation.
+
+    Attributes:
+        secret: Secret key for HMAC validation
+        algorithm: JWT algorithm (default: HS256)
+        issuer: Expected issuer (optional, for validation)
+        leeway_seconds: Clock skew tolerance (default: 60s)
+        access_token_lifetime_seconds: Expected token lifetime (default: 900s/15min)
+    """
+
+    secret: str
+    algorithm: str = "HS256"
+    issuer: str | None = "sentiment-analyzer"
+    leeway_seconds: int = 60
+    access_token_lifetime_seconds: int = 900
+
+
+def _get_jwt_config() -> JWTConfig | None:
+    """Load JWT configuration from environment.
+
+    Returns:
+        JWTConfig if JWT_SECRET is set, None otherwise
+    """
+    secret = os.environ.get("JWT_SECRET")
+    if not secret:
+        return None
+
+    return JWTConfig(
+        secret=secret,
+        algorithm=os.environ.get("JWT_ALGORITHM", "HS256"),
+        issuer=os.environ.get("JWT_ISSUER", "sentiment-analyzer"),
+        leeway_seconds=int(os.environ.get("JWT_LEEWAY_SECONDS", "60")),
+    )
+
+
+def validate_jwt(token: str, config: JWTConfig | None = None) -> JWTClaim | None:
+    """Validate a JWT token and extract claims.
+
+    Validates the token signature, expiration, and required claims.
+
+    Args:
+        token: JWT token string (without "Bearer " prefix)
+        config: Optional JWTConfig, uses environment if not provided
+
+    Returns:
+        JWTClaim if valid, None if invalid
+
+    Environment:
+        JWT_SECRET: Required secret key for validation
+    """
+    if config is None:
+        config = _get_jwt_config()
+        if config is None:
+            logger.warning("JWT_SECRET not configured, cannot validate JWT")
+            return None
+
+    try:
+        payload = jwt.decode(
+            token,
+            config.secret,
+            algorithms=[config.algorithm],
+            issuer=config.issuer,
+            leeway=config.leeway_seconds,
+            options={
+                "require": ["sub", "exp", "iat"],
+            },
+        )
+
+        return JWTClaim(
+            subject=payload["sub"],
+            expiration=datetime.fromtimestamp(payload["exp"], tz=UTC),
+            issued_at=datetime.fromtimestamp(payload["iat"], tz=UTC),
+            issuer=payload.get("iss"),
+        )
+
+    except jwt.ExpiredSignatureError:
+        logger.debug("JWT token has expired")
+        return None
+    except jwt.InvalidIssuerError:
+        logger.debug("JWT token has invalid issuer")
+        return None
+    except jwt.InvalidSignatureError:
+        logger.warning("JWT token has invalid signature")
+        return None
+    except jwt.DecodeError:
+        logger.debug("JWT token is malformed")
+        return None
+    except jwt.MissingRequiredClaimError as e:
+        logger.debug(f"JWT token missing required claim: {e}")
+        return None
+    except Exception as e:
+        logger.warning(f"Unexpected error validating JWT: {e}")
+        return None
 
 
 def extract_user_id(event: dict[str, Any]) -> str | None:
@@ -57,9 +179,9 @@ def extract_user_id(event: dict[str, Any]) -> str | None:
 def _extract_user_id_from_token(token: str) -> str | None:
     """Extract user ID from Bearer token.
 
-    Currently treats the token as a direct user ID for anonymous sessions.
-    For authenticated sessions with JWTs, this would decode and validate
-    the token to extract the user ID claim.
+    Supports both:
+    1. UUID tokens for anonymous sessions (token IS the user_id)
+    2. JWT tokens for authenticated sessions (user_id from 'sub' claim)
 
     Args:
         token: Bearer token value
@@ -72,11 +194,13 @@ def _extract_user_id_from_token(token: str) -> str | None:
     if _is_valid_uuid(token):
         return token
 
-    # TODO: Add JWT validation for authenticated sessions
-    # This would decode the token and extract the 'sub' or 'user_id' claim
-    # For now, we only support UUID tokens for anonymous sessions
+    # Try JWT validation for authenticated sessions
+    jwt_claim = validate_jwt(token)
+    if jwt_claim:
+        logger.debug(f"Extracted user_id from JWT token: {jwt_claim.subject[:8]}...")
+        return jwt_claim.subject
 
-    logger.debug("Token is not a valid UUID, JWT validation not yet implemented")
+    logger.debug("Token is not a valid UUID and JWT validation failed")
     return None
 
 

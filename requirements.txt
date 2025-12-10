@@ -46,3 +46,6 @@ sendgrid==6.12.5
 
 # AWS Lambda Powertools - Enhanced observability
 aws-lambda-powertools==3.23.0
+
+# JWT Authentication - Feature 075 (validation gaps)
+PyJWT==2.10.1
