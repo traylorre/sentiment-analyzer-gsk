@@ -55,9 +55,6 @@ async def test_tiingo_failure_graceful_degradation(
             json=config_payload,
         )
 
-        if create_response.status_code == 500:
-            pytest.skip("Config creation endpoint returning 500 - API issue")
-
         if create_response.status_code != 201:
             pytest.skip("Config creation not available")
 

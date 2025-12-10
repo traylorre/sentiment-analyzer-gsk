@@ -440,8 +440,6 @@ async def test_sentiment_invalid_config(
 
         # May return 404 (not found), 403 (forbidden), 422 (validation error),
         # or 500 (if error handling not complete)
-        if response.status_code == 500:
-            pytest.skip("Invalid config lookup returning 500 - API issue")
 
         assert response.status_code in (
             403,
