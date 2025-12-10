@@ -7,6 +7,7 @@
 | ID | Decision | Date | Status | Deviation? |
 |----|----------|------|--------|------------|
 | ADR-001 | Hybrid Lambda Packaging | 2025-11-23 | ✅ Active | NO - IS best practice |
+| ADR-002 | Market Data Deduplication Strategy | 2025-12-09 | ✅ Active | NO - IS best practice |
 
 ---
 
@@ -107,6 +108,88 @@ Reconsider if:
 2. Dashboard/Ingestion exceed 250MB (move to containers)
 3. Team unanimously prefers Docker-only workflow
 4. AWS releases universal packaging format
+
+---
+
+## ADR-002: Market Data Deduplication Strategy
+
+**Date**: 2025-12-09
+**Status**: ✅ Active
+**Deviation from Best Practice**: NO - This IS the industry best practice
+
+### Context
+
+The Market Data Ingestion system (Feature 072) collects news articles from multiple sources (Tiingo, Finnhub) every 5 minutes during market hours. The same article can appear in multiple collection cycles and from different sources, requiring robust deduplication.
+
+### Decision
+
+**SHA256-based composite key with date-only granularity**:
+1. **Dedup Key**: `SHA256(headline + source + publication_date)[:32]` (32-char hex)
+2. **Date Granularity**: Use date only (not datetime) for same-day dedup
+3. **DynamoDB PK/SK**: `PK=NEWS#{dedup_key}`, `SK={source}#{ingested_at_iso}`
+
+### Rationale
+
+| Factor | Choice | Reasoning |
+|--------|--------|-----------|
+| **Hash Algorithm** | SHA256 | Cryptographically secure, no collision risk at this scale |
+| **Key Truncation** | 32 chars | Balance between uniqueness and storage (128 bits entropy) |
+| **Date vs DateTime** | Date only | Same article published at 9:01 AM and 9:05 AM should dedup |
+| **Source in Key** | Included | Same headline from different sources = different data quality |
+| **DynamoDB Pattern** | Conditional PutItem | `attribute_not_exists(PK)` for atomic deduplication |
+
+### Alternatives Considered
+
+**Option A: Full datetime (NOT chosen)**
+- ❌ Articles with identical content but 1-second difference would be duplicated
+- ❌ Clock drift between sources causes false negatives
+- ✅ More granular tracking
+
+**Option B: Content hash only (NOT chosen)**
+- ❌ Same headline from Tiingo and Finnhub would be deduplicated
+- ❌ Lose source attribution for quality comparison
+- ✅ Simpler key structure
+
+**Option C: UUID-based (NOT chosen)**
+- ❌ No natural deduplication
+- ❌ Requires secondary index for duplicate detection
+- ✅ Guaranteed unique
+
+### Implementation
+
+```python
+# src/lambdas/shared/utils/dedup.py
+def generate_dedup_key(headline: str, source: str, published_at: datetime) -> str:
+    """Generate 32-char dedup key from article attributes."""
+    date_str = published_at.strftime("%Y-%m-%d")  # Date only, not time
+    content = f"{headline}|{source}|{date_str}"
+    return hashlib.sha256(content.encode()).hexdigest()[:32]
+
+# DynamoDB conditional write for atomic dedup
+table.put_item(
+    Item=news_item.to_dynamodb_item(),
+    ConditionExpression="attribute_not_exists(PK)"
+)
+```
+
+### Consequences
+
+**Positive**:
+- ✅ Zero duplicate news items per day (SC-003)
+- ✅ Deterministic: same article always produces same key
+- ✅ Source-aware: allows comparing data quality between sources
+- ✅ Efficient: conditional write handles dedup atomically
+
+**Negative**:
+- ⚠️ Same article published on different days = different keys (acceptable: context changes)
+- ⚠️ Minor headline variations = different keys (acceptable: captures edits)
+
+### Review Trigger
+
+Reconsider if:
+1. Storage costs become significant (>$10/month for duplicates)
+2. Need to track article evolution over multiple days
+3. Cross-source deduplication becomes a requirement
 
 ---
 

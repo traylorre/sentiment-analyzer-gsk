@@ -60,6 +60,10 @@ from botocore.config import Config
 # Day 1 mandatory per constitution v1.1 (FR-035)
 patch_all()
 
+from src.lambdas.ingestion.alerting import (
+    ConsecutiveFailureAlert,
+    create_alert_publisher,
+)
 from src.lambdas.shared.adapters.base import (
     AdapterError,
     NewsArticle,
@@ -69,6 +73,7 @@ from src.lambdas.shared.adapters.finnhub import FinnhubAdapter
 from src.lambdas.shared.adapters.tiingo import TiingoAdapter
 from src.lambdas.shared.circuit_breaker import CircuitBreakerState
 from src.lambdas.shared.dynamodb import get_table, put_item_if_not_exists
+from src.lambdas.shared.failure_tracker import ConsecutiveFailureTracker
 from src.lambdas.shared.logging_utils import (
     get_safe_error_info,
     sanitize_for_log,
@@ -100,6 +105,10 @@ TTL_DAYS = 30
 # Circuit breaker settings
 CIRCUIT_BREAKER_THRESHOLD = 5
 CIRCUIT_BREAKER_TIMEOUT = 300  # 5 minutes
+
+# Consecutive failure alerting settings (US4 - FR-006)
+FAILURE_ALERT_THRESHOLD = 3  # Alert after 3 consecutive failures
+FAILURE_ALERT_WINDOW_MINUTES = 15  # Within 15-minute window
 
 # Quota settings (free tier limits)
 TIINGO_DAILY_LIMIT = 500
@@ -193,6 +202,18 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         # Get SNS client
         sns_client = _get_sns_client(config["aws_region"])
 
+        # US4: Initialize failure tracker with alert publisher callback
+        sources_list = []
+        if tiingo_adapter:
+            sources_list.append("tiingo")
+        if finnhub_adapter:
+            sources_list.append("finnhub")
+        failure_tracker = _create_failure_tracker(
+            alert_topic_arn=config["alert_topic_arn"],
+            aws_region=config["aws_region"],
+            sources_affected=sources_list,
+        )
+
         # DFA-002: Collect messages for batch publishing
         pending_sns_messages: list[dict[str, Any]] = []
 
@@ -233,6 +254,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                                     summary["duplicates_skipped"] += 1
 
                             tiingo_breaker.record_success()
+                            # US4: Reset failure tracker on success
+                            failure_tracker.record_success()
 
                         except RateLimitError as e:
                             logger.warning(
@@ -246,6 +269,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                                 "APIRateLimitHit", 1, dimensions={"Source": "tiingo"}
                             )
                             tiingo_breaker.record_failure()
+                            # US4: Track failure for alerting
+                            failure_tracker.record_failure(f"Tiingo rate limited: {e}")
                             errors.append(
                                 {
                                     "ticker": ticker,
@@ -264,6 +289,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                                 },
                             )
                             tiingo_breaker.record_failure()
+                            # US4: Track failure for alerting
+                            failure_tracker.record_failure(f"Tiingo adapter error: {e}")
                             summary["errors"] += 1
 
                 # Fetch from Finnhub (secondary source)
@@ -293,6 +320,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                                     summary["duplicates_skipped"] += 1
 
                             finnhub_breaker.record_success()
+                            # US4: Reset failure tracker on success
+                            failure_tracker.record_success()
 
                         except RateLimitError as e:
                             logger.warning(
@@ -306,6 +335,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                                 "APIRateLimitHit", 1, dimensions={"Source": "finnhub"}
                             )
                             finnhub_breaker.record_failure()
+                            # US4: Track failure for alerting
+                            failure_tracker.record_failure(f"Finnhub rate limited: {e}")
                             errors.append(
                                 {
                                     "ticker": ticker,
@@ -324,6 +355,10 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                                 },
                             )
                             finnhub_breaker.record_failure()
+                            # US4: Track failure for alerting
+                            failure_tracker.record_failure(
+                                f"Finnhub adapter error: {e}"
+                            )
                             summary["errors"] += 1
 
                 summary["articles_fetched"] += (
@@ -415,11 +450,96 @@ def _get_config() -> dict[str, str]:
         "dynamodb_table": os.environ.get("DATABASE_TABLE")
         or os.environ.get("DYNAMODB_TABLE", ""),
         "sns_topic_arn": os.environ.get("SNS_TOPIC_ARN", ""),
+        "alert_topic_arn": os.environ.get(
+            "ALERT_TOPIC_ARN", ""
+        ),  # US4: Operational alerts
         "tiingo_secret_arn": os.environ.get("TIINGO_SECRET_ARN", ""),
         "finnhub_secret_arn": os.environ.get("FINNHUB_SECRET_ARN", ""),
         "model_version": os.environ.get("MODEL_VERSION", "v1.0.0"),
         "aws_region": aws_region,
     }
+
+
+def _create_failure_tracker(
+    alert_topic_arn: str,
+    aws_region: str,
+    sources_affected: list[str],
+) -> ConsecutiveFailureTracker:
+    """Create a failure tracker with alert publisher callback.
+
+    US4 implementation (T050): Integrates ConsecutiveFailureTracker with
+    AlertPublisher to send SNS alerts after 3 consecutive failures within
+    15 minutes.
+
+    Args:
+        alert_topic_arn: SNS topic ARN for operational alerts
+        aws_region: AWS region for SNS client
+        sources_affected: List of sources being tracked (for alert details)
+
+    Returns:
+        Configured ConsecutiveFailureTracker instance
+    """
+    if not alert_topic_arn:
+        # No alert topic configured - return tracker without callback
+        logger.warning(
+            "ALERT_TOPIC_ARN not configured, failure alerts will not be sent"
+        )
+        return ConsecutiveFailureTracker(
+            threshold=FAILURE_ALERT_THRESHOLD,
+            window_minutes=FAILURE_ALERT_WINDOW_MINUTES,
+        )
+
+    # Create alert publisher
+    sns_client = boto3.client("sns", region_name=aws_region)
+    publisher = create_alert_publisher(
+        topic_arn=alert_topic_arn,
+        sns_client=sns_client,
+    )
+
+    # Track first failure timestamp for alert details
+    first_failure_at: datetime | None = None
+
+    def alert_callback(error_message: str) -> None:
+        """Callback to publish structured alert via SNS."""
+        nonlocal first_failure_at
+        now = datetime.now(UTC)
+
+        alert = ConsecutiveFailureAlert(
+            failure_count=FAILURE_ALERT_THRESHOLD,
+            window_minutes=FAILURE_ALERT_WINDOW_MINUTES,
+            first_failure_at=first_failure_at or now,
+            last_failure_at=now,
+            sources_affected=sources_affected if sources_affected else ["unknown"],
+            error_summary=error_message[:200],
+        )
+        publisher.publish_failure_alert(alert)
+
+        # Reset first failure time after alert sent
+        first_failure_at = None
+
+    def record_first_failure() -> None:
+        """Record the first failure timestamp."""
+        nonlocal first_failure_at
+        if first_failure_at is None:
+            first_failure_at = datetime.now(UTC)
+
+    # Create tracker with callback
+    tracker = ConsecutiveFailureTracker(
+        alert_callback=alert_callback,
+        threshold=FAILURE_ALERT_THRESHOLD,
+        window_minutes=FAILURE_ALERT_WINDOW_MINUTES,
+    )
+
+    # Wrap record_failure to capture first failure time
+    original_record_failure = tracker.record_failure
+
+    def wrapped_record_failure(error_msg: str, at: datetime | None = None) -> bool:
+        record_first_failure()
+        return original_record_failure(error_msg, at)
+
+    tracker.record_failure = wrapped_record_failure  # type: ignore[method-assign]
+
+    return tracker
 
 
 @xray_recorder.capture("get_active_tickers")
