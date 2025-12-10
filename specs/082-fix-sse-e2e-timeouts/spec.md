@@ -89,9 +89,38 @@ As a CI/CD system, I need all SSE E2E tests to pass so that the deploy pipeline 
 - **SC-003**: Pipeline deploy workflow completes with status "success"
 - **SC-004**: Non-SSE tests continue to pass (no regression)
 
+## Root Cause Analysis
+
+**Diagnosis Date**: 2025-12-10
+**Root Cause**: Test Client URL Routing
+
+### Investigation Findings
+
+1. **Lambda Configuration**: VERIFIED CORRECT
+   - SSE Lambda uses `RESPONSE_STREAM` mode (`infrastructure/terraform/main.tf:642`)
+   - Dashboard Lambda uses `BUFFERED` mode (`infrastructure/terraform/main.tf:421`)
+   - Two-Lambda architecture is correctly implemented
+
+2. **Test Client Routing**: ROOT CAUSE IDENTIFIED
+   - `PreprodAPIClient` uses single `PREPROD_API_URL` for ALL requests (`tests/e2e/helpers/api_client.py:24-34`)
+   - `PREPROD_API_URL` points to the **Dashboard Lambda** (BUFFERED mode)
+   - SSE streaming endpoints require the **SSE Lambda** (RESPONSE_STREAM mode)
+   - Requests to `/api/v2/stream*` go to Dashboard Lambda, which cannot stream
+
+3. **Evidence Supporting Diagnosis**:
+   - `test_stream_status_endpoint` PASSES: Non-streaming JSON response works on BUFFERED Lambda
+   - All streaming SSE tests TIMEOUT: `EventSourceResponse` requires `RESPONSE_STREAM` invoke mode
+   - SSE Lambda has separate Function URL output: `sse_lambda_function_url`
+
+### Required Fix
+
+- **FR-007**: E2E tests MUST use separate `SSE_LAMBDA_URL` environment variable for streaming endpoints
+- **FR-008**: `PreprodAPIClient` MUST route `/api/v2/stream*` paths to SSE Lambda URL
+- **FR-009**: CI workflow MUST set `SSE_LAMBDA_URL` from Terraform output `sse_lambda_function_url`
+
 ## Assumptions
 
 - The SSE Lambda is a separate Lambda from the dashboard Lambda
 - The current test timeout of 10 seconds should be sufficient for SSE connection establishment
-- The issue is either infrastructure configuration or endpoint implementation, not network connectivity
-- The non-streaming `/api/v2/stream/status` endpoint passing indicates the SSE Lambda is reachable
+- The issue is test client routing, not infrastructure configuration or network connectivity
+- The non-streaming `/api/v2/stream/status` endpoint passing on Dashboard Lambda confirms the routing issue

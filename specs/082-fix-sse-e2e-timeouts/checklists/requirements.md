@@ -45,8 +45,16 @@
 |-----------|--------|-------|
 | Assumptions documented | PASS | 4 assumptions about Lambda architecture and timeout |
 
+## Clarification Session
+
+| Question | Answer | Source |
+|----------|--------|--------|
+| Root Cause Category | Test Client Routing | Investigation of `api_client.py`, `main.tf` |
+| Lambda Config Verified | RESPONSE_STREAM correct on SSE Lambda | `main.tf:642` |
+| Fix Required | Add SSE_LAMBDA_URL env var, update client routing | FR-007, FR-008, FR-009 |
+
 ## Overall Assessment
 
-**Status**: READY FOR NEXT PHASE
+**Status**: READY FOR `/speckit.plan`
 
-The spec meets all quality criteria and is ready for `/speckit.clarify` or `/speckit.plan`.
+The spec has been clarified with root cause analysis. Ready for implementation planning.
