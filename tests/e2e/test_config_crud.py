@@ -49,10 +49,6 @@ async def test_config_create_success(
 
         response = await api_client.post("/api/v2/configurations", json=config_payload)
 
-        # Skip if API returns 500 (backend issue, not test issue)
-        if response.status_code == 500:
-            pytest.skip("Config creation endpoint returning 500 - API issue")
-
         assert response.status_code in (
             200,
             201,
@@ -94,8 +90,6 @@ async def test_config_create_with_ticker_metadata(
         config_payload = synthetic_cfg.to_api_payload()
 
         response = await api_client.post("/api/v2/configurations", json=config_payload)
-        if response.status_code == 500:
-            pytest.skip("Config creation endpoint returning 500 - API issue")
         assert response.status_code == 201
 
         data = response.json()
@@ -137,8 +131,6 @@ async def test_config_read_by_id(
             "/api/v2/configurations",
             json=config_payload,
         )
-        if create_response.status_code == 500:
-            pytest.skip("Config creation endpoint returning 500 - API issue")
         assert create_response.status_code == 201
 
         config_id = create_response.json()["config_id"]
@@ -180,8 +172,6 @@ async def test_config_update_name_and_tickers(
             "/api/v2/configurations",
             json=original_cfg.to_api_payload(),
         )
-        if create_response.status_code == 500:
-            pytest.skip("Config creation endpoint returning 500 - API issue")
         assert create_response.status_code == 201
 
         config_id = create_response.json()["config_id"]
@@ -235,8 +225,6 @@ async def test_config_delete(
             "/api/v2/configurations",
             json=synthetic_cfg.to_api_payload(),
         )
-        if create_response.status_code == 500:
-            pytest.skip("Config creation endpoint returning 500 - API issue")
         assert create_response.status_code == 201
 
         config_id = create_response.json()["config_id"]
@@ -289,8 +277,6 @@ async def test_config_max_limit_enforced(
                 json=cfg.to_api_payload(),
             )
 
-            if response.status_code == 500:
-                pytest.skip("Config creation endpoint returning 500 - API issue")
             if response.status_code == 201:
                 created_configs.append(response.json()["config_id"])
             elif response.status_code in (400, 403, 429):
@@ -373,12 +359,10 @@ async def test_config_list_pagination(
             cfg = config_generator.generate_config(
                 f"{test_run_id}-page-{i}", ticker_count=1
             )
-            resp = await api_client.post(
+            await api_client.post(
                 "/api/v2/configurations",
                 json=cfg.to_api_payload(),
             )
-            if resp.status_code == 500:
-                pytest.skip("Config creation endpoint returning 500 - API issue")
 
         # List configs with pagination
         response = await api_client.get(
@@ -417,9 +401,6 @@ async def test_config_not_found(
         response = await api_client.get(
             "/api/v2/configurations/non-existent-config-id-12345"
         )
-
-        if response.status_code == 500:
-            pytest.skip("Config lookup endpoint returning 500 - API issue")
 
         assert (
             response.status_code == 404

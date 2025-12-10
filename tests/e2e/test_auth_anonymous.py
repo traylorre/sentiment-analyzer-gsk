@@ -117,9 +117,6 @@ async def test_anonymous_config_creation(
 
         # Anonymous users should be able to create configs
         # Status may be 201 (created) or 200 (ok)
-        # Skip if API returns 500 (backend issue, not test issue)
-        if config_response.status_code == 500:
-            pytest.skip("Config creation endpoint returning 500 - API issue")
 
         # 201 Created is the correct status for resource creation
         assert (
@@ -211,8 +208,6 @@ async def test_anonymous_multiple_sessions_isolated(
             "/api/v2/configurations",
             json={"name": "Session 1 Config", "tickers": ["AAPL"]},
         )
-        if config_response.status_code == 500:
-            pytest.skip("Config creation endpoint returning 500 - API issue")
         if config_response.status_code == 201:
             config_id = config_response.json()["config_id"]
 
