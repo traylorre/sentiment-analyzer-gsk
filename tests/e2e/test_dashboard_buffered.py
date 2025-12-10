@@ -52,7 +52,7 @@ async def test_configs_list_returns_json(
 
     Given: An authenticated user
     When: GET /api/v2/configurations is called
-    Then: Response is valid JSON array
+    Then: Response is valid JSON with configurations list and max_allowed
     """
     # Create session
     session_response = await api_client.post("/api/v2/auth/anonymous", json={})
@@ -69,9 +69,11 @@ async def test_configs_list_returns_json(
             "application/json" in content_type
         ), f"Expected application/json, got: {content_type}"
 
-        # Verify response is valid JSON
+        # Verify response is valid JSON with expected structure
         data = response.json()
-        assert isinstance(data, list)
+        assert isinstance(data, dict), f"Expected dict, got {type(data).__name__}"
+        assert "configurations" in data, "Missing 'configurations' key"
+        assert isinstance(data["configurations"], list)
 
     finally:
         api_client.clear_access_token()
