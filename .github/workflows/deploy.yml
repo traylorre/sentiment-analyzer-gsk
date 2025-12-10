@@ -190,6 +190,7 @@ jobs:
             boto3==1.41.0 \
             python-json-logger==4.0.0 \
             aws-xray-sdk==2.14.0 \
+            PyJWT==2.10.1 \
             -t packages/dashboard-deps/ \
             --platform manylinux2014_x86_64 \
             --implementation cp \
