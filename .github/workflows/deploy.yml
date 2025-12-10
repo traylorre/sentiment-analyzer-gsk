@@ -558,6 +558,7 @@ jobs:
     outputs:
       dashboard_url: ${{ steps.outputs.outputs.dashboard_url }}
       sns_topic_arn: ${{ steps.outputs.outputs.sns_topic_arn }}
+      sse_lambda_url: ${{ steps.outputs.outputs.sse_lambda_url }}
 
     defaults:
       run:
@@ -704,10 +705,12 @@ jobs:
           DASHBOARD_URL=$(terraform output -raw dashboard_function_url 2>/dev/null || echo "")
           API_URL=$(terraform output -raw dashboard_api_url 2>/dev/null || echo "")
           SNS_TOPIC_ARN=$(terraform output -raw sns_topic_arn 2>/dev/null || echo "")
+          SSE_LAMBDA_URL=$(terraform output -raw sse_lambda_function_url 2>/dev/null || echo "")
 
           echo "dashboard_url=${DASHBOARD_URL}" >> $GITHUB_OUTPUT
           echo "api_url=${API_URL}" >> $GITHUB_OUTPUT
           echo "sns_topic_arn=${SNS_TOPIC_ARN}" >> $GITHUB_OUTPUT
+          echo "sse_lambda_url=${SSE_LAMBDA_URL}" >> $GITHUB_OUTPUT
 
       - name: Smoke Test (Post-Deployment)
         id: smoke_test
@@ -904,6 +907,9 @@ jobs:
           PREPROD_DASHBOARD_API_KEY: ${{ secrets.DASHBOARD_API_KEY }}
           # Required for E2E tests (tests/e2e/helpers/api_client.py uses PREPROD_API_URL)
           PREPROD_API_URL: ${{ needs.deploy-preprod.outputs.dashboard_url }}
+          # Required for SSE E2E tests - routes /api/v2/stream* to SSE Lambda (RESPONSE_STREAM mode)
+          # See: specs/082-fix-sse-e2e-timeouts/spec.md
+          SSE_LAMBDA_URL: ${{ needs.deploy-preprod.outputs.sse_lambda_url }}
           # Required for E2E Lambda invocation tests (test_e2e_lambda_invocation_preprod.py)
           DASHBOARD_FUNCTION_URL: ${{ needs.deploy-preprod.outputs.dashboard_url }}
         id: integration-tests
