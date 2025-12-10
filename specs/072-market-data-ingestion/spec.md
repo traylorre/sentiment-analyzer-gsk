@@ -47,6 +47,7 @@ As an analyst, I want data from multiple sources so that single-source outages d
 2. **Given** primary source fails, **When** system detects failure, **Then** system automatically switches to secondary source within 10 seconds
 3. **Given** failover occurred, **When** analyst views dashboard, **Then** source attribution indicates which source provided the data
 4. **Given** all sources fail, **When** system cannot collect data, **Then** operations team receives an alert within 5 minutes
+5. **Given** failover to secondary occurred, **When** 5 minutes of successful secondary operation pass, **Then** system attempts to switch back to primary
 
 ---
 
@@ -61,7 +62,7 @@ As a portfolio manager, I want confidence scores with each sentiment value so th
 **Acceptance Scenarios**:
 
 1. **Given** sentiment data is collected, **When** displayed to user, **Then** a confidence score (0.0-1.0) accompanies each sentiment value
-2. **Given** confidence score is below threshold, **When** displayed to user, **Then** value is visually distinguished (e.g., muted color, warning icon)
+2. **Given** confidence score is below 0.6, **When** displayed to user, **Then** value is visually distinguished (e.g., muted color, warning icon)
 3. **Given** user views historical data, **When** comparing accuracy, **Then** historical accuracy metrics are available
 
 ---
@@ -78,7 +79,7 @@ As an operations engineer, I want visibility into collection health so that I ca
 
 1. **Given** system is collecting data, **When** ops engineer views metrics, **Then** collection success rate is visible
 2. **Given** collection errors occur, **When** ops engineer views metrics, **Then** error counts and types are visible
-3. **Given** collection latency increases, **When** latency exceeds threshold, **Then** alert is generated
+3. **Given** collection latency increases, **When** latency exceeds 30 seconds, **Then** alert is generated
 
 ---
 
@@ -112,7 +113,7 @@ As an operations engineer, I want visibility into collection health so that I ca
 ### Key Entities
 
 - **News Item**: A piece of market news with headline, content, publication time, and source. Uniquely identified by composite key: (headline + source + publication date)
-- **Sentiment Score**: A numerical sentiment value (-1.0 to 1.0) with confidence (0.0 to 1.0) and label (positive/neutral/negative)
+- **Sentiment Score**: A numerical sentiment value (-1.0 to 1.0) with confidence (0.0 to 1.0, or null if source doesn't provide confidence) and label (positive/neutral/negative). Finnhub provides native confidence; Tiingo data is marked as "unscored" (confidence=null).
 - **Collection Event**: A record of data collection attempt with timestamp, source, success/failure, and item count
 - **Data Source**: A provider of market news with availability status and priority ranking. Failure is detected by: HTTP error (4xx/5xx), request timeout (>10 seconds), or empty/malformed response body (even with 200 OK)
 
@@ -139,6 +140,7 @@ As an operations engineer, I want visibility into collection health so that I ca
 - Budget limit of $50/month for data source subscriptions
 - No PII (Personally Identifiable Information) exists in collected market news data
 - Existing dashboard infrastructure will display collected data (no UI redesign required)
+- Acceptable data staleness outside market hours is 1 hour (no alerts for staleness during this period)
 
 ## Clarifications
 
@@ -147,8 +149,13 @@ As an operations engineer, I want visibility into collection health so that I ca
 - Q: What makes two news items "identical" for deduplication? → A: Headline + source + publication date (composite key)
 - Q: What threshold triggers an operations alert for collection failures? → A: 3 consecutive failures within 15 minutes
 - Q: How is data source failure detected? → A: HTTP error (4xx/5xx), request timeout (>10 seconds), OR empty/malformed response body (even with 200 OK)
+- Q: What confidence score threshold triggers a "low confidence" visual warning? → A: 0.6 (scores below this are visually distinguished)
+- Q: After failover, when should system attempt to switch back to primary? → A: After 5 minutes of successful secondary operation
+- Q: What is acceptable data staleness outside market hours? → A: 1 hour (confirmed)
+- Q: What collection latency threshold triggers an alert? → A: 30 seconds (3x normal timeout)
+- Q: Should sentiment be recalculated when model is updated? → A: No, historical data retains original scores (confirmed)
+- Q: How should confidence scores be calculated when source doesn't provide native sentiment confidence? → A: Use Finnhub confidence directly; mark Tiingo as "unscored" (confidence=null). Future work: research deriving confidence from article metadata (source reputation, length, ticker count) as sources expand.
 
 ## Open Questions
 
-- Should sentiment be recalculated when the sentiment model is updated? (Assumption: No, historical data retains original scores)
-- What is acceptable data staleness outside market hours? (Assumption: 1 hour is acceptable)
+*No unresolved questions - all clarified in session above.*

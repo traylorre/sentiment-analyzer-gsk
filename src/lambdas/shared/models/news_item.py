@@ -14,23 +14,39 @@ class SentimentScore(BaseModel):
     """Embedded sentiment analysis result.
 
     Confidence score enables downstream filtering by data quality.
+    Finnhub provides native confidence; Tiingo is marked as "unscored" (null).
     """
 
     score: float = Field(..., ge=-1.0, le=1.0, description="Sentiment score (-1 to +1)")
-    confidence: float = Field(
-        ..., ge=0.0, le=1.0, description="Confidence in score (0 to 1)"
+    confidence: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Confidence in score (0 to 1), null for unscored sources like Tiingo",
     )
     label: Literal["positive", "neutral", "negative"] = Field(
         ..., description="Derived sentiment label"
     )
 
+    @property
+    def is_low_confidence(self) -> bool:
+        """Check if sentiment has low confidence for UI distinction.
+
+        Returns True if:
+        - confidence < 0.6 (below threshold)
+        - confidence is None (unscored source like Tiingo)
+        """
+        if self.confidence is None:
+            return True
+        return self.confidence < 0.6
+
     @classmethod
-    def from_score(cls, score: float, confidence: float) -> "SentimentScore":
+    def from_score(cls, score: float, confidence: float | None) -> "SentimentScore":
         """Create SentimentScore with auto-derived label.
 
         Args:
             score: Sentiment score between -1.0 and 1.0
-            confidence: Confidence score between 0.0 and 1.0
+            confidence: Confidence score between 0.0 and 1.0, or None for unscored
 
         Returns:
             SentimentScore with derived label
@@ -111,7 +127,10 @@ class NewsItem(BaseModel):
             item["source_name"] = self.source_name
         if self.sentiment:
             item["sentiment_score"] = str(self.sentiment.score)
-            item["sentiment_confidence"] = str(self.sentiment.confidence)
+            # Handle null confidence for unscored sources (Tiingo)
+            if self.sentiment.confidence is not None:
+                item["sentiment_confidence"] = str(self.sentiment.confidence)
+            # Omit sentiment_confidence key entirely when null (DynamoDB best practice)
             item["sentiment_label"] = self.sentiment.label
         return item
 
@@ -120,9 +139,13 @@ class NewsItem(BaseModel):
         """Create NewsItem from DynamoDB item."""
         sentiment = None
         if "sentiment_score" in item:
+            # Handle null confidence for unscored sources (Tiingo)
+            confidence = None
+            if "sentiment_confidence" in item:
+                confidence = float(item["sentiment_confidence"])
             sentiment = SentimentScore(
                 score=float(item["sentiment_score"]),
-                confidence=float(item["sentiment_confidence"]),
+                confidence=confidence,
                 label=item["sentiment_label"],
             )
 

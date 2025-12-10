@@ -518,7 +518,190 @@ In a blameless postmortem culture:
 2. If the user invokes a slash command, follow that command's workflow
 3. When in doubt, ask: "Should I continue the prior work or start the new workflow?"
 
+## Feature 072 Market Data Ingestion Patterns
+
+### Deduplication Key Generation
+```python
+from src.lambdas.shared.utils.dedup import generate_dedup_key
+
+# Generate 32-char SHA256 dedup key (date-only granularity)
+dedup_key = generate_dedup_key(
+    headline="Apple Reports Q4 Earnings",
+    source="tiingo",  # or "finnhub"
+    published_at=datetime(2025, 12, 9, 14, 30, 0, tzinfo=UTC)
+)
+# Result: "a1b2c3d4e5f6789012345678901234ab"  # pragma: allowlist secret
+```
+
+### NewsItem DynamoDB Schema
+```python
+from src.lambdas.shared.models.news_item import NewsItem, SentimentScore
+
+item = NewsItem(
+    dedup_key="a1b2c3d4e5f6789012345678901234ab",  # pragma: allowlist secret
+    source="tiingo",
+    headline="Apple Reports Q4 Earnings",
+    published_at=datetime(2025, 12, 9, 14, 30, 0, tzinfo=UTC),
+    ingested_at=datetime.now(UTC),
+    tickers=["AAPL"],
+    sentiment=SentimentScore.from_score(0.75, 0.92),  # Auto-derives label
+)
+
+# DynamoDB keys
+item.pk  # "NEWS#a1b2c3d4e5f6789012345678901234ab"
+item.sk  # "tiingo#2025-12-09T14:35:00+00:00"
+```
+
+### FailoverOrchestrator Pattern
+```python
+from src.lambdas.shared.failover import FailoverOrchestrator
+
+orchestrator = FailoverOrchestrator(
+    primary_adapter=tiingo_adapter,
+    secondary_adapter=finnhub_adapter,
+    timeout_seconds=10,  # FR-002: Failover within 10 seconds
+)
+
+result = await orchestrator.get_news_with_failover(tickers=["AAPL", "TSLA"])
+# Returns: (news_items, source_used, is_failover)
+```
+
+### ConsecutiveFailureTracker Pattern
+```python
+from src.lambdas.shared.failure_tracker import ConsecutiveFailureTracker
+
+tracker = ConsecutiveFailureTracker(
+    window_minutes=15,  # FR-008: 15-minute window
+    threshold=3,        # FR-008: 3 consecutive failures
+)
+
+tracker.record_failure()
+if tracker.should_alert():
+    # Publish SNS alert to operations team
+    pass
+```
+
+### Market Hours Utilities
+```python
+from src.lambdas.shared.utils.market import is_market_open, get_cache_expiration
+
+# Check if NYSE is open (9:30 AM - 4:00 PM ET, weekdays)
+if is_market_open():
+    # Collect fresh data
+    pass
+
+# Get cache expiration (expires at market close or next open)
+expiration = get_cache_expiration()
+```
+
+### CollectionEvent Audit Trail
+```python
+from src.lambdas.shared.models.collection_event import CollectionEvent
+
+event = CollectionEvent(
+    triggered_at=datetime.now(UTC),
+    status="success",
+    source_used="tiingo",
+    is_failover=False,
+    items_collected=50,
+)
+
+completed = event.mark_completed(
+    status="success",
+    items_stored=10,
+    items_duplicates=40,
+)
+# Automatically calculates duration_ms
+```
+
+### Alerting Pattern (US4)
+```python
+from src.lambdas.ingestion.alerting import AlertPublisher
+
+publisher = AlertPublisher(
+    topic_arn="arn:aws:sns:us-east-1:123456789012:ingestion-alerts",
+    sns_client=sns_client,
+)
+
+# Alert on consecutive failures (3 within 15 min)
+publisher.publish_failure_alert(
+    source="tiingo",
+    consecutive_failures=3,
+    window_minutes=15,
+    error_message="Connection timeout after 10 seconds",
+)
+```
+
+### Notification Pattern (Phase 7)
+```python
+from src.lambdas.ingestion.notification import NotificationPublisher, NewDataNotification
+from src.lambdas.ingestion.storage import store_news_items_with_notification
+
+# Storage with automatic downstream notification
+result, notification_id = store_news_items_with_notification(
+    table=dynamodb_table,
+    articles=news_articles,
+    source="tiingo",
+    notification_publisher=publisher,
+    collection_timestamp=datetime.now(UTC),
+    is_failover=False,
+)
+# notification_id is None if no new items stored (all duplicates)
+```
+
+### Metrics Pattern (US4)
+```python
+from src.lambdas.ingestion.metrics import MetricsPublisher, CollectionMetrics
+
+publisher = MetricsPublisher(cloudwatch_client=cw_client)
+
+# Record collection metrics
+publisher.record_collection(CollectionMetrics(
+    source="tiingo",
+    success=True,
+    latency_ms=1500,
+    items_collected=50,
+    items_duplicate=40,
+    is_failover=False,
+))
+
+# Check latency threshold (30s = 3x normal timeout)
+if publisher.check_latency_threshold(latency_ms=35000, source="tiingo"):
+    # High latency alert generated
+    pass
+
+# Record notification latency (30s SLA per FR-004)
+sla_met = publisher.record_notification_latency(latency_ms=500, source="tiingo")
+```
+
+### Troubleshooting Ingestion
+
+| Symptom | Likely Cause | Fix |
+|---------|--------------|-----|
+| All items are duplicates | Same news already ingested | Expected behavior - dedup working |
+| Failover not triggering | Timeout not exceeded | Check timeout config (10s default) |
+| No alerts on failure | Threshold not reached | Need 3 failures in 15-min window |
+| Stale data outside market hours | Expected behavior | 1-hour staleness acceptable per spec |
+| High latency alerts | Network/API slowness | Check source API status, adjust timeout |
+| Notification SLA exceeded | Storage slow or high volume | Check DynamoDB capacity |
+
+### Ingestion Commands
+```bash
+# Run ingestion unit tests
+pytest tests/unit/ingestion/ -v
+
+# Run specific test module
+pytest tests/unit/ingestion/test_alerting.py -v
+
+# Run integration tests
+pytest tests/integration/ingestion/ -v
+
+# Check metrics
+aws cloudwatch get-metric-data --metric-data-queries '[...]' --start-time ... --end-time ...
+```
+
 ## Recent Changes
+- 072-market-data-ingestion: Added market data ingestion with deduplication, failover, and market hours utilities
 - 057-pragma-comment-stability: Added Ruff formatter (pragma comment preservation)
 - 070-validation-blindspot-audit: Added Python 3.13 (existing project standard) + Semgrep (SAST), Bandit (Python security linter), pre-commit, Make
 - 069-stale-pr-autoupdate: Added YAML (GitHub Actions workflow syntax), Bash (slash command) + GitHub Actions, GitHub CLI (`gh`), GitHub REST API

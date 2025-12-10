@@ -4,6 +4,7 @@ Provides automatic failover from primary to secondary data sources with:
 - 10-second timeout for failover trigger (FR-002)
 - Integration with existing CircuitBreakerManager
 - Source attribution tracking
+- Primary recovery after 5 minutes of successful secondary operation (US2 clarification)
 
 Architecture:
     FailoverOrchestrator --> TiingoAdapter (primary, priority 1)
@@ -28,6 +29,9 @@ T = TypeVar("T")
 
 # Default timeout before failover (10 seconds per FR-002)
 DEFAULT_FAILOVER_TIMEOUT_SECONDS = 10
+
+# Default recovery window (5 minutes per US2 clarification)
+DEFAULT_RECOVERY_WINDOW_SECONDS = 300
 
 
 @dataclass
@@ -76,6 +80,7 @@ class FailoverOrchestrator:
         secondary: BaseAdapter,
         circuit_breaker: CircuitBreakerManager,
         timeout_seconds: float = DEFAULT_FAILOVER_TIMEOUT_SECONDS,
+        recovery_window_seconds: int = DEFAULT_RECOVERY_WINDOW_SECONDS,
     ):
         """Initialize failover orchestrator.
 
@@ -84,15 +89,21 @@ class FailoverOrchestrator:
             secondary: Secondary data source adapter (e.g., FinnhubAdapter)
             circuit_breaker: Circuit breaker manager for state tracking
             timeout_seconds: Timeout before triggering failover (default: 10s)
+            recovery_window_seconds: Seconds to wait before attempting primary recovery (default: 300s/5min)
         """
         self._primary = primary
         self._secondary = secondary
         self._circuit_breaker = circuit_breaker
         self._timeout_seconds = timeout_seconds
+        self._recovery_window_seconds = recovery_window_seconds
 
         # Track source configs
         self._primary_config = DataSourceConfig.tiingo_default()
         self._secondary_config = DataSourceConfig.finnhub_default()
+
+        # Track failover state for primary recovery
+        self._failover_started_at: datetime | None = None
+        self._is_in_failover: bool = False
 
     def get_news_with_failover(
         self,
@@ -105,6 +116,9 @@ class FailoverOrchestrator:
 
         Attempts primary source first. If it fails or times out within
         timeout_seconds, automatically fails over to secondary source.
+
+        After 5 minutes of successful secondary operation, will attempt
+        to switch back to primary (US2 clarification).
 
         Args:
             tickers: List of stock symbols
@@ -121,6 +135,19 @@ class FailoverOrchestrator:
         start_time = time.time()
         primary_source: Literal["tiingo", "finnhub"] = self._primary.source_name
         secondary_source: Literal["tiingo", "finnhub"] = self._secondary.source_name
+
+        # Check if we should attempt primary recovery
+        if self._should_attempt_primary_recovery():
+            logger.info(
+                "Attempting primary recovery after 5 minutes of secondary success",
+                extra={
+                    "primary": primary_source,
+                    "failover_duration_seconds": self._get_failover_duration_seconds(),
+                },
+            )
+            # Reset failover state - will be set again if primary fails
+            self._is_in_failover = False
+            self._failover_started_at = None
 
         # Check if primary circuit is open
         if not self._circuit_breaker.can_execute(primary_source):
@@ -268,6 +295,11 @@ class FailoverOrchestrator:
                 datetime.now(UTC)
             )
 
+            # Track failover state for recovery timing
+            if not self._is_in_failover:
+                self._is_in_failover = True
+                self._failover_started_at = datetime.now(UTC)
+
             logger.info(
                 "Failover to secondary succeeded",
                 extra={
@@ -275,6 +307,9 @@ class FailoverOrchestrator:
                     "articles": len(articles),
                     "duration_ms": duration_ms,
                     "primary_error": primary_error,
+                    "failover_started_at": self._failover_started_at.isoformat()
+                    if self._failover_started_at
+                    else None,
                 },
             )
 
@@ -338,3 +373,40 @@ class FailoverOrchestrator:
     def secondary_config(self) -> DataSourceConfig:
         """Get secondary source configuration."""
         return self._secondary_config
+
+    @property
+    def is_in_failover(self) -> bool:
+        """Check if currently in failover mode."""
+        return self._is_in_failover
+
+    @property
+    def failover_started_at(self) -> datetime | None:
+        """Get when failover started (None if not in failover)."""
+        return self._failover_started_at
+
+    def _should_attempt_primary_recovery(self) -> bool:
+        """Determine if primary recovery should be attempted.
+
+        Per US2 clarification: After 5 minutes of successful secondary
+        operation, system attempts to switch back to primary.
+
+        Returns:
+            True if recovery should be attempted, False otherwise
+        """
+        if not self._is_in_failover or self._failover_started_at is None:
+            return False
+
+        elapsed_seconds = (
+            datetime.now(UTC) - self._failover_started_at
+        ).total_seconds()
+        return elapsed_seconds >= self._recovery_window_seconds
+
+    def _get_failover_duration_seconds(self) -> float:
+        """Get how long we've been in failover mode.
+
+        Returns:
+            Seconds since failover started, or 0 if not in failover
+        """
+        if not self._is_in_failover or self._failover_started_at is None:
+            return 0.0
+        return (datetime.now(UTC) - self._failover_started_at).total_seconds()
