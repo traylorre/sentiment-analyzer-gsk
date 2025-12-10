@@ -17,22 +17,41 @@ class PreprodAPIClient:
     - Authentication header management
     - Request ID tracking for observability tests
     - Response helpers for common assertions
+
+    Two-Lambda Architecture:
+        The sentiment-analyzer uses two Lambda functions with different streaming modes:
+        - Dashboard Lambda (BUFFERED): Handles non-streaming requests like /api/v2/configurations
+        - SSE Lambda (RESPONSE_STREAM): Handles streaming requests like /api/v2/stream
+
+        The SSE Lambda requires RESPONSE_STREAM invoke mode to support Server-Sent Events.
+        Using the Dashboard Lambda (BUFFERED mode) for SSE requests causes timeouts because
+        the entire response must be buffered before sending.
+
+        Environment variables:
+        - PREPROD_API_URL: Dashboard Lambda Function URL (non-streaming requests)
+        - SSE_LAMBDA_URL: SSE Lambda Function URL (streaming requests)
+
+        See: specs/082-fix-sse-e2e-timeouts/spec.md for details.
     """
 
     def __init__(
         self,
         base_url: str | None = None,
+        sse_url: str | None = None,
         timeout: float = 30.0,
     ):
         """Initialize the API client.
 
         Args:
             base_url: API base URL (default: from PREPROD_API_URL env var)
+            sse_url: SSE Lambda URL for streaming endpoints (default: from SSE_LAMBDA_URL env var)
             timeout: Request timeout in seconds
         """
         self.base_url = base_url or os.environ.get(
             "PREPROD_API_URL", "https://api.preprod.sentiment-analyzer.com"
         )
+        # SSE Lambda URL for streaming endpoints; falls back to base_url if not set
+        self.sse_url = sse_url or os.environ.get("SSE_LAMBDA_URL", self.base_url)
         self.timeout = timeout
         self._client: httpx.AsyncClient | None = None
         self._access_token: str | None = None
@@ -268,6 +287,11 @@ class PreprodAPIClient:
         This method reads only the initial response (headers + first event) with
         a short timeout to validate the endpoint is working.
 
+        URL Routing:
+            Paths starting with "/api/v2/stream" are routed to the SSE Lambda
+            (self.sse_url) which uses RESPONSE_STREAM invoke mode. Other paths
+            are routed to the Dashboard Lambda (self.base_url).
+
         Args:
             path: API path (e.g., "/api/v2/stream")
             headers: Additional headers
@@ -284,9 +308,14 @@ class PreprodAPIClient:
         if "Accept" not in request_headers:
             request_headers["Accept"] = "text/event-stream"
 
+        # Route to SSE Lambda URL for streaming endpoints
+        effective_url = (
+            self.sse_url if path.startswith("/api/v2/stream") else self.base_url
+        )
+
         # Create a client with short read timeout for SSE
         async with httpx.AsyncClient(
-            base_url=self.base_url,
+            base_url=effective_url,
             timeout=httpx.Timeout(timeout, read=timeout),
         ) as stream_client:
             async with stream_client.stream(
