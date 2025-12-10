@@ -685,16 +685,46 @@ async def create_configuration(
     table=Depends(get_dynamodb_table),
     ticker_cache: TickerCache | None = Depends(get_ticker_cache_dependency),
 ):
-    """Create configuration (T049)."""
+    """Create configuration (T049).
+
+    Root cause fix (Feature 077): Service function create_configuration()
+    re-raises DynamoDB exceptions. Without try/except here, these propagate
+    as HTTP 500. Now we catch exceptions and return appropriate status codes.
+    """
     user_id = get_user_id_from_request(request)
-    result = config_service.create_configuration(
-        table=table,
-        user_id=user_id,
-        request=body,
-        ticker_cache=ticker_cache,
+
+    # FR-006: Log only safe fields (counts, booleans), NEVER user content
+    logger.info(
+        "Config creation attempt",
+        extra={
+            "operation": "create_configuration",
+            "ticker_count": len(body.tickers),
+            "ticker_cache_available": ticker_cache is not None,
+        },
     )
+
+    try:
+        result = config_service.create_configuration(
+            table=table,
+            user_id=user_id,
+            request=body,
+            ticker_cache=ticker_cache,
+        )
+    except Exception as e:
+        # Log error details for diagnostics (no user content per FR-006)
+        logger.error(
+            "Config creation failed with exception",
+            extra=get_safe_error_info(e),
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create configuration. Please try again.",
+        ) from e
+
     if isinstance(result, config_service.ErrorResponse):
         if result.error.code == "MAX_CONFIGS_REACHED":
+            raise HTTPException(status_code=409, detail=result.error.message)
+        if result.error.code == "CONFLICT":
             raise HTTPException(status_code=409, detail=result.error.message)
         raise HTTPException(status_code=400, detail=result.error.message)
     return JSONResponse(result.model_dump(), status_code=201)
