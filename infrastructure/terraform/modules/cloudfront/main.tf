@@ -276,6 +276,7 @@ resource "aws_cloudfront_distribution" "dashboard" {
   }
 
   tags = {
+    Name        = "${var.environment}-sentiment-dashboard"
     Environment = var.environment
     Feature     = "006-user-config-dashboard"
     Component   = "cdn"
