@@ -145,6 +145,7 @@ Most are features not yet implemented:
 - [X] Feature 075: Resource Naming Validators (6 tests) - **CLOSED** (32 tests implemented, 11 IAM coverage tests)
 - [X] Feature 075: JWT Authentication Validation (1 TODO) - **CLOSED** (21 tests, TODO removed)
 - [X] Feature 076: v1 API Integration Tests (21 skipped) - **CLOSED** (tests removed, v2 coverage verified)
+- [X] Feature 077: Config Creation 500 Error - **CLOSED** (exception handling added, safe logging)
 - [ ] Feature ???: Notifications E2E
 - [ ] Feature ???: Magic Link Authentication
 - [ ] Feature ???: Rate Limiting
@@ -192,3 +193,27 @@ Most are features not yet implemented:
 
 **Modified Files**:
 - `tests/integration/test_dashboard_preprod.py` - 21 skipped tests removed, 3 preserved
+
+---
+
+## Closed Gaps Summary (Feature 077)
+
+**Date Closed**: 2025-12-10
+**Issue**: Config creation endpoint returning 500 instead of proper validation errors
+**Root Cause**: Unhandled `ValueError` from Pydantic model validation
+
+| Metric | Value |
+|--------|-------|
+| PRs Merged | #332 |
+| Files Modified | 1 |
+| Security Pattern | CWE-117 compliant (no user content in logs) |
+
+**Fix Applied**:
+- Added try/except around config creation in `router_v2.py`
+- Returns 422 Unprocessable Entity with validation details
+- Safe logging: counts and booleans only, NEVER user-generated content
+
+**Spec Document**: `specs/077-fix-config-creation-500/spec.md`
+
+**Modified Files**:
+- `src/lambdas/dashboard/router_v2.py` - Exception handling for config creation
