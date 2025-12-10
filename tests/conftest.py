@@ -81,6 +81,12 @@ os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "testing")
 os.environ.setdefault("AWS_REGION", "us-east-1")
 os.environ.setdefault("SSE_POLL_INTERVAL", "1")
 
+# Disable X-Ray SDK in tests to suppress "cannot find the current segment" errors.
+# X-Ray requires a Lambda runtime context with an active segment. In tests, there's no
+# X-Ray daemon running, so the SDK logs ERROR for every instrumented AWS call.
+# Setting this env var makes X-Ray gracefully no-op instead of logging errors.
+os.environ.setdefault("AWS_XRAY_SDK_ENABLED", "false")
+
 # These are ONLY set if not already present (CI sets them for preprod)
 # For local unit tests (not preprod), these provide sensible defaults
 if "DYNAMODB_TABLE" not in os.environ:
