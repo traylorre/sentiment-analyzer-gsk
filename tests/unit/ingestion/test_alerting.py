@@ -268,8 +268,10 @@ class TestCreateAlertPublisher:
 
     def test_create_with_topic_arn(self) -> None:
         """Should create publisher with topic ARN."""
+        mock_sns = MagicMock()
         publisher = create_alert_publisher(
-            topic_arn="arn:aws:sns:us-east-1:123456789012:alerts"
+            topic_arn="arn:aws:sns:us-east-1:123456789012:alerts",
+            sns_client=mock_sns,
         )
 
         assert publisher is not None
