@@ -8,7 +8,7 @@
 | Category | Count | Closeable |
 |----------|-------|-----------|
 | Skipped Unit Tests (unimplemented validators) | 6 | ✅ Easy |
-| Skipped Integration Tests (v1 API deprecated) | 21 | 🚫 Intentional |
+| ~~Skipped Integration Tests (v1 API deprecated)~~ | 0 | ✅ CLOSED (Feature 076) |
 | Skipped E2E Tests (features not implemented) | ~35 | ⚠️ Feature work |
 | IAM Allowlist Exemptions | 4 | ⚠️ Architectural |
 | Bidirectional Spec Exemptions | 19 | 🚫 Intentional |
@@ -108,7 +108,7 @@ Most are features not yet implemented:
 
 | Gap | Reason |
 |-----|--------|
-| 21 v1 API integration tests | v1 API intentionally deprecated, v2 replaces it |
+| ~~21 v1 API integration tests~~ | CLOSED (Feature 076) - Tests removed, v2 coverage verified |
 | 5 vaporware specs | Frontend specs for backend-only project |
 | 10 infrastructure specs | SC-005 exemption - Terraform semantic matching limitation |
 | 3 test-infrastructure specs | Test methodology, not production code |
@@ -144,6 +144,7 @@ Most are features not yet implemented:
 
 - [X] Feature 075: Resource Naming Validators (6 tests) - **CLOSED** (32 tests implemented, 11 IAM coverage tests)
 - [X] Feature 075: JWT Authentication Validation (1 TODO) - **CLOSED** (21 tests, TODO removed)
+- [X] Feature 076: v1 API Integration Tests (21 skipped) - **CLOSED** (tests removed, v2 coverage verified)
 - [ ] Feature ???: Notifications E2E
 - [ ] Feature ???: Magic Link Authentication
 - [ ] Feature ???: Rate Limiting
@@ -171,3 +172,23 @@ Most are features not yet implemented:
 - `tests/unit/validators/test_resource_naming.py`
 - `tests/unit/validators/test_iam_coverage.py`
 - `tests/unit/middleware/test_jwt_validation.py`
+
+---
+
+## Closed Gaps Summary (Feature 076)
+
+**Date Closed**: 2025-12-10
+**Tests Removed**: 21 (v1 API deprecated)
+**Tests Preserved**: 3 (version-agnostic)
+
+| Action | Count |
+|--------|-------|
+| v1 tests audited | 21 |
+| v2 equivalents found | 15 |
+| Deprecated features | 6 |
+| Coverage gaps | 0 |
+
+**Audit Document**: `specs/076-v1-test-deprecation/audit.md`
+
+**Modified Files**:
+- `tests/integration/test_dashboard_preprod.py` - 21 skipped tests removed, 3 preserved
