@@ -65,7 +65,7 @@ class TestCollectionEventSave:
         assert item["source_used"] == "tiingo"
         assert item["is_failover"] is True
 
-    def test_save_handles_dynamodb_error(self) -> None:
+    def test_save_handles_dynamodb_error(self, caplog) -> None:
         """Should return False on DynamoDB error."""
         mock_table = MagicMock()
         mock_table.put_item.side_effect = ClientError(
@@ -83,6 +83,11 @@ class TestCollectionEventSave:
         result = repo.save(event)
 
         assert result is False
+
+        # Verify expected error was logged
+        from tests.conftest import assert_error_logged
+
+        assert_error_logged(caplog, "Failed to save collection event")
 
 
 class TestCollectionEventQueryByDate:
@@ -127,7 +132,7 @@ class TestCollectionEventQueryByDate:
 
         assert events == []
 
-    def test_get_by_date_handles_error(self) -> None:
+    def test_get_by_date_handles_error(self, caplog) -> None:
         """Should return empty list on DynamoDB error."""
         mock_table = MagicMock()
         mock_table.query.side_effect = ClientError(
@@ -139,6 +144,11 @@ class TestCollectionEventQueryByDate:
         events = repo.get_by_date("2025-12-09")
 
         assert events == []
+
+        # Verify expected error was logged
+        from tests.conftest import assert_error_logged
+
+        assert_error_logged(caplog, "Failed to query collection events")
 
 
 class TestCollectionEventQueryFailures:

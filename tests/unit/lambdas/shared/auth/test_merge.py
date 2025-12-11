@@ -268,7 +268,7 @@ class TestMergeAnonymousData:
         assert result.status == "partial"
         assert result.configurations == 1  # Only one succeeded
 
-    def test_merge_returns_failed_on_query_error(self):
+    def test_merge_returns_failed_on_query_error(self, caplog):
         """Returns failed status when query fails."""
         table = MagicMock()
         table.get_item.return_value = {}  # No existing merge status
@@ -281,6 +281,11 @@ class TestMergeAnonymousData:
 
         assert result.status == "failed"
         assert result.error == "merge_failed"
+
+        # Verify expected error was logged
+        from tests.conftest import assert_error_logged
+
+        assert_error_logged(caplog, "Data merge failed")
 
 
 class TestGetMergeStatus:
@@ -383,7 +388,7 @@ class TestGetMergeStatus:
 
         assert result.status == "no_data"
 
-    def test_status_handles_error(self):
+    def test_status_handles_error(self, caplog):
         """Returns failed on database error."""
         table = MagicMock()
         table.get_item.side_effect = Exception("DynamoDB error")
@@ -392,6 +397,11 @@ class TestGetMergeStatus:
 
         assert result.status == "failed"
         assert result.error == "status_check_failed"
+
+        # Verify expected error was logged
+        from tests.conftest import assert_error_logged
+
+        assert_error_logged(caplog, "Failed to get merge status")
 
 
 class TestMergeResult:

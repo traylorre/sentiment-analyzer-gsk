@@ -517,3 +517,89 @@ def ohlc_test_client(mock_tiingo, mock_finnhub):
 
     # Cleanup
     app.dependency_overrides.clear()
+
+
+# =============================================================================
+# S3 Model Download Fixtures (087-test-coverage-completion)
+# =============================================================================
+
+
+@pytest.fixture
+def mock_model_tar():
+    """
+    Create mock model tar.gz for S3 download testing.
+
+    Creates a minimal valid tar.gz with config.json for testing
+    the sentiment model S3 download path.
+
+    Returns:
+        io.BytesIO: Buffer containing tar.gz data
+
+    Example:
+        @mock_aws
+        def test_download_model_from_s3_success(mock_model_tar):
+            s3 = boto3.client("s3", region_name="us-east-1")
+            s3.create_bucket(Bucket="sentiment-model-bucket")
+            s3.put_object(
+                Bucket="sentiment-model-bucket",
+                Key="models/sentiment-v1.tar.gz",
+                Body=mock_model_tar.read()
+            )
+            # Test download function
+    """
+    import io
+    import tarfile
+
+    tar_buffer = io.BytesIO()
+    with tarfile.open(fileobj=tar_buffer, mode="w:gz") as tar:
+        # Add config.json
+        config_data = b'{"model_type": "distilbert", "num_labels": 3}'
+        config_info = tarfile.TarInfo(name="model/config.json")
+        config_info.size = len(config_data)
+        tar.addfile(config_info, io.BytesIO(config_data))
+
+        # Add mock weights file (minimal)
+        weights_data = b"mock_pytorch_weights_data"
+        weights_info = tarfile.TarInfo(name="model/pytorch_model.bin")
+        weights_info.size = len(weights_data)
+        tar.addfile(weights_info, io.BytesIO(weights_data))
+
+    tar_buffer.seek(0)
+    return tar_buffer
+
+
+@pytest.fixture
+def mock_s3_error_not_found():
+    """
+    Mock S3 NoSuchKey error for testing download failure path.
+
+    Returns:
+        botocore.exceptions.ClientError: NoSuchKey error
+    """
+    from botocore.exceptions import ClientError
+
+    return ClientError(
+        {
+            "Error": {
+                "Code": "NoSuchKey",
+                "Message": "The specified key does not exist.",
+            }
+        },
+        "GetObject",
+    )
+
+
+@pytest.fixture
+def mock_s3_error_throttling():
+    """
+    Mock S3 Throttling error for testing retry behavior.
+
+    Returns:
+        botocore.exceptions.ClientError: SlowDown error
+    """
+    from botocore.exceptions import ClientError
+
+    return ClientError(
+        {"Error": {"Code": "SlowDown", "Message": "Please reduce your request rate."}},
+        "GetObject",
+    )

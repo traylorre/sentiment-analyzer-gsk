@@ -108,7 +108,7 @@ class TestConsecutiveFailureTracker:
         tracker.record_success()
         assert tracker.current_failure_count == 0
 
-    def test_alert_at_threshold(self) -> None:
+    def test_alert_at_threshold(self, caplog) -> None:
         """Should trigger alert when threshold reached."""
         alert_callback = MagicMock()
         tracker = ConsecutiveFailureTracker(
@@ -132,6 +132,11 @@ class TestConsecutiveFailureTracker:
         alert_msg = alert_callback.call_args[0][0]
         assert "3 consecutive" in alert_msg
         assert "Error 3" in alert_msg
+
+        # Verify expected error was logged
+        from tests.conftest import assert_error_logged
+
+        assert_error_logged(caplog, "Consecutive failure threshold exceeded")
 
     def test_no_duplicate_alerts(self) -> None:
         """Should not send duplicate alerts in same window."""

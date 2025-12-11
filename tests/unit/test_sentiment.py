@@ -435,3 +435,96 @@ class TestIntegrationScenarios:
                 mock_pipeline_instance.return_value = result
                 sentiment, _ = analyze_sentiment("Test")
                 assert sentiment == "neutral"
+
+
+class TestS3ModelDownload:
+    """Tests for S3 model download functionality."""
+
+    @pytest.fixture(autouse=True)
+    def mock_s3_download(self):
+        """Override the module-level mock_s3_download to NOT mock for these tests."""
+        # We want to test the actual _download_model_from_s3 function,
+        # so we yield without patching anything
+        yield None
+
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        """Reset model cache before each test."""
+        clear_model_cache()
+        yield
+        clear_model_cache()
+
+    def test_download_model_skips_if_exists(self, tmp_path):
+        """Test model download skips when model exists (warm Lambda container)."""
+        from src.lambdas.analysis.sentiment import _download_model_from_s3
+
+        # Create a real model directory to simulate warm Lambda
+        model_path = tmp_path / "model"
+        model_path.mkdir()
+        (model_path / "config.json").write_text("{}")
+
+        # Mock the constant to use our tmp_path
+        with patch("src.lambdas.analysis.sentiment.LOCAL_MODEL_PATH", str(model_path)):
+            # S3 download should be skipped because model already exists
+            with patch("boto3.client") as mock_boto3_client:
+                _download_model_from_s3()
+                # boto3.client should not be called since model exists
+                mock_boto3_client.assert_not_called()
+
+    def test_download_model_s3_error(self, tmp_path, caplog):
+        """Test S3 download error handling (NoSuchKey)."""
+        from botocore.exceptions import ClientError
+
+        from src.lambdas.analysis.sentiment import _download_model_from_s3
+
+        # Use fresh tmp_path (no model)
+        model_path = tmp_path / "model"
+
+        with patch("src.lambdas.analysis.sentiment.LOCAL_MODEL_PATH", str(model_path)):
+            with patch("boto3.client") as mock_boto3_client:
+                mock_s3 = MagicMock()
+                mock_s3.download_file.side_effect = ClientError(
+                    {"Error": {"Code": "NoSuchKey", "Message": "Model not found"}},
+                    "GetObject",
+                )
+                mock_boto3_client.return_value = mock_s3
+
+                with pytest.raises(ModelLoadError) as exc_info:
+                    _download_model_from_s3()
+
+                assert "Failed to download model from S3" in str(exc_info.value)
+
+                # Verify expected error was logged
+                from tests.conftest import assert_error_logged
+
+                assert_error_logged(caplog, "Failed to download model from S3")
+
+    def test_download_model_throttling_error(self, tmp_path, caplog):
+        """Test S3 download throttling error handling."""
+        from botocore.exceptions import ClientError
+
+        from src.lambdas.analysis.sentiment import _download_model_from_s3
+
+        model_path = tmp_path / "model"
+
+        with patch("src.lambdas.analysis.sentiment.LOCAL_MODEL_PATH", str(model_path)):
+            with patch("boto3.client") as mock_boto3_client:
+                mock_s3 = MagicMock()
+                mock_s3.download_file.side_effect = ClientError(
+                    {
+                        "Error": {
+                            "Code": "Throttling",
+                            "Message": "Rate limit exceeded",
+                        }
+                    },
+                    "GetObject",
+                )
+                mock_boto3_client.return_value = mock_s3
+
+                with pytest.raises(ModelLoadError):
+                    _download_model_from_s3()
+
+                # Verify expected error was logged
+                from tests.conftest import assert_error_logged
+
+                assert_error_logged(caplog, "Failed to download model from S3")

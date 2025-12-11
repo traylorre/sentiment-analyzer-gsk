@@ -100,7 +100,7 @@ class TestAlertPublisher:
         assert "Message" in call_kwargs
         assert "Subject" in call_kwargs
 
-    def test_publish_handles_sns_error_gracefully(self) -> None:
+    def test_publish_handles_sns_error_gracefully(self, caplog) -> None:
         """Should log error but not raise on SNS failure."""
         mock_sns = MagicMock()
         mock_sns.publish.side_effect = ClientError(
@@ -123,6 +123,11 @@ class TestAlertPublisher:
 
         # Should not raise
         publisher.publish_failure_alert(alert)
+
+        # Verify expected error was logged
+        from tests.conftest import assert_error_logged
+
+        assert_error_logged(caplog, "Failed to publish failure alert")
 
     def test_alert_includes_alert_type(self) -> None:
         """Alert should include type for routing."""
