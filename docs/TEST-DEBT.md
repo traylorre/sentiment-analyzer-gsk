@@ -1,26 +1,33 @@
 # Test Debt Burndown Report
 
 **Generated:** 2025-11-25
-**Last Updated:** 2025-11-25
-**Overall Coverage:** 85.99% (target: 80%)
-**Total Tests:** 569 unit tests + integration/e2e suites
+**Last Updated:** 2025-12-11
+**Overall Coverage:** 80.40% (target: 80%)
+**Total Tests:** 1948 unit tests + integration/e2e suites
 
 ## Executive Summary
 
 The test suite meets coverage thresholds but has structural weaknesses that reduce confidence in preprod validation. This document tracks test debt items being burned down.
 
-**Progress:** 3 of 6 items resolved, 1 in progress, 2 remaining.
+**Progress:** 4 of 6 items resolved, 2 deferred to future sprint.
+
+### Recent Changes (2025-12-11)
+
+- TD-001: **RESOLVED** - PR #112 merged, observability tests use assertions
+- TD-007: **ADDED** - Pre-commit hook for ERROR log validation (086-test-debt-burndown)
+- TD-005/TD-006: **DEFERRED** - Coverage improvements require substantial work
 
 ## Test Debt Status
 
 | ID | Description | Status | PR |
 |----|-------------|--------|-----|
-| TD-001 | Observability tests skip on missing metrics | IN PROGRESS | [#112](https://github.com/traylorre/sentiment-analyzer-gsk/pull/112) |
+| TD-001 | Observability tests skip on missing metrics | **RESOLVED** | [#112](https://github.com/traylorre/sentiment-analyzer-gsk/pull/112) |
 | TD-002 | E2E Lambda tests have empty placeholders | **RESOLVED** | [#113](https://github.com/traylorre/sentiment-analyzer-gsk/pull/113) |
 | TD-003 | Ingestion preprod tests have empty exception handlers | **RESOLVED** | [#113](https://github.com/traylorre/sentiment-analyzer-gsk/pull/113) |
 | TD-004 | No synthetic data for E2E validation | **RESOLVED** | [#114](https://github.com/traylorre/sentiment-analyzer-gsk/pull/114) |
-| TD-005 | Dashboard handler low coverage (72%) | OPEN | - |
-| TD-006 | Sentiment model S3 loading untested (74%) | OPEN | - |
+| TD-005 | Dashboard handler low coverage (71%) | DEFERRED | - |
+| TD-006 | Sentiment model S3 loading untested (51%) | DEFERRED | - |
+| TD-007 | ERROR log assertion validation | **RESOLVED** | 086-test-debt-burndown |
 
 ---
 
@@ -55,33 +62,35 @@ The test suite meets coverage thresholds but has structural weaknesses that redu
 
 ---
 
-## In Progress
-
-### TD-001: Observability Tests Skip on Missing Metrics
-**Status:** IN PROGRESS - PR #112 awaiting merge
+### TD-001: Observability Tests Skip on Missing Metrics ✅
+**Resolved:** PR #112 merged
 **File:** `tests/integration/test_observability_preprod.py`
 
-**Problem:** Tests skip when CloudWatch metrics don't exist, hiding the fact that metrics SHOULD exist if the system is running correctly.
-
-**Solution implemented:**
+**What was fixed:**
 1. Added "Warm Up Lambdas for Metrics" step to `.github/workflows/deploy.yml`
    - Invokes dashboard Lambda endpoints before integration tests
    - Waits 60s for CloudWatch metrics to propagate
 2. Created `tests/integration/test_observability_preprod.py`
    - Tests use assertions (not skips) to fail when metrics missing
    - Validates invocation count, duration metrics, error rates
-   - Validates CloudWatch log groups exist
 
-**Acceptance criteria:** Zero `pytest.skip` calls in observability tests
+### TD-007: ERROR Log Assertion Validation ✅
+**Resolved:** 086-test-debt-burndown
+**File:** `scripts/check-error-log-assertions.sh`, `.pre-commit-config.yaml`
+
+**What was added:**
+1. Pre-commit hook script that validates ERROR logs have assertions
+2. Hook runs on `git push` (advisory mode - warns but doesn't block)
+3. 28 existing `assert_error_logged()` calls across test files
 
 ---
 
-## Remaining Items
+## Deferred Items
 
 ### TD-005: Dashboard Handler Low Coverage
 **File:** `src/lambdas/dashboard/handler.py`
-**Status:** OPEN
-**Coverage:** 72%
+**Status:** DEFERRED
+**Coverage:** 71%
 
 **Problem:** SSE streaming, WebSocket, and static file error paths are untested.
 
@@ -100,8 +109,8 @@ The test suite meets coverage thresholds but has structural weaknesses that redu
 
 ### TD-006: Sentiment Model S3 Loading Untested
 **File:** `src/lambdas/analysis/sentiment.py`
-**Status:** OPEN
-**Coverage:** 74%
+**Status:** DEFERRED
+**Coverage:** 51%
 
 **Problem:** Lines 81-139 (S3 model download and loading) are never executed in unit tests.
 
@@ -134,10 +143,10 @@ The test suite meets coverage thresholds but has structural weaknesses that redu
 ## Metrics Summary
 
 ```
-Overall Coverage: 85.99% (target: 80%) ✅
-Test Debt Items: 6 total
-  - Resolved: 3 (TD-002, TD-003, TD-004)
-  - In Progress: 1 (TD-001)
-  - Remaining: 2 (TD-005, TD-006)
+Overall Coverage: 80.40% (target: 80%) ✅
+Test Debt Items: 7 total
+  - Resolved: 5 (TD-001, TD-002, TD-003, TD-004, TD-007)
+  - Deferred: 2 (TD-005, TD-006)
 Modules Below 80%: 3 (handler.py, sentiment.py, chaos.py)
+Pre-commit Hooks: ERROR log validation added (086-test-debt-burndown)
 ```

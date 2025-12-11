@@ -123,6 +123,17 @@ repos:
         always_run: true
         stages: [manual]  # Run with: pre-commit run mypy --hook-stage manual
 
+      # ERROR log assertion validation (086-test-debt-burndown)
+      # Validates that ERROR logs in tests have assert_error_logged() calls
+      - id: check-error-log-assertions
+        name: Check ERROR log assertions
+        entry: ./scripts/check-error-log-assertions.sh
+        language: script
+        types: [python]
+        pass_filenames: false
+        always_run: true
+        stages: [push]
+
 # CI Integration:
 # In GitHub Actions, add:
 #   - name: Run pre-commit

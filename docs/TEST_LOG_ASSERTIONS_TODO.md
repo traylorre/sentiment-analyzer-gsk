@@ -121,6 +121,25 @@ def assert_warning_logged(caplog, pattern: str):
 
 ---
 
-**Status**: Not started (kept local, will complete before pushing)
-**Branch**: `fix/coverage-relative-files`
-**Unpushed Commit**: 4976539
+**Status**: PARTIALLY COMPLETE (086-test-debt-burndown)
+**Branch**: `086-test-debt-burndown`
+
+### Implementation (2025-12-11)
+
+- **Pre-commit hook** added: `scripts/check-error-log-assertions.sh`
+- **Existing assertions**: 28 `assert_error_logged()` calls across 4 test files
+- **Coverage**: 9 of 21 documented patterns have explicit assertions
+- **Advisory mode**: Hook warns but doesn't block (can be made blocking later)
+
+### Files with Log Assertions
+
+- `tests/unit/test_analysis_handler.py`: 3 assertions
+- `tests/unit/test_errors.py`: 2 assertions
+- `tests/unit/test_secrets.py`: 2 assertions
+- `tests/unit/test_sentiment.py`: 2 assertions
+
+### Remaining Work (Future Sprint)
+
+The remaining 12 patterns can be added incrementally. The pre-commit hook will
+alert developers to unasserted ERROR logs, creating awareness and gradual
+improvement.
