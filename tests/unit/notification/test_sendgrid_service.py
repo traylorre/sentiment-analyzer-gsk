@@ -222,7 +222,7 @@ class TestEmailServiceSendEmail:
             )
 
     @patch("src.lambdas.notification.sendgrid_service.SendGridAPIClient")
-    def test_send_email_auth_error_401(self, mock_sendgrid):
+    def test_send_email_auth_error_401(self, mock_sendgrid, caplog):
         """Test authentication error handling (401)."""
         mock_client = MagicMock()
         mock_sendgrid.return_value = mock_client
@@ -241,8 +241,13 @@ class TestEmailServiceSendEmail:
                 html_content="<p>Test</p>",
             )
 
+        # Verify expected error was logged
+        from tests.conftest import assert_error_logged
+
+        assert_error_logged(caplog, "SendGrid authentication error")
+
     @patch("src.lambdas.notification.sendgrid_service.SendGridAPIClient")
-    def test_send_email_auth_error_403(self, mock_sendgrid):
+    def test_send_email_auth_error_403(self, mock_sendgrid, caplog):
         """Test authentication error handling (403)."""
         mock_client = MagicMock()
         mock_sendgrid.return_value = mock_client
@@ -261,8 +266,13 @@ class TestEmailServiceSendEmail:
                 html_content="<p>Test</p>",
             )
 
+        # Verify expected error was logged
+        from tests.conftest import assert_error_logged
+
+        assert_error_logged(caplog, "SendGrid authentication error")
+
     @patch("src.lambdas.notification.sendgrid_service.SendGridAPIClient")
-    def test_send_email_generic_error(self, mock_sendgrid):
+    def test_send_email_generic_error(self, mock_sendgrid, caplog):
         """Test generic error handling."""
         mock_client = MagicMock()
         mock_sendgrid.return_value = mock_client
@@ -282,6 +292,11 @@ class TestEmailServiceSendEmail:
             )
 
         assert "Network error" in str(exc_info.value)
+
+        # Verify expected error was logged
+        from tests.conftest import assert_error_logged
+
+        assert_error_logged(caplog, "SendGrid error")
 
 
 class TestEmailServiceMagicLink:
@@ -390,7 +405,7 @@ class TestGetSendgridApiKey:
         assert "not configured" in str(exc_info.value)
 
     @patch("src.lambdas.notification.sendgrid_service.get_secret")
-    def test_secrets_manager_error(self, mock_get_secret):
+    def test_secrets_manager_error(self, mock_get_secret, caplog):
         """Test handling of Secrets Manager errors."""
         clear_api_key_cache()
         mock_get_secret.side_effect = Exception("Access denied")
@@ -401,6 +416,11 @@ class TestGetSendgridApiKey:
             )
 
         assert "Failed to retrieve" in str(exc_info.value)
+
+        # Verify expected error was logged
+        from tests.conftest import assert_error_logged
+
+        assert_error_logged(caplog, "Unexpected error getting SendGrid API key")
 
 
 class TestClearApiKeyCache:

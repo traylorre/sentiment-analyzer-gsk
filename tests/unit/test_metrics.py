@@ -338,12 +338,21 @@ class TestCreateLogger:
 class TestEdgeCases:
     """Tests for edge cases and error handling."""
 
-    def test_emit_metric_handles_error(self, aws_credentials):
+    def test_emit_metric_handles_error(self, aws_credentials, caplog):
         """Test that emit_metric doesn't raise on CloudWatch error."""
-        # This test verifies graceful error handling
-        with mock_aws():
+        # Create a mock that raises an exception
+        with patch("src.lib.metrics.get_cloudwatch_client") as mock_client_factory:
+            mock_client = MagicMock()
+            mock_client.put_metric_data.side_effect = Exception("Invalid credentials")
+            mock_client_factory.return_value = mock_client
+
             # Should not raise even if metric emission fails
             emit_metric("TestMetric", 1)
+
+        # Verify expected error was logged
+        from tests.conftest import assert_error_logged
+
+        assert_error_logged(caplog, "Failed to emit metric")
 
     def test_log_structured_with_none_values(self, capsys):
         """Test logging with None values."""
