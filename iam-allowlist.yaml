@@ -73,6 +73,21 @@ patterns:
     context_required:
       ci_policy: true
 
+  # CloudFront cache policy read operations - AWS service limitation
+  # These actions do NOT support resource-level permissions per AWS Service Authorization Reference
+  - id: cloudfront-cache-policy-read
+    pattern: "cloudfront:(GetCachePolicy|GetOriginRequestPolicy|ListCachePolicies|ListOriginRequestPolicies)"
+    classification: runtime
+    finding_ids:
+      - IAM-002
+    justification: >
+      CloudFront GetCachePolicy, GetOriginRequestPolicy, ListCachePolicies, and
+      ListOriginRequestPolicies do NOT support resource-level permissions per AWS
+      Service Authorization Reference. Wildcard Resource "*" is required.
+    canonical_source: "https://docs.aws.amazon.com/service-authorization/latest/reference/list_amazoncloudfront.html"
+    context_required:
+      aws_limitation: true
+
 paths:
   # Test fixtures may contain intentional policy violations
   - pattern: "tests/fixtures/.*"

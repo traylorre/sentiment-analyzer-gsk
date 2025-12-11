@@ -2,7 +2,7 @@
 
 **Feature Branch**: `080-fix-integ-test-failures`
 **Created**: 2025-12-10
-**Status**: Draft
+**Status**: Planned
 **Input**: Fix integration test failures from CI pipeline run 20097301157
 
 ## Overview

@@ -2,7 +2,7 @@
 
 **Feature Branch**: `079-e2e-endpoint-roadmap`
 **Created**: 2025-12-10
-**Status**: Draft
+**Status**: Planned
 **Input**: Implementation roadmap for ~60 missing API endpoints causing E2E test skips
 
 ## Overview
