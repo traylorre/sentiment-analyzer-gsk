@@ -19,6 +19,10 @@ RUN pip install --no-cache-dir --target /app/packages -r requirements.txt
 # Production image
 FROM python:3.13-slim
 
+# Create non-root user for security (090-security-first-burndown)
+# UID 1000 is standard for Lambda containers
+RUN adduser --disabled-password --gecos '' --uid 1000 lambda
+
 WORKDIR /app
 
 # Copy AWS Lambda Web Adapter extension
@@ -40,6 +44,10 @@ ENV AWS_LWA_INVOKE_MODE=RESPONSE_STREAM
 
 # Expose port for Lambda Web Adapter
 EXPOSE 8080
+
+# Set ownership and switch to non-root user (090-security-first-burndown)
+RUN chown -R lambda:lambda /app
+USER lambda
 
 # Run with uvicorn
 CMD ["python", "-m", "uvicorn", "handler:app", "--host", "0.0.0.0", "--port", "8080"]

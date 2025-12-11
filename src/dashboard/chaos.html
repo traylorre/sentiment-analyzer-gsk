@@ -12,8 +12,13 @@
     <script defer src="/static/vendor/alpine.min.js"></script>
 
     <!-- Tailwind CSS + DaisyUI -->
+    <!-- Note: cdn.tailwindcss.com is a JIT compiler that generates CSS dynamically, so SRI is not applicable -->
+    <!-- Consider migrating to a build-time Tailwind setup for production SRI support -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.14/dist/full.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.14/dist/full.min.css"
+          rel="stylesheet"
+          integrity="sha384-hlhTcK8D1Pj0594UWVQ6V40KGnB4Y8+Pf6mov3DVLV2lr0PqHuq/x1lVg/hZn7jt"
+          crossorigin="anonymous">
 
     <style>
         .pulse-dot {
