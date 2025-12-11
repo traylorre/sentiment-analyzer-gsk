@@ -627,6 +627,7 @@ data "aws_iam_policy_document" "ci_deploy_iam" {
   }
 
   # IAM User Policy Attachments (for CI deployer users managing their own policies)
+  # Updated from sentiment-analyzer-*-deployer to *-sentiment-deployer per 090-security-first-burndown
   statement {
     sid    = "IAMUserPolicyAttachments"
     effect = "Allow"
@@ -636,7 +637,7 @@ data "aws_iam_policy_document" "ci_deploy_iam" {
       "iam:DetachUserPolicy"
     ]
     resources = [
-      "arn:aws:iam::*:user/sentiment-analyzer-*-deployer"
+      "arn:aws:iam::*:user/*-sentiment-deployer"
     ]
   }
 
@@ -817,6 +818,7 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
   }
 
   # Terraform State S3 Access
+  # Updated from sentiment-analyzer-terraform-state-* to *-sentiment-tfstate per 090-security-first-burndown
   statement {
     sid    = "TerraformState"
     effect = "Allow"
@@ -827,8 +829,8 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
       "s3:DeleteObject"
     ]
     resources = [
-      "arn:aws:s3:::sentiment-analyzer-terraform-state-*",
-      "arn:aws:s3:::sentiment-analyzer-terraform-state-*/*"
+      "arn:aws:s3:::*-sentiment-tfstate",
+      "arn:aws:s3:::*-sentiment-tfstate/*"
     ]
   }
 
@@ -1048,9 +1050,8 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
   }
 
   # KMS Alias Management
-  # Note: Supports both patterns:
-  # - *-sentiment-* (preprod-sentiment-shared-key)
-  # - sentiment-analyzer-* (sentiment-analyzer-preprod)
+  # Updated to use only *-sentiment-* pattern per 090-security-first-burndown
+  # Legacy sentiment-analyzer-* pattern removed
   statement {
     sid    = "KMSAlias"
     effect = "Allow"
@@ -1060,8 +1061,7 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
       "kms:UpdateAlias"
     ]
     resources = [
-      "arn:aws:kms:*:*:alias/*-sentiment-*",
-      "arn:aws:kms:*:*:alias/sentiment-analyzer-*"
+      "arn:aws:kms:*:*:alias/*-sentiment-*"
     ]
   }
 
@@ -1136,48 +1136,52 @@ resource "aws_iam_policy" "ci_deploy_iam" {
 # ==================================================================
 # Policy Attachments - Preprod Deployer
 # ==================================================================
+# NOTE: User name follows *-sentiment-deployer pattern per 090-security-first-burndown
+# Admin must create preprod-sentiment-deployer user before applying
 
 resource "aws_iam_user_policy_attachment" "ci_deploy_core_preprod" {
-  user       = "sentiment-analyzer-preprod-deployer"
+  user       = "preprod-sentiment-deployer"
   policy_arn = aws_iam_policy.ci_deploy_core.arn
 }
 
 resource "aws_iam_user_policy_attachment" "ci_deploy_monitoring_preprod" {
-  user       = "sentiment-analyzer-preprod-deployer"
+  user       = "preprod-sentiment-deployer"
   policy_arn = aws_iam_policy.ci_deploy_monitoring.arn
 }
 
 resource "aws_iam_user_policy_attachment" "ci_deploy_storage_preprod" {
-  user       = "sentiment-analyzer-preprod-deployer"
+  user       = "preprod-sentiment-deployer"
   policy_arn = aws_iam_policy.ci_deploy_storage.arn
 }
 
 resource "aws_iam_user_policy_attachment" "ci_deploy_iam_preprod" {
-  user       = "sentiment-analyzer-preprod-deployer"
+  user       = "preprod-sentiment-deployer"
   policy_arn = aws_iam_policy.ci_deploy_iam.arn
 }
 
 # ==================================================================
 # Policy Attachments - Prod Deployer
 # ==================================================================
+# NOTE: User name follows *-sentiment-deployer pattern per 090-security-first-burndown
+# Admin must create prod-sentiment-deployer user before applying
 
 resource "aws_iam_user_policy_attachment" "ci_deploy_core_prod" {
-  user       = "sentiment-analyzer-prod-deployer"
+  user       = "prod-sentiment-deployer"
   policy_arn = aws_iam_policy.ci_deploy_core.arn
 }
 
 resource "aws_iam_user_policy_attachment" "ci_deploy_monitoring_prod" {
-  user       = "sentiment-analyzer-prod-deployer"
+  user       = "prod-sentiment-deployer"
   policy_arn = aws_iam_policy.ci_deploy_monitoring.arn
 }
 
 resource "aws_iam_user_policy_attachment" "ci_deploy_storage_prod" {
-  user       = "sentiment-analyzer-prod-deployer"
+  user       = "prod-sentiment-deployer"
   policy_arn = aws_iam_policy.ci_deploy_storage.arn
 }
 
 resource "aws_iam_user_policy_attachment" "ci_deploy_iam_prod" {
-  user       = "sentiment-analyzer-prod-deployer"
+  user       = "prod-sentiment-deployer"
   policy_arn = aws_iam_policy.ci_deploy_iam.arn
 }
 
@@ -1198,7 +1202,7 @@ output "ci_policy_arns" {
 output "ci_policy_attached_users" {
   description = "List of IAM users with CI deployment policies attached"
   value = [
-    "sentiment-analyzer-preprod-deployer",
-    "sentiment-analyzer-prod-deployer"
+    "preprod-sentiment-deployer",
+    "prod-sentiment-deployer"
   ]
 }

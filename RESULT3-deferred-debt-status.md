@@ -8,9 +8,10 @@
 
 | Category | Items | Status |
 |----------|-------|--------|
-| **Tech Debt (TECH_DEBT_REGISTRY.md)** | 21 items | 13 resolved, 8 deferred |
-| **Test Debt (TEST-DEBT.md)** | 7 items | **6 resolved**, 1 deferred |
+| **Tech Debt (TECH_DEBT_REGISTRY.md)** | 21 items | 14 resolved, 7 deferred |
+| **Test Debt (TEST-DEBT.md)** | 7 items | **7 resolved** (TD-006 fixed by 088) |
 | **Log Assertions (TEST_LOG_ASSERTIONS_TODO.md)** | 21 error patterns | **68 assertions added** (086/087) |
+| **Security Debt (RESULT4)** | 4 items | **4 resolved** (090-security-first-burndown) |
 | **Dashboard Testing Backlog** | 6 categories | Backlogged (post-production) |
 | **Open GitHub Issues** | 7 issues | Deferred cloud portability + testing |
 | **Future Work** | 1 item | Project name parameterization |
@@ -22,10 +23,13 @@
 | ID | Item | Status | Location |
 |----|------|--------|----------|
 | TD-005 | Dashboard handler coverage (71% → **88%**) | **RESOLVED** | PR #340 (087) |
-| TD-006 | Sentiment model S3 loading (51% → **59%**) | **PARTIAL** | PR #340 (087) |
+| TD-006 | Sentiment model S3 loading (51% → **96%**) | **RESOLVED** | PR #341 (088) |
 | TD-007 | ERROR log assertion validation | **RESOLVED** | PR #339 (086) |
 | TD-001 | Observability tests skip on missing metrics | **RESOLVED** | PR #112 |
 | TD-021 | Lambda FIS chaos testing | **BLOCKED** | Waiting for terraform-provider-aws#41208 |
+| SEC-001 | IAM legacy ARN patterns (4 items) | **RESOLVED** | 090-security-first-burndown |
+| SEC-002 | CDN scripts missing SRI | **RESOLVED** | 090-security-first-burndown |
+| SEC-003 | Dockerfile missing USER | **RESOLVED** | 090-security-first-burndown |
 
 ---
 
@@ -241,7 +245,7 @@ Cloud Portability (TD-016 → TD-017 → TD-018 → TD-019 → TD-020)
 
 ---
 
-## Completed Features (086/087)
+## Completed Features (086/087/088/090)
 
 **Feature 086**: `086-test-debt-burndown` (PR #339, merged 2025-12-11)
 - Pre-commit hook for ERROR log assertion validation
@@ -254,21 +258,40 @@ Cloud Portability (TD-016 → TD-017 → TD-018 → TD-019 → TD-020)
 - Log assertions: 42 → 68 (+26 assertions)
 - Tests: 6 files updated, 3 new S3 model tests
 
-**Success Criteria Results**:
+**Feature 088**: `088-sentiment-s3-coverage` (PR #341, merged 2025-12-11)
+- Sentiment model S3 coverage: 59% → 96% ✅
+- Added 10 new S3 model loading tests
+- Covered: download errors, hash validation, extraction failures
+
+**Feature 090**: `090-security-first-burndown` (branch: 090-security-first-burndown, 2025-12-11)
+- Migrated 4 legacy IAM patterns to `*-sentiment-*` format ✅
+- Added SRI (Subresource Integrity) to CDN scripts ✅
+- Added non-root USER to SSE Lambda Dockerfile ✅
+- Created `/sri-validate` methodology (22 unit tests) ✅
+- Added CSP headers to CloudFront response policy ✅
+
+**Success Criteria Results (086/087)**:
 - SC-001: ✅ 68 `assert_error_logged()` calls in test suite
 - SC-002: ✅ Dashboard handler coverage 88% (target: 85%)
-- SC-003: ❌ Sentiment model coverage 59% (target: 85% - still needs work)
-- SC-004: ✅ All 1992 tests pass
+- SC-003: ✅ Sentiment model coverage 96% (target: 85%) - Fixed by 088
+- SC-004: ✅ All tests pass
+
+**Success Criteria Results (090)**:
+- SC-001: ✅ IAM legacy patterns: 0 (was 4)
+- SC-002: ✅ CDN scripts with SRI: 2/2 (Chart.js, DaisyUI)
+- SC-003: ✅ SRI methodology: /sri-validate command exists
+- SC-004: ✅ CSP header configured in CloudFront
+- SC-005: ✅ Dockerfile runs as non-root user
 
 ---
 
 ## Remaining Work
 
-### TD-006: Sentiment Model Coverage (Deferred)
-**Current**: 59%
+### TD-006: Sentiment Model Coverage ✅ RESOLVED
+**Current**: 96% (was 59%)
 **Target**: 85%
-**Gap**: S3 download paths, error handling edge cases
-**Effort**: ~2-3 hours to add integration tests
+**Status**: ✅ Fixed by 088-sentiment-s3-coverage (PR #341)
+**Coverage**: Download errors, hash validation, extraction failures all tested
 
 ### TD-021: Lambda FIS Chaos Testing (Blocked)
 **Status**: Waiting for terraform-provider-aws#41208

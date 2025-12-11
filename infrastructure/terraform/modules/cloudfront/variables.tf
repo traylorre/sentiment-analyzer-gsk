@@ -29,7 +29,8 @@ variable "acm_certificate_arn" {
 variable "content_security_policy" {
   description = "Content-Security-Policy header value"
   type        = string
-  default     = "default-src 'self'; script-src 'self' 'unsafe-inline' https://hcaptcha.com https://*.hcaptcha.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://*.amazonaws.com https://*.amazoncognito.com; frame-src https://hcaptcha.com https://*.hcaptcha.com;"
+  # Updated per 090-security-first-burndown to include CDN domains for Chart.js, DaisyUI, and Tailwind
+  default = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdn.tailwindcss.com https://hcaptcha.com https://*.hcaptcha.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://*.amazonaws.com https://*.amazoncognito.com; frame-src https://hcaptcha.com https://*.hcaptcha.com; frame-ancestors 'none';"
 }
 
 variable "enable_logging" {
