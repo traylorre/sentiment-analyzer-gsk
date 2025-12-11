@@ -2,7 +2,7 @@
 
 **Feature Branch**: `082-fix-sse-e2e-timeouts`
 **Created**: 2025-12-10
-**Status**: Draft
+**Status**: In Progress
 **Input**: User description: "Fix SSE E2E Integration Test Timeouts - SSE streaming endpoints return timeout instead of streaming responses in preprod"
 
 ## User Scenarios & Testing *(mandatory)*

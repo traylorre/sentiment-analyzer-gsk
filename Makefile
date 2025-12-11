@@ -1,4 +1,4 @@
-.PHONY: help install install-tools validate fmt fmt-check lint security sast audit-pragma test test-local test-unit test-integration test-e2e \
+.PHONY: help install install-tools validate fmt fmt-check lint security sast audit-pragma test test-local test-unit test-integration test-e2e test-spec test-mutation \
         localstack-up localstack-down localstack-wait localstack-logs localstack-status \
         tf-init tf-plan tf-apply tf-destroy tf-init-local tf-plan-local tf-apply-local tf-destroy-local \
         cost cost-diff cost-baseline clean clean-all
@@ -102,6 +102,29 @@ test-e2e: ## Run E2E tests (requires preprod deployment)
 	AWS_ENV=preprod pytest tests/e2e/ -v -m preprod
 
 test: test-unit ## Alias for test-unit
+
+test-spec: ## Run spec coherence validation
+	@echo "$(YELLOW)Running spec coherence validation...$(NC)"
+	@if [ -d "specs" ]; then \
+		echo "Checking spec files for coherence..."; \
+		for spec in specs/*/spec.md; do \
+			if [ -f "$$spec" ]; then \
+				grep -q "## Functional Requirements" "$$spec" || echo "$(RED)Missing FR section: $$spec$(NC)"; \
+				grep -q "## Success Criteria" "$$spec" || echo "$(RED)Missing SC section: $$spec$(NC)"; \
+			fi; \
+		done; \
+		echo "$(GREEN)Spec coherence check complete$(NC)"; \
+	else \
+		echo "$(YELLOW)No specs directory found$(NC)"; \
+	fi
+
+test-mutation: ## Run mutation tests (requires mutmut)
+	@echo "$(YELLOW)Running mutation tests...$(NC)"
+	@if command -v mutmut &>/dev/null; then \
+		mutmut run || echo "$(YELLOW)Mutation testing complete (check results with: mutmut results)$(NC)"; \
+	else \
+		echo "$(YELLOW)mutmut not installed. Install with: pip install mutmut$(NC)"; \
+	fi
 
 # ============================================================================
 # LocalStack

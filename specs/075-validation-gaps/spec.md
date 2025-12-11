@@ -2,7 +2,7 @@
 
 **Feature Branch**: `075-validation-gaps`
 **Created**: 2025-12-09
-**Status**: Draft
+**Status**: Partial (Resource Naming Complete, JWT Pending)
 **Input**: User description: "Close 7 easily-closeable validation gaps identified in RESULT1-validation-gaps.md: 6 skipped resource naming validator tests and 1 JWT authentication TODO"
 
 ## Clarifications
@@ -110,6 +110,25 @@ As a user with an authenticated session, I want the system to validate my JWT to
 - **SC-004**: `make validate` passes on the target repo with zero failures
 - **SC-005**: Resource naming validator detects 100% of intentionally misnamed test fixtures
 - **SC-006**: JWT validation handles at least 1000 token validations per second without degradation
+
+## Implementation
+
+### Completed
+
+- `src/validators/resource_naming.py` - Resource naming validation (FR-001, FR-002, FR-003)
+  - `extract_resources()` - Extract resources from Terraform
+  - `validate_naming_pattern()` - Validate against `{env}-sentiment-{service}`
+  - `TerraformResource` dataclass
+  - `ValidationResult` dataclass
+- `src/validators/iam_coverage.py` - IAM coverage validation (FR-004, FR-005)
+  - `extract_iam_patterns()` - Extract ARN patterns from policies
+  - `check_coverage()` - Cross-reference resources against patterns
+  - `IAMPattern` dataclass
+  - `CoverageReport` dataclass
+
+### Pending
+
+- JWT Authentication (FR-007 through FR-012) - Not yet implemented
 
 ## Assumptions
 
