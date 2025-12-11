@@ -19,9 +19,9 @@
 
 **Purpose**: Establish baseline coverage and validate existing test infrastructure
 
-- [ ] T001 Run coverage analysis to capture current baseline in tests/unit/ (`pytest --cov=src.lambdas.dashboard.handler --cov=src.lambdas.analysis.sentiment --cov-report=term-missing tests/unit/`)
-- [ ] T002 Verify `assert_error_logged` and `assert_warning_logged` helpers exist in tests/conftest.py
-- [ ] T003 Run pre-commit hook to identify current unasserted ERROR logs (`./scripts/check-error-log-assertions.sh --verbose`)
+- [x] T001 Run coverage analysis to capture current baseline in tests/unit/ (`pytest --cov=src.lambdas.dashboard.handler --cov=src.lambdas.analysis.sentiment --cov-report=term-missing tests/unit/`)
+- [x] T002 Verify `assert_error_logged` and `assert_warning_logged` helpers exist in tests/conftest.py
+- [x] T003 Run pre-commit hook to identify current unasserted ERROR logs (`./scripts/check-error-log-assertions.sh --verbose`)
 
 ---
 
@@ -31,9 +31,9 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T004 Create tests/unit/dashboard/test_dashboard_handler_sse.py with base test class and moto fixtures per FR-014
-- [ ] T005 [P] Add mock_sse_generator fixture to tests/unit/dashboard/conftest.py (AsyncMock pattern from research.md)
-- [ ] T006 [P] Add mock_model_tar fixture (tar.gz with config.json) to tests/unit/conftest.py per quickstart.md pattern
+- [x] T004 Create tests/unit/dashboard/test_dashboard_handler_sse.py with base test class and moto fixtures per FR-014
+- [x] T005 [P] Add mock_sse_generator fixture to tests/unit/dashboard/conftest.py (AsyncMock pattern from research.md)
+- [x] T006 [P] Add mock_model_tar fixture (tar.gz with config.json) to tests/unit/conftest.py per quickstart.md pattern
 
 **Checkpoint**: Foundation ready - user story implementation can now begin
 
@@ -47,49 +47,49 @@
 
 ### SSE Streaming Tests (lines 548-576, 642-656)
 
-- [ ] T007 [US1] Add test_get_dashboard_metrics_dynamodb_error() in tests/unit/test_dashboard_handler.py for lines 548-576
-- [ ] T008 [US1] Add test_get_dashboard_metrics_aggregation() in tests/unit/test_dashboard_handler.py for metrics calculation path
-- [ ] T009 [US1] Add test_get_sentiment_v2_dynamodb_error() in tests/unit/test_dashboard_handler.py for lines 642-656
+- [x] T007 [US1] Add test_get_dashboard_metrics_dynamodb_error() in tests/unit/test_dashboard_handler.py for lines 548-576
+- [x] T008 [US1] Add test_get_dashboard_metrics_aggregation() in tests/unit/test_dashboard_handler.py for metrics calculation path
+- [x] T009 [US1] Add test_get_sentiment_v2_dynamodb_error() in tests/unit/test_dashboard_handler.py for lines 642-656
 
 ### SSE Lambda Tests (dedicated file per FR-014)
 
-- [ ] T010 [P] [US1] Add TestSSEHeartbeat class in tests/unit/dashboard/test_dashboard_handler_sse.py for SSE heartbeat generation
-- [ ] T011 [P] [US1] Add TestSSEClientDisconnect class in tests/unit/dashboard/test_dashboard_handler_sse.py for disconnect handling
-- [ ] T012 [P] [US1] Add TestSSEConnectionLimit class in tests/unit/dashboard/test_dashboard_handler_sse.py for 503 at limit
+- [x] T010 [P] [US1] Add TestSSEHeartbeat class in tests/unit/dashboard/test_dashboard_handler_sse.py for SSE heartbeat generation
+- [x] T011 [P] [US1] Add TestSSEClientDisconnect class in tests/unit/dashboard/test_dashboard_handler_sse.py for disconnect handling
+- [x] T012 [P] [US1] Add TestSSEConnectionLimit class in tests/unit/dashboard/test_dashboard_handler_sse.py for 503 at limit
 
 ### Trend Endpoint Error Handlers (lines 715-758)
 
-- [ ] T013 [US1] Add test_get_trend_v2_range_parsing_edge_cases() in tests/unit/test_dashboard_handler.py for lines 715-716, 729, 736
-- [ ] T014 [US1] Add test_get_trend_v2_value_error() in tests/unit/test_dashboard_handler.py for lines 743-750
-- [ ] T015 [US1] Add test_get_trend_v2_generic_exception() in tests/unit/test_dashboard_handler.py for lines 751-758
+- [x] T013 [US1] Add test_get_trend_v2_range_parsing_edge_cases() in tests/unit/test_dashboard_handler.py for lines 715-716, 729, 736
+- [x] T014 [US1] Add test_get_trend_v2_value_error() in tests/unit/test_dashboard_handler.py for lines 743-750
+- [x] T015 [US1] Add test_get_trend_v2_generic_exception() in tests/unit/test_dashboard_handler.py for lines 751-758
 
 ### Articles Endpoint Error Handlers (lines 800, 835-849)
 
-- [ ] T016 [US1] Add test_get_articles_v2_limit_validation() in tests/unit/test_dashboard_handler.py for line 800
-- [ ] T017 [US1] Add test_get_articles_v2_value_error() in tests/unit/test_dashboard_handler.py for lines 835-840
-- [ ] T018 [US1] Add test_get_articles_v2_generic_exception() in tests/unit/test_dashboard_handler.py for lines 841-849
+- [x] T016 [US1] Add test_get_articles_v2_limit_validation() in tests/unit/test_dashboard_handler.py for line 800
+- [x] T017 [US1] Add test_get_articles_v2_value_error() in tests/unit/test_dashboard_handler.py for lines 835-840
+- [x] T018 [US1] Add test_get_articles_v2_generic_exception() in tests/unit/test_dashboard_handler.py for lines 841-849
 
 ### Static File and API Key Initialization (lines 104-163)
 
-- [ ] T019 [US1] Add test_get_api_key_secrets_manager_fallback() in tests/unit/test_dashboard_handler.py for lines 104-118
-- [ ] T020 [US1] Add test_lifespan_startup_shutdown_logging() in tests/unit/test_dashboard_handler.py for lines 131, 155-163
-- [ ] T021 [US1] Add test_verify_api_key_error_path() in tests/unit/test_dashboard_handler.py for lines 225-229
+- [x] T019 [US1] Add test_get_api_key_secrets_manager_fallback() in tests/unit/test_dashboard_handler.py for lines 104-118
+- [x] T020 [US1] Add test_lifespan_startup_shutdown_logging() in tests/unit/test_dashboard_handler.py for lines 131, 155-163
+- [x] T021 [US1] Add test_verify_api_key_error_path() in tests/unit/test_dashboard_handler.py for lines 225-229
 
 ### Item Retrieval Error Handlers (lines 290-322)
 
-- [ ] T022 [P] [US1] Add test_get_items_error_handler() in tests/unit/test_dashboard_handler.py for lines 290-294
-- [ ] T023 [P] [US1] Add test_get_item_error_handler() in tests/unit/test_dashboard_handler.py for lines 318-322
+- [x] T022 [P] [US1] Add test_get_items_error_handler() in tests/unit/test_dashboard_handler.py for lines 290-294
+- [x] T023 [P] [US1] Add test_get_item_error_handler() in tests/unit/test_dashboard_handler.py for lines 318-322
 
 ### Static File Edge Cases (lines 352-384)
 
-- [ ] T024 [US1] Add test_static_file_serving_edge_cases() in tests/unit/test_dashboard_handler.py for lines 352-353, 368, 384
+- [x] T024 [US1] Add test_static_file_serving_edge_cases() in tests/unit/test_dashboard_handler.py for lines 352-353, 368, 384
 
 ### Chaos Endpoint Error Handlers (lines 910-1136)
 
-- [ ] T025 [P] [US1] Add test_chaos_error_response_formatting() in tests/unit/test_dashboard_handler.py for lines 910-911, 937-938
-- [ ] T026 [P] [US1] Add test_get_chaos_experiment_fis_error() in tests/unit/test_dashboard_handler.py for lines 975-989
-- [ ] T027 [P] [US1] Add test_chaos_start_stop_errors() in tests/unit/test_dashboard_handler.py for lines 1029-1030, 1057-1071
-- [ ] T028 [P] [US1] Add test_delete_chaos_experiment_error() in tests/unit/test_dashboard_handler.py for lines 1126-1136
+- [x] T025 [P] [US1] Add test_chaos_error_response_formatting() in tests/unit/test_dashboard_handler.py for lines 910-911, 937-938
+- [x] T026 [P] [US1] Add test_get_chaos_experiment_fis_error() in tests/unit/test_dashboard_handler.py for lines 975-989
+- [x] T027 [P] [US1] Add test_chaos_start_stop_errors() in tests/unit/test_dashboard_handler.py for lines 1029-1030, 1057-1071
+- [x] T028 [P] [US1] Add test_delete_chaos_experiment_error() in tests/unit/test_dashboard_handler.py for lines 1126-1136
 
 **Checkpoint**: At this point, dashboard handler coverage should be ≥85%. Run validation command to confirm.
 
