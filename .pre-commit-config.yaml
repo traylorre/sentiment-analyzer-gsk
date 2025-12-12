@@ -134,6 +134,17 @@ repos:
         always_run: true
         stages: [push]
 
+      # False-pass pattern detection (093-e2e-false-pass-remediation)
+      # Blocks tests that skip on 500 errors instead of failing
+      - id: check-false-pass-patterns
+        name: Check E2E false-pass patterns
+        entry: ./scripts/check-false-pass-patterns.sh --staged-only
+        language: script
+        types: [python]
+        pass_filenames: false
+        always_run: true
+        stages: [commit]
+
 # CI Integration:
 # In GitHub Actions, add:
 #   - name: Run pre-commit

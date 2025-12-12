@@ -37,12 +37,7 @@ async def test_magic_link_request(
 
     # Magic link request should succeed
     # Common responses: 200 (ok), 202 (accepted), 204 (no content)
-    # If 500: email service (SendGrid) may not be configured in preprod
-    if response.status_code == 500:
-        pytest.skip(
-            "Magic link endpoint unavailable - email service may not be configured"
-        )
-
+    # 500 is a server error and should FAIL the test, not be skipped
     assert response.status_code in (
         200,
         202,
@@ -82,12 +77,10 @@ async def test_magic_link_request_rate_limited(
         json={"email": test_email},
     )
 
-    if first_response.status_code == 500:
-        pytest.skip(
-            "Magic link endpoint unavailable - email service may not be configured"
-        )
-
-    assert first_response.status_code in (200, 202, 204)
+    # 500 is a server error - test should fail, not skip
+    assert (
+        first_response.status_code in (200, 202, 204)
+    ), f"Magic link request failed: {first_response.status_code} - {first_response.text}"
 
     # Make rapid follow-up requests - try more requests for preprod
     rate_limited = False
@@ -131,12 +124,10 @@ async def test_magic_link_verification(
         json={"email": test_email},
     )
 
-    if request_response.status_code == 500:
-        pytest.skip(
-            "Magic link endpoint unavailable - email service may not be configured"
-        )
-
-    assert request_response.status_code in (200, 202, 204)
+    # 500 is a server error - test should fail, not skip
+    assert (
+        request_response.status_code in (200, 202, 204)
+    ), f"Magic link request failed: {request_response.status_code} - {request_response.text}"
 
     # Get synthetic token from handler
     synthetic_token = sendgrid_handler.get_magic_link_token(test_email)
@@ -238,10 +229,10 @@ async def test_anonymous_data_merge(
         json={"email": test_email},
     )
 
-    if magic_response.status_code == 500:
-        pytest.skip(
-            "Magic link endpoint unavailable - email service may not be configured"
-        )
+    # 500 is a server error - test should fail, not skip
+    assert (
+        magic_response.status_code in (200, 202, 204)
+    ), f"Magic link request failed: {magic_response.status_code} - {magic_response.text}"
 
     # Step 4: Get synthetic token and verify with anonymous session
     synthetic_token = sendgrid_handler.get_magic_link_token(test_email)
@@ -340,12 +331,10 @@ async def test_full_anonymous_to_authenticated_journey(
         json={"email": test_email},
     )
 
-    if magic_response.status_code == 500:
-        pytest.skip(
-            "Magic link endpoint unavailable - email service may not be configured"
-        )
-
-    assert magic_response.status_code in (200, 202, 204), "Failed to request magic link"
+    # 500 is a server error - test should fail, not skip
+    assert (
+        magic_response.status_code in (200, 202, 204)
+    ), f"Magic link request failed: {magic_response.status_code} - {magic_response.text}"
 
     # === Phase 4: Verify Magic Link ===
     synthetic_token = sendgrid_handler.get_magic_link_token(test_email)

@@ -287,11 +287,11 @@ async def test_magic_link_rate_limit(
     if first_response.status_code == 404:
         pytest.skip("Magic link endpoint not implemented")
 
-    if first_response.status_code == 500:
-        pytest.skip("Magic link endpoint returning 500 - API issue")
-
+    # 500 is a server error - test should fail, not skip
     # Should succeed
-    assert first_response.status_code in (200, 202, 204)
+    assert (
+        first_response.status_code in (200, 202, 204)
+    ), f"Magic link request failed: {first_response.status_code} - {first_response.text}"
 
     # Make rapid follow-up requests
     rate_limited = False
