@@ -631,6 +631,24 @@
             animation: spin 1s linear infinite;
         }
 
+        /* Section Navigation */
+        .section-nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 48px;
+            padding-top: 24px;
+            border-top: 1px solid var(--border);
+        }
+
+        .section-nav .btn {
+            min-width: 120px;
+        }
+
+        .section-nav-spacer {
+            width: 120px;
+        }
+
         /* Status Indicators */
         .status-dot {
             width: 8px;
@@ -924,6 +942,11 @@ by_tag: tag → timestamp</div>
                     </div>
                 </div>
             </div>
+
+            <div class="section-nav">
+                <button class="btn btn-secondary" onclick="navigateTo('welcome')">← Back</button>
+                <button class="btn btn-primary" onclick="navigateTo('auth')">Next →</button>
+            </div>
         </section>
 
         <!-- Auth Section -->
@@ -975,6 +998,11 @@ by_tag: tag → timestamp</div>
                 <div class="api-demo-body">
                     <div id="auth-anon-response" class="response-box">Click "Execute" to create an anonymous session</div>
                 </div>
+            </div>
+
+            <div class="section-nav">
+                <button class="btn btn-secondary" onclick="navigateTo('architecture')">← Back</button>
+                <button class="btn btn-primary" onclick="navigateTo('config')">Next →</button>
             </div>
         </section>
 
@@ -1039,6 +1067,11 @@ by_tag: tag → timestamp</div>
                     <div id="config-list-response" class="response-box">Create a session first, then execute</div>
                 </div>
             </div>
+
+            <div class="section-nav">
+                <button class="btn btn-secondary" onclick="navigateTo('auth')">← Back</button>
+                <button class="btn btn-primary" onclick="navigateTo('sentiment')">Next →</button>
+            </div>
         </section>
 
         <!-- Sentiment Section -->
@@ -1091,6 +1124,11 @@ by_tag: tag → timestamp</div>
                     <div id="sentiment-response" class="response-box">Create a configuration first, then get sentiment for its tickers</div>
                 </div>
             </div>
+
+            <div class="section-nav">
+                <button class="btn btn-secondary" onclick="navigateTo('config')">← Back</button>
+                <button class="btn btn-primary" onclick="navigateTo('external')">Next →</button>
+            </div>
         </section>
 
         <!-- External APIs Section -->
@@ -1135,6 +1173,11 @@ by_tag: tag → timestamp</div>
                     <div class="stat-value purple" id="sendgrid-quota">--</div>
                     <div class="stat-label">SendGrid (100/day)</div>
                 </div>
+            </div>
+
+            <div class="section-nav">
+                <button class="btn btn-secondary" onclick="navigateTo('sentiment')">← Back</button>
+                <button class="btn btn-primary" onclick="navigateTo('circuit')">Next →</button>
             </div>
         </section>
 
@@ -1200,6 +1243,11 @@ by_tag: tag → timestamp</div>
                         <div>Failures: 0/5</div>
                     </div>
                 </div>
+            </div>
+
+            <div class="section-nav">
+                <button class="btn btn-secondary" onclick="navigateTo('external')">← Back</button>
+                <button class="btn btn-primary" onclick="navigateTo('traffic')">Next →</button>
             </div>
         </section>
 
@@ -1297,6 +1345,11 @@ python3 traffic_generator.py --env preprod --scenario all
                     </div>
                 </div>
             </div>
+
+            <div class="section-nav">
+                <button class="btn btn-secondary" onclick="navigateTo('circuit')">← Back</button>
+                <button class="btn btn-primary" onclick="navigateTo('chaos')">Next →</button>
+            </div>
         </section>
 
         <!-- Chaos Engineering Section -->
@@ -1366,6 +1419,11 @@ python3 traffic_generator.py --env preprod --scenario all
                         <div class="timeline-desc">After 60 seconds, circuit enters HALF-OPEN state and tests with a single request. If successful, circuit closes.</div>
                     </div>
                 </div>
+            </div>
+
+            <div class="section-nav">
+                <button class="btn btn-secondary" onclick="navigateTo('traffic')">← Back</button>
+                <button class="btn btn-primary" onclick="navigateTo('caching')">Next →</button>
             </div>
         </section>
 
@@ -1440,6 +1498,11 @@ python3 traffic_generator.py --env preprod --scenario all
                     <div class="stat-label">Cached Entries</div>
                 </div>
             </div>
+
+            <div class="section-nav">
+                <button class="btn btn-secondary" onclick="navigateTo('chaos')">← Back</button>
+                <button class="btn btn-primary" onclick="navigateTo('observability')">Next →</button>
+            </div>
         </section>
 
         <!-- Observability Section -->
@@ -1491,6 +1554,11 @@ python3 traffic_generator.py --env preprod --scenario all
                 <div class="api-demo-body">
                     <div id="health-response" class="response-box">Service health and dependencies status</div>
                 </div>
+            </div>
+
+            <div class="section-nav">
+                <button class="btn btn-secondary" onclick="navigateTo('caching')">← Back</button>
+                <button class="btn btn-primary" onclick="navigateTo('testing')">Next →</button>
             </div>
         </section>
 
@@ -1553,6 +1621,11 @@ python3 traffic_generator.py --env preprod --scenario all
                         </ul>
                     </div>
                 </div>
+            </div>
+
+            <div class="section-nav">
+                <button class="btn btn-secondary" onclick="navigateTo('observability')">← Back</button>
+                <button class="btn btn-primary" onclick="navigateTo('infra')">Next →</button>
             </div>
         </section>
 
@@ -1636,6 +1709,11 @@ infrastructure/terraform/modules/<br>
                         </tr>
                     </tbody>
                 </table>
+            </div>
+
+            <div class="section-nav">
+                <button class="btn btn-secondary" onclick="navigateTo('testing')">← Back</button>
+                <div class="section-nav-spacer"></div>
             </div>
         </section>
     </main>
