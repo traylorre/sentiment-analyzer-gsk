@@ -241,10 +241,12 @@
             transition: all 0.3s;
         }
 
-        .card:hover {
+        /* Only interactive cards (with buttons/actions) should have hover effects */
+        .card-interactive:hover {
             border-color: var(--accent-green);
             transform: translateY(-2px);
             box-shadow: 0 8px 32px rgba(0, 211, 149, 0.1);
+            cursor: pointer;
         }
 
         .card-header {
