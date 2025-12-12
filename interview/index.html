@@ -1642,10 +1642,11 @@ infrastructure/terraform/modules/<br>
     <div id="toast" class="toast"></div>
 
     <script>
-        // Configuration
+        // Configuration - Use CloudFront "ONE URL" for proper routing to both
+        // Dashboard Lambda (REST API) and SSE Lambda (streaming)
         const ENVIRONMENTS = {
-            preprod: 'https://ee2a3fxtkxmpwp2bhul3uylmb40hfknf.lambda-url.us-east-1.on.aws',
-            prod: 'https://prod-sentiment-dashboard.lambda-url.us-east-1.on.aws'  // Update when available
+            preprod: 'https://d2z9uvoj5xlbd2.cloudfront.net',
+            prod: 'https://prod.sentiment-analyzer.example.com'  // Update when available
         };
 
         let currentEnv = 'preprod';

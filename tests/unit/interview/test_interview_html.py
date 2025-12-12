@@ -163,10 +163,11 @@ class TestJavaScript:
         assert "const ENVIRONMENTS = {" in content
 
     def test_preprod_url_defined(self):
-        """Preprod URL should be defined."""
+        """Preprod URL should be defined with CloudFront ONE URL."""
         content = get_html_content()
         assert "preprod:" in content
-        assert "lambda-url.us-east-1.on.aws" in content
+        # Uses CloudFront "ONE URL" for proper routing to Dashboard and SSE Lambdas
+        assert "d2z9uvoj5xlbd2.cloudfront.net" in content
 
     def test_required_functions_defined(self):
         """All required JavaScript functions should be defined."""
