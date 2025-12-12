@@ -16,6 +16,7 @@ from fastapi import FastAPI, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sse_starlette.sse import EventSourceResponse
+from starlette.responses import StreamingResponse
 
 from src.lambdas.shared.logging_utils import sanitize_for_log
 
@@ -131,12 +132,28 @@ async def global_stream(
     metrics_emitter.emit_connection_count(connection_manager.count)
 
     async def event_generator():
-        """Generate SSE events and handle cleanup."""
+        """Generate SSE events and handle cleanup.
+
+        Formats events as SSE protocol strings for StreamingResponse.
+        Using StreamingResponse instead of EventSourceResponse for better
+        Content-Type header handling with Lambda Web Adapter.
+        """
         try:
-            async for event_str in stream_generator.generate_global_stream(
+            async for event_dict in stream_generator.generate_global_stream(
                 connection, last_event_id
             ):
-                yield event_str
+                # Format as SSE protocol string
+                lines = []
+                if "event" in event_dict:
+                    lines.append(f"event: {event_dict['event']}")
+                if "id" in event_dict:
+                    lines.append(f"id: {event_dict['id']}")
+                if "retry" in event_dict:
+                    lines.append(f"retry: {event_dict['retry']}")
+                if "data" in event_dict:
+                    lines.append(f"data: {event_dict['data']}")
+                lines.append("")  # Empty line terminates event
+                yield "\n".join(lines) + "\n"
         finally:
             # Release connection on disconnect
             connection_manager.release(connection.connection_id)
@@ -149,12 +166,15 @@ async def global_stream(
             )
             metrics_emitter.emit_connection_count(connection_manager.count)
 
-    return EventSourceResponse(
+    # Use StreamingResponse instead of EventSourceResponse for better
+    # Content-Type header handling with Lambda Web Adapter
+    return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
         },
     )
 

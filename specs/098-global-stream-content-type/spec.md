@@ -23,20 +23,22 @@ may be overriding it when not explicitly set.
 
 ## Solution
 
-Explicitly set `media_type="text/event-stream"` in both EventSourceResponse calls.
+Replace `EventSourceResponse` with `StreamingResponse` for the global stream endpoint.
+Lambda Web Adapter may not correctly pass Content-Type from EventSourceResponse.
 
 ### Before
 ```python
 return EventSourceResponse(
     event_generator(),
+    media_type="text/event-stream",
     headers={...},
 )
 ```
 
 ### After
 ```python
-return EventSourceResponse(
-    event_generator(),
+return StreamingResponse(
+    event_generator(),  # Now yields formatted SSE strings
     media_type="text/event-stream",
     headers={...},
 )
