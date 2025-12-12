@@ -99,6 +99,25 @@ class SSEEvent(BaseModel):
         lines.append("")  # Empty line terminates event
         return "\n".join(lines)
 
+    def to_sse_dict(self) -> dict:
+        """Format event as dictionary for EventSourceResponse.
+
+        EventSourceResponse from sse-starlette expects dictionaries with
+        'event', 'id', 'data', and optionally 'retry' keys. This ensures
+        proper Content-Type: text/event-stream header is set.
+
+        Returns:
+            Dictionary with SSE event fields.
+        """
+        result = {
+            "event": self.event,
+            "id": self.id,
+            "data": self.data.model_dump_json(),
+        }
+        if self.retry is not None:
+            result["retry"] = self.retry
+        return result
+
 
 class StreamStatus(BaseModel):
     """Response model for /api/v2/stream/status endpoint."""

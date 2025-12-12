@@ -141,7 +141,7 @@ class SSEStreamGenerator:
         self,
         connection: SSEConnection,
         last_event_id: str | None = None,
-    ) -> AsyncGenerator[str]:
+    ) -> AsyncGenerator[dict]:
         """Generate SSE events for global stream.
 
         Yields heartbeats and metrics updates.
@@ -151,7 +151,7 @@ class SSEStreamGenerator:
             last_event_id: Last-Event-ID for reconnection replay
 
         Yields:
-            Formatted SSE event strings
+            SSE event dictionaries for EventSourceResponse
         """
         logger.info(
             "Starting global stream",
@@ -166,14 +166,14 @@ class SSEStreamGenerator:
         # Replay buffered events if reconnecting
         if last_event_id:
             for event in self._event_buffer.get_events_after(last_event_id):
-                yield event.to_sse_format()
+                yield event.to_sse_dict()
                 metrics_emitter.emit_events_sent(1, event.event)
 
         # Send initial heartbeat
         heartbeat = self._create_heartbeat()
         self._event_buffer.add(heartbeat)
         self._conn_manager.update_last_event_id(connection.connection_id, heartbeat.id)
-        yield heartbeat.to_sse_format()
+        yield heartbeat.to_sse_dict()
         metrics_emitter.emit_events_sent(1, "heartbeat")
 
         # Track timing
@@ -191,7 +191,7 @@ class SSEStreamGenerator:
                     self._conn_manager.update_last_event_id(
                         connection.connection_id, event.id
                     )
-                    yield event.to_sse_format()
+                    yield event.to_sse_dict()
                     metrics_emitter.emit_events_sent(1, "metrics")
 
                 # Send heartbeat if interval passed
@@ -201,7 +201,7 @@ class SSEStreamGenerator:
                     self._conn_manager.update_last_event_id(
                         connection.connection_id, heartbeat.id
                     )
-                    yield heartbeat.to_sse_format()
+                    yield heartbeat.to_sse_dict()
                     metrics_emitter.emit_events_sent(1, "heartbeat")
                     last_heartbeat = current_time
 
@@ -226,7 +226,7 @@ class SSEStreamGenerator:
         self,
         connection: SSEConnection,
         last_event_id: str | None = None,
-    ) -> AsyncGenerator[str]:
+    ) -> AsyncGenerator[dict]:
         """Generate SSE events for configuration-specific stream.
 
         Yields heartbeats and filtered sentiment updates.
@@ -236,7 +236,7 @@ class SSEStreamGenerator:
             last_event_id: Last-Event-ID for reconnection replay
 
         Yields:
-            Formatted SSE event strings
+            SSE event dictionaries for EventSourceResponse
         """
         logger.info(
             "Starting config stream",
@@ -262,14 +262,14 @@ class SSEStreamGenerator:
                     if hasattr(event.data, "ticker"):
                         if not connection.matches_ticker(event.data.ticker):
                             continue
-                yield event.to_sse_format()
+                yield event.to_sse_dict()
                 metrics_emitter.emit_events_sent(1, event.event)
 
         # Send initial heartbeat
         heartbeat = self._create_heartbeat()
         self._event_buffer.add(heartbeat)
         self._conn_manager.update_last_event_id(connection.connection_id, heartbeat.id)
-        yield heartbeat.to_sse_format()
+        yield heartbeat.to_sse_dict()
         metrics_emitter.emit_events_sent(1, "heartbeat")
 
         try:
@@ -283,7 +283,7 @@ class SSEStreamGenerator:
                 self._conn_manager.update_last_event_id(
                     connection.connection_id, heartbeat.id
                 )
-                yield heartbeat.to_sse_format()
+                yield heartbeat.to_sse_dict()
                 metrics_emitter.emit_events_sent(1, "heartbeat")
 
         except asyncio.CancelledError:

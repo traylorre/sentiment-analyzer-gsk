@@ -214,7 +214,7 @@ class TestGlobalStreamGeneration:
 
         # Should have initial heartbeat and metrics event
         assert len(events) >= 1
-        assert "heartbeat" in events[0]
+        assert events[0]["event"] == "heartbeat"
 
     @pytest.mark.asyncio
     async def test_global_stream_replays_events_on_reconnect(self, connection):
@@ -308,7 +308,7 @@ class TestConfigStreamGeneration:
 
         # Should have initial heartbeat
         assert len(events) >= 1
-        assert "heartbeat" in events[0]
+        assert events[0]["event"] == "heartbeat"
 
     @pytest.mark.asyncio
     async def test_config_stream_filters_sentiment_replay(
@@ -365,4 +365,5 @@ class TestConfigStreamGeneration:
         # Should NOT include GOOGL event (filtered out)
         # Should include heartbeat
         for event in events:
-            assert "GOOGL" not in event
+            # Event is now a dict with 'event', 'id', 'data' keys
+            assert "GOOGL" not in event.get("data", "")
