@@ -14,6 +14,7 @@ resource "aws_s3_bucket" "dashboard_assets" {
   bucket = "${var.environment}-sentiment-dashboard-${var.account_suffix}"
 
   tags = {
+    Name        = "${var.environment}-sentiment-dashboard-assets"
     Environment = var.environment
     Feature     = "006-user-config-dashboard"
     Component   = "cdn-origin"
