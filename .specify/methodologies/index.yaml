@@ -7,33 +7,9 @@ meta:
   last_updated: "2025-12-11T00:00:00Z"
   description: "AI-First Methodology Index for programmatic discovery"
 
-methodologies:
-  sri_validation:
-    name: "SRI Validation"
-    description: "Detect CDN scripts and stylesheets missing Subresource Integrity attributes"
-    canonical_path: "src/validators/sri.py"
-    documentation: "docs/sri-methodology.md"
-    primary_layer: precommit
-    uses_techniques:
-      - static_analysis
-    verification_gate:
-      metric: pass_rate
-      threshold: 1.0
-      measurement: "SRI validator unit tests pass"
-      command: "pytest tests/unit/test_sri_validator.py -q --tb=no"
-    validation_gate:
-      metric: detection_rate
-      threshold: 0.95
-      measurement: "% of missing SRI attributes detected"
-      command: "python3 scripts/validate-runner.py --validator sri"
-    applies_to_layers:
-      - precommit
-      - ci
-      - unit
-    taxonomy_concerns:
-      - supply_chain_security
-    # Created 2025-12-11 via 090-security-first-burndown
-    # Canonical sources:
-    # - https://developer.mozilla.org/en-US/docs/Web/Security/Subresource_Integrity
-    # - https://owasp.org/www-community/controls/SubresourceIntegrity
-    # - https://w3c.github.io/webappsec-subresource-integrity/
+methodologies: {}
+  # Validators have been migrated to template repo (terraform-gsk-template)
+  # per 091-sri-backport-add-methodology feature.
+  #
+  # Target repos inherit methodology validation through template repo.
+  # See: github.com/traylorre/terraform-gsk-template/.specify/methodologies/index.yaml

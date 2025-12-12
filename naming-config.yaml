@@ -1,0 +1,35 @@
+# naming-config.yaml - Project-specific naming configuration
+# Lives in TARGET repo (sentiment-analyzer-gsk)
+# Per 091 spec - Task T042
+
+# Required fields
+project_slug: "sentiment"
+environments:
+  - preprod
+  - prod
+pattern_template: "{env}-{project}-{service}"
+
+# Optional fields with defaults shown
+service_pattern: "[a-z0-9-]+"
+
+# Legacy patterns to flag for migration
+legacy_patterns:
+  - pattern: "sentiment-analyzer-*"
+    message: "Legacy naming. Migrate to {env}-sentiment-{service}"
+
+# AWS resource types to validate (defaults to common types)
+resource_types:
+  - aws_lambda_function
+  - aws_dynamodb_table
+  - aws_s3_bucket
+  - aws_sqs_queue
+  - aws_sns_topic
+  - aws_cloudwatch_log_group
+  - aws_iam_role
+  - aws_iam_policy
+
+# Exemptions for resources that cannot be renamed
+exemptions:
+  # Example:
+  # - terraform_id: "aws_s3_bucket.legacy_bucket"
+  #   reason: "Pre-existing bucket, migration scheduled for Q2"
