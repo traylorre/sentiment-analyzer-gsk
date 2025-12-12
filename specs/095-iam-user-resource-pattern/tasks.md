@@ -16,11 +16,11 @@ Fix IAM policy resource constraint pattern to match actual AWS IAM user names.
 
 ### Tasks
 
-- [ ] T001 Update resource pattern in `infrastructure/terraform/ci-user-policy.tf` line 640
+- [x] T001 Update resource pattern in `infrastructure/terraform/ci-user-policy.tf` line 640
   - Change: `"arn:aws:iam::*:user/*-sentiment-deployer"`
   - To: `"arn:aws:iam::*:user/sentiment-analyzer-*-deployer"`
 
-- [ ] T002 Update comment in `infrastructure/terraform/ci-user-policy.tf` line 630
+- [x] T002 Update comment in `infrastructure/terraform/ci-user-policy.tf` line 630
   - Change: `# Updated from sentiment-analyzer-*-deployer to *-sentiment-deployer per 090-security-first-burndown`
   - To: `# Pattern: sentiment-analyzer-*-deployer (preprod, prod)`
 
@@ -31,7 +31,7 @@ Verify changes pass all validation gates before commit.
 
 ### Tasks
 
-- [ ] T003 Run `terraform fmt` and `terraform validate` on changed file
+- [x] T003 Run `terraform fmt` and `terraform validate` on changed file
 
 ## Phase 3: Commit & Push
 
@@ -40,11 +40,34 @@ Commit with GPG signature and push to trigger pipeline.
 
 ### Tasks
 
-- [ ] T004 Commit changes with GPG signature and push to main
+- [x] T004 Commit changes with GPG signature and push to main
+
+## Phase 4: Bootstrap (ADMIN REQUIRED)
+
+### Goal
+Apply updated IAM policy to AWS (same bootstrap cycle as 094).
+
+### Why This Is Needed
+Same chicken-and-egg as 094:
+1. Fix updates resource pattern in `ci_deploy_iam` policy
+2. terraform plan needs `iam:ListAttachedUserPolicies` to check attachments
+3. Deployer lacks that permission because the fix isn't applied yet
+4. Circular dependency: can't apply the fix via pipeline
+
+### Tasks
+
+- [ ] T005 **ADMIN** Run terraform apply with elevated credentials:
+  ```bash
+  cd infrastructure/terraform
+  terraform init
+  terraform apply -target=aws_iam_policy.ci_deploy_iam
+  ```
+
+- [ ] T006 Re-trigger Deploy Pipeline after bootstrap
 
 ## Verification Checklist
 
-Post-push verification (via Deploy Pipeline):
+Post-bootstrap verification:
 
 - [ ] V001: terraform plan succeeds without IAM errors
 - [ ] V002: terraform apply succeeds
