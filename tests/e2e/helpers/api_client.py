@@ -308,10 +308,8 @@ class PreprodAPIClient:
         if "Accept" not in request_headers:
             request_headers["Accept"] = "text/event-stream"
 
-        # Route to SSE Lambda URL for streaming endpoints
-        effective_url = (
-            self.sse_url if path.startswith("/api/v2/stream") else self.base_url
-        )
+        # Route to SSE Lambda URL for any streaming endpoint (contains /stream)
+        effective_url = self.sse_url if "/stream" in path else self.base_url
 
         # Create a client with short read timeout for SSE
         async with httpx.AsyncClient(
