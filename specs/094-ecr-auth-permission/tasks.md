@@ -45,12 +45,47 @@ Create PR with GPG-signed commit and verify CI passes.
 
 ### Tasks
 
-- [ ] T005 Commit changes with GPG signature (`git commit -S`)
-- [ ] T006 Push branch and create PR with auto-merge enabled
+- [x] T005 Commit changes with GPG signature (`git commit -S`)
+- [x] T006 Push branch and create PR with auto-merge enabled (PR #346 merged)
+
+## Phase 4: Bootstrap (ADMIN REQUIRED)
+
+### Goal
+Apply IAM policy attachments to AWS (one-time bootstrap).
+
+### Why This Is Needed
+The Deploy Pipeline uses `sentiment-analyzer-preprod-deployer` credentials. Before this bootstrap:
+1. The user exists but has NO IAM policies attached
+2. ECR login fails (no `ecr:GetAuthorizationToken` permission)
+3. Terraform apply that would fix this runs AFTER ECR login
+4. Circular dependency: can't fix via pipeline
+
+### Tasks
+
+- [ ] T007 **ADMIN** Run terraform apply with elevated credentials:
+  ```bash
+  cd infrastructure/terraform
+  terraform init
+  terraform apply \
+    -target=aws_iam_policy.ci_deploy_core \
+    -target=aws_iam_policy.ci_deploy_monitoring \
+    -target=aws_iam_policy.ci_deploy_storage \
+    -target=aws_iam_policy.ci_deploy_iam \
+    -target=aws_iam_user_policy_attachment.ci_deploy_core_preprod \
+    -target=aws_iam_user_policy_attachment.ci_deploy_monitoring_preprod \
+    -target=aws_iam_user_policy_attachment.ci_deploy_storage_preprod \
+    -target=aws_iam_user_policy_attachment.ci_deploy_iam_preprod \
+    -target=aws_iam_user_policy_attachment.ci_deploy_core_prod \
+    -target=aws_iam_user_policy_attachment.ci_deploy_monitoring_prod \
+    -target=aws_iam_user_policy_attachment.ci_deploy_storage_prod \
+    -target=aws_iam_user_policy_attachment.ci_deploy_iam_prod
+  ```
+
+- [ ] T008 Re-trigger Deploy Pipeline after bootstrap
 
 ## Verification Checklist
 
-Post-merge verification (via TFC and Deploy Pipeline):
+Post-bootstrap verification:
 
 - [ ] V001: Terraform plan shows exactly 8 policy attachment changes
 - [ ] V002: Terraform apply succeeds without errors
