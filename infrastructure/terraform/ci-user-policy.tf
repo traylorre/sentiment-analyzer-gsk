@@ -818,7 +818,7 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
   }
 
   # Terraform State S3 Access
-  # Updated from sentiment-analyzer-terraform-state-* to *-sentiment-tfstate per 090-security-first-burndown
+  # Fix: Match actual bucket name pattern (sentiment-analyzer-terraform-state-{account_id})
   statement {
     sid    = "TerraformState"
     effect = "Allow"
@@ -829,8 +829,8 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
       "s3:DeleteObject"
     ]
     resources = [
-      "arn:aws:s3:::*-sentiment-tfstate",
-      "arn:aws:s3:::*-sentiment-tfstate/*"
+      "arn:aws:s3:::sentiment-analyzer-terraform-state-*",
+      "arn:aws:s3:::sentiment-analyzer-terraform-state-*/*"
     ]
   }
 
