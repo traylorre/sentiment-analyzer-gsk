@@ -87,10 +87,10 @@ The Deploy Pipeline uses `sentiment-analyzer-preprod-deployer` credentials. Befo
 
 Post-bootstrap verification:
 
-- [ ] V001: Terraform plan shows exactly 8 policy attachment changes
-- [ ] V002: Terraform apply succeeds without errors
-- [ ] V003: Deploy Pipeline ECR login step passes
-- [ ] V004: No new IAM permissions added (diff shows only user attribute changes)
+- [x] V001: Terraform plan shows exactly 8 policy attachment changes
+- [x] V002: Terraform apply succeeds without errors
+- [x] V003: Deploy Pipeline ECR login step passes
+- [x] V004: No new IAM permissions added (diff shows only user attribute changes)
 
 ## Dependencies
 

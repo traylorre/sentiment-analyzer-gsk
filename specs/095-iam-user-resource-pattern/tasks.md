@@ -69,10 +69,10 @@ Same chicken-and-egg as 094:
 
 Post-bootstrap verification:
 
-- [ ] V001: terraform plan succeeds without IAM errors
-- [ ] V002: terraform apply succeeds
-- [ ] V003: Deploy to Preprod job completes successfully
-- [ ] V004: Only resource pattern change in diff (no new permissions)
+- [x] V001: terraform plan succeeds without IAM errors
+- [x] V002: terraform apply succeeds
+- [x] V003: Deploy to Preprod job completes successfully
+- [x] V004: Only resource pattern change in diff (no new permissions)
 
 ## Dependencies
 
