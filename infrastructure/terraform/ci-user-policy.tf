@@ -627,7 +627,7 @@ data "aws_iam_policy_document" "ci_deploy_iam" {
   }
 
   # IAM User Policy Attachments (for CI deployer users managing their own policies)
-  # Updated from sentiment-analyzer-*-deployer to *-sentiment-deployer per 090-security-first-burndown
+  # Pattern: sentiment-analyzer-*-deployer (preprod, prod)
   statement {
     sid    = "IAMUserPolicyAttachments"
     effect = "Allow"
@@ -637,7 +637,7 @@ data "aws_iam_policy_document" "ci_deploy_iam" {
       "iam:DetachUserPolicy"
     ]
     resources = [
-      "arn:aws:iam::*:user/*-sentiment-deployer"
+      "arn:aws:iam::*:user/sentiment-analyzer-*-deployer"
     ]
   }
 
