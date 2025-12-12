@@ -151,6 +151,7 @@ async def global_stream(
 
     return EventSourceResponse(
         event_generator(),
+        media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
@@ -291,6 +292,7 @@ async def config_stream(
 
     return EventSourceResponse(
         event_generator(),
+        media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
