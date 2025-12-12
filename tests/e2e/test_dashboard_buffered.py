@@ -286,7 +286,7 @@ async def test_alerts_list_returns_json(
 
     Given: An authenticated user with a configuration
     When: GET /api/v2/configurations/{id}/alerts is called
-    Then: Response is valid JSON array
+    Then: Response is valid JSON with AlertListResponse structure
     """
     session_response = await api_client.post("/api/v2/auth/anonymous", json={})
     assert session_response.status_code == 201
@@ -313,7 +313,12 @@ async def test_alerts_list_returns_json(
         ), f"Expected application/json, got: {content_type}"
 
         data = response.json()
-        assert isinstance(data, list)
+        # API returns AlertListResponse with alerts list, total count, and quota info
+        assert isinstance(data, dict), f"Expected dict, got {type(data)}"
+        assert "alerts" in data, "Response missing 'alerts' field"
+        assert "total" in data, "Response missing 'total' field"
+        assert "daily_email_quota" in data, "Response missing 'daily_email_quota' field"
+        assert isinstance(data["alerts"], list), "alerts should be a list"
 
     finally:
         api_client.clear_access_token()
