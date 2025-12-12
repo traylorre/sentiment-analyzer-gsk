@@ -989,9 +989,13 @@ jobs:
 
   # ========================================================================
   # JOB 5: Build SSE Lambda Image (Production)
+  # TEMPORARILY DISABLED: Production deployment skipped until ready for prod release
+  # To re-enable: Remove `if: false` from jobs 5-7 and restore summary needs
+  # See: interview/FUTURE_IMPROVEMENTS.md for tracking
   # ========================================================================
   build-sse-image-prod:
     name: Build SSE Lambda Image (Production)
+    if: false  # TEMP: Skip production - re-enable when ready for prod release
     runs-on: ubuntu-latest
     needs: [build, deploy-preprod, test-preprod]
     environment: production
@@ -1029,9 +1033,11 @@ jobs:
 
   # ========================================================================
   # JOB 6: Deploy to Production
+  # TEMPORARILY DISABLED - see JOB 5 comment
   # ========================================================================
   deploy-prod:
     name: Deploy to Production
+    if: false  # TEMP: Skip production
     needs: [build, deploy-preprod, test-preprod, build-sse-image-prod]
     runs-on: ubuntu-latest
 
@@ -1218,9 +1224,11 @@ jobs:
 
   # ========================================================================
   # JOB 7: Production Canary Test
+  # TEMPORARILY DISABLED - see JOB 5 comment
   # ========================================================================
   canary:
     name: Production Canary Test
+    if: false  # TEMP: Skip production
     needs: [build, deploy-prod]
     runs-on: ubuntu-latest
     environment: production
@@ -1259,10 +1267,12 @@ jobs:
 
   # ========================================================================
   # JOB 8: Summary
+  # TEMPORARILY: Only depends on preprod jobs (production disabled)
+  # To restore: Add build-sse-image-prod, deploy-prod, canary to needs
   # ========================================================================
   summary:
     name: Deployment Summary
-    needs: [build, test, build-sse-image-preprod, deploy-preprod, test-preprod, build-sse-image-prod, deploy-prod, canary]
+    needs: [build, test, build-sse-image-preprod, deploy-preprod, test-preprod]
     if: always()
     runs-on: ubuntu-latest
 
@@ -1276,9 +1286,7 @@ jobs:
           echo "- Build SSE Image (Preprod): ${{ needs.build-sse-image-preprod.result }}"
           echo "- Deploy Preprod: ${{ needs.deploy-preprod.result }}"
           echo "- Test Preprod (Real AWS): ${{ needs.test-preprod.result }}"
-          echo "- Build SSE Image (Prod): ${{ needs.build-sse-image-prod.result }}"
-          echo "- Deploy Production: ${{ needs.deploy-prod.result }}"
-          echo "- Canary Test: ${{ needs.canary.result }}"
+          echo "- Production: SKIPPED (temporarily disabled)"
           echo ""
           echo "Artifact SHA: ${{ needs.build.outputs.artifact-sha }}"
-          echo "Production Dashboard: ${{ needs.deploy-prod.outputs.dashboard_url }}"
+          echo "Preprod Dashboard: ${{ needs.deploy-preprod.outputs.dashboard_url }}"
