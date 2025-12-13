@@ -48,14 +48,19 @@ content-type: application/xml
 
 Add `origin_path = "/v1"` to the API Gateway origin in CloudFront module.
 
+**Why not remove the stage?** REST API (current) requires explicit stage names. Only HTTP API supports `$default` (stageless). Migration would be a larger change.
+
 ### Request Flow After Fix
 ```
+User requests:       https://cloudfront.net/api/v2/auth/anonymous
 CloudFront receives: /api/v2/auth/anonymous
 CloudFront forwards: /v1/api/v2/auth/anonymous (origin_path prepended)
-API Gateway stage:   v1 ✓
+API Gateway stage:   v1 ✓ (validates, strips stage)
 Lambda receives:     /api/v2/auth/anonymous
-Response:            200 OK
+Response:            200 OK → User
 ```
+
+**Note**: The `/v1` stage is invisible to users - it's an internal routing detail between CloudFront and API Gateway.
 
 ## Success Criteria
 

@@ -63,3 +63,9 @@ variable "price_class_override" {
     error_message = "price_class_override must be empty or one of: PriceClass_100, PriceClass_200, PriceClass_All"
   }
 }
+
+variable "api_gateway_stage_path" {
+  description = "API Gateway stage path to prepend to origin requests (e.g., /v1)"
+  type        = string
+  default     = ""
+}
