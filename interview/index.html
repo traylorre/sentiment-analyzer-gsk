@@ -772,11 +772,6 @@
 
         <div class="nav-section">
             <div class="nav-title">Resilience</div>
-            <a class="nav-item" data-section="circuit">
-                <span class="nav-icon">⚡</span>
-                Circuit Breaker
-                <span class="nav-badge">Demo</span>
-            </a>
             <a class="nav-item" data-section="chaos">
                 <span class="nav-icon">💥</span>
                 Chaos Engineering
@@ -784,6 +779,11 @@
             <a class="nav-item" data-section="caching">
                 <span class="nav-icon">🚀</span>
                 Caching Strategy
+            </a>
+            <a class="nav-item" data-section="circuit">
+                <span class="nav-icon">⚡</span>
+                Circuit Breaker
+                <span class="nav-badge">Demo</span>
             </a>
             <a class="nav-item" data-section="traffic">
                 <span class="nav-icon">🔄</span>
@@ -1187,11 +1187,11 @@ by_tag: tag → timestamp</div>
 
             <div class="section-nav">
                 <button class="btn btn-secondary" onclick="navigateTo('sentiment')">← Back</button>
-                <button class="btn btn-primary" onclick="navigateTo('circuit')">Next →</button>
+                <button class="btn btn-primary" onclick="navigateTo('chaos')">Next →</button>
             </div>
         </section>
 
-        <!-- Circuit Breaker Section -->
+        <!-- Chaos Engineering Section (moved before Circuit Breaker) -->
         <section id="circuit" class="section">
             <div class="section-header">
                 <h1 class="section-title">Circuit Breaker</h1>
@@ -1256,7 +1256,7 @@ by_tag: tag → timestamp</div>
             </div>
 
             <div class="section-nav">
-                <button class="btn btn-secondary" onclick="navigateTo('external')">← Back</button>
+                <button class="btn btn-secondary" onclick="navigateTo('caching')">← Back</button>
                 <button class="btn btn-primary" onclick="navigateTo('traffic')">Next →</button>
             </div>
         </section>
@@ -1358,7 +1358,7 @@ python3 traffic_generator.py --env preprod --scenario all
 
             <div class="section-nav">
                 <button class="btn btn-secondary" onclick="navigateTo('circuit')">← Back</button>
-                <button class="btn btn-primary" onclick="navigateTo('chaos')">Next →</button>
+                <button class="btn btn-primary" onclick="navigateTo('observability')">Next →</button>
             </div>
         </section>
 
@@ -1432,7 +1432,7 @@ python3 traffic_generator.py --env preprod --scenario all
             </div>
 
             <div class="section-nav">
-                <button class="btn btn-secondary" onclick="navigateTo('traffic')">← Back</button>
+                <button class="btn btn-secondary" onclick="navigateTo('external')">← Back</button>
                 <button class="btn btn-primary" onclick="navigateTo('caching')">Next →</button>
             </div>
         </section>
@@ -1511,7 +1511,7 @@ python3 traffic_generator.py --env preprod --scenario all
 
             <div class="section-nav">
                 <button class="btn btn-secondary" onclick="navigateTo('chaos')">← Back</button>
-                <button class="btn btn-primary" onclick="navigateTo('observability')">Next →</button>
+                <button class="btn btn-primary" onclick="navigateTo('circuit')">Next →</button>
             </div>
         </section>
 
@@ -1567,7 +1567,7 @@ python3 traffic_generator.py --env preprod --scenario all
             </div>
 
             <div class="section-nav">
-                <button class="btn btn-secondary" onclick="navigateTo('caching')">← Back</button>
+                <button class="btn btn-secondary" onclick="navigateTo('traffic')">← Back</button>
                 <button class="btn btn-primary" onclick="navigateTo('testing')">Next →</button>
             </div>
         </section>

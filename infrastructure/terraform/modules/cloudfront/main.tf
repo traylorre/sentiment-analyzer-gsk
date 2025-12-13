@@ -133,6 +133,45 @@ resource "aws_cloudfront_response_headers_policy" "security" {
 }
 
 # ===================================================================
+# CloudFront Response Headers Policy (CORS for API)
+# ===================================================================
+# Enables cross-origin requests from the Interview Dashboard (GitHub Pages)
+# to the API Gateway backend. Required because:
+# 1. CloudFront forwards requests to API Gateway
+# 2. API Gateway REST API doesn't handle OPTIONS preflight natively
+# 3. Lambda CORS headers may not reach the browser before CloudFront times out
+
+resource "aws_cloudfront_response_headers_policy" "cors_api" {
+  count = length(var.cors_allowed_origins) > 0 ? 1 : 0
+
+  name    = "${var.environment}-sentiment-cors-api"
+  comment = "CORS headers for API routes"
+
+  cors_config {
+    access_control_allow_credentials = false
+    access_control_max_age_sec       = 86400
+
+    access_control_allow_headers {
+      items = ["Authorization", "Content-Type", "X-User-ID", "Accept", "Origin"]
+    }
+
+    access_control_allow_methods {
+      items = ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"]
+    }
+
+    access_control_allow_origins {
+      items = var.cors_allowed_origins
+    }
+
+    access_control_expose_headers {
+      items = ["X-Request-ID"]
+    }
+
+    origin_override = true
+  }
+}
+
+# ===================================================================
 # CloudFront Distribution
 # ===================================================================
 
@@ -201,7 +240,7 @@ resource "aws_cloudfront_distribution" "dashboard" {
 
       forwarded_values {
         query_string = true
-        headers      = ["Authorization", "Origin", "Accept"]
+        headers      = ["Authorization", "Origin", "Accept", "X-User-ID"]
         cookies {
           forward = "all"
         }
@@ -212,6 +251,8 @@ resource "aws_cloudfront_distribution" "dashboard" {
       default_ttl            = 0
       max_ttl                = 0
       compress               = true
+      # Attach CORS policy for cross-origin API requests
+      response_headers_policy_id = length(var.cors_allowed_origins) > 0 ? aws_cloudfront_response_headers_policy.cors_api[0].id : null
     }
   }
 
