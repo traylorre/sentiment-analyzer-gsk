@@ -834,12 +834,11 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
     ]
   }
 
-  # CloudFront Distribution
+  # CloudFront Distribution (tag-protected)
   # SECURITY: Scoped via tag condition to *-sentiment-* (FR-011)
-  # Note: CloudFront distributions don't support resource-level permissions
-  # for most actions, so we use tag-based conditions where possible
+  # Note: Only distributions support ABAC (tag-based conditions) in CloudFront
   statement {
-    sid    = "CloudFront"
+    sid    = "CloudFrontDistribution"
     effect = "Allow"
     actions = [
       "cloudfront:CreateDistribution",
@@ -850,6 +849,27 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
       "cloudfront:TagResource",
       "cloudfront:UntagResource",
       "cloudfront:ListTagsForResource",
+      "cloudfront:CreateInvalidation" # For deploy workflow cache invalidation
+    ]
+    resources = [
+      "arn:aws:cloudfront::*:distribution/*"
+    ]
+    condition {
+      test     = "StringLike"
+      variable = "aws:ResourceTag/Name"
+      values   = ["*-sentiment-*"]
+    }
+  }
+
+  # CloudFront Policies (no tag support)
+  # SECURITY: Origin access controls, cache policies, and response headers policies
+  # do NOT support ABAC (tag-based conditions) in CloudFront. Access is scoped by
+  # naming convention in Terraform code (preprod-sentiment-*, prod-sentiment-*).
+  # See: https://docs.aws.amazon.com/service-authorization/latest/reference/list_amazoncloudfront.html
+  statement {
+    sid    = "CloudFrontPolicies"
+    effect = "Allow"
+    actions = [
       "cloudfront:CreateOriginAccessControl",
       "cloudfront:UpdateOriginAccessControl",
       "cloudfront:DeleteOriginAccessControl",
@@ -865,16 +885,10 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
       "cloudfront:GetResponseHeadersPolicy"
     ]
     resources = [
-      "arn:aws:cloudfront::*:distribution/*",
       "arn:aws:cloudfront::*:origin-access-control/*",
       "arn:aws:cloudfront::*:cache-policy/*",
       "arn:aws:cloudfront::*:response-headers-policy/*"
     ]
-    condition {
-      test     = "StringLike"
-      variable = "aws:ResourceTag/Name"
-      values   = ["*-sentiment-*"]
-    }
   }
 
   # CloudFront List/Get operations - require wildcard for Terraform state refresh
