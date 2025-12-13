@@ -210,6 +210,7 @@ resource "aws_cloudfront_distribution" "dashboard" {
 
   # SSE Lambda origin for streaming endpoints (optional)
   # SSE requires RESPONSE_STREAM invoke mode, separate from Dashboard Lambda
+  # Feature 119: Extended timeouts for SSE streaming to prevent premature disconnects
   dynamic "origin" {
     for_each = var.sse_lambda_domain != "" ? [1] : []
     content {
@@ -220,6 +221,11 @@ resource "aws_cloudfront_distribution" "dashboard" {
         https_port             = 443
         origin_protocol_policy = "https-only"
         origin_ssl_protocols   = ["TLSv1.2"]
+        # SSE streaming timeout configuration (Feature 119)
+        # origin_read_timeout: Max time CloudFront waits for origin response (5 min for long sentiment analysis)
+        # origin_keepalive_timeout: Keep connection alive during streaming (1 min between messages)
+        origin_read_timeout      = 300
+        origin_keepalive_timeout = 60
       }
     }
   }
