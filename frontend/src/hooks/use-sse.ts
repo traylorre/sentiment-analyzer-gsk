@@ -11,6 +11,15 @@ import {
 
 interface UseSSEOptions {
   configId?: string;
+  /**
+   * User token for authenticated config-specific streams.
+   * Required when configId is provided.
+   *
+   * Note: EventSource API does not support custom HTTP headers,
+   * so the token must be passed as a query parameter. Use short-lived
+   * tokens for security (tokens in URLs appear in browser history and logs).
+   */
+  userToken?: string;
   enabled?: boolean;
   onUpdate?: (payload: SentimentUpdatePayload) => void;
 }
@@ -24,7 +33,7 @@ interface UseSSEResult {
 }
 
 export function useSSE(options: UseSSEOptions = {}): UseSSEResult {
-  const { configId, enabled = true, onUpdate } = options;
+  const { configId, userToken, enabled = true, onUpdate } = options;
 
   const [status, setStatus] = useState<SSEStatus>('disconnected');
   const [lastUpdate, setLastUpdate] = useState<string | null>(null);
@@ -68,9 +77,20 @@ export function useSSE(options: UseSSEOptions = {}): UseSSEResult {
     }
 
     const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
-    const url = configId
-      ? `${baseUrl}/api/v2/stream?configId=${configId}`
-      : `${baseUrl}/api/v2/stream`;
+
+    // Build URL based on whether this is a config-specific or global stream
+    let url: string;
+    if (configId) {
+      // Config-specific stream requires authentication via user_token query param
+      // Note: EventSource API does not support custom headers, so token must be in URL
+      url = `${baseUrl}/api/v2/configurations/${configId}/stream`;
+      if (userToken) {
+        url += `?user_token=${encodeURIComponent(userToken)}`;
+      }
+    } else {
+      // Global stream (no authentication required)
+      url = `${baseUrl}/api/v2/stream`;
+    }
 
     clientRef.current = new SSEClient(url, {
       onMessage: handleMessage,
@@ -79,7 +99,7 @@ export function useSSE(options: UseSSEOptions = {}): UseSSEResult {
     });
 
     clientRef.current.connect();
-  }, [configId, handleMessage, handleStatusChange, handleError]);
+  }, [configId, userToken, handleMessage, handleStatusChange, handleError]);
 
   const disconnect = useCallback(() => {
     if (clientRef.current) {
@@ -99,13 +119,13 @@ export function useSSE(options: UseSSEOptions = {}): UseSSEResult {
     };
   }, [enabled, connect, disconnect]);
 
-  // Reconnect when configId changes
+  // Reconnect when configId or userToken changes
   useEffect(() => {
     if (enabled && clientRef.current) {
       disconnect();
       connect();
     }
-  }, [configId, enabled, connect, disconnect]);
+  }, [configId, userToken, enabled, connect, disconnect]);
 
   return {
     status,

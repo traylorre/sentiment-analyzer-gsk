@@ -12,7 +12,7 @@ from aws_xray_sdk.core import patch_all, xray_recorder
 
 patch_all()
 
-from fastapi import FastAPI, Header, Request
+from fastapi import FastAPI, Header, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sse_starlette.sse import EventSourceResponse
@@ -185,48 +185,72 @@ async def config_stream(
     request: Request,
     config_id: str,
     x_user_id: str | None = Header(None, alias="X-User-ID"),
+    user_token: str | None = Query(None, description="User token for EventSource auth"),
     last_event_id: str | None = Header(None, alias="Last-Event-ID"),
 ):
     """Configuration-specific SSE stream endpoint.
 
     Streams real-time sentiment updates filtered to configured tickers.
-    Per FR-014: Requires X-User-ID authentication header
+    Per FR-014: Requires authentication via X-User-ID header OR user_token query param
     Per T035: GET /api/v2/configurations/{config_id}/stream
 
     Path Parameters:
         config_id: Configuration ID to stream
 
     Headers:
-        X-User-ID: Required user ID for authentication
+        X-User-ID: User ID for authentication (preferred for non-EventSource clients)
         Last-Event-ID: Optional event ID for reconnection resumption
+
+    Query Parameters:
+        user_token: User token for EventSource authentication (browser limitation workaround)
+                   EventSource API does not support custom headers, so tokens must be
+                   passed via query parameter. Use short-lived tokens for security.
 
     Returns:
         EventSourceResponse streaming heartbeat and filtered sentiment events
 
     Raises:
-        401: Missing or invalid X-User-ID header (T034)
+        401: Missing or invalid authentication (T034)
         404: Configuration not found or doesn't belong to user (T037)
         503: Connection limit reached
+
+    Security Notes:
+        - Query param tokens appear in logs, browser history, and caches
+        - Use short-lived tokens (5-min expiry recommended)
+        - Always use HTTPS to prevent token interception
+        - Response includes Cache-Control: no-store to prevent caching
     """
-    # T034: Validate X-User-ID header
-    if not x_user_id or not x_user_id.strip():
+    # T034: Validate authentication - accept header OR query param
+    # Header takes precedence if both provided
+    user_id = None
+    auth_method = None
+
+    if x_user_id and x_user_id.strip():
+        user_id = x_user_id.strip()
+        auth_method = "header"
+    elif user_token and user_token.strip():
+        user_id = user_token.strip()
+        auth_method = "query_param"
+
+    if not user_id:
         logger.warning(
-            "Config stream rejected - missing X-User-ID",
+            "Config stream rejected - missing authentication",
             extra={"config_id": sanitize_for_log(config_id[:8] if config_id else "")},
         )
         return JSONResponse(
             status_code=401,
-            content={"detail": "X-User-ID header is required"},
+            content={
+                "detail": "Authentication required. Provide X-User-ID header or user_token query parameter."
+            },
         )
 
-    user_id = x_user_id.strip()
-
-    # Log connection attempt
+    # Log connection attempt (redact token from query params for security)
     logger.info(
         "Config stream connection attempt",
         extra={
             "config_id": sanitize_for_log(config_id[:8] if config_id else ""),
             "user_id_prefix": sanitize_for_log(user_id[:8] if user_id else ""),
+            "auth_method": auth_method,
             "client_host": sanitize_for_log(
                 request.client.host if request.client else "unknown"
             ),
@@ -314,8 +338,10 @@ async def config_stream(
         event_generator(),
         media_type="text/event-stream",
         headers={
-            "Cache-Control": "no-cache",
+            # Prevent caching of authenticated streams (security: token in URL)
+            "Cache-Control": "no-store, no-cache, private, must-revalidate",
             "X-Accel-Buffering": "no",
+            "Pragma": "no-cache",
         },
     )
 
