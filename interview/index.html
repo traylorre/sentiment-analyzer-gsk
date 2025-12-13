@@ -2176,7 +2176,8 @@ infrastructure/terraform/modules/<br>
             // Ctrl/Cmd + number to navigate
             if ((e.ctrlKey || e.metaKey) && e.key >= '1' && e.key <= '9') {
                 e.preventDefault();
-                const sections = ['welcome', 'architecture', 'auth', 'config', 'sentiment', 'external', 'circuit', 'chaos', 'caching'];
+                // Order matches hamburger menu sidebar (nav-items)
+                const sections = ['welcome', 'architecture', 'auth', 'config', 'sentiment', 'external', 'chaos', 'caching', 'circuit'];
                 const idx = parseInt(e.key) - 1;
                 if (idx < sections.length) {
                     navigateTo(sections[idx]);
