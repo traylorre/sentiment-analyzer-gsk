@@ -119,6 +119,55 @@ resource "aws_api_gateway_method" "proxy" {
   }
 }
 
+# OPTIONS method for CORS preflight (no auth required)
+# Browser sends OPTIONS before POST/PUT/DELETE - must not require auth
+resource "aws_api_gateway_method" "proxy_options" {
+  rest_api_id   = aws_api_gateway_rest_api.dashboard.id
+  resource_id   = aws_api_gateway_resource.proxy.id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+# Mock integration for OPTIONS - returns 200 with CORS headers
+resource "aws_api_gateway_integration" "proxy_options" {
+  rest_api_id = aws_api_gateway_rest_api.dashboard.id
+  resource_id = aws_api_gateway_resource.proxy.id
+  http_method = aws_api_gateway_method.proxy_options.http_method
+  type        = "MOCK"
+
+  request_templates = {
+    "application/json" = jsonencode({ statusCode = 200 })
+  }
+}
+
+# Method response for OPTIONS
+resource "aws_api_gateway_method_response" "proxy_options" {
+  rest_api_id = aws_api_gateway_rest_api.dashboard.id
+  resource_id = aws_api_gateway_resource.proxy.id
+  http_method = aws_api_gateway_method.proxy_options.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = true
+    "method.response.header.Access-Control-Allow-Methods" = true
+    "method.response.header.Access-Control-Allow-Origin"  = true
+  }
+}
+
+# Integration response for OPTIONS
+resource "aws_api_gateway_integration_response" "proxy_options" {
+  rest_api_id = aws_api_gateway_rest_api.dashboard.id
+  resource_id = aws_api_gateway_resource.proxy.id
+  http_method = aws_api_gateway_method.proxy_options.http_method
+  status_code = aws_api_gateway_method_response.proxy_options.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,Authorization,X-User-ID'"
+    "method.response.header.Access-Control-Allow-Methods" = "'GET,POST,PUT,DELETE,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Origin"  = "'*'"
+  }
+}
+
 # API Gateway Method (ANY method for root)
 # SECURITY: Requires Cognito authentication when enabled (FR-012)
 resource "aws_api_gateway_method" "root" {
@@ -127,6 +176,54 @@ resource "aws_api_gateway_method" "root" {
   http_method   = "ANY"
   authorization = var.enable_cognito_auth ? "COGNITO_USER_POOLS" : "NONE"
   authorizer_id = var.enable_cognito_auth ? aws_api_gateway_authorizer.cognito[0].id : null
+}
+
+# OPTIONS method for root CORS preflight
+resource "aws_api_gateway_method" "root_options" {
+  rest_api_id   = aws_api_gateway_rest_api.dashboard.id
+  resource_id   = aws_api_gateway_rest_api.dashboard.root_resource_id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+# Mock integration for root OPTIONS
+resource "aws_api_gateway_integration" "root_options" {
+  rest_api_id = aws_api_gateway_rest_api.dashboard.id
+  resource_id = aws_api_gateway_rest_api.dashboard.root_resource_id
+  http_method = aws_api_gateway_method.root_options.http_method
+  type        = "MOCK"
+
+  request_templates = {
+    "application/json" = jsonencode({ statusCode = 200 })
+  }
+}
+
+# Method response for root OPTIONS
+resource "aws_api_gateway_method_response" "root_options" {
+  rest_api_id = aws_api_gateway_rest_api.dashboard.id
+  resource_id = aws_api_gateway_rest_api.dashboard.root_resource_id
+  http_method = aws_api_gateway_method.root_options.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = true
+    "method.response.header.Access-Control-Allow-Methods" = true
+    "method.response.header.Access-Control-Allow-Origin"  = true
+  }
+}
+
+# Integration response for root OPTIONS
+resource "aws_api_gateway_integration_response" "root_options" {
+  rest_api_id = aws_api_gateway_rest_api.dashboard.id
+  resource_id = aws_api_gateway_rest_api.dashboard.root_resource_id
+  http_method = aws_api_gateway_method.root_options.http_method
+  status_code = aws_api_gateway_method_response.root_options.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,Authorization,X-User-ID'"
+    "method.response.header.Access-Control-Allow-Methods" = "'GET,POST,PUT,DELETE,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Origin"  = "'*'"
+  }
 }
 
 # API Gateway Integration (Lambda proxy integration)
@@ -171,9 +268,13 @@ resource "aws_api_gateway_deployment" "dashboard" {
     redeployment = sha1(jsonencode([
       aws_api_gateway_resource.proxy.id,
       aws_api_gateway_method.proxy.id,
+      aws_api_gateway_method.proxy_options.id,
       aws_api_gateway_method.root.id,
+      aws_api_gateway_method.root_options.id,
       aws_api_gateway_integration.lambda_proxy.id,
       aws_api_gateway_integration.lambda_root.id,
+      aws_api_gateway_integration.proxy_options.id,
+      aws_api_gateway_integration.root_options.id,
     ]))
   }
 
@@ -184,6 +285,8 @@ resource "aws_api_gateway_deployment" "dashboard" {
   depends_on = [
     aws_api_gateway_integration.lambda_proxy,
     aws_api_gateway_integration.lambda_root,
+    aws_api_gateway_integration_response.proxy_options,
+    aws_api_gateway_integration_response.root_options,
   ]
 }
 
