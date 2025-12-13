@@ -75,3 +75,9 @@ variable "cors_allowed_origins" {
   type        = list(string)
   default     = []
 }
+
+variable "sse_lambda_domain" {
+  description = "SSE Lambda Function URL domain for streaming endpoints (optional)"
+  type        = string
+  default     = ""
+}
