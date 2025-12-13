@@ -331,6 +331,33 @@ resource "aws_cloudfront_distribution" "dashboard" {
     }
   }
 
+  # Cache behavior for /metrics endpoint (routes to API Gateway)
+  # Feature 121: Forward Authorization header to fix 401 Unauthorized
+  dynamic "ordered_cache_behavior" {
+    for_each = var.api_gateway_domain != "" ? [1] : []
+    content {
+      path_pattern     = "/metrics"
+      allowed_methods  = ["GET", "HEAD", "OPTIONS"]
+      cached_methods   = ["GET", "HEAD"]
+      target_origin_id = "api-gateway"
+
+      forwarded_values {
+        query_string = true
+        headers      = ["Authorization", "Origin", "Accept"]
+        cookies {
+          forward = "none"
+        }
+      }
+
+      viewer_protocol_policy     = "https-only"
+      min_ttl                    = 0
+      default_ttl                = 0 # Don't cache metrics
+      max_ttl                    = 0
+      compress                   = true
+      response_headers_policy_id = length(var.cors_allowed_origins) > 0 ? aws_cloudfront_response_headers_policy.cors_api[0].id : null
+    }
+  }
+
   # Cache behavior for static assets with long cache
   ordered_cache_behavior {
     path_pattern     = "/static/*"
