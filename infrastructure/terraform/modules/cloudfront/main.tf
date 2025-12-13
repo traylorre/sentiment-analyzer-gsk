@@ -159,6 +159,7 @@ resource "aws_cloudfront_distribution" "dashboard" {
     content {
       domain_name = var.api_gateway_domain
       origin_id   = "api-gateway"
+      origin_path = var.api_gateway_stage_path
       custom_origin_config {
         http_port              = 80
         https_port             = 443

@@ -101,7 +101,8 @@ module "cloudfront" {
 
   # API Gateway integration
   # Extract just the domain from API Gateway endpoint (strip https:// and path like /v1)
-  api_gateway_domain = split("/", replace(module.api_gateway.api_endpoint, "https://", ""))[0]
+  api_gateway_domain     = split("/", replace(module.api_gateway.api_endpoint, "https://", ""))[0]
+  api_gateway_stage_path = "/${module.api_gateway.stage_name}"
 
   # Custom domain (optional)
   custom_domain       = var.cloudfront_custom_domain
