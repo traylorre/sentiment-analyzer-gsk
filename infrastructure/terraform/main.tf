@@ -104,6 +104,9 @@ module "cloudfront" {
   api_gateway_domain     = split("/", replace(module.api_gateway.api_endpoint, "https://", ""))[0]
   api_gateway_stage_path = "/${module.api_gateway.stage_name}"
 
+  # CORS configuration for cross-origin API requests (Interview Dashboard on GitHub Pages)
+  cors_allowed_origins = var.cors_allowed_origins
+
   # Custom domain (optional)
   custom_domain       = var.cloudfront_custom_domain
   acm_certificate_arn = var.cloudfront_acm_certificate_arn

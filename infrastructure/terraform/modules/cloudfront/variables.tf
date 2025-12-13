@@ -69,3 +69,9 @@ variable "api_gateway_stage_path" {
   type        = string
   default     = ""
 }
+
+variable "cors_allowed_origins" {
+  description = "List of origins allowed to access the API (CORS). Default includes GitHub Pages."
+  type        = list(string)
+  default     = []
+}
