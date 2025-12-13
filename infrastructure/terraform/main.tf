@@ -104,6 +104,10 @@ module "cloudfront" {
   api_gateway_domain     = split("/", replace(module.api_gateway.api_endpoint, "https://", ""))[0]
   api_gateway_stage_path = "/${module.api_gateway.stage_name}"
 
+  # SSE Lambda integration for streaming endpoints
+  # Extract domain from Function URL (strip https:// suffix)
+  sse_lambda_domain = split("/", replace(module.sse_streaming_lambda.function_url, "https://", ""))[0]
+
   # CORS configuration for cross-origin API requests (Interview Dashboard on GitHub Pages)
   cors_allowed_origins = var.cors_allowed_origins
 
@@ -111,7 +115,7 @@ module "cloudfront" {
   custom_domain       = var.cloudfront_custom_domain
   acm_certificate_arn = var.cloudfront_acm_certificate_arn
 
-  depends_on = [module.api_gateway]
+  depends_on = [module.api_gateway, module.sse_streaming_lambda]
 }
 
 # ===================================================================

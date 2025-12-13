@@ -208,6 +208,22 @@ resource "aws_cloudfront_distribution" "dashboard" {
     }
   }
 
+  # SSE Lambda origin for streaming endpoints (optional)
+  # SSE requires RESPONSE_STREAM invoke mode, separate from Dashboard Lambda
+  dynamic "origin" {
+    for_each = var.sse_lambda_domain != "" ? [1] : []
+    content {
+      domain_name = var.sse_lambda_domain
+      origin_id   = "sse-lambda"
+      custom_origin_config {
+        http_port              = 80
+        https_port             = 443
+        origin_protocol_policy = "https-only"
+        origin_ssl_protocols   = ["TLSv1.2"]
+      }
+    }
+  }
+
   # Default behavior for static assets
   default_cache_behavior {
     allowed_methods  = ["GET", "HEAD", "OPTIONS"]
@@ -227,6 +243,33 @@ resource "aws_cloudfront_distribution" "dashboard" {
     max_ttl                    = 31536000 # 1 year
     compress                   = true
     response_headers_policy_id = aws_cloudfront_response_headers_policy.security.id
+  }
+
+  # Cache behavior for SSE streaming endpoints (must be before /api/* to match first)
+  # Routes to SSE Lambda with RESPONSE_STREAM invoke mode
+  dynamic "ordered_cache_behavior" {
+    for_each = var.sse_lambda_domain != "" ? [1] : []
+    content {
+      path_pattern     = "/api/v2/stream*"
+      allowed_methods  = ["GET", "HEAD", "OPTIONS"]
+      cached_methods   = ["GET", "HEAD"]
+      target_origin_id = "sse-lambda"
+
+      forwarded_values {
+        query_string = true
+        headers      = ["Authorization", "Origin", "Accept"]
+        cookies {
+          forward = "none"
+        }
+      }
+
+      viewer_protocol_policy     = "https-only"
+      min_ttl                    = 0
+      default_ttl                = 0 # Never cache SSE streams
+      max_ttl                    = 0
+      compress                   = false # Don't compress streaming responses
+      response_headers_policy_id = length(var.cors_allowed_origins) > 0 ? aws_cloudfront_response_headers_policy.cors_api[0].id : null
+    }
   }
 
   # Cache behavior for API routes (if API Gateway origin is configured)
