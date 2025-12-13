@@ -69,8 +69,8 @@ export function useSSE(options: UseSSEOptions = {}): UseSSEResult {
 
     const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
     const url = configId
-      ? `${baseUrl}/api/stream?configId=${configId}`
-      : `${baseUrl}/api/stream`;
+      ? `${baseUrl}/api/v2/stream?configId=${configId}`
+      : `${baseUrl}/api/v2/stream`;
 
     clientRef.current = new SSEClient(url, {
       onMessage: handleMessage,
