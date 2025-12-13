@@ -249,6 +249,16 @@
             cursor: pointer;
         }
 
+        /* Feature 110: Pulse animation to highlight interactive elements */
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(0, 211, 149, 0); }
+            50% { box-shadow: 0 0 12px 4px rgba(0, 211, 149, 0.4); }
+        }
+
+        .highlight-interactive {
+            animation: pulse-glow 1.5s ease-in-out 3;
+        }
+
         .card-header {
             display: flex;
             align-items: center;
@@ -713,7 +723,7 @@
             </div>
             <div style="display: flex; align-items: center; gap: 8px;">
                 <span id="interview-timer" style="font-family: 'SF Mono', Monaco, monospace; font-size: 18px; font-weight: 600; color: var(--accent-green);">00:00</span>
-                <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;" onclick="startInterviewTimer()">Start</button>
+                <button class="btn btn-secondary" data-interactive style="padding: 6px 12px; font-size: 12px;" onclick="startInterviewTimer()">Start</button>
             </div>
             <div class="env-toggle">
                 <button class="env-btn active" data-env="preprod">Preprod</button>
@@ -991,7 +1001,7 @@ by_tag: tag → timestamp</div>
                 <div class="api-demo-header">
                     <span class="method-badge method-post">POST</span>
                     <span class="endpoint-url">/api/v2/auth/anonymous</span>
-                    <button class="btn btn-primary" onclick="callAPI('auth-anon', 'POST', '/api/v2/auth/anonymous', {})">
+                    <button class="btn btn-primary" data-interactive onclick="callAPI('auth-anon', 'POST', '/api/v2/auth/anonymous', {})">
                         Execute
                     </button>
                 </div>
@@ -1044,7 +1054,7 @@ by_tag: tag → timestamp</div>
                 <div class="api-demo-header">
                     <span class="method-badge method-post">POST</span>
                     <span class="endpoint-url">/api/v2/configurations</span>
-                    <button class="btn btn-primary" onclick="createConfiguration()">
+                    <button class="btn btn-primary" data-interactive onclick="createConfiguration()">
                         Create Tech Watchlist
                     </button>
                 </div>
@@ -1059,7 +1069,7 @@ by_tag: tag → timestamp</div>
                 <div class="api-demo-header">
                     <span class="method-badge method-get">GET</span>
                     <span class="endpoint-url">/api/v2/configurations</span>
-                    <button class="btn btn-primary" onclick="callAuthenticatedAPI('config-list', 'GET', '/api/v2/configurations')">
+                    <button class="btn btn-primary" data-interactive onclick="callAuthenticatedAPI('config-list', 'GET', '/api/v2/configurations')">
                         Execute (needs auth)
                     </button>
                 </div>
@@ -1116,7 +1126,7 @@ by_tag: tag → timestamp</div>
                 <div class="api-demo-header">
                     <span class="method-badge method-get">GET</span>
                     <span class="endpoint-url" id="sentiment-endpoint">/api/v2/configurations/{config_id}/sentiment</span>
-                    <button class="btn btn-primary" onclick="getConfigSentiment()">
+                    <button class="btn btn-primary" data-interactive onclick="getConfigSentiment()">
                         Get Sentiment
                     </button>
                 </div>
@@ -1283,7 +1293,7 @@ python3 traffic_generator.py --env preprod --scenario all
                 </div>
 
                 <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-                    <button class="btn btn-primary" onclick="copyCommand('python3 traffic_generator.py --env preprod --scenario all')">
+                    <button class="btn btn-primary" data-interactive onclick="copyCommand('python3 traffic_generator.py --env preprod --scenario all')">
                         Copy "Run All"
                     </button>
                     <button class="btn btn-secondary" onclick="copyCommand('python3 traffic_generator.py --env preprod --scenario basic')">
@@ -1547,7 +1557,7 @@ python3 traffic_generator.py --env preprod --scenario all
                 <div class="api-demo-header">
                     <span class="method-badge method-get">GET</span>
                     <span class="endpoint-url">/health</span>
-                    <button class="btn btn-primary" onclick="callAPI('health', 'GET', '/health')">
+                    <button class="btn btn-primary" data-interactive onclick="callAPI('health', 'GET', '/health')">
                         Execute
                     </button>
                 </div>
@@ -1871,10 +1881,25 @@ infrastructure/terraform/modules/<br>
             // Scroll to top
             window.scrollTo(0, 0);
 
+            // Feature 110: Highlight interactive elements on section change
+            highlightInteractiveElements(sectionId);
+
             // Close sidebar on mobile after navigation
             if (window.innerWidth <= 1024) {
                 closeSidebar();
             }
+        }
+
+        // Feature 110: Pulse animation for interactive elements
+        function highlightInteractiveElements(sectionId) {
+            const section = document.getElementById(sectionId);
+            if (!section) return;
+
+            section.querySelectorAll('[data-interactive]').forEach(el => {
+                el.classList.remove('highlight-interactive');
+                void el.offsetWidth; // Force reflow to restart animation
+                el.classList.add('highlight-interactive');
+            });
         }
 
         // Environment Toggle
