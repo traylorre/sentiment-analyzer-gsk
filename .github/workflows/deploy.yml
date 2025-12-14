@@ -674,6 +674,18 @@ jobs:
           echo "   Terraform will wait for lock release (timeout: 5 minutes)"
           echo ""
 
+      - name: Terraform Refresh (Preprod)
+        run: |
+          echo "🔄 Syncing Terraform state with AWS..."
+          # Refresh ensures state matches actual AWS resources
+          # This fixes drift where state has origin_read_timeout=30 but AWS has 300
+          terraform refresh \
+            -var-file=preprod.tfvars \
+            -var="model_version=${{ needs.build.outputs.artifact-sha }}" \
+            -var="lambda_package_version=${{ needs.build.outputs.artifact-sha }}" \
+            -lock-timeout=5m
+          echo "✅ State refresh complete"
+
       - name: Terraform Plan (Preprod)
         id: plan
         timeout-minutes: 10
@@ -1213,6 +1225,16 @@ jobs:
           echo "⏳ Proceeding with deployment..."
           echo "   Terraform will wait for lock release (timeout: 5 minutes)"
           echo ""
+
+      - name: Terraform Refresh (Production)
+        run: |
+          echo "🔄 Syncing Terraform state with AWS..."
+          terraform refresh \
+            -var-file=prod.tfvars \
+            -var="model_version=${{ needs.build.outputs.artifact-sha }}" \
+            -var="lambda_package_version=${{ needs.build.outputs.artifact-sha }}" \
+            -lock-timeout=5m
+          echo "✅ State refresh complete"
 
       - name: Terraform Plan (Production)
         id: plan
