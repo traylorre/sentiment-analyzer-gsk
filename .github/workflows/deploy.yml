@@ -686,6 +686,65 @@ jobs:
             -lock-timeout=5m
           echo "✅ State refresh complete"
 
+      - name: Fix CloudFront Invalid Timeout (AWS CLI)
+        run: |
+          echo "🔍 Checking CloudFront distribution for invalid timeout values..."
+
+          # Get the CloudFront distribution ID from Terraform outputs
+          DIST_ID=$(terraform output -raw cloudfront_distribution_id 2>/dev/null || echo "")
+
+          if [ -z "$DIST_ID" ]; then
+            echo "⚠️ No CloudFront distribution found - skipping timeout check"
+            exit 0
+          fi
+
+          echo "Distribution ID: $DIST_ID"
+
+          # Get current distribution config
+          aws cloudfront get-distribution-config --id "$DIST_ID" > /tmp/cf-config.json
+          ETAG=$(jq -r '.ETag' /tmp/cf-config.json)
+
+          # Check if any origin has invalid timeout (>180)
+          INVALID_TIMEOUT=$(jq -r '.DistributionConfig.Origins.Items[]? |
+            select(.CustomOriginConfig.OriginReadTimeout > 180) |
+            "\(.Id): \(.CustomOriginConfig.OriginReadTimeout)s"' /tmp/cf-config.json)
+
+          if [ -z "$INVALID_TIMEOUT" ]; then
+            echo "✅ All origin timeouts are valid (<=180s)"
+            exit 0
+          fi
+
+          echo "⚠️ Found invalid timeout values:"
+          echo "$INVALID_TIMEOUT"
+          echo ""
+          echo "🔧 Fixing timeout values via AWS CLI..."
+
+          # Update config: set all origin_read_timeout > 180 to 180
+          jq '.DistributionConfig.Origins.Items = [.DistributionConfig.Origins.Items[] |
+            if .CustomOriginConfig.OriginReadTimeout > 180
+            then .CustomOriginConfig.OriginReadTimeout = 180
+            else . end]' /tmp/cf-config.json > /tmp/cf-config-fixed.json
+
+          # Also fix keepalive timeout if > 60
+          jq '.DistributionConfig.Origins.Items = [.DistributionConfig.Origins.Items[] |
+            if .CustomOriginConfig.OriginKeepaliveTimeout > 60
+            then .CustomOriginConfig.OriginKeepaliveTimeout = 60
+            else . end]' /tmp/cf-config-fixed.json > /tmp/cf-config-final.json
+
+          # Extract just the DistributionConfig for the update
+          jq '.DistributionConfig' /tmp/cf-config-final.json > /tmp/cf-update.json
+
+          # Update the distribution
+          aws cloudfront update-distribution \
+            --id "$DIST_ID" \
+            --if-match "$ETAG" \
+            --distribution-config file:///tmp/cf-update.json
+
+          echo "✅ CloudFront distribution updated with valid timeout values"
+          echo ""
+          echo "⏳ Waiting 30s for CloudFront to propagate changes..."
+          sleep 30
+
       - name: Terraform Plan (Preprod)
         id: plan
         timeout-minutes: 10
@@ -1235,6 +1294,58 @@ jobs:
             -var="lambda_package_version=${{ needs.build.outputs.artifact-sha }}" \
             -lock-timeout=5m
           echo "✅ State refresh complete"
+
+      - name: Fix CloudFront Invalid Timeout (AWS CLI)
+        run: |
+          echo "🔍 Checking CloudFront distribution for invalid timeout values..."
+
+          DIST_ID=$(terraform output -raw cloudfront_distribution_id 2>/dev/null || echo "")
+
+          if [ -z "$DIST_ID" ]; then
+            echo "⚠️ No CloudFront distribution found - skipping timeout check"
+            exit 0
+          fi
+
+          echo "Distribution ID: $DIST_ID"
+
+          aws cloudfront get-distribution-config --id "$DIST_ID" > /tmp/cf-config.json
+          ETAG=$(jq -r '.ETag' /tmp/cf-config.json)
+
+          INVALID_TIMEOUT=$(jq -r '.DistributionConfig.Origins.Items[]? |
+            select(.CustomOriginConfig.OriginReadTimeout > 180) |
+            "\(.Id): \(.CustomOriginConfig.OriginReadTimeout)s"' /tmp/cf-config.json)
+
+          if [ -z "$INVALID_TIMEOUT" ]; then
+            echo "✅ All origin timeouts are valid (<=180s)"
+            exit 0
+          fi
+
+          echo "⚠️ Found invalid timeout values:"
+          echo "$INVALID_TIMEOUT"
+          echo ""
+          echo "🔧 Fixing timeout values via AWS CLI..."
+
+          jq '.DistributionConfig.Origins.Items = [.DistributionConfig.Origins.Items[] |
+            if .CustomOriginConfig.OriginReadTimeout > 180
+            then .CustomOriginConfig.OriginReadTimeout = 180
+            else . end]' /tmp/cf-config.json > /tmp/cf-config-fixed.json
+
+          jq '.DistributionConfig.Origins.Items = [.DistributionConfig.Origins.Items[] |
+            if .CustomOriginConfig.OriginKeepaliveTimeout > 60
+            then .CustomOriginConfig.OriginKeepaliveTimeout = 60
+            else . end]' /tmp/cf-config-fixed.json > /tmp/cf-config-final.json
+
+          jq '.DistributionConfig' /tmp/cf-config-final.json > /tmp/cf-update.json
+
+          aws cloudfront update-distribution \
+            --id "$DIST_ID" \
+            --if-match "$ETAG" \
+            --distribution-config file:///tmp/cf-update.json
+
+          echo "✅ CloudFront distribution updated with valid timeout values"
+          echo ""
+          echo "⏳ Waiting 30s for CloudFront to propagate changes..."
+          sleep 30
 
       - name: Terraform Plan (Production)
         id: plan
