@@ -745,6 +745,39 @@ jobs:
           echo "⏳ Waiting 30s for CloudFront to propagate changes..."
           sleep 30
 
+      - name: Reset CloudFront Terraform State
+        run: |
+          echo "🔄 Resetting CloudFront resource in Terraform state..."
+          echo "This fixes state drift that causes InvalidOriginReadTimeout errors"
+          echo ""
+
+          DIST_ID=$(terraform output -raw cloudfront_distribution_id 2>/dev/null || echo "")
+
+          if [ -z "$DIST_ID" ]; then
+            echo "⚠️ No CloudFront distribution found - skipping state reset"
+            exit 0
+          fi
+
+          echo "Distribution ID: $DIST_ID"
+          echo ""
+
+          # Remove CloudFront distribution from state
+          echo "📤 Removing CloudFront distribution from Terraform state..."
+          terraform state rm module.cloudfront.aws_cloudfront_distribution.dashboard || {
+            echo "⚠️ Resource not in state (may have already been removed)"
+          }
+
+          # Re-import the CloudFront distribution
+          echo "📥 Re-importing CloudFront distribution into Terraform state..."
+          terraform import \
+            -var-file=preprod.tfvars \
+            -var="model_version=${{ needs.build.outputs.artifact-sha }}" \
+            -var="lambda_package_version=${{ needs.build.outputs.artifact-sha }}" \
+            module.cloudfront.aws_cloudfront_distribution.dashboard "$DIST_ID"
+
+          echo ""
+          echo "✅ CloudFront state reset complete - state now matches AWS"
+
       - name: Terraform Plan (Preprod)
         id: plan
         timeout-minutes: 10
@@ -1346,6 +1379,31 @@ jobs:
           echo ""
           echo "⏳ Waiting 30s for CloudFront to propagate changes..."
           sleep 30
+
+      - name: Reset CloudFront Terraform State
+        run: |
+          echo "🔄 Resetting CloudFront resource in Terraform state..."
+
+          DIST_ID=$(terraform output -raw cloudfront_distribution_id 2>/dev/null || echo "")
+
+          if [ -z "$DIST_ID" ]; then
+            echo "⚠️ No CloudFront distribution found - skipping state reset"
+            exit 0
+          fi
+
+          echo "Distribution ID: $DIST_ID"
+
+          terraform state rm module.cloudfront.aws_cloudfront_distribution.dashboard || {
+            echo "⚠️ Resource not in state"
+          }
+
+          terraform import \
+            -var-file=prod.tfvars \
+            -var="model_version=${{ needs.build.outputs.artifact-sha }}" \
+            -var="lambda_package_version=${{ needs.build.outputs.artifact-sha }}" \
+            module.cloudfront.aws_cloudfront_distribution.dashboard "$DIST_ID"
+
+          echo "✅ CloudFront state reset complete"
 
       - name: Terraform Plan (Production)
         id: plan
