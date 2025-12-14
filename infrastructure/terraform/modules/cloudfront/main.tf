@@ -223,9 +223,10 @@ resource "aws_cloudfront_distribution" "dashboard" {
         origin_ssl_protocols   = ["TLSv1.2"]
         # SSE streaming timeout configuration (Feature 119)
         # origin_read_timeout: Max time CloudFront waits for origin response
-        # AWS CloudFront limit: 180 seconds max without quota increase (300+ requires AWS support approval)
-        # origin_keepalive_timeout: Keep connection alive during streaming (1 min between messages)
-        origin_read_timeout      = 180
+        # AWS CloudFront DEFAULT limit: 60 seconds max (quota increase required for 61-180s)
+        # See: https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/cloudfront-limits.html
+        # origin_keepalive_timeout: Keep connection alive during streaming (max 60s)
+        origin_read_timeout      = 60
         origin_keepalive_timeout = 60
       }
     }
