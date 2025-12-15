@@ -27,7 +27,12 @@ from sse_starlette.sse import EventSourceResponse
 from starlette.responses import StreamingResponse
 from stream import stream_generator
 
-from src.lambdas.shared.logging_utils import sanitize_for_log
+# Import logging utilities - try Docker path first (logging_utils.py copied to /app/),
+# fall back to full path for tests
+try:
+    from logging_utils import sanitize_for_log
+except ImportError:
+    from src.lambdas.shared.logging_utils import sanitize_for_log
 
 # Configure logging
 logging.basicConfig(
