@@ -67,9 +67,9 @@ class TestSSEConnectionHealth:
                 )
 
                 # Check for other Lambda errors
-                assert "errorType" not in content_str, (
-                    f"SSE Lambda returned error response: {content_str[:200]}"
-                )
+                assert (
+                    "errorType" not in content_str
+                ), f"SSE Lambda returned error response: {content_str[:200]}"
 
     @pytest.mark.asyncio
     async def test_sse_stream_returns_200(self, dashboard_url: str) -> None:
@@ -204,6 +204,6 @@ class TestDashboardConnectionIndicator:
 
                 # Should not be an error response
                 chunk_str = first_chunk.decode("utf-8", errors="ignore")
-                assert "errorType" not in chunk_str, (
-                    f"Lambda error would trigger onerror callback: {chunk_str[:100]}"
-                )
+                assert (
+                    "errorType" not in chunk_str
+                ), f"Lambda error would trigger onerror callback: {chunk_str[:100]}"
