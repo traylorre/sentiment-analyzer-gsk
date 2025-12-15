@@ -36,6 +36,41 @@ Auto-generated from all feature plans. Last updated: 2025-11-26
 - **Email**: SendGrid (100/day free tier)
 - **Bot Protection**: hCaptcha
 
+## Python Virtual Environment (IMPORTANT)
+
+This project uses a Python 3.13 virtual environment to ensure parity with CI and production.
+Ubuntu system Python (3.10) must remain for system tools, so **always use the venv**.
+
+### Quick Start (Every Terminal Session)
+```bash
+source .venv/bin/activate
+# Verify: python --version should show 3.13.x
+```
+
+### If venv doesn't exist (fresh clone)
+```bash
+python3.13 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements-dev.txt
+```
+
+### Running Commands
+```bash
+# With venv activated:
+pytest tests/unit/
+python -m pytest tests/unit/sse_streaming/ -v
+
+# Without activation (explicit path):
+.venv/bin/pytest tests/unit/
+.venv/bin/python -m ruff check src/
+```
+
+### Why venv?
+- Ubuntu needs Python 3.10 for system tools (apt, etc.)
+- Project requires Python 3.13 (matches CI/prod Lambda runtime)
+- `python3` symlink gets reset by apt updates
+- venv provides isolation without affecting system Python
+
 ## Project Structure
 
 ```text

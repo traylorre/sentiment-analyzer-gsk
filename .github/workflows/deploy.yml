@@ -389,7 +389,7 @@ jobs:
           echo "🚀 Build time optimized: Per-Lambda dependencies (not bundling 3.9GB!)"
 
       - name: Upload Lambda Packages as Artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ steps.package.outputs.name }}
           path: packages/
@@ -413,7 +413,7 @@ jobs:
           cat build-manifest.json
 
       - name: Upload Build Manifest
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: build-manifest-${{ steps.package.outputs.sha }}
           path: build-manifest.json
@@ -482,7 +482,7 @@ jobs:
           exit 1
 
       - name: Validate Build Artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: ${{ needs.build.outputs.artifact-name }}
           path: packages/
@@ -561,7 +561,7 @@ jobs:
           from handler import app
           from config import config_lookup_service
           from stream import stream_generator
-          from src.lambdas.shared.logging_utils import sanitize_for_log
+          from logging_utils import sanitize_for_log
 
           print('✅ All imports successful')
           sys.exit(0)
@@ -600,7 +600,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Download Lambda Packages
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: ${{ needs.build.outputs.artifact-name }}
           path: packages/
@@ -1127,7 +1127,7 @@ jobs:
 
       - name: Upload Test Results
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: preprod-test-results-${{ needs.build.outputs.artifact-sha }}
           path: preprod-test-results.xml
@@ -1165,7 +1165,7 @@ jobs:
 
       - name: Upload Validation Metadata
         if: success()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: validation-${{ needs.build.outputs.artifact-sha }}
           path: validated.json
@@ -1227,7 +1227,7 @@ jobs:
           from handler import app
           from config import config_lookup_service
           from stream import stream_generator
-          from src.lambdas.shared.logging_utils import sanitize_for_log
+          from logging_utils import sanitize_for_log
           print('✅ All imports successful')
           sys.exit(0)
           "
@@ -1268,7 +1268,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Download Lambda Packages
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: ${{ needs.build.outputs.artifact-name }}
           path: packages/
