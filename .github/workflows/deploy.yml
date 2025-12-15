@@ -544,6 +544,37 @@ jobs:
           cache-to: type=gha,mode=max
           provenance: false
 
+      # Smoke test: Verify Python imports work inside the Docker image
+      # Catches missing __init__.py files and import errors before deployment
+      # See: fix(128) - ModuleNotFoundError for src.lambdas.shared imports
+      - name: Smoke Test SSE Lambda Imports
+        run: |
+          echo "🧪 Running Docker import smoke test..."
+          IMAGE="${{ steps.login-ecr.outputs.registry }}/preprod-sse-streaming-lambda:${{ github.sha }}"
+
+          # Run Python import check inside the container
+          docker run --rm --entrypoint python "$IMAGE" -c "
+          import sys
+          print('Testing imports...')
+
+          # These imports must work for the Lambda to start
+          from handler import app
+          from config import config_lookup_service
+          from stream import stream_generator
+          from src.lambdas.shared.logging_utils import sanitize_for_log
+
+          print('✅ All imports successful')
+          sys.exit(0)
+          "
+
+          if [ $? -eq 0 ]; then
+            echo "✅ SSE Lambda import smoke test passed"
+          else
+            echo "❌ SSE Lambda import smoke test FAILED"
+            echo "The Docker image has import errors that will cause Runtime.ExitError"
+            exit 1
+          fi
+
   # ========================================================================
   # JOB 4: Deploy to Preprod
   # ========================================================================
@@ -1183,6 +1214,30 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false
+
+      # Smoke test: Verify Python imports work inside the Docker image
+      # See: fix(128) - ModuleNotFoundError for src.lambdas.shared imports
+      - name: Smoke Test SSE Lambda Imports
+        run: |
+          echo "🧪 Running Docker import smoke test..."
+          IMAGE="${{ steps.login-ecr.outputs.registry }}/prod-sse-streaming-lambda:${{ github.sha }}"
+
+          docker run --rm --entrypoint python "$IMAGE" -c "
+          import sys
+          from handler import app
+          from config import config_lookup_service
+          from stream import stream_generator
+          from src.lambdas.shared.logging_utils import sanitize_for_log
+          print('✅ All imports successful')
+          sys.exit(0)
+          "
+
+          if [ $? -eq 0 ]; then
+            echo "✅ SSE Lambda import smoke test passed"
+          else
+            echo "❌ SSE Lambda import smoke test FAILED"
+            exit 1
+          fi
 
   # ========================================================================
   # JOB 6: Deploy to Production
