@@ -12,17 +12,17 @@ import time
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 
-from src.lambdas.shared.logging_utils import sanitize_for_log
-
-from .connection import ConnectionManager, SSEConnection, connection_manager
-from .metrics import metrics_emitter
-from .models import (
+from connection import ConnectionManager, SSEConnection, connection_manager
+from metrics import metrics_emitter
+from models import (
     HeartbeatData,
     MetricsEventData,
     SentimentUpdateData,
     SSEEvent,
 )
-from .polling import PollingService, polling_service
+from polling import PollingService, polling_service
+
+from src.lambdas.shared.logging_utils import sanitize_for_log
 
 logger = logging.getLogger(__name__)
 

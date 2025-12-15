@@ -12,19 +12,22 @@ from aws_xray_sdk.core import patch_all, xray_recorder
 
 patch_all()
 
+# Use absolute imports instead of relative imports to work when
+# handler.py is imported directly (not as part of a package).
+# The Dockerfile sets PYTHONPATH=/app so these modules are findable.
+# For tests, conftest.py adds the Lambda directory to sys.path.
+from config import config_lookup_service
+from connection import connection_manager
 from fastapi import FastAPI, Header, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from metrics import metrics_emitter
+from models import StreamStatus
 from sse_starlette.sse import EventSourceResponse
 from starlette.responses import StreamingResponse
+from stream import stream_generator
 
 from src.lambdas.shared.logging_utils import sanitize_for_log
-
-from .config import config_lookup_service
-from .connection import connection_manager
-from .metrics import metrics_emitter
-from .models import StreamStatus
-from .stream import stream_generator
 
 # Configure logging
 logging.basicConfig(

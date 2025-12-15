@@ -11,8 +11,7 @@ from datetime import UTC, datetime
 
 import boto3
 from botocore.exceptions import ClientError
-
-from .models import MetricsEventData
+from models import MetricsEventData
 
 logger = logging.getLogger(__name__)
 

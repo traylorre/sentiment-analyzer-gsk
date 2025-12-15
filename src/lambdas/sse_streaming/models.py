@@ -5,8 +5,9 @@ Defines Pydantic models for SSE event payloads per contracts/sse-events.md.
 
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 def generate_event_id() -> str:
@@ -70,18 +71,51 @@ class SSEEvent(BaseModel):
     """An SSE event ready for streaming.
 
     Wraps event data with type, ID, and optional retry interval.
+
+    Note: The data field accepts HeartbeatData, MetricsEventData, or
+    SentimentUpdateData. A pre-validator handles already-instantiated
+    model objects to work around pydantic 2.12 union validation issues.
     """
 
     event: str = Field(description="Event type: heartbeat/metrics/sentiment_update")
     id: str = Field(
         default_factory=generate_event_id, description="Unique event identifier"
     )
-    data: HeartbeatData | MetricsEventData | SentimentUpdateData = Field(
-        description="Event payload"
-    )
+    data: Any = Field(description="Event payload")
     retry: int | None = Field(
         default=None, description="Reconnection delay in ms (optional)"
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_data_type(cls, values: dict[str, Any]) -> dict[str, Any]:
+        """Validate that data is one of the allowed event data types.
+
+        Pydantic 2.12 has issues with union types when passed already-instantiated
+        model objects. This validator accepts the model instances directly.
+
+        Note: Uses class name checking instead of isinstance() because the same
+        module can be imported via different paths (e.g., 'models' vs
+        'src.lambdas.sse_streaming.models'), causing isinstance to fail even
+        when the types are logically the same.
+        """
+        if isinstance(values, dict):
+            data = values.get("data")
+            if data is not None:
+                # Check by class name to handle dual-path imports
+                allowed_types = {
+                    "HeartbeatData",
+                    "MetricsEventData",
+                    "SentimentUpdateData",
+                }
+                if isinstance(data, dict):
+                    pass  # dicts are allowed, will be validated by field type
+                elif type(data).__name__ not in allowed_types:
+                    raise ValueError(
+                        f"data must be HeartbeatData, MetricsEventData, or SentimentUpdateData, "
+                        f"got {type(data).__name__}"
+                    )
+        return values
 
     def to_sse_format(self) -> str:
         """Format event as SSE protocol string.
