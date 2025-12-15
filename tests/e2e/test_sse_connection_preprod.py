@@ -47,7 +47,9 @@ class TestSSEConnectionHealth:
         """
         async with httpx.AsyncClient(timeout=10.0) as client:
             # Use stream to avoid waiting for full response
-            async with client.stream("GET", f"{dashboard_url}/api/v2/stream") as response:
+            async with client.stream(
+                "GET", f"{dashboard_url}/api/v2/stream"
+            ) as response:
                 # Read just enough to check for error
                 content = b""
                 async for chunk in response.aiter_bytes():
@@ -80,7 +82,9 @@ class TestSSEConnectionHealth:
         Dashboard shows "Disconnected" if this fails.
         """
         async with httpx.AsyncClient(timeout=10.0) as client:
-            async with client.stream("GET", f"{dashboard_url}/api/v2/stream") as response:
+            async with client.stream(
+                "GET", f"{dashboard_url}/api/v2/stream"
+            ) as response:
                 assert response.status_code == 200, (
                     f"Expected 200, got {response.status_code}. "
                     f"Dashboard will show 'Disconnected' status."
@@ -99,7 +103,9 @@ class TestSSEConnectionHealth:
         but CloudFront should preserve the original Content-Type.
         """
         async with httpx.AsyncClient(timeout=10.0) as client:
-            async with client.stream("GET", f"{dashboard_url}/api/v2/stream") as response:
+            async with client.stream(
+                "GET", f"{dashboard_url}/api/v2/stream"
+            ) as response:
                 content_type = response.headers.get("content-type", "")
 
                 # Accept text/event-stream (correct) or octet-stream (Lambda URL quirk)
@@ -123,7 +129,9 @@ class TestSSEConnectionHealth:
             events_received = []
 
             try:
-                async with client.stream("GET", f"{dashboard_url}/api/v2/stream") as response:
+                async with client.stream(
+                    "GET", f"{dashboard_url}/api/v2/stream"
+                ) as response:
                     assert response.status_code == 200
 
                     # Read stream for up to 5 seconds
@@ -145,7 +153,7 @@ class TestSSEConnectionHealth:
                     # Wait max 5 seconds for an event
                     await asyncio.wait_for(read_events(), timeout=5.0)
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass  # Expected - SSE streams don't end
 
             assert len(events_received) >= 1, (
