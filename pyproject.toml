@@ -142,6 +142,9 @@ exclude = [
 [tool.pytest.ini_options]
 minversion = "7.0"
 testpaths = ["tests"]
+# Add SSE Lambda directory to PYTHONPATH for absolute imports (fix(130))
+# The handler.py uses `from config import ...` which needs this path
+pythonpath = ["src/lambdas/sse_streaming"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
