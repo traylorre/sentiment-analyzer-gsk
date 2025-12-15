@@ -482,7 +482,7 @@ jobs:
           exit 1
 
       - name: Validate Build Artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: ${{ needs.build.outputs.artifact-name }}
           path: packages/
@@ -600,7 +600,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Download Lambda Packages
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: ${{ needs.build.outputs.artifact-name }}
           path: packages/
@@ -1268,7 +1268,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Download Lambda Packages
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: ${{ needs.build.outputs.artifact-name }}
           path: packages/
