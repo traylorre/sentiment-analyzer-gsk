@@ -561,7 +561,7 @@ jobs:
           from handler import app
           from config import config_lookup_service
           from stream import stream_generator
-          from src.lambdas.shared.logging_utils import sanitize_for_log
+          from logging_utils import sanitize_for_log
 
           print('✅ All imports successful')
           sys.exit(0)
@@ -1227,7 +1227,7 @@ jobs:
           from handler import app
           from config import config_lookup_service
           from stream import stream_generator
-          from src.lambdas.shared.logging_utils import sanitize_for_log
+          from logging_utils import sanitize_for_log
           print('✅ All imports successful')
           sys.exit(0)
           "

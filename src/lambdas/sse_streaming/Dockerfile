@@ -31,15 +31,12 @@ COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.9.1 /lambda-adapter /opt
 # Copy installed packages
 COPY --from=builder /app/packages /app/packages
 
-# Copy shared module for logging utilities
-# Structure: /app/src/lambdas/shared/
-# Create parent package __init__.py files (required for from src.lambdas.shared imports)
-RUN mkdir -p /app/src/lambdas && \
-    touch /app/src/__init__.py /app/src/lambdas/__init__.py
-COPY shared /app/src/lambdas/shared
-
 # Copy application code from sse_streaming subdirectory
 COPY sse_streaming /app
+
+# Copy shared logging utilities directly into app directory
+# This avoids complex PYTHONPATH issues with Lambda Web Adapter
+COPY shared/logging_utils.py /app/logging_utils.py
 
 # Set Python path to include packages and app root for imports
 ENV PYTHONPATH=/app/packages:/app
