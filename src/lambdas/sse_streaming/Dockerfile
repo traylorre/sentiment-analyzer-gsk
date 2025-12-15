@@ -33,6 +33,9 @@ COPY --from=builder /app/packages /app/packages
 
 # Copy shared module for logging utilities
 # Structure: /app/src/lambdas/shared/
+# Create parent package __init__.py files (required for from src.lambdas.shared imports)
+RUN mkdir -p /app/src/lambdas && \
+    touch /app/src/__init__.py /app/src/lambdas/__init__.py
 COPY shared /app/src/lambdas/shared
 
 # Copy application code from sse_streaming subdirectory
