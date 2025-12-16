@@ -49,3 +49,13 @@ output "notification_lambda_role_name" {
   description = "Name of the Notification Lambda IAM role (Feature 006)"
   value       = aws_iam_role.notification_lambda.name
 }
+
+output "sse_streaming_lambda_role_arn" {
+  description = "ARN of the SSE Streaming Lambda IAM role (Feature 016)"
+  value       = aws_iam_role.sse_streaming_lambda.arn
+}
+
+output "sse_streaming_lambda_role_name" {
+  description = "Name of the SSE Streaming Lambda IAM role (Feature 016)"
+  value       = aws_iam_role.sse_streaming_lambda.name
+}

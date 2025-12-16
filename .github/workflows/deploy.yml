@@ -1074,6 +1074,7 @@ jobs:
       - name: Warm Up Lambdas for Metrics (TD-001)
         env:
           DASHBOARD_URL: ${{ needs.deploy-preprod.outputs.dashboard_url }}
+          SSE_LAMBDA_URL: ${{ needs.deploy-preprod.outputs.sse_lambda_url }}
           API_KEY: ${{ secrets.DASHBOARD_API_KEY }}
         run: |
           echo "🔥 Warming up Lambdas to generate CloudWatch metrics..."
@@ -1081,18 +1082,27 @@ jobs:
           echo ""
 
           # Invoke dashboard Lambda multiple times to generate metrics
-          echo "1. Invoking /health endpoint..."
+          echo "1. Invoking Dashboard Lambda /health endpoint..."
           curl -s -o /dev/null -w "HTTP %{http_code}\n" "${DASHBOARD_URL}/health" || true
 
-          echo "2. Invoking /api/metrics endpoint (authenticated)..."
+          echo "2. Invoking /api/v2/metrics endpoint (authenticated)..."
           curl -s -o /dev/null -w "HTTP %{http_code}\n" \
             -H "Authorization: ${API_KEY}" \
-            "${DASHBOARD_URL}/api/metrics" || true
+            "${DASHBOARD_URL}/api/v2/metrics" || true
 
-          echo "3. Invoking /api/items endpoint (authenticated)..."
+          echo "3. Invoking /api/v2/sentiment endpoint (authenticated)..."
           curl -s -o /dev/null -w "HTTP %{http_code}\n" \
             -H "Authorization: ${API_KEY}" \
-            "${DASHBOARD_URL}/api/items?limit=5" || true
+            "${DASHBOARD_URL}/api/v2/sentiment?tickers=AAPL" || true
+
+          # Warm up SSE Lambda (Feature 140: SSE tests were failing due to cold start)
+          # SSE Lambda uses Docker image with Lambda Web Adapter, needs warmup
+          echo ""
+          echo "4. Invoking SSE Lambda /health endpoint..."
+          curl -s -o /dev/null -w "HTTP %{http_code}\n" "${SSE_LAMBDA_URL}/health" || true
+
+          echo "5. Invoking SSE Lambda /api/v2/stream/status endpoint..."
+          curl -s -o /dev/null -w "HTTP %{http_code}\n" "${SSE_LAMBDA_URL}/api/v2/stream/status" || true
 
           # Wait for CloudWatch metrics to propagate
           echo ""

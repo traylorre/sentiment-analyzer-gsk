@@ -245,6 +245,57 @@ classDef externalNode fill:#e5e7eb,stroke:#6b7280,stroke-width:2px,color:#1f2937
 
 ---
 
+---
+
+### 3. SSE Lambda Streaming Architecture (NEW - Dec 2025)
+**File:** `sse-lambda-streaming.mmd`
+**Audience:** Backend developers, SREs, streaming specialists
+**Purpose:** Understand how SSE Lambda works from connection to event delivery
+**Focus:** Connection lifecycle, heartbeat mechanism, polling strategy
+
+**What It Shows:**
+- ✅ Connection establishment through CloudFront → Lambda Web Adapter
+- ✅ Connection pool management (100 max connections)
+- ✅ DynamoDB polling (every 5 seconds)
+- ✅ Heartbeat mechanism (30s intervals to keep CloudFront alive)
+- ✅ Event streaming format (SSE protocol)
+- ✅ Disconnect and cleanup flow
+- ✅ Config-specific filtered streams with authentication
+- ✅ Error handling (503 when pool full)
+
+**Key Insights:**
+- Lambda Web Adapter enables HTTP/1.1 streaming (not possible with Mangum)
+- RESPONSE_STREAM invoke mode required for SSE
+- Heartbeats prevent CloudFront's 60s origin timeout from disconnecting
+- Last-Event-ID enables client reconnection resumption
+
+---
+
+### 4. CloudFront Multi-Origin Routing (NEW - Dec 2025)
+**File:** `cloudfront-multi-origin.mmd`
+**Audience:** DevOps, architects, frontend developers
+**Purpose:** Understand how CloudFront routes requests to different backends
+**Focus:** Cache behaviors, origin configuration, path-based routing
+
+**What It Shows:**
+- ✅ CloudFront edge entry point
+- ✅ Three cache behaviors (priority order):
+  1. `/api/v2/stream*` → SSE Lambda (TTL=0, no compression)
+  2. `/api/*` → API Gateway (TTL=0, forward Authorization)
+  3. `/*` → S3 Dashboard (TTL=1 day, compression enabled)
+- ✅ Origin configurations (timeouts, keepalive)
+- ✅ Lambda Web Adapter integration
+- ✅ S3 Origin Access Control (OAC)
+- ✅ Data flow to DynamoDB
+
+**Key Insights:**
+- SSE requires separate origin due to RESPONSE_STREAM requirement
+- Path patterns evaluated in precedence order (most specific first)
+- Static assets cached at edge, APIs never cached
+- OAC replaces deprecated OAI for S3 access
+
+---
+
 ## Future Diagram Plans
 
 Keep Canva project active for future diagrams:
@@ -377,6 +428,6 @@ Keep Canva project active for future diagrams:
 
 ---
 
-**Last Updated:** 2025-11-29
-**Diagram Count:** 3 specs + 5 use-case sequences (+ 6 planned component diagrams)
-**Status:** Ready for Canva creation
+**Last Updated:** 2025-12-16
+**Diagram Count:** 5 specs + 5 use-case sequences (+ 6 planned component diagrams)
+**Status:** SSE and CloudFront diagrams added; architecture diagrams updated with CloudFront CDN

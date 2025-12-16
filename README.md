@@ -165,12 +165,16 @@ Ingests financial news from external sources (Tiingo, Finnhub) and returns senti
 
 ### Architecture
 
-- **Compute**: AWS Lambda (Python 3.13)
+- **Edge/CDN**: CloudFront with multi-origin routing (S3, API Gateway, SSE Lambda)
+- **Compute**: AWS Lambda (Python 3.13) - 5 functions (Ingestion, Analysis, Dashboard, SSE, Metrics)
+- **Real-time**: SSE Lambda with Lambda Web Adapter for RESPONSE_STREAM mode
 - **Orchestration**: EventBridge, SNS, SQS
-- **Storage**: DynamoDB (on-demand capacity)
+- **Storage**: DynamoDB (on-demand capacity), S3 (static assets, ML models)
 - **Sentiment Model**: DistilBERT (fine-tuned for social media)
 - **Infrastructure**: Terraform with S3 backend and S3 native locking
 - **CI/CD**: GitHub Actions → Dev → Preprod → Prod promotion pipeline
+
+**Detailed Architecture Diagrams**: See [docs/diagrams/](./docs/diagrams/README.md)
 
 ### Key Features
 
@@ -180,6 +184,8 @@ Ingests financial news from external sources (Tiingo, Finnhub) and returns senti
 ✅ **Observable** - CloudWatch dashboards, alarms, DLQ monitoring
 ✅ **Multi-environment** - Isolated dev/preprod/prod environments
 ✅ **Promotion pipeline** - Automated artifact promotion with validation gates
+✅ **Real-time streaming** - SSE Lambda with CloudFront multi-origin routing
+✅ **CDN-delivered UI** - Interview Dashboard served via CloudFront edge
 
 ---
 
@@ -196,6 +202,11 @@ graph TB
     end
 
     subgraph AWS["AWS Cloud"]
+        subgraph EdgeLayer["Edge Layer"]
+            CF[CloudFront<br/>Multi-Origin CDN]
+            S3UI[S3 Bucket<br/>Interview Dashboard]
+        end
+
         subgraph IngestionLayer["Ingestion Layer"]
             EB[EventBridge<br/>Scheduler<br/>5 min]
             Ingestion[Ingestion Lambda<br/>Python 3.13]
@@ -208,8 +219,9 @@ graph TB
         end
 
         subgraph APILayer["API Layer"]
-            Dashboard[Dashboard Lambda<br/>FastAPI + SSE]
-            FnURL[Function URL]
+            APIGW[API Gateway<br/>REST /api/*]
+            Dashboard[Dashboard Lambda<br/>FastAPI REST]
+            SSELambda[SSE Lambda<br/>RESPONSE_STREAM<br/>Docker + Web Adapter]
         end
 
         subgraph StorageLayer["Storage Layer"]
@@ -229,6 +241,11 @@ graph TB
         Browser[Web Browser]
     end
 
+    Browser -->|HTTPS| CF
+    CF -->|/static/*| S3UI
+    CF -->|/api/*| APIGW
+    CF -->|/api/v2/stream*| SSELambda
+
     EB -->|Trigger| Ingestion
     Tiingo -->|Fetch Financial News| Ingestion
     Finnhub -->|Fetch Market News| Ingestion
@@ -241,10 +258,10 @@ graph TB
     Analysis -->|Store Results| DDB
     Analysis -->|Failed| DLQ
 
-    Browser <-->|HTTPS| FnURL
-    FnURL <-->|Invoke| Dashboard
+    APIGW -->|Invoke| Dashboard
     Dashboard -->|Query| DDB
-    Dashboard -->|SSE Stream| Browser
+    SSELambda -->|Poll every 5s| DDB
+    SSELambda -.->|Stream Events| Browser
 
     EBMetrics -->|Trigger| Metrics
     Metrics -->|Query by_status GSI| DDB
@@ -253,6 +270,7 @@ graph TB
     Ingestion -.->|Logs| CW
     Analysis -.->|Logs| CW
     Dashboard -.->|Logs| CW
+    SSELambda -.->|Logs| CW
     Metrics -.->|Logs| CW
 
     CW -.->|Cost Alerts| Budget
@@ -263,13 +281,15 @@ graph TB
     classDef messagingStyle fill:#b39ddb,stroke:#673ab7,stroke-width:2px,color:#1a0a3e
     classDef monitoringStyle fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
     classDef externalStyle fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef edgeStyle fill:#ffccbc,stroke:#ff5722,stroke-width:2px,color:#4a1a00
 
-    class External,AWS,IngestionLayer,ProcessingLayer,APILayer,StorageLayer,MonitoringLayer,Users layerBox
-    class Ingestion,Analysis,Dashboard,Metrics lambdaStyle
+    class External,AWS,EdgeLayer,IngestionLayer,ProcessingLayer,APILayer,StorageLayer,MonitoringLayer,Users layerBox
+    class Ingestion,Analysis,Dashboard,SSELambda,Metrics lambdaStyle
     class DDB,DLQ,S3Model storageStyle
     class SNS messagingStyle
     class CW,Budget,EBMetrics,EB monitoringStyle
     class Tiingo,Finnhub,Browser externalStyle
+    class CF,S3UI,APIGW edgeStyle
 ```
 
 ### Environment Promotion Pipeline
@@ -759,7 +779,8 @@ sentiment-analyzer-gsk/
 │   ├── lambdas/
 │   │   ├── ingestion/           # Ingestion Lambda
 │   │   ├── analysis/            # Analysis Lambda
-│   │   ├── dashboard/           # Dashboard Lambda (FastAPI)
+│   │   ├── dashboard/           # Dashboard Lambda (FastAPI REST)
+│   │   ├── sse_streaming/       # SSE Lambda (real-time streaming)
 │   │   ├── metrics/             # Metrics Lambda (stuck item monitor)
 │   │   └── shared/              # Shared Lambda utilities
 │   └── lib/                     # Common library code
@@ -773,7 +794,13 @@ sentiment-analyzer-gsk/
 │   ├── DEPLOYMENT.md            # Deployment guide
 │   ├── DEMO_CHECKLIST.md        # Demo preparation
 │   ├── TROUBLESHOOTING.md       # Common issues
-│   └── IAM_TERRAFORM_TROUBLESHOOTING.md  # IAM debugging guide
+│   ├── IAM_TERRAFORM_TROUBLESHOOTING.md  # IAM debugging guide
+│   └── diagrams/                # Architecture diagrams
+│       ├── README.md            # Diagram index and guidelines
+│       ├── high-level-overview.mmd       # System overview
+│       ├── security-flow.mmd             # Security zones
+│       ├── sse-lambda-streaming.mmd      # SSE streaming flow
+│       └── cloudfront-multi-origin.mmd   # CDN routing
 │
 ├── specs/                       # Feature specifications
 │   └── 001-interactive-dashboard-demo/
@@ -856,6 +883,15 @@ See [SECURITY.md](./SECURITY.md) for full security policy.
 | **[SECURITY.md](./SECURITY.md)** | Security policy | Security researchers, contributors |
 | **[DEPLOYMENT.md](./docs/DEPLOYMENT.md)** | Deployment procedures | DevOps, on-call |
 | **[IAM_TERRAFORM_TROUBLESHOOTING.md](./docs/IAM_TERRAFORM_TROUBLESHOOTING.md)** | IAM debugging guide | DevOps, on-call |
+
+### Architecture Diagrams
+
+| Diagram | Purpose | File |
+|---------|---------|------|
+| **System Overview** | High-level architecture with all components | [high-level-overview.mmd](./docs/diagrams/high-level-overview.mmd) |
+| **Security Flow** | Trust zones and data sanitization | [security-flow.mmd](./docs/diagrams/security-flow.mmd) |
+| **SSE Streaming** | Real-time event streaming architecture | [sse-lambda-streaming.mmd](./docs/diagrams/sse-lambda-streaming.mmd) |
+| **CloudFront Routing** | Multi-origin CDN configuration | [cloudfront-multi-origin.mmd](./docs/diagrams/cloudfront-multi-origin.mmd) |
 
 ### Operations Documentation
 

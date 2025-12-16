@@ -1,0 +1,107 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#673AB7', 'secondaryColor': '#FF5722', 'tertiaryColor': '#4CAF50'}}}%%
+sequenceDiagram
+    autonumber
+    participant Browser as Browser<br/>(EventSource API)
+    participant CF as CloudFront<br/>(Edge CDN)
+    participant LWA as Lambda Web Adapter<br/>(HTTP/1.1 ↔ Lambda)
+    participant Handler as FastAPI Handler<br/>(sse_streaming)
+    participant Pool as Connection Manager<br/>(Max 100)
+    participant DDB as DynamoDB<br/>(sentiment-items)
+    participant CW as CloudWatch<br/>(Metrics)
+
+    Note over Browser,CW: SSE Connection Lifecycle
+
+    %% Connection Establishment
+    rect rgb(232, 245, 233)
+        Note right of Browser: Phase 1: Connection Setup
+        Browser->>+CF: GET /api/v2/stream<br/>Accept: text/event-stream
+        CF->>CF: Route via cache behavior<br/>TTL=0, no-cache
+        CF->>+LWA: Forward request<br/>Origin timeout: 60s
+        LWA->>LWA: Translate HTTP/1.1 → Lambda<br/>RESPONSE_STREAM invoke mode
+        LWA->>+Handler: HTTP Request
+        Handler->>+Pool: acquire_connection(user_id)
+
+        alt Connection Pool Full (100 max)
+            Pool-->>Handler: ConnectionPoolExhausted
+            Handler-->>LWA: 503 Service Unavailable<br/>Retry-After: 30
+            LWA-->>CF: 503 Response
+            CF-->>Browser: 503 + Retry-After header
+        else Connection Available
+            Pool->>Pool: Create SSEConnection<br/>UUID, filters, timestamp
+            Pool-->>Handler: connection_id
+            Handler-->>LWA: 200 OK<br/>Content-Type: text/event-stream
+            LWA-->>CF: Begin streaming response
+            CF-->>Browser: Connection established
+        end
+    end
+
+    %% Streaming Phase
+    rect rgb(227, 242, 253)
+        Note right of Browser: Phase 2: Event Streaming
+        loop Every 5 seconds (polling interval)
+            Handler->>+DDB: Scan with filter<br/>timestamp > last_poll
+            DDB-->>-Handler: New sentiment items
+
+            alt New Items Found
+                Handler->>Handler: Format SSE event<br/>event: sentiment_update<br/>id: uuid<br/>data: JSON
+                Handler-->>LWA: yield event bytes
+                LWA-->>CF: Stream chunk
+                CF-->>Browser: SSE event
+                Browser->>Browser: onmessage handler<br/>Update dashboard UI
+            end
+        end
+
+        loop Every 30 seconds (heartbeat)
+            Handler->>Handler: Generate heartbeat<br/>event: heartbeat<br/>id: uuid<br/>data: {}
+            Handler-->>LWA: yield heartbeat bytes
+            LWA-->>CF: Stream chunk
+            CF-->>Browser: Heartbeat event
+            Note over CF: Keeps CloudFront<br/>60s timeout alive
+        end
+
+        Handler->>+CW: PutMetricData<br/>ConnectionCount, Latency
+        CW-->>-Handler: OK
+    end
+
+    %% Disconnection
+    rect rgb(255, 243, 224)
+        Note right of Browser: Phase 3: Disconnect & Cleanup
+        alt User Closes Tab
+            Browser-xCF: Connection closed
+            CF-xLWA: Connection closed
+            LWA-xHandler: Request cancelled
+        else Network Error
+            CF-xLWA: Timeout after 60s
+            LWA-xHandler: Request terminated
+        else Client Reconnect
+            Browser->>Browser: EventSource auto-reconnect<br/>with Last-Event-ID
+        end
+
+        Handler->>+Pool: release_connection(connection_id)
+        Pool->>Pool: Remove from active set<br/>Decrement counter
+        Pool-->>-Handler: Released
+        Handler->>CW: PutMetricData<br/>ConnectionClosed
+        deactivate Handler
+        deactivate LWA
+        deactivate CF
+    end
+
+    Note over Browser,CW: Config-Specific Streams
+
+    %% Config Stream Variant
+    rect rgb(243, 229, 245)
+        Note right of Browser: Authenticated Config Stream
+        Browser->>CF: GET /api/v2/configurations/{id}/stream<br/>?user_token=xxx
+        CF->>LWA: Forward with query params
+        LWA->>Handler: Request with auth
+        Handler->>+DDB: GetItem config<br/>Validate user access
+        DDB-->>-Handler: Config with ticker_filters
+        Handler->>Pool: acquire_connection<br/>with ticker_filters: [AAPL, MSFT]
+        Pool-->>Handler: Filtered connection
+
+        loop Polling with Filter
+            Handler->>DDB: Scan with ticker filter
+            DDB-->>Handler: Matching items only
+            Handler-->>Browser: Filtered events
+        end
+    end

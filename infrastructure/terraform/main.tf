@@ -618,8 +618,8 @@ module "sse_streaming_lambda" {
 
   function_name = local.sse_lambda_name
   description   = "Real-time SSE streaming for sentiment updates (Feature 016)"
-  iam_role_arn  = module.iam.dashboard_lambda_role_arn # Reuse dashboard role for DynamoDB access
-  handler       = null                                 # Not used for Docker-based Lambda
+  iam_role_arn  = module.iam.sse_streaming_lambda_role_arn # Dedicated role with Scan/Query/GetItem (Spec 386)
+  handler       = null                                     # Not used for Docker-based Lambda
 
   # Docker-based deployment via ECR
   # Image URI will be updated by CI/CD pipeline after first terraform apply
