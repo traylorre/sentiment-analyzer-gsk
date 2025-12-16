@@ -389,7 +389,7 @@ jobs:
           echo "🚀 Build time optimized: Per-Lambda dependencies (not bundling 3.9GB!)"
 
       - name: Upload Lambda Packages as Artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ steps.package.outputs.name }}
           path: packages/
@@ -413,7 +413,7 @@ jobs:
           cat build-manifest.json
 
       - name: Upload Build Manifest
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: build-manifest-${{ steps.package.outputs.sha }}
           path: build-manifest.json
@@ -482,7 +482,7 @@ jobs:
           exit 1
 
       - name: Validate Build Artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: ${{ needs.build.outputs.artifact-name }}
           path: packages/
@@ -553,7 +553,10 @@ jobs:
           IMAGE="${{ steps.login-ecr.outputs.registry }}/preprod-sse-streaming-lambda:${{ github.sha }}"
 
           # Run Python import check inside the container
-          docker run --rm --entrypoint python "$IMAGE" -c "
+          # Note: PYTHONPATH is set here to match the Lambda environment variable
+          # configured in Terraform. Docker ENV alone doesn't work because Lambda
+          # Web Adapter subprocess doesn't inherit container environment reliably.
+          docker run --rm -e PYTHONPATH=/app/packages:/app --entrypoint python "$IMAGE" -c "
           import sys
           print('Testing imports...')
 
@@ -562,6 +565,7 @@ jobs:
           from config import config_lookup_service
           from stream import stream_generator
           from src.lambdas.shared.logging_utils import sanitize_for_log
+          from src.lambdas.shared.models.configuration import Configuration
 
           print('✅ All imports successful')
           sys.exit(0)
@@ -600,7 +604,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Download Lambda Packages
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: ${{ needs.build.outputs.artifact-name }}
           path: packages/
@@ -834,6 +838,30 @@ jobs:
           terraform apply -auto-approve -lock-timeout=5m preprod.tfplan
           echo "✅ Preprod infrastructure deployed"
 
+      # Force SSE Lambda to use the new Docker image
+      # Terraform doesn't detect :latest tag changes because the image_uri is unchanged.
+      # We use the immutable SHA tag pushed by build-sse-image-preprod job.
+      - name: Force SSE Lambda Image Update
+        run: |
+          echo "🔄 Forcing SSE Lambda to use new Docker image..."
+
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          REGION="${{ vars.AWS_REGION }}"
+          IMAGE_URI="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/preprod-sse-streaming-lambda:${{ github.sha }}"
+
+          echo "Image URI: ${IMAGE_URI}"
+
+          aws lambda update-function-code \
+            --function-name preprod-sentiment-sse-streaming \
+            --image-uri "${IMAGE_URI}"
+
+          # Wait for update to complete
+          echo "⏳ Waiting for Lambda update to complete..."
+          aws lambda wait function-updated \
+            --function-name preprod-sentiment-sse-streaming
+
+          echo "✅ SSE Lambda updated to use new image"
+
       - name: Get Preprod Outputs
         id: outputs
         run: |
@@ -1046,6 +1074,7 @@ jobs:
       - name: Warm Up Lambdas for Metrics (TD-001)
         env:
           DASHBOARD_URL: ${{ needs.deploy-preprod.outputs.dashboard_url }}
+          SSE_LAMBDA_URL: ${{ needs.deploy-preprod.outputs.sse_lambda_url }}
           API_KEY: ${{ secrets.DASHBOARD_API_KEY }}
         run: |
           echo "🔥 Warming up Lambdas to generate CloudWatch metrics..."
@@ -1053,18 +1082,27 @@ jobs:
           echo ""
 
           # Invoke dashboard Lambda multiple times to generate metrics
-          echo "1. Invoking /health endpoint..."
+          echo "1. Invoking Dashboard Lambda /health endpoint..."
           curl -s -o /dev/null -w "HTTP %{http_code}\n" "${DASHBOARD_URL}/health" || true
 
-          echo "2. Invoking /api/metrics endpoint (authenticated)..."
+          echo "2. Invoking /api/v2/metrics endpoint (authenticated)..."
           curl -s -o /dev/null -w "HTTP %{http_code}\n" \
             -H "Authorization: ${API_KEY}" \
-            "${DASHBOARD_URL}/api/metrics" || true
+            "${DASHBOARD_URL}/api/v2/metrics" || true
 
-          echo "3. Invoking /api/items endpoint (authenticated)..."
+          echo "3. Invoking /api/v2/sentiment endpoint (authenticated)..."
           curl -s -o /dev/null -w "HTTP %{http_code}\n" \
             -H "Authorization: ${API_KEY}" \
-            "${DASHBOARD_URL}/api/items?limit=5" || true
+            "${DASHBOARD_URL}/api/v2/sentiment?tickers=AAPL" || true
+
+          # Warm up SSE Lambda (Feature 140: SSE tests were failing due to cold start)
+          # SSE Lambda uses Docker image with Lambda Web Adapter, needs warmup
+          echo ""
+          echo "4. Invoking SSE Lambda /health endpoint..."
+          curl -s -o /dev/null -w "HTTP %{http_code}\n" "${SSE_LAMBDA_URL}/health" || true
+
+          echo "5. Invoking SSE Lambda /api/v2/stream/status endpoint..."
+          curl -s -o /dev/null -w "HTTP %{http_code}\n" "${SSE_LAMBDA_URL}/api/v2/stream/status" || true
 
           # Wait for CloudWatch metrics to propagate
           echo ""
@@ -1127,7 +1165,7 @@ jobs:
 
       - name: Upload Test Results
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: preprod-test-results-${{ needs.build.outputs.artifact-sha }}
           path: preprod-test-results.xml
@@ -1165,7 +1203,7 @@ jobs:
 
       - name: Upload Validation Metadata
         if: success()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: validation-${{ needs.build.outputs.artifact-sha }}
           path: validated.json
@@ -1222,12 +1260,14 @@ jobs:
           echo "🧪 Running Docker import smoke test..."
           IMAGE="${{ steps.login-ecr.outputs.registry }}/prod-sse-streaming-lambda:${{ github.sha }}"
 
-          docker run --rm --entrypoint python "$IMAGE" -c "
+          # Note: PYTHONPATH matches Lambda environment variable in Terraform
+          docker run --rm -e PYTHONPATH=/app/packages:/app --entrypoint python "$IMAGE" -c "
           import sys
           from handler import app
           from config import config_lookup_service
           from stream import stream_generator
           from src.lambdas.shared.logging_utils import sanitize_for_log
+          from src.lambdas.shared.models.configuration import Configuration
           print('✅ All imports successful')
           sys.exit(0)
           "
@@ -1268,7 +1308,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Download Lambda Packages
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: ${{ needs.build.outputs.artifact-name }}
           path: packages/

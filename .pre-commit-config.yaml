@@ -72,11 +72,16 @@ repos:
           - --args=--quiet --compact -d infrastructure/terraform/
 
   # Security checks - detect hardcoded secrets
-  - repo: https://github.com/Yelp/detect-secrets
-    rev: v1.4.0
+  # NOTE: Using local wrapper to auto-stage baseline updates (eliminates churn)
+  # The detect-secrets hook updates line numbers in .secrets.baseline on each scan,
+  # which causes infinite loops during commit. The wrapper auto-stages these changes.
+  # See: scripts/detect-secrets-autostage.sh and docs/ci-gotchas.md
+  - repo: local
     hooks:
       - id: detect-secrets
-        args: [--baseline, .secrets.baseline]
+        name: Detect secrets
+        entry: ./scripts/detect-secrets-autostage.sh
+        language: script
         exclude: >
           (?x)^(
             tests/.*|

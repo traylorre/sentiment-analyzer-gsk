@@ -27,7 +27,12 @@ from sse_starlette.sse import EventSourceResponse
 from starlette.responses import StreamingResponse
 from stream import stream_generator
 
-from src.lambdas.shared.logging_utils import sanitize_for_log
+# Import logging utilities - try Docker path first (logging_utils.py copied to /app/),
+# fall back to full path for tests
+try:
+    from logging_utils import sanitize_for_log
+except ImportError:
+    from src.lambdas.shared.logging_utils import sanitize_for_log
 
 # Configure logging
 logging.basicConfig(
@@ -77,7 +82,10 @@ async def stream_status() -> StreamStatus:
 
 
 @app.get("/api/v2/stream")
-@xray_recorder.capture("global_stream")
+# Note: X-Ray @xray_recorder.capture() is intentionally NOT used here.
+# The capture decorator only works with synchronous functions (per AWS docs)
+# and interferes with async streaming responses. Streaming requests are traced
+# via the X-Ray middleware applied at startup via patch_all().
 async def global_stream(
     request: Request,
     last_event_id: str | None = Header(None, alias="Last-Event-ID"),
@@ -183,7 +191,10 @@ async def global_stream(
 
 
 @app.get("/api/v2/configurations/{config_id}/stream")
-@xray_recorder.capture("config_stream")
+# Note: X-Ray @xray_recorder.capture() is intentionally NOT used here.
+# The capture decorator only works with synchronous functions (per AWS docs)
+# and interferes with async streaming responses. Streaming requests are traced
+# via the X-Ray middleware applied at startup via patch_all().
 async def config_stream(
     request: Request,
     config_id: str,

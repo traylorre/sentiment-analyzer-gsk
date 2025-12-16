@@ -8,10 +8,19 @@ flowchart TB
         Schedule["Schedule Rule<br/>(5 min)"]
     end
 
+    subgraph CDN["CloudFront CDN"]
+        CF["CloudFront Distribution<br/>Multi-Origin Routing"]
+    end
+
+    subgraph Frontend["Static Frontend"]
+        S3["S3 Bucket<br/>Interview Dashboard"]
+    end
+
     subgraph Lambda["AWS Lambda Functions"]
         Ingestion["Ingestion Lambda<br/>512MB / 60s"]
         Analysis["Analysis Lambda<br/>1024MB / 30s"]
-        Dashboard["Dashboard Lambda<br/>512MB / 60s"]
+        Dashboard["Dashboard Lambda<br/>512MB / 60s<br/>REST API"]
+        SSE["SSE Lambda<br/>512MB / 60s<br/>RESPONSE_STREAM"]
     end
 
     subgraph Storage["Data Storage"]
@@ -33,26 +42,38 @@ flowchart TB
         Browser["Web Browser"]
     end
 
-    %% Data Flow
+    %% User Request Flow (via CloudFront)
+    Browser -->|HTTPS| CF
+    CF -->|"/static/*"| S3
+    CF -->|"/api/*"| Dashboard
+    CF -->|"/api/v2/stream*"| SSE
+
+    %% Data Ingestion Flow
     Schedule -->|Trigger| Ingestion
     NewsAPI -->|Articles| Ingestion
     Secrets -->|API Key| Ingestion
     Ingestion -->|Store Items| DynamoDB
     Ingestion -->|Publish| SNS
 
+    %% Analysis Flow
     SNS -->|Trigger| Analysis
     SNS -->|Failed| DLQ
     Analysis -->|Update Items| DynamoDB
     Secrets -->|Model Config| Analysis
 
-    Browser -->|HTTP| Dashboard
+    %% API Flow
     Dashboard -->|Query| DynamoDB
     Secrets -->|API Key| Dashboard
+
+    %% SSE Streaming Flow
+    SSE -->|Poll/Scan| DynamoDB
+    SSE -.->|Stream Events| Browser
 
     %% Monitoring
     Ingestion -->|Logs| CloudWatch
     Analysis -->|Logs| CloudWatch
     Dashboard -->|Logs| CloudWatch
+    SSE -->|Logs| CloudWatch
     CloudWatch -->|Triggers| Alarms
 
     %% Styling
@@ -61,9 +82,13 @@ flowchart TB
     classDef storage fill:#D4F2D4,stroke:#7ED321,stroke-width:2px
     classDef messaging fill:#F2E4D4,stroke:#D0021B,stroke-width:2px
     classDef monitoring fill:#E8E4F2,stroke:#9013FE,stroke-width:2px
+    classDef cdn fill:#F2D4E8,stroke:#E91E63,stroke-width:2px
+    classDef frontend fill:#D4F2F2,stroke:#00BCD4,stroke-width:2px
 
     class NewsAPI external
-    class Ingestion,Analysis,Dashboard lambda
+    class Ingestion,Analysis,Dashboard,SSE lambda
     class DynamoDB,Secrets storage
     class SNS,DLQ messaging
     class CloudWatch,Alarms monitoring
+    class CF cdn
+    class S3 frontend

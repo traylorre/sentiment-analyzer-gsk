@@ -60,10 +60,10 @@ jobs:
             echo "Updating PR #$pr..."
             if gh api repos/${{ github.repository }}/pulls/$pr/update-branch -X PUT 2>/dev/null; then
               echo "  ✓ PR #$pr updated successfully"
-              ((updated++))
+              updated=$((updated + 1))
             else
               echo "  ⚠ PR #$pr skipped (likely has conflicts or is up to date)"
-              ((skipped++))
+              skipped=$((skipped + 1))
             fi
           done
 

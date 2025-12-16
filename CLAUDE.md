@@ -36,6 +36,41 @@ Auto-generated from all feature plans. Last updated: 2025-11-26
 - **Email**: SendGrid (100/day free tier)
 - **Bot Protection**: hCaptcha
 
+## Python Virtual Environment (IMPORTANT)
+
+This project uses a Python 3.13 virtual environment to ensure parity with CI and production.
+Ubuntu system Python (3.10) must remain for system tools, so **always use the venv**.
+
+### Quick Start (Every Terminal Session)
+```bash
+source .venv/bin/activate
+# Verify: python --version should show 3.13.x
+```
+
+### If venv doesn't exist (fresh clone)
+```bash
+python3.13 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements-dev.txt
+```
+
+### Running Commands
+```bash
+# With venv activated:
+pytest tests/unit/
+python -m pytest tests/unit/sse_streaming/ -v
+
+# Without activation (explicit path):
+.venv/bin/pytest tests/unit/
+.venv/bin/python -m ruff check src/
+```
+
+### Why venv?
+- Ubuntu needs Python 3.10 for system tools (apt, etc.)
+- Project requires Python 3.13 (matches CI/prod Lambda runtime)
+- `python3` symlink gets reset by apt updates
+- venv provides isolation without affecting system Python
+
 ## Project Structure
 
 ```text
@@ -513,6 +548,40 @@ In a blameless postmortem culture:
 | Merged PR breaks deploy | IAM permissions not tested | Run `/iam-audit` before merge |
 | Context continuation bypasses workflow | Over-indexed on "continue without asking" | Slash commands override context |
 | Log injection warnings | User input logged directly | Use `sanitize_for_log()` helper |
+
+### Pre-commit Hook Ordering (File-Modifying Hooks)
+
+**Problem**: Hooks that modify files can cause infinite loops when they depend on each other's output.
+The canonical example: `detect-secrets` stores line numbers in `.secrets.baseline`, but formatters
+change line counts, causing baseline drift → commit fails → add baseline → repeat.
+
+**File-Modifying Hooks (in execution order)**:
+
+| Order | Hook | Modifies | Line-Sensitive | Notes |
+|-------|------|----------|----------------|-------|
+| 1 | trailing-whitespace | ✓ | ✗ | Strips trailing whitespace |
+| 2 | end-of-file-fixer | ✓ | ✗ | Ensures newline at EOF |
+| 3-8 | check-* | ✗ | ✗ | Read-only validators |
+| 9 | ruff | ✓ | ✓ | May add/remove lines (imports, etc.) |
+| 10 | ruff-format | ✓ | ✓ | May reflow long lines |
+| 11 | terraform_fmt | ✓ | ✗ | Only affects .tf files |
+| 12-13 | terraform_* | ✗ | ✗ | Security scanners |
+| 14 | detect-secrets | ✓ | ✓ | Updates line numbers in baseline |
+| 15-17 | gitleaks, bandit, etc. | ✗ | ✗ | Read-only security scanners |
+
+**Solution**: `scripts/detect-secrets-autostage.sh` wrapper auto-stages baseline updates.
+See `.pre-commit-config.yaml` for the local hook configuration.
+
+**Three Strategies to Eliminate Churn**:
+
+1. **Auto-stage wrapper (IMPLEMENTED)**: Wrapper script runs hook, auto-stages baseline if
+   modified, retries until stable. Best balance of functionality and convenience.
+
+2. **Slim baseline**: Run `detect-secrets scan --slim > .secrets.baseline` to omit line
+   numbers. Loses audit capability (`detect-secrets audit` won't work).
+
+3. **CI-only detection**: Remove from pre-commit, run fresh scan in CI. Loses local
+   protection but eliminates all local churn.
 
 ### When Resuming from Context Summary
 
