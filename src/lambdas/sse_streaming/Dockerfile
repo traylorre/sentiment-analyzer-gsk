@@ -31,17 +31,18 @@ COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.9.1 /lambda-adapter /opt
 # Copy installed packages
 COPY --from=builder /app/packages /app/packages
 
-# Copy shared module for logging utilities
+# Copy application code from sse_streaming subdirectory
+COPY sse_streaming /app
+
+# Copy shared modules for logging utilities and models
 # Structure: /app/src/lambdas/shared/
-# Create parent package __init__.py files (required for from src.lambdas.shared imports)
 RUN mkdir -p /app/src/lambdas && \
     touch /app/src/__init__.py /app/src/lambdas/__init__.py
 COPY shared /app/src/lambdas/shared
 
-# Copy application code from sse_streaming subdirectory
-COPY sse_streaming /app
-
-# Set Python path to include packages and app root for imports
+# Set Python path to include packages and app directories
+# Both paths needed: /app/packages for pip dependencies, /app for src.lambdas.shared imports
+# Note: Also set via Lambda env vars in Terraform as belt-and-suspenders
 ENV PYTHONPATH=/app/packages:/app
 ENV AWS_LWA_INVOKE_MODE=RESPONSE_STREAM
 

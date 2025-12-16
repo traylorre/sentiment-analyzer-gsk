@@ -353,7 +353,11 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
       "logs:ListTagsForResource",
       "logs:PutMetricFilter",
       "logs:DeleteMetricFilter",
-      "logs:DescribeMetricFilters"
+      "logs:DescribeMetricFilters",
+      # CloudWatch Logs Insights queries (for E2E observability tests)
+      "logs:StartQuery",
+      "logs:GetQueryResults",
+      "logs:StopQuery"
     ]
     resources = [
       # Pattern: {env}-sentiment-* (preprod-sentiment-dashboard, prod-sentiment-ingestion, etc.)
@@ -404,7 +408,21 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
     actions = [
       "cloudwatch:ListMetrics",
       "cloudwatch:GetMetricStatistics",
-      "cloudwatch:DescribeAlarms"
+      "cloudwatch:DescribeAlarms",
+      # GetMetricData for E2E observability tests (wildcard required by AWS)
+      "cloudwatch:GetMetricData"
+    ]
+    resources = ["*"]
+  }
+
+  # CloudWatch PutMetricData - required for Lambda custom metrics emission
+  # Note: PutMetricData doesn't support resource-level ARNs (AWS limitation)
+  # Namespace isolation via application code (SentimentAnalyzer namespace)
+  statement {
+    sid    = "CloudWatchMetricsWrite"
+    effect = "Allow"
+    actions = [
+      "cloudwatch:PutMetricData"
     ]
     resources = ["*"]
   }
@@ -742,7 +760,9 @@ data "aws_iam_policy_document" "ci_deploy_iam" {
       "xray:GetInsight",
       "xray:GetInsightEvents",
       "xray:GetInsightImpactGraph",
-      "xray:GetInsightSummaries"
+      "xray:GetInsightSummaries",
+      # BatchGetTraces for E2E observability tests to verify tracing
+      "xray:BatchGetTraces"
     ]
     resources = ["*"]
   }
