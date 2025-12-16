@@ -280,6 +280,35 @@ resource "aws_cloudfront_distribution" "dashboard" {
     }
   }
 
+  # Cache behavior for config-specific SSE streams (must be before /api/* to match first)
+  # Feature 139: Route /api/v2/configurations/{id}/stream to SSE Lambda
+  # The pattern /api/v2/stream* only matches paths STARTING with /api/v2/stream,
+  # not paths like /api/v2/configurations/{id}/stream which contain /stream elsewhere.
+  dynamic "ordered_cache_behavior" {
+    for_each = var.sse_lambda_domain != "" ? [1] : []
+    content {
+      path_pattern     = "/api/v2/configurations/*/stream"
+      allowed_methods  = ["GET", "HEAD", "OPTIONS"]
+      cached_methods   = ["GET", "HEAD"]
+      target_origin_id = "sse-lambda"
+
+      forwarded_values {
+        query_string = true
+        headers      = ["Authorization", "Origin", "Accept"]
+        cookies {
+          forward = "none"
+        }
+      }
+
+      viewer_protocol_policy     = "https-only"
+      min_ttl                    = 0
+      default_ttl                = 0 # Never cache SSE streams
+      max_ttl                    = 0
+      compress                   = false # Don't compress streaming responses
+      response_headers_policy_id = length(var.cors_allowed_origins) > 0 ? aws_cloudfront_response_headers_policy.cors_api[0].id : null
+    }
+  }
+
   # Cache behavior for API routes (if API Gateway origin is configured)
   dynamic "ordered_cache_behavior" {
     for_each = var.api_gateway_domain != "" ? [1] : []
