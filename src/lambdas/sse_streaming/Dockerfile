@@ -36,15 +36,14 @@ COPY sse_streaming /app
 
 # Copy shared modules for logging utilities and models
 # Structure: /app/src/lambdas/shared/
-# Note: PYTHONPATH is set via Lambda environment variables in Terraform,
-# not via Docker ENV, because Lambda Web Adapter subprocess doesn't
-# reliably inherit container environment variables.
 RUN mkdir -p /app/src/lambdas && \
     touch /app/src/__init__.py /app/src/lambdas/__init__.py
 COPY shared /app/src/lambdas/shared
 
-# Set Python path to include packages directory
-ENV PYTHONPATH=/app/packages
+# Set Python path to include packages and app directories
+# Both paths needed: /app/packages for pip dependencies, /app for src.lambdas.shared imports
+# Note: Also set via Lambda env vars in Terraform as belt-and-suspenders
+ENV PYTHONPATH=/app/packages:/app
 ENV AWS_LWA_INVOKE_MODE=RESPONSE_STREAM
 
 # Expose port for Lambda Web Adapter
