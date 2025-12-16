@@ -624,3 +624,92 @@ resource "aws_iam_role_policy" "notification_metrics" {
     ]
   })
 }
+
+# ===================================================================
+# SSE Streaming Lambda IAM Role (Feature 016 - Real-time SSE)
+# ===================================================================
+
+resource "aws_iam_role" "sse_streaming_lambda" {
+  name = "${var.environment}-sse-streaming-lambda-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+
+  tags = {
+    Environment = var.environment
+    Feature     = "016-sse-streaming-lambda"
+    Lambda      = "sse-streaming"
+  }
+}
+
+# SSE Streaming Lambda: DynamoDB access (Scan for metrics polling, Query/GetItem for config)
+resource "aws_iam_role_policy" "sse_streaming_dynamodb" {
+  name = "${var.environment}-sse-streaming-dynamodb-policy"
+  role = aws_iam_role.sse_streaming_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:Scan",
+          "dynamodb:Query",
+          "dynamodb:GetItem"
+        ]
+        Resource = [
+          var.dynamodb_table_arn,
+          "${var.dynamodb_table_arn}/index/by_sentiment",
+          "${var.dynamodb_table_arn}/index/by_tag",
+          "${var.dynamodb_table_arn}/index/by_status"
+        ]
+      }
+    ]
+  })
+}
+
+# SSE Streaming Lambda: CloudWatch Logs
+resource "aws_iam_role_policy_attachment" "sse_streaming_logs" {
+  role       = aws_iam_role.sse_streaming_lambda.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+# SSE Streaming Lambda: X-Ray tracing
+resource "aws_iam_role_policy_attachment" "sse_streaming_xray" {
+  role       = aws_iam_role.sse_streaming_lambda.name
+  policy_arn = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"
+}
+
+# SSE Streaming Lambda: CloudWatch Metrics
+resource "aws_iam_role_policy" "sse_streaming_metrics" {
+  name = "${var.environment}-sse-streaming-metrics-policy"
+  role = aws_iam_role.sse_streaming_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "cloudwatch:PutMetricData"
+        ]
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "cloudwatch:namespace" = "SentimentAnalyzer/SSE"
+          }
+        }
+      }
+    ]
+  })
+}
