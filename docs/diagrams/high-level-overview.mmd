@@ -3,16 +3,20 @@ graph LR
     Twitter[Twitter API<br/>Rate: 450/15min]
     RSS[RSS Feeds<br/>Size: ≤10MB]
     Admin[Admin User<br/>REST API]
+    Browser[Web Browser<br/>Dashboard/SSE]
 
     %% Entry Points
     EventBridge[EventBridge<br/>Every 60s]
-    APIGateway[API Gateway<br/>API Key Auth]
+    CloudFront[CloudFront<br/>Multi-Origin CDN]
+    APIGateway[API Gateway<br/>REST /api/*]
 
     %% Lambda Functions
     Scheduler["scheduler-lambda<br/>256MB | 60s<br/>Concurrency: 1"]
     IngestTwitter["ingestion-twitter<br/>256MB | 60s<br/>OAuth refresh"]
     IngestRSS["ingestion-rss<br/>256MB | 60s<br/>Parse XML"]
     AdminAPI["admin-api-lambda<br/>256MB | 30s<br/>CRUD sources"]
+    DashboardL["dashboard-lambda<br/>512MB | 60s<br/>REST API"]
+    SSEL["sse-streaming-lambda<br/>512MB | 60s<br/>RESPONSE_STREAM<br/>Docker + Web Adapter"]
 
     %% Messaging
     SNS[SNS Topics<br/>Fan-out to SQS]
@@ -23,12 +27,19 @@ graph LR
 
     %% Storage
     SourceConfigs[(DynamoDB<br/>source-configs<br/>GSI: polling-schedule)]
-    SentimentItems[(DynamoDB<br/>sentiment-items<br/>TTL: 90 days)]
+    SentimentItems[(DynamoDB<br/>sentiment-items<br/>TTL: 90 days<br/>GSI: ticker-timestamp)]
+    S3Dashboard[S3 Bucket<br/>Interview Dashboard<br/>Static Assets]
 
     %% Support Services
     Secrets[Secrets Manager<br/>OAuth tokens]
     CloudWatch["CloudWatch<br/>Logs | Metrics"]
     S3[S3 Bucket<br/>DLQ Archives]
+
+    %% User Request Flow (via CloudFront)
+    Browser -->|HTTPS| CloudFront
+    CloudFront -->|/static/*| S3Dashboard
+    CloudFront -->|/api/*| APIGateway
+    CloudFront -->|/api/v2/stream*| SSEL
 
     %% Data Flow
     EventBridge -->|Trigger 1/min| Scheduler
@@ -52,14 +63,22 @@ graph LR
     SQS ==>|Poll batch: 10| Inference
 
     APIGateway -->|Invoke| AdminAPI
+    APIGateway -->|Invoke| DashboardL
     AdminAPI -->|CRUD ops| SourceConfigs
+    DashboardL -->|Query| SentimentItems
 
     Inference ==>|PutItem conditional<br/>100-1000/min| SentimentItems
+
+    %% SSE Streaming Flow
+    SSEL -->|Poll every 5s| SentimentItems
+    SSEL -.->|Stream Events<br/>Heartbeat 30s| Browser
 
     IngestTwitter -.->|Logs| CloudWatch
     IngestRSS -.->|Logs| CloudWatch
     Inference -.->|Logs| CloudWatch
     AdminAPI -.->|Logs| CloudWatch
+    DashboardL -.->|Logs| CloudWatch
+    SSEL -.->|Logs| CloudWatch
 
     SQS -.->|DLQ after 3 retries| S3
 
@@ -69,9 +88,11 @@ graph LR
     classDef messaging fill:#FCE4EC,stroke:#F48FB1,stroke-width:2px
     classDef database fill:#C8E6C9,stroke:#66BB6A,stroke-width:2px
     classDef support fill:#B2DFDB,stroke:#4DB6AC,stroke-width:2px
+    classDef cdn fill:#FFECB3,stroke:#FFA000,stroke-width:2px
 
-    class Twitter,RSS,Admin external
-    class Scheduler,IngestTwitter,IngestRSS,AdminAPI,Inference lambda
+    class Twitter,RSS,Admin,Browser external
+    class Scheduler,IngestTwitter,IngestRSS,AdminAPI,Inference,DashboardL,SSEL lambda
     class EventBridge,APIGateway,SNS,SQS messaging
-    class SourceConfigs,SentimentItems database
+    class SourceConfigs,SentimentItems,S3Dashboard database
     class Secrets,CloudWatch,S3 support
+    class CloudFront cdn
