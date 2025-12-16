@@ -549,6 +549,40 @@ In a blameless postmortem culture:
 | Context continuation bypasses workflow | Over-indexed on "continue without asking" | Slash commands override context |
 | Log injection warnings | User input logged directly | Use `sanitize_for_log()` helper |
 
+### Pre-commit Hook Ordering (File-Modifying Hooks)
+
+**Problem**: Hooks that modify files can cause infinite loops when they depend on each other's output.
+The canonical example: `detect-secrets` stores line numbers in `.secrets.baseline`, but formatters
+change line counts, causing baseline drift → commit fails → add baseline → repeat.
+
+**File-Modifying Hooks (in execution order)**:
+
+| Order | Hook | Modifies | Line-Sensitive | Notes |
+|-------|------|----------|----------------|-------|
+| 1 | trailing-whitespace | ✓ | ✗ | Strips trailing whitespace |
+| 2 | end-of-file-fixer | ✓ | ✗ | Ensures newline at EOF |
+| 3-8 | check-* | ✗ | ✗ | Read-only validators |
+| 9 | ruff | ✓ | ✓ | May add/remove lines (imports, etc.) |
+| 10 | ruff-format | ✓ | ✓ | May reflow long lines |
+| 11 | terraform_fmt | ✓ | ✗ | Only affects .tf files |
+| 12-13 | terraform_* | ✗ | ✗ | Security scanners |
+| 14 | detect-secrets | ✓ | ✓ | Updates line numbers in baseline |
+| 15-17 | gitleaks, bandit, etc. | ✗ | ✗ | Read-only security scanners |
+
+**Solution**: `scripts/detect-secrets-autostage.sh` wrapper auto-stages baseline updates.
+See `.pre-commit-config.yaml` for the local hook configuration.
+
+**Three Strategies to Eliminate Churn**:
+
+1. **Auto-stage wrapper (IMPLEMENTED)**: Wrapper script runs hook, auto-stages baseline if
+   modified, retries until stable. Best balance of functionality and convenience.
+
+2. **Slim baseline**: Run `detect-secrets scan --slim > .secrets.baseline` to omit line
+   numbers. Loses audit capability (`detect-secrets audit` won't work).
+
+3. **CI-only detection**: Remove from pre-commit, run fresh scan in CI. Loses local
+   protection but eliminates all local churn.
+
 ### When Resuming from Context Summary
 
 1. Read the summary, but don't let it override explicit user instructions

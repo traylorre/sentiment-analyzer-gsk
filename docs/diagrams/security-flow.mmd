@@ -1,9 +1,15 @@
 graph TB
+    subgraph Zone0[" ZONE 0: EDGE - CloudFront Security Boundary "]
+        CFront[CloudFront Distribution<br/>✓ DDoS protection<br/>✓ TLS 1.2+ only<br/>✓ Origin access control<br/>✓ Geographic restrictions<br/>✓ WAF integration ready]
+        BrowserReq[Browser Request<br/>⚠ XSS payloads<br/>⚠ CSRF attempts<br/>⚠ Token theft]
+    end
+
     subgraph Zone1[" ZONE 1: UNTRUSTED - Internet Input "]
         TwitterAPI[Twitter API Response<br/>⚠ XSS, SQL Injection<br/>⚠ Oversized: 2MB]
         RSSXML[RSS Feed XML<br/>⚠ XXE, SSRF<br/>⚠ Oversized: 10MB]
         AdminReq[Admin API Request<br/>⚠ SSRF, NoSQL Injection<br/>⚠ Rate abuse]
         OAuthResp[OAuth Refresh<br/>⚠ Token injection<br/>⚠ Expired tokens]
+        SSEReq[SSE Stream Request<br/>⚠ Long-lived connection<br/>⚠ Connection exhaustion<br/>⚠ Token in query params]
     end
 
     subgraph Zone2[" ZONE 2: VALIDATION & SANITIZATION "]
@@ -11,6 +17,7 @@ graph TB
         IngestR[ingestion-rss<br/>✓ Size check: 10MB<br/>✓ XML parsing secure<br/>✓ XXE prevention<br/>✗ NO SANITIZATION<br/>→ Errors → DLQ]
         AdminL["admin-api-lambda<br/>✓ Pydantic validation<br/>✓ Regex: ^[a-z0-9-]+$<br/>✓ HTTPS only<br/>✓ IP blocklist<br/>✓ Parameterized writes"]
         OAuthV[OAuth Validation<br/>✓ Token expiry<br/>✓ Base64 decode<br/>✓ Circuit breaker<br/>Cache: 5-min TTL]
+        SSEL["sse-streaming-lambda<br/>✓ Connection pool: 100 max<br/>✓ Heartbeat: 30s<br/>✓ Config auth validation<br/>✓ Ticker filter validation<br/>⚠ Query param tokens"]
     end
 
     subgraph Zone3[" ZONE 3: PROCESSING - Still Tainted "]
@@ -21,20 +28,29 @@ graph TB
 
     subgraph Zone4[" ZONE 4: PROTECTED - Parameterized Only "]
         DDBWrite[DynamoDB PutItem<br/>✓ PARAMETERIZED<br/>✓ No SQL injection<br/>✓ No code execution<br/>✓ Conditional writes<br/>⚠ XSS if web UI displays]
-        SecGuard[Security Guarantees<br/>✅ No SQL injection<br/>✅ No NoSQL injection<br/>✅ No XXE attacks<br/>✅ No SSRF<br/>⚠ XSS in UI<br/>⚠ Log injection]
+        DDBRead[DynamoDB Scan/Query<br/>✓ PARAMETERIZED<br/>✓ SSE Lambda role<br/>✓ Least privilege<br/>✓ No PII access]
+        SecGuard[Security Guarantees<br/>✅ No SQL injection<br/>✅ No NoSQL injection<br/>✅ No XXE attacks<br/>✅ No SSRF<br/>✅ IAM role separation<br/>⚠ XSS in UI<br/>⚠ Log injection]
     end
 
     subgraph Zone5[" ZONE 5: INFRASTRUCTURE "]
         SecretsM[Secrets Manager<br/>OAuth tokens<br/>Cache: 5-min<br/>Circuit breaker<br/>Throttle: 5K/day]
         CW[CloudWatch<br/>Retention: 7 years<br/>Secret filtering<br/>Alarms: DLQ > 10]
         S3Arch[S3 DLQ Archive<br/>Age > 10 days<br/>Retention: 90 days<br/>Glacier storage]
+        S3Static[S3 Static Assets<br/>✓ OAC access only<br/>✓ No public access<br/>✓ Versioning enabled]
     end
+
+    %% CloudFront Edge Flow
+    BrowserReq -->|HTTPS only| CFront
+    CFront -->|/api/v2/stream*| SSEReq
+    CFront -->|/api/*| AdminReq
+    CFront -->|/static/*| S3Static
 
     %% Data Flow
     TwitterAPI -->|HTTP Response<br/>TAINTED| IngestT
     RSSXML -->|XML Response<br/>TAINTED| IngestR
     AdminReq -->|JSON Body<br/>TAINTED| AdminL
     OAuthResp -->|Token Response| OAuthV
+    SSEReq -->|EventSource| SSEL
 
     IngestT -.->|GetSecret| SecretsM
     IngestR -.->|GetSecret| SecretsM
@@ -54,21 +70,29 @@ graph TB
     InferenceL ==>|PutItem<br/>100-1000/min<br/>PARAMETERIZED| DDBWrite
     DDBWrite --> SecGuard
 
+    %% SSE Stream Path
+    SSEL -->|Poll every 5s<br/>PARAMETERIZED| DDBRead
+    DDBRead --> SecGuard
+    SSEL -.->|Stream Events| BrowserReq
+
     %% Monitoring
     IngestT -.->|Logs & Metrics| CW
     IngestR -.->|Logs & Metrics| CW
     InferenceL -.->|Logs & Metrics| CW
     AdminL -.->|Logs & Metrics| CW
+    SSEL -.->|Logs & Metrics| CW
 
     %% Styling
+    classDef edge fill:#E1F5FE,stroke:#03A9F4,stroke-width:3px
     classDef untrusted fill:#FFEBEE,stroke:#EF5350,stroke-width:3px
     classDef validation fill:#FFF3E0,stroke:#FF9800,stroke-width:3px
     classDef processing fill:#FFFDE7,stroke:#FDD835,stroke-width:3px
     classDef protected fill:#E8F5E9,stroke:#66BB6A,stroke-width:3px
     classDef infrastructure fill:#E3F2FD,stroke:#42A5F5,stroke-width:2px
 
-    class TwitterAPI,RSSXML,AdminReq,OAuthResp untrusted
-    class IngestT,IngestR,AdminL,OAuthV validation
+    class CFront,BrowserReq edge
+    class TwitterAPI,RSSXML,AdminReq,OAuthResp,SSEReq untrusted
+    class IngestT,IngestR,AdminL,OAuthV,SSEL validation
     class Queue,InferenceL,DLQ processing
-    class DDBWrite,SecGuard protected
-    class SecretsM,CW,S3Arch infrastructure
+    class DDBWrite,DDBRead,SecGuard protected
+    class SecretsM,CW,S3Arch,S3Static infrastructure

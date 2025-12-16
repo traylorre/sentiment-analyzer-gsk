@@ -1,0 +1,77 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#FF9800', 'secondaryColor': '#2196F3', 'tertiaryColor': '#4CAF50'}}}%%
+flowchart TB
+    subgraph Internet["Internet"]
+        Browser["Web Browser<br/>Interview Dashboard"]
+    end
+
+    subgraph CloudFront["CloudFront Distribution"]
+        direction TB
+        Edge["CloudFront Edge<br/>POP Location"]
+
+        subgraph Behaviors["Cache Behaviors (Priority Order)"]
+            B1["Behavior 1: /api/v2/stream*<br/>Precedence: 0 (highest)<br/>TTL: 0 (never cache)<br/>Compress: disabled<br/>Origin: SSE Lambda"]
+            B2["Behavior 2: /api/*<br/>Precedence: 1<br/>TTL: 0 (never cache)<br/>Forward: Authorization header<br/>Origin: API Gateway"]
+            B3["Default Behavior: /*<br/>Precedence: 2 (lowest)<br/>TTL: 1 day (static assets)<br/>Compress: enabled<br/>Origin: S3 Dashboard"]
+        end
+
+        Edge --> B1
+        Edge --> B2
+        Edge --> B3
+    end
+
+    subgraph Origins["Origin Servers"]
+        subgraph SSEOrigin["SSE Lambda Origin"]
+            LambdaURL["Lambda Function URL<br/>Invoke: RESPONSE_STREAM<br/>Timeout: 60s read<br/>Keepalive: 60s"]
+            WebAdapter["Lambda Web Adapter<br/>HTTP/1.1 streaming<br/>FastAPI + SSE-Starlette"]
+            SSEHandler["SSE Handler<br/>Connection pool: 100<br/>Heartbeat: 30s<br/>Polling: 5s"]
+        end
+
+        subgraph APIOrigin["API Gateway Origin"]
+            APIGW["API Gateway<br/>REST API<br/>Stage: preprod/prod"]
+            DashboardL["Dashboard Lambda<br/>Mangum adapter<br/>BUFFERED invoke"]
+            AdminL["Admin API Lambda<br/>CRUD operations"]
+        end
+
+        subgraph S3Origin["S3 Origin"]
+            S3Bucket["S3 Bucket<br/>Interview Dashboard<br/>React static assets"]
+            OAC["Origin Access Control<br/>CloudFront identity<br/>No public access"]
+        end
+    end
+
+    subgraph Storage["Data Layer"]
+        DynamoDB["DynamoDB<br/>sentiment-items<br/>GSI: ticker-timestamp"]
+    end
+
+    %% Request Flows
+    Browser -->|HTTPS| Edge
+
+    B1 -->|"/api/v2/stream*"<br/>Long-lived connection| LambdaURL
+    LambdaURL --> WebAdapter
+    WebAdapter --> SSEHandler
+    SSEHandler -->|Poll every 5s| DynamoDB
+    SSEHandler -.->|Stream events| Browser
+
+    B2 -->|"/api/*"<br/>Request/Response| APIGW
+    APIGW --> DashboardL
+    APIGW --> AdminL
+    DashboardL -->|Query| DynamoDB
+
+    B3 -->|"/*"<br/>Static assets| OAC
+    OAC --> S3Bucket
+
+    %% Styling
+    classDef internet fill:#FFEBEE,stroke:#F44336,stroke-width:2px
+    classDef cloudfront fill:#FFF3E0,stroke:#FF9800,stroke-width:2px
+    classDef behavior fill:#FFFDE7,stroke:#FFC107,stroke-width:1px
+    classDef sse fill:#E8F5E9,stroke:#4CAF50,stroke-width:2px
+    classDef api fill:#E3F2FD,stroke:#2196F3,stroke-width:2px
+    classDef s3 fill:#F3E5F5,stroke:#9C27B0,stroke-width:2px
+    classDef storage fill:#ECEFF1,stroke:#607D8B,stroke-width:2px
+
+    class Browser internet
+    class Edge cloudfront
+    class B1,B2,B3 behavior
+    class LambdaURL,WebAdapter,SSEHandler sse
+    class APIGW,DashboardL,AdminL api
+    class S3Bucket,OAC s3
+    class DynamoDB storage
