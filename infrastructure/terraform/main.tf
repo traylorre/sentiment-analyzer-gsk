@@ -634,7 +634,11 @@ module "sse_streaming_lambda" {
   tracing_mode = "Active"
 
   # Environment variables
+  # Note: PYTHONPATH must be set here, not just in Docker ENV, because
+  # Lambda Web Adapter runs Python in a subprocess that doesn't reliably
+  # inherit container environment variables.
   environment_variables = {
+    PYTHONPATH             = "/app/packages:/app"
     DYNAMODB_TABLE         = module.dynamodb.table_name
     DATABASE_TABLE         = module.dynamodb.feature_006_users_table_name
     SSE_HEARTBEAT_INTERVAL = "30"
