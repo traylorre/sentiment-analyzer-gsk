@@ -34,12 +34,17 @@ COPY --from=builder /app/packages /app/packages
 # Copy application code from sse_streaming subdirectory
 COPY sse_streaming /app
 
-# Copy shared logging utilities directly into app directory
-# This avoids complex PYTHONPATH issues with Lambda Web Adapter
-COPY shared/logging_utils.py /app/logging_utils.py
+# Copy shared modules for logging utilities and models
+# Structure: /app/src/lambdas/shared/
+# Note: PYTHONPATH is set via Lambda environment variables in Terraform,
+# not via Docker ENV, because Lambda Web Adapter subprocess doesn't
+# reliably inherit container environment variables.
+RUN mkdir -p /app/src/lambdas && \
+    touch /app/src/__init__.py /app/src/lambdas/__init__.py
+COPY shared /app/src/lambdas/shared
 
-# Set Python path to include packages and app root for imports
-ENV PYTHONPATH=/app/packages:/app
+# Set Python path to include packages directory
+ENV PYTHONPATH=/app/packages
 ENV AWS_LWA_INVOKE_MODE=RESPONSE_STREAM
 
 # Expose port for Lambda Web Adapter

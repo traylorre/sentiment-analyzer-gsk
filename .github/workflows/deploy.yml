@@ -553,7 +553,10 @@ jobs:
           IMAGE="${{ steps.login-ecr.outputs.registry }}/preprod-sse-streaming-lambda:${{ github.sha }}"
 
           # Run Python import check inside the container
-          docker run --rm --entrypoint python "$IMAGE" -c "
+          # Note: PYTHONPATH is set here to match the Lambda environment variable
+          # configured in Terraform. Docker ENV alone doesn't work because Lambda
+          # Web Adapter subprocess doesn't inherit container environment reliably.
+          docker run --rm -e PYTHONPATH=/app/packages:/app --entrypoint python "$IMAGE" -c "
           import sys
           print('Testing imports...')
 
@@ -561,7 +564,8 @@ jobs:
           from handler import app
           from config import config_lookup_service
           from stream import stream_generator
-          from logging_utils import sanitize_for_log
+          from src.lambdas.shared.logging_utils import sanitize_for_log
+          from src.lambdas.shared.models.configuration import Configuration
 
           print('✅ All imports successful')
           sys.exit(0)
@@ -1222,12 +1226,14 @@ jobs:
           echo "🧪 Running Docker import smoke test..."
           IMAGE="${{ steps.login-ecr.outputs.registry }}/prod-sse-streaming-lambda:${{ github.sha }}"
 
-          docker run --rm --entrypoint python "$IMAGE" -c "
+          # Note: PYTHONPATH matches Lambda environment variable in Terraform
+          docker run --rm -e PYTHONPATH=/app/packages:/app --entrypoint python "$IMAGE" -c "
           import sys
           from handler import app
           from config import config_lookup_service
           from stream import stream_generator
-          from logging_utils import sanitize_for_log
+          from src.lambdas.shared.logging_utils import sanitize_for_log
+          from src.lambdas.shared.models.configuration import Configuration
           print('✅ All imports successful')
           sys.exit(0)
           "
