@@ -838,6 +838,30 @@ jobs:
           terraform apply -auto-approve -lock-timeout=5m preprod.tfplan
           echo "✅ Preprod infrastructure deployed"
 
+      # Force SSE Lambda to use the new Docker image
+      # Terraform doesn't detect :latest tag changes because the image_uri is unchanged.
+      # We use the immutable SHA tag pushed by build-sse-image-preprod job.
+      - name: Force SSE Lambda Image Update
+        run: |
+          echo "🔄 Forcing SSE Lambda to use new Docker image..."
+
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          REGION="${{ vars.AWS_REGION }}"
+          IMAGE_URI="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/preprod-sse-streaming-lambda:${{ github.sha }}"
+
+          echo "Image URI: ${IMAGE_URI}"
+
+          aws lambda update-function-code \
+            --function-name preprod-sentiment-sse-streaming \
+            --image-uri "${IMAGE_URI}"
+
+          # Wait for update to complete
+          echo "⏳ Waiting for Lambda update to complete..."
+          aws lambda wait function-updated \
+            --function-name preprod-sentiment-sse-streaming
+
+          echo "✅ SSE Lambda updated to use new image"
+
       - name: Get Preprod Outputs
         id: outputs
         run: |
