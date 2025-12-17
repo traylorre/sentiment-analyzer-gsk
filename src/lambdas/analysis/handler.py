@@ -47,6 +47,7 @@ Security Notes:
 
 import json
 import logging
+import os
 import time
 from decimal import Decimal
 from typing import Any
@@ -239,8 +240,17 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         }
 
     except Exception as e:
-        # Unexpected error
-        logger.error(f"Unexpected error: {e}", exc_info=True)
+        # Unexpected error - log environment context for debugging
+        # Fix(151): Add DATABASE_TABLE to error logs for debugging 500 errors
+        database_table = os.environ.get("DATABASE_TABLE", "<NOT_SET>")
+        logger.error(
+            f"Unexpected error: {e}",
+            exc_info=True,
+            extra={
+                "database_table": database_table,
+                "request_id": request_id,
+            },
+        )
         emit_metric("AnalysisErrors", 1)
 
         return {
@@ -324,9 +334,15 @@ def _update_item_with_sentiment(
         return False
 
     except Exception as e:
+        # Fix(151): Log DATABASE_TABLE for debugging DynamoDB errors
+        database_table = os.environ.get("DATABASE_TABLE", "<NOT_SET>")
         logger.error(
             f"Failed to update item: {e}",
-            extra={"source_id": source_id, "error": str(e)},
+            extra={
+                "source_id": source_id,
+                "database_table": database_table,
+                "error": str(e),
+            },
         )
         raise
 
