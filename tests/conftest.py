@@ -90,8 +90,16 @@ os.environ.setdefault("AWS_XRAY_SDK_ENABLED", "false")
 
 # These are ONLY set if not already present (CI sets them for preprod)
 # For local unit tests (not preprod), these provide sensible defaults
+#
+# CI backward compat: Map DYNAMODB_TABLE -> DATABASE_TABLE if only DYNAMODB_TABLE is set.
+# Handler code uses DATABASE_TABLE, but CI historically set DYNAMODB_TABLE.
 if "DATABASE_TABLE" not in os.environ:
-    os.environ["DATABASE_TABLE"] = "test-sentiment-items"
+    if "DYNAMODB_TABLE" in os.environ:
+        # CI sets DYNAMODB_TABLE; map it to DATABASE_TABLE for handlers
+        os.environ["DATABASE_TABLE"] = os.environ["DYNAMODB_TABLE"]
+    else:
+        # Local unit tests with moto mocks use test table
+        os.environ["DATABASE_TABLE"] = "test-sentiment-items"
 if "API_KEY" not in os.environ:
     os.environ["API_KEY"] = "test-api-key-12345"
 if "ENVIRONMENT" not in os.environ:

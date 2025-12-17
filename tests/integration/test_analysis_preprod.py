@@ -49,9 +49,10 @@ def env_vars():
     """
     Verify required environment variables are set.
 
-    Does NOT override CI-provided values.
+    Analysis handler uses DATABASE_TABLE (via get_table()) for the items table.
+    Conftest.py maps DYNAMODB_TABLE -> DATABASE_TABLE for backward compat.
     """
-    required_vars = ["DYNAMODB_TABLE", "ENVIRONMENT"]
+    required_vars = ["DATABASE_TABLE", "ENVIRONMENT"]
     for var in required_vars:
         assert var in os.environ, f"Missing required env var: {var}"
     yield
