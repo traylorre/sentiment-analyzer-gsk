@@ -104,9 +104,9 @@ async def debug_info() -> dict:
         "AWS_LWA_INVOKE_MODE": os.environ.get("AWS_LWA_INVOKE_MODE"),
         "AWS_LWA_READINESS_CHECK_PATH": os.environ.get("AWS_LWA_READINESS_CHECK_PATH"),
         "PYTHONPATH": os.environ.get("PYTHONPATH"),
-        "SSE_HEARTBEAT_INTERVAL": os.environ.get("SSE_HEARTBEAT_INTERVAL"),
-        "SSE_MAX_CONNECTIONS": os.environ.get("SSE_MAX_CONNECTIONS"),
-        "SSE_POLL_INTERVAL": os.environ.get("SSE_POLL_INTERVAL"),
+        "SSE_HEARTBEAT_INTERVAL": os.environ.get("SSE_HEARTBEAT_INTERVAL", "30"),
+        "SSE_MAX_CONNECTIONS": os.environ.get("SSE_MAX_CONNECTIONS", "100"),
+        "SSE_POLL_INTERVAL": os.environ.get("SSE_POLL_INTERVAL", "5"),
     }
 
     return {
