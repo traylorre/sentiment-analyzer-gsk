@@ -283,7 +283,7 @@ module "ingestion_lambda" {
   # Environment variables
   environment_variables = {
     WATCH_TAGS              = var.watch_tags
-    DYNAMODB_TABLE          = module.dynamodb.table_name
+    DATABASE_TABLE          = module.dynamodb.table_name
     SNS_TOPIC_ARN           = module.sns.topic_arn
     NEWSAPI_SECRET_ARN      = module.secrets.newsapi_secret_arn
     TIINGO_SECRET_ARN       = module.secrets.tiingo_secret_arn
@@ -342,7 +342,7 @@ module "analysis_lambda" {
 
   # Environment variables
   environment_variables = {
-    DYNAMODB_TABLE          = module.dynamodb.table_name
+    DATABASE_TABLE          = module.dynamodb.table_name
     MODEL_S3_BUCKET         = local.model_s3_bucket
     MODEL_VERSION           = var.model_version
     ENVIRONMENT             = var.environment
@@ -486,7 +486,7 @@ module "metrics_lambda" {
 
   # Environment variables
   environment_variables = {
-    DYNAMODB_TABLE = module.dynamodb.table_name
+    DATABASE_TABLE = module.dynamodb.table_name
     ENVIRONMENT    = var.environment
   }
 
