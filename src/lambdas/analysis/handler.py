@@ -191,6 +191,9 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 "source_id": source_id,
                 "sentiment": sentiment,
                 "score": round(score, 4),
+                # Fix(152): Add confidence field to match contract tests
+                # Contract expects sentiment, score, confidence per tests/property/conftest.py
+                "confidence": round(score, 4),
                 "model_version": model_version,
                 "inference_time_ms": round(inference_time_ms, 2),
                 "updated": updated,
