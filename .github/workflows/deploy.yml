@@ -1144,7 +1144,10 @@ jobs:
         env:
           AWS_REGION: ${{ vars.AWS_REGION }}
           ENVIRONMENT: preprod
+          # Legacy table for news/sentiment data (v1 API)
           DYNAMODB_TABLE: preprod-sentiment-items
+          # Feature 006 users table for user configs (v2 API, used by dashboard handler)
+          DATABASE_TABLE: preprod-sentiment-users
           SNS_TOPIC_ARN: ${{ steps.infra.outputs.sns_topic_arn }}
           NEWSAPI_SECRET_ARN: ${{ secrets.NEWSAPI_SECRET_ARN }}
           DASHBOARD_API_KEY: ${{ secrets.DASHBOARD_API_KEY }}
