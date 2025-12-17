@@ -31,7 +31,7 @@ from src.lambdas.ingestion.config import (
 def valid_env_vars(monkeypatch):
     """Set up valid environment variables for testing."""
     monkeypatch.setenv("WATCH_TAGS", "AI,climate,economy,health,sports")
-    monkeypatch.setenv("DYNAMODB_TABLE", "dev-sentiment-items")
+    monkeypatch.setenv("DATABASE_TABLE", "dev-sentiment-items")
     monkeypatch.setenv("SNS_TOPIC_ARN", "arn:aws:sns:us-east-1:123456789:test-topic")
     monkeypatch.setenv(
         "NEWSAPI_SECRET_ARN", "arn:aws:secretsmanager:us-east-1:123456789:secret:test"
@@ -244,7 +244,7 @@ class TestGetConfig:
     def test_get_config_missing_watch_tags(self, monkeypatch):
         """Test error when WATCH_TAGS is missing."""
         monkeypatch.delenv("WATCH_TAGS", raising=False)
-        monkeypatch.setenv("DYNAMODB_TABLE", "test")
+        monkeypatch.setenv("DATABASE_TABLE", "test")
         monkeypatch.setenv("SNS_TOPIC_ARN", "arn:aws:sns:us-east-1:123456789:topic")
         monkeypatch.setenv(
             "NEWSAPI_SECRET_ARN",

@@ -89,8 +89,8 @@ os.environ.setdefault("AWS_XRAY_SDK_ENABLED", "false")
 
 # These are ONLY set if not already present (CI sets them for preprod)
 # For local unit tests (not preprod), these provide sensible defaults
-if "DYNAMODB_TABLE" not in os.environ:
-    os.environ["DYNAMODB_TABLE"] = "test-sentiment-items"
+if "DATABASE_TABLE" not in os.environ:
+    os.environ["DATABASE_TABLE"] = "test-sentiment-items"
 if "API_KEY" not in os.environ:
     os.environ["API_KEY"] = "test-api-key-12345"
 if "ENVIRONMENT" not in os.environ:
@@ -295,7 +295,7 @@ def synthetic_data():
     from tests.fixtures.synthetic_data import SyntheticDataGenerator
 
     # Get table name from environment (CI sets this for preprod)
-    table_name = os.environ.get("DYNAMODB_TABLE")
+    table_name = os.environ.get("DATABASE_TABLE")
 
     if not table_name or table_name == "test-sentiment-items":
         # Skip synthetic data for unit tests (mocked DynamoDB)

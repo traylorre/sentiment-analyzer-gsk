@@ -57,7 +57,7 @@ def dynamodb_table(aws_credentials):
     """
     with mock_aws():
         # Set table name env var
-        os.environ["DYNAMODB_TABLE"] = "test-sentiment-items"
+        os.environ["DATABASE_TABLE"] = "test-sentiment-items"
 
         # Create table with production schema
         client = boto3.client("dynamodb", region_name="us-east-1")
@@ -231,12 +231,12 @@ class TestGetTable:
         assert table.table_name == "test-sentiment-items"
 
     def test_get_table_no_name_raises(self, aws_credentials):
-        """Test that missing table name raises ValueError."""
+        """Test that missing DATABASE_TABLE env var raises KeyError."""
         with mock_aws():
             # Remove env var
-            os.environ.pop("DYNAMODB_TABLE", None)
+            os.environ.pop("DATABASE_TABLE", None)
 
-            with pytest.raises(ValueError, match="Table name required"):
+            with pytest.raises(KeyError, match="DATABASE_TABLE"):
                 get_table()
 
 
@@ -560,29 +560,18 @@ class TestRegionValidation:
             table = get_table()
             assert table.table_name == "cloud-agnostic-table"
 
-    def test_get_table_falls_back_to_dynamodb_table(self, monkeypatch):
-        """Test get_table falls back to DYNAMODB_TABLE."""
+    def test_missing_database_table_raises_keyerror(self, monkeypatch):
+        """Test get_table raises KeyError when DATABASE_TABLE is missing (no fallback)."""
         from src.lambdas.shared.dynamodb import get_table
 
         monkeypatch.setenv("AWS_REGION", "us-east-1")
         monkeypatch.delenv("DATABASE_TABLE", raising=False)
+        # Even if DYNAMODB_TABLE exists, it should NOT be used as fallback
         monkeypatch.setenv("DYNAMODB_TABLE", "legacy-table")
 
         with mock_aws():
-            client = boto3.client("dynamodb", region_name="us-east-1")
-            client.create_table(
-                TableName="legacy-table",
-                KeySchema=[
-                    {"AttributeName": "pk", "KeyType": "HASH"},
-                ],
-                AttributeDefinitions=[
-                    {"AttributeName": "pk", "AttributeType": "S"},
-                ],
-                BillingMode="PAY_PER_REQUEST",
-            )
-
-            table = get_table()
-            assert table.table_name == "legacy-table"
+            with pytest.raises(KeyError, match="DATABASE_TABLE"):
+                get_table()
 
     def test_explicit_region_overrides_env(self, monkeypatch):
         """Test explicit region_name parameter overrides environment."""

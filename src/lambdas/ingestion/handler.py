@@ -447,8 +447,7 @@ def _get_config() -> dict[str, str]:
         raise ValueError("CLOUD_REGION or AWS_REGION environment variable must be set")
 
     return {
-        "dynamodb_table": os.environ.get("DATABASE_TABLE")
-        or os.environ.get("DYNAMODB_TABLE", ""),
+        "dynamodb_table": os.environ["DATABASE_TABLE"],
         "sns_topic_arn": os.environ.get("SNS_TOPIC_ARN", ""),
         "alert_topic_arn": os.environ.get(
             "ALERT_TOPIC_ARN", ""
