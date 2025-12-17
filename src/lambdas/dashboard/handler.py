@@ -78,8 +78,7 @@ logger.setLevel(logging.INFO)
 
 # Configuration from environment
 # CRITICAL: These must be set - no defaults to prevent wrong-environment data corruption
-# Cloud-agnostic: Use DATABASE_TABLE, fallback to DYNAMODB_TABLE for backward compatibility
-DYNAMODB_TABLE = os.environ.get("DATABASE_TABLE") or os.environ["DYNAMODB_TABLE"]
+DYNAMODB_TABLE = os.environ["DATABASE_TABLE"]
 CHAOS_EXPERIMENTS_TABLE = os.environ.get("CHAOS_EXPERIMENTS_TABLE", "")
 ENVIRONMENT = os.environ["ENVIRONMENT"]
 

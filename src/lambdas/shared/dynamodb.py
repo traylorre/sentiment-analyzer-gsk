@@ -103,7 +103,7 @@ def get_table(table_name: str | None = None, region_name: str | None = None) -> 
     Get a DynamoDB table resource.
 
     Args:
-        table_name: Table name (defaults to DATABASE_TABLE or DYNAMODB_TABLE env var)
+        table_name: Table name (defaults to DATABASE_TABLE env var)
         region_name: Cloud region
 
     Returns:
@@ -114,16 +114,7 @@ def get_table(table_name: str | None = None, region_name: str | None = None) -> 
         1. DATABASE_TABLE env var is set correctly
         2. Table exists: aws dynamodb describe-table --table-name <name>
     """
-    # Cloud-agnostic: Use DATABASE_TABLE, fallback to DYNAMODB_TABLE for backward compatibility
-    name = (
-        table_name
-        or os.environ.get("DATABASE_TABLE")
-        or os.environ.get("DYNAMODB_TABLE")
-    )
-    if not name:
-        raise ValueError(
-            "Table name required: set DATABASE_TABLE env var or pass table_name"
-        )
+    name = table_name or os.environ["DATABASE_TABLE"]
 
     resource = get_dynamodb_resource(region_name)
     return resource.Table(name)

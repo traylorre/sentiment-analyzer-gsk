@@ -31,7 +31,7 @@ from src.lambdas.shared.models.alert_rule import ALERT_LIMITS, AlertRule
 logger = logging.getLogger(__name__)
 
 # Environment variables
-DYNAMODB_TABLE = os.environ.get("DYNAMODB_TABLE", "")
+DYNAMODB_TABLE = os.environ["DATABASE_TABLE"]
 INTERNAL_API_KEY = os.environ.get("INTERNAL_API_KEY", "")
 
 
