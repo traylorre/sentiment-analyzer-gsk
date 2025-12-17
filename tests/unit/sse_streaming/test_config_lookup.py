@@ -162,8 +162,8 @@ class TestConfigLookupServiceInit:
     """Tests for ConfigLookupService initialization."""
 
     def test_default_table_name_from_env(self):
-        """Test table name defaults to DYNAMODB_TABLE env var."""
-        with patch.dict("os.environ", {"DYNAMODB_TABLE": "my-custom-table"}):
+        """Test table name defaults to DATABASE_TABLE env var."""
+        with patch.dict("os.environ", {"DATABASE_TABLE": "my-custom-table"}):
             with patch("src.lambdas.sse_streaming.config.boto3") as mock_boto3:
                 mock_resource = MagicMock()
                 mock_table = MagicMock()
@@ -179,7 +179,7 @@ class TestConfigLookupServiceInit:
 
     def test_explicit_table_name_overrides_env(self):
         """Test explicit table name overrides environment variable."""
-        with patch.dict("os.environ", {"DYNAMODB_TABLE": "env-table"}):
+        with patch.dict("os.environ", {"DATABASE_TABLE": "env-table"}):
             with patch("src.lambdas.sse_streaming.config.boto3") as mock_boto3:
                 mock_resource = MagicMock()
                 mock_table = MagicMock()

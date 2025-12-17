@@ -67,10 +67,10 @@ from src.lambdas.shared.models.configuration import (
 @pytest.fixture
 def env_vars():
     """Set test environment variables."""
-    os.environ["DYNAMODB_TABLE"] = "test-user-config"
+    os.environ["DATABASE_TABLE"] = "test-user-config"
     os.environ["ENVIRONMENT"] = "test"
     yield
-    for key in ["DYNAMODB_TABLE", "ENVIRONMENT"]:
+    for key in ["DATABASE_TABLE", "ENVIRONMENT"]:
         os.environ.pop(key, None)
 
 

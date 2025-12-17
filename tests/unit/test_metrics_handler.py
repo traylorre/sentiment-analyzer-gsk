@@ -47,11 +47,11 @@ def aws_credentials():
 @pytest.fixture
 def env_vars(aws_credentials):
     """Set up environment variables for testing."""
-    os.environ["DYNAMODB_TABLE"] = "test-sentiment-items"
+    os.environ["DATABASE_TABLE"] = "test-sentiment-items"
     os.environ["ENVIRONMENT"] = "test"
     yield
     # Cleanup
-    for key in ["DYNAMODB_TABLE", "ENVIRONMENT"]:
+    for key in ["DATABASE_TABLE", "ENVIRONMENT"]:
         os.environ.pop(key, None)
 
 
@@ -275,14 +275,12 @@ class TestLambdaHandler:
         assert result["body"]["stuck_items"] == 0
 
     def test_handler_missing_table_env(self, aws_credentials, mock_context):
-        """Test handler fails gracefully with missing DYNAMODB_TABLE."""
-        os.environ.pop("DYNAMODB_TABLE", None)
+        """Test handler raises KeyError when DATABASE_TABLE is missing (no fallback)."""
+        os.environ.pop("DATABASE_TABLE", None)
         os.environ["ENVIRONMENT"] = "test"
 
-        result = lambda_handler({}, mock_context)
-
-        assert result["statusCode"] == 500
-        assert "DYNAMODB_TABLE not set" in result["body"]
+        with pytest.raises(KeyError, match="DATABASE_TABLE"):
+            lambda_handler({}, mock_context)
 
     def test_handler_emits_error_metric_on_failure(self, env_vars, mock_context):
         """Test handler emits error metric on failure."""

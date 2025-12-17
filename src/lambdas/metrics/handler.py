@@ -154,16 +154,9 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         request_id=getattr(context, "aws_request_id", "local"),
     )
 
-    # Get configuration from environment
-    table_name = os.environ.get("DYNAMODB_TABLE")
+    # Get configuration from environment (no fallback - fail fast if missing)
+    table_name = os.environ["DATABASE_TABLE"]
     environment = os.environ.get("ENVIRONMENT", "dev")
-
-    if not table_name:
-        log_structured("error", "DYNAMODB_TABLE environment variable not set")
-        return {
-            "statusCode": 500,
-            "body": "Configuration error: DYNAMODB_TABLE not set",
-        }
 
     try:
         # Query for stuck items

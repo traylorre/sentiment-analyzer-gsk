@@ -31,11 +31,11 @@ from src.lambdas.analysis.handler import lambda_handler
 @pytest.fixture
 def env_vars():
     """Set test environment variables."""
-    os.environ["DYNAMODB_TABLE"] = "test-sentiment-items"
+    os.environ["DATABASE_TABLE"] = "test-sentiment-items"
     os.environ["MODEL_PATH"] = "/opt/model"
     os.environ["ENVIRONMENT"] = "test"
     yield
-    for key in ["DYNAMODB_TABLE", "MODEL_PATH", "ENVIRONMENT"]:
+    for key in ["DATABASE_TABLE", "MODEL_PATH", "ENVIRONMENT"]:
         os.environ.pop(key, None)
 
 
