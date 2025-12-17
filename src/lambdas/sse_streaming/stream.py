@@ -20,7 +20,7 @@ from models import (
     SentimentUpdateData,
     SSEEvent,
 )
-from polling import PollingService, polling_service
+from polling import PollingService, get_polling_service
 
 from src.lambdas.shared.logging_utils import sanitize_for_log
 
@@ -90,7 +90,7 @@ class SSEStreamGenerator:
                               Defaults to SSE_HEARTBEAT_INTERVAL or 30.
         """
         self._conn_manager = conn_manager or connection_manager
-        self._poll_service = poll_service or polling_service
+        self._poll_service = poll_service or get_polling_service()
         self._heartbeat_interval = heartbeat_interval or int(
             os.environ.get("SSE_HEARTBEAT_INTERVAL", "30")
         )

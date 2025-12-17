@@ -55,7 +55,7 @@ class TestPollingService:
         with patch.object(
             PollingService, "_get_table", return_value=mock_dynamodb_table
         ):
-            service = PollingService()
+            service = PollingService(table_name="test-table")
             service._table = mock_dynamodb_table
             metrics = service._aggregate_metrics(mock_dynamodb_table.scan()["Items"])
 
@@ -71,7 +71,7 @@ class TestPollingService:
         with patch.object(
             PollingService, "_get_table", return_value=mock_dynamodb_table
         ):
-            service = PollingService()
+            service = PollingService(table_name="test-table")
             metrics = service._aggregate_metrics(mock_dynamodb_table.scan()["Items"])
 
         assert metrics.by_tag["AAPL"] == 2
@@ -82,7 +82,7 @@ class TestPollingService:
         from src.lambdas.sse_streaming.polling import PollingService
 
         with patch.object(PollingService, "_get_table", return_value=MagicMock()):
-            service = PollingService()
+            service = PollingService(table_name="test-table")
             metrics = service._aggregate_metrics([])
 
         assert metrics.total == 0
@@ -98,7 +98,7 @@ class TestPollingInterval:
         from src.lambdas.sse_streaming.polling import PollingService
 
         with patch.object(PollingService, "_get_table", return_value=MagicMock()):
-            with patch.dict("os.environ", {}, clear=True):
+            with patch.dict("os.environ", {"DYNAMODB_TABLE": "test-table"}, clear=True):
                 service = PollingService()
 
         assert service.poll_interval == 5
@@ -108,10 +108,21 @@ class TestPollingInterval:
         from src.lambdas.sse_streaming.polling import PollingService
 
         with patch.object(PollingService, "_get_table", return_value=MagicMock()):
-            with patch.dict("os.environ", {"SSE_POLL_INTERVAL": "10"}):
+            with patch.dict(
+                "os.environ",
+                {"DYNAMODB_TABLE": "test-table", "SSE_POLL_INTERVAL": "10"},
+            ):
                 service = PollingService()
 
         assert service.poll_interval == 10
+
+    def test_missing_dynamodb_table_raises_error(self):
+        """Should raise ValueError if DYNAMODB_TABLE not set."""
+        from src.lambdas.sse_streaming.polling import PollingService
+
+        with patch.dict("os.environ", {}, clear=True):
+            with pytest.raises(ValueError, match="DYNAMODB_TABLE.*required"):
+                PollingService()
 
 
 class TestPollMethod:
@@ -240,7 +251,7 @@ class TestMetricsChange:
         from src.lambdas.sse_streaming.polling import PollingService
 
         with patch.object(PollingService, "_get_table", return_value=MagicMock()):
-            service = PollingService()
+            service = PollingService(table_name="test-table")
 
         old = MetricsEventData(total=100, positive=50, neutral=30, negative=20)
         new = MetricsEventData(total=101, positive=51, neutral=30, negative=20)
@@ -252,7 +263,7 @@ class TestMetricsChange:
         from src.lambdas.sse_streaming.polling import PollingService
 
         with patch.object(PollingService, "_get_table", return_value=MagicMock()):
-            service = PollingService()
+            service = PollingService(table_name="test-table")
 
         old = MetricsEventData(total=100, positive=50, neutral=30, negative=20)
         new = MetricsEventData(total=100, positive=50, neutral=30, negative=20)
@@ -264,7 +275,7 @@ class TestMetricsChange:
         from src.lambdas.sse_streaming.polling import PollingService
 
         with patch.object(PollingService, "_get_table", return_value=MagicMock()):
-            service = PollingService()
+            service = PollingService(table_name="test-table")
 
         old = MetricsEventData(
             total=100, positive=50, neutral=30, negative=20, by_tag={"AAPL": 50}

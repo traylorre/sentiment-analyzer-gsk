@@ -35,10 +35,16 @@ class PollingService:
                        Defaults to DYNAMODB_TABLE env var.
             poll_interval: Poll interval in seconds.
                           Defaults to SSE_POLL_INTERVAL env var or 5.
+
+        Raises:
+            ValueError: If DYNAMODB_TABLE env var is not set and no table_name provided.
         """
-        self._table_name = table_name or os.environ.get(
-            "DYNAMODB_TABLE", "sentiment-data"
-        )
+        self._table_name = table_name or os.environ.get("DYNAMODB_TABLE")
+        if not self._table_name:
+            raise ValueError(
+                "DYNAMODB_TABLE environment variable is required "
+                "(no fallback - Amendment 1.15)"
+            )
         self._poll_interval = poll_interval or int(
             os.environ.get("SSE_POLL_INTERVAL", "5")
         )
@@ -191,5 +197,21 @@ class PollingService:
             await asyncio.sleep(self._poll_interval)
 
 
-# Global polling service instance
-polling_service = PollingService()
+# Global polling service instance (lazy initialization)
+_polling_service: PollingService | None = None
+
+
+def get_polling_service() -> PollingService:
+    """Get or create the global polling service instance.
+
+    Uses lazy initialization to defer creation until DYNAMODB_TABLE
+    environment variable is available (at Lambda runtime, not import time).
+    """
+    global _polling_service
+    if _polling_service is None:
+        _polling_service = PollingService()
+    return _polling_service
+
+
+# Backwards compatibility alias - prefer get_polling_service()
+polling_service = None  # type: ignore[assignment]
