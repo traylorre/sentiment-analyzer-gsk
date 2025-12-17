@@ -32,11 +32,11 @@ from src.lambdas.dashboard.handler import app
 def env_vars():
     """Set test environment variables."""
     os.environ["API_KEY"] = "test-api-key-12345"
-    os.environ["DYNAMODB_TABLE"] = "test-sentiment-items"
+    os.environ["DATABASE_TABLE"] = "test-sentiment-items"
     os.environ["ENVIRONMENT"] = "test"
     yield
     # Cleanup
-    for key in ["API_KEY", "DYNAMODB_TABLE", "ENVIRONMENT"]:
+    for key in ["API_KEY", "DATABASE_TABLE", "ENVIRONMENT"]:
         os.environ.pop(key, None)
 
 

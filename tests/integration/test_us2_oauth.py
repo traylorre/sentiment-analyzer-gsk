@@ -38,7 +38,7 @@ from moto import mock_aws
 @pytest.fixture
 def env_vars():
     """Set test environment variables."""
-    os.environ["DYNAMODB_TABLE"] = "test-auth-table"
+    os.environ["DATABASE_TABLE"] = "test-auth-table"
     os.environ["ENVIRONMENT"] = "test"
     os.environ["COGNITO_CLIENT_ID"] = "test-client-id"
     os.environ["COGNITO_CLIENT_SECRET"] = "test-client-secret"
@@ -46,7 +46,7 @@ def env_vars():
     os.environ["DASHBOARD_URL"] = "https://test.sentiment-analyzer.com"
     yield
     for key in [
-        "DYNAMODB_TABLE",
+        "DATABASE_TABLE",
         "ENVIRONMENT",
         "COGNITO_CLIENT_ID",
         "COGNITO_CLIENT_SECRET",

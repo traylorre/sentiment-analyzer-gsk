@@ -93,9 +93,7 @@ class ConfigAlertCreateRequest(BaseModel):
 logger = logging.getLogger(__name__)
 
 # Environment config
-DYNAMODB_TABLE = os.environ.get("DATABASE_TABLE") or os.environ.get(
-    "DYNAMODB_TABLE", ""
-)
+DYNAMODB_TABLE = os.environ["DATABASE_TABLE"]
 TICKER_CACHE_BUCKET = os.environ.get("TICKER_CACHE_BUCKET", "")
 
 # Create routers

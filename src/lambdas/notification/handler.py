@@ -33,7 +33,7 @@ logger.setLevel(os.environ.get("LOG_LEVEL", "INFO"))
 
 # Environment variables
 SENDGRID_SECRET_ARN = os.environ.get("SENDGRID_SECRET_ARN", "")
-DYNAMODB_TABLE = os.environ.get("DYNAMODB_TABLE", "")
+DYNAMODB_TABLE = os.environ["DATABASE_TABLE"]
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "dev")
 FROM_EMAIL = os.environ.get("FROM_EMAIL", "noreply@sentiment-analyzer.com")
 DASHBOARD_URL = os.environ.get("DASHBOARD_URL", "https://sentiment-analyzer.com")

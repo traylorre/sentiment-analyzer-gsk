@@ -48,14 +48,14 @@ def aws_credentials():
 @pytest.fixture
 def env_vars(aws_credentials):
     """Set up environment variables for testing."""
-    os.environ["DYNAMODB_TABLE"] = "test-sentiment-items"
+    os.environ["DATABASE_TABLE"] = "test-sentiment-items"
     os.environ["MODEL_PATH"] = "/opt/model"
     os.environ["ENVIRONMENT"] = "test"
 
     yield
 
     # Cleanup
-    for key in ["DYNAMODB_TABLE", "MODEL_PATH", "ENVIRONMENT"]:
+    for key in ["DATABASE_TABLE", "MODEL_PATH", "ENVIRONMENT"]:
         os.environ.pop(key, None)
 
 
