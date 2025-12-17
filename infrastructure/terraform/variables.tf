@@ -156,3 +156,27 @@ variable "notification_from_email" {
   type        = string
   default     = "noreply@sentiment-analyzer.com"
 }
+
+# ===================================================================
+# SSE Streaming Configuration
+# ===================================================================
+
+variable "sse_poll_interval" {
+  description = "SSE poll interval in seconds for checking new data"
+  type        = number
+  default     = 5
+  validation {
+    condition     = var.sse_poll_interval >= 1 && var.sse_poll_interval <= 60
+    error_message = "SSE poll interval must be between 1 and 60 seconds."
+  }
+}
+
+variable "sse_heartbeat_interval" {
+  description = "SSE heartbeat interval in seconds for keeping connection alive"
+  type        = number
+  default     = 30
+  validation {
+    condition     = var.sse_heartbeat_interval >= 10 && var.sse_heartbeat_interval <= 300
+    error_message = "SSE heartbeat interval must be between 10 and 300 seconds."
+  }
+}
