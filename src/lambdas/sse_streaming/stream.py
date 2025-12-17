@@ -304,5 +304,21 @@ class SSEStreamGenerator:
             raise
 
 
-# Global stream generator instance
-stream_generator = SSEStreamGenerator()
+# Global stream generator instance (lazy initialization)
+_stream_generator: SSEStreamGenerator | None = None
+
+
+def get_stream_generator() -> SSEStreamGenerator:
+    """Get stream generator instance (lazy initialization).
+
+    This avoids module-level instantiation which can break test collection
+    by eagerly initializing ConnectionManager and PollingService dependencies.
+    """
+    global _stream_generator
+    if _stream_generator is None:
+        _stream_generator = SSEStreamGenerator()
+    return _stream_generator
+
+
+# Backwards compatibility alias - deprecated, use get_stream_generator()
+stream_generator = None  # type: ignore[assignment]
