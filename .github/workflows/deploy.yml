@@ -556,7 +556,7 @@ jobs:
           # Note: PYTHONPATH is set here to match the Lambda environment variable
           # configured in Terraform. Docker ENV alone doesn't work because Lambda
           # Web Adapter subprocess doesn't inherit container environment reliably.
-          docker run --rm -e PYTHONPATH=/app/packages:/app --entrypoint python "$IMAGE" -c "
+          docker run --rm -e PYTHONPATH=/app/packages:/app -e DATABASE_TABLE=preprod-sentiment-items --entrypoint python "$IMAGE" -c "
           import sys
           print('Testing imports...')
 
@@ -1290,7 +1290,7 @@ jobs:
           IMAGE="${{ steps.login-ecr.outputs.registry }}/prod-sse-streaming-lambda:${{ github.sha }}"
 
           # Note: PYTHONPATH matches Lambda environment variable in Terraform
-          docker run --rm -e PYTHONPATH=/app/packages:/app --entrypoint python "$IMAGE" -c "
+          docker run --rm -e PYTHONPATH=/app/packages:/app -e DATABASE_TABLE=prod-sentiment-items --entrypoint python "$IMAGE" -c "
           import sys
           from handler import app
           from config import config_lookup_service
