@@ -265,7 +265,10 @@ resource "aws_cloudfront_distribution" "dashboard" {
 
       forwarded_values {
         query_string = true
-        headers      = ["Authorization", "Origin", "Accept"]
+        # Fix(150): Forward Last-Event-ID and X-User-ID headers for SSE reconnection and auth
+        # Last-Event-ID: Required for FR-007 SSE reconnection replay
+        # X-User-ID: Required for FR-014 authentication on config streams
+        headers = ["Authorization", "Origin", "Accept", "Last-Event-ID", "X-User-ID"]
         cookies {
           forward = "none"
         }
@@ -294,7 +297,8 @@ resource "aws_cloudfront_distribution" "dashboard" {
 
       forwarded_values {
         query_string = true
-        headers      = ["Authorization", "Origin", "Accept"]
+        # Fix(150): Forward Last-Event-ID and X-User-ID headers for SSE reconnection and auth
+        headers = ["Authorization", "Origin", "Accept", "Last-Event-ID", "X-User-ID"]
         cookies {
           forward = "none"
         }
