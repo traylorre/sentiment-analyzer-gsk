@@ -25,7 +25,7 @@ from metrics import metrics_emitter
 from models import StreamStatus
 from sse_starlette.sse import EventSourceResponse
 from starlette.responses import StreamingResponse
-from stream import stream_generator
+from stream import get_stream_generator
 
 # Import logging utilities - try Docker path first (logging_utils.py copied to /app/),
 # fall back to full path for tests
@@ -104,9 +104,9 @@ async def debug_info() -> dict:
         "AWS_LWA_INVOKE_MODE": os.environ.get("AWS_LWA_INVOKE_MODE"),
         "AWS_LWA_READINESS_CHECK_PATH": os.environ.get("AWS_LWA_READINESS_CHECK_PATH"),
         "PYTHONPATH": os.environ.get("PYTHONPATH"),
-        "SSE_HEARTBEAT_INTERVAL": os.environ.get("SSE_HEARTBEAT_INTERVAL"),
-        "SSE_MAX_CONNECTIONS": os.environ.get("SSE_MAX_CONNECTIONS"),
-        "SSE_POLL_INTERVAL": os.environ.get("SSE_POLL_INTERVAL"),
+        "SSE_HEARTBEAT_INTERVAL": os.environ.get("SSE_HEARTBEAT_INTERVAL", "30"),
+        "SSE_MAX_CONNECTIONS": os.environ.get("SSE_MAX_CONNECTIONS", "100"),
+        "SSE_POLL_INTERVAL": os.environ.get("SSE_POLL_INTERVAL", "5"),
     }
 
     return {
@@ -200,7 +200,7 @@ async def global_stream(
         Content-Type header handling with Lambda Web Adapter.
         """
         try:
-            async for event_dict in stream_generator.generate_global_stream(
+            async for event_dict in get_stream_generator().generate_global_stream(
                 connection, last_event_id
             ):
                 # Format as SSE protocol string
@@ -381,7 +381,7 @@ async def config_stream(
         """Generate SSE events and handle cleanup."""
         try:
             # T036: Ticker filtering is handled in generate_config_stream
-            async for event_str in stream_generator.generate_config_stream(
+            async for event_str in get_stream_generator().generate_config_stream(
                 connection, last_event_id
             ):
                 yield event_str

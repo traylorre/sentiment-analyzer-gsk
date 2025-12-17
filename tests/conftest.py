@@ -80,6 +80,7 @@ os.environ.setdefault("AWS_ACCESS_KEY_ID", "testing")
 os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "testing")
 os.environ.setdefault("AWS_REGION", "us-east-1")
 os.environ.setdefault("SSE_POLL_INTERVAL", "1")
+os.environ.setdefault("SSE_HEARTBEAT_INTERVAL", "1")  # Fast heartbeats for tests
 
 # Disable X-Ray SDK in tests to suppress "cannot find the current segment" errors.
 # X-Ray requires a Lambda runtime context with an active segment. In tests, there's no
