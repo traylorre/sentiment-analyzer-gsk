@@ -282,14 +282,15 @@ module "ingestion_lambda" {
 
   # Environment variables
   environment_variables = {
-    WATCH_TAGS         = var.watch_tags
-    DYNAMODB_TABLE     = module.dynamodb.table_name
-    SNS_TOPIC_ARN      = module.sns.topic_arn
-    NEWSAPI_SECRET_ARN = module.secrets.newsapi_secret_arn
-    TIINGO_SECRET_ARN  = module.secrets.tiingo_secret_arn
-    FINNHUB_SECRET_ARN = module.secrets.finnhub_secret_arn
-    ENVIRONMENT        = var.environment
-    MODEL_VERSION      = var.model_version
+    WATCH_TAGS              = var.watch_tags
+    DYNAMODB_TABLE          = module.dynamodb.table_name
+    SNS_TOPIC_ARN           = module.sns.topic_arn
+    NEWSAPI_SECRET_ARN      = module.secrets.newsapi_secret_arn
+    TIINGO_SECRET_ARN       = module.secrets.tiingo_secret_arn
+    FINNHUB_SECRET_ARN      = module.secrets.finnhub_secret_arn
+    ENVIRONMENT             = var.environment
+    MODEL_VERSION           = var.model_version
+    CHAOS_EXPERIMENTS_TABLE = module.dynamodb.chaos_experiments_table_name
   }
 
   # Logging
@@ -341,10 +342,11 @@ module "analysis_lambda" {
 
   # Environment variables
   environment_variables = {
-    DYNAMODB_TABLE  = module.dynamodb.table_name
-    MODEL_S3_BUCKET = local.model_s3_bucket
-    MODEL_VERSION   = var.model_version
-    ENVIRONMENT     = var.environment
+    DYNAMODB_TABLE          = module.dynamodb.table_name
+    MODEL_S3_BUCKET         = local.model_s3_bucket
+    MODEL_VERSION           = var.model_version
+    ENVIRONMENT             = var.environment
+    CHAOS_EXPERIMENTS_TABLE = module.dynamodb.chaos_experiments_table_name
   }
 
   # Dead letter queue
