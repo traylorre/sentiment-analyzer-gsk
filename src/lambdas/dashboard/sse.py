@@ -51,9 +51,7 @@ from src.lambdas.shared.logging_utils import get_safe_error_info
 logger = logging.getLogger(__name__)
 
 # Environment configuration
-DYNAMODB_TABLE = os.environ.get("DATABASE_TABLE") or os.environ.get(
-    "DYNAMODB_TABLE", ""
-)
+DYNAMODB_TABLE = os.environ["DATABASE_TABLE"]
 
 # SSE configuration
 HEARTBEAT_INTERVAL = int(os.environ.get("SSE_HEARTBEAT_INTERVAL", "30"))  # seconds

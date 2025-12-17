@@ -40,12 +40,12 @@ from moto import mock_aws
 @pytest.fixture
 def env_vars():
     """Set test environment variables."""
-    os.environ["DYNAMODB_TABLE"] = "test-auth-table"
+    os.environ["DATABASE_TABLE"] = "test-auth-table"
     os.environ["ENVIRONMENT"] = "test"
     os.environ["MAGIC_LINK_SECRET"] = "test-secret-key-for-signing"
     os.environ["DASHBOARD_URL"] = "https://test.sentiment-analyzer.com"
     yield
-    for key in ["DYNAMODB_TABLE", "ENVIRONMENT", "MAGIC_LINK_SECRET", "DASHBOARD_URL"]:
+    for key in ["DATABASE_TABLE", "ENVIRONMENT", "MAGIC_LINK_SECRET", "DASHBOARD_URL"]:
         os.environ.pop(key, None)
 
 

@@ -36,7 +36,7 @@ def reset_active_tickers_cache():
 @pytest.fixture
 def env_vars():
     """Set required environment variables."""
-    os.environ["DYNAMODB_TABLE"] = "test-financial-news"
+    os.environ["DATABASE_TABLE"] = "test-financial-news"
     os.environ["SNS_TOPIC_ARN"] = "arn:aws:sns:us-east-1:123456789:test-topic"
     os.environ["TIINGO_SECRET_ARN"] = (
         "arn:aws:secretsmanager:us-east-1:123456789:secret:tiingo"
@@ -48,7 +48,7 @@ def env_vars():
     os.environ["AWS_REGION"] = "us-east-1"
     yield
     for key in [
-        "DYNAMODB_TABLE",
+        "DATABASE_TABLE",
         "SNS_TOPIC_ARN",
         "TIINGO_SECRET_ARN",
         "FINNHUB_SECRET_ARN",
