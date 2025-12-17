@@ -7,6 +7,12 @@
 # - Content-Type header mismatches
 #
 # See: specs/128-fix-sse-lambda-import/
+#
+# IMPORTANT: These tests must use SSE_LAMBDA_URL, not PREPROD_DASHBOARD_URL.
+# The SSE routes (/api/v2/stream, /api/v2/stream/status) only exist on the
+# SSE Lambda, not on the Dashboard Lambda. Using PREPROD_DASHBOARD_URL
+# causes 404 errors because the Dashboard Lambda doesn't have these routes.
+# Fix: Issue #141 (fix-sse-test-url)
 
 import os
 
@@ -15,16 +21,22 @@ import pytest
 
 pytestmark = [pytest.mark.e2e, pytest.mark.preprod]
 
-# Get dashboard URL from environment (set by CI workflow)
-PREPROD_DASHBOARD_URL = os.environ.get("PREPROD_DASHBOARD_URL", "")
+# Get SSE Lambda URL from environment (set by CI workflow)
+# SSE routes only exist on the SSE Lambda, not the Dashboard Lambda
+SSE_LAMBDA_URL = os.environ.get("SSE_LAMBDA_URL", "")
 
 
 @pytest.fixture
-def dashboard_url() -> str:
-    """Get preprod dashboard URL from environment."""
-    if not PREPROD_DASHBOARD_URL:
-        pytest.skip("PREPROD_DASHBOARD_URL not set")
-    return PREPROD_DASHBOARD_URL.rstrip("/")
+def sse_lambda_url() -> str:
+    """Get SSE Lambda URL from environment.
+
+    The SSE Lambda is a separate function with RESPONSE_STREAM invoke mode
+    that handles real-time streaming. SSE routes like /api/v2/stream only
+    exist on this Lambda, not on the Dashboard Lambda.
+    """
+    if not SSE_LAMBDA_URL:
+        pytest.skip("SSE_LAMBDA_URL not set")
+    return SSE_LAMBDA_URL.rstrip("/")
 
 
 class TestSSEConnectionHealth:
@@ -35,7 +47,7 @@ class TestSSEConnectionHealth:
     """
 
     @pytest.mark.asyncio
-    async def test_sse_lambda_no_runtime_error(self, dashboard_url: str) -> None:
+    async def test_sse_lambda_no_runtime_error(self, sse_lambda_url: str) -> None:
         """T128a: Verify SSE Lambda starts without Runtime.ExitError.
 
         Given: SSE Lambda is deployed
@@ -48,7 +60,7 @@ class TestSSEConnectionHealth:
         async with httpx.AsyncClient(timeout=10.0) as client:
             # Use stream to avoid waiting for full response
             async with client.stream(
-                "GET", f"{dashboard_url}/api/v2/stream"
+                "GET", f"{sse_lambda_url}/api/v2/stream"
             ) as response:
                 # Read just enough to check for error
                 content = b""
@@ -72,7 +84,7 @@ class TestSSEConnectionHealth:
                 ), f"SSE Lambda returned error response: {content_str[:200]}"
 
     @pytest.mark.asyncio
-    async def test_sse_stream_returns_200(self, dashboard_url: str) -> None:
+    async def test_sse_stream_returns_200(self, sse_lambda_url: str) -> None:
         """T128b: Verify SSE stream returns HTTP 200.
 
         Given: SSE Lambda is deployed and healthy
@@ -83,7 +95,7 @@ class TestSSEConnectionHealth:
         """
         async with httpx.AsyncClient(timeout=10.0) as client:
             async with client.stream(
-                "GET", f"{dashboard_url}/api/v2/stream"
+                "GET", f"{sse_lambda_url}/api/v2/stream"
             ) as response:
                 assert response.status_code == 200, (
                     f"Expected 200, got {response.status_code}. "
@@ -91,7 +103,7 @@ class TestSSEConnectionHealth:
                 )
 
     @pytest.mark.asyncio
-    async def test_sse_content_type_is_event_stream(self, dashboard_url: str) -> None:
+    async def test_sse_content_type_is_event_stream(self, sse_lambda_url: str) -> None:
         """T128c: Verify SSE Content-Type for EventSource compatibility.
 
         Given: SSE Lambda is deployed
@@ -104,7 +116,7 @@ class TestSSEConnectionHealth:
         """
         async with httpx.AsyncClient(timeout=10.0) as client:
             async with client.stream(
-                "GET", f"{dashboard_url}/api/v2/stream"
+                "GET", f"{sse_lambda_url}/api/v2/stream"
             ) as response:
                 content_type = response.headers.get("content-type", "")
 
@@ -116,7 +128,7 @@ class TestSSEConnectionHealth:
                 )
 
     @pytest.mark.asyncio
-    async def test_sse_receives_heartbeat_event(self, dashboard_url: str) -> None:
+    async def test_sse_receives_heartbeat_event(self, sse_lambda_url: str) -> None:
         """T128d: Verify SSE stream sends heartbeat events.
 
         Given: SSE Lambda is healthy
@@ -130,7 +142,7 @@ class TestSSEConnectionHealth:
 
             try:
                 async with client.stream(
-                    "GET", f"{dashboard_url}/api/v2/stream"
+                    "GET", f"{sse_lambda_url}/api/v2/stream"
                 ) as response:
                     assert response.status_code == 200
 
@@ -171,7 +183,7 @@ class TestDashboardConnectionIndicator:
     """
 
     @pytest.mark.asyncio
-    async def test_dashboard_sse_connection_flow(self, dashboard_url: str) -> None:
+    async def test_dashboard_sse_connection_flow(self, sse_lambda_url: str) -> None:
         """T128e: Simulate browser EventSource connection flow.
 
         Given: Dashboard is loaded
@@ -191,7 +203,7 @@ class TestDashboardConnectionIndicator:
             }
 
             async with client.stream(
-                "GET", f"{dashboard_url}/api/v2/stream", headers=headers
+                "GET", f"{sse_lambda_url}/api/v2/stream", headers=headers
             ) as response:
                 # Check connection established (equivalent to onopen)
                 assert response.status_code == 200, "EventSource onopen would not fire"

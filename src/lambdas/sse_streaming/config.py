@@ -30,10 +30,15 @@ class ConfigLookupService:
 
         Args:
             table_name: DynamoDB table name.
-                       Defaults to DYNAMODB_TABLE env var.
+                       Defaults to DATABASE_TABLE env var (same as Dashboard Lambda),
+                       falls back to DYNAMODB_TABLE for backward compatibility.
         """
-        self._table_name = table_name or os.environ.get(
-            "DYNAMODB_TABLE", "sentiment-data"
+        # Use DATABASE_TABLE (Feature 006 users table) where configs are stored.
+        # Dashboard Lambda uses the same pattern in router_v2.py.
+        self._table_name = (
+            table_name
+            or os.environ.get("DATABASE_TABLE")
+            or os.environ.get("DYNAMODB_TABLE", "sentiment-data")
         )
         self._table = None  # Lazy initialization
 

@@ -128,6 +128,18 @@ repos:
         always_run: true
         stages: [manual]  # Run with: pre-commit run mypy --hook-stage manual
 
+      # Branch collision detection (143-orphan-branch-prevention)
+      # Prevents pushing to a branch name that already exists on remote without a PR
+      # This catches cases where a push fails, we create a new branch, but the old
+      # branch is left orphaned on remote without a PR to clean it up.
+      - id: check-branch-collision
+        name: Check for orphaned remote branches
+        entry: ./scripts/check-branch-collision.sh
+        language: script
+        pass_filenames: false
+        always_run: true
+        stages: [push]
+
       # ERROR log assertion validation (086-test-debt-burndown)
       # Validates that ERROR logs in tests have assert_error_logged() calls
       - id: check-error-log-assertions

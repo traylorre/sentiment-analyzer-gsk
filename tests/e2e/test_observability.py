@@ -7,6 +7,8 @@
 # - Cross-Lambda tracing
 # - CloudWatch alarm triggers
 
+import os
+
 import pytest
 
 from tests.e2e.helpers.api_client import PreprodAPIClient
@@ -15,6 +17,11 @@ from tests.e2e.helpers.xray import get_xray_trace
 from tests.fixtures.synthetic.config_generator import SyntheticConfiguration
 
 pytestmark = [pytest.mark.e2e, pytest.mark.preprod, pytest.mark.us11]
+
+# Log group name follows Terraform naming: {env}-sentiment-dashboard
+# Environment is set by CI workflow (ENVIRONMENT=preprod)
+ENVIRONMENT = os.environ.get("ENVIRONMENT", "preprod")
+DASHBOARD_LOG_GROUP = f"/aws/lambda/{ENVIRONMENT}-sentiment-dashboard"
 
 
 @pytest.mark.asyncio
@@ -36,9 +43,8 @@ async def test_cloudwatch_logs_created(
     # Query CloudWatch Logs for evidence of the request
     # Note: Logs may take a few seconds to appear
     try:
-        log_group = "/aws/lambda/sentiment-analyzer-dashboard"
         results = await query_cloudwatch_logs(
-            log_group=log_group,
+            log_group=DASHBOARD_LOG_GROUP,
             query="fields @timestamp, @message | filter @message like /auth/ | limit 10",
         )
 
@@ -244,9 +250,8 @@ async def test_error_logs_captured(
     await api_client.get("/api/v2/configurations/invalid-id-xyz/sentiment")
 
     try:
-        log_group = "/aws/lambda/sentiment-analyzer-dashboard"
         results = await query_cloudwatch_logs(
-            log_group=log_group,
+            log_group=DASHBOARD_LOG_GROUP,
             query="fields @timestamp, @message | filter @message like /ERROR/ or @message like /error/ | limit 10",
         )
 
