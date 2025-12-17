@@ -411,7 +411,7 @@ module "dashboard_lambda" {
     COGNITO_USER_POOL_ID         = module.cognito.user_pool_id
     COGNITO_CLIENT_ID            = module.cognito.client_id
     TICKER_CACHE_BUCKET          = aws_s3_bucket.ticker_cache.id
-    SSE_POLL_INTERVAL            = "5"
+    SSE_POLL_INTERVAL            = tostring(var.sse_poll_interval)
     ENVIRONMENT                  = var.environment
     CHAOS_EXPERIMENTS_TABLE      = module.dynamodb.chaos_experiments_table_name
     # CORS: Pass explicit origins from tfvars (no wildcard fallback)
@@ -643,9 +643,9 @@ module "sse_streaming_lambda" {
     PYTHONPATH             = "/app/packages:/app"
     DYNAMODB_TABLE         = module.dynamodb.table_name
     DATABASE_TABLE         = module.dynamodb.feature_006_users_table_name
-    SSE_HEARTBEAT_INTERVAL = "30"
+    SSE_HEARTBEAT_INTERVAL = tostring(var.sse_heartbeat_interval)
     SSE_MAX_CONNECTIONS    = "100"
-    SSE_POLL_INTERVAL      = "5"
+    SSE_POLL_INTERVAL      = tostring(var.sse_poll_interval)
     ENVIRONMENT            = var.environment
     AWS_LWA_INVOKE_MODE    = "RESPONSE_STREAM"
     # Fix(141): Tell Lambda Web Adapter to check /health instead of default /
