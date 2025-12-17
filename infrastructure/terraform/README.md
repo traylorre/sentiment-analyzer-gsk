@@ -61,10 +61,10 @@ cd infrastructure/terraform
 terraform init
 
 # Plan deployment (dev environment)
-terraform plan -var-file=environments/dev.tfvars
+terraform plan -var-file=dev.tfvars
 
 # Apply deployment
-terraform apply -var-file=environments/dev.tfvars
+terraform apply -var-file=dev.tfvars
 ```
 
 **What gets deployed**:
@@ -94,8 +94,8 @@ After Lambda functions are deployed, uncomment the following sections in `main.t
 Then re-run Terraform:
 
 ```bash
-terraform plan -var-file=environments/dev.tfvars
-terraform apply -var-file=environments/dev.tfvars
+terraform plan -var-file=dev.tfvars
+terraform apply -var-file=dev.tfvars
 ```
 
 **What gets deployed**:
@@ -137,7 +137,7 @@ echo "Dashboard API Key: $API_KEY"
 
 ## Environment Variables
 
-### Development (`environments/dev.tfvars`)
+### Development (`dev.tfvars`)
 
 ```hcl
 environment   = "dev"
@@ -146,7 +146,7 @@ watch_tags    = "AI,climate,economy,health,sports"
 model_version = "v1.0.0"
 ```
 
-### Production (`environments/prod.tfvars`)
+### Production (`prod.tfvars`)
 
 ```hcl
 environment   = "prod"
@@ -230,10 +230,10 @@ To destroy all resources:
 
 ```bash
 # Destroy dev environment
-terraform destroy -var-file=environments/dev.tfvars
+terraform destroy -var-file=dev.tfvars
 
 # Destroy prod environment
-terraform destroy -var-file=environments/prod.tfvars
+terraform destroy -var-file=prod.tfvars
 ```
 
 **WARNING**: This will permanently delete:
