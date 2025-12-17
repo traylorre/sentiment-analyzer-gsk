@@ -646,6 +646,9 @@ module "sse_streaming_lambda" {
     SSE_POLL_INTERVAL      = "5"
     ENVIRONMENT            = var.environment
     AWS_LWA_INVOKE_MODE    = "RESPONSE_STREAM"
+    # Fix(141): Tell Lambda Web Adapter to check /health instead of default /
+    # This fixes "GET / HTTP/1.1 404 Not Found" logs during Lambda init
+    AWS_LWA_READINESS_CHECK_PATH = "/health"
   }
 
   # Function URL with RESPONSE_STREAM for true SSE streaming

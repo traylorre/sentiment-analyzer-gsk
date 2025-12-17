@@ -68,6 +68,56 @@ async def health_check() -> dict:
     return {"status": "healthy", "environment": ENVIRONMENT}
 
 
+@app.get("/debug")
+async def debug_info() -> dict:
+    """Debug endpoint for diagnosing Lambda configuration issues.
+
+    Returns Lambda environment info and registered routes.
+    Only available in non-prod environments for security.
+
+    Fix(141): Added to diagnose path translation issues in preprod.
+    """
+    if ENVIRONMENT == "prod":
+        return {"error": "Debug endpoint disabled in production"}
+
+    # Get registered routes
+    routes = []
+    for route in app.routes:
+        if hasattr(route, "path") and hasattr(route, "methods"):
+            routes.append(
+                {
+                    "path": route.path,
+                    "methods": list(route.methods) if route.methods else [],
+                    "name": route.name if hasattr(route, "name") else None,
+                }
+            )
+
+    # Get relevant environment variables (exclude secrets)
+    safe_env_vars = {
+        "ENVIRONMENT": os.environ.get("ENVIRONMENT"),
+        "AWS_REGION": os.environ.get("AWS_REGION"),
+        "AWS_LAMBDA_FUNCTION_NAME": os.environ.get("AWS_LAMBDA_FUNCTION_NAME"),
+        "AWS_LAMBDA_FUNCTION_VERSION": os.environ.get("AWS_LAMBDA_FUNCTION_VERSION"),
+        "AWS_LAMBDA_FUNCTION_MEMORY_SIZE": os.environ.get(
+            "AWS_LAMBDA_FUNCTION_MEMORY_SIZE"
+        ),
+        "AWS_LWA_INVOKE_MODE": os.environ.get("AWS_LWA_INVOKE_MODE"),
+        "AWS_LWA_READINESS_CHECK_PATH": os.environ.get("AWS_LWA_READINESS_CHECK_PATH"),
+        "PYTHONPATH": os.environ.get("PYTHONPATH"),
+        "SSE_HEARTBEAT_INTERVAL": os.environ.get("SSE_HEARTBEAT_INTERVAL"),
+        "SSE_MAX_CONNECTIONS": os.environ.get("SSE_MAX_CONNECTIONS"),
+        "SSE_POLL_INTERVAL": os.environ.get("SSE_POLL_INTERVAL"),
+    }
+
+    return {
+        "status": "debug",
+        "environment": ENVIRONMENT,
+        "routes": routes,
+        "env_vars": safe_env_vars,
+        "python_version": f"{__import__('sys').version_info.major}.{__import__('sys').version_info.minor}.{__import__('sys').version_info.micro}",
+    }
+
+
 @app.get("/api/v2/stream/status", response_model=StreamStatus)
 @xray_recorder.capture("stream_status")
 async def stream_status() -> StreamStatus:

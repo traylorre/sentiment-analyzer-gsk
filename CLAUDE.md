@@ -589,6 +589,40 @@ See `.pre-commit-config.yaml` for the local hook configuration.
 2. If the user invokes a slash command, follow that command's workflow
 3. When in doubt, ask: "Should I continue the prior work or start the new workflow?"
 
+### Orphan Branch Prevention (143)
+
+**Problem**: Branches pushed to remote without a PR become orphaned. This happens when:
+1. A push fails (e.g., branch name collision)
+2. You create a new branch locally
+3. The original branch is left on remote without cleanup
+
+**Prevention**: The `check-branch-collision` pre-push hook detects orphaned branches.
+
+**Atomic Push + PR Pattern** (Recommended):
+```bash
+# Always create PR immediately after push
+git push -u origin HEAD && gh pr create --fill && gh pr merge --auto --squash --delete-branch
+```
+
+**Manual Cleanup** (if orphan exists):
+```bash
+# Find orphaned branches (no PR associated)
+for branch in $(git branch -r | grep -v HEAD | grep -v main | sed 's/origin\///'); do
+  pr_count=$(gh pr list --state all --head "$branch" --json number --jq 'length')
+  if [ "$pr_count" = "0" ]; then
+    echo "ORPHAN: $branch"
+    git push origin --delete "$branch"
+  fi
+done
+```
+
+**Recovery from Push Failure**:
+```bash
+# If push fails due to existing branch
+git push origin --delete BRANCH_NAME  # Delete orphan first
+git push -u origin HEAD               # Then push again
+```
+
 ## Feature 072 Market Data Ingestion Patterns
 
 ### Deduplication Key Generation
