@@ -120,7 +120,7 @@ jobs:
       - name: Enable auto-merge
         uses: peter-evans/enable-pull-request-automerge@v3
         with:
-          token: ${{ secrets.REPO_PAT }}
+          token: ${{ secrets.CLAUDE_CODE_PAT }}
           pull-request-number: ${{ github.event.pull_request.number }}
           merge-method: squash
 
@@ -129,7 +129,7 @@ jobs:
           gh pr comment "$PR_URL" --body "Auto-merge enabled. This PR will automatically merge once all required checks pass."
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.CLAUDE_CODE_PAT }}
 
   # ========================================================================
   # JOB 4: Dependabot Auto-Merge
@@ -151,7 +151,7 @@ jobs:
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.CLAUDE_CODE_PAT }}
 
       - name: Auto-merge GitHub Actions major version updates
         if: |
@@ -160,14 +160,14 @@ jobs:
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.CLAUDE_CODE_PAT }}
 
       - name: Auto-merge security updates
         if: steps.metadata.outputs.dependency-type == 'direct:production' && contains(github.event.pull_request.title, 'security')
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.CLAUDE_CODE_PAT }}
 
       - name: Approve PR (patch/minor or GitHub Actions)
         if: |
@@ -177,7 +177,7 @@ jobs:
         run: gh pr review --approve "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.CLAUDE_CODE_PAT }}
 
       - name: Comment on Python major version updates
         if: |
@@ -191,4 +191,4 @@ jobs:
           This PR will NOT be auto-merged."
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.CLAUDE_CODE_PAT }}
