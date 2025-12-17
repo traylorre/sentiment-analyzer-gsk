@@ -45,6 +45,9 @@ COPY shared /app/src/lambdas/shared
 # Note: Also set via Lambda env vars in Terraform as belt-and-suspenders
 ENV PYTHONPATH=/app/packages:/app
 ENV AWS_LWA_INVOKE_MODE=RESPONSE_STREAM
+# Fix(141): Tell Lambda Web Adapter to check /health instead of default /
+# This prevents "GET / HTTP/1.1 404 Not Found" during Lambda init
+ENV AWS_LWA_READINESS_CHECK_PATH=/health
 
 # Expose port for Lambda Web Adapter
 EXPOSE 8080
