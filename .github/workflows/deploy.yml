@@ -1097,12 +1097,41 @@ jobs:
 
           # Warm up SSE Lambda (Feature 140: SSE tests were failing due to cold start)
           # SSE Lambda uses Docker image with Lambda Web Adapter, needs warmup
+          # Fix(141): Add retry with backoff to handle cold start delays (10-20s for Docker Lambdas)
           echo ""
-          echo "4. Invoking SSE Lambda /health endpoint..."
-          curl -s -o /dev/null -w "HTTP %{http_code}\n" "${SSE_LAMBDA_URL}/health" || true
+          echo "4. Invoking SSE Lambda /health endpoint (with retry)..."
+          for i in 1 2 3 4 5; do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 --max-time 30 "${SSE_LAMBDA_URL}/health" || echo "000")
+            echo "  Attempt $i: HTTP $HTTP_CODE"
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "  ✅ SSE Lambda /health responded successfully"
+              break
+            fi
+            if [ $i -lt 5 ]; then
+              SLEEP_TIME=$((2 ** (i - 1)))
+              echo "  Retrying in ${SLEEP_TIME}s..."
+              sleep $SLEEP_TIME
+            else
+              echo "  ⚠️ SSE Lambda /health did not return 200 after 5 attempts (continuing anyway)"
+            fi
+          done
 
-          echo "5. Invoking SSE Lambda /api/v2/stream/status endpoint..."
-          curl -s -o /dev/null -w "HTTP %{http_code}\n" "${SSE_LAMBDA_URL}/api/v2/stream/status" || true
+          echo "5. Invoking SSE Lambda /api/v2/stream/status endpoint (with retry)..."
+          for i in 1 2 3 4 5; do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 --max-time 30 "${SSE_LAMBDA_URL}/api/v2/stream/status" || echo "000")
+            echo "  Attempt $i: HTTP $HTTP_CODE"
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "  ✅ SSE Lambda /api/v2/stream/status responded successfully"
+              break
+            fi
+            if [ $i -lt 5 ]; then
+              SLEEP_TIME=$((2 ** (i - 1)))
+              echo "  Retrying in ${SLEEP_TIME}s..."
+              sleep $SLEEP_TIME
+            else
+              echo "  ⚠️ SSE Lambda /api/v2/stream/status did not return 200 after 5 attempts (continuing anyway)"
+            fi
+          done
 
           # Wait for CloudWatch metrics to propagate
           echo ""
