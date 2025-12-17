@@ -198,7 +198,7 @@ locals {
   metrics_lambda_name   = "${var.environment}-sentiment-metrics"
 
   # S3 bucket for ML model storage
-  model_s3_bucket = "sentiment-analyzer-models-218795110243"
+  model_s3_bucket = "sentiment-analyzer-models-${data.aws_caller_identity.current.account_id}"
 
   # S3 bucket for ticker cache data (Feature 006)
   ticker_cache_bucket = "${var.environment}-sentiment-ticker-cache-${data.aws_caller_identity.current.account_id}"
