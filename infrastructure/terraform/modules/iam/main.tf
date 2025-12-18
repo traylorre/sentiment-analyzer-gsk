@@ -678,6 +678,31 @@ resource "aws_iam_role_policy" "sse_streaming_dynamodb" {
   })
 }
 
+# SSE Streaming Lambda: Feature 006 Users Table Access (read-only for user config validation)
+resource "aws_iam_role_policy" "sse_streaming_feature_006_users" {
+  count = var.enable_feature_006 ? 1 : 0
+  name  = "${var.environment}-sse-streaming-feature-006-users-policy"
+  role  = aws_iam_role.sse_streaming_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:Query"
+        ]
+        Resource = [
+          var.feature_006_users_table_arn,
+          "${var.feature_006_users_table_arn}/index/by_email",
+          "${var.feature_006_users_table_arn}/index/by_cognito_sub"
+        ]
+      }
+    ]
+  })
+}
+
 # SSE Streaming Lambda: CloudWatch Logs
 resource "aws_iam_role_policy_attachment" "sse_streaming_logs" {
   role       = aws_iam_role.sse_streaming_lambda.name
