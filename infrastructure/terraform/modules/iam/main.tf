@@ -47,7 +47,7 @@ resource "aws_iam_role_policy" "ingestion_dynamodb" {
   })
 }
 
-# Ingestion Lambda: Secrets Manager access (NewsAPI key)
+# Ingestion Lambda: Secrets Manager access (Tiingo and Finnhub API keys)
 resource "aws_iam_role_policy" "ingestion_secrets" {
   name = "${var.environment}-ingestion-secrets-policy"
   role = aws_iam_role.ingestion_lambda.id
@@ -60,7 +60,10 @@ resource "aws_iam_role_policy" "ingestion_secrets" {
         Action = [
           "secretsmanager:GetSecretValue"
         ]
-        Resource = var.newsapi_secret_arn
+        Resource = [
+          var.tiingo_secret_arn,
+          var.finnhub_secret_arn
+        ]
       }
     ]
   })
@@ -110,6 +113,31 @@ resource "aws_iam_role_policy" "ingestion_metrics" {
             "cloudwatch:namespace" = "SentimentAnalyzer"
           }
         }
+      }
+    ]
+  })
+}
+
+# Ingestion Lambda: Feature 006 Users Table Access (Query for CONFIGURATION records)
+# Required for fetching active tickers from configurations stored in users table
+resource "aws_iam_role_policy" "ingestion_feature_006_users" {
+  count = var.enable_feature_006 ? 1 : 0
+  name  = "${var.environment}-ingestion-feature-006-users-policy"
+  role  = aws_iam_role.ingestion_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:Query"
+        ]
+        Resource = [
+          var.feature_006_users_table_arn,
+          "${var.feature_006_users_table_arn}/index/by_entity_status"
+        ]
       }
     ]
   })

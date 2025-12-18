@@ -1212,7 +1212,6 @@ jobs:
           # Feature 006 users table for user configs (v2 API, used by dashboard handler)
           DATABASE_TABLE: preprod-sentiment-users
           SNS_TOPIC_ARN: ${{ steps.infra.outputs.sns_topic_arn }}
-          NEWSAPI_SECRET_ARN: ${{ secrets.NEWSAPI_SECRET_ARN }}
           DASHBOARD_API_KEY: ${{ secrets.DASHBOARD_API_KEY }}
           API_KEY: ${{ secrets.DASHBOARD_API_KEY }}
           WATCH_TAGS: AI,climate,economy

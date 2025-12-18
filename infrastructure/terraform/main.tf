@@ -284,8 +284,8 @@ module "ingestion_lambda" {
   environment_variables = {
     WATCH_TAGS              = var.watch_tags
     DATABASE_TABLE          = module.dynamodb.table_name
+    USERS_TABLE             = module.dynamodb.feature_006_users_table_name
     SNS_TOPIC_ARN           = module.sns.topic_arn
-    NEWSAPI_SECRET_ARN      = module.secrets.newsapi_secret_arn
     TIINGO_SECRET_ARN       = module.secrets.tiingo_secret_arn
     FINNHUB_SECRET_ARN      = module.secrets.finnhub_secret_arn
     ENVIRONMENT             = var.environment
@@ -765,7 +765,6 @@ module "iam" {
 
   environment                  = var.environment
   dynamodb_table_arn           = module.dynamodb.table_arn
-  newsapi_secret_arn           = module.secrets.newsapi_secret_arn
   dashboard_api_key_secret_arn = module.secrets.dashboard_api_key_secret_arn
   analysis_topic_arn           = module.sns.topic_arn
   dlq_arn                      = module.sns.dlq_arn
@@ -773,6 +772,8 @@ module "iam" {
   chaos_experiments_table_arn  = module.dynamodb.chaos_experiments_table_arn
   ticker_cache_bucket_arn      = aws_s3_bucket.ticker_cache.arn
   sendgrid_secret_arn          = module.secrets.sendgrid_secret_arn
+  tiingo_secret_arn            = module.secrets.tiingo_secret_arn
+  finnhub_secret_arn           = module.secrets.finnhub_secret_arn
   feature_006_users_table_arn  = module.dynamodb.feature_006_users_table_arn
   enable_feature_006           = true
 }
@@ -854,11 +855,6 @@ output "dynamodb_table_name" {
 output "dynamodb_table_arn" {
   description = "ARN of the DynamoDB table"
   value       = module.dynamodb.table_arn
-}
-
-output "newsapi_secret_arn" {
-  description = "ARN of the NewsAPI secret"
-  value       = module.secrets.newsapi_secret_arn
 }
 
 output "dashboard_api_key_secret_arn" {
