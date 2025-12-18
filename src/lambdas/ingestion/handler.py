@@ -132,12 +132,23 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     Triggered by EventBridge scheduler every 5 minutes.
 
     Args:
-        event: EventBridge scheduled event
+        event: EventBridge scheduled event (or warmup event with {"warmup": true})
         context: Lambda context (contains aws_request_id)
 
     Returns:
         Response with status and summary
     """
+    # Feature 142: Warmup support - short-circuit for warmup invocations
+    # This reduces cold start delays when tests invoke Lambda for warmup
+    if event.get("warmup"):
+        logger.info("Warmup invocation - returning early")
+        return {
+            "statusCode": 200,
+            "body": json.dumps(
+                {"status": "warmed", "message": "Lambda container initialized"}
+            ),
+        }
+
     start_time = time.perf_counter()
     request_id = getattr(context, "aws_request_id", "unknown")
 
