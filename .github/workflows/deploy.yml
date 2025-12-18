@@ -139,6 +139,7 @@ jobs:
           pip install \
             boto3==1.41.0 \
             requests==2.32.5 \
+            httpx==0.28.1 \
             pydantic==2.12.4 \
             python-json-logger==4.0.0 \
             aws-xray-sdk==2.14.0 \
