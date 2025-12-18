@@ -177,11 +177,12 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         # Load configuration from environment
         config = _get_config()
 
-        # Get DynamoDB table
+        # Get DynamoDB tables
         table = get_table(config["dynamodb_table"])
+        users_table = get_table(config["users_table"])
 
-        # Get unique tickers from all active configurations
-        tickers = _get_active_tickers(table)
+        # Get unique tickers from all active configurations (stored in users table)
+        tickers = _get_active_tickers(users_table)
 
         if not tickers:
             logger.info("No active tickers found, skipping ingestion")
@@ -459,6 +460,7 @@ def _get_config() -> dict[str, str]:
 
     return {
         "dynamodb_table": os.environ["DATABASE_TABLE"],
+        "users_table": os.environ.get("USERS_TABLE", os.environ["DATABASE_TABLE"]),
         "sns_topic_arn": os.environ.get("SNS_TOPIC_ARN", ""),
         "alert_topic_arn": os.environ.get(
             "ALERT_TOPIC_ARN", ""
@@ -593,7 +595,7 @@ def _get_active_tickers(table: Any, force_refresh: bool = False) -> list[str]:
             # Query using by_entity_status GSI (entity_type + is_active composite)
             response = table.query(
                 IndexName="by_entity_status",
-                KeyConditionExpression="entity_type = :et AND entity_status = :status",
+                KeyConditionExpression="entity_type = :et AND status = :status",
                 ExpressionAttributeValues={
                     ":et": "CONFIGURATION",
                     ":status": "active",
@@ -633,7 +635,7 @@ def _get_active_tickers(table: Any, force_refresh: bool = False) -> list[str]:
             if use_gsi:
                 response = table.query(
                     IndexName="by_entity_status",
-                    KeyConditionExpression="entity_type = :et AND entity_status = :status",
+                    KeyConditionExpression="entity_type = :et AND status = :status",
                     ExpressionAttributeValues={
                         ":et": "CONFIGURATION",
                         ":status": "active",
