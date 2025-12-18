@@ -41,7 +41,12 @@ import pytest
 from src.lambdas.analysis.handler import lambda_handler
 
 # Environment variables should be set by CI (do NOT override here)
-# CI sets: DYNAMODB_TABLE=dev-sentiment-items, ENVIRONMENT=dev, etc.
+# CI sets: DYNAMODB_TABLE=preprod-sentiment-items, ENVIRONMENT=preprod, etc.
+#
+# IMPORTANT: CI sets DATABASE_TABLE to preprod-sentiment-users (user configs table)
+# but this test suite needs to use DYNAMODB_TABLE (sentiment items table).
+# The analysis handler uses get_table() which reads DATABASE_TABLE.
+# Fix(Issue #13): Set DATABASE_TABLE = DYNAMODB_TABLE for test isolation.
 
 
 @pytest.fixture
@@ -49,12 +54,26 @@ def env_vars():
     """
     Verify required environment variables are set.
 
-    Does NOT override CI-provided values.
+    Does NOT override CI-provided values, except for DATABASE_TABLE which must
+    point to the same table as DYNAMODB_TABLE for the analysis handler to work.
     """
     required_vars = ["DYNAMODB_TABLE", "ENVIRONMENT"]
     for var in required_vars:
         assert var in os.environ, f"Missing required env var: {var}"
+
+    # Fix(Issue #13): Analysis handler uses DATABASE_TABLE via get_table().
+    # CI sets DATABASE_TABLE=preprod-sentiment-users (wrong table for this test).
+    # Override to match DYNAMODB_TABLE so handler updates the correct table.
+    original_database_table = os.environ.get("DATABASE_TABLE")
+    os.environ["DATABASE_TABLE"] = os.environ["DYNAMODB_TABLE"]
+
     yield
+
+    # Restore original value
+    if original_database_table is not None:
+        os.environ["DATABASE_TABLE"] = original_database_table
+    else:
+        os.environ.pop("DATABASE_TABLE", None)
 
 
 @pytest.fixture
