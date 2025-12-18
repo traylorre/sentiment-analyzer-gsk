@@ -304,15 +304,18 @@ def verify_internal_auth(auth_header: str | None) -> bool:
 def _find_alerts_by_ticker(table: Any, ticker: str) -> list[AlertRule]:
     """Find all alerts for a specific ticker.
 
-    Note: In production, use a GSI on ticker for efficiency.
-    This implementation scans all alerts which is OK for low volume.
+    Uses by_entity_status GSI to query ALERT_RULE items with ticker filter.
+    CRITICAL: No table scan - GSI query is O(n) where n = alert count.
     """
     alerts = []
 
     try:
-        # Scan for alerts (would use GSI in production)
-        response = table.scan(
-            FilterExpression="entity_type = :type AND ticker = :ticker",
+        # Query using by_entity_status GSI (entity_type hash key)
+        # Filter by ticker on the filtered result set
+        response = table.query(
+            IndexName="by_entity_status",
+            KeyConditionExpression="entity_type = :type",
+            FilterExpression="ticker = :ticker",
             ExpressionAttributeValues={
                 ":type": "ALERT_RULE",
                 ":ticker": ticker,
@@ -324,8 +327,10 @@ def _find_alerts_by_ticker(table: Any, ticker: str) -> list[AlertRule]:
 
         # Handle pagination
         while "LastEvaluatedKey" in response:
-            response = table.scan(
-                FilterExpression="entity_type = :type AND ticker = :ticker",
+            response = table.query(
+                IndexName="by_entity_status",
+                KeyConditionExpression="entity_type = :type",
+                FilterExpression="ticker = :ticker",
                 ExpressionAttributeValues={
                     ":type": "ALERT_RULE",
                     ":ticker": ticker,

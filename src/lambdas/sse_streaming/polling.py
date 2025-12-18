@@ -139,11 +139,11 @@ class PollingService:
             metrics are different from last poll.
         """
         try:
-            # Run DynamoDB scan in executor to avoid blocking
+            # Run DynamoDB GSI queries in executor to avoid blocking
+            # CRITICAL: No table scan - uses by_sentiment GSI instead
             loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(None, self._scan_table)
+            items = await loop.run_in_executor(None, self._get_all_items_by_gsi)
 
-            items = response.get("Items", [])
             metrics = self._aggregate_metrics(items)
 
             changed = self._metrics_changed(self._last_metrics, metrics)
@@ -171,20 +171,53 @@ class PollingService:
             # Return empty metrics on first poll failure
             return MetricsEventData(total=0, positive=0, neutral=0, negative=0), False
 
-    def _scan_table(self) -> dict:
-        """Scan DynamoDB table for sentiment items.
+    def _query_by_sentiment(self, sentiment: str) -> list[dict]:
+        """Query DynamoDB table for items by sentiment using GSI.
+
+        CRITICAL: Uses by_sentiment GSI instead of scan for O(n) efficiency.
+
+        Args:
+            sentiment: Sentiment value to query ("positive", "negative", "neutral")
 
         Returns:
-            DynamoDB scan response
+            List of DynamoDB items matching the sentiment
         """
-        # Filter for sentiment items only
         table = self._get_table()
-        response = table.scan(
-            FilterExpression="begins_with(pk, :prefix)",
-            ExpressionAttributeValues={":prefix": "SENTIMENT#"},
-            Limit=1000,  # Reasonable limit for metrics aggregation
+        items: list[dict] = []
+
+        response = table.query(
+            IndexName="by_sentiment",
+            KeyConditionExpression="sentiment = :sentiment",
+            ExpressionAttributeValues={":sentiment": sentiment},
+            Limit=1000,
         )
-        return response
+        items.extend(response.get("Items", []))
+
+        # Handle pagination
+        while "LastEvaluatedKey" in response and len(items) < 1000:
+            response = table.query(
+                IndexName="by_sentiment",
+                KeyConditionExpression="sentiment = :sentiment",
+                ExpressionAttributeValues={":sentiment": sentiment},
+                ExclusiveStartKey=response["LastEvaluatedKey"],
+                Limit=1000 - len(items),
+            )
+            items.extend(response.get("Items", []))
+
+        return items
+
+    def _get_all_items_by_gsi(self) -> list[dict]:
+        """Get all sentiment items using GSI queries (no scan).
+
+        CRITICAL: No table scan - queries each sentiment type via GSI.
+
+        Returns:
+            Combined list of all sentiment items
+        """
+        all_items: list[dict] = []
+        for sentiment in ["positive", "negative", "neutral"]:
+            all_items.extend(self._query_by_sentiment(sentiment))
+        return all_items
 
     async def poll_loop(self):
         """Continuous polling loop generator.

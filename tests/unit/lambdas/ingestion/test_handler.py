@@ -138,16 +138,29 @@ class TestGetActiveTickers:
             AttributeDefinitions=[
                 {"AttributeName": "PK", "AttributeType": "S"},
                 {"AttributeName": "SK", "AttributeType": "S"},
+                {"AttributeName": "entity_type", "AttributeType": "S"},
+                {"AttributeName": "status", "AttributeType": "S"},
+            ],
+            GlobalSecondaryIndexes=[
+                {
+                    "IndexName": "by_entity_status",
+                    "KeySchema": [
+                        {"AttributeName": "entity_type", "KeyType": "HASH"},
+                        {"AttributeName": "status", "KeyType": "RANGE"},
+                    ],
+                    "Projection": {"ProjectionType": "ALL"},
+                }
             ],
             BillingMode="PAY_PER_REQUEST",
         )
 
-        # Add configurations with tickers
+        # Add configurations with tickers (status="active" for GSI query)
         table.put_item(
             Item={
                 "PK": "USER#user1",
                 "SK": "CONFIG#config1",
                 "entity_type": "CONFIGURATION",
+                "status": "active",
                 "is_active": True,
                 "tickers": [
                     {"symbol": "AAPL", "name": "Apple"},
@@ -160,6 +173,7 @@ class TestGetActiveTickers:
                 "PK": "USER#user2",
                 "SK": "CONFIG#config2",
                 "entity_type": "CONFIGURATION",
+                "status": "active",
                 "is_active": True,
                 "tickers": [
                     {"symbol": "GOOGL", "name": "Alphabet"},
@@ -186,26 +200,40 @@ class TestGetActiveTickers:
             AttributeDefinitions=[
                 {"AttributeName": "PK", "AttributeType": "S"},
                 {"AttributeName": "SK", "AttributeType": "S"},
+                {"AttributeName": "entity_type", "AttributeType": "S"},
+                {"AttributeName": "status", "AttributeType": "S"},
+            ],
+            GlobalSecondaryIndexes=[
+                {
+                    "IndexName": "by_entity_status",
+                    "KeySchema": [
+                        {"AttributeName": "entity_type", "KeyType": "HASH"},
+                        {"AttributeName": "status", "KeyType": "RANGE"},
+                    ],
+                    "Projection": {"ProjectionType": "ALL"},
+                }
             ],
             BillingMode="PAY_PER_REQUEST",
         )
 
-        # Add active configuration
+        # Add active configuration (status="active" for GSI query)
         table.put_item(
             Item={
                 "PK": "USER#user1",
                 "SK": "CONFIG#config1",
                 "entity_type": "CONFIGURATION",
+                "status": "active",
                 "is_active": True,
                 "tickers": [{"symbol": "AAPL"}],
             }
         )
-        # Add inactive configuration
+        # Add inactive configuration (status="inactive" won't be found by GSI)
         table.put_item(
             Item={
                 "PK": "USER#user2",
                 "SK": "CONFIG#config2",
                 "entity_type": "CONFIGURATION",
+                "status": "inactive",
                 "is_active": False,
                 "tickers": [{"symbol": "MSFT"}],
             }

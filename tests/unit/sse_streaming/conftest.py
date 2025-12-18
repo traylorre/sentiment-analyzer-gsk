@@ -53,10 +53,22 @@ def sse_env_vars(monkeypatch):
 def mock_dynamodb_table(mocker):
     """Mock DynamoDB table for SSE streaming tests.
 
-    Returns a mock table that can be configured with scan/get_item responses.
+    Returns a mock table that can be configured with query/get_item responses.
+    Uses by_sentiment GSI queries instead of scan.
     """
     mock_table = mocker.MagicMock()
-    mock_table.scan.return_value = {"Items": []}
+    mock_table._test_items = []  # Default empty, tests can override
+
+    # Query returns items matching sentiment (repeatable)
+    def query_side_effect(**kwargs):
+        sentiment = kwargs.get("ExpressionAttributeValues", {}).get(":sentiment", "")
+        return {
+            "Items": [
+                i for i in mock_table._test_items if i.get("sentiment") == sentiment
+            ]
+        }
+
+    mock_table.query.side_effect = query_side_effect
     mock_table.get_item.return_value = {}
     return mock_table
 

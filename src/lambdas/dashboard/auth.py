@@ -415,37 +415,22 @@ def get_user_by_id(table: Any, user_id: str) -> User | None:
 
 
 def get_user_by_email(table: Any, email: str) -> User | None:
-    """Get user by email address.
+    """Get user by email address (DEPRECATED - raises error).
+
+    CRITICAL: This function used table scan which is not permitted.
+    Use get_user_by_email_gsi() instead for O(1) GSI lookup.
 
     Args:
         table: DynamoDB Table resource
         email: User's email
 
-    Returns:
-        User if found, None otherwise
+    Raises:
+        NotImplementedError: Always - scan is not permitted
     """
-    try:
-        # Scan for user with matching email (would be GSI in production)
-        response = table.scan(
-            FilterExpression="email = :email AND entity_type = :type",
-            ExpressionAttributeValues={
-                ":email": email.lower(),
-                ":type": "USER",
-            },
-        )
-
-        items = response.get("Items", [])
-        if not items:
-            return None
-
-        return User.from_dynamodb_item(items[0])
-
-    except Exception as e:
-        logger.error(
-            "Failed to get user by email",
-            extra=get_safe_error_info(e),
-        )
-        return None
+    raise NotImplementedError(
+        "get_user_by_email() uses table scan which is not permitted. "
+        "Use get_user_by_email_gsi() instead for O(1) GSI lookup."
+    )
 
 
 # =============================================================================
@@ -1430,7 +1415,7 @@ def verify_magic_link(
     )
 
     # Find or create user
-    existing_user = get_user_by_email(table, token.email)
+    existing_user = get_user_by_email_gsi(table, token.email)
     merged_data = False
 
     if existing_user:
@@ -1601,7 +1586,7 @@ def handle_oauth_callback(
         )
 
     # Check for existing user with this email
-    existing_user = get_user_by_email(table, email)
+    existing_user = get_user_by_email_gsi(table, email)
 
     if existing_user and existing_user.auth_type != request.provider:
         # Account conflict - mask email in response
@@ -1810,7 +1795,7 @@ def check_email_conflict(
     Returns:
         CheckEmailResponse with conflict status
     """
-    existing_user = get_user_by_email(table, request.email)
+    existing_user = get_user_by_email_gsi(table, request.email)
 
     if not existing_user:
         return CheckEmailResponse(conflict=False)

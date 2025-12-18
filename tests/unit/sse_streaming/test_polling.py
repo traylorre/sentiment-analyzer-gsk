@@ -16,36 +16,48 @@ class TestPollingService:
 
     @pytest.fixture
     def mock_dynamodb_table(self):
-        """Create mock DynamoDB table."""
+        """Create mock DynamoDB table with GSI query mocks."""
         mock_table = MagicMock()
-        mock_table.scan.return_value = {
-            "Items": [
-                {
-                    "pk": "SENTIMENT#item1",
-                    "sk": "2025-12-02T10:00:00Z",
-                    "ticker": "AAPL",
-                    "sentiment": "positive",
-                    "score": Decimal("0.85"),
-                    "timestamp": "2025-12-02T10:00:00Z",
-                },
-                {
-                    "pk": "SENTIMENT#item2",
-                    "sk": "2025-12-02T10:01:00Z",
-                    "ticker": "MSFT",
-                    "sentiment": "neutral",
-                    "score": Decimal("0.05"),
-                    "timestamp": "2025-12-02T10:01:00Z",
-                },
-                {
-                    "pk": "SENTIMENT#item3",
-                    "sk": "2025-12-02T10:02:00Z",
-                    "ticker": "AAPL",
-                    "sentiment": "negative",
-                    "score": Decimal("-0.65"),
-                    "timestamp": "2025-12-02T10:02:00Z",
-                },
-            ]
+        # Code uses by_sentiment GSI with 3 queries (positive, negative, neutral)
+        positive_item = {
+            "pk": "SENTIMENT#item1",
+            "sk": "2025-12-02T10:00:00Z",
+            "ticker": "AAPL",
+            "sentiment": "positive",
+            "score": Decimal("0.85"),
+            "timestamp": "2025-12-02T10:00:00Z",
         }
+        negative_item = {
+            "pk": "SENTIMENT#item3",
+            "sk": "2025-12-02T10:02:00Z",
+            "ticker": "AAPL",
+            "sentiment": "negative",
+            "score": Decimal("-0.65"),
+            "timestamp": "2025-12-02T10:02:00Z",
+        }
+        neutral_item = {
+            "pk": "SENTIMENT#item2",
+            "sk": "2025-12-02T10:01:00Z",
+            "ticker": "MSFT",
+            "sentiment": "neutral",
+            "score": Decimal("0.05"),
+            "timestamp": "2025-12-02T10:01:00Z",
+        }
+        # Store items for direct test access
+        mock_table._test_items = [positive_item, negative_item, neutral_item]
+
+        # Query returns items for each sentiment type (repeatable)
+        def query_side_effect(**kwargs):
+            sentiment = kwargs.get("ExpressionAttributeValues", {}).get(
+                ":sentiment", ""
+            )
+            return {
+                "Items": [
+                    i for i in mock_table._test_items if i["sentiment"] == sentiment
+                ]
+            }
+
+        mock_table.query.side_effect = query_side_effect
         return mock_table
 
     def test_aggregate_metrics_counts_sentiments(self, mock_dynamodb_table):
@@ -57,7 +69,8 @@ class TestPollingService:
         ):
             service = PollingService(table_name="test-table")
             service._table = mock_dynamodb_table
-            metrics = service._aggregate_metrics(mock_dynamodb_table.scan()["Items"])
+            # Use _test_items directly (no longer using scan)
+            metrics = service._aggregate_metrics(mock_dynamodb_table._test_items)
 
         assert metrics.total == 3
         assert metrics.positive == 1
@@ -72,7 +85,8 @@ class TestPollingService:
             PollingService, "_get_table", return_value=mock_dynamodb_table
         ):
             service = PollingService(table_name="test-table")
-            metrics = service._aggregate_metrics(mock_dynamodb_table.scan()["Items"])
+            # Use _test_items directly (no longer using scan)
+            metrics = service._aggregate_metrics(mock_dynamodb_table._test_items)
 
         assert metrics.by_tag["AAPL"] == 2
         assert metrics.by_tag["MSFT"] == 1
@@ -130,17 +144,28 @@ class TestPollMethod:
 
     @pytest.fixture
     def mock_dynamodb_table(self):
-        """Create mock DynamoDB table."""
+        """Create mock DynamoDB table with GSI query mock."""
         mock_table = MagicMock()
-        mock_table.scan.return_value = {
-            "Items": [
-                {
-                    "pk": "SENTIMENT#item1",
-                    "ticker": "AAPL",
-                    "sentiment": "positive",
-                },
-            ]
+        # Code uses by_sentiment GSI with 3 queries (positive, negative, neutral)
+        positive_item = {
+            "pk": "SENTIMENT#item1",
+            "ticker": "AAPL",
+            "sentiment": "positive",
         }
+        mock_table._test_items = [positive_item]
+
+        # Query returns items for each sentiment type (repeatable for multiple polls)
+        def query_side_effect(**kwargs):
+            sentiment = kwargs.get("ExpressionAttributeValues", {}).get(
+                ":sentiment", ""
+            )
+            return {
+                "Items": [
+                    i for i in mock_table._test_items if i["sentiment"] == sentiment
+                ]
+            }
+
+        mock_table.query.side_effect = query_side_effect
         return mock_table
 
     @pytest.mark.asyncio
@@ -180,9 +205,10 @@ class TestPollMethod:
 
         from src.lambdas.sse_streaming.polling import PollingService
 
-        mock_dynamodb_table.scan.side_effect = ClientError(
+        # Use query.side_effect for error (GSI query is used instead of scan)
+        mock_dynamodb_table.query.side_effect = ClientError(
             {"Error": {"Code": "InternalError", "Message": "Test error"}},
-            "Scan",
+            "Query",
         )
 
         service = PollingService(table_name="test-table")
@@ -208,10 +234,10 @@ class TestPollMethod:
         metrics1, _ = await service.poll()
         assert metrics1.total == 1
 
-        # Second poll fails
-        mock_dynamodb_table.scan.side_effect = ClientError(
+        # Second poll fails - use query.side_effect for error
+        mock_dynamodb_table.query.side_effect = ClientError(
             {"Error": {"Code": "InternalError", "Message": "Test error"}},
-            "Scan",
+            "Query",
         )
 
         metrics2, changed = await service.poll()
@@ -221,26 +247,26 @@ class TestPollMethod:
         assert changed is False
 
 
-class TestScanTable:
-    """Tests for _scan_table method."""
+class TestQueryBySentiment:
+    """Tests for _query_by_sentiment method using GSI."""
 
-    def test_scan_table_uses_filter_expression(self):
-        """Scan should filter for SENTIMENT# prefix."""
+    def test_query_by_sentiment_uses_gsi(self):
+        """Query should use by_sentiment GSI."""
         from src.lambdas.sse_streaming.polling import PollingService
 
         mock_table = MagicMock()
-        mock_table.scan.return_value = {"Items": []}
+        mock_table.query.return_value = {"Items": []}
 
         service = PollingService(table_name="test-table")
         service._table = mock_table
 
-        service._scan_table()
+        service._query_by_sentiment("positive")
 
-        mock_table.scan.assert_called_once()
-        call_kwargs = mock_table.scan.call_args[1]
-        assert "FilterExpression" in call_kwargs
-        assert "begins_with(pk, :prefix)" in call_kwargs["FilterExpression"]
-        assert call_kwargs["ExpressionAttributeValues"][":prefix"] == "SENTIMENT#"
+        mock_table.query.assert_called_once()
+        call_kwargs = mock_table.query.call_args[1]
+        assert call_kwargs["IndexName"] == "by_sentiment"
+        assert "KeyConditionExpression" in call_kwargs
+        assert call_kwargs["ExpressionAttributeValues"][":sentiment"] == "positive"
 
 
 class TestMetricsChange:

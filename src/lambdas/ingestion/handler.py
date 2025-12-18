@@ -177,12 +177,11 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         # Load configuration from environment
         config = _get_config()
 
-        # Get DynamoDB tables
+        # Get DynamoDB table
         table = get_table(config["dynamodb_table"])
-        users_table = get_table(config["users_table"])
 
-        # Get unique tickers from all active configurations (stored in users table)
-        tickers = _get_active_tickers(users_table)
+        # Get unique tickers from all active configurations
+        tickers = _get_active_tickers(table)
 
         if not tickers:
             logger.info("No active tickers found, skipping ingestion")
@@ -460,7 +459,6 @@ def _get_config() -> dict[str, str]:
 
     return {
         "dynamodb_table": os.environ["DATABASE_TABLE"],
-        "users_table": os.environ.get("USERS_TABLE", os.environ["DATABASE_TABLE"]),
         "sns_topic_arn": os.environ.get("SNS_TOPIC_ARN", ""),
         "alert_topic_arn": os.environ.get(
             "ALERT_TOPIC_ARN", ""
@@ -589,37 +587,17 @@ def _get_active_tickers(table: Any, force_refresh: bool = False) -> list[str]:
     tickers_set: set[str] = set()
 
     try:
-        # Try to use GSI query first (by_entity_status), fall back to scan
-        # The GSI query is ~100x faster than scan for large tables
-        try:
-            # Query using by_entity_status GSI (entity_type + is_active composite)
-            response = table.query(
-                IndexName="by_entity_status",
-                KeyConditionExpression="entity_type = :et AND status = :status",
-                ExpressionAttributeValues={
-                    ":et": "CONFIGURATION",
-                    ":status": "active",
-                },
-                ProjectionExpression="tickers",
-            )
-            use_gsi = True
-        except table.meta.client.exceptions.ClientError as e:
-            # GSI may not exist yet - fall back to scan
-            if "ValidationException" in str(e) or "ResourceNotFoundException" in str(e):
-                logger.warning(
-                    "GSI by_entity_status not available, falling back to scan"
-                )
-                response = table.scan(
-                    FilterExpression="entity_type = :et AND is_active = :active",
-                    ExpressionAttributeValues={
-                        ":et": "CONFIGURATION",
-                        ":active": True,
-                    },
-                    ProjectionExpression="tickers",
-                )
-                use_gsi = False
-            else:
-                raise
+        # Query using by_entity_status GSI (entity_type + status composite)
+        # CRITICAL: No scan fallback - GSI must be available
+        response = table.query(
+            IndexName="by_entity_status",
+            KeyConditionExpression="entity_type = :et AND status = :status",
+            ExpressionAttributeValues={
+                ":et": "CONFIGURATION",
+                ":status": "active",
+            },
+            ProjectionExpression="tickers",
+        )
 
         for item in response.get("Items", []):
             for ticker in item.get("tickers", []):
@@ -632,27 +610,16 @@ def _get_active_tickers(table: Any, force_refresh: bool = False) -> list[str]:
 
         # Handle pagination
         while "LastEvaluatedKey" in response:
-            if use_gsi:
-                response = table.query(
-                    IndexName="by_entity_status",
-                    KeyConditionExpression="entity_type = :et AND status = :status",
-                    ExpressionAttributeValues={
-                        ":et": "CONFIGURATION",
-                        ":status": "active",
-                    },
-                    ProjectionExpression="tickers",
-                    ExclusiveStartKey=response["LastEvaluatedKey"],
-                )
-            else:
-                response = table.scan(
-                    FilterExpression="entity_type = :et AND is_active = :active",
-                    ExpressionAttributeValues={
-                        ":et": "CONFIGURATION",
-                        ":active": True,
-                    },
-                    ProjectionExpression="tickers",
-                    ExclusiveStartKey=response["LastEvaluatedKey"],
-                )
+            response = table.query(
+                IndexName="by_entity_status",
+                KeyConditionExpression="entity_type = :et AND status = :status",
+                ExpressionAttributeValues={
+                    ":et": "CONFIGURATION",
+                    ":status": "active",
+                },
+                ProjectionExpression="tickers",
+                ExclusiveStartKey=response["LastEvaluatedKey"],
+            )
             for item in response.get("Items", []):
                 for ticker in item.get("tickers", []):
                     if isinstance(ticker, dict):
@@ -670,7 +637,7 @@ def _get_active_tickers(table: Any, force_refresh: bool = False) -> list[str]:
             "Refreshed active tickers cache",
             extra={
                 "ticker_count": len(_active_tickers_cache),
-                "used_gsi": use_gsi,
+                "used_gsi": True,  # Always uses by_entity_status GSI
             },
         )
 

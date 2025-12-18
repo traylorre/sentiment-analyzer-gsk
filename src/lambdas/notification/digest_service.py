@@ -103,11 +103,13 @@ class DigestService:
         """
         users_due: list[tuple[User, DigestSettings]] = []
 
-        # Scan for all enabled digest settings
-        # Note: In production with many users, use GSI on enabled + time
+        # Query using by_entity_status GSI for DIGEST_SETTINGS items
+        # CRITICAL: No table scan - GSI query is O(n) where n = digest settings count
         try:
-            response = self.table.scan(
-                FilterExpression=("entity_type = :et AND enabled = :enabled"),
+            response = self.table.query(
+                IndexName="by_entity_status",
+                KeyConditionExpression="entity_type = :et",
+                FilterExpression="enabled = :enabled",
                 ExpressionAttributeValues={
                     ":et": "DIGEST_SETTINGS",
                     ":enabled": True,
@@ -125,6 +127,27 @@ class DigestService:
                     user = self._get_user(settings.user_id)
                     if user and user.email:
                         users_due.append((user, settings))
+
+            # Handle pagination
+            while "LastEvaluatedKey" in response:
+                response = self.table.query(
+                    IndexName="by_entity_status",
+                    KeyConditionExpression="entity_type = :et",
+                    FilterExpression="enabled = :enabled",
+                    ExpressionAttributeValues={
+                        ":et": "DIGEST_SETTINGS",
+                        ":enabled": True,
+                    },
+                    ProjectionExpression="PK, SK, user_id, #t, timezone, include_all_configs, config_ids, last_sent",
+                    ExpressionAttributeNames={"#t": "time"},
+                    ExclusiveStartKey=response["LastEvaluatedKey"],
+                )
+                for item in response.get("Items", []):
+                    settings = DigestSettings.from_dynamodb_item(item)
+                    if self._is_digest_due(settings, current_hour_utc):
+                        user = self._get_user(settings.user_id)
+                        if user and user.email:
+                            users_due.append((user, settings))
 
             logger.info(
                 "Found users due for digest",

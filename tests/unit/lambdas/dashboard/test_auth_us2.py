@@ -259,10 +259,10 @@ class TestHandleOAuthCallback:
     def test_successful_new_user(self):
         """Creates new user on successful OAuth."""
         table = MagicMock()
-        table.scan.return_value = {"Items": []}  # No existing user
+        # Mock GSI query for user lookup (get_user_by_email_gsi uses by_email GSI)
+        table.query.return_value = {"Items": []}  # No existing user
         table.put_item.return_value = {}
         table.update_item.return_value = {}
-        table.query.return_value = {"Items": []}
 
         mock_tokens = MagicMock()
         mock_tokens.id_token = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyMTIzIiwiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIn0.sig"
@@ -303,7 +303,8 @@ class TestHandleOAuthCallback:
             last_active_at=datetime.now(UTC),
             session_expires_at=datetime.now(UTC) + timedelta(days=30),
         )
-        table.scan.return_value = {"Items": [existing_user.to_dynamodb_item()]}
+        # Mock GSI query (get_user_by_email_gsi uses by_email GSI)
+        table.query.return_value = {"Items": [existing_user.to_dynamodb_item()]}
 
         mock_tokens = MagicMock()
         mock_tokens.id_token = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyMTIzIiwiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIn0.sig"
@@ -451,7 +452,8 @@ class TestCheckEmailConflict:
     def test_no_conflict_new_email(self):
         """Returns no conflict for new email."""
         table = MagicMock()
-        table.scan.return_value = {"Items": []}
+        # Mock GSI query (get_user_by_email_gsi uses by_email GSI)
+        table.query.return_value = {"Items": []}
 
         request = CheckEmailRequest(email="new@example.com", current_provider="google")
         response = check_email_conflict(table, request)
@@ -470,7 +472,8 @@ class TestCheckEmailConflict:
             last_active_at=datetime.now(UTC),
             session_expires_at=datetime.now(UTC) + timedelta(days=30),
         )
-        table.scan.return_value = {"Items": [user.to_dynamodb_item()]}
+        # Mock GSI query (get_user_by_email_gsi uses by_email GSI)
+        table.query.return_value = {"Items": [user.to_dynamodb_item()]}
 
         request = CheckEmailRequest(email="test@example.com", current_provider="google")
         response = check_email_conflict(table, request)
@@ -489,7 +492,8 @@ class TestCheckEmailConflict:
             last_active_at=datetime.now(UTC),
             session_expires_at=datetime.now(UTC) + timedelta(days=30),
         )
-        table.scan.return_value = {"Items": [user.to_dynamodb_item()]}
+        # Mock GSI query (get_user_by_email_gsi uses by_email GSI)
+        table.query.return_value = {"Items": [user.to_dynamodb_item()]}
 
         request = CheckEmailRequest(email="test@example.com", current_provider="google")
         response = check_email_conflict(table, request)

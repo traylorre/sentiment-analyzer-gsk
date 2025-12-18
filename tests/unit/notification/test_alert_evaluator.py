@@ -169,7 +169,8 @@ class TestFindAlertsByTicker:
 
     def test_finds_alerts(self, mock_table, sample_alert_item):
         """Finds alerts for ticker."""
-        mock_table.scan.return_value = {"Items": [sample_alert_item]}
+        # Uses by_entity_status GSI query
+        mock_table.query.return_value = {"Items": [sample_alert_item]}
 
         alerts = _find_alerts_by_ticker(mock_table, "AAPL")
 
@@ -178,7 +179,8 @@ class TestFindAlertsByTicker:
 
     def test_returns_empty_when_none(self, mock_table):
         """Returns empty list when no alerts."""
-        mock_table.scan.return_value = {"Items": []}
+        # Uses by_entity_status GSI query
+        mock_table.query.return_value = {"Items": []}
 
         alerts = _find_alerts_by_ticker(mock_table, "TSLA")
 
