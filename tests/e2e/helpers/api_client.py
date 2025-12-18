@@ -3,10 +3,13 @@
 # HTTP client wrapper for interacting with the preprod API during E2E tests.
 # Handles authentication, request tracing, and response validation.
 
+import logging
 import os
 from typing import Any
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 
 class PreprodAPIClient:
@@ -47,11 +50,31 @@ class PreprodAPIClient:
             sse_url: SSE Lambda URL for streaming endpoints (default: from SSE_LAMBDA_URL env var)
             timeout: Request timeout in seconds
         """
-        self.base_url = base_url or os.environ.get(
+        # Normalize URLs by removing trailing slashes to prevent httpx path issues
+        raw_base_url = base_url or os.environ.get(
             "PREPROD_API_URL", "https://api.preprod.sentiment-analyzer.com"
         )
-        # SSE Lambda URL for streaming endpoints; falls back to base_url if not set
-        self.sse_url = sse_url or os.environ.get("SSE_LAMBDA_URL", self.base_url)
+        self.base_url = raw_base_url.rstrip("/")
+
+        # SSE Lambda URL for streaming endpoints
+        # IMPORTANT: If SSE_LAMBDA_URL is not set, SSE requests will route to base_url
+        # which uses BUFFERED mode and will cause 404 errors for streaming endpoints
+        raw_sse_url = sse_url or os.environ.get("SSE_LAMBDA_URL", "")
+        self.sse_url = raw_sse_url.rstrip("/") if raw_sse_url else self.base_url
+
+        # Log URL configuration for debugging routing issues
+        if self.sse_url == self.base_url:
+            logger.warning(
+                "SSE_LAMBDA_URL not set - SSE requests will route to base_url (%s). "
+                "This may cause 404 errors if base_url uses BUFFERED invoke mode.",
+                self.base_url,
+            )
+        else:
+            logger.debug(
+                "API client initialized: base_url=%s, sse_url=%s",
+                self.base_url,
+                self.sse_url,
+            )
         self.timeout = timeout
         self._client: httpx.AsyncClient | None = None
         self._access_token: str | None = None
@@ -311,6 +334,15 @@ class PreprodAPIClient:
         # Route to SSE Lambda URL for any streaming endpoint (contains /stream)
         effective_url = self.sse_url if "/stream" in path else self.base_url
 
+        # Log routing decision for debugging
+        logger.debug(
+            "SSE request routing: path=%s -> %s (base=%s, sse=%s)",
+            path,
+            effective_url,
+            self.base_url,
+            self.sse_url,
+        )
+
         # Create a client with short read timeout for SSE
         async with httpx.AsyncClient(
             base_url=effective_url,
@@ -322,6 +354,18 @@ class PreprodAPIClient:
                 headers=request_headers,
             ) as response:
                 self._capture_response_headers(response)
+
+                # Detect routing failures for /stream paths
+                if "/stream" in path and response.status_code == 404:
+                    logger.error(
+                        "SSE ROUTING FAILURE: Received 404 for stream endpoint %s. "
+                        "This usually indicates the request was routed to the wrong Lambda. "
+                        "Expected URL: %s, base_url: %s, sse_url: %s",
+                        path,
+                        effective_url,
+                        self.base_url,
+                        self.sse_url,
+                    )
 
                 # Read initial content (first event or timeout)
                 content_parts = []
