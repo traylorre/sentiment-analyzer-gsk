@@ -14,10 +14,17 @@
 # causes 404 errors because the Dashboard Lambda doesn't have these routes.
 # Fix: Issue #141 (fix-sse-test-url)
 
+import asyncio
 import os
 
 import httpx
 import pytest
+
+# Retry configuration for Docker Lambda cold starts (10-20s)
+# Docker Lambda containers can take 10-20s to initialize on cold start
+MAX_RETRIES = 3
+INITIAL_TIMEOUT = 15.0  # Allow for cold start delay
+BACKOFF_MULTIPLIER = 2.0  # Double timeout per retry: 15s -> 30s -> 60s
 
 pytestmark = [pytest.mark.e2e, pytest.mark.preprod]
 
@@ -56,32 +63,43 @@ class TestSSEConnectionHealth:
 
         This catches the exact error from fix(128): Missing __init__.py files
         caused Lambda to crash on import, returning Runtime.ExitError JSON.
+
+        Note: Uses retry with backoff for Docker Lambda cold starts (10-20s).
         """
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            # Use stream to avoid waiting for full response
-            async with client.stream(
-                "GET", f"{sse_lambda_url}/api/v2/stream"
-            ) as response:
-                # Read just enough to check for error
-                content = b""
-                async for chunk in response.aiter_bytes():
-                    content += chunk
-                    if len(content) > 500:  # Enough to detect error JSON
-                        break
+        timeout = INITIAL_TIMEOUT
+        last_error = None
 
-                content_str = content.decode("utf-8", errors="ignore")
+        for attempt in range(MAX_RETRIES):
+            try:
+                async with httpx.AsyncClient(timeout=timeout) as client:
+                    async with client.stream(
+                        "GET", f"{sse_lambda_url}/api/v2/stream"
+                    ) as response:
+                        content = b""
+                        async for chunk in response.aiter_bytes():
+                            content += chunk
+                            if len(content) > 500:
+                                break
 
-                # Check for Runtime.ExitError (the exact error from fix(128))
-                assert "Runtime.ExitError" not in content_str, (
-                    f"SSE Lambda crashed with Runtime.ExitError!\n"
-                    f"This usually means missing __init__.py files in Docker image.\n"
-                    f"Response: {content_str[:200]}"
-                )
+                        content_str = content.decode("utf-8", errors="ignore")
 
-                # Check for other Lambda errors
-                assert (
-                    "errorType" not in content_str
-                ), f"SSE Lambda returned error response: {content_str[:200]}"
+                        assert "Runtime.ExitError" not in content_str, (
+                            f"SSE Lambda crashed with Runtime.ExitError!\n"
+                            f"Response: {content_str[:200]}"
+                        )
+
+                        assert (
+                            "errorType" not in content_str
+                        ), f"SSE Lambda returned error: {content_str[:200]}"
+
+                        return  # Success
+            except httpx.ReadTimeout as e:
+                last_error = e
+                if attempt < MAX_RETRIES - 1:
+                    await asyncio.sleep(1.0)
+                    timeout *= BACKOFF_MULTIPLIER
+
+        raise last_error  # Re-raise after all retries
 
     @pytest.mark.asyncio
     async def test_sse_stream_returns_200(self, sse_lambda_url: str) -> None:
@@ -92,15 +110,29 @@ class TestSSEConnectionHealth:
         Then: HTTP status is 200
 
         Dashboard shows "Disconnected" if this fails.
+        Note: Uses retry with backoff for Docker Lambda cold starts (10-20s).
         """
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            async with client.stream(
-                "GET", f"{sse_lambda_url}/api/v2/stream"
-            ) as response:
-                assert response.status_code == 200, (
-                    f"Expected 200, got {response.status_code}. "
-                    f"Dashboard will show 'Disconnected' status."
-                )
+        timeout = INITIAL_TIMEOUT
+        last_error = None
+
+        for attempt in range(MAX_RETRIES):
+            try:
+                async with httpx.AsyncClient(timeout=timeout) as client:
+                    async with client.stream(
+                        "GET", f"{sse_lambda_url}/api/v2/stream"
+                    ) as response:
+                        assert response.status_code == 200, (
+                            f"Expected 200, got {response.status_code}. "
+                            f"Dashboard will show 'Disconnected' status."
+                        )
+                        return  # Success
+            except httpx.ReadTimeout as e:
+                last_error = e
+                if attempt < MAX_RETRIES - 1:
+                    await asyncio.sleep(1.0)
+                    timeout *= BACKOFF_MULTIPLIER
+
+        raise last_error
 
     @pytest.mark.asyncio
     async def test_sse_content_type_is_event_stream(self, sse_lambda_url: str) -> None:
@@ -114,18 +146,29 @@ class TestSSEConnectionHealth:
         Note: Lambda Function URLs may return application/octet-stream,
         but CloudFront should preserve the original Content-Type.
         """
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            async with client.stream(
-                "GET", f"{sse_lambda_url}/api/v2/stream"
-            ) as response:
-                content_type = response.headers.get("content-type", "")
+        timeout = INITIAL_TIMEOUT
+        last_error = None
 
-                # Accept text/event-stream (correct) or octet-stream (Lambda URL quirk)
-                valid_types = ["text/event-stream", "application/octet-stream"]
-                assert any(t in content_type for t in valid_types), (
-                    f"Expected event-stream content type, got: {content_type}. "
-                    f"Browser EventSource may fail to connect."
-                )
+        for attempt in range(MAX_RETRIES):
+            try:
+                async with httpx.AsyncClient(timeout=timeout) as client:
+                    async with client.stream(
+                        "GET", f"{sse_lambda_url}/api/v2/stream"
+                    ) as response:
+                        content_type = response.headers.get("content-type", "")
+
+                        valid_types = ["text/event-stream", "application/octet-stream"]
+                        assert any(
+                            t in content_type for t in valid_types
+                        ), f"Expected event-stream content type, got: {content_type}."
+                        return  # Success
+            except httpx.ReadTimeout as e:
+                last_error = e
+                if attempt < MAX_RETRIES - 1:
+                    await asyncio.sleep(1.0)
+                    timeout *= BACKOFF_MULTIPLIER
+
+        raise last_error
 
     @pytest.mark.asyncio
     async def test_sse_receives_heartbeat_event(self, sse_lambda_url: str) -> None:
@@ -136,8 +179,10 @@ class TestSSEConnectionHealth:
         Then: At least one heartbeat or metrics event is received
 
         Dashboard uses heartbeats to show "Connected" status indicator.
+        Note: Uses 45s total timeout for cold start + heartbeat wait.
         """
-        async with httpx.AsyncClient(timeout=35.0) as client:
+        # Higher timeout to handle cold start (20s) + heartbeat wait (5s) + buffer
+        async with httpx.AsyncClient(timeout=45.0) as client:
             events_received = []
 
             try:
@@ -146,31 +191,24 @@ class TestSSEConnectionHealth:
                 ) as response:
                     assert response.status_code == 200
 
-                    # Read stream for up to 5 seconds
-                    import asyncio
-
                     async def read_events():
                         buffer = ""
                         async for chunk in response.aiter_text():
                             buffer += chunk
-                            # Parse SSE events (format: "event: type\ndata: ...\n\n")
                             while "\n\n" in buffer:
                                 event_text, buffer = buffer.split("\n\n", 1)
                                 if event_text.strip():
                                     events_received.append(event_text)
-                                    # Exit early if we got an event
                                     if len(events_received) >= 1:
                                         return
 
-                    # Wait max 5 seconds for an event
-                    await asyncio.wait_for(read_events(), timeout=5.0)
+                    await asyncio.wait_for(read_events(), timeout=10.0)
 
             except TimeoutError:
-                pass  # Expected - SSE streams don't end
+                pass
 
             assert len(events_received) >= 1, (
-                "No SSE events received within 5 seconds. "
-                "Dashboard will show 'Connecting...' indefinitely. "
+                "No SSE events received within 10 seconds. "
                 "Check Lambda logs for errors."
             )
 
@@ -194,28 +232,40 @@ class TestDashboardConnectionIndicator:
         1. new EventSource(`${baseUrl}/api/v2/stream`)
         2. Wait for onopen callback
         3. updateConnectionStatus(true)
+
+        Note: Uses retry with backoff for Docker Lambda cold starts (10-20s).
         """
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            # EventSource sends these headers
-            headers = {
-                "Accept": "text/event-stream",
-                "Cache-Control": "no-cache",
-            }
+        timeout = INITIAL_TIMEOUT
+        last_error = None
+        headers = {
+            "Accept": "text/event-stream",
+            "Cache-Control": "no-cache",
+        }
 
-            async with client.stream(
-                "GET", f"{sse_lambda_url}/api/v2/stream", headers=headers
-            ) as response:
-                # Check connection established (equivalent to onopen)
-                assert response.status_code == 200, "EventSource onopen would not fire"
+        for attempt in range(MAX_RETRIES):
+            try:
+                async with httpx.AsyncClient(timeout=timeout) as client:
+                    async with client.stream(
+                        "GET", f"{sse_lambda_url}/api/v2/stream", headers=headers
+                    ) as response:
+                        assert (
+                            response.status_code == 200
+                        ), "EventSource onopen would not fire"
 
-                # Read first chunk to verify streaming works
-                first_chunk = b""
-                async for chunk in response.aiter_bytes():
-                    first_chunk = chunk
-                    break
+                        first_chunk = b""
+                        async for chunk in response.aiter_bytes():
+                            first_chunk = chunk
+                            break
 
-                # Should not be an error response
-                chunk_str = first_chunk.decode("utf-8", errors="ignore")
-                assert (
-                    "errorType" not in chunk_str
-                ), f"Lambda error would trigger onerror callback: {chunk_str[:100]}"
+                        chunk_str = first_chunk.decode("utf-8", errors="ignore")
+                        assert (
+                            "errorType" not in chunk_str
+                        ), f"Lambda error: {chunk_str[:100]}"
+                        return  # Success
+            except httpx.ReadTimeout as e:
+                last_error = e
+                if attempt < MAX_RETRIES - 1:
+                    await asyncio.sleep(1.0)
+                    timeout *= BACKOFF_MULTIPLIER
+
+        raise last_error
