@@ -79,7 +79,11 @@ data "aws_iam_policy_document" "ci_deploy_core" {
       "lambda:ListLayerVersions",
       "lambda:ListLayers",
       "lambda:GetFunctionCodeSigningConfig",
-      "lambda:ListFunctionUrlConfigs"
+      "lambda:ListFunctionUrlConfigs",
+      # Lambda concurrency management (required for reserved_concurrency changes)
+      "lambda:PutFunctionConcurrency",
+      "lambda:DeleteFunctionConcurrency",
+      "lambda:GetFunctionConcurrency"
     ]
     resources = [
       # Pattern: {env}-sentiment-* (preprod-sentiment-ingestion, prod-sentiment-dashboard, etc.)
