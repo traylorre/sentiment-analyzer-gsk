@@ -630,7 +630,7 @@ module "sse_streaming_lambda" {
   # Resource configuration per spec
   memory_size          = 512
   timeout              = 900 # 15 minutes - max Lambda timeout for SSE connections
-  reserved_concurrency = 10  # Start with 10 concurrent instances
+  reserved_concurrency = 25  # Increased from 10 to handle E2E test suite SSE connections
 
   # X-Ray tracing (FR-016)
   tracing_mode = "Active"
