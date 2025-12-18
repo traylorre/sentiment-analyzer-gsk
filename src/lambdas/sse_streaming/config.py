@@ -101,11 +101,18 @@ class ConfigLookupService:
             return config
 
         except ClientError as e:
+            error_code = e.response.get("Error", {}).get("Code", "Unknown")
+            error_message = e.response.get("Error", {}).get("Message", str(e))
             logger.error(
                 "DynamoDB get_item failed",
                 extra={
                     "error": str(e),
+                    "error_code": error_code,
+                    "error_message": error_message,
+                    "table_name": self._table_name,
+                    "operation": "get_item",
                     "config_id": sanitize_for_log(config_id[:8] if config_id else ""),
+                    "user_id_prefix": sanitize_for_log(user_id[:8] if user_id else ""),
                 },
             )
             return None
