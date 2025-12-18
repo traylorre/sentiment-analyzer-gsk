@@ -1218,10 +1218,10 @@ jobs:
         run: |
           # Run tests marked as "preprod" (auto-marked by conftest.py for *_preprod.py files)
           # These tests use REAL AWS resources, not moto mocks
-          # Timeout: 300s (5 min) - allows ~112 tests to complete
-          # Previous 180s was hitting 87% completion before timeout
+          # Timeout: 360s (6 min) - provides 20% buffer over 279s avg runtime
+          # Previous 300s was at 93% utilization, risking timeout flakiness
           set +e  # Don't exit on error
-          timeout 300 pytest tests/ \
+          timeout 360 pytest tests/ \
             -m "preprod" \
             -v \
             --tb=short \
@@ -1233,7 +1233,7 @@ jobs:
             echo "✅ Integration tests passed"
             echo "passed=true" >> $GITHUB_OUTPUT
           elif [ $TEST_EXIT_CODE -eq 124 ]; then
-            echo "⚠️ Integration tests timed out (300s limit)"
+            echo "⚠️ Integration tests timed out (360s limit)"
             echo "passed=false" >> $GITHUB_OUTPUT
             echo "reason=timeout" >> $GITHUB_OUTPUT
           else
