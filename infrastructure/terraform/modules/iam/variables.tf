@@ -10,11 +10,6 @@ variable "dynamodb_table_arn" {
   type        = string
 }
 
-variable "newsapi_secret_arn" {
-  description = "ARN of the NewsAPI secret in Secrets Manager"
-  type        = string
-}
-
 variable "dashboard_api_key_secret_arn" {
   description = "ARN of the Dashboard API key secret in Secrets Manager"
   type        = string
@@ -49,6 +44,18 @@ variable "ticker_cache_bucket_arn" {
 
 variable "sendgrid_secret_arn" {
   description = "ARN of the SendGrid API key secret in Secrets Manager (Feature 006)"
+  type        = string
+  default     = ""
+}
+
+variable "tiingo_secret_arn" {
+  description = "ARN of the Tiingo API key secret in Secrets Manager (Feature 006)"
+  type        = string
+  default     = ""
+}
+
+variable "finnhub_secret_arn" {
+  description = "ARN of the Finnhub API key secret in Secrets Manager (Feature 006)"
   type        = string
   default     = ""
 }
