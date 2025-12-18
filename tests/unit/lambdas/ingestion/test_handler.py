@@ -663,16 +663,29 @@ class TestLambdaHandler:
             AttributeDefinitions=[
                 {"AttributeName": "PK", "AttributeType": "S"},
                 {"AttributeName": "SK", "AttributeType": "S"},
+                {"AttributeName": "entity_type", "AttributeType": "S"},
+                {"AttributeName": "status", "AttributeType": "S"},
+            ],
+            GlobalSecondaryIndexes=[
+                {
+                    "IndexName": "by_entity_status",
+                    "KeySchema": [
+                        {"AttributeName": "entity_type", "KeyType": "HASH"},
+                        {"AttributeName": "status", "KeyType": "RANGE"},
+                    ],
+                    "Projection": {"ProjectionType": "ALL"},
+                }
             ],
             BillingMode="PAY_PER_REQUEST",
         )
 
-        # Add a configuration
+        # Add a configuration (status="active" for GSI query)
         table.put_item(
             Item={
                 "PK": "USER#user1",
                 "SK": "CONFIG#config1",
                 "entity_type": "CONFIGURATION",
+                "status": "active",
                 "is_active": True,
                 "tickers": [{"symbol": "AAPL"}],
             }
@@ -741,16 +754,29 @@ class TestLambdaHandler:
             AttributeDefinitions=[
                 {"AttributeName": "PK", "AttributeType": "S"},
                 {"AttributeName": "SK", "AttributeType": "S"},
+                {"AttributeName": "entity_type", "AttributeType": "S"},
+                {"AttributeName": "status", "AttributeType": "S"},
+            ],
+            GlobalSecondaryIndexes=[
+                {
+                    "IndexName": "by_entity_status",
+                    "KeySchema": [
+                        {"AttributeName": "entity_type", "KeyType": "HASH"},
+                        {"AttributeName": "status", "KeyType": "RANGE"},
+                    ],
+                    "Projection": {"ProjectionType": "ALL"},
+                }
             ],
             BillingMode="PAY_PER_REQUEST",
         )
 
-        # Add a configuration
+        # Add a configuration (status="active" for GSI query)
         table.put_item(
             Item={
                 "PK": "USER#user1",
                 "SK": "CONFIG#config1",
                 "entity_type": "CONFIGURATION",
+                "status": "active",
                 "is_active": True,
                 "tickers": [{"symbol": "AAPL"}],
             }
