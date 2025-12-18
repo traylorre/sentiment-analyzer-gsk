@@ -152,9 +152,12 @@ jobs:
             --quiet
 
           # Build ingestion package
-          mkdir -p packages/ingestion-build/src/lambdas packages/ingestion-build/src/lib
+          # NOTE: handler.py must be at ROOT for Lambda handler config "handler.lambda_handler"
+          # The src/ directory structure is needed for internal imports (from src.lambdas.ingestion...)
+          mkdir -p packages/ingestion-build/src/lambdas/ingestion packages/ingestion-build/src/lib
           cp -r packages/ingestion-deps/* packages/ingestion-build/
-          cp -r src/lambdas/ingestion/* packages/ingestion-build/
+          cp -r src/lambdas/ingestion/* packages/ingestion-build/          # handler.py at ROOT
+          cp -r src/lambdas/ingestion/* packages/ingestion-build/src/lambdas/ingestion/  # also in src/ for imports
           cp -r src/lambdas/shared packages/ingestion-build/src/lambdas/
           cp -r src/lib/* packages/ingestion-build/src/lib/
           cd packages/ingestion-build
@@ -264,9 +267,12 @@ jobs:
             --quiet
 
           # Build analysis package
-          mkdir -p packages/analysis-build/src/lambdas packages/analysis-build/src/lib
+          # NOTE: handler.py must be at ROOT for Lambda handler config "handler.lambda_handler"
+          # The src/ directory structure is needed for internal imports (from src.lambdas.analysis...)
+          mkdir -p packages/analysis-build/src/lambdas/analysis packages/analysis-build/src/lib
           cp -r packages/analysis-deps/* packages/analysis-build/
-          cp -r src/lambdas/analysis/* packages/analysis-build/
+          cp -r src/lambdas/analysis/* packages/analysis-build/          # handler.py at ROOT
+          cp -r src/lambdas/analysis/* packages/analysis-build/src/lambdas/analysis/  # also in src/ for imports
           cp -r src/lambdas/shared packages/analysis-build/src/lambdas/
           cp -r src/lib/* packages/analysis-build/src/lib/
           cd packages/analysis-build
@@ -304,9 +310,12 @@ jobs:
             --quiet
 
           # Build metrics package
-          mkdir -p packages/metrics-build/src/lambdas packages/metrics-build/src/lib
+          # NOTE: handler.py must be at ROOT for Lambda handler config "handler.lambda_handler"
+          # The src/ directory structure is needed for internal imports (from src.lib.metrics...)
+          mkdir -p packages/metrics-build/src/lambdas/metrics packages/metrics-build/src/lib
           cp -r packages/metrics-deps/* packages/metrics-build/
-          cp -r src/lambdas/metrics/* packages/metrics-build/
+          cp -r src/lambdas/metrics/* packages/metrics-build/          # handler.py at ROOT
+          cp -r src/lambdas/metrics/* packages/metrics-build/src/lambdas/metrics/  # also in src/ for imports
           cp -r src/lambdas/shared packages/metrics-build/src/lambdas/
           cp -r src/lib/* packages/metrics-build/src/lib/
           cd packages/metrics-build
@@ -354,9 +363,12 @@ jobs:
             --quiet
 
           # Build notification package
-          mkdir -p packages/notification-build/src/lambdas packages/notification-build/src/lib
+          # NOTE: handler.py must be at ROOT for Lambda handler config "handler.lambda_handler"
+          # The src/ directory structure is needed for internal imports (from src.lambdas.notification...)
+          mkdir -p packages/notification-build/src/lambdas/notification packages/notification-build/src/lib
           cp -r packages/notification-deps/* packages/notification-build/
-          cp -r src/lambdas/notification/* packages/notification-build/
+          cp -r src/lambdas/notification/* packages/notification-build/          # handler.py at ROOT
+          cp -r src/lambdas/notification/* packages/notification-build/src/lambdas/notification/  # also in src/ for imports
           cp -r src/lambdas/shared packages/notification-build/src/lambdas/
           cp -r src/lib/* packages/notification-build/src/lib/
           cd packages/notification-build
