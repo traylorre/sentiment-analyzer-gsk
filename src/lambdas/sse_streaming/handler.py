@@ -24,6 +24,7 @@ from fastapi.responses import JSONResponse
 from metrics import metrics_emitter
 from models import StreamStatus
 from sse_starlette.sse import EventSourceResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import StreamingResponse
 from stream import get_stream_generator
 
@@ -50,6 +51,37 @@ app = FastAPI(
     description="Real-time Server-Sent Events for sentiment updates",
     version="1.0.0",
 )
+
+
+# Path normalization middleware - Fix(141): Lambda Web Adapter sends double slashes
+class PathNormalizationMiddleware(BaseHTTPMiddleware):
+    """Normalize request paths to handle Lambda Web Adapter double-slash issue.
+
+    Lambda Web Adapter v0.9.1 can forward requests with double slashes
+    (e.g., //health instead of /health), causing 404 errors since FastAPI
+    routes don't match paths with leading double slashes.
+
+    This middleware normalizes the path before routing by collapsing
+    consecutive slashes into single slashes.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        # Normalize path by collapsing multiple slashes
+        original_path = request.scope.get("path", "")
+        if "//" in original_path:
+            import re
+
+            normalized_path = re.sub(r"/+", "/", original_path)
+            logger.debug(
+                "Path normalized",
+                extra={"original": original_path, "normalized": normalized_path},
+            )
+            request.scope["path"] = normalized_path
+        return await call_next(request)
+
+
+# Add path normalization middleware (applied first, before CORS)
+app.add_middleware(PathNormalizationMiddleware)
 
 # CORS middleware
 app.add_middleware(
