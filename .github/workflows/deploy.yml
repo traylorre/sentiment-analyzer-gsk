@@ -1133,6 +1133,56 @@ jobs:
             fi
           done
 
+          # Warm up Ingestion Lambda (Feature 142: Reduce cold start delays)
+          # Uses aws lambda invoke since no HTTP endpoint
+          echo ""
+          echo "6. Invoking Ingestion Lambda for warmup..."
+          INGESTION_FUNCTION="preprod-sentiment-ingestion"
+          # Send a warmup event that will be recognized and short-circuited
+          WARMUP_PAYLOAD='{"warmup": true}'
+          for i in 1 2 3; do
+            RESULT=$(aws lambda invoke \
+              --function-name "$INGESTION_FUNCTION" \
+              --invocation-type RequestResponse \
+              --payload "$WARMUP_PAYLOAD" \
+              --cli-binary-format raw-in-base64-out \
+              /tmp/ingestion-response.json 2>&1) || true
+            if echo "$RESULT" | grep -q "200"; then
+              echo "  ✅ Ingestion Lambda warmed up successfully"
+              break
+            fi
+            if [ $i -lt 3 ]; then
+              echo "  Attempt $i: Retrying in 5s..."
+              sleep 5
+            else
+              echo "  ⚠️ Ingestion Lambda warmup did not complete (continuing anyway)"
+            fi
+          done
+
+          # Warm up Analysis Lambda (Feature 142: ML model loading)
+          # Analysis Lambda has heavy ML dependencies, warmup helps with model loading
+          echo ""
+          echo "7. Invoking Analysis Lambda for warmup..."
+          ANALYSIS_FUNCTION="preprod-sentiment-analysis"
+          for i in 1 2 3; do
+            RESULT=$(aws lambda invoke \
+              --function-name "$ANALYSIS_FUNCTION" \
+              --invocation-type RequestResponse \
+              --payload "$WARMUP_PAYLOAD" \
+              --cli-binary-format raw-in-base64-out \
+              /tmp/analysis-response.json 2>&1) || true
+            if echo "$RESULT" | grep -q "200"; then
+              echo "  ✅ Analysis Lambda warmed up successfully"
+              break
+            fi
+            if [ $i -lt 3 ]; then
+              echo "  Attempt $i: Retrying in 5s..."
+              sleep 5
+            else
+              echo "  ⚠️ Analysis Lambda warmup did not complete (continuing anyway)"
+            fi
+          done
+
           # Wait for CloudWatch metrics to propagate
           echo ""
           echo "⏳ Waiting 60s for CloudWatch metrics to propagate..."
