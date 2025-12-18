@@ -85,7 +85,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     Triggered by SNS messages from ingestion Lambda.
 
     Args:
-        event: SNS event with Records array
+        event: SNS event with Records array (or warmup event with {"warmup": true})
         context: Lambda context (contains aws_request_id)
 
     Returns:
@@ -97,6 +97,17 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         2. DynamoDB item exists with status=pending
         3. SNS message format matches contract
     """
+    # Feature 142: Warmup support - short-circuit for warmup invocations
+    # This is especially important for Analysis Lambda which loads ML model on cold start
+    if event.get("warmup"):
+        log_structured("INFO", "Warmup invocation - returning early")
+        return {
+            "statusCode": 200,
+            "body": json.dumps(
+                {"status": "warmed", "message": "Lambda container initialized"}
+            ),
+        }
+
     start_time = time.perf_counter()
     request_id = getattr(context, "aws_request_id", "unknown")
 
