@@ -58,6 +58,37 @@ def env_vars():
         os.environ.pop(key, None)
 
 
+def _create_table_with_gsi(dynamodb, table_name: str = "test-financial-news"):
+    """Create DynamoDB table with by_entity_status GSI for testing.
+
+    (502-gsi-query-optimization: Added GSI definition for _get_active_tickers tests)
+    """
+    return dynamodb.create_table(
+        TableName=table_name,
+        KeySchema=[
+            {"AttributeName": "PK", "KeyType": "HASH"},
+            {"AttributeName": "SK", "KeyType": "RANGE"},
+        ],
+        AttributeDefinitions=[
+            {"AttributeName": "PK", "AttributeType": "S"},
+            {"AttributeName": "SK", "AttributeType": "S"},
+            {"AttributeName": "entity_type", "AttributeType": "S"},
+            {"AttributeName": "status", "AttributeType": "S"},
+        ],
+        GlobalSecondaryIndexes=[
+            {
+                "IndexName": "by_entity_status",
+                "KeySchema": [
+                    {"AttributeName": "entity_type", "KeyType": "HASH"},
+                    {"AttributeName": "status", "KeyType": "RANGE"},
+                ],
+                "Projection": {"ProjectionType": "ALL"},
+            }
+        ],
+        BillingMode="PAY_PER_REQUEST",
+    )
+
+
 @pytest.fixture
 def dynamodb_table():
     """Create mock DynamoDB table."""
@@ -99,7 +130,10 @@ def create_news_article(
 
 
 class TestGetActiveTickers:
-    """Tests for _get_active_tickers function."""
+    """Tests for _get_active_tickers function.
+
+    (502-gsi-query-optimization: Updated to use by_entity_status GSI)
+    """
 
     @mock_aws
     def test_returns_empty_when_no_configurations(self, env_vars):
@@ -107,18 +141,7 @@ class TestGetActiveTickers:
         from src.lambdas.ingestion.handler import _get_active_tickers
 
         dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
-        table = dynamodb.create_table(
-            TableName="test-financial-news",
-            KeySchema=[
-                {"AttributeName": "PK", "KeyType": "HASH"},
-                {"AttributeName": "SK", "KeyType": "RANGE"},
-            ],
-            AttributeDefinitions=[
-                {"AttributeName": "PK", "AttributeType": "S"},
-                {"AttributeName": "SK", "AttributeType": "S"},
-            ],
-            BillingMode="PAY_PER_REQUEST",
-        )
+        table = _create_table_with_gsi(dynamodb)
 
         tickers = _get_active_tickers(table)
         assert tickers == []
@@ -129,26 +152,15 @@ class TestGetActiveTickers:
         from src.lambdas.ingestion.handler import _get_active_tickers
 
         dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
-        table = dynamodb.create_table(
-            TableName="test-financial-news",
-            KeySchema=[
-                {"AttributeName": "PK", "KeyType": "HASH"},
-                {"AttributeName": "SK", "KeyType": "RANGE"},
-            ],
-            AttributeDefinitions=[
-                {"AttributeName": "PK", "AttributeType": "S"},
-                {"AttributeName": "SK", "AttributeType": "S"},
-            ],
-            BillingMode="PAY_PER_REQUEST",
-        )
+        table = _create_table_with_gsi(dynamodb)
 
-        # Add configurations with tickers
+        # Add configurations with tickers (status="active" for GSI query)
         table.put_item(
             Item={
                 "PK": "USER#user1",
                 "SK": "CONFIG#config1",
                 "entity_type": "CONFIGURATION",
-                "is_active": True,
+                "status": "active",
                 "tickers": [
                     {"symbol": "AAPL", "name": "Apple"},
                     {"symbol": "MSFT", "name": "Microsoft"},
@@ -160,7 +172,7 @@ class TestGetActiveTickers:
                 "PK": "USER#user2",
                 "SK": "CONFIG#config2",
                 "entity_type": "CONFIGURATION",
-                "is_active": True,
+                "status": "active",
                 "tickers": [
                     {"symbol": "GOOGL", "name": "Alphabet"},
                     {"symbol": "AAPL", "name": "Apple"},  # Duplicate
@@ -173,40 +185,33 @@ class TestGetActiveTickers:
 
     @mock_aws
     def test_ignores_inactive_configurations(self, env_vars):
-        """Should ignore inactive configurations."""
+        """Should ignore inactive configurations.
+
+        GSI query only returns status='active' items, so inactive configs
+        are filtered at the database level.
+        """
         from src.lambdas.ingestion.handler import _get_active_tickers
 
         dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
-        table = dynamodb.create_table(
-            TableName="test-financial-news",
-            KeySchema=[
-                {"AttributeName": "PK", "KeyType": "HASH"},
-                {"AttributeName": "SK", "KeyType": "RANGE"},
-            ],
-            AttributeDefinitions=[
-                {"AttributeName": "PK", "AttributeType": "S"},
-                {"AttributeName": "SK", "AttributeType": "S"},
-            ],
-            BillingMode="PAY_PER_REQUEST",
-        )
+        table = _create_table_with_gsi(dynamodb)
 
-        # Add active configuration
+        # Add active configuration (status="active" for GSI)
         table.put_item(
             Item={
                 "PK": "USER#user1",
                 "SK": "CONFIG#config1",
                 "entity_type": "CONFIGURATION",
-                "is_active": True,
+                "status": "active",
                 "tickers": [{"symbol": "AAPL"}],
             }
         )
-        # Add inactive configuration
+        # Add inactive configuration (status="inactive" won't match GSI query)
         table.put_item(
             Item={
                 "PK": "USER#user2",
                 "SK": "CONFIG#config2",
                 "entity_type": "CONFIGURATION",
-                "is_active": False,
+                "status": "inactive",
                 "tickers": [{"symbol": "MSFT"}],
             }
         )
@@ -586,22 +591,14 @@ class TestLambdaHandler:
 
     @mock_aws
     def test_returns_success_with_no_tickers(self, env_vars):
-        """Should return success when no active tickers."""
+        """Should return success when no active tickers.
+
+        (502-gsi-query-optimization: Updated to use GSI table)
+        """
         from src.lambdas.ingestion.handler import lambda_handler
 
         dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
-        dynamodb.create_table(
-            TableName="test-financial-news",
-            KeySchema=[
-                {"AttributeName": "PK", "KeyType": "HASH"},
-                {"AttributeName": "SK", "KeyType": "RANGE"},
-            ],
-            AttributeDefinitions=[
-                {"AttributeName": "PK", "AttributeType": "S"},
-                {"AttributeName": "SK", "AttributeType": "S"},
-            ],
-            BillingMode="PAY_PER_REQUEST",
-        )
+        _create_table_with_gsi(dynamodb)
 
         mock_context = MagicMock()
         mock_context.aws_request_id = "test-request-id"
@@ -622,30 +619,22 @@ class TestLambdaHandler:
 
     @mock_aws
     def test_processes_tickers_from_configurations(self, env_vars):
-        """Should process tickers from active configurations."""
+        """Should process tickers from active configurations.
+
+        (502-gsi-query-optimization: Updated to use GSI table and status attribute)
+        """
         from src.lambdas.ingestion.handler import lambda_handler
 
         dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
-        table = dynamodb.create_table(
-            TableName="test-financial-news",
-            KeySchema=[
-                {"AttributeName": "PK", "KeyType": "HASH"},
-                {"AttributeName": "SK", "KeyType": "RANGE"},
-            ],
-            AttributeDefinitions=[
-                {"AttributeName": "PK", "AttributeType": "S"},
-                {"AttributeName": "SK", "AttributeType": "S"},
-            ],
-            BillingMode="PAY_PER_REQUEST",
-        )
+        table = _create_table_with_gsi(dynamodb)
 
-        # Add a configuration
+        # Add a configuration (status="active" for GSI query)
         table.put_item(
             Item={
                 "PK": "USER#user1",
                 "SK": "CONFIG#config1",
                 "entity_type": "CONFIGURATION",
-                "is_active": True,
+                "status": "active",
                 "tickers": [{"symbol": "AAPL"}],
             }
         )
@@ -700,30 +689,22 @@ class TestLambdaHandler:
 
     @mock_aws
     def test_handles_rate_limit_errors(self, env_vars):
-        """Should handle rate limit errors gracefully."""
+        """Should handle rate limit errors gracefully.
+
+        (502-gsi-query-optimization: Updated to use GSI table and status attribute)
+        """
         from src.lambdas.ingestion.handler import lambda_handler
 
         dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
-        table = dynamodb.create_table(
-            TableName="test-financial-news",
-            KeySchema=[
-                {"AttributeName": "PK", "KeyType": "HASH"},
-                {"AttributeName": "SK", "KeyType": "RANGE"},
-            ],
-            AttributeDefinitions=[
-                {"AttributeName": "PK", "AttributeType": "S"},
-                {"AttributeName": "SK", "AttributeType": "S"},
-            ],
-            BillingMode="PAY_PER_REQUEST",
-        )
+        table = _create_table_with_gsi(dynamodb)
 
-        # Add a configuration
+        # Add a configuration (status="active" for GSI query)
         table.put_item(
             Item={
                 "PK": "USER#user1",
                 "SK": "CONFIG#config1",
                 "entity_type": "CONFIGURATION",
-                "is_active": True,
+                "status": "active",
                 "tickers": [{"symbol": "AAPL"}],
             }
         )

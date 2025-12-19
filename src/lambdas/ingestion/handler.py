@@ -558,8 +558,11 @@ def _create_failure_tracker(
 def _get_active_tickers(table: Any, force_refresh: bool = False) -> list[str]:
     """Get unique tickers from all active user configurations.
 
+    Uses by_entity_status GSI for O(result) query performance instead of O(table) scan.
+    (502-gsi-query-optimization: Removed scan fallback)
+
     DFA-003 optimization: Results are cached for 5 minutes since configurations
-    change infrequently (only on user actions). This reduces expensive scans
+    change infrequently (only on user actions). This reduces expensive queries
     to a single cached lookup per Lambda invocation.
 
     Args:
@@ -585,41 +588,20 @@ def _get_active_tickers(table: Any, force_refresh: bool = False) -> list[str]:
         )
         return _active_tickers_cache
 
-    # Cache miss - fetch from DynamoDB
+    # Cache miss - fetch from DynamoDB using GSI query
     tickers_set: set[str] = set()
 
     try:
-        # Try to use GSI query first (by_entity_status), fall back to scan
-        # The GSI query is ~100x faster than scan for large tables
-        try:
-            # Query using by_entity_status GSI (entity_type + is_active composite)
-            response = table.query(
-                IndexName="by_entity_status",
-                KeyConditionExpression="entity_type = :et AND status = :status",
-                ExpressionAttributeValues={
-                    ":et": "CONFIGURATION",
-                    ":status": "active",
-                },
-                ProjectionExpression="tickers",
-            )
-            use_gsi = True
-        except table.meta.client.exceptions.ClientError as e:
-            # GSI may not exist yet - fall back to scan
-            if "ValidationException" in str(e) or "ResourceNotFoundException" in str(e):
-                logger.warning(
-                    "GSI by_entity_status not available, falling back to scan"
-                )
-                response = table.scan(
-                    FilterExpression="entity_type = :et AND is_active = :active",
-                    ExpressionAttributeValues={
-                        ":et": "CONFIGURATION",
-                        ":active": True,
-                    },
-                    ProjectionExpression="tickers",
-                )
-                use_gsi = False
-            else:
-                raise
+        # Query using by_entity_status GSI for O(result) performance
+        response = table.query(
+            IndexName="by_entity_status",
+            KeyConditionExpression="entity_type = :et AND status = :status",
+            ExpressionAttributeValues={
+                ":et": "CONFIGURATION",
+                ":status": "active",
+            },
+            ProjectionExpression="tickers",
+        )
 
         for item in response.get("Items", []):
             for ticker in item.get("tickers", []):
@@ -630,29 +612,18 @@ def _get_active_tickers(table: Any, force_refresh: bool = False) -> list[str]:
                 if symbol:
                     tickers_set.add(symbol.upper())
 
-        # Handle pagination
+        # Handle pagination with LastEvaluatedKey
         while "LastEvaluatedKey" in response:
-            if use_gsi:
-                response = table.query(
-                    IndexName="by_entity_status",
-                    KeyConditionExpression="entity_type = :et AND status = :status",
-                    ExpressionAttributeValues={
-                        ":et": "CONFIGURATION",
-                        ":status": "active",
-                    },
-                    ProjectionExpression="tickers",
-                    ExclusiveStartKey=response["LastEvaluatedKey"],
-                )
-            else:
-                response = table.scan(
-                    FilterExpression="entity_type = :et AND is_active = :active",
-                    ExpressionAttributeValues={
-                        ":et": "CONFIGURATION",
-                        ":active": True,
-                    },
-                    ProjectionExpression="tickers",
-                    ExclusiveStartKey=response["LastEvaluatedKey"],
-                )
+            response = table.query(
+                IndexName="by_entity_status",
+                KeyConditionExpression="entity_type = :et AND status = :status",
+                ExpressionAttributeValues={
+                    ":et": "CONFIGURATION",
+                    ":status": "active",
+                },
+                ProjectionExpression="tickers",
+                ExclusiveStartKey=response["LastEvaluatedKey"],
+            )
             for item in response.get("Items", []):
                 for ticker in item.get("tickers", []):
                     if isinstance(ticker, dict):
@@ -668,10 +639,7 @@ def _get_active_tickers(table: Any, force_refresh: bool = False) -> list[str]:
 
         logger.debug(
             "Refreshed active tickers cache",
-            extra={
-                "ticker_count": len(_active_tickers_cache),
-                "used_gsi": use_gsi,
-            },
+            extra={"ticker_count": len(_active_tickers_cache)},
         )
 
     except Exception as e:

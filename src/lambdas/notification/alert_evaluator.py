@@ -302,19 +302,29 @@ def verify_internal_auth(auth_header: str | None) -> bool:
 
 
 def _find_alerts_by_ticker(table: Any, ticker: str) -> list[AlertRule]:
-    """Find all alerts for a specific ticker.
+    """Find all active alerts for a specific ticker.
 
-    Note: In production, use a GSI on ticker for efficiency.
-    This implementation scans all alerts which is OK for low volume.
+    Uses by_entity_status GSI for O(result) query performance with FilterExpression on ticker.
+    (502-gsi-query-optimization: Replaced scan with GSI query)
+
+    Args:
+        table: DynamoDB Table resource
+        ticker: Ticker symbol to find alerts for
+
+    Returns:
+        List of AlertRule objects for the ticker
     """
     alerts = []
 
     try:
-        # Scan for alerts (would use GSI in production)
-        response = table.scan(
-            FilterExpression="entity_type = :type AND ticker = :ticker",
+        # Query using by_entity_status GSI, filter by ticker
+        response = table.query(
+            IndexName="by_entity_status",
+            KeyConditionExpression="entity_type = :type AND status = :status",
+            FilterExpression="ticker = :ticker",
             ExpressionAttributeValues={
                 ":type": "ALERT_RULE",
+                ":status": "active",
                 ":ticker": ticker,
             },
         )
@@ -322,12 +332,15 @@ def _find_alerts_by_ticker(table: Any, ticker: str) -> list[AlertRule]:
         for item in response.get("Items", []):
             alerts.append(AlertRule.from_dynamodb_item(item))
 
-        # Handle pagination
+        # Handle pagination with LastEvaluatedKey
         while "LastEvaluatedKey" in response:
-            response = table.scan(
-                FilterExpression="entity_type = :type AND ticker = :ticker",
+            response = table.query(
+                IndexName="by_entity_status",
+                KeyConditionExpression="entity_type = :type AND status = :status",
+                FilterExpression="ticker = :ticker",
                 ExpressionAttributeValues={
                     ":type": "ALERT_RULE",
+                    ":status": "active",
                     ":ticker": ticker,
                 },
                 ExclusiveStartKey=response["LastEvaluatedKey"],

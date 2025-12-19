@@ -126,13 +126,17 @@ class TestPollingInterval:
 
 
 class TestPollMethod:
-    """Tests for the async poll method."""
+    """Tests for the async poll method.
+
+    (502-gsi-query-optimization: Updated to mock table.query instead of table.scan)
+    """
 
     @pytest.fixture
     def mock_dynamodb_table(self):
-        """Create mock DynamoDB table."""
+        """Create mock DynamoDB table with GSI query support."""
         mock_table = MagicMock()
-        mock_table.scan.return_value = {
+        # Mock GSI query response (used by _query_by_sentiment)
+        mock_table.query.return_value = {
             "Items": [
                 {
                     "pk": "SENTIMENT#item1",
@@ -145,7 +149,11 @@ class TestPollMethod:
 
     @pytest.mark.asyncio
     async def test_poll_returns_metrics_and_changed_flag(self, mock_dynamodb_table):
-        """Poll should return metrics and changed flag."""
+        """Poll should return metrics and changed flag.
+
+        Note: The mock returns 1 item per query, and the poll calls query 3 times
+        (once for positive, neutral, negative sentiments), so total is 3.
+        """
         from src.lambdas.sse_streaming.polling import PollingService
 
         service = PollingService(table_name="test-table")
@@ -154,7 +162,8 @@ class TestPollMethod:
         metrics, changed = await service.poll()
 
         assert metrics is not None
-        assert metrics.total == 1
+        # Mock returns 1 item per query * 3 sentiment types = 3 total
+        assert metrics.total == 3
         assert changed is True  # First poll always changed
 
     @pytest.mark.asyncio
@@ -175,14 +184,17 @@ class TestPollMethod:
 
     @pytest.mark.asyncio
     async def test_poll_handles_dynamodb_error(self, mock_dynamodb_table):
-        """Poll should handle DynamoDB errors gracefully."""
+        """Poll should handle DynamoDB errors gracefully.
+
+        (502-gsi-query-optimization: Updated to use query error instead of scan)
+        """
         from botocore.exceptions import ClientError
 
         from src.lambdas.sse_streaming.polling import PollingService
 
-        mock_dynamodb_table.scan.side_effect = ClientError(
+        mock_dynamodb_table.query.side_effect = ClientError(
             {"Error": {"Code": "InternalError", "Message": "Test error"}},
-            "Scan",
+            "Query",
         )
 
         service = PollingService(table_name="test-table")
@@ -196,7 +208,10 @@ class TestPollMethod:
 
     @pytest.mark.asyncio
     async def test_poll_returns_cached_metrics_on_error(self, mock_dynamodb_table):
-        """Poll should return cached metrics when error occurs after first poll."""
+        """Poll should return cached metrics when error occurs after first poll.
+
+        (502-gsi-query-optimization: Updated to use query error instead of scan)
+        """
         from botocore.exceptions import ClientError
 
         from src.lambdas.sse_streaming.polling import PollingService
@@ -206,41 +221,45 @@ class TestPollMethod:
 
         # First successful poll
         metrics1, _ = await service.poll()
-        assert metrics1.total == 1
+        # Mock returns 1 item per query * 3 sentiment types = 3 total
+        assert metrics1.total == 3
 
         # Second poll fails
-        mock_dynamodb_table.scan.side_effect = ClientError(
+        mock_dynamodb_table.query.side_effect = ClientError(
             {"Error": {"Code": "InternalError", "Message": "Test error"}},
-            "Scan",
+            "Query",
         )
 
         metrics2, changed = await service.poll()
 
         # Should return cached metrics
-        assert metrics2.total == 1
+        assert metrics2.total == 3
         assert changed is False
 
 
-class TestScanTable:
-    """Tests for _scan_table method."""
+class TestQueryBySentiment:
+    """Tests for _query_by_sentiment method.
 
-    def test_scan_table_uses_filter_expression(self):
-        """Scan should filter for SENTIMENT# prefix."""
+    (502-gsi-query-optimization: Replaced TestScanTable with GSI query tests)
+    """
+
+    def test_query_by_sentiment_uses_gsi(self):
+        """Query should use by_sentiment GSI."""
         from src.lambdas.sse_streaming.polling import PollingService
 
         mock_table = MagicMock()
-        mock_table.scan.return_value = {"Items": []}
+        mock_table.query.return_value = {"Items": []}
 
         service = PollingService(table_name="test-table")
         service._table = mock_table
 
-        service._scan_table()
+        service._query_by_sentiment("positive")
 
-        mock_table.scan.assert_called_once()
-        call_kwargs = mock_table.scan.call_args[1]
-        assert "FilterExpression" in call_kwargs
-        assert "begins_with(pk, :prefix)" in call_kwargs["FilterExpression"]
-        assert call_kwargs["ExpressionAttributeValues"][":prefix"] == "SENTIMENT#"
+        mock_table.query.assert_called_once()
+        call_kwargs = mock_table.query.call_args[1]
+        assert call_kwargs["IndexName"] == "by_sentiment"
+        assert "sentiment = :sentiment" in call_kwargs["KeyConditionExpression"]
+        assert call_kwargs["ExpressionAttributeValues"][":sentiment"] == "positive"
 
 
 class TestMetricsChange:
