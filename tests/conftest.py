@@ -604,3 +604,158 @@ def mock_s3_error_throttling():
         {"Error": {"Code": "SlowDown", "Message": "Please reduce your request rate."}},
         "GetObject",
     )
+
+
+# =============================================================================
+# GSI Query Optimization Fixtures (502-gsi-query-optimization)
+# =============================================================================
+#
+# Fixtures for testing DynamoDB GSI queries instead of table scans.
+# These enable moto table creation with GSI definitions and query mocking.
+
+
+GSI_DEFINITIONS = {
+    "by_entity_status": {
+        "IndexName": "by_entity_status",
+        "KeySchema": [
+            {"AttributeName": "entity_type", "KeyType": "HASH"},
+            {"AttributeName": "status", "KeyType": "RANGE"},
+        ],
+        "Projection": {"ProjectionType": "ALL"},
+    },
+    "by_sentiment": {
+        "IndexName": "by_sentiment",
+        "KeySchema": [
+            {"AttributeName": "sentiment", "KeyType": "HASH"},
+            {"AttributeName": "timestamp", "KeyType": "RANGE"},
+        ],
+        "Projection": {"ProjectionType": "ALL"},
+    },
+    "by_email": {
+        "IndexName": "by_email",
+        "KeySchema": [
+            {"AttributeName": "email", "KeyType": "HASH"},
+        ],
+        "Projection": {"ProjectionType": "ALL"},
+    },
+}
+
+
+@pytest.fixture
+def gsi_table_definition():
+    """
+    DynamoDB table definition with GSI configurations for moto.
+
+    Returns a dict with KeySchema, AttributeDefinitions, and GlobalSecondaryIndexes
+    that can be passed to boto3 create_table().
+
+    Example:
+        @mock_aws
+        def test_with_gsi(gsi_table_definition):
+            dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
+            dynamodb.create_table(
+                TableName="test-table",
+                BillingMode="PAY_PER_REQUEST",
+                **gsi_table_definition
+            )
+    """
+    return {
+        "KeySchema": [
+            {"AttributeName": "PK", "KeyType": "HASH"},
+            {"AttributeName": "SK", "KeyType": "RANGE"},
+        ],
+        "AttributeDefinitions": [
+            {"AttributeName": "PK", "AttributeType": "S"},
+            {"AttributeName": "SK", "AttributeType": "S"},
+            {"AttributeName": "entity_type", "AttributeType": "S"},
+            {"AttributeName": "status", "AttributeType": "S"},
+            {"AttributeName": "sentiment", "AttributeType": "S"},
+            {"AttributeName": "timestamp", "AttributeType": "S"},
+            {"AttributeName": "email", "AttributeType": "S"},
+        ],
+        "GlobalSecondaryIndexes": [
+            GSI_DEFINITIONS["by_entity_status"],
+            GSI_DEFINITIONS["by_sentiment"],
+            GSI_DEFINITIONS["by_email"],
+        ],
+    }
+
+
+@pytest.fixture
+def create_query_mock():
+    """
+    Factory fixture to create query mocks with configurable side_effect.
+
+    Returns a function that creates a MagicMock for table.query() that
+    returns different results based on IndexName or other query parameters.
+
+    Example:
+        def test_gsi_query(create_query_mock):
+            mock_table = create_query_mock({
+                "by_entity_status": [{"PK": "CONFIG#1", "tickers": ["AAPL"]}],
+                "by_sentiment": [{"source_id": "src1", "sentiment": "positive"}],
+            })
+
+            result = mock_table.query(IndexName="by_entity_status", ...)
+            assert result["Items"] == [{"PK": "CONFIG#1", "tickers": ["AAPL"]}]
+    """
+    from unittest.mock import MagicMock
+
+    def _create_mock(items_by_index: dict[str, list[dict]]) -> MagicMock:
+        def query_side_effect(**kwargs):
+            index_name = kwargs.get("IndexName")
+            items = items_by_index.get(index_name, [])
+            return {"Items": items, "Count": len(items)}
+
+        mock_table = MagicMock()
+        mock_table.query.side_effect = query_side_effect
+        return mock_table
+
+    return _create_mock
+
+
+@pytest.fixture
+def create_paginated_query_mock():
+    """
+    Factory fixture to create paginated query mocks for testing LastEvaluatedKey handling.
+
+    Returns a function that creates a MagicMock for table.query() that
+    simulates pagination by returning items in pages.
+
+    Example:
+        def test_pagination(create_paginated_query_mock):
+            items = [{"id": i} for i in range(250)]
+            mock_table = create_paginated_query_mock(items, page_size=100)
+
+            # First call returns 100 items + LastEvaluatedKey
+            result1 = mock_table.query(IndexName="by_entity_status")
+            assert len(result1["Items"]) == 100
+            assert "LastEvaluatedKey" in result1
+
+            # Continue with ExclusiveStartKey
+            result2 = mock_table.query(
+                IndexName="by_entity_status",
+                ExclusiveStartKey=result1["LastEvaluatedKey"]
+            )
+            assert len(result2["Items"]) == 100
+    """
+    from unittest.mock import MagicMock
+
+    def _create_mock(items: list[dict], page_size: int = 100) -> MagicMock:
+        def query_side_effect(**kwargs):
+            start_key = kwargs.get("ExclusiveStartKey")
+            start_idx = 0 if not start_key else int(start_key.get("idx", 0))
+
+            page = items[start_idx : start_idx + page_size]
+            response = {"Items": page, "Count": len(page)}
+
+            if start_idx + page_size < len(items):
+                response["LastEvaluatedKey"] = {"idx": start_idx + page_size}
+
+            return response
+
+        mock_table = MagicMock()
+        mock_table.query.side_effect = query_side_effect
+        return mock_table
+
+    return _create_mock

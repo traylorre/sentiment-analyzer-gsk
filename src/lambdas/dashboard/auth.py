@@ -415,37 +415,24 @@ def get_user_by_id(table: Any, user_id: str) -> User | None:
 
 
 def get_user_by_email(table: Any, email: str) -> User | None:
-    """Get user by email address.
+    """DEPRECATED: Use get_user_by_email_gsi() instead for O(1) lookup.
+
+    This function used table.scan() which has O(table) performance.
+    The GSI-based version provides O(1) lookup via the by_email GSI.
+
+    (502-gsi-query-optimization: Deprecated to prevent accidental scan usage)
 
     Args:
-        table: DynamoDB Table resource
-        email: User's email
+        table: DynamoDB Table resource (unused)
+        email: User's email (unused)
 
-    Returns:
-        User if found, None otherwise
+    Raises:
+        NotImplementedError: Always raised with guidance to use GSI version
     """
-    try:
-        # Scan for user with matching email (would be GSI in production)
-        response = table.scan(
-            FilterExpression="email = :email AND entity_type = :type",
-            ExpressionAttributeValues={
-                ":email": email.lower(),
-                ":type": "USER",
-            },
-        )
-
-        items = response.get("Items", [])
-        if not items:
-            return None
-
-        return User.from_dynamodb_item(items[0])
-
-    except Exception as e:
-        logger.error(
-            "Failed to get user by email",
-            extra=get_safe_error_info(e),
-        )
-        return None
+    raise NotImplementedError(
+        "get_user_by_email() is deprecated due to O(n) table scan. "
+        "Use get_user_by_email_gsi() for O(1) lookup via the by_email GSI."
+    )
 
 
 # =============================================================================
@@ -1192,13 +1179,19 @@ def request_magic_link(
 
 
 def _invalidate_existing_tokens(table: Any, email: str) -> None:
-    """Invalidate any existing magic link tokens for an email."""
+    """Invalidate any existing magic link tokens for an email.
+
+    Uses by_email GSI for O(result) query performance.
+    (502-gsi-query-optimization: Replaced scan with GSI query)
+    """
     try:
-        # Scan for existing tokens (would use GSI in production)
-        response = table.scan(
-            FilterExpression="email = :email AND entity_type = :type AND used = :used",
+        # Query using by_email GSI, filter by entity_type and used
+        response = table.query(
+            IndexName="by_email",
+            KeyConditionExpression="email = :email",
+            FilterExpression="entity_type = :type AND used = :used",
             ExpressionAttributeValues={
-                ":email": email,
+                ":email": email.lower(),
                 ":type": "MAGIC_LINK_TOKEN",
                 ":used": False,
             },
@@ -1210,6 +1203,26 @@ def _invalidate_existing_tokens(table: Any, email: str) -> None:
                 UpdateExpression="SET used = :used",
                 ExpressionAttributeValues={":used": True},
             )
+
+        # Handle pagination with LastEvaluatedKey
+        while "LastEvaluatedKey" in response:
+            response = table.query(
+                IndexName="by_email",
+                KeyConditionExpression="email = :email",
+                FilterExpression="entity_type = :type AND used = :used",
+                ExpressionAttributeValues={
+                    ":email": email.lower(),
+                    ":type": "MAGIC_LINK_TOKEN",
+                    ":used": False,
+                },
+                ExclusiveStartKey=response["LastEvaluatedKey"],
+            )
+            for item in response.get("Items", []):
+                table.update_item(
+                    Key={"PK": item["PK"], "SK": item["SK"]},
+                    UpdateExpression="SET used = :used",
+                    ExpressionAttributeValues={":used": True},
+                )
 
     except Exception as e:
         logger.warning(
@@ -1429,8 +1442,8 @@ def verify_magic_link(
         ExpressionAttributeValues={":used": True},
     )
 
-    # Find or create user
-    existing_user = get_user_by_email(table, token.email)
+    # Find or create user (use GSI version for O(1) lookup)
+    existing_user = get_user_by_email_gsi(table, token.email)
     merged_data = False
 
     if existing_user:
@@ -1600,8 +1613,8 @@ def handle_oauth_callback(
             message="Email not provided by OAuth provider.",
         )
 
-    # Check for existing user with this email
-    existing_user = get_user_by_email(table, email)
+    # Check for existing user with this email (use GSI for O(1) lookup)
+    existing_user = get_user_by_email_gsi(table, email)
 
     if existing_user and existing_user.auth_type != request.provider:
         # Account conflict - mask email in response
@@ -1810,7 +1823,8 @@ def check_email_conflict(
     Returns:
         CheckEmailResponse with conflict status
     """
-    existing_user = get_user_by_email(table, request.email)
+    # Use GSI for O(1) lookup
+    existing_user = get_user_by_email_gsi(table, request.email)
 
     if not existing_user:
         return CheckEmailResponse(conflict=False)

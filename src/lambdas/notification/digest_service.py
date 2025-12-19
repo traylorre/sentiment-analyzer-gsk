@@ -92,6 +92,9 @@ class DigestService:
     ) -> list[tuple[User, DigestSettings]]:
         """Query users who should receive digest at current UTC hour.
 
+        Uses by_entity_status GSI for O(result) query performance.
+        (502-gsi-query-optimization: Replaced scan with GSI query)
+
         The digest is scheduled per user timezone. We check all users whose
         configured digest time falls within the current UTC hour.
 
@@ -103,14 +106,14 @@ class DigestService:
         """
         users_due: list[tuple[User, DigestSettings]] = []
 
-        # Scan for all enabled digest settings
-        # Note: In production with many users, use GSI on enabled + time
         try:
-            response = self.table.scan(
-                FilterExpression=("entity_type = :et AND enabled = :enabled"),
+            # Query using by_entity_status GSI for enabled digest settings
+            response = self.table.query(
+                IndexName="by_entity_status",
+                KeyConditionExpression="entity_type = :et AND status = :status",
                 ExpressionAttributeValues={
                     ":et": "DIGEST_SETTINGS",
-                    ":enabled": True,
+                    ":status": "enabled",
                 },
                 ProjectionExpression="PK, SK, user_id, #t, timezone, include_all_configs, config_ids, last_sent",
                 ExpressionAttributeNames={"#t": "time"},
@@ -125,6 +128,26 @@ class DigestService:
                     user = self._get_user(settings.user_id)
                     if user and user.email:
                         users_due.append((user, settings))
+
+            # Handle pagination with LastEvaluatedKey
+            while "LastEvaluatedKey" in response:
+                response = self.table.query(
+                    IndexName="by_entity_status",
+                    KeyConditionExpression="entity_type = :et AND status = :status",
+                    ExpressionAttributeValues={
+                        ":et": "DIGEST_SETTINGS",
+                        ":status": "enabled",
+                    },
+                    ProjectionExpression="PK, SK, user_id, #t, timezone, include_all_configs, config_ids, last_sent",
+                    ExpressionAttributeNames={"#t": "time"},
+                    ExclusiveStartKey=response["LastEvaluatedKey"],
+                )
+                for item in response.get("Items", []):
+                    settings = DigestSettings.from_dynamodb_item(item)
+                    if self._is_digest_due(settings, current_hour_utc):
+                        user = self._get_user(settings.user_id)
+                        if user and user.email:
+                            users_due.append((user, settings))
 
             logger.info(
                 "Found users due for digest",

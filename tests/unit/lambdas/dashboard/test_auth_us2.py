@@ -66,7 +66,7 @@ class TestRequestMagicLink:
     def test_creates_token_and_stores(self):
         """Creates token and stores in DynamoDB."""
         table = MagicMock()
-        table.scan.return_value = {"Items": []}
+        table.query.return_value = {"Items": []}
         table.put_item.return_value = {}
 
         request = MagicLinkRequest(email="test@example.com")
@@ -84,9 +84,13 @@ class TestRequestMagicLink:
         assert item["entity_type"] == "MAGIC_LINK_TOKEN"
 
     def test_invalidates_existing_tokens(self):
-        """Invalidates any existing tokens for the email."""
+        """Invalidates any existing tokens for the email.
+
+        (502-gsi-query-optimization: Updated to mock table.query instead of table.scan)
+        """
         table = MagicMock()
-        table.scan.return_value = {
+        # Mock GSI query response for by_email GSI
+        table.query.return_value = {
             "Items": [
                 {"PK": "TOKEN#old1", "SK": "MAGIC_LINK", "email": "test@example.com"}
             ]
@@ -101,9 +105,12 @@ class TestRequestMagicLink:
         table.update_item.assert_called()
 
     def test_includes_anonymous_user_id(self):
-        """Stores anonymous user ID for merge."""
+        """Stores anonymous user ID for merge.
+
+        (502-gsi-query-optimization: Updated to mock table.query instead of table.scan)
+        """
         table = MagicMock()
-        table.scan.return_value = {"Items": []}
+        table.query.return_value = {"Items": []}
         table.put_item.return_value = {}
 
         anon_id = str(uuid.uuid4())
@@ -138,7 +145,8 @@ class TestVerifyMagicLink:
             }
         }
         table.update_item.return_value = {}
-        table.scan.return_value = {"Items": []}
+        # Mock GSI query for by_email GSI (502-gsi-query-optimization)
+        table.query.return_value = {"Items": []}
         table.put_item.return_value = {}
 
         response = verify_magic_link(table, token_id, sig)
@@ -257,12 +265,14 @@ class TestHandleOAuthCallback:
     """Tests for T093: handle_oauth_callback."""
 
     def test_successful_new_user(self):
-        """Creates new user on successful OAuth."""
+        """Creates new user on successful OAuth.
+
+        (502-gsi-query-optimization: Updated to mock table.query instead of table.scan)
+        """
         table = MagicMock()
-        table.scan.return_value = {"Items": []}  # No existing user
+        table.query.return_value = {"Items": []}  # No existing user (by_email GSI)
         table.put_item.return_value = {}
         table.update_item.return_value = {}
-        table.query.return_value = {"Items": []}
 
         mock_tokens = MagicMock()
         mock_tokens.id_token = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyMTIzIiwiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIn0.sig"
@@ -292,7 +302,10 @@ class TestHandleOAuthCallback:
                 assert response.is_new_user is True
 
     def test_existing_user_different_provider_conflict(self):
-        """Returns conflict when email exists with different provider."""
+        """Returns conflict when email exists with different provider.
+
+        (502-gsi-query-optimization: Updated to mock table.query instead of table.scan)
+        """
         table = MagicMock()
         existing_user = User(
             user_id=str(uuid.uuid4()),
@@ -303,7 +316,7 @@ class TestHandleOAuthCallback:
             last_active_at=datetime.now(UTC),
             session_expires_at=datetime.now(UTC) + timedelta(days=30),
         )
-        table.scan.return_value = {"Items": [existing_user.to_dynamodb_item()]}
+        table.query.return_value = {"Items": [existing_user.to_dynamodb_item()]}
 
         mock_tokens = MagicMock()
         mock_tokens.id_token = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyMTIzIiwiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIn0.sig"
@@ -449,9 +462,12 @@ class TestCheckEmailConflict:
     """Tests for T097: check_email_conflict."""
 
     def test_no_conflict_new_email(self):
-        """Returns no conflict for new email."""
+        """Returns no conflict for new email.
+
+        (502-gsi-query-optimization: Updated to mock table.query instead of table.scan)
+        """
         table = MagicMock()
-        table.scan.return_value = {"Items": []}
+        table.query.return_value = {"Items": []}  # by_email GSI
 
         request = CheckEmailRequest(email="new@example.com", current_provider="google")
         response = check_email_conflict(table, request)
@@ -459,7 +475,10 @@ class TestCheckEmailConflict:
         assert response.conflict is False
 
     def test_no_conflict_same_provider(self):
-        """Returns no conflict if same provider."""
+        """Returns no conflict if same provider.
+
+        (502-gsi-query-optimization: Updated to mock table.query instead of table.scan)
+        """
         table = MagicMock()
         user = User(
             user_id=str(uuid.uuid4()),
@@ -470,7 +489,7 @@ class TestCheckEmailConflict:
             last_active_at=datetime.now(UTC),
             session_expires_at=datetime.now(UTC) + timedelta(days=30),
         )
-        table.scan.return_value = {"Items": [user.to_dynamodb_item()]}
+        table.query.return_value = {"Items": [user.to_dynamodb_item()]}
 
         request = CheckEmailRequest(email="test@example.com", current_provider="google")
         response = check_email_conflict(table, request)
@@ -478,7 +497,10 @@ class TestCheckEmailConflict:
         assert response.conflict is False
 
     def test_conflict_different_provider(self):
-        """Returns conflict for different provider."""
+        """Returns conflict for different provider.
+
+        (502-gsi-query-optimization: Updated to mock table.query instead of table.scan)
+        """
         table = MagicMock()
         user = User(
             user_id=str(uuid.uuid4()),
@@ -489,7 +511,7 @@ class TestCheckEmailConflict:
             last_active_at=datetime.now(UTC),
             session_expires_at=datetime.now(UTC) + timedelta(days=30),
         )
-        table.scan.return_value = {"Items": [user.to_dynamodb_item()]}
+        table.query.return_value = {"Items": [user.to_dynamodb_item()]}
 
         request = CheckEmailRequest(email="test@example.com", current_provider="google")
         response = check_email_conflict(table, request)

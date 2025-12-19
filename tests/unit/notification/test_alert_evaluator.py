@@ -165,20 +165,27 @@ class TestCheckEmailQuota:
 
 
 class TestFindAlertsByTicker:
-    """Tests for _find_alerts_by_ticker helper."""
+    """Tests for _find_alerts_by_ticker helper.
+
+    (502-gsi-query-optimization: Updated to mock table.query instead of table.scan)
+    """
 
     def test_finds_alerts(self, mock_table, sample_alert_item):
-        """Finds alerts for ticker."""
-        mock_table.scan.return_value = {"Items": [sample_alert_item]}
+        """Finds alerts for ticker using by_entity_status GSI."""
+        mock_table.query.return_value = {"Items": [sample_alert_item]}
 
         alerts = _find_alerts_by_ticker(mock_table, "AAPL")
 
         assert len(alerts) == 1
         assert alerts[0].ticker == "AAPL"
+        # Verify GSI query was used
+        mock_table.query.assert_called_once()
+        call_kwargs = mock_table.query.call_args[1]
+        assert call_kwargs["IndexName"] == "by_entity_status"
 
     def test_returns_empty_when_none(self, mock_table):
         """Returns empty list when no alerts."""
-        mock_table.scan.return_value = {"Items": []}
+        mock_table.query.return_value = {"Items": []}
 
         alerts = _find_alerts_by_ticker(mock_table, "TSLA")
 
