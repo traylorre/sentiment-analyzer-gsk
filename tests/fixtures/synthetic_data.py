@@ -90,7 +90,7 @@ class SyntheticDataGenerator:
         ttl_timestamp = int((datetime.now(UTC) + timedelta(days=30)).timestamp())
 
         item = {
-            "source_id": f"newsapi:{item_id}",
+            "source_id": f"article:{item_id}",
             "timestamp": timestamp_str,
             "title": f"Test Article - {sentiment.upper()} sentiment",
             "source_url": f"https://test.example.com/article/{item_id}",

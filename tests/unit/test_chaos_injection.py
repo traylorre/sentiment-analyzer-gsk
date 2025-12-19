@@ -43,7 +43,7 @@ class TestIsChaoActive:
             "Items": [
                 {
                     "experiment_id": "test-123",
-                    "scenario_type": "newsapi_failure",
+                    "scenario_type": "ingestion_failure",
                     "status": "running",
                 }
             ]
@@ -52,7 +52,7 @@ class TestIsChaoActive:
         mock_dynamodb.Table.return_value = mock_table
         mock_boto3_resource.return_value = mock_dynamodb
 
-        result = is_chaos_active("newsapi_failure")
+        result = is_chaos_active("ingestion_failure")
 
         assert result is True
         mock_table.query.assert_called_once()
@@ -61,7 +61,7 @@ class TestIsChaoActive:
         assert query_call["ExpressionAttributeValues"][":status"] == "running"
         assert (
             query_call["ExpressionAttributeValues"][":scenario_type"]
-            == "newsapi_failure"
+            == "ingestion_failure"
         )
 
     @patch.dict(
@@ -80,7 +80,7 @@ class TestIsChaoActive:
         mock_dynamodb.Table.return_value = mock_table
         mock_boto3_resource.return_value = mock_dynamodb
 
-        result = is_chaos_active("newsapi_failure")
+        result = is_chaos_active("ingestion_failure")
 
         assert result is False
 
@@ -93,14 +93,14 @@ class TestIsChaoActive:
     )
     def test_production_environment_returns_false(self):
         """Test returns False in production (safety check)."""
-        result = is_chaos_active("newsapi_failure")
+        result = is_chaos_active("ingestion_failure")
 
         assert result is False
 
     @patch.dict(os.environ, {"ENVIRONMENT": "preprod", "CHAOS_EXPERIMENTS_TABLE": ""})
     def test_no_chaos_table_configured(self):
         """Test returns False when chaos table not configured."""
-        result = is_chaos_active("newsapi_failure")
+        result = is_chaos_active("ingestion_failure")
 
         assert result is False
 
@@ -128,7 +128,7 @@ class TestIsChaoActive:
         mock_dynamodb.Table.return_value = mock_table
         mock_boto3_resource.return_value = mock_dynamodb
 
-        result = is_chaos_active("newsapi_failure")
+        result = is_chaos_active("ingestion_failure")
 
         assert result is False
 
@@ -144,7 +144,7 @@ class TestIsChaoActive:
         """Test returns False on unexpected errors (fail-safe)."""
         mock_boto3_resource.side_effect = Exception("Unexpected error")
 
-        result = is_chaos_active("newsapi_failure")
+        result = is_chaos_active("ingestion_failure")
 
         assert result is False
 
@@ -200,13 +200,13 @@ class TestIsChaoActive:
         mock_dynamodb.Table.return_value = mock_table
         mock_boto3_resource.return_value = mock_dynamodb
 
-        is_chaos_active("newsapi_failure")
+        is_chaos_active("ingestion_failure")
 
         query_call = mock_table.query.call_args[1]
         assert query_call["FilterExpression"] == "scenario_type = :scenario_type"
         assert (
             query_call["ExpressionAttributeValues"][":scenario_type"]
-            == "newsapi_failure"
+            == "ingestion_failure"
         )
 
     @patch.dict(
@@ -248,7 +248,7 @@ class TestIsChaoActive:
         mock_dynamodb.Table.return_value = mock_table
         mock_boto3_resource.return_value = mock_dynamodb
 
-        is_chaos_active("newsapi_failure")
+        is_chaos_active("ingestion_failure")
 
         query_call = mock_table.query.call_args[1]
         assert query_call["Limit"] == 1
@@ -270,7 +270,7 @@ class TestIsChaoActive:
         mock_dynamodb.Table.return_value = mock_table
         mock_boto3_resource.return_value = mock_dynamodb
 
-        is_chaos_active("newsapi_failure")
+        is_chaos_active("ingestion_failure")
 
         mock_boto3_resource.assert_called_with("dynamodb", region_name="us-west-2")
 
@@ -291,7 +291,7 @@ class TestIsChaoActive:
         mock_dynamodb.Table.return_value = mock_table
         mock_boto3_resource.return_value = mock_dynamodb
 
-        is_chaos_active("newsapi_failure")
+        is_chaos_active("ingestion_failure")
 
         mock_boto3_resource.assert_called_with("dynamodb", region_name="eu-west-1")
 
@@ -312,7 +312,7 @@ class TestIsChaoActive:
         mock_boto3_resource.return_value = mock_dynamodb
 
         # First call should create client
-        is_chaos_active("newsapi_failure")
+        is_chaos_active("ingestion_failure")
         assert mock_boto3_resource.call_count == 1
 
         # Second call should reuse cached client
@@ -340,7 +340,7 @@ class TestIsChaoActive:
         mock_dynamodb.Table.return_value = mock_table
         mock_boto3_resource.return_value = mock_dynamodb
 
-        result = is_chaos_active("newsapi_failure")
+        result = is_chaos_active("ingestion_failure")
 
         assert result is True
 
@@ -353,7 +353,7 @@ class TestIsChaoActive:
     )
     def test_staging_environment_returns_false(self):
         """Test returns False in staging (not in allowed list)."""
-        result = is_chaos_active("newsapi_failure")
+        result = is_chaos_active("ingestion_failure")
 
         assert result is False
 

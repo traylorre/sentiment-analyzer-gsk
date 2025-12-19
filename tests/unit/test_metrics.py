@@ -89,7 +89,7 @@ class TestEmitMetric:
             "TestMetric",
             100,
             unit="Count",
-            dimensions={"Tag": "AI", "Source": "NewsAPI"},
+            dimensions={"Tag": "AI", "Source": "Tiingo"},
         )
 
     def test_emit_metric_milliseconds(self, cloudwatch_client):
@@ -143,17 +143,17 @@ class TestGetCorrelationId:
         context = MagicMock()
         context.aws_request_id = "req-123-456"
 
-        correlation_id = get_correlation_id("newsapi#abc123", context)
+        correlation_id = get_correlation_id("article#abc123", context)
 
-        assert correlation_id == "newsapi#abc123-req-123-456"
+        assert correlation_id == "article#abc123-req-123-456"
 
     def test_correlation_id_with_missing_request_id(self):
         """Test fallback when context lacks request_id."""
         context = MagicMock(spec=[])  # No aws_request_id attribute
 
-        correlation_id = get_correlation_id("newsapi#abc123", context)
+        correlation_id = get_correlation_id("article#abc123", context)
 
-        assert correlation_id == "newsapi#abc123-unknown"
+        assert correlation_id == "article#abc123-unknown"
 
 
 class TestLogStructured:
@@ -164,7 +164,7 @@ class TestLogStructured:
         log_structured(
             "INFO",
             "Test message",
-            source_id="newsapi#abc123",
+            source_id="article#abc123",
             count=42,
         )
 
@@ -173,7 +173,7 @@ class TestLogStructured:
 
         assert log_data["level"] == "INFO"
         assert log_data["message"] == "Test message"
-        assert log_data["source_id"] == "newsapi#abc123"
+        assert log_data["source_id"] == "article#abc123"
         assert log_data["count"] == 42
         assert "timestamp" in log_data
 
@@ -269,12 +269,12 @@ class TestJsonFormatter:
             args=(),
             exc_info=None,
         )
-        record.structured_data = {"source_id": "newsapi#abc123", "count": 10}
+        record.structured_data = {"source_id": "article#abc123", "count": 10}
 
         output = formatter.format(record)
         log_data = json.loads(output)
 
-        assert log_data["source_id"] == "newsapi#abc123"
+        assert log_data["source_id"] == "article#abc123"
         assert log_data["count"] == 10
 
 

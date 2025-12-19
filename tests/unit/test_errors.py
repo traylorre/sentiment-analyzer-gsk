@@ -177,11 +177,11 @@ class TestNotFoundError:
         response = not_found_error(
             "Article not found",
             "req-123",
-            resource="newsapi#abc123",
+            resource="article#abc123",
         )
 
         body = json.loads(response["body"])
-        assert body["details"]["resource"] == "newsapi#abc123"
+        assert body["details"]["resource"] == "article#abc123"
 
 
 class TestUnauthorizedError:
@@ -218,11 +218,11 @@ class TestRateLimitError:
 
     def test_rate_limit_with_service(self):
         """Test rate limit with specific service."""
-        response = rate_limit_error("req-123", service="NewsAPI")
+        response = rate_limit_error("req-123", service="Tiingo")
 
         body = json.loads(response["body"])
-        assert "NewsAPI" in body["error"]
-        assert body["details"]["service"] == "NewsAPI"
+        assert "Tiingo" in body["error"]
+        assert body["details"]["service"] == "Tiingo"
 
     def test_rate_limit_with_retry_after(self):
         """Test rate limit with Retry-After header."""
@@ -301,13 +301,13 @@ class TestSecretError:
 
     def test_secret_error(self, caplog):
         """Test secret error."""
-        response = secret_error("req-123", "dev/sentiment-analyzer/newsapi")
+        response = secret_error("req-123", "dev/sentiment-analyzer/tiingo")
 
         assert response["statusCode"] == 500
         body = json.loads(response["body"])
         assert body["code"] == "SECRET_ERROR"
         # Security: Only returns secret name in response, not full path
-        assert body["details"]["secret_name"] == "newsapi"
+        assert body["details"]["secret_name"] == "tiingo"
 
         # Verify error code was logged (no message to prevent data leakage)
         from tests.conftest import assert_error_logged

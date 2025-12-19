@@ -39,10 +39,15 @@ aws sts get-caller-identity
 Create the required secrets before first deployment:
 
 ```bash
-# NewsAPI key
+# Tiingo API key
 aws secretsmanager create-secret \
-  --name "dev/sentiment-analyzer/newsapi" \
-  --secret-string '{"api_key": "your-newsapi-key"}'
+  --name "dev/sentiment-analyzer/tiingo" \
+  --secret-string '{"api_key": "your-tiingo-api-key"}'
+
+# Finnhub API key (secondary provider)
+aws secretsmanager create-secret \
+  --name "dev/sentiment-analyzer/finnhub" \
+  --secret-string '{"api_key": "your-finnhub-api-key"}'
 
 # Dashboard API key
 aws secretsmanager create-secret \
@@ -282,7 +287,7 @@ terraform apply
 ```bash
 # 1. Create new secret version
 aws secretsmanager put-secret-value \
-  --secret-id "dev/sentiment-analyzer/newsapi" \
+  --secret-id "dev/sentiment-analyzer/tiingo" \
   --secret-string '{"api_key": "new-api-key"}'
 
 # 2. Lambda functions will pick up new value on next cold start
@@ -301,7 +306,7 @@ For production, configure automatic rotation:
 
 ```bash
 aws secretsmanager rotate-secret \
-  --secret-id "prod/sentiment-analyzer/newsapi" \
+  --secret-id "prod/sentiment-analyzer/tiingo" \
   --rotation-lambda-arn arn:aws:lambda:us-east-1:123456789012:function:rotation-lambda
 ```
 
@@ -314,7 +319,7 @@ aws secretsmanager rotate-secret \
 ```hcl
 # terraform.tfvars
 environment         = "dev"
-watch_tags          = "AI,climate,economy,health,sports"
+watch_tickers       = "AAPL,TSLA,GOOGL,MSFT,AMZN"
 model_version       = "v1.0.0"
 alarm_email         = "dev-alerts@example.com"
 monthly_budget_limit = 50
@@ -325,7 +330,7 @@ monthly_budget_limit = 50
 ```hcl
 # terraform.tfvars
 environment         = "prod"
-watch_tags          = "AI,climate,economy"
+watch_tickers       = "AAPL,TSLA,GOOGL"
 model_version       = "v1.0.0"
 alarm_email         = "oncall@example.com"
 monthly_budget_limit = 100
@@ -337,9 +342,10 @@ monthly_budget_limit = 100
 |--------|----------|-------------|
 | All | `ENVIRONMENT` | dev or prod |
 | All | `DYNAMODB_TABLE` | Table name |
-| Ingestion | `WATCH_TAGS` | Comma-separated tags |
+| Ingestion | `WATCH_TICKERS` | Comma-separated tickers |
 | Ingestion | `SNS_TOPIC_ARN` | Analysis topic |
-| Ingestion | `NEWSAPI_SECRET_ARN` | Secret ARN |
+| Ingestion | `TIINGO_SECRET_ARN` | Tiingo API secret ARN |
+| Ingestion | `FINNHUB_SECRET_ARN` | Finnhub API secret ARN |
 | Analysis | `MODEL_PATH` | /opt/model |
 | Analysis | `MODEL_VERSION` | v1.0.0 |
 | Dashboard | `DASHBOARD_API_KEY_SECRET_ARN` | Secret ARN |

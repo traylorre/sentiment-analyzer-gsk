@@ -11,7 +11,7 @@ For On-Call Engineers:
     - Batch deduplication correctly filters duplicates
 
 For Developers:
-    - source_id format: "newsapi#{hash16}"
+    - source_id format: "article#{hash16}"
     - Hash is deterministic (same input = same output)
     - Test edge cases: missing fields, unicode, special chars
 """
@@ -41,8 +41,8 @@ class TestGenerateSourceId:
 
         source_id = generate_source_id(article)
 
-        assert source_id.startswith("newsapi#")
-        assert len(source_id) == len("newsapi#") + 16
+        assert source_id.startswith("article#")
+        assert len(source_id) == len("article#") + 16
 
     def test_deterministic_hashing(self):
         """Test that same URL produces same hash."""
@@ -76,8 +76,8 @@ class TestGenerateSourceId:
 
         source_id = generate_source_id(article)
 
-        assert source_id.startswith("newsapi#")
-        assert len(source_id) == len("newsapi#") + 16
+        assert source_id.startswith("article#")
+        assert len(source_id) == len("article#") + 16
 
     def test_fallback_deterministic(self):
         """Test that fallback is also deterministic."""
@@ -118,7 +118,7 @@ class TestGenerateSourceId:
 
         source_id = generate_source_id(article)
 
-        assert source_id.startswith("newsapi#")
+        assert source_id.startswith("article#")
 
     def test_unicode_url(self):
         """Test URL with unicode characters."""
@@ -126,7 +126,7 @@ class TestGenerateSourceId:
 
         source_id = generate_source_id(article)
 
-        assert source_id.startswith("newsapi#")
+        assert source_id.startswith("article#")
 
     def test_unicode_title(self):
         """Test title with unicode characters."""
@@ -137,7 +137,7 @@ class TestGenerateSourceId:
 
         source_id = generate_source_id(article)
 
-        assert source_id.startswith("newsapi#")
+        assert source_id.startswith("article#")
 
     def test_url_preferred_over_title(self):
         """Test that URL is used when both URL and title present."""
@@ -168,7 +168,7 @@ class TestGenerateSourceId:
 
         # Empty string is falsy, should use fallback
         source_id = generate_source_id(article)
-        assert source_id.startswith("newsapi#")
+        assert source_id.startswith("article#")
 
 
 class TestIsDuplicate:
@@ -176,21 +176,21 @@ class TestIsDuplicate:
 
     def test_is_duplicate_true(self):
         """Test duplicate detection returns True."""
-        existing = {"newsapi#abc123", "newsapi#def456"}
+        existing = {"article#abc123", "article#def456"}
 
-        assert is_duplicate("newsapi#abc123", existing) is True
+        assert is_duplicate("article#abc123", existing) is True
 
     def test_is_duplicate_false(self):
         """Test new item returns False."""
-        existing = {"newsapi#abc123", "newsapi#def456"}
+        existing = {"article#abc123", "article#def456"}
 
-        assert is_duplicate("newsapi#new789", existing) is False
+        assert is_duplicate("article#new789", existing) is False
 
     def test_empty_existing_set(self):
         """Test with empty existing set."""
         existing: set[str] = set()
 
-        assert is_duplicate("newsapi#abc123", existing) is False
+        assert is_duplicate("article#abc123", existing) is False
 
 
 class TestExtractHash:
@@ -198,7 +198,7 @@ class TestExtractHash:
 
     def test_extract_hash_basic(self):
         """Test basic hash extraction."""
-        source_id = "newsapi#abc123def456"
+        source_id = "article#abc123def456"
 
         hash_part = extract_hash(source_id)
 
@@ -206,7 +206,7 @@ class TestExtractHash:
 
     def test_extract_hash_with_extra_hashes(self):
         """Test extraction when hash contains # character."""
-        source_id = "newsapi#abc#123#456"
+        source_id = "article#abc#123#456"
 
         hash_part = extract_hash(source_id)
 
@@ -216,7 +216,7 @@ class TestExtractHash:
     def test_invalid_format_no_hash(self):
         """Test ValueError for missing # separator."""
         with pytest.raises(ValueError, match="Invalid source_id format"):
-            extract_hash("newsapiabc123")
+            extract_hash("articleabc123")
 
     def test_invalid_format_empty(self):
         """Test ValueError for empty string."""
@@ -234,11 +234,11 @@ class TestGetSourcePrefix:
 
     def test_get_prefix_basic(self):
         """Test basic prefix extraction."""
-        source_id = "newsapi#abc123def456"
+        source_id = "article#abc123def456"
 
         prefix = get_source_prefix(source_id)
 
-        assert prefix == "newsapi"
+        assert prefix == "article"
 
     def test_get_prefix_different_source(self):
         """Test with different source prefix."""
@@ -259,16 +259,16 @@ class TestGenerateCorrelationId:
 
     def test_generate_correlation_id(self):
         """Test correlation ID generation."""
-        source_id = "newsapi#abc123"
+        source_id = "article#abc123"
         request_id = "req-456-789"
 
         correlation_id = generate_correlation_id(source_id, request_id)
 
-        assert correlation_id == "newsapi#abc123-req-456-789"
+        assert correlation_id == "article#abc123-req-456-789"
 
     def test_correlation_id_format(self):
         """Test correlation ID contains both parts."""
-        source_id = "newsapi#test123"
+        source_id = "article#test123"
         request_id = "lambda-request-id"
 
         correlation_id = generate_correlation_id(source_id, request_id)
@@ -347,7 +347,7 @@ class TestBatchDeduplicate:
         new, _, _ = batch_deduplicate(articles)
 
         assert "source_id" in new[0]
-        assert new[0]["source_id"].startswith("newsapi#")
+        assert new[0]["source_id"].startswith("article#")
 
     def test_skips_invalid_articles(self):
         """Test that articles without required fields are skipped."""
@@ -373,7 +373,7 @@ class TestBatchDeduplicate:
 
     def test_returns_combined_ids(self):
         """Test that all_ids includes both existing and new."""
-        existing_ids = {"newsapi#existing1"}
+        existing_ids = {"article#existing1"}
 
         articles = [
             {"url": "https://example.com/new"},
@@ -382,7 +382,7 @@ class TestBatchDeduplicate:
         _, _, all_ids = batch_deduplicate(articles, existing_ids)
 
         # Should have both existing and new
-        assert "newsapi#existing1" in all_ids
+        assert "article#existing1" in all_ids
         assert len(all_ids) == 2
 
 

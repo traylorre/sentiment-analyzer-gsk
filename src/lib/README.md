@@ -11,7 +11,7 @@ Content hashing for article deduplication.
 
 **Algorithm**:
 ```
-source_id = "newsapi#" + sha256(url or title+publishedAt)[:16]
+source_id = "article#" + sha256(url or title+publishedAt)[:16]
 ```
 
 **On-Call Note**: If duplicate articles appear, check:
@@ -22,7 +22,7 @@ source_id = "newsapi#" + sha256(url or title+publishedAt)[:16]
 CloudWatch metrics and structured logging.
 
 **Metrics emitted**:
-- `ArticlesFetched` - Raw count from NewsAPI
+- `ArticlesFetched` - Raw count from external APIs (Tiingo/Finnhub)
 - `NewItemsIngested` - After deduplication
 - `DuplicatesSkipped` - Dedup count
 - `AnalysisCount` - Items analyzed
@@ -34,7 +34,7 @@ Example query:
 ```
 fields @timestamp, @message
 | filter level = "ERROR"
-| filter correlation_id like /newsapi#/
+| filter correlation_id like /article#/
 | sort @timestamp desc
 ```
 

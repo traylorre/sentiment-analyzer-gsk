@@ -127,15 +127,15 @@ def build_key(source_id: str, timestamp: str) -> dict[str, str]:
     Schema: PK=source_id, SK=timestamp
 
     Args:
-        source_id: Source identifier (e.g., "newsapi#abc123def456")
+        source_id: Source identifier (e.g., "article#abc123def456")
         timestamp: ISO8601 timestamp (e.g., "2025-11-17T14:30:00.000Z")
 
     Returns:
         Dict with source_id and timestamp keys
 
     Example:
-        >>> build_key("newsapi#abc123", "2025-11-17T14:30:00.000Z")
-        {'source_id': 'newsapi#abc123', 'timestamp': '2025-11-17T14:30:00.000Z'}
+        >>> build_key("article#abc123", "2025-11-17T14:30:00.000Z")
+        {'source_id': 'article#abc123', 'timestamp': '2025-11-17T14:30:00.000Z'}
 
     Security Note:
         Inputs are used as-is in parameterized queries. Validation should occur

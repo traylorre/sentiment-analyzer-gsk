@@ -254,7 +254,7 @@ data "aws_iam_policy_document" "ci_deploy_core" {
       "secretsmanager:UntagResource"
     ]
     resources = [
-      # Pattern: {env}/sentiment-analyzer/* (preprod/sentiment-analyzer/newsapi, etc.)
+      # Pattern: {env}/sentiment-analyzer/* (preprod/sentiment-analyzer/tiingo, etc.)
       "arn:aws:secretsmanager:*:*:secret:*/sentiment-analyzer/*"
     ]
   }

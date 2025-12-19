@@ -103,7 +103,7 @@ def sample_items():
 
     items = [
         {
-            "source_id": "newsapi#article1",
+            "source_id": "article#article1",
             "timestamp": (now - timedelta(minutes=10)).isoformat(),
             "title": "Positive News Article",
             "sentiment": "positive",
@@ -113,7 +113,7 @@ def sample_items():
             "source": "techcrunch",
         },
         {
-            "source_id": "newsapi#article2",
+            "source_id": "article#article2",
             "timestamp": (now - timedelta(minutes=20)).isoformat(),
             "title": "Neutral News Article",
             "sentiment": "neutral",
@@ -123,7 +123,7 @@ def sample_items():
             "source": "reuters",
         },
         {
-            "source_id": "newsapi#article3",
+            "source_id": "article#article3",
             "timestamp": (now - timedelta(minutes=30)).isoformat(),
             "title": "Negative News Article",
             "sentiment": "negative",
@@ -133,7 +133,7 @@ def sample_items():
             "source": "bloomberg",
         },
         {
-            "source_id": "newsapi#article4",
+            "source_id": "article#article4",
             "timestamp": (now - timedelta(minutes=40)).isoformat(),
             "title": "Another Positive Article",
             "sentiment": "positive",
@@ -143,7 +143,7 @@ def sample_items():
             "source": "wired",
         },
         {
-            "source_id": "newsapi#article5",
+            "source_id": "article#article5",
             "timestamp": (now - timedelta(minutes=50)).isoformat(),
             "title": "Pending Article",
             "status": "pending",
@@ -401,13 +401,13 @@ class TestGetItemsBySentiment:
 
         # Create items at different times
         old_item = {
-            "source_id": "newsapi#old",
+            "source_id": "article#old",
             "timestamp": (now - timedelta(hours=48)).isoformat(),
             "sentiment": "positive",
             "status": "analyzed",
         }
         recent_item = {
-            "source_id": "newsapi#recent",
+            "source_id": "article#recent",
             "timestamp": (now - timedelta(hours=1)).isoformat(),
             "sentiment": "positive",
             "status": "analyzed",
@@ -420,7 +420,7 @@ class TestGetItemsBySentiment:
         result = get_items_by_sentiment(dynamodb_table, "positive", hours=24)
 
         assert len(result) == 1
-        assert result[0]["source_id"] == "newsapi#recent"
+        assert result[0]["source_id"] == "article#recent"
 
 
 class TestCalculateIngestionRate:
@@ -434,23 +434,23 @@ class TestCalculateIngestionRate:
         items = [
             # Within last hour
             {
-                "source_id": "newsapi#recent1",
+                "source_id": "article#recent1",
                 "timestamp": (now - timedelta(minutes=30)).isoformat(),
                 "status": "analyzed",
             },
             {
-                "source_id": "newsapi#recent2",
+                "source_id": "article#recent2",
                 "timestamp": (now - timedelta(minutes=45)).isoformat(),
                 "status": "analyzed",
             },
             # Within last 24 hours but not last hour
             {
-                "source_id": "newsapi#older1",
+                "source_id": "article#older1",
                 "timestamp": (now - timedelta(hours=2)).isoformat(),
                 "status": "analyzed",
             },
             {
-                "source_id": "newsapi#older2",
+                "source_id": "article#older2",
                 "timestamp": (now - timedelta(hours=12)).isoformat(),
                 "status": "analyzed",
             },
@@ -469,12 +469,12 @@ class TestCalculateIngestionRate:
 
         items = [
             {
-                "source_id": "newsapi#analyzed",
+                "source_id": "article#analyzed",
                 "timestamp": (now - timedelta(minutes=30)).isoformat(),
                 "status": "analyzed",
             },
             {
-                "source_id": "newsapi#pending",
+                "source_id": "article#pending",
                 "timestamp": (now - timedelta(minutes=30)).isoformat(),
                 "status": "pending",
             },

@@ -27,7 +27,8 @@ cd infrastructure/terraform
 terraform init -migrate-state
 
 # Import existing secrets (if they exist)
-terraform import module.secrets.aws_secretsmanager_secret.newsapi dev/sentiment-analyzer/newsapi
+terraform import module.secrets.aws_secretsmanager_secret.tiingo dev/sentiment-analyzer/tiingo
+terraform import module.secrets.aws_secretsmanager_secret.finnhub dev/sentiment-analyzer/finnhub
 terraform import module.secrets.aws_secretsmanager_secret.dashboard_api_key dev/sentiment-analyzer/dashboard-api-key
 
 # Verify state

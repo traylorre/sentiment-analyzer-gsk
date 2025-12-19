@@ -53,7 +53,7 @@ def create_sns_event(source_id: str, timestamp: str, text: str) -> dict:
     """Create SNS event for testing."""
     message = {
         "source_id": source_id,
-        "source_type": "newsapi",
+        "source_type": "article",
         "text_for_analysis": text,
         "model_version": "v1.0.0",
         "matched_tags": ["AI"],
@@ -97,7 +97,7 @@ class TestAnalysisDevE2E:
         table = dynamodb.Table("test-sentiment-items")
 
         # Insert pending item
-        source_id = "newsapi#test123"
+        source_id = "article#test123"
         timestamp = "2025-11-20T10:00:00.000Z"
         table.put_item(
             Item={
@@ -105,7 +105,7 @@ class TestAnalysisDevE2E:
                 "timestamp": timestamp,
                 "status": "pending",
                 "text_for_analysis": "Great news about AI!",
-                "source_type": "newsapi",
+                "source_type": "article",
                 "matched_tags": ["AI"],
             }
         )
@@ -159,7 +159,7 @@ class TestAnalysisDevE2E:
 
         table = dynamodb.Table("test-sentiment-items")
 
-        source_id = "newsapi#idempotent"
+        source_id = "article#idempotent"
         timestamp = "2025-11-20T11:00:00.000Z"
         table.put_item(
             Item={
@@ -167,7 +167,7 @@ class TestAnalysisDevE2E:
                 "timestamp": timestamp,
                 "status": "pending",
                 "text_for_analysis": "Test",
-                "source_type": "newsapi",
+                "source_type": "article",
                 "matched_tags": ["test"],
             }
         )

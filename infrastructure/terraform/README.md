@@ -70,7 +70,8 @@ terraform apply -var-file=dev.tfvars
 **What gets deployed**:
 - DynamoDB table: `dev-sentiment-items`
 - Secrets Manager:
-  - `dev/sentiment-analyzer/newsapi`
+  - `dev/sentiment-analyzer/tiingo`
+  - `dev/sentiment-analyzer/finnhub`
   - `dev/sentiment-analyzer/dashboard-api-key`
 - AWS Backup vault and plan
 - CloudWatch alarms
@@ -109,15 +110,25 @@ terraform apply -var-file=dev.tfvars
 
 Secrets are created but NOT populated by Terraform (security best practice). Set them manually:
 
-### NewsAPI Secret
+### Tiingo Secret
 
 ```bash
 aws secretsmanager put-secret-value \
-  --secret-id dev/sentiment-analyzer/newsapi \
-  --secret-string '{"api_key":"YOUR_NEWSAPI_KEY_HERE"}'
+  --secret-id dev/sentiment-analyzer/tiingo \
+  --secret-string '{"api_key":"YOUR_TIINGO_KEY_HERE"}'
 ```
 
-**Get NewsAPI key**: https://newsapi.org/register
+**Get Tiingo key**: https://www.tiingo.com/account/api/token
+
+### Finnhub Secret
+
+```bash
+aws secretsmanager put-secret-value \
+  --secret-id dev/sentiment-analyzer/finnhub \
+  --secret-string '{"api_key":"YOUR_FINNHUB_KEY_HERE"}'
+```
+
+**Get Finnhub key**: https://finnhub.io/dashboard
 
 ### Dashboard API Key
 
@@ -164,7 +175,8 @@ After successful deployment, Terraform outputs:
 ```
 dynamodb_table_name           = "dev-sentiment-items"
 dynamodb_table_arn            = "arn:aws:dynamodb:us-east-1:..."
-newsapi_secret_arn            = "arn:aws:secretsmanager:us-east-1:..."
+tiingo_secret_arn             = "arn:aws:secretsmanager:us-east-1:..."
+finnhub_secret_arn            = "arn:aws:secretsmanager:us-east-1:..."
 dashboard_api_key_secret_arn  = "arn:aws:secretsmanager:us-east-1:..."
 gsi_by_sentiment              = "by_sentiment"
 gsi_by_tag                    = "by_tag"
@@ -261,7 +273,7 @@ terraform destroy -var-file=prod.tfvars
 
 ```bash
 aws secretsmanager delete-secret \
-  --secret-id dev/sentiment-analyzer/newsapi \
+  --secret-id dev/sentiment-analyzer/tiingo \
   --force-delete-without-recovery
 ```
 

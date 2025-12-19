@@ -52,16 +52,16 @@ def secrets_manager(aws_credentials):
     Create mocked Secrets Manager with test secrets.
 
     Creates secrets matching the paths used in production:
-    - dev/sentiment-analyzer/newsapi
+    - dev/sentiment-analyzer/tiingo
     - dev/sentiment-analyzer/dashboard-api-key
     """
     with mock_aws():
         client = boto3.client("secretsmanager", region_name="us-east-1")
 
-        # Create NewsAPI secret
+        # Create Tiingo API secret
         client.create_secret(
-            Name="dev/sentiment-analyzer/newsapi",
-            SecretString=json.dumps({"api_key": "test-newsapi-key-12345"}),
+            Name="dev/sentiment-analyzer/tiingo",
+            SecretString=json.dumps({"api_key": "test-tiingo-key-12345"}),
         )
 
         # Create Dashboard API key secret
@@ -109,9 +109,9 @@ class TestGetSecret:
 
     def test_get_secret_success(self, secrets_manager):
         """Test successful secret retrieval."""
-        secret = get_secret("dev/sentiment-analyzer/newsapi")
+        secret = get_secret("dev/sentiment-analyzer/tiingo")
 
-        assert secret == {"api_key": "test-newsapi-key-12345"}
+        assert secret == {"api_key": "test-tiingo-key-12345"}
 
     def test_get_secret_multiple_fields(self, secrets_manager):
         """Test retrieving secret with multiple fields."""
@@ -124,33 +124,33 @@ class TestGetSecret:
     def test_get_secret_caching(self, secrets_manager):
         """Test that secrets are cached."""
         # First call - fetches from Secrets Manager (result triggers caching)
-        get_secret("dev/sentiment-analyzer/newsapi")
+        get_secret("dev/sentiment-analyzer/tiingo")
 
         # Modify the secret in Secrets Manager
         secrets_manager.update_secret(
-            SecretId="dev/sentiment-analyzer/newsapi",
+            SecretId="dev/sentiment-analyzer/tiingo",
             SecretString=json.dumps({"api_key": "updated-key"}),
         )
 
         # Second call - should return cached value
-        secret2 = get_secret("dev/sentiment-analyzer/newsapi")
+        secret2 = get_secret("dev/sentiment-analyzer/tiingo")
 
         # Should still be original value (cached)
-        assert secret2 == {"api_key": "test-newsapi-key-12345"}
+        assert secret2 == {"api_key": "test-tiingo-key-12345"}
 
     def test_get_secret_force_refresh(self, secrets_manager):
         """Test force_refresh bypasses cache."""
         # First call - caches the secret
-        get_secret("dev/sentiment-analyzer/newsapi")
+        get_secret("dev/sentiment-analyzer/tiingo")
 
         # Modify the secret
         secrets_manager.update_secret(
-            SecretId="dev/sentiment-analyzer/newsapi",
+            SecretId="dev/sentiment-analyzer/tiingo",
             SecretString=json.dumps({"api_key": "updated-key"}),
         )
 
         # Force refresh - should get new value
-        secret = get_secret("dev/sentiment-analyzer/newsapi", force_refresh=True)
+        secret = get_secret("dev/sentiment-analyzer/tiingo", force_refresh=True)
 
         assert secret == {"api_key": "updated-key"}
 
@@ -188,11 +188,11 @@ class TestGetSecret:
         os.environ["SECRETS_CACHE_TTL_SECONDS"] = "1"
 
         # First call - caches the secret
-        get_secret("dev/sentiment-analyzer/newsapi")
+        get_secret("dev/sentiment-analyzer/tiingo")
 
         # Modify the secret
         secrets_manager.update_secret(
-            SecretId="dev/sentiment-analyzer/newsapi",
+            SecretId="dev/sentiment-analyzer/tiingo",
             SecretString=json.dumps({"api_key": "updated-key"}),
         )
 
@@ -200,7 +200,7 @@ class TestGetSecret:
         time.sleep(1.1)
 
         # Should get new value after cache expiry
-        secret = get_secret("dev/sentiment-analyzer/newsapi")
+        secret = get_secret("dev/sentiment-analyzer/tiingo")
 
         assert secret == {"api_key": "updated-key"}
 
@@ -210,9 +210,9 @@ class TestGetApiKey:
 
     def test_get_api_key_default_field(self, secrets_manager):
         """Test getting API key with default field name."""
-        api_key = get_api_key("dev/sentiment-analyzer/newsapi")
+        api_key = get_api_key("dev/sentiment-analyzer/tiingo")
 
-        assert api_key == "test-newsapi-key-12345"
+        assert api_key == "test-tiingo-key-12345"
 
     def test_get_api_key_custom_field(self, secrets_manager):
         """Test getting value with custom field name."""
@@ -226,7 +226,7 @@ class TestGetApiKey:
     def test_get_api_key_missing_field(self, secrets_manager):
         """Test SecretRetrievalError for missing field."""
         with pytest.raises(SecretRetrievalError, match="Field 'missing' not found"):
-            get_api_key("dev/sentiment-analyzer/newsapi", key_field="missing")
+            get_api_key("dev/sentiment-analyzer/tiingo", key_field="missing")
 
 
 class TestClearCache:
@@ -235,11 +235,11 @@ class TestClearCache:
     def test_clear_cache(self, secrets_manager):
         """Test that clear_cache removes all cached secrets."""
         # Cache a secret
-        get_secret("dev/sentiment-analyzer/newsapi")
+        get_secret("dev/sentiment-analyzer/tiingo")
 
         # Modify the secret
         secrets_manager.update_secret(
-            SecretId="dev/sentiment-analyzer/newsapi",
+            SecretId="dev/sentiment-analyzer/tiingo",
             SecretString=json.dumps({"api_key": "updated-key"}),
         )
 
@@ -247,7 +247,7 @@ class TestClearCache:
         clear_cache()
 
         # Should get new value
-        secret = get_secret("dev/sentiment-analyzer/newsapi")
+        secret = get_secret("dev/sentiment-analyzer/tiingo")
 
         assert secret == {"api_key": "updated-key"}
 
@@ -323,43 +323,43 @@ class TestEdgeCases:
         """Test retrieving secret by ARN."""
         # Get the ARN of an existing secret
         response = secrets_manager.describe_secret(
-            SecretId="dev/sentiment-analyzer/newsapi"
+            SecretId="dev/sentiment-analyzer/tiingo"
         )
         arn = response["ARN"]
 
         # Retrieve by ARN
         secret = get_secret(arn)
 
-        assert secret == {"api_key": "test-newsapi-key-12345"}
+        assert secret == {"api_key": "test-tiingo-key-12345"}
 
     def test_concurrent_cache_access(self, secrets_manager):
         """Test that cache handles concurrent access safely."""
         # This is a basic test - real concurrency testing would need threads
         for _ in range(10):
-            secret = get_secret("dev/sentiment-analyzer/newsapi")
-            assert secret == {"api_key": "test-newsapi-key-12345"}
+            secret = get_secret("dev/sentiment-analyzer/tiingo")
+            assert secret == {"api_key": "test-tiingo-key-12345"}
             clear_cache()
 
     def test_different_secrets_cached_separately(self, secrets_manager):
         """Test that different secrets are cached independently."""
         # Cache both secrets
-        newsapi = get_secret("dev/sentiment-analyzer/newsapi")
+        tiingo = get_secret("dev/sentiment-analyzer/tiingo")
         dashboard = get_secret("dev/sentiment-analyzer/dashboard-api-key")
 
         # Verify they're different
-        assert newsapi["api_key"] == "test-newsapi-key-12345"
+        assert tiingo["api_key"] == "test-tiingo-key-12345"
         assert dashboard["api_key"] == "test-dashboard-key-67890"
 
         # Update only one
         secrets_manager.update_secret(
-            SecretId="dev/sentiment-analyzer/newsapi",
-            SecretString=json.dumps({"api_key": "updated-newsapi"}),
+            SecretId="dev/sentiment-analyzer/tiingo",
+            SecretString=json.dumps({"api_key": "updated-tiingo"}),
         )
 
-        # Dashboard should still be cached, newsapi should be cached (not updated)
-        newsapi2 = get_secret("dev/sentiment-analyzer/newsapi")
+        # Dashboard should still be cached, tiingo should be cached (not updated)
+        tiingo2 = get_secret("dev/sentiment-analyzer/tiingo")
         dashboard2 = get_secret("dev/sentiment-analyzer/dashboard-api-key")
 
         # Both should be original cached values
-        assert newsapi2["api_key"] == "test-newsapi-key-12345"
+        assert tiingo2["api_key"] == "test-tiingo-key-12345"
         assert dashboard2["api_key"] == "test-dashboard-key-67890"

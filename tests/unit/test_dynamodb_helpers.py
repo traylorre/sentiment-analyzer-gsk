@@ -115,18 +115,18 @@ class TestBuildKey:
 
     def test_build_key_basic(self):
         """Test basic key construction."""
-        key = build_key("newsapi#abc123", "2025-11-17T14:30:00.000Z")
+        key = build_key("article#abc123", "2025-11-17T14:30:00.000Z")
 
         assert key == {
-            "source_id": "newsapi#abc123",
+            "source_id": "article#abc123",
             "timestamp": "2025-11-17T14:30:00.000Z",
         }
 
     def test_build_key_with_special_chars(self):
         """Test key with special characters in source_id."""
-        key = build_key("newsapi#abc123def456", "2025-11-17T14:30:00.000Z")
+        key = build_key("article#abc123def456", "2025-11-17T14:30:00.000Z")
 
-        assert key["source_id"] == "newsapi#abc123def456"
+        assert key["source_id"] == "article#abc123def456"
 
     def test_build_key_empty_values(self):
         """Test key with empty strings (edge case)."""
@@ -194,10 +194,10 @@ class TestParseDynamoDBItem:
 
     def test_parse_string_unchanged(self):
         """Test strings pass through unchanged."""
-        item = {"source_id": "newsapi#abc123", "title": "Test Article"}
+        item = {"source_id": "article#abc123", "title": "Test Article"}
         result = parse_dynamodb_item(item)
 
-        assert result["source_id"] == "newsapi#abc123"
+        assert result["source_id"] == "article#abc123"
         assert result["title"] == "Test Article"
 
 
@@ -248,7 +248,7 @@ class TestItemExists:
         # Insert test item
         dynamodb_table.put_item(
             Item={
-                "source_id": "newsapi#test123",
+                "source_id": "article#test123",
                 "timestamp": "2025-11-17T14:30:00.000Z",
                 "status": "pending",
             }
@@ -256,7 +256,7 @@ class TestItemExists:
 
         result = item_exists(
             dynamodb_table,
-            "newsapi#test123",
+            "article#test123",
             "2025-11-17T14:30:00.000Z",
         )
 
@@ -266,7 +266,7 @@ class TestItemExists:
         """Test item_exists returns False for non-existing item."""
         result = item_exists(
             dynamodb_table,
-            "newsapi#nonexistent",
+            "article#nonexistent",
             "2025-11-17T14:30:00.000Z",
         )
 
@@ -279,7 +279,7 @@ class TestPutItemIfNotExists:
     def test_put_new_item_succeeds(self, dynamodb_table):
         """Test putting a new item succeeds."""
         item = {
-            "source_id": "newsapi#new123",
+            "source_id": "article#new123",
             "timestamp": "2025-11-17T14:30:00.000Z",
             "status": "pending",
             "title": "Test Article",
@@ -291,7 +291,7 @@ class TestPutItemIfNotExists:
 
         # Verify item was created
         response = dynamodb_table.get_item(
-            Key={"source_id": "newsapi#new123", "timestamp": "2025-11-17T14:30:00.000Z"}
+            Key={"source_id": "article#new123", "timestamp": "2025-11-17T14:30:00.000Z"}
         )
         assert "Item" in response
         assert response["Item"]["title"] == "Test Article"
@@ -299,7 +299,7 @@ class TestPutItemIfNotExists:
     def test_put_existing_item_returns_false(self, dynamodb_table):
         """Test putting existing item returns False (deduplication)."""
         item = {
-            "source_id": "newsapi#exists123",
+            "source_id": "article#exists123",
             "timestamp": "2025-11-17T14:30:00.000Z",
             "status": "pending",
         }
@@ -315,14 +315,14 @@ class TestPutItemIfNotExists:
     def test_put_item_preserves_original(self, dynamodb_table):
         """Test that existing item is not overwritten."""
         original = {
-            "source_id": "newsapi#preserve123",
+            "source_id": "article#preserve123",
             "timestamp": "2025-11-17T14:30:00.000Z",
             "status": "pending",
             "title": "Original Title",
         }
 
         updated = {
-            "source_id": "newsapi#preserve123",
+            "source_id": "article#preserve123",
             "timestamp": "2025-11-17T14:30:00.000Z",
             "status": "analyzed",
             "title": "Updated Title",
@@ -337,7 +337,7 @@ class TestPutItemIfNotExists:
         # Verify original is preserved
         response = dynamodb_table.get_item(
             Key={
-                "source_id": "newsapi#preserve123",
+                "source_id": "article#preserve123",
                 "timestamp": "2025-11-17T14:30:00.000Z",
             }
         )
@@ -353,7 +353,7 @@ class TestUpdateItemStatus:
         # Create item
         dynamodb_table.put_item(
             Item={
-                "source_id": "newsapi#update123",
+                "source_id": "article#update123",
                 "timestamp": "2025-11-17T14:30:00.000Z",
                 "status": "pending",
             }
@@ -362,7 +362,7 @@ class TestUpdateItemStatus:
         # Update status
         result = update_item_status(
             dynamodb_table,
-            "newsapi#update123",
+            "article#update123",
             "2025-11-17T14:30:00.000Z",
             "analyzed",
         )
@@ -372,7 +372,7 @@ class TestUpdateItemStatus:
         # Verify update
         response = dynamodb_table.get_item(
             Key={
-                "source_id": "newsapi#update123",
+                "source_id": "article#update123",
                 "timestamp": "2025-11-17T14:30:00.000Z",
             }
         )
@@ -383,7 +383,7 @@ class TestUpdateItemStatus:
         # Create item
         dynamodb_table.put_item(
             Item={
-                "source_id": "newsapi#attrs123",
+                "source_id": "article#attrs123",
                 "timestamp": "2025-11-17T14:30:00.000Z",
                 "status": "pending",
             }
@@ -392,7 +392,7 @@ class TestUpdateItemStatus:
         # Update with additional attributes
         result = update_item_status(
             dynamodb_table,
-            "newsapi#attrs123",
+            "article#attrs123",
             "2025-11-17T14:30:00.000Z",
             "analyzed",
             additional_attrs={
@@ -407,7 +407,7 @@ class TestUpdateItemStatus:
         # Verify all updates
         response = dynamodb_table.get_item(
             Key={
-                "source_id": "newsapi#attrs123",
+                "source_id": "article#attrs123",
                 "timestamp": "2025-11-17T14:30:00.000Z",
             }
         )
@@ -422,7 +422,7 @@ class TestUpdateItemStatus:
         # DynamoDB update_item creates the item if it doesn't exist
         result = update_item_status(
             dynamodb_table,
-            "newsapi#nonexistent",
+            "article#nonexistent",
             "2025-11-17T14:30:00.000Z",
             "analyzed",
         )
@@ -432,7 +432,7 @@ class TestUpdateItemStatus:
         # Verify item was created
         response = dynamodb_table.get_item(
             Key={
-                "source_id": "newsapi#nonexistent",
+                "source_id": "article#nonexistent",
                 "timestamp": "2025-11-17T14:30:00.000Z",
             }
         )
