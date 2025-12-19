@@ -12,6 +12,7 @@ from botocore.exceptions import ClientError
 
 from src.lambdas.shared.logging_utils import sanitize_for_log
 from src.lambdas.shared.models.configuration import Configuration
+from src.lambdas.shared.models.status_utils import ACTIVE, INACTIVE
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +80,11 @@ class ConfigLookupService:
                 return None
 
             # Check if configuration is active (not soft-deleted)
-            if not item.get("is_active", True):
+            # Use status field with fallback to is_active for backward compatibility
+            status = item.get(
+                "status", ACTIVE if item.get("is_active", True) else INACTIVE
+            )
+            if status != ACTIVE:
                 logger.debug(
                     "Configuration is inactive",
                     extra={

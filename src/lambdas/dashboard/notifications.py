@@ -35,6 +35,7 @@ from pydantic import BaseModel
 
 from src.lambdas.shared.logging_utils import get_safe_error_info, sanitize_for_log
 from src.lambdas.shared.models.notification import DigestSettings, Notification
+from src.lambdas.shared.models.status_utils import DISABLED, ENABLED
 
 logger = logging.getLogger(__name__)
 
@@ -482,8 +483,9 @@ def disable_all_notifications(
                         "PK": f"USER#{user_id}",
                         "SK": item["SK"],
                     },
-                    UpdateExpression="SET is_enabled = :disabled",
-                    ExpressionAttributeValues={":disabled": False},
+                    UpdateExpression="SET is_enabled = :disabled, #status = :status",
+                    ExpressionAttributeNames={"#status": "status"},
+                    ExpressionAttributeValues={":disabled": False, ":status": DISABLED},
                 )
                 alerts_disabled += 1
 
@@ -761,7 +763,9 @@ def update_digest_settings(
 
         if enabled is not None:
             update_parts.append("enabled = :enabled")
+            update_parts.append("#status = :status")
             attr_values[":enabled"] = enabled
+            attr_values[":status"] = ENABLED if enabled else DISABLED
 
         if time is not None:
             # 'time' is a reserved word in DynamoDB
@@ -799,9 +803,14 @@ def update_digest_settings(
             "ExpressionAttributeValues": attr_values,
         }
 
-        # Add expression attribute names if we used #t for time
+        # Add expression attribute names if we used #t for time or #status
+        attr_names: dict[str, str] = {}
         if time is not None:
-            update_kwargs["ExpressionAttributeNames"] = {"#t": "time"}
+            attr_names["#t"] = "time"
+        if enabled is not None:
+            attr_names["#status"] = "status"
+        if attr_names:
+            update_kwargs["ExpressionAttributeNames"] = attr_names
 
         table.update_item(**update_kwargs)
 

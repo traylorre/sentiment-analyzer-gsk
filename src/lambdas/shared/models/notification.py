@@ -5,6 +5,12 @@ from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field
 
+from src.lambdas.shared.models.status_utils import (
+    DISABLED,
+    ENABLED,
+    get_status_from_item,
+)
+
 
 class Notification(BaseModel):
     """Sent notification record."""
@@ -98,7 +104,8 @@ class DigestSettings(BaseModel):
     """User's daily digest email preferences."""
 
     user_id: str
-    enabled: bool = False
+    enabled: bool = False  # Legacy, use status instead
+    status: str = DISABLED  # GSI-compatible status: "enabled" or "disabled" (defaults to disabled)
     time: str = "09:00"  # 24-hour format HH:MM
     timezone: str = "America/New_York"
     include_all_configs: bool = True
@@ -125,6 +132,7 @@ class DigestSettings(BaseModel):
             "SK": self.sk,
             "user_id": self.user_id,
             "enabled": self.enabled,
+            "status": self.status,
             "time": self.time,
             "timezone": self.timezone,
             "include_all_configs": self.include_all_configs,
@@ -147,9 +155,14 @@ class DigestSettings(BaseModel):
         if item.get("last_sent"):
             last_sent = datetime.fromisoformat(item["last_sent"])
 
+        # Get status with backward compatibility for boolean field
+        status = get_status_from_item(item, "DIGEST_SETTINGS")
+        enabled = status == ENABLED
+
         return cls(
             user_id=item["user_id"],
-            enabled=item.get("enabled", False),
+            enabled=enabled,
+            status=status,
             time=item.get("time", "09:00"),
             timezone=item.get("timezone", "America/New_York"),
             include_all_configs=item.get("include_all_configs", True),

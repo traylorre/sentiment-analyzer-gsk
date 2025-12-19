@@ -26,6 +26,7 @@ from src.lambdas.notification.alert_evaluator import (
     verify_internal_auth,
 )
 from src.lambdas.shared.models.alert_rule import AlertRule
+from src.lambdas.shared.models.status_utils import DISABLED, ENABLED
 
 
 @pytest.fixture
@@ -64,6 +65,7 @@ def sample_alert(user_id, alert_id, config_id):
         threshold_value=-0.3,
         threshold_direction="below",
         is_enabled=True,
+        status=ENABLED,
         trigger_count=0,
         created_at=datetime.now(UTC),
     )
@@ -293,6 +295,7 @@ class TestEvaluateAlertsForTicker:
     ):
         """Skips disabled alerts."""
         sample_alert.is_enabled = False
+        sample_alert.status = DISABLED
         mock_find.return_value = [sample_alert]
 
         result = evaluate_alerts_for_ticker(mock_table, "AAPL", sentiment_score=-0.5)

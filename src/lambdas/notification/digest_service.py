@@ -30,6 +30,7 @@ from boto3.dynamodb.conditions import Key
 from src.lambdas.shared.logging_utils import get_safe_error_info, sanitize_for_log
 from src.lambdas.shared.models.configuration import Configuration
 from src.lambdas.shared.models.notification import DigestSettings
+from src.lambdas.shared.models.status_utils import ENABLED
 from src.lambdas.shared.models.user import User
 
 logger = logging.getLogger(__name__)
@@ -110,13 +111,13 @@ class DigestService:
             # Query using by_entity_status GSI for enabled digest settings
             response = self.table.query(
                 IndexName="by_entity_status",
-                KeyConditionExpression="entity_type = :et AND status = :status",
+                KeyConditionExpression="entity_type = :et AND #status = :status",
                 ExpressionAttributeValues={
                     ":et": "DIGEST_SETTINGS",
-                    ":status": "enabled",
+                    ":status": ENABLED,
                 },
                 ProjectionExpression="PK, SK, user_id, #t, timezone, include_all_configs, config_ids, last_sent",
-                ExpressionAttributeNames={"#t": "time"},
+                ExpressionAttributeNames={"#t": "time", "#status": "status"},
             )
 
             for item in response.get("Items", []):
@@ -133,13 +134,13 @@ class DigestService:
             while "LastEvaluatedKey" in response:
                 response = self.table.query(
                     IndexName="by_entity_status",
-                    KeyConditionExpression="entity_type = :et AND status = :status",
+                    KeyConditionExpression="entity_type = :et AND #status = :status",
                     ExpressionAttributeValues={
                         ":et": "DIGEST_SETTINGS",
-                        ":status": "enabled",
+                        ":status": ENABLED,
                     },
                     ProjectionExpression="PK, SK, user_id, #t, timezone, include_all_configs, config_ids, last_sent",
-                    ExpressionAttributeNames={"#t": "time"},
+                    ExpressionAttributeNames={"#t": "time", "#status": "status"},
                     ExclusiveStartKey=response["LastEvaluatedKey"],
                 )
                 for item in response.get("Items", []):

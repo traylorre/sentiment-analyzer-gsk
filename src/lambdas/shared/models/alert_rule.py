@@ -5,6 +5,11 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from src.lambdas.shared.models.status_utils import (
+    ENABLED,
+    get_status_from_item,
+)
+
 
 class AlertRule(BaseModel):
     """User-defined alert rule for a ticker."""
@@ -22,7 +27,8 @@ class AlertRule(BaseModel):
     threshold_direction: Literal["above", "below"]
 
     # State
-    is_enabled: bool = True
+    is_enabled: bool = True  # Legacy, use status instead
+    status: str = ENABLED  # GSI-compatible status: "enabled" or "disabled"
     last_triggered_at: datetime | None = None
     trigger_count: int = 0
 
@@ -52,6 +58,7 @@ class AlertRule(BaseModel):
             "threshold_value": str(self.threshold_value),  # DynamoDB Decimal
             "threshold_direction": self.threshold_direction,
             "is_enabled": self.is_enabled,
+            "status": self.status,
             "trigger_count": self.trigger_count,
             "created_at": self.created_at.isoformat(),
             "entity_type": "ALERT_RULE",
@@ -67,6 +74,10 @@ class AlertRule(BaseModel):
         if item.get("last_triggered_at"):
             last_triggered = datetime.fromisoformat(item["last_triggered_at"])
 
+        # Get status with backward compatibility for boolean field
+        status = get_status_from_item(item, "ALERT_RULE")
+        is_enabled = status == ENABLED
+
         return cls(
             alert_id=item["alert_id"],
             user_id=item["user_id"],
@@ -75,7 +86,8 @@ class AlertRule(BaseModel):
             alert_type=item["alert_type"],
             threshold_value=float(item["threshold_value"]),
             threshold_direction=item["threshold_direction"],
-            is_enabled=item.get("is_enabled", True),
+            is_enabled=is_enabled,
+            status=status,
             last_triggered_at=last_triggered,
             trigger_count=item.get("trigger_count", 0),
             created_at=datetime.fromisoformat(item["created_at"]),
