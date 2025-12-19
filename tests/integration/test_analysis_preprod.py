@@ -123,7 +123,7 @@ def create_sns_event(
 
     message = {
         "source_id": source_id,
-        "source_type": "newsapi",
+        "source_type": "article",
         "text_for_analysis": text,
         "model_version": model_version,
         "matched_tags": matched_tags,
@@ -169,7 +169,7 @@ class TestAnalysisE2E:
         """
         # Use unique source_id to avoid conflicts with other test runs
         test_id = f"integration-test-{datetime.now(UTC).timestamp()}"
-        source_id = f"newsapi#{test_id}"
+        source_id = f"article#{test_id}"
         timestamp = datetime.now(UTC).isoformat()
 
         # Insert pending item into REAL dev table
@@ -179,7 +179,7 @@ class TestAnalysisE2E:
                 "timestamp": timestamp,
                 "status": "pending",
                 "text_for_analysis": "This is an amazing breakthrough in AI technology!",
-                "source_type": "newsapi",
+                "source_type": "article",
                 "matched_tags": ["AI", "technology"],
             }
         )
@@ -242,7 +242,7 @@ class TestAnalysisE2E:
         """
         # Use unique source_id
         test_id = f"integration-idempotent-{datetime.now(UTC).timestamp()}"
-        source_id = f"newsapi#{test_id}"
+        source_id = f"article#{test_id}"
         timestamp = datetime.now(UTC).isoformat()
 
         # Insert pending item
@@ -252,7 +252,7 @@ class TestAnalysisE2E:
                 "timestamp": timestamp,
                 "status": "pending",
                 "text_for_analysis": "Test article",
-                "source_type": "newsapi",
+                "source_type": "article",
                 "matched_tags": ["AI"],
             }
         )
@@ -318,7 +318,7 @@ class TestAnalysisE2E:
         Neutral indicates low model confidence (score < 0.6).
         """
         test_id = f"integration-neutral-{datetime.now(UTC).timestamp()}"
-        source_id = f"newsapi#{test_id}"
+        source_id = f"article#{test_id}"
         timestamp = datetime.now(UTC).isoformat()
 
         dynamodb_table.put_item(
@@ -327,7 +327,7 @@ class TestAnalysisE2E:
                 "timestamp": timestamp,
                 "status": "pending",
                 "text_for_analysis": "The weather is okay today.",
-                "source_type": "newsapi",
+                "source_type": "article",
                 "matched_tags": ["weather"],
             }
         )
@@ -374,7 +374,7 @@ class TestAnalysisE2E:
         Integration: Negative sentiment is stored correctly in REAL dev table.
         """
         test_id = f"integration-negative-{datetime.now(UTC).timestamp()}"
-        source_id = f"newsapi#{test_id}"
+        source_id = f"article#{test_id}"
         timestamp = datetime.now(UTC).isoformat()
 
         dynamodb_table.put_item(
@@ -383,7 +383,7 @@ class TestAnalysisE2E:
                 "timestamp": timestamp,
                 "status": "pending",
                 "text_for_analysis": "This is terrible news about the economy.",
-                "source_type": "newsapi",
+                "source_type": "article",
                 "matched_tags": ["economy"],
             }
         )
@@ -429,7 +429,7 @@ class TestAnalysisE2E:
         This is important for tracking which model analyzed each item.
         """
         test_id = f"integration-version-{datetime.now(UTC).timestamp()}"
-        source_id = f"newsapi#{test_id}"
+        source_id = f"article#{test_id}"
         timestamp = datetime.now(UTC).isoformat()
 
         dynamodb_table.put_item(
@@ -438,7 +438,7 @@ class TestAnalysisE2E:
                 "timestamp": timestamp,
                 "status": "pending",
                 "text_for_analysis": "Test",
-                "source_type": "newsapi",
+                "source_type": "article",
                 "matched_tags": ["test"],
             }
         )
@@ -485,7 +485,7 @@ class TestAnalysisE2E:
         Score should be rounded to 4 decimal places.
         """
         test_id = f"integration-precision-{datetime.now(UTC).timestamp()}"
-        source_id = f"newsapi#{test_id}"
+        source_id = f"article#{test_id}"
         timestamp = datetime.now(UTC).isoformat()
 
         dynamodb_table.put_item(
@@ -494,7 +494,7 @@ class TestAnalysisE2E:
                 "timestamp": timestamp,
                 "status": "pending",
                 "text_for_analysis": "Test",
-                "source_type": "newsapi",
+                "source_type": "article",
                 "matched_tags": ["test"],
             }
         )

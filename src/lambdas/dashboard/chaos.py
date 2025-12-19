@@ -20,7 +20,7 @@ Safety Mechanisms:
 
 Supported Scenarios (Phase 1):
     - dynamodb_throttle: Throttle DynamoDB writes (AWS FIS - Phase 2)
-    - newsapi_failure: Simulate NewsAPI unavailability (Phase 3)
+    - ingestion_failure: Simulate article ingestion unavailability (Phase 3)
     - lambda_cold_start: Inject artificial delay (Phase 4)
 """
 
@@ -103,7 +103,7 @@ def create_experiment(
     Create a new chaos experiment.
 
     Args:
-        scenario_type: Type of chaos scenario (dynamodb_throttle|newsapi_failure|lambda_cold_start)
+        scenario_type: Type of chaos scenario (dynamodb_throttle|ingestion_failure|lambda_cold_start)
         blast_radius: Percentage of requests to affect (10-100)
         duration_seconds: Duration in seconds (5-300)
         parameters: Optional scenario-specific parameters
@@ -119,7 +119,7 @@ def create_experiment(
     check_environment_allowed()
 
     # Validate parameters
-    valid_scenarios = ["dynamodb_throttle", "newsapi_failure", "lambda_cold_start"]
+    valid_scenarios = ["dynamodb_throttle", "ingestion_failure", "lambda_cold_start"]
     if scenario_type not in valid_scenarios:
         raise ValueError(
             f"Invalid scenario_type: {scenario_type}. "
@@ -591,14 +591,14 @@ def start_experiment(experiment_id: str) -> dict[str, Any]:
             }
             update_experiment_status(experiment_id, "running", results)
 
-        elif scenario_type == "newsapi_failure":
+        elif scenario_type == "ingestion_failure":
             # Phase 3: DynamoDB-based chaos injection
-            # Ingestion Lambda queries chaos_experiments table and skips NewsAPI if active
+            # Ingestion Lambda queries chaos_experiments table and skips article ingestion if active
             # No AWS FIS needed - pure application-level fault injection
             results = {
                 "started_at": datetime.now(UTC).isoformat() + "Z",
                 "injection_method": "dynamodb_flag",
-                "note": "Ingestion Lambda will skip NewsAPI calls while experiment is running",
+                "note": "Ingestion Lambda will skip article ingestion calls while experiment is running",
             }
             update_experiment_status(experiment_id, "running", results)
 
@@ -664,7 +664,7 @@ def stop_experiment(experiment_id: str) -> dict[str, Any]:
             results["stopped_at"] = datetime.now(UTC).isoformat() + "Z"
             update_experiment_status(experiment_id, "stopped", results)
 
-        elif scenario_type == "newsapi_failure":
+        elif scenario_type == "ingestion_failure":
             # Phase 3: Stop DynamoDB-based chaos injection
             # Simply mark experiment as stopped - Ingestion Lambda checks status
             results = experiment.get("results", {})

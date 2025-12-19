@@ -29,6 +29,8 @@ Auto-generated from all feature plans. Last updated: 2025-11-26
 - N/A (tooling configuration only) (070-validation-blindspot-audit)
 - Terraform (HCL) with AWS Provider ~> 5.0 + AWS IAM, aws_iam_user_policy_attachment resources (094-ecr-auth-permission)
 - N/A (IAM configuration only) (094-ecr-auth-permission)
+- Python 3.13 + boto3, pydantic, pytest (no new deps needed) (501-purge-newsapi)
+- DynamoDB (existing data NOT migrated - code-only purge) (501-purge-newsapi)
 
 - **Python 3.13** with FastAPI, boto3, pydantic, aws-lambda-powertools, httpx
 - **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, CloudFront
@@ -806,9 +808,9 @@ aws cloudwatch get-metric-data --metric-data-queries '[...]' --start-time ... --
 ```
 
 ## Recent Changes
+- 501-purge-newsapi: Added Python 3.13 + boto3, pydantic, pytest (no new deps needed)
 - 094-ecr-auth-permission: Added Terraform (HCL) with AWS Provider ~> 5.0 + AWS IAM, aws_iam_user_policy_attachment resources
 - 072-market-data-ingestion: Added market data ingestion with deduplication, failover, and market hours utilities
-- 057-pragma-comment-stability: Added Ruff formatter (pragma comment preservation)
 
 <!-- MANUAL ADDITIONS START -->
 

@@ -307,7 +307,7 @@ def calculate_ingestion_rate(
         If rates seem low:
         1. Check EventBridge schedule is running (every 5 min)
         2. Verify ingestion Lambda is not erroring
-        3. Check NewsAPI is returning articles
+        3. Check article source is returning articles
     """
     now = datetime.now(UTC)
 

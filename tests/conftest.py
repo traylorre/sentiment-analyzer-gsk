@@ -137,9 +137,9 @@ def aws_credentials():
 @pytest.fixture
 def sample_article():
     """
-    Sample NewsAPI article for testing.
+    Sample Article API article for testing.
 
-    Matches the structure returned by NewsAPI /everything endpoint.
+    Matches the structure returned by Article API /everything endpoint.
     """
     return {
         "source": {"id": "test-source", "name": "Test News"},
@@ -161,7 +161,7 @@ def sample_sentiment_item():
     Matches the schema in infrastructure/terraform/modules/dynamodb/main.tf.
     """
     return {
-        "source_id": "newsapi#abc123def456",
+        "source_id": "article#abc123def456",
         "timestamp": "2025-11-17T14:30:00.000Z",
         "status": "analyzed",
         "sentiment": "positive",
@@ -181,7 +181,7 @@ def sample_pending_item():
     Sample DynamoDB item representing a pending (unanalyzed) article.
     """
     return {
-        "source_id": "newsapi#pending123",
+        "source_id": "article#pending123",
         "timestamp": "2025-11-17T15:00:00.000Z",
         "status": "pending",
         "title": "Pending Article",

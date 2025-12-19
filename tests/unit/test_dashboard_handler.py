@@ -96,7 +96,7 @@ def seed_test_data(table):
 
     items = [
         {
-            "source_id": "newsapi#article1",
+            "source_id": "article#article1",
             "timestamp": (now - timedelta(minutes=10)).isoformat(),
             "title": "Positive News Article",
             "sentiment": "positive",
@@ -106,7 +106,7 @@ def seed_test_data(table):
             "source": "techcrunch",
         },
         {
-            "source_id": "newsapi#article2",
+            "source_id": "article#article2",
             "timestamp": (now - timedelta(minutes=20)).isoformat(),
             "title": "Neutral News Article",
             "sentiment": "neutral",
@@ -116,7 +116,7 @@ def seed_test_data(table):
             "source": "reuters",
         },
         {
-            "source_id": "newsapi#article3",
+            "source_id": "article#article3",
             "timestamp": (now - timedelta(minutes=30)).isoformat(),
             "title": "Negative News Article",
             "sentiment": "negative",
@@ -569,7 +569,7 @@ class TestChaosUIEndpoint:
         # Check for key UI elements
         assert "Chaos Testing" in content
         assert "DynamoDB Throttle" in content
-        assert "NewsAPI Failure" in content
+        assert "Ingestion Failure" in content
         assert "Lambda" in content or "Cold Start" in content
         assert "Blast Radius" in content
         assert "Duration" in content
@@ -925,7 +925,7 @@ class TestChaosExperimentsAPI:
         mock_experiment = {
             "experiment_id": "test-123",
             "status": "pending",
-            "scenario_type": "newsapi_failure",
+            "scenario_type": "ingestion_failure",
         }
         monkeypatch.setattr(
             "src.lambdas.dashboard.handler.get_experiment",

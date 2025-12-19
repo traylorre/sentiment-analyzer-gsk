@@ -73,8 +73,8 @@ def mock_context():
 def sns_event():
     """Sample SNS event from ingestion Lambda."""
     message = {
-        "source_id": "newsapi#abc123def456",
-        "source_type": "newsapi",
+        "source_id": "article#abc123def456",
+        "source_type": "tiingo",
         "text_for_analysis": "This is a great article about AI breakthroughs!",
         "model_version": "v1.0.0",
         "matched_tags": ["AI", "technology"],
@@ -123,9 +123,9 @@ def dynamodb_table(env_vars):
         # Insert pending item
         table.put_item(
             Item={
-                "source_id": "newsapi#abc123def456",
+                "source_id": "article#abc123def456",
                 "timestamp": "2025-11-17T14:30:15.000Z",
-                "source_type": "newsapi",
+                "source_type": "tiingo",
                 "source_url": "https://example.com/article",
                 "text_snippet": "This is a great article...",
                 "text_for_analysis": "This is a great article about AI breakthroughs!",
@@ -168,7 +168,7 @@ class TestLambdaHandler:
             result = lambda_handler(sns_event, mock_context)
 
         assert result["statusCode"] == 200
-        assert result["body"]["source_id"] == "newsapi#abc123def456"
+        assert result["body"]["source_id"] == "article#abc123def456"
         assert result["body"]["sentiment"] == "positive"
         assert result["body"]["score"] == 0.92
         assert result["body"]["model_version"] == "v1.0.0"
@@ -200,7 +200,7 @@ class TestLambdaHandler:
         table = dynamodb.Table("test-sentiment-items")
         response = table.get_item(
             Key={
-                "source_id": "newsapi#abc123def456",
+                "source_id": "article#abc123def456",
                 "timestamp": "2025-11-17T14:30:15.000Z",
             }
         )
@@ -232,7 +232,7 @@ class TestLambdaHandler:
         table = dynamodb.Table("test-sentiment-items")
         table.put_item(
             Item={
-                "source_id": "newsapi#abc123def456",
+                "source_id": "article#abc123def456",
                 "timestamp": "2025-11-17T14:30:15.000Z",
                 "status": "analyzed",  # Already analyzed
                 "sentiment": "positive",
@@ -261,7 +261,7 @@ class TestLambdaHandler:
         # Original sentiment should be preserved
         response = table.get_item(
             Key={
-                "source_id": "newsapi#abc123def456",
+                "source_id": "article#abc123def456",
                 "timestamp": "2025-11-17T14:30:15.000Z",
             }
         )
@@ -298,7 +298,7 @@ class TestLambdaHandler:
                     "Sns": {
                         "Message": json.dumps(
                             {
-                                "source_id": "newsapi#abc123",
+                                "source_id": "article#abc123",
                                 # Missing timestamp, text_for_analysis, model_version
                             }
                         )
@@ -416,7 +416,7 @@ class TestLambdaHandler:
         table = dynamodb.Table("test-sentiment-items")
         table.put_item(
             Item={
-                "source_id": "newsapi#abc123def456",
+                "source_id": "article#abc123def456",
                 "timestamp": "2025-11-17T14:30:15.000Z",
                 "status": "pending",
                 "text_for_analysis": "Test text",
@@ -450,7 +450,7 @@ class TestUpdateItemWithSentiment:
         table = dynamodb.Table("test-sentiment-items")
         table.put_item(
             Item={
-                "source_id": "newsapi#test123",
+                "source_id": "article#test123",
                 "timestamp": "2025-11-17T10:00:00Z",
                 "status": "pending",
             }
@@ -459,7 +459,7 @@ class TestUpdateItemWithSentiment:
         with patch("src.lib.metrics.emit_metric"):
             result = _update_item_with_sentiment(
                 table=table,
-                source_id="newsapi#test123",
+                source_id="article#test123",
                 timestamp="2025-11-17T10:00:00Z",
                 sentiment="positive",
                 score=0.88,
@@ -471,7 +471,7 @@ class TestUpdateItemWithSentiment:
         # Verify update
         response = table.get_item(
             Key={
-                "source_id": "newsapi#test123",
+                "source_id": "article#test123",
                 "timestamp": "2025-11-17T10:00:00Z",
             }
         )
@@ -500,7 +500,7 @@ class TestUpdateItemWithSentiment:
         table = dynamodb.Table("test-sentiment-items")
         table.put_item(
             Item={
-                "source_id": "newsapi#test123",
+                "source_id": "article#test123",
                 "timestamp": "2025-11-17T10:00:00Z",
                 "status": "analyzed",  # Already analyzed
                 "sentiment": "negative",
@@ -510,7 +510,7 @@ class TestUpdateItemWithSentiment:
         with patch("src.lib.metrics.emit_metric"):
             result = _update_item_with_sentiment(
                 table=table,
-                source_id="newsapi#test123",
+                source_id="article#test123",
                 timestamp="2025-11-17T10:00:00Z",
                 sentiment="positive",  # Different
                 score=0.95,
@@ -522,7 +522,7 @@ class TestUpdateItemWithSentiment:
         # Original should be preserved
         response = table.get_item(
             Key={
-                "source_id": "newsapi#test123",
+                "source_id": "article#test123",
                 "timestamp": "2025-11-17T10:00:00Z",
             }
         )
@@ -611,15 +611,15 @@ class TestSNSMessageParsing:
         table = dynamodb.Table("test-sentiment-items")
         table.put_item(
             Item={
-                "source_id": "newsapi#custom123",
+                "source_id": "article#custom123",
                 "timestamp": "2025-11-17T12:00:00.000Z",
                 "status": "pending",
             }
         )
 
         message = {
-            "source_id": "newsapi#custom123",
-            "source_type": "newsapi",
+            "source_id": "article#custom123",
+            "source_type": "tiingo",
             "text_for_analysis": "Custom text for testing",
             "model_version": "v2.0.0",
             "matched_tags": ["custom"],
@@ -643,7 +643,7 @@ class TestSNSMessageParsing:
             result = lambda_handler(event, mock_context)
 
         # Verify parsed correctly
-        assert result["body"]["source_id"] == "newsapi#custom123"
+        assert result["body"]["source_id"] == "article#custom123"
         assert result["body"]["model_version"] == "v2.0.0"
 
         # Verify text was passed to analyze

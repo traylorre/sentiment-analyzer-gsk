@@ -17,7 +17,7 @@ indicates extreme traffic spike.
 Secrets Manager integration with in-memory caching (5-minute TTL).
 
 **On-Call Note**: If secrets fail to load, check:
-1. Secret exists: `aws secretsmanager describe-secret --secret-id dev/sentiment-analyzer/newsapi`
+1. Secret exists: `aws secretsmanager describe-secret --secret-id dev/sentiment-analyzer/tiingo`
 2. Lambda IAM role has `secretsmanager:GetSecretValue` permission
 3. Cache may be stale - Lambda cold start will refresh
 

@@ -127,10 +127,10 @@ echo -n "PASTE_DEV_DEPLOYER_SECRET_KEY" | gh secret set AWS_SECRET_ACCESS_KEY --
 openssl rand -hex 32 | gh secret set DASHBOARD_API_KEY --env dev
 ```
 
-### DEV Secret 4 of 4: NEWSAPI_SECRET_ARN (auto-filled from AWS)
+### DEV Secret 4 of 4: TIINGO_SECRET_ARN (auto-filled from AWS)
 ```bash
 # This fetches the ARN from AWS Secrets Manager
-aws secretsmanager describe-secret --secret-id dev/sentiment-analyzer/newsapi --query ARN --output text | gh secret set NEWSAPI_SECRET_ARN --env dev
+aws secretsmanager describe-secret --secret-id dev/sentiment-analyzer/tiingo --query ARN --output text | gh secret set TIINGO_SECRET_ARN --env dev
 ```
 
 ---
@@ -157,10 +157,10 @@ echo -n "PASTE_PREPROD_DEPLOYER_SECRET_KEY" | gh secret set AWS_SECRET_ACCESS_KE
 aws secretsmanager get-secret-value --secret-id preprod/sentiment-analyzer/dashboard-api-key --query SecretString --output text | gh secret set DASHBOARD_API_KEY --env preprod
 ```
 
-### PREPROD Secret 4 of 4: NEWSAPI_SECRET_ARN (auto-filled from AWS)
+### PREPROD Secret 4 of 4: TIINGO_SECRET_ARN (auto-filled from AWS)
 ```bash
 # This fetches the ARN from AWS Secrets Manager
-aws secretsmanager describe-secret --secret-id preprod/sentiment-analyzer/newsapi --query ARN --output text | gh secret set NEWSAPI_SECRET_ARN --env preprod
+aws secretsmanager describe-secret --secret-id preprod/sentiment-analyzer/tiingo --query ARN --output text | gh secret set TIINGO_SECRET_ARN --env preprod
 ```
 
 ---
@@ -187,10 +187,10 @@ echo -n "PASTE_PROD_DEPLOYER_SECRET_KEY" | gh secret set AWS_SECRET_ACCESS_KEY -
 openssl rand -hex 32 | gh secret set DASHBOARD_API_KEY --env production
 ```
 
-### PRODUCTION Secret 4 of 4: NEWSAPI_SECRET_ARN (auto-filled from AWS)
+### PRODUCTION Secret 4 of 4: TIINGO_SECRET_ARN (auto-filled from AWS)
 ```bash
 # This fetches the ARN from AWS Secrets Manager
-aws secretsmanager describe-secret --secret-id prod/sentiment-analyzer/newsapi --query ARN --output text | gh secret set NEWSAPI_SECRET_ARN --env production
+aws secretsmanager describe-secret --secret-id prod/sentiment-analyzer/tiingo --query ARN --output text | gh secret set TIINGO_SECRET_ARN --env production
 ```
 
 ---
@@ -214,7 +214,7 @@ gh secret list --env production
 - `AWS_ACCESS_KEY_ID`
 - `AWS_SECRET_ACCESS_KEY`
 - `DASHBOARD_API_KEY`
-- `NEWSAPI_SECRET_ARN`
+- `TIINGO_SECRET_ARN`
 
 ---
 
@@ -236,9 +236,9 @@ gh secret list --env production
 - PROD: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
 
 **Automatic (run command as-is)**: 6 secrets
-- DEV: DASHBOARD_API_KEY (generated), NEWSAPI_SECRET_ARN (from AWS)
-- PREPROD: DASHBOARD_API_KEY (from AWS), NEWSAPI_SECRET_ARN (from AWS)
-- PROD: DASHBOARD_API_KEY (generated), NEWSAPI_SECRET_ARN (from AWS)
+- DEV: DASHBOARD_API_KEY (generated), TIINGO_SECRET_ARN (from AWS)
+- PREPROD: DASHBOARD_API_KEY (from AWS), TIINGO_SECRET_ARN (from AWS)
+- PROD: DASHBOARD_API_KEY (generated), TIINGO_SECRET_ARN (from AWS)
 
 ---
 

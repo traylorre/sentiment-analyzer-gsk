@@ -6,7 +6,7 @@ Provides structured logging and CloudWatch metrics emission for all Lambdas.
 
 For On-Call Engineers:
     Metrics emitted by this module:
-    - ArticlesFetched: Raw count from NewsAPI
+    - ArticlesFetched: Raw count from article source
     - NewItemsIngested: After deduplication
     - DuplicatesSkipped: Dedup count
     - AnalysisCount: Items analyzed
@@ -16,7 +16,7 @@ For On-Call Engineers:
     ```
     fields @timestamp, @message
     | filter level = "ERROR"
-    | filter correlation_id like /newsapi#/
+    | filter correlation_id like /article#/
     | sort @timestamp desc
     ```
 
@@ -72,8 +72,8 @@ class StructuredLogger:
         "timestamp": "2025-11-17T14:30:00.000Z",
         "level": "INFO",
         "message": "Item ingested",
-        "source_id": "newsapi#abc123",
-        "correlation_id": "newsapi#abc123-req-456"
+        "source_id": "article#abc123",
+        "correlation_id": "article#abc123-req-456"
     }
     """
 
@@ -310,7 +310,7 @@ def get_correlation_id(source_id: str, context: Any) -> str:
         Use this ID to trace an item through all Lambdas:
         aws logs filter-log-events \
           --log-group-name /aws/lambda/dev-sentiment-ingestion \
-          --filter-pattern "correlation_id newsapi#abc123-req-456"
+          --filter-pattern "correlation_id article#abc123-req-456"
     """
     request_id = getattr(context, "aws_request_id", "unknown")
     return f"{source_id}-{request_id}"
@@ -335,8 +335,8 @@ def log_structured(
         >>> log_structured(
         ...     "INFO",
         ...     "Item ingested",
-        ...     source_id="newsapi#abc123",
-        ...     correlation_id="newsapi#abc123-req-456",
+        ...     source_id="article#abc123",
+        ...     correlation_id="article#abc123-req-456",
         ... )
     """
     log_data = {

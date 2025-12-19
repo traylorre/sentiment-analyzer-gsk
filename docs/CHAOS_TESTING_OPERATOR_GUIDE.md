@@ -13,7 +13,7 @@
 - [Quick Reference Table](#quick-reference-table)
 - [Scenario Playbooks](#scenario-playbooks)
   - [Phase 2: DynamoDB Throttling](#phase-2-dynamodb-throttling)
-  - [Phase 3: NewsAPI Failure](#phase-3-newsapi-failure)
+  - [Phase 3: External API Failure](#phase-3-external-api-failure)
   - [Phase 4: Lambda Cold Start Delay](#phase-4-lambda-cold-start-delay)
 - [Common Operations](#common-operations)
 - [Troubleshooting](#troubleshooting)
@@ -95,7 +95,7 @@ Minimum permissions required:
 | Scenario | What It Tests | Normal Behavior | Chaos Behavior | Recovery Time | Acceptable Thresholds |
 |----------|---------------|------------------|----------------|---------------|----------------------|
 | **DynamoDB Throttling** | System resilience to database capacity limits | All writes succeed, latency <100ms | 50% writes throttled, DLQ accumulates | Immediate on stop | Error rate <10%, no data loss |
-| **NewsAPI Failure** | Graceful degradation when external API unavailable | 10-100 articles fetched every 5min | 0 articles fetched, no errors | 5 minutes (next poll) | Ingestion stops, analysis continues processing backlog |
+| **API Failure** | Graceful degradation when external API unavailable | 10-100 articles fetched every 5min | 0 articles fetched, no errors | 5 minutes (next poll) | Ingestion stops, analysis continues processing backlog |
 | **Lambda Cold Start** | Performance under high latency conditions | P95 latency 200-500ms | P95 latency +2000ms (configurable) | Immediate on stop | No timeouts, no 5xx errors |
 
 ---
@@ -233,11 +233,11 @@ aws cloudwatch get-metric-statistics \
 
 ---
 
-### Phase 3: NewsAPI Failure
+### Phase 3: External API Failure
 
 #### What It Tests
 
-- Graceful degradation when external API (NewsAPI) is unavailable
+- Graceful degradation when external data APIs (Tiingo/Finnhub) are unavailable
 - System continues processing existing data
 - No cascading failures to downstream components
 - Monitoring detects missing ingestion
@@ -269,7 +269,7 @@ curl -X POST "$DASHBOARD_URL/api/chaos/experiments" \
   -H "Authorization: Bearer $DASHBOARD_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "scenario_type": "newsapi_failure",
+    "scenario_type": "api_failure",
     "duration_seconds": 600,
     "blast_radius": 100
   }'
@@ -281,8 +281,8 @@ export EXPERIMENT_ID="<experiment_id>"
 
 **Immediate (within 1 poll cycle = 5 minutes)**:
 1. Ingestion Lambda detects active chaos experiment
-2. Skips NewsAPI fetch for all tags
-3. Logs warning: "Chaos experiment active: skipping NewsAPI fetch"
+2. Skips external API fetch for all tickers
+3. Logs warning: "Chaos experiment active: skipping external API fetch"
 4. Returns successfully with 0 articles fetched (no errors)
 
 **Sustained (5-600 seconds)**:
@@ -563,7 +563,7 @@ tmux attach-session -t chaos
    # Ensure role has fis:StartExperiment
    ```
 
-3. Check DynamoDB table exists (for newsapi_failure, lambda_cold_start):
+3. Check DynamoDB table exists (for api_failure, lambda_cold_start):
    ```bash
    aws dynamodb describe-table --table-name preprod-chaos-experiments
    ```
@@ -660,7 +660,7 @@ After EVERY experiment:
 ## References
 
 - [Phase 2: DynamoDB Throttling Documentation](./chaos-testing/PHASE2_DYNAMODB_THROTTLE.md)
-- [Phase 3: NewsAPI Failure Documentation](./chaos-testing/PHASE3_NEWSAPI_FAILURE.md)
+- [Phase 3: API Failure Documentation](./chaos-testing/PHASE3_API_FAILURE.md)
 - [Phase 4: Lambda Delay Documentation](./chaos-testing/PHASE4_LAMBDA_DELAY.md)
 - [Chaos Engineering Principles](https://principlesofchaos.org/)
 - [AWS FIS Best Practices](https://docs.aws.amazon.com/fis/latest/userguide/best-practices.html)

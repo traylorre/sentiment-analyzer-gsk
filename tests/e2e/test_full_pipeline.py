@@ -2,7 +2,7 @@
 Full Pipeline E2E Test for Sentiment Analyzer
 
 This test validates the complete data flow:
-1. Ingestion Lambda fetches from NewsAPI and stores in DynamoDB
+1. Ingestion Lambda fetches from Article API and stores in DynamoDB
 2. SNS notification triggers Analysis Lambda
 3. Analysis Lambda runs sentiment inference and updates DynamoDB
 4. Dashboard Lambda serves aggregated metrics
@@ -37,7 +37,7 @@ from moto import mock_aws
 TEST_TABLE_NAME = "test-sentiment-items"
 TEST_TOPIC_ARN = "arn:aws:sns:us-east-1:123456789012:test-analysis-requests"
 TEST_API_KEY = "test-api-key-12345"
-TEST_NEWSAPI_KEY = "test-newsapi-key"
+TEST_ARTICLE_KEY = "test-article-key"
 
 
 def create_test_infrastructure():
@@ -128,8 +128,8 @@ def create_test_infrastructure():
     # Create Secrets Manager secrets
     secrets = boto3.client("secretsmanager", region_name="us-east-1")
     secrets.create_secret(
-        Name="test/sentiment-analyzer/newsapi",
-        SecretString=json.dumps({"api_key": TEST_NEWSAPI_KEY}),
+        Name="test/sentiment-analyzer/article",
+        SecretString=json.dumps({"api_key": TEST_ARTICLE_KEY}),
     )
     secrets.create_secret(
         Name="test/sentiment-analyzer/dashboard-api-key",
@@ -142,7 +142,7 @@ def create_test_infrastructure():
 def generate_source_id(url: str) -> str:
     """Generate source_id from URL using same algorithm as production."""
     content_hash = hashlib.sha256(url.encode()).hexdigest()[:16]
-    return f"newsapi#{content_hash}"
+    return f"article#{content_hash}"
 
 
 class TestFullPipeline:
@@ -163,7 +163,7 @@ class TestFullPipeline:
         """Test complete flow from ingestion through analysis to dashboard.
 
         This is the primary integration test that validates:
-        1. Articles are ingested from NewsAPI
+        1. Articles are ingested from Article API
         2. Items are stored in DynamoDB with pending status
         3. SNS messages are published for analysis
         4. Analysis updates items with sentiment scores
@@ -421,7 +421,7 @@ class TestFullPipeline:
         ]
 
         for i, (sentiment, tag, timestamp) in enumerate(test_data):
-            source_id = f"newsapi#{i:016d}"
+            source_id = f"article#{i:016d}"
             table.put_item(
                 Item={
                     "source_id": source_id,
@@ -529,7 +529,7 @@ class TestFullPipeline:
 
         # Publish message in expected format
         message = {
-            "source_id": "newsapi#abc123",
+            "source_id": "article#abc123",
             "timestamp": "2025-01-15T10:00:00Z",
             "text_for_analysis": "This is great news about AI progress.",
         }
@@ -553,7 +553,7 @@ class TestFullPipeline:
         sns_wrapper = json.loads(response["Messages"][0]["Body"])
         received_message = json.loads(sns_wrapper["Message"])
 
-        assert received_message["source_id"] == "newsapi#abc123"
+        assert received_message["source_id"] == "article#abc123"
         assert received_message["timestamp"] == "2025-01-15T10:00:00Z"
         assert "text_for_analysis" in received_message
 

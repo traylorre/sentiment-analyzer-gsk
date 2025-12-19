@@ -1,10 +1,14 @@
 # Feature: Remove Dead NewsAPI Code
 
+## Status: COMPLETED
+
+All dead NewsAPI code has been surgically removed from the codebase. See PROOF_REPORT.md for verification evidence.
+
 ## Overview
 
 Surgically remove all dead NEWSAPI/NEWS_API code following Feature 006 migration to Tiingo/Finnhub APIs.
 
-**Context:** Feature 006 migrated from NewsAPI to Tiingo+Finnhub for financial news (see CHANGELOG.md lines 12-46). The migration was completed but dead NewsAPI code persists after 2 previous incomplete cleanup audits.
+**Context:** Feature 006 migrated from NewsAPI to Tiingo+Finnhub for financial news (see CHANGELOG.md lines 12-46). The migration was completed but dead NewsAPI code persisted after 2 previous incomplete cleanup audits. This specification documented the third audit which successfully removed all production references.
 
 ## Problem Statement
 

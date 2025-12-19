@@ -866,7 +866,7 @@ async def create_chaos_experiment(
 
     Request body:
         {
-            "scenario_type": "dynamodb_throttle|newsapi_failure|lambda_cold_start",
+            "scenario_type": "dynamodb_throttle|ingestion_failure|lambda_cold_start",
             "blast_radius": 10-100,
             "duration_seconds": 5-300,
             "parameters": {}
@@ -1006,7 +1006,7 @@ async def start_chaos_experiment(
 
     Phase 2 Note:
         This endpoint now integrates with AWS FIS for DynamoDB throttling.
-        Other scenarios (NewsAPI failure, Lambda delay) will be implemented in Phase 3-4.
+        Other scenarios (ingestion failure, Lambda delay) will be implemented in Phase 3-4.
     """
     try:
         updated_experiment = start_experiment(experiment_id)

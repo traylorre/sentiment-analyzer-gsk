@@ -17,7 +17,7 @@ For On-Call Engineers:
     See SC-03 in ON_CALL_SOP.md for ingestion issues.
 
 For Developers:
-    - source_id = "newsapi#{sha256[:16]}"
+    - source_id = "article#{sha256[:16]}"
     - Prefer URL for hashing, fallback to title+publishedAt
     - Hash is truncated to 16 chars for readability (still 64 bits of entropy)
 
@@ -34,8 +34,8 @@ from typing import Any
 # Structured logging for CloudWatch
 logger = logging.getLogger(__name__)
 
-# Source prefix for NewsAPI articles
-SOURCE_PREFIX = "newsapi"
+# Source prefix for articles (source-agnostic identifier)
+SOURCE_PREFIX = "article"
 
 
 def generate_source_id(article: dict[str, Any]) -> str:
@@ -50,10 +50,10 @@ def generate_source_id(article: dict[str, Any]) -> str:
     5. Prepend source prefix
 
     Args:
-        article: NewsAPI article dict with url, title, publishedAt fields
+        article: Article dict with url, title, publishedAt fields
 
     Returns:
-        source_id in format "newsapi#{hash16}"
+        source_id in format "article#{hash16}"
 
     Raises:
         ValueError: If article lacks required fields for hashing
@@ -62,7 +62,7 @@ def generate_source_id(article: dict[str, Any]) -> str:
         >>> article = {"url": "https://example.com/article/123", "title": "Test", "publishedAt": "2025-11-17T14:30:00Z"}
         >>> source_id = generate_source_id(article)
         >>> source_id
-        'newsapi#a1b2c3d4e5f6g7h8'
+        'article#a1b2c3d4e5f6g7h8'
 
     On-Call Note:
         Same article will always produce same source_id.
@@ -100,7 +100,7 @@ def _get_hash_content(article: dict[str, Any]) -> str:
     2. title + publishedAt (fallback if URL missing)
 
     Args:
-        article: NewsAPI article dict
+        article: Article dict
 
     Returns:
         String content to hash
@@ -144,10 +144,10 @@ def is_duplicate(source_id: str, existing_ids: set[str]) -> bool:
         True if duplicate, False if new
 
     Example:
-        >>> existing = {"newsapi#abc123", "newsapi#def456"}
-        >>> is_duplicate("newsapi#abc123", existing)
+        >>> existing = {"article#abc123", "article#def456"}
+        >>> is_duplicate("article#abc123", existing)
         True
-        >>> is_duplicate("newsapi#new789", existing)
+        >>> is_duplicate("article#new789", existing)
         False
     """
     return source_id in existing_ids
@@ -158,7 +158,7 @@ def extract_hash(source_id: str) -> str:
     Extract the hash portion from a source_id.
 
     Args:
-        source_id: Full source_id (e.g., "newsapi#abc123def456")
+        source_id: Full source_id (e.g., "article#abc123def456")
 
     Returns:
         Hash portion (e.g., "abc123def456")
@@ -181,10 +181,10 @@ def get_source_prefix(source_id: str) -> str:
     Extract the source prefix from a source_id.
 
     Args:
-        source_id: Full source_id (e.g., "newsapi#abc123def456")
+        source_id: Full source_id (e.g., "article#abc123def456")
 
     Returns:
-        Source prefix (e.g., "newsapi")
+        Source prefix (e.g., "article")
 
     Raises:
         ValueError: If source_id format is invalid
@@ -213,12 +213,12 @@ def generate_correlation_id(source_id: str, request_id: str) -> str:
         Correlation ID for logging
 
     Example:
-        >>> generate_correlation_id("newsapi#abc123", "req-456")
-        'newsapi#abc123-req-456'
+        >>> generate_correlation_id("article#abc123", "req-456")
+        'article#abc123-req-456'
 
     On-Call Note:
         Use this ID to search CloudWatch logs across all Lambdas:
-        filter @message like /newsapi#abc123-req-456/
+        filter @message like /article#abc123-req-456/
     """
     return f"{source_id}-{request_id}"
 
@@ -234,7 +234,7 @@ def batch_deduplicate(
     Also deduplicates within the batch itself.
 
     Args:
-        articles: List of NewsAPI article dicts
+        articles: List of article dicts
         existing_ids: Optional set of already-known source_ids
 
     Returns:

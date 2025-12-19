@@ -6,7 +6,7 @@ Abstract base class for data source adapters.
 
 For On-Call Engineers:
     All adapters implement this interface. If adding a new source,
-    check that it follows the same pattern as NewsAPI adapter.
+    check that it follows the same pattern as TiingoAdapter or FinnhubAdapter.
 
 For Developers:
     - Implement fetch_items() to return list of article dicts
@@ -29,7 +29,8 @@ class BaseAdapter(ABC):
 
     All data source adapters must implement this interface.
     Currently implemented:
-    - NewsAPIAdapter (newsapi.py)
+    - TiingoAdapter (tiingo.py)
+    - FinnhubAdapter (finnhub.py)
 
     Future adapters:
     - TwitterAdapter
@@ -67,7 +68,7 @@ class BaseAdapter(ABC):
         Get the name of this data source.
 
         Returns:
-            Source name (e.g., "newsapi", "twitter")
+            Source name (e.g., "tiingo", "finnhub", "twitter")
         """
         pass
 
