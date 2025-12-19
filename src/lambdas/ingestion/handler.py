@@ -595,7 +595,8 @@ def _get_active_tickers(table: Any, force_refresh: bool = False) -> list[str]:
         # Query using by_entity_status GSI for O(result) performance
         response = table.query(
             IndexName="by_entity_status",
-            KeyConditionExpression="entity_type = :et AND status = :status",
+            KeyConditionExpression="entity_type = :et AND #status = :status",
+            ExpressionAttributeNames={"#status": "status"},
             ExpressionAttributeValues={
                 ":et": "CONFIGURATION",
                 ":status": "active",
@@ -616,7 +617,8 @@ def _get_active_tickers(table: Any, force_refresh: bool = False) -> list[str]:
         while "LastEvaluatedKey" in response:
             response = table.query(
                 IndexName="by_entity_status",
-                KeyConditionExpression="entity_type = :et AND status = :status",
+                KeyConditionExpression="entity_type = :et AND #status = :status",
+                ExpressionAttributeNames={"#status": "status"},
                 ExpressionAttributeValues={
                     ":et": "CONFIGURATION",
                     ":status": "active",
