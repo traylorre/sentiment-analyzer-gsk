@@ -483,8 +483,9 @@ def disable_all_notifications(
                         "PK": f"USER#{user_id}",
                         "SK": item["SK"],
                     },
-                    UpdateExpression="SET is_enabled = :disabled",
-                    ExpressionAttributeValues={":disabled": False},
+                    UpdateExpression="SET is_enabled = :disabled, #status = :status",
+                    ExpressionAttributeNames={"#status": "status"},
+                    ExpressionAttributeValues={":disabled": False, ":status": DISABLED},
                 )
                 alerts_disabled += 1
 
