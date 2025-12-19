@@ -41,6 +41,7 @@ from src.lambdas.shared.models.configuration import (
     ConfigurationUpdate,
     Ticker,
 )
+from src.lambdas.shared.models.status_utils import ACTIVE, INACTIVE
 
 logger = logging.getLogger(__name__)
 
@@ -254,6 +255,7 @@ def create_configuration(
         created_at=now,
         updated_at=now,
         is_active=True,
+        status=ACTIVE,
     )
 
     try:
@@ -311,7 +313,11 @@ def list_configurations(
 
         configs = []
         for item in response.get("Items", []):
-            if item.get("is_active", True):
+            # Use status field with fallback to is_active for backward compatibility
+            status = item.get(
+                "status", ACTIVE if item.get("is_active", True) else INACTIVE
+            )
+            if status == ACTIVE:
                 config = Configuration.from_dynamodb_item(item)
                 configs.append(_config_to_response(config))
 
@@ -379,7 +385,9 @@ def get_configuration(
         if not item:
             return None
 
-        if not item.get("is_active", True):
+        # Use status field with fallback to is_active for backward compatibility
+        status = item.get("status", ACTIVE if item.get("is_active", True) else INACTIVE)
+        if status != ACTIVE:
             return None
 
         config = Configuration.from_dynamodb_item(item)
@@ -535,15 +543,19 @@ def delete_configuration(
         return False
 
     try:
-        # Soft delete by setting is_active = False
+        # Soft delete by setting is_active = False and status = "inactive"
         table.update_item(
             Key={
                 "PK": f"USER#{user_id}",
                 "SK": f"CONFIG#{config_id}",
             },
-            UpdateExpression="SET is_active = :inactive, updated_at = :updated",
+            UpdateExpression="SET is_active = :inactive, #status = :status, updated_at = :updated",
+            ExpressionAttributeNames={
+                "#status": "status",
+            },
             ExpressionAttributeValues={
                 ":inactive": False,
+                ":status": INACTIVE,
                 ":updated": datetime.now(UTC).isoformat(),
             },
         )
@@ -579,8 +591,9 @@ def _count_user_configurations(table: Any, user_id: str) -> int:
             KeyConditionExpression=Key("PK").eq(f"USER#{user_id}")
             & Key("SK").begins_with("CONFIG#"),
             Select="COUNT",
-            FilterExpression="is_active = :active",
-            ExpressionAttributeValues={":active": True},
+            FilterExpression="#status = :active",
+            ExpressionAttributeNames={"#status": "status"},
+            ExpressionAttributeValues={":active": ACTIVE},
         )
         return response.get("Count", 0)
     except Exception:

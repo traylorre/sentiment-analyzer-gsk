@@ -35,6 +35,7 @@ from src.lambdas.shared.models.alert_rule import (
     AlertRule,
     AlertRuleCreate,
 )
+from src.lambdas.shared.models.status_utils import DISABLED, ENABLED
 
 logger = logging.getLogger(__name__)
 
@@ -164,6 +165,7 @@ def create_alert(
         threshold_value=request.threshold_value,
         threshold_direction=request.threshold_direction,
         is_enabled=True,
+        status=ENABLED,
         trigger_count=0,
         created_at=now,
     )
@@ -228,8 +230,14 @@ def list_alerts(
                 continue
             if ticker and item.get("ticker") != ticker.upper():
                 continue
-            if enabled is not None and item.get("is_enabled", True) != enabled:
-                continue
+            # Use status field with fallback to is_enabled for backward compatibility
+            if enabled is not None:
+                status = item.get(
+                    "status", ENABLED if item.get("is_enabled", True) else DISABLED
+                )
+                item_enabled = status == ENABLED
+                if item_enabled != enabled:
+                    continue
 
             alert = AlertRule.from_dynamodb_item(item)
             alerts.append(_alert_to_response(alert))
@@ -339,6 +347,7 @@ def update_alert(
     # Build update expression
     update_parts = []
     attr_values: dict[str, Any] = {}
+    attr_names: dict[str, str] = {}
 
     if request.threshold_value is not None:
         update_parts.append("threshold_value = :threshold")
@@ -350,7 +359,10 @@ def update_alert(
 
     if request.is_enabled is not None:
         update_parts.append("is_enabled = :enabled")
+        update_parts.append("#status = :status")
         attr_values[":enabled"] = request.is_enabled
+        attr_values[":status"] = ENABLED if request.is_enabled else DISABLED
+        attr_names["#status"] = "status"
 
     if not update_parts:
         # Nothing to update, return existing
@@ -359,15 +371,18 @@ def update_alert(
     try:
         # Use ReturnValues='ALL_NEW' to get updated item directly,
         # avoiding eventual consistency issues with a separate read
-        response = table.update_item(
-            Key={
+        update_kwargs: dict[str, Any] = {
+            "Key": {
                 "PK": f"USER#{user_id}",
                 "SK": f"ALERT#{alert_id}",
             },
-            UpdateExpression="SET " + ", ".join(update_parts),
-            ExpressionAttributeValues=attr_values,
-            ReturnValues="ALL_NEW",
-        )
+            "UpdateExpression": "SET " + ", ".join(update_parts),
+            "ExpressionAttributeValues": attr_values,
+            "ReturnValues": "ALL_NEW",
+        }
+        if attr_names:
+            update_kwargs["ExpressionAttributeNames"] = attr_names
+        response = table.update_item(**update_kwargs)
 
         logger.info(
             "Updated alert",
@@ -463,6 +478,7 @@ def toggle_alert(
         return None
 
     new_enabled = not existing.is_enabled
+    new_status = ENABLED if new_enabled else DISABLED
 
     try:
         table.update_item(
@@ -470,8 +486,9 @@ def toggle_alert(
                 "PK": f"USER#{user_id}",
                 "SK": f"ALERT#{alert_id}",
             },
-            UpdateExpression="SET is_enabled = :enabled",
-            ExpressionAttributeValues={":enabled": new_enabled},
+            UpdateExpression="SET is_enabled = :enabled, #status = :status",
+            ExpressionAttributeNames={"#status": "status"},
+            ExpressionAttributeValues={":enabled": new_enabled, ":status": new_status},
         )
 
         message = "Alert enabled" if new_enabled else "Alert disabled"

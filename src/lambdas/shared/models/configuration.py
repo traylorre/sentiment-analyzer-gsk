@@ -5,6 +5,11 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from src.lambdas.shared.models.status_utils import (
+    ACTIVE,
+    get_status_from_item,
+)
+
 
 class Ticker(BaseModel):
     """Stock ticker with validation metadata."""
@@ -35,7 +40,8 @@ class Configuration(BaseModel):
     # Metadata
     created_at: datetime
     updated_at: datetime
-    is_active: bool = True  # For soft delete
+    is_active: bool = True  # For soft delete (legacy, use status instead)
+    status: str = ACTIVE  # GSI-compatible status: "active" or "inactive"
 
     @property
     def pk(self) -> str:
@@ -70,6 +76,7 @@ class Configuration(BaseModel):
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
             "is_active": self.is_active,
+            "status": self.status,
             "entity_type": "CONFIGURATION",
         }
 
@@ -87,6 +94,10 @@ class Configuration(BaseModel):
                 )
             )
 
+        # Get status with backward compatibility for boolean field
+        status = get_status_from_item(item, "CONFIGURATION")
+        is_active = status == ACTIVE
+
         return cls(
             config_id=item["config_id"],
             user_id=item["user_id"],
@@ -97,7 +108,8 @@ class Configuration(BaseModel):
             atr_period=item.get("atr_period", 14),
             created_at=datetime.fromisoformat(item["created_at"]),
             updated_at=datetime.fromisoformat(item["updated_at"]),
-            is_active=item.get("is_active", True),
+            is_active=is_active,
+            status=status,
         )
 
 

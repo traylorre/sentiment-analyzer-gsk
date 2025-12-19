@@ -27,6 +27,7 @@ from pydantic import BaseModel
 
 from src.lambdas.shared.logging_utils import get_safe_error_info, sanitize_for_log
 from src.lambdas.shared.models.alert_rule import ALERT_LIMITS, AlertRule
+from src.lambdas.shared.models.status_utils import ENABLED
 
 logger = logging.getLogger(__name__)
 
@@ -145,8 +146,8 @@ def evaluate_alerts_for_ticker(
         )
 
         for alert in alerts:
-            # Skip disabled alerts
-            if not alert.is_enabled:
+            # Skip disabled alerts - use status field (with is_enabled fallback)
+            if alert.status != ENABLED:
                 continue
 
             # Check cooldown (don't trigger same alert within 1 hour)
@@ -318,13 +319,15 @@ def _find_alerts_by_ticker(table: Any, ticker: str) -> list[AlertRule]:
 
     try:
         # Query using by_entity_status GSI, filter by ticker
+        # ALERT_RULE uses "enabled"/"disabled" status values (not "active"/"inactive")
         response = table.query(
             IndexName="by_entity_status",
-            KeyConditionExpression="entity_type = :type AND status = :status",
+            KeyConditionExpression="entity_type = :type AND #status = :status",
             FilterExpression="ticker = :ticker",
+            ExpressionAttributeNames={"#status": "status"},
             ExpressionAttributeValues={
                 ":type": "ALERT_RULE",
-                ":status": "active",
+                ":status": ENABLED,
                 ":ticker": ticker,
             },
         )
@@ -336,11 +339,12 @@ def _find_alerts_by_ticker(table: Any, ticker: str) -> list[AlertRule]:
         while "LastEvaluatedKey" in response:
             response = table.query(
                 IndexName="by_entity_status",
-                KeyConditionExpression="entity_type = :type AND status = :status",
+                KeyConditionExpression="entity_type = :type AND #status = :status",
                 FilterExpression="ticker = :ticker",
+                ExpressionAttributeNames={"#status": "status"},
                 ExpressionAttributeValues={
                     ":type": "ALERT_RULE",
-                    ":status": "active",
+                    ":status": ENABLED,
                     ":ticker": ticker,
                 },
                 ExclusiveStartKey=response["LastEvaluatedKey"],
