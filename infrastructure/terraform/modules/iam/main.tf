@@ -28,7 +28,7 @@ resource "aws_iam_role" "ingestion_lambda" {
   }
 }
 
-# Ingestion Lambda policy (DynamoDB PutItem only)
+# Ingestion Lambda policy (DynamoDB: PutItem, GetItem, Query on by_status GSI for self-healing)
 resource "aws_iam_role_policy" "ingestion_dynamodb" {
   name = "${var.environment}-ingestion-dynamodb-policy"
   role = aws_iam_role.ingestion_lambda.id
@@ -39,9 +39,18 @@ resource "aws_iam_role_policy" "ingestion_dynamodb" {
       {
         Effect = "Allow"
         Action = [
-          "dynamodb:PutItem"
+          "dynamodb:PutItem",
+          "dynamodb:GetItem"
         ]
         Resource = var.dynamodb_table_arn
+      },
+      {
+        # Self-healing: Query by_status GSI to find stale pending items
+        Effect = "Allow"
+        Action = [
+          "dynamodb:Query"
+        ]
+        Resource = "${var.dynamodb_table_arn}/index/by_status"
       }
     ]
   })
