@@ -191,17 +191,26 @@ def get_full_items(
 
     for item in item_keys:
         source_id = item.get("source_id")
-        if not source_id:
+        timestamp = item.get("timestamp")
+
+        # Both keys required for composite primary key
+        if not source_id or not timestamp:
+            logger.warning(
+                "Skipping item missing required keys",
+                extra={
+                    "has_source_id": bool(source_id),
+                    "has_timestamp": bool(timestamp),
+                },
+            )
             continue
 
         try:
             response = table.get_item(
-                Key={"source_id": source_id},
+                Key={"source_id": source_id, "timestamp": timestamp},
                 ProjectionExpression=(
                     "source_id, source_type, text_for_analysis, "
-                    "matched_tickers, #ts, sentiment, metadata"
+                    "matched_tickers, sentiment, metadata"
                 ),
-                ExpressionAttributeNames={"#ts": "timestamp"},
             )
 
             full_item = response.get("Item")

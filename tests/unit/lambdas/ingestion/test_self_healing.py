@@ -161,11 +161,16 @@ class TestGetFullItems:
 
         mock_table.get_item.return_value = {"Item": sample_analyzed_item}
 
-        item_keys = [{"source_id": "finnhub:99999"}]
+        item_keys = [{"source_id": "finnhub:99999", "timestamp": "2025-12-13T09:00:00"}]
         result = get_full_items(mock_table, item_keys)
 
         # Should be empty because item has sentiment
         assert result == []
+        # Verify GetItem called with composite key
+        mock_table.get_item.assert_called_once()
+        call_args = mock_table.get_item.call_args
+        assert call_args.kwargs["Key"]["source_id"] == "finnhub:99999"
+        assert call_args.kwargs["Key"]["timestamp"] == "2025-12-13T09:00:00"
 
     def test_includes_items_without_sentiment(self, mock_table, sample_full_item):
         """Returns items that don't have sentiment attribute."""
@@ -173,11 +178,15 @@ class TestGetFullItems:
 
         mock_table.get_item.return_value = {"Item": sample_full_item}
 
-        item_keys = [{"source_id": "finnhub:12345"}]
+        item_keys = [{"source_id": "finnhub:12345", "timestamp": "2025-12-13T09:00:00"}]
         result = get_full_items(mock_table, item_keys)
 
         assert len(result) == 1
         assert result[0]["source_id"] == "finnhub:12345"
+        # Verify GetItem called with composite key
+        call_args = mock_table.get_item.call_args
+        assert call_args.kwargs["Key"]["source_id"] == "finnhub:12345"
+        assert call_args.kwargs["Key"]["timestamp"] == "2025-12-13T09:00:00"
 
     def test_returns_empty_for_empty_input(self, mock_table):
         """Returns empty list for empty input."""
@@ -194,10 +203,32 @@ class TestGetFullItems:
 
         mock_table.get_item.return_value = {"Item": None}
 
+        item_keys = [{"source_id": "missing:123", "timestamp": "2025-12-13T09:00:00"}]
+        result = get_full_items(mock_table, item_keys)
+
+        assert result == []
+
+    def test_skips_items_missing_timestamp(self, mock_table):
+        """Skips items that are missing the timestamp key."""
+        from src.lambdas.ingestion.self_healing import get_full_items
+
+        # Item without timestamp should be skipped
         item_keys = [{"source_id": "missing:123"}]
         result = get_full_items(mock_table, item_keys)
 
         assert result == []
+        mock_table.get_item.assert_not_called()
+
+    def test_skips_items_missing_source_id(self, mock_table):
+        """Skips items that are missing the source_id key."""
+        from src.lambdas.ingestion.self_healing import get_full_items
+
+        # Item without source_id should be skipped
+        item_keys = [{"timestamp": "2025-12-13T09:00:00"}]
+        result = get_full_items(mock_table, item_keys)
+
+        assert result == []
+        mock_table.get_item.assert_not_called()
 
 
 class TestRepublishItemsToSns:
