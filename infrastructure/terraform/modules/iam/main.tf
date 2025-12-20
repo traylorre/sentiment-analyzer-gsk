@@ -269,7 +269,8 @@ resource "aws_iam_role_policy" "analysis_s3_model" {
       {
         Effect = "Allow"
         Action = [
-          "s3:GetObject"
+          "s3:GetObject",
+          "s3:HeadObject"
         ]
         Resource = "${var.model_s3_bucket_arn}/*"
       }
