@@ -71,7 +71,7 @@ async def test_unauthenticated_create_config_returns_401(
 
     response = await api_client.post(
         "/api/v2/configurations",
-        json={"name": "Test", "tickers": [{"symbol": "AAPL"}]},
+        json={"name": "Test", "tickers": ["AAPL"]},
     )
 
     assert response.status_code in (
@@ -124,7 +124,7 @@ async def test_anonymous_cannot_access_other_users_config(
         "/api/v2/configurations",
         json={
             "name": f"Private Config {test_run_id}",
-            "tickers": [{"symbol": "AAPL"}],
+            "tickers": ["AAPL"],
         },
     )
 
@@ -171,7 +171,7 @@ async def test_anonymous_cannot_modify_other_users_config(
         "/api/v2/configurations",
         json={
             "name": f"Protected Config {test_run_id}",
-            "tickers": [{"symbol": "MSFT"}],
+            "tickers": ["MSFT"],
         },
     )
 
@@ -221,7 +221,7 @@ async def test_anonymous_cannot_delete_other_users_config(
         "/api/v2/configurations",
         json={
             "name": f"Deletion Target {test_run_id}",
-            "tickers": [{"symbol": "GOOGL"}],
+            "tickers": ["GOOGL"],
         },
     )
 
@@ -282,7 +282,7 @@ async def test_anonymous_config_limit_enforced(
                 "/api/v2/configurations",
                 json={
                     "name": f"Limit Test {test_run_id} #{i}",
-                    "tickers": [{"symbol": "AAPL"}],
+                    "tickers": ["AAPL"],
                 },
             )
 
@@ -329,7 +329,7 @@ async def test_anonymous_alert_limit_enforced(
             "/api/v2/configurations",
             json={
                 "name": f"Alert Limit Test {test_run_id}",
-                "tickers": [{"symbol": "AAPL"}],
+                "tickers": ["AAPL"],
             },
         )
 
