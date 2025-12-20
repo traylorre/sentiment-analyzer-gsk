@@ -326,8 +326,9 @@ module "analysis_lambda" {
   source_code_hash = var.lambda_package_version
 
   # Resource configuration per task spec
-  # JUSTIFICATION (FR-024): 1024MB required for ML model inference (DistilBERT)
-  memory_size          = 1024
+  # JUSTIFICATION (FR-024): 2048MB required for ML model inference (DistilBERT)
+  # Increased from 1024MB - model requires ~700MB, Python runtime ~300MB, headroom for spikes
+  memory_size          = 2048
   timeout              = 30
   reserved_concurrency = 5
 

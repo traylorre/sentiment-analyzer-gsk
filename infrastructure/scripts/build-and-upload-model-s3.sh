@@ -50,7 +50,8 @@ S3_KEY="distilbert/${MODEL_VERSION}/model.tar.gz"
 # Known good hash for model config (for supply chain security)
 # This is the SHA256 of the config.json file
 # Update this when upgrading model versions
-EXPECTED_CONFIG_HASH="a53dbee6f2c8f2f6e9a9c5f8f7d3c4e5b6a7d8e9f0a1b2c3d4e5f6a7b8c9d0e1"
+# Updated 2025-12-20 for distilbert-base-uncased-finetuned-sst-2-english
+EXPECTED_CONFIG_HASH="df80ff6a470008e42520222530ca1559e2533afc931a21277a08707391fbca74"
 
 # Colors for output
 RED='\033[0;31m'
@@ -166,10 +167,25 @@ echo "Verifying model files..."
 
 required_files=(
     "config.json"
-    "pytorch_model.bin"
     "tokenizer_config.json"
     "vocab.txt"
 )
+
+# Check for model weights (either pytorch_model.bin or model.safetensors)
+has_model_weights=false
+if [ -f "${MODEL_DIR}/pytorch_model.bin" ]; then
+    has_model_weights=true
+    echo "Found pytorch_model.bin"
+fi
+if [ -f "${MODEL_DIR}/model.safetensors" ]; then
+    has_model_weights=true
+    echo "Found model.safetensors (HuggingFace new default)"
+fi
+
+if [ "$has_model_weights" = false ]; then
+    echo -e "${RED}Error: No model weights found (need pytorch_model.bin or model.safetensors)${NC}"
+    exit 1
+fi
 
 missing_files=()
 for file in "${required_files[@]}"; do
