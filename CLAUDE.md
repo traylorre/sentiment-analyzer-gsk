@@ -35,6 +35,8 @@ Auto-generated from all feature plans. Last updated: 2025-11-26
 - DynamoDB with GSIs (by_entity_status, by_sentiment, by_email) (502-gsi-query-optimization)
 - Python 3.13 + boto3, pydantic (for model validation) (503-consolidate-status-field)
 - DynamoDB (preprod-sentiment-users table with by_entity_status GSI) (503-consolidate-status-field)
+- Python 3.13 (existing project standard) + boto3, aws-xray-sdk (existing) (1003-self-healing-ingestion)
+- DynamoDB with `by_status` GSI (hash: status, range: timestamp, projection: KEYS_ONLY) (1003-self-healing-ingestion)
 
 - **Python 3.13** with FastAPI, boto3, pydantic, aws-lambda-powertools, httpx
 - **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, CloudFront
@@ -812,9 +814,9 @@ aws cloudwatch get-metric-data --metric-data-queries '[...]' --start-time ... --
 ```
 
 ## Recent Changes
+- 1003-self-healing-ingestion: Added Python 3.13 (existing project standard) + boto3, aws-xray-sdk (existing)
 - 503-consolidate-status-field: Added Python 3.13 + boto3, pydantic (for model validation)
 - 502-gsi-query-optimization: Added Python 3.13 + boto3>=1.34.0, aws-xray-sdk>=2.12.0
-- 501-purge-newsapi: Added Python 3.13 + boto3, pydantic, pytest (no new deps needed)
 
 <!-- MANUAL ADDITIONS START -->
 

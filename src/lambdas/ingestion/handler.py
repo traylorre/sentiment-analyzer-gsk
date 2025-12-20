@@ -64,6 +64,7 @@ from src.lambdas.ingestion.alerting import (
     ConsecutiveFailureAlert,
     create_alert_publisher,
 )
+from src.lambdas.ingestion.self_healing import run_self_healing_check
 from src.lambdas.shared.adapters.base import (
     AdapterError,
     NewsArticle,
@@ -408,6 +409,23 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             if finnhub_adapter:
                 finnhub_adapter.close()
 
+        # Run self-healing check to detect and republish stale pending items
+        # This runs after normal ingestion to fix items stuck in pending status
+        self_healing_result = None
+        try:
+            self_healing_result = run_self_healing_check(
+                table=table,
+                sns_client=sns_client,
+                sns_topic_arn=config["sns_topic_arn"],
+                model_version=config["model_version"],
+            )
+        except Exception as e:
+            # Self-healing failures should not affect ingestion response
+            logger.warning(
+                "Self-healing check failed",
+                extra=get_safe_error_info(e),
+            )
+
         # Calculate execution time
         execution_time_ms = (time.perf_counter() - start_time) * 1000
 
@@ -433,6 +451,16 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
         if errors:
             response["body"]["errors"] = errors
+
+        # Add self-healing summary to response
+        if self_healing_result:
+            response["body"]["self_healing"] = {
+                "items_found": self_healing_result.items_found,
+                "items_republished": self_healing_result.items_republished,
+                "execution_time_ms": round(self_healing_result.execution_time_ms, 2),
+            }
+            if self_healing_result.errors:
+                response["body"]["self_healing"]["errors"] = self_healing_result.errors
 
         return response
 
