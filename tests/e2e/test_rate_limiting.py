@@ -8,11 +8,21 @@
 # - Recovery after rate limit window
 # - Magic link rate limiting
 #
-# Note: Some tests may skip in preprod if rate limits are too high to trigger
-# within reasonable E2E test bounds. The default rate limit is 100 req/min,
-# which is intentionally generous for production use. Tests that skip still
-# validate that rate limiting infrastructure is properly configured by checking
-# for X-RateLimit-* headers on normal responses.
+# Rate Limit Configuration (from infrastructure/terraform/main.tf:700-701):
+# - Steady-state: 100 requests per second
+# - Burst limit: 200 concurrent requests
+#
+# EXPECTED SKIP BEHAVIOR:
+# Tests that attempt to trigger 429 responses will SKIP in preprod because:
+# - E2E tests send 50-100 requests
+# - Burst limit of 200 concurrent requests cannot be exceeded
+# - This is correct behavior, not a bug
+#
+# Tests that DO pass and verify rate limiting is configured:
+# - test_rate_limit_headers_on_normal_response: Checks X-RateLimit-* headers
+# - test_requests_within_limit_succeed: Verifies normal operation
+#
+# See tests/e2e/SKIP_REASONS.md for full documentation.
 
 import asyncio
 
