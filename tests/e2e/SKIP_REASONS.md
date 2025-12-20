@@ -42,15 +42,31 @@ Utility tests for cleaning up test data. Skipped by default to prevent accidenta
 Transient conditions that vary by environment/timing. Not bugs.
 
 #### RATE_LIMIT_CONFIG
-**Count**: 3 tests
+**Count**: 3-4 tests
 **Pattern**: "Could not trigger rate limit with 100 requests"
 
-Preprod has higher rate limits than test expects. Document actual limits.
+Tests that attempt to trigger rate limiting skip because preprod rate limits
+are appropriately generous for production use.
 
-**Preprod Rate Limits** (as of 2025-12):
-- API Gateway: 100 requests/second burst, 50 sustained
-- Magic link: 10/hour per IP
-- E2E tests send 100 requests, may not trigger limits
+**Preprod Rate Limits** (from `infrastructure/terraform/main.tf:700-701`):
+- Steady-state: 100 requests per second
+- Burst limit: 200 concurrent requests
+- No per-IP quota configured
+
+**Why Tests Skip**:
+E2E tests send 50-100 requests. With a 200 concurrent burst limit, these
+cannot trigger rate limiting. This is expected and correct behavior.
+
+**Verification**:
+- `test_rate_limit_headers_on_normal_response` PASSES - confirms infrastructure configured
+- `test_requests_within_limit_succeed` PASSES - confirms normal operation
+- 429-triggering tests skip because limits exceed E2E test bounds (not a bug)
+
+**Affected Tests**:
+- `test_rate_limit_triggers_429` (50 concurrent < 200 burst)
+- `test_retry_after_header_present` (100 sequential < 100 req/sec)
+- `test_rate_limit_recovery` (depends on triggering limit first)
+- `test_rate_limit_returns_retry_info` (100 requests < limits)
 
 ---
 
