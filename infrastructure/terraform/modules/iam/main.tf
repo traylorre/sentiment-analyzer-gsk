@@ -54,7 +54,7 @@ resource "aws_iam_role_policy" "ingestion_secrets" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
+    Statement = concat([
       {
         Effect = "Allow"
         Action = [
@@ -65,7 +65,17 @@ resource "aws_iam_role_policy" "ingestion_secrets" {
           var.finnhub_secret_arn
         ]
       }
-    ]
+      ],
+      # KMS decrypt required when secrets use customer-managed KMS keys
+      var.secrets_kms_key_arn != "" ? [
+        {
+          Effect = "Allow"
+          Action = [
+            "kms:Decrypt"
+          ]
+          Resource = var.secrets_kms_key_arn
+        }
+    ] : [])
   })
 }
 

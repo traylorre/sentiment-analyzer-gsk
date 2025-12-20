@@ -776,6 +776,7 @@ module "iam" {
   finnhub_secret_arn           = module.secrets.finnhub_secret_arn
   feature_006_users_table_arn  = module.dynamodb.feature_006_users_table_arn
   enable_feature_006           = true
+  secrets_kms_key_arn          = module.kms.key_arn
 }
 
 # ===================================================================
