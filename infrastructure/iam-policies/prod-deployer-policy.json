@@ -185,7 +185,10 @@
         "logs:PutRetentionPolicy",
         "logs:TagLogGroup",
         "logs:UntagLogGroup",
-        "logs:ListTagsLogGroup"
+        "logs:ListTagsLogGroup",
+        "logs:StartQuery",
+        "logs:GetQueryResults",
+        "logs:StopQuery"
       ],
       "Resource": [
         "arn:aws:logs:*:*:log-group:/aws/lambda/prod-*",
@@ -200,11 +203,22 @@
         "cloudwatch:DescribeAlarms",
         "cloudwatch:TagResource",
         "cloudwatch:UntagResource",
-        "cloudwatch:ListTagsForResource"
+        "cloudwatch:ListTagsForResource",
+        "cloudwatch:GetMetricData",
+        "cloudwatch:PutMetricData"
       ],
       "Resource": [
         "arn:aws:cloudwatch:*:*:alarm:prod-*"
       ]
+    },
+    {
+      "Sid": "XRayProdResources",
+      "Effect": "Allow",
+      "Action": [
+        "xray:BatchGetTraces",
+        "xray:GetTraceSummaries"
+      ],
+      "Resource": "*"
     },
     {
       "Sid": "TerraformStateAccess",
