@@ -315,14 +315,9 @@ def republish_items_to_sns(
                 )
 
         except Exception as e:
-            # TEMPORARY DEBUG: Log full exception for diagnosis
+            # TEMPORARY DEBUG: Log full exception directly in message
             logger.error(
-                "SNS batch republish failed",
-                extra={
-                    "batch_size": len(batch),
-                    "error_message": str(e)[:500],  # Full error for debugging
-                    **get_safe_error_info(e),
-                },
+                f"SNS batch republish failed: {type(e).__name__}: {str(e)[:300]}",
             )
 
     return success_count
