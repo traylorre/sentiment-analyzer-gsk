@@ -71,3 +71,9 @@ variable "enable_feature_006" {
   type        = bool
   default     = true
 }
+
+variable "secrets_kms_key_arn" {
+  description = "ARN of the KMS key used to encrypt secrets (required for secretsmanager:GetSecretValue)"
+  type        = string
+  default     = ""
+}
