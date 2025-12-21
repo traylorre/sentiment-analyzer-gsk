@@ -288,8 +288,9 @@ async def test_anonymous_config_limit_enforced(
 
             if response.status_code == 201:
                 created_count += 1
-            elif response.status_code in (400, 403, 422, 429):
+            elif response.status_code in (400, 403, 409, 422, 429):
                 # Limit reached or validation error - this is expected
+                # 409 = Conflict (e.g., duplicate or limit reached)
                 data = response.json()
                 assert (
                     "limit" in str(data).lower()
