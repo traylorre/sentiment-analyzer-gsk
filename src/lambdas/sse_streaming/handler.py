@@ -72,9 +72,13 @@ class PathNormalizationMiddleware(BaseHTTPMiddleware):
             import re
 
             normalized_path = re.sub(r"/+", "/", original_path)
+            # Note: Paths are user-provided - sanitize to prevent log injection (CWE-117)
             logger.debug(
                 "Path normalized",
-                extra={"original": original_path, "normalized": normalized_path},
+                extra={
+                    "original": sanitize_for_log(original_path),
+                    "normalized": sanitize_for_log(normalized_path),
+                },
             )
             request.scope["path"] = normalized_path
         return await call_next(request)
@@ -206,15 +210,20 @@ async def global_stream(
             if res and res in valid_resolutions:
                 resolution_filters.append(res)
         # Log invalid resolutions for debugging
+        # Note: User input must be sanitized to prevent log injection (CWE-117)
         requested = {r.strip().lower() for r in resolutions.split(",") if r.strip()}
         invalid = requested - valid_resolutions
         if invalid:
             logger.warning(
                 "Invalid resolutions requested",
-                extra={"invalid": list(invalid), "valid": list(valid_resolutions)},
+                extra={
+                    "invalid": [sanitize_for_log(r) for r in invalid],
+                    "valid": list(valid_resolutions),
+                },
             )
 
     # Log connection attempt
+    # Note: All user-provided values MUST be sanitized to prevent log injection (CWE-117)
     logger.info(
         "Global stream connection attempt",
         extra={
@@ -222,7 +231,11 @@ async def global_stream(
                 request.client.host if request.client else "unknown"
             ),
             "last_event_id": sanitize_for_log(last_event_id) if last_event_id else None,
-            "resolution_filters": resolution_filters if resolution_filters else "all",
+            "resolution_filters": (
+                [sanitize_for_log(r) for r in resolution_filters]
+                if resolution_filters
+                else "all"
+            ),
         },
     )
 
@@ -429,12 +442,15 @@ async def config_stream(
         )
 
     # Log successful connection
+    # Note: ticker_filters comes from DynamoDB (trusted) but sanitize defensively
     logger.info(
         "Config stream connection established",
         extra={
             "connection_id": connection.connection_id,
             "config_id": sanitize_for_log(config_id),
-            "ticker_filters": ticker_filters,
+            "ticker_filters": (
+                [sanitize_for_log(t) for t in ticker_filters] if ticker_filters else []
+            ),
             "total_connections": connection_manager.count,
         },
     )
