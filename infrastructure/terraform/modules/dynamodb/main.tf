@@ -417,3 +417,71 @@ resource "aws_dynamodb_table" "chaos_experiments" {
     prevent_destroy = true
   }
 }
+
+# ===================================================================
+# DynamoDB Table: Feature 1009 - Sentiment Time-Series
+# ===================================================================
+#
+# Pre-aggregated time-series buckets for multi-resolution sentiment data.
+# Design follows AWS DynamoDB best practices [CS-001, CS-002]:
+# - Composite PK: {ticker}#{resolution} for partition distribution
+# - SK: ISO8601 bucket timestamp for time-range queries
+# - Resolution-dependent TTL for cost optimization [CS-013, CS-014]
+#
+# Key pattern examples:
+# - PK="AAPL#1m", SK="2025-12-21T10:35:00Z" (1-minute bucket)
+# - PK="AAPL#5m", SK="2025-12-21T10:35:00Z" (5-minute bucket)
+# - PK="AAPL#1h", SK="2025-12-21T10:00:00Z" (1-hour bucket)
+#
+# For On-Call Engineers:
+#   Query ticker at resolution: PK = {ticker}#{resolution}
+#   Time range: SK between start and end ISO8601 timestamps
+
+resource "aws_dynamodb_table" "sentiment_timeseries" {
+  name         = "${var.environment}-sentiment-timeseries"
+  billing_mode = "PAY_PER_REQUEST" # On-demand: ~$8/month at 18K writes/day × 8 resolutions
+  hash_key     = "PK"
+  range_key    = "SK"
+
+  # Enable point-in-time recovery (35-day retention)
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  # Primary key attributes
+  attribute {
+    name = "PK"
+    type = "S" # String: {ticker}#{resolution} e.g., "AAPL#5m"
+  }
+
+  attribute {
+    name = "SK"
+    type = "S" # String: ISO8601 bucket timestamp e.g., "2025-12-21T10:35:00Z"
+  }
+
+  # TTL configuration (resolution-dependent expiration)
+  # 1m: 6h, 5m: 12h, 10m: 24h, 1h: 7d, 3h: 14d, 6h: 30d, 12h: 60d, 24h: 90d
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  # Encryption at rest (AWS-managed keys)
+  server_side_encryption {
+    enabled     = true
+    kms_key_arn = null # Use AWS-managed keys (default, no extra cost)
+  }
+
+  tags = {
+    Name        = "${var.environment}-sentiment-timeseries"
+    Environment = var.environment
+    Feature     = "1009-realtime-multi-resolution"
+    ManagedBy   = "Terraform"
+    CostCenter  = "demo"
+  }
+
+  # SECURITY: Prevent accidental deletion of time-series data
+  lifecycle {
+    prevent_destroy = true
+  }
+}

@@ -77,3 +77,9 @@ variable "secrets_kms_key_arn" {
   type        = string
   default     = ""
 }
+
+variable "timeseries_table_arn" {
+  description = "ARN of the Feature 1009 sentiment-timeseries DynamoDB table"
+  type        = string
+  default     = ""
+}

@@ -1,0 +1,365 @@
+openapi: 3.0.3
+info:
+  title: Sentiment Time-Series API
+  description: Multi-resolution time-series API for sentiment data
+  version: 2.0.0
+
+servers:
+  - url: https://{function-url}/api/v2
+    description: Lambda Function URL
+
+paths:
+  /timeseries/{ticker}:
+    get:
+      summary: Get time-series sentiment data
+      description: |
+        Returns aggregated sentiment buckets for a ticker at the specified resolution.
+        Includes a partial bucket for the current incomplete time period.
+      operationId: getTimeseries
+      tags:
+        - Timeseries
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          description: Stock ticker symbol
+          schema:
+            type: string
+            pattern: ^[A-Z]+$
+            example: AAPL
+        - name: resolution
+          in: query
+          required: true
+          description: Time resolution for aggregation
+          schema:
+            type: string
+            enum: ["1m", "5m", "10m", "1h", "3h", "6h", "12h", "24h"]
+            example: "5m"
+        - name: start
+          in: query
+          required: false
+          description: Start of time range (ISO8601). Defaults to 1 resolution period ago.
+          schema:
+            type: string
+            format: date-time
+            example: "2025-12-21T10:00:00Z"
+        - name: end
+          in: query
+          required: false
+          description: End of time range (ISO8601). Defaults to now.
+          schema:
+            type: string
+            format: date-time
+            example: "2025-12-21T11:00:00Z"
+      responses:
+        "200":
+          description: Successful response with time-series data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TimeseriesResponse"
+        "400":
+          description: Invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Ticker not found or no data available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /stream:
+    get:
+      summary: SSE stream for real-time updates
+      description: |
+        Server-Sent Events stream for real-time sentiment updates.
+        Supports resolution and ticker filtering.
+      operationId: streamUpdates
+      tags:
+        - Streaming
+      parameters:
+        - name: resolutions
+          in: query
+          required: false
+          description: Comma-separated list of resolutions to subscribe to
+          schema:
+            type: array
+            items:
+              type: string
+              enum: ["1m", "5m", "10m", "1h", "3h", "6h", "12h", "24h"]
+            default: ["1m"]
+          style: form
+          explode: false
+          example: "1m,5m"
+        - name: tickers
+          in: query
+          required: false
+          description: Comma-separated list of tickers to filter (empty = all)
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: false
+          example: "AAPL,TSLA"
+        - name: Last-Event-ID
+          in: header
+          required: false
+          description: Last event ID for reconnection support
+          schema:
+            type: string
+      responses:
+        "200":
+          description: SSE stream established
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: |
+                  SSE event stream with the following event types:
+                  - heartbeat: Connection keepalive
+                  - bucket_update: Complete bucket data
+                  - partial_bucket: Incomplete bucket with progress
+        "503":
+          description: Connection limit reached
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    SentimentBucket:
+      type: object
+      required:
+        - ticker
+        - resolution
+        - timestamp
+        - open
+        - high
+        - low
+        - close
+        - count
+        - avg
+        - label_counts
+        - is_partial
+      properties:
+        ticker:
+          type: string
+          description: Stock ticker symbol
+          example: AAPL
+        resolution:
+          type: string
+          enum: ["1m", "5m", "10m", "1h", "3h", "6h", "12h", "24h"]
+          description: Time resolution
+          example: "5m"
+        timestamp:
+          type: string
+          format: date-time
+          description: Bucket start time (aligned to resolution boundary)
+          example: "2025-12-21T10:35:00Z"
+        open:
+          type: number
+          format: float
+          minimum: -1.0
+          maximum: 1.0
+          description: First sentiment score in bucket
+          example: 0.72
+        high:
+          type: number
+          format: float
+          minimum: -1.0
+          maximum: 1.0
+          description: Maximum sentiment score in bucket
+          example: 0.89
+        low:
+          type: number
+          format: float
+          minimum: -1.0
+          maximum: 1.0
+          description: Minimum sentiment score in bucket
+          example: 0.45
+        close:
+          type: number
+          format: float
+          minimum: -1.0
+          maximum: 1.0
+          description: Last sentiment score in bucket
+          example: 0.78
+        count:
+          type: integer
+          minimum: 0
+          description: Number of articles in bucket
+          example: 12
+        avg:
+          type: number
+          format: float
+          minimum: -1.0
+          maximum: 1.0
+          description: Average sentiment score (sum/count)
+          example: 0.72
+        label_counts:
+          type: object
+          description: Distribution by sentiment label
+          properties:
+            positive:
+              type: integer
+              minimum: 0
+            neutral:
+              type: integer
+              minimum: 0
+            negative:
+              type: integer
+              minimum: 0
+          example:
+            positive: 8
+            neutral: 3
+            negative: 1
+        is_partial:
+          type: boolean
+          description: True if bucket is incomplete
+          example: false
+
+    PartialBucket:
+      allOf:
+        - $ref: "#/components/schemas/SentimentBucket"
+        - type: object
+          required:
+            - progress_pct
+            - next_update_at
+          properties:
+            is_partial:
+              type: boolean
+              enum: [true]
+              description: Always true for partial buckets
+            progress_pct:
+              type: number
+              format: float
+              minimum: 0
+              maximum: 100
+              description: Percentage through bucket period
+              example: 47.5
+            next_update_at:
+              type: string
+              format: date-time
+              description: When bucket will be complete
+              example: "2025-12-21T10:40:00Z"
+
+    TimeseriesResponse:
+      type: object
+      required:
+        - ticker
+        - resolution
+        - buckets
+        - cache_hit
+        - query_time_ms
+      properties:
+        ticker:
+          type: string
+          description: Stock ticker symbol
+          example: AAPL
+        resolution:
+          type: string
+          enum: ["1m", "5m", "10m", "1h", "3h", "6h", "12h", "24h"]
+          description: Time resolution
+          example: "5m"
+        buckets:
+          type: array
+          items:
+            $ref: "#/components/schemas/SentimentBucket"
+          description: Complete sentiment buckets in time order
+        partial_bucket:
+          $ref: "#/components/schemas/PartialBucket"
+          nullable: true
+          description: Current incomplete bucket (null if none)
+        cache_hit:
+          type: boolean
+          description: Whether response was served from cache
+          example: true
+        query_time_ms:
+          type: number
+          format: float
+          description: Query execution time in milliseconds
+          example: 15.3
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Error code
+          example: INVALID_RESOLUTION
+        message:
+          type: string
+          description: Human-readable error message
+          example: "Resolution must be one of: 1m, 5m, 10m, 1h, 3h, 6h, 12h, 24h"
+        details:
+          type: object
+          description: Additional error details
+          additionalProperties: true
+
+    HeartbeatEvent:
+      type: object
+      required:
+        - timestamp
+        - connections
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          example: "2025-12-21T10:35:00Z"
+        connections:
+          type: integer
+          description: Current active connection count
+          example: 42
+        uptime_seconds:
+          type: integer
+          description: Lambda uptime in seconds
+          example: 3600
+
+    BucketUpdateEvent:
+      type: object
+      required:
+        - ticker
+        - resolution
+        - bucket
+      properties:
+        ticker:
+          type: string
+          example: AAPL
+        resolution:
+          type: string
+          enum: ["1m", "5m", "10m", "1h", "3h", "6h", "12h", "24h"]
+          example: "1m"
+        bucket:
+          $ref: "#/components/schemas/SentimentBucket"
+
+    PartialBucketEvent:
+      type: object
+      required:
+        - ticker
+        - resolution
+        - bucket
+        - progress_pct
+      properties:
+        ticker:
+          type: string
+          example: AAPL
+        resolution:
+          type: string
+          enum: ["1m", "5m", "10m", "1h", "3h", "6h", "12h", "24h"]
+          example: "1m"
+        bucket:
+          $ref: "#/components/schemas/PartialBucket"
+        progress_pct:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+          example: 47.5

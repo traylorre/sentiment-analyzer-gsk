@@ -107,6 +107,29 @@ resource "aws_iam_role_policy" "ingestion_sns" {
   })
 }
 
+# Feature 1009: Ingestion Lambda - Time-series table write access
+# BatchWriteItem for write fanout to 8 resolutions per sentiment score [CS-001, CS-003]
+resource "aws_iam_role_policy" "ingestion_timeseries" {
+  count = var.timeseries_table_arn != "" ? 1 : 0
+  name  = "${var.environment}-ingestion-timeseries-policy"
+  role  = aws_iam_role.ingestion_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:BatchWriteItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem"
+        ]
+        Resource = var.timeseries_table_arn
+      }
+    ]
+  })
+}
+
 # Ingestion Lambda: CloudWatch Logs
 resource "aws_iam_role_policy_attachment" "ingestion_logs" {
   role       = aws_iam_role.ingestion_lambda.name
@@ -479,6 +502,28 @@ resource "aws_iam_role_policy" "dashboard_feature_006_users" {
   })
 }
 
+# Feature 1009: Dashboard Lambda - Time-series table read access
+# Query for multi-resolution sentiment buckets and historical data
+resource "aws_iam_role_policy" "dashboard_timeseries" {
+  count = var.timeseries_table_arn != "" ? 1 : 0
+  name  = "${var.environment}-dashboard-timeseries-policy"
+  role  = aws_iam_role.dashboard_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:Query",
+          "dynamodb:GetItem"
+        ]
+        Resource = var.timeseries_table_arn
+      }
+    ]
+  })
+}
+
 # ===================================================================
 # Metrics Lambda IAM Role (Operational Monitoring)
 # ===================================================================
@@ -782,6 +827,28 @@ resource "aws_iam_role_policy" "sse_streaming_metrics" {
             "cloudwatch:namespace" = "SentimentAnalyzer/SSE"
           }
         }
+      }
+    ]
+  })
+}
+
+# Feature 1009: SSE Streaming Lambda - Time-series table read access
+# Query for multi-resolution sentiment buckets [CS-005, CS-006]
+resource "aws_iam_role_policy" "sse_streaming_timeseries" {
+  count = var.timeseries_table_arn != "" ? 1 : 0
+  name  = "${var.environment}-sse-streaming-timeseries-policy"
+  role  = aws_iam_role.sse_streaming_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:Query",
+          "dynamodb:GetItem"
+        ]
+        Resource = var.timeseries_table_arn
       }
     ]
   })
