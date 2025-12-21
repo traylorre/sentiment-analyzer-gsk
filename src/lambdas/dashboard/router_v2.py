@@ -1157,20 +1157,30 @@ async def get_timeseries(
     resolution: str = Query(..., pattern="^(1m|5m|10m|1h|3h|6h|12h|24h)$"),
     start: str | None = Query(None, description="Start time (ISO8601)"),
     end: str | None = Query(None, description="End time (ISO8601)"),
+    limit: int | None = Query(None, ge=1, le=1000, description="Max buckets to return"),
+    cursor: str | None = Query(
+        None, description="Pagination cursor from previous response"
+    ),
 ):
-    """Get time-series sentiment data for a ticker (T035).
+    """Get time-series sentiment data for a ticker (T035, T042).
 
-    Feature 1009: Multi-resolution sentiment time-series.
+    Feature 1009: Multi-resolution sentiment time-series with pagination.
     Canonical: [CS-001] DynamoDB best practices, [CS-005] Lambda caching
+
+    Pagination:
+        Use `limit` to control page size and `cursor` to fetch next page.
+        Response includes `next_cursor` and `has_more` for iteration.
 
     Args:
         ticker: Stock ticker symbol (e.g., "AAPL")
         resolution: Time resolution (1m, 5m, 10m, 1h, 3h, 6h, 12h, 24h)
         start: Optional start time (ISO8601)
         end: Optional end time (ISO8601)
+        limit: Max buckets to return (default varies by resolution)
+        cursor: Pagination cursor from previous response
 
     Returns:
-        TimeseriesResponse with buckets and optional partial bucket
+        TimeseriesResponse with buckets, pagination info, and optional partial bucket
     """
     from datetime import datetime
 
@@ -1203,12 +1213,14 @@ async def get_timeseries(
                 status_code=400, detail="Invalid end time format"
             ) from e
 
-    # Query timeseries
+    # Query timeseries with pagination
     response = timeseries_service.query_timeseries(
         ticker=ticker.upper(),
         resolution=res,
         start=start_dt,
         end=end_dt,
+        limit=limit,
+        cursor=cursor,
     )
 
     return JSONResponse(response.to_dict())
