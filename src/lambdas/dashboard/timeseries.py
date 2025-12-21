@@ -23,8 +23,7 @@ from typing import TYPE_CHECKING, Any
 
 import boto3
 
-from src.lambdas.sse_streaming.cache import ResolutionCache, get_global_cache
-from src.lib.timeseries import Resolution
+from src.lib.timeseries import Resolution, ResolutionCache, get_global_cache
 
 if TYPE_CHECKING:
     pass

@@ -20,14 +20,14 @@ import pytest
 from freezegun import freeze_time
 from moto import mock_aws
 
-# Import will fail until module is implemented - this is expected for TDD
+# Import from shared lib location
 from src.lambdas.dashboard.timeseries import (
     TimeseriesQueryService,
     TimeseriesResponse,
     query_timeseries,
 )
-from src.lambdas.sse_streaming import cache as cache_module
 from src.lib.timeseries import Resolution
+from src.lib.timeseries import cache as cache_module
 
 
 @pytest.fixture(autouse=True)

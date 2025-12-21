@@ -13,9 +13,8 @@ from __future__ import annotations
 import pytest
 from freezegun import freeze_time
 
-# Import will fail until module is implemented - this is expected for TDD
-from src.lambdas.sse_streaming.cache import CacheStats, ResolutionCache
-from src.lib.timeseries import Resolution
+# Import cache utilities from shared lib location
+from src.lib.timeseries import CacheStats, Resolution, ResolutionCache
 
 
 class TestResolutionAwareCache:

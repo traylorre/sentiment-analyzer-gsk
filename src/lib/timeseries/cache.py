@@ -22,7 +22,7 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Any
 
-from src.lib.timeseries import Resolution
+from src.lib.timeseries.models import Resolution
 
 
 @dataclass
