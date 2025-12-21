@@ -113,9 +113,9 @@
 - [X] T034 [US2] Implement timeseries query service in `src/lambdas/dashboard/timeseries.py`
 - [X] T035 [US2] Add GET /api/v2/timeseries/{ticker} endpoint in `src/lambdas/dashboard/router_v2.py` (NOTE: router_v2.py, not api_v2.py)
 - [X] T036 [US2] Implement cache integration for timeseries queries in `src/lambdas/dashboard/timeseries.py`
-- [ ] T037 [US2] Create client-side IndexedDB cache in `src/dashboard/cache.js` per `[CS-008]`
-- [ ] T038 [US2] Implement resolution selector UI component in `src/dashboard/app.js`
-- [ ] T039 [US2] Implement instant switching with IndexedDB lookup in `src/dashboard/timeseries.js`
+- [X] T037 [US2] Create client-side IndexedDB cache in `src/dashboard/cache.js` per `[CS-008]`
+- [X] T038 [US2] Implement resolution selector UI component in `src/dashboard/timeseries.js` (NOTE: timeseries.js, not app.js - timeseries module handles all resolution logic)
+- [X] T039 [US2] Implement instant switching with IndexedDB lookup in `src/dashboard/timeseries.js`
 
 **Checkpoint**: Resolution switching tests PASS. Manual test: switch resolutions, verify <100ms response.
 

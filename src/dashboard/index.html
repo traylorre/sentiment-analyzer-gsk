@@ -43,6 +43,11 @@
             </div>
         </section>
 
+        <!-- Resolution Selector for Time-Series [Feature 1009] -->
+        <section id="resolution-selector" class="resolution-selector">
+            <!-- Populated by timeseries.js -->
+        </section>
+
         <!-- Charts Row -->
         <section class="charts-row">
             <div class="chart-container">
@@ -52,6 +57,12 @@
             <div class="chart-container">
                 <h3>By Tag</h3>
                 <canvas id="tag-chart"></canvas>
+            </div>
+            <!-- Timeseries Chart Container [Feature 1009] -->
+            <div id="timeseries-chart-container" class="chart-container timeseries-chart">
+                <h3>Sentiment Trend <span id="timeseries-ticker">AAPL</span></h3>
+                <canvas id="timeseries-chart" data-testid="timeseries-chart"></canvas>
+                <div id="chart-loaded" data-testid="chart-loaded" style="display:none;"></div>
             </div>
         </section>
 
@@ -99,6 +110,8 @@
     </footer>
 
     <script src="/config.js"></script>
+    <script src="/cache.js"></script>
+    <script src="/timeseries.js"></script>
     <script src="/app.js"></script>
 </body>
 </html>

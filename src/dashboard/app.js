@@ -50,6 +50,16 @@ async function initDashboard() {
     // Initialize charts
     initCharts();
 
+    // Initialize timeseries module (Feature 1009)
+    if (typeof timeseriesManager !== 'undefined') {
+        try {
+            await timeseriesManager.init();
+            console.log('Timeseries module initialized');
+        } catch (error) {
+            console.error('Failed to initialize timeseries:', error);
+        }
+    }
+
     // Fetch initial metrics
     await fetchMetrics();
 
@@ -419,5 +429,9 @@ window.addEventListener('beforeunload', () => {
     }
     if (state.pollInterval) {
         clearInterval(state.pollInterval);
+    }
+    // Cleanup timeseries module (Feature 1009)
+    if (typeof timeseriesManager !== 'undefined') {
+        timeseriesManager.destroy();
     }
 });

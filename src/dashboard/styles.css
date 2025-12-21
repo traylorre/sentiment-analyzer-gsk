@@ -385,3 +385,126 @@ footer {
 .new-item {
     animation: highlight 2s ease-out;
 }
+
+/* ================================
+ * Feature 1009: Resolution Selector
+ * ================================ */
+
+.resolution-selector {
+    background-color: var(--card-background);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-md) var(--spacing-lg);
+    margin-bottom: var(--spacing-lg);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--spacing-md);
+}
+
+.resolution-header {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.resolution-header label {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.resolution-header #ticker-input {
+    width: 80px;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.resolution-header #ticker-input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.resolution-label {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-left: var(--spacing-md);
+}
+
+.resolution-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-xs);
+}
+
+.resolution-btn {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background-color: var(--card-background);
+    color: var(--text-color);
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.resolution-btn:hover {
+    background-color: var(--background-color);
+    border-color: var(--primary-color);
+}
+
+.resolution-btn.active {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+    color: white;
+}
+
+.resolution-btn:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+}
+
+/* Timeseries Chart Container */
+.timeseries-chart {
+    min-height: 350px;
+}
+
+.timeseries-chart h3 {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.timeseries-chart #timeseries-ticker {
+    color: var(--primary-color);
+    font-weight: 700;
+}
+
+/* Responsive: Stack on mobile */
+@media (max-width: 640px) {
+    .resolution-selector {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .resolution-header {
+        width: 100%;
+    }
+
+    .resolution-buttons {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .resolution-label {
+        margin-left: 0;
+        margin-top: var(--spacing-sm);
+    }
+}
