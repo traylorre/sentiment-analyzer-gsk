@@ -316,20 +316,19 @@ module "analysis_lambda" {
   source = "./modules/lambda"
 
   function_name = local.analysis_lambda_name
-  description   = "Performs sentiment analysis using DistilBERT model from S3"
+  description   = "Performs sentiment analysis using DistilBERT model from S3 (ADR-005 Phase 2: Container)"
   iam_role_arn  = module.iam.analysis_lambda_role_arn
-  handler       = "handler.lambda_handler"
-  s3_bucket     = "${var.environment}-sentiment-lambda-deployments"
-  s3_key        = "analysis/lambda.zip"
+  handler       = null # Not used for container-based Lambda
 
-  # Force update when package changes (git SHA triggers redeployment)
-  source_code_hash = var.lambda_package_version
+  # Container-based deployment via ECR (ADR-005 Phase 2)
+  # Image URI will be updated by CI/CD pipeline after image build
+  image_uri = "${aws_ecr_repository.analysis.repository_url}:latest"
 
   # Resource configuration per task spec
   # JUSTIFICATION (FR-024): 2048MB required for ML model inference (DistilBERT)
-  # Increased from 1024MB - model requires ~700MB, Python runtime ~300MB, headroom for spikes
+  # torch ~700MB + transformers ~500MB + Python runtime ~300MB + inference headroom
   memory_size          = 2048
-  timeout              = 30
+  timeout              = 60 # Increased for cold start + S3 model download
   reserved_concurrency = 5
 
   # X-Ray tracing (Feature 006 - Day 1 mandatory)
@@ -337,9 +336,6 @@ module "analysis_lambda" {
 
   # Ephemeral storage for ML model (~250MB extracted, 3GB for headroom)
   ephemeral_storage_size = 3072 # 3GB
-
-  # Lambda layer for DistilBERT model (deprecated - now using S3)
-  layers = var.model_layer_arns
 
   # Environment variables
   environment_variables = {
@@ -360,14 +356,14 @@ module "analysis_lambda" {
   create_error_alarm       = true
   error_alarm_threshold    = 5
   create_duration_alarm    = true
-  duration_alarm_threshold = 5000 # 5 seconds
+  duration_alarm_threshold = 10000 # 10 seconds - account for cold start + S3 download
   alarm_actions            = [module.monitoring.alarm_topic_arn]
 
   tags = {
     Lambda = "analysis"
   }
 
-  depends_on = [module.iam]
+  depends_on = [module.iam, aws_ecr_repository.analysis]
 }
 
 # ===================================================================
@@ -597,6 +593,48 @@ resource "aws_ecr_repository" "sse_streaming" {
 # ECR Lifecycle policy - keep last 5 images
 resource "aws_ecr_lifecycle_policy" "sse_streaming" {
   repository = aws_ecr_repository.sse_streaming.name
+
+  policy = jsonencode({
+    rules = [
+      {
+        rulePriority = 1
+        description  = "Keep last 5 images"
+        selection = {
+          tagStatus   = "any"
+          countType   = "imageCountMoreThan"
+          countNumber = 5
+        }
+        action = {
+          type = "expire"
+        }
+      }
+    ]
+  })
+}
+
+# ECR Repository for Analysis Lambda container image (ADR-005 Phase 2)
+resource "aws_ecr_repository" "analysis" {
+  name                 = "${var.environment}-analysis-lambda"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  encryption_configuration {
+    encryption_type = "AES256"
+  }
+
+  tags = {
+    Environment = var.environment
+    Feature     = "1008-analysis-lambda-container"
+    Component   = "analysis"
+  }
+}
+
+# ECR Lifecycle policy - keep last 5 images
+resource "aws_ecr_lifecycle_policy" "analysis" {
+  repository = aws_ecr_repository.analysis.name
 
   policy = jsonencode({
     rules = [
@@ -1080,4 +1118,9 @@ output "sse_lambda_name" {
 output "sse_ecr_repository_url" {
   description = "ECR repository URL for SSE Lambda container images"
   value       = aws_ecr_repository.sse_streaming.repository_url
+}
+
+output "analysis_ecr_repository_url" {
+  description = "ECR repository URL for Analysis Lambda container images"
+  value       = aws_ecr_repository.analysis.repository_url
 }

@@ -593,11 +593,89 @@ jobs:
           fi
 
   # ========================================================================
+  # JOB 3.5: Build Analysis Lambda Image (Preprod)
+  # ADR-005 Phase 2: Container deployment for PyTorch + transformers
+  # ========================================================================
+  build-analysis-image-preprod:
+    name: Build Analysis Lambda Image (Preprod)
+    runs-on: ubuntu-latest
+    needs: [build, test]
+    environment: preprod
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Configure AWS Credentials (Preprod)
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and Push Analysis Lambda Image
+        uses: docker/build-push-action@v6
+        with:
+          context: src
+          file: src/lambdas/analysis/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/preprod-analysis-lambda:latest
+            ${{ steps.login-ecr.outputs.registry }}/preprod-analysis-lambda:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+
+      # Smoke test: Verify Python imports work inside the Docker image
+      # Catches missing dependencies and import errors before deployment
+      - name: Smoke Test Analysis Lambda Imports
+        run: |
+          echo "🧪 Running Docker import smoke test..."
+          IMAGE="${{ steps.login-ecr.outputs.registry }}/preprod-analysis-lambda:${{ github.sha }}"
+
+          # Run Python import check inside the container
+          docker run --rm --entrypoint python "$IMAGE" -c "
+          import sys
+          print('Testing imports...')
+
+          # Core imports - must work for Lambda to start
+          from handler import lambda_handler
+          from sentiment import analyze_sentiment, load_model
+
+          # Shared module imports
+          from src.lambdas.shared.logging_utils import sanitize_for_log
+
+          # ML library imports - the whole point of container deployment
+          import torch
+          import transformers
+          print(f'torch version: {torch.__version__}')
+          print(f'transformers version: {transformers.__version__}')
+
+          print('✅ All imports successful')
+          sys.exit(0)
+          "
+
+          if [ $? -eq 0 ]; then
+            echo "✅ Analysis Lambda import smoke test passed"
+          else
+            echo "❌ Analysis Lambda import smoke test FAILED"
+            echo "The Docker image has import errors that will cause Runtime.ExitError"
+            exit 1
+          fi
+
+  # ========================================================================
   # JOB 4: Deploy to Preprod
   # ========================================================================
   deploy-preprod:
     name: Deploy to Preprod
-    needs: [build, test, build-sse-image-preprod]
+    needs: [build, test, build-sse-image-preprod, build-analysis-image-preprod]
     runs-on: ubuntu-latest
     environment:
       name: preprod
@@ -874,6 +952,29 @@ jobs:
             --function-name preprod-sentiment-sse-streaming
 
           echo "✅ SSE Lambda updated to use new image"
+
+      # Force Analysis Lambda to use the new Docker image
+      # ADR-005 Phase 2: Container deployment for PyTorch + transformers
+      - name: Force Analysis Lambda Image Update
+        run: |
+          echo "🔄 Forcing Analysis Lambda to use new Docker image..."
+
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          REGION="${{ vars.AWS_REGION }}"
+          IMAGE_URI="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/preprod-analysis-lambda:${{ github.sha }}"
+
+          echo "Image URI: ${IMAGE_URI}"
+
+          aws lambda update-function-code \
+            --function-name preprod-sentiment-analysis \
+            --image-uri "${IMAGE_URI}"
+
+          # Wait for update to complete
+          echo "⏳ Waiting for Lambda update to complete..."
+          aws lambda wait function-updated \
+            --function-name preprod-sentiment-analysis
+
+          echo "✅ Analysis Lambda updated to use new image"
 
       - name: Get Preprod Outputs
         id: outputs
@@ -1701,7 +1802,7 @@ jobs:
   # ========================================================================
   summary:
     name: Deployment Summary
-    needs: [build, test, build-sse-image-preprod, deploy-preprod, test-preprod]
+    needs: [build, test, build-sse-image-preprod, build-analysis-image-preprod, deploy-preprod, test-preprod]
     if: always()
     runs-on: ubuntu-latest
 
@@ -1713,6 +1814,7 @@ jobs:
           echo "- Build: ${{ needs.build.result }}"
           echo "- Unit Tests (Mocked): ${{ needs.test.result }}"
           echo "- Build SSE Image (Preprod): ${{ needs.build-sse-image-preprod.result }}"
+          echo "- Build Analysis Image (Preprod): ${{ needs.build-analysis-image-preprod.result }}"
           echo "- Deploy Preprod: ${{ needs.deploy-preprod.result }}"
           echo "- Test Preprod (Real AWS): ${{ needs.test-preprod.result }}"
           echo "- Production: SKIPPED (temporarily disabled)"

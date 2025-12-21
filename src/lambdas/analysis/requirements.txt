@@ -1,0 +1,23 @@
+# Analysis Lambda Dependencies
+# Container image deployment for ML sentiment inference (ADR-005 Phase 2)
+
+# PyTorch CPU-only (minimal size, no CUDA dependencies)
+# Using extra-index-url for CPU-only wheel
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.5.1+cpu
+
+# HuggingFace Transformers for DistilBERT model loading
+# Pin to version compatible with model training environment
+transformers>=4.46.0,<5.0.0
+
+# AWS SDK for S3 model download and DynamoDB updates
+boto3>=1.35.0,<2.0.0
+
+# Data validation for request/response schemas
+pydantic>=2.10.0,<3.0.0
+
+# Structured JSON logging for CloudWatch
+python-json-logger>=2.0.0,<3.0.0
+
+# AWS X-Ray distributed tracing (FR-035 Day 1 mandatory)
+aws-xray-sdk>=2.14.0,<3.0.0
