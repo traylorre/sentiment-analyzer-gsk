@@ -100,19 +100,19 @@
 
 ### Tests for User Story 2 (MUST FAIL initially)
 
-- [ ] T029 [P] [US2] Implement `tests/unit/test_resolution_cache.py` with TestResolutionAwareCache per `[CS-005, CS-006]`
-- [ ] T030 [P] [US2] Implement `tests/unit/test_timeseries_query.py` with TestTimeseriesQuery for dashboard Lambda
+- [X] T029 [P] [US2] Implement `tests/unit/test_resolution_cache.py` with TestResolutionAwareCache per `[CS-005, CS-006]`
+- [X] T030 [P] [US2] Implement `tests/unit/test_timeseries_query.py` with TestTimeseriesQuery for dashboard Lambda
 
 **Checkpoint**: Run `pytest tests/unit/test_resolution_cache.py tests/unit/test_timeseries_query.py` - ALL tests MUST FAIL
 
 ### Implementation for User Story 2
 
-- [ ] T031 [US2] Implement ResolutionCache class in `src/lambdas/sse_streaming/cache.py` with resolution-aware TTL per `[CS-005, CS-006]`
-- [ ] T032 [US2] Implement cache stats tracking (hits/misses/hit_rate) in `src/lambdas/sse_streaming/cache.py`
-- [ ] T033 [US2] Implement LRU eviction with max_entries in `src/lambdas/sse_streaming/cache.py`
-- [ ] T034 [US2] Implement timeseries query service in `src/lambdas/dashboard/timeseries.py`
-- [ ] T035 [US2] Add GET /api/v2/timeseries/{ticker} endpoint in `src/lambdas/dashboard/api_v2.py`
-- [ ] T036 [US2] Implement cache integration for timeseries queries in `src/lambdas/dashboard/timeseries.py`
+- [X] T031 [US2] Implement ResolutionCache class in `src/lambdas/sse_streaming/cache.py` with resolution-aware TTL per `[CS-005, CS-006]`
+- [X] T032 [US2] Implement cache stats tracking (hits/misses/hit_rate) in `src/lambdas/sse_streaming/cache.py`
+- [X] T033 [US2] Implement LRU eviction with max_entries in `src/lambdas/sse_streaming/cache.py`
+- [X] T034 [US2] Implement timeseries query service in `src/lambdas/dashboard/timeseries.py`
+- [X] T035 [US2] Add GET /api/v2/timeseries/{ticker} endpoint in `src/lambdas/dashboard/router_v2.py` (NOTE: router_v2.py, not api_v2.py)
+- [X] T036 [US2] Implement cache integration for timeseries queries in `src/lambdas/dashboard/timeseries.py`
 - [ ] T037 [US2] Create client-side IndexedDB cache in `src/dashboard/cache.js` per `[CS-008]`
 - [ ] T038 [US2] Implement resolution selector UI component in `src/dashboard/app.js`
 - [ ] T039 [US2] Implement instant switching with IndexedDB lookup in `src/dashboard/timeseries.js`

@@ -38,6 +38,7 @@ from src.lambdas.dashboard import quota as quota_service
 from src.lambdas.dashboard import sentiment as sentiment_service
 from src.lambdas.dashboard import sse as sse_module
 from src.lambdas.dashboard import tickers as ticker_service
+from src.lambdas.dashboard import timeseries as timeseries_service
 from src.lambdas.dashboard import volatility as volatility_service
 from src.lambdas.shared.cache.ticker_cache import TickerCache, get_ticker_cache
 from src.lambdas.shared.dynamodb import get_table
@@ -105,6 +106,8 @@ notification_router = APIRouter(prefix="/api/v2/notifications", tags=["notificat
 market_router = APIRouter(prefix="/api/v2/market", tags=["market"])
 # Feature 014: Users router for email lookup (T044)
 users_router = APIRouter(prefix="/api/v2/users", tags=["users"])
+# Feature 1009: Timeseries router for multi-resolution sentiment time-series
+timeseries_router = APIRouter(prefix="/api/v2/timeseries", tags=["timeseries"])
 
 
 def get_dynamodb_table():
@@ -1143,6 +1146,75 @@ async def get_market_status():
 
 
 # ===================================================================
+# Timeseries Endpoints (Feature 1009)
+# ===================================================================
+
+
+@timeseries_router.get("/{ticker}")
+async def get_timeseries(
+    ticker: str,
+    request: Request,
+    resolution: str = Query(..., pattern="^(1m|5m|10m|1h|3h|6h|12h|24h)$"),
+    start: str | None = Query(None, description="Start time (ISO8601)"),
+    end: str | None = Query(None, description="End time (ISO8601)"),
+):
+    """Get time-series sentiment data for a ticker (T035).
+
+    Feature 1009: Multi-resolution sentiment time-series.
+    Canonical: [CS-001] DynamoDB best practices, [CS-005] Lambda caching
+
+    Args:
+        ticker: Stock ticker symbol (e.g., "AAPL")
+        resolution: Time resolution (1m, 5m, 10m, 1h, 3h, 6h, 12h, 24h)
+        start: Optional start time (ISO8601)
+        end: Optional end time (ISO8601)
+
+    Returns:
+        TimeseriesResponse with buckets and optional partial bucket
+    """
+    from datetime import datetime
+
+    from src.lib.timeseries import Resolution
+
+    # Parse resolution
+    try:
+        res = Resolution(resolution)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid resolution: {resolution}. Valid: 1m, 5m, 10m, 1h, 3h, 6h, 12h, 24h",
+        ) from e
+
+    # Parse time range
+    start_dt = None
+    end_dt = None
+    if start:
+        try:
+            start_dt = datetime.fromisoformat(start.replace("Z", "+00:00"))
+        except ValueError as e:
+            raise HTTPException(
+                status_code=400, detail="Invalid start time format"
+            ) from e
+    if end:
+        try:
+            end_dt = datetime.fromisoformat(end.replace("Z", "+00:00"))
+        except ValueError as e:
+            raise HTTPException(
+                status_code=400, detail="Invalid end time format"
+            ) from e
+
+    # Query timeseries
+    response = timeseries_service.query_timeseries(
+        ticker=ticker.upper(),
+        resolution=res,
+        start=start_dt,
+        end=end_dt,
+    )
+
+    return JSONResponse(response.to_dict())
+
+
+# ===================================================================
 # Alert Endpoints
 # ===================================================================
 
@@ -1522,3 +1594,5 @@ def include_routers(app):
     app.include_router(ohlc_module.router)
     # Feature 015: SSE Streaming
     app.include_router(sse_module.router)
+    # Feature 1009: Multi-resolution sentiment time-series
+    app.include_router(timeseries_router)
