@@ -114,17 +114,10 @@ jobs:
   enable-auto-merge:
     name: Enable Auto-Merge
     runs-on: ubuntu-latest
-    # Only run for pull_request_target (not pull_request) to have write access
-    # Use continue-on-error to gracefully handle missing PAT
-    if: |
-      github.event_name == 'pull_request_target' &&
-      github.actor != 'dependabot[bot]'
+    if: github.event_name == 'pull_request_target' && github.actor != 'dependabot[bot]'
 
     steps:
       - name: Enable auto-merge
-        # Use continue-on-error: if PAT is not set, job will show warning but not fail
-        continue-on-error: true
-        id: auto-merge
         uses: peter-evans/enable-pull-request-automerge@v3
         with:
           token: ${{ secrets.CLAUDE_CODE_PAT }}
@@ -132,22 +125,11 @@ jobs:
           merge-method: squash
 
       - name: Comment on PR
-        if: steps.auto-merge.outcome == 'success'
-        continue-on-error: true
         run: |
           gh pr comment "$PR_URL" --body "Auto-merge enabled. This PR will automatically merge once all required checks pass."
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.CLAUDE_CODE_PAT }}
-
-      - name: Log auto-merge status
-        run: |
-          if [ "${{ steps.auto-merge.outcome }}" == "success" ]; then
-            echo "✅ Auto-merge enabled successfully"
-          else
-            echo "⚠️ Auto-merge could not be enabled (PAT may not be configured)"
-            echo "To enable: Add CLAUDE_CODE_PAT secret with repo scope"
-          fi
 
   # ========================================================================
   # JOB 4: Dependabot Auto-Merge
