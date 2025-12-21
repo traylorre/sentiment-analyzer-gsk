@@ -68,21 +68,21 @@
 
 ### Tests for User Story 1 (MUST FAIL initially)
 
-- [ ] T017 [P] [US1] Implement `tests/unit/test_timeseries_fanout.py` with TestWriteFanout per `[CS-001, CS-003]`
-- [ ] T018 [P] [US1] Implement `tests/unit/test_sse_resolution_filter.py` with TestSSEResolutionFilter per `[CS-007]`
+- [X] T017 [P] [US1] Implement `tests/unit/test_timeseries_fanout.py` with TestWriteFanout per `[CS-001, CS-003]`
+- [X] T018 [P] [US1] Implement `tests/unit/test_sse_resolution_filter.py` with TestSSEResolutionFilter per `[CS-007]`
 
 **Checkpoint**: Run `pytest tests/unit/test_*fanout*.py tests/unit/test_sse*.py` - ALL tests MUST FAIL
 
 ### Implementation for User Story 1
 
-- [ ] T019 [US1] Implement generate_fanout_items() in `src/lambdas/ingestion/timeseries_fanout.py` per `[CS-001]`
-- [ ] T020 [US1] Implement write_fanout() with BatchWriteItem in `src/lambdas/ingestion/timeseries_fanout.py` per `[CS-003]`
-- [ ] T021 [US1] Implement resolution-dependent TTL calculation in `src/lambdas/ingestion/timeseries_fanout.py` per `[CS-013, CS-014]`
-- [ ] T022 [US1] Modify `src/lambdas/ingestion/handler.py` to call write_fanout() after sentiment analysis
-- [ ] T023 [US1] Implement SSEConnection model with subscribed_resolutions in `src/lambdas/sse_streaming/models.py`
-- [ ] T024 [US1] Implement BucketUpdateEvent and PartialBucketEvent in `src/lambdas/sse_streaming/models.py`
-- [ ] T025 [US1] Implement should_send_event() in `src/lambdas/sse_streaming/stream.py` per `[CS-007]`
-- [ ] T026 [US1] Add resolutions query parameter to /api/v2/stream endpoint in `src/lambdas/sse_streaming/handler.py`
+- [X] T019 [US1] Implement generate_fanout_items() in `src/lambdas/ingestion/timeseries_fanout.py` per `[CS-001]`
+- [X] T020 [US1] Implement write_fanout() with BatchWriteItem in `src/lambdas/ingestion/timeseries_fanout.py` per `[CS-003]`
+- [X] T021 [US1] Implement resolution-dependent TTL calculation in `src/lambdas/ingestion/timeseries_fanout.py` per `[CS-013, CS-014]`
+- [X] T022 [US1] Modify `src/lambdas/analysis/handler.py` to call write_fanout() after sentiment analysis (NOTE: Analysis Lambda has sentiment results, not Ingestion)
+- [X] T023 [US1] Implement SSEConnection model with subscribed_resolutions in `src/lambdas/sse_streaming/timeseries_models.py`
+- [X] T024 [US1] Implement BucketUpdateEvent and PartialBucketEvent in `src/lambdas/sse_streaming/timeseries_models.py`
+- [X] T025 [US1] Implement should_send_event() in `src/lambdas/sse_streaming/resolution_filter.py` per `[CS-007]`
+- [X] T026 [US1] Add resolutions query parameter to /api/v2/stream endpoint in `src/lambdas/sse_streaming/handler.py`
 - [ ] T027 [US1] Implement partial bucket streaming with progress_pct in `src/lambdas/sse_streaming/stream.py`
 - [ ] T028 [US1] Add 100ms debounce to multi-resolution updates in `src/lambdas/sse_streaming/stream.py`
 

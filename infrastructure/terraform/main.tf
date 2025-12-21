@@ -346,6 +346,7 @@ module "analysis_lambda" {
     MODEL_VERSION           = var.model_version
     ENVIRONMENT             = var.environment
     CHAOS_EXPERIMENTS_TABLE = module.dynamodb.chaos_experiments_table_name
+    TIMESERIES_TABLE        = module.dynamodb.timeseries_table_name # Feature 1009: Write fanout
   }
 
   # Dead letter queue
