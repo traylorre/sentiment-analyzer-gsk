@@ -291,6 +291,8 @@ module "ingestion_lambda" {
     ENVIRONMENT             = var.environment
     MODEL_VERSION           = var.model_version
     CHAOS_EXPERIMENTS_TABLE = module.dynamodb.chaos_experiments_table_name
+    # Feature 1009: Time-series fanout table for multi-resolution buckets
+    TIMESERIES_TABLE = module.dynamodb.timeseries_table_name
   }
 
   # Logging
@@ -414,6 +416,8 @@ module "dashboard_lambda" {
     # CORS: Pass explicit origins from tfvars (no wildcard fallback)
     # CloudFront domain is dynamically determined by Lambda at runtime
     CORS_ORIGINS = join(",", var.cors_allowed_origins)
+    # Feature 1009: Time-series table for multi-resolution queries
+    TIMESERIES_TABLE = module.dynamodb.timeseries_table_name
   }
 
   # Function URL with CORS
@@ -690,6 +694,8 @@ module "sse_streaming_lambda" {
     # Fix(141): Tell Lambda Web Adapter to check /health instead of default /
     # This fixes "GET / HTTP/1.1 404 Not Found" logs during Lambda init
     AWS_LWA_READINESS_CHECK_PATH = "/health"
+    # Feature 1009: Time-series table for multi-resolution queries and streaming
+    TIMESERIES_TABLE = module.dynamodb.timeseries_table_name
   }
 
   # Function URL with RESPONSE_STREAM for true SSE streaming
@@ -816,6 +822,8 @@ module "iam" {
   feature_006_users_table_arn  = module.dynamodb.feature_006_users_table_arn
   enable_feature_006           = true
   secrets_kms_key_arn          = module.kms.key_arn
+  # Feature 1009: Time-series table for multi-resolution buckets
+  timeseries_table_arn = module.dynamodb.timeseries_table_arn
 }
 
 # ===================================================================

@@ -91,3 +91,14 @@ output "chaos_experiments_table_arn" {
   description = "ARN of the Chaos Experiments DynamoDB table"
   value       = aws_dynamodb_table.chaos_experiments.arn
 }
+
+# Feature 1009: Sentiment Time-Series Outputs
+output "timeseries_table_name" {
+  description = "Name of the Feature 1009 sentiment time-series DynamoDB table"
+  value       = aws_dynamodb_table.sentiment_timeseries.name
+}
+
+output "timeseries_table_arn" {
+  description = "ARN of the Feature 1009 sentiment time-series DynamoDB table"
+  value       = aws_dynamodb_table.sentiment_timeseries.arn
+}
