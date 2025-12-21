@@ -208,9 +208,12 @@ def get_full_items(
             response = table.get_item(
                 Key={"source_id": source_id, "timestamp": timestamp},
                 ProjectionExpression=(
-                    "source_id, source_type, text_for_analysis, "
+                    "source_id, #ts, source_type, text_for_analysis, "
                     "matched_tickers, sentiment, metadata"
                 ),
+                ExpressionAttributeNames={
+                    "#ts": "timestamp",
+                },
             )
 
             full_item = response.get("Item")
