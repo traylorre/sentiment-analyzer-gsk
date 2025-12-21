@@ -49,9 +49,11 @@ import json
 import logging
 import os
 import time
+from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
+import boto3
 from aws_xray_sdk.core import patch_all, xray_recorder
 
 # Patch boto3 and requests for X-Ray distributed tracing
@@ -65,6 +67,7 @@ from src.lambdas.analysis.sentiment import (
     get_model_load_time_ms,
     load_model,
 )
+from src.lambdas.ingestion.timeseries_fanout import write_fanout
 from src.lambdas.shared.chaos_injection import get_chaos_delay_ms
 from src.lambdas.shared.dynamodb import get_table
 from src.lib.metrics import (
@@ -72,6 +75,7 @@ from src.lib.metrics import (
     emit_metrics_batch,
     log_structured,
 )
+from src.lib.timeseries import SentimentScore
 
 # Structured logging
 logger = logging.getLogger(__name__)
@@ -132,12 +136,15 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         timestamp = message["timestamp"]
         text = message["text_for_analysis"]
         model_version = message["model_version"]
+        # Feature 1009: Extract tickers for time-series fanout
+        matched_tickers = message.get("matched_tickers", [])
 
         log_structured(
             "INFO",
             "Analysis started",
             request_id=request_id,
             source_id=source_id,
+            ticker_count=len(matched_tickers),
         )
 
         # Load model (cached after first invocation)
@@ -173,6 +180,18 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             score=score,
             model_version=model_version,
         )
+
+        # Feature 1009: Write fanout to time-series table for real-time streaming
+        # Canonical: [CS-001] "Pre-aggregate at write time for known query patterns"
+        # Canonical: [CS-003] "Write amplification acceptable when reads >> writes"
+        if updated and matched_tickers:
+            _write_timeseries_fanout(
+                tickers=matched_tickers,
+                score=score,
+                sentiment=sentiment,
+                timestamp=timestamp,
+                source_id=source_id,
+            )
 
         # Calculate total execution time
         execution_time_ms = (time.perf_counter() - start_time) * 1000
@@ -397,3 +416,99 @@ def _emit_analysis_metrics(
         metrics.append({"name": "ItemsAnalyzed", "value": 1, "unit": "Count"})
 
     emit_metrics_batch(metrics)
+
+
+# Global DynamoDB client for time-series writes (Lambda global scope caching [CS-005])
+_dynamodb_client: Any = None
+
+
+def _get_dynamodb_client() -> Any:
+    """Get DynamoDB client with Lambda global scope caching.
+
+    Canonical: [CS-005] "Initialize SDK clients outside of the handler function"
+    Canonical: [CS-006] "Reuse connections across invocations"
+    """
+    global _dynamodb_client
+    if _dynamodb_client is None:
+        _dynamodb_client = boto3.client("dynamodb")
+    return _dynamodb_client
+
+
+@xray_recorder.capture("write_timeseries_fanout")
+def _write_timeseries_fanout(
+    tickers: list[str],
+    score: float,
+    sentiment: str,
+    timestamp: str,
+    source_id: str,
+) -> None:
+    """Write sentiment score to time-series table for all matched tickers.
+
+    Feature 1009: Write fanout for multi-resolution sentiment time-series.
+
+    Canonical: [CS-001] "Pre-aggregate at write time for known query patterns"
+    Canonical: [CS-003] "Write amplification acceptable when reads >> writes"
+
+    Args:
+        tickers: List of ticker symbols this sentiment applies to
+        score: Sentiment score (0.0-1.0)
+        sentiment: Sentiment label (positive/negative/neutral)
+        timestamp: ISO8601 timestamp of the original article
+        source_id: Source ID for tracking
+
+    Note:
+        Failures are logged but don't fail the Lambda - time-series is
+        supplementary to the primary sentiment-items table update.
+    """
+    timeseries_table = os.environ.get("TIMESERIES_TABLE")
+    if not timeseries_table:
+        # TIMESERIES_TABLE not configured - skip fanout silently
+        return
+
+    try:
+        # Parse timestamp to datetime
+        ts = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    except (ValueError, TypeError) as e:
+        logger.warning(
+            "Invalid timestamp for fanout, skipping",
+            extra={"timestamp": timestamp, "error": str(e)},
+        )
+        return
+
+    dynamodb = _get_dynamodb_client()
+    fanout_count = 0
+    fanout_errors = 0
+
+    for ticker in tickers:
+        try:
+            sentiment_score = SentimentScore(
+                ticker=ticker.upper(),
+                value=score,
+                timestamp=ts,
+                label=sentiment,
+                source=source_id,
+            )
+            write_fanout(dynamodb, timeseries_table, sentiment_score)
+            fanout_count += 1
+        except Exception as e:
+            fanout_errors += 1
+            logger.warning(
+                "Time-series fanout failed for ticker",
+                extra={
+                    "ticker": ticker,
+                    "error": str(e),
+                    "table": timeseries_table,
+                },
+            )
+
+    if fanout_count > 0:
+        emit_metric("TimeseriesFanoutCount", fanout_count)
+        log_structured(
+            "INFO",
+            "Time-series fanout complete",
+            tickers_written=fanout_count,
+            tickers_failed=fanout_errors,
+        )
+
+    if fanout_errors > 0:
+        emit_metric("TimeseriesFanoutErrors", fanout_errors)

@@ -26,6 +26,7 @@ class SSEConnection:
         user_id: User ID from X-User-ID header (None for global streams)
         config_id: Configuration ID for filtered streams (None for global)
         ticker_filters: List of tickers to filter events for
+        resolution_filters: List of resolutions to subscribe to (Feature 1009)
         last_event_id: Last event ID sent to this connection
         connected_at: Connection establishment timestamp (UTC)
     """
@@ -34,6 +35,7 @@ class SSEConnection:
     user_id: str | None = None
     config_id: str | None = None
     ticker_filters: list[str] = field(default_factory=list)
+    resolution_filters: list[str] = field(default_factory=list)  # Feature 1009
     last_event_id: str | None = None
     connected_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
@@ -50,6 +52,22 @@ class SSEConnection:
             return True
         ticker_upper = ticker.upper()
         return any(t.upper() == ticker_upper for t in self.ticker_filters)
+
+    def matches_resolution(self, resolution: str) -> bool:
+        """Check if this connection should receive events for a resolution.
+
+        Feature 1009: Resolution filtering for multi-resolution streaming.
+        Canonical: [CS-007] "SSE for real-time updates at subscribed resolutions"
+
+        Args:
+            resolution: The resolution level to check (e.g., "1m", "5m", "1h")
+
+        Returns:
+            True if no filters (all resolutions) or resolution is in filters
+        """
+        if not self.resolution_filters:
+            return True
+        return resolution.lower() in (r.lower() for r in self.resolution_filters)
 
 
 class ConnectionManager:
@@ -106,6 +124,7 @@ class ConnectionManager:
         user_id: str | None = None,
         config_id: str | None = None,
         ticker_filters: list[str] | None = None,
+        resolution_filters: list[str] | None = None,
     ) -> SSEConnection | None:
         """Acquire a connection slot.
 
@@ -113,6 +132,7 @@ class ConnectionManager:
             user_id: Optional user ID for authenticated streams
             config_id: Optional configuration ID for filtered streams
             ticker_filters: Optional list of tickers to filter events
+            resolution_filters: Optional list of resolutions to subscribe to (Feature 1009)
 
         Returns:
             SSEConnection if slot available, None if limit reached
@@ -132,6 +152,7 @@ class ConnectionManager:
                 user_id=user_id,
                 config_id=config_id,
                 ticker_filters=ticker_filters or [],
+                resolution_filters=resolution_filters or [],
             )
             self._connections[connection.connection_id] = connection
 
@@ -141,6 +162,7 @@ class ConnectionManager:
                     "connection_id": connection.connection_id,
                     "user_id": sanitize_for_log(user_id) if user_id else None,
                     "config_id": sanitize_for_log(config_id) if config_id else None,
+                    "resolution_filters": resolution_filters or "all",
                     "current_count": len(self._connections),
                 },
             )

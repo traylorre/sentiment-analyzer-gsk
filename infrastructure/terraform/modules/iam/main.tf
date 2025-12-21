@@ -301,6 +301,30 @@ resource "aws_iam_role_policy" "analysis_s3_model" {
   })
 }
 
+# Analysis Lambda: Time-series Write Access (Feature 1009)
+# Canonical: [CS-001] "Pre-aggregate at write time for known query patterns"
+# Canonical: [CS-003] "Write amplification acceptable when reads >> writes"
+resource "aws_iam_role_policy" "analysis_timeseries" {
+  count = var.timeseries_table_arn != "" ? 1 : 0
+  name  = "${var.environment}-analysis-timeseries-policy"
+  role  = aws_iam_role.analysis_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:BatchWriteItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem"
+        ]
+        Resource = var.timeseries_table_arn
+      }
+    ]
+  })
+}
+
 # ===================================================================
 # Dashboard Lambda IAM Role
 # ===================================================================

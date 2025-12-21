@@ -171,6 +171,11 @@ async def stream_status() -> StreamStatus:
 async def global_stream(
     request: Request,
     last_event_id: str | None = Header(None, alias="Last-Event-ID"),
+    resolutions: str | None = Query(
+        None,
+        description="Comma-separated resolution filters (e.g., '1m,5m,1h'). "
+        "Valid: 1m,5m,10m,1h,3h,6h,12h,24h. Empty = all resolutions.",
+    ),
 ):
     """Global SSE stream endpoint.
 
@@ -178,12 +183,37 @@ async def global_stream(
     Per FR-004: Global stream at /api/v2/stream
     Per FR-014: No authentication required (public metrics)
 
+    Feature 1009: Multi-resolution time-series streaming
+    Canonical: [CS-007] "SSE for real-time updates at subscribed resolutions"
+
     Headers:
         Last-Event-ID: Optional event ID for reconnection resumption
+
+    Query Parameters:
+        resolutions: Comma-separated list of resolution levels to subscribe to.
+                    Valid values: 1m, 5m, 10m, 1h, 3h, 6h, 12h, 24h
+                    Empty or not specified = subscribe to all resolutions.
 
     Returns:
         EventSourceResponse streaming heartbeat and metrics events
     """
+    # Feature 1009: Parse and validate resolution filters
+    resolution_filters: list[str] = []
+    valid_resolutions = {"1m", "5m", "10m", "1h", "3h", "6h", "12h", "24h"}
+    if resolutions:
+        for res in resolutions.split(","):
+            res = res.strip().lower()
+            if res and res in valid_resolutions:
+                resolution_filters.append(res)
+        # Log invalid resolutions for debugging
+        requested = {r.strip().lower() for r in resolutions.split(",") if r.strip()}
+        invalid = requested - valid_resolutions
+        if invalid:
+            logger.warning(
+                "Invalid resolutions requested",
+                extra={"invalid": list(invalid), "valid": list(valid_resolutions)},
+            )
+
     # Log connection attempt
     logger.info(
         "Global stream connection attempt",
@@ -192,11 +222,12 @@ async def global_stream(
                 request.client.host if request.client else "unknown"
             ),
             "last_event_id": sanitize_for_log(last_event_id) if last_event_id else None,
+            "resolution_filters": resolution_filters if resolution_filters else "all",
         },
     )
 
-    # Acquire connection slot
-    connection = connection_manager.acquire()
+    # Acquire connection slot with resolution filters
+    connection = connection_manager.acquire(resolution_filters=resolution_filters)
     if connection is None:
         # Connection limit reached - return 503
         logger.warning(
