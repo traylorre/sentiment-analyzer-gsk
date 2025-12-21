@@ -20,12 +20,13 @@ import boto3
 import pytest
 from moto import mock_aws
 
-from src.lambdas.ingestion.timeseries_fanout import (
+from src.lib.timeseries import (
+    Resolution,
+    SentimentScore,
     generate_fanout_items,
     write_fanout,
     write_fanout_with_update,
 )
-from src.lib.timeseries import Resolution, SentimentScore
 
 
 def parse_iso(s: str) -> datetime:

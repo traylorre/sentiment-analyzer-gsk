@@ -11,6 +11,11 @@ This module provides utilities for:
 
 from src.lib.timeseries.aggregation import aggregate_ohlc
 from src.lib.timeseries.bucket import calculate_bucket_progress, floor_to_bucket
+from src.lib.timeseries.fanout import (
+    generate_fanout_items,
+    write_fanout,
+    write_fanout_with_update,
+)
 from src.lib.timeseries.models import (
     OHLCBucket,
     PartialBucket,
@@ -30,4 +35,7 @@ __all__ = [
     "floor_to_bucket",
     "calculate_bucket_progress",
     "aggregate_ohlc",
+    "generate_fanout_items",
+    "write_fanout",
+    "write_fanout_with_update",
 ]

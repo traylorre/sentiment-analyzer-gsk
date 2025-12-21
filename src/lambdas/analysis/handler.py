@@ -67,7 +67,6 @@ from src.lambdas.analysis.sentiment import (
     get_model_load_time_ms,
     load_model,
 )
-from src.lambdas.ingestion.timeseries_fanout import write_fanout
 from src.lambdas.shared.chaos_injection import get_chaos_delay_ms
 from src.lambdas.shared.dynamodb import get_table
 from src.lib.metrics import (
@@ -75,7 +74,7 @@ from src.lib.metrics import (
     emit_metrics_batch,
     log_structured,
 )
-from src.lib.timeseries import SentimentScore
+from src.lib.timeseries import SentimentScore, write_fanout
 
 # Structured logging
 logger = logging.getLogger(__name__)

@@ -17,7 +17,8 @@ from typing import Any
 
 from botocore.exceptions import ClientError
 
-from src.lib.timeseries import Resolution, SentimentScore, floor_to_bucket
+from src.lib.timeseries.bucket import floor_to_bucket
+from src.lib.timeseries.models import Resolution, SentimentScore
 
 logger = logging.getLogger(__name__)
 
