@@ -83,3 +83,9 @@ variable "timeseries_table_arn" {
   type        = string
   default     = ""
 }
+
+variable "enable_timeseries" {
+  description = "Enable Feature 1009 timeseries IAM policies (set explicitly to avoid count depends on unknown)"
+  type        = bool
+  default     = false
+}

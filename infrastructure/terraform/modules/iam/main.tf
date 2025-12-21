@@ -110,7 +110,7 @@ resource "aws_iam_role_policy" "ingestion_sns" {
 # Feature 1009: Ingestion Lambda - Time-series table write access
 # BatchWriteItem for write fanout to 8 resolutions per sentiment score [CS-001, CS-003]
 resource "aws_iam_role_policy" "ingestion_timeseries" {
-  count = var.timeseries_table_arn != "" ? 1 : 0
+  count = var.enable_timeseries ? 1 : 0
   name  = "${var.environment}-ingestion-timeseries-policy"
   role  = aws_iam_role.ingestion_lambda.id
 
@@ -305,7 +305,7 @@ resource "aws_iam_role_policy" "analysis_s3_model" {
 # Canonical: [CS-001] "Pre-aggregate at write time for known query patterns"
 # Canonical: [CS-003] "Write amplification acceptable when reads >> writes"
 resource "aws_iam_role_policy" "analysis_timeseries" {
-  count = var.timeseries_table_arn != "" ? 1 : 0
+  count = var.enable_timeseries ? 1 : 0
   name  = "${var.environment}-analysis-timeseries-policy"
   role  = aws_iam_role.analysis_lambda.id
 
@@ -529,7 +529,7 @@ resource "aws_iam_role_policy" "dashboard_feature_006_users" {
 # Feature 1009: Dashboard Lambda - Time-series table read access
 # Query for multi-resolution sentiment buckets and historical data
 resource "aws_iam_role_policy" "dashboard_timeseries" {
-  count = var.timeseries_table_arn != "" ? 1 : 0
+  count = var.enable_timeseries ? 1 : 0
   name  = "${var.environment}-dashboard-timeseries-policy"
   role  = aws_iam_role.dashboard_lambda.id
 
@@ -859,7 +859,7 @@ resource "aws_iam_role_policy" "sse_streaming_metrics" {
 # Feature 1009: SSE Streaming Lambda - Time-series table read access
 # Query for multi-resolution sentiment buckets [CS-005, CS-006]
 resource "aws_iam_role_policy" "sse_streaming_timeseries" {
-  count = var.timeseries_table_arn != "" ? 1 : 0
+  count = var.enable_timeseries ? 1 : 0
   name  = "${var.environment}-sse-streaming-timeseries-policy"
   role  = aws_iam_role.sse_streaming_lambda.id
 

@@ -824,6 +824,7 @@ module "iam" {
   enable_feature_006           = true
   secrets_kms_key_arn          = module.kms.key_arn
   # Feature 1009: Time-series table for multi-resolution buckets
+  enable_timeseries    = true
   timeseries_table_arn = module.dynamodb.timeseries_table_arn
 }
 
