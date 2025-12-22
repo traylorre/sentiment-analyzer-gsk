@@ -7,9 +7,12 @@ Feature 1010: Parallel Ingestion with Cross-Source Deduplication
 """
 
 import hashlib
+import logging
 import re
 from datetime import datetime
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 def normalize_headline(headline: str) -> str:
@@ -179,6 +182,15 @@ def upsert_article_with_source(
 
     source_id = f"dedup:{dedup_key}"
 
+    logger.debug(
+        "Upserting article",
+        extra={
+            "dedup_key": dedup_key[:8],
+            "source": source,
+            "source_id": source_id[:16],
+        },
+    )
+
     try:
         # Try to update existing article (add source if not present)
         table.update_item(
@@ -201,6 +213,10 @@ def upsert_article_with_source(
                 "NOT contains(sources, :existing_source)"
             ),
         )
+        logger.info(
+            "Updated article with new source",
+            extra={"dedup_key": dedup_key[:8], "source": source},
+        )
         return "updated"
 
     except ClientError as e:
@@ -216,6 +232,10 @@ def upsert_article_with_source(
                 )
                 if "Item" in response:
                     # Article exists, source must already be present
+                    logger.debug(
+                        "Duplicate article skipped",
+                        extra={"dedup_key": dedup_key[:8], "source": source},
+                    )
                     return "duplicate"
             except ClientError:
                 pass  # Proceed to create
@@ -236,6 +256,10 @@ def upsert_article_with_source(
                 table.put_item(
                     Item=item,
                     ConditionExpression="attribute_not_exists(source_id)",
+                )
+                logger.info(
+                    "Created new article",
+                    extra={"dedup_key": dedup_key[:8], "source": source},
                 )
                 return "created"
             except ClientError as create_error:

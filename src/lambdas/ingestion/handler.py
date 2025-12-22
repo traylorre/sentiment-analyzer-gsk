@@ -5,6 +5,12 @@ Financial News Ingestion Lambda Handler
 EventBridge-triggered Lambda that fetches financial news from Tiingo and Finnhub
 for user-configured tickers and publishes to SNS for sentiment analysis.
 
+Feature 1010: Parallel Ingestion with Cross-Source Deduplication
+    - Fetches from Tiingo and Finnhub concurrently using ThreadPoolExecutor
+    - Deduplicates articles across sources using headline-based SHA256 keys
+    - Tracks multi-source attribution (sources: ["tiingo", "finnhub"])
+    - Reports collision metrics to CloudWatch for operational monitoring
+
 For On-Call Engineers:
     This Lambda runs every 5 minutes via EventBridge scheduler.
 
@@ -12,6 +18,8 @@ For On-Call Engineers:
     - Rate limit exceeded - Check circuit breaker state and quota tracker
     - No articles fetched - Verify API keys in Secrets Manager
     - High deduplication rate - Normal for active tickers, check DynamoDB TTL
+    - High collision rate (>40%) - Check for duplicate data in sources
+    - Low collision rate (<5%) - Check Tiingo/Finnhub API connectivity
 
     Quick commands:
     # Check recent invocations
@@ -25,24 +33,38 @@ For On-Call Engineers:
       --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) \
       --period 3600 --statistics Sum
 
+    # Check collision rate (Feature 1010)
+    aws cloudwatch get-metric-statistics \
+      --namespace SentimentAnalyzer/Ingestion \
+      --metric-name CollisionRate \
+      --start-time $(date -d '1 hour ago' -u +%Y-%m-%dT%H:%M:%SZ) \
+      --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) \
+      --period 300 --statistics Average
+
     See ON_CALL_SOP.md for detailed runbooks.
 
 For Developers:
-    Handler workflow:
-    1. Load active configurations from DynamoDB
+    Handler workflow (parallel mode - Feature 1010):
+    1. Load active configurations from DynamoDB (users table)
     2. Aggregate unique tickers across all configurations
-    3. Check circuit breaker state for each API
-    4. Fetch articles from Tiingo (primary) and Finnhub (secondary)
-    5. Deduplicate against DynamoDB
-    6. Insert new items (status=pending)
-    7. Publish to SNS for sentiment analysis
-    8. Emit CloudWatch metrics
+    3. Check circuit breaker and quota for each API
+    4. Fetch articles from Tiingo and Finnhub in parallel (ThreadPoolExecutor)
+    5. Generate cross-source dedup keys (SHA256 of normalized headline + date)
+    6. Upsert articles with multi-source tracking (conditional DynamoDB writes)
+    7. Only publish SNS for newly created articles (not updates)
+    8. Emit ingestion and collision metrics to CloudWatch
+
+    Key modules:
+    - parallel_fetcher.py: ThreadPoolExecutor-based concurrent fetching
+    - dedup.py: Headline normalization, dedup key generation, atomic upsert
+    - metrics.py: IngestionMetrics for collision rate tracking
 
 Security Notes:
     - API keys retrieved from Secrets Manager (never hardcoded)
     - Conditional writes prevent duplicate processing
     - All external calls use HTTPS
     - Input validation via Pydantic schemas
+    - Thread-safe operations via threading.Lock (quota tracker, circuit breaker)
 """
 
 import json
@@ -70,6 +92,7 @@ from src.lambdas.ingestion.dedup import (
     normalize_headline,
     upsert_article_with_source,
 )
+from src.lambdas.ingestion.metrics import IngestionMetrics
 from src.lambdas.ingestion.parallel_fetcher import ParallelFetcher
 from src.lambdas.ingestion.self_healing import run_self_healing_check
 from src.lambdas.shared.adapters.base import (
@@ -1184,7 +1207,8 @@ def _parallel_ingest(
 ) -> tuple[list[dict[str, Any]], dict[str, int], list[dict[str, Any]]]:
     """Execute parallel ingestion using ParallelFetcher.
 
-    Feature 1010: Fetches from Tiingo and Finnhub concurrently.
+    Feature 1010: Fetches from Tiingo and Finnhub concurrently with
+    cross-source deduplication and collision metrics.
 
     Args:
         tickers: List of ticker symbols
@@ -1210,6 +1234,10 @@ def _parallel_ingest(
     }
     errors: list[dict[str, Any]] = []
 
+    # Feature 1010: Initialize ingestion metrics for collision tracking
+    ingestion_metrics = IngestionMetrics()
+    ingestion_metrics.start_timing()
+
     # Create parallel fetcher
     fetcher = ParallelFetcher(
         tiingo_adapter=tiingo_adapter,
@@ -1224,11 +1252,17 @@ def _parallel_ingest(
     metrics = fetcher.get_metrics()
     fetch_errors = fetcher.get_errors()
 
+    # Feature 1010: Record fetch counts for collision rate calculation
+    tiingo_count = metrics.get("tiingo_count", 0)
+    finnhub_count = metrics.get("finnhub_count", 0)
+    ingestion_metrics.record_fetch("tiingo", tiingo_count)
+    ingestion_metrics.record_fetch("finnhub", finnhub_count)
+
     logger.info(
         "Parallel fetch complete",
         extra={
-            "tiingo_count": metrics.get("tiingo_count", 0),
-            "finnhub_count": metrics.get("finnhub_count", 0),
+            "tiingo_count": tiingo_count,
+            "finnhub_count": finnhub_count,
             "duration_ms": metrics.get("duration_ms", 0),
         },
     )
@@ -1256,8 +1290,12 @@ def _parallel_ingest(
         if sns_msg is not None:
             summary["new_items"] += 1
             pending_sns_messages.append(sns_msg)
+            # Feature 1010: Track new article stored
+            ingestion_metrics.record_stored()
         else:
             summary["duplicates_skipped"] += 1
+            # Feature 1010: Track collision (duplicate from cross-source)
+            ingestion_metrics.record_collision()
 
     # Record Tiingo success if articles were fetched
     if tiingo_articles:
@@ -1276,11 +1314,38 @@ def _parallel_ingest(
         if sns_msg is not None:
             summary["new_items"] += 1
             pending_sns_messages.append(sns_msg)
+            # Feature 1010: Track new article stored
+            ingestion_metrics.record_stored()
         else:
             summary["duplicates_skipped"] += 1
+            # Feature 1010: Track collision (duplicate from cross-source)
+            ingestion_metrics.record_collision()
 
     # Record Finnhub success if articles were fetched
     if finnhub_articles:
         failure_tracker.record_success()
+
+    # Feature 1010: Finalize and publish collision metrics
+    ingestion_metrics.stop_timing()
+
+    # Log metrics summary
+    logger.info(
+        "Ingestion metrics",
+        extra=ingestion_metrics.to_dict(),
+    )
+
+    # Check for anomalous collision rate and log warning
+    if ingestion_metrics.is_anomalous():
+        logger.warning(
+            "Anomalous collision rate detected",
+            extra={
+                "anomaly_type": ingestion_metrics.anomaly_type,
+                "message": ingestion_metrics.get_anomaly_message(),
+                "collision_rate": ingestion_metrics.collision_rate,
+            },
+        )
+
+    # Publish collision metrics to CloudWatch
+    ingestion_metrics.publish_to_cloudwatch()
 
     return pending_sns_messages, summary, errors
