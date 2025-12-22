@@ -46,6 +46,7 @@ def env_vars():
     )
     os.environ["MODEL_VERSION"] = "v1.0.0"
     os.environ["AWS_REGION"] = "us-east-1"
+    os.environ["ENVIRONMENT"] = "test"
     yield
     for key in [
         "DATABASE_TABLE",
@@ -54,6 +55,7 @@ def env_vars():
         "FINNHUB_SECRET_ARN",
         "MODEL_VERSION",
         "AWS_REGION",
+        "ENVIRONMENT",
     ]:
         os.environ.pop(key, None)
 
