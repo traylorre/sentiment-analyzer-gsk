@@ -469,3 +469,79 @@ resource "aws_cloudwatch_metric_alarm" "sendgrid_quota_critical" {
     Severity    = "CRITICAL"
   }
 }
+
+# =============================================================================
+# Feature 1010: Cross-Source Collision Rate Alarms (SC-008)
+# =============================================================================
+# Monitors collision rate from parallel ingestion with Tiingo + Finnhub.
+# Expected range: 15-25% for typical financial news overlap.
+# Alerts when rate is too high (>40%) or too low (<5%) indicating issues.
+# =============================================================================
+
+# Alarm: High collision rate (>40%) - possible duplicate data in sources
+resource "aws_cloudwatch_metric_alarm" "ingestion_collision_rate_high" {
+  alarm_name          = "${var.environment}-sentiment-collision-rate-high"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 3 # 3 consecutive periods to avoid false positives
+  metric_name         = "CollisionRate"
+  namespace           = "SentimentAnalyzer/Ingestion"
+  period              = 300 # 5 minutes (matches ingestion schedule)
+  statistic           = "Average"
+  threshold           = 0.40 # 40% collision rate threshold
+  alarm_description   = "Feature 1010 SC-008: Cross-source collision rate > 40%. Check for duplicate data in Tiingo/Finnhub sources."
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alarms.arn]
+  ok_actions    = [aws_sns_topic.alarms.arn]
+
+  tags = {
+    Environment = var.environment
+    Feature     = "1010-parallel-ingestion-dedup"
+    Scenario    = "SC-008-high-collision"
+  }
+}
+
+# Alarm: Low collision rate (<5%) - possible source mismatch or API issues
+resource "aws_cloudwatch_metric_alarm" "ingestion_collision_rate_low" {
+  alarm_name          = "${var.environment}-sentiment-collision-rate-low"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = 6 # 6 periods (30 min) to allow for low-activity periods
+  metric_name         = "CollisionRate"
+  namespace           = "SentimentAnalyzer/Ingestion"
+  period              = 300 # 5 minutes
+  statistic           = "Average"
+  threshold           = 0.05 # 5% collision rate threshold
+  alarm_description   = "Feature 1010 SC-008: Cross-source collision rate < 5%. Check Tiingo/Finnhub API connectivity and ticker configuration."
+  treat_missing_data  = "notBreaching" # Missing data during quiet periods is OK
+
+  alarm_actions = [aws_sns_topic.alarms.arn]
+  ok_actions    = [aws_sns_topic.alarms.arn]
+
+  tags = {
+    Environment = var.environment
+    Feature     = "1010-parallel-ingestion-dedup"
+    Scenario    = "SC-008-low-collision"
+  }
+}
+
+# Alarm: Anomalous collision rate detected (from IngestionMetrics.is_anomalous())
+resource "aws_cloudwatch_metric_alarm" "ingestion_anomalous_collision" {
+  alarm_name          = "${var.environment}-sentiment-anomalous-collision-rate"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "AnomalousCollisionRate"
+  namespace           = "SentimentAnalyzer/Ingestion"
+  period              = 300 # 5 minutes
+  statistic           = "Sum"
+  threshold           = 0 # Any anomaly triggers alert
+  alarm_description   = "Feature 1010: Anomalous collision rate detected by ingestion metrics. Check CloudWatch logs for details."
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alarms.arn]
+
+  tags = {
+    Environment = var.environment
+    Feature     = "1010-parallel-ingestion-dedup"
+    Scenario    = "anomalous-collision"
+  }
+}

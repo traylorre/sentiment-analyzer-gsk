@@ -313,7 +313,9 @@ def republish_items_to_sns(
                     extra={
                         "entry_id": failure.get("Id"),
                         "code": failure.get("Code"),
-                        "message": sanitize_for_log(failure.get("Message", "")[:100]),
+                        "error_message": sanitize_for_log(
+                            failure.get("Message", "")[:100]
+                        ),
                     },
                 )
 

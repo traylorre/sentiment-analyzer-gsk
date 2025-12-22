@@ -1,165 +1,267 @@
-"""Unit tests for source attribution tracking (T029).
+"""Tests for multi-source attribution tracking.
 
-Verifies that the storage layer properly tracks which data source
-provided each news item, enabling failover transparency.
+Feature 1010 Phase 5: User Story 3 - Multi-Source Attribution Tracking
+
+Tests that each article tracks which sources provided it with
+detailed per-source metadata.
 """
 
-from datetime import UTC, datetime
+from datetime import datetime
 
-from src.lambdas.shared.models.news_item import NewsItem
-from src.lambdas.shared.utils.dedup import generate_dedup_key
+from src.lambdas.ingestion.dedup import build_source_attribution
 
 
-class TestSourceAttributionInNewsItem:
-    """Tests for source attribution in NewsItem model."""
+class TestSourceAttribution:
+    """Tests for source attribution building and structure."""
 
-    def test_news_item_stores_tiingo_source(self) -> None:
-        """NewsItem should correctly store tiingo as source."""
-        dedup_key = generate_dedup_key(
-            headline="Test Article",
+    def test_single_source_article_has_one_attribution(self) -> None:
+        """Single source article should have exactly one attribution entry."""
+        attribution = build_source_attribution(
             source="tiingo",
-            published_at=datetime(2025, 12, 9, 14, 0, 0, tzinfo=UTC),
+            article_id="91144751",
+            url="https://example.com/article",
+            crawl_timestamp=datetime(2025, 12, 21, 10, 30, 0),
+            original_headline="Apple Reports Q4 Earnings Beat - Reuters",
+            source_name="reuters",
         )
 
-        item = NewsItem(
-            dedup_key=dedup_key,
+        # Verify all required fields present
+        assert "article_id" in attribution
+        assert "url" in attribution
+        assert "crawl_timestamp" in attribution
+        assert "original_headline" in attribution
+        assert "source_name" in attribution
+
+        # Verify values
+        assert attribution["article_id"] == "91144751"
+        assert attribution["url"] == "https://example.com/article"
+        assert (
+            attribution["original_headline"]
+            == "Apple Reports Q4 Earnings Beat - Reuters"
+        )
+        assert attribution["source_name"] == "reuters"
+
+    def test_attribution_contains_required_fields(self) -> None:
+        """Attribution must contain article_id, url, crawl_timestamp, original_headline."""
+        attribution = build_source_attribution(
+            source="finnhub",
+            article_id="abc-def-123",
+            url="https://finnhub.io/news/abc",
+            crawl_timestamp=datetime(2025, 12, 21, 14, 0, 0),
+            original_headline="AAPL: Strong quarter reported",
+        )
+
+        required_fields = ["article_id", "url", "crawl_timestamp", "original_headline"]
+        for field in required_fields:
+            assert field in attribution, f"Missing required field: {field}"
+
+    def test_attribution_without_source_name(self) -> None:
+        """Attribution without source_name should not include the field."""
+        attribution = build_source_attribution(
             source="tiingo",
-            headline="Test Article",
-            published_at=datetime(2025, 12, 9, 14, 0, 0, tzinfo=UTC),
-            ingested_at=datetime(2025, 12, 9, 14, 5, 0, tzinfo=UTC),
+            article_id="12345",
+            url="https://example.com/article",
+            crawl_timestamp=datetime(2025, 12, 21, 10, 30, 0),
+            original_headline="Some Headline",
+            source_name=None,
         )
 
-        assert item.source == "tiingo"
+        assert "source_name" not in attribution
 
-    def test_news_item_stores_finnhub_source(self) -> None:
-        """NewsItem should correctly store finnhub as source."""
-        dedup_key = generate_dedup_key(
-            headline="Test Article",
+    def test_attribution_with_empty_url(self) -> None:
+        """Attribution with empty url should store empty string."""
+        attribution = build_source_attribution(
             source="finnhub",
-            published_at=datetime(2025, 12, 9, 14, 0, 0, tzinfo=UTC),
+            article_id="no-url-article",
+            url="",
+            crawl_timestamp=datetime(2025, 12, 21, 10, 30, 0),
+            original_headline="Article without URL",
         )
 
-        item = NewsItem(
-            dedup_key=dedup_key,
+        assert attribution["url"] == ""
+
+    def test_attribution_with_none_url(self) -> None:
+        """Attribution with None url should store empty string."""
+        attribution = build_source_attribution(
             source="finnhub",
-            headline="Test Article",
-            published_at=datetime(2025, 12, 9, 14, 0, 0, tzinfo=UTC),
-            ingested_at=datetime(2025, 12, 9, 14, 5, 0, tzinfo=UTC),
+            article_id="no-url-article",
+            url=None,  # type: ignore
+            crawl_timestamp=datetime(2025, 12, 21, 10, 30, 0),
+            original_headline="Article without URL",
         )
 
-        assert item.source == "finnhub"
+        assert attribution["url"] == ""
 
-    def test_source_included_in_sort_key(self) -> None:
-        """Sort key should include source for attribution queries."""
-        dedup_key = generate_dedup_key(
-            headline="Test Article",
+    def test_crawl_timestamp_formatted_as_iso8601(self) -> None:
+        """crawl_timestamp should be formatted as ISO8601."""
+        ts = datetime(2025, 12, 21, 10, 30, 45)
+        attribution = build_source_attribution(
             source="tiingo",
-            published_at=datetime(2025, 12, 9, 14, 0, 0, tzinfo=UTC),
+            article_id="12345",
+            url="https://example.com",
+            crawl_timestamp=ts,
+            original_headline="Headline",
         )
 
-        item = NewsItem(
-            dedup_key=dedup_key,
+        assert attribution["crawl_timestamp"] == "2025-12-21T10:30:45"
+
+    def test_crawl_timestamp_string_passthrough(self) -> None:
+        """String crawl_timestamp should pass through unchanged."""
+        ts_str = "2025-12-21T10:30:45+00:00"
+        attribution = build_source_attribution(
             source="tiingo",
-            headline="Test Article",
-            published_at=datetime(2025, 12, 9, 14, 0, 0, tzinfo=UTC),
-            ingested_at=datetime(2025, 12, 9, 14, 5, 0, tzinfo=UTC),
+            article_id="12345",
+            url="https://example.com",
+            crawl_timestamp=ts_str,  # type: ignore
+            original_headline="Headline",
         )
 
-        # SK format: {source}#{ingested_at_iso}
-        assert item.sk.startswith("tiingo#")
+        assert attribution["crawl_timestamp"] == ts_str
 
-    def test_source_included_in_dynamodb_item(self) -> None:
-        """DynamoDB item should include source attribute."""
-        dedup_key = generate_dedup_key(
-            headline="Test Article",
+    def test_article_id_converted_to_string(self) -> None:
+        """article_id should be converted to string."""
+        attribution = build_source_attribution(
+            source="tiingo",
+            article_id=91144751,  # type: ignore - integer input
+            url="https://example.com",
+            crawl_timestamp=datetime.now(),
+            original_headline="Headline",
+        )
+
+        assert attribution["article_id"] == "91144751"
+        assert isinstance(attribution["article_id"], str)
+
+
+class TestDualSourceAttribution:
+    """Tests for articles with attributions from multiple sources."""
+
+    def test_dual_source_article_has_both_attributions(self) -> None:
+        """Article from both sources should have two attribution entries."""
+        tiingo_attr = build_source_attribution(
+            source="tiingo",
+            article_id="91144751",
+            url="https://tiingo.com/article/91144751",
+            crawl_timestamp=datetime(2025, 12, 21, 10, 30, 0),
+            original_headline="Apple Reports Q4 Earnings Beat - Reuters",
+            source_name="reuters",
+        )
+
+        finnhub_attr = build_source_attribution(
             source="finnhub",
-            published_at=datetime(2025, 12, 9, 14, 0, 0, tzinfo=UTC),
+            article_id="abc-def-123",
+            url="https://finnhub.io/news/abc-def-123",
+            crawl_timestamp=datetime(2025, 12, 21, 10, 32, 0),
+            original_headline="Apple Reports Q4 Earnings Beat",
+            source_name="reuters",
         )
 
-        item = NewsItem(
-            dedup_key=dedup_key,
-            source="finnhub",
-            headline="Test Article",
-            published_at=datetime(2025, 12, 9, 14, 0, 0, tzinfo=UTC),
-            ingested_at=datetime(2025, 12, 9, 14, 5, 0, tzinfo=UTC),
-        )
-
-        dynamo_item = item.to_dynamodb_item()
-
-        assert dynamo_item["source"] == "finnhub"
-
-
-class TestSourceAttributionFromDynamoDB:
-    """Tests for source attribution when reading from DynamoDB."""
-
-    def test_source_preserved_on_read(self) -> None:
-        """Source should be preserved when reading from DynamoDB."""
-        dynamo_item = {
-            "PK": "NEWS#abcd1234abcd1234abcd1234abcd1234",
-            "SK": "finnhub#2025-12-09T14:05:00+00:00",
-            "dedup_key": "abcd1234abcd1234abcd1234abcd1234",
-            "source": "finnhub",
-            "headline": "Test Article",
-            "published_at": "2025-12-09T14:00:00+00:00",
-            "ingested_at": "2025-12-09T14:05:00+00:00",
-            "tickers": ["AAPL"],
-            "tags": [],
-            "entity_type": "NEWS_ITEM",
+        # Build combined attribution map as it would be stored
+        source_attribution = {
+            "tiingo": tiingo_attr,
+            "finnhub": finnhub_attr,
         }
 
-        item = NewsItem.from_dynamodb_item(dynamo_item)
+        # Verify both sources present
+        assert "tiingo" in source_attribution
+        assert "finnhub" in source_attribution
+        assert len(source_attribution) == 2
 
-        assert item.source == "finnhub"
+        # Verify each has distinct article_id and url
+        assert source_attribution["tiingo"]["article_id"] == "91144751"
+        assert source_attribution["finnhub"]["article_id"] == "abc-def-123"
+        assert (
+            source_attribution["tiingo"]["url"] != source_attribution["finnhub"]["url"]
+        )
 
+        # But same source_name (reuters provided to both)
+        assert source_attribution["tiingo"]["source_name"] == "reuters"
+        assert source_attribution["finnhub"]["source_name"] == "reuters"
 
-class TestSourceAttributionDifferentiation:
-    """Tests for source-based differentiation."""
-
-    def test_same_article_different_sources_have_different_dedup_keys(self) -> None:
-        """Same headline from different sources should have different dedup keys."""
-        headline = "Apple Reports Strong Earnings"
-        published_at = datetime(2025, 12, 9, 14, 0, 0, tzinfo=UTC)
-
-        tiingo_key = generate_dedup_key(
-            headline=headline,
+    def test_attribution_preserves_original_headlines(self) -> None:
+        """Each source preserves its original headline before normalization."""
+        tiingo_attr = build_source_attribution(
             source="tiingo",
-            published_at=published_at,
+            article_id="t1",
+            url="https://tiingo.com/t1",
+            crawl_timestamp=datetime(2025, 12, 21, 10, 0, 0),
+            original_headline="Apple Reports Q4 Earnings Beat - Reuters",
         )
 
-        finnhub_key = generate_dedup_key(
-            headline=headline,
+        finnhub_attr = build_source_attribution(
             source="finnhub",
-            published_at=published_at,
+            article_id="f1",
+            url="https://finnhub.io/f1",
+            crawl_timestamp=datetime(2025, 12, 21, 10, 1, 0),
+            original_headline="Apple reports Q4 earnings beat",  # Different formatting
         )
 
-        # Different sources should produce different keys
-        # This allows tracking the same news from multiple sources
-        assert tiingo_key != finnhub_key
+        # Both preserve their original (non-normalized) headlines
+        assert (
+            tiingo_attr["original_headline"]
+            == "Apple Reports Q4 Earnings Beat - Reuters"
+        )
+        assert finnhub_attr["original_headline"] == "Apple reports Q4 earnings beat"
 
-    def test_source_attribution_enables_failover_tracking(self) -> None:
-        """Source field enables identifying which source provided data during failover."""
-        # Simulate normal collection from tiingo
-        tiingo_item = NewsItem(
-            dedup_key="aaaa" * 8,
+    def test_attribution_timestamps_can_differ(self) -> None:
+        """Different sources may have different crawl timestamps."""
+        tiingo_attr = build_source_attribution(
             source="tiingo",
-            headline="Normal Collection",
-            published_at=datetime(2025, 12, 9, 14, 0, 0, tzinfo=UTC),
-            ingested_at=datetime(2025, 12, 9, 14, 5, 0, tzinfo=UTC),
+            article_id="t1",
+            url="https://tiingo.com/t1",
+            crawl_timestamp=datetime(2025, 12, 21, 10, 0, 0),
+            original_headline="Headline",
         )
 
-        # Simulate failover collection from finnhub
-        finnhub_item = NewsItem(
-            dedup_key="bbbb" * 8,
+        finnhub_attr = build_source_attribution(
             source="finnhub",
-            headline="Failover Collection",
-            published_at=datetime(2025, 12, 9, 14, 10, 0, tzinfo=UTC),
-            ingested_at=datetime(2025, 12, 9, 14, 15, 0, tzinfo=UTC),
+            article_id="f1",
+            url="https://finnhub.io/f1",
+            crawl_timestamp=datetime(2025, 12, 21, 10, 5, 0),  # 5 minutes later
+            original_headline="Headline",
         )
 
-        # Both items can coexist and be distinguished by source
-        assert tiingo_item.source == "tiingo"
-        assert finnhub_item.source == "finnhub"
+        assert tiingo_attr["crawl_timestamp"] != finnhub_attr["crawl_timestamp"]
 
-        # SK includes source for querying by source
-        assert "tiingo" in tiingo_item.sk
-        assert "finnhub" in finnhub_item.sk
+
+class TestAttributionEdgeCases:
+    """Edge case tests for attribution handling."""
+
+    def test_unicode_headline_preserved(self) -> None:
+        """Unicode characters in headline should be preserved."""
+        attribution = build_source_attribution(
+            source="tiingo",
+            article_id="1",
+            url="https://example.com",
+            crawl_timestamp=datetime.now(),
+            original_headline="Apple 株式会社 reports earnings 📈",
+        )
+
+        assert attribution["original_headline"] == "Apple 株式会社 reports earnings 📈"
+
+    def test_very_long_headline_preserved(self) -> None:
+        """Very long headlines should be preserved in full."""
+        long_headline = "A" * 1000
+        attribution = build_source_attribution(
+            source="tiingo",
+            article_id="1",
+            url="https://example.com",
+            crawl_timestamp=datetime.now(),
+            original_headline=long_headline,
+        )
+
+        assert len(attribution["original_headline"]) == 1000
+
+    def test_headline_with_html_preserved(self) -> None:
+        """HTML in headline should be preserved (not escaped or stripped)."""
+        attribution = build_source_attribution(
+            source="tiingo",
+            article_id="1",
+            url="https://example.com",
+            crawl_timestamp=datetime.now(),
+            original_headline="<b>Breaking:</b> Apple earnings &amp; outlook",
+        )
+
+        assert (
+            attribution["original_headline"]
+            == "<b>Breaking:</b> Apple earnings &amp; outlook"
+        )
