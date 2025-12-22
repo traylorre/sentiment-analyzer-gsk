@@ -543,10 +543,518 @@ class TimeseriesManager {
     }
 }
 
-// Export singleton instance
+/**
+ * MultiTickerManager - Manages multiple ticker charts for comparison view
+ * Feature 1009 Phase 6 (T052): Multi-ticker chart layout
+ *
+ * Canonical Sources:
+ * - [CS-002] ticker#resolution composite key for filtering
+ * - [CS-006] Shared caching across users
+ */
+class MultiTickerManager {
+    constructor(config = {}) {
+        this.apiBaseUrl = config.apiBaseUrl || (typeof CONFIG !== 'undefined' ? CONFIG.API_BASE_URL : '');
+        this.sseBaseUrl = config.sseBaseUrl || (typeof CONFIG !== 'undefined' ? CONFIG.SSE_BASE_URL : '');
+        this.cache = typeof timeseriesCache !== 'undefined' ? timeseriesCache : null;
+
+        this.tickers = [];  // Array of ticker symbols
+        this.currentResolution = DEFAULT_RESOLUTION;
+        this.charts = {};   // ticker -> Chart instance
+        this.bucketData = {};  // ticker -> buckets array
+        this.eventSource = null;
+
+        // Callbacks
+        this.onDataUpdate = null;
+    }
+
+    /**
+     * Initialize multi-ticker view
+     * @param {string[]} tickers - Array of ticker symbols
+     */
+    async init(tickers = ['AAPL', 'MSFT', 'GOOGL']) {
+        this.tickers = tickers.map(t => t.toUpperCase());
+
+        // Initialize cache
+        if (this.cache) {
+            await this.cache.init();
+        }
+
+        // Parse URL params
+        const params = new URLSearchParams(window.location.search);
+        if (params.has('tickers')) {
+            this.tickers = params.get('tickers').toUpperCase().split(',').filter(t => t.trim());
+        }
+        if (params.has('resolution')) {
+            const res = params.get('resolution');
+            if (RESOLUTIONS.some(r => r.key === res)) {
+                this.currentResolution = res;
+            }
+        }
+
+        // Render UI
+        this.renderCompareUI();
+
+        // Load all ticker data in parallel (SC-006: <1s for 10 tickers)
+        await this.loadAllData();
+
+        // Connect SSE for all tickers
+        this.connectSSE();
+
+        console.log(`Multi-ticker view initialized: ${this.tickers.join(', ')} @ ${this.currentResolution}`);
+    }
+
+    /**
+     * Render multi-ticker comparison UI
+     */
+    renderCompareUI() {
+        // Find or create container
+        let container = document.getElementById('multi-ticker-container');
+        if (!container) {
+            const chartsSection = document.querySelector('.charts-row');
+            if (chartsSection) {
+                container = document.createElement('div');
+                container.id = 'multi-ticker-container';
+                container.className = 'multi-ticker-container';
+                chartsSection.parentNode.insertBefore(container, chartsSection.nextSibling);
+            } else {
+                console.warn('No .charts-row section found for multi-ticker view');
+                return;
+            }
+        }
+
+        // Header with resolution selector and ticker input
+        container.innerHTML = `
+            <div class="multi-ticker-header">
+                <h3>Compare Tickers</h3>
+                <div class="ticker-input-row">
+                    <label for="multi-ticker-input">Tickers (comma-separated):</label>
+                    <input type="text"
+                           id="multi-ticker-input"
+                           value="${this.tickers.join(', ')}"
+                           placeholder="AAPL, MSFT, GOOGL"
+                           data-testid="multi-ticker-input">
+                    <button type="button" id="update-tickers-btn" data-testid="update-tickers">
+                        Update
+                    </button>
+                </div>
+                <div class="resolution-buttons" role="group" aria-label="Time resolution">
+                    ${RESOLUTIONS.map(r => `
+                        <button type="button"
+                                class="resolution-btn ${r.key === this.currentResolution ? 'active' : ''}"
+                                data-resolution="${r.key}"
+                                data-testid="compare-resolution-${r.key}"
+                                aria-pressed="${r.key === this.currentResolution}">
+                            ${r.label}
+                        </button>
+                    `).join('')}
+                </div>
+            </div>
+            <div id="ticker-charts-grid" class="ticker-charts-grid" data-testid="ticker-charts-grid">
+                ${this.tickers.map(ticker => `
+                    <div class="ticker-chart-cell" data-ticker="${ticker}" data-testid="chart-cell-${ticker}">
+                        <h4>${ticker}</h4>
+                        <canvas id="chart-${ticker}" data-testid="chart-${ticker}"></canvas>
+                        <div class="chart-status" id="status-${ticker}">Loading...</div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+
+        // Add event listeners for resolution buttons
+        container.querySelectorAll('.resolution-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const resolution = e.target.dataset.resolution;
+                this.switchResolution(resolution);
+            });
+        });
+
+        // Ticker input update button
+        const updateBtn = document.getElementById('update-tickers-btn');
+        if (updateBtn) {
+            updateBtn.addEventListener('click', () => this.updateTickers());
+        }
+
+        // Allow Enter key to update
+        const tickerInput = document.getElementById('multi-ticker-input');
+        if (tickerInput) {
+            tickerInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    this.updateTickers();
+                }
+            });
+        }
+
+        // Initialize charts for each ticker
+        this.tickers.forEach(ticker => {
+            this.initTickerChart(ticker);
+        });
+    }
+
+    /**
+     * Initialize Chart.js instance for a single ticker
+     */
+    initTickerChart(ticker) {
+        const canvas = document.getElementById(`chart-${ticker}`);
+        if (!canvas) {
+            console.warn(`Canvas not found for ticker: ${ticker}`);
+            return;
+        }
+
+        const ctx = canvas.getContext('2d');
+        this.charts[ticker] = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: ticker,
+                    data: [],
+                    borderColor: this.getTickerColor(ticker),
+                    backgroundColor: this.getTickerColor(ticker, 0.2),
+                    tension: 0.3,
+                    fill: true,
+                    pointRadius: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                scales: {
+                    y: {
+                        min: -1,
+                        max: 1,
+                        title: { display: false }
+                    },
+                    x: {
+                        display: true,
+                        ticks: { maxTicksLimit: 6 }
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            title: (items) => items[0]?.label || '',
+                            label: (context) => `Sentiment: ${context.raw?.toFixed(3) || 'N/A'}`
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    /**
+     * Get a unique color for each ticker
+     */
+    getTickerColor(ticker, alpha = 1) {
+        const colors = [
+            `rgba(75, 192, 192, ${alpha})`,   // teal
+            `rgba(54, 162, 235, ${alpha})`,   // blue
+            `rgba(255, 159, 64, ${alpha})`,   // orange
+            `rgba(153, 102, 255, ${alpha})`,  // purple
+            `rgba(255, 99, 132, ${alpha})`,   // red
+            `rgba(255, 205, 86, ${alpha})`,   // yellow
+            `rgba(201, 203, 207, ${alpha})`,  // gray
+            `rgba(46, 204, 113, ${alpha})`,   // green
+            `rgba(241, 90, 34, ${alpha})`,    // vermilion
+            `rgba(155, 89, 182, ${alpha})`    // violet
+        ];
+        const index = this.tickers.indexOf(ticker) % colors.length;
+        return colors[index];
+    }
+
+    /**
+     * Load all ticker data using batch API (SC-006: <1s for 10 tickers)
+     */
+    async loadAllData() {
+        const startTime = performance.now();
+
+        try {
+            // Use batch endpoint for parallel queries
+            const tickersParam = this.tickers.join(',');
+            const url = `${this.apiBaseUrl}/api/v2/timeseries/batch?tickers=${tickersParam}&resolution=${this.currentResolution}`;
+            console.log(`Batch fetching: ${url}`);
+
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+
+            // Update each ticker's chart
+            for (const ticker of this.tickers) {
+                const tickerData = data[ticker];
+                if (tickerData && tickerData.buckets) {
+                    this.bucketData[ticker] = tickerData.buckets;
+                    this.updateTickerChart(ticker, tickerData.buckets);
+
+                    // Cache for instant resolution switching
+                    if (this.cache) {
+                        await this.cache.set(ticker, this.currentResolution, tickerData.buckets);
+                    }
+                } else {
+                    this.updateTickerStatus(ticker, 'No data');
+                }
+            }
+
+            const elapsed = performance.now() - startTime;
+            console.log(`Batch load complete: ${elapsed.toFixed(0)}ms for ${this.tickers.length} tickers`);
+
+            // Verify SC-006 metric
+            if (elapsed > 1000 && this.tickers.length <= 10) {
+                console.warn(`SC-006 violation: ${elapsed.toFixed(0)}ms > 1000ms for ${this.tickers.length} tickers`);
+            }
+
+        } catch (error) {
+            console.error('Failed to load batch data:', error);
+            // Fallback to individual requests
+            await this.loadAllDataFallback();
+        }
+    }
+
+    /**
+     * Fallback: load data individually if batch fails
+     */
+    async loadAllDataFallback() {
+        console.log('Using fallback individual requests');
+
+        const promises = this.tickers.map(async (ticker) => {
+            try {
+                const url = `${this.apiBaseUrl}/api/v2/timeseries/${ticker}?resolution=${this.currentResolution}`;
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const data = await response.json();
+                this.bucketData[ticker] = data.buckets || [];
+                this.updateTickerChart(ticker, data.buckets || []);
+            } catch (error) {
+                console.error(`Failed to load ${ticker}:`, error);
+                this.updateTickerStatus(ticker, 'Error');
+            }
+        });
+
+        await Promise.all(promises);
+    }
+
+    /**
+     * Update a single ticker's chart
+     */
+    updateTickerChart(ticker, buckets) {
+        const chart = this.charts[ticker];
+        if (!chart) return;
+
+        if (!buckets || buckets.length === 0) {
+            this.updateTickerStatus(ticker, 'No data');
+            return;
+        }
+
+        const labels = buckets.map(b => {
+            const ts = b.bucket_timestamp || b.SK;
+            const date = new Date(ts);
+            if (['1m', '5m', '10m'].includes(this.currentResolution)) {
+                return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+            } else {
+                return date.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit' });
+            }
+        });
+
+        const avgData = buckets.map(b => b.avg !== undefined ? b.avg : (b.sum / b.count) || 0);
+
+        chart.data.labels = labels;
+        chart.data.datasets[0].data = avgData;
+        chart.update('none');
+
+        this.updateTickerStatus(ticker, `${buckets.length} points`);
+    }
+
+    /**
+     * Update status text for a ticker
+     */
+    updateTickerStatus(ticker, status) {
+        const statusEl = document.getElementById(`status-${ticker}`);
+        if (statusEl) {
+            statusEl.textContent = status;
+        }
+    }
+
+    /**
+     * Switch resolution for all tickers
+     */
+    async switchResolution(resolution) {
+        if (resolution === this.currentResolution) return;
+
+        console.log(`Switching resolution: ${this.currentResolution} -> ${resolution}`);
+        this.currentResolution = resolution;
+
+        // Update UI
+        document.querySelectorAll('#multi-ticker-container .resolution-btn').forEach(btn => {
+            const isActive = btn.dataset.resolution === resolution;
+            btn.classList.toggle('active', isActive);
+            btn.setAttribute('aria-pressed', isActive);
+        });
+
+        this.updateURL();
+
+        // Try cache first for instant switching
+        let allCached = true;
+        for (const ticker of this.tickers) {
+            if (this.cache) {
+                const cached = await this.cache.get(ticker, resolution);
+                if (cached) {
+                    this.bucketData[ticker] = cached;
+                    this.updateTickerChart(ticker, cached);
+                } else {
+                    allCached = false;
+                }
+            } else {
+                allCached = false;
+            }
+        }
+
+        // If not all cached, reload from API
+        if (!allCached) {
+            await this.loadAllData();
+        }
+
+        // Reconnect SSE
+        this.connectSSE();
+    }
+
+    /**
+     * Update tickers from input field
+     */
+    async updateTickers() {
+        const input = document.getElementById('multi-ticker-input');
+        if (!input) return;
+
+        const newTickers = input.value.toUpperCase()
+            .split(',')
+            .map(t => t.trim())
+            .filter(t => t.length > 0);
+
+        if (newTickers.length === 0) {
+            console.warn('No valid tickers entered');
+            return;
+        }
+
+        // Check for changes
+        const tickersChanged = JSON.stringify(this.tickers) !== JSON.stringify(newTickers);
+        if (!tickersChanged) return;
+
+        this.tickers = newTickers;
+        this.updateURL();
+
+        // Re-render grid and reload
+        this.renderCompareUI();
+        await this.loadAllData();
+        this.connectSSE();
+    }
+
+    /**
+     * Update URL with current state
+     */
+    updateURL() {
+        const url = new URL(window.location);
+        url.searchParams.set('tickers', this.tickers.join(','));
+        url.searchParams.set('resolution', this.currentResolution);
+        window.history.replaceState({}, '', url);
+    }
+
+    /**
+     * Connect SSE for all tickers with resolution filter
+     */
+    connectSSE() {
+        if (this.eventSource) {
+            this.eventSource.close();
+        }
+
+        const baseUrl = this.sseBaseUrl || this.apiBaseUrl;
+        if (!baseUrl) return;
+
+        // Use new tickers query param (T051)
+        const tickersParam = this.tickers.join(',');
+        const streamUrl = `${baseUrl}/api/v2/stream?tickers=${tickersParam}&resolutions=${this.currentResolution}`;
+        console.log('Multi-ticker SSE connecting:', streamUrl);
+
+        this.eventSource = new EventSource(streamUrl);
+
+        this.eventSource.addEventListener('bucket_update', (event) => {
+            try {
+                const bucket = JSON.parse(event.data);
+                this.handleBucketUpdate(bucket);
+            } catch (error) {
+                console.error('Failed to parse bucket_update:', error);
+            }
+        });
+
+        this.eventSource.addEventListener('partial_bucket', (event) => {
+            try {
+                const bucket = JSON.parse(event.data);
+                this.handleBucketUpdate(bucket);  // Treat same as full update
+            } catch (error) {
+                console.error('Failed to parse partial_bucket:', error);
+            }
+        });
+
+        this.eventSource.onerror = (error) => {
+            console.error('Multi-ticker SSE error:', error);
+        };
+    }
+
+    /**
+     * Handle bucket update for any ticker
+     */
+    handleBucketUpdate(bucket) {
+        const ticker = bucket.ticker;
+        if (!this.tickers.includes(ticker)) return;
+        if (bucket.resolution !== this.currentResolution) return;
+
+        console.log(`Bucket update for ${ticker}:`, bucket);
+
+        // Update bucket data
+        if (!this.bucketData[ticker]) {
+            this.bucketData[ticker] = [];
+        }
+
+        const existingIdx = this.bucketData[ticker].findIndex(
+            b => (b.bucket_timestamp || b.SK) === (bucket.bucket_timestamp || bucket.SK)
+        );
+
+        if (existingIdx >= 0) {
+            this.bucketData[ticker][existingIdx] = bucket;
+        } else {
+            this.bucketData[ticker].push(bucket);
+        }
+
+        this.updateTickerChart(ticker, this.bucketData[ticker]);
+    }
+
+    /**
+     * Clean up resources
+     */
+    destroy() {
+        if (this.eventSource) {
+            this.eventSource.close();
+            this.eventSource = null;
+        }
+        Object.values(this.charts).forEach(chart => {
+            if (chart) chart.destroy();
+        });
+        this.charts = {};
+    }
+}
+
+// Export singleton instances
 const timeseriesManager = new TimeseriesManager();
+const multiTickerManager = new MultiTickerManager();
 
 // Export for module systems if available
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { TimeseriesManager, timeseriesManager, RESOLUTIONS };
+    module.exports = {
+        TimeseriesManager,
+        MultiTickerManager,
+        timeseriesManager,
+        multiTickerManager,
+        RESOLUTIONS
+    };
 }

@@ -167,10 +167,10 @@
 ### Implementation for User Story 4
 
 - [x] T050 [US4] Implement batch query for multiple tickers in `src/lambdas/dashboard/timeseries.py`
-- [ ] T051 [US4] Add tickers query parameter to /api/v2/stream in `src/lambdas/sse_streaming/handler.py`
-- [ ] T052 [US4] Implement multi-ticker chart layout in `src/dashboard/app.js`
-- [ ] T053 [US4] Implement per-ticker independent updates in `src/dashboard/timeseries.js`
-- [ ] T054 [US4] Implement shared cache across users for same ticker+resolution in `src/lambdas/sse_streaming/cache.py` per `[CS-006]`
+- [x] T051 [US4] Add tickers query parameter to /api/v2/stream in `src/lambdas/sse_streaming/handler.py`
+- [x] T052 [US4] Implement multi-ticker chart layout in `src/dashboard/app.js`
+- [x] T053 [US4] Implement per-ticker independent updates in `src/dashboard/timeseries.js`
+- [x] T054 [US4] Implement shared cache across users for same ticker+resolution in `src/lambdas/sse_streaming/cache.py` per `[CS-006]`
 
 **Checkpoint**: Multi-ticker view loads in <1 second. Tests PASS.
 
