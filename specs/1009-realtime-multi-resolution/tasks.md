@@ -186,18 +186,18 @@
 
 ### Tests for User Story 5
 
-- [ ] T055 [P] [US5] Implement `tests/e2e/test_client_cache.py` with TestClientSideCache (Playwright) per `[CS-008]`
-- [ ] T056 [P] [US5] Implement `tests/e2e/test_sse_reconnection.py` for auto-reconnection behavior
+- [X] T055 [P] [US5] Implement `tests/e2e/test_client_cache.py` with TestClientSideCache (Playwright) per `[CS-008]`
+- [X] T056 [P] [US5] Implement `tests/e2e/test_sse_reconnection.py` for auto-reconnection behavior
 
-**Checkpoint**: E2E tests MUST FAIL initially
+**Checkpoint**: E2E tests implemented with TDD structure
 
 ### Implementation for User Story 5
 
-- [ ] T057 [US5] Implement SSE auto-reconnection with exponential backoff in `src/dashboard/app.js` per `[CS-007]`
-- [ ] T058 [US5] Implement fallback polling when SSE unavailable in `src/dashboard/app.js`
-- [ ] T059 [US5] Implement offline mode with IndexedDB cache access in `src/dashboard/cache.js`
-- [ ] T060 [US5] Add degraded mode indicator (subtle badge) in `src/dashboard/app.js`
-- [ ] T061 [US5] Implement cache version validation and invalidation in `src/dashboard/cache.js`
+- [X] T057 [US5] Implement SSE auto-reconnection with exponential backoff in `src/dashboard/app.js` per `[CS-007]`
+- [X] T058 [US5] Implement fallback polling when SSE unavailable in `src/dashboard/app.js`
+- [X] T059 [US5] Implement offline mode with IndexedDB cache access in `src/dashboard/cache.js`
+- [X] T060 [US5] Add degraded mode indicator (subtle badge) in `src/dashboard/app.js`
+- [X] T061 [US5] Implement cache version validation and invalidation in `src/dashboard/cache.js`
 
 **Checkpoint**: Disconnect/reconnect works smoothly. E2E tests PASS.
 

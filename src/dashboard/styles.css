@@ -106,6 +106,31 @@ header h1 {
     background-color: var(--disconnected-color);
 }
 
+/* Phase 7 (T060): Degraded mode indicators for connectivity resilience */
+
+/* Polling mode - yellow indicator (degraded but functional) */
+.status-dot.polling {
+    background-color: #f59e0b;  /* Amber/warning color */
+    animation: pulse 2s infinite;
+}
+
+/* Offline mode - red indicator */
+.status-dot.offline {
+    background-color: var(--disconnected-color);
+    animation: none;
+}
+
+/* Connecting/reconnecting mode - pulsing blue */
+.status-dot.connecting {
+    background-color: var(--primary-color);
+    animation: connecting-pulse 1s infinite;
+}
+
+@keyframes connecting-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.9); }
+}
+
 @keyframes pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.5; }
