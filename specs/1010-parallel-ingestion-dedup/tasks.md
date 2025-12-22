@@ -107,7 +107,7 @@
 
 ### Tests for User Story 3
 
-- [ ] T027 [P] [US3] Create `tests/unit/ingestion/test_source_attribution.py` with test cases:
+- [x] T027 [P] [US3] Create `tests/unit/ingestion/test_source_attribution.py` with test cases:
   - test_single_source_article_has_one_attribution
   - test_dual_source_article_has_both_attributions
   - test_attribution_contains_required_fields (article_id, url, crawl_timestamp, original_headline)
@@ -115,11 +115,11 @@
 
 ### Implementation for User Story 3
 
-- [ ] T029 [US3] Enhance `build_source_attribution()` in dedup.py to capture: article_id, url, crawl_timestamp, original_headline, source_name
-- [ ] T030 [US3] Modify Tiingo adapter field mapping in `src/lambdas/shared/adapters/tiingo.py` to expose source_name from response
-- [ ] T031 [P] [US3] Modify Finnhub adapter field mapping in `src/lambdas/shared/adapters/finnhub.py` to expose source_name from response
-- [ ] T032 [US3] Update DynamoDB item schema in data-model.md to document source_attribution map structure
-- [ ] T033 [US3] Add attribution aggregation endpoint stub in contracts/metrics-api.yaml (GET /api/v2/metrics/attribution)
+- [x] T029 [US3] Enhance `build_source_attribution()` in dedup.py to capture: article_id, url, crawl_timestamp, original_headline, source_name
+- [x] T030 [US3] Modify Tiingo adapter field mapping in `src/lambdas/shared/adapters/tiingo.py` to expose source_name from response
+- [x] T031 [P] [US3] Modify Finnhub adapter field mapping in `src/lambdas/shared/adapters/finnhub.py` to expose source_name from response
+- [x] T032 [US3] Update DynamoDB item schema in data-model.md to document source_attribution map structure
+- [x] T033 [US3] Add attribution aggregation endpoint stub in contracts/metrics-api.yaml (GET /api/v2/metrics/attribution)
 
 **Checkpoint**: Attribution tracking complete. All articles include detailed per-source provenance metadata.
 
@@ -133,18 +133,18 @@
 
 ### Tests for User Story 4
 
-- [ ] T034 [P] [US4] Create `tests/unit/ingestion/test_collision_metrics.py` with test cases:
+- [x] T034 [P] [US4] Create `tests/unit/ingestion/test_collision_metrics.py` with test cases:
   - test_metrics_track_articles_fetched_per_source
   - test_metrics_track_collisions_detected
   - test_collision_rate_calculation
   - test_metrics_published_to_cloudwatch
-- [ ] T035 [P] [US4] Create `tests/unit/ingestion/test_collision_alerts.py` for threshold alerting tests
+- [x] T035 [P] [US4] Create `tests/unit/ingestion/test_collision_alerts.py` for threshold alerting tests
 
 ### Implementation for User Story 4
 
-- [ ] T036 [US4] Create `src/lambdas/ingestion/metrics.py` with IngestionMetrics class to track: articles_fetched{source}, articles_stored, collisions_detected
-- [ ] T037 [US4] Implement collision_rate property calculation in IngestionMetrics
-- [ ] T038 [US4] Add `publish_to_cloudwatch()` method to emit metrics at end of Lambda invocation
+- [x] T036 [US4] Create `src/lambdas/ingestion/metrics.py` with IngestionMetrics class to track: articles_fetched{source}, articles_stored, collisions_detected
+- [x] T037 [US4] Implement collision_rate property calculation in IngestionMetrics
+- [x] T038 [US4] Add `publish_to_cloudwatch()` method to emit metrics at end of Lambda invocation
 - [ ] T039 [US4] Integrate IngestionMetrics into handler.py, incrementing counters during processing
 - [ ] T040 [US4] Add CloudWatch alarm threshold at collision_rate > 0.40 or < 0.05 per SC-008
 

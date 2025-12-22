@@ -45,6 +45,38 @@ paths:
         '500':
           description: Internal server error
 
+  /api/v2/metrics/attribution:
+    get:
+      summary: Get source attribution summary
+      description: Returns aggregated attribution statistics showing which sources contribute articles
+      operationId: getAttributionSummary
+      parameters:
+        - name: start_time
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Start of time range (ISO8601). Defaults to 24h ago.
+        - name: end_time
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: End of time range (ISO8601). Defaults to now.
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttributionSummaryResponse'
+        '401':
+          description: Unauthorized
+        '500':
+          description: Internal server error
+
   /api/v2/metrics/collisions:
     get:
       summary: Get collision statistics
@@ -110,6 +142,40 @@ components:
               articles_fetched: { type: integer }
               articles_contributed: { type: integer }
               unique_only: { type: integer }
+
+    AttributionSummaryResponse:
+      type: object
+      required:
+        - time_range
+        - total_articles
+        - by_source
+        - by_wire_service
+      properties:
+        time_range:
+          type: object
+          properties:
+            start: { type: string, format: date-time }
+            end: { type: string, format: date-time }
+        total_articles:
+          type: integer
+          description: Total unique articles in time range
+        by_source:
+          type: object
+          description: Breakdown by API source (tiingo, finnhub)
+          additionalProperties:
+            type: object
+            properties:
+              articles_provided: { type: integer }
+              exclusive_articles: { type: integer }
+              shared_articles: { type: integer }
+        by_wire_service:
+          type: object
+          description: Breakdown by wire service (reuters, ap, bloomberg, etc.)
+          additionalProperties:
+            type: object
+            properties:
+              count: { type: integer }
+              sources: { type: array, items: { type: string } }
 
     CollisionStatsResponse:
       type: object

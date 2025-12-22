@@ -4,12 +4,15 @@ Provides structured metric publishing for operational visibility:
 - Failover events (count, duration)
 - Collection metrics (success rate, latency)
 - Data quality metrics (duplicate rate)
+- Cross-source collision metrics (Feature 1010)
 
 Architecture:
     metrics.py --> boto3 CloudWatch --> CloudWatch Metrics
 """
 
 import logging
+import time
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal
@@ -452,3 +455,238 @@ def create_metrics_publisher(
         Configured MetricsPublisher instance
     """
     return MetricsPublisher(cloudwatch_client=cloudwatch_client)
+
+
+class IngestionMetrics:
+    """Tracks cross-source ingestion and collision metrics.
+
+    Feature 1010: Tracks deduplication metrics for parallel ingestion.
+
+    Metrics tracked:
+    - articles_fetched: Per-source fetch counts
+    - articles_stored: Unique articles stored after dedup
+    - collisions_detected: Duplicate articles found across sources
+    - collision_rate: collisions / total_fetched
+    - duration_ms: Total processing time
+
+    Thresholds (per SC-008):
+    - collision_rate > 0.40: Alert (too high, possible duplicate data)
+    - collision_rate < 0.05: Alert (too low, possible source mismatch)
+    - Expected range: 15-25% for typical financial news
+    """
+
+    LOW_COLLISION_THRESHOLD = 0.05
+    HIGH_COLLISION_THRESHOLD = 0.40
+
+    def __init__(self) -> None:
+        """Initialize metrics tracking."""
+        self.articles_fetched: dict[str, int] = defaultdict(int)
+        self.articles_stored: int = 0
+        self.collisions_detected: int = 0
+        self._start_time: float | None = None
+        self._end_time: float | None = None
+
+    def record_fetch(self, source: str, count: int) -> None:
+        """Record articles fetched from a source.
+
+        Args:
+            source: Source name (tiingo or finnhub)
+            count: Number of articles fetched
+        """
+        self.articles_fetched[source] += count
+
+    def record_stored(self) -> None:
+        """Record a new unique article stored."""
+        self.articles_stored += 1
+
+    def record_collision(self) -> None:
+        """Record a duplicate article detected."""
+        self.collisions_detected += 1
+
+    def start_timing(self) -> None:
+        """Start timing the ingestion run."""
+        self._start_time = time.time()
+
+    def stop_timing(self) -> None:
+        """Stop timing the ingestion run."""
+        self._end_time = time.time()
+
+    @property
+    def total_fetched(self) -> int:
+        """Total articles fetched across all sources."""
+        return sum(self.articles_fetched.values())
+
+    @property
+    def collision_rate(self) -> float:
+        """Calculate collision rate.
+
+        Returns:
+            Collision rate as a fraction (0.0 to 1.0).
+            Returns 0.0 if no articles fetched.
+        """
+        total = self.total_fetched
+        if total == 0:
+            return 0.0
+        return self.collisions_detected / total
+
+    @property
+    def duration_ms(self) -> int:
+        """Get processing duration in milliseconds."""
+        if self._start_time is None or self._end_time is None:
+            return 0
+        return int((self._end_time - self._start_time) * 1000)
+
+    def is_anomalous(self) -> bool:
+        """Check if collision rate is outside normal range.
+
+        Returns:
+            True if collision rate is anomalous (< 5% or > 40%)
+            and both sources were fetched.
+        """
+        # Zero rate is expected for single source or empty ingestion
+        if self.total_fetched == 0:
+            return False
+
+        # Check if we have data from both sources
+        has_both_sources = (
+            self.articles_fetched.get("tiingo", 0) > 0
+            and self.articles_fetched.get("finnhub", 0) > 0
+        )
+
+        if not has_both_sources:
+            # Single source ingestion - zero collisions is expected
+            return False
+
+        rate = self.collision_rate
+        return (
+            rate < self.LOW_COLLISION_THRESHOLD or rate > self.HIGH_COLLISION_THRESHOLD
+        )
+
+    @property
+    def anomaly_type(self) -> str | None:
+        """Get the type of anomaly detected.
+
+        Returns:
+            "high_collision_rate", "low_collision_rate", or None
+        """
+        if not self.is_anomalous():
+            return None
+
+        rate = self.collision_rate
+        if rate > self.HIGH_COLLISION_THRESHOLD:
+            return "high_collision_rate"
+        elif rate < self.LOW_COLLISION_THRESHOLD:
+            return "low_collision_rate"
+        return None
+
+    def get_anomaly_message(self) -> str | None:
+        """Get a descriptive message for the anomaly.
+
+        Returns:
+            Human-readable anomaly description or None if normal.
+        """
+        anomaly = self.anomaly_type
+        rate_pct = self.collision_rate * 100
+
+        if anomaly == "high_collision_rate":
+            return (
+                f"High collision rate detected: {rate_pct:.1f}% "
+                f"(threshold: >{self.HIGH_COLLISION_THRESHOLD * 100:.0f}%). "
+                "This may indicate duplicate data in sources."
+            )
+        elif anomaly == "low_collision_rate":
+            return (
+                f"Low collision rate detected: {rate_pct:.1f}% "
+                f"(threshold: <{self.LOW_COLLISION_THRESHOLD * 100:.0f}%). "
+                "This may indicate source data mismatch or API issues."
+            )
+        return None
+
+    def reset(self) -> None:
+        """Reset all metrics to initial state."""
+        self.articles_fetched = defaultdict(int)
+        self.articles_stored = 0
+        self.collisions_detected = 0
+        self._start_time = None
+        self._end_time = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Export metrics as dictionary for logging.
+
+        Returns:
+            Dictionary containing all metric values.
+        """
+        return {
+            "articles_fetched": dict(self.articles_fetched),
+            "total_fetched": self.total_fetched,
+            "articles_stored": self.articles_stored,
+            "collisions_detected": self.collisions_detected,
+            "collision_rate": self.collision_rate,
+            "duration_ms": self.duration_ms,
+            "is_anomalous": self.is_anomalous(),
+            "anomaly_type": self.anomaly_type,
+        }
+
+    def publish_to_cloudwatch(self, namespace: str = METRICS_NAMESPACE) -> None:
+        """Publish metrics to CloudWatch.
+
+        Args:
+            namespace: CloudWatch namespace for metrics
+        """
+        try:
+            client = boto3.client("cloudwatch")
+
+            metric_data = [
+                {
+                    "MetricName": "TiingoArticlesFetched",
+                    "Value": self.articles_fetched.get("tiingo", 0),
+                    "Unit": "Count",
+                },
+                {
+                    "MetricName": "FinnhubArticlesFetched",
+                    "Value": self.articles_fetched.get("finnhub", 0),
+                    "Unit": "Count",
+                },
+                {
+                    "MetricName": "ArticlesStored",
+                    "Value": self.articles_stored,
+                    "Unit": "Count",
+                },
+                {
+                    "MetricName": "CollisionsDetected",
+                    "Value": self.collisions_detected,
+                    "Unit": "Count",
+                },
+                {
+                    "MetricName": "CollisionRate",
+                    "Value": self.collision_rate,
+                    "Unit": "None",
+                },
+                {
+                    "MetricName": "AnomalousCollisionRate",
+                    "Value": 1 if self.is_anomalous() else 0,
+                    "Unit": "None",
+                },
+            ]
+
+            if self.duration_ms > 0:
+                metric_data.append(
+                    {
+                        "MetricName": "IngestionDurationMs",
+                        "Value": self.duration_ms,
+                        "Unit": "Milliseconds",
+                    }
+                )
+
+            client.put_metric_data(Namespace=namespace, MetricData=metric_data)
+
+            logger.info(
+                "Published ingestion metrics to CloudWatch",
+                extra={
+                    "namespace": namespace,
+                    "metrics": self.to_dict(),
+                },
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to publish CloudWatch metrics: {e}")
