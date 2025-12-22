@@ -83,8 +83,8 @@
 - [X] T024 [US1] Implement BucketUpdateEvent and PartialBucketEvent in `src/lambdas/sse_streaming/timeseries_models.py`
 - [X] T025 [US1] Implement should_send_event() in `src/lambdas/sse_streaming/resolution_filter.py` per `[CS-007]`
 - [X] T026 [US1] Add resolutions query parameter to /api/v2/stream endpoint in `src/lambdas/sse_streaming/handler.py`
-- [ ] T027 [US1] Implement partial bucket streaming with progress_pct in `src/lambdas/sse_streaming/stream.py`
-- [ ] T028 [US1] Add 100ms debounce to multi-resolution updates in `src/lambdas/sse_streaming/stream.py`
+- [x] T027 [US1] Implement partial bucket streaming with progress_pct in `src/lambdas/sse_streaming/stream.py`
+- [x] T028 [US1] Add 100ms debounce to multi-resolution updates in `src/lambdas/sse_streaming/stream.py`
 
 **Checkpoint**: Run full test suite - fanout and SSE tests MUST PASS. Manual test: trigger ingestion, observe SSE events.
 

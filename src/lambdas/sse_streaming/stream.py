@@ -3,6 +3,10 @@
 Generates SSE events including heartbeats, metrics, and sentiment updates.
 Per FR-006: Heartbeat every 30 seconds
 Per FR-010: All events include event type, unique ID, and JSON payload
+
+Feature 1009 additions:
+- T027: Partial bucket streaming with progress_pct
+- T028: 100ms debounce for multi-resolution updates
 """
 
 import asyncio
@@ -21,10 +25,61 @@ from models import (
     SSEEvent,
 )
 from polling import PollingService, get_polling_service
+from timeseries_models import PartialBucketEvent
 
 from src.lambdas.shared.logging_utils import sanitize_for_log
+from src.lib.timeseries import Resolution, calculate_bucket_progress, floor_to_bucket
 
 logger = logging.getLogger(__name__)
+
+# Default debounce interval in milliseconds (T028)
+DEFAULT_DEBOUNCE_MS = 100
+
+
+class Debouncer:
+    """
+    Debounce mechanism for rate-limiting event emissions.
+
+    Canonical: [CS-007] "Avoid flooding clients with rapid updates"
+    Task: T028 - 100ms debounce for multi-resolution updates
+    """
+
+    def __init__(self, interval_ms: int = DEFAULT_DEBOUNCE_MS):
+        """Initialize debouncer.
+
+        Args:
+            interval_ms: Minimum interval between emissions (default 100ms)
+        """
+        self._interval_seconds = interval_ms / 1000.0
+        self._last_emit: dict[str, float] = {}  # key -> last emit timestamp
+
+    def should_emit(self, key: str) -> bool:
+        """Check if enough time has passed to emit for this key.
+
+        Args:
+            key: Unique identifier for the debounce group (e.g., "AAPL#5m")
+
+        Returns:
+            True if emission is allowed, False if debounced
+        """
+        current_time = time.time()
+        last_emit = self._last_emit.get(key, 0.0)
+
+        if current_time - last_emit >= self._interval_seconds:
+            self._last_emit[key] = current_time
+            return True
+        return False
+
+    def reset(self, key: str | None = None) -> None:
+        """Reset debounce state.
+
+        Args:
+            key: Specific key to reset, or None to reset all
+        """
+        if key is None:
+            self._last_emit.clear()
+        else:
+            self._last_emit.pop(key, None)
 
 
 class EventBuffer:
@@ -73,6 +128,10 @@ class SSEStreamGenerator:
 
     Combines heartbeats, metrics updates, and sentiment events
     into a single stream per connection.
+
+    Feature 1009 additions:
+    - T027: Partial bucket streaming with progress_pct
+    - T028: 100ms debounce for multi-resolution updates
     """
 
     def __init__(
@@ -80,6 +139,7 @@ class SSEStreamGenerator:
         conn_manager: ConnectionManager | None = None,
         poll_service: PollingService | None = None,
         heartbeat_interval: int | None = None,
+        debounce_ms: int = DEFAULT_DEBOUNCE_MS,
     ):
         """Initialize stream generator.
 
@@ -88,6 +148,7 @@ class SSEStreamGenerator:
             poll_service: Polling service instance
             heartbeat_interval: Heartbeat interval in seconds.
                               Defaults to SSE_HEARTBEAT_INTERVAL or 30.
+            debounce_ms: Debounce interval for bucket updates (default 100ms)
         """
         self._conn_manager = conn_manager or connection_manager
         self._poll_service = poll_service or get_polling_service()
@@ -96,6 +157,7 @@ class SSEStreamGenerator:
         )
         self._event_buffer = EventBuffer()
         self._start_time = time.time()
+        self._debouncer = Debouncer(interval_ms=debounce_ms)
 
     @property
     def heartbeat_interval(self) -> int:
@@ -136,6 +198,62 @@ class SSEStreamGenerator:
                 timestamp=datetime.now(UTC),
             ),
         )
+
+    def _create_partial_bucket_event(
+        self,
+        ticker: str,
+        resolution: Resolution,
+        bucket_data: dict,
+    ) -> SSEEvent:
+        """Create a partial bucket event with progress_pct.
+
+        Task T027: Partial bucket streaming with progress_pct.
+        Canonical: [CS-011] "Partial aggregates with progress indicators"
+
+        Args:
+            ticker: Stock ticker symbol
+            resolution: Time resolution of the bucket
+            bucket_data: Current aggregated bucket data (OHLC, counts, etc.)
+
+        Returns:
+            SSEEvent containing PartialBucketEvent data
+        """
+        # Calculate current bucket start time
+        now = datetime.now(UTC)
+        bucket_start = floor_to_bucket(now, resolution)
+
+        # Calculate progress through current bucket
+        progress_pct = calculate_bucket_progress(bucket_start, resolution)
+
+        event_data = PartialBucketEvent(
+            ticker=ticker,
+            resolution=resolution,
+            bucket=bucket_data,
+            progress_pct=progress_pct,
+            is_partial=True,
+            timestamp=now,
+        )
+
+        return SSEEvent(
+            event="partial_bucket",
+            data=event_data.model_dump(),
+        )
+
+    def should_emit_bucket_update(self, ticker: str, resolution: Resolution) -> bool:
+        """Check if bucket update should be emitted (with debounce).
+
+        Task T028: 100ms debounce for multi-resolution updates.
+        Prevents flooding clients with rapid updates.
+
+        Args:
+            ticker: Stock ticker symbol
+            resolution: Time resolution of the bucket
+
+        Returns:
+            True if update should be emitted, False if debounced
+        """
+        debounce_key = f"{ticker}#{resolution.value}"
+        return self._debouncer.should_emit(debounce_key)
 
     async def generate_global_stream(
         self,
