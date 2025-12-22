@@ -8,8 +8,9 @@ Performance optimization (C1):
 - Cache survives Lambda warm invocations
 
 Thread-safety (Feature 1010):
-- Module-level lock protects cache access during parallel ingestion
-- record_failure() and can_execute() are thread-safe
+- Module-level lock protects cache dictionary access during parallel ingestion
+- Deep copy on cache retrieval prevents shared mutable state between threads
+- record_failure() and can_execute() are thread-safe via isolated state copies
 """
 
 import logging
@@ -38,11 +39,22 @@ _cache_stats = {"hits": 0, "misses": 0}
 # Thread-safety lock for cache access (Feature 1010)
 _circuit_breaker_lock = threading.Lock()
 
+# Per-service locks for atomic read-modify-write operations
+# Prevents race conditions during concurrent record_failure/record_success calls
+_service_locks: dict[str, threading.Lock] = {
+    "tiingo": threading.Lock(),
+    "finnhub": threading.Lock(),
+    "sendgrid": threading.Lock(),
+}
+
 
 def _get_cached_state(service: str) -> "CircuitBreakerState | None":
     """Get circuit breaker state from cache if not expired.
 
     Thread-safe: Uses _circuit_breaker_lock for synchronized access.
+
+    Note: Callers must use _service_locks[service] when performing
+    read-modify-write operations to prevent race conditions.
     """
     with _circuit_breaker_lock:
         if service in _circuit_breaker_cache:
@@ -366,62 +378,68 @@ class CircuitBreakerManager:
     ) -> CircuitBreakerState:
         """Record successful API call and save state.
 
+        Thread-safe: Uses per-service lock to make read-modify-write atomic.
+
         Args:
             service: Service name
 
         Returns:
             Updated CircuitBreakerState
         """
-        state = self.get_state(service)
-        old_state = state.state
-        state.record_success()
+        with _service_locks[service]:
+            state = self.get_state(service)
+            old_state = state.state
+            state.record_success()
 
-        # Only persist if state changed (half_open → closed)
-        if old_state != state.state:
-            self.save_state(state)
-            logger.info(
-                "Circuit breaker recovered",
-                extra={
-                    "service": service,
-                    "old_state": old_state,
-                    "new_state": "closed",
-                },
-            )
-        else:
-            # Just update cache timestamp
-            _set_cached_state(service, state)
+            # Only persist if state changed (half_open → closed)
+            if old_state != state.state:
+                self.save_state(state)
+                logger.info(
+                    "Circuit breaker recovered",
+                    extra={
+                        "service": service,
+                        "old_state": old_state,
+                        "new_state": "closed",
+                    },
+                )
+            else:
+                # Just update cache timestamp
+                _set_cached_state(service, state)
 
-        return state
+            return state
 
     def record_failure(
         self, service: Literal["tiingo", "finnhub", "sendgrid"]
     ) -> CircuitBreakerState:
         """Record failed API call and save state.
 
+        Thread-safe: Uses per-service lock to make read-modify-write atomic.
+
         Args:
             service: Service name
 
         Returns:
             Updated CircuitBreakerState
         """
-        state = self.get_state(service)
-        old_state = state.state
-        state.record_failure()
+        with _service_locks[service]:
+            state = self.get_state(service)
+            old_state = state.state
+            state.record_failure()
 
-        # Always persist failures (metrics tracking)
-        self.save_state(state)
+            # Always persist failures (metrics tracking)
+            self.save_state(state)
 
-        if old_state != state.state:
-            logger.warning(
-                "Circuit breaker tripped",
-                extra={
-                    "service": service,
-                    "failure_count": state.failure_count,
-                    "total_opens": state.total_opens,
-                },
-            )
+            if old_state != state.state:
+                logger.warning(
+                    "Circuit breaker tripped",
+                    extra={
+                        "service": service,
+                        "failure_count": state.failure_count,
+                        "total_opens": state.total_opens,
+                    },
+                )
 
-        return state
+            return state
 
     def can_execute(self, service: Literal["tiingo", "finnhub", "sendgrid"]) -> bool:
         """Check if request to service is allowed.
