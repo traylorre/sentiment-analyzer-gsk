@@ -232,8 +232,12 @@ class TimeseriesManager {
             return;
         }
 
-        const startTime = performance.now();
-        console.log(`Switching resolution: ${this.currentResolution} -> ${resolution}`);
+        // Performance instrumentation: mark start
+        const switchId = `resolution-switch-${Date.now()}`;
+        performance.mark(`${switchId}-start`);
+
+        const previousResolution = this.currentResolution;
+        console.log(`Switching resolution: ${previousResolution} -> ${resolution}`);
 
         this.currentResolution = resolution;
         this.updateSelectorUI();
@@ -241,18 +245,41 @@ class TimeseriesManager {
 
         // Try cache first for instant response
         let data = null;
+        let cacheHit = false;
         if (this.cache) {
             data = await this.cache.get(this.currentTicker, resolution);
+            cacheHit = data !== null;
         }
 
         if (data) {
-            const elapsed = performance.now() - startTime;
-            console.log(`Cache hit: ${elapsed.toFixed(1)}ms`);
             this.updateChart(data);
         } else {
             // Fall back to API
             await this.loadData();
         }
+
+        // Performance instrumentation: mark end and measure
+        performance.mark(`${switchId}-end`);
+        performance.measure(switchId, `${switchId}-start`, `${switchId}-end`);
+
+        const entries = performance.getEntriesByName(switchId, 'measure');
+        const duration = entries.length > 0 ? entries[0].duration : 0;
+
+        // Expose metrics for E2E tests
+        window.lastSwitchMetrics = {
+            duration_ms: duration,
+            from_resolution: previousResolution,
+            to_resolution: resolution,
+            cache_hit: cacheHit,
+            timestamp: Date.now()
+        };
+
+        console.log(`Resolution switch completed in ${duration.toFixed(1)}ms (cache: ${cacheHit})`);
+
+        // Clean up performance entries to avoid memory leak
+        performance.clearMarks(`${switchId}-start`);
+        performance.clearMarks(`${switchId}-end`);
+        performance.clearMeasures(switchId);
 
         // Reconnect SSE with new resolution filter
         this.connectSSE();
@@ -934,7 +961,12 @@ class MultiTickerManager {
     async switchResolution(resolution) {
         if (resolution === this.currentResolution) return;
 
-        console.log(`Switching resolution: ${this.currentResolution} -> ${resolution}`);
+        // Performance instrumentation: mark start
+        const switchId = `multi-resolution-switch-${Date.now()}`;
+        performance.mark(`${switchId}-start`);
+
+        const previousResolution = this.currentResolution;
+        console.log(`Switching resolution: ${previousResolution} -> ${resolution}`);
         this.currentResolution = resolution;
 
         // Update UI
@@ -966,6 +998,29 @@ class MultiTickerManager {
         if (!allCached) {
             await this.loadAllData();
         }
+
+        // Performance instrumentation: mark end and measure
+        performance.mark(`${switchId}-end`);
+        performance.measure(switchId, `${switchId}-start`, `${switchId}-end`);
+
+        const entries = performance.getEntriesByName(switchId, 'measure');
+        const duration = entries.length > 0 ? entries[0].duration : 0;
+
+        // Expose metrics for E2E tests
+        window.lastSwitchMetrics = {
+            duration_ms: duration,
+            from_resolution: previousResolution,
+            to_resolution: resolution,
+            cache_hit: allCached,
+            timestamp: Date.now()
+        };
+
+        console.log(`Multi-ticker resolution switch completed in ${duration.toFixed(1)}ms (all cached: ${allCached})`);
+
+        // Clean up performance entries to avoid memory leak
+        performance.clearMarks(`${switchId}-start`);
+        performance.clearMarks(`${switchId}-end`);
+        performance.clearMeasures(switchId);
 
         // Reconnect SSE
         this.connectSSE();
