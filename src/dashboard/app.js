@@ -38,7 +38,11 @@ const state = {
         negative: 0,
         byTag: {}
     },
-    recentItems: []
+    recentItems: [],
+    // Phase 7: Connectivity Resilience (US5) state
+    connectionMode: 'connecting',  // 'streaming' | 'polling' | 'offline' | 'connecting'
+    isOnline: navigator.onLine,
+    reconnectTimer: null
 };
 
 /**
@@ -49,6 +53,9 @@ async function initDashboard() {
 
     // Initialize charts
     initCharts();
+
+    // Phase 7: Set up offline/online event listeners [CS-007]
+    setupConnectivityListeners();
 
     // Initialize timeseries module (Feature 1009)
     if (typeof timeseriesManager !== 'undefined') {
@@ -67,6 +74,82 @@ async function initDashboard() {
     connectSSE();
 
     console.log('Dashboard initialized');
+}
+
+/**
+ * Phase 7 (T059): Set up network connectivity listeners
+ *
+ * Canonical Source: [CS-007] MDN Server-Sent Events
+ * FR-009: System MUST automatically reconnect after connection loss
+ */
+function setupConnectivityListeners() {
+    // Listen for online/offline events
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    // Set initial state
+    state.isOnline = navigator.onLine;
+    if (!state.isOnline) {
+        handleOffline();
+    }
+}
+
+/**
+ * Phase 7 (T059): Handle coming back online
+ *
+ * SC-007: Automatic reconnection within 5 seconds
+ */
+function handleOnline() {
+    console.log('Network: Online');
+    state.isOnline = true;
+
+    // Reset retry counter for fresh reconnection attempt
+    state.sseRetries = 0;
+
+    // Clear any pending reconnect timers
+    if (state.reconnectTimer) {
+        clearTimeout(state.reconnectTimer);
+        state.reconnectTimer = null;
+    }
+
+    // Attempt immediate reconnection to SSE
+    if (!state.eventSource || state.eventSource.readyState === EventSource.CLOSED) {
+        console.log('Reconnecting SSE after coming online...');
+        connectSSE();
+    }
+
+    updateConnectionMode('connecting');
+}
+
+/**
+ * Phase 7 (T059): Handle going offline
+ *
+ * FR-009: Dashboard remains functional during connectivity issues
+ */
+function handleOffline() {
+    console.log('Network: Offline');
+    state.isOnline = false;
+
+    // Close SSE connection if active
+    if (state.eventSource) {
+        state.eventSource.close();
+        state.eventSource = null;
+    }
+
+    // Stop polling (no point when offline)
+    if (state.pollInterval) {
+        clearInterval(state.pollInterval);
+        state.pollInterval = null;
+    }
+
+    // Clear reconnect timers
+    if (state.reconnectTimer) {
+        clearTimeout(state.reconnectTimer);
+        state.reconnectTimer = null;
+    }
+
+    updateConnectionMode('offline');
+    console.log('Cached data remains accessible via IndexedDB');
 }
 
 /**
@@ -290,15 +373,26 @@ function updateRecentItems(items) {
 /**
  * Connect to Server-Sent Events stream
  *
+ * Phase 7 (T057): Enhanced with exponential backoff (1s, 2s, 4s, 8s cap)
  * Uses SSE_BASE_URL for the SSE Lambda (two-Lambda architecture).
  * Falls back to API_BASE_URL if SSE_BASE_URL is not configured.
+ *
+ * Canonical Source: [CS-007] MDN Server-Sent Events
  */
 function connectSSE() {
+    // Phase 7: Don't attempt connection if offline
+    if (!state.isOnline) {
+        console.log('Cannot connect SSE: offline');
+        updateConnectionMode('offline');
+        return;
+    }
+
     if (state.eventSource) {
         state.eventSource.close();
     }
 
     console.log('Connecting to SSE stream...');
+    updateConnectionMode('connecting');
 
     // Use SSE_BASE_URL if configured, otherwise fall back to API_BASE_URL
     const baseUrl = CONFIG.SSE_BASE_URL || CONFIG.API_BASE_URL;
@@ -310,11 +404,18 @@ function connectSSE() {
         console.log('SSE connection established');
         state.sseRetries = 0;
         updateConnectionStatus(true);
+        updateConnectionMode('streaming');
 
         // Clear fallback polling if active
         if (state.pollInterval) {
             clearInterval(state.pollInterval);
             state.pollInterval = null;
+        }
+
+        // Clear any pending reconnect timers
+        if (state.reconnectTimer) {
+            clearTimeout(state.reconnectTimer);
+            state.reconnectTimer = null;
         }
     };
 
@@ -352,12 +453,21 @@ function connectSSE() {
         state.eventSource.close();
         state.eventSource = null;
 
-        // Retry connection with exponential backoff
+        // Phase 7: Don't retry if we went offline
+        if (!state.isOnline) {
+            updateConnectionMode('offline');
+            return;
+        }
+
+        // Phase 7 (T057): Retry with exponential backoff (1s, 2s, 4s, 8s cap)
         if (state.sseRetries < CONFIG.SSE_MAX_RETRIES) {
             state.sseRetries++;
-            const delay = CONFIG.SSE_RECONNECT_DELAY * Math.pow(2, state.sseRetries - 1);
+            // Calculate delay with 8 second cap per spec
+            const rawDelay = CONFIG.SSE_RECONNECT_DELAY * Math.pow(2, state.sseRetries - 1);
+            const delay = Math.min(rawDelay, 8000);  // Cap at 8 seconds per spec
             console.log(`Retrying SSE connection in ${delay}ms (attempt ${state.sseRetries}/${CONFIG.SSE_MAX_RETRIES})`);
-            setTimeout(connectSSE, delay);
+            updateConnectionMode('connecting');
+            state.reconnectTimer = setTimeout(connectSSE, delay);
         } else {
             console.log('Max SSE retries reached, falling back to polling');
             startPolling();
@@ -380,18 +490,89 @@ function handleSSEMessage(data) {
 }
 
 /**
- * Start polling as fallback when SSE fails
+ * Phase 7 (T058): Start polling as fallback when SSE fails
+ *
+ * FR-010: System MUST fall back to periodic polling if streaming
+ * connection cannot be established.
+ *
+ * Uses 5-second interval per spec for faster updates in degraded mode.
  */
 function startPolling() {
+    // Phase 7: Don't poll if offline
+    if (!state.isOnline) {
+        console.log('Cannot start polling: offline');
+        updateConnectionMode('offline');
+        return;
+    }
+
     if (state.pollInterval) {
         return; // Already polling
     }
 
     console.log('Starting polling fallback');
+    updateConnectionMode('polling');
+
+    // Use faster 5s interval per spec (FR-010) when in degraded mode
+    const FALLBACK_POLL_INTERVAL = 5000;  // 5 seconds per spec
+
+    // Fetch immediately, then poll
+    fetchMetrics();
 
     state.pollInterval = setInterval(async () => {
-        await fetchMetrics();
-    }, CONFIG.METRICS_POLL_INTERVAL);
+        if (state.isOnline) {
+            await fetchMetrics();
+        }
+    }, FALLBACK_POLL_INTERVAL);
+}
+
+/**
+ * Phase 7 (T060): Update connection mode and show appropriate indicator
+ *
+ * Connection modes:
+ * - 'streaming': SSE connected (green indicator)
+ * - 'polling': Fallback polling active (yellow indicator)
+ * - 'offline': No network connection (red indicator)
+ * - 'connecting': Attempting to connect (pulsing indicator)
+ *
+ * US5 Acceptance: Display a subtle indicator of degraded mode.
+ */
+function updateConnectionMode(mode) {
+    state.connectionMode = mode;
+
+    const indicator = document.getElementById('status-indicator');
+    const text = document.getElementById('status-text');
+
+    // Remove all mode classes
+    indicator.classList.remove('connected', 'disconnected', 'polling', 'offline', 'connecting');
+
+    switch (mode) {
+        case 'streaming':
+            indicator.classList.add('connected');
+            text.textContent = 'Connected';
+            state.connected = true;
+            break;
+        case 'polling':
+            indicator.classList.add('polling');
+            text.textContent = 'Polling';
+            state.connected = true;  // Still receiving data
+            break;
+        case 'offline':
+            indicator.classList.add('offline');
+            text.textContent = 'Offline';
+            state.connected = false;
+            break;
+        case 'connecting':
+            indicator.classList.add('connecting');
+            text.textContent = 'Reconnecting...';
+            state.connected = false;
+            break;
+        default:
+            indicator.classList.add('disconnected');
+            text.textContent = 'Disconnected';
+            state.connected = false;
+    }
+
+    console.log(`Connection mode: ${mode}`);
 }
 
 /**
@@ -444,6 +625,13 @@ window.addEventListener('beforeunload', () => {
     if (state.pollInterval) {
         clearInterval(state.pollInterval);
     }
+    // Phase 7: Clear reconnect timer
+    if (state.reconnectTimer) {
+        clearTimeout(state.reconnectTimer);
+    }
+    // Phase 7: Remove connectivity listeners
+    window.removeEventListener('online', handleOnline);
+    window.removeEventListener('offline', handleOffline);
     // Cleanup timeseries module (Feature 1009)
     if (typeof timeseriesManager !== 'undefined') {
         timeseriesManager.destroy();
