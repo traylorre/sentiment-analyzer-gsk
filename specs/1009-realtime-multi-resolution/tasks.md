@@ -159,14 +159,14 @@
 
 ### Tests for User Story 4
 
-- [ ] T048 [P] [US4] Implement `tests/unit/test_multi_ticker_query.py` for batch ticker queries
-- [ ] T049 [P] [US4] Implement `tests/unit/test_shared_cache.py` for cross-user cache sharing
+- [x] T048 [P] [US4] Implement `tests/unit/test_multi_ticker_query.py` for batch ticker queries
+- [x] T049 [P] [US4] Implement `tests/unit/test_shared_cache.py` for cross-user cache sharing
 
 **Checkpoint**: Multi-ticker tests MUST FAIL initially
 
 ### Implementation for User Story 4
 
-- [ ] T050 [US4] Implement batch query for multiple tickers in `src/lambdas/dashboard/timeseries.py`
+- [x] T050 [US4] Implement batch query for multiple tickers in `src/lambdas/dashboard/timeseries.py`
 - [ ] T051 [US4] Add tickers query parameter to /api/v2/stream in `src/lambdas/sse_streaming/handler.py`
 - [ ] T052 [US4] Implement multi-ticker chart layout in `src/dashboard/app.js`
 - [ ] T053 [US4] Implement per-ticker independent updates in `src/dashboard/timeseries.js`
