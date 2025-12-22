@@ -383,6 +383,9 @@ class TestProcessArticle:
 
     DFA-002: _process_article now returns SNS message dict for batching
     instead of publishing immediately. Returns None for duplicates.
+
+    Feature 1010: Updated to use cross-source dedup with headline-based keys.
+    Now uses upsert_article_with_source() instead of put_item_if_not_exists().
     """
 
     @mock_aws
@@ -404,9 +407,10 @@ class TestProcessArticle:
 
         article = create_news_article("unique-123", "tiingo", "New Article")
 
+        # Feature 1010: Mock upsert_article_with_source instead of put_item_if_not_exists
         with patch(
-            "src.lambdas.ingestion.handler.put_item_if_not_exists",
-            return_value=True,
+            "src.lambdas.ingestion.handler.upsert_article_with_source",
+            return_value="created",
         ):
             result = _process_article(
                 article=article,
@@ -419,8 +423,11 @@ class TestProcessArticle:
         assert result is not None
         assert result["source_type"] == "tiingo"
         assert "body" in result
-        assert result["body"]["source_id"] == "tiingo:unique-123"
+        # Feature 1010: source_id now uses dedup: prefix with headline hash
+        assert result["body"]["source_id"].startswith("dedup:")
         assert result["body"]["model_version"] == "v1.0.0"
+        # Feature 1010: Track sources array
+        assert result["body"]["sources"] == ["tiingo"]
 
     @mock_aws
     def test_skips_duplicate_article(self, env_vars):
@@ -441,9 +448,10 @@ class TestProcessArticle:
 
         article = create_news_article("duplicate-123", "tiingo", "Duplicate Article")
 
+        # Feature 1010: Mock upsert_article_with_source returning "duplicate"
         with patch(
-            "src.lambdas.ingestion.handler.put_item_if_not_exists",
-            return_value=False,
+            "src.lambdas.ingestion.handler.upsert_article_with_source",
+            return_value="duplicate",
         ):
             result = _process_article(
                 article=article,
@@ -453,6 +461,43 @@ class TestProcessArticle:
             )
 
         # DFA-002: Now returns None for duplicates
+        assert result is None
+
+    @mock_aws
+    def test_returns_none_for_updated_article(self, env_vars):
+        """Feature 1010: Should return None when article already exists from another source."""
+        from src.lambdas.ingestion.handler import _process_article
+
+        dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
+        table = dynamodb.create_table(
+            TableName="test-financial-news",
+            KeySchema=[
+                {"AttributeName": "source_id", "KeyType": "HASH"},
+            ],
+            AttributeDefinitions=[
+                {"AttributeName": "source_id", "AttributeType": "S"},
+            ],
+            BillingMode="PAY_PER_REQUEST",
+        )
+
+        article = create_news_article(
+            "cross-source-123", "finnhub", "Cross Source Article"
+        )
+
+        # Feature 1010: Mock upsert_article_with_source returning "updated"
+        # (article exists from tiingo, finnhub added as second source)
+        with patch(
+            "src.lambdas.ingestion.handler.upsert_article_with_source",
+            return_value="updated",
+        ):
+            result = _process_article(
+                article=article,
+                source="finnhub",
+                table=table,
+                model_version="v1.0.0",
+            )
+
+        # Should not re-publish for cross-source updates
         assert result is None
 
 
@@ -667,9 +712,10 @@ class TestLambdaHandler:
                 "src.lambdas.ingestion.handler.FinnhubAdapter",
                 return_value=mock_finnhub,
             ),
+            # Feature 1010: Mock upsert_article_with_source instead of put_item_if_not_exists
             patch(
-                "src.lambdas.ingestion.handler.put_item_if_not_exists",
-                return_value=True,
+                "src.lambdas.ingestion.handler.upsert_article_with_source",
+                return_value="created",
             ),
             patch(
                 "src.lambdas.ingestion.handler._get_sns_client",
@@ -752,4 +798,6 @@ class TestLambdaHandler:
         assert response["statusCode"] == 207
         assert response["body"]["summary"]["errors"] == 1
         assert len(response["body"]["errors"]) == 1
-        assert response["body"]["errors"][0]["error"] == "RATE_LIMIT"
+        # Feature 1010: Parallel fetcher passes through exception message
+        # rather than normalizing to error codes
+        assert "Rate limited" in response["body"]["errors"][0]["error"]

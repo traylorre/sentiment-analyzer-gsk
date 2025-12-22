@@ -6,10 +6,15 @@ Performance optimization (C2):
 - In-memory cache with 60s TTL reduces DynamoDB reads by ~95%
 - Batched write-through pattern for quota updates
 - Periodic sync to DynamoDB (not on every call)
+
+Thread-safety (Feature 1010):
+- Module-level lock protects cache access during parallel ingestion
+- record_call() and check_quota() are thread-safe
 """
 
 import logging
 import os
+import threading
 import time
 from datetime import UTC, datetime
 from typing import Any, Literal
@@ -33,48 +38,73 @@ _quota_tracker_cache: tuple[float, "QuotaTracker", float] | None = None
 # Cache statistics for monitoring
 _quota_cache_stats = {"hits": 0, "misses": 0, "syncs": 0}
 
+# Thread-safety lock for cache access (Feature 1010)
+_quota_cache_lock = threading.Lock()
+
 
 def _get_cached_tracker() -> "QuotaTracker | None":
-    """Get quota tracker from cache if not expired."""
+    """Get quota tracker from cache if not expired.
+
+    Thread-safe: Uses _quota_cache_lock for synchronized access.
+    """
     global _quota_tracker_cache
-    if _quota_tracker_cache is not None:
-        timestamp, tracker, _ = _quota_tracker_cache
-        if time.time() - timestamp < QUOTA_TRACKER_CACHE_TTL:
-            _quota_cache_stats["hits"] += 1
-            return tracker
-        # Expired - don't delete, will be overwritten
-    _quota_cache_stats["misses"] += 1
-    return None
+    with _quota_cache_lock:
+        if _quota_tracker_cache is not None:
+            timestamp, tracker, _ = _quota_tracker_cache
+            if time.time() - timestamp < QUOTA_TRACKER_CACHE_TTL:
+                _quota_cache_stats["hits"] += 1
+                return tracker
+            # Expired - don't delete, will be overwritten
+        _quota_cache_stats["misses"] += 1
+        return None
 
 
 def _set_cached_tracker(tracker: "QuotaTracker", synced: bool = False) -> None:
-    """Store quota tracker in cache."""
+    """Store quota tracker in cache.
+
+    Thread-safe: Uses _quota_cache_lock for synchronized access.
+    """
     global _quota_tracker_cache
-    now = time.time()
-    last_sync = (
-        now if synced else (_quota_tracker_cache[2] if _quota_tracker_cache else now)
-    )
-    _quota_tracker_cache = (now, tracker, last_sync)
+    with _quota_cache_lock:
+        now = time.time()
+        last_sync = (
+            now
+            if synced
+            else (_quota_tracker_cache[2] if _quota_tracker_cache else now)
+        )
+        _quota_tracker_cache = (now, tracker, last_sync)
 
 
 def _needs_sync() -> bool:
-    """Check if cache needs to be synced to DynamoDB."""
-    if _quota_tracker_cache is None:
-        return False
-    _, _, last_sync = _quota_tracker_cache
-    return time.time() - last_sync >= QUOTA_TRACKER_SYNC_INTERVAL
+    """Check if cache needs to be synced to DynamoDB.
+
+    Thread-safe: Uses _quota_cache_lock for synchronized access.
+    """
+    with _quota_cache_lock:
+        if _quota_tracker_cache is None:
+            return False
+        _, _, last_sync = _quota_tracker_cache
+        return time.time() - last_sync >= QUOTA_TRACKER_SYNC_INTERVAL
 
 
 def get_quota_cache_stats() -> dict[str, int]:
-    """Get cache hit/miss/sync statistics for monitoring."""
-    return _quota_cache_stats.copy()
+    """Get cache hit/miss/sync statistics for monitoring.
+
+    Thread-safe: Uses _quota_cache_lock for synchronized access.
+    """
+    with _quota_cache_lock:
+        return _quota_cache_stats.copy()
 
 
 def clear_quota_cache() -> None:
-    """Clear cache and reset stats. Used in tests."""
+    """Clear cache and reset stats. Used in tests.
+
+    Thread-safe: Uses _quota_cache_lock for synchronized access.
+    """
     global _quota_tracker_cache, _quota_cache_stats
-    _quota_tracker_cache = None
-    _quota_cache_stats = {"hits": 0, "misses": 0, "syncs": 0}
+    with _quota_cache_lock:
+        _quota_tracker_cache = None
+        _quota_cache_stats = {"hits": 0, "misses": 0, "syncs": 0}
 
 
 class APIQuotaUsage(BaseModel):

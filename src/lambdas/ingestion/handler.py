@@ -64,6 +64,13 @@ from src.lambdas.ingestion.alerting import (
     ConsecutiveFailureAlert,
     create_alert_publisher,
 )
+from src.lambdas.ingestion.dedup import (
+    build_source_attribution,
+    generate_dedup_key,
+    normalize_headline,
+    upsert_article_with_source,
+)
+from src.lambdas.ingestion.parallel_fetcher import ParallelFetcher
 from src.lambdas.ingestion.self_healing import run_self_healing_check
 from src.lambdas.shared.adapters.base import (
     AdapterError,
@@ -73,7 +80,7 @@ from src.lambdas.shared.adapters.base import (
 from src.lambdas.shared.adapters.finnhub import FinnhubAdapter
 from src.lambdas.shared.adapters.tiingo import TiingoAdapter
 from src.lambdas.shared.circuit_breaker import CircuitBreakerState
-from src.lambdas.shared.dynamodb import get_table, put_item_if_not_exists
+from src.lambdas.shared.dynamodb import get_table
 from src.lambdas.shared.failure_tracker import ConsecutiveFailureTracker
 from src.lambdas.shared.logging_utils import (
     get_safe_error_info,
@@ -114,6 +121,12 @@ FAILURE_ALERT_WINDOW_MINUTES = 15  # Within 15-minute window
 # Quota settings (free tier limits)
 TIINGO_DAILY_LIMIT = 500
 FINNHUB_DAILY_LIMIT = 1000  # 60 calls/minute ≈ 1000 safe calls/day
+
+# Feature 1010: Parallel ingestion mode
+# When enabled, fetches from Tiingo and Finnhub concurrently using ThreadPoolExecutor
+PARALLEL_INGESTION_ENABLED = (
+    os.environ.get("PARALLEL_INGESTION_ENABLED", "true").lower() == "true"
+)
 
 # =============================================================================
 # DFA-003 FIX: Active Tickers Cache (reduces Scan to cached Query)
@@ -231,154 +244,195 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         pending_sns_messages: list[dict[str, Any]] = []
 
         try:
-            # Process each ticker
-            for ticker in tickers:
-                ticker_stats = {
-                    "tiingo": 0,
-                    "finnhub": 0,
-                    "new": 0,
-                    "duplicates": 0,
-                }
-
-                # Fetch from Tiingo (primary source)
-                if tiingo_adapter and tiingo_breaker.can_execute():
-                    if quota_tracker.can_call("tiingo"):
-                        try:
-                            articles = _fetch_tiingo_articles(
-                                tiingo_adapter, [ticker], quota_tracker
-                            )
-                            ticker_stats["tiingo"] = len(articles)
-                            summary["tiingo_articles"] += len(articles)
-
-                            # Process each article (collect SNS messages)
-                            for article in articles:
-                                sns_msg = _process_article(
-                                    article=article,
-                                    source="tiingo",
-                                    table=table,
-                                    model_version=config["model_version"],
-                                )
-                                if sns_msg is not None:
-                                    ticker_stats["new"] += 1
-                                    summary["new_items"] += 1
-                                    pending_sns_messages.append(sns_msg)
-                                else:
-                                    ticker_stats["duplicates"] += 1
-                                    summary["duplicates_skipped"] += 1
-
-                            tiingo_breaker.record_success()
-                            # US4: Reset failure tracker on success
-                            failure_tracker.record_success()
-
-                        except RateLimitError as e:
-                            logger.warning(
-                                "Tiingo rate limited",
-                                extra={
-                                    "ticker": sanitize_for_log(ticker),
-                                    "retry_after": e.retry_after,
-                                },
-                            )
-                            emit_metric(
-                                "APIRateLimitHit", 1, dimensions={"Source": "tiingo"}
-                            )
-                            tiingo_breaker.record_failure()
-                            # US4: Track failure for alerting
-                            failure_tracker.record_failure(f"Tiingo rate limited: {e}")
-                            errors.append(
-                                {
-                                    "ticker": ticker,
-                                    "source": "tiingo",
-                                    "error": "RATE_LIMIT",
-                                }
-                            )
-                            summary["errors"] += 1
-
-                        except AdapterError as e:
-                            logger.error(
-                                "Tiingo adapter error",
-                                extra={
-                                    "ticker": sanitize_for_log(ticker),
-                                    **get_safe_error_info(e),
-                                },
-                            )
-                            tiingo_breaker.record_failure()
-                            # US4: Track failure for alerting
-                            failure_tracker.record_failure(f"Tiingo adapter error: {e}")
-                            summary["errors"] += 1
-
-                # Fetch from Finnhub (secondary source)
-                if finnhub_adapter and finnhub_breaker.can_execute():
-                    if quota_tracker.can_call("finnhub"):
-                        try:
-                            articles = _fetch_finnhub_articles(
-                                finnhub_adapter, [ticker], quota_tracker
-                            )
-                            ticker_stats["finnhub"] = len(articles)
-                            summary["finnhub_articles"] += len(articles)
-
-                            # Process each article (collect SNS messages)
-                            for article in articles:
-                                sns_msg = _process_article(
-                                    article=article,
-                                    source="finnhub",
-                                    table=table,
-                                    model_version=config["model_version"],
-                                )
-                                if sns_msg is not None:
-                                    ticker_stats["new"] += 1
-                                    summary["new_items"] += 1
-                                    pending_sns_messages.append(sns_msg)
-                                else:
-                                    ticker_stats["duplicates"] += 1
-                                    summary["duplicates_skipped"] += 1
-
-                            finnhub_breaker.record_success()
-                            # US4: Reset failure tracker on success
-                            failure_tracker.record_success()
-
-                        except RateLimitError as e:
-                            logger.warning(
-                                "Finnhub rate limited",
-                                extra={
-                                    "ticker": sanitize_for_log(ticker),
-                                    "retry_after": e.retry_after,
-                                },
-                            )
-                            emit_metric(
-                                "APIRateLimitHit", 1, dimensions={"Source": "finnhub"}
-                            )
-                            finnhub_breaker.record_failure()
-                            # US4: Track failure for alerting
-                            failure_tracker.record_failure(f"Finnhub rate limited: {e}")
-                            errors.append(
-                                {
-                                    "ticker": ticker,
-                                    "source": "finnhub",
-                                    "error": "RATE_LIMIT",
-                                }
-                            )
-                            summary["errors"] += 1
-
-                        except AdapterError as e:
-                            logger.error(
-                                "Finnhub adapter error",
-                                extra={
-                                    "ticker": sanitize_for_log(ticker),
-                                    **get_safe_error_info(e),
-                                },
-                            )
-                            finnhub_breaker.record_failure()
-                            # US4: Track failure for alerting
-                            failure_tracker.record_failure(
-                                f"Finnhub adapter error: {e}"
-                            )
-                            summary["errors"] += 1
-
-                summary["articles_fetched"] += (
-                    ticker_stats["tiingo"] + ticker_stats["finnhub"]
+            # Feature 1010: Use parallel mode if enabled
+            if PARALLEL_INGESTION_ENABLED:
+                logger.info("Using parallel ingestion mode")
+                parallel_messages, parallel_summary, parallel_errors = _parallel_ingest(
+                    tickers=tickers,
+                    tiingo_adapter=tiingo_adapter,
+                    finnhub_adapter=finnhub_adapter,
+                    tiingo_breaker=tiingo_breaker,
+                    finnhub_breaker=finnhub_breaker,
+                    quota_tracker=quota_tracker,
+                    table=table,
+                    config=config,
+                    failure_tracker=failure_tracker,
                 )
-                summary["tickers_processed"] += 1
-                per_ticker_stats[ticker] = ticker_stats
+
+                # Merge parallel results into main summary
+                pending_sns_messages.extend(parallel_messages)
+                summary["tiingo_articles"] = parallel_summary["tiingo_articles"]
+                summary["finnhub_articles"] = parallel_summary["finnhub_articles"]
+                summary["new_items"] = parallel_summary["new_items"]
+                summary["duplicates_skipped"] = parallel_summary["duplicates_skipped"]
+                summary["errors"] = parallel_summary["errors"]
+                summary["articles_fetched"] = (
+                    parallel_summary["tiingo_articles"]
+                    + parallel_summary["finnhub_articles"]
+                )
+                summary["tickers_processed"] = len(tickers)
+                errors.extend(parallel_errors)
+
+            else:
+                # Sequential mode (legacy behavior)
+                # Process each ticker
+                for ticker in tickers:
+                    ticker_stats = {
+                        "tiingo": 0,
+                        "finnhub": 0,
+                        "new": 0,
+                        "duplicates": 0,
+                    }
+
+                    # Fetch from Tiingo (primary source)
+                    if tiingo_adapter and tiingo_breaker.can_execute():
+                        if quota_tracker.can_call("tiingo"):
+                            try:
+                                articles = _fetch_tiingo_articles(
+                                    tiingo_adapter, [ticker], quota_tracker
+                                )
+                                ticker_stats["tiingo"] = len(articles)
+                                summary["tiingo_articles"] += len(articles)
+
+                                # Process each article (collect SNS messages)
+                                for article in articles:
+                                    sns_msg = _process_article(
+                                        article=article,
+                                        source="tiingo",
+                                        table=table,
+                                        model_version=config["model_version"],
+                                    )
+                                    if sns_msg is not None:
+                                        ticker_stats["new"] += 1
+                                        summary["new_items"] += 1
+                                        pending_sns_messages.append(sns_msg)
+                                    else:
+                                        ticker_stats["duplicates"] += 1
+                                        summary["duplicates_skipped"] += 1
+
+                                tiingo_breaker.record_success()
+                                # US4: Reset failure tracker on success
+                                failure_tracker.record_success()
+
+                            except RateLimitError as e:
+                                logger.warning(
+                                    "Tiingo rate limited",
+                                    extra={
+                                        "ticker": sanitize_for_log(ticker),
+                                        "retry_after": e.retry_after,
+                                    },
+                                )
+                                emit_metric(
+                                    "APIRateLimitHit",
+                                    1,
+                                    dimensions={"Source": "tiingo"},
+                                )
+                                tiingo_breaker.record_failure()
+                                # US4: Track failure for alerting
+                                failure_tracker.record_failure(
+                                    f"Tiingo rate limited: {e}"
+                                )
+                                errors.append(
+                                    {
+                                        "ticker": ticker,
+                                        "source": "tiingo",
+                                        "error": "RATE_LIMIT",
+                                    }
+                                )
+                                summary["errors"] += 1
+
+                            except AdapterError as e:
+                                logger.error(
+                                    "Tiingo adapter error",
+                                    extra={
+                                        "ticker": sanitize_for_log(ticker),
+                                        **get_safe_error_info(e),
+                                    },
+                                )
+                                tiingo_breaker.record_failure()
+                                # US4: Track failure for alerting
+                                failure_tracker.record_failure(
+                                    f"Tiingo adapter error: {e}"
+                                )
+                                summary["errors"] += 1
+
+                    # Fetch from Finnhub (secondary source)
+                    if finnhub_adapter and finnhub_breaker.can_execute():
+                        if quota_tracker.can_call("finnhub"):
+                            try:
+                                articles = _fetch_finnhub_articles(
+                                    finnhub_adapter, [ticker], quota_tracker
+                                )
+                                ticker_stats["finnhub"] = len(articles)
+                                summary["finnhub_articles"] += len(articles)
+
+                                # Process each article (collect SNS messages)
+                                for article in articles:
+                                    sns_msg = _process_article(
+                                        article=article,
+                                        source="finnhub",
+                                        table=table,
+                                        model_version=config["model_version"],
+                                    )
+                                    if sns_msg is not None:
+                                        ticker_stats["new"] += 1
+                                        summary["new_items"] += 1
+                                        pending_sns_messages.append(sns_msg)
+                                    else:
+                                        ticker_stats["duplicates"] += 1
+                                        summary["duplicates_skipped"] += 1
+
+                                finnhub_breaker.record_success()
+                                # US4: Reset failure tracker on success
+                                failure_tracker.record_success()
+
+                            except RateLimitError as e:
+                                logger.warning(
+                                    "Finnhub rate limited",
+                                    extra={
+                                        "ticker": sanitize_for_log(ticker),
+                                        "retry_after": e.retry_after,
+                                    },
+                                )
+                                emit_metric(
+                                    "APIRateLimitHit",
+                                    1,
+                                    dimensions={"Source": "finnhub"},
+                                )
+                                finnhub_breaker.record_failure()
+                                # US4: Track failure for alerting
+                                failure_tracker.record_failure(
+                                    f"Finnhub rate limited: {e}"
+                                )
+                                errors.append(
+                                    {
+                                        "ticker": ticker,
+                                        "source": "finnhub",
+                                        "error": "RATE_LIMIT",
+                                    }
+                                )
+                                summary["errors"] += 1
+
+                            except AdapterError as e:
+                                logger.error(
+                                    "Finnhub adapter error",
+                                    extra={
+                                        "ticker": sanitize_for_log(ticker),
+                                        **get_safe_error_info(e),
+                                    },
+                                )
+                                finnhub_breaker.record_failure()
+                                # US4: Track failure for alerting
+                                failure_tracker.record_failure(
+                                    f"Finnhub adapter error: {e}"
+                                )
+                                summary["errors"] += 1
+
+                    summary["articles_fetched"] += (
+                        ticker_stats["tiingo"] + ticker_stats["finnhub"]
+                    )
+                    summary["tickers_processed"] += 1
+                    per_ticker_stats[ticker] = ticker_stats
 
             # DFA-002: Batch publish all collected SNS messages
             if pending_sns_messages:
@@ -846,6 +900,10 @@ def _process_article(
 ) -> dict[str, Any] | None:
     """Process a single article: deduplicate and store in DynamoDB.
 
+    Feature 1010: Cross-source deduplication using headline-based keys.
+    Same article from Tiingo and Finnhub creates one record with both
+    sources tracked in the sources[] array.
+
     DFA-002 optimization: Returns SNS message for batching instead of
     publishing individually. Caller should batch messages and use
     _publish_sns_batch() after processing all articles.
@@ -857,21 +915,31 @@ def _process_article(
         model_version: Current model version
 
     Returns:
-        SNS message dict if article is new, None if duplicate
+        SNS message dict if article is new, None if duplicate or updated
     """
-    # Generate source_id for deduplication
-    source_id = f"{source}:{article.article_id}"
+    # Feature 1010: Generate cross-source dedup key from headline + date
+    headline = article.title or ""
+    dedup_key = generate_dedup_key(headline, article.published_at)
+    normalized_headline = normalize_headline(headline)
 
-    # Build DynamoDB item
+    # Build source attribution for this source
     now = datetime.now(UTC)
-    ttl_timestamp = int((now + timedelta(days=TTL_DAYS)).timestamp())
+    attribution = build_source_attribution(
+        source=source,
+        article_id=article.article_id,
+        url=article.url or "",
+        crawl_timestamp=now,
+        original_headline=headline,
+        source_name=article.source_name,
+    )
 
+    # Build item data for new articles
+    ttl_timestamp = int((now + timedelta(days=TTL_DAYS)).timestamp())
     text_for_analysis = _get_text_for_analysis(article)
 
-    item = {
-        "source_id": source_id,
-        "timestamp": article.published_at.isoformat(),
-        "source_type": source,
+    item_data = {
+        "headline": headline,
+        "normalized_headline": normalized_headline,
         "source_url": article.url or "",
         "text_snippet": (article.description or "")[:200],
         "text_for_analysis": text_for_analysis,
@@ -886,9 +954,31 @@ def _process_article(
         },
     }
 
-    # Try to insert (conditional write for deduplication)
-    if not put_item_if_not_exists(table, item):
-        return None  # Duplicate
+    # Feature 1010: Upsert with cross-source dedup
+    timestamp = article.published_at.isoformat()
+    result = upsert_article_with_source(
+        table=table,
+        dedup_key=dedup_key,
+        timestamp=timestamp,
+        source=source,
+        attribution=attribution,
+        item_data=item_data,
+    )
+
+    # Only publish SNS for new articles (not updates or duplicates)
+    if result != "created":
+        logger.debug(
+            "Article dedup result",
+            extra={
+                "result": result,
+                "source": sanitize_for_log(source),
+                "dedup_key": dedup_key[:8],  # Truncate for logging
+            },
+        )
+        return None
+
+    # Feature 1010: Use dedup-based source_id for SNS message
+    source_id = f"dedup:{dedup_key}"
 
     # Return message for batch publishing (DFA-002 optimization)
     return {
@@ -896,10 +986,11 @@ def _process_article(
         "body": {
             "source_id": source_id,
             "source_type": source,
+            "sources": [source],  # Feature 1010: Track sources
             "text_for_analysis": text_for_analysis,
             "model_version": model_version,
             "matched_tickers": article.tickers,
-            "timestamp": article.published_at.isoformat(),
+            "timestamp": timestamp,
         },
     }
 
@@ -1077,3 +1168,119 @@ def _emit_summary_metrics(summary: dict[str, int], execution_time_ms: float) -> 
         )
 
     emit_metrics_batch(metrics)
+
+
+@xray_recorder.capture("parallel_ingest")
+def _parallel_ingest(
+    tickers: list[str],
+    tiingo_adapter: TiingoAdapter | None,
+    finnhub_adapter: FinnhubAdapter | None,
+    tiingo_breaker: Any,
+    finnhub_breaker: Any,
+    quota_tracker: QuotaTracker,
+    table: Any,
+    config: dict[str, Any],
+    failure_tracker: Any,
+) -> tuple[list[dict[str, Any]], dict[str, int], list[dict[str, Any]]]:
+    """Execute parallel ingestion using ParallelFetcher.
+
+    Feature 1010: Fetches from Tiingo and Finnhub concurrently.
+
+    Args:
+        tickers: List of ticker symbols
+        tiingo_adapter: Tiingo API adapter
+        finnhub_adapter: Finnhub API adapter
+        tiingo_breaker: Circuit breaker for Tiingo
+        finnhub_breaker: Circuit breaker for Finnhub
+        quota_tracker: Quota tracker for rate limiting
+        table: DynamoDB table
+        config: Configuration dict
+        failure_tracker: Failure tracker for alerting
+
+    Returns:
+        Tuple of (pending_sns_messages, summary_dict, errors_list)
+    """
+    pending_sns_messages: list[dict[str, Any]] = []
+    summary = {
+        "tiingo_articles": 0,
+        "finnhub_articles": 0,
+        "new_items": 0,
+        "duplicates_skipped": 0,
+        "errors": 0,
+    }
+    errors: list[dict[str, Any]] = []
+
+    # Create parallel fetcher
+    fetcher = ParallelFetcher(
+        tiingo_adapter=tiingo_adapter,
+        finnhub_adapter=finnhub_adapter,
+        tiingo_breaker=tiingo_breaker,
+        finnhub_breaker=finnhub_breaker,
+        quota_tracker=quota_tracker,
+    )
+
+    # Fetch from all sources in parallel
+    results = fetcher.fetch_all_sources(tickers)
+    metrics = fetcher.get_metrics()
+    fetch_errors = fetcher.get_errors()
+
+    logger.info(
+        "Parallel fetch complete",
+        extra={
+            "tiingo_count": metrics.get("tiingo_count", 0),
+            "finnhub_count": metrics.get("finnhub_count", 0),
+            "duration_ms": metrics.get("duration_ms", 0),
+        },
+    )
+
+    # Record fetch errors
+    for error in fetch_errors:
+        source = error.get("source", "unknown")
+        if source == "tiingo":
+            failure_tracker.record_failure(f"Tiingo fetch error: {error.get('error')}")
+        elif source == "finnhub":
+            failure_tracker.record_failure(f"Finnhub fetch error: {error.get('error')}")
+        errors.append({"source": source, "error": error.get("error")})
+        summary["errors"] += 1
+
+    # Process Tiingo articles
+    tiingo_articles = results.get("tiingo", [])
+    summary["tiingo_articles"] = len(tiingo_articles)
+    for article in tiingo_articles:
+        sns_msg = _process_article(
+            article=article,
+            source="tiingo",
+            table=table,
+            model_version=config["model_version"],
+        )
+        if sns_msg is not None:
+            summary["new_items"] += 1
+            pending_sns_messages.append(sns_msg)
+        else:
+            summary["duplicates_skipped"] += 1
+
+    # Record Tiingo success if articles were fetched
+    if tiingo_articles:
+        failure_tracker.record_success()
+
+    # Process Finnhub articles
+    finnhub_articles = results.get("finnhub", [])
+    summary["finnhub_articles"] = len(finnhub_articles)
+    for article in finnhub_articles:
+        sns_msg = _process_article(
+            article=article,
+            source="finnhub",
+            table=table,
+            model_version=config["model_version"],
+        )
+        if sns_msg is not None:
+            summary["new_items"] += 1
+            pending_sns_messages.append(sns_msg)
+        else:
+            summary["duplicates_skipped"] += 1
+
+    # Record Finnhub success if articles were fetched
+    if finnhub_articles:
+        failure_tracker.record_success()
+
+    return pending_sns_messages, summary, errors

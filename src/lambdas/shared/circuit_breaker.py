@@ -6,10 +6,15 @@ Performance optimization (C1):
 - In-memory cache with 60s TTL reduces DynamoDB reads by ~90%
 - Write-through pattern ensures state consistency
 - Cache survives Lambda warm invocations
+
+Thread-safety (Feature 1010):
+- Module-level lock protects cache access during parallel ingestion
+- record_failure() and can_execute() are thread-safe
 """
 
 import logging
 import os
+import threading
 import time
 from datetime import UTC, datetime
 from typing import Any, Literal
@@ -30,44 +35,67 @@ _circuit_breaker_cache: dict[str, tuple[float, "CircuitBreakerState"]] = {}
 # Cache statistics for monitoring
 _cache_stats = {"hits": 0, "misses": 0}
 
+# Thread-safety lock for cache access (Feature 1010)
+_circuit_breaker_lock = threading.Lock()
+
 
 def _get_cached_state(service: str) -> "CircuitBreakerState | None":
-    """Get circuit breaker state from cache if not expired."""
-    if service in _circuit_breaker_cache:
-        timestamp, state = _circuit_breaker_cache[service]
-        if time.time() - timestamp < CIRCUIT_BREAKER_CACHE_TTL:
-            _cache_stats["hits"] += 1
-            return state
-        # Expired - remove from cache
-        del _circuit_breaker_cache[service]
-    _cache_stats["misses"] += 1
-    return None
+    """Get circuit breaker state from cache if not expired.
+
+    Thread-safe: Uses _circuit_breaker_lock for synchronized access.
+    """
+    with _circuit_breaker_lock:
+        if service in _circuit_breaker_cache:
+            timestamp, state = _circuit_breaker_cache[service]
+            if time.time() - timestamp < CIRCUIT_BREAKER_CACHE_TTL:
+                _cache_stats["hits"] += 1
+                return state
+            # Expired - remove from cache
+            del _circuit_breaker_cache[service]
+        _cache_stats["misses"] += 1
+        return None
 
 
 def _set_cached_state(service: str, state: "CircuitBreakerState") -> None:
-    """Store circuit breaker state in cache."""
-    _circuit_breaker_cache[service] = (time.time(), state)
+    """Store circuit breaker state in cache.
+
+    Thread-safe: Uses _circuit_breaker_lock for synchronized access.
+    """
+    with _circuit_breaker_lock:
+        _circuit_breaker_cache[service] = (time.time(), state)
 
 
 def _invalidate_cache(service: str | None = None) -> None:
-    """Invalidate cache for a service or all services."""
+    """Invalidate cache for a service or all services.
+
+    Thread-safe: Uses _circuit_breaker_lock for synchronized access.
+    """
     global _circuit_breaker_cache
-    if service:
-        _circuit_breaker_cache.pop(service, None)
-    else:
-        _circuit_breaker_cache = {}
+    with _circuit_breaker_lock:
+        if service:
+            _circuit_breaker_cache.pop(service, None)
+        else:
+            _circuit_breaker_cache = {}
 
 
 def get_cache_stats() -> dict[str, int]:
-    """Get cache hit/miss statistics for monitoring."""
-    return _cache_stats.copy()
+    """Get cache hit/miss statistics for monitoring.
+
+    Thread-safe: Uses _circuit_breaker_lock for synchronized access.
+    """
+    with _circuit_breaker_lock:
+        return _cache_stats.copy()
 
 
 def clear_cache() -> None:
-    """Clear cache and reset stats. Used in tests."""
+    """Clear cache and reset stats. Used in tests.
+
+    Thread-safe: Uses _circuit_breaker_lock for synchronized access.
+    """
     global _circuit_breaker_cache, _cache_stats
-    _circuit_breaker_cache = {}
-    _cache_stats = {"hits": 0, "misses": 0}
+    with _circuit_breaker_lock:
+        _circuit_breaker_cache = {}
+        _cache_stats = {"hits": 0, "misses": 0}
 
 
 class CircuitBreakerState(BaseModel):
