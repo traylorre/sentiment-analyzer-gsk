@@ -39,6 +39,8 @@ Auto-generated from all feature plans. Last updated: 2025-11-26
 - DynamoDB with `by_status` GSI (hash: status, range: timestamp, projection: KEYS_ONLY) (1003-self-healing-ingestion)
 - Python 3.13 (existing project standard) + FastAPI, boto3, sse-starlette (existing SSE stack), pydantic (1009-realtime-multi-resolution)
 - DynamoDB with new time-series table (`{env}-sentiment-timeseries`) (1009-realtime-multi-resolution)
+- Python 3.13 (existing project standard) + structlog (existing), boto3 (existing), pytest-playwright (E2E) (1020-validate-cache-hit-rate)
+- CloudWatch Logs (structured JSON via structlog) (1020-validate-cache-hit-rate)
 
 - **Python 3.13** with FastAPI, boto3, pydantic, aws-lambda-powertools, httpx
 - **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, CloudFront
@@ -816,9 +818,9 @@ aws cloudwatch get-metric-data --metric-data-queries '[...]' --start-time ... --
 ```
 
 ## Recent Changes
+- 1020-validate-cache-hit-rate: Added Python 3.13 (existing project standard) + structlog (existing), boto3 (existing), pytest-playwright (E2E)
 - 1009-realtime-multi-resolution: Added Python 3.13 (existing project standard) + FastAPI, boto3, sse-starlette (existing SSE stack), pydantic
 - 1003-self-healing-ingestion: Added Python 3.13 (existing project standard) + boto3, aws-xray-sdk (existing)
-- 503-consolidate-status-field: Added Python 3.13 + boto3, pydantic (for model validation)
 
 <!-- MANUAL ADDITIONS START -->
 
