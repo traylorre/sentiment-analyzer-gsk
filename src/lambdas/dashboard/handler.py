@@ -273,15 +273,24 @@ def verify_api_key(
 @app.get("/", response_class=HTMLResponse)
 async def serve_index():
     """
-    Serve the main dashboard HTML page.
+    Serve the main dashboard HTML page with API key injection.
+
+    Injects the API key as a JavaScript global variable for frontend auth.
+    The key is injected at runtime, never stored in static files.
 
     Returns:
-        HTML content of index.html
+        HTML content of index.html with injected API key
 
     On-Call Note:
         If this returns 404, verify:
         1. src/dashboard/index.html exists
         2. Lambda deployment includes dashboard files
+
+    Security Note (Feature 1011):
+        API key is injected into page source at render time. This is safe because:
+        - Key not in version control (runtime injection from Secrets Manager)
+        - Users who see page source already have dashboard access
+        - Key rotates without code changes
     """
     index_path = STATIC_DIR / "index.html"
 
@@ -295,7 +304,19 @@ async def serve_index():
             detail="Dashboard index.html not found",
         )
 
-    return FileResponse(index_path, media_type="text/html")
+    # Read HTML content
+    html_content = index_path.read_text()
+
+    # Inject API key as JavaScript global variable (Feature 1011)
+    # Place before </head> to ensure it's available when scripts load
+    api_key = get_api_key()
+    if api_key:
+        key_script = (
+            f'<script>window.DASHBOARD_API_KEY = "{api_key}";</script>\n</head>'
+        )
+        html_content = html_content.replace("</head>", key_script)
+
+    return HTMLResponse(content=html_content, media_type="text/html")
 
 
 @app.get("/chaos", response_class=HTMLResponse)
