@@ -13,24 +13,29 @@ from moto import mock_aws
 
 from src.lambdas.shared.adapters.base import NewsArticle, RateLimitError
 from src.lambdas.shared.circuit_breaker import CircuitBreakerState
-from src.lambdas.shared.quota_tracker import QuotaTracker
+from src.lambdas.shared.quota_tracker import QuotaTracker, clear_quota_cache
 
 
 @pytest.fixture(autouse=True)
-def reset_active_tickers_cache():
-    """Reset the active tickers cache before each test.
+def reset_caches():
+    """Reset module-level caches before each test.
 
     DFA-003 added caching to _get_active_tickers which persists across tests.
+    Feature 1010 added quota tracker caching which also persists.
     This fixture ensures each test starts with a clean cache state.
     """
     import src.lambdas.ingestion.handler as handler_module
 
+    # Reset active tickers cache
     handler_module._active_tickers_cache = []
     handler_module._active_tickers_cache_timestamp = 0.0
+    # Reset quota tracker cache (Feature 1010)
+    clear_quota_cache()
     yield
     # Clean up after test too
     handler_module._active_tickers_cache = []
     handler_module._active_tickers_cache_timestamp = 0.0
+    clear_quota_cache()
 
 
 @pytest.fixture

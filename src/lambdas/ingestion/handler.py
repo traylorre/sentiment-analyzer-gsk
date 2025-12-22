@@ -1115,7 +1115,9 @@ def _publish_sns_batch(
                     extra={
                         "entry_id": failure.get("Id"),
                         "code": failure.get("Code"),
-                        "message": sanitize_for_log(failure.get("Message", "")[:100]),
+                        "error_message": sanitize_for_log(
+                            failure.get("Message", "")[:100]
+                        ),
                     },
                 )
 
@@ -1340,7 +1342,7 @@ def _parallel_ingest(
             "Anomalous collision rate detected",
             extra={
                 "anomaly_type": ingestion_metrics.anomaly_type,
-                "message": ingestion_metrics.get_anomaly_message(),
+                "anomaly_message": ingestion_metrics.get_anomaly_message(),
                 "collision_rate": ingestion_metrics.collision_rate,
             },
         )
