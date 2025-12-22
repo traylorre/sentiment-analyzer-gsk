@@ -139,6 +139,18 @@ const CONFIG = {
         positive: 'Positive',
         neutral: 'Neutral',
         negative: 'Negative'
+    },
+
+    // Feature 1021: Skeleton Loading UI timing constants
+    SKELETON: {
+        // Timeout before showing error state (FR-010)
+        TIMEOUT_MS: 30000,  // 30 seconds
+
+        // Transition duration for skeleton to content
+        TRANSITION_MS: 300,
+
+        // Debounce delay for rapid resolution switches (US2)
+        DEBOUNCE_MS: 300
     }
 };
 
@@ -153,3 +165,4 @@ Object.freeze(CONFIG.RESOLUTIONS);
 Object.freeze(CONFIG.RESOLUTION_ORDER);
 // Deep freeze each resolution object
 Object.values(CONFIG.RESOLUTIONS).forEach(r => Object.freeze(r));
+Object.freeze(CONFIG.SKELETON);
