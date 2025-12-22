@@ -1226,6 +1226,91 @@ async def get_timeseries(
     return JSONResponse(response.to_dict())
 
 
+@timeseries_router.get("/batch")
+async def get_timeseries_batch(
+    request: Request,
+    tickers: str = Query(
+        ..., description="Comma-separated ticker symbols (e.g., 'AAPL,MSFT,GOOGL')"
+    ),
+    resolution: str = Query(..., pattern="^(1m|5m|10m|1h|3h|6h|12h|24h)$"),
+    start: str | None = Query(None, description="Start time (ISO8601)"),
+    end: str | None = Query(None, description="End time (ISO8601)"),
+    limit: int | None = Query(
+        None, ge=1, le=1000, description="Max buckets per ticker"
+    ),
+):
+    """Get time-series sentiment data for multiple tickers in parallel (T050, T052).
+
+    Feature 1009 Phase 6: Multi-ticker comparison view with batch queries.
+    Canonical: [CS-002] ticker#resolution composite key, [CS-006] Shared caching
+
+    Performance target: SC-006 - 10 tickers in <1 second via parallel I/O.
+
+    Args:
+        tickers: Comma-separated ticker symbols (e.g., "AAPL,MSFT,GOOGL")
+        resolution: Time resolution (1m, 5m, 10m, 1h, 3h, 6h, 12h, 24h)
+        start: Optional start time (ISO8601)
+        end: Optional end time (ISO8601)
+        limit: Max buckets per ticker (default varies by resolution)
+
+    Returns:
+        Dict mapping ticker -> TimeseriesResponse
+        Example: {"AAPL": {...}, "MSFT": {...}, "GOOGL": {...}}
+    """
+    from datetime import datetime
+
+    from src.lib.timeseries import Resolution
+
+    # Parse resolution
+    try:
+        res = Resolution(resolution)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid resolution: {resolution}. Valid: 1m, 5m, 10m, 1h, 3h, 6h, 12h, 24h",
+        ) from e
+
+    # Parse tickers
+    ticker_list = [t.strip().upper() for t in tickers.split(",") if t.strip()]
+    if not ticker_list:
+        raise HTTPException(status_code=400, detail="No valid tickers provided")
+    if len(ticker_list) > 20:
+        raise HTTPException(
+            status_code=400, detail="Maximum 20 tickers per batch request"
+        )
+
+    # Parse time range
+    start_dt = None
+    end_dt = None
+    if start:
+        try:
+            start_dt = datetime.fromisoformat(start.replace("Z", "+00:00"))
+        except ValueError as e:
+            raise HTTPException(
+                status_code=400, detail="Invalid start time format"
+            ) from e
+    if end:
+        try:
+            end_dt = datetime.fromisoformat(end.replace("Z", "+00:00"))
+        except ValueError as e:
+            raise HTTPException(
+                status_code=400, detail="Invalid end time format"
+            ) from e
+
+    # Use batch query for parallel I/O (T050)
+    results = timeseries_service.query_batch(
+        tickers=ticker_list,
+        resolution=res,
+        start=start_dt,
+        end=end_dt,
+        limit=limit,
+    )
+
+    # Convert to dict of dicts for JSON response
+    response_dict = {ticker: response.to_dict() for ticker, response in results.items()}
+    return JSONResponse(response_dict)
+
+
 # ===================================================================
 # Alert Endpoints
 # ===================================================================

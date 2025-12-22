@@ -180,6 +180,11 @@ async def global_stream(
         description="Comma-separated resolution filters (e.g., '1m,5m,1h'). "
         "Valid: 1m,5m,10m,1h,3h,6h,12h,24h. Empty = all resolutions.",
     ),
+    tickers: str | None = Query(
+        None,
+        description="Comma-separated ticker filters (e.g., 'AAPL,MSFT,GOOGL'). "
+        "Empty = all tickers. Case-insensitive.",
+    ),
 ):
     """Global SSE stream endpoint.
 
@@ -190,6 +195,9 @@ async def global_stream(
     Feature 1009: Multi-resolution time-series streaming
     Canonical: [CS-007] "SSE for real-time updates at subscribed resolutions"
 
+    Feature 1009 Phase 6 (T051): Multi-ticker streaming
+    Canonical: [CS-002] "ticker#resolution composite key for filtering"
+
     Headers:
         Last-Event-ID: Optional event ID for reconnection resumption
 
@@ -197,6 +205,9 @@ async def global_stream(
         resolutions: Comma-separated list of resolution levels to subscribe to.
                     Valid values: 1m, 5m, 10m, 1h, 3h, 6h, 12h, 24h
                     Empty or not specified = subscribe to all resolutions.
+        tickers: Comma-separated list of ticker symbols to subscribe to.
+                Case-insensitive (e.g., 'aapl' matches 'AAPL').
+                Empty or not specified = subscribe to all tickers.
 
     Returns:
         EventSourceResponse streaming heartbeat and metrics events
@@ -222,6 +233,15 @@ async def global_stream(
                 },
             )
 
+    # Feature 1009 Phase 6 (T051): Parse ticker filters
+    # Tickers are case-insensitive (stored uppercase for consistency)
+    ticker_filters: list[str] = []
+    if tickers:
+        for ticker in tickers.split(","):
+            ticker = ticker.strip().upper()
+            if ticker:
+                ticker_filters.append(ticker)
+
     # Log connection attempt
     # Note: All user-provided values MUST be sanitized to prevent log injection (CWE-117)
     logger.info(
@@ -236,11 +256,18 @@ async def global_stream(
                 if resolution_filters
                 else "all"
             ),
+            "ticker_filters": (
+                [sanitize_for_log(t) for t in ticker_filters]
+                if ticker_filters
+                else "all"
+            ),
         },
     )
 
-    # Acquire connection slot with resolution filters
-    connection = connection_manager.acquire(resolution_filters=resolution_filters)
+    # Acquire connection slot with resolution and ticker filters
+    connection = connection_manager.acquire(
+        resolution_filters=resolution_filters, ticker_filters=ticker_filters
+    )
     if connection is None:
         # Connection limit reached - return 503
         logger.warning(

@@ -165,3 +165,84 @@ class TestGlobalExceptionHandler:
             assert response.status_code == 500
             data = response.json()
             assert data["detail"] == "Internal server error"
+
+
+class TestGlobalStreamTickersQueryParam:
+    """Tests for tickers query parameter on /api/v2/stream (Phase 6 T051)."""
+
+    @pytest.fixture
+    def client(self):
+        """Create test client for SSE Lambda."""
+        from src.lambdas.sse_streaming.handler import app
+
+        return TestClient(app)
+
+    def test_stream_accepts_tickers_param(self, client):
+        """Test that stream endpoint accepts tickers query param."""
+        from src.lambdas.sse_streaming.handler import connection_manager
+
+        # Mock to verify param is parsed
+        with patch.object(connection_manager, "acquire", return_value=None):
+            response = client.get("/api/v2/stream?tickers=AAPL,MSFT,GOOGL")
+            # 503 expected since acquire returns None
+            assert response.status_code == 503
+
+    def test_stream_passes_ticker_filters_to_connection_manager(self, client):
+        """Test that ticker filters are passed to connection_manager.acquire()."""
+        from src.lambdas.sse_streaming.handler import connection_manager
+
+        # Capture the kwargs passed to acquire
+        with patch.object(connection_manager, "acquire", return_value=None) as mock_acq:
+            client.get("/api/v2/stream?tickers=AAPL,MSFT")
+            mock_acq.assert_called_once()
+            kwargs = mock_acq.call_args.kwargs
+            assert kwargs.get("ticker_filters") == ["AAPL", "MSFT"]
+
+    def test_stream_ticker_filters_case_insensitive(self, client):
+        """Test that ticker filters are normalized to uppercase."""
+        from src.lambdas.sse_streaming.handler import connection_manager
+
+        with patch.object(connection_manager, "acquire", return_value=None) as mock_acq:
+            client.get("/api/v2/stream?tickers=aapl,Msft,googl")
+            kwargs = mock_acq.call_args.kwargs
+            # All should be uppercase
+            assert kwargs.get("ticker_filters") == ["AAPL", "MSFT", "GOOGL"]
+
+    def test_stream_empty_tickers_param_means_all(self, client):
+        """Test that empty/missing tickers param means all tickers."""
+        from src.lambdas.sse_streaming.handler import connection_manager
+
+        with patch.object(connection_manager, "acquire", return_value=None) as mock_acq:
+            client.get("/api/v2/stream")  # No tickers param
+            kwargs = mock_acq.call_args.kwargs
+            assert kwargs.get("ticker_filters") == []  # Empty = all
+
+    def test_stream_tickers_with_resolutions(self, client):
+        """Test that tickers and resolutions can be used together."""
+        from src.lambdas.sse_streaming.handler import connection_manager
+
+        with patch.object(connection_manager, "acquire", return_value=None) as mock_acq:
+            client.get("/api/v2/stream?tickers=AAPL,MSFT&resolutions=1m,5m")
+            kwargs = mock_acq.call_args.kwargs
+            assert kwargs.get("ticker_filters") == ["AAPL", "MSFT"]
+            assert kwargs.get("resolution_filters") == ["1m", "5m"]
+
+    def test_stream_tickers_whitespace_handling(self, client):
+        """Test that whitespace in tickers is handled correctly."""
+        from src.lambdas.sse_streaming.handler import connection_manager
+
+        with patch.object(connection_manager, "acquire", return_value=None) as mock_acq:
+            client.get("/api/v2/stream?tickers=%20AAPL%20,%20MSFT%20")
+            kwargs = mock_acq.call_args.kwargs
+            # Whitespace should be stripped
+            assert kwargs.get("ticker_filters") == ["AAPL", "MSFT"]
+
+    def test_stream_tickers_empty_items_filtered(self, client):
+        """Test that empty ticker items are filtered out."""
+        from src.lambdas.sse_streaming.handler import connection_manager
+
+        with patch.object(connection_manager, "acquire", return_value=None) as mock_acq:
+            client.get("/api/v2/stream?tickers=AAPL,,MSFT,")
+            kwargs = mock_acq.call_args.kwargs
+            # Empty items should be excluded
+            assert kwargs.get("ticker_filters") == ["AAPL", "MSFT"]
