@@ -4,18 +4,29 @@ Canonical References:
 [CS-001] "Design your application to process one partition key at a time"
          - AWS DynamoDB Best Practices
 
+[CS-002] "ticker#resolution composite key for multi-dimensional time-series"
+         - DynamoDB Key Design Best Practices
+
 [CS-005] "Initialize SDK clients and database connections outside of the
          function handler so they can be reused across invocations."
          - AWS Lambda Best Practices
 
+[CS-006] "Shared caching across users for same ticker+resolution"
+         - Feature 1009 Spec
+
 This module provides the TimeseriesQueryService for querying sentiment
 time-series data from DynamoDB with caching support.
+
+Feature 1009 Phase 6 additions:
+- T050: query_batch() for multi-ticker queries in parallel
 """
 
 from __future__ import annotations
 
+import logging
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
@@ -24,6 +35,8 @@ from typing import TYPE_CHECKING, Any
 import boto3
 
 from src.lib.timeseries import Resolution, ResolutionCache, get_global_cache
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     pass
@@ -312,6 +325,87 @@ class TimeseriesQueryService:
             next_cursor=next_cursor,
             has_more=has_more,
         )
+
+    def query_batch(
+        self,
+        tickers: list[str],
+        resolution: Resolution,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        limit: int | None = None,
+    ) -> dict[str, TimeseriesResponse]:
+        """Query time-series data for multiple tickers in parallel.
+
+        Task T050: Batch query for multi-ticker comparison view.
+        Canonical: [CS-002] "ticker#resolution composite key"
+
+        Goal: 10 tickers load in <1 second (SC-006)
+
+        Args:
+            tickers: List of stock ticker symbols.
+            resolution: Time resolution for data.
+            start: Start of time range (inclusive).
+            end: End of time range (exclusive).
+            limit: Maximum number of buckets per ticker.
+
+        Returns:
+            Dict mapping ticker symbol to TimeseriesResponse.
+            Tickers with errors return empty buckets (partial failure handling).
+        """
+        if not tickers:
+            return {}
+
+        results: dict[str, TimeseriesResponse] = {}
+
+        # Use ThreadPoolExecutor for parallel I/O
+        # Max workers = min(len(tickers), 10) to avoid overwhelming DynamoDB
+        max_workers = min(len(tickers), 10)
+
+        def query_ticker(ticker: str) -> tuple[str, TimeseriesResponse]:
+            """Query a single ticker and return (ticker, response) tuple."""
+            try:
+                response = self.query(
+                    ticker=ticker,
+                    resolution=resolution,
+                    start=start,
+                    end=end,
+                    limit=limit,
+                )
+                return ticker, response
+            except Exception as e:
+                # Log error but return empty response (partial failure handling)
+                logger.warning(
+                    "Failed to query ticker",
+                    extra={
+                        "ticker": ticker,
+                        "resolution": resolution.value,
+                        "error": str(e),
+                    },
+                )
+                # Return empty response for failed ticker
+                return ticker, TimeseriesResponse(
+                    ticker=ticker,
+                    resolution=resolution.value,
+                    buckets=[],
+                    partial_bucket=None,
+                    cache_hit=False,
+                    query_time_ms=0.0,
+                    next_cursor=None,
+                    has_more=False,
+                )
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all ticker queries
+            futures = {
+                executor.submit(query_ticker, ticker): ticker for ticker in tickers
+            }
+
+            # Collect results as they complete
+            for future in as_completed(futures):
+                ticker, response = future.result()
+                results[ticker] = response
+
+        return results
 
 
 # Global service instance for Lambda warm invocations
