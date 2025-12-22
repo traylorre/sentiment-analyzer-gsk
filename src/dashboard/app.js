@@ -136,10 +136,24 @@ function initCharts() {
 
 /**
  * Fetch metrics from API
+ *
+ * Feature 1011: Includes Authorization header when API key is configured.
+ * API key is injected by server at render time (window.DASHBOARD_API_KEY).
  */
 async function fetchMetrics() {
     try {
-        const response = await fetch(`${CONFIG.API_BASE_URL}${CONFIG.ENDPOINTS.METRICS}`);
+        // Build request options with optional Authorization header (Feature 1011)
+        const options = {};
+        if (CONFIG.API_KEY) {
+            options.headers = {
+                'Authorization': `Bearer ${CONFIG.API_KEY}`
+            };
+        }
+
+        const response = await fetch(
+            `${CONFIG.API_BASE_URL}${CONFIG.ENDPOINTS.METRICS}`,
+            options
+        );
 
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);

@@ -15,6 +15,11 @@
  */
 
 const CONFIG = {
+    // API Key (Feature 1011)
+    // Injected by server at render time via window.DASHBOARD_API_KEY
+    // NEVER hardcode here - falls back to empty string for unauthenticated dev mode
+    API_KEY: window.DASHBOARD_API_KEY || '',
+
     // API Configuration
     // Empty string means same origin (Lambda Function URL serves both static and API)
     API_BASE_URL: '',
