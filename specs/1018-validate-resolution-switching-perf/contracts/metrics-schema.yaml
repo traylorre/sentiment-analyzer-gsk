@@ -1,0 +1,133 @@
+# Performance Metrics Schema
+# Feature: 1018-validate-resolution-switching-perf
+# Date: 2025-12-22
+
+# Schema for resolution switch timing data exposed by browser instrumentation
+# Accessible via window.lastSwitchMetrics in browser context
+
+SwitchTiming:
+  type: object
+  description: Single resolution switch measurement
+  required:
+    - duration_ms
+    - from_resolution
+    - to_resolution
+    - cache_hit
+    - timestamp
+  properties:
+    duration_ms:
+      type: number
+      format: float
+      minimum: 0
+      description: Time from click to render complete (milliseconds)
+      example: 42.5
+    from_resolution:
+      type: string
+      enum: ["1m", "5m", "10m", "1h", "3h", "6h", "12h", "24h"]
+      description: Starting resolution key
+      example: "1m"
+    to_resolution:
+      type: string
+      enum: ["1m", "5m", "10m", "1h", "3h", "6h", "12h", "24h"]
+      description: Target resolution key
+      example: "5m"
+    cache_hit:
+      type: boolean
+      description: True if data came from IndexedDB cache
+      example: true
+    timestamp:
+      type: integer
+      format: int64
+      description: Unix timestamp (milliseconds) when switch occurred
+      example: 1703240000000
+
+PerformanceReport:
+  type: object
+  description: Aggregated performance test results
+  required:
+    - test_name
+    - timestamp
+    - sample_count
+    - statistics
+    - passed
+    - threshold_ms
+    - measurements
+  properties:
+    test_name:
+      type: string
+      description: Identifier for the test
+      example: "resolution_switching_performance"
+    timestamp:
+      type: string
+      format: date-time
+      description: ISO 8601 timestamp when test completed
+      example: "2025-12-22T10:30:00Z"
+    sample_count:
+      type: integer
+      minimum: 1
+      description: Number of switches measured
+      example: 100
+    statistics:
+      $ref: "#/StatsSummary"
+    passed:
+      type: boolean
+      description: True if p95 < threshold
+      example: true
+    threshold_ms:
+      type: number
+      format: float
+      description: Target threshold in milliseconds
+      example: 100
+    measurements:
+      type: array
+      items:
+        $ref: "#/SwitchTiming"
+      description: Raw timing data
+
+StatsSummary:
+  type: object
+  description: Statistical summary of timing measurements
+  required:
+    - min_ms
+    - max_ms
+    - mean_ms
+    - p50_ms
+    - p90_ms
+    - p95_ms
+    - p99_ms
+  properties:
+    min_ms:
+      type: number
+      format: float
+      description: Minimum observed latency
+      example: 12.5
+    max_ms:
+      type: number
+      format: float
+      description: Maximum observed latency
+      example: 145.2
+    mean_ms:
+      type: number
+      format: float
+      description: Arithmetic mean
+      example: 42.3
+    p50_ms:
+      type: number
+      format: float
+      description: 50th percentile (median)
+      example: 38.1
+    p90_ms:
+      type: number
+      format: float
+      description: 90th percentile
+      example: 78.4
+    p95_ms:
+      type: number
+      format: float
+      description: 95th percentile (key threshold)
+      example: 92.1
+    p99_ms:
+      type: number
+      format: float
+      description: 99th percentile
+      example: 118.5
