@@ -391,10 +391,7 @@ class TestLiveUpdates:
 
         # Check for partial bucket indicator
         partial_indicator = page.locator(
-            ".partial-bucket, "
-            "[data-partial='true'], "
-            ".in-progress, "
-            "[class*='partial']"
+            ".partial-bucket, [data-partial='true'], .in-progress, [class*='partial']"
         )
 
         # Also check in JavaScript state

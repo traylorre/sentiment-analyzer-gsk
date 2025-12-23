@@ -1,0 +1,125 @@
+# CloudWatch Logs Insights Queries for Cache Metrics
+# Feature: 1020-validate-cache-hit-rate
+# Log Group: /aws/lambda/sse-streaming-{environment}
+
+queries:
+  # Aggregate hit rate for the last hour
+  aggregate_hit_rate:
+    name: "Aggregate Cache Hit Rate (Last Hour)"
+    description: "Calculate overall cache hit rate across all requests"
+    query: |
+      fields @timestamp, hit_rate, hits, misses
+      | filter event_type = "cache_metrics"
+      | stats avg(hit_rate) as avg_hit_rate,
+              sum(hits) as total_hits,
+              sum(misses) as total_misses,
+              count() as sample_count
+              by bin(1h)
+      | sort @timestamp desc
+      | limit 24
+    usage: "Run in CloudWatch Logs Insights console against SSE Lambda log group"
+    success_criteria: "avg_hit_rate > 0.80"
+
+  # Hit rate by ticker (identify poorly cached tickers)
+  hit_rate_by_ticker:
+    name: "Cache Hit Rate by Ticker"
+    description: "Identify which tickers have lowest cache efficiency"
+    query: |
+      fields @timestamp, ticker, hit_rate
+      | filter event_type = "cache_metrics" and ispresent(ticker)
+      | stats avg(hit_rate) as ticker_hit_rate,
+              count() as sample_count
+              by ticker
+      | sort ticker_hit_rate asc
+      | limit 20
+    usage: "Identify tickers that may need TTL tuning or have unusual access patterns"
+    success_criteria: "All tickers should have ticker_hit_rate > 0.75"
+
+  # Time-series trend (5-minute buckets)
+  hit_rate_trend:
+    name: "Cache Hit Rate Time Series (5-minute buckets)"
+    description: "Track hit rate over time to identify patterns or degradation"
+    query: |
+      fields @timestamp, hit_rate
+      | filter event_type = "cache_metrics"
+      | stats avg(hit_rate) as avg_hit_rate,
+              min(hit_rate) as min_hit_rate,
+              max(hit_rate) as max_hit_rate,
+              count() as samples
+              by bin(5m)
+      | sort @timestamp desc
+      | limit 288
+    usage: "Visualize cache performance over time, detect degradation patterns"
+    success_criteria: "avg_hit_rate should remain stable above 0.80"
+
+  # Low hit rate detection (alerts)
+  low_hit_rate_events:
+    name: "Low Cache Hit Rate Events"
+    description: "Find all instances where hit rate dropped below target"
+    query: |
+      fields @timestamp, hit_rate, hits, misses, entry_count, trigger, is_cold_start
+      | filter event_type = "cache_metrics" and hit_rate < 0.80
+      | sort @timestamp desc
+      | limit 100
+    usage: "Investigate periods of poor cache performance"
+    success_criteria: "Should be rare (mostly cold starts)"
+
+  # Cold start impact
+  cold_start_impact:
+    name: "Cold Start Impact on Cache"
+    description: "Compare cache performance on cold starts vs warm invocations"
+    query: |
+      fields @timestamp, hit_rate, is_cold_start
+      | filter event_type = "cache_metrics"
+      | stats avg(hit_rate) as avg_hit_rate,
+              count() as sample_count
+              by is_cold_start
+    usage: "Quantify cold start impact on cache performance"
+    success_criteria: "Warm invocations (is_cold_start=false) should have >80% hit rate"
+
+  # Cache utilization
+  cache_utilization:
+    name: "Cache Utilization Over Time"
+    description: "Track how full the cache is (entry_count vs max_entries)"
+    query: |
+      fields @timestamp, entry_count, max_entries
+      | filter event_type = "cache_metrics"
+      | stats avg(entry_count) as avg_entries,
+              max(entry_count) as peak_entries,
+              latest(max_entries) as max_allowed
+              by bin(1h)
+      | sort @timestamp desc
+      | limit 24
+    usage: "Ensure cache size is appropriate; if consistently near max, consider increasing"
+    success_criteria: "peak_entries should be less than max_allowed (avoid constant eviction)"
+
+  # Hourly summary report
+  hourly_summary:
+    name: "Hourly Cache Performance Summary"
+    description: "Executive summary of cache performance by hour"
+    query: |
+      fields @timestamp, hit_rate, hits, misses, entry_count
+      | filter event_type = "cache_metrics" and is_cold_start = false
+      | stats avg(hit_rate) as avg_hit_rate,
+              sum(hits) as total_hits,
+              sum(misses) as total_misses,
+              avg(entry_count) as avg_entries,
+              count() as samples
+              by bin(1h)
+      | sort @timestamp desc
+      | limit 168
+    usage: "Weekly performance review (7 days × 24 hours)"
+    success_criteria: "All hours should show avg_hit_rate > 0.80"
+
+# Example AWS CLI command to run a query
+example_cli:
+  description: "Run aggregate hit rate query via AWS CLI"
+  command: |
+    aws logs start-query \
+      --log-group-name "/aws/lambda/sse-streaming-preprod" \
+      --start-time $(date -d '1 hour ago' +%s) \
+      --end-time $(date +%s) \
+      --query-string 'fields @timestamp, hit_rate | filter event_type = "cache_metrics" | stats avg(hit_rate) as avg_hit_rate'
+
+    # Get results (wait ~5 seconds)
+    aws logs get-query-results --query-id <query-id-from-above>
