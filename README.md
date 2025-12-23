@@ -12,60 +12,51 @@ A cloud-hosted Sentiment Analyzer service built with serverless AWS architecture
 
 ## CI/CD Pipeline Status
 
-### PR Checks
-[![Code Quality](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pr-check-lint.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pr-check-lint.yml)
-[![Unit Tests](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pr-check-test.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pr-check-test.yml)
-[![Security Scan](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pr-check-security.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pr-check-security.yml)
-[![CodeQL](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pr-check-codeql.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pr-check-codeql.yml)
-
-### Deployment Pipeline
-
+[![PR Checks](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pr-checks.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pr-checks.yml)
 [![Deploy Pipeline](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/deploy.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/deploy.yml)
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555', 'background':'#1a1a2e'}}}%%
 flowchart LR
-    subgraph Stage1["Build Stage"]
-        Build["Build Lambda<br/>Packages"]
+    subgraph Build["Build Stage"]
+        build["Build Lambda<br/>Packages"]
+        test["Unit Tests<br/>(Mocked AWS)"]
     end
 
-    subgraph Stage2["Dev Stage"]
-        DeployDev["Deploy Dev"]
-        TestDev["Test Dev"]
+    subgraph Images["Container Images"]
+        sse_img["Build SSE<br/>Lambda Image"]
+        analysis_img["Build Analysis<br/>Lambda Image"]
     end
 
-    subgraph Stage3["Preprod Stage"]
-        DeployPreprod["Deploy Preprod"]
-        TestPreprod["Test Preprod"]
+    subgraph Preprod["Preprod Stage"]
+        deploy_preprod["Deploy<br/>Preprod"]
+        test_preprod["Integration<br/>Tests"]
     end
 
-    subgraph Stage4["Prod Stage"]
-        DeployProd["Deploy Prod"]
-        CanaryTest["Canary Test"]
-        Summary["Summary"]
+    subgraph Prod["Production Stage"]
+        deploy_prod["Deploy<br/>Prod"]
+        canary["Canary<br/>Test"]
+        summary["Summary"]
     end
 
-    Build --> DeployDev
-    DeployDev --> TestDev
-    TestDev --> DeployPreprod
-    DeployPreprod --> TestPreprod
-    TestPreprod --> DeployProd
-    DeployProd --> CanaryTest
-    CanaryTest --> Summary
+    build --> test
+    test --> sse_img
+    test --> analysis_img
+    sse_img --> deploy_preprod
+    analysis_img --> deploy_preprod
+    deploy_preprod --> test_preprod
+    test_preprod --> deploy_prod
+    deploy_prod --> canary
+    canary --> summary
 
-    classDef stageBox fill:#fff8e1,stroke:#c9a227,stroke-width:2px,color:#333
-    classDef buildNode fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px,color:#1e3a1e
-    classDef devNode fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
-    classDef preprodNode fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
+    classDef buildNode fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px
+    classDef imageNode fill:#b39ddb,stroke:#673ab7,stroke-width:2px
+    classDef preprodNode fill:#ffb74d,stroke:#c77800,stroke-width:2px
     classDef prodNode fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
-    classDef summaryNode fill:#b39ddb,stroke:#673ab7,stroke-width:2px,color:#1a0a3e
 
-    class Stage1,Stage2,Stage3,Stage4 stageBox
-    class Build buildNode
-    class DeployDev,TestDev devNode
-    class DeployPreprod,TestPreprod preprodNode
-    class DeployProd,CanaryTest prodNode
-    class Summary summaryNode
+    class build,test buildNode
+    class sse_img,analysis_img imageNode
+    class deploy_preprod,test_preprod preprodNode
+    class deploy_prod,canary,summary prodNode
 ```
 
 **Quick Actions:**
@@ -194,7 +185,6 @@ Ingests financial news from external sources (Tiingo, Finnhub) and returns senti
 ### High-Level System Architecture
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
 graph TB
     subgraph External["External Sources"]
         Tiingo[Tiingo API<br/>Primary Source]
@@ -295,72 +285,51 @@ graph TB
 ### Environment Promotion Pipeline
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
 graph LR
     subgraph Source["Source"]
         Code[Feature Branch]
     end
 
-    subgraph Build["Build"]
-        GHA[GitHub Actions<br/>Build & Test]
+    subgraph Build["Build & Test"]
+        GHA[GitHub Actions<br/>Build & Unit Test]
         Artifact[Lambda Packages<br/>SHA-versioned]
-    end
-
-    subgraph DevEnv["Dev Environment"]
-        DevDeploy[Deploy Dev]
-        DevTest[Integration Tests]
-        DevApprove{Tests Pass?}
     end
 
     subgraph PreprodEnv["Preprod Environment"]
         PreprodDeploy[Deploy Preprod]
-        PreprodTest[Smoke Tests]
-        PreprodApprove{Validation<br/>Gate}
+        PreprodTest[Integration Tests<br/>E2E + Playwright]
+        PreprodApprove{Tests Pass?}
     end
 
     subgraph ProdEnv["Prod Environment"]
-        ProdApprove{Manual<br/>Approval}
         ProdDeploy[Deploy Prod]
+        Canary[Canary Test]
         ProdMonitor[Production<br/>Monitoring]
     end
 
     Code --> GHA
     GHA --> Artifact
-    Artifact --> DevDeploy
-    DevDeploy --> DevTest
-    DevTest --> DevApprove
-
-    DevApprove -->|Pass| PreprodDeploy
-    DevApprove -->|Fail| Code
-
+    Artifact --> PreprodDeploy
     PreprodDeploy --> PreprodTest
     PreprodTest --> PreprodApprove
 
-    PreprodApprove -->|Pass| ProdApprove
+    PreprodApprove -->|Pass| ProdDeploy
     PreprodApprove -->|Fail| Code
 
-    ProdApprove -->|Approved| ProdDeploy
-    ProdApprove -->|Rejected| Code
+    ProdDeploy --> Canary
+    Canary --> ProdMonitor
 
-    ProdDeploy --> ProdMonitor
-
-    classDef stageBox fill:#fff8e1,stroke:#c9a227,stroke-width:2px,color:#333
-    classDef sourceNode fill:#b39ddb,stroke:#673ab7,stroke-width:2px,color:#1a0a3e
-    classDef buildNode fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px,color:#1e3a1e
-    classDef devNode fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
-    classDef preprodNode fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
+    classDef sourceNode fill:#b39ddb,stroke:#673ab7,stroke-width:2px
+    classDef buildNode fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px
+    classDef preprodNode fill:#ffb74d,stroke:#c77800,stroke-width:2px
     classDef prodNode fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
-    classDef gateStyle fill:#ffcc80,stroke:#e65100,stroke-width:2px,color:#4a2800
-    classDef criticalGate fill:#ef9a9a,stroke:#c62828,stroke-width:2px,color:#4a0000
+    classDef gateStyle fill:#ffcc80,stroke:#e65100,stroke-width:2px
 
-    class Source,Build,DevEnv,PreprodEnv,ProdEnv stageBox
     class Code sourceNode
     class GHA,Artifact buildNode
-    class DevDeploy,DevTest devNode
     class PreprodDeploy,PreprodTest preprodNode
-    class ProdDeploy,ProdMonitor prodNode
-    class DevApprove,PreprodApprove gateStyle
-    class ProdApprove criticalGate
+    class ProdDeploy,Canary,ProdMonitor prodNode
+    class PreprodApprove gateStyle
 ```
 
 ### Data Flow: Real-Time Sentiment Processing
