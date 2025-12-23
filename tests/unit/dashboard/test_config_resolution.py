@@ -57,10 +57,9 @@ class TestResolutionConfig:
         for resolution in Resolution:
             js_ttl = parsed_resolutions[resolution.value]["ttlSeconds"]
             python_ttl = resolution.ttl_seconds
-            assert js_ttl == python_ttl, (
-                f"TTL mismatch for {resolution.value}: "
-                f"JS={js_ttl}, Python={python_ttl}"
-            )
+            assert (
+                js_ttl == python_ttl
+            ), f"TTL mismatch for {resolution.value}: JS={js_ttl}, Python={python_ttl}"
 
     def test_duration_matches_python_model(self, parsed_resolutions: dict) -> None:
         """Verify duration values match Resolution.duration_seconds."""
