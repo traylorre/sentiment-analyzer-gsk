@@ -31,6 +31,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from boto3.dynamodb.conditions import Key
+from botocore.exceptions import ClientError
 from pydantic import BaseModel
 
 from src.lambdas.shared.logging_utils import get_safe_error_info, sanitize_for_log
@@ -42,6 +43,7 @@ from src.lambdas.shared.models.configuration import (
     Ticker,
 )
 from src.lambdas.shared.models.status_utils import ACTIVE, INACTIVE
+from src.lambdas.shared.retry import dynamodb_retry
 
 logger = logging.getLogger(__name__)
 
@@ -259,7 +261,16 @@ def create_configuration(
     )
 
     try:
-        table.put_item(Item=config.to_dynamodb_item())
+        # Feature 1032: Use conditional expression to prevent duplicates
+        # and add retry logic for transient failures
+        @dynamodb_retry
+        def _put_item_with_retry() -> None:
+            table.put_item(
+                Item=config.to_dynamodb_item(),
+                ConditionExpression="attribute_not_exists(PK)",
+            )
+
+        _put_item_with_retry()
 
         # C3 FIX: Invalidate cache after creation
         _invalidate_user_config_cache(user_id)
@@ -274,6 +285,30 @@ def create_configuration(
         )
 
         return _config_to_response(config)
+
+    except ClientError as e:
+        error_code = e.response.get("Error", {}).get("Code", "")
+        if error_code == "ConditionalCheckFailedException":
+            # This shouldn't happen with UUID, but handle gracefully
+            logger.warning(
+                "Config creation conflict (duplicate key)",
+                extra={"config_id_prefix": sanitize_for_log(config_id[:8])},
+            )
+            return ErrorResponse(
+                error=ErrorDetail(
+                    code="CONFLICT",
+                    message="Configuration already exists. Please retry.",
+                )
+            )
+        # Log and re-raise other ClientErrors
+        logger.error(
+            "DynamoDB error creating configuration",
+            extra={
+                "error_code": error_code,
+                "user_id_prefix": sanitize_for_log(user_id[:8]),
+            },
+        )
+        raise
 
     except Exception as e:
         logger.error(
@@ -585,8 +620,13 @@ def delete_configuration(
 
 
 def _count_user_configurations(table: Any, user_id: str) -> int:
-    """Count user's active configurations."""
-    try:
+    """Count user's active configurations.
+
+    Feature 1032: Added retry logic for transient DynamoDB failures.
+    """
+
+    @dynamodb_retry
+    def _query_with_retry() -> int:
         response = table.query(
             KeyConditionExpression=Key("PK").eq(f"USER#{user_id}")
             & Key("SK").begins_with("CONFIG#"),
@@ -596,7 +636,14 @@ def _count_user_configurations(table: Any, user_id: str) -> int:
             ExpressionAttributeValues={":active": ACTIVE},
         )
         return response.get("Count", 0)
-    except Exception:
+
+    try:
+        return _query_with_retry()
+    except Exception as e:
+        logger.warning(
+            "Failed to count user configurations, assuming 0",
+            extra=get_safe_error_info(e),
+        )
         return 0
 
 
