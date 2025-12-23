@@ -45,7 +45,7 @@ freezegun==1.5.5        # Time mocking for TTL tests
 hypothesis>=6.0.0
 
 # E2E Testing - Playwright for browser automation
-pytest-playwright==0.5.2  # Pytest fixtures for Playwright
+pytest-playwright>=0.7.2  # Pytest fixtures for Playwright (0.7.2 adds pytest 9.0+ support)
 playwright>=1.49.0        # Browser automation (requires: playwright install)
 
 # Terraform parsing - Feature 075 (validation gaps)
