@@ -5,6 +5,7 @@ import { fetchOHLCData, fetchSentimentHistory } from '@/lib/api/ohlc';
 import { useAuthStore } from '@/stores/auth-store';
 import type {
   TimeRange,
+  OHLCResolution,
   ChartSentimentSource,
   OHLCResponse,
   SentimentHistoryResponse,
@@ -15,19 +16,25 @@ import { STALE_TIME_MS } from '@/lib/constants';
 interface UseChartDataOptions {
   ticker: string | null;
   timeRange?: TimeRange;
+  resolution?: OHLCResolution;
   sentimentSource?: ChartSentimentSource;
   enabled?: boolean;
 }
 
 /**
  * Hook to fetch OHLC price data for a ticker.
+ * Supports resolution parameter for intraday data (T015-T017).
  */
-export function useOHLCData(ticker: string | null, timeRange: TimeRange = '1M') {
+export function useOHLCData(
+  ticker: string | null,
+  timeRange: TimeRange = '1M',
+  resolution: OHLCResolution = 'D'
+) {
   const userId = useAuthStore((state) => state.user?.userId);
 
   return useQuery<OHLCResponse>({
-    queryKey: ['ohlc', ticker, timeRange],
-    queryFn: () => fetchOHLCData(ticker!, { range: timeRange }, userId!),
+    queryKey: ['ohlc', ticker, timeRange, resolution],
+    queryFn: () => fetchOHLCData(ticker!, { range: timeRange, resolution }, userId!),
     enabled: !!ticker && !!userId,
     staleTime: STALE_TIME_MS,
   });
@@ -57,10 +64,12 @@ export function useSentimentHistoryData(
  *
  * Fetches both OHLC and sentiment history in parallel and combines them
  * into a single ChartDataBundle for the overlay chart component.
+ * Supports resolution parameter for intraday OHLC data (T015-T017).
  */
 export function useChartData({
   ticker,
   timeRange = '1M',
+  resolution = 'D',
   sentimentSource = 'aggregated',
   enabled = true,
 }: UseChartDataOptions): ChartDataBundle & {
@@ -70,8 +79,8 @@ export function useChartData({
   const userId = useAuthStore((state) => state.user?.userId);
 
   const ohlcQuery = useQuery<OHLCResponse>({
-    queryKey: ['ohlc', ticker, timeRange],
-    queryFn: () => fetchOHLCData(ticker!, { range: timeRange }, userId!),
+    queryKey: ['ohlc', ticker, timeRange, resolution],
+    queryFn: () => fetchOHLCData(ticker!, { range: timeRange, resolution }, userId!),
     enabled: enabled && !!ticker && !!userId,
     staleTime: STALE_TIME_MS,
   });
@@ -95,9 +104,12 @@ export function useChartData({
     priceData: ohlcQuery.data?.candles || [],
     sentimentData: sentimentQuery.data?.history || [],
     timeRange,
+    resolution: ohlcQuery.data?.resolution || resolution,
     sentimentSource,
     isLoading,
     error,
+    resolutionFallback: ohlcQuery.data?.resolution_fallback,
+    fallbackMessage: ohlcQuery.data?.fallback_message,
     refetch: () => {
       ohlcQuery.refetch();
       sentimentQuery.refetch();

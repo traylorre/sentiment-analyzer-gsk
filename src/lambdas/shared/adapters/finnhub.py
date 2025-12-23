@@ -293,16 +293,18 @@ class FinnhubAdapter(BaseAdapter):
         ticker: str,
         start_date: datetime | None = None,
         end_date: datetime | None = None,
+        resolution: str = "D",
     ) -> list[OHLCCandle]:
-        """Fetch daily OHLC price data.
+        """Fetch OHLC price data at specified resolution.
 
-        DFA-004 optimization: Results cached for 1 hour. OHLC data changes
-        infrequently (daily), so longer TTL is safe.
+        DFA-004 optimization: Results cached for 1 hour (daily) or 5 min (intraday).
+        Supports intraday resolutions: 1, 5, 15, 30, 60 minutes or D (daily).
 
         Args:
             ticker: Stock symbol
             start_date: Start date (default: 30 days ago)
             end_date: End date (default: now)
+            resolution: Candle resolution - "1", "5", "15", "30", "60", or "D"
 
         Returns:
             List of OHLCCandle objects
@@ -317,15 +319,20 @@ class FinnhubAdapter(BaseAdapter):
         from_ts = int(start_date.timestamp())
         to_ts = int(end_date.timestamp())
 
+        # Use shorter cache TTL for intraday data (fresher during market hours)
+        cache_ttl = (
+            API_CACHE_TTL_OHLC_SECONDS if resolution == "D" else 300
+        )  # 5 min for intraday
+
         # DFA-004: Check cache first
         cache_params = {
             "symbol": ticker,
-            "resolution": "D",
+            "resolution": resolution,
             "from": from_ts,
             "to": to_ts,
         }
         cache_key = _get_cache_key("/stock/candle", cache_params)
-        cached_data = _get_from_cache(cache_key, API_CACHE_TTL_OHLC_SECONDS)
+        cached_data = _get_from_cache(cache_key, cache_ttl)
 
         if cached_data is not None:
             logger.debug("Finnhub OHLC cache hit for %s", sanitize_for_log(ticker))

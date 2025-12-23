@@ -7,11 +7,13 @@ import type {
   OHLCResponse,
   SentimentHistoryResponse,
   TimeRange,
+  OHLCResolution,
   ChartSentimentSource,
 } from '@/types/chart';
 
 interface OHLCParams {
   range?: TimeRange;
+  resolution?: OHLCResolution;
   start_date?: string;
   end_date?: string;
 }
@@ -27,7 +29,7 @@ interface SentimentHistoryParams {
  * Fetch OHLC price data for a ticker.
  *
  * @param ticker - Stock ticker symbol (e.g., AAPL)
- * @param params - Query parameters for time range
+ * @param params - Query parameters for time range and resolution (T013-T014)
  * @param userId - User ID for authentication
  * @returns OHLCResponse with candles array
  */
@@ -39,6 +41,7 @@ export async function fetchOHLCData(
   return api.get<OHLCResponse>(`/api/v2/tickers/${ticker}/ohlc`, {
     params: {
       range: params.range,
+      resolution: params.resolution,
       start_date: params.start_date,
       end_date: params.end_date,
     },
