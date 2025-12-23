@@ -36,8 +36,68 @@ const CONFIG = {
         TRENDS: '/api/v2/trends',
         ARTICLES: '/api/v2/articles',
         METRICS: '/api/v2/metrics',
-        STREAM: '/api/v2/stream'  // SSE endpoint (served by SSE Lambda)
+        STREAM: '/api/v2/stream',  // SSE endpoint (served by SSE Lambda)
+        TIMESERIES: '/api/v2/timeseries'  // Timeseries endpoint: append /{ticker}?resolution=5m
     },
+
+    // Resolution configuration for multi-resolution timeseries (Feature 1009)
+    // Values sourced from src/lib/timeseries/models.py Resolution enum
+    RESOLUTIONS: {
+        '1m': {
+            key: '1m',
+            displayName: '1 min',
+            durationSeconds: 60,
+            ttlSeconds: 21600  // 6 hours
+        },
+        '5m': {
+            key: '5m',
+            displayName: '5 min',
+            durationSeconds: 300,
+            ttlSeconds: 43200  // 12 hours
+        },
+        '10m': {
+            key: '10m',
+            displayName: '10 min',
+            durationSeconds: 600,
+            ttlSeconds: 86400  // 24 hours
+        },
+        '1h': {
+            key: '1h',
+            displayName: '1 hour',
+            durationSeconds: 3600,
+            ttlSeconds: 604800  // 7 days
+        },
+        '3h': {
+            key: '3h',
+            displayName: '3 hours',
+            durationSeconds: 10800,
+            ttlSeconds: 1209600  // 14 days
+        },
+        '6h': {
+            key: '6h',
+            displayName: '6 hours',
+            durationSeconds: 21600,
+            ttlSeconds: 2592000  // 30 days
+        },
+        '12h': {
+            key: '12h',
+            displayName: '12 hours',
+            durationSeconds: 43200,
+            ttlSeconds: 5184000  // 60 days
+        },
+        '24h': {
+            key: '24h',
+            displayName: '24 hours',
+            durationSeconds: 86400,
+            ttlSeconds: 7776000  // 90 days
+        }
+    },
+
+    // Resolution display order for UI selectors
+    RESOLUTION_ORDER: ['1m', '5m', '10m', '1h', '3h', '6h', '12h', '24h'],
+
+    // Default resolution (Feature 1009 FR-002)
+    DEFAULT_RESOLUTION: '5m',
 
     // Polling interval for sentiment data (milliseconds)
     SENTIMENT_POLL_INTERVAL: 30000, // 30 seconds
@@ -89,3 +149,7 @@ Object.freeze(CONFIG.COLORS);
 Object.freeze(CONFIG.COLORS_BG);
 Object.freeze(CONFIG.DATE_FORMAT);
 Object.freeze(CONFIG.SENTIMENT_LABELS);
+Object.freeze(CONFIG.RESOLUTIONS);
+Object.freeze(CONFIG.RESOLUTION_ORDER);
+// Deep freeze each resolution object
+Object.values(CONFIG.RESOLUTIONS).forEach(r => Object.freeze(r));
