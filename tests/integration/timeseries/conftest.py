@@ -10,6 +10,7 @@ Canonical References:
 Uses LocalStack DynamoDB for realistic AWS behavior.
 """
 
+import uuid
 from datetime import UTC, datetime
 from typing import Any
 
@@ -24,7 +25,18 @@ TEST_BUCKET_5M_START = datetime(2024, 1, 2, 10, 35, 0, tzinfo=UTC)
 
 
 @pytest.fixture(scope="class")
-def timeseries_table(dynamodb_client, test_run_id) -> str:
+def timeseries_test_run_id() -> str:
+    """Class-scoped test run ID for timeseries integration tests.
+
+    We need class scope to match the timeseries_table fixture scope.
+    The parent conftest's test_run_id has function scope which causes
+    a ScopeMismatch error.
+    """
+    return uuid.uuid4().hex[:8]
+
+
+@pytest.fixture(scope="class")
+def timeseries_table(dynamodb_client, timeseries_test_run_id) -> str:
     """
     Create and tear down a DynamoDB timeseries table per test class.
 
@@ -36,12 +48,12 @@ def timeseries_table(dynamodb_client, test_run_id) -> str:
 
     Args:
         dynamodb_client: LocalStack DynamoDB client from parent conftest
-        test_run_id: Unique test run identifier
+        timeseries_test_run_id: Class-scoped unique test run identifier
 
     Yields:
         str: Table name for test use
     """
-    table_name = f"test-timeseries-{test_run_id}"
+    table_name = f"test-timeseries-{timeseries_test_run_id}"
 
     # Create table
     dynamodb_client.create_table(
