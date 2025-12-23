@@ -1,0 +1,232 @@
+# Test Oracle: Timeseries Integration Tests
+# Defines expected outputs for deterministic test inputs
+# Used to validate test assertions are correct
+
+version: "1.0"
+feature: "1016-timeseries-integration-test"
+created: "2024-12-22"
+
+# ==============================================================================
+# Fanout Test Oracle
+# ==============================================================================
+fanout_tests:
+  single_score_fanout:
+    input:
+      ticker: "AAPL"
+      value: 0.75
+      label: "positive"
+      timestamp: "2024-01-02T10:35:47Z"
+      source: "test-source"
+
+    expected:
+      item_count: 8
+
+      partition_keys:
+        - "AAPL#1m"
+        - "AAPL#5m"
+        - "AAPL#10m"
+        - "AAPL#1h"
+        - "AAPL#3h"
+        - "AAPL#6h"
+        - "AAPL#12h"
+        - "AAPL#24h"
+
+      # Bucket timestamps are floored to resolution boundaries
+      bucket_timestamps:
+        "1m": "2024-01-02T10:35:00Z"
+        "5m": "2024-01-02T10:35:00Z"
+        "10m": "2024-01-02T10:30:00Z"
+        "1h": "2024-01-02T10:00:00Z"
+        "3h": "2024-01-02T09:00:00Z"
+        "6h": "2024-01-02T06:00:00Z"
+        "12h": "2024-01-02T00:00:00Z"
+        "24h": "2024-01-02T00:00:00Z"
+
+      # Each item contains OHLC (all same for single score)
+      item_values:
+        open: 0.75
+        high: 0.75
+        low: 0.75
+        close: 0.75
+        count: 1
+        avg: 0.75
+        is_partial: true
+        label_counts:
+          positive: 1
+
+# ==============================================================================
+# Query Ordering Test Oracle
+# ==============================================================================
+query_tests:
+  ascending_order:
+    input:
+      ticker: "AAPL"
+      resolution: "5m"
+      buckets:
+        - "2024-01-02T10:30:00Z"
+        - "2024-01-02T10:35:00Z"
+        - "2024-01-02T10:40:00Z"
+        - "2024-01-02T10:45:00Z"
+        - "2024-01-02T10:50:00Z"
+      query_start: "2024-01-02T10:25:00Z"
+      query_end: "2024-01-02T10:55:00Z"
+
+    expected:
+      bucket_count: 5
+      order: "ascending"
+      first_bucket: "2024-01-02T10:30:00Z"
+      last_bucket: "2024-01-02T10:50:00Z"
+
+  out_of_order_insert:
+    input:
+      insert_order:
+        - "2024-01-02T10:40:00Z"
+        - "2024-01-02T10:30:00Z"
+        - "2024-01-02T10:50:00Z"
+        - "2024-01-02T10:35:00Z"
+        - "2024-01-02T10:45:00Z"
+
+    expected:
+      returned_order:
+        - "2024-01-02T10:30:00Z"
+        - "2024-01-02T10:35:00Z"
+        - "2024-01-02T10:40:00Z"
+        - "2024-01-02T10:45:00Z"
+        - "2024-01-02T10:50:00Z"
+
+  empty_range:
+    input:
+      query_start: "2024-01-02T11:00:00Z"
+      query_end: "2024-01-02T12:00:00Z"
+      existing_buckets: []
+
+    expected:
+      bucket_count: 0
+      result: []
+
+# ==============================================================================
+# Partial Bucket Test Oracle
+# ==============================================================================
+partial_bucket_tests:
+  mid_bucket_50_percent:
+    input:
+      current_time: "2024-01-02T10:37:30Z"
+      bucket_start: "2024-01-02T10:35:00Z"
+      resolution: "5m"  # 300 seconds
+
+    expected:
+      is_partial: true
+      progress_pct: 50.0  # 150 seconds into 300-second bucket
+      elapsed_seconds: 150
+
+  bucket_start_0_percent:
+    input:
+      current_time: "2024-01-02T10:35:00Z"
+      bucket_start: "2024-01-02T10:35:00Z"
+      resolution: "5m"
+
+    expected:
+      is_partial: true
+      progress_pct: 0.0
+
+  bucket_end_100_percent:
+    input:
+      current_time: "2024-01-02T10:45:00Z"
+      bucket_start: "2024-01-02T10:35:00Z"
+      resolution: "5m"
+
+    expected:
+      is_partial: false
+      progress_pct: 100.0
+
+# ==============================================================================
+# OHLC Aggregation Test Oracle
+# ==============================================================================
+ohlc_tests:
+  four_scores:
+    input:
+      scores:
+        - value: 0.6
+          label: "positive"
+          timestamp: "2024-01-02T10:35:10Z"
+        - value: 0.9
+          label: "neutral"
+          timestamp: "2024-01-02T10:35:20Z"
+        - value: 0.3
+          label: "positive"
+          timestamp: "2024-01-02T10:35:30Z"
+        - value: 0.7
+          label: "negative"
+          timestamp: "2024-01-02T10:35:40Z"
+
+    expected:
+      open: 0.6    # First by timestamp
+      high: 0.9    # Maximum value
+      low: 0.3     # Minimum value
+      close: 0.7   # Last by timestamp
+      count: 4
+      sum: 2.5     # 0.6 + 0.9 + 0.3 + 0.7
+      avg: 0.625   # 2.5 / 4
+      label_counts:
+        positive: 2
+        neutral: 1
+        negative: 1
+
+  two_scores:
+    input:
+      scores:
+        - value: 0.6
+          label: "positive"
+          timestamp: "2024-01-02T10:35:10Z"
+        - value: 0.8
+          label: "positive"
+          timestamp: "2024-01-02T10:35:20Z"
+
+    expected:
+      open: 0.6
+      high: 0.8
+      low: 0.6
+      close: 0.8
+      count: 2
+      sum: 1.4
+      avg: 0.7
+      label_counts:
+        positive: 2
+
+  single_score:
+    input:
+      scores:
+        - value: 0.75
+          label: "positive"
+          timestamp: "2024-01-02T10:35:15Z"
+
+    expected:
+      open: 0.75
+      high: 0.75
+      low: 0.75
+      close: 0.75
+      count: 1
+      sum: 0.75
+      avg: 0.75
+      label_counts:
+        positive: 1
+
+# ==============================================================================
+# TTL Test Oracle
+# ==============================================================================
+ttl_tests:
+  resolution_dependent_ttl:
+    input:
+      base_timestamp: "2024-01-02T10:35:00Z"  # Unix: 1704192900
+
+    expected:
+      # TTL = base_timestamp + resolution.ttl_seconds
+      ttl_values:
+        "1m": 1704214500   # +6 hours (21600s)
+        "5m": 1704236100   # +12 hours (43200s)
+        "10m": 1704279300  # +24 hours (86400s)
+        "1h": 1704797700   # +7 days (604800s)
+        "3h": 1705402500   # +14 days (1209600s)
+        "6h": 1706784900   # +30 days (2592000s)
+        "12h": 1709376900  # +60 days (5184000s)
+        "24h": 1711968900  # +90 days (7776000s)
