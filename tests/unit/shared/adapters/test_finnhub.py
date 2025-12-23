@@ -293,6 +293,68 @@ class TestFinnhubGetOHLC:
             with pytest.raises(RateLimitError):
                 finnhub_adapter.get_ohlc("AAPL")
 
+    def test_get_ohlc_with_resolution_parameter(self, finnhub_adapter: FinnhubAdapter):
+        """Test OHLC fetch with intraday resolution (T008)."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.is_success = True
+        mock_response.json.return_value = {
+            "s": "ok",
+            "t": [1705276800, 1705277100],  # 5 min apart
+            "o": [150.0, 150.5],
+            "h": [150.8, 151.0],
+            "l": [149.5, 150.2],
+            "c": [150.5, 150.8],
+            "v": [10000, 12000],
+        }
+
+        with patch.object(
+            finnhub_adapter.client, "get", return_value=mock_response
+        ) as mock_get:
+            result = finnhub_adapter.get_ohlc("AAPL", resolution="5")
+
+        call_params = mock_get.call_args[1]["params"]
+        assert call_params["resolution"] == "5"
+        assert len(result) == 2
+
+    @pytest.mark.parametrize(
+        "resolution",
+        ["1", "5", "15", "30", "60", "D"],
+    )
+    def test_get_ohlc_all_resolutions(
+        self, finnhub_adapter: FinnhubAdapter, resolution: str
+    ):
+        """Test OHLC fetch with all supported resolutions (T008)."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.is_success = True
+        mock_response.json.return_value = {"s": "no_data"}
+
+        with patch.object(
+            finnhub_adapter.client, "get", return_value=mock_response
+        ) as mock_get:
+            finnhub_adapter.get_ohlc("AAPL", resolution=resolution)
+
+        call_params = mock_get.call_args[1]["params"]
+        assert call_params["resolution"] == resolution
+
+    def test_get_ohlc_default_resolution_is_daily(
+        self, finnhub_adapter: FinnhubAdapter
+    ):
+        """Test that default resolution is daily (D)."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.is_success = True
+        mock_response.json.return_value = {"s": "no_data"}
+
+        with patch.object(
+            finnhub_adapter.client, "get", return_value=mock_response
+        ) as mock_get:
+            finnhub_adapter.get_ohlc("AAPL")
+
+        call_params = mock_get.call_args[1]["params"]
+        assert call_params["resolution"] == "D"
+
 
 class TestFinnhubContextManager:
     """Tests for context manager protocol."""

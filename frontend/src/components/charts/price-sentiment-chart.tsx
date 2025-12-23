@@ -19,7 +19,8 @@ import { cn } from '@/lib/utils';
 import { formatSentimentScore, formatDateTime } from '@/lib/utils';
 import { useChartData } from '@/hooks/use-chart-data';
 import { useHaptic } from '@/hooks/use-haptic';
-import type { TimeRange, ChartSentimentSource, PriceCandle, SentimentPoint } from '@/types/chart';
+import type { TimeRange, OHLCResolution, ChartSentimentSource, PriceCandle, SentimentPoint } from '@/types/chart';
+import { RESOLUTION_LABELS } from '@/types/chart';
 
 interface PriceSentimentChartProps {
   ticker: string;
@@ -27,6 +28,7 @@ interface PriceSentimentChartProps {
   height?: number;
   interactive?: boolean;
   initialTimeRange?: TimeRange;
+  initialResolution?: OHLCResolution;
   initialSentimentSource?: ChartSentimentSource;
 }
 
@@ -61,6 +63,7 @@ export function PriceSentimentChart({
   height = 400,
   interactive = true,
   initialTimeRange = '1M',
+  initialResolution = 'D',
   initialSentimentSource = 'aggregated',
 }: PriceSentimentChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -71,16 +74,42 @@ export function PriceSentimentChart({
   const [isReady, setIsReady] = useState(false);
   const [tooltip, setTooltip] = useState<TooltipData | null>(null);
   const [timeRange, setTimeRange] = useState<TimeRange>(initialTimeRange);
+  // T024: Read initial resolution from sessionStorage
+  const [resolution, setResolution] = useState<OHLCResolution>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = sessionStorage.getItem('ohlc_preferred_resolution');
+      if (stored && ['1', '5', '15', '30', '60', 'D'].includes(stored)) {
+        return stored as OHLCResolution;
+      }
+    }
+    return initialResolution;
+  });
   const [sentimentSource, setSentimentSource] = useState<ChartSentimentSource>(initialSentimentSource);
   const [showCandles, setShowCandles] = useState(true);
   const [showSentiment, setShowSentiment] = useState(true);
 
   const haptic = useHaptic();
 
-  // Fetch chart data
-  const { priceData, sentimentData, isLoading, error, refetch } = useChartData({
+  // T025: Persist resolution to sessionStorage when it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('ohlc_preferred_resolution', resolution);
+    }
+  }, [resolution]);
+
+  // Fetch chart data with resolution support (T020)
+  const {
+    priceData,
+    sentimentData,
+    isLoading,
+    error,
+    refetch,
+    resolutionFallback,
+    fallbackMessage,
+  } = useChartData({
     ticker,
     timeRange,
+    resolution,
     sentimentSource,
   });
 
@@ -282,6 +311,15 @@ export function PriceSentimentChart({
     [haptic]
   );
 
+  // Handle resolution change (T019)
+  const handleResolutionChange = useCallback(
+    (newResolution: OHLCResolution) => {
+      setResolution(newResolution);
+      haptic.light();
+    },
+    [haptic]
+  );
+
   // Handle sentiment source change
   const handleSourceChange = useCallback(
     (newSource: ChartSentimentSource) => {
@@ -296,6 +334,7 @@ export function PriceSentimentChart({
   const currentSentiment = sentimentData.length > 0 ? sentimentData[sentimentData.length - 1].score : null;
 
   const timeRanges: TimeRange[] = ['1W', '1M', '3M', '6M', '1Y'];
+  const resolutions: OHLCResolution[] = ['1', '5', '15', '30', '60', 'D'];
   const sentimentSources: { value: ChartSentimentSource; label: string }[] = [
     { value: 'aggregated', label: 'Aggregated' },
     { value: 'tiingo', label: 'Tiingo' },
@@ -359,6 +398,26 @@ export function PriceSentimentChart({
           ))}
         </div>
 
+        {/* Resolution selector (T019) */}
+        <div className="flex gap-1 bg-card/50 rounded-lg p-1">
+          {resolutions.map((res) => (
+            <button
+              key={res}
+              onClick={() => handleResolutionChange(res)}
+              className={cn(
+                'px-2 py-1 text-sm font-medium rounded-md transition-colors',
+                resolution === res
+                  ? 'bg-purple-500/20 border border-purple-500 text-purple-400'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-card'
+              )}
+              aria-pressed={resolution === res}
+              aria-label={`${RESOLUTION_LABELS[res]} resolution`}
+            >
+              {RESOLUTION_LABELS[res]}
+            </button>
+          ))}
+        </div>
+
         {/* Sentiment source dropdown */}
         <select
           value={sentimentSource}
@@ -403,6 +462,13 @@ export function PriceSentimentChart({
           </button>
         </div>
       </div>
+
+      {/* Resolution fallback message (T021) */}
+      {resolutionFallback && fallbackMessage && (
+        <div className="mb-4 px-3 py-2 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-sm text-yellow-500">
+          {fallbackMessage}
+        </div>
+      )}
 
       {/* Tooltip */}
       <AnimatePresence>

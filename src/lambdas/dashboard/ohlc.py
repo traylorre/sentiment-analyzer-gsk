@@ -24,7 +24,9 @@ from src.lambdas.shared.adapters.finnhub import FinnhubAdapter
 from src.lambdas.shared.adapters.tiingo import TiingoAdapter
 from src.lambdas.shared.logging_utils import get_safe_error_info
 from src.lambdas.shared.models import (
+    RESOLUTION_MAX_DAYS,
     TIME_RANGE_DAYS,
+    OHLCResolution,
     OHLCResponse,
     PriceCandle,
     SentimentHistoryResponse,
@@ -55,6 +57,10 @@ async def get_ohlc_data(
     ticker: str,
     request: Request,
     range: TimeRange = Query(TimeRange.ONE_MONTH, description="Time range for data"),
+    resolution: OHLCResolution = Query(
+        OHLCResolution.DAILY,
+        description="Candlestick resolution (1, 5, 15, 30, 60 minutes or D for daily)",
+    ),
     start_date: date | None = Query(
         None, description="Custom start date (overrides range)"
     ),
@@ -65,11 +71,13 @@ async def get_ohlc_data(
     """Get OHLC candlestick data for a ticker.
 
     Returns historical price data for visualization.
-    Uses Tiingo as primary source, Finnhub as fallback.
+    Supports intraday resolutions (1, 5, 15, 30, 60 minutes) and daily.
+    Uses Tiingo as primary source (daily only), Finnhub for all resolutions.
 
     Args:
         ticker: Stock ticker symbol (e.g., AAPL, MSFT)
         range: Predefined time range (1W, 1M, 3M, 6M, 1Y)
+        resolution: Candle resolution - 1/5/15/30/60 min or D (daily)
         start_date: Custom start date (overrides range if provided)
         end_date: Custom end date (defaults to today)
 
@@ -111,37 +119,109 @@ async def get_ohlc_data(
         start_date = end_date - timedelta(days=days)
         time_range_str = range.value
 
+    # Apply time range limiting based on resolution (per data-model.md)
+    max_days = RESOLUTION_MAX_DAYS.get(resolution, 365)
+    actual_days = (end_date - start_date).days
+    if actual_days > max_days:
+        start_date = end_date - timedelta(days=max_days)
+        logger.info(
+            "Time range limited for resolution",
+            extra={
+                "resolution": resolution.value,
+                "max_days": max_days,
+                "requested_days": actual_days,
+            },
+        )
+
     # Log without user-derived values to prevent log injection (CWE-117)
     # CodeQL traces taint from range param -> days -> start_date/end_date
     # See: https://github.com/github/codeql/discussions/10702
     logger.info("Fetching OHLC data")
 
-    # Try Tiingo first (primary source per FR-014)
-    source = "tiingo"
+    # Track fallback state
+    resolution_fallback = False
+    fallback_message = None
+    actual_resolution = resolution
+
+    # For intraday resolutions, use Finnhub (only source with intraday support)
+    # For daily, try Tiingo first then fallback to Finnhub
+    source = "finnhub"
     candles = []
 
-    try:
-        ohlc_candles = tiingo.get_ohlc(ticker, start_date, end_date)
-        if ohlc_candles:
-            candles = [PriceCandle.from_ohlc_candle(c) for c in ohlc_candles]
-    except Exception as e:
-        logger.warning(
-            "Tiingo OHLC fetch failed, trying Finnhub",
-            extra=get_safe_error_info(e),
-        )
+    if resolution == OHLCResolution.DAILY:
+        # Try Tiingo first for daily data (primary source per FR-014)
+        source = "tiingo"
+        try:
+            ohlc_candles = tiingo.get_ohlc(ticker, start_date, end_date)
+            if ohlc_candles:
+                candles = [
+                    PriceCandle.from_ohlc_candle(c, resolution) for c in ohlc_candles
+                ]
+        except Exception as e:
+            logger.warning(
+                "Tiingo OHLC fetch failed, trying Finnhub",
+                extra=get_safe_error_info(e),
+            )
 
-    # Fallback to Finnhub if Tiingo failed or returned no data
+    # Use Finnhub for intraday, or as fallback for daily
     if not candles:
         source = "finnhub"
         try:
-            ohlc_candles = finnhub.get_ohlc(ticker, start_date, end_date)
+            ohlc_candles = finnhub.get_ohlc(
+                ticker, start_date, end_date, resolution=resolution.value
+            )
             if ohlc_candles:
-                candles = [PriceCandle.from_ohlc_candle(c) for c in ohlc_candles]
+                candles = [
+                    PriceCandle.from_ohlc_candle(c, resolution) for c in ohlc_candles
+                ]
         except Exception as e:
             logger.warning(
                 "Finnhub OHLC fetch failed",
                 extra=get_safe_error_info(e),
             )
+
+    # Fallback: If intraday data unavailable, try daily (T006)
+    if not candles and resolution != OHLCResolution.DAILY:
+        logger.info(
+            "Intraday data unavailable, falling back to daily",
+            extra={"requested_resolution": resolution.value},
+        )
+        resolution_fallback = True
+        fallback_message = f"Intraday data unavailable for {ticker}, showing daily"
+        actual_resolution = OHLCResolution.DAILY
+
+        # Try Tiingo first for daily fallback
+        source = "tiingo"
+        try:
+            ohlc_candles = tiingo.get_ohlc(ticker, start_date, end_date)
+            if ohlc_candles:
+                candles = [
+                    PriceCandle.from_ohlc_candle(c, actual_resolution)
+                    for c in ohlc_candles
+                ]
+        except Exception as e:
+            logger.warning(
+                "Tiingo daily fallback failed",
+                extra=get_safe_error_info(e),
+            )
+
+        # Finnhub daily fallback
+        if not candles:
+            source = "finnhub"
+            try:
+                ohlc_candles = finnhub.get_ohlc(
+                    ticker, start_date, end_date, resolution="D"
+                )
+                if ohlc_candles:
+                    candles = [
+                        PriceCandle.from_ohlc_candle(c, actual_resolution)
+                        for c in ohlc_candles
+                    ]
+            except Exception as e:
+                logger.warning(
+                    "Finnhub daily fallback failed",
+                    extra=get_safe_error_info(e),
+                )
 
     # Check if we got any data
     if not candles:
@@ -162,6 +242,8 @@ async def get_ohlc_data(
         extra={
             "source": source,
             "candle_count": len(candles),
+            "resolution": actual_resolution.value,
+            "fallback": resolution_fallback,
         },
     )
 
@@ -169,11 +251,18 @@ async def get_ohlc_data(
         ticker=ticker,
         candles=candles,
         time_range=time_range_str,
-        start_date=candles[0].date,
-        end_date=candles[-1].date,
+        start_date=candles[0].date
+        if isinstance(candles[0].date, date)
+        else candles[0].date.date(),
+        end_date=candles[-1].date
+        if isinstance(candles[-1].date, date)
+        else candles[-1].date.date(),
         count=len(candles),
         source=source,
         cache_expires_at=cache_expires,
+        resolution=actual_resolution.value,
+        resolution_fallback=resolution_fallback,
+        fallback_message=fallback_message,
     )
 
 

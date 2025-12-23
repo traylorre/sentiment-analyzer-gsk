@@ -41,7 +41,9 @@ from src.lambdas.shared.models.notification import (
     Notification,
 )
 from src.lambdas.shared.models.ohlc import (
+    RESOLUTION_MAX_DAYS,
     TIME_RANGE_DAYS,
+    OHLCResolution,
     OHLCResponse,
     PriceCandle,
     TimeRange,
@@ -96,10 +98,12 @@ __all__ = [
     "MagicLinkToken",
     "SESSION_LIMITS",
     # OHLC models
+    "OHLCResolution",
     "OHLCResponse",
     "PriceCandle",
     "TimeRange",
     "TIME_RANGE_DAYS",
+    "RESOLUTION_MAX_DAYS",
     # Sentiment history models
     "SentimentHistoryResponse",
     "SentimentPoint",

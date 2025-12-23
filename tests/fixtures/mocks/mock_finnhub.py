@@ -162,7 +162,7 @@ class MockFinnhubAdapter(FinnhubAdapter):
         ticker: str,
         start_date: datetime | None = None,
         end_date: datetime | None = None,
-        interval: str = "1d",
+        resolution: str = "D",
     ) -> list[OHLCCandle]:
         """Get synthetic OHLC data.
 
@@ -170,7 +170,7 @@ class MockFinnhubAdapter(FinnhubAdapter):
             ticker: Stock symbol
             start_date: Start of date range
             end_date: End of date range
-            interval: Candle interval (1d, 1h, etc.)
+            resolution: Candle resolution (1, 5, 15, 30, 60 min or D for daily)
 
         Returns:
             List of synthetic OHLCCandle objects
@@ -180,7 +180,7 @@ class MockFinnhubAdapter(FinnhubAdapter):
                 "ticker": ticker,
                 "start_date": start_date,
                 "end_date": end_date,
-                "interval": interval,
+                "resolution": resolution,
             }
         )
 
@@ -202,7 +202,7 @@ class MockFinnhubAdapter(FinnhubAdapter):
             ticker=ticker,
             days=days,
             end_date=end_date,
-            interval=interval,
+            interval=resolution,
         )
 
 

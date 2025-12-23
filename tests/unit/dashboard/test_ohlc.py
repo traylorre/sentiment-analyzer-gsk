@@ -3,12 +3,13 @@
 from datetime import date, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from src.lambdas.dashboard.ohlc import router
 from src.lambdas.shared.adapters.base import OHLCCandle
-from src.lambdas.shared.models import TimeRange
+from src.lambdas.shared.models import RESOLUTION_MAX_DAYS, OHLCResolution, TimeRange
 
 
 # Test helpers
@@ -211,3 +212,176 @@ class TestTimeRangeEnum:
         assert TimeRange.THREE_MONTHS.value == "3M"
         assert TimeRange.SIX_MONTHS.value == "6M"
         assert TimeRange.ONE_YEAR.value == "1Y"
+
+
+class TestOHLCResolutionEnum:
+    """Tests for OHLCResolution enum (T007)."""
+
+    def test_resolution_values(self):
+        """Should have correct resolution values matching Finnhub API."""
+        assert OHLCResolution.ONE_MINUTE.value == "1"
+        assert OHLCResolution.FIVE_MINUTES.value == "5"
+        assert OHLCResolution.FIFTEEN_MINUTES.value == "15"
+        assert OHLCResolution.THIRTY_MINUTES.value == "30"
+        assert OHLCResolution.ONE_HOUR.value == "60"
+        assert OHLCResolution.DAILY.value == "D"
+
+    def test_max_days_property(self):
+        """Should have correct max_days for each resolution."""
+        assert OHLCResolution.ONE_MINUTE.max_days == 7
+        assert OHLCResolution.FIVE_MINUTES.max_days == 30
+        assert OHLCResolution.FIFTEEN_MINUTES.max_days == 90
+        assert OHLCResolution.THIRTY_MINUTES.max_days == 90
+        assert OHLCResolution.ONE_HOUR.max_days == 180
+        assert OHLCResolution.DAILY.max_days == 365
+
+    def test_resolution_max_days_dict(self):
+        """Should have RESOLUTION_MAX_DAYS mapping for all resolutions."""
+        for resolution in OHLCResolution:
+            assert resolution in RESOLUTION_MAX_DAYS
+            assert RESOLUTION_MAX_DAYS[resolution] == resolution.max_days
+
+
+class TestOHLCResolutionEndpoint:
+    """Tests for OHLC endpoint resolution parameter (T009)."""
+
+    @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
+    @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
+    def test_accepts_resolution_parameter(self, mock_finnhub_cls, mock_tiingo_cls):
+        """Should accept resolution query parameter."""
+        mock_finnhub = MagicMock()
+        mock_finnhub.get_ohlc.return_value = _create_ohlc_candles(10)
+        mock_finnhub_cls.return_value = mock_finnhub
+
+        response = client.get(
+            "/api/v2/tickers/AAPL/ohlc?resolution=5",
+            headers={"X-User-ID": "test-user"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["resolution"] == "5"
+
+    @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
+    @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
+    def test_default_resolution_is_daily(self, mock_finnhub_cls, mock_tiingo_cls):
+        """Should default to daily resolution."""
+        mock_tiingo = MagicMock()
+        mock_tiingo.get_ohlc.return_value = _create_ohlc_candles(10)
+        mock_tiingo_cls.return_value = mock_tiingo
+
+        response = client.get(
+            "/api/v2/tickers/AAPL/ohlc",
+            headers={"X-User-ID": "test-user"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["resolution"] == "D"
+
+    @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
+    @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
+    def test_uses_finnhub_for_intraday(self, mock_finnhub_cls, mock_tiingo_cls):
+        """Should use Finnhub for intraday resolutions (not Tiingo)."""
+        mock_tiingo = MagicMock()
+        mock_tiingo_cls.return_value = mock_tiingo
+
+        mock_finnhub = MagicMock()
+        mock_finnhub.get_ohlc.return_value = _create_ohlc_candles(10)
+        mock_finnhub_cls.return_value = mock_finnhub
+
+        response = client.get(
+            "/api/v2/tickers/AAPL/ohlc?resolution=5",
+            headers={"X-User-ID": "test-user"},
+        )
+
+        assert response.status_code == 200
+        # Tiingo should not be called for intraday
+        mock_tiingo.get_ohlc.assert_not_called()
+        # Finnhub should be called with resolution
+        mock_finnhub.get_ohlc.assert_called_once()
+        call_kwargs = mock_finnhub.get_ohlc.call_args[1]
+        assert call_kwargs.get("resolution") == "5"
+
+    @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
+    @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
+    def test_resolution_response_includes_fallback_fields(
+        self, mock_finnhub_cls, mock_tiingo_cls
+    ):
+        """Should include resolution_fallback and fallback_message in response."""
+        mock_tiingo = MagicMock()
+        mock_tiingo.get_ohlc.return_value = _create_ohlc_candles(10)
+        mock_tiingo_cls.return_value = mock_tiingo
+
+        response = client.get(
+            "/api/v2/tickers/AAPL/ohlc",
+            headers={"X-User-ID": "test-user"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "resolution_fallback" in data
+        assert data["resolution_fallback"] is False
+        assert data["fallback_message"] is None
+
+    @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
+    @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
+    def test_fallback_to_daily_when_intraday_unavailable(
+        self, mock_finnhub_cls, mock_tiingo_cls
+    ):
+        """Should fall back to daily when intraday data unavailable."""
+        mock_tiingo = MagicMock()
+        mock_tiingo.get_ohlc.return_value = _create_ohlc_candles(10)
+        mock_tiingo_cls.return_value = mock_tiingo
+
+        mock_finnhub = MagicMock()
+        # Return empty for intraday, have Tiingo return daily
+        mock_finnhub.get_ohlc.return_value = []
+        mock_finnhub_cls.return_value = mock_finnhub
+
+        response = client.get(
+            "/api/v2/tickers/AAPL/ohlc?resolution=5",
+            headers={"X-User-ID": "test-user"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["resolution"] == "D"  # Fell back to daily
+        assert data["resolution_fallback"] is True
+        assert "unavailable" in data["fallback_message"].lower()
+
+    @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
+    @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
+    @pytest.mark.parametrize(
+        "resolution",
+        ["1", "5", "15", "30", "60", "D"],
+    )
+    def test_all_resolutions_accepted(
+        self, mock_finnhub_cls, mock_tiingo_cls, resolution
+    ):
+        """Should accept all valid resolution values."""
+        mock_finnhub = MagicMock()
+        mock_finnhub.get_ohlc.return_value = _create_ohlc_candles(10)
+        mock_finnhub_cls.return_value = mock_finnhub
+
+        mock_tiingo = MagicMock()
+        mock_tiingo.get_ohlc.return_value = _create_ohlc_candles(10)
+        mock_tiingo_cls.return_value = mock_tiingo
+
+        response = client.get(
+            f"/api/v2/tickers/AAPL/ohlc?resolution={resolution}",
+            headers={"X-User-ID": "test-user"},
+        )
+
+        assert response.status_code == 200
+
+    @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
+    @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
+    def test_invalid_resolution_rejected(self, mock_finnhub_cls, mock_tiingo_cls):
+        """Should reject invalid resolution values."""
+        response = client.get(
+            "/api/v2/tickers/AAPL/ohlc?resolution=invalid",
+            headers={"X-User-ID": "test-user"},
+        )
+
+        assert response.status_code == 422  # Validation error
