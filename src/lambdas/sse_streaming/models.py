@@ -19,6 +19,9 @@ class HeartbeatData(BaseModel):
     """Payload for heartbeat events.
 
     Sent every 30 seconds (configurable via SSE_HEARTBEAT_INTERVAL).
+
+    Feature 1019 additions:
+    - server_timestamp: Alias for timestamp, for client clock sync reference (FR-002)
     """
 
     timestamp: datetime = Field(
@@ -27,6 +30,11 @@ class HeartbeatData(BaseModel):
     )
     connections: int = Field(description="Active connection count")
     uptime_seconds: int = Field(description="Lambda uptime in seconds")
+
+    @property
+    def server_timestamp(self) -> datetime:
+        """Alias for timestamp - for client clock synchronization reference (FR-002)."""
+        return self.timestamp
 
 
 class MetricsEventData(BaseModel):

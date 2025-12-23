@@ -21,6 +21,7 @@ from datetime import UTC, datetime
 
 from cache_logger import CacheMetricsLogger, log_cold_start_metrics
 from connection import ConnectionManager, SSEConnection, connection_manager
+from latency_logger import log_latency_metric
 from metrics import metrics_emitter
 from models import (
     HeartbeatData,
@@ -249,6 +250,17 @@ class SSEStreamGenerator:
             progress_pct=progress_pct,
             is_partial=True,
             timestamp=now,
+            origin_timestamp=now,  # Feature 1019: Set origin for latency tracking
+        )
+
+        # Feature 1019: Log latency metric for CloudWatch Logs Insights
+        log_latency_metric(
+            event_type="partial_bucket",
+            origin_timestamp=event_data.origin_timestamp,
+            send_timestamp=now,
+            ticker=ticker,
+            resolution=resolution.value,
+            connection_count=self._conn_manager.count,
         )
 
         return SSEEvent(
