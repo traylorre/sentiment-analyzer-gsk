@@ -53,7 +53,7 @@ make tf-apply-local
 
 ```bash
 # Run integration tests against LocalStack
-pytest tests/integration/test_timeseries_pipeline.py -v
+pytest tests/integration/timeseries/test_timeseries_pipeline.py -v
 
 # Clean up
 make localstack-down
