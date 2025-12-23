@@ -372,6 +372,7 @@ module "analysis_lambda" {
 # ===================================================================
 # Module: Dashboard Lambda (T053)
 # ===================================================================
+# Feature 1036: Container-based deployment to fix pydantic binary incompatibility
 
 module "dashboard_lambda" {
   source = "./modules/lambda"
@@ -379,12 +380,12 @@ module "dashboard_lambda" {
   function_name = local.dashboard_lambda_name
   description   = "Serves dashboard UI and API endpoints"
   iam_role_arn  = module.iam.dashboard_lambda_role_arn
-  handler       = "handler.lambda_handler"
-  s3_bucket     = "${var.environment}-sentiment-lambda-deployments"
-  s3_key        = "dashboard/lambda.zip"
+  handler       = null # Not used for Docker-based Lambda
 
-  # Force update when package changes (git SHA triggers redeployment)
-  source_code_hash = var.lambda_package_version
+  # Docker-based deployment via ECR (Feature 1036)
+  # Fixes HTTP 502 errors caused by pydantic_core binary incompatibility in ZIP packaging
+  # Image URI will be updated by CI/CD pipeline after first terraform apply
+  image_uri = "${aws_ecr_repository.dashboard.repository_url}:latest"
 
   # Resource configuration per task spec
   # JUSTIFICATION (FR-024): 1024MB required for FastAPI+Mangum with async handlers
@@ -458,7 +459,7 @@ module "dashboard_lambda" {
     Lambda = "dashboard"
   }
 
-  depends_on = [module.iam]
+  depends_on = [module.iam, aws_ecr_repository.dashboard]
 }
 
 # ===================================================================
@@ -640,6 +641,49 @@ resource "aws_ecr_repository" "analysis" {
 # ECR Lifecycle policy - keep last 5 images
 resource "aws_ecr_lifecycle_policy" "analysis" {
   repository = aws_ecr_repository.analysis.name
+
+  policy = jsonencode({
+    rules = [
+      {
+        rulePriority = 1
+        description  = "Keep last 5 images"
+        selection = {
+          tagStatus   = "any"
+          countType   = "imageCountMoreThan"
+          countNumber = 5
+        }
+        action = {
+          type = "expire"
+        }
+      }
+    ]
+  })
+}
+
+# ECR Repository for Dashboard Lambda container image (Feature 1036)
+# Fixes HTTP 502 errors caused by pydantic_core binary incompatibility in ZIP packaging
+resource "aws_ecr_repository" "dashboard" {
+  name                 = "${var.environment}-dashboard-lambda"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  encryption_configuration {
+    encryption_type = "AES256"
+  }
+
+  tags = {
+    Environment = var.environment
+    Feature     = "1036-dashboard-container-deploy"
+    Component   = "dashboard"
+  }
+}
+
+# ECR Lifecycle policy - keep last 5 images
+resource "aws_ecr_lifecycle_policy" "dashboard" {
+  repository = aws_ecr_repository.dashboard.name
 
   policy = jsonencode({
     rules = [
@@ -1133,4 +1177,9 @@ output "sse_ecr_repository_url" {
 output "analysis_ecr_repository_url" {
   description = "ECR repository URL for Analysis Lambda container images"
   value       = aws_ecr_repository.analysis.repository_url
+}
+
+output "dashboard_ecr_repository_url" {
+  description = "ECR repository URL for Dashboard Lambda container images"
+  value       = aws_ecr_repository.dashboard.repository_url
 }

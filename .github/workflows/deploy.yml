@@ -175,73 +175,11 @@ jobs:
           rm -rf packages/ingestion-deps packages/ingestion-build
 
           # ============================================================
-          # Dashboard Lambda - Web framework dependencies
+          # Dashboard Lambda - Now uses container deployment (Feature 1036)
           # ============================================================
           echo ""
-          echo "📦 Packaging Dashboard Lambda (FastAPI, Mangum, SSE, pydantic)..."
-
-          # Install dashboard dependencies
-          # CRITICAL: pydantic-core has Rust binaries that MUST match Lambda runtime
-          # Use explicit platform flags to ensure cp313 wheels are downloaded
-          # (Docker container approach was downloading cp311 wheels from cache)
-          pip install \
-            fastapi==0.121.3 \
-            mangum==0.19.0 \
-            sse-starlette==3.0.3 \
-            pydantic==2.12.4 \
-            email-validator==2.2.0 \
-            httpx==0.28.1 \
-            boto3==1.41.0 \
-            python-json-logger==4.0.0 \
-            aws-xray-sdk==2.14.0 \
-            PyJWT==2.10.1 \
-            -t packages/dashboard-deps/ \
-            --platform manylinux2014_x86_64 \
-            --implementation cp \
-            --python-version 313 \
-            --only-binary=:all: \
-            --no-cache-dir \
-            --disable-pip-version-check \
-            --quiet
-
-          # Verify pydantic-core binary is for Python 3.13
-          echo "🔍 Verifying pydantic-core binary compatibility..."
-          PYDANTIC_SO=$(find packages/dashboard-deps -name "_pydantic_core*.so" | head -1)
-          if [ -z "$PYDANTIC_SO" ]; then
-            echo "❌ ERROR: pydantic-core .so file not found!"
-            exit 1
-          fi
-          echo "Found: $PYDANTIC_SO"
-          if echo "$PYDANTIC_SO" | grep -q "cpython-313"; then
-            echo "✅ pydantic-core binary is for Python 3.13"
-          else
-            echo "❌ ERROR: pydantic-core binary is NOT for Python 3.13!"
-            echo "File: $PYDANTIC_SO"
-            exit 1
-          fi
-
-          # Build dashboard package
-          # NOTE: handler.py must be at ROOT for Lambda handler config "handler.lambda_handler"
-          # The src/ directory structure is needed for internal imports (from src.lambdas.shared...)
-          mkdir -p packages/dashboard-build/src/lambdas/dashboard packages/dashboard-build/src/lib packages/dashboard-build/src/dashboard
-          cp -r packages/dashboard-deps/* packages/dashboard-build/
-          cp -r src/lambdas/dashboard/* packages/dashboard-build/          # handler.py at ROOT
-          cp -r src/lambdas/dashboard/* packages/dashboard-build/src/lambdas/dashboard/  # also in src/ for imports
-          cp -r src/lambdas/shared packages/dashboard-build/src/lambdas/
-          cp -r src/lib/* packages/dashboard-build/src/lib/
-          cp -r src/dashboard/* packages/dashboard-build/src/dashboard/
-          cd packages/dashboard-build
-          zip -r ../dashboard-${SHA}.zip . \
-            -x "*.pyc" "__pycache__/*" "*.pytest_cache/*" "tests/*" -q
-          cd ../..
-
-          # Validate package structure before cleanup
-          validate_lambda_package "dashboard" "handler.py"
-
-          # Show size and cleanup
-          DASHBOARD_SIZE=$(du -h packages/dashboard-${SHA}.zip | cut -f1)
-          echo "✅ Dashboard Lambda: ${DASHBOARD_SIZE}"
-          rm -rf packages/dashboard-deps packages/dashboard-build
+          echo "ℹ️ Dashboard Lambda uses container deployment - see build-dashboard-image-preprod job"
+          echo "   Container deployment fixes pydantic binary incompatibility that caused HTTP 502 errors"
 
           # ============================================================
           # Analysis Lambda - Minimal dependencies (model loads from S3)
@@ -676,11 +614,92 @@ jobs:
           fi
 
   # ========================================================================
+  # JOB 3.6: Build Dashboard Lambda Image (Preprod)
+  # Feature 1036: Container deployment to fix pydantic binary incompatibility
+  # ========================================================================
+  build-dashboard-image-preprod:
+    name: Build Dashboard Lambda Image (Preprod)
+    runs-on: ubuntu-latest
+    needs: [build, test]
+    environment: preprod
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Configure AWS Credentials (Preprod)
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and Push Dashboard Lambda Image
+        uses: docker/build-push-action@v6
+        with:
+          context: src
+          file: src/lambdas/dashboard/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/preprod-dashboard-lambda:latest
+            ${{ steps.login-ecr.outputs.registry }}/preprod-dashboard-lambda:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+
+      # Smoke test: Verify Python imports work inside the Docker image
+      # Catches missing dependencies and import errors before deployment
+      - name: Smoke Test Dashboard Lambda Imports
+        run: |
+          echo "🧪 Running Docker import smoke test..."
+          IMAGE="${{ steps.login-ecr.outputs.registry }}/preprod-dashboard-lambda:${{ github.sha }}"
+
+          # Run Python import check inside the container
+          docker run --rm --entrypoint python "$IMAGE" -c "
+          import sys
+          print('Testing imports...')
+
+          # Core imports - must work for Lambda to start
+          from handler import lambda_handler
+
+          # FastAPI and Mangum - web framework
+          from fastapi import FastAPI
+          from mangum import Mangum
+
+          # Pydantic - the whole point of container deployment
+          # This import would fail with ZIP deployment due to binary incompatibility
+          import pydantic
+          from pydantic import BaseModel
+          print(f'pydantic version: {pydantic.__version__}')
+
+          # Shared module imports
+          from src.lambdas.shared.logging_utils import sanitize_for_log
+
+          print('✅ All imports successful')
+          sys.exit(0)
+          "
+
+          if [ $? -eq 0 ]; then
+            echo "✅ Dashboard Lambda import smoke test passed"
+          else
+            echo "❌ Dashboard Lambda import smoke test FAILED"
+            echo "The Docker image has import errors that will cause Runtime.ExitError"
+            exit 1
+          fi
+
+  # ========================================================================
   # JOB 4: Deploy to Preprod
   # ========================================================================
   deploy-preprod:
     name: Deploy to Preprod
-    needs: [build, test, build-sse-image-preprod, build-analysis-image-preprod]
+    needs: [build, test, build-sse-image-preprod, build-analysis-image-preprod, build-dashboard-image-preprod]
     runs-on: ubuntu-latest
     environment:
       name: preprod
@@ -727,9 +746,8 @@ jobs:
             s3://${BUCKET}/analysis/lambda.zip \
             --metadata "git-sha=${GITHUB_SHA},build-timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-          aws s3 cp ../../packages/dashboard-${SHA}.zip \
-            s3://${BUCKET}/dashboard/lambda.zip \
-            --metadata "git-sha=${GITHUB_SHA},build-timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          # Dashboard Lambda now uses container deployment (Feature 1036)
+          # No ZIP upload needed - see build-dashboard-image-preprod job
 
           aws s3 cp ../../packages/metrics-${SHA}.zip \
             s3://${BUCKET}/metrics/lambda.zip \
@@ -980,6 +998,29 @@ jobs:
             --function-name preprod-sentiment-analysis
 
           echo "✅ Analysis Lambda updated to use new image"
+
+      # Force Dashboard Lambda to use the new Docker image
+      # Feature 1036: Container deployment to fix pydantic binary incompatibility
+      - name: Force Dashboard Lambda Image Update
+        run: |
+          echo "🔄 Forcing Dashboard Lambda to use new Docker image..."
+
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          REGION="${{ vars.AWS_REGION }}"
+          IMAGE_URI="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/preprod-dashboard-lambda:${{ github.sha }}"
+
+          echo "Image URI: ${IMAGE_URI}"
+
+          aws lambda update-function-code \
+            --function-name preprod-sentiment-dashboard \
+            --image-uri "${IMAGE_URI}"
+
+          # Wait for update to complete
+          echo "⏳ Waiting for Lambda update to complete..."
+          aws lambda wait function-updated \
+            --function-name preprod-sentiment-dashboard
+
+          echo "✅ Dashboard Lambda updated to use new image"
 
       - name: Get Preprod Outputs
         id: outputs
@@ -1489,13 +1530,80 @@ jobs:
           fi
 
   # ========================================================================
+  # JOB 5.5: Build Dashboard Lambda Image (Production)
+  # Feature 1036: Container deployment to fix pydantic binary incompatibility
+  # ========================================================================
+  build-dashboard-image-prod:
+    name: Build Dashboard Lambda Image (Production)
+    if: false  # TEMP: Skip production (see JOB 5 comment)
+    runs-on: ubuntu-latest
+    needs: [build, deploy-preprod, test-preprod]
+    environment: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Configure AWS Credentials (Production)
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and Push Dashboard Lambda Image
+        uses: docker/build-push-action@v6
+        with:
+          context: src
+          file: src/lambdas/dashboard/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/prod-dashboard-lambda:latest
+            ${{ steps.login-ecr.outputs.registry }}/prod-dashboard-lambda:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+
+      - name: Smoke Test Dashboard Lambda Imports
+        run: |
+          echo "🧪 Running Docker import smoke test..."
+          IMAGE="${{ steps.login-ecr.outputs.registry }}/prod-dashboard-lambda:${{ github.sha }}"
+
+          docker run --rm --entrypoint python "$IMAGE" -c "
+          import sys
+          from handler import lambda_handler
+          from fastapi import FastAPI
+          from mangum import Mangum
+          import pydantic
+          from pydantic import BaseModel
+          print(f'pydantic version: {pydantic.__version__}')
+          from src.lambdas.shared.logging_utils import sanitize_for_log
+          print('✅ All imports successful')
+          sys.exit(0)
+          "
+
+          if [ $? -eq 0 ]; then
+            echo "✅ Dashboard Lambda import smoke test passed"
+          else
+            echo "❌ Dashboard Lambda import smoke test FAILED"
+            exit 1
+          fi
+
+  # ========================================================================
   # JOB 6: Deploy to Production
   # TEMPORARILY DISABLED - see JOB 5 comment
   # ========================================================================
   deploy-prod:
     name: Deploy to Production
     if: false  # TEMP: Skip production
-    needs: [build, deploy-preprod, test-preprod, build-sse-image-prod]
+    needs: [build, deploy-preprod, test-preprod, build-sse-image-prod, build-dashboard-image-prod]
     runs-on: ubuntu-latest
 
     # Conditional environment based on PR author
@@ -1544,9 +1652,8 @@ jobs:
             s3://${BUCKET}/analysis/lambda.zip \
             --metadata "git-sha=${GITHUB_SHA},build-timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ),validated-in=preprod"
 
-          aws s3 cp ../../packages/dashboard-${SHA}.zip \
-            s3://${BUCKET}/dashboard/lambda.zip \
-            --metadata "git-sha=${GITHUB_SHA},build-timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ),validated-in=preprod"
+          # Dashboard Lambda now uses container deployment (Feature 1036)
+          # No ZIP upload needed - see build-dashboard-image-prod job
 
           aws s3 cp ../../packages/metrics-${SHA}.zip \
             s3://${BUCKET}/metrics/lambda.zip \
