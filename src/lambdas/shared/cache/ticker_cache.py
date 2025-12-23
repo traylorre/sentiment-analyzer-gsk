@@ -13,6 +13,8 @@ from typing import Literal
 import boto3
 from pydantic import BaseModel, Field
 
+from src.lambdas.shared.retry import s3_retry
+
 logger = logging.getLogger(__name__)
 
 
@@ -54,6 +56,8 @@ class TickerCache(BaseModel):
     def load_from_s3(cls, bucket: str, key: str) -> "TickerCache":
         """Load cache from S3 bucket.
 
+        Feature 1032: Added retry logic for transient S3 failures.
+
         Args:
             bucket: S3 bucket name
             key: S3 object key (e.g., "ticker-cache/us-symbols.json")
@@ -62,11 +66,16 @@ class TickerCache(BaseModel):
             TickerCache instance
 
         Raises:
-            ValueError: If S3 object cannot be loaded or parsed
+            ValueError: If S3 object cannot be loaded or parsed after retries
         """
-        try:
+
+        @s3_retry
+        def _get_object_with_retry():
             s3 = boto3.client("s3")
-            response = s3.get_object(Bucket=bucket, Key=key)
+            return s3.get_object(Bucket=bucket, Key=key)
+
+        try:
+            response = _get_object_with_retry()
             data = json.loads(response["Body"].read().decode("utf-8"))
             return cls._from_json(data)
         except Exception as e:

@@ -49,3 +49,6 @@ aws-lambda-powertools==3.23.0
 
 # JWT Authentication - Feature 075 (validation gaps)
 PyJWT==2.10.1
+
+# Retry Library - Feature 1032 (config API stability)
+tenacity==9.0.0

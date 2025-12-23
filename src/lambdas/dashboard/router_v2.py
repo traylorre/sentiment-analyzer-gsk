@@ -22,6 +22,7 @@ import logging
 import os
 from typing import Literal
 
+from botocore.exceptions import ClientError
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr
@@ -711,6 +712,43 @@ async def create_configuration(
             request=body,
             ticker_cache=ticker_cache,
         )
+    except ClientError as e:
+        # Feature 1032: Map DynamoDB errors to appropriate HTTP status codes
+        error_code = e.response.get("Error", {}).get("Code", "")
+        logger.error(
+            "Config creation DynamoDB error",
+            extra={"error_code": error_code, **get_safe_error_info(e)},
+        )
+        if error_code in (
+            "ProvisionedThroughputExceededException",
+            "ThrottlingException",
+        ):
+            raise HTTPException(
+                status_code=429,
+                detail="Service busy. Please retry in a few seconds.",
+                headers={"Retry-After": "3"},
+            ) from e
+        if error_code in ("ServiceUnavailable", "InternalServerError"):
+            raise HTTPException(
+                status_code=503,
+                detail="Service temporarily unavailable. Please retry.",
+                headers={"Retry-After": "5"},
+            ) from e
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create configuration. Please try again.",
+        ) from e
+    except ValueError as e:
+        # Feature 1032: Handle ticker cache failures gracefully
+        logger.warning(
+            "Config creation failed due to validation",
+            extra=get_safe_error_info(e),
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Ticker validation service temporarily unavailable.",
+            headers={"Retry-After": "5"},
+        ) from e
     except Exception as e:
         # Log error details for diagnostics (no user content per FR-006)
         logger.error(
