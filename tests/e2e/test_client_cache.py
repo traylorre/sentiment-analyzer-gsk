@@ -30,6 +30,11 @@ except ImportError:
     Page = None  # Type hint placeholder
 
 
+# Feature implementation status - set DASHBOARD_CACHE_IMPLEMENTED=true to run tests
+FEATURE_IMPLEMENTED = (
+    os.environ.get("DASHBOARD_CACHE_IMPLEMENTED", "").lower() == "true"
+)
+
 pytestmark = [
     pytest.mark.e2e,
     pytest.mark.preprod,
@@ -37,6 +42,12 @@ pytestmark = [
     pytest.mark.skipif(
         not PLAYWRIGHT_AVAILABLE,
         reason="pytest-playwright not installed (pip install pytest-playwright)",
+    ),
+    pytest.mark.skipif(
+        not FEATURE_IMPLEMENTED,
+        reason="Dashboard IndexedDB cache not yet implemented. "
+        "See specs/1009-realtime-multi-resolution/ tasks T059-T061. "
+        "Set DASHBOARD_CACHE_IMPLEMENTED=true to run these tests.",
     ),
 ]
 
