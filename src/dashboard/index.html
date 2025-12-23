@@ -19,8 +19,17 @@
     </header>
 
     <main>
-        <!-- Metrics Cards -->
-        <section class="metrics-cards">
+        <!-- Metrics Cards (Feature 1021: Skeleton Loading UI) -->
+        <section class="metrics-cards skeleton-container" aria-label="Metrics" aria-busy="true">
+            <!-- Skeleton overlay for metrics -->
+            <div class="skeleton-overlay" data-skeleton="metrics" aria-hidden="true">
+                <div style="display: flex; gap: var(--spacing-md); width: 100%;">
+                    <div class="skeleton skeleton-metric" style="flex: 1;"></div>
+                    <div class="skeleton skeleton-metric" style="flex: 1;"></div>
+                    <div class="skeleton skeleton-metric" style="flex: 1;"></div>
+                    <div class="skeleton skeleton-metric" style="flex: 1;"></div>
+                </div>
+            </div>
             <div class="card total">
                 <h3>Total Items</h3>
                 <div class="value" id="total-items">0</div>
@@ -43,31 +52,57 @@
             </div>
         </section>
 
-        <!-- Resolution Selector for Time-Series [Feature 1009] -->
-        <section id="resolution-selector" class="resolution-selector">
+        <!-- Resolution Selector for Time-Series [Feature 1009, 1021] -->
+        <section id="resolution-selector" class="resolution-selector skeleton-container" aria-label="Resolution selector" aria-busy="true">
+            <!-- Skeleton overlay for resolution selector -->
+            <div class="skeleton-overlay" data-skeleton="resolution" aria-hidden="true">
+                <div class="skeleton skeleton-resolution"></div>
+            </div>
             <!-- Populated by timeseries.js -->
         </section>
 
-        <!-- Charts Row -->
+        <!-- Charts Row (Feature 1021: Skeleton Loading UI) -->
         <section class="charts-row">
-            <div class="chart-container">
+            <div class="chart-container skeleton-container" aria-label="Sentiment distribution chart" aria-busy="true">
+                <!-- Skeleton overlay for sentiment chart -->
+                <div class="skeleton-overlay" data-skeleton="sentimentChart" aria-hidden="true">
+                    <div class="skeleton skeleton-chart"></div>
+                </div>
                 <h3>Sentiment Distribution</h3>
                 <canvas id="sentiment-chart"></canvas>
             </div>
-            <div class="chart-container">
+            <div class="chart-container skeleton-container" aria-label="Tag distribution chart" aria-busy="true">
+                <!-- Skeleton overlay for tag chart -->
+                <div class="skeleton-overlay" data-skeleton="tagChart" aria-hidden="true">
+                    <div class="skeleton skeleton-chart"></div>
+                </div>
                 <h3>By Tag</h3>
                 <canvas id="tag-chart"></canvas>
             </div>
-            <!-- Timeseries Chart Container [Feature 1009] -->
-            <div id="timeseries-chart-container" class="chart-container timeseries-chart">
+            <!-- Timeseries Chart Container [Feature 1009, 1021] -->
+            <div id="timeseries-chart-container" class="chart-container timeseries-chart skeleton-container" aria-label="Timeseries chart" aria-busy="true">
+                <!-- Skeleton overlay for timeseries chart -->
+                <div class="skeleton-overlay" data-skeleton="chart" aria-hidden="true">
+                    <div class="skeleton skeleton-chart"></div>
+                </div>
                 <h3>Sentiment Trend <span id="timeseries-ticker">AAPL</span></h3>
                 <canvas id="timeseries-chart" data-testid="timeseries-chart"></canvas>
                 <div id="chart-loaded" data-testid="chart-loaded" style="display:none;"></div>
             </div>
         </section>
 
-        <!-- Recent Items Table -->
-        <section class="recent-items">
+        <!-- Recent Items Table (Feature 1021: Skeleton Loading UI) -->
+        <section class="recent-items skeleton-container" aria-label="Recent items" aria-busy="true">
+            <!-- Skeleton overlay for table -->
+            <div class="skeleton-overlay" data-skeleton="table" aria-hidden="true">
+                <div style="width: 100%; padding: var(--spacing-md);">
+                    <div class="skeleton skeleton-row"></div>
+                    <div class="skeleton skeleton-row"></div>
+                    <div class="skeleton skeleton-row"></div>
+                    <div class="skeleton skeleton-row"></div>
+                    <div class="skeleton skeleton-row"></div>
+                </div>
+            </div>
             <h3>Recent Items</h3>
             <div class="table-container">
                 <table id="items-table">
