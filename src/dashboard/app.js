@@ -46,10 +46,126 @@ const state = {
 };
 
 /**
+ * Feature 1021: Skeleton Loading UI State
+ * ========================================
+ * FR-011: Never show loading spinners, skeleton UI only
+ * SC-009: Zero loading spinners visible
+ */
+const skeletonState = {
+    chart: false,
+    tickerList: false,
+    resolution: false,
+    metrics: false,
+    table: false
+};
+
+// Skeleton timeout handles (FR-010: 30s timeout)
+const skeletonTimeouts = {};
+
+/**
+ * Show skeleton for a component (T003)
+ *
+ * @param {string} component - Component name (chart, tickerList, resolution, metrics, table)
+ */
+function showSkeleton(component) {
+    skeletonState[component] = true;
+    const overlay = document.querySelector(`[data-skeleton="${component}"]`);
+    if (overlay) {
+        overlay.classList.remove('hidden');
+        // Set aria-busy on parent container (RQ-4: Accessibility)
+        const container = overlay.parentElement;
+        if (container) {
+            container.setAttribute('aria-busy', 'true');
+        }
+    }
+}
+
+/**
+ * Hide skeleton for a component with smooth transition (T003)
+ *
+ * @param {string} component - Component name
+ */
+function hideSkeleton(component) {
+    skeletonState[component] = false;
+    const overlay = document.querySelector(`[data-skeleton="${component}"]`);
+    if (overlay) {
+        overlay.classList.add('hidden');
+        // Clear aria-busy on parent container
+        const container = overlay.parentElement;
+        if (container) {
+            container.setAttribute('aria-busy', 'false');
+        }
+    }
+    // Clear any pending timeout
+    if (skeletonTimeouts[component]) {
+        clearTimeout(skeletonTimeouts[component]);
+        delete skeletonTimeouts[component];
+    }
+}
+
+/**
+ * Start skeleton with timeout (T021: FR-010 - 30s timeout)
+ *
+ * @param {string} component - Component name
+ * @param {number} timeoutMs - Timeout in milliseconds (default: CONFIG.SKELETON.TIMEOUT_MS)
+ */
+function startSkeletonWithTimeout(component, timeoutMs = null) {
+    const timeout = timeoutMs || (CONFIG.SKELETON ? CONFIG.SKELETON.TIMEOUT_MS : 30000);
+    showSkeleton(component);
+
+    // Clear any existing timeout
+    if (skeletonTimeouts[component]) {
+        clearTimeout(skeletonTimeouts[component]);
+    }
+
+    // Set timeout to show error state
+    skeletonTimeouts[component] = setTimeout(() => {
+        showSkeletonError(component, 'Request timed out. Please refresh the page.');
+    }, timeout);
+}
+
+/**
+ * Cancel skeleton and mark as success (T008: Cancel pending when data arrives)
+ *
+ * @param {string} component - Component name
+ */
+function skeletonSuccess(component) {
+    if (skeletonTimeouts[component]) {
+        clearTimeout(skeletonTimeouts[component]);
+        delete skeletonTimeouts[component];
+    }
+    hideSkeleton(component);
+}
+
+/**
+ * Show error state after skeleton timeout (T021, T022)
+ *
+ * @param {string} component - Component name
+ * @param {string} message - Error message to display
+ */
+function showSkeletonError(component, message) {
+    skeletonState[component] = false;
+    const overlay = document.querySelector(`[data-skeleton="${component}"]`);
+    if (overlay) {
+        overlay.innerHTML = `
+            <div class="skeleton-error">
+                <div class="skeleton-error-icon">⚠️</div>
+                <div class="skeleton-error-message">${message}</div>
+            </div>
+        `;
+        overlay.classList.remove('hidden');
+    }
+}
+
+/**
  * Initialize the dashboard application
  */
 async function initDashboard() {
     console.log('Initializing dashboard...');
+
+    // Feature 1021 (T010): Show skeletons immediately on page load
+    // SC-002: Skeleton appears within 100ms of navigation
+    initSkeletons();
 
     // Initialize charts
     initCharts();
@@ -62,9 +178,15 @@ async function initDashboard() {
         try {
             await timeseriesManager.init();
             console.log('Timeseries module initialized');
+            // Hide resolution skeleton once timeseries is ready
+            skeletonSuccess('resolution');
         } catch (error) {
             console.error('Failed to initialize timeseries:', error);
+            showSkeletonError('resolution', 'Failed to load resolution selector');
         }
+    } else {
+        // No timeseries module, hide skeleton
+        hideSkeleton('resolution');
     }
 
     // Fetch initial metrics
@@ -74,6 +196,24 @@ async function initDashboard() {
     connectSSE();
 
     console.log('Dashboard initialized');
+}
+
+/**
+ * Feature 1021 (T010): Initialize all skeletons on page load
+ *
+ * FR-001: Display skeleton for chart area immediately on page load
+ * FR-002: Display skeleton for ticker list during initial load
+ * FR-003: Display skeleton for resolution selector during initial load
+ */
+function initSkeletons() {
+    // Show all skeletons with timeout protection (FR-010)
+    startSkeletonWithTimeout('metrics');
+    startSkeletonWithTimeout('resolution');
+    startSkeletonWithTimeout('chart');
+    startSkeletonWithTimeout('sentimentChart');
+    startSkeletonWithTimeout('tagChart');
+    startSkeletonWithTimeout('table');
+    console.log('Skeleton loading UI initialized');
 }
 
 /**
@@ -98,6 +238,7 @@ function setupConnectivityListeners() {
  * Phase 7 (T059): Handle coming back online
  *
  * SC-007: Automatic reconnection within 5 seconds
+ * Feature 1021 (T018): Show skeleton overlay on SSE reconnection
  */
 function handleOnline() {
     console.log('Network: Online');
@@ -115,6 +256,9 @@ function handleOnline() {
     // Attempt immediate reconnection to SSE
     if (!state.eventSource || state.eventSource.readyState === EventSource.CLOSED) {
         console.log('Reconnecting SSE after coming online...');
+        // Feature 1021 (T018): Show skeleton overlay during reconnection
+        // Using overlay mode preserves existing content (T017)
+        showSkeleton('chart');
         connectSSE();
     }
 
@@ -254,8 +398,15 @@ async function fetchMetrics() {
 
 /**
  * Update metrics display with new data
+ *
+ * Feature 1021 (T011): Hide skeletons when data arrives
  */
 function updateMetrics(data) {
+    // Feature 1021: Hide metrics skeleton when data arrives
+    skeletonSuccess('metrics');
+    skeletonSuccess('sentimentChart');
+    skeletonSuccess('tagChart');
+
     // Update state
     state.metrics = {
         total: data.total || 0,
@@ -315,8 +466,13 @@ function updateMetrics(data) {
 
 /**
  * Update recent items table
+ *
+ * Feature 1021 (T011): Hide table skeleton when data arrives
  */
 function updateRecentItems(items) {
+    // Feature 1021: Hide table skeleton when data arrives
+    skeletonSuccess('table');
+
     const tbody = document.getElementById('items-tbody');
     const existingIds = new Set(state.recentItems.map(item => item.source_id));
 
@@ -405,6 +561,9 @@ function connectSSE() {
         state.sseRetries = 0;
         updateConnectionStatus(true);
         updateConnectionMode('streaming');
+
+        // Feature 1021 (T019): Hide skeleton when SSE connected
+        hideSkeleton('chart');
 
         // Clear fallback polling if active
         if (state.pollInterval) {
