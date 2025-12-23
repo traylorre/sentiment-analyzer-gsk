@@ -1,8 +1,8 @@
 # SSE Streaming Lambda - Docker Image
 # Uses AWS Lambda Web Adapter for RESPONSE_STREAM mode
 #
-# Build context: src/lambdas (parent directory)
-# This allows importing from shared modules
+# Build context: src/ (changed from src/lambdas to include src/lib)
+# This allows importing from shared modules and lib packages
 FROM python:3.13-slim AS builder
 
 WORKDIR /app
@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy and install Python dependencies from sse_streaming subdirectory
-COPY sse_streaming/requirements.txt .
+COPY lambdas/sse_streaming/requirements.txt .
 RUN pip install --no-cache-dir --target /app/packages -r requirements.txt
 
 # Production image
@@ -32,13 +32,17 @@ COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.9.1 /lambda-adapter /opt
 COPY --from=builder /app/packages /app/packages
 
 # Copy application code from sse_streaming subdirectory
-COPY sse_streaming /app
+COPY lambdas/sse_streaming /app
 
 # Copy shared modules for logging utilities and models
 # Structure: /app/src/lambdas/shared/
-RUN mkdir -p /app/src/lambdas && \
-    touch /app/src/__init__.py /app/src/lambdas/__init__.py
-COPY shared /app/src/lambdas/shared
+RUN mkdir -p /app/src/lambdas /app/src/lib && \
+    touch /app/src/__init__.py /app/src/lambdas/__init__.py /app/src/lib/__init__.py
+COPY lambdas/shared /app/src/lambdas/shared
+
+# Copy lib/timeseries for Resolution and other models
+# Required by timeseries_models.py: from src.lib.timeseries import Resolution
+COPY lib/timeseries /app/src/lib/timeseries
 
 # Set Python path to include packages and app directories
 # Both paths needed: /app/packages for pip dependencies, /app for src.lambdas.shared imports

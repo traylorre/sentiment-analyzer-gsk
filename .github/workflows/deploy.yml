@@ -547,7 +547,9 @@ jobs:
       - name: Build and Push SSE Lambda Image
         uses: docker/build-push-action@v6
         with:
-          context: src/lambdas
+          # Build context changed to src/ to include src/lib/timeseries
+          # Required for: from src.lib.timeseries import Resolution
+          context: src
           file: src/lambdas/sse_streaming/Dockerfile
           push: true
           tags: |
@@ -579,6 +581,9 @@ jobs:
           from stream import stream_generator
           from src.lambdas.shared.logging_utils import sanitize_for_log
           from src.lambdas.shared.models.configuration import Configuration
+          # Timeseries models (Feature 1009) - added after ModuleNotFoundError fix
+          from src.lib.timeseries import Resolution
+          from timeseries_models import PartialBucketEvent
 
           print('✅ All imports successful')
           sys.exit(0)
@@ -1438,7 +1443,9 @@ jobs:
       - name: Build and Push SSE Lambda Image
         uses: docker/build-push-action@v6
         with:
-          context: src/lambdas
+          # Build context changed to src/ to include src/lib/timeseries
+          # Required for: from src.lib.timeseries import Resolution
+          context: src
           file: src/lambdas/sse_streaming/Dockerfile
           push: true
           tags: |
@@ -1463,6 +1470,9 @@ jobs:
           from stream import stream_generator
           from src.lambdas.shared.logging_utils import sanitize_for_log
           from src.lambdas.shared.models.configuration import Configuration
+          # Timeseries models (Feature 1009) - added after ModuleNotFoundError fix
+          from src.lib.timeseries import Resolution
+          from timeseries_models import PartialBucketEvent
           print('✅ All imports successful')
           sys.exit(0)
           "
