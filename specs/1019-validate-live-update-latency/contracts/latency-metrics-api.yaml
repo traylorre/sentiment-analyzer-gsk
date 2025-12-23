@@ -1,0 +1,148 @@
+# Latency Metrics Contract: Validate Live Update Latency
+#
+# Feature: 1019-validate-live-update-latency
+# Date: 2024-12-22
+#
+# Defines the contract for latency metrics logging and querying.
+
+---
+log_entry_schema:
+  description: "CloudWatch Logs JSON schema for latency metrics"
+  type: object
+  required:
+    - event_type
+    - origin_timestamp
+    - send_timestamp
+    - latency_ms
+  properties:
+    event_type:
+      type: string
+      enum: ["bucket_update", "partial_bucket", "heartbeat"]
+      description: "Type of SSE event being measured"
+    ticker:
+      type: string
+      pattern: "^[A-Z]{1,5}$"
+      description: "Stock ticker symbol (null for heartbeat)"
+    resolution:
+      type: string
+      enum: ["1m", "5m", "10m", "1h", "3h", "6h", "12h", "24h"]
+      description: "Time resolution (null for heartbeat)"
+    origin_timestamp:
+      type: string
+      format: date-time
+      description: "ISO 8601 timestamp when sentiment data was created"
+    send_timestamp:
+      type: string
+      format: date-time
+      description: "ISO 8601 timestamp when SSE event was serialized"
+    latency_ms:
+      type: integer
+      minimum: 0
+      maximum: 60000
+      description: "Latency in milliseconds (send - origin)"
+    is_cold_start:
+      type: boolean
+      description: "True if Lambda was cold starting"
+    connection_count:
+      type: integer
+      minimum: 0
+      description: "Active SSE connections when event was sent"
+
+---
+cloudwatch_queries:
+  description: "CloudWatch Logs Insights queries for latency analysis"
+
+  percentiles:
+    name: "Latency Percentiles"
+    description: "Calculate p50, p90, p95, p99 latency"
+    query: |
+      fields @timestamp, latency_ms
+      | filter event_type = "bucket_update"
+      | stats pctile(latency_ms, 50) as p50,
+              pctile(latency_ms, 90) as p90,
+              pctile(latency_ms, 95) as p95,
+              pctile(latency_ms, 99) as p99,
+              count(*) as sample_count
+
+  percentiles_by_ticker:
+    name: "Latency Percentiles by Ticker"
+    description: "Calculate percentiles grouped by ticker symbol"
+    query: |
+      fields @timestamp, latency_ms, ticker
+      | filter event_type = "bucket_update"
+      | stats pctile(latency_ms, 95) as p95, count(*) as count by ticker
+      | sort p95 desc
+
+  hourly_trend:
+    name: "Hourly Latency Trend"
+    description: "Track latency over time with hourly buckets"
+    query: |
+      fields @timestamp, latency_ms
+      | filter event_type = "bucket_update"
+      | stats pctile(latency_ms, 95) as p95,
+              avg(latency_ms) as avg_ms,
+              count(*) as count
+        by bin(1h)
+      | sort @timestamp
+
+  cold_start_impact:
+    name: "Cold Start Impact"
+    description: "Compare latency for cold vs warm starts"
+    query: |
+      fields @timestamp, latency_ms, is_cold_start
+      | filter event_type = "bucket_update"
+      | stats pctile(latency_ms, 95) as p95,
+              avg(latency_ms) as avg_ms,
+              count(*) as count
+        by is_cold_start
+
+  high_latency_events:
+    name: "High Latency Events"
+    description: "Find events exceeding 2 second threshold"
+    query: |
+      fields @timestamp, latency_ms, ticker, resolution, is_cold_start
+      | filter event_type = "bucket_update" and latency_ms > 2000
+      | sort latency_ms desc
+      | limit 50
+
+---
+expected_outputs:
+  description: "Example outputs from CloudWatch Logs Insights queries"
+
+  percentiles_output:
+    p50: 127
+    p90: 456
+    p95: 890
+    p99: 1523
+    sample_count: 10000
+
+  success_criteria:
+    - "p95 < 3000 (SC-001: <3s end-to-end latency)"
+    - "sample_count > 100 (statistical significance)"
+
+---
+client_metrics_schema:
+  description: "window.lastLatencyMetrics object exposed to E2E tests"
+  type: object
+  properties:
+    latency_ms:
+      type: integer
+      description: "Client-calculated end-to-end latency"
+    event_type:
+      type: string
+      description: "Event type received"
+    ticker:
+      type: string
+      nullable: true
+      description: "Ticker symbol (null for heartbeat)"
+    origin_timestamp:
+      type: string
+      format: date-time
+      description: "ISO 8601 from server origin_timestamp"
+    receive_timestamp:
+      type: string
+      format: date-time
+      description: "ISO 8601 when client received event"
+    is_clock_skew:
+      type: boolean
+      description: "True if negative latency detected (client clock behind)"
