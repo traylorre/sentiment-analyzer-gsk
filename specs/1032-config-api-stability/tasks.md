@@ -5,8 +5,9 @@
 ### T001: Add tenacity dependency
 - [x] Check if tenacity is already in requirements.txt
 - [x] If not, add `tenacity>=8.0.0` to requirements.txt
+- [x] Add `tenacity==9.0.0` to requirements-ci.txt (CI deps mirror)
 - [x] Run `pip install -r requirements.txt` locally
-- **File**: `requirements.txt`
+- **Files**: `requirements.txt`, `requirements-ci.txt`
 - **Status**: complete
 
 ### T002: Create retry decorator helper
