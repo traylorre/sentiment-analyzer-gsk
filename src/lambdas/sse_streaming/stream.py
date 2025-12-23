@@ -7,6 +7,9 @@ Per FR-010: All events include event type, unique ID, and JSON payload
 Feature 1009 additions:
 - T027: Partial bucket streaming with progress_pct
 - T028: 100ms debounce for multi-resolution updates
+
+Feature 1020 additions:
+- Cache metrics logging for SC-008 validation (>80% hit rate)
 """
 
 import asyncio
@@ -16,6 +19,7 @@ import time
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 
+from cache_logger import CacheMetricsLogger, log_cold_start_metrics
 from connection import ConnectionManager, SSEConnection, connection_manager
 from metrics import metrics_emitter
 from models import (
@@ -29,6 +33,7 @@ from timeseries_models import PartialBucketEvent
 
 from src.lambdas.shared.logging_utils import sanitize_for_log
 from src.lib.timeseries import Resolution, calculate_bucket_progress, floor_to_bucket
+from src.lib.timeseries.cache import get_global_cache
 
 logger = logging.getLogger(__name__)
 
@@ -158,6 +163,18 @@ class SSEStreamGenerator:
         self._event_buffer = EventBuffer()
         self._start_time = time.time()
         self._debouncer = Debouncer(interval_ms=debounce_ms)
+
+        # Feature 1020: Cache metrics logging for SC-008 validation
+        cache = get_global_cache()
+        self._cache_logger = CacheMetricsLogger(cache, interval_seconds=60)
+
+        # Log initial metrics on cold start
+        # Safely get connection count (handles mocked conn_manager in tests)
+        try:
+            conn_count = int(self._conn_manager.count)
+        except (TypeError, ValueError):
+            conn_count = 0
+        log_cold_start_metrics(cache, connection_count=conn_count)
 
     @property
     def heartbeat_interval(self) -> int:
@@ -322,6 +339,9 @@ class SSEStreamGenerator:
                     yield heartbeat.to_sse_dict()
                     metrics_emitter.emit_events_sent(1, "heartbeat")
                     last_heartbeat = current_time
+
+                # Feature 1020: Periodic cache metrics logging (every 60s)
+                self._cache_logger.maybe_log(connection_count=self._conn_manager.count)
 
         except asyncio.CancelledError:
             logger.info(
