@@ -1,0 +1,30 @@
+# Dashboard Lambda Dependencies
+# Container image deployment for FastAPI dashboard (Feature 1036)
+# Fixes pydantic_core binary incompatibility in ZIP packaging
+
+# AWS SDK for DynamoDB, S3, Secrets Manager, X-Ray
+boto3>=1.42.0,<2.0.0
+
+# Web Framework - FastAPI with Lambda adapter
+fastapi>=0.127.0,<1.0.0
+mangum>=0.19.0,<1.0.0
+
+# HTTP Client - For external API calls (financial data providers)
+httpx>=0.28.0,<1.0.0
+
+# Data validation for request/response schemas
+# NOTE: pydantic must be installed in container to ensure binary compatibility
+pydantic>=2.12.0,<3.0.0
+email-validator>=2.3.0,<3.0.0
+
+# Structured JSON logging for CloudWatch
+python-json-logger>=4.0.0,<5.0.0
+
+# AWS X-Ray distributed tracing (Day 1 mandatory)
+aws-xray-sdk>=2.15.0,<3.0.0
+
+# JWT Authentication for auth middleware (Feature 075)
+PyJWT>=2.10.0,<3.0.0
+
+# Retry logic for DynamoDB/S3 operations (Feature 1032)
+tenacity>=9.0.0,<10.0.0
