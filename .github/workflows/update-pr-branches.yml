@@ -30,6 +30,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      actions: write  # Required for gh workflow run to trigger pr-checks.yml
 
     steps:
       - name: Update all open PR branches
@@ -58,9 +59,20 @@ jobs:
 
           for pr in $prs; do
             echo "Updating PR #$pr..."
+            # Get branch name for this PR (needed to trigger pr-checks.yml)
+            branch=$(gh pr view $pr --repo ${{ github.repository }} --json headRefName -q '.headRefName')
+
             if gh api repos/${{ github.repository }}/pulls/$pr/update-branch -X PUT 2>/dev/null; then
               echo "  ✓ PR #$pr updated successfully"
               updated=$((updated + 1))
+
+              # Trigger pr-checks.yml on the updated branch via workflow_dispatch
+              echo "  → Triggering pr-checks.yml on branch '$branch'..."
+              if gh workflow run pr-checks.yml --repo ${{ github.repository }} --ref "$branch"; then
+                echo "  ✓ pr-checks.yml triggered"
+              else
+                echo "  ⚠ Failed to trigger pr-checks.yml (non-blocking)"
+              fi
             else
               echo "  ⚠ PR #$pr skipped (likely has conflicts or is up to date)"
               skipped=$((skipped + 1))
