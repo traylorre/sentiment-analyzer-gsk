@@ -225,6 +225,8 @@ class TimeseriesManager {
      * Switch to a new resolution
      * Attempts cache-first for instant switching
      *
+     * Feature 1021 (T013-T016): Show skeleton during resolution switch
+     *
      * @param {string} resolution - e.g., "5m"
      */
     async switchResolution(resolution) {
@@ -232,7 +234,26 @@ class TimeseriesManager {
             return;
         }
 
-        // Performance instrumentation: mark start
+        // Feature 1021 (T014): Debounce rapid resolution switches
+        if (this._resolutionDebounce) {
+            clearTimeout(this._resolutionDebounce);
+        }
+
+        const debounceMs = (typeof CONFIG !== 'undefined' && CONFIG.SKELETON)
+            ? CONFIG.SKELETON.DEBOUNCE_MS
+            : 300;
+
+        this._resolutionDebounce = setTimeout(async () => {
+            await this._performResolutionSwitch(resolution);
+        }, debounceMs);
+    }
+
+    /**
+     * Internal method to perform the actual resolution switch
+     * Called after debounce delay
+     */
+    async _performResolutionSwitch(resolution) {
+        // Performance instrumentation: mark start (T064)
         const switchId = `resolution-switch-${Date.now()}`;
         performance.mark(`${switchId}-start`);
 
@@ -253,7 +274,12 @@ class TimeseriesManager {
 
         if (data) {
             this.updateChart(data);
+            // Feature 1021: No skeleton needed for cache hit (instant)
         } else {
+            // Feature 1021 (T013): Show skeleton during API fetch
+            if (typeof showSkeleton === 'function') {
+                showSkeleton('chart');
+            }
             // Fall back to API
             await this.loadData();
         }
@@ -323,6 +349,8 @@ class TimeseriesManager {
 
     /**
      * Load timeseries data from API
+     *
+     * Feature 1021 (T015): Hide skeleton when data arrives
      */
     async loadData() {
         try {
@@ -345,6 +373,11 @@ class TimeseriesManager {
             // Update chart
             this.updateChart(buckets);
 
+            // Feature 1021 (T015): Hide skeleton when data arrives
+            if (typeof skeletonSuccess === 'function') {
+                skeletonSuccess('chart');
+            }
+
             // Notify listeners
             if (this.onDataUpdate) {
                 this.onDataUpdate(buckets);
@@ -353,6 +386,10 @@ class TimeseriesManager {
         } catch (error) {
             console.error('Failed to load timeseries data:', error);
             this.updateChart([]);  // Clear chart on error
+            // Feature 1021: Hide skeleton on error too
+            if (typeof hideSkeleton === 'function') {
+                hideSkeleton('chart');
+            }
         }
     }
 
