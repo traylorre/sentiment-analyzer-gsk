@@ -44,5 +44,9 @@ httpx==0.28.1           # For FastAPI TestClient
 freezegun==1.5.5        # Time mocking for TTL tests
 hypothesis>=6.0.0
 
+# E2E Testing - Playwright for browser automation
+pytest-playwright==0.5.2  # Pytest fixtures for Playwright
+playwright>=1.49.0        # Browser automation (requires: playwright install)
+
 # Terraform parsing - Feature 075 (validation gaps)
 python-hcl2>=4.3.0

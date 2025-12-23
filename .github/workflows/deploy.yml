@@ -1166,6 +1166,9 @@ jobs:
           pip install -e .
           pip install -r requirements-dev.txt
 
+      - name: Install Playwright browsers
+        run: playwright install chromium --with-deps
+
       - name: Configure AWS Credentials (Preprod)
         uses: aws-actions/configure-aws-credentials@v5
         with:
