@@ -36,6 +36,53 @@ const DEFAULT_TICKER = 'AAPL';
 const DEFAULT_RESOLUTION = '5m';
 
 /**
+ * Feature 1019: Latency tracking for SSE events
+ * Exposes window.lastLatencyMetrics and window.latencySamples for E2E testing
+ */
+window.latencySamples = [];
+window.lastLatencyMetrics = null;
+
+/**
+ * Calculate and track latency from SSE event origin_timestamp
+ *
+ * @param {Object} eventData - Parsed SSE event data
+ * @param {string} eventType - Type of SSE event
+ * @returns {Object|null} Latency metrics or null if no origin_timestamp
+ */
+function trackLatency(eventData, eventType) {
+    if (!eventData.origin_timestamp) {
+        return null;
+    }
+
+    const receiveTime = Date.now();
+    const originTime = new Date(eventData.origin_timestamp).getTime();
+    const latencyMs = receiveTime - originTime;
+    const isClockSkew = latencyMs < 0;
+
+    const metrics = {
+        latency_ms: latencyMs,
+        event_type: eventType,
+        ticker: eventData.ticker || null,
+        origin_timestamp: eventData.origin_timestamp,
+        receive_timestamp: new Date(receiveTime).toISOString(),
+        is_clock_skew: isClockSkew
+    };
+
+    window.lastLatencyMetrics = metrics;
+
+    // Only track positive latency values (non-clock-skew)
+    if (!isClockSkew) {
+        window.latencySamples.push(latencyMs);
+        // Keep only last 1000 samples
+        if (window.latencySamples.length > 1000) {
+            window.latencySamples.shift();
+        }
+    }
+
+    return metrics;
+}
+
+/**
  * TimeseriesManager - Coordinates resolution switching and data fetching
  */
 class TimeseriesManager {
@@ -465,6 +512,8 @@ class TimeseriesManager {
         this.eventSource.addEventListener('bucket_update', (event) => {
             try {
                 const bucket = JSON.parse(event.data);
+                // Feature 1019: Track latency for E2E validation
+                trackLatency(bucket, 'bucket_update');
                 this.handleBucketUpdate(bucket);
             } catch (error) {
                 console.error('Failed to parse bucket_update:', error);
@@ -474,6 +523,8 @@ class TimeseriesManager {
         this.eventSource.addEventListener('partial_bucket', (event) => {
             try {
                 const bucket = JSON.parse(event.data);
+                // Feature 1019: Track latency for E2E validation
+                trackLatency(bucket, 'partial_bucket');
                 this.handlePartialBucket(bucket);
             } catch (error) {
                 console.error('Failed to parse partial_bucket:', error);

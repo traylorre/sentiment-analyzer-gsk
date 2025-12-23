@@ -52,6 +52,9 @@ class BucketUpdateEvent(BaseModel):
     Event indicating a time-series bucket has been updated.
 
     Sent when new sentiment data is aggregated into a bucket.
+
+    Feature 1019 additions:
+    - origin_timestamp: When sentiment data was originally created (for latency measurement)
     """
 
     ticker: str = Field(description="Stock ticker symbol")
@@ -59,7 +62,11 @@ class BucketUpdateEvent(BaseModel):
     bucket: dict[str, Any] = Field(description="Bucket data (OHLC, counts, etc.)")
     timestamp: datetime = Field(
         default_factory=lambda: datetime.now(UTC),
-        description="When the update occurred",
+        description="When the SSE event was generated",
+    )
+    origin_timestamp: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        description="When the sentiment data was originally created (FR-001)",
     )
 
 
