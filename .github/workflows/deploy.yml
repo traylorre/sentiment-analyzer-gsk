@@ -509,7 +509,8 @@ jobs:
           # Note: PYTHONPATH is set here to match the Lambda environment variable
           # configured in Terraform. Docker ENV alone doesn't work because Lambda
           # Web Adapter subprocess doesn't inherit container environment reliably.
-          docker run --rm -e PYTHONPATH=/app/packages:/app -e DATABASE_TABLE=preprod-sentiment-items --entrypoint python "$IMAGE" -c "
+          # Feature 1043: USERS_TABLE for config queries, SENTIMENTS_TABLE for sentiment data
+          docker run --rm -e PYTHONPATH=/app/packages:/app -e USERS_TABLE=preprod-sentiment-users -e SENTIMENTS_TABLE=preprod-sentiment-items --entrypoint python "$IMAGE" -c "
           import sys
           print('Testing imports...')
 
@@ -663,7 +664,8 @@ jobs:
 
           # Run Python import check inside the container
           # Note: Must pass env vars that modules expect at import time (chaos.py, handler.py)
-          docker run --rm -e ENVIRONMENT=preprod -e DATABASE_TABLE=preprod-sentiment-items --entrypoint python "$IMAGE" -c "
+          # Feature 1043: USERS_TABLE and SENTIMENTS_TABLE are required at import time
+          docker run --rm -e ENVIRONMENT=preprod -e USERS_TABLE=preprod-sentiment-users -e SENTIMENTS_TABLE=preprod-sentiment-items --entrypoint python "$IMAGE" -c "
           import sys
           print('Testing imports...')
 
@@ -1533,7 +1535,8 @@ jobs:
           IMAGE="${{ steps.login-ecr.outputs.registry }}/prod-sse-streaming-lambda:${{ github.sha }}"
 
           # Note: PYTHONPATH matches Lambda environment variable in Terraform
-          docker run --rm -e PYTHONPATH=/app/packages:/app -e DATABASE_TABLE=prod-sentiment-items --entrypoint python "$IMAGE" -c "
+          # Feature 1043: USERS_TABLE for config queries, SENTIMENTS_TABLE for sentiment data
+          docker run --rm -e PYTHONPATH=/app/packages:/app -e USERS_TABLE=prod-sentiment-users -e SENTIMENTS_TABLE=prod-sentiment-items --entrypoint python "$IMAGE" -c "
           import sys
           from handler import app
           from config import config_lookup_service
@@ -1602,7 +1605,8 @@ jobs:
           IMAGE="${{ steps.login-ecr.outputs.registry }}/prod-dashboard-lambda:${{ github.sha }}"
 
           # Note: Must pass env vars that modules expect at import time (chaos.py, handler.py)
-          docker run --rm -e ENVIRONMENT=prod -e DATABASE_TABLE=prod-sentiment-items --entrypoint python "$IMAGE" -c "
+          # Feature 1043: USERS_TABLE and SENTIMENTS_TABLE are required at import time
+          docker run --rm -e ENVIRONMENT=prod -e USERS_TABLE=prod-sentiment-users -e SENTIMENTS_TABLE=prod-sentiment-items --entrypoint python "$IMAGE" -c "
           import sys
           from handler import lambda_handler
           from fastapi import FastAPI

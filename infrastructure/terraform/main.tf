@@ -727,10 +727,11 @@ module "sse_streaming_lambda" {
   # Note: PYTHONPATH must be set here, not just in Docker ENV, because
   # Lambda Web Adapter runs Python in a subprocess that doesn't reliably
   # inherit container environment variables.
+  # Feature 1043: Clear env var naming - USERS_TABLE for configs, SENTIMENTS_TABLE for sentiment data
   environment_variables = {
     PYTHONPATH             = "/app/packages:/app"
-    DYNAMODB_TABLE         = module.dynamodb.table_name
-    DATABASE_TABLE         = module.dynamodb.feature_006_users_table_name
+    USERS_TABLE            = module.dynamodb.feature_006_users_table_name # configs, sessions
+    SENTIMENTS_TABLE       = module.dynamodb.table_name                   # sentiment items
     SSE_HEARTBEAT_INTERVAL = tostring(var.sse_heartbeat_interval)
     SSE_MAX_CONNECTIONS    = "100"
     SSE_POLL_INTERVAL      = tostring(var.sse_poll_interval)
