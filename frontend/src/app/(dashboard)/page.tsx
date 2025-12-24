@@ -1,63 +1,34 @@
 'use client';
 
-import { useState, useCallback, useMemo, Suspense } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
-import { TrendingUp, RefreshCw } from 'lucide-react';
+import { TrendingUp } from 'lucide-react';
 import { TickerInput } from '@/components/dashboard/ticker-input';
 import { TickerChipList } from '@/components/dashboard/ticker-chip';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { ChartSkeleton } from '@/components/ui/loading-skeleton';
 import { PageTransition, AnimatedContainer } from '@/components/layout/page-transition';
-import { cn } from '@/lib/utils';
 import { useHaptic } from '@/hooks/use-haptic';
 import type { TickerSearchResult } from '@/lib/api/tickers';
-import type { SentimentTimeSeries } from '@/types/sentiment';
 
 // Dynamic import for heavy chart component - reduces initial bundle size
-const SentimentChart = dynamic(
-  () => import('@/components/charts/sentiment-chart').then((mod) => ({ default: mod.SentimentChart })),
+const PriceSentimentChart = dynamic(
+  () => import('@/components/charts/price-sentiment-chart').then((mod) => ({ default: mod.PriceSentimentChart })),
   {
     loading: () => <ChartSkeleton />,
     ssr: false, // Lightweight Charts requires browser APIs
   }
 );
 
-// Mock data for demo (will be replaced with real API calls)
-const generateMockData = (days: number = 30): SentimentTimeSeries[] => {
-  const data: SentimentTimeSeries[] = [];
-  const now = Date.now();
-  let value = 0;
-
-  for (let i = days; i >= 0; i--) {
-    // Random walk with mean reversion
-    value += (Math.random() - 0.5) * 0.2;
-    value = Math.max(-1, Math.min(1, value));
-    value = value * 0.95; // Mean reversion
-
-    data.push({
-      timestamp: new Date(now - i * 24 * 60 * 60 * 1000).toISOString(),
-      score: value + (Math.random() - 0.5) * 0.1,
-      source: 'our_model',
-    });
-  }
-
-  return data;
-};
-
-interface TickerData {
+interface TickerInfo {
   symbol: string;
   name: string;
-  data: SentimentTimeSeries[];
-  latestScore: number;
-  isLoading: boolean;
 }
 
 export default function DashboardPage() {
-  const [tickers, setTickers] = useState<TickerData[]>([]);
+  const [tickers, setTickers] = useState<TickerInfo[]>([]);
   const [activeTicker, setActiveTicker] = useState<string | null>(null);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const haptic = useHaptic();
 
   // Handle ticker selection from search
@@ -69,17 +40,8 @@ export default function DashboardPage() {
         return;
       }
 
-      // Add new ticker with mock data
-      const mockData = generateMockData();
-      const newTicker: TickerData = {
-        symbol: ticker.symbol,
-        name: ticker.name,
-        data: mockData,
-        latestScore: mockData[mockData.length - 1].score,
-        isLoading: false,
-      };
-
-      setTickers((prev) => [...prev, newTicker]);
+      // Add new ticker
+      setTickers((prev) => [...prev, { symbol: ticker.symbol, name: ticker.name }]);
       setActiveTicker(ticker.symbol);
       haptic.medium();
     },
@@ -103,44 +65,14 @@ export default function DashboardPage() {
     [activeTicker, tickers, haptic]
   );
 
-  // Handle refresh
-  const handleRefresh = useCallback(async () => {
-    setIsRefreshing(true);
-    haptic.light();
-
-    // Simulate refresh delay
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    // Update all tickers with new mock data
-    setTickers((prev) =>
-      prev.map((t) => {
-        const newData = generateMockData();
-        return {
-          ...t,
-          data: newData,
-          latestScore: newData[newData.length - 1].score,
-        };
-      })
-    );
-
-    setIsRefreshing(false);
-    haptic.medium();
-  }, [haptic]);
-
-  // Get active ticker data
-  const activeTickerData = useMemo(
-    () => tickers.find((t) => t.symbol === activeTicker),
-    [tickers, activeTicker]
-  );
-
-  // Prepare ticker chips data
+  // Prepare ticker chips data (simplified - no scores needed, chart fetches its own data)
   const tickerChips = useMemo(
     () =>
       tickers.map((t) => ({
         symbol: t.symbol,
         name: t.name,
-        score: t.latestScore,
-        isLoading: t.isLoading,
+        score: 0, // Placeholder - PriceSentimentChart handles data fetching
+        isLoading: false,
       })),
     [tickers]
   );
@@ -154,21 +86,8 @@ export default function DashboardPage() {
             <div className="flex items-center justify-between">
               <CardTitle className="text-lg flex items-center gap-2">
                 <TrendingUp className="h-5 w-5 text-accent" />
-                Sentiment Analysis
+                Price & Sentiment Analysis
               </CardTitle>
-              {tickers.length > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleRefresh}
-                  disabled={isRefreshing}
-                  className="text-muted-foreground hover:text-accent"
-                >
-                  <RefreshCw
-                    className={cn('h-4 w-4', isRefreshing && 'animate-spin')}
-                  />
-                </Button>
-              )}
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -192,14 +111,13 @@ export default function DashboardPage() {
 
       {/* Chart section */}
       <AnimatePresence mode="wait">
-        {activeTickerData ? (
-          <AnimatedContainer key={activeTickerData.symbol} delay={0.2}>
+        {activeTicker ? (
+          <AnimatedContainer key={activeTicker} delay={0.2}>
             <Card className="glass">
               <CardContent className="pt-6">
-                <SentimentChart
-                  data={activeTickerData.data}
-                  ticker={activeTickerData.symbol}
-                  height={350}
+                <PriceSentimentChart
+                  ticker={activeTicker}
+                  height={450}
                 />
               </CardContent>
             </Card>
@@ -219,11 +137,11 @@ export default function DashboardPage() {
                   </div>
                   <div className="space-y-2">
                     <h3 className="text-xl font-semibold text-foreground">
-                      Track Sentiment
+                      Track Price & Sentiment
                     </h3>
                     <p className="text-muted-foreground max-w-md mx-auto">
-                      Search for a ticker symbol above to view real-time sentiment
-                      analysis from multiple sources.
+                      Search for a ticker symbol above to view OHLC candlesticks
+                      with sentiment overlay. Select time resolutions from 1-minute to daily.
                     </p>
                   </div>
                 </motion.div>
