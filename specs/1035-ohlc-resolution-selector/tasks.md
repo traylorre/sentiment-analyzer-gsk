@@ -86,8 +86,8 @@
 
 ### Frontend Unit Tests
 
-- [ ] T022 [P] [US1] Add test for resolution selector rendering in frontend/src/__tests__/price-sentiment-chart.test.tsx
-- [ ] T023 [P] [US1] Add test for resolution change triggers data refetch in frontend/src/__tests__/price-sentiment-chart.test.tsx
+- [x] T022 [P] [US1] Add test for resolution selector rendering in frontend/tests/unit/components/charts/price-sentiment-chart.test.tsx
+- [x] T023 [P] [US1] Add test for resolution change triggers data refetch in frontend/tests/unit/components/charts/price-sentiment-chart.test.tsx
 
 **Checkpoint**: User Story 1 complete - users can select resolutions and see chart update with intraday candles
 
@@ -107,8 +107,8 @@
 
 ### Frontend Unit Tests
 
-- [ ] T027 [P] [US2] Add test for resolution preference persistence in frontend/src/__tests__/price-sentiment-chart.test.tsx
-- [ ] T028 [P] [US2] Add test for initial resolution read from sessionStorage in frontend/src/__tests__/price-sentiment-chart.test.tsx
+- [x] T027 [P] [US2] Add test for resolution preference persistence in frontend/tests/unit/components/charts/price-sentiment-chart.test.tsx
+- [x] T028 [P] [US2] Add test for initial resolution read from sessionStorage in frontend/tests/unit/components/charts/price-sentiment-chart.test.tsx
 
 **Checkpoint**: User Story 2 complete - resolution preference persists across navigation
 
@@ -127,7 +127,7 @@
 
 ### Frontend Unit Tests
 
-- [ ] T031 [P] [US3] Add test for synchronized resolution between price and sentiment in frontend/src/__tests__/price-sentiment-chart.test.tsx
+- [x] T031 [P] [US3] Add test for synchronized resolution between price and sentiment in frontend/tests/unit/components/charts/price-sentiment-chart.test.tsx
 
 **Checkpoint**: User Story 3 complete - price and sentiment data synchronized on time axis
 
@@ -138,8 +138,8 @@
 **Purpose**: Final improvements affecting multiple components
 
 - [x] T032 Add error message display when resolution unavailable (fallback to daily) in frontend/src/components/charts/price-sentiment-chart.tsx
-- [ ] T033 [P] Run make validate to ensure code quality in project root
-- [ ] T034 [P] Verify quickstart.md examples work with new resolution parameter
+- [x] T033 [P] Run make validate to ensure code quality in project root
+- [x] T034 [P] Verify quickstart.md examples work with new resolution parameter
 
 ---
 
