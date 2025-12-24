@@ -432,9 +432,32 @@ def get_configuration(
         _set_cached_config(user_id, config_id, result)
         return result
 
-    except Exception as e:
+    except ClientError as e:
+        error_code = e.response.get("Error", {}).get("Code", "")
+        # ResourceNotFoundException means item doesn't exist - return None
+        # ValidationException means malformed request (e.g., invalid key) - return None
+        if error_code in ("ResourceNotFoundException", "ValidationException"):
+            logger.debug(
+                "Configuration not found",
+                extra={
+                    "config_id": sanitize_for_log(config_id[:8] if config_id else ""),
+                    "error_code": error_code,
+                },
+            )
+            return None
+        # Other DynamoDB errors (service unavailable, throttling, etc.) - log and re-raise
         logger.error(
             "Failed to get configuration",
+            extra={
+                "config_id": sanitize_for_log(config_id[:8] if config_id else ""),
+                "error_code": error_code,
+                **get_safe_error_info(e),
+            },
+        )
+        raise
+    except Exception as e:
+        logger.error(
+            "Unexpected error getting configuration",
             extra={
                 "config_id": sanitize_for_log(config_id[:8] if config_id else ""),
                 **get_safe_error_info(e),
