@@ -1274,13 +1274,14 @@ jobs:
             exit 1
           fi
 
-          echo "3. Invoking /api/v2/sentiment endpoint (authenticated)..."
+          echo "3. Invoking /api/v2/tickers/AAPL/sentiment/history endpoint (authenticated)..."
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
             -H "Authorization: Bearer ${API_KEY}" \
-            "${DASHBOARD_URL}/api/v2/sentiment?tickers=AAPL" || echo "000")
+            "${DASHBOARD_URL}/api/v2/tickers/AAPL/sentiment/history" || echo "000")
           echo "  HTTP $HTTP_CODE"
-          if [ "$HTTP_CODE" != "200" ]; then
-            echo "❌ ERROR: /api/v2/sentiment returned HTTP $HTTP_CODE (expected 200)"
+          # 200=OK, 204=No Content, 404=No historical data yet - all acceptable for warmup
+          if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "204" ] && [ "$HTTP_CODE" != "404" ]; then
+            echo "❌ ERROR: /api/v2/tickers/AAPL/sentiment/history returned HTTP $HTTP_CODE (expected 200/204/404)"
             echo "Check DASHBOARD_API_KEY secret matches API_KEY in Lambda environment"
             exit 1
           fi
