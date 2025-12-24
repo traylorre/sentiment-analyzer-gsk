@@ -401,10 +401,10 @@ module "dashboard_lambda" {
   # The chaos module needs Lambda ARNs, and Lambda needs chaos outputs = cycle.
   # Dashboard can look up FIS templates at runtime via AWS SDK if needed.
   environment_variables = {
-    # Feature 006: Use new sentiment-users table for user data (PK/SK single-table design)
-    DATABASE_TABLE = module.dynamodb.feature_006_users_table_name
-    # Backward compat: Legacy v1 sentiment-items table for news/sentiment data
-    DYNAMODB_TABLE               = module.dynamodb.table_name
+    # Feature 1043: Clear naming - users table for sessions/configs/alerts
+    USERS_TABLE = module.dynamodb.feature_006_users_table_name
+    # Feature 1043: Clear naming - sentiment items table for news/metrics/analysis
+    SENTIMENTS_TABLE             = module.dynamodb.table_name
     API_KEY                      = "" # Will be fetched from Secrets Manager at runtime
     DASHBOARD_API_KEY_SECRET_ARN = module.secrets.dashboard_api_key_secret_arn
     SENDGRID_SECRET_ARN          = module.secrets.sendgrid_secret_arn

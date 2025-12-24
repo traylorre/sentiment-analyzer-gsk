@@ -90,6 +90,12 @@ os.environ.setdefault("AWS_XRAY_SDK_ENABLED", "false")
 
 # These are ONLY set if not already present (CI sets them for preprod)
 # For local unit tests (not preprod), these provide sensible defaults
+# Feature 1043: Clear naming - separate tables for users and sentiments
+if "USERS_TABLE" not in os.environ:
+    os.environ["USERS_TABLE"] = "test-sentiment-users"
+if "SENTIMENTS_TABLE" not in os.environ:
+    os.environ["SENTIMENTS_TABLE"] = "test-sentiment-items"
+# Legacy: Keep DATABASE_TABLE for Lambdas not yet migrated
 if "DATABASE_TABLE" not in os.environ:
     os.environ["DATABASE_TABLE"] = "test-sentiment-items"
 if "API_KEY" not in os.environ:

@@ -95,7 +95,8 @@ class ConfigAlertCreateRequest(BaseModel):
 logger = logging.getLogger(__name__)
 
 # Environment config
-DYNAMODB_TABLE = os.environ["DATABASE_TABLE"]
+# Feature 1043: Clear naming - users table for auth/configs/alerts/users
+USERS_TABLE = os.environ["USERS_TABLE"]
 TICKER_CACHE_BUCKET = os.environ.get("TICKER_CACHE_BUCKET", "")
 
 # Create routers
@@ -111,9 +112,9 @@ users_router = APIRouter(prefix="/api/v2/users", tags=["users"])
 timeseries_router = APIRouter(prefix="/api/v2/timeseries", tags=["timeseries"])
 
 
-def get_dynamodb_table():
+def get_users_table():
     """Dependency to get DynamoDB table."""
-    return get_table(DYNAMODB_TABLE)
+    return get_table(USERS_TABLE)
 
 
 def get_ticker_cache_dependency() -> TickerCache | None:
@@ -230,7 +231,7 @@ async def get_config_with_tickers(
 async def create_anonymous_session(
     request: Request,
     body: auth_service.AnonymousSessionRequest,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Create anonymous session (T047)."""
     try:
@@ -247,7 +248,7 @@ async def create_anonymous_session(
 @auth_router.get("/validate")
 async def validate_session(
     request: Request,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Validate session (T048)."""
     user_id = request.headers.get("X-User-ID")
@@ -261,7 +262,7 @@ async def validate_session(
 @auth_router.post("/extend")
 async def extend_session(
     request: Request,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Extend session by 30 days."""
     user_id = get_user_id_from_request(request)
@@ -285,7 +286,7 @@ class MagicLinkRequest(BaseModel):
 async def request_magic_link(
     request: Request,
     body: MagicLinkRequest,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Request magic link email (T090)."""
     user_id = request.headers.get("X-User-ID")  # Optional for linking
@@ -303,7 +304,7 @@ async def request_magic_link(
 async def verify_magic_link(
     token: str,
     request: Request,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Verify magic link token (T091).
 
@@ -371,7 +372,7 @@ class OAuthCallbackRequest(BaseModel):
 async def handle_oauth_callback(
     request: Request,
     body: OAuthCallbackRequest,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Handle OAuth callback (T093).
 
@@ -426,7 +427,7 @@ async def refresh_tokens(body: RefreshTokenRequest):
 @auth_router.post("/signout")
 async def sign_out(
     request: Request,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Sign out current device (T095)."""
     # Extract access token from Authorization header
@@ -444,7 +445,7 @@ async def sign_out(
 @auth_router.get("/session")
 async def get_session_info(
     request: Request,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Get session info (T096)."""
     user_id = get_user_id_from_request(request)
@@ -457,7 +458,7 @@ async def get_session_info(
 @auth_router.post("/session/refresh")
 async def refresh_session(
     request: Request,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Refresh session expiry (T056).
 
@@ -487,7 +488,7 @@ admin_router = APIRouter(prefix="/api/v2/admin", tags=["admin"])
 @admin_router.post("/sessions/revoke")
 async def revoke_sessions_bulk(
     body: BulkRevocationRequest,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Bulk session revocation - andon cord pattern (T057).
 
@@ -509,7 +510,7 @@ class CheckEmailRequest(BaseModel):
 @auth_router.post("/check-email")
 async def check_email_conflict(
     body: CheckEmailRequest,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Check for email account conflict (T097)."""
     result = auth_service.check_email_conflict(table=table, email=body.email)
@@ -525,7 +526,7 @@ class LinkAccountsRequest(BaseModel):
 async def link_accounts(
     request: Request,
     body: LinkAccountsRequest,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Link accounts (T098)."""
     user_id = get_user_id_from_request(request)
@@ -543,7 +544,7 @@ async def link_accounts(
 @auth_router.get("/merge-status")
 async def get_merge_status(
     request: Request,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Get merge status (T099)."""
     user_id = get_user_id_from_request(request)
@@ -561,7 +562,7 @@ class MergeRequest(BaseModel):
 async def merge_anonymous_data(
     request: Request,
     body: MergeRequest,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Merge anonymous session data into authenticated account (T069).
 
@@ -643,7 +644,7 @@ class UserLookupResponse(BaseModel):
 @users_router.get("/lookup")
 async def lookup_user_by_email(
     email: EmailStr = Query(..., description="Email address to look up"),
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Look up user by email address (T044).
 
@@ -684,7 +685,7 @@ async def lookup_user_by_email(
 async def create_configuration(
     request: Request,
     body: config_service.ConfigurationCreate,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
     ticker_cache: TickerCache | None = Depends(get_ticker_cache_dependency),
 ):
     """Create configuration (T049).
@@ -772,7 +773,7 @@ async def create_configuration(
 @config_router.get("")
 async def list_configurations(
     request: Request,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """List configurations (T050)."""
     user_id = get_user_id_from_request(request, table=table)
@@ -784,7 +785,7 @@ async def list_configurations(
 async def get_configuration(
     config_id: str,
     request: Request,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Get configuration (T051)."""
     user_id = get_user_id_from_request(request)
@@ -828,7 +829,7 @@ async def update_configuration_patch(
     config_id: str,
     request: Request,
     body: config_service.ConfigurationUpdate,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
     ticker_cache: TickerCache | None = Depends(get_ticker_cache_dependency),
 ):
     """Update configuration via PATCH (T052)."""
@@ -842,7 +843,7 @@ async def update_configuration_put(
     config_id: str,
     request: Request,
     body: config_service.ConfigurationUpdate,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
     ticker_cache: TickerCache | None = Depends(get_ticker_cache_dependency),
 ):
     """Update configuration via PUT (T052)."""
@@ -855,7 +856,7 @@ async def update_configuration_put(
 async def delete_configuration(
     config_id: str,
     request: Request,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Delete configuration (T053)."""
     user_id = get_user_id_from_request(request)
@@ -877,7 +878,7 @@ async def delete_configuration(
 async def get_sentiment(
     config_id: str,
     request: Request,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Get sentiment data for configuration (T056)."""
     user_id = get_user_id_from_request(request)
@@ -895,7 +896,7 @@ async def get_heatmap(
     config_id: str,
     request: Request,
     view: str = Query("sources", pattern="^(sources|time_periods|timeperiods)$"),
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Get heat map data (T057)."""
     user_id = get_user_id_from_request(request)
@@ -916,7 +917,7 @@ async def get_heatmap(
 async def get_volatility(
     config_id: str,
     request: Request,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Get volatility data (T058)."""
     user_id = get_user_id_from_request(request)
@@ -933,7 +934,7 @@ async def get_volatility(
 async def get_correlation(
     config_id: str,
     request: Request,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Get correlation data (T059)."""
     user_id = get_user_id_from_request(request)
@@ -970,7 +971,7 @@ async def trigger_refresh(
 async def get_premarket(
     config_id: str,
     request: Request,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Get pre-market estimates (T063)."""
     user_id = get_user_id_from_request(request)
@@ -991,7 +992,7 @@ async def get_ticker_sentiment_history(
     request: Request,
     source: str = Query(None, pattern="^(tiingo|finnhub)$"),
     days: int = Query(7, ge=1, le=30),
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Get sentiment history for a specific ticker within a configuration."""
     user_id = get_user_id_from_request(request)
@@ -1012,7 +1013,7 @@ async def get_ticker_sentiment_history(
 async def get_config_alerts(
     config_id: str,
     request: Request,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Get alerts for a specific configuration."""
     user_id = get_user_id_from_request(request)
@@ -1031,7 +1032,7 @@ async def create_config_alert(
     config_id: str,
     request: Request,
     body: ConfigAlertCreateRequest,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Create alert for a specific configuration.
 
@@ -1075,7 +1076,7 @@ async def update_config_alert(
     alert_id: str,
     request: Request,
     body: alert_service.AlertUpdateRequest,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Update alert for a specific configuration."""
     user_id = get_authenticated_user_id(request)
@@ -1105,7 +1106,7 @@ async def delete_config_alert(
     config_id: str,
     alert_id: str,
     request: Request,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Delete alert for a specific configuration."""
     user_id = get_authenticated_user_id(request)
@@ -1124,7 +1125,7 @@ async def toggle_config_alert(
     config_id: str,
     alert_id: str,
     request: Request,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Toggle alert enabled status for a specific configuration."""
     user_id = get_authenticated_user_id(request)
@@ -1358,7 +1359,7 @@ async def get_timeseries_batch(
 async def create_alert(
     request: Request,
     body: alert_service.AlertRuleCreate,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Create alert rule (T131)."""
     user_id = get_authenticated_user_id(request)
@@ -1378,7 +1379,7 @@ async def create_alert(
 async def list_alerts(
     request: Request,
     config_id: str | None = None,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """List alerts (T132)."""
     user_id = get_authenticated_user_id(request)
@@ -1394,7 +1395,7 @@ async def list_alerts(
 async def get_alert(
     alert_id: str,
     request: Request,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Get alert (T133)."""
     user_id = get_authenticated_user_id(request)
@@ -1415,7 +1416,7 @@ async def update_alert(
     alert_id: str,
     request: Request,
     body: alert_service.AlertUpdateRequest,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Update alert (T134)."""
     user_id = get_authenticated_user_id(request)
@@ -1444,7 +1445,7 @@ async def update_alert(
 async def delete_alert(
     alert_id: str,
     request: Request,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Delete alert (T135)."""
     user_id = get_authenticated_user_id(request)
@@ -1462,7 +1463,7 @@ async def delete_alert(
 async def toggle_alert(
     alert_id: str,
     request: Request,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Toggle alert enabled status (T136)."""
     user_id = get_authenticated_user_id(request)
@@ -1479,7 +1480,7 @@ async def toggle_alert(
 @alert_router.get("/quota")
 async def get_alert_quota(
     request: Request,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Get alert email quota usage (T145).
 
@@ -1509,7 +1510,7 @@ async def list_notifications(
     offset: int = Query(0, ge=0),
     status: str | None = None,
     alert_id: str | None = None,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """List notification history (T137)."""
     user_id = get_authenticated_user_id(request)
@@ -1527,7 +1528,7 @@ async def list_notifications(
 @notification_router.get("/preferences")
 async def get_preferences(
     request: Request,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Get notification preferences (T139)."""
     user_id = get_authenticated_user_id(request)
@@ -1542,7 +1543,7 @@ async def get_preferences(
 async def update_preferences(
     request: Request,
     body: NotificationPreferencesUpdate,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Update notification preferences (T140)."""
     user_id = get_authenticated_user_id(request)
@@ -1561,7 +1562,7 @@ async def update_preferences(
 @notification_router.post("/disable-all")
 async def disable_all_notifications(
     request: Request,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Disable all notifications (T141)."""
     user_id = get_authenticated_user_id(request)
@@ -1575,7 +1576,7 @@ async def disable_all_notifications(
 @notification_router.get("/unsubscribe")
 async def unsubscribe(
     token: str,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Unsubscribe via email token (T142)."""
     result = notification_service.unsubscribe_via_token(
@@ -1590,7 +1591,7 @@ async def unsubscribe(
 @notification_router.post("/resubscribe")
 async def resubscribe(
     request: Request,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Resubscribe to notifications (T143)."""
     user_id = get_authenticated_user_id(request)
@@ -1604,7 +1605,7 @@ async def resubscribe(
 @notification_router.get("/digest")
 async def get_digest_settings(
     request: Request,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Get digest settings (T144a)."""
     user_id = get_authenticated_user_id(request)
@@ -1619,7 +1620,7 @@ async def get_digest_settings(
 async def update_digest_settings(
     request: Request,
     body: DigestSettingsUpdate,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Update digest settings (T144b)."""
     user_id = get_authenticated_user_id(request)
@@ -1640,7 +1641,7 @@ async def update_digest_settings(
 @notification_router.post("/digest/test")
 async def trigger_test_digest(
     request: Request,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Trigger test digest (T144c)."""
     user_id = get_authenticated_user_id(request)
@@ -1655,7 +1656,7 @@ async def trigger_test_digest(
 async def get_notification(
     notification_id: str,
     request: Request,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Get notification detail (T138)."""
     user_id = get_authenticated_user_id(request)
@@ -1677,7 +1678,7 @@ async def get_notification(
 @auth_router.get("/me")
 async def get_current_user(
     request: Request,
-    table=Depends(get_dynamodb_table),
+    table=Depends(get_users_table),
 ):
     """Get current user info - MINIMAL response to prevent data leakage.
 

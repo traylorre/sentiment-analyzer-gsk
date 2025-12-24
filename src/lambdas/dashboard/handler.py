@@ -78,7 +78,11 @@ logger.setLevel(logging.INFO)
 
 # Configuration from environment
 # CRITICAL: These must be set - no defaults to prevent wrong-environment data corruption
-DYNAMODB_TABLE = os.environ["DATABASE_TABLE"]
+# Feature 1043: Clear naming - separate tables for different data types
+USERS_TABLE = os.environ["USERS_TABLE"]  # sessions, configs, alerts (PK/SK design)
+SENTIMENTS_TABLE = os.environ[
+    "SENTIMENTS_TABLE"
+]  # news items, sentiment analysis (has GSIs)
 CHAOS_EXPERIMENTS_TABLE = os.environ.get("CHAOS_EXPERIMENTS_TABLE", "")
 ENVIRONMENT = os.environ["ENVIRONMENT"]
 
@@ -155,7 +159,7 @@ async def lifespan(app: FastAPI):
         "Dashboard Lambda starting",
         extra={
             "environment": ENVIRONMENT,
-            "table": DYNAMODB_TABLE,
+            "table": SENTIMENTS_TABLE,
         },
     )
     yield
@@ -504,7 +508,7 @@ async def health_check():
         3. Check network connectivity (VPC configuration)
     """
     try:
-        table = get_table(DYNAMODB_TABLE)
+        table = get_table(SENTIMENTS_TABLE)
 
         # Test connectivity by describing table
         _ = table.table_status  # This triggers a DescribeTable call
@@ -512,7 +516,7 @@ async def health_check():
         return JSONResponse(
             {
                 "status": "healthy",
-                "table": DYNAMODB_TABLE,
+                "table": SENTIMENTS_TABLE,
                 "environment": ENVIRONMENT,
             }
         )
@@ -520,7 +524,7 @@ async def health_check():
     except Exception as e:
         logger.error(
             "Health check failed",
-            extra={"table": DYNAMODB_TABLE, **get_safe_error_info(e)},
+            extra={"table": SENTIMENTS_TABLE, **get_safe_error_info(e)},
         )
 
         return JSONResponse(
@@ -528,7 +532,7 @@ async def health_check():
             content={
                 "status": "unhealthy",
                 "error": get_safe_error_message_for_user(e),
-                "table": DYNAMODB_TABLE,
+                "table": SENTIMENTS_TABLE,
             },
         )
 
@@ -574,7 +578,7 @@ async def get_metrics_v2(
         hours = 168
 
     try:
-        table = get_table(DYNAMODB_TABLE)
+        table = get_table(SENTIMENTS_TABLE)
         metrics = aggregate_dashboard_metrics(table, hours=hours)
 
         # Sanitize recent items for response
@@ -655,7 +659,7 @@ async def get_sentiment_v2(
         start_time = start
 
     try:
-        table = get_table(DYNAMODB_TABLE)
+        table = get_table(SENTIMENTS_TABLE)
         result = get_sentiment_by_tags(table, tag_list, start_time, end_time)
         return JSONResponse(result)
 
@@ -756,7 +760,7 @@ async def get_trends_v2(
         range_hours = 168
 
     try:
-        table = get_table(DYNAMODB_TABLE)
+        table = get_table(SENTIMENTS_TABLE)
         result = get_trend_data(table, tag_list, interval, range_hours)
         return JSONResponse(result)
 
@@ -837,7 +841,7 @@ async def get_articles_v2(
         )
 
     try:
-        table = get_table(DYNAMODB_TABLE)
+        table = get_table(SENTIMENTS_TABLE)
         articles = get_articles_by_tags(
             table,
             tag_list,
