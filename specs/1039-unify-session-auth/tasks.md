@@ -15,6 +15,7 @@
 - [ ] **4.1** Update unit tests to use session tokens
 - [ ] **4.2** Update conftest.py fixtures
 - [ ] **4.3** Update E2E api_client.py
+- [ ] **4.4** Update integration tests to use session auth (tests/integration/test_dashboard_dev.py)
 
 ## Verification
 

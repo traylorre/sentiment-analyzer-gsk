@@ -75,6 +75,7 @@ For `/chaos/*` endpoints:
 - `tests/unit/dashboard/test_handler.py` - Update to session tokens
 - `tests/conftest.py` - Remove API_KEY fixture
 - `tests/e2e/helpers/api_client.py` - Use session auth
+- `tests/integration/test_dashboard_dev.py` - Update auth_headers fixture to use X-User-ID header with valid UUID (anonymous session)
 
 ## Non-Goals
 
