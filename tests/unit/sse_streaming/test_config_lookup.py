@@ -162,8 +162,8 @@ class TestConfigLookupServiceInit:
     """Tests for ConfigLookupService initialization."""
 
     def test_default_table_name_from_env(self):
-        """Test table name defaults to DATABASE_TABLE env var."""
-        with patch.dict("os.environ", {"DATABASE_TABLE": "my-custom-table"}):
+        """Test table name defaults to USERS_TABLE env var (Feature 1043)."""
+        with patch.dict("os.environ", {"USERS_TABLE": "my-custom-table"}, clear=True):
             with patch("src.lambdas.sse_streaming.config.boto3") as mock_boto3:
                 mock_resource = MagicMock()
                 mock_table = MagicMock()
@@ -176,6 +176,22 @@ class TestConfigLookupServiceInit:
                 service.get_configuration("test-user", "test-config")
 
                 mock_resource.Table.assert_called_once_with("my-custom-table")
+
+    def test_fallback_to_database_table_env(self):
+        """Test table name falls back to DATABASE_TABLE if USERS_TABLE not set (Feature 1043)."""
+        with patch.dict("os.environ", {"DATABASE_TABLE": "legacy-table"}, clear=True):
+            with patch("src.lambdas.sse_streaming.config.boto3") as mock_boto3:
+                mock_resource = MagicMock()
+                mock_table = MagicMock()
+                mock_table.get_item.return_value = {}
+                mock_resource.Table.return_value = mock_table
+                mock_boto3.resource.return_value = mock_resource
+
+                service = ConfigLookupService()
+                # Trigger lazy initialization by calling a method
+                service.get_configuration("test-user", "test-config")
+
+                mock_resource.Table.assert_called_once_with("legacy-table")
 
     def test_explicit_table_name_overrides_env(self):
         """Test explicit table name overrides environment variable."""
