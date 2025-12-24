@@ -135,7 +135,7 @@ class TestPydanticModels:
         assert data.by_tag == {}
         assert data.rate_last_hour == 0
         assert data.rate_last_24h == 0
-        assert isinstance(data.timestamp, datetime)
+        assert isinstance(data.origin_timestamp, datetime)
 
     def test_metrics_event_data_custom_values(self):
         """MetricsEventData accepts custom values."""
@@ -152,10 +152,10 @@ class TestPydanticModels:
         assert data.by_tag["AAPL"] == 40
 
     def test_heartbeat_event_data(self):
-        """HeartbeatEventData has timestamp and connections."""
+        """HeartbeatEventData has origin_timestamp and connections."""
         data = HeartbeatEventData(connections=5)
         assert data.connections == 5
-        assert isinstance(data.timestamp, datetime)
+        assert isinstance(data.origin_timestamp, datetime)
 
     def test_new_item_event_data(self):
         """NewItemEventData validates sentiment and score."""
@@ -230,7 +230,7 @@ class TestEventGeneration:
 
             # Parse data as JSON
             data = json.loads(event["data"])
-            assert "timestamp" in data
+            assert "origin_timestamp" in data
 
             # Cancel generator
             await gen.aclose()

@@ -77,7 +77,7 @@ class MetricsEventData(BaseModel):
     by_tag: dict[str, int] = Field(default_factory=dict)
     rate_last_hour: int = 0
     rate_last_24h: int = 0
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    origin_timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class NewItemEventData(BaseModel):
@@ -93,7 +93,7 @@ class NewItemEventData(BaseModel):
 class HeartbeatEventData(BaseModel):
     """Payload for heartbeat events (FR-004)."""
 
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    origin_timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     connections: int = Field(ge=0)
 
 
