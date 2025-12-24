@@ -28,3 +28,6 @@ PyJWT>=2.10.0,<3.0.0
 
 # Retry logic for DynamoDB/S3 operations (Feature 1032)
 tenacity>=9.0.0,<10.0.0
+
+# Server-Sent Events for real-time streaming (Feature 015)
+sse-starlette>=2.0.0,<3.0.0
