@@ -273,8 +273,8 @@ data "aws_iam_policy_document" "ci_deploy_core" {
     resources = ["*"]
   }
 
-  # ECR Repository Management (for Docker-based Lambdas like SSE streaming, Analysis)
-  # SECURITY: Scoped to {env}-sentiment-*, {env}-sse-streaming-*, {env}-analysis-* patterns (FR-012)
+  # ECR Repository Management (for Docker-based Lambdas: SSE streaming, Analysis, Dashboard)
+  # SECURITY: Scoped to {env}-sentiment-*, {env}-sse-streaming-*, {env}-analysis-*, {env}-dashboard-lambda* patterns (FR-012)
   statement {
     sid    = "ECR"
     effect = "Allow"
@@ -298,7 +298,8 @@ data "aws_iam_policy_document" "ci_deploy_core" {
     resources = [
       "arn:aws:ecr:*:*:repository/*-sentiment-*",
       "arn:aws:ecr:*:*:repository/*-sse-streaming-*",
-      "arn:aws:ecr:*:*:repository/*-analysis-*"
+      "arn:aws:ecr:*:*:repository/*-analysis-*",
+      "arn:aws:ecr:*:*:repository/*-dashboard-lambda*"
     ]
   }
 
@@ -321,7 +322,8 @@ data "aws_iam_policy_document" "ci_deploy_core" {
     resources = [
       "arn:aws:ecr:*:*:repository/*-sentiment-*",
       "arn:aws:ecr:*:*:repository/*-sse-streaming-*",
-      "arn:aws:ecr:*:*:repository/*-analysis-*"
+      "arn:aws:ecr:*:*:repository/*-analysis-*",
+      "arn:aws:ecr:*:*:repository/*-dashboard-lambda*"
     ]
   }
 
