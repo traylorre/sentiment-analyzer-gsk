@@ -98,7 +98,9 @@ class TestPollingInterval:
         from src.lambdas.sse_streaming.polling import PollingService
 
         with patch.object(PollingService, "_get_table", return_value=MagicMock()):
-            with patch.dict("os.environ", {"DYNAMODB_TABLE": "test-table"}, clear=True):
+            with patch.dict(
+                "os.environ", {"SENTIMENTS_TABLE": "test-table"}, clear=True
+            ):
                 service = PollingService()
 
         assert service.poll_interval == 5
@@ -110,18 +112,18 @@ class TestPollingInterval:
         with patch.object(PollingService, "_get_table", return_value=MagicMock()):
             with patch.dict(
                 "os.environ",
-                {"DYNAMODB_TABLE": "test-table", "SSE_POLL_INTERVAL": "10"},
+                {"SENTIMENTS_TABLE": "test-table", "SSE_POLL_INTERVAL": "10"},
             ):
                 service = PollingService()
 
         assert service.poll_interval == 10
 
-    def test_missing_dynamodb_table_raises_error(self):
-        """Should raise ValueError if DYNAMODB_TABLE not set."""
+    def test_missing_sentiments_table_raises_error(self):
+        """Should raise ValueError if SENTIMENTS_TABLE not set."""
         from src.lambdas.sse_streaming.polling import PollingService
 
         with patch.dict("os.environ", {}, clear=True):
-            with pytest.raises(ValueError, match="DYNAMODB_TABLE.*required"):
+            with pytest.raises(ValueError, match="SENTIMENTS_TABLE.*required"):
                 PollingService()
 
 

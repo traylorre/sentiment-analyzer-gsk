@@ -32,17 +32,17 @@ class PollingService:
 
         Args:
             table_name: DynamoDB table name.
-                       Defaults to DYNAMODB_TABLE env var.
+                       Defaults to SENTIMENTS_TABLE env var.
             poll_interval: Poll interval in seconds.
                           Defaults to SSE_POLL_INTERVAL env var or 5.
 
         Raises:
-            ValueError: If DYNAMODB_TABLE env var is not set and no table_name provided.
+            ValueError: If SENTIMENTS_TABLE env var is not set and no table_name provided.
         """
-        self._table_name = table_name or os.environ.get("DYNAMODB_TABLE")
+        self._table_name = table_name or os.environ.get("SENTIMENTS_TABLE")
         if not self._table_name:
             raise ValueError(
-                "DYNAMODB_TABLE environment variable is required "
+                "SENTIMENTS_TABLE environment variable is required "
                 "(no fallback - Amendment 1.15)"
             )
         self._poll_interval = poll_interval or int(
@@ -244,7 +244,7 @@ _polling_service: PollingService | None = None
 def get_polling_service() -> PollingService:
     """Get or create the global polling service instance.
 
-    Uses lazy initialization to defer creation until DYNAMODB_TABLE
+    Uses lazy initialization to defer creation until SENTIMENTS_TABLE
     environment variable is available (at Lambda runtime, not import time).
     """
     global _polling_service
