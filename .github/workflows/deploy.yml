@@ -662,7 +662,8 @@ jobs:
           IMAGE="${{ steps.login-ecr.outputs.registry }}/preprod-dashboard-lambda:${{ github.sha }}"
 
           # Run Python import check inside the container
-          docker run --rm --entrypoint python "$IMAGE" -c "
+          # Note: Must pass env vars that modules expect at import time (chaos.py, handler.py)
+          docker run --rm -e ENVIRONMENT=preprod -e DATABASE_TABLE=preprod-sentiment-items --entrypoint python "$IMAGE" -c "
           import sys
           print('Testing imports...')
 
@@ -1576,7 +1577,8 @@ jobs:
           echo "🧪 Running Docker import smoke test..."
           IMAGE="${{ steps.login-ecr.outputs.registry }}/prod-dashboard-lambda:${{ github.sha }}"
 
-          docker run --rm --entrypoint python "$IMAGE" -c "
+          # Note: Must pass env vars that modules expect at import time (chaos.py, handler.py)
+          docker run --rm -e ENVIRONMENT=prod -e DATABASE_TABLE=prod-sentiment-items --entrypoint python "$IMAGE" -c "
           import sys
           from handler import lambda_handler
           from fastapi import FastAPI
