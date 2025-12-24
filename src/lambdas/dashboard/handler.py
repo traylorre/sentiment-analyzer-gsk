@@ -8,21 +8,21 @@ For On-Call Engineers:
     If dashboard is not accessible:
     1. Check Lambda Function URL is configured correctly
     2. Verify CORS is enabled in Lambda response
-    3. Check API_KEY environment variable is set
-    4. Verify DynamoDB table exists and Lambda has permissions
+    3. Verify DynamoDB table exists and Lambda has permissions
 
     See SC-05 in ON_CALL_SOP.md for dashboard-related incidents.
 
 For Developers:
     - Uses Mangum adapter for Lambda Function URL compatibility
-    - API key validation uses constant-time comparison
     - Static files served from /static/ prefix
     - CORS enabled for all origins (demo configuration)
 
-Security Notes:
-    - API key required for all /api/* endpoints
-    - Use secrets.compare_digest() to prevent timing attacks
-    - Static files served without authentication
+Auth (Feature 1039):
+    - All /api/* endpoints use session-based auth via X-User-ID or Bearer token
+    - Public endpoints (metrics, sentiment, trends, articles) accept anonymous sessions
+    - Chaos endpoints require authenticated (non-anonymous) sessions
+    - Legacy vanilla JS frontend (/src/dashboard/) needs X-User-ID header update
+    - Next.js frontend (/frontend/) already uses session auth
 
 X-Ray Tracing:
     X-Ray is enabled for distributed tracing across all Lambda invocations.
@@ -36,16 +36,16 @@ patch_all()
 
 import logging
 import os
-import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request
 
 # CORSMiddleware removed - CORS handled by Lambda Function URL
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
-from fastapi.security import APIKeyHeader
+
+# Feature 1039: APIKeyHeader removed - using session auth only
 from mangum import Mangum
 
 from src.lambdas.dashboard.api_v2 import (
@@ -87,40 +87,7 @@ CHAOS_EXPERIMENTS_TABLE = os.environ.get("CHAOS_EXPERIMENTS_TABLE", "")
 ENVIRONMENT = os.environ["ENVIRONMENT"]
 
 
-def get_api_key() -> str:
-    """
-    Get API key from environment or Secrets Manager.
-
-    Fallback chain:
-    1. API_KEY environment variable (set by CI or for testing)
-    2. DASHBOARD_API_KEY_SECRET_ARN -> fetch from Secrets Manager
-
-    Returns:
-        API key string, or empty string if not configured
-    """
-    # First check env var (takes precedence, allows test mocking)
-    api_key = os.environ.get("API_KEY", "")
-    if api_key:
-        return api_key
-
-    # Fall back to Secrets Manager if ARN is provided
-    secret_arn = os.environ.get("DASHBOARD_API_KEY_SECRET_ARN", "")
-    if secret_arn:
-        try:
-            from src.lambdas.shared.secrets import get_api_key as fetch_api_key
-
-            return fetch_api_key(secret_arn)
-        except Exception as e:
-            logger.error(
-                "Failed to fetch API key from Secrets Manager",
-                extra={"error": str(e)},
-            )
-            # Don't expose error details - just return empty to enforce auth
-            return ""
-
-    return ""
-
-
+# Feature 1039: get_api_key() removed - using session auth only
 # CORS configuration removed - handled by Lambda Function URL
 # See infrastructure/terraform/main.tf for CORS allowed origins
 
@@ -144,8 +111,7 @@ ALLOWED_STATIC_FILES: dict[str, str] = {
     "styles.css": "text/css",
 }
 
-# API key header
-api_key_header = APIKeyHeader(name="Authorization", auto_error=False)
+# Feature 1039: api_key_header removed - using session auth only
 
 
 @asynccontextmanager
@@ -184,117 +150,36 @@ logger.info(
 )
 
 # Include Feature 006 API v2 routers
-from src.lambdas.dashboard.router_v2 import include_routers
+from src.lambdas.dashboard.router_v2 import (
+    get_authenticated_user_id,
+    get_user_id_from_request,
+    include_routers,
+)
 
 include_routers(app)
 logger.info("Feature 006 API v2 routers included")
 
 
-def verify_api_key(
-    request: Request,
-    authorization: str | None = Depends(api_key_header),
-) -> bool:
-    """
-    Verify API key from Authorization header.
-
-    Uses constant-time comparison to prevent timing attacks.
-
-    Args:
-        request: FastAPI request object (for IP logging)
-        authorization: Authorization header value (Bearer <key>)
-
-    Returns:
-        True if valid
-
-    Raises:
-        HTTPException: If API key is invalid or missing
-
-    On-Call Note:
-        If all API requests return 401:
-        1. Verify API_KEY environment variable is set
-        2. Check client is sending correct Authorization header
-        3. Format: "Bearer <api-key>"
-
-    Security Note (P1-2):
-        Logs client IP on authentication failures for forensics.
-    """
-    # Get client IP for logging (behind Lambda Function URL / API Gateway)
-    client_ip = request.headers.get("X-Forwarded-For", "unknown").split(",")[0].strip()
-
-    api_key = get_api_key()
-
-    if not api_key:
-        # No API key configured - allow access (dev mode only)
-        logger.warning(
-            "API_KEY not configured - allowing unauthenticated access",
-            extra={"environment": ENVIRONMENT, "client_ip": client_ip},
-        )
-        return True
-
-    if not authorization:
-        logger.warning(
-            "Missing Authorization header",
-            extra={"client_ip": client_ip, "path": request.url.path},
-        )
-        raise HTTPException(
-            status_code=401,
-            detail="Missing Authorization header",
-        )
-
-    # Extract token from "Bearer <token>"
-    parts = authorization.split(" ")
-    if len(parts) != 2 or parts[0].lower() != "bearer":
-        logger.warning(
-            "Invalid Authorization header format",
-            extra={"client_ip": client_ip, "path": request.url.path},
-        )
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid Authorization header format. Use: Bearer <api-key>",
-        )
-
-    provided_key = parts[1]
-
-    # Constant-time comparison to prevent timing attacks
-    if not secrets.compare_digest(provided_key, api_key):
-        logger.warning(
-            "Invalid API key attempt",
-            extra={
-                "environment": ENVIRONMENT,
-                "client_ip": client_ip,
-                "path": request.url.path,
-                "key_prefix": provided_key[:8] if len(provided_key) >= 8 else "short",
-            },
-        )
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid API key",
-        )
-
-    return True
+# Feature 1039: verify_api_key() removed - using session auth only
+# All endpoints now use get_user_id_from_request() or get_authenticated_user_id()
 
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_index():
     """
-    Serve the main dashboard HTML page with API key injection.
-
-    Injects the API key as a JavaScript global variable for frontend auth.
-    The key is injected at runtime, never stored in static files.
+    Serve the main dashboard HTML page.
 
     Returns:
-        HTML content of index.html with injected API key
+        HTML content of index.html
 
     On-Call Note:
         If this returns 404, verify:
         1. src/dashboard/index.html exists
         2. Lambda deployment includes dashboard files
 
-    Security Note (Feature 1011):
-        API key is injected into page source at render time. This is safe because:
-        - Key not in version control (runtime injection from Secrets Manager)
-        - Users who see page source already have dashboard access
-        - Key rotates without code changes
+    Feature 1039:
+        API key injection removed - frontend uses session auth.
+        Session token is obtained via /api/v2/session endpoint.
     """
     index_path = STATIC_DIR / "index.html"
 
@@ -308,19 +193,8 @@ async def serve_index():
             detail="Dashboard index.html not found",
         )
 
-    # Read HTML content
-    html_content = index_path.read_text()
-
-    # Inject API key as JavaScript global variable (Feature 1011)
-    # Place before </head> to ensure it's available when scripts load
-    api_key = get_api_key()
-    if api_key:
-        key_script = (
-            f'<script>window.DASHBOARD_API_KEY = "{api_key}";</script>\n</head>'
-        )
-        html_content = html_content.replace("</head>", key_script)
-
-    return HTMLResponse(content=html_content, media_type="text/html")
+    # Feature 1039: No API key injection - frontend uses session auth
+    return FileResponse(index_path, media_type="text/html")
 
 
 @app.get("/chaos", response_class=HTMLResponse)
@@ -546,7 +420,6 @@ async def health_check():
 async def get_metrics_v2(
     request: Request,
     hours: int = 24,
-    _: bool = Depends(verify_api_key),
 ):
     """
     Get aggregated dashboard metrics.
@@ -568,8 +441,15 @@ async def get_metrics_v2(
         1. Verify DynamoDB table has data
         2. Check GSIs exist (by_sentiment, by_status)
         3. Verify items have status='analyzed'
+
+    Auth:
+        Feature 1039: Uses session auth (anonymous sessions OK).
+        Session ID logged for audit trail.
     """
     from src.lambdas.dashboard.metrics import aggregate_dashboard_metrics
+
+    # Feature 1039: Session auth - anonymous sessions OK for public metrics
+    _user_id = get_user_id_from_request(request, validate_session=False)
 
     # Validate hours parameter
     if hours < 1:
@@ -609,7 +489,6 @@ async def get_sentiment_v2(
     tags: str,
     start: str | None = None,
     end: str | None = None,
-    _: bool = Depends(verify_api_key),
 ):
     """
     Get aggregated sentiment for multiple tags (POWERPLAN).
@@ -630,8 +509,14 @@ async def get_sentiment_v2(
         1. Verify by_tag GSI exists on the table
         2. Check items exist with matching tags
         3. Verify time range covers existing data
+
+    Auth:
+        Feature 1039: Uses session auth (anonymous sessions OK).
     """
     from datetime import UTC, datetime, timedelta
+
+    # Feature 1039: Session auth - anonymous sessions OK for public sentiment
+    _user_id = get_user_id_from_request(request, validate_session=False)
 
     # Parse tags
     tag_list = [t.strip() for t in tags.split(",") if t.strip()]
@@ -689,7 +574,6 @@ async def get_trends_v2(
     tags: str,
     interval: str = "1h",
     range: str = "24h",
-    _: bool = Depends(verify_api_key),
 ):
     """
     Get trend data for sparkline visualizations (POWERPLAN).
@@ -710,7 +594,13 @@ async def get_trends_v2(
         1. Verify ingestion is running
         2. Check time range covers data ingestion period
         3. Verify by_tag GSI exists
+
+    Auth:
+        Feature 1039: Uses session auth (anonymous sessions OK).
     """
+    # Feature 1039: Session auth - anonymous sessions OK for public trends
+    _user_id = get_user_id_from_request(request, validate_session=False)
+
     # Parse tags
     tag_list = [t.strip() for t in tags.split(",") if t.strip()]
     if not tag_list:
@@ -791,7 +681,6 @@ async def get_articles_v2(
     tags: str,
     limit: int = 20,
     sentiment: str | None = None,
-    _: bool = Depends(verify_api_key),
 ):
     """
     Get recent articles for specified tags (POWERPLAN).
@@ -812,7 +701,13 @@ async def get_articles_v2(
         1. Verify by_tag GSI exists
         2. Check ingestion is working
         3. Verify sentiment filter matches existing data
+
+    Auth:
+        Feature 1039: Uses session auth (anonymous sessions OK).
     """
+    # Feature 1039: Session auth - anonymous sessions OK for public articles
+    _user_id = get_user_id_from_request(request, validate_session=False)
+
     # Parse tags
     tag_list = [t.strip() for t in tags.split(",") if t.strip()]
     if not tag_list:
@@ -884,7 +779,6 @@ async def get_articles_v2(
 @app.post("/chaos/experiments")
 async def create_chaos_experiment(
     request: Request,
-    _: bool = Depends(verify_api_key),
 ):
     """
     Create a new chaos experiment.
@@ -902,7 +796,13 @@ async def create_chaos_experiment(
 
     Security Note:
         Environment gating enforced in chaos module (preprod only).
+
+    Auth:
+        Feature 1039: Requires authenticated session (non-anonymous).
     """
+    # Feature 1039: Chaos endpoints require authenticated users (not anonymous)
+    _user_id = get_authenticated_user_id(request)
+
     try:
         body = await request.json()
 
@@ -940,9 +840,9 @@ async def create_chaos_experiment(
 
 @app.get("/chaos/experiments")
 async def list_chaos_experiments(
+    request: Request,
     status: str | None = None,
     limit: int = 20,
-    _: bool = Depends(verify_api_key),
 ):
     """
     List chaos experiments with optional status filter.
@@ -953,7 +853,13 @@ async def list_chaos_experiments(
 
     Returns:
         Array of experiment JSON objects
+
+    Auth:
+        Feature 1039: Requires authenticated session (non-anonymous).
     """
+    # Feature 1039: Chaos endpoints require authenticated users (not anonymous)
+    _user_id = get_authenticated_user_id(request)
+
     try:
         experiments = list_experiments(status=status, limit=limit)
         return JSONResponse(experiments)
@@ -967,8 +873,8 @@ async def list_chaos_experiments(
 
 @app.get("/chaos/experiments/{experiment_id}")
 async def get_chaos_experiment(
+    request: Request,
     experiment_id: str,
-    _: bool = Depends(verify_api_key),
 ):
     """
     Get chaos experiment by ID with enriched FIS status.
@@ -981,7 +887,13 @@ async def get_chaos_experiment(
 
     Phase 2.2 Enhancement:
         Enriches response with real-time FIS experiment status for DynamoDB throttle scenarios.
+
+    Auth:
+        Feature 1039: Requires authenticated session (non-anonymous).
     """
+    # Feature 1039: Chaos endpoints require authenticated users (not anonymous)
+    _user_id = get_authenticated_user_id(request)
+
     experiment = get_experiment(experiment_id)
 
     if not experiment:
@@ -1017,8 +929,8 @@ async def get_chaos_experiment(
 
 @app.post("/chaos/experiments/{experiment_id}/start")
 async def start_chaos_experiment(
+    request: Request,
     experiment_id: str,
-    _: bool = Depends(verify_api_key),
 ):
     """
     Start a chaos experiment.
@@ -1032,7 +944,13 @@ async def start_chaos_experiment(
     Phase 2 Note:
         This endpoint now integrates with AWS FIS for DynamoDB throttling.
         Other scenarios (ingestion failure, Lambda delay) will be implemented in Phase 3-4.
+
+    Auth:
+        Feature 1039: Requires authenticated session (non-anonymous).
     """
+    # Feature 1039: Chaos endpoints require authenticated users (not anonymous)
+    _user_id = get_authenticated_user_id(request)
+
     try:
         updated_experiment = start_experiment(experiment_id)
         return JSONResponse(updated_experiment)
@@ -1059,8 +977,8 @@ async def start_chaos_experiment(
 
 @app.post("/chaos/experiments/{experiment_id}/stop")
 async def stop_chaos_experiment(
+    request: Request,
     experiment_id: str,
-    _: bool = Depends(verify_api_key),
 ):
     """
     Stop a running chaos experiment.
@@ -1073,7 +991,13 @@ async def stop_chaos_experiment(
 
     Phase 2 Note:
         This endpoint now integrates with AWS FIS to stop experiments.
+
+    Auth:
+        Feature 1039: Requires authenticated session (non-anonymous).
     """
+    # Feature 1039: Chaos endpoints require authenticated users (not anonymous)
+    _user_id = get_authenticated_user_id(request)
+
     try:
         updated_experiment = stop_experiment(experiment_id)
         return JSONResponse(updated_experiment)
@@ -1100,8 +1024,8 @@ async def stop_chaos_experiment(
 
 @app.delete("/chaos/experiments/{experiment_id}")
 async def delete_chaos_experiment(
+    request: Request,
     experiment_id: str,
-    _: bool = Depends(verify_api_key),
 ):
     """
     Delete a chaos experiment.
@@ -1111,7 +1035,13 @@ async def delete_chaos_experiment(
 
     Returns:
         Success message
+
+    Auth:
+        Feature 1039: Requires authenticated session (non-anonymous).
     """
+    # Feature 1039: Chaos endpoints require authenticated users (not anonymous)
+    _user_id = get_authenticated_user_id(request)
+
     success = delete_experiment(experiment_id)
 
     if not success:
