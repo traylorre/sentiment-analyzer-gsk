@@ -1381,11 +1381,11 @@ jobs:
         run: |
           # Run tests marked as "preprod" (auto-marked by conftest.py for *_preprod.py files)
           # These tests use REAL AWS resources, not moto mocks
-          # Timeout: 480s (8 min) - provides buffer for Playwright tests and Lambda cold starts
-          # Previous 360s was exceeded when E2E test suite grew, causing job-level timeout
-          # See: specs/1029-fix-e2e-test-timeout/spec.md
+          # Timeout: 720s (12 min) - provides buffer for Playwright tests and Lambda cold starts
+          # Increased from 480s due to Dashboard Lambda container deployment cold starts
+          # See: specs/1041-increase-integ-test-timeout/spec.md
           set +e  # Don't exit on error
-          timeout 480 pytest tests/ \
+          timeout 720 pytest tests/ \
             -m "preprod" \
             -v \
             --tb=short \
@@ -1397,7 +1397,7 @@ jobs:
             echo "✅ Integration tests passed"
             echo "passed=true" >> $GITHUB_OUTPUT
           elif [ $TEST_EXIT_CODE -eq 124 ]; then
-            echo "⚠️ Integration tests timed out (480s limit)"
+            echo "⚠️ Integration tests timed out (720s limit)"
             echo "passed=false" >> $GITHUB_OUTPUT
             echo "reason=timeout" >> $GITHUB_OUTPUT
           else
