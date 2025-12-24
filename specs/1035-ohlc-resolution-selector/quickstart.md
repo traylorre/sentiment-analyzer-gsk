@@ -80,7 +80,7 @@ Resolution preference is stored in sessionStorage and persists across page navig
 pytest tests/unit/lambdas/dashboard/test_ohlc.py -v
 
 # Frontend
-npm test -- --grep "resolution"
+npm test -- --run -t "resolution"
 ```
 
 ### E2E Tests
