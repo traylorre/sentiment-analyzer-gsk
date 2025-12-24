@@ -102,6 +102,11 @@ if "API_KEY" not in os.environ:
     os.environ["API_KEY"] = "test-api-key-12345"
 if "ENVIRONMENT" not in os.environ:
     os.environ["ENVIRONMENT"] = "test"
+# Feature 1044: API keys for OHLC adapters (test values for unit tests)
+if "TIINGO_API_KEY" not in os.environ:
+    os.environ["TIINGO_API_KEY"] = "test-tiingo-key"
+if "FINNHUB_API_KEY" not in os.environ:
+    os.environ["FINNHUB_API_KEY"] = "test-finnhub-key"
 
 
 @pytest.fixture(autouse=True)
