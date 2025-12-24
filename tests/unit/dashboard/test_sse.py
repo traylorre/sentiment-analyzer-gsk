@@ -361,7 +361,7 @@ class TestConfigStreamEndpoint:
             return_value="user-123",
         ):
             with patch(
-                "src.lambdas.dashboard.sse.DYNAMODB_TABLE",
+                "src.lambdas.dashboard.sse.SENTIMENTS_TABLE",
                 "test-table",
             ):
                 with patch(

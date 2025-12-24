@@ -51,7 +51,8 @@ from src.lambdas.shared.logging_utils import get_safe_error_info
 logger = logging.getLogger(__name__)
 
 # Environment configuration
-DYNAMODB_TABLE = os.environ["DATABASE_TABLE"]
+# Feature 1043: Clear naming - sentiments table for SSE metrics
+SENTIMENTS_TABLE = os.environ["SENTIMENTS_TABLE"]
 
 # SSE configuration
 HEARTBEAT_INTERVAL = int(os.environ.get("SSE_HEARTBEAT_INTERVAL", "30"))  # seconds
@@ -272,10 +273,10 @@ async def _get_metrics_data() -> MetricsEventData:
         MetricsEventData with current dashboard metrics
     """
     try:
-        if DYNAMODB_TABLE:
+        if SENTIMENTS_TABLE:
             from src.lambdas.dashboard.metrics import aggregate_dashboard_metrics
 
-            table = get_table(DYNAMODB_TABLE)
+            table = get_table(SENTIMENTS_TABLE)
             metrics = aggregate_dashboard_metrics(table, hours=24)
 
             return MetricsEventData(
@@ -383,10 +384,10 @@ async def stream_config_events(
         ) from e
 
     # Validate configuration exists (FR-008)
-    if DYNAMODB_TABLE:
+    if SENTIMENTS_TABLE:
         from src.lambdas.dashboard import configurations as config_service
 
-        table = get_table(DYNAMODB_TABLE)
+        table = get_table(SENTIMENTS_TABLE)
         config = config_service.get_configuration(
             table=table,
             user_id=user_id,

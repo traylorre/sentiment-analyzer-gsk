@@ -42,6 +42,8 @@ def reset_caches():
 def env_vars():
     """Set required environment variables."""
     os.environ["DATABASE_TABLE"] = "test-financial-news"
+    # Feature 1043: USERS_TABLE used by _get_active_tickers for configuration queries
+    os.environ["USERS_TABLE"] = "test-financial-news"
     os.environ["SNS_TOPIC_ARN"] = "arn:aws:sns:us-east-1:123456789:test-topic"
     os.environ["TIINGO_SECRET_ARN"] = (
         "arn:aws:secretsmanager:us-east-1:123456789:secret:tiingo"
@@ -55,6 +57,7 @@ def env_vars():
     yield
     for key in [
         "DATABASE_TABLE",
+        "USERS_TABLE",
         "SNS_TOPIC_ARN",
         "TIINGO_SECRET_ARN",
         "FINNHUB_SECRET_ARN",
