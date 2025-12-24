@@ -1245,19 +1245,43 @@ jobs:
           echo "This ensures observability tests have real metrics to validate."
           echo ""
 
+          # Validate API_KEY is set (Feature 1042: No silent auth failures)
+          if [ -z "${API_KEY}" ]; then
+            echo "❌ ERROR: DASHBOARD_API_KEY secret is not set or empty"
+            echo "Authenticated warmup calls will fail. Please configure the secret."
+            exit 1
+          fi
+
           # Invoke dashboard Lambda multiple times to generate metrics
           echo "1. Invoking Dashboard Lambda /health endpoint..."
-          curl -s -o /dev/null -w "HTTP %{http_code}\n" "${DASHBOARD_URL}/health" || true
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${DASHBOARD_URL}/health" || echo "000")
+          echo "  HTTP $HTTP_CODE"
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "  ⚠️ Health endpoint returned $HTTP_CODE (continuing, may be cold start)"
+          fi
 
+          # Feature 1042: Use Bearer prefix and fail on auth errors (no silent fallback)
           echo "2. Invoking /api/v2/metrics endpoint (authenticated)..."
-          curl -s -o /dev/null -w "HTTP %{http_code}\n" \
-            -H "Authorization: ${API_KEY}" \
-            "${DASHBOARD_URL}/api/v2/metrics" || true
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer ${API_KEY}" \
+            "${DASHBOARD_URL}/api/v2/metrics" || echo "000")
+          echo "  HTTP $HTTP_CODE"
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ ERROR: /api/v2/metrics returned HTTP $HTTP_CODE (expected 200)"
+            echo "Check DASHBOARD_API_KEY secret matches API_KEY in Lambda environment"
+            exit 1
+          fi
 
           echo "3. Invoking /api/v2/sentiment endpoint (authenticated)..."
-          curl -s -o /dev/null -w "HTTP %{http_code}\n" \
-            -H "Authorization: ${API_KEY}" \
-            "${DASHBOARD_URL}/api/v2/sentiment?tickers=AAPL" || true
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer ${API_KEY}" \
+            "${DASHBOARD_URL}/api/v2/sentiment?tickers=AAPL" || echo "000")
+          echo "  HTTP $HTTP_CODE"
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ ERROR: /api/v2/sentiment returned HTTP $HTTP_CODE (expected 200)"
+            echo "Check DASHBOARD_API_KEY secret matches API_KEY in Lambda environment"
+            exit 1
+          fi
 
           # Warm up SSE Lambda (Feature 140: SSE tests were failing due to cold start)
           # SSE Lambda uses Docker image with Lambda Web Adapter, needs warmup
