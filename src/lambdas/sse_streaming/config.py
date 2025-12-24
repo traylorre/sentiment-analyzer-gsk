@@ -33,9 +33,13 @@ class ConfigLookupService:
             table_name: DynamoDB table name.
                        Defaults to DATABASE_TABLE env var (required).
         """
-        # Use DATABASE_TABLE (Feature 006 users table) where configs are stored.
+        # Feature 1043: Use USERS_TABLE for config storage (fallback to DATABASE_TABLE for backward compat)
         # Dashboard Lambda uses the same pattern in router_v2.py.
-        self._table_name = table_name or os.environ["DATABASE_TABLE"]
+        self._table_name = table_name or os.environ.get(
+            "USERS_TABLE", os.environ.get("DATABASE_TABLE")
+        )
+        if not self._table_name:
+            raise OSError("USERS_TABLE or DATABASE_TABLE environment variable required")
         self._table = None  # Lazy initialization
 
     def _get_table(self):
