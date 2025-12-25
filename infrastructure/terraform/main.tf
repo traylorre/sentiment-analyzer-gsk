@@ -420,6 +420,8 @@ module "dashboard_lambda" {
     CORS_ORIGINS = join(",", var.cors_allowed_origins)
     # Feature 1009: Time-series table for multi-resolution queries
     TIMESERIES_TABLE = module.dynamodb.timeseries_table_name
+    # Feature 1054: JWT secret for auth middleware token validation
+    JWT_SECRET = var.jwt_secret
   }
 
   # Function URL with CORS
@@ -742,6 +744,8 @@ module "sse_streaming_lambda" {
     AWS_LWA_READINESS_CHECK_PATH = "/health"
     # Feature 1009: Time-series table for multi-resolution queries and streaming
     TIMESERIES_TABLE = module.dynamodb.timeseries_table_name
+    # Feature 1054: JWT secret for auth middleware token validation
+    JWT_SECRET = var.jwt_secret
   }
 
   # Function URL with RESPONSE_STREAM for true SSE streaming

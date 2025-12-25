@@ -180,3 +180,15 @@ variable "sse_heartbeat_interval" {
     error_message = "SSE heartbeat interval must be between 10 and 300 seconds."
   }
 }
+
+# ===================================================================
+# Feature 1054: JWT Authentication
+# ===================================================================
+
+variable "jwt_secret" {
+  description = "Secret key for JWT token validation in Dashboard and SSE Lambda"
+  type        = string
+  sensitive   = true
+  # Note: For preprod, use PREPROD_TEST_JWT_SECRET from E2E tests
+  # For prod, use a strong, unique secret
+}

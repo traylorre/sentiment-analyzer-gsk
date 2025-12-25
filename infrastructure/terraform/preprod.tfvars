@@ -27,3 +27,8 @@ cors_allowed_origins = [
   "http://localhost:3000",                 # Local development
   "http://localhost:8080"                  # Alternative local dev
 ]
+
+# Feature 1054: JWT Secret for auth middleware
+# This must match PREPROD_TEST_JWT_SECRET used by E2E tests (Feature 1053)
+# The value is passed via TF_VAR_jwt_secret in CI to avoid committing secrets
+# Default for local dev: "test-jwt-secret-for-e2e-only-not-production"
