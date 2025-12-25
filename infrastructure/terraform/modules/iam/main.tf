@@ -378,7 +378,7 @@ resource "aws_iam_role_policy" "dashboard_dynamodb" {
   })
 }
 
-# Dashboard Lambda: Secrets Manager (API key)
+# Dashboard Lambda: Secrets Manager (API key + OHLC data sources)
 resource "aws_iam_role_policy" "dashboard_secrets" {
   name = "${var.environment}-dashboard-secrets-policy"
   role = aws_iam_role.dashboard_lambda.id
@@ -391,7 +391,12 @@ resource "aws_iam_role_policy" "dashboard_secrets" {
         Action = [
           "secretsmanager:GetSecretValue"
         ]
-        Resource = var.dashboard_api_key_secret_arn
+        # Feature 1056: Add Tiingo and Finnhub secrets for OHLC endpoint
+        Resource = [
+          var.dashboard_api_key_secret_arn,
+          var.tiingo_secret_arn,
+          var.finnhub_secret_arn
+        ]
       }
     ]
   })
