@@ -23,6 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from src.lambdas.shared.adapters.finnhub import FinnhubAdapter
 from src.lambdas.shared.adapters.tiingo import TiingoAdapter
 from src.lambdas.shared.logging_utils import get_safe_error_info
+from src.lambdas.shared.middleware import extract_auth_context
 from src.lambdas.shared.models import (
     RESOLUTION_MAX_DAYS,
     TIME_RANGE_DAYS,
@@ -40,6 +41,31 @@ logger = logging.getLogger(__name__)
 
 # Create router
 router = APIRouter(prefix="/api/v2/tickers", tags=["price-data"])
+
+
+def get_user_id_from_request(request: Request) -> str:
+    """Extract and validate user_id from request (Feature 1049).
+
+    Uses shared auth middleware for consistent auth handling.
+    Supports both Bearer token and X-User-ID header.
+
+    Args:
+        request: FastAPI Request object
+
+    Returns:
+        Validated user_id string
+
+    Raises:
+        HTTPException 401: Missing or invalid user identification
+    """
+    event = {"headers": dict(request.headers)}
+    auth_context = extract_auth_context(event)
+
+    user_id = auth_context.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Missing user identification")
+
+    return user_id
 
 
 def get_tiingo_adapter() -> TiingoAdapter:
@@ -90,10 +116,8 @@ async def get_ohlc_data(
         HTTPException 404: No price data available
         HTTPException 503: External data source unavailable
     """
-    # Validate user ID (uses existing auth pattern)
-    user_id = request.headers.get("X-User-ID")
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Missing user identification")
+    # Feature 1049: Use standardized auth extraction (validates user, raises 401 if invalid)
+    get_user_id_from_request(request)
 
     # Normalize ticker
     ticker = ticker.upper().strip()
@@ -295,10 +319,8 @@ async def get_sentiment_history(
         HTTPException 401: Missing user identification
         HTTPException 404: No sentiment data available
     """
-    # Validate user ID
-    user_id = request.headers.get("X-User-ID")
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Missing user identification")
+    # Feature 1049: Use standardized auth extraction (validates user, raises 401 if invalid)
+    get_user_id_from_request(request)
 
     # Normalize ticker
     ticker = ticker.upper().strip()

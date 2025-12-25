@@ -35,6 +35,9 @@ def _create_ohlc_candles(
     return candles
 
 
+# Test constants (Feature 1049: valid UUID required for auth)
+TEST_USER_ID = "12345678-1234-5678-1234-567812345678"
+
 # Create test app
 app = FastAPI()
 app.include_router(router)
@@ -54,7 +57,7 @@ class TestOHLCEndpoint:
 
         response = client.get(
             "/api/v2/tickers/AAPL/ohlc",
-            headers={"X-User-ID": "test-user"},
+            headers={"X-User-ID": TEST_USER_ID},
         )
 
         assert response.status_code == 200
@@ -79,7 +82,7 @@ class TestOHLCEndpoint:
         """Should reject invalid ticker symbols."""
         response = client.get(
             "/api/v2/tickers/INVALID123/ohlc",
-            headers={"X-User-ID": "test-user"},
+            headers={"X-User-ID": TEST_USER_ID},
         )
 
         assert response.status_code == 400
@@ -99,7 +102,7 @@ class TestOHLCEndpoint:
 
         response = client.get(
             "/api/v2/tickers/AAPL/ohlc",
-            headers={"X-User-ID": "test-user"},
+            headers={"X-User-ID": TEST_USER_ID},
         )
 
         assert response.status_code == 200
@@ -119,7 +122,7 @@ class TestOHLCEndpoint:
 
         response = client.get(
             "/api/v2/tickers/AAPL/ohlc",
-            headers={"X-User-ID": "test-user"},
+            headers={"X-User-ID": TEST_USER_ID},
         )
 
         assert response.status_code == 404
@@ -135,7 +138,7 @@ class TestOHLCEndpoint:
 
         response = client.get(
             "/api/v2/tickers/AAPL/ohlc?range=3M",
-            headers={"X-User-ID": "test-user"},
+            headers={"X-User-ID": TEST_USER_ID},
         )
 
         assert response.status_code == 200
@@ -151,7 +154,7 @@ class TestOHLCEndpoint:
 
         response = client.get(
             "/api/v2/tickers/AAPL/ohlc?start_date=2024-01-01&end_date=2024-01-31",
-            headers={"X-User-ID": "test-user"},
+            headers={"X-User-ID": TEST_USER_ID},
         )
 
         assert response.status_code == 200
@@ -163,7 +166,7 @@ class TestOHLCEndpoint:
         """Should reject when start_date is after end_date."""
         response = client.get(
             "/api/v2/tickers/AAPL/ohlc?start_date=2024-12-31&end_date=2024-01-01",
-            headers={"X-User-ID": "test-user"},
+            headers={"X-User-ID": TEST_USER_ID},
         )
 
         assert response.status_code == 400
@@ -179,7 +182,7 @@ class TestOHLCEndpoint:
 
         response = client.get(
             "/api/v2/tickers/AAPL/ohlc",
-            headers={"X-User-ID": "test-user"},
+            headers={"X-User-ID": TEST_USER_ID},
         )
 
         assert response.status_code == 200
@@ -195,7 +198,7 @@ class TestOHLCEndpoint:
 
         response = client.get(
             "/api/v2/tickers/aapl/ohlc",
-            headers={"X-User-ID": "test-user"},
+            headers={"X-User-ID": TEST_USER_ID},
         )
 
         assert response.status_code == 200
@@ -255,7 +258,7 @@ class TestOHLCResolutionEndpoint:
 
         response = client.get(
             "/api/v2/tickers/AAPL/ohlc?resolution=5",
-            headers={"X-User-ID": "test-user"},
+            headers={"X-User-ID": TEST_USER_ID},
         )
 
         assert response.status_code == 200
@@ -272,7 +275,7 @@ class TestOHLCResolutionEndpoint:
 
         response = client.get(
             "/api/v2/tickers/AAPL/ohlc",
-            headers={"X-User-ID": "test-user"},
+            headers={"X-User-ID": TEST_USER_ID},
         )
 
         assert response.status_code == 200
@@ -292,7 +295,7 @@ class TestOHLCResolutionEndpoint:
 
         response = client.get(
             "/api/v2/tickers/AAPL/ohlc?resolution=5",
-            headers={"X-User-ID": "test-user"},
+            headers={"X-User-ID": TEST_USER_ID},
         )
 
         assert response.status_code == 200
@@ -315,7 +318,7 @@ class TestOHLCResolutionEndpoint:
 
         response = client.get(
             "/api/v2/tickers/AAPL/ohlc",
-            headers={"X-User-ID": "test-user"},
+            headers={"X-User-ID": TEST_USER_ID},
         )
 
         assert response.status_code == 200
@@ -341,7 +344,7 @@ class TestOHLCResolutionEndpoint:
 
         response = client.get(
             "/api/v2/tickers/AAPL/ohlc?resolution=5",
-            headers={"X-User-ID": "test-user"},
+            headers={"X-User-ID": TEST_USER_ID},
         )
 
         assert response.status_code == 200
@@ -370,7 +373,7 @@ class TestOHLCResolutionEndpoint:
 
         response = client.get(
             f"/api/v2/tickers/AAPL/ohlc?resolution={resolution}",
-            headers={"X-User-ID": "test-user"},
+            headers={"X-User-ID": TEST_USER_ID},
         )
 
         assert response.status_code == 200
@@ -381,7 +384,7 @@ class TestOHLCResolutionEndpoint:
         """Should reject invalid resolution values."""
         response = client.get(
             "/api/v2/tickers/AAPL/ohlc?resolution=invalid",
-            headers={"X-User-ID": "test-user"},
+            headers={"X-User-ID": TEST_USER_ID},
         )
 
         assert response.status_code == 422  # Validation error
