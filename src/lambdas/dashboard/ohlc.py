@@ -16,6 +16,7 @@ Security Notes:
 """
 
 import logging
+import os
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -69,13 +70,57 @@ def get_user_id_from_request(request: Request) -> str:
 
 
 def get_tiingo_adapter() -> TiingoAdapter:
-    """Dependency to get TiingoAdapter."""
-    return TiingoAdapter()
+    """Dependency to get TiingoAdapter.
+
+    Fetches API key from Secrets Manager using TIINGO_SECRET_ARN environment variable.
+    Falls back to TIINGO_API_KEY environment variable for local development/testing.
+    """
+    # First try direct environment variable (for local dev/testing)
+    api_key = os.environ.get("TIINGO_API_KEY")
+    if not api_key:
+        # Try Secrets Manager
+        secret_arn = os.environ.get("TIINGO_SECRET_ARN")
+        if secret_arn:
+            try:
+                from src.lambdas.shared.secrets import get_api_key
+
+                api_key = get_api_key(secret_arn)
+            except Exception as e:
+                logger.warning(
+                    "Failed to retrieve Tiingo API key from Secrets Manager",
+                    extra=get_safe_error_info(e),
+                )
+    if not api_key:
+        logger.warning("Tiingo API key not configured, data source unavailable")
+        raise HTTPException(status_code=503, detail="Tiingo data source unavailable")
+    return TiingoAdapter(api_key=api_key)
 
 
 def get_finnhub_adapter() -> FinnhubAdapter:
-    """Dependency to get FinnhubAdapter."""
-    return FinnhubAdapter()
+    """Dependency to get FinnhubAdapter.
+
+    Fetches API key from Secrets Manager using FINNHUB_SECRET_ARN environment variable.
+    Falls back to FINNHUB_API_KEY environment variable for local development/testing.
+    """
+    # First try direct environment variable (for local dev/testing)
+    api_key = os.environ.get("FINNHUB_API_KEY")
+    if not api_key:
+        # Try Secrets Manager
+        secret_arn = os.environ.get("FINNHUB_SECRET_ARN")
+        if secret_arn:
+            try:
+                from src.lambdas.shared.secrets import get_api_key
+
+                api_key = get_api_key(secret_arn)
+            except Exception as e:
+                logger.warning(
+                    "Failed to retrieve Finnhub API key from Secrets Manager",
+                    extra=get_safe_error_info(e),
+                )
+    if not api_key:
+        logger.warning("Finnhub API key not configured, data source unavailable")
+        raise HTTPException(status_code=503, detail="Finnhub data source unavailable")
+    return FinnhubAdapter(api_key=api_key)
 
 
 @router.get("/{ticker}/ohlc", response_model=OHLCResponse)

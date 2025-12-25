@@ -296,8 +296,7 @@ def extract_auth_context_typed(event: dict[str, Any]) -> AuthContext:
         # Fall back to UUID token (anonymous)
         if _is_valid_uuid(token):
             logger.debug(
-                f"Authenticated via UUID Bearer: {token[:8]}... "
-                f"(auth_type=ANONYMOUS)"
+                f"Authenticated via UUID Bearer: {token[:8]}... (auth_type=ANONYMOUS)"
             )
             return AuthContext(
                 user_id=token,
@@ -309,7 +308,7 @@ def extract_auth_context_typed(event: dict[str, Any]) -> AuthContext:
     user_id = normalized_headers.get("x-user-id")
     if user_id and _is_valid_uuid(user_id):
         logger.debug(
-            f"Authenticated via X-User-ID: {user_id[:8]}... " f"(auth_type=ANONYMOUS)"
+            f"Authenticated via X-User-ID: {user_id[:8]}... (auth_type=ANONYMOUS)"
         )
         return AuthContext(
             user_id=user_id,
