@@ -221,11 +221,20 @@ class TestLambdaAuthentication:
         )
 
         assert response.status_code == 401
-        assert "Missing Authorization header" in response.text
+        # Feature 1039/1043: Auth system uses session auth (X-User-ID header), not API keys
+        # Error message updated to reflect new auth model
+        assert (
+            "Missing user identification" in response.text
+            or "Missing Authorization" in response.text
+        )
 
     def test_auth_rejected_with_invalid_key(self):
         """
-        E2E: Requests with invalid API key are rejected.
+        E2E: Requests with invalid auth are rejected.
+
+        Note: Feature 1039/1043 changed auth from API key to session auth.
+        The error message now reflects "Missing user identification" for
+        requests without proper X-User-ID header.
         """
         response = requests.get(
             f"{DASHBOARD_URL}/api/v2/sentiment?tags=tech",
@@ -234,7 +243,10 @@ class TestLambdaAuthentication:
         )
 
         assert response.status_code == 401
-        assert "Invalid API key" in response.text
+        # Feature 1039/1043: Auth rejects requests without X-User-ID header
+        assert (
+            "Missing user identification" in response.text or "Invalid" in response.text
+        )
 
     def test_auth_accepted_with_valid_key(self, auth_headers):
         """
