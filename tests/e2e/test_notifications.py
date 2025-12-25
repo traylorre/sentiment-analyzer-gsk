@@ -5,9 +5,15 @@
 # - Notification status tracking
 # - Notification list and detail views
 # - Quota enforcement
+#
+# NOTE (Feature 1053): Tests requiring authenticated access now use JWT bearer
+# tokens instead of the deprecated X-Auth-Type header (blocked by Feature 1048).
+
+import uuid
 
 import pytest
 
+from tests.e2e.conftest import create_test_jwt
 from tests.e2e.helpers.api_client import PreprodAPIClient
 from tests.fixtures.synthetic.config_generator import SyntheticConfiguration
 
@@ -17,20 +23,21 @@ pytestmark = [pytest.mark.e2e, pytest.mark.preprod, pytest.mark.us6]
 async def create_session_with_config(
     api_client: PreprodAPIClient,
     synthetic_config: SyntheticConfiguration,
+    test_jwt_secret: str,
 ) -> tuple[str, str]:
-    """Helper to create session and config.
+    """Helper to create config with JWT authenticated user (Feature 1053).
 
-    Sets auth_type to 'email' to simulate authenticated user for
-    endpoints that require non-anonymous authentication.
+    Args:
+        api_client: The preprod API client
+        synthetic_config: Configuration to create
+        test_jwt_secret: JWT secret for test token generation
+
+    Returns (user_id, config_id).
     """
-    session_response = await api_client.post("/api/v2/auth/anonymous", json={})
-    # API returns 201 Created for new sessions (correct HTTP semantics)
-    assert session_response.status_code == 201
-    token = session_response.json()["token"]
-
-    api_client.set_access_token(token)
-    # Set auth_type to simulate authenticated user
-    api_client.set_auth_type("email")
+    # Generate authenticated JWT token
+    user_id = str(uuid.uuid4())
+    token = create_test_jwt(user_id=user_id, secret=test_jwt_secret)
+    api_client.set_bearer_token(token)
 
     config_response = await api_client.post(
         "/api/v2/configurations",
@@ -39,16 +46,17 @@ async def create_session_with_config(
 
     if config_response.status_code != 201:
         api_client.clear_access_token()
-        pytest.skip("Config creation not available")
+        pytest.skip(f"Config creation failed: {config_response.status_code}")
 
     config_id = config_response.json()["config_id"]
-    return token, config_id
+    return user_id, config_id
 
 
 @pytest.mark.asyncio
 async def test_alert_trigger_creates_notification(
     api_client: PreprodAPIClient,
     synthetic_config: SyntheticConfiguration,
+    test_jwt_secret: str,
 ) -> None:
     """T075: Verify alert trigger creates notification.
 
@@ -59,8 +67,8 @@ async def test_alert_trigger_creates_notification(
     When: Notification list is queried
     Then: Notification exists with correct metadata
     """
-    # Create session to authenticate - return values not used but authenticates client
-    await create_session_with_config(api_client, synthetic_config)
+    # Create session to authenticate with JWT (Feature 1053)
+    await create_session_with_config(api_client, synthetic_config, test_jwt_secret)
 
     try:
         # Check notification list endpoint exists
@@ -88,6 +96,7 @@ async def test_alert_trigger_creates_notification(
 async def test_notification_status_sent(
     api_client: PreprodAPIClient,
     synthetic_config: SyntheticConfiguration,
+    test_jwt_secret: str,
 ) -> None:
     """T076: Verify notification shows 'sent' status after delivery.
 
@@ -95,8 +104,8 @@ async def test_notification_status_sent(
     When: Notification detail is queried
     Then: Status shows 'sent' or 'delivered'
     """
-    # Create session to authenticate - return values not used but authenticates client
-    await create_session_with_config(api_client, synthetic_config)
+    # Create session to authenticate with JWT (Feature 1053)
+    await create_session_with_config(api_client, synthetic_config, test_jwt_secret)
 
     try:
         # Get notification list
@@ -130,6 +139,7 @@ async def test_notification_status_sent(
 async def test_notification_list(
     api_client: PreprodAPIClient,
     synthetic_config: SyntheticConfiguration,
+    test_jwt_secret: str,
 ) -> None:
     """T077: Verify notification list returns paginated results.
 
@@ -137,8 +147,8 @@ async def test_notification_list(
     When: GET /api/v2/notifications is called
     Then: Response contains notification list with pagination
     """
-    # Create session to authenticate - return values not used but authenticates client
-    await create_session_with_config(api_client, synthetic_config)
+    # Create session to authenticate with JWT (Feature 1053)
+    await create_session_with_config(api_client, synthetic_config, test_jwt_secret)
 
     try:
         response = await api_client.get(
@@ -164,6 +174,7 @@ async def test_notification_list(
 async def test_notification_detail_with_tracking(
     api_client: PreprodAPIClient,
     synthetic_config: SyntheticConfiguration,
+    test_jwt_secret: str,
 ) -> None:
     """T078: Verify notification detail includes tracking info.
 
@@ -171,8 +182,8 @@ async def test_notification_detail_with_tracking(
     When: GET /api/v2/notifications/{id} is called
     Then: Response contains notification with tracking metadata
     """
-    # Create session to authenticate - return values not used but authenticates client
-    await create_session_with_config(api_client, synthetic_config)
+    # Create session to authenticate with JWT (Feature 1053)
+    await create_session_with_config(api_client, synthetic_config, test_jwt_secret)
 
     try:
         # First get list to find a notification ID
@@ -214,6 +225,7 @@ async def test_notification_detail_with_tracking(
 async def test_notification_quota_exceeded(
     api_client: PreprodAPIClient,
     synthetic_config: SyntheticConfiguration,
+    test_jwt_secret: str,
 ) -> None:
     """T079: Verify notification quota is enforced.
 
@@ -225,8 +237,8 @@ async def test_notification_quota_exceeded(
     When: Attempting to trigger more notifications
     Then: Appropriate quota error is returned
     """
-    # Create session to authenticate - return values not used but authenticates client
-    await create_session_with_config(api_client, synthetic_config)
+    # Create session to authenticate with JWT (Feature 1053)
+    await create_session_with_config(api_client, synthetic_config, test_jwt_secret)
 
     try:
         # Check if there's a quota endpoint
@@ -254,6 +266,7 @@ async def test_notification_quota_exceeded(
 async def test_notification_mark_read(
     api_client: PreprodAPIClient,
     synthetic_config: SyntheticConfiguration,
+    test_jwt_secret: str,
 ) -> None:
     """Verify notification can be marked as read.
 
@@ -261,8 +274,8 @@ async def test_notification_mark_read(
     When: PATCH /api/v2/notifications/{id} with read=true
     Then: Notification is marked as read
     """
-    # Create session to authenticate - return values not used but authenticates client
-    await create_session_with_config(api_client, synthetic_config)
+    # Create session to authenticate with JWT (Feature 1053)
+    await create_session_with_config(api_client, synthetic_config, test_jwt_secret)
 
     try:
         # Get list to find a notification
