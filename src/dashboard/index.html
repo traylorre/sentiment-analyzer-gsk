@@ -61,6 +61,26 @@
             <!-- Populated by timeseries.js -->
         </section>
 
+        <!-- OHLC Price Chart Section [Feature 1057] -->
+        <section id="ohlc-section" class="ohlc-section">
+            <!-- OHLC Resolution Selector -->
+            <div id="ohlc-resolution-selector" class="ohlc-resolution-selector">
+                <!-- Populated by ohlc.js -->
+            </div>
+
+            <!-- OHLC Chart Container -->
+            <div id="ohlc-chart-container" class="chart-container ohlc-chart skeleton-container" aria-label="OHLC price chart" aria-busy="true">
+                <!-- Skeleton overlay for OHLC chart -->
+                <div class="skeleton-overlay" data-skeleton="ohlcChart" aria-hidden="true">
+                    <div class="skeleton skeleton-chart"></div>
+                </div>
+                <h3>Price Chart <span id="ohlc-ticker-label">AAPL</span></h3>
+                <div id="ohlc-fallback-message" class="ohlc-fallback-message" style="display:none;"></div>
+                <div id="ohlc-error-message" class="ohlc-error-message" style="display:none;"></div>
+                <canvas id="ohlc-chart" data-testid="ohlc-chart"></canvas>
+            </div>
+        </section>
+
         <!-- Charts Row (Feature 1021: Skeleton Loading UI) -->
         <section class="charts-row">
             <div class="chart-container skeleton-container" aria-label="Sentiment distribution chart" aria-busy="true">
@@ -146,6 +166,7 @@
 
     <script src="/config.js"></script>
     <script src="/cache.js"></script>
+    <script src="/ohlc.js"></script>
     <script src="/timeseries.js"></script>
     <script src="/app.js"></script>
 </body>

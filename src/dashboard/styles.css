@@ -512,6 +512,108 @@ footer {
     font-weight: 700;
 }
 
+/* ================================
+ * Feature 1057: OHLC Price Chart
+ * ================================
+ */
+
+.ohlc-section {
+    margin: var(--spacing-lg) 0;
+    padding: var(--spacing-md);
+    background: var(--card-bg);
+    border-radius: var(--border-radius);
+    border: 1px solid var(--border-color);
+}
+
+.ohlc-resolution-selector {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-md);
+    flex-wrap: wrap;
+}
+
+.ohlc-resolution-header {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.ohlc-resolution-label {
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.ohlc-resolution-buttons {
+    display: flex;
+    gap: var(--spacing-xs);
+    flex-wrap: wrap;
+}
+
+.ohlc-resolution-btn {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: all 0.15s ease;
+}
+
+.ohlc-resolution-btn:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--primary-color);
+}
+
+.ohlc-resolution-btn.active {
+    background: rgba(139, 92, 246, 0.2);
+    border-color: #8b5cf6;
+    color: #8b5cf6;
+}
+
+.ohlc-chart {
+    min-height: 400px;
+}
+
+.ohlc-chart h3 {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-md);
+}
+
+.ohlc-chart #ohlc-ticker-label {
+    color: #8b5cf6;
+    font-weight: 700;
+}
+
+.ohlc-fallback-message {
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: rgba(251, 191, 36, 0.1);
+    border: 1px solid rgba(251, 191, 36, 0.3);
+    border-radius: var(--border-radius);
+    color: #fbbf24;
+    font-size: 0.875rem;
+    margin-bottom: var(--spacing-sm);
+}
+
+.ohlc-error-message {
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: var(--border-radius);
+    color: #ef4444;
+    font-size: 0.875rem;
+    margin-bottom: var(--spacing-sm);
+}
+
+#ohlc-chart {
+    width: 100%;
+    height: 350px;
+}
+
 /* Responsive: Stack on mobile */
 @media (max-width: 640px) {
     .resolution-selector {
