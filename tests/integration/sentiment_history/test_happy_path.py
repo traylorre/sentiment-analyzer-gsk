@@ -37,8 +37,8 @@ def test_client():
 
 @pytest.fixture
 def auth_headers():
-    """Headers with valid authentication."""
-    return {"X-User-ID": "test-user-123"}
+    """Headers with valid authentication (Feature 1049: valid UUID required)."""
+    return {"X-User-ID": "550e8400-e29b-41d4-a716-446655440000"}
 
 
 class TestSentimentHistoryHappyPath:
