@@ -50,6 +50,10 @@ from src.lambdas.shared.errors import (
 )
 from src.lambdas.shared.logging_utils import get_safe_error_info
 from src.lambdas.shared.middleware import extract_auth_context
+from src.lambdas.shared.middleware.auth_middleware import (
+    AuthType,
+    extract_auth_context_typed,
+)
 from src.lambdas.shared.response_models import (
     UserMeResponse,
     mask_email,
@@ -188,14 +192,30 @@ def get_authenticated_user_id(request: Request) -> str:
     """Get authenticated user ID (non-anonymous).
 
     For endpoints that require authenticated users (not anonymous).
+
+    Feature 1048: Auth type is determined by token validation, NOT request headers.
+    This prevents the X-Auth-Type header bypass vulnerability where anonymous
+    users could send X-Auth-Type: authenticated to bypass restrictions.
+
+    Raises:
+        HTTPException 401: No valid authentication token
+        HTTPException 403: Token is valid but user is anonymous (UUID, not JWT)
     """
-    user_id = get_user_id_from_request(request)
-    auth_type = request.headers.get("X-Auth-Type", "anonymous")
-    if auth_type == "anonymous":
+    # Feature 1048: Use typed auth context - auth_type from token validation
+    event = {"headers": dict(request.headers)}
+    auth_context = extract_auth_context_typed(event)
+
+    if auth_context.user_id is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    # Feature 1048: Check auth_type from token validation, NOT from headers
+    # Anonymous = UUID token, Authenticated = JWT token
+    if auth_context.auth_type == AuthType.ANONYMOUS:
         raise HTTPException(
             status_code=403, detail="This endpoint requires authenticated user"
         )
-    return user_id
+
+    return auth_context.user_id
 
 
 async def get_config_with_tickers(
