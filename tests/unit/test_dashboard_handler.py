@@ -15,13 +15,16 @@ For Developers:
     - moto mocks DynamoDB for isolated tests
     - Tests cover session auth, endpoints, error handling
     - Feature 1039: Session auth via X-User-ID header
+    - Feature 1048: Auth type determined by token (JWT=authenticated, UUID=anonymous)
 """
 
 import os
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from unittest.mock import patch
 
 import boto3
+import jwt
 import pytest
 from fastapi.testclient import TestClient
 from moto import mock_aws
@@ -137,26 +140,50 @@ def client():
     return TestClient(app)
 
 
-@pytest.fixture
-def auth_headers():
-    """Return valid authenticated session headers (Feature 1039: session auth).
+# Test JWT configuration (Feature 1048)
+TEST_JWT_SECRET = "test-secret-key-do-not-use-in-production"
+TEST_USER_ID = "12345678-1234-5678-1234-567812345678"
 
-    Uses X-User-ID header with a valid UUID and X-Auth-Type: authenticated
-    to identify as non-anonymous user.
-    """
-    return {
-        "X-User-ID": "12345678-1234-5678-1234-567812345678",
-        "X-Auth-Type": "authenticated",  # Required for chaos endpoints
+
+def create_test_jwt(user_id: str = TEST_USER_ID) -> str:
+    """Create a valid JWT token for testing authenticated endpoints."""
+
+    payload = {
+        "sub": user_id,
+        "exp": datetime.now(UTC) + timedelta(minutes=15),
+        "iat": datetime.now(UTC),
+        "iss": "sentiment-analyzer",
     }
+    return jwt.encode(payload, TEST_JWT_SECRET, algorithm="HS256")
+
+
+@pytest.fixture
+def jwt_env():
+    """Set JWT_SECRET environment variable for authenticated tests."""
+    with patch.dict(os.environ, {"JWT_SECRET": TEST_JWT_SECRET}):
+        yield
+
+
+@pytest.fixture
+def auth_headers(jwt_env):
+    """Return valid authenticated session headers (Feature 1048: JWT auth).
+
+    Uses Bearer token with valid JWT to identify as authenticated user.
+    Feature 1048: Auth type determined by token validation, not headers.
+
+    Note: Requires jwt_env fixture to set JWT_SECRET for validation.
+    """
+    token = create_test_jwt()
+    return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.fixture
 def anonymous_headers():
     """Return anonymous session headers for public endpoints.
 
-    Uses only X-User-ID - no X-Auth-Type means anonymous.
+    Uses X-User-ID with UUID - anonymous session (no JWT).
     """
-    return {"X-User-ID": "12345678-1234-5678-1234-567812345678"}
+    return {"X-User-ID": TEST_USER_ID}
 
 
 class TestAuthentication:

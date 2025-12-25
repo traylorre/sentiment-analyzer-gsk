@@ -13,12 +13,46 @@ import os
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from enum import Enum
 from typing import Any
 
 import jwt
 from aws_xray_sdk.core import xray_recorder
 
 logger = logging.getLogger(__name__)
+
+
+class AuthType(str, Enum):
+    """Authentication type determined by token validation (Feature 1048).
+
+    CRITICAL: This is determined by token validation, NOT request headers.
+    Anonymous users cannot bypass by sending X-Auth-Type header.
+
+    Values:
+        ANONYMOUS: UUID token (no JWT claims) - anonymous session
+        AUTHENTICATED: JWT with valid claims - authenticated session
+    """
+
+    ANONYMOUS = "anonymous"
+    AUTHENTICATED = "authenticated"
+
+
+@dataclass(frozen=True)
+class AuthContext:
+    """Authentication context from validated token (Feature 1048).
+
+    CRITICAL: auth_type is determined by token validation, not request headers.
+    This prevents anonymous users from bypassing auth checks.
+
+    Attributes:
+        user_id: Validated user ID (or None if unauthenticated)
+        auth_type: ANONYMOUS for UUID tokens, AUTHENTICATED for JWT
+        auth_method: Where the credential came from ("bearer", "x-user-id", None)
+    """
+
+    user_id: str | None
+    auth_type: AuthType
+    auth_method: str | None = None
 
 
 @dataclass(frozen=True)
@@ -220,14 +254,89 @@ def _is_valid_uuid(value: str) -> bool:
         return False
 
 
+@xray_recorder.capture("extract_auth_context_typed")
+def extract_auth_context_typed(event: dict[str, Any]) -> AuthContext:
+    """Extract typed authentication context from request (Feature 1048).
+
+    CRITICAL: auth_type is determined by token validation, NOT request headers.
+    This prevents the X-Auth-Type header bypass vulnerability.
+
+    - JWT token with valid claims → AuthType.AUTHENTICATED
+    - UUID token (no JWT) → AuthType.ANONYMOUS
+    - X-User-ID header (UUID only) → AuthType.ANONYMOUS
+    - No valid token → AuthType.ANONYMOUS with user_id=None
+
+    Args:
+        event: Lambda event dict with headers
+
+    Returns:
+        AuthContext with validated user_id and auth_type
+    """
+    headers = event.get("headers", {}) or {}
+    normalized_headers = {k.lower(): v for k, v in headers.items()}
+
+    # Try Bearer token first (preferred)
+    auth_header = normalized_headers.get("authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+
+        # Check if it's a JWT first (authenticated)
+        jwt_claim = validate_jwt(token)
+        if jwt_claim:
+            logger.debug(
+                f"Authenticated via JWT: {jwt_claim.subject[:8]}... "
+                f"(auth_type=AUTHENTICATED)"
+            )
+            return AuthContext(
+                user_id=jwt_claim.subject,
+                auth_type=AuthType.AUTHENTICATED,
+                auth_method="bearer",
+            )
+
+        # Fall back to UUID token (anonymous)
+        if _is_valid_uuid(token):
+            logger.debug(
+                f"Authenticated via UUID Bearer: {token[:8]}... "
+                f"(auth_type=ANONYMOUS)"
+            )
+            return AuthContext(
+                user_id=token,
+                auth_type=AuthType.ANONYMOUS,
+                auth_method="bearer",
+            )
+
+    # Try X-User-ID header (legacy, always anonymous)
+    user_id = normalized_headers.get("x-user-id")
+    if user_id and _is_valid_uuid(user_id):
+        logger.debug(
+            f"Authenticated via X-User-ID: {user_id[:8]}... " f"(auth_type=ANONYMOUS)"
+        )
+        return AuthContext(
+            user_id=user_id,
+            auth_type=AuthType.ANONYMOUS,
+            auth_method="x-user-id",
+        )
+
+    # No valid auth
+    logger.debug("No valid auth token found (auth_type=ANONYMOUS, user_id=None)")
+    return AuthContext(
+        user_id=None,
+        auth_type=AuthType.ANONYMOUS,
+        auth_method=None,
+    )
+
+
 @xray_recorder.capture("extract_auth_context")
 def extract_auth_context(event: dict[str, Any]) -> dict[str, Any]:
-    """Extract full authentication context from request.
+    """Extract full authentication context from request (legacy dict format).
+
+    DEPRECATED: Use extract_auth_context_typed() for new code.
 
     Returns a dict with:
     - user_id: Extracted user ID or None
     - auth_method: 'bearer' | 'x-user-id' | None
     - is_authenticated: Whether user ID was found
+    - auth_type: 'anonymous' | 'authenticated' (Feature 1048)
 
     Args:
         event: Lambda event dict
@@ -235,35 +344,15 @@ def extract_auth_context(event: dict[str, Any]) -> dict[str, Any]:
     Returns:
         Auth context dictionary
     """
-    headers = event.get("headers", {}) or {}
-    normalized_headers = {k.lower(): v for k, v in headers.items()}
+    # Delegate to typed version for consistent behavior
+    typed_context = extract_auth_context_typed(event)
 
-    context = {
-        "user_id": None,
-        "auth_method": None,
-        "is_authenticated": False,
+    return {
+        "user_id": typed_context.user_id,
+        "auth_method": typed_context.auth_method,
+        "is_authenticated": typed_context.user_id is not None,
+        "auth_type": typed_context.auth_type.value,  # Feature 1048: expose auth_type
     }
-
-    # Try Bearer token first
-    auth_header = normalized_headers.get("authorization", "")
-    if auth_header.startswith("Bearer "):
-        token = auth_header[7:]
-        user_id = _extract_user_id_from_token(token)
-        if user_id:
-            context["user_id"] = user_id
-            context["auth_method"] = "bearer"
-            context["is_authenticated"] = True
-            return context
-
-    # Fall back to X-User-ID
-    user_id = normalized_headers.get("x-user-id")
-    if user_id and _is_valid_uuid(user_id):
-        context["user_id"] = user_id
-        context["auth_method"] = "x-user-id"
-        context["is_authenticated"] = True
-        return context
-
-    return context
 
 
 def require_auth(event: dict[str, Any]) -> str:
