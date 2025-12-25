@@ -8,9 +8,13 @@
 # - Delete alert
 # - Max alert limit enforcement
 # - Anonymous user restrictions
+#
+# NOTE (Feature 1053): Tests requiring authenticated access now use JWT bearer
+# tokens instead of the deprecated X-Auth-Type header (blocked by Feature 1048).
 
 import pytest
 
+from tests.e2e.conftest import create_test_jwt
 from tests.e2e.helpers.api_client import PreprodAPIClient
 from tests.fixtures.synthetic.config_generator import (
     SyntheticConfiguration,
@@ -19,30 +23,57 @@ from tests.fixtures.synthetic.config_generator import (
 pytestmark = [pytest.mark.e2e, pytest.mark.preprod, pytest.mark.us5]
 
 
-async def create_config_and_session(
+async def create_config_for_authenticated_user(
     api_client: PreprodAPIClient,
     synthetic_config: SyntheticConfiguration,
-    authenticated: bool = True,
+    test_jwt_secret: str,
 ) -> tuple[str, str]:
-    """Helper to create session and config.
+    """Helper to create config with JWT authenticated user (Feature 1053).
 
     Args:
         api_client: The preprod API client
         synthetic_config: Configuration to create
-        authenticated: If True, set auth_type to 'email' to simulate
-            authenticated user. If False, leave as anonymous.
+        test_jwt_secret: JWT secret for test token generation
+
+    Returns (user_id, config_id).
+    """
+    import uuid
+
+    # Generate authenticated JWT token
+    user_id = str(uuid.uuid4())
+    token = create_test_jwt(user_id=user_id, secret=test_jwt_secret)
+    api_client.set_bearer_token(token)
+
+    config_response = await api_client.post(
+        "/api/v2/configurations",
+        json=synthetic_config.to_api_payload(),
+    )
+
+    if config_response.status_code != 201:
+        api_client.clear_access_token()
+        pytest.skip(f"Config creation failed: {config_response.status_code}")
+
+    config_id = config_response.json()["config_id"]
+    return user_id, config_id
+
+
+async def create_config_for_anonymous_user(
+    api_client: PreprodAPIClient,
+    synthetic_config: SyntheticConfiguration,
+) -> tuple[str, str]:
+    """Helper to create anonymous session and config.
+
+    Args:
+        api_client: The preprod API client
+        synthetic_config: Configuration to create
 
     Returns (token, config_id).
     """
     session_response = await api_client.post("/api/v2/auth/anonymous", json={})
-    # API returns 201 Created for new sessions (correct HTTP semantics)
     assert session_response.status_code == 201
     token = session_response.json()["token"]
 
     api_client.set_access_token(token)
-    if authenticated:
-        # Simulate authenticated user for endpoints that require it
-        api_client.set_auth_type("email")
 
     config_response = await api_client.post(
         "/api/v2/configurations",
@@ -61,14 +92,17 @@ async def create_config_and_session(
 async def test_alert_create_sentiment_threshold(
     api_client: PreprodAPIClient,
     synthetic_config: SyntheticConfiguration,
+    test_jwt_secret: str,
 ) -> None:
     """T068: Verify sentiment threshold alert can be created.
 
-    Given: A configuration with tickers
+    Given: A configuration with tickers (JWT authenticated user)
     When: POST /api/v2/configurations/{id}/alerts is called with sentiment alert
     Then: Alert is created and returned with alert_id
     """
-    token, config_id = await create_config_and_session(api_client, synthetic_config)
+    user_id, config_id = await create_config_for_authenticated_user(
+        api_client, synthetic_config, test_jwt_secret
+    )
     ticker_symbol = synthetic_config.tickers[0].symbol
 
     try:
@@ -106,14 +140,17 @@ async def test_alert_create_sentiment_threshold(
 async def test_alert_create_volatility_threshold(
     api_client: PreprodAPIClient,
     synthetic_config: SyntheticConfiguration,
+    test_jwt_secret: str,
 ) -> None:
     """T069: Verify volatility threshold alert can be created.
 
-    Given: A configuration with tickers
+    Given: A configuration with tickers (JWT authenticated user)
     When: POST /api/v2/configurations/{id}/alerts is called with volatility alert
     Then: Alert is created for ATR-based volatility
     """
-    token, config_id = await create_config_and_session(api_client, synthetic_config)
+    user_id, config_id = await create_config_for_authenticated_user(
+        api_client, synthetic_config, test_jwt_secret
+    )
     ticker_symbol = synthetic_config.tickers[0].symbol
 
     try:
@@ -150,14 +187,17 @@ async def test_alert_create_volatility_threshold(
 async def test_alert_toggle_off(
     api_client: PreprodAPIClient,
     synthetic_config: SyntheticConfiguration,
+    test_jwt_secret: str,
 ) -> None:
     """T070: Verify alert can be toggled off.
 
-    Given: An enabled alert
+    Given: An enabled alert (JWT authenticated user)
     When: PATCH /api/v2/alerts/{id} with enabled=false
     Then: Alert is disabled
     """
-    token, config_id = await create_config_and_session(api_client, synthetic_config)
+    user_id, config_id = await create_config_for_authenticated_user(
+        api_client, synthetic_config, test_jwt_secret
+    )
     ticker_symbol = synthetic_config.tickers[0].symbol
 
     try:
@@ -201,14 +241,17 @@ async def test_alert_toggle_off(
 async def test_alert_update_threshold(
     api_client: PreprodAPIClient,
     synthetic_config: SyntheticConfiguration,
+    test_jwt_secret: str,
 ) -> None:
     """T071: Verify alert threshold can be updated.
 
-    Given: An existing alert
+    Given: An existing alert (JWT authenticated user)
     When: PATCH /api/v2/alerts/{id} with new threshold
     Then: Alert threshold is updated
     """
-    token, config_id = await create_config_and_session(api_client, synthetic_config)
+    user_id, config_id = await create_config_for_authenticated_user(
+        api_client, synthetic_config, test_jwt_secret
+    )
     ticker_symbol = synthetic_config.tickers[0].symbol
 
     try:
@@ -250,14 +293,17 @@ async def test_alert_update_threshold(
 async def test_alert_delete(
     api_client: PreprodAPIClient,
     synthetic_config: SyntheticConfiguration,
+    test_jwt_secret: str,
 ) -> None:
     """T072: Verify alert can be deleted.
 
-    Given: An existing alert
+    Given: An existing alert (JWT authenticated user)
     When: DELETE /api/v2/alerts/{id} is called
     Then: Alert is deleted and no longer accessible
     """
-    token, config_id = await create_config_and_session(api_client, synthetic_config)
+    user_id, config_id = await create_config_for_authenticated_user(
+        api_client, synthetic_config, test_jwt_secret
+    )
     ticker_symbol = synthetic_config.tickers[0].symbol
 
     try:
@@ -299,14 +345,17 @@ async def test_alert_delete(
 async def test_alert_max_limit_enforced(
     api_client: PreprodAPIClient,
     synthetic_config: SyntheticConfiguration,
+    test_jwt_secret: str,
 ) -> None:
     """T073: Verify maximum alert limit is enforced.
 
-    Given: A user with maximum allowed alerts
+    Given: A user with maximum allowed alerts (JWT authenticated)
     When: Creating another alert
     Then: Request is rejected with limit error
     """
-    token, config_id = await create_config_and_session(api_client, synthetic_config)
+    user_id, config_id = await create_config_for_authenticated_user(
+        api_client, synthetic_config, test_jwt_secret
+    )
     ticker_symbol = synthetic_config.tickers[0].symbol
 
     try:
@@ -353,21 +402,22 @@ async def test_alert_anonymous_forbidden(
 ) -> None:
     """T074: Verify anonymous users cannot create alerts.
 
-    Note: This depends on business logic - some systems may allow
-    anonymous alerts while others require full authentication.
+    This test validates the Feature 1048 security fix - anonymous users
+    (UUID tokens) should be rejected from alert endpoints that require
+    AuthType.AUTHENTICATED.
 
-    Given: An anonymous session (without auth_type set)
+    Given: An anonymous session (UUID token, no JWT)
     When: Attempting to create an alert
-    Then: Request is rejected or requires authentication upgrade
+    Then: Request is rejected with 403 (authenticated user required)
     """
-    # Use authenticated=False to test anonymous access
-    token, config_id = await create_config_and_session(
-        api_client, synthetic_config, authenticated=False
+    # Use anonymous session (no JWT authentication)
+    token, config_id = await create_config_for_anonymous_user(
+        api_client, synthetic_config
     )
     ticker_symbol = synthetic_config.tickers[0].symbol
 
     try:
-        # Try to create alert as anonymous
+        # Try to create alert as anonymous - should fail with 403
         response = await api_client.post(
             f"/api/v2/configurations/{config_id}/alerts",
             json={
@@ -382,16 +432,15 @@ async def test_alert_anonymous_forbidden(
         if response.status_code == 404:
             pytest.skip("Alerts endpoint not implemented")
 
-        # If anonymous is allowed, skip this test
-        # If anonymous is forbidden, should get 403
-        # Both behaviors are valid depending on implementation
-        if response.status_code == 403:
-            data = response.json()
-            # Should indicate authentication required
-            assert "error" in data or "message" in data or "detail" in data
-        elif response.status_code == 201:
-            # Anonymous alerts allowed - that's fine too
-            pass
+        # After Feature 1048, anonymous users should be rejected
+        assert response.status_code == 403, (
+            f"Expected 403 for anonymous user, got {response.status_code}. "
+            f"Feature 1048 requires authenticated users for alert endpoints."
+        )
+
+        data = response.json()
+        # Should indicate authentication required
+        assert "error" in data or "message" in data or "detail" in data
 
     finally:
         api_client.clear_access_token()
@@ -401,14 +450,17 @@ async def test_alert_anonymous_forbidden(
 async def test_alert_list(
     api_client: PreprodAPIClient,
     synthetic_config: SyntheticConfiguration,
+    test_jwt_secret: str,
 ) -> None:
     """Verify alerts can be listed for a configuration.
 
-    Given: A configuration with alerts
+    Given: A configuration with alerts (JWT authenticated user)
     When: GET /api/v2/configurations/{id}/alerts is called
     Then: List of alerts is returned
     """
-    token, config_id = await create_config_and_session(api_client, synthetic_config)
+    user_id, config_id = await create_config_for_authenticated_user(
+        api_client, synthetic_config, test_jwt_secret
+    )
     ticker_symbol = synthetic_config.tickers[0].symbol
 
     try:
@@ -445,14 +497,17 @@ async def test_alert_list(
 async def test_alert_invalid_threshold(
     api_client: PreprodAPIClient,
     synthetic_config: SyntheticConfiguration,
+    test_jwt_secret: str,
 ) -> None:
     """Verify invalid threshold values are rejected.
 
-    Given: An alert request with invalid threshold
+    Given: An alert request with invalid threshold (JWT authenticated user)
     When: POST to create alert
     Then: Request is rejected with validation error
     """
-    token, config_id = await create_config_and_session(api_client, synthetic_config)
+    user_id, config_id = await create_config_for_authenticated_user(
+        api_client, synthetic_config, test_jwt_secret
+    )
     ticker_symbol = synthetic_config.tickers[0].symbol
 
     try:
