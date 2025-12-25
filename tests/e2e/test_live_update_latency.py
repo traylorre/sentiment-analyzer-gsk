@@ -32,11 +32,26 @@ except ImportError:
     async_playwright = None
 
 
-# Skip all tests if playwright not available
-pytestmark = pytest.mark.skipif(
-    not HAS_PLAYWRIGHT,
-    reason="playwright not installed",
+# Feature flag for live update latency tests
+LIVE_UPDATE_TESTS_ENABLED = (
+    os.environ.get("LIVE_UPDATE_LATENCY_TESTS_ENABLED", "").lower() == "true"
 )
+
+# Skip all tests if not enabled or playwright not available
+pytestmark = [
+    pytest.mark.skipif(
+        not HAS_PLAYWRIGHT,
+        reason="playwright not installed",
+    ),
+    pytest.mark.skipif(
+        not LIVE_UPDATE_TESTS_ENABLED,
+        reason=(
+            "Live update latency tests require SSE connection and real-time data. "
+            "These tests validate Feature 1019 (SC-003: p95 latency < 3s). "
+            "Set LIVE_UPDATE_LATENCY_TESTS_ENABLED=true to run these tests."
+        ),
+    ),
+]
 
 
 @dataclass
