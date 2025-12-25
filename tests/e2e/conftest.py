@@ -18,8 +18,10 @@ import uuid
 from collections.abc import AsyncGenerator, Generator, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 
 import boto3
+import jwt  # PyJWT for test JWT generation (Feature 1053)
 import pytest
 import pytest_asyncio
 
@@ -474,6 +476,97 @@ async def api_client() -> AsyncGenerator[PreprodAPIClient]:
     httpx.AsyncClient is lightweight, so per-test creation is acceptable.
     """
     async with PreprodAPIClient() as client:
+        yield client
+
+
+# =============================================================================
+# JWT Authentication Fixtures (Feature 1053)
+# =============================================================================
+
+# Default test secret - CI should override via PREPROD_TEST_JWT_SECRET
+_DEFAULT_TEST_JWT_SECRET = "test-jwt-secret-for-e2e-only-not-production"
+
+
+def create_test_jwt(
+    user_id: str | None = None,
+    secret: str | None = None,
+    expires_in: timedelta = timedelta(minutes=15),
+    issuer: str = "sentiment-analyzer",
+) -> str:
+    """Create a valid JWT token for E2E tests (Feature 1053).
+
+    This generates real JWT tokens that the auth middleware will validate
+    as AuthType.AUTHENTICATED, unlike the deprecated X-Auth-Type header.
+
+    Args:
+        user_id: User ID for the token (defaults to random UUID)
+        secret: JWT secret (defaults to env var or test default)
+        expires_in: Token validity period
+        issuer: Token issuer claim
+
+    Returns:
+        Encoded JWT token string
+    """
+    if user_id is None:
+        user_id = str(uuid.uuid4())
+    if secret is None:
+        secret = os.environ.get("PREPROD_TEST_JWT_SECRET", _DEFAULT_TEST_JWT_SECRET)
+
+    now = datetime.now(UTC)
+    payload = {
+        "sub": user_id,
+        "exp": now + expires_in,
+        "iat": now,
+        "iss": issuer,
+    }
+    return jwt.encode(payload, secret, algorithm="HS256")
+
+
+@pytest.fixture(scope="session")
+def test_jwt_secret() -> str:
+    """Get JWT secret for E2E tests.
+
+    In CI: Uses PREPROD_TEST_JWT_SECRET environment variable
+    Locally: Uses default test secret (for local testing only)
+
+    The preprod Lambda must be configured with the same JWT_SECRET
+    for tokens to validate successfully.
+    """
+    secret = os.environ.get("PREPROD_TEST_JWT_SECRET", _DEFAULT_TEST_JWT_SECRET)
+    if secret == _DEFAULT_TEST_JWT_SECRET:
+        import warnings
+
+        warnings.warn(
+            "Using default test JWT secret. Set PREPROD_TEST_JWT_SECRET for CI.",
+            UserWarning,
+            stacklevel=2,
+        )
+    return secret
+
+
+@pytest_asyncio.fixture
+async def authenticated_api_client(
+    test_jwt_secret: str,
+) -> AsyncGenerator[PreprodAPIClient]:
+    """API client with JWT authentication for tests requiring authenticated access.
+
+    This fixture creates a client with a valid JWT bearer token, allowing tests
+    to access endpoints that require AuthType.AUTHENTICATED (Feature 1048 fix).
+
+    Use this instead of api_client + set_auth_type("email") which is deprecated.
+
+    Example:
+        async def test_alert_create(authenticated_api_client):
+            response = await authenticated_api_client.post("/api/v2/alerts", ...)
+            assert response.status_code == 201
+    """
+    async with PreprodAPIClient() as client:
+        # Generate unique user ID for this test
+        user_id = str(uuid.uuid4())
+        token = create_test_jwt(user_id=user_id, secret=test_jwt_secret)
+        client.set_bearer_token(token)
+        # Store user_id for tests that need to reference it
+        client._authenticated_user_id = user_id  # type: ignore[attr-defined]
         yield client
 
 

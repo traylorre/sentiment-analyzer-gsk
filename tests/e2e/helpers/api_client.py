@@ -78,6 +78,7 @@ class PreprodAPIClient:
         self.timeout = timeout
         self._client: httpx.AsyncClient | None = None
         self._access_token: str | None = None
+        self._bearer_token: str | None = None  # JWT bearer token (Feature 1053)
         self._auth_type: str | None = None
         self._last_trace_id: str | None = None
         self._last_request_id: str | None = None
@@ -97,21 +98,50 @@ class PreprodAPIClient:
             self._client = None
 
     def set_access_token(self, token: str) -> None:
-        """Set the access token for authenticated requests."""
+        """Set the access token for authenticated requests (X-User-ID header).
+
+        This is for anonymous session tokens (UUIDs) which are sent via X-User-ID.
+        For authenticated JWT tokens, use set_bearer_token() instead.
+        """
         self._access_token = token
 
-    def set_auth_type(self, auth_type: str) -> None:
-        """Set the auth type for authenticated requests.
+    def set_bearer_token(self, jwt_token: str) -> None:
+        """Set a JWT bearer token for authenticated requests (Feature 1053).
+
+        This sends the token via Authorization: Bearer header, which the auth
+        middleware validates as AuthType.AUTHENTICATED (vs ANONYMOUS for UUIDs).
 
         Args:
-            auth_type: Authentication type (e.g., 'email', 'oauth', 'anonymous')
+            jwt_token: A valid JWT token (use create_test_jwt() for tests)
         """
+        self._bearer_token = jwt_token
+
+    def set_auth_type(self, auth_type: str) -> None:
+        """DEPRECATED: Set the auth type header (no longer effective).
+
+        WARNING: Feature 1048 blocked X-Auth-Type header bypass vulnerability.
+        This method is kept for backwards compatibility but the header is ignored
+        by the auth middleware. Use set_bearer_token() for authenticated access.
+
+        Args:
+            auth_type: Authentication type (ignored by server)
+        """
+        # Log deprecation warning
+        import warnings
+
+        warnings.warn(
+            "set_auth_type() is deprecated after Feature 1048 security fix. "
+            "Use set_bearer_token() with a valid JWT for authenticated access.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._auth_type = auth_type
 
     def clear_access_token(self) -> None:
-        """Clear the access token (for testing unauthenticated endpoints)."""
+        """Clear all authentication tokens."""
         self._access_token = None
         self._auth_type = None
+        self._bearer_token = None
 
     @property
     def last_trace_id(self) -> str | None:
@@ -128,20 +158,28 @@ class PreprodAPIClient:
     ) -> dict[str, str]:
         """Build request headers including auth if set.
 
-        The API v2 router uses X-User-ID header for user identification,
-        not Authorization: Bearer. The access_token is the user_id returned
-        from the anonymous session creation endpoint.
+        Authentication priority (Feature 1053):
+        1. Bearer token (JWT) - sends Authorization: Bearer header
+           → Server validates JWT and returns AuthType.AUTHENTICATED
+        2. Access token (UUID) - sends X-User-ID header
+           → Server returns AuthType.ANONYMOUS
 
-        X-Auth-Type header indicates the authentication method used
-        (e.g., 'email', 'oauth', 'anonymous').
+        Note: X-Auth-Type header is deprecated and ignored by server (Feature 1048).
         """
         headers: dict[str, str] = {}
-        if self._access_token:
-            # API v2 uses X-User-ID header for authentication
+
+        # Bearer token takes priority (authenticated JWT)
+        if self._bearer_token:
+            headers["Authorization"] = f"Bearer {self._bearer_token}"
+        elif self._access_token:
+            # Fallback to X-User-ID for anonymous UUID tokens
             headers["X-User-ID"] = self._access_token
+
+        # X-Auth-Type is deprecated but kept for backwards compatibility
+        # Server ignores this header after Feature 1048 security fix
         if self._auth_type:
-            # API v2 uses X-Auth-Type to distinguish auth methods
             headers["X-Auth-Type"] = self._auth_type
+
         if extra_headers:
             headers.update(extra_headers)
         return headers
