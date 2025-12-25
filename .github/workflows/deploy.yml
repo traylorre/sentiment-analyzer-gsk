@@ -925,6 +925,7 @@ jobs:
             -var-file=preprod.tfvars \
             -var="model_version=${{ needs.build.outputs.artifact-sha }}" \
             -var="lambda_package_version=${{ needs.build.outputs.artifact-sha }}" \
+            -var="jwt_secret=${{ secrets.PREPROD_JWT_SECRET }}" \
             module.cloudfront.aws_cloudfront_distribution.dashboard "$DIST_ID"
 
           echo ""
@@ -938,6 +939,7 @@ jobs:
             -var-file=preprod.tfvars \
             -var="model_version=${{ needs.build.outputs.artifact-sha }}" \
             -var="lambda_package_version=${{ needs.build.outputs.artifact-sha }}" \
+            -var="jwt_secret=${{ secrets.PREPROD_JWT_SECRET }}" \
             -no-color \
             -lock-timeout=5m \
             -out=preprod.tfplan | tee plan.txt
@@ -1396,6 +1398,9 @@ jobs:
           SSE_LAMBDA_URL: ${{ needs.deploy-preprod.outputs.sse_lambda_url }}
           # Required for E2E Lambda invocation tests (test_e2e_lambda_invocation_preprod.py)
           DASHBOARD_FUNCTION_URL: ${{ needs.deploy-preprod.outputs.dashboard_url }}
+          # Feature 1054: JWT secret for E2E test authentication (Feature 1053)
+          # Must match jwt_secret in Terraform preprod configuration
+          PREPROD_TEST_JWT_SECRET: ${{ secrets.PREPROD_JWT_SECRET }}
         id: integration-tests
         run: |
           # Run tests marked as "preprod" (auto-marked by conftest.py for *_preprod.py files)
@@ -1835,6 +1840,7 @@ jobs:
             -var-file=prod.tfvars \
             -var="model_version=${{ needs.build.outputs.artifact-sha }}" \
             -var="lambda_package_version=${{ needs.build.outputs.artifact-sha }}" \
+            -var="jwt_secret=${{ secrets.PROD_JWT_SECRET }}" \
             module.cloudfront.aws_cloudfront_distribution.dashboard "$DIST_ID"
 
           echo "✅ CloudFront state reset complete"
@@ -1847,6 +1853,7 @@ jobs:
             -var-file=prod.tfvars \
             -var="model_version=${{ needs.build.outputs.artifact-sha }}" \
             -var="lambda_package_version=${{ needs.build.outputs.artifact-sha }}" \
+            -var="jwt_secret=${{ secrets.PROD_JWT_SECRET }}" \
             -no-color \
             -lock-timeout=5m \
             -out=prod.tfplan | tee plan.txt

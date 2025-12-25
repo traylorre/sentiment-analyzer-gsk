@@ -39,3 +39,7 @@ model_layer_arns = []
 # Example: ["https://d1234567890.cloudfront.net"]
 # You can also add custom domains: ["https://dashboard.example.com", "https://d1234567890.cloudfront.net"]
 cors_allowed_origins = []
+
+# Feature 1054: JWT Secret for auth middleware
+# IMPORTANT: Use a strong, unique secret for production
+# The value is passed via TF_VAR_jwt_secret in CI - never commit the actual secret
