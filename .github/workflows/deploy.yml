@@ -1945,7 +1945,7 @@ jobs:
   # ========================================================================
   summary:
     name: Deployment Summary
-    needs: [build, test, build-sse-image-preprod, build-analysis-image-preprod, deploy-preprod, test-preprod]
+    needs: [build, test, build-sse-image-preprod, build-analysis-image-preprod, build-dashboard-image-preprod, deploy-preprod, test-preprod]
     if: always()
     runs-on: ubuntu-latest
 
