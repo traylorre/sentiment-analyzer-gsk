@@ -21,6 +21,9 @@
  *     - Uses `timestamp` field from DynamoDB (not ingested_at)
  */
 
+// Feature 1050: Session user ID for X-User-ID header
+let sessionUserId = null;
+
 // Application state
 const state = {
     connected: false,
@@ -61,6 +64,83 @@ const skeletonState = {
 
 // Skeleton timeout handles (FR-010: 30s timeout)
 const skeletonTimeouts = {};
+
+/**
+ * Feature 1050: Validate UUID4 format
+ *
+ * @param {string} str - String to validate
+ * @returns {boolean} - True if valid UUID4
+ */
+function isValidUUID(str) {
+    if (!str || typeof str !== 'string') return false;
+    const uuid4Regex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    return uuid4Regex.test(str);
+}
+
+/**
+ * Feature 1050: Initialize anonymous session (FR-001, FR-002, FR-004)
+ *
+ * Creates or restores an anonymous session for API authentication.
+ * Session UUID is stored in localStorage and sent via X-User-ID header.
+ *
+ * @returns {Promise<boolean>} - True if session initialized successfully
+ */
+async function initSession() {
+    console.log('Initializing session...');
+
+    // FR-004: Check localStorage for existing valid session
+    try {
+        const storedUserId = localStorage.getItem(CONFIG.SESSION_KEY);
+        if (storedUserId && isValidUUID(storedUserId)) {
+            console.log('Restored session from localStorage:', storedUserId.substring(0, 8) + '...');
+            sessionUserId = storedUserId;
+            return true;
+        }
+    } catch (e) {
+        // localStorage may not be available (private browsing, etc.)
+        console.warn('localStorage not available:', e.message);
+    }
+
+    // FR-001: Create new anonymous session
+    try {
+        const response = await fetch(
+            `${CONFIG.API_BASE_URL}${CONFIG.ENDPOINTS.AUTH_ANONYMOUS}`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        const userId = data.userId || data.user_id;
+
+        if (!userId || !isValidUUID(userId)) {
+            throw new Error('Invalid user ID received from server');
+        }
+
+        sessionUserId = userId;
+        console.log('Created new anonymous session:', userId.substring(0, 8) + '...');
+
+        // FR-002: Store in localStorage for persistence
+        try {
+            localStorage.setItem(CONFIG.SESSION_KEY, userId);
+        } catch (e) {
+            console.warn('Could not persist session to localStorage:', e.message);
+        }
+
+        return true;
+
+    } catch (error) {
+        console.error('Failed to initialize session:', error);
+        return false;
+    }
+}
 
 /**
  * Show skeleton for a component (T003)
@@ -166,6 +246,15 @@ async function initDashboard() {
     // Feature 1021 (T010): Show skeletons immediately on page load
     // SC-002: Skeleton appears within 100ms of navigation
     initSkeletons();
+
+    // Feature 1050 (FR-006): Initialize session before any API calls
+    const sessionReady = await initSession();
+    if (!sessionReady) {
+        console.error('Session initialization failed - dashboard cannot load');
+        showSkeletonError('metrics', 'Failed to initialize session. Please refresh the page.');
+        showSkeletonError('chart', 'Session initialization failed');
+        return;
+    }
 
     // Initialize charts
     initCharts();
@@ -364,18 +453,17 @@ function initCharts() {
 /**
  * Fetch metrics from API
  *
- * Feature 1011: Includes Authorization header when API key is configured.
- * API key is injected by server at render time (window.DASHBOARD_API_KEY).
+ * Feature 1050: Uses X-User-ID header for anonymous session authentication.
+ * Session is initialized by initSession() before this function is called.
  */
 async function fetchMetrics() {
     try {
-        // Build request options with optional Authorization header (Feature 1011)
-        const options = {};
-        if (CONFIG.API_KEY) {
-            options.headers = {
-                'Authorization': `Bearer ${CONFIG.API_KEY}`
-            };
-        }
+        // Feature 1050 (FR-003): Include X-User-ID header for authentication
+        const options = {
+            headers: {
+                'X-User-ID': sessionUserId
+            }
+        };
 
         const response = await fetch(
             `${CONFIG.API_BASE_URL}${CONFIG.ENDPOINTS.METRICS}`,

@@ -15,10 +15,9 @@
  */
 
 const CONFIG = {
-    // API Key (Feature 1011)
-    // Injected by server at render time via window.DASHBOARD_API_KEY
-    // NEVER hardcode here - falls back to empty string for unauthenticated dev mode
-    API_KEY: window.DASHBOARD_API_KEY || '',
+    // Session Storage Key (Feature 1050)
+    // Used to persist anonymous session UUID in localStorage
+    SESSION_KEY: 'sentiment_dashboard_session',
 
     // API Configuration
     // Empty string means same origin (Lambda Function URL serves both static and API)
@@ -32,6 +31,7 @@ const CONFIG = {
 
     // Endpoints (API v2)
     ENDPOINTS: {
+        AUTH_ANONYMOUS: '/api/v2/auth/anonymous',  // Feature 1050: Anonymous session creation
         SENTIMENT: '/api/v2/sentiment',
         TRENDS: '/api/v2/trends',
         ARTICLES: '/api/v2/articles',
