@@ -1248,7 +1248,8 @@ jobs:
 
           # Feature 1047: Use X-User-ID for session auth (consistent with all endpoints)
           # API key auth was removed in Feature 1039 - all endpoints now use session auth
-          WARMUP_USER_ID="ci-warmup-$(date +%s)"
+          # Feature 1049: X-User-ID must be a valid UUID format
+          WARMUP_USER_ID="00000000-0000-0000-0000-000000000001"
 
           # Invoke dashboard Lambda multiple times to generate metrics
           echo "1. Invoking Dashboard Lambda /health endpoint..."
