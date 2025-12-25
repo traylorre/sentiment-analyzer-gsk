@@ -835,6 +835,7 @@ jobs:
             -var-file=preprod.tfvars \
             -var="model_version=${{ needs.build.outputs.artifact-sha }}" \
             -var="lambda_package_version=${{ needs.build.outputs.artifact-sha }}" \
+            -var="jwt_secret=${{ secrets.PREPROD_JWT_SECRET }}" \
             -lock-timeout=5m
           echo "✅ State refresh complete"
 
@@ -1764,6 +1765,7 @@ jobs:
             -var-file=prod.tfvars \
             -var="model_version=${{ needs.build.outputs.artifact-sha }}" \
             -var="lambda_package_version=${{ needs.build.outputs.artifact-sha }}" \
+            -var="jwt_secret=${{ secrets.PROD_JWT_SECRET }}" \
             -lock-timeout=5m
           echo "✅ State refresh complete"
 
