@@ -351,13 +351,19 @@ class TimeseriesManager {
      * Load timeseries data from API
      *
      * Feature 1021 (T015): Hide skeleton when data arrives
+     * Feature 1051: Added X-User-ID header for session auth
      */
     async loadData() {
         try {
             const url = `${this.apiBaseUrl}/api/v2/timeseries/${this.currentTicker}?resolution=${this.currentResolution}`;
             console.log(`Fetching: ${url}`);
 
-            const response = await fetch(url);
+            // Feature 1051: Include X-User-ID header for authentication
+            const response = await fetch(url, {
+                headers: {
+                    'X-User-ID': sessionUserId
+                }
+            });
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
@@ -880,6 +886,7 @@ class MultiTickerManager {
 
     /**
      * Load all ticker data using batch API (SC-006: <1s for 10 tickers)
+     * Feature 1051: Added X-User-ID header for session auth
      */
     async loadAllData() {
         const startTime = performance.now();
@@ -890,7 +897,12 @@ class MultiTickerManager {
             const url = `${this.apiBaseUrl}/api/v2/timeseries/batch?tickers=${tickersParam}&resolution=${this.currentResolution}`;
             console.log(`Batch fetching: ${url}`);
 
-            const response = await fetch(url);
+            // Feature 1051: Include X-User-ID header for authentication
+            const response = await fetch(url, {
+                headers: {
+                    'X-User-ID': sessionUserId
+                }
+            });
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
@@ -930,6 +942,7 @@ class MultiTickerManager {
 
     /**
      * Fallback: load data individually if batch fails
+     * Feature 1051: Added X-User-ID header for session auth
      */
     async loadAllDataFallback() {
         console.log('Using fallback individual requests');
@@ -937,7 +950,12 @@ class MultiTickerManager {
         const promises = this.tickers.map(async (ticker) => {
             try {
                 const url = `${this.apiBaseUrl}/api/v2/timeseries/${ticker}?resolution=${this.currentResolution}`;
-                const response = await fetch(url);
+                // Feature 1051: Include X-User-ID header for authentication
+                const response = await fetch(url, {
+                    headers: {
+                        'X-User-ID': sessionUserId
+                    }
+                });
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const data = await response.json();
                 this.bucketData[ticker] = data.buckets || [];
