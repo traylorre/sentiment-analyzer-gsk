@@ -278,6 +278,17 @@ async function initDashboard() {
         hideSkeleton('resolution');
     }
 
+    // Feature 1057: Initialize OHLC chart
+    if (typeof initOHLCChart === 'function') {
+        try {
+            await initOHLCChart('AAPL');
+            console.log('OHLC chart initialized');
+        } catch (error) {
+            console.error('Failed to initialize OHLC chart:', error);
+            showSkeletonError('ohlcChart', 'Failed to load price chart');
+        }
+    }
+
     // Fetch initial metrics
     await fetchMetrics();
 

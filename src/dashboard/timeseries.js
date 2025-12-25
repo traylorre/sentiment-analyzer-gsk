@@ -335,6 +335,11 @@ class TimeseriesManager {
 
         // Reconnect SSE for new ticker
         this.connectSSE();
+
+        // Feature 1057: Update OHLC chart when ticker changes
+        if (typeof updateOHLCTicker === 'function') {
+            await updateOHLCTicker(ticker);
+        }
     }
 
     /**

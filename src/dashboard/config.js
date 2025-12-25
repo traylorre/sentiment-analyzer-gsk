@@ -37,7 +37,30 @@ const CONFIG = {
         ARTICLES: '/api/v2/articles',
         METRICS: '/api/v2/metrics',
         STREAM: '/api/v2/stream',  // SSE endpoint (served by SSE Lambda)
-        TIMESERIES: '/api/v2/timeseries'  // Timeseries endpoint: append /{ticker}?resolution=5m
+        TIMESERIES: '/api/v2/timeseries',  // Timeseries endpoint: append /{ticker}?resolution=5m
+        OHLC: '/api/v2/tickers'  // Feature 1057: OHLC endpoint: append /{ticker}/ohlc?resolution=D
+    },
+
+    // Feature 1057: OHLC resolution configuration
+    // Maps backend resolution values to display labels
+    // Backend accepts: '1', '5', '15', '30', '60', 'D'
+    OHLC_RESOLUTIONS: [
+        { key: '1', label: '1m', description: '1 minute candles' },
+        { key: '5', label: '5m', description: '5 minute candles' },
+        { key: '15', label: '15m', description: '15 minute candles' },
+        { key: '30', label: '30m', description: '30 minute candles' },
+        { key: '60', label: '1h', description: '1 hour candles' },
+        { key: 'D', label: 'Day', description: 'Daily candles' }
+    ],
+
+    // Default OHLC resolution
+    DEFAULT_OHLC_RESOLUTION: 'D',
+
+    // OHLC chart colors
+    OHLC_COLORS: {
+        bullish: '#22c55e',  // Green for price up
+        bearish: '#ef4444',  // Red for price down
+        wick: '#6b7280'      // Gray for candle wicks
     },
 
     // Resolution configuration for multi-resolution timeseries (Feature 1009)
@@ -166,3 +189,7 @@ Object.freeze(CONFIG.RESOLUTION_ORDER);
 // Deep freeze each resolution object
 Object.values(CONFIG.RESOLUTIONS).forEach(r => Object.freeze(r));
 Object.freeze(CONFIG.SKELETON);
+// Feature 1057: Freeze OHLC config
+Object.freeze(CONFIG.OHLC_RESOLUTIONS);
+CONFIG.OHLC_RESOLUTIONS.forEach(r => Object.freeze(r));
+Object.freeze(CONFIG.OHLC_COLORS);
