@@ -16,7 +16,8 @@ app.include_router(router)
 client = TestClient(app)
 
 
-AUTH_HEADERS = {"X-User-ID": "test-user-123"}
+# Feature 1049: Valid UUID required for auth
+AUTH_HEADERS = {"X-User-ID": "12345678-1234-5678-1234-567812345678"}
 
 
 class TestSentimentHistoryEndpoint:
