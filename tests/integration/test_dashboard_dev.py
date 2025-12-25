@@ -30,13 +30,15 @@ from src.lambdas.dashboard.handler import app
 
 @pytest.fixture
 def env_vars():
-    """Set test environment variables."""
-    os.environ["API_KEY"] = "test-api-key-12345"
+    """Set test environment variables.
+
+    Feature 1039: API_KEY removed, now uses session-based auth.
+    """
     os.environ["DATABASE_TABLE"] = "test-sentiment-items"
     os.environ["ENVIRONMENT"] = "test"
     yield
     # Cleanup
-    for key in ["API_KEY", "DATABASE_TABLE", "ENVIRONMENT"]:
+    for key in ["DATABASE_TABLE", "ENVIRONMENT"]:
         os.environ.pop(key, None)
 
 
@@ -48,8 +50,12 @@ def client():
 
 @pytest.fixture
 def auth_headers():
-    """Return valid authorization headers."""
-    return {"Authorization": "Bearer test-api-key-12345"}
+    """Return valid authorization headers.
+
+    Feature 1039: Uses X-User-ID with anonymous UUID for session auth.
+    Anonymous sessions are accepted for public endpoints.
+    """
+    return {"X-User-ID": "550e8400-e29b-41d4-a716-446655440000"}
 
 
 class TestDashboardDevE2E:
@@ -146,8 +152,11 @@ class TestDashboardDevE2E:
             assert field in data
 
     @mock_aws
-    def test_api_key_validation(self, env_vars, client):
-        """E2E: API key validation rejects invalid credentials."""
+    def test_session_auth_validation(self, env_vars, client):
+        """E2E: Session auth validation rejects missing/invalid credentials.
+
+        Feature 1039: API key auth removed, now uses session-based auth.
+        """
         import boto3
 
         dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
@@ -168,8 +177,9 @@ class TestDashboardDevE2E:
         response = client.get("/api/v2/sentiment?tags=test")
         assert response.status_code == 401
 
-        # Wrong key
+        # Invalid token (not a valid JWT/UUID)
         response = client.get(
-            "/api/v2/sentiment?tags=test", headers={"Authorization": "Bearer wrong-key"}
+            "/api/v2/sentiment?tags=test",
+            headers={"Authorization": "Bearer invalid-token"},
         )
         assert response.status_code == 401

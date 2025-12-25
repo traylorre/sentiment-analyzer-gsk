@@ -13,8 +13,8 @@ For On-Call Engineers:
 For Developers:
     - Uses FastAPI TestClient for endpoint testing
     - moto mocks DynamoDB for isolated tests
-    - Tests cover authentication, endpoints, error handling
-    - API key validation tested with various scenarios
+    - Tests cover session auth, endpoints, error handling
+    - Feature 1039: Session auth via X-User-ID header
 """
 
 import os
@@ -30,7 +30,7 @@ from src.lambdas.dashboard.handler import app
 
 # Set default env vars for tests (only if not already set by CI)
 # IMPORTANT: Use setdefault to avoid overwriting CI-provided preprod values
-os.environ.setdefault("API_KEY", "test-api-key-12345")
+# Feature 1039: API_KEY removed - using session auth
 os.environ.setdefault("DYNAMODB_TABLE", "test-sentiment-items")
 os.environ.setdefault("ENVIRONMENT", "test")
 
@@ -139,53 +139,56 @@ def client():
 
 @pytest.fixture
 def auth_headers():
-    """Return valid authorization headers."""
-    return {"Authorization": "Bearer test-api-key-12345"}
+    """Return valid authenticated session headers (Feature 1039: session auth).
+
+    Uses X-User-ID header with a valid UUID and X-Auth-Type: authenticated
+    to identify as non-anonymous user.
+    """
+    return {
+        "X-User-ID": "12345678-1234-5678-1234-567812345678",
+        "X-Auth-Type": "authenticated",  # Required for chaos endpoints
+    }
+
+
+@pytest.fixture
+def anonymous_headers():
+    """Return anonymous session headers for public endpoints.
+
+    Uses only X-User-ID - no X-Auth-Type means anonymous.
+    """
+    return {"X-User-ID": "12345678-1234-5678-1234-567812345678"}
 
 
 class TestAuthentication:
-    """Tests for API key authentication."""
+    """Tests for session-based authentication (Feature 1039).
+
+    Feature 1039 replaced API key auth with session-based auth.
+    Public endpoints accept anonymous sessions via X-User-ID header.
+    """
 
     def test_missing_auth_header(self, client):
-        """Test request without Authorization header returns 401."""
+        """Test request without X-User-ID header returns 401."""
         response = client.get("/api/v2/sentiment?tags=test")
         assert response.status_code == 401
-        assert "Missing Authorization header" in response.json()["detail"]
-
-    def test_invalid_auth_format(self, client):
-        """Test request with invalid Authorization format returns 401."""
-        response = client.get(
-            "/api/v2/sentiment?tags=test",
-            headers={"Authorization": "InvalidFormat"},
-        )
-        assert response.status_code == 401
-        assert "Invalid Authorization header format" in response.json()["detail"]
-
-    def test_invalid_api_key(self, client):
-        """Test request with wrong API key returns 401."""
-        response = client.get(
-            "/api/v2/sentiment?tags=test",
-            headers={"Authorization": "Bearer wrong-key"},
-        )
-        assert response.status_code == 401
-        assert "Invalid API key" in response.json()["detail"]
+        assert "Missing user identification" in response.json()["detail"]
 
     @mock_aws
-    def test_valid_api_key(self, client, auth_headers):
-        """Test request with valid API key succeeds."""
+    def test_valid_session_id(self, client, auth_headers):
+        """Test request with valid X-User-ID succeeds."""
         create_test_table()
 
         response = client.get("/api/v2/sentiment?tags=test", headers=auth_headers)
         assert response.status_code == 200
 
     @mock_aws
-    def test_case_insensitive_bearer(self, client):
-        """Test Bearer keyword is case-insensitive."""
+    def test_bearer_token_works(self, client):
+        """Test request with Bearer token containing user ID works."""
         create_test_table()
 
+        # Bearer token is also accepted for session auth
         response = client.get(
             "/api/v2/sentiment?tags=test",
-            headers={"Authorization": "bearer test-api-key-12345"},
+            headers={"Authorization": "Bearer 12345678-1234-5678-1234-567812345678"},
         )
         assert response.status_code == 200
 
@@ -429,13 +432,12 @@ class TestSecurityMitigations:
                 "CORS is handled by Lambda Function URL"
             )
 
-    def test_authentication_logs_client_ip_on_failure(
-        self, client, auth_headers, caplog
-    ):
+    def test_authentication_returns_401_on_missing_auth(self, client, caplog):
         """
-        P1-2: Test authentication failures log client IP.
+        P1-2: Test missing auth returns 401.
 
-        Verifies forensic logging for security auditing.
+        Feature 1039: Session auth replaces API key auth.
+        Missing X-User-ID or Authorization header returns 401.
         """
         import logging
 
@@ -448,101 +450,40 @@ class TestSecurityMitigations:
         )
 
         assert response.status_code == 401
-        assert "Missing Authorization header" in caplog.text
-        # Check structured logging in log records
-        assert any(
-            getattr(record, "client_ip", None) == "198.51.100.42"
-            for record in caplog.records
+        assert "Missing user identification" in response.json()["detail"]
+
+    @mock_aws
+    def test_valid_session_auth_succeeds(self, client, auth_headers):
+        """
+        P1-2: Test valid session auth succeeds.
+
+        Feature 1039: Session auth via X-User-ID header.
+        """
+        create_test_table()
+
+        response = client.get(
+            "/api/v2/sentiment?tags=test",
+            headers=auth_headers,
         )
 
-    def test_authentication_logs_invalid_api_key_with_ip(
-        self, client, auth_headers, caplog
-    ):
+        assert response.status_code == 200
+
+    def test_missing_session_id_returns_401(self, client):
         """
-        P1-2: Test invalid API key logs client IP and key prefix.
+        P1-2: Test missing session ID returns 401.
 
-        Verifies forensic tracking includes attempted key for analysis.
+        Feature 1039: Session auth requires X-User-ID or Bearer token.
         """
-        import logging
-
-        caplog.set_level(logging.WARNING)
-
-        # Test wrong API key
+        # Simulate request with only X-Forwarded-For (no auth)
         response = client.get(
             "/api/v2/sentiment?tags=test",
             headers={
-                "Authorization": "Bearer wrong-key-12345678",
-                "X-Forwarded-For": "198.51.100.99",
-            },
-        )
-
-        assert response.status_code == 401
-        assert "Invalid API key attempt" in caplog.text
-        # Check structured logging in log records
-        assert any(
-            getattr(record, "client_ip", None) == "198.51.100.99"
-            for record in caplog.records
-        )
-        # Should log key prefix for analysis
-        assert any(
-            getattr(record, "key_prefix", None) == "wrong-ke"
-            or "wrong-ke" in caplog.text
-            for record in caplog.records
-        )
-
-    def test_authentication_logs_request_path(self, client, caplog):
-        """
-        P1-2: Test authentication failures log request path.
-
-        Verifies we can identify which endpoints are being targeted.
-        """
-        import logging
-
-        caplog.set_level(logging.WARNING)
-
-        response = client.get(
-            "/api/v2/articles?tags=test",
-            headers={"X-Forwarded-For": "203.0.113.1"},
-        )
-
-        assert response.status_code == 401
-        # Check structured logging in log records
-        assert any(
-            getattr(record, "path", None) == "/api/v2/articles"
-            for record in caplog.records
-        )
-        assert any(
-            getattr(record, "client_ip", None) == "203.0.113.1"
-            for record in caplog.records
-        )
-
-    def test_x_forwarded_for_header_parsing(self, client, auth_headers, caplog):
-        """
-        P1-2: Test X-Forwarded-For header is correctly parsed.
-
-        Verifies we extract the first IP from comma-separated list
-        (client IP, not proxy IPs).
-        """
-        import logging
-
-        caplog.set_level(logging.WARNING)
-
-        # Simulate multi-proxy X-Forwarded-For
-        response = client.get(
-            "/api/v2/sentiment?tags=test",
-            headers={
-                "Authorization": "Bearer wrong-key",
                 "X-Forwarded-For": "198.51.100.1, 203.0.113.1, 192.0.2.1",
             },
         )
 
         assert response.status_code == 401
-        # Should log the FIRST IP (client), not proxy IPs
-        # Check structured logging in log records
-        assert any(
-            getattr(record, "client_ip", None) == "198.51.100.1"
-            for record in caplog.records
-        )
+        assert "Missing user identification" in response.json()["detail"]
 
 
 class TestChaosUIEndpoint:
@@ -1279,54 +1220,37 @@ class TestArticlesV2Errors:
         assert_error_logged(caplog, "Failed to get articles by tags")
 
 
-class TestAPIKeyAndLifespan:
-    """Tests for API key fallback and lifespan handlers (lines 104-163, 225-229)."""
+class TestSessionAuth:
+    """Tests for session-based authentication (Feature 1039).
 
-    def test_get_api_key_secrets_manager_fallback_error(
-        self, client, monkeypatch, caplog
-    ):
-        """Test API key falls back gracefully when Secrets Manager fails (lines 104-118)."""
+    Feature 1039 replaced API key auth with session-based auth.
+    These tests verify the session auth middleware is correctly integrated.
+    """
 
-        # Clear API_KEY to force Secrets Manager lookup
-        monkeypatch.setenv("API_KEY", "")
-        monkeypatch.setenv(
-            "DASHBOARD_API_KEY_SECRET_ARN",
-            "arn:aws:secretsmanager:us-east-1:123:secret:test",
+    @mock_aws
+    def test_session_auth_with_x_user_id(self, client, anonymous_headers):
+        """Test session auth with X-User-ID header succeeds."""
+        create_test_table()
+
+        response = client.get("/api/v2/sentiment?tags=AI", headers=anonymous_headers)
+        assert response.status_code == 200
+
+    @mock_aws
+    def test_session_auth_with_bearer_token(self, client):
+        """Test session auth with Bearer token containing user ID."""
+        create_test_table()
+
+        response = client.get(
+            "/api/v2/sentiment?tags=AI",
+            headers={"Authorization": "Bearer 12345678-1234-5678-1234-567812345678"},
         )
+        assert response.status_code == 200
 
-        def mock_fetch_api_key(arn):
-            raise Exception("Access denied to secret")
-
-        monkeypatch.setattr(
-            "src.lambdas.dashboard.handler.get_api_key",
-            lambda: "",  # Simulate failed fetch returning empty
-        )
-
-        # With empty API key, should allow unauthenticated access (dev mode)
+    def test_missing_session_id_returns_401(self, client):
+        """Test missing session ID returns 401."""
         response = client.get("/api/v2/sentiment?tags=AI")
-        # The request should proceed (may fail for other reasons, but not 401)
-        # This tests the fallback path
-        assert response.status_code != 401  # Auth passed, may error for other reasons
-
-    def test_verify_api_key_no_key_configured(self, client, monkeypatch, caplog):
-        """Test API verification when no key is configured (lines 223-229)."""
-
-        # Clear API_KEY to trigger no-auth-configured path
-        monkeypatch.setenv("API_KEY", "")
-        monkeypatch.delenv("DASHBOARD_API_KEY_SECRET_ARN", raising=False)
-
-        # Need to reset the cached API key
-        monkeypatch.setattr(
-            "src.lambdas.dashboard.handler.get_api_key",
-            lambda: "",
-        )
-
-        # Request without auth header should be allowed when no key configured
-        response = client.get("/api/v2/sentiment?tags=AI")
-        # Should not get 401 - either 200 or some other non-auth error
-        assert response.status_code != 401 or "API_KEY not configured" in str(
-            caplog.text
-        )
+        assert response.status_code == 401
+        assert "Missing user identification" in response.json()["detail"]
 
 
 class TestStaticFileEdgeCases:
