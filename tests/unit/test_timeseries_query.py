@@ -41,16 +41,19 @@ def clear_global_cache() -> None:
 
 
 def create_test_table(dynamodb_client: Any, table_name: str) -> None:
-    """Create DynamoDB timeseries table for testing."""
+    """Create DynamoDB timeseries table for testing.
+
+    Note: Uses uppercase PK and SK to match production schema.
+    """
     dynamodb_client.create_table(
         TableName=table_name,
         KeySchema=[
-            {"AttributeName": "pk", "KeyType": "HASH"},
-            {"AttributeName": "sk", "KeyType": "RANGE"},
+            {"AttributeName": "PK", "KeyType": "HASH"},
+            {"AttributeName": "SK", "KeyType": "RANGE"},
         ],
         AttributeDefinitions=[
-            {"AttributeName": "pk", "AttributeType": "S"},
-            {"AttributeName": "sk", "AttributeType": "S"},
+            {"AttributeName": "PK", "AttributeType": "S"},
+            {"AttributeName": "SK", "AttributeType": "S"},
         ],
         BillingMode="PAY_PER_REQUEST",
     )
@@ -70,14 +73,15 @@ def insert_bucket(
     sum_val: float = 6.0,
     is_partial: bool = False,
 ) -> None:
-    """Insert a sentiment bucket into DynamoDB."""
+    """Insert a sentiment bucket into DynamoDB.
+
+    Note: Uses uppercase PK and SK to match production schema.
+    """
     pk = f"{ticker}#{resolution}"
     table.put_item(
         Item={
-            "pk": pk,
-            "sk": timestamp,
-            "ticker": ticker,
-            "resolution": resolution,
+            "PK": pk,
+            "SK": timestamp,
             "open": Decimal(str(open_val)),
             "high": Decimal(str(high)),
             "low": Decimal(str(low)),

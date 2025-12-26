@@ -46,10 +46,8 @@ class TestTimeseriesPagination:
             ts = base_time.replace(minute=i % 60, hour=10 + i // 60)
             items.append(
                 {
-                    "pk": "AAPL#1m",
-                    "sk": ts.isoformat().replace("+00:00", "Z"),
-                    "ticker": "AAPL",
-                    "resolution": "1m",
+                    "PK": "AAPL#1m",
+                    "SK": ts.isoformat().replace("+00:00", "Z"),
                     "open": Decimal("0.65"),
                     "high": Decimal("0.85"),
                     "low": Decimal("0.55"),
@@ -75,10 +73,8 @@ class TestTimeseriesPagination:
         mock_dynamodb_table.query.return_value = {
             "Items": [
                 {
-                    "pk": "AAPL#1m",
-                    "sk": f"2025-12-21T10:{i:02d}:00Z",
-                    "ticker": "AAPL",
-                    "resolution": "1m",
+                    "PK": "AAPL#1m",
+                    "SK": f"2025-12-21T10:{i:02d}:00Z",
                     "open": Decimal("0.65"),
                     "high": Decimal("0.85"),
                     "low": Decimal("0.55"),
@@ -90,7 +86,7 @@ class TestTimeseriesPagination:
                 }
                 for i in range(20)
             ],
-            "LastEvaluatedKey": {"pk": "AAPL#1m", "sk": "2025-12-21T10:19:00Z"},
+            "LastEvaluatedKey": {"PK": "AAPL#1m", "SK": "2025-12-21T10:19:00Z"},
         }
 
         with patch("boto3.resource") as mock_boto:
@@ -121,10 +117,8 @@ class TestTimeseriesPagination:
         mock_dynamodb_table.query.return_value = {
             "Items": [
                 {
-                    "pk": "AAPL#1m",
-                    "sk": f"2025-12-21T10:{20 + i:02d}:00Z",
-                    "ticker": "AAPL",
-                    "resolution": "1m",
+                    "PK": "AAPL#1m",
+                    "SK": f"2025-12-21T10:{20 + i:02d}:00Z",
                     "open": Decimal("0.65"),
                     "high": Decimal("0.85"),
                     "low": Decimal("0.55"),
@@ -136,7 +130,7 @@ class TestTimeseriesPagination:
                 }
                 for i in range(20)
             ],
-            "LastEvaluatedKey": {"pk": "AAPL#1m", "sk": "2025-12-21T10:39:00Z"},
+            "LastEvaluatedKey": {"PK": "AAPL#1m", "SK": "2025-12-21T10:39:00Z"},
         }
 
         with patch("boto3.resource") as mock_boto:
@@ -154,7 +148,7 @@ class TestTimeseriesPagination:
             mock_dynamodb_table.query.assert_called_once()
             call_kwargs = mock_dynamodb_table.query.call_args.kwargs
             assert "ExclusiveStartKey" in call_kwargs
-            assert call_kwargs["ExclusiveStartKey"]["sk"] == "2025-12-21T10:19:00Z"
+            assert call_kwargs["ExclusiveStartKey"]["SK"] == "2025-12-21T10:19:00Z"
 
             # Verify response
             assert len(response.buckets) == 20
@@ -173,10 +167,8 @@ class TestTimeseriesPagination:
         mock_dynamodb_table.query.return_value = {
             "Items": [
                 {
-                    "pk": "AAPL#1m",
-                    "sk": f"2025-12-21T10:{i:02d}:00Z",
-                    "ticker": "AAPL",
-                    "resolution": "1m",
+                    "PK": "AAPL#1m",
+                    "SK": f"2025-12-21T10:{i:02d}:00Z",
                     "open": Decimal("0.65"),
                     "high": Decimal("0.85"),
                     "low": Decimal("0.55"),
@@ -221,10 +213,8 @@ class TestTimeseriesPagination:
         mock_dynamodb_table.query.return_value = {
             "Items": [
                 {
-                    "pk": "AAPL#1m",
-                    "sk": f"2025-12-21T10:{i:02d}:00Z",
-                    "ticker": "AAPL",
-                    "resolution": "1m",
+                    "PK": "AAPL#1m",
+                    "SK": f"2025-12-21T10:{i:02d}:00Z",
                     "open": Decimal("0.65"),
                     "high": Decimal("0.85"),
                     "low": Decimal("0.55"),
@@ -236,7 +226,7 @@ class TestTimeseriesPagination:
                 }
                 for i in range(30)
             ],
-            "LastEvaluatedKey": {"pk": "AAPL#1m", "sk": "2025-12-21T10:29:00Z"},
+            "LastEvaluatedKey": {"PK": "AAPL#1m", "SK": "2025-12-21T10:29:00Z"},
         }
 
         with patch("boto3.resource") as mock_boto:

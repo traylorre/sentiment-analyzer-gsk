@@ -125,7 +125,12 @@ def _decimal_to_float(value: Decimal | float | int) -> float:
 
 
 def _item_to_bucket(item: dict[str, Any]) -> SentimentBucketResponse:
-    """Convert a DynamoDB item to SentimentBucketResponse."""
+    """Convert a DynamoDB item to SentimentBucketResponse.
+
+    DynamoDB items use uppercase keys PK and SK:
+    - PK: "TICKER#resolution" (e.g., "AAPL#6h")
+    - SK: timestamp (e.g., "2025-12-15T00:00:00+00:00")
+    """
     count = int(item.get("count", 0))
     sum_val = _decimal_to_float(item.get("sum", 0))
     avg = sum_val / count if count > 0 else 0.0
@@ -137,10 +142,14 @@ def _item_to_bucket(item: dict[str, Any]) -> SentimentBucketResponse:
         for k, v in raw_label_counts.items()
     }
 
+    # Parse ticker and resolution from PK (format: "TICKER#resolution")
+    pk = item["PK"]
+    ticker, resolution = pk.rsplit("#", 1)
+
     return SentimentBucketResponse(
-        ticker=item["ticker"],
-        resolution=item["resolution"],
-        timestamp=item["sk"],
+        ticker=ticker,
+        resolution=resolution,
+        timestamp=item["SK"],
         open=_decimal_to_float(item.get("open", 0)),
         high=_decimal_to_float(item.get("high", 0)),
         low=_decimal_to_float(item.get("low", 0)),
@@ -250,24 +259,24 @@ class TimeseriesQueryService:
         # Build partition key
         pk = f"{ticker}#{resolution.value}"
 
-        # Build key condition expression
-        key_condition = "pk = :pk"
+        # Build key condition expression (DynamoDB uses uppercase PK and SK)
+        key_condition = "PK = :pk"
         expression_values: dict[str, Any] = {":pk": pk}
 
         # Add time range conditions if specified
         # Use BETWEEN for key condition and FilterExpression for exclusive end
         filter_expression: str | None = None
         if start is not None and end is not None:
-            key_condition += " AND sk BETWEEN :start AND :end"
+            key_condition += " AND SK BETWEEN :start AND :end"
             expression_values[":start"] = start.isoformat().replace("+00:00", "Z")
             expression_values[":end"] = end.isoformat().replace("+00:00", "Z")
             # FilterExpression for exclusive end (end is excluded)
-            filter_expression = "sk < :end"
+            filter_expression = "SK < :end"
         elif start is not None:
-            key_condition += " AND sk >= :start"
+            key_condition += " AND SK >= :start"
             expression_values[":start"] = start.isoformat().replace("+00:00", "Z")
         elif end is not None:
-            key_condition += " AND sk < :end"
+            key_condition += " AND SK < :end"
             expression_values[":end"] = end.isoformat().replace("+00:00", "Z")
 
         # Execute query with pagination support
@@ -280,9 +289,9 @@ class TimeseriesQueryService:
         if filter_expression:
             query_kwargs["FilterExpression"] = filter_expression
 
-        # Add cursor for pagination (ExclusiveStartKey)
+        # Add cursor for pagination (ExclusiveStartKey uses uppercase keys)
         if cursor is not None:
-            query_kwargs["ExclusiveStartKey"] = {"pk": pk, "sk": cursor}
+            query_kwargs["ExclusiveStartKey"] = {"PK": pk, "SK": cursor}
 
         response = self._table.query(**query_kwargs)
 
@@ -297,9 +306,9 @@ class TimeseriesQueryService:
             else:
                 all_buckets.append(bucket)
 
-        # Extract pagination cursor from response
+        # Extract pagination cursor from response (uses uppercase SK)
         last_evaluated_key = response.get("LastEvaluatedKey")
-        next_cursor = last_evaluated_key["sk"] if last_evaluated_key else None
+        next_cursor = last_evaluated_key["SK"] if last_evaluated_key else None
         has_more = last_evaluated_key is not None
 
         # Cache the result if using cache and no time range/pagination specified

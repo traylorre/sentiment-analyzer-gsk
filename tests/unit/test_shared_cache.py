@@ -238,13 +238,12 @@ class TestCacheWithQueryService:
             mock_dynamodb.Table.return_value = mock_table
 
             # First query (cache miss)
+            # Note: Uses uppercase PK and SK to match production schema
             mock_table.query.return_value = {
                 "Items": [
                     {
-                        "pk": "AAPL#5m",
-                        "sk": "2025-12-22T10:00:00Z",
-                        "ticker": "AAPL",
-                        "resolution": "5m",
+                        "PK": "AAPL#5m",
+                        "SK": "2025-12-22T10:00:00Z",
                         "open": 0.5,
                         "high": 0.6,
                         "low": 0.4,
