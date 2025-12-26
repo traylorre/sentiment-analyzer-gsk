@@ -58,6 +58,7 @@ class MockTiingoAdapter(TiingoAdapter):
         # Track calls for test assertions
         self.get_news_calls: list[dict] = []
         self.get_ohlc_calls: list[dict] = []
+        self.get_intraday_ohlc_calls: list[dict] = []
         self.get_sentiment_calls: list[dict] = []
 
     def reset(self, seed: int | None = None) -> None:
@@ -72,6 +73,7 @@ class MockTiingoAdapter(TiingoAdapter):
         self._news_gen.reset(self.seed)
         self.get_news_calls.clear()
         self.get_ohlc_calls.clear()
+        self.get_intraday_ohlc_calls.clear()
         self.get_sentiment_calls.clear()
         if self.failure_injector:
             self.failure_injector.reset()
@@ -195,6 +197,67 @@ class MockTiingoAdapter(TiingoAdapter):
         days = 30
         if start_date:
             days = max(1, (end_date - start_date).days)
+
+        return self._ticker_gen.generate_candles(
+            ticker=ticker,
+            days=days,
+            end_date=end_date,
+            interval=interval,
+        )
+
+    def get_intraday_ohlc(
+        self,
+        ticker: str,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+        resolution: str = "5",
+    ) -> list[OHLCCandle]:
+        """Get synthetic intraday OHLC data (Feature 1056).
+
+        Mirrors the real TiingoAdapter.get_intraday_ohlc method signature.
+        Returns synthetic candle data for testing intraday resolution switching.
+
+        Args:
+            ticker: Stock symbol
+            start_date: Start of date range
+            end_date: End of date range
+            resolution: Candle resolution ('1', '5', '15', '30', '60' minutes)
+
+        Returns:
+            List of synthetic OHLCCandle objects with intraday timestamps
+        """
+        self.get_intraday_ohlc_calls.append(
+            {
+                "ticker": ticker,
+                "start_date": start_date,
+                "end_date": end_date,
+                "resolution": resolution,
+            }
+        )
+
+        # Check for injected failures first
+        self._check_failure_injection()
+
+        if self.fail_mode:
+            raise RuntimeError("Mock Tiingo API failure (fail_mode=True)")
+
+        if end_date is None:
+            end_date = datetime.now(UTC)
+
+        # Calculate days from start_date or default to 7 (shorter for intraday)
+        days = 7
+        if start_date:
+            days = max(1, (end_date - start_date).days)
+
+        # Map resolution to interval format for candle generator
+        interval_map = {
+            "1": "1m",
+            "5": "5m",
+            "15": "15m",
+            "30": "30m",
+            "60": "1h",
+        }
+        interval = interval_map.get(resolution, "5m")
 
         return self._ticker_gen.generate_candles(
             ticker=ticker,

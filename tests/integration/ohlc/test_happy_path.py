@@ -89,6 +89,32 @@ class TestOHLCHappyPath:
         assert data["count"] > 0
         assert len(data["candles"]) == data["count"]
 
+    # T016b: Intraday resolutions (Feature 1056)
+    @pytest.mark.ohlc
+    @pytest.mark.parametrize(
+        "resolution",
+        ["1", "5", "15", "30", "60"],
+        ids=["1min", "5min", "15min", "30min", "60min"],
+    )
+    def test_ohlc_intraday_resolutions(
+        self, test_client, auth_headers, ohlc_validator, resolution
+    ):
+        """OHLC endpoint returns valid data for intraday resolutions (Feature 1056)."""
+        response = test_client.get(
+            f"/api/v2/tickers/AAPL/ohlc?resolution={resolution}&range=1W",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        ohlc_validator.assert_valid(data)
+        assert data["ticker"] == "AAPL"
+        # Resolution should match requested or fallback to daily
+        assert data["resolution"] in (resolution, "D")
+        assert data["count"] > 0
+        assert len(data["candles"]) == data["count"]
+
     # T017: Time range parameterized test
     @pytest.mark.ohlc
     @pytest.mark.parametrize(
