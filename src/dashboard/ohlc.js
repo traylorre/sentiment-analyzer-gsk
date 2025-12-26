@@ -400,11 +400,12 @@ class OHLCChart {
         }
 
         // Format labels based on resolution
-        const labels = candles.map(c => this.formatTimestamp(c.timestamp));
+        // Note: Backend returns 'date' field, not 'timestamp'
+        const labels = candles.map(c => this.formatTimestamp(c.date));
 
         // Create data for floating bar chart (simulating candlesticks)
         const data = candles.map(c => ({
-            x: this.formatTimestamp(c.timestamp),
+            x: this.formatTimestamp(c.date),
             y: [c.low, c.high],  // Bar spans from low to high
             ohlc: { open: c.open, high: c.high, low: c.low, close: c.close }
         }));
