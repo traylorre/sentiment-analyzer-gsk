@@ -90,14 +90,17 @@ class TestOHLCEndpoint:
 
     @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
     @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
-    def test_falls_back_to_finnhub(self, mock_finnhub_cls, mock_tiingo_cls):
-        """Should fall back to Finnhub if Tiingo fails."""
+    def test_returns_404_when_tiingo_fails(self, mock_finnhub_cls, mock_tiingo_cls):
+        """Should return 404 if Tiingo daily fails (no Finnhub fallback).
+
+        Feature 1055: Finnhub free tier doesn't support stock candles (403 error),
+        so we use Tiingo exclusively. If Tiingo fails, return 404.
+        """
         mock_tiingo = MagicMock()
         mock_tiingo.get_ohlc.side_effect = Exception("Tiingo error")
         mock_tiingo_cls.return_value = mock_tiingo
 
         mock_finnhub = MagicMock()
-        mock_finnhub.get_ohlc.return_value = _create_ohlc_candles(10)
         mock_finnhub_cls.return_value = mock_finnhub
 
         response = client.get(
@@ -105,8 +108,8 @@ class TestOHLCEndpoint:
             headers={"X-User-ID": TEST_USER_ID},
         )
 
-        assert response.status_code == 200
-        assert response.json()["source"] == "finnhub"
+        assert response.status_code == 404
+        assert "No price data available" in response.json()["detail"]
 
     @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
     @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
@@ -251,9 +254,15 @@ class TestOHLCResolutionEndpoint:
     @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
     @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
     def test_accepts_resolution_parameter(self, mock_finnhub_cls, mock_tiingo_cls):
-        """Should accept resolution query parameter."""
+        """Should accept resolution query parameter.
+
+        Feature 1055: Tiingo IEX is used for intraday resolutions.
+        """
+        mock_tiingo = MagicMock()
+        mock_tiingo.get_intraday_ohlc.return_value = _create_ohlc_candles(10)
+        mock_tiingo_cls.return_value = mock_tiingo
+
         mock_finnhub = MagicMock()
-        mock_finnhub.get_ohlc.return_value = _create_ohlc_candles(10)
         mock_finnhub_cls.return_value = mock_finnhub
 
         response = client.get(
@@ -284,13 +293,17 @@ class TestOHLCResolutionEndpoint:
 
     @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
     @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
-    def test_uses_finnhub_for_intraday(self, mock_finnhub_cls, mock_tiingo_cls):
-        """Should use Finnhub for intraday resolutions (not Tiingo)."""
+    def test_uses_tiingo_iex_for_intraday(self, mock_finnhub_cls, mock_tiingo_cls):
+        """Should use Tiingo IEX for intraday resolutions.
+
+        Feature 1055: Finnhub free tier returns 403 for stock candles,
+        so we use Tiingo IEX endpoint for all intraday resolutions.
+        """
         mock_tiingo = MagicMock()
+        mock_tiingo.get_intraday_ohlc.return_value = _create_ohlc_candles(10)
         mock_tiingo_cls.return_value = mock_tiingo
 
         mock_finnhub = MagicMock()
-        mock_finnhub.get_ohlc.return_value = _create_ohlc_candles(10)
         mock_finnhub_cls.return_value = mock_finnhub
 
         response = client.get(
@@ -299,12 +312,12 @@ class TestOHLCResolutionEndpoint:
         )
 
         assert response.status_code == 200
-        # Tiingo should not be called for intraday
+        # Tiingo IEX should be called for intraday
+        mock_tiingo.get_intraday_ohlc.assert_called_once()
+        # Tiingo daily should not be called for intraday
         mock_tiingo.get_ohlc.assert_not_called()
-        # Finnhub should be called with resolution
-        mock_finnhub.get_ohlc.assert_called_once()
-        call_kwargs = mock_finnhub.get_ohlc.call_args[1]
-        assert call_kwargs.get("resolution") == "5"
+        # Finnhub should not be called (free tier doesn't support candles)
+        mock_finnhub.get_ohlc.assert_not_called()
 
     @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
     @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
@@ -332,14 +345,18 @@ class TestOHLCResolutionEndpoint:
     def test_fallback_to_daily_when_intraday_unavailable(
         self, mock_finnhub_cls, mock_tiingo_cls
     ):
-        """Should fall back to daily when intraday data unavailable."""
+        """Should fall back to daily when intraday data unavailable.
+
+        Feature 1055: When Tiingo IEX returns no data for intraday,
+        fall back to Tiingo daily endpoint.
+        """
         mock_tiingo = MagicMock()
+        # Return empty for intraday, return data for daily
+        mock_tiingo.get_intraday_ohlc.return_value = []
         mock_tiingo.get_ohlc.return_value = _create_ohlc_candles(10)
         mock_tiingo_cls.return_value = mock_tiingo
 
         mock_finnhub = MagicMock()
-        # Return empty for intraday, have Tiingo return daily
-        mock_finnhub.get_ohlc.return_value = []
         mock_finnhub_cls.return_value = mock_finnhub
 
         response = client.get(
@@ -362,14 +379,17 @@ class TestOHLCResolutionEndpoint:
     def test_all_resolutions_accepted(
         self, mock_finnhub_cls, mock_tiingo_cls, resolution
     ):
-        """Should accept all valid resolution values."""
-        mock_finnhub = MagicMock()
-        mock_finnhub.get_ohlc.return_value = _create_ohlc_candles(10)
-        mock_finnhub_cls.return_value = mock_finnhub
+        """Should accept all valid resolution values.
 
+        Feature 1055: Daily uses Tiingo daily, intraday uses Tiingo IEX.
+        """
         mock_tiingo = MagicMock()
         mock_tiingo.get_ohlc.return_value = _create_ohlc_candles(10)
+        mock_tiingo.get_intraday_ohlc.return_value = _create_ohlc_candles(10)
         mock_tiingo_cls.return_value = mock_tiingo
+
+        mock_finnhub = MagicMock()
+        mock_finnhub_cls.return_value = mock_finnhub
 
         response = client.get(
             f"/api/v2/tickers/AAPL/ohlc?resolution={resolution}",
