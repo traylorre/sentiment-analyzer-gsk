@@ -66,7 +66,7 @@ resource "aws_dynamodb_table" "sentiment_items" {
     name            = "by_status"
     hash_key        = "status"
     range_key       = "timestamp"
-    projection_type = "KEYS_ONLY" # Minimal storage for monitoring
+    projection_type = "ALL" # Minimal storage for monitoring
   }
 
   # TTL configuration (30-day auto-deletion)
