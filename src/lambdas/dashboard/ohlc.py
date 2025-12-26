@@ -17,7 +17,7 @@ Security Notes:
 
 import logging
 import os
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
@@ -297,16 +297,27 @@ async def get_ohlc_data(
         },
     )
 
+    # Extract start/end dates, handling datetime vs date types
+    # Note: datetime is a subclass of date, so check datetime FIRST
+    first_candle_date = candles[0].date
+    last_candle_date = candles[-1].date
+    start_date_value = (
+        first_candle_date.date()
+        if isinstance(first_candle_date, datetime)
+        else first_candle_date
+    )
+    end_date_value = (
+        last_candle_date.date()
+        if isinstance(last_candle_date, datetime)
+        else last_candle_date
+    )
+
     return OHLCResponse(
         ticker=ticker,
         candles=candles,
         time_range=time_range_str,
-        start_date=candles[0].date
-        if isinstance(candles[0].date, date)
-        else candles[0].date.date(),
-        end_date=candles[-1].date
-        if isinstance(candles[-1].date, date)
-        else candles[-1].date.date(),
+        start_date=start_date_value,
+        end_date=end_date_value,
         count=len(candles),
         source=source,
         cache_expires_at=cache_expires,
