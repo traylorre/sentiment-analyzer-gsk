@@ -470,11 +470,16 @@ async def get_metrics_v2(
         return JSONResponse(metrics)
 
     except Exception as e:
+        # DEBUG: Temporarily log full exception for diagnosis (TD-002)
+        import traceback
+
         logger.error(
             "Failed to get dashboard metrics",
             extra={
                 "hours": sanitize_for_log(hours),
                 **get_safe_error_info(e),
+                "debug_message": str(e)[:200].replace("\n", " ").replace("\r", " "),
+                "debug_traceback": traceback.format_exc()[:500].replace("\n", " | "),
             },
         )
         raise HTTPException(
