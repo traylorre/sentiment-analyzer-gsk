@@ -231,31 +231,37 @@ class OHLCValidator:
                     )
                     break  # Only report first out-of-order
 
-        # OHLC-010: start_date == candles[0].date
-        if candles and str(response["start_date"]) != str(candles[0]["date"]):
-            errors.append(
-                ValidationError(
-                    field="start_date",
-                    message=f"start_date ({response['start_date']}) must equal first candle date ({candles[0]['date']})",
-                    value={
-                        "start_date": response["start_date"],
-                        "first_candle": candles[0]["date"],
-                    },
+        # OHLC-010: start_date == candles[0].date (compare date parts only)
+        # Feature 1056: Intraday candles have datetime format, response has date format
+        if candles:
+            first_candle_date = str(candles[0]["date"]).split("T")[0]
+            if str(response["start_date"]) != first_candle_date:
+                errors.append(
+                    ValidationError(
+                        field="start_date",
+                        message=f"start_date ({response['start_date']}) must equal first candle date ({first_candle_date})",
+                        value={
+                            "start_date": response["start_date"],
+                            "first_candle": candles[0]["date"],
+                        },
+                    )
                 )
-            )
 
-        # OHLC-011: end_date == candles[-1].date
-        if candles and str(response["end_date"]) != str(candles[-1]["date"]):
-            errors.append(
-                ValidationError(
-                    field="end_date",
-                    message=f"end_date ({response['end_date']}) must equal last candle date ({candles[-1]['date']})",
-                    value={
-                        "end_date": response["end_date"],
-                        "last_candle": candles[-1]["date"],
-                    },
+        # OHLC-011: end_date == candles[-1].date (compare date parts only)
+        # Feature 1056: Intraday candles have datetime format, response has date format
+        if candles:
+            last_candle_date = str(candles[-1]["date"]).split("T")[0]
+            if str(response["end_date"]) != last_candle_date:
+                errors.append(
+                    ValidationError(
+                        field="end_date",
+                        message=f"end_date ({response['end_date']}) must equal last candle date ({last_candle_date})",
+                        value={
+                            "end_date": response["end_date"],
+                            "last_candle": candles[-1]["date"],
+                        },
+                    )
                 )
-            )
 
         # Validate source
         if response["source"] not in ("tiingo", "finnhub"):
