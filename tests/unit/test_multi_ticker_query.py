@@ -53,12 +53,13 @@ class TestMultiTickerQuery:
         score: float = 0.5,
         count: int = 10,
     ) -> dict[str, Any]:
-        """Create a mock DynamoDB bucket item."""
+        """Create a mock DynamoDB bucket item.
+
+        Note: Uses uppercase PK and SK to match production schema.
+        """
         return {
-            "pk": f"{ticker}#{resolution}",
-            "sk": timestamp,
-            "ticker": ticker,
-            "resolution": resolution,
+            "PK": f"{ticker}#{resolution}",
+            "SK": timestamp,
             "open": Decimal(str(score)),
             "high": Decimal(str(score + 0.1)),
             "low": Decimal(str(score - 0.1)),
@@ -208,13 +209,12 @@ class TestMultiTickerQueryPerformance:
             mock_dynamodb.Table.return_value = mock_table
 
             # Fast response (no actual I/O)
+            # Note: Uses uppercase PK and SK to match production schema
             mock_table.query.return_value = {
                 "Items": [
                     {
-                        "pk": "AAPL#5m",
-                        "sk": "2025-12-22T10:00:00Z",
-                        "ticker": "AAPL",
-                        "resolution": "5m",
+                        "PK": "AAPL#5m",
+                        "SK": "2025-12-22T10:00:00Z",
                         "open": Decimal("0.5"),
                         "high": Decimal("0.6"),
                         "low": Decimal("0.4"),
