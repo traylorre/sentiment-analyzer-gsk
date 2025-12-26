@@ -514,6 +514,7 @@ def sanitize_item_for_response(item: dict[str, Any]) -> dict[str, Any]:
     Sanitize a DynamoDB item for API response.
 
     Removes internal fields, converts Decimal to float/int, and ensures safe output.
+    Also flattens metadata fields for frontend compatibility.
 
     Args:
         item: DynamoDB item
@@ -529,6 +530,13 @@ def sanitize_item_for_response(item: dict[str, Any]) -> dict[str, Any]:
         DynamoDB returns Decimal types for numeric fields. These must be
         converted to float/int for JSON serialization. This became necessary
         after changing by_status GSI projection from KEYS_ONLY to ALL.
+
+    Frontend Compatibility Note:
+        The vanilla JS dashboard (src/dashboard/app.js) expects:
+        - item.title (from metadata.title)
+        - item.source (from source_url domain or source_type)
+        - item.tags (from metadata.tags)
+        We flatten these for backward compatibility.
     """
     # Fields to exclude from API responses
     hidden_fields = {"ttl", "content_hash"}
@@ -538,5 +546,30 @@ def sanitize_item_for_response(item: dict[str, Any]) -> dict[str, Any]:
         if key not in hidden_fields:
             # Convert Decimal to float/int for JSON serialization
             sanitized[key] = _convert_decimal(value)
+
+    # Frontend compatibility: flatten metadata fields
+    metadata = item.get("metadata", {})
+    if metadata:
+        # Extract title from metadata if not already at top level
+        if "title" not in sanitized and "title" in metadata:
+            sanitized["title"] = metadata["title"]
+
+        # Extract tags from metadata if not already at top level
+        if "tags" not in sanitized and "tags" in metadata:
+            sanitized["tags"] = metadata["tags"]
+
+        # Extract source_name from metadata for display
+        if "source_name" in metadata:
+            sanitized["source"] = metadata["source_name"]
+
+    # Fallback: derive source from source_url if not set
+    if "source" not in sanitized and "source_url" in sanitized:
+        try:
+            from urllib.parse import urlparse
+
+            parsed = urlparse(sanitized["source_url"])
+            sanitized["source"] = parsed.netloc or "unknown"
+        except Exception:
+            sanitized["source"] = "unknown"
 
     return sanitized
