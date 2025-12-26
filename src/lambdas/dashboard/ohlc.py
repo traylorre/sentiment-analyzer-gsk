@@ -212,14 +212,14 @@ async def get_ohlc_data(
     fallback_message = None
     actual_resolution = resolution
 
-    # For intraday resolutions, use Finnhub (only source with intraday support)
-    # For daily, try Tiingo first then fallback to Finnhub
-    source = "finnhub"
+    # Feature 1055: Use Tiingo for ALL resolutions
+    # - Daily: Tiingo daily endpoint (existing)
+    # - Intraday: Tiingo IEX endpoint (new) - Finnhub free tier doesn't support candles
+    source = "tiingo"
     candles = []
 
     if resolution == OHLCResolution.DAILY:
-        # Try Tiingo first for daily data (primary source per FR-014)
-        source = "tiingo"
+        # Use Tiingo daily endpoint for daily data (primary source per FR-014)
         try:
             ohlc_candles = tiingo.get_ohlc(ticker, start_date, end_date)
             if ohlc_candles:
@@ -228,15 +228,13 @@ async def get_ohlc_data(
                 ]
         except Exception as e:
             logger.warning(
-                "Tiingo OHLC fetch failed, trying Finnhub",
+                "Tiingo daily OHLC fetch failed",
                 extra=get_safe_error_info(e),
             )
-
-    # Use Finnhub for intraday, or as fallback for daily
-    if not candles:
-        source = "finnhub"
+    else:
+        # Feature 1055: Use Tiingo IEX for intraday resolutions
         try:
-            ohlc_candles = finnhub.get_ohlc(
+            ohlc_candles = tiingo.get_intraday_ohlc(
                 ticker, start_date, end_date, resolution=resolution.value
             )
             if ohlc_candles:
@@ -245,11 +243,12 @@ async def get_ohlc_data(
                 ]
         except Exception as e:
             logger.warning(
-                "Finnhub OHLC fetch failed",
+                "Tiingo IEX intraday fetch failed",
                 extra=get_safe_error_info(e),
             )
 
     # Fallback: If intraday data unavailable, try daily (T006)
+    # Feature 1055: Simplified - only Tiingo for fallback (Finnhub free tier doesn't work)
     if not candles and resolution != OHLCResolution.DAILY:
         logger.info(
             "Intraday data unavailable, falling back to daily",
@@ -259,7 +258,7 @@ async def get_ohlc_data(
         fallback_message = f"Intraday data unavailable for {ticker}, showing daily"
         actual_resolution = OHLCResolution.DAILY
 
-        # Try Tiingo first for daily fallback
+        # Use Tiingo daily endpoint for fallback
         source = "tiingo"
         try:
             ohlc_candles = tiingo.get_ohlc(ticker, start_date, end_date)
@@ -273,24 +272,6 @@ async def get_ohlc_data(
                 "Tiingo daily fallback failed",
                 extra=get_safe_error_info(e),
             )
-
-        # Finnhub daily fallback
-        if not candles:
-            source = "finnhub"
-            try:
-                ohlc_candles = finnhub.get_ohlc(
-                    ticker, start_date, end_date, resolution="D"
-                )
-                if ohlc_candles:
-                    candles = [
-                        PriceCandle.from_ohlc_candle(c, actual_resolution)
-                        for c in ohlc_candles
-                    ]
-            except Exception as e:
-                logger.warning(
-                    "Finnhub daily fallback failed",
-                    extra=get_safe_error_info(e),
-                )
 
     # Check if we got any data
     if not candles:

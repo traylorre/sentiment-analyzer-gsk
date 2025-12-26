@@ -1,15 +1,19 @@
 """OHLC Error Resilience Integration Tests (US3).
 
 Tests for /api/v2/tickers/{ticker}/ohlc endpoint covering:
-- HTTP error fallback (500, 502, 503, 504, 429)
+- HTTP error handling (500, 502, 503, 504, 429)
 - Connection error handling (timeout, connection refused, DNS failure)
 - Malformed response handling (invalid JSON, empty response, empty array)
-- Fallback from Tiingo to Finnhub
+- 404 response when Tiingo fails (Feature 1055: no Finnhub fallback for OHLC)
+
+Note: Feature 1055 removed Finnhub fallback for OHLC because Finnhub free tier
+returns 403 Forbidden for stock/candle endpoint (requires Premium subscription).
+All OHLC data now comes exclusively from Tiingo (daily + IEX for intraday).
 
 For On-Call Engineers:
     These tests verify the OHLC endpoint's error handling.
     If tests fail, check:
-    1. Fallback logic in ohlc.py is working correctly
+    1. Error handling in ohlc.py is working correctly
     2. FailureInjector is configured correctly in mock adapters
     3. HTTP exceptions are being raised properly
 """
@@ -61,9 +65,9 @@ def create_test_client_with_injectors(
 
 
 class TestOHLCTiingoHttpErrors:
-    """US3: OHLC falls back to Finnhub on Tiingo HTTP errors."""
+    """US3: OHLC returns 404 on Tiingo HTTP errors (no Finnhub fallback per Feature 1055)."""
 
-    # T035-T039: HTTP error codes trigger fallback
+    # T035-T039: HTTP error codes return 404 (no fallback)
     @pytest.mark.ohlc
     @pytest.mark.error_resilience
     @pytest.mark.parametrize(
@@ -77,10 +81,10 @@ class TestOHLCTiingoHttpErrors:
         ],
         ids=["500", "502", "503", "504", "429"],
     )
-    def test_ohlc_tiingo_http_error_fallback(
-        self, auth_headers, ohlc_validator, injector_factory, error_code
+    def test_ohlc_tiingo_http_error_returns_404(
+        self, auth_headers, injector_factory, error_code
     ):
-        """OHLC falls back to Finnhub when Tiingo returns HTTP {error_code}."""
+        """OHLC returns 404 when Tiingo returns HTTP {error_code} (Feature 1055: no Finnhub fallback)."""
         client, _, _ = create_test_client_with_injectors(
             tiingo_injector=injector_factory()
         )
@@ -88,22 +92,19 @@ class TestOHLCTiingoHttpErrors:
         with client:
             response = client.get("/api/v2/tickers/AAPL/ohlc", headers=auth_headers)
 
-        assert response.status_code == 200
-        data = response.json()
-
-        # Should have fallen back to finnhub
-        assert data["source"] == "finnhub"
-        ohlc_validator.assert_valid(data)
+        # Feature 1055: No Finnhub fallback, so Tiingo errors result in 404
+        assert response.status_code == 404
+        assert "No price data available" in response.json()["detail"]
 
 
 class TestOHLCTiingoConnectionErrors:
-    """US3: OHLC falls back to Finnhub on Tiingo connection errors."""
+    """US3: OHLC returns 404 on Tiingo connection errors (no Finnhub fallback per Feature 1055)."""
 
-    # T040-T042: Connection errors trigger fallback
+    # T040-T042: Connection errors return 404 (no fallback)
     @pytest.mark.ohlc
     @pytest.mark.error_resilience
-    def test_ohlc_tiingo_timeout_fallback(self, auth_headers, ohlc_validator):
-        """OHLC falls back to Finnhub when Tiingo times out."""
+    def test_ohlc_tiingo_timeout_returns_404(self, auth_headers):
+        """OHLC returns 404 when Tiingo times out (Feature 1055: no Finnhub fallback)."""
         client, _, _ = create_test_client_with_injectors(
             tiingo_injector=create_timeout_injector()
         )
@@ -111,17 +112,14 @@ class TestOHLCTiingoConnectionErrors:
         with client:
             response = client.get("/api/v2/tickers/MSFT/ohlc", headers=auth_headers)
 
-        assert response.status_code == 200
-        data = response.json()
-        assert data["source"] == "finnhub"
-        ohlc_validator.assert_valid(data)
+        # Feature 1055: No Finnhub fallback
+        assert response.status_code == 404
+        assert "No price data available" in response.json()["detail"]
 
     @pytest.mark.ohlc
     @pytest.mark.error_resilience
-    def test_ohlc_tiingo_connection_refused_fallback(
-        self, auth_headers, ohlc_validator
-    ):
-        """OHLC falls back to Finnhub when Tiingo connection is refused."""
+    def test_ohlc_tiingo_connection_refused_returns_404(self, auth_headers):
+        """OHLC returns 404 when Tiingo connection is refused (Feature 1055: no Finnhub fallback)."""
         client, _, _ = create_test_client_with_injectors(
             tiingo_injector=create_connection_refused_injector()
         )
@@ -129,15 +127,14 @@ class TestOHLCTiingoConnectionErrors:
         with client:
             response = client.get("/api/v2/tickers/GOOGL/ohlc", headers=auth_headers)
 
-        assert response.status_code == 200
-        data = response.json()
-        assert data["source"] == "finnhub"
-        ohlc_validator.assert_valid(data)
+        # Feature 1055: No Finnhub fallback
+        assert response.status_code == 404
+        assert "No price data available" in response.json()["detail"]
 
     @pytest.mark.ohlc
     @pytest.mark.error_resilience
-    def test_ohlc_tiingo_dns_failure_fallback(self, auth_headers, ohlc_validator):
-        """OHLC falls back to Finnhub when Tiingo DNS resolution fails."""
+    def test_ohlc_tiingo_dns_failure_returns_404(self, auth_headers):
+        """OHLC returns 404 when Tiingo DNS resolution fails (Feature 1055: no Finnhub fallback)."""
         client, _, _ = create_test_client_with_injectors(
             tiingo_injector=create_dns_failure_injector()
         )
@@ -145,21 +142,19 @@ class TestOHLCTiingoConnectionErrors:
         with client:
             response = client.get("/api/v2/tickers/NVDA/ohlc", headers=auth_headers)
 
-        assert response.status_code == 200
-        data = response.json()
-        assert data["source"] == "finnhub"
-        ohlc_validator.assert_valid(data)
+        # Feature 1055: No Finnhub fallback
+        assert response.status_code == 404
+        assert "No price data available" in response.json()["detail"]
 
 
 class TestOHLCTiingoMalformedResponses:
-    """US3: OHLC falls back to Finnhub on Tiingo failures (fail_mode)."""
+    """US3: OHLC returns 404 on Tiingo failures (no Finnhub fallback per Feature 1055)."""
 
-    # T043-T045: Using fail_mode instead of malformed response injectors
-    # because the real adapter would raise exceptions for malformed data
+    # T043-T045: fail_mode returns 404 (no fallback)
     @pytest.mark.ohlc
     @pytest.mark.error_resilience
-    def test_ohlc_tiingo_fail_mode_fallback(self, auth_headers, ohlc_validator):
-        """OHLC falls back to Finnhub when Tiingo is in fail_mode."""
+    def test_ohlc_tiingo_fail_mode_returns_404(self, auth_headers):
+        """OHLC returns 404 when Tiingo is in fail_mode (Feature 1055: no Finnhub fallback)."""
         mock_tiingo = MockTiingoAdapter(seed=42, fail_mode=True)
         mock_finnhub = MockFinnhubAdapter(seed=42)
 
@@ -171,17 +166,14 @@ class TestOHLCTiingoMalformedResponses:
         with TestClient(app) as client:
             response = client.get("/api/v2/tickers/TSLA/ohlc", headers=auth_headers)
 
-        assert response.status_code == 200
-        data = response.json()
-        assert data["source"] == "finnhub"
-        ohlc_validator.assert_valid(data)
+        # Feature 1055: No Finnhub fallback
+        assert response.status_code == 404
+        assert "No price data available" in response.json()["detail"]
 
     @pytest.mark.ohlc
     @pytest.mark.error_resilience
-    def test_ohlc_tiingo_returns_empty_fallback(self, auth_headers, ohlc_validator):
-        """OHLC falls back to Finnhub when Tiingo returns no candles."""
-        # This is a more realistic scenario - Tiingo returns empty data
-        # The endpoint checks for empty candles array, not malformed responses
+    def test_ohlc_tiingo_returns_empty_returns_404(self, auth_headers):
+        """OHLC returns 404 when Tiingo returns no candles (Feature 1055: no Finnhub fallback)."""
         mock_tiingo = MockTiingoAdapter(seed=42, fail_mode=True)
         mock_finnhub = MockFinnhubAdapter(seed=42)
 
@@ -193,15 +185,14 @@ class TestOHLCTiingoMalformedResponses:
         with TestClient(app) as client:
             response = client.get("/api/v2/tickers/AMD/ohlc", headers=auth_headers)
 
-        assert response.status_code == 200
-        data = response.json()
-        assert data["source"] == "finnhub"
-        ohlc_validator.assert_valid(data)
+        # Feature 1055: No Finnhub fallback
+        assert response.status_code == 404
+        assert "No price data available" in response.json()["detail"]
 
     @pytest.mark.ohlc
     @pytest.mark.error_resilience
-    def test_ohlc_multiple_tickers_fallback(self, auth_headers, ohlc_validator):
-        """OHLC fallback works for multiple different tickers."""
+    def test_ohlc_multiple_tickers_returns_404(self, auth_headers):
+        """OHLC returns 404 for multiple tickers when Tiingo fails (Feature 1055: no Finnhub fallback)."""
         mock_tiingo = MockTiingoAdapter(seed=42, fail_mode=True)
         mock_finnhub = MockFinnhubAdapter(seed=42)
 
@@ -215,10 +206,9 @@ class TestOHLCTiingoMalformedResponses:
                 response = client.get(
                     f"/api/v2/tickers/{ticker}/ohlc", headers=auth_headers
                 )
-                assert response.status_code == 200
-                data = response.json()
-                assert data["source"] == "finnhub"
-                ohlc_validator.assert_valid(data)
+                # Feature 1055: No Finnhub fallback
+                assert response.status_code == 404
+                assert "No price data available" in response.json()["detail"]
 
 
 class TestOHLCBothSourcesFailure:
@@ -341,7 +331,7 @@ class TestOHLCFinnhubHttpErrors:
 
 
 class TestOHLCCallTracking:
-    """US3: Verify correct adapter calls are made."""
+    """US3: Verify correct adapter calls are made (Feature 1055: Tiingo only, no Finnhub fallback)."""
 
     @pytest.mark.ohlc
     @pytest.mark.error_resilience
@@ -358,8 +348,8 @@ class TestOHLCCallTracking:
 
     @pytest.mark.ohlc
     @pytest.mark.error_resilience
-    def test_ohlc_tiingo_failure_calls_finnhub(self, auth_headers):
-        """OHLC calls Finnhub when Tiingo fails."""
+    def test_ohlc_tiingo_failure_does_not_call_finnhub(self, auth_headers):
+        """OHLC does NOT call Finnhub when Tiingo fails (Feature 1055: no Finnhub fallback)."""
         client, mock_tiingo, mock_finnhub = create_test_client_with_injectors(
             tiingo_injector=create_http_500_injector()
         )
@@ -367,6 +357,7 @@ class TestOHLCCallTracking:
         with client:
             response = client.get("/api/v2/tickers/IBM/ohlc", headers=auth_headers)
 
-        assert response.status_code == 200
+        # Feature 1055: No Finnhub fallback - Tiingo is the only source
+        assert response.status_code == 404
         assert len(mock_tiingo.get_ohlc_calls) == 1
-        assert len(mock_finnhub.get_ohlc_calls) == 1
+        assert len(mock_finnhub.get_ohlc_calls) == 0  # Finnhub NOT called

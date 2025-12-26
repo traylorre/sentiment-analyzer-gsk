@@ -320,6 +320,112 @@ class TiingoAdapter(BaseAdapter):
 
         return candles
 
+    def get_intraday_ohlc(
+        self,
+        ticker: str,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+        resolution: str = "5",
+    ) -> list[OHLCCandle]:
+        """Fetch intraday OHLC price data from Tiingo IEX endpoint.
+
+        Feature 1055: Enables intraday resolutions (1m, 5m, 15m, 30m, 1h) using
+        Tiingo IEX endpoint instead of Finnhub (which requires Premium subscription).
+
+        Args:
+            ticker: Stock symbol
+            start_date: Start date (default: 7 days ago for intraday)
+            end_date: End date (default: now)
+            resolution: Candle resolution - '1', '5', '15', '30', or '60' minutes
+
+        Returns:
+            List of OHLCCandle objects
+        """
+        # Map resolution to Tiingo resampleFreq format
+        resolution_map = {
+            "1": "1min",
+            "5": "5min",
+            "15": "15min",
+            "30": "30min",
+            "60": "1hour",
+        }
+        resample_freq = resolution_map.get(resolution, "5min")
+
+        # Default date range (shorter for intraday due to data limits)
+        if end_date is None:
+            end_date = datetime.now(UTC)
+        if start_date is None:
+            # Use shorter default for intraday (7 days for 1min, longer for others)
+            days_back = 7 if resolution == "1" else 30
+            start_date = end_date - timedelta(days=days_back)
+
+        # Use 5-minute cache TTL for intraday (more frequent updates)
+        cache_ttl = 300  # 5 minutes
+
+        # Check cache first
+        endpoint = f"/iex/{ticker}/prices"
+        cache_params = {
+            "ticker": ticker,
+            "startDate": start_date.strftime("%Y-%m-%d"),
+            "resampleFreq": resample_freq,
+        }
+        cache_key = _get_cache_key(endpoint, cache_params)
+        cached_data = _get_from_cache(cache_key, cache_ttl)
+        if cached_data is not None:
+            logger.debug(
+                "Tiingo IEX intraday cache hit for %s (%s)",
+                sanitize_for_log(ticker),
+                resample_freq,
+            )
+            data = cached_data
+        else:
+            try:
+                response = self.client.get(
+                    endpoint,
+                    params={
+                        "startDate": start_date.strftime("%Y-%m-%d"),
+                        "resampleFreq": resample_freq,
+                    },
+                )
+                data = self._handle_response(response)
+                # Cache the raw response
+                _put_in_cache(cache_key, data)
+                logger.debug(
+                    "Tiingo IEX intraday cache miss for %s (%s), cached",
+                    sanitize_for_log(ticker),
+                    resample_freq,
+                )
+            except httpx.RequestError as e:
+                logger.error(f"Tiingo IEX intraday request failed: {e}")
+                raise AdapterError(f"Tiingo IEX intraday request failed: {e}") from e
+
+        # Parse response (IEX format is slightly different from daily)
+        candles = []
+        for item in data:
+            try:
+                # IEX uses 'date' field with ISO format
+                date_str = item["date"]
+                # Handle both Z and +00:00 formats
+                if date_str.endswith("Z"):
+                    date_str = date_str[:-1] + "+00:00"
+                date = datetime.fromisoformat(date_str)
+
+                candles.append(
+                    OHLCCandle(
+                        date=date,
+                        open=float(item["open"]),
+                        high=float(item["high"]),
+                        low=float(item["low"]),
+                        close=float(item["close"]),
+                        volume=None,  # IEX doesn't include volume in resampled data
+                    )
+                )
+            except (KeyError, ValueError) as e:
+                logger.warning(f"Failed to parse Tiingo IEX candle: {e}")
+                continue
+
+        return candles
+
     def close(self) -> None:
         """Close the HTTP client."""
         if self._client is not None:

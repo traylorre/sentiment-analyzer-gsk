@@ -186,10 +186,10 @@ class TestOHLCHappyPath:
         # Primary source (tiingo) should be used when it succeeds
         assert data["source"] == "tiingo"
 
-    # T022: Source field shows finnhub when primary fails
+    # T022: Returns 404 when Tiingo fails (Feature 1055: no Finnhub fallback)
     @pytest.mark.ohlc
-    def test_ohlc_source_field_finnhub_fallback(self, auth_headers, ohlc_validator):
-        """OHLC response shows 'finnhub' as source when tiingo fails."""
+    def test_ohlc_returns_404_when_tiingo_fails(self, auth_headers):
+        """OHLC returns 404 when tiingo fails (Feature 1055: no Finnhub fallback for OHLC)."""
         # Create failing Tiingo adapter
         tiingo_failing = MockTiingoAdapter(seed=42, fail_mode=True)
         finnhub_working = MockFinnhubAdapter(seed=42)
@@ -202,12 +202,9 @@ class TestOHLCHappyPath:
         with TestClient(app) as client:
             response = client.get("/api/v2/tickers/AMD/ohlc", headers=auth_headers)
 
-        assert response.status_code == 200
-        data = response.json()
-
-        # Should fall back to finnhub
-        assert data["source"] == "finnhub"
-        ohlc_validator.assert_valid(data)
+        # Feature 1055: No Finnhub fallback - Tiingo failure returns 404
+        assert response.status_code == 404
+        assert "No price data available" in response.json()["detail"]
 
     # T023: Count matches candles array length
     @pytest.mark.ohlc

@@ -254,6 +254,170 @@ class TestTiingoGetOHLC:
         assert result == []
 
 
+class TestTiingoGetIntradayOHLC:
+    """Tests for Tiingo get_intraday_ohlc method (Feature 1055)."""
+
+    def test_get_intraday_ohlc_success(self, tiingo_adapter: TiingoAdapter):
+        """Test successful intraday OHLC fetch from IEX endpoint."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.is_success = True
+        mock_response.json.return_value = [
+            {
+                "date": "2025-01-15T14:30:00+00:00",
+                "open": 150.25,
+                "high": 150.50,
+                "low": 150.10,
+                "close": 150.40,
+            },
+            {
+                "date": "2025-01-15T14:35:00+00:00",
+                "open": 150.40,
+                "high": 150.60,
+                "low": 150.35,
+                "close": 150.55,
+            },
+        ]
+
+        with patch.object(tiingo_adapter.client, "get", return_value=mock_response):
+            result = tiingo_adapter.get_intraday_ohlc("AAPL", resolution="5")
+
+        assert len(result) == 2
+        assert result[0].open == 150.25
+        assert result[0].high == 150.50
+        assert result[0].low == 150.10
+        assert result[0].close == 150.40
+        assert result[0].volume is None  # IEX doesn't include volume in resampled data
+
+    def test_get_intraday_ohlc_resolution_mapping(self, tiingo_adapter: TiingoAdapter):
+        """Test resolution mapping to Tiingo IEX resampleFreq format."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.is_success = True
+        mock_response.json.return_value = []
+
+        resolution_tests = [
+            ("1", "1min"),
+            ("5", "5min"),
+            ("15", "15min"),
+            ("30", "30min"),
+            ("60", "1hour"),
+        ]
+
+        for resolution, expected_freq in resolution_tests:
+            with patch.object(
+                tiingo_adapter.client, "get", return_value=mock_response
+            ) as mock_get:
+                tiingo_adapter.get_intraday_ohlc("AAPL", resolution=resolution)
+
+            call_params = mock_get.call_args[1]["params"]
+            assert (
+                call_params["resampleFreq"] == expected_freq
+            ), f"Resolution {resolution} should map to {expected_freq}"
+
+    def test_get_intraday_ohlc_default_resolution(self, tiingo_adapter: TiingoAdapter):
+        """Test default resolution is 5min."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.is_success = True
+        mock_response.json.return_value = []
+
+        with patch.object(
+            tiingo_adapter.client, "get", return_value=mock_response
+        ) as mock_get:
+            tiingo_adapter.get_intraday_ohlc("AAPL")
+
+        call_params = mock_get.call_args[1]["params"]
+        assert call_params["resampleFreq"] == "5min"
+
+    def test_get_intraday_ohlc_uses_iex_endpoint(self, tiingo_adapter: TiingoAdapter):
+        """Test that IEX endpoint path is used."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.is_success = True
+        mock_response.json.return_value = []
+
+        with patch.object(
+            tiingo_adapter.client, "get", return_value=mock_response
+        ) as mock_get:
+            tiingo_adapter.get_intraday_ohlc("AAPL")
+
+        call_args = mock_get.call_args[0]
+        assert "/iex/AAPL/prices" in call_args[0]
+
+    def test_get_intraday_ohlc_handles_z_timezone(self, tiingo_adapter: TiingoAdapter):
+        """Test parsing of Z timezone format."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.is_success = True
+        mock_response.json.return_value = [
+            {
+                "date": "2025-01-15T14:30:00Z",  # Z format
+                "open": 150.0,
+                "high": 151.0,
+                "low": 149.0,
+                "close": 150.5,
+            },
+        ]
+
+        with patch.object(tiingo_adapter.client, "get", return_value=mock_response):
+            result = tiingo_adapter.get_intraday_ohlc("AAPL")
+
+        assert len(result) == 1
+        assert result[0].date.hour == 14
+        assert result[0].date.minute == 30
+
+    def test_get_intraday_ohlc_empty_response(self, tiingo_adapter: TiingoAdapter):
+        """Test empty response handling."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.is_success = True
+        mock_response.json.return_value = []
+
+        with patch.object(tiingo_adapter.client, "get", return_value=mock_response):
+            result = tiingo_adapter.get_intraday_ohlc("AAPL")
+
+        assert result == []
+
+    def test_get_intraday_ohlc_request_error(self, tiingo_adapter: TiingoAdapter):
+        """Test request error handling."""
+        with patch.object(
+            tiingo_adapter.client,
+            "get",
+            side_effect=httpx.RequestError("Connection failed"),
+        ):
+            with pytest.raises(AdapterError, match="intraday request failed"):
+                tiingo_adapter.get_intraday_ohlc("AAPL")
+
+    def test_get_intraday_ohlc_caching(self, tiingo_adapter: TiingoAdapter):
+        """Test that intraday responses are cached."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.is_success = True
+        mock_response.json.return_value = [
+            {
+                "date": "2025-01-15T14:30:00+00:00",
+                "open": 150.0,
+                "high": 151.0,
+                "low": 149.0,
+                "close": 150.5,
+            },
+        ]
+
+        with patch.object(
+            tiingo_adapter.client, "get", return_value=mock_response
+        ) as mock_get:
+            # First call
+            result1 = tiingo_adapter.get_intraday_ohlc("AAPL", resolution="5")
+            # Second call (should use cache)
+            result2 = tiingo_adapter.get_intraday_ohlc("AAPL", resolution="5")
+
+        # Should only make one API call
+        assert mock_get.call_count == 1
+        assert len(result1) == 1
+        assert len(result2) == 1
+
+
 class TestTiingoContextManager:
     """Tests for context manager protocol."""
 
