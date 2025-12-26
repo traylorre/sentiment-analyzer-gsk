@@ -482,11 +482,38 @@ def aggregate_dashboard_metrics(
         raise
 
 
+def _convert_decimal(value: Any) -> Any:
+    """
+    Recursively convert DynamoDB Decimal types to Python float/int.
+
+    DynamoDB uses Decimal for numeric types, but these are not JSON serializable.
+    This function converts them to standard Python types.
+
+    Args:
+        value: Any value that might be a Decimal or contain Decimals
+
+    Returns:
+        Value with Decimals converted to float/int
+    """
+    from decimal import Decimal
+
+    if isinstance(value, Decimal):
+        # Convert to int if it's a whole number, otherwise float
+        if value == int(value):
+            return int(value)
+        return float(value)
+    elif isinstance(value, dict):
+        return {k: _convert_decimal(v) for k, v in value.items()}
+    elif isinstance(value, list):
+        return [_convert_decimal(v) for v in value]
+    return value
+
+
 def sanitize_item_for_response(item: dict[str, Any]) -> dict[str, Any]:
     """
     Sanitize a DynamoDB item for API response.
 
-    Removes internal fields and ensures safe output.
+    Removes internal fields, converts Decimal to float/int, and ensures safe output.
 
     Args:
         item: DynamoDB item
@@ -497,6 +524,11 @@ def sanitize_item_for_response(item: dict[str, Any]) -> dict[str, Any]:
     Security Note:
         This function ensures no internal metadata leaks to clients.
         Add any fields that should be hidden to the HIDDEN_FIELDS list.
+
+    JSON Serialization Note:
+        DynamoDB returns Decimal types for numeric fields. These must be
+        converted to float/int for JSON serialization. This became necessary
+        after changing by_status GSI projection from KEYS_ONLY to ALL.
     """
     # Fields to exclude from API responses
     hidden_fields = {"ttl", "content_hash"}
@@ -504,6 +536,7 @@ def sanitize_item_for_response(item: dict[str, Any]) -> dict[str, Any]:
     sanitized = {}
     for key, value in item.items():
         if key not in hidden_fields:
-            sanitized[key] = value
+            # Convert Decimal to float/int for JSON serialization
+            sanitized[key] = _convert_decimal(value)
 
     return sanitized
