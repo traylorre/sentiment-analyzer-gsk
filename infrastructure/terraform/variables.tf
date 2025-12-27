@@ -15,6 +15,12 @@ variable "aws_region" {
   # No default - region must be explicitly provided
 }
 
+variable "tags" {
+  description = "Common tags to apply to all resources for cost tracking and management"
+  type        = map(string)
+  default     = {}
+}
+
 variable "watch_tags" {
   description = "Comma-separated list of tags to watch (max 5)"
   type        = string
