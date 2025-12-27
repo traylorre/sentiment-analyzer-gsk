@@ -561,7 +561,8 @@ class OHLCChart {
         // Build a map of sentiment by timestamp for alignment
         const sentimentByTime = new Map();
         this.sentimentData.forEach(bucket => {
-            const ts = bucket.bucket_timestamp || bucket.SK;
+            // Feature 1069: Fix field name - API returns 'timestamp', not 'bucket_timestamp' or 'SK'
+            const ts = bucket.timestamp || bucket.bucket_timestamp || bucket.SK;
             if (ts) {
                 // Parse and normalize to date string for matching
                 const date = new Date(ts);
