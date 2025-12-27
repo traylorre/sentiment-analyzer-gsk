@@ -572,11 +572,20 @@ class TimeseriesManager {
             this.eventSource.close();
         }
 
-        const baseUrl = this.sseBaseUrl || this.apiBaseUrl;
-        if (!baseUrl) {
+        // Feature 1068: Fix same-origin configuration handling
+        // Empty string '' is valid for same-origin requests, only warn if truly unconfigured
+        const sseUrl = this.sseBaseUrl;
+        const apiUrl = this.apiBaseUrl;
+
+        // Only warn if both are null/undefined (not just falsy empty strings)
+        if ((sseUrl === null || sseUrl === undefined) &&
+            (apiUrl === null || apiUrl === undefined)) {
             console.warn('No SSE base URL configured');
             return;
         }
+
+        // Use nullish coalescing to allow empty string through for same-origin
+        const baseUrl = sseUrl ?? apiUrl ?? '';
 
         // Connect with resolution filter
         const streamUrl = `${baseUrl}/api/v2/stream?tickers=${this.currentTicker}&resolutions=${this.currentResolution}`;

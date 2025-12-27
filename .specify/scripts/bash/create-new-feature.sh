@@ -131,8 +131,8 @@ check_existing_branches() {
     local short_name="$1"
     local specs_dir="$2"
 
-    # Fetch all remotes to get latest branch info (suppress errors if no remotes)
-    git fetch --all --prune 2>/dev/null || true
+    # Fetch all remotes to get latest branch info (suppress all output)
+    git fetch --all --prune >/dev/null 2>&1 || true
 
     # Find all branches matching the pattern using git ls-remote (more reliable)
     local remote_branches=$(git ls-remote --heads origin 2>/dev/null | grep -E "refs/heads/[0-9]+-${short_name}$" | sed 's/.*\/\([0-9]*\)-.*/\1/' | sort -n)
