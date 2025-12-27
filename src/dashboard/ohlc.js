@@ -136,7 +136,7 @@ class OHLCChart {
     }
 
     /**
-     * Bind event handlers for resolution buttons
+     * Bind event handlers for resolution buttons and chart interactions
      */
     bindEvents() {
         // Resolution button clicks
@@ -148,6 +148,24 @@ class OHLCChart {
                 }
             });
         });
+
+        // Feature 1070: Double-click to reset zoom
+        const canvas = document.getElementById('ohlc-chart');
+        if (canvas) {
+            canvas.addEventListener('dblclick', () => {
+                this.resetZoom();
+            });
+        }
+    }
+
+    /**
+     * Feature 1070: Reset chart zoom to default view
+     */
+    resetZoom() {
+        if (this.chart) {
+            this.chart.resetZoom();
+            console.log('OHLC: Zoom reset to default');
+        }
     }
 
     /**
@@ -400,6 +418,33 @@ class OHLCChart {
                                     return 'Sentiment: N/A';
                                 }
                                 return '';
+                            }
+                        }
+                    },
+                    // Feature 1070: Vertical zoom for Price Chart
+                    // Allows mouse wheel zoom on Y-axis (price) centered around cursor
+                    // Sentiment axis (right, -1 to 1) remains fixed
+                    zoom: {
+                        zoom: {
+                            wheel: {
+                                enabled: true,
+                                speed: 0.1
+                            },
+                            mode: 'y',
+                            // Only zoom the price axis, not sentiment
+                            scaleMode: 'y',
+                            onZoom: ({ chart }) => {
+                                // Restore sentiment axis to fixed -1 to 1 range
+                                const sentimentScale = chart.scales.sentiment;
+                                if (sentimentScale) {
+                                    sentimentScale.options.min = overlayConfig.yAxisMin || -1.0;
+                                    sentimentScale.options.max = overlayConfig.yAxisMax || 1.0;
+                                }
+                            }
+                        },
+                        limits: {
+                            price: {
+                                minRange: 5  // Minimum $5 range when zoomed in
                             }
                         }
                     }
