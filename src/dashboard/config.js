@@ -174,7 +174,29 @@ const CONFIG = {
 
         // Debounce delay for rapid resolution switches (US2)
         DEBOUNCE_MS: 300
-    }
+    },
+
+    // Feature 1064: Unified Resolution Selector
+    // Maps user-selected resolution to chart-specific values
+    // When OHLC and sentiment use different resolutions, shows fallback indicator
+    UNIFIED_RESOLUTIONS: [
+        { key: '1m', label: '1m', ohlc: '1', sentiment: '1m', exact: true },
+        { key: '5m', label: '5m', ohlc: '5', sentiment: '5m', exact: true },
+        { key: '10m', label: '10m', ohlc: '15', sentiment: '10m', exact: false },
+        { key: '15m', label: '15m', ohlc: '15', sentiment: '10m', exact: false },
+        { key: '30m', label: '30m', ohlc: '30', sentiment: '1h', exact: false },
+        { key: '1h', label: '1h', ohlc: '60', sentiment: '1h', exact: true },
+        { key: '3h', label: '3h', ohlc: '60', sentiment: '3h', exact: false },
+        { key: '6h', label: '6h', ohlc: 'D', sentiment: '6h', exact: false },
+        { key: '12h', label: '12h', ohlc: 'D', sentiment: '12h', exact: false },
+        { key: 'D', label: 'Day', ohlc: 'D', sentiment: '24h', exact: true }
+    ],
+
+    // Default unified resolution
+    DEFAULT_UNIFIED_RESOLUTION: '1h',
+
+    // Session storage key for unified resolution
+    UNIFIED_RESOLUTION_KEY: 'unified_resolution'
 };
 
 // Freeze config to prevent accidental modifications
@@ -193,3 +215,6 @@ Object.freeze(CONFIG.SKELETON);
 Object.freeze(CONFIG.OHLC_RESOLUTIONS);
 CONFIG.OHLC_RESOLUTIONS.forEach(r => Object.freeze(r));
 Object.freeze(CONFIG.OHLC_COLORS);
+// Feature 1064: Freeze unified resolution config
+Object.freeze(CONFIG.UNIFIED_RESOLUTIONS);
+CONFIG.UNIFIED_RESOLUTIONS.forEach(r => Object.freeze(r));
