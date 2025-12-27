@@ -477,3 +477,48 @@ async function updateOHLCTicker(ticker) {
         await ohlcChartInstance.switchTicker(ticker);
     }
 }
+
+/**
+ * Set OHLC chart resolution (Feature 1064: unified resolution selector)
+ * Called from unified-resolution.js to update OHLC chart resolution
+ * @param {string} resolution - OHLC resolution value ('1', '5', '15', '30', '60', 'D')
+ * @param {boolean} isFallback - True if this is a fallback from a different unified resolution
+ */
+async function setOHLCResolution(resolution, isFallback = false) {
+    if (!ohlcChartInstance) {
+        console.warn('OHLC chart not initialized');
+        return;
+    }
+
+    // Skip if already at this resolution
+    if (ohlcChartInstance.currentResolution === resolution) {
+        return;
+    }
+
+    console.log(`OHLC: External resolution set to ${resolution}${isFallback ? ' (fallback)' : ''}`);
+
+    ohlcChartInstance.currentResolution = resolution;
+    ohlcChartInstance.showLoading();
+    await ohlcChartInstance.loadData();
+
+    // Show fallback indicator if needed
+    if (isFallback) {
+        ohlcChartInstance.fallbackMessage = 'Resolution mapped from unified selector';
+        ohlcChartInstance.showFallbackMessage();
+    }
+}
+
+/**
+ * Hide the local OHLC resolution selector (Feature 1064)
+ * Called when unified resolution selector is active
+ */
+function hideOHLCResolutionSelector() {
+    const container = document.getElementById('ohlc-resolution-selector');
+    if (container) {
+        container.style.display = 'none';
+    }
+}
+
+// Export functions for external use
+window.setOHLCResolution = setOHLCResolution;
+window.hideOHLCResolutionSelector = hideOHLCResolutionSelector;

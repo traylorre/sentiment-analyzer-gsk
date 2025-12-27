@@ -52,20 +52,32 @@
             </div>
         </section>
 
-        <!-- Resolution Selector for Time-Series [Feature 1009, 1021] -->
-        <section id="resolution-selector" class="resolution-selector skeleton-container" aria-label="Resolution selector" aria-busy="true">
+        <!-- Unified Resolution Selector [Feature 1064] -->
+        <section id="unified-controls" class="unified-controls">
+            <div id="unified-resolution-selector" class="unified-resolution-selector">
+                <!-- Populated by unified-resolution.js -->
+            </div>
+            <!-- Ticker input moved here for unified controls -->
+            <div id="ticker-input-container" class="ticker-input-container">
+                <label for="ticker-input" class="ticker-label">Ticker:</label>
+                <input type="text" id="ticker-input" class="ticker-input" value="AAPL" placeholder="Enter ticker" />
+            </div>
+        </section>
+
+        <!-- Legacy Resolution Selector (hidden, kept for backwards compatibility) -->
+        <section id="resolution-selector" class="resolution-selector skeleton-container" style="display:none;" aria-label="Resolution selector" aria-busy="true">
             <!-- Skeleton overlay for resolution selector -->
             <div class="skeleton-overlay" data-skeleton="resolution" aria-hidden="true">
                 <div class="skeleton skeleton-resolution"></div>
             </div>
-            <!-- Populated by timeseries.js -->
+            <!-- Legacy: Populated by timeseries.js, now hidden by Feature 1064 -->
         </section>
 
         <!-- OHLC Price Chart Section [Feature 1057] -->
         <section id="ohlc-section" class="ohlc-section">
-            <!-- OHLC Resolution Selector -->
-            <div id="ohlc-resolution-selector" class="ohlc-resolution-selector">
-                <!-- Populated by ohlc.js -->
+            <!-- Legacy OHLC Resolution Selector (hidden by Feature 1064) -->
+            <div id="ohlc-resolution-selector" class="ohlc-resolution-selector" style="display:none;">
+                <!-- Legacy: Populated by ohlc.js, now hidden by Feature 1064 -->
             </div>
 
             <!-- OHLC Chart Container -->
@@ -168,6 +180,7 @@
     <script src="/cache.js"></script>
     <script src="/ohlc.js"></script>
     <script src="/timeseries.js"></script>
+    <script src="/unified-resolution.js"></script>
     <script src="/app.js"></script>
 </body>
 </html>

@@ -1214,6 +1214,52 @@ class MultiTickerManager {
 const timeseriesManager = new TimeseriesManager();
 const multiTickerManager = new MultiTickerManager();
 
+/**
+ * Set sentiment timeseries resolution (Feature 1064: unified resolution selector)
+ * Called from unified-resolution.js to update sentiment chart resolution
+ * @param {string} resolution - Sentiment resolution value ('1m', '5m', '10m', '1h', etc.)
+ * @param {boolean} isFallback - True if this is a fallback from a different unified resolution
+ */
+async function setSentimentResolution(resolution, isFallback = false) {
+    if (!timeseriesManager) {
+        console.warn('Timeseries manager not initialized');
+        return;
+    }
+
+    console.log(`Sentiment: External resolution set to ${resolution}${isFallback ? ' (fallback)' : ''}`);
+
+    // Use the existing switchResolution method
+    await timeseriesManager.switchResolution(resolution);
+
+    // Show fallback indicator if needed (future enhancement)
+    if (isFallback) {
+        console.log('Sentiment: Resolution mapped from unified selector');
+    }
+}
+
+/**
+ * Hide the local sentiment resolution selector (Feature 1064)
+ * Called when unified resolution selector is active
+ */
+function hideSentimentResolutionSelector() {
+    const container = document.getElementById('resolution-selector');
+    if (container) {
+        container.style.display = 'none';
+    }
+}
+
+/**
+ * Get the timeseries manager instance
+ */
+function getTimeseriesManager() {
+    return timeseriesManager;
+}
+
+// Export functions for external use (Feature 1064)
+window.setSentimentResolution = setSentimentResolution;
+window.hideSentimentResolutionSelector = hideSentimentResolutionSelector;
+window.getTimeseriesManager = getTimeseriesManager;
+
 // Export for module systems if available
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
@@ -1221,6 +1267,8 @@ if (typeof module !== 'undefined' && module.exports) {
         MultiTickerManager,
         timeseriesManager,
         multiTickerManager,
-        RESOLUTIONS
+        RESOLUTIONS,
+        setSentimentResolution,
+        hideSentimentResolutionSelector
     };
 }

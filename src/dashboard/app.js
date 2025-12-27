@@ -290,6 +290,50 @@ async function initDashboard() {
         }
     }
 
+    // Feature 1064: Initialize Unified Resolution Selector
+    if (typeof initUnifiedResolution === 'function') {
+        try {
+            initUnifiedResolution({
+                containerId: 'unified-resolution-selector',
+                onOhlcChange: async (resolution, isFallback) => {
+                    if (typeof setOHLCResolution === 'function') {
+                        await setOHLCResolution(resolution, isFallback);
+                    }
+                },
+                onSentimentChange: async (resolution, isFallback) => {
+                    if (typeof setSentimentResolution === 'function') {
+                        await setSentimentResolution(resolution, isFallback);
+                    }
+                }
+            });
+            console.log('Unified resolution selector initialized');
+
+            // Bind ticker input to update both charts
+            const tickerInput = document.getElementById('ticker-input');
+            if (tickerInput) {
+                tickerInput.addEventListener('keydown', async (e) => {
+                    if (e.key === 'Enter') {
+                        const ticker = tickerInput.value.toUpperCase().trim();
+                        if (ticker) {
+                            // Update both charts
+                            if (typeof updateOHLCTicker === 'function') {
+                                await updateOHLCTicker(ticker);
+                            }
+                            if (typeof getTimeseriesManager === 'function') {
+                                const tsManager = getTimeseriesManager();
+                                if (tsManager && typeof tsManager.switchTicker === 'function') {
+                                    await tsManager.switchTicker(ticker);
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        } catch (error) {
+            console.error('Failed to initialize unified resolution selector:', error);
+        }
+    }
+
     // Fetch initial metrics
     await fetchMetrics();
 
