@@ -645,7 +645,7 @@ def get_ticker_sentiment_history(
         base_score = 0.5 + (0.1 * (day_offset % 3 - 1))
         history.append(
             {
-                "timestamp": timestamp.isoformat(),
+                "timestamp": timestamp.isoformat().replace("+00:00", "Z"),
                 "score": round(base_score, 4),
                 "source": source or "our_model",
             }
@@ -661,12 +661,14 @@ def get_ticker_sentiment_history(
                         score=history[0]["score"] if history else 0.0,
                         label=_score_to_label(history[0]["score"] if history else 0.0),
                         confidence=0.8,
-                        updated_at=now.isoformat() + "Z",
+                        updated_at=now.isoformat().replace("+00:00", "Z"),
                     )
                 },
             )
         ],
-        last_updated=now.isoformat() + "Z",
-        next_refresh_at=(now + timedelta(seconds=300)).isoformat() + "Z",
+        last_updated=now.isoformat().replace("+00:00", "Z"),
+        next_refresh_at=(now + timedelta(seconds=300))
+        .isoformat()
+        .replace("+00:00", "Z"),
         cache_status="fresh",
     )
