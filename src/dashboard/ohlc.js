@@ -448,10 +448,16 @@ class OHLCChart {
                                 }
                             }
                         },
+                        // Feature 1073: Fixed limits configuration
                         limits: {
                             price: {
-                                min: 0,      // Feature 1072: Price cannot go below $0
-                                minRange: 5  // Minimum $5 range when zoomed in
+                                min: 'original',  // Use data range, not $0 floor
+                                minRange: 5       // Minimum $5 range when zoomed in
+                            },
+                            sentiment: {
+                                min: -1,          // Fixed sentiment range
+                                max: 1,
+                                minRange: 2       // Full -1 to 1 range always
                             }
                         }
                     }
