@@ -28,7 +28,7 @@ import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
@@ -122,6 +122,36 @@ def _decimal_to_float(value: Decimal | float | int) -> float:
     if isinstance(value, Decimal):
         return float(value)
     return float(value)
+
+
+def _is_bucket_complete(bucket_timestamp: str, resolution: Resolution) -> bool:
+    """Determine if a bucket's time window has ended.
+
+    A bucket is complete if the current time is past the end of its window.
+    This is calculated at query time rather than trusting the stored is_partial flag,
+    since the fanout writer always sets is_partial=True.
+
+    Args:
+        bucket_timestamp: ISO8601 timestamp of the bucket start
+        resolution: The resolution enum for this bucket
+
+    Returns:
+        True if the bucket's time window has ended (complete), False if still open
+    """
+    try:
+        # Parse bucket timestamp
+        ts_str = bucket_timestamp.replace("Z", "+00:00")
+        bucket_start = datetime.fromisoformat(ts_str)
+
+        # Calculate when this bucket's window ends
+        bucket_end = bucket_start.timestamp() + resolution.duration_seconds
+
+        # Compare with current time
+        now = datetime.now(UTC).timestamp()
+        return now > bucket_end
+    except (ValueError, TypeError):
+        # If we can't parse the timestamp, treat as partial (safer)
+        return False
 
 
 def _item_to_bucket(item: dict[str, Any]) -> SentimentBucketResponse:
@@ -296,15 +326,23 @@ class TimeseriesQueryService:
         response = self._table.query(**query_kwargs)
 
         # Convert items to buckets
+        # Determine completeness using hybrid approach:
+        # - If stored is_partial=False, bucket is explicitly complete
+        # - If stored is_partial=True, calculate based on time window
+        # (fanout writer always sets is_partial=True, so time-based calc is needed)
         all_buckets: list[SentimentBucketResponse] = []
         partial_bucket: SentimentBucketResponse | None = None
 
         for item in response.get("Items", []):
             bucket = _item_to_bucket(item)
-            if bucket.is_partial:
-                partial_bucket = bucket
-            else:
+            # Bucket is complete if explicitly marked OR if time window has ended
+            is_complete = not bucket.is_partial or _is_bucket_complete(
+                bucket.timestamp, resolution
+            )
+            if is_complete:
                 all_buckets.append(bucket)
+            else:
+                partial_bucket = bucket
 
         # Extract pagination cursor from response (uses uppercase SK)
         last_evaluated_key = response.get("LastEvaluatedKey")
