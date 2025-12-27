@@ -177,17 +177,25 @@ class TestTimeseriesQueryService:
         assert response.buckets[1].timestamp == "2025-12-21T10:40:00Z"
 
     @mock_aws
+    @freeze_time("2025-12-21T10:42:00Z")
     def test_query_returns_partial_bucket_separately(
         self, timeseries_table_name: str
     ) -> None:
-        """Query MUST return partial bucket in dedicated field."""
+        """Query MUST return partial bucket in dedicated field.
+
+        Partial bucket detection uses time-based logic:
+        - A bucket is partial if its time window hasn't ended yet
+        - Freeze time to 10:42 so 10:35 bucket is complete but 10:40 is partial
+        """
         dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
         create_test_table(
             boto3.client("dynamodb", region_name="us-east-1"), timeseries_table_name
         )
         table = dynamodb.Table(timeseries_table_name)
 
+        # 10:35 bucket ends at 10:40 - complete (frozen time is 10:42)
         insert_bucket(table, "AAPL", "5m", "2025-12-21T10:35:00Z", is_partial=False)
+        # 10:40 bucket ends at 10:45 - partial (frozen time is 10:42)
         insert_bucket(table, "AAPL", "5m", "2025-12-21T10:40:00Z", is_partial=True)
 
         service = TimeseriesQueryService(table_name=timeseries_table_name)
