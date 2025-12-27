@@ -385,13 +385,10 @@ class OHLCChart {
                     intersect: false
                 },
                 plugins: {
+                    // Feature 1072: Hide legend for cleaner display
+                    // Tooltip still shows Price and Sentiment values on hover
                     legend: {
-                        display: true,
-                        position: 'top',
-                        labels: {
-                            usePointStyle: true,
-                            padding: 15
-                        }
+                        display: false
                     },
                     tooltip: {
                         callbacks: {
@@ -444,6 +441,7 @@ class OHLCChart {
                         },
                         limits: {
                             price: {
+                                min: 0,      // Feature 1072: Price cannot go below $0
                                 minRange: 5  // Minimum $5 range when zoomed in
                             }
                         }
@@ -539,6 +537,9 @@ class OHLCChart {
 
         // Update sentiment overlay if we have data (Feature 1065)
         this.updateSentimentOverlay();
+
+        // Feature 1072: Reset zoom to show all new data (auto-fit on load/resolution change)
+        this.chart.resetZoom();
 
         this.chart.update('none');
 
