@@ -422,9 +422,18 @@ class OHLCChart {
                         }
                     },
                     // Feature 1070: Vertical zoom for Price Chart
+                    // Feature 1071: Horizontal pan for time navigation
                     // Allows mouse wheel zoom on Y-axis (price) centered around cursor
+                    // Allows left-click-drag to pan along X-axis (time)
                     // Sentiment axis (right, -1 to 1) remains fixed
                     zoom: {
+                        // Feature 1071: Pan configuration for horizontal navigation
+                        pan: {
+                            enabled: true,
+                            mode: 'x',           // Pan only on X-axis (time)
+                            threshold: 5,        // Minimum pan distance before action
+                            modifierKey: null    // No modifier key required (plain left-click)
+                        },
                         zoom: {
                             wheel: {
                                 enabled: true,
