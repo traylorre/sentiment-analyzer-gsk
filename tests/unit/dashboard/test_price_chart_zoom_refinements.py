@@ -108,25 +108,25 @@ class TestLegendRemoved:
 class TestPriceAutoFit:
     """Test that price axis auto-fits to data range."""
 
-    def test_zoom_limits_uses_original(self) -> None:
-        """Verify zoom limits use 'original' for data-range auto-fit."""
+    def test_dynamic_price_limits(self) -> None:
+        """Verify price limits are calculated dynamically from data (Feature 1075)."""
         content = read_ohlc_js()
 
-        # Feature 1073 changed min: 0 to min: 'original' for proper auto-fit
-        assert "min: 'original'" in content, (
-            "Zoom limits should use min: 'original' for auto-fit. "
-            "This allows chart to show actual data range, not $0 floor."
+        # Feature 1075 changed from 'original' to dynamic calculation
+        assert "calculatePriceLimits" in content, (
+            "Price limits should use calculatePriceLimits for dynamic auto-fit. "
+            "This allows chart to show actual data range."
         )
 
     def test_has_feature_comment_for_limits(self) -> None:
         """Verify Feature comment exists for limits configuration."""
         content = read_ohlc_js()
 
-        # Look for Feature 1073 comment near limits
-        has_limits_comment = "Feature 1073" in content and "limits" in content.lower()
+        # Look for Feature 1075 comment near limits calculation
+        has_limits_comment = "Feature 1075" in content and "limits" in content.lower()
 
         assert has_limits_comment, (
-            "Missing Feature 1073 reference for limits. "
+            "Missing Feature 1075 reference for limits. "
             "Add a comment for traceability."
         )
 

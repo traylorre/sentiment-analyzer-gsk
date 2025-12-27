@@ -1,9 +1,9 @@
 """
 Price Chart Interaction Fixes Tests for Dashboard JavaScript.
 
-Feature 1073: Tests that verify the fixes for Features 1070, 1071, 1072:
+Feature 1073: Tests that verify the fixes for Features 1070, 1071, 1072, 1075:
 1. Hammer.js is loaded for pan gestures to work
-2. Price axis uses 'original' limit (not min: 0) for proper auto-fit
+2. Price axis uses dynamic limit calculation (Feature 1075: calculatePriceLimits)
 3. Sentiment axis has fixed -1 to 1 limits
 
 These tests use static analysis of JavaScript/HTML source code.
@@ -95,41 +95,52 @@ class TestHammerJsLoaded:
 
 
 class TestPriceAxisAutoFit:
-    """Test that price axis uses data range, not $0 floor."""
+    """Test that price axis uses dynamic data range, not $0 floor."""
 
-    def test_price_limits_uses_original(self) -> None:
-        """Verify price limits use 'original' keyword for auto-fit."""
+    def test_calculate_price_limits_function_exists(self) -> None:
+        """Verify calculatePriceLimits function exists (Feature 1075)."""
         content = read_ohlc_js()
 
-        # Look for min: 'original' in price limits
-        assert "min: 'original'" in content, (
-            "Price limits should use min: 'original' for data range auto-fit. "
-            "Found min: 0 which forces $0 floor."
+        # Look for the calculatePriceLimits function definition
+        assert "calculatePriceLimits" in content, (
+            "calculatePriceLimits function not found. "
+            "Feature 1075 requires dynamic price limit calculation."
         )
 
-    def test_price_limits_not_zero(self) -> None:
-        """Verify price limits do NOT use min: 0."""
+    def test_price_limits_calculated_from_data(self) -> None:
+        """Verify price limits are calculated from candle low/high values."""
         content = read_ohlc_js()
 
-        # Check that we don't have min: 0 in price limits anymore
-        # This is a negative test - we want to ensure the old behavior is gone
-        limits_section = re.search(
-            r"limits:\s*\{[\s\S]*?price:\s*\{[\s\S]*?\}",
-            content,
-        )
-        assert limits_section, "Limits configuration not found"
+        # Check that we extract lows and highs from candles
+        assert (
+            "candles.map(c => c.low)" in content
+        ), "Price limits should extract low values from candles."
+        assert (
+            "candles.map(c => c.high)" in content
+        ), "Price limits should extract high values from candles."
 
-        limits_text = limits_section.group(0)
-        # min: 0 should not be in the price section
-        # (but min: -1 could be in sentiment section, so check specifically for price)
-        price_section = re.search(r"price:\s*\{[^}]*\}", limits_text)
-        assert price_section, "Price limits not found"
+    def test_price_limits_have_padding(self) -> None:
+        """Verify price limits include padding for visual clarity."""
+        content = read_ohlc_js()
 
-        price_text = price_section.group(0)
-        assert "min: 0" not in price_text, (
-            "Price limits still using min: 0. "
-            "Change to min: 'original' for proper auto-fit."
+        # Check for 5% padding calculation
+        padding_pattern = r"range \* 0\.05"
+        assert re.search(padding_pattern, content), (
+            "Price limits should include 5% padding above and below. "
+            "This provides visual clarity at chart edges."
         )
+
+    def test_price_limits_applied_dynamically(self) -> None:
+        """Verify price limits are updated in updateChart method."""
+        content = read_ohlc_js()
+
+        # Check that limits are set dynamically, not just at init
+        assert (
+            "this.chart.options.plugins.zoom.limits.price.min" in content
+        ), "Price limits should be updated dynamically in updateChart."
+        assert (
+            "this.chart.options.plugins.zoom.limits.price.max" in content
+        ), "Price limits should be updated dynamically in updateChart."
 
 
 class TestSentimentAxisFixed:
