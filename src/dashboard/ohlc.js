@@ -722,3 +722,5 @@ function hideOHLCResolutionSelector() {
 window.setOHLCResolution = setOHLCResolution;
 window.hideOHLCResolutionSelector = hideOHLCResolutionSelector;
 window.loadOHLCSentimentOverlay = loadOHLCSentimentOverlay;  // Feature 1065
+window.initOHLCChart = initOHLCChart;  // Feature 1066: Fix missing export
+window.updateOHLCTicker = updateOHLCTicker;  // Feature 1066: Fix missing export
