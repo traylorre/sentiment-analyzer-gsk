@@ -1,15 +1,17 @@
 /**
- * Unified Resolution Selector (Feature 1064)
- * ==========================================
+ * Unified Resolution Selector (Feature 1064, 1065)
+ * =================================================
  *
  * Single resolution selector that controls both OHLC price chart and sentiment
  * trend chart. Uses resolution mapping to handle different supported values
  * between the two chart types.
  *
+ * Feature 1065: Also passes sentiment resolution to OHLC chart for overlay.
+ *
  * Dependencies:
  *   - config.js: CONFIG.UNIFIED_RESOLUTIONS, CONFIG.DEFAULT_UNIFIED_RESOLUTION
- *   - ohlc.js: ohlcChartInstance.setResolution()
- *   - timeseries.js: timeseriesChartInstance.setResolution()
+ *   - ohlc.js: setOHLCResolution(ohlcRes, isFallback, sentimentRes)
+ *   - timeseries.js: setSentimentResolution(sentimentRes, isFallback)
  */
 
 /**
@@ -157,14 +159,15 @@ class UnifiedResolutionSelector {
 
     /**
      * Apply resolution to both charts via callbacks
+     * Feature 1065: Also passes sentiment resolution to OHLC for overlay
      */
     applyResolution(resolution) {
         const resConfig = CONFIG.UNIFIED_RESOLUTIONS.find(r => r.key === resolution);
         if (!resConfig) return;
 
-        // Notify OHLC chart
+        // Notify OHLC chart (Feature 1065: include sentiment resolution for overlay)
         if (this.onOhlcChange) {
-            this.onOhlcChange(resConfig.ohlc, !resConfig.exact);
+            this.onOhlcChange(resConfig.ohlc, !resConfig.exact, resConfig.sentiment);
         }
 
         // Notify sentiment chart

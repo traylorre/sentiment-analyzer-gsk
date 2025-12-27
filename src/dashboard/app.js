@@ -291,13 +291,15 @@ async function initDashboard() {
     }
 
     // Feature 1064: Initialize Unified Resolution Selector
+    // Feature 1065: onOhlcChange now receives sentiment resolution for overlay
     if (typeof initUnifiedResolution === 'function') {
         try {
             initUnifiedResolution({
                 containerId: 'unified-resolution-selector',
-                onOhlcChange: async (resolution, isFallback) => {
+                onOhlcChange: async (resolution, isFallback, sentimentResolution) => {
                     if (typeof setOHLCResolution === 'function') {
-                        await setOHLCResolution(resolution, isFallback);
+                        // Feature 1065: Pass sentiment resolution for overlay
+                        await setOHLCResolution(resolution, isFallback, sentimentResolution);
                     }
                 },
                 onSentimentChange: async (resolution, isFallback) => {
@@ -315,14 +317,23 @@ async function initDashboard() {
                     if (e.key === 'Enter') {
                         const ticker = tickerInput.value.toUpperCase().trim();
                         if (ticker) {
-                            // Update both charts
+                            // Update OHLC chart
                             if (typeof updateOHLCTicker === 'function') {
                                 await updateOHLCTicker(ticker);
                             }
+                            // Update sentiment timeseries chart
                             if (typeof getTimeseriesManager === 'function') {
                                 const tsManager = getTimeseriesManager();
                                 if (tsManager && typeof tsManager.switchTicker === 'function') {
                                     await tsManager.switchTicker(ticker);
+                                }
+                            }
+                            // Feature 1065: Reload sentiment overlay for new ticker
+                            if (typeof loadOHLCSentimentOverlay === 'function' &&
+                                typeof getUnifiedResolution === 'function') {
+                                const res = getUnifiedResolution();
+                                if (res && res.sentiment) {
+                                    await loadOHLCSentimentOverlay(res.sentiment);
                                 }
                             }
                         }

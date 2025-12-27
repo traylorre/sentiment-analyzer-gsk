@@ -137,7 +137,19 @@ const CONFIG = {
         positive: '#22c55e',
         neutral: '#6b7280',
         negative: '#ef4444',
-        primary: '#3b82f6'
+        primary: '#3b82f6',
+        sentiment: '#3b82f6'  // Feature 1065: Blue for sentiment overlay
+    },
+
+    // Feature 1065: Sentiment-Price Overlay configuration
+    OVERLAY: {
+        enabled: true,
+        sentimentColor: '#3b82f6',       // Blue line
+        sentimentColorBg: 'rgba(59, 130, 246, 0.15)',  // Light blue fill
+        lineWidth: 2,
+        pointRadius: 3,
+        yAxisMin: -1.0,
+        yAxisMax: 1.0
     },
 
     // Chart background colors (with transparency)
@@ -218,3 +230,5 @@ Object.freeze(CONFIG.OHLC_COLORS);
 // Feature 1064: Freeze unified resolution config
 Object.freeze(CONFIG.UNIFIED_RESOLUTIONS);
 CONFIG.UNIFIED_RESOLUTIONS.forEach(r => Object.freeze(r));
+// Feature 1065: Freeze overlay config
+Object.freeze(CONFIG.OVERLAY);
