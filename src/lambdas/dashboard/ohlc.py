@@ -17,6 +17,7 @@ Security Notes:
 
 import logging
 import os
+import time
 from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -39,6 +40,102 @@ from src.lambdas.shared.models import (
 from src.lambdas.shared.utils.market import get_cache_expiration
 
 logger = logging.getLogger(__name__)
+
+# ============================================================================
+# OHLC Response Cache (Feature 1076)
+# ============================================================================
+# Module-level cache to prevent 429 rate limit errors when users rapidly
+# switch resolution buckets. Similar pattern to sentiment.py caching.
+# ============================================================================
+
+# Cache TTLs per resolution (seconds) - more volatile = shorter TTL
+OHLC_CACHE_TTLS: dict[str, int] = {
+    "1": 300,  # 5 minutes for 1-minute resolution
+    "5": 900,  # 15 minutes for 5-minute resolution
+    "15": 900,  # 15 minutes for 15-minute resolution
+    "30": 900,  # 15 minutes for 30-minute resolution
+    "60": 1800,  # 30 minutes for hourly resolution
+    "D": 3600,  # 1 hour for daily resolution
+}
+OHLC_CACHE_DEFAULT_TTL = 300  # 5 minutes fallback
+OHLC_CACHE_MAX_ENTRIES = int(os.environ.get("OHLC_CACHE_MAX_ENTRIES", "256"))
+
+# Cache storage: {cache_key: (timestamp, response_dict)}
+_ohlc_cache: dict[str, tuple[float, dict]] = {}
+_ohlc_cache_stats: dict[str, int] = {"hits": 0, "misses": 0, "evictions": 0}
+
+
+def _get_ohlc_cache_key(
+    ticker: str, resolution: str, start_date: date, end_date: date
+) -> str:
+    """Generate cache key for OHLC request."""
+    return f"ohlc:{ticker.upper()}:{resolution}:{start_date.isoformat()}:{end_date.isoformat()}"
+
+
+def _get_cached_ohlc(cache_key: str, resolution: str) -> dict | None:
+    """Get OHLC response from cache if valid.
+
+    Args:
+        cache_key: The cache key to look up
+        resolution: Resolution string for TTL lookup
+
+    Returns:
+        Cached response dict if valid, None if expired or missing
+    """
+    if cache_key in _ohlc_cache:
+        timestamp, response = _ohlc_cache[cache_key]
+        ttl = OHLC_CACHE_TTLS.get(resolution, OHLC_CACHE_DEFAULT_TTL)
+        if time.time() - timestamp < ttl:
+            _ohlc_cache_stats["hits"] += 1
+            return response
+        # Expired, remove it
+        del _ohlc_cache[cache_key]
+    _ohlc_cache_stats["misses"] += 1
+    return None
+
+
+def _set_cached_ohlc(cache_key: str, response: dict) -> None:
+    """Store OHLC response in cache with LRU eviction.
+
+    Args:
+        cache_key: The cache key
+        response: Response dict to cache
+    """
+    global _ohlc_cache
+    if len(_ohlc_cache) >= OHLC_CACHE_MAX_ENTRIES:
+        # Evict oldest entry by timestamp (LRU)
+        oldest_key = min(_ohlc_cache.keys(), key=lambda k: _ohlc_cache[k][0])
+        del _ohlc_cache[oldest_key]
+        _ohlc_cache_stats["evictions"] += 1
+    _ohlc_cache[cache_key] = (time.time(), response)
+
+
+def get_ohlc_cache_stats() -> dict[str, int]:
+    """Return cache statistics for observability."""
+    return _ohlc_cache_stats.copy()
+
+
+def invalidate_ohlc_cache(ticker: str | None = None) -> int:
+    """Invalidate OHLC cache entries.
+
+    Args:
+        ticker: If provided, only invalidate entries for this ticker.
+                If None, clear entire cache.
+
+    Returns:
+        Number of entries invalidated
+    """
+    global _ohlc_cache
+    if ticker is None:
+        count = len(_ohlc_cache)
+        _ohlc_cache = {}
+        return count
+    prefix = f"ohlc:{ticker.upper()}:"
+    keys_to_remove = [k for k in _ohlc_cache if k.startswith(prefix)]
+    for key in keys_to_remove:
+        del _ohlc_cache[key]
+    return len(keys_to_remove)
+
 
 # Create router
 router = APIRouter(prefix="/api/v2/tickers", tags=["price-data"])
@@ -207,6 +304,17 @@ async def get_ohlc_data(
     # See: https://github.com/github/codeql/discussions/10702
     logger.info("Fetching OHLC data")
 
+    # Feature 1076: Check cache before making external API calls
+    cache_key = _get_ohlc_cache_key(ticker, resolution.value, start_date, end_date)
+    cached_response = _get_cached_ohlc(cache_key, resolution.value)
+    if cached_response:
+        logger.info(
+            "OHLC cache hit",
+            extra={"cache_key": cache_key, "stats": get_ohlc_cache_stats()},
+        )
+        # Return cached OHLCResponse directly
+        return OHLCResponse(**cached_response)
+
     # Track fallback state
     resolution_fallback = False
     fallback_message = None
@@ -312,7 +420,7 @@ async def get_ohlc_data(
         else last_candle_date
     )
 
-    return OHLCResponse(
+    response = OHLCResponse(
         ticker=ticker,
         candles=candles,
         time_range=time_range_str,
@@ -325,6 +433,19 @@ async def get_ohlc_data(
         resolution_fallback=resolution_fallback,
         fallback_message=fallback_message,
     )
+
+    # Feature 1076: Cache the response for future requests
+    # Use the actual resolution for cache key (may differ from requested if fallback occurred)
+    actual_cache_key = _get_ohlc_cache_key(
+        ticker, actual_resolution.value, start_date_value, end_date_value
+    )
+    _set_cached_ohlc(actual_cache_key, response.model_dump(mode="json"))
+    logger.debug(
+        "OHLC response cached",
+        extra={"cache_key": actual_cache_key, "stats": get_ohlc_cache_stats()},
+    )
+
+    return response
 
 
 @router.get("/{ticker}/sentiment/history", response_model=SentimentHistoryResponse)
