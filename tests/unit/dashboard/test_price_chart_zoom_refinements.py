@@ -105,31 +105,28 @@ class TestLegendRemoved:
         )
 
 
-class TestPriceFloorLimit:
-    """Test that price axis cannot go below $0 when zooming out."""
+class TestPriceAutoFit:
+    """Test that price axis auto-fits to data range."""
 
-    def test_zoom_limits_has_min_zero(self) -> None:
-        """Verify zoom limits include min: 0 for price axis."""
+    def test_zoom_limits_uses_original(self) -> None:
+        """Verify zoom limits use 'original' for data-range auto-fit."""
         content = read_ohlc_js()
 
-        # Look for limits configuration with price min: 0
-        limits_pattern = r"limits:\s*\{[^}]*price:\s*\{[^}]*min:\s*0"
-        assert re.search(limits_pattern, content, re.DOTALL), (
-            "Zoom limits missing min: 0 for price. "
-            "Add limits: { price: { min: 0 } } to prevent negative prices."
+        # Feature 1073 changed min: 0 to min: 'original' for proper auto-fit
+        assert "min: 'original'" in content, (
+            "Zoom limits should use min: 'original' for auto-fit. "
+            "This allows chart to show actual data range, not $0 floor."
         )
 
-    def test_has_feature_1072_floor_comment(self) -> None:
-        """Verify Feature 1072 comment exists for price floor configuration."""
+    def test_has_feature_comment_for_limits(self) -> None:
+        """Verify Feature comment exists for limits configuration."""
         content = read_ohlc_js()
 
-        # Look for Feature 1072 comment near min: 0 or price floor
-        has_floor_comment = "Feature 1072" in content and (
-            "min: 0" in content or "$0" in content or "price" in content.lower()
-        )
+        # Look for Feature 1073 comment near limits
+        has_limits_comment = "Feature 1073" in content and "limits" in content.lower()
 
-        assert has_floor_comment, (
-            "Missing Feature 1072 reference for price floor. "
+        assert has_limits_comment, (
+            "Missing Feature 1073 reference for limits. "
             "Add a comment for traceability."
         )
 
