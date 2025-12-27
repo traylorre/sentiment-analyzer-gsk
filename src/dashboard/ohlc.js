@@ -511,6 +511,39 @@ class OHLCChart {
     }
 
     /**
+     * Feature 1075: Calculate price limits from candle data
+     * Returns min/max with 5% padding for visual clarity
+     */
+    calculatePriceLimits(candles) {
+        if (!candles || candles.length === 0) {
+            return { min: 0, max: 100 };  // Default for empty data
+        }
+
+        const lows = candles.map(c => c.low);
+        const highs = candles.map(c => c.high);
+
+        const dataMin = Math.min(...lows);
+        const dataMax = Math.max(...highs);
+
+        // Handle flat line (all same price) - add $0.50 buffer
+        if (dataMin === dataMax) {
+            return {
+                min: dataMin - 0.5,
+                max: dataMax + 0.5
+            };
+        }
+
+        // Add 5% padding above and below
+        const range = dataMax - dataMin;
+        const padding = range * 0.05;
+
+        return {
+            min: dataMin - padding,
+            max: dataMax + padding
+        };
+    }
+
+    /**
      * Update chart with new candle data
      */
     updateChart(candles) {
@@ -553,12 +586,23 @@ class OHLCChart {
         // Update sentiment overlay if we have data (Feature 1065)
         this.updateSentimentOverlay();
 
+        // Feature 1075: Calculate dynamic price limits from actual data
+        // This fixes the issue where 'original' keyword preserves stale initial values
+        const priceLimits = this.calculatePriceLimits(candles);
+        this.chart.options.plugins.zoom.limits.price.min = priceLimits.min;
+        this.chart.options.plugins.zoom.limits.price.max = priceLimits.max;
+
+        // Also set the scale min/max so Chart.js respects data range
+        this.chart.options.scales.price.min = priceLimits.min;
+        this.chart.options.scales.price.max = priceLimits.max;
+
+        // Apply config changes before resetZoom
+        this.chart.update('none');
+
         // Feature 1072: Reset zoom to show all new data (auto-fit on load/resolution change)
         this.chart.resetZoom();
 
-        this.chart.update('none');
-
-        console.log(`OHLC: Updated chart with ${candles.length} candles`);
+        console.log(`OHLC: Updated chart with ${candles.length} candles, price range $${priceLimits.min.toFixed(2)}-$${priceLimits.max.toFixed(2)}`);
     }
 
     /**
