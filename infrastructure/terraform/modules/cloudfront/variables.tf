@@ -30,7 +30,8 @@ variable "content_security_policy" {
   description = "Content-Security-Policy header value"
   type        = string
   # Updated per 090-security-first-burndown to include CDN domains for Chart.js, DaisyUI, and Tailwind
-  default = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdn.tailwindcss.com https://hcaptcha.com https://*.hcaptcha.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://*.amazonaws.com https://*.amazoncognito.com; frame-src https://hcaptcha.com https://*.hcaptcha.com; frame-ancestors 'none';"
+  # Feature 1074: Added cdn.jsdelivr.net to connect-src for Hammer.js source maps
+  default = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdn.tailwindcss.com https://hcaptcha.com https://*.hcaptcha.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://*.amazonaws.com https://*.amazoncognito.com https://cdn.jsdelivr.net; frame-src https://hcaptcha.com https://*.hcaptcha.com; frame-ancestors 'none';"
 }
 
 variable "enable_logging" {
