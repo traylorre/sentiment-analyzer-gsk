@@ -445,7 +445,7 @@ class OHLCChart {
                         // Feature 1071: Pan configuration for horizontal navigation
                         pan: {
                             enabled: true,
-                            mode: 'x',           // Pan only on X-axis (time)
+                            mode: 'xy',          // Feature 1080: Allow both X (time) and Y (price) panning
                             threshold: 5,        // Minimum pan distance before action
                             modifierKey: null,   // No modifier key required (plain left-click)
                             // Feature 1077: Cursor feedback during pan
@@ -473,8 +473,13 @@ class OHLCChart {
                                 }
                             }
                         },
-                        // Feature 1073: Fixed limits configuration
+                        // Feature 1073/1080: Fixed limits configuration with X-axis support
                         limits: {
+                            x: {
+                                min: 'original',  // Feature 1080: Use original data range for time axis
+                                max: 'original',
+                                minRange: 60000   // Minimum 1 minute visible (60 seconds * 1000ms)
+                            },
                             price: {
                                 min: 'original',  // Use data range, not $0 floor
                                 minRange: 5       // Minimum $5 range when zoomed in
