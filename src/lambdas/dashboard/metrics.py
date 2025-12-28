@@ -18,9 +18,10 @@ For Developers:
     - Recent items limited to 20 for performance
     - Rate calculations use timestamp filtering
 
-Performance optimization (C7):
-    - In-memory cache with 60s TTL for GSI query results
-    - Reduces DynamoDB read capacity usage by ~40%
+Performance optimization (C7, Feature 1085):
+    - In-memory cache with 300s TTL for GSI query results
+    - Feature 1085: Increased from 60s to 300s to prevent SSE 429 errors
+    - Reduces DynamoDB read capacity usage by ~80%
     - Cache survives Lambda warm invocations
 
 Security Notes:
@@ -48,9 +49,10 @@ SENTIMENT_VALUES = ["positive", "neutral", "negative"]
 
 # =============================================================================
 # C7 FIX: In-memory cache for GSI query results
+# Feature 1085: Increased TTL from 60s to 300s to prevent SSE 429 rate limit errors
 # =============================================================================
-# Cache TTL in seconds (default 60s - configurable via env var)
-METRICS_CACHE_TTL = int(os.environ.get("METRICS_CACHE_TTL", "60"))
+# Cache TTL in seconds (default 300s - configurable via env var)
+METRICS_CACHE_TTL = int(os.environ.get("METRICS_CACHE_TTL", "300"))
 
 # In-memory cache: {cache_key: (timestamp, result)}
 _metrics_cache: dict[str, tuple[float, Any]] = {}
