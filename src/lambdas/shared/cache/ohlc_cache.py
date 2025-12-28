@@ -70,8 +70,15 @@ def _get_table_name() -> str:
 
 
 def _get_dynamodb_client():
-    """Get DynamoDB client (lazy initialization)."""
-    return boto3.client("dynamodb")
+    """Get DynamoDB client (lazy initialization).
+
+    Uses AWS_REGION or AWS_DEFAULT_REGION from environment.
+    Falls back to us-east-1 if neither is set.
+    """
+    region = os.environ.get("AWS_REGION") or os.environ.get(
+        "AWS_DEFAULT_REGION", "us-east-1"
+    )
+    return boto3.client("dynamodb", region_name=region)
 
 
 def _build_pk(ticker: str, source: str) -> str:
