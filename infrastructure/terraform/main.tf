@@ -425,6 +425,8 @@ module "dashboard_lambda" {
     # Feature 1056: OHLC data source secrets for Tiingo/Finnhub adapters
     TIINGO_SECRET_ARN  = module.secrets.tiingo_secret_arn
     FINNHUB_SECRET_ARN = module.secrets.finnhub_secret_arn
+    # Feature 1087: OHLC persistent cache table for write-through caching
+    OHLC_CACHE_TABLE = module.dynamodb.ohlc_cache_table_name
   }
 
   # Function URL with CORS
@@ -878,6 +880,8 @@ module "iam" {
   # Feature 1009: Time-series table for multi-resolution buckets
   enable_timeseries    = true
   timeseries_table_arn = module.dynamodb.timeseries_table_arn
+  # Feature 1087: OHLC persistent cache table
+  ohlc_cache_table_arn = module.dynamodb.ohlc_cache_table_arn
 }
 
 # ===================================================================

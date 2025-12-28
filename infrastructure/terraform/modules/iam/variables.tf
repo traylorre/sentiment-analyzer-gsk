@@ -89,3 +89,9 @@ variable "enable_timeseries" {
   type        = bool
   default     = false
 }
+
+variable "ohlc_cache_table_arn" {
+  description = "ARN of the Feature 1087 OHLC persistent cache DynamoDB table"
+  type        = string
+  default     = ""
+}

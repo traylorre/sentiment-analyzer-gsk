@@ -102,3 +102,14 @@ output "timeseries_table_arn" {
   description = "ARN of the Feature 1009 sentiment time-series DynamoDB table"
   value       = aws_dynamodb_table.sentiment_timeseries.arn
 }
+
+# Feature 1087: OHLC Persistent Cache Outputs
+output "ohlc_cache_table_name" {
+  description = "Name of the Feature 1087 OHLC persistent cache DynamoDB table"
+  value       = aws_dynamodb_table.ohlc_cache.name
+}
+
+output "ohlc_cache_table_arn" {
+  description = "ARN of the Feature 1087 OHLC persistent cache DynamoDB table"
+  value       = aws_dynamodb_table.ohlc_cache.arn
+}

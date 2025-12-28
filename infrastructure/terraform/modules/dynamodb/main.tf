@@ -485,3 +485,66 @@ resource "aws_dynamodb_table" "sentiment_timeseries" {
     prevent_destroy = true
   }
 }
+
+# ===================================================================
+# DynamoDB Table: Feature 1087 - OHLC Persistent Cache
+# ===================================================================
+#
+# Persistent write-through cache for OHLC (Open-High-Low-Close) price data.
+# Design follows AWS DynamoDB best practices [CS-001, CS-002]:
+# - Composite PK: {ticker}#{source} for partition distribution
+# - SK: {resolution}#{timestamp} for time-range queries
+# - No TTL: Historical OHLC data is permanent record
+#
+# Key pattern examples:
+# - PK="AAPL#tiingo", SK="5m#2025-12-27T10:30:00Z" (5-minute candle)
+# - PK="AAPL#finnhub", SK="D#2025-12-27T00:00:00Z" (daily candle)
+#
+# For On-Call Engineers:
+#   Query ticker at resolution: PK = {ticker}#{source}
+#   Time range: SK between "{resolution}#{start}" and "{resolution}#{end}"
+
+resource "aws_dynamodb_table" "ohlc_cache" {
+  name         = "${var.environment}-ohlc-cache"
+  billing_mode = "PAY_PER_REQUEST" # On-demand for unpredictable workloads
+  hash_key     = "PK"
+  range_key    = "SK"
+
+  # Enable point-in-time recovery (35-day retention)
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  # Primary key attributes
+  attribute {
+    name = "PK"
+    type = "S" # String: {ticker}#{source} e.g., "AAPL#tiingo"
+  }
+
+  attribute {
+    name = "SK"
+    type = "S" # String: {resolution}#{timestamp} e.g., "5m#2025-12-27T10:30:00Z"
+  }
+
+  # No TTL for now - historical data is permanent
+  # TTL cleanup deferred to future work per spec 1087
+
+  # Encryption at rest (AWS-managed keys)
+  server_side_encryption {
+    enabled     = true
+    kms_key_arn = null # Use AWS-managed keys (default, no extra cost)
+  }
+
+  tags = {
+    Name        = "${var.environment}-ohlc-cache"
+    Environment = var.environment
+    Feature     = "1087-persistent-ohlc-cache"
+    ManagedBy   = "Terraform"
+    CostCenter  = "demo"
+  }
+
+  # SECURITY: Prevent accidental deletion of cached price data
+  lifecycle {
+    prevent_destroy = true
+  }
+}
