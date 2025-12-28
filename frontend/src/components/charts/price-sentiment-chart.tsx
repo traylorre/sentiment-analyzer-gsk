@@ -16,11 +16,52 @@ import {
 } from 'lightweight-charts';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { formatSentimentScore, formatDateTime } from '@/lib/utils';
+import { formatSentimentScore, formatChartDate } from '@/lib/utils';
 import { useChartData } from '@/hooks/use-chart-data';
 import { useHaptic } from '@/hooks/use-haptic';
 import type { TimeRange, OHLCResolution, ChartSentimentSource, PriceCandle, SentimentPoint } from '@/types/chart';
 import { RESOLUTION_LABELS } from '@/types/chart';
+
+/**
+ * Number of candlesticks to show initially for each resolution.
+ * Higher-frequency data needs narrower initial view for visibility.
+ * 0 means show all data (fitContent).
+ */
+const VISIBLE_CANDLES: Record<OHLCResolution, number> = {
+  '1': 120,   // 2 hours of 1-min candles
+  '5': 78,    // 1 trading day of 5-min candles
+  '15': 52,   // 2 trading days
+  '30': 26,   // 2 trading days
+  '60': 40,   // 5 trading days
+  'D': 0,     // Show all (fitContent)
+};
+
+/**
+ * Convert date value to lightweight-charts Time type.
+ * Handles both ISO strings (from API) and numeric timestamps (from tests/legacy).
+ * - Intraday (1m, 5m, 15m, 30m, 1h): Unix timestamp in seconds
+ * - Daily: YYYY-MM-DD string
+ */
+function convertToChartTime(dateValue: string | number, resolution: OHLCResolution): Time {
+  // If already a number, handle directly
+  if (typeof dateValue === 'number') {
+    if (resolution === 'D') {
+      // Convert timestamp to YYYY-MM-DD string for daily
+      const date = new Date(dateValue * 1000);
+      return date.toISOString().split('T')[0] as Time;
+    }
+    // Intraday: return timestamp as-is (already in seconds)
+    return dateValue as Time;
+  }
+
+  // String handling
+  if (resolution === 'D') {
+    // Daily: return YYYY-MM-DD string (works natively with lightweight-charts)
+    return dateValue.split('T')[0] as Time;
+  }
+  // Intraday: convert ISO string to Unix timestamp in seconds
+  return Math.floor(new Date(dateValue).getTime() / 1000) as Time;
+}
 
 interface PriceSentimentChartProps {
   ticker: string;
@@ -144,7 +185,13 @@ export function PriceSentimentChart({
       width: containerRef.current.clientWidth,
       height,
       handleScale: interactive,
-      handleScroll: interactive,
+      // Enable panning with explicit config for better control
+      handleScroll: interactive ? {
+        mouseWheel: true,
+        pressedMouseMove: true,
+        horzTouchDrag: true,
+        vertTouchDrag: false,
+      } : false,
       // Left price scale for candlesticks (price)
       leftPriceScale: {
         visible: true,
@@ -208,8 +255,9 @@ export function PriceSentimentChart({
         const candleData = param.seriesData.get(candleSeries);
         const sentimentValue = param.seriesData.get(sentimentSeries);
 
+        // Handle both string (daily) and number (intraday) Time types
         const tooltipData: TooltipData = {
-          date: formatDateTime(new Date((param.time as number) * 1000).toISOString()),
+          date: formatChartDate(param.time, resolution),
         };
 
         if (candleData && typeof candleData === 'object' && 'open' in candleData) {
@@ -255,12 +303,12 @@ export function PriceSentimentChart({
     };
   }, [height, interactive]);
 
-  // Update candlestick data
+  // Update candlestick data with resolution-aware time conversion
   useEffect(() => {
     if (!candleSeriesRef.current || !priceData.length) return;
 
     const chartData: CandlestickData<Time>[] = priceData.map((candle: PriceCandle) => ({
-      time: candle.date as Time,
+      time: convertToChartTime(candle.date, resolution),
       open: candle.open,
       high: candle.high,
       low: candle.low,
@@ -268,26 +316,39 @@ export function PriceSentimentChart({
     }));
 
     candleSeriesRef.current.setData(chartData);
-  }, [priceData]);
+  }, [priceData, resolution]);
 
-  // Update sentiment data
+  // Update sentiment data with resolution-aware time conversion
   useEffect(() => {
     if (!sentimentSeriesRef.current || !sentimentData.length) return;
 
     const chartData: LineData<Time>[] = sentimentData.map((point: SentimentPoint) => ({
-      time: point.date as Time,
+      time: convertToChartTime(point.date, resolution),
       value: point.score,
     }));
 
     sentimentSeriesRef.current.setData(chartData);
-  }, [sentimentData]);
+  }, [sentimentData, resolution]);
 
-  // Fit content when data changes
+  // Fit content when data changes, with resolution-aware visible range
   useEffect(() => {
-    if (chartRef.current && (priceData.length || sentimentData.length)) {
-      chartRef.current.timeScale().fitContent();
+    if (!chartRef.current || (!priceData.length && !sentimentData.length)) return;
+
+    // First fit all content
+    chartRef.current.timeScale().fitContent();
+
+    // For intraday resolutions, limit visible range to show candlesticks clearly
+    const visibleCount = VISIBLE_CANDLES[resolution];
+    const dataLength = priceData.length || sentimentData.length;
+
+    if (visibleCount > 0 && dataLength > visibleCount) {
+      // Show most recent candles (scroll to right edge)
+      chartRef.current.timeScale().setVisibleLogicalRange({
+        from: dataLength - visibleCount,
+        to: dataLength - 1,
+      });
     }
-  }, [priceData, sentimentData]);
+  }, [priceData, sentimentData, resolution]);
 
   // Update series visibility
   useEffect(() => {
