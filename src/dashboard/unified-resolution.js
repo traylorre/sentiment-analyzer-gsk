@@ -1,12 +1,13 @@
 /**
- * Unified Resolution Selector (Feature 1064, 1065)
- * =================================================
+ * Unified Resolution Selector (Feature 1064, 1065, 1084)
+ * ======================================================
  *
  * Single resolution selector that controls both OHLC price chart and sentiment
  * trend chart. Uses resolution mapping to handle different supported values
  * between the two chart types.
  *
  * Feature 1065: Also passes sentiment resolution to OHLC chart for overlay.
+ * Feature 1084: Only shows resolutions with exact:true (hides hybrid buckets).
  *
  * Dependencies:
  *   - config.js: CONFIG.UNIFIED_RESOLUTIONS, CONFIG.DEFAULT_UNIFIED_RESOLUTION
@@ -62,10 +63,13 @@ class UnifiedResolutionSelector {
 
     /**
      * Load resolution from sessionStorage or return default
+     * Feature 1084: Validates saved resolution is exact (visible in selector)
      */
     loadResolution() {
         const saved = sessionStorage.getItem(CONFIG.UNIFIED_RESOLUTION_KEY);
-        if (saved && CONFIG.UNIFIED_RESOLUTIONS.find(r => r.key === saved)) {
+        // Feature 1084: Only accept saved resolution if it's an exact match (visible)
+        const savedRes = saved && CONFIG.UNIFIED_RESOLUTIONS.find(r => r.key === saved && r.exact !== false);
+        if (savedRes) {
             return saved;
         }
         return CONFIG.DEFAULT_UNIFIED_RESOLUTION;
@@ -80,22 +84,24 @@ class UnifiedResolutionSelector {
 
     /**
      * Render the resolution selector buttons
+     * Feature 1084: Only render buttons for exact-match resolutions (hides hybrid buckets)
      */
     render() {
-        const buttons = CONFIG.UNIFIED_RESOLUTIONS.map(res => {
+        // Feature 1084: Filter to only show exact resolutions (1m, 5m, 1h, Day)
+        const exactResolutions = CONFIG.UNIFIED_RESOLUTIONS.filter(r => r.exact !== false);
+
+        const buttons = exactResolutions.map(res => {
             const isActive = res.key === this.currentResolution;
-            const exactClass = res.exact ? '' : 'has-fallback';
             return `
                 <button
-                    class="unified-resolution-btn ${isActive ? 'active' : ''} ${exactClass}"
+                    class="unified-resolution-btn ${isActive ? 'active' : ''}"
                     data-resolution="${res.key}"
                     data-ohlc="${res.ohlc}"
                     data-sentiment="${res.sentiment}"
                     aria-pressed="${isActive}"
-                    title="${res.exact ? res.label : `${res.label} (mapped: OHLC=${res.ohlc}, Sentiment=${res.sentiment})`}"
+                    title="${res.label}"
                 >
                     ${res.label}
-                    ${!res.exact ? '<span class="fallback-dot" aria-hidden="true"></span>' : ''}
                 </button>
             `;
         }).join('');
