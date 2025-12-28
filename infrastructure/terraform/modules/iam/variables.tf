@@ -95,3 +95,9 @@ variable "ohlc_cache_table_arn" {
   type        = string
   default     = ""
 }
+
+variable "enable_ohlc_cache" {
+  description = "Whether to enable OHLC cache IAM policy (avoids count depends on computed ARN)"
+  type        = bool
+  default     = false
+}

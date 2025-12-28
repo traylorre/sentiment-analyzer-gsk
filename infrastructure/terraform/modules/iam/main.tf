@@ -565,8 +565,9 @@ resource "aws_iam_role_policy" "dashboard_timeseries" {
 
 # Feature 1087: Dashboard Lambda - OHLC persistent cache read/write access
 # Read for cache lookup, write for write-through caching from external APIs
+# Note: Using enable_ohlc_cache bool to avoid count depending on computed ARN
 resource "aws_iam_role_policy" "dashboard_ohlc_cache" {
-  count = var.ohlc_cache_table_arn != "" ? 1 : 0
+  count = var.enable_ohlc_cache ? 1 : 0
   name  = "${var.environment}-dashboard-ohlc-cache-policy"
   role  = aws_iam_role.dashboard_lambda.id
 
