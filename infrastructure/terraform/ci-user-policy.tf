@@ -143,7 +143,11 @@ data "aws_iam_policy_document" "ci_deploy_core" {
       # Pattern: {env}-chaos-* (preprod-chaos-experiments, prod-chaos-experiments)
       "arn:aws:dynamodb:*:*:table/*-chaos-*",
       "arn:aws:dynamodb:*:*:table/*-chaos-*/stream/*",
-      "arn:aws:dynamodb:*:*:table/*-chaos-*/index/*"
+      "arn:aws:dynamodb:*:*:table/*-chaos-*/index/*",
+      # Pattern: {env}-ohlc-* (Feature 1087: OHLC persistent cache)
+      "arn:aws:dynamodb:*:*:table/*-ohlc-*",
+      "arn:aws:dynamodb:*:*:table/*-ohlc-*/stream/*",
+      "arn:aws:dynamodb:*:*:table/*-ohlc-*/index/*"
     ]
   }
 
