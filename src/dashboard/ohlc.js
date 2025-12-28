@@ -340,12 +340,13 @@ class OHLCChart {
             return;
         }
 
-        // Feature 1077: Register chartjs-plugin-zoom for pan/zoom functionality
+        // Feature 1077/1079: Register chartjs-plugin-zoom for pan/zoom functionality
         // Chart.js v4.x requires explicit plugin registration when loaded via CDN
+        // Feature 1079: Use getPlugin() API instead of internal registry structure
         if (typeof ChartZoom !== 'undefined' && typeof Chart !== 'undefined') {
             // Check if plugin is already registered to avoid duplicate registration
-            const registeredPlugins = Chart.registry?.plugins?.items || [];
-            const isRegistered = registeredPlugins.some(p => p.id === 'zoom');
+            // Chart.js v4.x uses getPlugin() method - returns plugin or undefined
+            const isRegistered = Chart.registry.getPlugin('zoom');
             if (!isRegistered) {
                 Chart.register(ChartZoom);
                 console.log('chartjs-plugin-zoom registered for pan/zoom functionality');
