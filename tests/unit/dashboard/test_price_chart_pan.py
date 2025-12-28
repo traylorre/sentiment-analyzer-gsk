@@ -52,15 +52,16 @@ class TestPanConfiguration:
             "Pan not enabled. " "Add enabled: true to pan configuration."
         )
 
-    def test_pan_mode_x_axis(self) -> None:
-        """Verify pan is configured for X-axis only (horizontal pan)."""
+    def test_pan_mode_xy_axis(self) -> None:
+        """Verify pan is configured for XY-axis (bi-directional pan, Feature 1080)."""
         content = read_ohlc_js()
 
-        # Look for mode: 'x' in pan configuration
-        # We need to find mode: 'x' within the pan block
-        pan_mode_pattern = r"pan:\s*\{[^}]*mode:\s*['\"]x['\"]"
+        # Feature 1080: Look for mode: 'xy' in pan configuration
+        # Changed from 'x' to 'xy' to enable vertical panning after zoom
+        pan_mode_pattern = r"pan:\s*\{[^}]*mode:\s*['\"]xy['\"]"
         assert re.search(pan_mode_pattern, content, re.DOTALL), (
-            "Pan mode not set to 'x'. " "Use mode: 'x' for horizontal-only panning."
+            "Pan mode not set to 'xy'. "
+            "Use mode: 'xy' for bi-directional panning (Feature 1080)."
         )
 
     def test_pan_has_threshold(self) -> None:
@@ -117,22 +118,26 @@ class TestPanAndZoomCoexistence:
         )
         assert has_mode_y, (
             "Zoom mode should be 'y' for vertical zoom. "
-            "Pan is 'x' for horizontal, zoom is 'y' for vertical."
+            "Pan is 'xy' for bi-directional, zoom is 'y' for vertical."
         )
 
-    def test_pan_x_zoom_y_separation(self) -> None:
-        """Verify pan is X-axis and zoom is Y-axis (orthogonal controls)."""
+    def test_pan_xy_zoom_y_configuration(self) -> None:
+        """Verify pan is XY-axis and zoom is Y-axis (Feature 1080)."""
         content = read_ohlc_js()
 
         # Check that we have both modes configured correctly
-        # Pan is in its own block: pan: { mode: 'x' }
-        has_pan_x = re.search(r"pan:\s*\{[^}]*mode:\s*['\"]x['\"]", content, re.DOTALL)
+        # Pan is in its own block: pan: { mode: 'xy' } for bi-directional
+        has_pan_xy = re.search(
+            r"pan:\s*\{[^}]*mode:\s*['\"]xy['\"]", content, re.DOTALL
+        )
 
         # For zoom mode, just check that mode: 'y' appears in the file
         # along with scaleMode: 'y' which confirms it's for Y-axis zoom
         has_zoom_y = "mode: 'y'" in content and "scaleMode: 'y'" in content
 
-        assert has_pan_x, "Pan should be configured for X-axis (mode: 'x')"
+        assert (
+            has_pan_xy
+        ), "Pan should be configured for XY-axis (mode: 'xy', Feature 1080)"
         assert (
             has_zoom_y
         ), "Zoom should be configured for Y-axis (mode: 'y' and scaleMode: 'y')"

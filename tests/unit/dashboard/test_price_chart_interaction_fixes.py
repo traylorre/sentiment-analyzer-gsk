@@ -211,11 +211,24 @@ class TestPanConfiguration:
             pan_enabled_pattern, content
         ), "Pan not enabled. Add pan: { enabled: true } to zoom config."
 
-    def test_pan_mode_x(self) -> None:
-        """Verify pan mode is 'x' for horizontal navigation."""
+    def test_pan_mode_xy(self) -> None:
+        """Verify pan mode is 'xy' for bi-directional navigation (Feature 1080)."""
         content = read_ohlc_js()
 
-        pan_mode_pattern = r"pan:\s*\{[^}]*mode:\s*['\"]x['\"]"
+        # Feature 1080: Changed from 'x' to 'xy' to enable vertical panning after zoom
+        pan_mode_pattern = r"pan:\s*\{[^}]*mode:\s*['\"]xy['\"]"
         assert re.search(pan_mode_pattern, content), (
-            "Pan mode not set to 'x'. " "Use mode: 'x' for horizontal-only panning."
+            "Pan mode not set to 'xy'. "
+            "Use mode: 'xy' for bi-directional panning (Feature 1080)."
+        )
+
+    def test_x_axis_limits_exist(self) -> None:
+        """Verify X-axis limits are configured for pan boundaries (Feature 1080)."""
+        content = read_ohlc_js()
+
+        # Feature 1080: X-axis limits are required for pan to work
+        x_limits_pattern = r"limits:\s*\{[^}]*x:\s*\{"
+        assert re.search(x_limits_pattern, content), (
+            "X-axis limits not configured. "
+            "Add limits.x config for pan boundaries (Feature 1080)."
         )
