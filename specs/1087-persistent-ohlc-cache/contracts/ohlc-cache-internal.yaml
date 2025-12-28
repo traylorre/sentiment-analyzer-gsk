@@ -1,0 +1,92 @@
+# Internal Contract: OHLC Persistent Cache Module
+# Feature: 1087-persistent-ohlc-cache
+# This defines the internal Python API, not external HTTP endpoints
+
+module: src.lambdas.shared.cache.ohlc_cache
+
+functions:
+  get_cached_candles:
+    description: Query DynamoDB for cached OHLC candles within a time range
+    parameters:
+      ticker:
+        type: str
+        description: Stock symbol (e.g., "AAPL")
+        validation: 1-5 uppercase letters
+      source:
+        type: str
+        description: Data provider
+        enum: ["tiingo", "finnhub"]
+      resolution:
+        type: str
+        description: Candle resolution
+        enum: ["1m", "5m", "15m", "30m", "1h", "D"]
+      start_time:
+        type: datetime
+        description: Range start (inclusive, UTC)
+      end_time:
+        type: datetime
+        description: Range end (inclusive, UTC)
+    returns:
+      type: OHLCCacheResult
+      fields:
+        candles: list[CachedCandle]
+        cache_hit: bool
+        missing_ranges: list[tuple[datetime, datetime]]
+    errors:
+      - ValidationError: Invalid parameters
+      - ClientError: DynamoDB connection failure (returns empty gracefully)
+
+  put_cached_candles:
+    description: Write OHLC candles to DynamoDB (write-through)
+    parameters:
+      ticker:
+        type: str
+        description: Stock symbol
+      source:
+        type: str
+        description: Data provider
+      resolution:
+        type: str
+        description: Candle resolution
+      candles:
+        type: list[CachedCandle]
+        description: Candles to persist
+    returns:
+      type: int
+      description: Number of candles written (excludes duplicates)
+    errors:
+      - ValidationError: Invalid candle data
+      - ClientError: DynamoDB write failure (logged, not raised)
+
+  is_market_open:
+    description: Check if NYSE market is currently open
+    parameters: []
+    returns:
+      type: bool
+      description: True if within trading hours (9:30-16:00 ET, Mon-Fri)
+
+models:
+  CachedCandle:
+    fields:
+      timestamp: datetime
+      open: float
+      high: float
+      low: float
+      close: float
+      volume: int
+      source: str
+      resolution: str
+
+  OHLCCacheResult:
+    fields:
+      candles: list[CachedCandle]
+      cache_hit: bool
+      missing_ranges: list[tuple[datetime, datetime]]
+
+constants:
+  TABLE_NAME_ENV_VAR: OHLC_CACHE_TABLE
+  DEFAULT_TABLE_NAME: "{env}-ohlc-cache"
+
+# No changes to existing external HTTP API
+# GET /api/v2/tickers/{ticker}/ohlc remains unchanged
+# This cache is internal implementation detail

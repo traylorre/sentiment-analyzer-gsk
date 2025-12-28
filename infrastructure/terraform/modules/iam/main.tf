@@ -563,6 +563,29 @@ resource "aws_iam_role_policy" "dashboard_timeseries" {
   })
 }
 
+# Feature 1087: Dashboard Lambda - OHLC persistent cache read/write access
+# Read for cache lookup, write for write-through caching from external APIs
+resource "aws_iam_role_policy" "dashboard_ohlc_cache" {
+  count = var.ohlc_cache_table_arn != "" ? 1 : 0
+  name  = "${var.environment}-dashboard-ohlc-cache-policy"
+  role  = aws_iam_role.dashboard_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:Query",
+          "dynamodb:PutItem",
+          "dynamodb:BatchWriteItem"
+        ]
+        Resource = var.ohlc_cache_table_arn
+      }
+    ]
+  })
+}
+
 # ===================================================================
 # Metrics Lambda IAM Role (Operational Monitoring)
 # ===================================================================
