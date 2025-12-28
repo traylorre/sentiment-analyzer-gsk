@@ -127,21 +127,19 @@ class TestLabelGeneration:
             "Use candles.map((c, i) => ...) for index access (Feature 1081)."
         )
 
-    def test_labels_map_passes_candles(self) -> None:
-        """Verify formatTimestamp is called with candles array.
+    def test_time_unit_set_dynamically(self) -> None:
+        """Verify time.unit is set dynamically based on resolution.
 
-        Feature 1082 changed the approach: X-axis now uses numeric timestamps
-        for pan/zoom to work, and formatTimestamp is called in the tick callback
-        instead of during data mapping.
+        Feature 1091 changed the approach: Instead of custom tick callback,
+        Chart.js built-in time formatting is used with dynamic time.unit.
         """
         content = read_ohlc_js()
 
-        # Feature 1082: formatTimestamp is now called in tick callback with this.candles
-        # Look for formatTimestamp call with candles in tick callback context
-        pattern = r"formatTimestamp\s*\([^)]+,\s*candleIndex\s*,\s*this\.candles\s*\)"
+        # Feature 1091: time.unit is set based on resolution in updateChart
+        pattern = r"this\.chart\.options\.scales\.x\.time\.unit\s*=\s*timeUnit"
         assert re.search(pattern, content), (
-            "formatTimestamp not receiving candles in tick callback. "
-            "Pass candles array for day boundary detection (Feature 1081/1082)."
+            "Time unit not being set dynamically. "
+            "Set this.chart.options.scales.x.time.unit based on resolution (Feature 1091)."
         )
 
 

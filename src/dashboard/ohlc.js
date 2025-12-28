@@ -369,12 +369,15 @@ class OHLCChart {
                 datasets: [
                     {
                         // Dataset 0: OHLC price bars
+                        // Feature 1091: Fix invisible candlesticks - use pixel-based thickness
                         label: 'Price',
                         data: [],
                         backgroundColor: [],
                         borderColor: [],
                         borderWidth: 1,
-                        barPercentage: 0.8,
+                        barThickness: 'flex',        // Auto-size based on available space
+                        maxBarThickness: 20,         // Cap at 20px to prevent oversized bars
+                        minBarLength: 2,             // Ensure bars are always visible
                         yAxisID: 'price',
                         order: 2  // Render behind sentiment line
                     },
@@ -440,9 +443,12 @@ class OHLCChart {
                                     }
                                 }
                                 // Handle sentiment dataset (Feature 1065)
+                                // Feature 1091: Fix console error - value is {x, y} object, not a number
                                 if (context.datasetIndex === 1) {
-                                    const value = context.raw;
-                                    if (value !== null && value !== undefined) {
+                                    const raw = context.raw;
+                                    // Extract y value from {x, y} object or use raw if it's a number
+                                    const value = (typeof raw === 'object' && raw !== null) ? raw.y : raw;
+                                    if (value !== null && value !== undefined && typeof value === 'number') {
                                         const sign = value >= 0 ? '+' : '';
                                         return `Sentiment: ${sign}${value.toFixed(3)}`;
                                     }
@@ -509,15 +515,19 @@ class OHLCChart {
                     }
                 },
                 scales: {
-                    // Feature 1082: Use time scale with numeric values for pan/zoom to work
+                    // Feature 1082/1091: Use time scale with numeric values for pan/zoom to work
                     x: {
                         type: 'time',
+                        offset: true,              // Feature 1091: Add padding so bars don't clip edges
                         time: {
+                            // Feature 1091: Resolution-aware display formats
+                            // Unit is dynamically set in updateChart based on resolution
                             displayFormats: {
                                 minute: 'HH:mm',
                                 hour: 'HH:mm',
-                                day: 'MMM d'
-                            }
+                                day: 'EEE MMM d'   // Feature 1091: Include weekday for daily
+                            },
+                            tooltipFormat: 'EEE MMM d, HH:mm'  // Full format for tooltip
                         },
                         grid: {
                             display: false
@@ -526,22 +536,9 @@ class OHLCChart {
                             maxRotation: 45,
                             minRotation: 0,
                             maxTicksLimit: 10,
-                            // Feature 1082: Custom tick callback for formatted labels
-                            callback: (value, index, ticks) => {
-                                // The ohlcChart reference is set during initChart
-                                if (this.chart && this.candles && this.candles.length > 0) {
-                                    // Find the candle closest to this tick value
-                                    const tickTime = new Date(value).getTime();
-                                    const candleIndex = this.candles.findIndex(c =>
-                                        new Date(c.date).getTime() === tickTime
-                                    );
-                                    if (candleIndex >= 0) {
-                                        return this.formatTimestamp(this.candles[candleIndex].date, candleIndex, this.candles);
-                                    }
-                                }
-                                // Fallback: use date-fns adapter default formatting
-                                return new Date(value).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-                            }
+                            source: 'data',        // Feature 1091: Use data points as tick source
+                            autoSkip: true,
+                            autoSkipPadding: 50
                         }
                     },
                     // Left Y-axis: Price (Feature 1065: moved to left)
@@ -636,6 +633,16 @@ class OHLCChart {
         // Feature 1082: Store candles for tick callback access
         this.candles = candles;
 
+        // Feature 1091: Set time unit based on resolution for proper x-axis formatting
+        const resolution = this.currentResolution;
+        let timeUnit = 'minute';
+        if (resolution === 'D') {
+            timeUnit = 'day';
+        } else if (resolution === '60') {
+            timeUnit = 'hour';
+        }
+        this.chart.options.scales.x.time.unit = timeUnit;
+
         // Feature 1082: Use numeric epoch milliseconds for X-axis (enables pan/zoom)
         // Labels are now auto-generated by time scale, tick callback formats them
         const labels = candles.map(c => new Date(c.date).getTime());
@@ -668,11 +675,14 @@ class OHLCChart {
         this.chart.options.plugins.zoom.limits.price.min = priceLimits.min;
         this.chart.options.plugins.zoom.limits.price.max = priceLimits.max;
 
-        // Feature 1082: Set numeric X-axis limits for pan boundaries
+        // Feature 1082/1091: Set numeric X-axis limits for pan boundaries
+        // Add 10% buffer on each side to allow panning beyond data range
         const xMin = data[0].x;
         const xMax = data[data.length - 1].x;
-        this.chart.options.plugins.zoom.limits.x.min = xMin;
-        this.chart.options.plugins.zoom.limits.x.max = xMax;
+        const xRange = xMax - xMin;
+        const xBuffer = xRange * 0.1;  // 10% buffer for panning
+        this.chart.options.plugins.zoom.limits.x.min = xMin - xBuffer;
+        this.chart.options.plugins.zoom.limits.x.max = xMax + xBuffer;
 
         // Also set the scale min/max so Chart.js respects data range
         this.chart.options.scales.price.min = priceLimits.min;
