@@ -594,11 +594,12 @@ class OHLCChart {
 
         // Format labels based on resolution
         // Note: Backend returns 'date' field, not 'timestamp'
-        const labels = candles.map(c => this.formatTimestamp(c.date));
+        // Feature 1081: Pass candle context for day boundary detection
+        const labels = candles.map((c, i) => this.formatTimestamp(c.date, i, candles));
 
         // Create data for floating bar chart (simulating candlesticks)
-        const data = candles.map(c => ({
-            x: this.formatTimestamp(c.date),
+        const data = candles.map((c, i) => ({
+            x: this.formatTimestamp(c.date, i, candles),
             y: [c.low, c.high],  // Bar spans from low to high
             ohlc: { open: c.open, high: c.high, low: c.low, close: c.close }
         }));
@@ -738,17 +739,43 @@ class OHLCChart {
     }
 
     /**
-     * Format timestamp for chart label
+     * Format timestamp for chart label with day context (Feature 1081)
+     * @param {string} timestamp - ISO timestamp
+     * @param {number} index - Candle index in data array (optional)
+     * @param {Array} candles - All candles for day boundary detection (optional)
      */
-    formatTimestamp(timestamp) {
+    formatTimestamp(timestamp, index = 0, candles = null) {
         const date = new Date(timestamp);
         const resolution = this.currentResolution;
 
         if (resolution === 'D') {
+            // Day resolution: "Dec 23" format
             return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        } else {
-            return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
         }
+
+        // Feature 1081: Check if this is first candle of a new day for multi-day data
+        if (candles && candles.length > 1) {
+            const isFirstOfDay = index === 0 || this.isDifferentDay(candles[index - 1].date, timestamp);
+
+            if (isFirstOfDay) {
+                // Show abbreviated date: "Mon 12/23"
+                const weekday = date.toLocaleDateString('en-US', { weekday: 'short' });
+                const monthDay = `${date.getMonth() + 1}/${date.getDate()}`;
+                return `${weekday} ${monthDay}`;
+            }
+        }
+
+        // Same day or no context: show time only
+        return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+    }
+
+    /**
+     * Check if two timestamps are on different calendar days (Feature 1081)
+     */
+    isDifferentDay(timestamp1, timestamp2) {
+        const d1 = new Date(timestamp1);
+        const d2 = new Date(timestamp2);
+        return d1.toDateString() !== d2.toDateString();
     }
 }
 
