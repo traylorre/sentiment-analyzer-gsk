@@ -128,14 +128,54 @@ class TestLabelGeneration:
         )
 
     def test_labels_map_passes_candles(self) -> None:
-        """Verify formatTimestamp is called with candles array."""
+        """Verify formatTimestamp is called with candles array.
+
+        Feature 1082 changed the approach: X-axis now uses numeric timestamps
+        for pan/zoom to work, and formatTimestamp is called in the tick callback
+        instead of during data mapping.
+        """
         content = read_ohlc_js()
 
-        # Look for formatTimestamp call with candles
-        pattern = r"formatTimestamp\s*\([^)]+,\s*i\s*,\s*candles\s*\)"
+        # Feature 1082: formatTimestamp is now called in tick callback with this.candles
+        # Look for formatTimestamp call with candles in tick callback context
+        pattern = r"formatTimestamp\s*\([^)]+,\s*candleIndex\s*,\s*this\.candles\s*\)"
         assert re.search(pattern, content), (
-            "formatTimestamp not receiving candles. "
-            "Pass candles array for day boundary detection (Feature 1081)."
+            "formatTimestamp not receiving candles in tick callback. "
+            "Pass candles array for day boundary detection (Feature 1081/1082)."
+        )
+
+
+class TestNumericXAxis:
+    """Test that X-axis uses numeric timestamps for pan/zoom (Feature 1082)."""
+
+    def test_time_scale_type(self) -> None:
+        """Verify X-axis uses 'time' scale type for numeric handling."""
+        content = read_ohlc_js()
+
+        pattern = r"type:\s*['\"]time['\"]"
+        assert re.search(pattern, content), (
+            "X-axis not using time scale type. "
+            "Use type: 'time' for numeric X-axis pan/zoom (Feature 1082)."
+        )
+
+    def test_data_uses_numeric_timestamps(self) -> None:
+        """Verify data.x uses numeric epoch milliseconds."""
+        content = read_ohlc_js()
+
+        # Look for new Date().getTime() in data mapping
+        pattern = r"x:\s*new Date\([^)]+\)\.getTime\(\)"
+        assert re.search(pattern, content), (
+            "Data not using numeric timestamps. "
+            "Use x: new Date(c.date).getTime() for pan/zoom (Feature 1082)."
+        )
+
+    def test_has_feature_1082_comment(self) -> None:
+        """Verify Feature 1082 comment exists for traceability."""
+        content = read_ohlc_js()
+
+        assert "Feature 1082" in content, (
+            "Missing Feature 1082 reference in ohlc.js. "
+            "Add a comment for traceability."
         )
 
 
