@@ -72,3 +72,39 @@ export function formatCountdown(seconds: number): string {
   const secs = seconds % 60;
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
+
+/**
+ * Format a chart time value based on OHLC resolution.
+ * Handles both Unix timestamps (number, intraday) and date strings (daily).
+ *
+ * @param time - lightweight-charts Time value (number for intraday, string for daily)
+ * @param resolution - OHLC resolution ('1', '5', '15', '30', '60', 'D')
+ * @returns Formatted date string appropriate for the resolution
+ */
+export function formatChartDate(
+  time: number | string,
+  resolution: '1' | '5' | '15' | '30' | '60' | 'D'
+): string {
+  // Convert to Date object
+  const date = typeof time === 'number'
+    ? new Date(time * 1000)  // Unix timestamp in seconds
+    : new Date(time);         // ISO string
+
+  if (resolution === 'D') {
+    // Daily: "Mon Dec 23"
+    return date.toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+    });
+  }
+
+  // Intraday: "Mon 12/23 2:00 PM"
+  return date.toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
