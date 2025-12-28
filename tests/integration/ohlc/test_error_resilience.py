@@ -42,6 +42,26 @@ from tests.fixtures.mocks.mock_finnhub import MockFinnhubAdapter
 from tests.fixtures.mocks.mock_tiingo import MockTiingoAdapter
 
 
+@pytest.fixture(autouse=True)
+def clear_ohlc_cache():
+    """Clear OHLC cache before and after each test to ensure test isolation.
+
+    Feature 1078: Cache keys now use time_range instead of dates, so cache
+    persists across tests unless explicitly cleared.
+    """
+    import src.lambdas.dashboard.ohlc as ohlc_module
+
+    ohlc_module._ohlc_cache.clear()
+    ohlc_module._ohlc_cache_stats["hits"] = 0
+    ohlc_module._ohlc_cache_stats["misses"] = 0
+    ohlc_module._ohlc_cache_stats["evictions"] = 0
+    yield
+    ohlc_module._ohlc_cache.clear()
+    ohlc_module._ohlc_cache_stats["hits"] = 0
+    ohlc_module._ohlc_cache_stats["misses"] = 0
+    ohlc_module._ohlc_cache_stats["evictions"] = 0
+
+
 @pytest.fixture
 def auth_headers():
     """Headers with valid authentication (Feature 1049: valid UUID required)."""

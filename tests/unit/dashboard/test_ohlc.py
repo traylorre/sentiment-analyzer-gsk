@@ -12,6 +12,22 @@ from src.lambdas.shared.adapters.base import OHLCCandle
 from src.lambdas.shared.models import RESOLUTION_MAX_DAYS, OHLCResolution, TimeRange
 
 
+@pytest.fixture(autouse=True)
+def clear_ohlc_cache():
+    """Clear OHLC cache before and after each test to ensure test isolation."""
+    import src.lambdas.dashboard.ohlc as ohlc_module
+
+    ohlc_module._ohlc_cache.clear()
+    ohlc_module._ohlc_cache_stats["hits"] = 0
+    ohlc_module._ohlc_cache_stats["misses"] = 0
+    ohlc_module._ohlc_cache_stats["evictions"] = 0
+    yield
+    ohlc_module._ohlc_cache.clear()
+    ohlc_module._ohlc_cache_stats["hits"] = 0
+    ohlc_module._ohlc_cache_stats["misses"] = 0
+    ohlc_module._ohlc_cache_stats["evictions"] = 0
+
+
 # Test helpers
 def _create_ohlc_candles(
     count: int, start_date: date | None = None

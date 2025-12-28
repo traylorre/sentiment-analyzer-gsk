@@ -66,10 +66,36 @@ _ohlc_cache_stats: dict[str, int] = {"hits": 0, "misses": 0, "evictions": 0}
 
 
 def _get_ohlc_cache_key(
-    ticker: str, resolution: str, start_date: date, end_date: date
+    ticker: str,
+    resolution: str,
+    time_range: str,
+    start_date: date | None = None,
+    end_date: date | None = None,
 ) -> str:
-    """Generate cache key for OHLC request."""
-    return f"ohlc:{ticker.upper()}:{resolution}:{start_date.isoformat()}:{end_date.isoformat()}"
+    """Generate cache key for OHLC request.
+
+    Feature 1078: Use time_range (e.g., "1M", "1W") for predefined ranges instead
+    of actual dates. This ensures cache hits when users switch resolutions, since
+    predefined ranges are relative to "today" and would otherwise generate unique
+    keys each day.
+
+    Args:
+        ticker: Stock ticker symbol
+        resolution: OHLC resolution (1, 5, 15, 30, 60, D)
+        time_range: Time range string ("1W", "1M", "3M", "6M", "1Y", or "custom")
+        start_date: Only used for custom ranges
+        end_date: Only used for custom ranges
+
+    Returns:
+        Cache key string
+    """
+    if time_range == "custom" and start_date and end_date:
+        # Custom ranges use actual dates (user provided specific dates)
+        return f"ohlc:{ticker.upper()}:{resolution}:custom:{start_date.isoformat()}:{end_date.isoformat()}"
+    else:
+        # Predefined ranges use the range name, not dates
+        # This ensures cache hits across requests within the same day
+        return f"ohlc:{ticker.upper()}:{resolution}:{time_range}"
 
 
 def _get_cached_ohlc(cache_key: str, resolution: str) -> dict | None:
@@ -304,8 +330,11 @@ async def get_ohlc_data(
     # See: https://github.com/github/codeql/discussions/10702
     logger.info("Fetching OHLC data")
 
-    # Feature 1076: Check cache before making external API calls
-    cache_key = _get_ohlc_cache_key(ticker, resolution.value, start_date, end_date)
+    # Feature 1076/1078: Check cache before making external API calls
+    # Use time_range_str (not dates) for cache key to ensure hits on predefined ranges
+    cache_key = _get_ohlc_cache_key(
+        ticker, resolution.value, time_range_str, start_date, end_date
+    )
     cached_response = _get_cached_ohlc(cache_key, resolution.value)
     if cached_response:
         logger.info(
@@ -434,10 +463,14 @@ async def get_ohlc_data(
         fallback_message=fallback_message,
     )
 
-    # Feature 1076: Cache the response for future requests
-    # Use the actual resolution for cache key (may differ from requested if fallback occurred)
+    # Feature 1076/1078: Cache the response for future requests
+    # Use time_range_str (not dates) to ensure cache key matches lookup
     actual_cache_key = _get_ohlc_cache_key(
-        ticker, actual_resolution.value, start_date_value, end_date_value
+        ticker,
+        actual_resolution.value,
+        time_range_str,
+        start_date_value,
+        end_date_value,
     )
     _set_cached_ohlc(actual_cache_key, response.model_dump(mode="json"))
     logger.debug(

@@ -41,38 +41,67 @@ def clear_cache():
 
 
 class TestOHLCCacheKey:
-    """Tests for cache key generation."""
+    """Tests for cache key generation.
 
-    def test_generates_deterministic_key(self):
-        """Cache key should be deterministic for same inputs."""
-        key1 = _get_ohlc_cache_key("AAPL", "D", date(2024, 1, 1), date(2024, 1, 31))
-        key2 = _get_ohlc_cache_key("AAPL", "D", date(2024, 1, 1), date(2024, 1, 31))
+    Feature 1078: Cache keys now use time_range (e.g., "1M") for predefined ranges
+    instead of actual dates, to ensure cache hits when users switch resolutions.
+    """
+
+    def test_generates_deterministic_key_predefined_range(self):
+        """Cache key should be deterministic for same predefined range."""
+        key1 = _get_ohlc_cache_key("AAPL", "D", "1M")
+        key2 = _get_ohlc_cache_key("AAPL", "D", "1M")
+        assert key1 == key2
+
+    def test_generates_deterministic_key_custom_range(self):
+        """Cache key should be deterministic for same custom date range."""
+        key1 = _get_ohlc_cache_key(
+            "AAPL", "D", "custom", date(2024, 1, 1), date(2024, 1, 31)
+        )
+        key2 = _get_ohlc_cache_key(
+            "AAPL", "D", "custom", date(2024, 1, 1), date(2024, 1, 31)
+        )
         assert key1 == key2
 
     def test_normalizes_ticker_to_uppercase(self):
         """Cache key should normalize ticker to uppercase."""
-        key1 = _get_ohlc_cache_key("aapl", "D", date(2024, 1, 1), date(2024, 1, 31))
-        key2 = _get_ohlc_cache_key("AAPL", "D", date(2024, 1, 1), date(2024, 1, 31))
+        key1 = _get_ohlc_cache_key("aapl", "D", "1M")
+        key2 = _get_ohlc_cache_key("AAPL", "D", "1M")
         assert key1 == key2
 
     def test_different_resolutions_different_keys(self):
         """Different resolutions should produce different cache keys."""
-        key_daily = _get_ohlc_cache_key(
-            "AAPL", "D", date(2024, 1, 1), date(2024, 1, 31)
-        )
-        key_5min = _get_ohlc_cache_key("AAPL", "5", date(2024, 1, 1), date(2024, 1, 31))
+        key_daily = _get_ohlc_cache_key("AAPL", "D", "1M")
+        key_5min = _get_ohlc_cache_key("AAPL", "5", "1M")
         assert key_daily != key_5min
 
-    def test_different_date_ranges_different_keys(self):
-        """Different date ranges should produce different cache keys."""
-        key1 = _get_ohlc_cache_key("AAPL", "D", date(2024, 1, 1), date(2024, 1, 31))
-        key2 = _get_ohlc_cache_key("AAPL", "D", date(2024, 2, 1), date(2024, 2, 28))
+    def test_different_time_ranges_different_keys(self):
+        """Different time ranges should produce different cache keys."""
+        key_1m = _get_ohlc_cache_key("AAPL", "D", "1M")
+        key_3m = _get_ohlc_cache_key("AAPL", "D", "3M")
+        assert key_1m != key_3m
+
+    def test_different_custom_date_ranges_different_keys(self):
+        """Different custom date ranges should produce different cache keys."""
+        key1 = _get_ohlc_cache_key(
+            "AAPL", "D", "custom", date(2024, 1, 1), date(2024, 1, 31)
+        )
+        key2 = _get_ohlc_cache_key(
+            "AAPL", "D", "custom", date(2024, 2, 1), date(2024, 2, 28)
+        )
         assert key1 != key2
 
-    def test_key_format(self):
-        """Cache key should have expected format."""
-        key = _get_ohlc_cache_key("MSFT", "15", date(2024, 3, 15), date(2024, 3, 20))
-        assert key == "ohlc:MSFT:15:2024-03-15:2024-03-20"
+    def test_key_format_predefined_range(self):
+        """Cache key for predefined range should have expected format."""
+        key = _get_ohlc_cache_key("MSFT", "15", "1M")
+        assert key == "ohlc:MSFT:15:1M"
+
+    def test_key_format_custom_range(self):
+        """Cache key for custom range should include dates."""
+        key = _get_ohlc_cache_key(
+            "MSFT", "15", "custom", date(2024, 3, 15), date(2024, 3, 20)
+        )
+        assert key == "ohlc:MSFT:15:custom:2024-03-15:2024-03-20"
 
 
 class TestOHLCCacheGetSet:
