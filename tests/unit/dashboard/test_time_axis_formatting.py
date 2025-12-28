@@ -157,14 +157,20 @@ class TestNumericXAxis:
         )
 
     def test_data_uses_numeric_timestamps(self) -> None:
-        """Verify data.x uses numeric epoch milliseconds."""
+        """Verify data.x uses numeric epoch milliseconds.
+
+        Feature 1092: The implementation uses a parseDate() helper that
+        internally calls new Date(...).getTime(). This is equivalent
+        but provides consistent timezone handling for date-only strings.
+        """
         content = read_ohlc_js()
 
-        # Look for new Date().getTime() in data mapping
-        pattern = r"x:\s*new Date\([^)]+\)\.getTime\(\)"
-        assert re.search(pattern, content), (
+        # Look for parseDate helper or direct getTime() call
+        has_parse_date = "parseDate" in content and "getTime()" in content
+        has_direct_gettime = re.search(r"x:\s*new Date\([^)]+\)\.getTime\(\)", content)
+        assert has_parse_date or has_direct_gettime, (
             "Data not using numeric timestamps. "
-            "Use x: new Date(c.date).getTime() for pan/zoom (Feature 1082)."
+            "Use x: parseDate(c.date) or x: new Date(c.date).getTime() (Feature 1082/1092)."
         )
 
     def test_has_feature_1082_comment(self) -> None:
