@@ -881,6 +881,7 @@ module "iam" {
   enable_timeseries    = true
   timeseries_table_arn = module.dynamodb.timeseries_table_arn
   # Feature 1087: OHLC persistent cache table
+  enable_ohlc_cache    = true
   ohlc_cache_table_arn = module.dynamodb.ohlc_cache_table_arn
 }
 
