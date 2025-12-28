@@ -340,6 +340,23 @@ class OHLCChart {
             return;
         }
 
+        // Feature 1077: Register chartjs-plugin-zoom for pan/zoom functionality
+        // Chart.js v4.x requires explicit plugin registration when loaded via CDN
+        if (typeof ChartZoom !== 'undefined' && typeof Chart !== 'undefined') {
+            // Check if plugin is already registered to avoid duplicate registration
+            const registeredPlugins = Chart.registry?.plugins?.items || [];
+            const isRegistered = registeredPlugins.some(p => p.id === 'zoom');
+            if (!isRegistered) {
+                Chart.register(ChartZoom);
+                console.log('chartjs-plugin-zoom registered for pan/zoom functionality');
+            }
+        } else {
+            console.warn('chartjs-plugin-zoom not available - pan/zoom disabled');
+        }
+
+        // Feature 1077: Set cursor style for pan interaction feedback
+        canvas.style.cursor = 'grab';
+
         const ctx = canvas.getContext('2d');
         const overlayConfig = CONFIG.OVERLAY || {};
 
@@ -429,7 +446,14 @@ class OHLCChart {
                             enabled: true,
                             mode: 'x',           // Pan only on X-axis (time)
                             threshold: 5,        // Minimum pan distance before action
-                            modifierKey: null    // No modifier key required (plain left-click)
+                            modifierKey: null,   // No modifier key required (plain left-click)
+                            // Feature 1077: Cursor feedback during pan
+                            onPanStart: ({ chart }) => {
+                                chart.canvas.style.cursor = 'grabbing';
+                            },
+                            onPanComplete: ({ chart }) => {
+                                chart.canvas.style.cursor = 'grab';
+                            }
                         },
                         zoom: {
                             wheel: {
