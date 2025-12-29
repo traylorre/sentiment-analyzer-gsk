@@ -34,8 +34,13 @@ def read_ohlc_js() -> str:
 class TestAutoFitOnDataLoad:
     """Test that chart auto-fits data on resolution change and initial load."""
 
-    def test_reset_zoom_called_in_update_chart(self) -> None:
-        """Verify resetZoom is called when updating chart with new data."""
+    def test_zoom_limits_updated_in_update_chart(self) -> None:
+        """Verify zoom limits are set when updating chart with new data.
+
+        Feature 1092: Instead of resetZoom() (which uses stale original values),
+        we directly update scales.{x,price}.originalOptions so that any future
+        resetZoom() call will use the correct data-derived limits.
+        """
         content = read_ohlc_js()
 
         # Find the updateChart method
@@ -46,23 +51,24 @@ class TestAutoFitOnDataLoad:
         assert update_chart_match, "updateChart method not found in ohlc.js"
 
         method_body = update_chart_match.group(1)
-        assert "this.chart.resetZoom()" in method_body, (
-            "resetZoom not called in updateChart method. "
-            "Add this.chart.resetZoom() to auto-fit data on load."
+        # Feature 1092: Verify originalOptions are updated instead of resetZoom()
+        assert "originalOptions" in method_body, (
+            "originalOptions not updated in updateChart method. "
+            "Feature 1092 requires updating scale.originalOptions to fix stale zoom limits."
         )
 
-    def test_reset_zoom_before_chart_update(self) -> None:
-        """Verify resetZoom is called before chart.update for proper rendering."""
+    def test_scale_options_updated_before_chart_update(self) -> None:
+        """Verify scale options are set before chart.update for proper rendering."""
         content = read_ohlc_js()
 
-        # resetZoom should come before the final chart.update('none')
-        reset_idx = content.find("this.chart.resetZoom()")
+        # originalOptions should come before the final chart.update('none')
+        options_idx = content.find("originalOptions")
         update_idx = content.rfind("this.chart.update('none')")
 
-        assert reset_idx != -1, "this.chart.resetZoom() not found"
+        assert options_idx != -1, "originalOptions not found"
         assert update_idx != -1, "this.chart.update('none') not found"
-        assert reset_idx < update_idx, (
-            "resetZoom should be called before chart.update('none') "
+        assert options_idx < update_idx, (
+            "originalOptions should be set before chart.update('none') "
             "for proper rendering order."
         )
 

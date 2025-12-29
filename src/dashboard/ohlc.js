@@ -369,12 +369,15 @@ class OHLCChart {
                 datasets: [
                     {
                         // Dataset 0: OHLC price bars
+                        // Feature 1091: Fix invisible candlesticks - use pixel-based thickness
                         label: 'Price',
                         data: [],
                         backgroundColor: [],
                         borderColor: [],
                         borderWidth: 1,
-                        barPercentage: 0.8,
+                        barThickness: 'flex',        // Auto-size based on available space
+                        maxBarThickness: 20,         // Cap at 20px to prevent oversized bars
+                        minBarLength: 2,             // Ensure bars are always visible
                         yAxisID: 'price',
                         order: 2  // Render behind sentiment line
                     },
@@ -411,18 +414,28 @@ class OHLCChart {
                     tooltip: {
                         callbacks: {
                             // Feature 1082/1083: Show full date+time in tooltip header
+                            // Feature 1092: Add null checks to prevent errors when clicking empty areas
                             title: (items) => {
                                 if (items.length > 0) {
                                     const item = items[0];
-                                    // Get timestamp from numeric x value or dateStr
-                                    const timestamp = item.raw.dateStr || new Date(item.raw.x).toISOString();
-                                    const date = new Date(timestamp);
-                                    // Full date+time format: "Mon 12/23 10:30"
-                                    const weekday = date.toLocaleDateString('en-US', { weekday: 'short' });
-                                    const month = date.getMonth() + 1;
-                                    const day = date.getDate();
-                                    const time = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-                                    return `${weekday} ${month}/${day} ${time}`;
+                                    // Guard against undefined raw data (happens when clicking empty chart areas)
+                                    if (!item || !item.raw) {
+                                        return '';
+                                    }
+                                    try {
+                                        // Get timestamp from numeric x value or dateStr
+                                        const timestamp = item.raw.dateStr || new Date(item.raw.x).toISOString();
+                                        const date = new Date(timestamp);
+                                        // Full date+time format: "Mon 12/23 10:30"
+                                        const weekday = date.toLocaleDateString('en-US', { weekday: 'short' });
+                                        const month = date.getMonth() + 1;
+                                        const day = date.getDate();
+                                        const time = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+                                        return `${weekday} ${month}/${day} ${time}`;
+                                    } catch (e) {
+                                        console.warn('OHLC tooltip title error:', e.message);
+                                        return '';
+                                    }
                                 }
                                 return '';
                             },
@@ -440,9 +453,12 @@ class OHLCChart {
                                     }
                                 }
                                 // Handle sentiment dataset (Feature 1065)
+                                // Feature 1091: Fix console error - value is {x, y} object, not a number
                                 if (context.datasetIndex === 1) {
-                                    const value = context.raw;
-                                    if (value !== null && value !== undefined) {
+                                    const raw = context.raw;
+                                    // Extract y value from {x, y} object or use raw if it's a number
+                                    const value = (typeof raw === 'object' && raw !== null) ? raw.y : raw;
+                                    if (value !== null && value !== undefined && typeof value === 'number') {
                                         const sign = value >= 0 ? '+' : '';
                                         return `Sentiment: ${sign}${value.toFixed(3)}`;
                                     }
@@ -489,15 +505,17 @@ class OHLCChart {
                                 }
                             }
                         },
-                        // Feature 1073/1080: Fixed limits configuration with X-axis support
+                        // Feature 1092: Limits configuration - do NOT use 'original' keyword
+                        // 'original' is evaluated at chart creation before data exists,
+                        // resulting in undefined limits that block pan operations.
+                        // Actual limits are set dynamically in updateChart() after data loads.
                         limits: {
                             x: {
-                                min: 'original',  // Feature 1080: Use original data range for time axis
-                                max: 'original',
+                                // min/max set dynamically in updateChart() with 10% buffer
                                 minRange: 60000   // Minimum 1 minute visible (60 seconds * 1000ms)
                             },
                             price: {
-                                min: 'original',  // Use data range, not $0 floor
+                                // min/max set dynamically in updateChart() from candle data
                                 minRange: 5       // Minimum $5 range when zoomed in
                             },
                             sentiment: {
@@ -509,15 +527,19 @@ class OHLCChart {
                     }
                 },
                 scales: {
-                    // Feature 1082: Use time scale with numeric values for pan/zoom to work
+                    // Feature 1082/1091: Use time scale with numeric values for pan/zoom to work
                     x: {
                         type: 'time',
+                        offset: true,              // Feature 1091: Add padding so bars don't clip edges
                         time: {
+                            // Feature 1091: Resolution-aware display formats
+                            // Unit is dynamically set in updateChart based on resolution
                             displayFormats: {
                                 minute: 'HH:mm',
                                 hour: 'HH:mm',
-                                day: 'MMM d'
-                            }
+                                day: 'EEE MMM d'   // Feature 1091: Include weekday for daily
+                            },
+                            tooltipFormat: 'EEE MMM d, HH:mm'  // Full format for tooltip
                         },
                         grid: {
                             display: false
@@ -526,22 +548,9 @@ class OHLCChart {
                             maxRotation: 45,
                             minRotation: 0,
                             maxTicksLimit: 10,
-                            // Feature 1082: Custom tick callback for formatted labels
-                            callback: (value, index, ticks) => {
-                                // The ohlcChart reference is set during initChart
-                                if (this.chart && this.candles && this.candles.length > 0) {
-                                    // Find the candle closest to this tick value
-                                    const tickTime = new Date(value).getTime();
-                                    const candleIndex = this.candles.findIndex(c =>
-                                        new Date(c.date).getTime() === tickTime
-                                    );
-                                    if (candleIndex >= 0) {
-                                        return this.formatTimestamp(this.candles[candleIndex].date, candleIndex, this.candles);
-                                    }
-                                }
-                                // Fallback: use date-fns adapter default formatting
-                                return new Date(value).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-                            }
+                            source: 'data',        // Feature 1091: Use data points as tick source
+                            autoSkip: true,
+                            autoSkipPadding: 50
                         }
                     },
                     // Left Y-axis: Price (Feature 1065: moved to left)
@@ -636,14 +645,35 @@ class OHLCChart {
         // Feature 1082: Store candles for tick callback access
         this.candles = candles;
 
-        // Feature 1082: Use numeric epoch milliseconds for X-axis (enables pan/zoom)
-        // Labels are now auto-generated by time scale, tick callback formats them
-        const labels = candles.map(c => new Date(c.date).getTime());
+        // Feature 1091: Set time unit based on resolution for proper x-axis formatting
+        const resolution = this.currentResolution;
+        let timeUnit = 'minute';
+        if (resolution === 'D') {
+            timeUnit = 'day';
+        } else if (resolution === '60') {
+            timeUnit = 'hour';
+        }
+        this.chart.options.scales.x.time.unit = timeUnit;
+
+        // Feature 1082/1092: Use numeric epoch milliseconds for X-axis (enables pan/zoom)
+        // Feature 1092: For daily resolution, parse date-only strings as local time (not UTC)
+        // JavaScript's new Date("2024-12-27") parses as midnight UTC, causing weekday shift
+        // Adding "T00:00:00" forces local time interpretation: "2024-12-27T00:00:00"
+        const parseDate = (dateStr) => {
+            // If it's a date-only string (YYYY-MM-DD), append local midnight time
+            if (typeof dateStr === 'string' && dateStr.length === 10 && dateStr.includes('-')) {
+                return new Date(dateStr + 'T00:00:00').getTime();
+            }
+            // Otherwise parse normally (intraday timestamps already have time)
+            return new Date(dateStr).getTime();
+        };
+
+        const labels = candles.map(c => parseDate(c.date));
 
         // Create data for floating bar chart (simulating candlesticks)
         // Feature 1082: Use numeric x values instead of formatted strings
         const data = candles.map((c, i) => ({
-            x: new Date(c.date).getTime(),  // Numeric epoch ms for pan calculations
+            x: parseDate(c.date),  // Numeric epoch ms for pan calculations
             y: [c.low, c.high],  // Bar spans from low to high
             ohlc: { open: c.open, high: c.high, low: c.low, close: c.close },
             dateStr: c.date  // Keep original for tooltip formatting
@@ -668,23 +698,36 @@ class OHLCChart {
         this.chart.options.plugins.zoom.limits.price.min = priceLimits.min;
         this.chart.options.plugins.zoom.limits.price.max = priceLimits.max;
 
-        // Feature 1082: Set numeric X-axis limits for pan boundaries
+        // Feature 1082/1091: Set numeric X-axis limits for pan boundaries
+        // Add 10% buffer on each side to allow panning beyond data range
         const xMin = data[0].x;
         const xMax = data[data.length - 1].x;
-        this.chart.options.plugins.zoom.limits.x.min = xMin;
-        this.chart.options.plugins.zoom.limits.x.max = xMax;
+        const xRange = xMax - xMin;
+        const xBuffer = xRange * 0.1;  // 10% buffer for panning
+        this.chart.options.plugins.zoom.limits.x.min = xMin - xBuffer;
+        this.chart.options.plugins.zoom.limits.x.max = xMax + xBuffer;
 
-        // Also set the scale min/max so Chart.js respects data range
-        this.chart.options.scales.price.min = priceLimits.min;
-        this.chart.options.scales.price.max = priceLimits.max;
-        this.chart.options.scales.x.min = xMin;
-        this.chart.options.scales.x.max = xMax;
+        // Feature 1092: Set scale min/max directly (not via options) to avoid resetZoom issues
+        // Chart.js zoom plugin stores "original" values when chart initializes with no data,
+        // so resetZoom() restores to those bad values. Instead, update scales directly.
+        this.chart.scales.price.options.min = priceLimits.min;
+        this.chart.scales.price.options.max = priceLimits.max;
+        this.chart.scales.x.options.min = xMin;
+        this.chart.scales.x.options.max = xMax;
 
-        // Apply config changes before resetZoom
+        // Feature 1092: Also update the zoom plugin's original state tracking
+        // This ensures resetZoom() will reset to current (correct) limits, not stale ones
+        if (this.chart.scales.x.originalOptions) {
+            this.chart.scales.x.originalOptions.min = xMin;
+            this.chart.scales.x.originalOptions.max = xMax;
+        }
+        if (this.chart.scales.price.originalOptions) {
+            this.chart.scales.price.originalOptions.min = priceLimits.min;
+            this.chart.scales.price.originalOptions.max = priceLimits.max;
+        }
+
+        // Apply changes without animation
         this.chart.update('none');
-
-        // Feature 1072: Reset zoom to show all new data (auto-fit on load/resolution change)
-        this.chart.resetZoom();
 
         console.log(`OHLC: Updated chart with ${candles.length} candles, price range $${priceLimits.min.toFixed(2)}-$${priceLimits.max.toFixed(2)}`);
     }
@@ -761,10 +804,17 @@ class OHLCChart {
         });
 
         // Align sentiment values to OHLC candle timestamps
-        // Feature 1082: Use {x, y} format with numeric x for time scale compatibility
+        // Feature 1082/1092: Use {x, y} format with numeric x for time scale compatibility
+        // Reuse parseDate helper for consistent local time handling
+        const parseDate = (dateStr) => {
+            if (typeof dateStr === 'string' && dateStr.length === 10 && dateStr.includes('-')) {
+                return new Date(dateStr + 'T00:00:00').getTime();
+            }
+            return new Date(dateStr).getTime();
+        };
         const alignedSentiment = this.ohlcCandles.map(candle => {
-            const candleDate = new Date(candle.date);
-            const candleTime = candleDate.getTime();
+            const candleTime = parseDate(candle.date);
+            const candleDate = new Date(candleTime);
 
             // Try exact match first
             const exactKey = candleDate.toISOString();
