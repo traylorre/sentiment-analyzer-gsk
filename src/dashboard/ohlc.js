@@ -696,13 +696,13 @@ class OHLCChart {
         this.chart.options.plugins.zoom.limits.price.min = priceLimits.min;
         this.chart.options.plugins.zoom.limits.price.max = priceLimits.max;
 
-        // Feature 1094: Set X-axis limits for pan boundaries (category scale uses indices)
-        // Allow small buffer for edge panning
+        // Feature 1098: Set X-axis limits to data range (no buffer)
+        // Prevents panning into empty space where no data exists
+        // User can pan freely within the loaded data but not beyond
         const xMin = 0;
         const xMax = data.length - 1;
-        const xBuffer = Math.max(1, Math.floor(data.length * 0.05));  // 5% buffer
-        this.chart.options.plugins.zoom.limits.x.min = xMin - xBuffer;
-        this.chart.options.plugins.zoom.limits.x.max = xMax + xBuffer;
+        this.chart.options.plugins.zoom.limits.x.min = xMin;
+        this.chart.options.plugins.zoom.limits.x.max = xMax;
 
         // Feature 1092: Set scale min/max directly (not via options) to avoid resetZoom issues
         // Chart.js zoom plugin stores "original" values when chart initializes with no data,
