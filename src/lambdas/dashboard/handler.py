@@ -113,6 +113,7 @@ ALLOWED_STATIC_FILES: dict[str, str] = {
     "timeseries.js": "application/javascript",
     "unified-resolution.js": "application/javascript",
     "styles.css": "text/css",
+    "favicon.ico": "image/x-icon",  # Feature 1096
 }
 
 # Feature 1039: api_key_header removed - using session auth only
@@ -201,6 +202,28 @@ async def serve_index():
     return FileResponse(index_path, media_type="text/html")
 
 
+@app.get("/favicon.ico")
+async def serve_favicon():
+    """
+    Serve the favicon.ico file (Feature 1096).
+
+    Browsers request /favicon.ico directly from root, so we need
+    a dedicated route rather than relying on /static/favicon.ico.
+
+    Returns:
+        Favicon ICO file (16x16 stock chart icon)
+    """
+    favicon_path = STATIC_DIR / "favicon.ico"
+
+    if not favicon_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Favicon not found",
+        )
+
+    return FileResponse(favicon_path, media_type="image/x-icon")
+
+
 @app.get("/chaos", response_class=HTMLResponse)
 async def serve_chaos():
     """
@@ -268,6 +291,9 @@ async def serve_static(filename: str):
     elif filename == "styles.css":
         safe_path = STATIC_DIR / "styles.css"
         media_type = "text/css"
+    elif filename == "favicon.ico":
+        safe_path = STATIC_DIR / "favicon.ico"
+        media_type = "image/x-icon"
     else:
         logger.warning(
             "Static file request for non-whitelisted file",
