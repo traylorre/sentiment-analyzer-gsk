@@ -85,6 +85,8 @@ SENTIMENTS_TABLE = os.environ[
 ]  # news items, sentiment analysis (has GSIs)
 CHAOS_EXPERIMENTS_TABLE = os.environ.get("CHAOS_EXPERIMENTS_TABLE", "")
 ENVIRONMENT = os.environ["ENVIRONMENT"]
+# Feature 1097: SSE Lambda URL for two-Lambda architecture
+SSE_LAMBDA_URL = os.environ.get("SSE_LAMBDA_URL", "")
 
 
 # Feature 1039: get_api_key() removed - using session auth only
@@ -456,6 +458,25 @@ async def health_check():
 # ===================================================================
 # API v2 Endpoints (POWERPLAN Mobile Dashboard)
 # ===================================================================
+
+
+@app.get("/api/v2/runtime")
+async def get_runtime_config():
+    """
+    Get runtime configuration for the frontend (Feature 1097).
+
+    Returns URLs and settings that may vary by environment.
+    Used by frontend to discover the SSE Lambda URL for streaming.
+
+    Returns:
+        JSON with runtime configuration including SSE Lambda URL
+    """
+    return JSONResponse(
+        {
+            "sse_url": SSE_LAMBDA_URL or None,  # Empty string -> null for frontend
+            "environment": ENVIRONMENT,
+        }
+    )
 
 
 @app.get("/api/v2/metrics")

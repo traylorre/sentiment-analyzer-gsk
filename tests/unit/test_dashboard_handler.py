@@ -1456,3 +1456,58 @@ class TestChaosEndpointErrors:
         response = client.delete("/chaos/experiments/test-123", headers=auth_headers)
         assert response.status_code == 500
         assert "Failed to delete" in response.json()["detail"]
+
+
+class TestRuntimeConfig:
+    """Tests for runtime configuration endpoint (Feature 1097)."""
+
+    def test_runtime_config_returns_sse_url(self, client, monkeypatch):
+        """Test runtime config returns SSE Lambda URL when configured."""
+        # Set the SSE_LAMBDA_URL environment variable
+        monkeypatch.setenv("SSE_LAMBDA_URL", "https://sse.example.com/")
+
+        # Import fresh to pick up new env var
+        from importlib import reload
+
+        from src.lambdas.dashboard import handler as handler_module
+
+        reload(handler_module)
+        test_client = TestClient(handler_module.app)
+
+        response = test_client.get("/api/v2/runtime")
+        assert response.status_code == 200
+
+        data = response.json()
+        assert "sse_url" in data
+        assert data["sse_url"] == "https://sse.example.com/"
+        assert "environment" in data
+
+        # Restore original
+        monkeypatch.setenv("SSE_LAMBDA_URL", "")
+        reload(handler_module)
+
+    def test_runtime_config_returns_null_when_not_configured(self, client, monkeypatch):
+        """Test runtime config returns null SSE URL when not configured."""
+        # Ensure SSE_LAMBDA_URL is empty
+        monkeypatch.setenv("SSE_LAMBDA_URL", "")
+
+        from importlib import reload
+
+        from src.lambdas.dashboard import handler as handler_module
+
+        reload(handler_module)
+        test_client = TestClient(handler_module.app)
+
+        response = test_client.get("/api/v2/runtime")
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["sse_url"] is None  # Empty string becomes None/null
+
+        reload(handler_module)
+
+    def test_runtime_config_no_auth_required(self, client):
+        """Test runtime config doesn't require authentication."""
+        # Should work without auth header
+        response = client.get("/api/v2/runtime")
+        assert response.status_code == 200

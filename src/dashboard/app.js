@@ -348,10 +348,36 @@ async function initDashboard() {
     // Fetch initial metrics
     await fetchMetrics();
 
+    // Feature 1097: Fetch runtime config before connecting to SSE
+    // This gets the SSE Lambda URL from the backend (two-Lambda architecture)
+    await fetchRuntimeConfig();
+
     // Connect to SSE stream
     connectSSE();
 
     console.log('Dashboard initialized');
+}
+
+/**
+ * Feature 1097: Fetch runtime configuration from backend.
+ *
+ * Gets environment-specific settings like the SSE Lambda URL.
+ * Updates CONFIG.SSE_BASE_URL so connectSSE() uses the correct URL.
+ */
+async function fetchRuntimeConfig() {
+    try {
+        const response = await fetch(`${CONFIG.API_BASE_URL}/api/v2/runtime`);
+        if (response.ok) {
+            const config = await response.json();
+            if (config.sse_url) {
+                // Remove trailing slash if present for consistency
+                CONFIG.SSE_BASE_URL = config.sse_url.replace(/\/$/, '');
+                console.log('SSE URL configured:', CONFIG.SSE_BASE_URL);
+            }
+        }
+    } catch (error) {
+        console.warn('Failed to fetch runtime config, using defaults:', error.message);
+    }
 }
 
 /**
