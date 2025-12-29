@@ -23,3 +23,4 @@ export {
   AnimatedProgress,
   AnimatedGauge,
 } from './animated-value';
+export { GapShaderPrimitive } from './primitives';

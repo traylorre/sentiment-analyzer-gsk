@@ -100,3 +100,18 @@ export interface ChartDataBundle {
 
 /** Chart loading states */
 export type ChartLoadingState = 'idle' | 'loading' | 'success' | 'error';
+
+/**
+ * Marker for dates with no trading data (weekends, holidays).
+ * Used to render red-shaded gap rectangles in the chart.
+ */
+export interface GapMarker {
+  /** Date in YYYY-MM-DD format (daily) or Unix timestamp (intraday) */
+  time: string | number;
+  /** Always true for gap markers */
+  isGap: true;
+  /** Human-readable reason for the gap */
+  reason: 'weekend' | 'holiday' | 'after_hours';
+  /** Holiday name if applicable */
+  holidayName?: string;
+}
