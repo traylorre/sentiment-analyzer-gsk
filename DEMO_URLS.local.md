@@ -3,20 +3,20 @@
 ## Quick Access
 
 **Main Dashboard (Browser):**
-https://ee2a3fxtkxmpwp2bhul3uylmb40hfknf.lambda-url.us-east-1.on.aws/
+https://cjx6qw4a7xqw6cuifvkbi6ae2e0evviw.lambda-url.us-east-1.on.aws/
 
 **API Docs:**
-https://ee2a3fxtkxmpwp2bhul3uylmb40hfknf.lambda-url.us-east-1.on.aws/docs
+https://cjx6qw4a7xqw6cuifvkbi6ae2e0evviw.lambda-url.us-east-1.on.aws/docs
 
 **OAuth URLs (GET - no auth):**
-https://ee2a3fxtkxmpwp2bhul3uylmb40hfknf.lambda-url.us-east-1.on.aws/api/v2/auth/oauth/urls
+https://cjx6qw4a7xqw6cuifvkbi6ae2e0evviw.lambda-url.us-east-1.on.aws/api/v2/auth/oauth/urls
 
 ---
 
 ## API Base URL
 
 ```
-API=https://ee2a3fxtkxmpwp2bhul3uylmb40hfknf.lambda-url.us-east-1.on.aws
+API=https://cjx6qw4a7xqw6cuifvkbi6ae2e0evviw.lambda-url.us-east-1.on.aws
 ```
 
 ---
@@ -24,7 +24,7 @@ API=https://ee2a3fxtkxmpwp2bhul3uylmb40hfknf.lambda-url.us-east-1.on.aws
 ## Terminal Demo Script
 
 ```bash
-API="https://ee2a3fxtkxmpwp2bhul3uylmb40hfknf.lambda-url.us-east-1.on.aws"
+API="https://cjx6qw4a7xqw6cuifvkbi6ae2e0evviw.lambda-url.us-east-1.on.aws"
 
 # 1. Get anonymous token (POST required)
 TOKEN=$(curl -s -X POST "$API/api/v2/auth/anonymous" \
