@@ -127,33 +127,33 @@ class TestLabelGeneration:
             "Use candles.map((c, i) => ...) for index access (Feature 1081)."
         )
 
-    def test_time_unit_set_dynamically(self) -> None:
-        """Verify time.unit is set dynamically based on resolution.
+    def test_tick_callback_formats_labels(self) -> None:
+        """Verify tick callback formats labels from candles array.
 
-        Feature 1091 changed the approach: Instead of custom tick callback,
-        Chart.js built-in time formatting is used with dynamic time.unit.
+        Feature 1094 changed the approach: Category scale with tick callback
+        for custom label formatting instead of time scale with dynamic unit.
         """
         content = read_ohlc_js()
 
-        # Feature 1091: time.unit is set based on resolution in updateChart
-        pattern = r"this\.chart\.options\.scales\.x\.time\.unit\s*=\s*timeUnit"
+        # Feature 1094: Tick callback accesses candles array for formatting
+        pattern = r"callback:\s*function\s*\(\s*value\s*,\s*index\s*\)"
         assert re.search(pattern, content), (
-            "Time unit not being set dynamically. "
-            "Set this.chart.options.scales.x.time.unit based on resolution (Feature 1091)."
+            "Tick callback not formatting labels. "
+            "Use callback: function(value, index) for custom label formatting (Feature 1094)."
         )
 
 
-class TestNumericXAxis:
-    """Test that X-axis uses numeric timestamps for pan/zoom (Feature 1082)."""
+class TestCategoryXAxis:
+    """Test that X-axis uses category scale for uniform bar widths (Feature 1094)."""
 
-    def test_time_scale_type(self) -> None:
-        """Verify X-axis uses 'time' scale type for numeric handling."""
+    def test_category_scale_type(self) -> None:
+        """Verify X-axis uses 'category' scale type for uniform spacing."""
         content = read_ohlc_js()
 
-        pattern = r"type:\s*['\"]time['\"]"
+        pattern = r"type:\s*['\"]category['\"]"
         assert re.search(pattern, content), (
-            "X-axis not using time scale type. "
-            "Use type: 'time' for numeric X-axis pan/zoom (Feature 1082)."
+            "X-axis not using category scale type. "
+            "Use type: 'category' for uniform candlestick widths (Feature 1094)."
         )
 
     def test_data_uses_numeric_timestamps(self) -> None:
