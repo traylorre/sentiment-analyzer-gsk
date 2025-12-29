@@ -107,7 +107,11 @@ else:
 # Only these files can be served via /static/ endpoint
 ALLOWED_STATIC_FILES: dict[str, str] = {
     "app.js": "application/javascript",
+    "cache.js": "application/javascript",
     "config.js": "application/javascript",
+    "ohlc.js": "application/javascript",
+    "timeseries.js": "application/javascript",
+    "unified-resolution.js": "application/javascript",
     "styles.css": "text/css",
 }
 
@@ -246,8 +250,20 @@ async def serve_static(filename: str):
     if filename == "app.js":
         safe_path = STATIC_DIR / "app.js"
         media_type = "application/javascript"
+    elif filename == "cache.js":
+        safe_path = STATIC_DIR / "cache.js"
+        media_type = "application/javascript"
     elif filename == "config.js":
         safe_path = STATIC_DIR / "config.js"
+        media_type = "application/javascript"
+    elif filename == "ohlc.js":
+        safe_path = STATIC_DIR / "ohlc.js"
+        media_type = "application/javascript"
+    elif filename == "timeseries.js":
+        safe_path = STATIC_DIR / "timeseries.js"
+        media_type = "application/javascript"
+    elif filename == "unified-resolution.js":
+        safe_path = STATIC_DIR / "unified-resolution.js"
         media_type = "application/javascript"
     elif filename == "styles.css":
         safe_path = STATIC_DIR / "styles.css"
