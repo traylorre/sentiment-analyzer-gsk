@@ -427,6 +427,9 @@ module "dashboard_lambda" {
     FINNHUB_SECRET_ARN = module.secrets.finnhub_secret_arn
     # Feature 1087: OHLC persistent cache table for write-through caching
     OHLC_CACHE_TABLE = module.dynamodb.ohlc_cache_table_name
+    # Feature 1097: SSE Lambda URL for frontend to connect to streaming endpoint
+    # Two-Lambda architecture: Dashboard Lambda (BUFFERED) + SSE Lambda (RESPONSE_STREAM)
+    SSE_LAMBDA_URL = module.sse_streaming_lambda.function_url
   }
 
   # Function URL with CORS
