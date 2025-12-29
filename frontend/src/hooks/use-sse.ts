@@ -8,6 +8,7 @@ import {
   SSEMessage,
   SentimentUpdatePayload,
 } from '@/lib/api/sse';
+import { useRuntimeStore, useRuntimeLoaded } from '@/stores/runtime-store';
 
 interface UseSSEOptions {
   configId?: string;
@@ -39,6 +40,10 @@ export function useSSE(options: UseSSEOptions = {}): UseSSEResult {
   const [lastUpdate, setLastUpdate] = useState<string | null>(null);
   const clientRef = useRef<SSEClient | null>(null);
   const queryClient = useQueryClient();
+
+  // Feature 1100: Get SSE URL from runtime config
+  const getSseBaseUrl = useRuntimeStore((state) => state.getSseBaseUrl);
+  const runtimeLoaded = useRuntimeLoaded();
 
   const handleMessage = useCallback(
     (message: SSEMessage) => {
@@ -76,7 +81,9 @@ export function useSSE(options: UseSSEOptions = {}): UseSSEResult {
       clientRef.current.disconnect();
     }
 
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
+    // Feature 1100: Use SSE Lambda URL from runtime config
+    // Falls back to NEXT_PUBLIC_API_URL if runtime config not available
+    const baseUrl = getSseBaseUrl();
 
     // Build URL based on whether this is a config-specific or global stream
     let url: string;
@@ -99,7 +106,7 @@ export function useSSE(options: UseSSEOptions = {}): UseSSEResult {
     });
 
     clientRef.current.connect();
-  }, [configId, userToken, handleMessage, handleStatusChange, handleError]);
+  }, [configId, userToken, getSseBaseUrl, handleMessage, handleStatusChange, handleError]);
 
   const disconnect = useCallback(() => {
     if (clientRef.current) {
@@ -108,16 +115,17 @@ export function useSSE(options: UseSSEOptions = {}): UseSSEResult {
     }
   }, []);
 
-  // Auto-connect when enabled
+  // Auto-connect when enabled and runtime config is loaded
+  // Feature 1100: Wait for runtime config to be loaded before connecting
   useEffect(() => {
-    if (enabled) {
+    if (enabled && runtimeLoaded) {
       connect();
     }
 
     return () => {
       disconnect();
     };
-  }, [enabled, connect, disconnect]);
+  }, [enabled, runtimeLoaded, connect, disconnect]);
 
   // Reconnect when configId or userToken changes
   useEffect(() => {
