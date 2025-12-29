@@ -34,7 +34,7 @@ const VISIBLE_CANDLES: Record<OHLCResolution, number> = {
   '15': 52,   // 2 trading days
   '30': 26,   // 2 trading days
   '60': 40,   // 5 trading days
-  'D': 0,     // Show all (fitContent)
+  'D': 40,    // ~2 months of trading days (scrollable)
 };
 
 /**
