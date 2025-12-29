@@ -16,11 +16,12 @@ import {
 } from 'lightweight-charts';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { formatSentimentScore, formatChartDate } from '@/lib/utils';
+import { formatSentimentScore, formatChartDate, fillGaps, isGapMarker } from '@/lib/utils';
 import { useChartData } from '@/hooks/use-chart-data';
 import { useHaptic } from '@/hooks/use-haptic';
-import type { TimeRange, OHLCResolution, ChartSentimentSource, PriceCandle, SentimentPoint } from '@/types/chart';
+import type { TimeRange, OHLCResolution, ChartSentimentSource, PriceCandle, SentimentPoint, GapMarker } from '@/types/chart';
 import { RESOLUTION_LABELS } from '@/types/chart';
+import { GapShaderPrimitive } from './primitives';
 
 /**
  * Number of candlesticks to show initially for each resolution.
@@ -85,6 +86,11 @@ interface TooltipData {
     score: number;
     label: string;
   };
+  /** Market closure information */
+  marketClosed?: {
+    reason: 'weekend' | 'holiday' | 'after_hours';
+    holidayName?: string;
+  };
 }
 
 /**
@@ -111,10 +117,13 @@ export function PriceSentimentChart({
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const sentimentSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const gapShaderRef = useRef<GapShaderPrimitive | null>(null);
 
   const [isReady, setIsReady] = useState(false);
   const [tooltip, setTooltip] = useState<TooltipData | null>(null);
   const [timeRange, setTimeRange] = useState<TimeRange>(initialTimeRange);
+  // Track gap markers for tooltip display (use ref for access in crosshair handler)
+  const gapMarkersMapRef = useRef<Map<string | number, GapMarker>>(new Map());
   // T024: Read initial resolution from sessionStorage
   const [resolution, setResolution] = useState<OHLCResolution>(() => {
     if (typeof window !== 'undefined') {
@@ -240,6 +249,12 @@ export function PriceSentimentChart({
       scaleMargins: { top: 0.1, bottom: 0.1 },
     });
 
+    // Create and attach gap shader primitive for market closure visualization
+    const gapShader = new GapShaderPrimitive();
+    gapShader.setChartHeight(height);
+    candleSeries.attachPrimitive(gapShader);
+    gapShaderRef.current = gapShader;
+
     chartRef.current = chart;
     candleSeriesRef.current = candleSeries;
     sentimentSeriesRef.current = sentimentSeries;
@@ -256,18 +271,35 @@ export function PriceSentimentChart({
         const sentimentValue = param.seriesData.get(sentimentSeries);
 
         // Handle both string (daily) and number (intraday) Time types
+        // Convert Time (which can be string, number, or BusinessDay) to string|number for formatChartDate
+        const timeValue = typeof param.time === 'object'
+          ? `${param.time.year}-${String(param.time.month).padStart(2, '0')}-${String(param.time.day).padStart(2, '0')}`
+          : param.time;
+
         const tooltipData: TooltipData = {
-          date: formatChartDate(param.time, resolution),
+          date: formatChartDate(timeValue, resolution),
         };
+
+        // Check if this is a gap marker
+        const gapMarker = gapMarkersMapRef.current.get(timeValue);
+        if (gapMarker) {
+          tooltipData.marketClosed = {
+            reason: gapMarker.reason,
+            holidayName: gapMarker.holidayName,
+          };
+        }
 
         if (candleData && typeof candleData === 'object' && 'open' in candleData) {
           const candle = candleData as CandlestickData<Time>;
-          tooltipData.price = {
-            open: candle.open,
-            high: candle.high,
-            low: candle.low,
-            close: candle.close,
-          };
+          // Only add price data if values are valid (not NaN for gap markers)
+          if (!Number.isNaN(candle.open)) {
+            tooltipData.price = {
+              open: candle.open,
+              high: candle.high,
+              low: candle.low,
+              close: candle.close,
+            };
+          }
         }
 
         if (sentimentValue && typeof sentimentValue === 'object' && 'value' in sentimentValue) {
@@ -300,22 +332,58 @@ export function PriceSentimentChart({
       chartRef.current = null;
       candleSeriesRef.current = null;
       sentimentSeriesRef.current = null;
+      gapShaderRef.current = null;
     };
   }, [height, interactive]);
 
-  // Update candlestick data with resolution-aware time conversion
+  // Update candlestick data with resolution-aware time conversion and gap markers
   useEffect(() => {
     if (!candleSeriesRef.current || !priceData.length) return;
 
-    const chartData: CandlestickData<Time>[] = priceData.map((candle: PriceCandle) => ({
-      time: convertToChartTime(candle.date, resolution),
-      open: candle.open,
-      high: candle.high,
-      low: candle.low,
-      close: candle.close,
-    }));
+    // Fill gaps for daily resolution only (intraday gaps are more complex)
+    const dataWithGaps = resolution === 'D' ? fillGaps(priceData, resolution) : priceData;
+
+    // Separate candles and gap markers, build chart data with whitespace for gaps
+    const chartData: CandlestickData<Time>[] = [];
+    const gapInfos: Array<{ index: number; marker: GapMarker }> = [];
+
+    dataWithGaps.forEach((item, index) => {
+      if (isGapMarker(item)) {
+        // Gap marker: add to gap info array for shading
+        gapInfos.push({ index, marker: item });
+        // Add whitespace candle for gaps (lightweight-charts requires data points)
+        chartData.push({
+          time: item.time as Time,
+          open: NaN,
+          high: NaN,
+          low: NaN,
+          close: NaN,
+        });
+      } else {
+        // Regular candle
+        chartData.push({
+          time: convertToChartTime(item.date, resolution),
+          open: item.open,
+          high: item.high,
+          low: item.low,
+          close: item.close,
+        });
+      }
+    });
 
     candleSeriesRef.current.setData(chartData);
+
+    // Update gap shader with gap positions
+    if (gapShaderRef.current) {
+      gapShaderRef.current.updateGaps(gapInfos);
+    }
+
+    // Update gap markers map ref for tooltip lookup
+    const newGapMap = new Map<string | number, GapMarker>();
+    gapInfos.forEach(({ marker }) => {
+      newGapMap.set(marker.time, marker);
+    });
+    gapMarkersMapRef.current = newGapMap;
   }, [priceData, resolution]);
 
   // Update sentiment data with resolution-aware time conversion
@@ -538,9 +606,25 @@ export function PriceSentimentChart({
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="absolute top-24 left-4 z-10 bg-card/95 backdrop-blur-sm border border-border rounded-lg p-3 shadow-lg"
+            className={cn(
+              "absolute top-24 left-4 z-10 backdrop-blur-sm border rounded-lg p-3 shadow-lg",
+              tooltip.marketClosed
+                ? "bg-red-950/80 border-red-500/30"
+                : "bg-card/95 border-border"
+            )}
           >
             <div className="text-xs text-muted-foreground mb-2">{tooltip.date}</div>
+            {tooltip.marketClosed && (
+              <div className="text-sm text-red-400 mb-2">
+                <span className="font-medium">Market Closed</span>
+                {tooltip.marketClosed.holidayName && (
+                  <span className="ml-1">- {tooltip.marketClosed.holidayName}</span>
+                )}
+                {!tooltip.marketClosed.holidayName && tooltip.marketClosed.reason === 'weekend' && (
+                  <span className="ml-1">- Weekend</span>
+                )}
+              </div>
+            )}
             {tooltip.price && (
               <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm mb-2">
                 <span className="text-muted-foreground">Open:</span>

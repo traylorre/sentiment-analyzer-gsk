@@ -18,4 +18,14 @@ export {
   formatDateTime,
   formatRelativeTime,
   formatCountdown,
+  formatChartDate,
 } from './format';
+export {
+  isHoliday,
+  isWeekend,
+  isMarketOpen,
+  fillGaps,
+  extractGapMarkers,
+  getGapIndices,
+  isGapMarker,
+} from './market-calendar';
