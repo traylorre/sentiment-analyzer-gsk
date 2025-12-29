@@ -32,7 +32,7 @@ import httpx
 
 # Environment configurations
 ENVIRONMENTS = {
-    "preprod": "https://ee2a3fxtkxmpwp2bhul3uylmb40hfknf.lambda-url.us-east-1.on.aws",
+    "preprod": "https://cjx6qw4a7xqw6cuifvkbi6ae2e0evviw.lambda-url.us-east-1.on.aws",
     "prod": "https://prod-sentiment-dashboard.lambda-url.us-east-1.on.aws",
 }
 

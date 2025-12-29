@@ -427,8 +427,8 @@ terraform workspace select dev
 terraform output -raw dashboard_url
 ```
 
-### Current URLs (as of 2025-11-24)
-- **Preprod**: https://ee2a3fxtkxmpwp2bhul3uylmb40hfknf.lambda-url.us-east-1.on.aws/
+### Current URLs (as of 2025-12-29)
+- **Preprod**: https://cjx6qw4a7xqw6cuifvkbi6ae2e0evviw.lambda-url.us-east-1.on.aws/
 - **Prod**: (Not yet deployed)
 - **Dev**: (Not yet deployed)
 
