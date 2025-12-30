@@ -960,19 +960,17 @@ module "chaos" {
 # Replaces the vanilla JS dashboard (/src/dashboard/) with the
 # Next.js frontend (/frontend/) for full pan/scroll support.
 
-# Read GitHub PAT from Secrets Manager (never store in tfvars)
-data "aws_secretsmanager_secret_version" "amplify_github_token" {
-  count     = var.enable_amplify ? 1 : 0
-  secret_id = "${var.environment}/amplify/github-token"
-}
-
+# Amplify Frontend Module
+# NOTE: GitHub access token is NOT passed here to avoid circular dependency.
+# The token is patched via terraform_data.amplify_github_token_patch AFTER
+# IAM permissions exist (see Gap 4 below).
 module "amplify_frontend" {
   source = "./modules/amplify"
   count  = var.enable_amplify ? 1 : 0
 
-  environment         = var.environment
-  github_repository   = var.amplify_github_repository
-  github_access_token = jsondecode(data.aws_secretsmanager_secret_version.amplify_github_token[0].secret_string)["token"]
+  environment       = var.environment
+  github_repository = var.amplify_github_repository
+  # github_access_token intentionally omitted - patched via terraform_data
 
   # Backend integration
   api_gateway_url      = module.api_gateway.api_endpoint
@@ -1016,6 +1014,34 @@ resource "terraform_data" "cognito_callback_patch" {
   }
 
   depends_on = [module.amplify_frontend, module.cognito]
+}
+
+# ===================================================================
+# Gap 4: Patch Amplify with GitHub token (breaks circular dependency)
+# ===================================================================
+# Data source reads secret at plan time, but CI IAM permission for
+# secretsmanager:GetSecretValue is only applied at apply time.
+# This terraform_data runs AFTER module.iam exists to patch Amplify.
+
+resource "terraform_data" "amplify_github_token_patch" {
+  count = var.enable_amplify ? 1 : 0
+
+  triggers_replace = {
+    app_id = module.amplify_frontend[0].app_id
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      TOKEN=$(aws secretsmanager get-secret-value \
+        --secret-id "${var.environment}/amplify/github-token" \
+        --query 'SecretString' --output text | jq -r '.token')
+      aws amplify update-app \
+        --app-id ${module.amplify_frontend[0].app_id} \
+        --access-token "$TOKEN"
+    EOT
+  }
+
+  depends_on = [module.amplify_frontend, module.iam]
 }
 
 # ===================================================================
