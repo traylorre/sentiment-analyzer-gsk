@@ -198,3 +198,28 @@ variable "jwt_secret" {
   # Note: For preprod, use PREPROD_TEST_JWT_SECRET from E2E tests
   # For prod, use a strong, unique secret
 }
+
+# ===================================================================
+# Feature 1105: AWS Amplify Frontend
+# ===================================================================
+
+variable "amplify_github_token" {
+  description = "GitHub Personal Access Token with repo scope for Amplify"
+  type        = string
+  default     = ""
+  sensitive   = true
+  # Note: Create a PAT at https://github.com/settings/tokens
+  # Required scope: repo (Full control of private repositories)
+}
+
+variable "amplify_github_repository" {
+  description = "GitHub repository URL for Amplify (e.g., https://github.com/owner/repo)"
+  type        = string
+  default     = "https://github.com/traylorre/sentiment-analyzer-gsk"
+}
+
+variable "enable_amplify" {
+  description = "Enable AWS Amplify frontend deployment (requires amplify_github_token)"
+  type        = bool
+  default     = false
+}

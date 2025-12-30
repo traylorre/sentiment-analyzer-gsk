@@ -86,17 +86,25 @@ export function useSSE(options: UseSSEOptions = {}): UseSSEResult {
     const baseUrl = getSseBaseUrl();
 
     // Build URL based on whether this is a config-specific or global stream
+    // Gap 4: Use same-origin proxy when available (cookie auth, no token in URL)
+    const useProxy = process.env.NEXT_PUBLIC_USE_SSE_PROXY === 'true';
     let url: string;
+
     if (configId) {
-      // Config-specific stream requires authentication via user_token query param
-      // Note: EventSource API does not support custom headers, so token must be in URL
-      url = `${baseUrl}/api/v2/configurations/${configId}/stream`;
-      if (userToken) {
-        url += `?user_token=${encodeURIComponent(userToken)}`;
+      if (useProxy) {
+        // Same-origin proxy: cookie sent automatically, token never in URL
+        // Security: HttpOnly cookie prevents XSS theft, no URL logging exposure
+        url = `/api/sse/configurations/${configId}/stream`;
+      } else {
+        // Legacy: token in URL (preprod temporary mitigation with short expiry)
+        url = `${baseUrl}/api/v2/configurations/${configId}/stream`;
+        if (userToken) {
+          url += `?user_token=${encodeURIComponent(userToken)}`;
+        }
       }
     } else {
       // Global stream (no authentication required)
-      url = `${baseUrl}/api/v2/stream`;
+      url = useProxy ? '/api/sse/stream' : `${baseUrl}/api/v2/stream`;
     }
 
     clientRef.current = new SSEClient(url, {
