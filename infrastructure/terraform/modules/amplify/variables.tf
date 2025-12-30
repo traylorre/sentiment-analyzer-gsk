@@ -12,9 +12,10 @@ variable "github_repository" {
 }
 
 variable "github_access_token" {
-  description = "GitHub Personal Access Token with repo scope for Amplify"
+  description = "GitHub Personal Access Token - initially empty, patched via terraform_data after IAM exists"
   type        = string
   sensitive   = true
+  default     = ""
 }
 
 variable "api_gateway_url" {

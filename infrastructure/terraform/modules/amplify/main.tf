@@ -12,8 +12,10 @@ resource "aws_amplify_app" "frontend" {
   # SSR mode for Next.js with middleware support
   platform = "WEB_COMPUTE"
 
-  # GitHub access token for repo connection
-  access_token = var.github_access_token
+  # GitHub access token - initially empty, patched via terraform_data after IAM exists
+  # This breaks the circular dependency: data source reads secret at plan time,
+  # but IAM permission for GetSecretValue is only applied at apply time.
+  access_token = var.github_access_token != "" ? var.github_access_token : null
 
   # Build specification for monorepo
   build_spec = <<-EOT
@@ -74,6 +76,12 @@ resource "aws_amplify_app" "frontend" {
     Environment = var.environment
     Feature     = "1105-nextjs-migration"
     Component   = "amplify-frontend"
+  }
+
+  # Ignore access_token changes - patched via terraform_data provisioner
+  # to break circular dependency with IAM GetSecretValue permission
+  lifecycle {
+    ignore_changes = [access_token]
   }
 }
 
