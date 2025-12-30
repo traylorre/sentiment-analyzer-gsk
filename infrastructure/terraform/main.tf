@@ -960,13 +960,19 @@ module "chaos" {
 # Replaces the vanilla JS dashboard (/src/dashboard/) with the
 # Next.js frontend (/frontend/) for full pan/scroll support.
 
+# Read GitHub PAT from Secrets Manager (never store in tfvars)
+data "aws_secretsmanager_secret_version" "amplify_github_token" {
+  count     = var.enable_amplify ? 1 : 0
+  secret_id = "${var.environment}/amplify/github-token"
+}
+
 module "amplify_frontend" {
   source = "./modules/amplify"
   count  = var.enable_amplify ? 1 : 0
 
   environment         = var.environment
   github_repository   = var.amplify_github_repository
-  github_access_token = var.amplify_github_token
+  github_access_token = jsondecode(data.aws_secretsmanager_secret_version.amplify_github_token[0].secret_string)["token"]
 
   # Backend integration
   api_gateway_url      = module.api_gateway.api_endpoint

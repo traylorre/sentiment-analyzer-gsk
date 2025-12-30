@@ -32,3 +32,9 @@ cors_allowed_origins = [
 # This must match PREPROD_TEST_JWT_SECRET used by E2E tests (Feature 1053)
 # The value is passed via TF_VAR_jwt_secret in CI to avoid committing secrets
 # Default for local dev: "test-jwt-secret-for-e2e-only-not-production"
+
+# Feature 1105: AWS Amplify SSR Frontend
+# Deploys Next.js frontend via Amplify Hosting (replaces vanilla JS dashboard)
+# GitHub PAT stored in Secrets Manager: preprod/amplify/github-token
+enable_amplify            = true
+amplify_github_repository = "https://github.com/traylorre/sentiment-analyzer-gsk"
