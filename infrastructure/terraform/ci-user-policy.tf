@@ -591,7 +591,8 @@ data "aws_iam_policy_document" "ci_deploy_iam" {
       "arn:aws:iam::*:role/*-fis-execution-role",
       "arn:aws:iam::*:role/*-backup-role",
       "arn:aws:iam::*:role/*-cognito-*",
-      "arn:aws:iam::*:role/*-rum-*"
+      "arn:aws:iam::*:role/*-rum-*",
+      "arn:aws:iam::*:role/*-amplify-*" # Feature 1105: Amplify service role
     ]
   }
 
@@ -655,7 +656,8 @@ data "aws_iam_policy_document" "ci_deploy_iam" {
       "arn:aws:iam::*:role/*-fis-execution-role",
       "arn:aws:iam::*:role/*-backup-role",
       "arn:aws:iam::*:role/*-cognito-*",
-      "arn:aws:iam::*:role/*-rum-*"
+      "arn:aws:iam::*:role/*-rum-*",
+      "arn:aws:iam::*:role/*-amplify-*" # Feature 1105: Amplify service role
     ]
   }
 
@@ -1128,6 +1130,42 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
   # NOTE: KMS encryption operations (Encrypt, Decrypt, GenerateDataKey) are granted
   # via KMS key policy in modules/kms/main.tf (CIDeployerEncryption statement).
   # Key policies are authoritative and don't require IAM policy grants.
+
+  # AWS Amplify Hosting (Feature 1105: Next.js SSR Frontend)
+  # NOTE: Amplify app ARNs use app IDs (UUIDs), not app names. Cannot scope by naming pattern.
+  # Security maintained via: (1) app is tagged with Name=*-sentiment-*, (2) Terraform controls creation
+  statement {
+    sid    = "Amplify"
+    effect = "Allow"
+    actions = [
+      "amplify:CreateApp",
+      "amplify:UpdateApp",
+      "amplify:DeleteApp",
+      "amplify:GetApp",
+      "amplify:ListApps",
+      "amplify:CreateBranch",
+      "amplify:UpdateBranch",
+      "amplify:DeleteBranch",
+      "amplify:GetBranch",
+      "amplify:ListBranches",
+      "amplify:CreateDomainAssociation",
+      "amplify:UpdateDomainAssociation",
+      "amplify:DeleteDomainAssociation",
+      "amplify:GetDomainAssociation",
+      "amplify:ListDomainAssociations",
+      "amplify:StartJob",
+      "amplify:StopJob",
+      "amplify:GetJob",
+      "amplify:ListJobs",
+      "amplify:TagResource",
+      "amplify:UntagResource",
+      "amplify:ListTagsForResource"
+    ]
+    resources = [
+      "arn:aws:amplify:*:*:apps/*",
+      "arn:aws:amplify:*:*:apps/*/*"
+    ]
+  }
 }
 
 # ==================================================================
