@@ -217,6 +217,7 @@ export function PriceSentimentChart({
         borderColor: 'rgba(0, 255, 255, 0.1)',
         timeVisible: true,
         secondsVisible: false,
+        textColor: '#a3a3a3',  // Enable label refresh on pan
       },
     });
 
