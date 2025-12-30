@@ -243,7 +243,7 @@ data "aws_iam_policy_document" "ci_deploy_core" {
   }
 
   # Secrets Manager
-  # SECURITY: Scoped to {env}/sentiment-analyzer/* naming pattern (FR-006)
+  # SECURITY: Scoped to {env}/sentiment-analyzer/* and {env}/amplify/* patterns (FR-006)
   statement {
     sid    = "SecretsManager"
     effect = "Allow"
@@ -252,6 +252,7 @@ data "aws_iam_policy_document" "ci_deploy_core" {
       "secretsmanager:DeleteSecret",
       "secretsmanager:DescribeSecret",
       "secretsmanager:GetResourcePolicy",
+      "secretsmanager:GetSecretValue", # Required for Terraform data sources (Feature 1105)
       "secretsmanager:UpdateSecret",
       "secretsmanager:PutSecretValue",
       "secretsmanager:TagResource",
@@ -259,7 +260,9 @@ data "aws_iam_policy_document" "ci_deploy_core" {
     ]
     resources = [
       # Pattern: {env}/sentiment-analyzer/* (preprod/sentiment-analyzer/tiingo, etc.)
-      "arn:aws:secretsmanager:*:*:secret:*/sentiment-analyzer/*"
+      "arn:aws:secretsmanager:*:*:secret:*/sentiment-analyzer/*",
+      # Pattern: {env}/amplify/* (preprod/amplify/github-token for Amplify SSR - Feature 1105)
+      "arn:aws:secretsmanager:*:*:secret:*/amplify/*"
     ]
   }
 
