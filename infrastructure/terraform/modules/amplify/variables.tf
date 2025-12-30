@@ -11,13 +11,6 @@ variable "github_repository" {
   type        = string
 }
 
-variable "github_access_token" {
-  description = "GitHub Personal Access Token - initially empty, patched via terraform_data after IAM exists"
-  type        = string
-  sensitive   = true
-  default     = ""
-}
-
 variable "api_gateway_url" {
   description = "API Gateway endpoint URL for backend API calls"
   type        = string
