@@ -954,6 +954,65 @@ module "chaos" {
 }
 
 # ===================================================================
+# Module: AWS Amplify Frontend (Feature 1105)
+# ===================================================================
+# Next.js frontend with SSR support via AWS Amplify Hosting.
+# Replaces the vanilla JS dashboard (/src/dashboard/) with the
+# Next.js frontend (/frontend/) for full pan/scroll support.
+
+module "amplify_frontend" {
+  source = "./modules/amplify"
+  count  = var.enable_amplify ? 1 : 0
+
+  environment         = var.environment
+  github_repository   = var.amplify_github_repository
+  github_access_token = var.amplify_github_token
+
+  # Backend integration
+  api_gateway_url      = module.api_gateway.api_endpoint
+  sse_lambda_url       = module.sse_streaming_lambda.function_url
+  cognito_user_pool_id = module.cognito.user_pool_id
+  cognito_client_id    = module.cognito.client_id
+  cognito_domain       = module.cognito.domain
+
+  depends_on = [
+    module.api_gateway,
+    module.sse_streaming_lambda,
+    module.cognito
+  ]
+}
+
+# ===================================================================
+# Gap 3: Patch Cognito with Amplify URL (breaks circular dependency)
+# ===================================================================
+# Cognito needs Amplify URL for callback_urls, but Amplify needs Cognito
+# credentials. This terraform_data runs AFTER both exist to patch Cognito.
+
+resource "terraform_data" "cognito_callback_patch" {
+  count = var.enable_amplify ? 1 : 0
+
+  triggers_replace = {
+    amplify_url = module.amplify_frontend[0].production_url
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      aws cognito-idp update-user-pool-client \
+        --user-pool-id ${module.cognito.user_pool_id} \
+        --client-id ${module.cognito.client_id} \
+        --callback-urls \
+          "http://localhost:3000/auth/callback" \
+          "${module.amplify_frontend[0].production_url}/auth/callback" \
+        --logout-urls \
+          "http://localhost:3000" \
+          "${module.amplify_frontend[0].production_url}"
+    EOT
+  }
+
+  depends_on = [module.amplify_frontend, module.cognito]
+}
+
+# ===================================================================
 # Outputs
 # ===================================================================
 
@@ -1198,4 +1257,28 @@ output "analysis_ecr_repository_url" {
 output "dashboard_ecr_repository_url" {
   description = "ECR repository URL for Dashboard Lambda container images"
   value       = aws_ecr_repository.dashboard.repository_url
+}
+
+# ===================================================================
+# Feature 1105: AWS Amplify Frontend Outputs
+# ===================================================================
+
+output "amplify_app_id" {
+  description = "Amplify App ID (empty if Amplify is disabled)"
+  value       = var.enable_amplify ? module.amplify_frontend[0].app_id : ""
+}
+
+output "amplify_default_domain" {
+  description = "Amplify default domain (empty if Amplify is disabled)"
+  value       = var.enable_amplify ? module.amplify_frontend[0].default_domain : ""
+}
+
+output "amplify_production_url" {
+  description = "Production URL for the Amplify-hosted Next.js frontend"
+  value       = var.enable_amplify ? module.amplify_frontend[0].production_url : ""
+}
+
+output "amplify_console_url" {
+  description = "AWS Console URL for Amplify app management"
+  value       = var.enable_amplify ? module.amplify_frontend[0].console_url : ""
 }

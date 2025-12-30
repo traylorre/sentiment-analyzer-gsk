@@ -138,6 +138,12 @@ resource "aws_cognito_user_pool_client" "dashboard" {
   # Read/write attributes
   read_attributes  = ["email", "email_verified", "custom:anonymous_session_id"]
   write_attributes = ["email", "custom:anonymous_session_id"]
+
+  # Gap 3: Ignore callback/logout URLs to break circular dependency with Amplify
+  # These URLs are patched by terraform_data after Amplify URL is known
+  lifecycle {
+    ignore_changes = [callback_urls, logout_urls]
+  }
 }
 
 # ===================================================================
