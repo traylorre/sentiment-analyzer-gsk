@@ -961,16 +961,18 @@ module "chaos" {
 # Next.js frontend (/frontend/) for full pan/scroll support.
 
 # Amplify Frontend Module
-# NOTE: GitHub access token is NOT passed here to avoid circular dependency.
-# The token is patched via terraform_data.amplify_github_token_patch AFTER
-# IAM permissions exist (see Gap 4 below).
+# Feature 1106: GitHub token read from Secrets Manager at plan time
+# This breaks the circular dependency - token is pre-provisioned in Secrets Manager,
+# not patched post-creation via terraform_data.
 module "amplify_frontend" {
   source = "./modules/amplify"
   count  = var.enable_amplify ? 1 : 0
 
   environment       = var.environment
   github_repository = var.amplify_github_repository
-  # github_access_token intentionally omitted - patched via terraform_data
+
+  # GitHub token from Secrets Manager (Feature 1106)
+  github_token_secret_name = "${var.environment}/amplify/github-token"
 
   # Backend integration
   api_gateway_url      = module.api_gateway.api_endpoint
@@ -1017,32 +1019,14 @@ resource "terraform_data" "cognito_callback_patch" {
 }
 
 # ===================================================================
-# Gap 4: Patch Amplify with GitHub token (breaks circular dependency)
+# Gap 4: RESOLVED - GitHub token now read from Secrets Manager (Feature 1106)
 # ===================================================================
-# Data source reads secret at plan time, but CI IAM permission for
-# secretsmanager:GetSecretValue is only applied at apply time.
-# This terraform_data runs AFTER module.iam exists to patch Amplify.
-
-resource "terraform_data" "amplify_github_token_patch" {
-  count = var.enable_amplify ? 1 : 0
-
-  triggers_replace = {
-    app_id = module.amplify_frontend[0].app_id
-  }
-
-  provisioner "local-exec" {
-    command = <<-EOT
-      TOKEN=$(aws secretsmanager get-secret-value \
-        --secret-id "${var.environment}/amplify/github-token" \
-        --query 'SecretString' --output text | jq -r '.token')
-      aws amplify update-app \
-        --app-id ${module.amplify_frontend[0].app_id} \
-        --access-token "$TOKEN"
-    EOT
-  }
-
-  depends_on = [module.amplify_frontend, module.iam]
-}
+# The token bootstrap problem is solved by reading the pre-provisioned token
+# from Secrets Manager via data source at plan time. The terraform_data
+# provisioner approach was removed because:
+# 1. AWS Amplify API rejects app creation without a valid token
+# 2. The provisioner runs AFTER creation, but creation itself fails
+# 3. Reading from Secrets Manager at plan time is the correct pattern
 
 # ===================================================================
 # Outputs

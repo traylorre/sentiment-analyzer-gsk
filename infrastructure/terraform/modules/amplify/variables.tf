@@ -47,3 +47,8 @@ variable "enable_auto_build" {
   type        = bool
   default     = true
 }
+
+variable "github_token_secret_name" {
+  description = "Name of the Secrets Manager secret containing GitHub PAT for Amplify"
+  type        = string
+}

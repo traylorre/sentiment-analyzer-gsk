@@ -2,21 +2,34 @@
 # Feature 1105: Next.js Frontend Migration via AWS Amplify SSR
 
 # ===================================================================
+# GitHub Token from Secrets Manager
+# ===================================================================
+# The token must be pre-provisioned in Secrets Manager before Terraform runs.
+# This breaks the chicken-and-egg problem: we read the token at plan time,
+# not via a provisioner that runs after creation.
+
+data "aws_secretsmanager_secret_version" "github_token" {
+  secret_id = var.github_token_secret_name
+}
+
+locals {
+  github_token = jsondecode(data.aws_secretsmanager_secret_version.github_token.secret_string)["token"]
+}
+
+# ===================================================================
 # Amplify App
 # ===================================================================
 
 resource "aws_amplify_app" "frontend" {
-  name       = "${var.environment}-sentiment-frontend"
-  repository = var.github_repository
+  name = "${var.environment}-sentiment-frontend"
+
+  # Repository connection with token from Secrets Manager
+  # Feature 1106: Token bootstrap via data source (not provisioner)
+  repository   = var.github_repository
+  access_token = local.github_token
 
   # SSR mode for Next.js with middleware support
   platform = "WEB_COMPUTE"
-
-  # GitHub access token - always null initially, patched via terraform_data after IAM exists
-  # This breaks the circular dependency: data source reads secret at plan time,
-  # but IAM permission for GetSecretValue is only applied at apply time.
-  # NOTE: Cannot use conditional on sensitive value (causes Terraform crash: "value is marked")
-  access_token = null
 
   # Build specification for monorepo
   build_spec = <<-EOT
@@ -79,11 +92,9 @@ resource "aws_amplify_app" "frontend" {
     Component   = "amplify-frontend"
   }
 
-  # Ignore access_token changes - patched via terraform_data provisioner
-  # to break circular dependency with IAM GetSecretValue permission
-  lifecycle {
-    ignore_changes = [access_token]
-  }
+  # NOTE: repository and access_token are now set directly from Secrets Manager
+  # data source (Feature 1106). No lifecycle ignore needed - token is read at
+  # plan time, not patched post-creation.
 }
 
 # ===================================================================
