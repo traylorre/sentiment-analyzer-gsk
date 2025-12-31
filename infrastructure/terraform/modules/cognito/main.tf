@@ -88,6 +88,7 @@ resource "aws_cognito_user_pool" "main" {
   deletion_protection = var.environment == "prod" ? "ACTIVE" : "INACTIVE"
 
   tags = {
+    Name        = "${var.environment}-sentiment-users" # Required for CI IAM policy condition
     Environment = var.environment
     Feature     = "006-user-config-dashboard"
     Component   = "authentication"
