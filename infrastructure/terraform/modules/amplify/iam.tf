@@ -8,13 +8,20 @@
 resource "aws_iam_role" "amplify_service" {
   name = "${var.environment}-amplify-service-role"
 
+  # Trust policy for SSR (WEB_COMPUTE) requires additional service principals
+  # See: https://docs.aws.amazon.com/amplify/latest/userguide/amplify-SSR-compute-role.html
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
+        Sid    = "AmplifySSRTrust"
         Effect = "Allow"
         Principal = {
-          Service = "amplify.amazonaws.com"
+          Service = [
+            "amplify.amazonaws.com",
+            "amplify.us-east-1.amazonaws.com",
+            "lambda.amazonaws.com"
+          ]
         }
         Action = "sts:AssumeRole"
       }
