@@ -583,6 +583,7 @@ data "aws_iam_policy_document" "ci_deploy_iam" {
       "iam:DeleteRole",
       "iam:GetRole",
       "iam:UpdateRole",
+      "iam:UpdateAssumeRolePolicy", # Feature 1109: Update trust policy for SSR
       "iam:AttachRolePolicy",
       "iam:DetachRolePolicy",
       "iam:PutRolePolicy",
