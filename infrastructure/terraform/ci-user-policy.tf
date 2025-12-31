@@ -500,8 +500,10 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
     }
   }
 
-  # Cognito User Pools - List/Describe operations (require wildcard)
-  # Note: These require unconditional access for Terraform state refresh
+  # Cognito User Pools - List/Describe and bootstrap operations (require wildcard)
+  # Note: These require unconditional access for Terraform state refresh AND
+  # for bootstrap operations on resources that don't yet have the required tags.
+  # TagResource/UpdateUserPoolClient are here to avoid chicken-egg with tag conditions.
   statement {
     sid    = "CognitoIDPList"
     effect = "Allow"
@@ -515,7 +517,12 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
       "cognito-idp:DescribeUserPoolDomain",
       "cognito-idp:DescribeResourceServer",
       "cognito-idp:DescribeIdentityProvider",
-      "cognito-idp:GetUserPoolMfaConfig"
+      "cognito-idp:GetUserPoolMfaConfig",
+      # Bootstrap operations - needed before tags exist (Feature 1107)
+      "cognito-idp:TagResource",
+      "cognito-idp:UntagResource",
+      "cognito-idp:ListTagsForResource",
+      "cognito-idp:UpdateUserPoolClient"
     ]
     resources = ["*"]
   }
