@@ -1,5 +1,19 @@
 import { api } from './client';
-import type { User, AuthTokens, AnonymousSession } from '@/types/auth';
+import type { User, AuthTokens, AnonymousSession, AnonymousSessionResponse } from '@/types/auth';
+
+/**
+ * Map snake_case backend response to camelCase frontend type.
+ * Per API contract: specs/006-user-config-dashboard/contracts/auth-api.md:31-39
+ */
+function mapAnonymousSession(response: AnonymousSessionResponse): AnonymousSession {
+  return {
+    userId: response.user_id,
+    authType: response.auth_type,
+    createdAt: response.created_at,
+    sessionExpiresAt: response.session_expires_at,
+    storageHint: response.storage_hint,
+  };
+}
 
 export interface MagicLinkRequest {
   email: string;
@@ -32,10 +46,13 @@ export interface RefreshTokenResponse {
 
 export const authApi = {
   /**
-   * Create a new anonymous session
+   * Create a new anonymous session.
+   * Maps snake_case backend response to camelCase frontend type.
    */
-  createAnonymousSession: () =>
-    api.post<AnonymousSession>('/api/v2/auth/anonymous'),
+  createAnonymousSession: async (): Promise<AnonymousSession> => {
+    const response = await api.post<AnonymousSessionResponse>('/api/v2/auth/anonymous');
+    return mapAnonymousSession(response);
+  },
 
   /**
    * Request a magic link be sent to the provided email

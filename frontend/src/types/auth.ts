@@ -25,6 +25,19 @@ export interface AnonymousSession {
   storageHint: 'localStorage';
 }
 
+/**
+ * Raw anonymous session response from backend (snake_case per API contract).
+ * See: specs/006-user-config-dashboard/contracts/auth-api.md:31-39
+ * Mapped to AnonymousSession (camelCase) at API boundary.
+ */
+export interface AnonymousSessionResponse {
+  user_id: string;
+  auth_type: 'anonymous';
+  created_at: string;
+  session_expires_at: string;
+  storage_hint: 'localStorage';
+}
+
 export interface AuthState {
   isAuthenticated: boolean;
   isAnonymous: boolean;
