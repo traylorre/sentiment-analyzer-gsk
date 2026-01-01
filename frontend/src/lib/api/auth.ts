@@ -1,4 +1,5 @@
 import { api } from './client';
+import { SESSION_INIT_TIMEOUT_MS } from '@/lib/constants';
 import type { User, AuthTokens, AnonymousSession, AnonymousSessionResponse } from '@/types/auth';
 
 /**
@@ -48,9 +49,11 @@ export const authApi = {
   /**
    * Create a new anonymous session.
    * Maps snake_case backend response to camelCase frontend type.
+   * Feature 1112: Includes timeout to prevent infinite loading state.
+   * @param timeout - Optional timeout in milliseconds (default: SESSION_INIT_TIMEOUT_MS)
    */
-  createAnonymousSession: async (): Promise<AnonymousSession> => {
-    const response = await api.post<AnonymousSessionResponse>('/api/v2/auth/anonymous');
+  createAnonymousSession: async (timeout: number = SESSION_INIT_TIMEOUT_MS): Promise<AnonymousSession> => {
+    const response = await api.post<AnonymousSessionResponse>('/api/v2/auth/anonymous', undefined, { timeout });
     return mapAnonymousSession(response);
   },
 
