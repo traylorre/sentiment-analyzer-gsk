@@ -1,4 +1,15 @@
-import { API_URL } from '@/lib/constants';
+import { API_URL, TIMEOUT_ERROR_MESSAGE } from '@/lib/constants';
+
+/**
+ * Feature 1112: Error codes for API client errors
+ */
+export type ErrorCode =
+  | 'NETWORK_ERROR'
+  | 'TIMEOUT'
+  | 'AUTH_ERROR'
+  | 'SERVER_ERROR'
+  | 'CLIENT_ERROR'
+  | 'UNKNOWN_ERROR';
 
 export interface ApiError {
   code: string;
@@ -20,6 +31,11 @@ export class ApiClientError extends Error {
 
 interface RequestOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined>;
+  /**
+   * Feature 1112: Request timeout in milliseconds.
+   * When specified, the request will be aborted after this duration.
+   */
+  timeout?: number;
 }
 
 let accessToken: string | null = null;
@@ -76,7 +92,7 @@ export async function apiClient<T>(
   endpoint: string,
   options: RequestOptions = {}
 ): Promise<T> {
-  const { params, ...fetchOptions } = options;
+  const { params, timeout, ...fetchOptions } = options;
 
   // Build URL with query params
   const url = new URL(`${API_URL}${endpoint}`);
@@ -102,12 +118,36 @@ export async function apiClient<T>(
     headers.set('X-User-ID', userId);
   }
 
-  const response = await fetch(url.toString(), {
-    ...fetchOptions,
-    headers,
-  });
+  // Feature 1112: AbortController-based timeout support
+  // Properly cancels the request (no orphaned connections)
+  const fetchOptionsWithSignal = { ...fetchOptions, headers } as RequestInit;
+  if (timeout !== undefined && timeout > 0) {
+    fetchOptionsWithSignal.signal = AbortSignal.timeout(timeout);
+  }
 
-  return handleResponse<T>(response);
+  try {
+    const response = await fetch(url.toString(), fetchOptionsWithSignal);
+    return handleResponse<T>(response);
+  } catch (error) {
+    // Feature 1112: Handle AbortError (timeout) separately
+    if (error instanceof Error && error.name === 'TimeoutError') {
+      throw new ApiClientError(0, 'TIMEOUT', TIMEOUT_ERROR_MESSAGE);
+    }
+    // Handle other abort errors (e.g., manual abort)
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new ApiClientError(0, 'TIMEOUT', TIMEOUT_ERROR_MESSAGE);
+    }
+    // Handle network errors
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      throw new ApiClientError(0, 'NETWORK_ERROR', 'Unable to connect. Please check your internet connection.');
+    }
+    // Re-throw ApiClientError as-is
+    if (error instanceof ApiClientError) {
+      throw error;
+    }
+    // Unknown errors
+    throw new ApiClientError(0, 'UNKNOWN_ERROR', error instanceof Error ? error.message : 'An unknown error occurred');
+  }
 }
 
 // Convenience methods

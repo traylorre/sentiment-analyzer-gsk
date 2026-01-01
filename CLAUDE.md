@@ -43,6 +43,8 @@ Auto-generated from all feature plans. Last updated: 2025-11-26
 - N/A (documentation output only) (1020-validate-budget-60-month)
 - Python 3.13 (backend Lambda), TypeScript 5 / React 18 (frontend) + FastAPI (backend routing), lightweight-charts 5.0.9 (charting), React Query (data fetching) (1035-ohlc-resolution-selector)
 - Session storage for resolution preference (browser-side only) (1035-ohlc-resolution-selector)
+- TypeScript 5.x (Next.js 14 frontend) + Zustand (state), fetch API, AbortController (1112-session-init-timeout)
+- localStorage (session persistence via Zustand persist) (1112-session-init-timeout)
 
 - **Python 3.13** with FastAPI, boto3, pydantic, aws-lambda-powertools, httpx
 - **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, CloudFront
@@ -820,9 +822,9 @@ aws cloudwatch get-metric-data --metric-data-queries '[...]' --start-time ... --
 ```
 
 ## Recent Changes
+- 1112-session-init-timeout: Added TypeScript 5.x (Next.js 14 frontend) + Zustand (state), fetch API, AbortController
 - 1035-ohlc-resolution-selector: Added Python 3.13 (backend Lambda), TypeScript 5 / React 18 (frontend) + FastAPI (backend routing), lightweight-charts 5.0.9 (charting), React Query (data fetching)
 - 1020-validate-budget-60-month: Added Python 3.13 (for any helper scripts), Terraform HCL (infrastructure) + infracost CLI, make, jq (for parsing)
-- 1009-realtime-multi-resolution: Added Python 3.13 (existing project standard) + FastAPI, boto3, sse-starlette (existing SSE stack), pydantic
 
 <!-- MANUAL ADDITIONS START -->
 

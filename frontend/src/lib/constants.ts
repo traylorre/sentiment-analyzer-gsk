@@ -16,6 +16,23 @@ export const RECONNECT_DELAY_MS = 3000;
 
 export const HAPTIC_ENABLED = process.env.NEXT_PUBLIC_ENABLE_HAPTICS !== 'false';
 
+/**
+ * Feature 1112: Session initialization timeout configuration
+ * Default timeout for anonymous session creation API call (milliseconds)
+ */
+export const SESSION_INIT_TIMEOUT_MS = 10000; // 10 seconds
+
+/**
+ * Feature 1112: Maximum time allowed for complete session initialization
+ * Includes timeout + UI transition time (for documentation/reference)
+ */
+export const MAX_INIT_TIME_MS = 15000; // 15 seconds
+
+/**
+ * Feature 1112: User-friendly timeout error message
+ */
+export const TIMEOUT_ERROR_MESSAGE = 'Connection timed out. Please check your network and try again.';
+
 export const LOCAL_STORAGE_KEYS = {
   userId: 'sentiment_user_id',
   authType: 'sentiment_auth_type',

@@ -5,6 +5,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { User, AuthTokens, AuthState, OAuthProvider } from '@/types/auth';
 import { setAuthCookies, clearAuthCookies } from '@/lib/cookies';
 import { setUserId, setAccessToken } from '@/lib/api/client';
+import { authApi } from '@/lib/api/auth';
 
 interface AuthStore extends AuthState {
   // Loading states
@@ -93,21 +94,14 @@ export const useAuthStore = create<AuthStore>()(
           setLoading(true);
           setError(null);
 
-          const response = await fetch('/api/v2/auth/anonymous', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-          });
-
-          if (!response.ok) {
-            throw new Error('Failed to create anonymous session');
-          }
-
-          const data = await response.json();
+          // Use authApi with proper snake_case → camelCase mapping
+          // Per spec: specs/006-user-config-dashboard/contracts/auth-api.md
+          const data = await authApi.createAnonymousSession();
 
           setUser({
             userId: data.userId,
             authType: 'anonymous',
-            createdAt: new Date().toISOString(),
+            createdAt: data.createdAt,
             configurationCount: 0,
             alertCount: 0,
             emailNotificationsEnabled: false,
