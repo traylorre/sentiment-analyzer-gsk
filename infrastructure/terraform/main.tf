@@ -975,14 +975,15 @@ module "amplify_frontend" {
   github_token_secret_name = "${var.environment}/amplify/github-token"
 
   # Backend integration
-  api_gateway_url      = module.api_gateway.api_endpoint
+  # Feature 1114: Use Lambda Function URL (has CORS) instead of API Gateway
+  dashboard_lambda_url = module.dashboard_lambda.function_url
   sse_lambda_url       = module.sse_streaming_lambda.function_url
   cognito_user_pool_id = module.cognito.user_pool_id
   cognito_client_id    = module.cognito.client_id
   cognito_domain       = module.cognito.domain
 
   depends_on = [
-    module.api_gateway,
+    module.dashboard_lambda,
     module.sse_streaming_lambda,
     module.cognito
   ]

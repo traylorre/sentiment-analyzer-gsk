@@ -12,7 +12,13 @@ variable "github_repository" {
 }
 
 variable "api_gateway_url" {
-  description = "API Gateway endpoint URL for backend API calls"
+  description = "API Gateway endpoint URL for backend API calls (deprecated - use dashboard_lambda_url)"
+  type        = string
+  default     = ""
+}
+
+variable "dashboard_lambda_url" {
+  description = "Dashboard Lambda Function URL for backend API calls (has CORS configured)"
   type        = string
 }
 
