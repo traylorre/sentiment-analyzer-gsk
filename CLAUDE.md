@@ -45,6 +45,10 @@ Auto-generated from all feature plans. Last updated: 2025-11-26
 - Session storage for resolution preference (browser-side only) (1035-ohlc-resolution-selector)
 - TypeScript 5.x (Next.js 14 frontend) + Zustand (state), fetch API, AbortController (1112-session-init-timeout)
 - localStorage (session persistence via Zustand persist) (1112-session-init-timeout)
+- Python 3.13 + AWS Lambda, pydantic, httpx (Tiingo API client) (1113-ohlc-intraday-backend)
+- N/A (stateless API calls, module-level LRU cache) (1113-ohlc-intraday-backend)
+- Terraform 1.5+ (infrastructure change only) + AWS Amplify, Lambda Function URL (1114-cors-api-gateway-fix)
+- N/A (configuration change) (1114-cors-api-gateway-fix)
 
 - **Python 3.13** with FastAPI, boto3, pydantic, aws-lambda-powertools, httpx
 - **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, CloudFront
@@ -822,9 +826,9 @@ aws cloudwatch get-metric-data --metric-data-queries '[...]' --start-time ... --
 ```
 
 ## Recent Changes
+- 1114-cors-api-gateway-fix: Added Terraform 1.5+ (infrastructure change only) + AWS Amplify, Lambda Function URL
+- 1113-ohlc-intraday-backend: Added Python 3.13 + AWS Lambda, pydantic, httpx (Tiingo API client)
 - 1112-session-init-timeout: Added TypeScript 5.x (Next.js 14 frontend) + Zustand (state), fetch API, AbortController
-- 1035-ohlc-resolution-selector: Added Python 3.13 (backend Lambda), TypeScript 5 / React 18 (frontend) + FastAPI (backend routing), lightweight-charts 5.0.9 (charting), React Query (data fetching)
-- 1020-validate-budget-60-month: Added Python 3.13 (for any helper scripts), Terraform HCL (infrastructure) + infracost CLI, make, jq (for parsing)
 
 <!-- MANUAL ADDITIONS START -->
 
