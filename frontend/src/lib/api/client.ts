@@ -1,4 +1,5 @@
 import { API_URL, TIMEOUT_ERROR_MESSAGE } from '@/lib/constants';
+import { joinUrl } from '@/lib/utils/url';
 
 /**
  * Feature 1112: Error codes for API client errors
@@ -95,7 +96,8 @@ export async function apiClient<T>(
   const { params, timeout, ...fetchOptions } = options;
 
   // Build URL with query params
-  const url = new URL(`${API_URL}${endpoint}`);
+  // Feature 1118: Use joinUrl to prevent double-slash issues
+  const url = new URL(joinUrl(API_URL, endpoint));
   if (params) {
     Object.entries(params).forEach(([key, value]) => {
       if (value !== undefined) {

@@ -7,6 +7,7 @@
  */
 
 import type { RuntimeConfig } from '@/types/runtime';
+import { joinUrl } from '@/lib/utils/url';
 
 /**
  * Fetch runtime configuration from /api/v2/runtime
@@ -21,7 +22,9 @@ export async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
 
   try {
-    const response = await fetch(`${baseUrl}/api/v2/runtime`, {
+    // Feature 1118: Use joinUrl to prevent double-slash issues
+    const url = baseUrl ? joinUrl(baseUrl, '/api/v2/runtime') : '/api/v2/runtime';
+    const response = await fetch(url, {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
