@@ -24,6 +24,13 @@
       "industry": "Internet Content & Information",
       "is_active": true
     },
+    "GOOG": {
+      "name": "Alphabet Inc - Class C",
+      "exchange": "NASDAQ",
+      "sector": "Technology",
+      "industry": "Internet Content & Information",
+      "is_active": true
+    },
     "AMZN": {
       "name": "Amazon.com Inc.",
       "exchange": "NASDAQ",
