@@ -35,7 +35,31 @@ from src.lambdas.dashboard.handler import app
 # IMPORTANT: Use setdefault to avoid overwriting CI-provided preprod values
 # Feature 1039: API_KEY removed - using session auth
 os.environ.setdefault("DYNAMODB_TABLE", "test-sentiment-items")
+os.environ.setdefault("USERS_TABLE", "test-sentiment-users")
 os.environ.setdefault("ENVIRONMENT", "test")
+
+
+def create_users_table():
+    """Create a test users DynamoDB table (Feature 1119).
+
+    The users table uses PK/SK pattern for user profiles and auth data.
+    """
+    dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
+
+    table = dynamodb.create_table(
+        TableName="test-sentiment-users",
+        KeySchema=[
+            {"AttributeName": "PK", "KeyType": "HASH"},
+            {"AttributeName": "SK", "KeyType": "RANGE"},
+        ],
+        AttributeDefinitions=[
+            {"AttributeName": "PK", "AttributeType": "S"},
+            {"AttributeName": "SK", "AttributeType": "S"},
+        ],
+        BillingMode="PAY_PER_REQUEST",
+    )
+    table.wait_until_exists()
+    return table
 
 
 def create_test_table():
@@ -218,6 +242,84 @@ class TestAuthentication:
             headers={"Authorization": "Bearer 12345678-1234-5678-1234-567812345678"},
         )
         assert response.status_code == 200
+
+
+class TestAnonymousSessionCreation:
+    """Tests for POST /api/v2/auth/anonymous endpoint (Feature 1119).
+
+    Feature 1119: Fix anonymous auth 422 error when frontend sends no body.
+    The endpoint should accept:
+    - No request body (use defaults)
+    - Empty JSON body {} (use defaults)
+    - Body with optional fields (use provided values)
+    """
+
+    @mock_aws
+    def test_no_body_returns_201(self, client):
+        """Test POST /api/v2/auth/anonymous with no body returns 201.
+
+        FR-001: System MUST accept POST /api/v2/auth/anonymous with no request
+        body and create a session using default values.
+        """
+        create_users_table()
+
+        # Send request with no body (content-length: 0)
+        response = client.post(
+            "/api/v2/auth/anonymous",
+            headers={"Content-Type": "application/json"},
+        )
+
+        assert (
+            response.status_code == 201
+        ), f"Expected 201, got {response.status_code}: {response.text}"
+        data = response.json()
+        assert "user_id" in data
+        assert data["auth_type"] == "anonymous"
+        assert "created_at" in data
+        assert "session_expires_at" in data
+        assert data["storage_hint"] == "localStorage"
+
+    @mock_aws
+    def test_empty_body_returns_201(self, client):
+        """Test POST /api/v2/auth/anonymous with empty body {} returns 201.
+
+        FR-002: System MUST accept POST /api/v2/auth/anonymous with an empty
+        JSON body {} and create a session using default values.
+        """
+        create_users_table()
+
+        response = client.post(
+            "/api/v2/auth/anonymous",
+            json={},
+        )
+
+        assert (
+            response.status_code == 201
+        ), f"Expected 201, got {response.status_code}: {response.text}"
+        data = response.json()
+        assert "user_id" in data
+        assert data["auth_type"] == "anonymous"
+
+    @mock_aws
+    def test_body_with_timezone_returns_201(self, client):
+        """Test POST /api/v2/auth/anonymous with custom timezone returns 201.
+
+        FR-003: System MUST accept POST /api/v2/auth/anonymous with optional
+        parameters (timezone, device_fingerprint) and use provided values.
+        """
+        create_users_table()
+
+        response = client.post(
+            "/api/v2/auth/anonymous",
+            json={"timezone": "Europe/London"},
+        )
+
+        assert (
+            response.status_code == 201
+        ), f"Expected 201, got {response.status_code}: {response.text}"
+        data = response.json()
+        assert "user_id" in data
+        assert data["auth_type"] == "anonymous"
 
 
 class TestStaticFiles:

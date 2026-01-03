@@ -23,7 +23,7 @@ import os
 from typing import Literal
 
 from botocore.exceptions import ClientError
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr
 
@@ -250,10 +250,19 @@ async def get_config_with_tickers(
 @auth_router.post("/anonymous")
 async def create_anonymous_session(
     request: Request,
-    body: auth_service.AnonymousSessionRequest,
+    body: auth_service.AnonymousSessionRequest | None = Body(default=None),
     table=Depends(get_users_table),
 ):
-    """Create anonymous session (T047)."""
+    """Create anonymous session (T047, Feature 1119).
+
+    Accepts:
+    - No request body (uses defaults: timezone=America/New_York)
+    - Empty body {} (uses defaults)
+    - Body with optional fields (uses provided values)
+    """
+    # Feature 1119: Accept empty/missing body, use defaults
+    if body is None:
+        body = auth_service.AnonymousSessionRequest()
     try:
         result = auth_service.create_anonymous_session(
             table=table,
