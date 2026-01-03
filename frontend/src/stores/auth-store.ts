@@ -24,7 +24,7 @@ interface AuthStore extends AuthState {
   // Auth operations
   signInAnonymous: () => Promise<void>;
   signInWithMagicLink: (email: string, token: string) => Promise<void>;
-  verifyMagicLink: (token: string) => Promise<void>;
+  verifyMagicLink: (token: string, sig?: string) => Promise<void>;
   signInWithOAuth: (provider: OAuthProvider) => Promise<void>;
   handleOAuthCallback: (code: string, provider: OAuthProvider) => Promise<void>;
   refreshSession: () => Promise<void>;
@@ -115,23 +115,15 @@ export const useAuthStore = create<AuthStore>()(
         }
       },
 
-      signInWithMagicLink: async (email: string, captchaToken: string) => {
+      signInWithMagicLink: async (email: string, _captchaToken: string) => {
         const { setLoading, setError } = get();
 
         try {
           setLoading(true);
           setError(null);
 
-          const response = await fetch('/api/v2/auth/magic-link', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, captchaToken }),
-          });
-
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.message || 'Failed to send magic link');
-          }
+          // Use authApi to route to Lambda backend
+          await authApi.requestMagicLink(email);
 
           // Magic link sent successfully - user needs to check email
         } catch (error) {
@@ -142,29 +134,22 @@ export const useAuthStore = create<AuthStore>()(
         }
       },
 
-      verifyMagicLink: async (token: string) => {
+      verifyMagicLink: async (token: string, sig?: string) => {
         const { setLoading, setError, setUser, setTokens, setSession } = get();
 
         try {
           setLoading(true);
           setError(null);
 
-          const response = await fetch('/api/v2/auth/magic-link/verify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token }),
-          });
-
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.message || 'Invalid or expired magic link');
-          }
-
-          const data = await response.json();
+          // Use authApi to route to Lambda backend
+          // Note: sig should be extracted from URL params by the caller
+          const data = await authApi.verifyMagicLink(token, sig ?? '');
 
           setUser(data.user);
           setTokens(data.tokens);
-          setSession(data.sessionExpiresAt);
+          // Calculate session expiry from expiresIn (seconds)
+          const expiresAt = new Date(Date.now() + data.tokens.expiresIn * 1000).toISOString();
+          setSession(expiresAt);
         } catch (error) {
           setError(error instanceof Error ? error.message : 'Unknown error');
           throw error;
@@ -180,14 +165,8 @@ export const useAuthStore = create<AuthStore>()(
           setLoading(true);
           setError(null);
 
-          // Get OAuth URLs from backend
-          const response = await fetch('/api/v2/auth/oauth/urls');
-
-          if (!response.ok) {
-            throw new Error(`Failed to get OAuth URLs`);
-          }
-
-          const urls = await response.json();
+          // Use authApi to route to Lambda backend
+          const urls = await authApi.getOAuthUrls();
 
           // Redirect to OAuth provider
           window.location.href = urls[provider];
@@ -205,22 +184,14 @@ export const useAuthStore = create<AuthStore>()(
           setLoading(true);
           setError(null);
 
-          const response = await fetch('/api/v2/auth/oauth/callback', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ provider, code }),
-          });
-
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.message || 'OAuth authentication failed');
-          }
-
-          const data = await response.json();
+          // Use authApi to route to Lambda backend
+          const data = await authApi.exchangeOAuthCode(provider, code);
 
           setUser(data.user);
           setTokens(data.tokens);
-          setSession(data.sessionExpiresAt);
+          // Calculate session expiry from expiresIn (seconds)
+          const expiresAt = new Date(Date.now() + data.tokens.expiresIn * 1000).toISOString();
+          setSession(expiresAt);
         } catch (error) {
           setError(error instanceof Error ? error.message : 'Unknown error');
           throw error;
@@ -230,27 +201,22 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       refreshSession: async () => {
-        const { tokens, setTokens, setSession, setError } = get();
+        const { tokens, setTokens, setError } = get();
 
         if (!tokens?.refreshToken) {
           return;
         }
 
         try {
-          const response = await fetch('/api/v2/auth/refresh', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ refreshToken: tokens.refreshToken }),
+          // Use authApi to route to Lambda backend
+          const data = await authApi.refreshToken(tokens.refreshToken);
+
+          // Update tokens with new access token (preserving refresh token)
+          setTokens({
+            ...tokens,
+            accessToken: data.accessToken,
+            idToken: data.idToken,
           });
-
-          if (!response.ok) {
-            throw new Error('Failed to refresh session');
-          }
-
-          const data = await response.json();
-
-          setTokens(data.tokens);
-          setSession(data.sessionExpiresAt);
         } catch (error) {
           setError(error instanceof Error ? error.message : 'Unknown error');
           // Don't throw - let the session expire gracefully
@@ -262,13 +228,9 @@ export const useAuthStore = create<AuthStore>()(
 
         try {
           if (tokens?.accessToken) {
-            await fetch('/api/v2/auth/signout', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${tokens.accessToken}`,
-              },
-            });
+            // Use authApi to route to Lambda backend
+            // authApi automatically handles Authorization header
+            await authApi.signOut();
           }
         } catch {
           // Ignore logout errors - still clear local state
