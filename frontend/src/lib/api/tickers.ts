@@ -12,14 +12,25 @@ export interface TickerValidationResult {
   invalid: string[];
 }
 
+/**
+ * Response wrapper from backend ticker search endpoint.
+ * Backend returns wrapped response for RESTful extensibility (Feature 1120).
+ */
+export interface TickerSearchResponse {
+  results: TickerSearchResult[];
+}
+
 export const tickersApi = {
   /**
-   * Search for tickers by symbol or name
+   * Search for tickers by symbol or name.
+   * Unwraps backend response {results: [...]} to return bare array (Feature 1120).
    */
-  search: (query: string, limit?: number) =>
-    api.get<TickerSearchResult[]>('/api/v2/tickers/search', {
+  search: async (query: string, limit?: number): Promise<TickerSearchResult[]> => {
+    const response = await api.get<TickerSearchResponse>('/api/v2/tickers/search', {
       params: { q: query, limit },
-    }),
+    });
+    return response.results ?? [];
+  },
 
   /**
    * Validate a single ticker symbol
