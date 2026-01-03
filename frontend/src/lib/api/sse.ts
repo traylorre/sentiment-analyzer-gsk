@@ -3,6 +3,8 @@
  * for real-time sentiment updates
  */
 
+import { joinUrl } from '@/lib/utils/url';
+
 export type SSEStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
 
 export interface SSEMessage<T = unknown> {
@@ -181,7 +183,9 @@ let sseInstance: SSEClient | null = null;
 
 export function getSSEClient(baseUrl?: string): SSEClient {
   if (!sseInstance) {
-    const url = baseUrl || `${process.env.NEXT_PUBLIC_API_URL || ''}/api/stream`;
+    // Feature 1118: Use joinUrl to prevent double-slash issues
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
+    const url = baseUrl || (apiUrl ? joinUrl(apiUrl, '/api/stream') : '/api/stream');
     sseInstance = new SSEClient(url);
   }
   return sseInstance;

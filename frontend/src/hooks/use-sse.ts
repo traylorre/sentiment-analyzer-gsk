@@ -8,6 +8,7 @@ import {
   SSEMessage,
   SentimentUpdatePayload,
 } from '@/lib/api/sse';
+import { joinUrl } from '@/lib/utils/url';
 import { useRuntimeStore, useRuntimeLoaded } from '@/stores/runtime-store';
 
 interface UseSSEOptions {
@@ -97,14 +98,16 @@ export function useSSE(options: UseSSEOptions = {}): UseSSEResult {
         url = `/api/sse/configurations/${configId}/stream`;
       } else {
         // Legacy: token in URL (preprod temporary mitigation with short expiry)
-        url = `${baseUrl}/api/v2/configurations/${configId}/stream`;
+        // Feature 1118: Use joinUrl to prevent double-slash issues
+        url = joinUrl(baseUrl, `/api/v2/configurations/${configId}/stream`);
         if (userToken) {
           url += `?user_token=${encodeURIComponent(userToken)}`;
         }
       }
     } else {
       // Global stream (no authentication required)
-      url = useProxy ? '/api/sse/stream' : `${baseUrl}/api/v2/stream`;
+      // Feature 1118: Use joinUrl to prevent double-slash issues
+      url = useProxy ? '/api/sse/stream' : joinUrl(baseUrl, '/api/v2/stream');
     }
 
     clientRef.current = new SSEClient(url, {

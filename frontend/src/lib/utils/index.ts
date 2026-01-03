@@ -1,4 +1,5 @@
 export { cn } from './cn';
+export { joinUrl } from './url';
 export { haptic, triggerHaptic, isHapticSupported } from './haptics';
 export type { HapticIntensity } from './haptics';
 export {
