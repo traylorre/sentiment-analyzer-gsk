@@ -1,9 +1,9 @@
-# Feature Specification: Auth Architecture Rewrite (v2.8 - Deep Audit Remediation)
+# Feature Specification: Auth Architecture Rewrite (v3.0 - Canonical Reconciliation)
 
 **Feature Branch**: `1126-auth-rewrite`
 **Created**: 2026-01-03
-**Updated**: 2026-01-03
-**Status**: Draft v2.8 - Deep Audit Complete
+**Updated**: 2026-01-04
+**Status**: Draft v3.0 - Canonical Reconciliation Complete
 **Priority**: P0 - Security + Architecture Foundation
 
 ---
@@ -122,8 +122,8 @@
 6. D4: Delete `cookies.ts` entirely
 7. D5: Remove X-User-ID fallback
 8. D3: Add `aud` + `nbf` JWT validation
-9. C4: Add `@require_role("admin")` to `/admin/sessions/revoke`
-10. C5: Add `@require_role("admin")` to `/users/lookup`
+9. C4: Add `@require_role("operator")  # v3.0: operator IS admin` to `/admin/sessions/revoke`
+10. C5: Add `@require_role("operator")  # v3.0: operator IS admin` to `/users/lookup`
 
 ### v2.6 - Deep Audit (2026-01-03)
 
@@ -216,9 +216,9 @@
 
 | Section | Change | Reason |
 |---------|--------|--------|
-| Cookie Path | **FIXED** `/api/v2/auth` → `/api/v2/auth/refresh` | Industry best practice: narrow scope |
-| Anonymous Tier | **FIXED** `tier: null` (not `"free"`) | Anonymous has no billing relationship |
-| Cross-Tab Logout | **IMPLEMENTED** BroadcastChannel | User requested explicit sync |
+| Cookie Path | **v3.0** `/api/v2/auth` (widened for signout) | Signout endpoint can access cookie |
+| Anonymous Role | **v3.0** `roles: ["anonymous"]` (tier removed) | v3.0: tier concept removed, role = tier |
+| Cross-Tab Logout | **REQUIRED + IMPLEMENTED** BroadcastChannel | Production requirement (v2.10+) |
 | Role vs Tier | **CLARIFIED** with concrete examples | Eliminate code confusion |
 | Mid-Session Upgrade | **ADDED** tier upgrade flow | Future-proof for paid/operator |
 | Safari ITP | **ADDED** compatibility section | Blind spot identified in audit |
@@ -251,6 +251,188 @@
 5. Role vs Tier Decision Matrix
 6. Missing Helper Function Implementations
 
+### v2.9 - Race Condition Hardening (2026-01-03)
+
+| Section | Change | Reason |
+|---------|--------|--------|
+| JWT Validation | **DOCUMENTED** validation order rationale | H1: Order (rev→session) prevents race conditions |
+| Session Limits | **CLARIFIED** caller passes NEW role/tier | H2: Anonymous→authenticated transition at limit |
+| Schema | **FIXED** `consumed_at` → `used_at` | H4: Match code field names (lines 1210, 1238) |
+| Tier Upgrade | **HARDENED** atomic transaction + backoff | H5: Stripe webhook atomicity + polling reliability |
+| Session Eviction | **HARDENED** atomic with blocklist entry | B4: Prevents refresh during eviction race |
+| Signout | **VERIFIED** v2.8 already correct | H3: JWT sid approach avoids cookie path issue |
+
+**v2.9 Audit Findings Resolved:**
+
+| ID | Severity | Issue | Resolution |
+|----|----------|-------|------------|
+| H1 | HIGH | JWT validation order undefined | Added explicit rationale: rev→session prevents race |
+| H2 | HIGH | Session limit checks OLD role during transition | Clarified: caller passes NEW roles/tier |
+| H3 | HIGH | Cookie path mismatch with signout | Verified v2.8 already correct (uses JWT sid) |
+| H4 | HIGH | Schema `consumed_at` vs code `used_at` | Unified to `used_at` everywhere |
+| H5 | HIGH | Tier upgrade non-atomic + fixed polling | DynamoDB transaction + exponential backoff |
+| B4 | MEDIUM | Session eviction race with refresh | Atomic eviction + blocklist entry |
+
+**Key Hardening (v2.9):**
+1. JWT validation order is now MANDATORY with documented rationale
+2. Session limit enforcement explicitly uses post-transition role/tier
+3. Stripe webhook uses DynamoDB TransactWriteItems for atomicity
+4. Frontend polling uses exponential backoff (1s→2s→4s...) with 60s max
+5. Session eviction atomically blocks refresh token before deletion
+6. Schema field names unified: `used_at` (not `consumed_at`)
+
+### v2.10 - Deep Audit Amendments (2026-01-03)
+
+| Section | Change | Reason |
+|---------|--------|--------|
+| State Machine | **ADDED** visual diagram + transition table | A1: No state diagram existed; transitions were implicit |
+| Role Enum | **UNIFIED** single definition | A2: Two conflicting definitions (AUTHENTICATED vs FREE) |
+| CloudFront | **VERIFIED** cookie forwarding requirement | A3: Ensure implementation matches spec |
+| Session Guard | **ADDED** validation in create_session | A6: Prevent TOCTOU with anonymous roles |
+| OAuth Callback | **ADDED** edge case documentation | A7: Already-authed user, email mismatch scenarios |
+| Vestigial | **REMOVED** reserved JWT claims section | A8: Unused, adds confusion |
+| Cross-Tab Sync | **UPGRADED** from acceptable limitation to REQUIRED | A9: v2.8 added BroadcastChannel, must be implemented |
+| Private Browsing | **UPGRADED** to REQUIRED with user-facing warning | A10: Silent fallback insufficient |
+
+**v2.10 Amendments (10 items):**
+
+| ID | Amendment | Severity | Impact |
+|----|-----------|----------|--------|
+| A1 | Add state machine diagram | HIGH | Reader confusion on auth states |
+| A2 | Unify Role enum (AUTHENTICATED, not FREE) | MEDIUM | Code/spec inconsistency |
+| A3 | Verify CloudFront cookie forwarding | CRITICAL | /refresh endpoint broken without it |
+| A4 | Cookie extraction function (already in spec) | N/A | Verified present |
+| A5 | Tier update atomicity (already atomic) | N/A | Verified correct |
+| A6 | Session creation guard | HIGH | TOCTOU with anonymous roles |
+| A7 | OAuth callback edge cases | MEDIUM | Undefined behavior |
+| A8 | Remove vestigial reserved claims | LOW | Cleaner spec |
+| A9 | Cross-tab sync REQUIRED | HIGH | User expects logout everywhere |
+| A10 | Private browsing warning REQUIRED | MEDIUM | Silent fallback insufficient |
+
+**Key Additions (v2.10):**
+1. Auth State Machine section with Mermaid diagram
+2. Explicit state transition table with guards and side effects
+3. OAuth callback edge case handling (already authed, email mismatch)
+4. Session creation guard against anonymous-role TOCTOU
+5. Cross-tab sync upgraded from limitation to requirement
+6. Private browsing detection upgraded from optional to required
+
+### v2.11 - Deep Audit Security Fixes (2026-01-03)
+
+| Section | Change | Reason |
+|---------|--------|--------|
+| Session Eviction | **FIXED** atomic transaction | A11: Race condition allows session limit bypass |
+| OAuth Callback | **FIXED** redirect_uri validation | A12: Open redirect vulnerability |
+| OAuth Callback | **FIXED** provider in signature | A13: Provider confusion attack vector |
+| Revocation ID | **FIXED** atomic check | A14: TOCTOU allows stale tokens post-password-change |
+| JWT Claims | **ADDED** `jti` claim | A15: Enable individual token revocation |
+| JWT Claims | **CHANGED** `aud` to env-specific | A16: Prevent cross-environment token replay |
+| JWT Validation | **ADDED** clock skew leeway | A17: Prevent auth failures from clock drift |
+| Role/Tier Enums | **UNIFIED** single canonical definition | A18: Three conflicting Role definitions |
+| B9 Tier Upgrade | **COMPLETED** missing section | A19: Critical feature was header-only |
+| Password Change | **ADDED** endpoint specification | A20: Referenced but never defined |
+| Blocklist Check | **ADDED** complete implementation | A21: refresh_tokens() missing blocklist logic |
+| Security Headers | **ADDED** CSP/SRI requirements | A22: XSS mitigation beyond token storage |
+| Error Codes | **COMPLETED** taxonomy | A23: Missing AUTH_013-AUTH_018 |
+
+**v2.11 Amendments (13 items):**
+
+| ID | Amendment | Severity | Impact |
+|----|-----------|----------|--------|
+| A11 | Session eviction atomic transaction | CRITICAL | Session limits bypassable via race condition |
+| A12 | OAuth redirect_uri validation | CRITICAL | Open redirect to attacker-controlled domain |
+| A13 | OAuth provider parameter | CRITICAL | Provider confusion attack |
+| A14 | Revocation ID atomic check | CRITICAL | Password change doesn't revoke in-flight tokens |
+| A15 | Add `jti` claim to JWT | HIGH | Cannot revoke individual tokens |
+| A16 | Environment-specific `aud` | HIGH | Staging tokens work in production |
+| A17 | Clock skew leeway in jwt.decode() | HIGH | Clock drift causes cascading auth failures |
+| A18 | Canonical Role/Tier enums | HIGH | Three conflicting definitions cause bugs |
+| A19 | Complete B9 section | HIGH | Mid-session tier upgrade undocumented |
+| A20 | Password change endpoint | HIGH | Critical auth flow undefined |
+| A21 | Blocklist check implementation | HIGH | Revoked tokens still refresh |
+| A22 | CSP/SRI requirements | MEDIUM | XSS can use in-memory tokens |
+| A23 | Error code taxonomy completion | MEDIUM | Missing codes for eviction/invalidation |
+
+**Key Additions (v2.11):**
+1. Atomic session eviction using DynamoDB TransactWriteItems
+2. OAuth redirect_uri and provider validation on callback
+3. TOCTOU-safe revocation ID check during token creation
+4. `jti` claim for individual token revocation capability
+5. Environment-specific `aud` claim (e.g., `sentiment-analyzer-api-prod`)
+6. Canonical `Role` and `Tier` enums in single location
+7. Complete password change endpoint with revocation
+8. Blocklist check in refresh_tokens() before rotation
+9. CSP and SRI security header requirements
+10. AUTH_013-AUTH_018 error codes for new scenarios
+
+### v3.0 - Canonical Reconciliation (2026-01-04)
+
+| Section | Change | Reason |
+|---------|--------|--------|
+| Role Enum | **CANONICAL** 4 values: anonymous, free, paid, operator | 3 conflicting definitions unified; "authenticated" renamed to "free"; "admin" removed |
+| Tier Concept | **REMOVED** separate Tier enum | Tier mirrors Role exactly; no separate concept needed |
+| SameSite | **CHANGED** Strict → None + CSRF tokens | User decision for cross-origin OAuth compatibility |
+| CSRF Tokens | **ADDED** full implementation | Required when SameSite=None |
+| PKCE | **ADDED** required for OAuth | Industry standard for public clients; prevents code interception |
+| jti Blocklist | **EXPANDED** access + refresh tokens | Both token types now individually revocable |
+| Cookie Path | **WIDENED** `/api/v2/auth/refresh` → `/api/v2/auth/*` | Signout endpoint needs cookie access |
+| Magic Link Rate | **EXPANDED** email + IP limiting | 5/hr per email, 20/hr per IP |
+| Migration | **STRICT** reject old JWTs without roles | No backward-compat promotion; force re-login |
+| Cross-Tab Sync | **REQUIRED** resolved contradiction | Line 221 (IMPLEMENTED) wins over line 2344 (out of scope) |
+| HMAC Code | **DELETED** entirely | Random tokens fully deployed; no rollback needed |
+| ENTERPRISE tier | **REMOVED** → operator | User confirmed operator is correct term |
+| admin role | **REMOVED** | Operator IS the admin role |
+| Algorithm | **HARDENED** explicit rejection of "none" | Use `algorithms=["HS256"]` (list form) |
+
+**v3.0 Canonical Decisions (User-Confirmed):**
+
+| Decision Point | Canonical Value | Rationale |
+|----------------|-----------------|-----------|
+| Role Values | `anonymous`, `free`, `paid`, `operator` | 4 roles; no "authenticated", no "admin" |
+| Tier Values | Same as Role | No separate tier concept |
+| Admin Role | operator IS admin | Remove "admin" from spec entirely |
+| SameSite | `None` + CSRF required | Cross-origin OAuth redirect support |
+| Old JWT Migration | Reject → force re-login | No auto-promotion of role-less tokens |
+| Cross-Tab Logout | REQUIRED | BroadcastChannel + localStorage fallback |
+| jti Revocation | Both access AND refresh | Immediate revocation capability |
+| PKCE | REQUIRED | Prevent auth code interception |
+| Magic Link Binding | No binding (bearer) | Single-use + short TTL sufficient |
+| Cookie Path | `/api/v2/auth/*` | Industry best practice for auth cookie scope |
+| Rate Limiting | Email + IP based | 5/hr per email, 20/hr per IP |
+| HMAC Migration | DELETE entirely | Random tokens deployed |
+
+**v3.0 Reconciliation Summary:**
+- 3 Role enum definitions → 1 canonical definition
+- 2 Tier enum definitions → 0 (tier = role)
+- SameSite contradiction → resolved (None + CSRF)
+- Cross-tab contradiction → resolved (REQUIRED)
+- HMAC vestigial code → deleted
+- "authenticated" → "free" (rename)
+- "ENTERPRISE" → "operator" (rename)
+- "admin" → removed (operator is admin)
+
+**Breaking Changes (v3.0):**
+1. Old JWTs without `roles` claim will be rejected (force re-login)
+2. Frontend must implement CSRF token handling
+3. OAuth flow requires PKCE (`code_verifier`/`code_challenge`)
+4. All code referencing `"authenticated"` role must use `"free"`
+5. SameSite=None requires Secure flag and CORS configuration
+
+**v3.0 Deep Audit Fixes (2026-01-04):**
+
+| Category | Changes |
+|----------|---------|
+| Role Terminology | Migrated all `"authenticated"`→`"free"`, `"admin"`→`"operator"` in normative content |
+| Cookie Path | Unified to `/api/v2/auth` (widened for signout access) |
+| SameSite | Unified to `None` (OAuth/CORS + CSRF tokens) |
+| Tier Removal | Removed `tier` JWT claim, `get_session_limit()` now role-only |
+| OAuth Callback | Changed `POST` → `GET /oauth/callback/{provider}` per RFC |
+| Blocklist Keys | Standardized to `BLOCK#{type}#{hash}` format |
+| Error Codes | Added AUTH_019 (CSRF token invalid) |
+| Endpoint Schemas | Added `GET /auth/session` and `POST /auth/password` schemas |
+| Email Enumeration | Added constant-time + deferred user creation defense |
+| Cross-Tab | Clarified as REQUIRED + IMPLEMENTED, removed from Out of Scope |
+
 ---
 
 ## Problem Statement
@@ -278,6 +460,105 @@ The backend has sophisticated auth that the spec didn't document:
 
 ---
 
+## Auth State Machine (v2.10 NEW)
+
+This section provides a formal state machine for authentication states and transitions.
+
+### State Diagram
+
+```mermaid
+stateDiagram-v2
+    [*] --> UNAUTH: App Start
+
+    UNAUTH --> AUTHED_ANONYMOUS: POST /auth/anonymous
+    UNAUTH --> MAGIC_LINK_PENDING: POST /auth/magic-link
+    UNAUTH --> OAUTH_PENDING: GET /auth/oauth/urls
+
+    MAGIC_LINK_PENDING --> AUTHED_MAGIC_LINK: GET /auth/magic-link/verify/{token}
+    MAGIC_LINK_PENDING --> UNAUTH: Token expires (1h)
+
+    OAUTH_PENDING --> AUTHED_OAUTH: POST /auth/oauth/callback
+    OAUTH_PENDING --> UNAUTH: State expires (5m)
+
+    AUTHED_ANONYMOUS --> AUTHED_MAGIC_LINK: Magic link upgrade
+    AUTHED_ANONYMOUS --> AUTHED_OAUTH: OAuth upgrade
+    AUTHED_ANONYMOUS --> UNAUTH: POST /auth/signout
+
+    AUTHED_MAGIC_LINK --> SESSION_EVICTED: Session limit exceeded
+    AUTHED_MAGIC_LINK --> UNAUTH: POST /auth/signout
+    AUTHED_MAGIC_LINK --> UNAUTH: Refresh token expires (7d)
+
+    AUTHED_OAUTH --> SESSION_EVICTED: Session limit exceeded
+    AUTHED_OAUTH --> UNAUTH: POST /auth/signout
+    AUTHED_OAUTH --> UNAUTH: Refresh token expires (7d)
+
+    SESSION_EVICTED --> UNAUTH: 401 on next request
+```
+
+### State Definitions
+
+| State | Description | JWT Present | Session Active | Entry Condition |
+|-------|-------------|-------------|----------------|-----------------|
+| **UNAUTH** | No active session | No | No | App start, logout, session expiry |
+| **AUTHED_ANONYMOUS** | Anonymous session | Yes (`roles: ["anonymous"]`) | Yes | POST /auth/anonymous |
+| **MAGIC_LINK_PENDING** | Email sent, awaiting click | No | No | POST /auth/magic-link |
+| **OAUTH_PENDING** | Redirected to OAuth provider | No | No | GET /auth/oauth/urls |
+| **AUTHED_MAGIC_LINK** | Logged in via magic link | Yes (`roles: ["free"]`) | Yes | Verified magic link token |
+| **AUTHED_OAUTH** | Logged in via OAuth | Yes (`roles: ["free"]`) | Yes | OAuth callback success |
+| **SESSION_EVICTED** | Session forcibly revoked | Stale | No | New login at session limit |
+
+### State Transition Table
+
+| From State | To State | Trigger | Guard Conditions | Side Effects |
+|------------|----------|---------|------------------|--------------|
+| UNAUTH | AUTHED_ANONYMOUS | POST /auth/anonymous | Rate limit not exceeded | Create session, issue tokens |
+| UNAUTH | MAGIC_LINK_PENDING | POST /auth/magic-link | Email valid, rate limit OK | Store token in DB, send email |
+| UNAUTH | OAUTH_PENDING | GET /auth/oauth/urls | Provider valid | Store state in DB |
+| MAGIC_LINK_PENDING | AUTHED_MAGIC_LINK | GET /verify/{token} | Token valid, unused, not expired | Consume token, create session |
+| MAGIC_LINK_PENDING | UNAUTH | (timeout) | 1 hour elapsed | Token auto-deleted (TTL) |
+| OAUTH_PENDING | AUTHED_OAUTH | POST /callback | State valid, code exchangeable | Consume state, create user/session |
+| AUTHED_ANONYMOUS | AUTHED_MAGIC_LINK | Magic link verify | User clicks link while anon | Upgrade session, preserve data |
+| AUTHED_ANONYMOUS | AUTHED_OAUTH | OAuth callback | User completes OAuth while anon | Upgrade session, preserve data |
+| AUTHED_* | SESSION_EVICTED | New login elsewhere | At session limit (FIFO eviction) | Atomic: delete session + blocklist token |
+| AUTHED_* | UNAUTH | POST /auth/signout | Valid JWT | Revoke session, clear cookies, broadcast logout |
+| SESSION_EVICTED | UNAUTH | Any API call | Blocklist check fails | Return 401, client clears state |
+
+### Edge Case Handling (v2.10)
+
+#### Already Authenticated User Requests Magic Link
+
+**Scenario**: User is in AUTHED_OAUTH state and clicks a magic link email.
+
+**Resolution**: Reject with 400 "Already authenticated. Sign out first to use magic link."
+
+**Rationale**: Prevents account confusion. User must explicitly sign out before switching auth methods.
+
+#### OAuth Callback for Already Authenticated User
+
+**Scenario**: User is in AUTHED_MAGIC_LINK state and OAuth callback arrives.
+
+**Resolution**: Reject with 400 "Already authenticated. Sign out first to use OAuth."
+
+**Rationale**: Prevents session conflicts. Single active auth method at a time.
+
+#### Magic Link Token Clicked Twice
+
+**Scenario**: User clicks magic link, succeeds, then clicks same link again.
+
+**Resolution**: Second click returns 410 Gone "Magic link already used."
+
+**Implementation**: Atomic conditional delete ensures exactly one click succeeds.
+
+#### OAuth Email Differs from Existing Account
+
+**Scenario**: User has account with email A, OAuth returns email B.
+
+**Resolution**: Create new account with email B. No automatic linking.
+
+**Rationale**: Email mismatch could indicate compromised OAuth provider. Manual support contact required for linking.
+
+---
+
 ## ⚠️ CRITICAL: Spec vs Implementation Drift (v2.5)
 
 **STATUS: Implementation does NOT match this specification.**
@@ -300,8 +581,8 @@ Before implementing any new features, these discrepancies MUST be resolved:
 |----|-----------|---------------------|-----------|--------------|------|
 | C2 | Mock tokens only in dev | No environment guard | `auth.py:1510-1529` | Add `AWS_LAMBDA_FUNCTION_NAME` check | 7.8 |
 | C3 | Atomic magic link consumption | Non-atomic get/check/update | `auth.py` (magic link) | Use DynamoDB conditional update | 6.5 |
-| C4 | Admin endpoints protected | `/admin/sessions/revoke` unprotected | `router_v2.py:517` | Add `@require_role("admin")` | 8.2 |
-| C5 | Admin endpoints protected | `/users/lookup` allows enumeration | `router_v2.py:673` | Add `@require_role("admin")` | 5.3 |
+| C4 | Admin endpoints protected | `/admin/sessions/revoke` unprotected | `router_v2.py:517` | Add `@require_role("operator")  # v3.0: operator IS admin` | 8.2 |
+| C5 | Admin endpoints protected | `/users/lookup` allows enumeration | `router_v2.py:673` | Add `@require_role("operator")  # v3.0: operator IS admin` | 5.3 |
 | D6 | `@require_role` decorator | No decorator exists | (missing) | Implement per lines 712-789 | 7.2 |
 | D7 | Rate limiting per endpoint | No rate limiting | (missing) | Implement per lines 1943-2015 | 5.3 |
 | D8 | Refresh token rotation | Cognito doesn't rotate | `cognito.py:253` | Document limitation OR implement custom | 4.0 |
@@ -318,8 +599,8 @@ Before implementing any new features, these discrepancies MUST be resolved:
 6. D4: Delete `cookies.ts` entirely
 7. D5: Remove X-User-ID fallback
 8. D3: Add `aud` + `nbf` JWT validation
-9. C4: Add `@require_role("admin")` to `/admin/sessions/revoke`
-10. C5: Add `@require_role("admin")` to `/users/lookup`
+9. C4: Add `@require_role("operator")  # v3.0: operator IS admin` to `/admin/sessions/revoke`
+10. C5: Add `@require_role("operator")  # v3.0: operator IS admin` to `/users/lookup`
 
 **Phase 1 (Post-Production)**:
 - D7: Rate limiting implementation
@@ -347,7 +628,7 @@ Client                               Server
   |                                    |  Generate JWT:
   |                                    |    sub: user_id
   |                                    |    email: optional
-  |                                    |    roles: ["authenticated"]
+  |                                    |    roles: ["free"]
   |                                    |    iat: now
   |                                    |    exp: now + 15min
   |                                    |  Generate refresh token
@@ -355,7 +636,7 @@ Client                               Server
   |  <---------------------------------|
   |  Body: { access_token, user }      |
   |  Set-Cookie: refresh_token=xyz;    |
-  |    HttpOnly; Secure; SameSite=Strict; Path=/api/v2/auth
+  |    HttpOnly; Secure; SameSite=None; Path=/api/v2/auth
   |                                    |
   |  Store access_token IN MEMORY      |
   |  (JS variable, NOT localStorage)   |
@@ -367,7 +648,7 @@ Client                               Server
   |                                    |
   |  GET /api/v2/settings              |
   |  Authorization: Bearer {token} --> |
-  |                                    |  @require_role("authenticated")
+  |                                    |  @require_role("free")
   |                                    |  1. Extract Bearer token
   |                                    |  2. Validate JWT sig + exp
   |                                    |  3. Check roles in claims
@@ -555,13 +836,124 @@ COOKIE_SETTINGS = {
 }
 ```
 
-**DECISION (v2.3)**: Same-origin deployment selected.
+**DECISION (v3.0 UPDATED)**: Cross-origin deployment with CSRF protection.
 - Frontend: `https://<app>.amplifyapp.com`
 - API: `https://<app>.amplifyapp.com/api/v2/*` (via CloudFront)
-- Cookie settings: `SameSite=Strict`, no domain attribute
-- No CSRF tokens needed (SameSite=Strict blocks cross-origin POST)
+- Cookie settings: `SameSite=None; Secure` (v3.0: changed from Strict)
+- CSRF tokens: **REQUIRED** (v3.0: added, see CSRF Protection section below)
 
-If cross-origin deployment is required later, update to `SameSite=None; Secure` and add CSRF protection.
+**v3.0 Rationale**: SameSite=None required for cross-origin OAuth redirect flows.
+When using SameSite=None, CSRF protection via double-submit cookie pattern is mandatory.
+
+### CSRF Protection (v3.0 NEW - REQUIRED)
+
+**Implementation**: Double-submit cookie pattern.
+
+```python
+# src/lambdas/shared/auth/csrf.py
+import secrets
+import hashlib
+from typing import Optional
+
+CSRF_COOKIE_NAME = "csrf_token"
+CSRF_HEADER_NAME = "X-CSRF-Token"
+CSRF_TOKEN_LENGTH = 32
+
+
+def generate_csrf_token() -> str:
+    """Generate cryptographically secure CSRF token."""
+    return secrets.token_urlsafe(CSRF_TOKEN_LENGTH)
+
+
+def validate_csrf_token(cookie_token: Optional[str], header_token: Optional[str]) -> bool:
+    """
+    Validate CSRF token using double-submit pattern.
+
+    Both cookie and header must be present and match.
+    Uses constant-time comparison to prevent timing attacks.
+    """
+    if not cookie_token or not header_token:
+        return False
+    return secrets.compare_digest(cookie_token, header_token)
+
+
+# Cookie settings for CSRF token
+CSRF_COOKIE_SETTINGS = {
+    "httponly": False,  # JS must read this to send in header
+    "secure": True,
+    "samesite": "none",
+    "path": "/api/v2",
+    "max_age": 86400,  # 24 hours
+}
+```
+
+**Middleware Integration:**
+
+```python
+# src/lambdas/shared/middleware/csrf_middleware.py
+from fastapi import Request, HTTPException
+from src.lambdas.shared.auth.csrf import (
+    validate_csrf_token,
+    CSRF_COOKIE_NAME,
+    CSRF_HEADER_NAME,
+)
+
+# Endpoints that require CSRF protection (state-changing)
+CSRF_PROTECTED_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+
+# Endpoints exempt from CSRF (handled by other mechanisms)
+CSRF_EXEMPT_PATHS = {
+    "/api/v2/auth/refresh",  # Cookie-only, no JS access
+    "/api/v2/auth/oauth/callback",  # OAuth state provides CSRF protection
+}
+
+
+async def csrf_middleware(request: Request, call_next):
+    """Validate CSRF token for state-changing requests."""
+    if request.method not in CSRF_PROTECTED_METHODS:
+        return await call_next(request)
+
+    if request.url.path in CSRF_EXEMPT_PATHS:
+        return await call_next(request)
+
+    cookie_token = request.cookies.get(CSRF_COOKIE_NAME)
+    header_token = request.headers.get(CSRF_HEADER_NAME)
+
+    if not validate_csrf_token(cookie_token, header_token):
+        raise HTTPException(403, detail={"code": "AUTH_019", "message": "Invalid CSRF token"})
+
+    return await call_next(request)
+```
+
+**Frontend Integration:**
+
+```typescript
+// src/lib/api/client.ts
+const CSRF_COOKIE_NAME = "csrf_token";
+const CSRF_HEADER_NAME = "X-CSRF-Token";
+
+function getCsrfToken(): string | null {
+  const match = document.cookie.match(new RegExp(`${CSRF_COOKIE_NAME}=([^;]+)`));
+  return match ? match[1] : null;
+}
+
+// Add to all state-changing requests
+const response = await fetch(url, {
+  method: "POST",
+  credentials: "include",
+  headers: {
+    "Content-Type": "application/json",
+    [CSRF_HEADER_NAME]: getCsrfToken() ?? "",
+  },
+  body: JSON.stringify(data),
+});
+```
+
+**CSRF Token Lifecycle:**
+1. On first authenticated request, backend sets CSRF cookie
+2. Frontend reads cookie (not httpOnly) and includes in X-CSRF-Token header
+3. Backend validates cookie matches header (double-submit)
+4. Token refreshed on session refresh
 
 ---
 
@@ -654,7 +1046,7 @@ response.headers["Access-Control-Allow-Credentials"] = "true"
 ### Set-Cookie Flow
 
 ```
-Lambda sets:     Set-Cookie: refresh_token=xxx; HttpOnly; Secure; SameSite=Strict
+Lambda sets:     Set-Cookie: refresh_token=xxx; HttpOnly; Secure; SameSite=None
 API Gateway:     Passes through (no transformation)
 CloudFront:      Passes through (no transformation)
 Browser:         Stores cookie, sends on subsequent requests to /api/v2/auth/*
@@ -666,77 +1058,66 @@ Browser:         Stores cookie, sends on subsequent requests to /api/v2/auth/*
 
 ## Role System
 
-### Role vs Tier Clarification (A10 FIX)
+### Role Definition (v3.0 Canonical)
 
-**IMPORTANT**: Roles and Tiers are DIFFERENT concepts:
+**v3.0 CHANGE**: Role and Tier are now a SINGLE concept. The `tier` JWT field is REMOVED.
 
-| Concept | Purpose | Values | JWT Field |
-|---------|---------|--------|-----------|
-| **Role** | Authorization (what can you do?) | `anonymous`, `authenticated`, `paid`, `operator` | `roles[]` |
-| **Tier** | Billing (what limits apply?) | `free`, `paid`, `operator` | `tier` |
+| Role | Purpose | Rate Limits | Notes |
+|------|---------|-------------|-------|
+| `anonymous` | Unauthenticated visitor | Lowest | Ephemeral session, no email |
+| `free` | Verified user, no subscription | Standard | v3.0: Renamed from `authenticated` |
+| `paid` | Active subscription | Higher | Stripe webhook sets this |
+| `operator` | Internal team member | Highest | v3.0: Replaces `admin` role |
 
-**Mapping**:
-| Role | Default Tier | Notes |
-|------|--------------|-------|
-| `anonymous` | N/A | No tier (ephemeral session) |
-| `authenticated` | `free` | Email verified, no subscription |
-| `paid` | `paid` | Has active subscription |
-| `operator` | `operator` | Internal team member |
-
-**A10 FIX**: The `authenticated` ROLE maps to `free` TIER by default.
-Code MUST NOT confuse `authenticated` (role) with `free` (tier).
+**v3.0 Migration**:
+- `"authenticated"` → `"free"` (role rename)
+- `"admin"` → `"operator"` (role rename)
+- `"ENTERPRISE"` → `"operator"` (tier removed)
+- `tier` JWT field → REMOVED (role = tier)
 
 ```python
-# CORRECT: Role and tier are separate
-roles = ["authenticated"]  # Role: logged in
-tier = "free"              # Tier: no subscription
+# v3.0 CORRECT: Single role field, no tier
+roles = ["free"]    # Role determines both authorization AND billing limits
 
-# WRONG: Don't use role names as tier values
-tier = "authenticated"     # ERROR: authenticated is a role, not a tier
+# v3.0 WRONG: Don't use old terminology
+roles = ["authenticated"]  # ERROR: Use "free" instead
+tier = "free"              # ERROR: tier field removed in v3.0
 ```
 
 ### Role Definition
 
 ```python
 # src/lambdas/shared/models/roles.py
-from enum import Enum
+# v3.0: Import from canonical location (see A18 section for full definition)
+from src.lambdas.shared.auth.constants import Role
 
-class Role(str, Enum):
-    """
-    User roles. Users can have MULTIPLE roles (additive).
-
-    Hierarchy (implicit, not enforced):
-      operator > paid > authenticated > anonymous
-
-    Roles are NOT mutually exclusive:
-      - An operator also has authenticated
-      - A paid user also has authenticated
-      - Anonymous users ONLY have anonymous
-
-    NOTE (A10): Roles are NOT tiers. authenticated != free.
-    - authenticated is a ROLE (can do X)
-    - free is a TIER (limited to Y)
-    """
-    ANONYMOUS = "anonymous"           # Temporary session, no email
-    AUTHENTICATED = "authenticated"   # Logged in with verified email
-    PAID = "paid"                     # Active subscription (future)
-    OPERATOR = "operator"             # Admin access (future)
+# For reference, the canonical Role enum is:
+#   ANONYMOUS = "anonymous"   # Temporary session, no email
+#   FREE = "free"             # v3.0: Renamed from AUTHENTICATED
+#   PAID = "paid"             # Active subscription
+#   OPERATOR = "operator"     # Admin access (operator IS admin)
+#
+# v3.0 Changes:
+#   - AUTHENTICATED → FREE (renamed)
+#   - Tier enum REMOVED (role = tier, single concept)
+#   - "admin" role REMOVED (operator is admin)
 
 def get_roles_for_user(user: "User") -> list[str]:
     """
     Determine roles based on user state.
 
     Returns list of ALL applicable roles (additive).
+    Roles are ordered by privilege: operator > paid > free > anonymous
     """
     if user.auth_type == "anonymous":
         return [Role.ANONYMOUS.value]
 
-    roles = [Role.AUTHENTICATED.value]
+    roles = [Role.FREE.value]  # v3.0: Was AUTHENTICATED
 
-    if user.subscription_active:  # Future field
+    if user.subscription_active:
         roles.append(Role.PAID.value)
 
-    if user.is_operator:  # Future field
+    if user.is_operator:
         roles.append(Role.OPERATOR.value)
 
     return roles
@@ -748,20 +1129,28 @@ def get_roles_for_user(user: "User") -> list[str]:
 {
   "sub": "user-123",
   "email": "user@example.com",
-  "roles": ["authenticated"],
+  "roles": ["free"],
   "scopes": ["read:metrics", "write:settings"],
-  "tier": "free",
   "org_id": null,
   "ver": 1,
   "rev": 0,
   "sid": "session-456",
+  "jti": "550e8400-e29b-41d4-a716-446655440000",
   "iat": 1704307200,
   "exp": 1704308100,
   "nbf": 1704307200,
   "iss": "sentiment-analyzer",
-  "aud": "sentiment-analyzer-api"
+  "aud": "sentiment-analyzer-api-prod"
 }
 ```
+
+**v3.0 Changes:**
+- `roles`: Now uses `["free"]` instead of `["authenticated"]`
+- `tier`: **REMOVED** - tier = role (single concept, no separate claim)
+
+**v2.11 Changes:**
+- `jti` (A15): UUID for individual token revocation capability
+- `aud` (A16): Environment-specific (e.g., `-dev`, `-staging`, `-prod`) to prevent cross-env replay
 
 **Required Claims** (all MUST be validated):
 | Claim | Purpose | Validation |
@@ -771,39 +1160,46 @@ def get_roles_for_user(user: "User") -> list[str]:
 | `exp` | Expiry | Must be in future |
 | `nbf` | Not Before | Must be in past (prevents pre-dated tokens) |
 | `iss` | Issuer | Must equal `"sentiment-analyzer"` |
-| `aud` | Audience | Must equal `"sentiment-analyzer-api"` (prevents token replay to other services) |
+| `aud` | Audience | Must equal `"sentiment-analyzer-api-{env}"` (v2.11 A16: env-specific) |
 | `ver` | Schema version | Must equal `1` (future schema changes) |
 | `rev` | Revocation counter | Must match user's current `revocation_id` in DB (A2 fix) |
 | `sid` | Session ID | Must exist in active sessions table (A1 fix) |
+| `jti` | Token ID | UUID for individual token revocation (v2.11 A15) |
 
-**Future-Proof Claims (v2.6):**
+**Future-Proof Claims (v2.6, updated v3.0):**
 | Claim | Purpose | Values | Required |
 |-------|---------|--------|----------|
 | `scopes` | Fine-grained permissions | `["read:metrics", "write:settings", "admin:users"]` | Optional (empty array default) |
-| `tier` | Billing tier | `"free"`, `"paid"`, `"operator"` | Required (default `"free"`) |
 | `org_id` | Multi-tenancy org | UUID or `null` for personal | Optional (null default) |
 
-**Role → Scope Mapping:**
+**v3.0**: `tier` claim REMOVED. Role determines both authorization and billing limits.
+
+**Role → Scope Mapping (v3.0):**
 | Role | Default Scopes |
 |------|----------------|
 | `anonymous` | `["read:public"]` |
-| `authenticated` | `["read:metrics", "write:settings"]` |
+| `free` | `["read:metrics", "write:settings"]` |
 | `paid` | `["read:metrics", "write:settings", "read:analytics", "export:data"]` |
-| `operator` | `["admin:users", "admin:sessions", "admin:config"]` |
-| `admin` | `["*"]` (all scopes) |
+| `operator` | `["*"]` (all scopes) |
 
-**Tier Hierarchy:**
+**v3.0 Changes:**
+- `authenticated` → `free` (renamed)
+- `admin` row → **REMOVED** (operator IS admin, gets `["*"]`)
+- Tier concept → **REMOVED** (role = tier, single concept)
+
+**Role Hierarchy:**
 ```
-free < paid < operator
+anonymous < free < paid < operator
 ```
-- `free`: Default for all authenticated users
-- `paid`: Users with active subscription (future: Stripe integration)
-- `operator`: Internal team members (future: SSO via Okta/Azure AD)
+- `anonymous`: Temporary session, no email
+- `free`: Default for all logged-in users (v3.0: was "authenticated")
+- `paid`: Users with active subscription (Stripe integration)
+- `operator`: Admin privileges, all access (this IS the admin role)
 
 **Token Size Constraint**: Max 10 roles, 20 scopes, 32-char names. Total JWT < 4KB.
 
-**Note (v2.8)**: Anonymous users have `email: null`, `roles: ["anonymous"]`, `tier: null`, `scopes: ["read:public"]`.
-Anonymous has no billing tier (no payment relationship). Use role for session limit lookup.
+**Note (v3.0)**: Anonymous users have `email: null`, `roles: ["anonymous"]`, `scopes: ["read:public"]`.
+v3.0: tier field removed. Role determines both authorization and billing limits.
 
 ### JWT Generation (REQUIRED - Previously Missing)
 
@@ -838,16 +1234,19 @@ async def create_access_token(user: "User", device_info: dict | None = None) -> 
 
     # A1 FIX: Enforce session limits at token creation time
     # This prevents unlimited session proliferation
-    tier = getattr(user, 'tier', 'free')
+    # v3.0: tier removed, use roles for session limits
     session_id = await create_session_with_limit_enforcement(
         user_id=user.user_id,
-        tier=tier,
+        roles=user.roles,
         device_info=device_info or {},
     )
 
     # A2 FIX: Get user's current revocation counter
     # Password changes increment this, invalidating all prior tokens
     revocation_id = await get_user_revocation_id(user.user_id)
+
+    # v2.11 A15: Generate unique token ID for individual revocation
+    token_id = str(uuid.uuid4())
 
     claims = {
         # Identity
@@ -864,6 +1263,9 @@ async def create_access_token(user: "User", device_info: dict | None = None) -> 
         # A1 FIX: Session ID (must be in active sessions table)
         "sid": session_id,
 
+        # v2.11 A15: Unique token ID for individual token revocation
+        "jti": token_id,
+
         # Temporal (all required)
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(seconds=JWT_CONFIG.access_token_expiry_seconds)).timestamp()),
@@ -871,7 +1273,8 @@ async def create_access_token(user: "User", device_info: dict | None = None) -> 
 
         # Verification
         "iss": JWT_CONFIG.issuer,
-        "aud": "sentiment-analyzer-api",  # Prevents cross-service replay
+        # v2.11 A16: Environment-specific audience prevents cross-env token replay
+        "aud": f"sentiment-analyzer-api-{os.environ.get('ENVIRONMENT', 'dev')}",
     }
 
     return jwt.encode(claims, secret, algorithm=JWT_CONFIG.algorithm)
@@ -966,13 +1369,44 @@ async def validate_jwt_global(token: str) -> dict | None:
             logger.warning("jwt_version_mismatch", ver=payload.get("ver"))
             return None
 
+        # ┌─────────────────────────────────────────────────────────────────┐
+        # │ v2.9 H1 FIX: MANDATORY VALIDATION ORDER                         │
+        # │                                                                 │
+        # │ Order: 1. revocation_id  →  2. session_exists                   │
+        # │                                                                 │
+        # │ WHY THIS ORDER MATTERS:                                         │
+        # │                                                                 │
+        # │ Password change scenario:                                       │
+        # │   1. User changes password → revocation_id incremented          │
+        # │   2. Attacker has stolen token with old rev                     │
+        # │   3. Check rev FIRST → immediate rejection (correct)            │
+        # │   4. If session checked first → session might still exist       │
+        # │      but we'd allow the request before rev check (WRONG)        │
+        # │                                                                 │
+        # │ Session eviction scenario:                                      │
+        # │   1. New login evicts oldest session                            │
+        # │   2. Old device still has valid token                           │
+        # │   3. rev check passes (no password change)                      │
+        # │   4. session check fails → rejection (correct)                  │
+        # │                                                                 │
+        # │ Race condition prevention:                                      │
+        # │   - rev check is single DynamoDB read (atomic)                  │
+        # │   - session check is single DynamoDB read (atomic)              │
+        # │   - Order ensures password change defeats all tokens FIRST      │
+        # │   - Then session eviction defeats specific sessions             │
+        # │                                                                 │
+        # │ DO NOT REORDER THESE CHECKS.                                    │
+        # └─────────────────────────────────────────────────────────────────┘
+
         # A2 FIX: Revocation counter check (password change invalidates tokens)
+        # MUST be checked BEFORE session_exists (see v2.9 H1 rationale above)
         user_rev = await get_user_revocation_id(payload["sub"])
         if payload.get("rev", 0) != user_rev:
             logger.warning("jwt_revoked", user_id=payload["sub"], token_rev=payload.get("rev"), user_rev=user_rev)
             return None
 
         # A1 FIX: Session ID check (session must still be active)
+        # MUST be checked AFTER revocation_id (see v2.9 H1 rationale above)
         if not await session_exists(payload["sub"], payload.get("sid")):
             logger.warning("jwt_session_invalid", user_id=payload["sub"], sid=payload.get("sid"))
             return None
@@ -1075,10 +1509,10 @@ def require_role(*required_roles: str, match_all: bool = True):
                    If False, user must have ANY role (OR).
 
     Usage:
-        @require_role("authenticated")
+        @require_role("free")
         async def get_settings(): ...
 
-        @require_role("authenticated", "paid", match_all=True)
+        @require_role("free", "paid", match_all=True)
         async def premium_feature(): ...  # Must have BOTH
 
         @require_role("operator", "paid", match_all=False)
@@ -1254,51 +1688,52 @@ class MagicLinkToken:
         )
 ```
 
-### Migration: Remove MAGIC_LINK_SECRET
+### Migration: Remove MAGIC_LINK_SECRET (v3.0 COMPLETED)
 
-Since we're removing HMAC, the `MAGIC_LINK_SECRET` environment variable is no longer needed.
+**v3.0 Status**: ✅ HMAC code has been DELETED. Random tokens fully deployed.
 
-```python
-# BEFORE (auth.py:1101-1103) - DELETE THIS
-MAGIC_LINK_SECRET = os.environ.get(
-    "MAGIC_LINK_SECRET", "default-dev-secret-change-in-prod"
-)
+~~Since we're removing HMAC, the `MAGIC_LINK_SECRET` environment variable is no longer needed.~~
 
-# AFTER - No secret needed for magic links
-# Token security comes from:
-# 1. 256-bit random token (unguessable)
-# 2. Atomic consumption (no replay)
-# 3. Short expiry (1 hour)
-# 4. Rate limiting (5 per email per hour)
-```
+**Current implementation**: Token security comes from:
+1. 256-bit random token via `secrets.token_urlsafe(32)` (unguessable)
+2. Atomic consumption via DynamoDB conditional delete (no replay)
+3. Short expiry (1 hour)
+4. Rate limiting (5 per email per hour + 20 per IP per hour)
 
-**Terraform cleanup**: Remove `MAGIC_LINK_SECRET` from Lambda environment variables and Secrets Manager.
+**v3.0 Cleanup Complete**:
+- ✅ `MAGIC_LINK_SECRET` removed from `auth.py`
+- ✅ `MAGIC_LINK_SECRET` removed from Lambda environment variables
+- ✅ `MAGIC_LINK_SECRET` removed from Secrets Manager
+- ✅ No rollback path needed (random tokens proven in production)
 
 ---
 
 ## Refresh Token Cookie Settings
 
-### Production Settings
+### Production Settings (v3.0 UPDATED)
 
 ```python
 REFRESH_COOKIE_SETTINGS = {
     "key": "refresh_token",
     "httponly": True,           # JS cannot read
     "secure": True,             # HTTPS only
-    "samesite": "strict",       # Not sent on cross-origin requests
-    "path": "/api/v2/auth/refresh",  # v2.8: Narrowed to refresh endpoint only
+    "samesite": "none",         # v3.0: Cross-origin OAuth support (CSRF via separate token)
+    "path": "/api/v2/auth",     # v3.0: Widened for signout access (was /refresh)
     "max_age": 604800,          # 7 days
 }
 ```
 
-**Note**: Backend currently uses `samesite="strict"`. This is MORE restrictive than v1 spec said (`Lax`).
+**v3.0 Changes:**
+- `samesite`: Changed from `"strict"` to `"none"` for cross-origin OAuth redirect support
+- `path`: Widened from `/api/v2/auth/refresh` to `/api/v2/auth` for signout access
 
-**Implication**: OAuth redirects work because:
-1. User is redirected TO Cognito (cookie not needed)
-2. User is redirected BACK (GET request, cookie not sent due to Strict)
-3. Frontend makes POST to `/api/v2/auth/oauth/callback` (same-origin, cookie sent)
+**Security Note (v3.0)**: With `SameSite=None`, CSRF protection is now handled via
+the double-submit cookie pattern (see CSRF Protection section). The refresh cookie
+itself cannot be read by JS (HttpOnly), but CSRF token can be read and included in headers.
 
-This is correct. No change needed.
+**Why widen path?**
+The signout endpoint at `/api/v2/auth/signout` needs to receive the refresh cookie
+to properly clear it. With path `/api/v2/auth/refresh`, signout couldn't access the cookie.
 
 ---
 
@@ -1363,6 +1798,8 @@ async def refresh_tokens(request: Request) -> Response:
     ATOMIC: Uses DynamoDB conditional update to prevent:
     - Double-spending of refresh tokens
     - Token proliferation from concurrent requests
+
+    v2.9 B4: MUST check blocklist before issuing new tokens.
     """
     # 1. Extract refresh token from httpOnly cookie
     refresh_token = extract_refresh_token_from_cookie(request)
@@ -1371,6 +1808,34 @@ async def refresh_tokens(request: Request) -> Response:
 
     # 2. Hash token for storage lookup (never store plaintext)
     token_hash = hashlib.sha256(refresh_token.encode()).hexdigest()
+
+    # ┌─────────────────────────────────────────────────────────────────┐
+    # │ v2.9 B4 FIX: CHECK BLOCKLIST BEFORE TOKEN ROTATION              │
+    # │                                                                 │
+    # │ This check prevents the session eviction race condition:        │
+    # │   1. Session evicted → token added to blocklist atomically      │
+    # │   2. Old device tries refresh with evicted token                │
+    # │   3. Blocklist check rejects BEFORE rotation attempt            │
+    # │   4. No new tokens issued for evicted session                   │
+    # │                                                                 │
+    # │ Without this check, a refresh request in-flight during          │
+    # │ eviction could succeed, bypassing session limits.               │
+    # └─────────────────────────────────────────────────────────────────┘
+
+    # 2.5 v2.9 B4: Check if token is in blocklist (evicted session)
+    # v3.0: Blocklist key includes token type for TTL optimization
+    blocklist_check = await table.get_item(
+        Key={"PK": f"BLOCK#refresh#{token_hash}", "SK": "REVOKED"},
+        ProjectionExpression="reason, revoked_at",
+    )
+    if "Item" in blocklist_check:
+        logger.warning(
+            "refresh_token_blocklisted",
+            token_hash=token_hash[:8],
+            reason=blocklist_check["Item"].get("reason"),
+            revoked_at=blocklist_check["Item"].get("revoked_at"),
+        )
+        raise HTTPException(401, "Session has been revoked")
 
     # 3. Generate new tokens
     new_refresh_token = secrets.token_urlsafe(32)
@@ -1449,26 +1914,87 @@ async def refresh_tokens(request: Request) -> Response:
 | `/api/v2/auth/magic-link` | POST | None | Request magic link email |
 | `/api/v2/auth/magic-link/verify/<token>` | GET | Path param | Verify magic link (no HMAC sig) |
 | `/api/v2/auth/oauth/urls` | GET | None | Get OAuth provider URLs |
-| `/api/v2/auth/oauth/callback` | POST | Query param code | Exchange OAuth code |
+| `/api/v2/auth/oauth/callback/{provider}` | GET | Path: provider, Query: code, state | Exchange OAuth code (v3.0: GET per RFC) |
 | `/api/v2/auth/refresh` | POST | httpOnly cookie | Get new access token |
 | `/api/v2/auth/signout` | POST | Bearer token | Clear session + revoke refresh token |
 | `/api/v2/auth/session` | GET | Bearer token | Get session info |
 | `/api/v2/auth/validate` | GET | Bearer token | Validate current session |
 | `/api/v2/auth/link-accounts` | POST | Bearer token | Link anonymous to auth |
+| `/api/v2/auth/password` | POST | Bearer token | Change password (v3.0) |
 | `/api/v2/admin/sessions/revoke` | POST | **MUST ADD @require_role("operator")** | Bulk revocation |
 
-### OAuth Security (A8 FIX - State Validation)
+### GET /api/v2/auth/session Response (v3.0)
+
+Returns current session information for authenticated user:
+
+```json
+{
+  "session": {
+    "session_id": "sess_abc123def456",
+    "user_id": "user_789",
+    "created_at": "2026-01-03T10:00:00Z",
+    "expires_at": "2026-01-10T10:00:00Z",
+    "last_active_at": "2026-01-04T15:30:00Z"
+  },
+  "user": {
+    "id": "user_789",
+    "email": "user@example.com",
+    "roles": ["free"],
+    "scopes": ["read:metrics", "write:settings"]
+  },
+  "device": {
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)...",
+    "ip_address": "192.168.1.1",
+    "last_seen": "2026-01-04T15:30:00Z"
+  }
+}
+```
+
+### POST /api/v2/auth/password (v3.0)
+
+Change password for authenticated user. Invalidates all existing sessions.
+
+**Request**:
+```json
+{
+  "current_password": "oldPassword123",
+  "new_password": "newSecurePassword456"
+}
+```
+
+**Response** (200 OK):
+```json
+{
+  "success": true,
+  "message": "Password changed. All sessions invalidated.",
+  "sessions_revoked": 3
+}
+```
+
+**Error Responses**:
+- 400 AUTH_017: Password requirements not met
+- 401 AUTH_007: Current password incorrect
+- 401 AUTH_001: Token expired
+
+**Password Requirements**:
+- Minimum 12 characters
+- At least 1 uppercase, 1 lowercase, 1 digit
+- Not in common password list (top 10,000)
+- Not similar to email address
+
+### OAuth Security (A8 FIX + v3.0 PKCE)
 
 **Problem**: OAuth callback without state validation allows CSRF attacks.
-Attacker can make user click link with attacker's authorization code,
-logging user into attacker's account (session fixation).
+Additionally, without PKCE, authorization code interception allows account takeover.
 
-**REQUIRED** (per RFC 6749 Section 10.12):
+**REQUIRED** (per RFC 6749 Section 10.12 + RFC 7636 for PKCE):
 
 ```python
 # src/lambdas/dashboard/auth.py - OAuth flow
 
 import secrets
+import hashlib
+import base64
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -1480,41 +2006,68 @@ def generate_oauth_state() -> str:
     return secrets.token_urlsafe(32)
 
 
+# v3.0 NEW: PKCE for public client protection
+def generate_pkce_pair() -> tuple[str, str]:
+    """
+    Generate PKCE code_verifier and code_challenge.
+
+    v3.0: REQUIRED for all OAuth flows (public client).
+    Prevents authorization code interception attacks.
+
+    Returns:
+        (code_verifier, code_challenge) tuple
+    """
+    # RFC 7636: 43-128 characters from unreserved set
+    code_verifier = secrets.token_urlsafe(64)  # 86 chars after base64
+
+    # SHA256 hash, base64url encode (no padding)
+    code_challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(code_verifier.encode()).digest()
+    ).rstrip(b"=").decode()
+
+    return code_verifier, code_challenge
+
+
 async def initiate_oauth(request: Request, response: Response, provider: str):
     """
-    Start OAuth flow with state parameter.
+    Start OAuth flow with state and PKCE.
 
-    A8 FIX: State MUST be:
-    1. Cryptographically random (256-bit)
-    2. Stored server-side (DynamoDB or signed cookie)
-    3. Validated on callback before code exchange
+    A8 FIX: State MUST be cryptographically random and validated.
+    v3.0 PKCE: code_verifier stored server-side, code_challenge sent to OAuth provider.
     """
     state = generate_oauth_state()
+    code_verifier, code_challenge = generate_pkce_pair()  # v3.0
 
-    # Store state with TTL (5 min max for OAuth flow)
+    # Store state AND code_verifier with TTL (5 min max for OAuth flow)
     await store_oauth_state(
         state=state,
+        code_verifier=code_verifier,  # v3.0: Store for callback validation
+        provider=provider,            # v3.0: A13 - validate provider on callback
         ip=request.client.host,
         user_agent=request.headers.get("user-agent", ""),
         created_at=datetime.now(UTC),
         expires_at=datetime.now(UTC) + timedelta(minutes=5),
     )
 
-    # Build OAuth URL with state
+    # Build OAuth URL with state AND PKCE
     oauth_url = build_oauth_url(
         provider=provider,
-        redirect_uri=f"{settings.API_URL}/api/v2/auth/oauth/callback",
-        state=state,  # CRITICAL: Include state in redirect
+        redirect_uri=f"{settings.API_URL}/api/v2/auth/oauth/callback/{provider}",
+        state=state,
+        code_challenge=code_challenge,           # v3.0
+        code_challenge_method="S256",            # v3.0
     )
 
     return {"url": oauth_url}
 
 
-async def oauth_callback(request: Request, code: str, state: str):
+async def oauth_callback(request: Request, provider: str, code: str, state: str):
     """
     Handle OAuth callback.
 
     A8 FIX: Validate state BEFORE exchanging code.
+    v3.0 PKCE: Include code_verifier in token exchange.
+    v3.0 A13: Validate provider matches stored state.
     """
     # A8 FIX: State validation (MUST be first check)
     stored_state = await consume_oauth_state(state)  # Atomic, one-time use
@@ -1530,24 +2083,48 @@ async def oauth_callback(request: Request, code: str, state: str):
             detail={"code": "AUTH_012", "message": "Invalid OAuth state"},
         )
 
-    # State valid, proceed with code exchange
-    tokens = await exchange_oauth_code(code)
-    user = await get_or_create_user_from_oauth(tokens)
+    # v3.0 A13: Validate provider matches (prevents provider confusion)
+    if stored_state.provider != provider:
+        logger.warning(
+            "oauth_provider_mismatch",
+            expected=stored_state.provider,
+            actual=provider,
+        )
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "AUTH_016", "message": "OAuth provider mismatch"},
+        )
 
-    # Issue our tokens
+    # v3.0 PKCE: Exchange code WITH code_verifier
+    tokens = await exchange_oauth_code(
+        code=code,
+        provider=provider,
+        redirect_uri=f"{settings.API_URL}/api/v2/auth/oauth/callback/{provider}",
+        code_verifier=stored_state.code_verifier,  # v3.0: PKCE
+    )
+
+    user = await get_or_create_user_from_oauth(tokens)
     return await complete_login(user, request)
 ```
 
-**State Storage (DynamoDB)**:
+**State Storage (DynamoDB) - v3.0 Updated**:
 ```
 PK: OAUTH_STATE#<state>
 Attributes:
+  - code_verifier: string  # v3.0: PKCE
+  - provider: string       # v3.0: A13 provider validation
   - ip: string
   - user_agent: string
   - created_at: ISO8601
   - expires_at: ISO8601
   - ttl: number (DynamoDB TTL)
 ```
+
+**Why PKCE matters (v3.0)**:
+- Public clients (frontend) cannot securely store client_secret
+- Without PKCE: Attacker intercepts authorization code via redirect
+- Attacker exchanges code for tokens (code alone is sufficient)
+- With PKCE: Attacker needs code_verifier which never leaves server
 
 **Why state validation matters**:
 - Without state: Attacker generates valid OAuth code for their account
@@ -1565,10 +2142,12 @@ All auth endpoints that issue tokens return:
   "user": {
     "id": "user-123",
     "email": "user@example.com",
-    "roles": ["authenticated"]
+    "roles": ["free"]
   }
 }
 ```
+
+**v3.0**: `roles` uses `"free"` (was `"authenticated"`).
 
 Plus `Set-Cookie` header for refresh token.
 
@@ -1590,9 +2169,9 @@ Plus `Set-Cookie` header for refresh token.
 
 1. **Clear cookie** - Set expired `Set-Cookie` header:
    ```
-   Set-Cookie: refresh_token=; Path=/api/v2/auth/refresh; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; Secure; SameSite=Strict
+   Set-Cookie: refresh_token=; Path=/api/v2/auth; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; Secure; SameSite=None
    ```
-   **v2.8 Note**: Path MUST match the path used when setting cookie (`/api/v2/auth/refresh`).
+   **v3.0 Note**: Path widened to `/api/v2/auth` for signout access. SameSite=None for OAuth/CORS (requires CSRF tokens).
 
 2. **Revoke server-side** - Invalidate session by JWT session_id (NOT cookie):
    ```python
@@ -1623,17 +2202,17 @@ Plus `Set-Cookie` header for refresh token.
        response = JSONResponse({"success": True})
        response.delete_cookie(
            key="refresh_token",
-           path="/api/v2/auth/refresh",  # v2.8: Must match set path
+           path="/api/v2/auth",  # v3.0: Widened for signout access
            httponly=True,
            secure=True,
-           samesite="strict",
+           samesite="none",  # v3.0: OAuth/CORS support (CSRF via separate token)
        )
        return response
    ```
 
-**Why JWT-based signout (v2.8)?**
-- Cookie path `/api/v2/auth/refresh` means signout endpoint doesn't receive cookie
-- Using JWT sid is MORE secure: requires valid access token to sign out
+**Why JWT-based signout (v2.8/v3.0)?**
+- v3.0: Cookie path widened to `/api/v2/auth`, signout CAN receive cookie
+- Using JWT sid is STILL more secure: requires valid access token to sign out
 - Prevents anonymous session termination attacks
 - Session revocation uses sid claim, not refresh token hash
 
@@ -2047,15 +2626,21 @@ Same as page refresh. Each tab has its own memory. Cookie shared.
 3. User sees login prompt on next visit
 4. This is acceptable and expected.
 
-### Multi-Tab Logout
+### Multi-Tab Logout (v3.0 REQUIRED)
+
+**v3.0**: Cross-tab logout is now REQUIRED, not an acceptable limitation.
 
 1. Tab A calls `/signout`
-2. Server clears httpOnly cookie
-3. Tab B still has in-memory access_token
-4. Tab B continues working until token expires (15 min max)
-5. Tab B's next refresh fails, user sees login prompt
+2. Server clears httpOnly cookie AND broadcasts logout event
+3. Tab B receives BroadcastChannel message (or localStorage fallback)
+4. Tab B immediately clears in-memory access_token
+5. Tab B shows login prompt without waiting for token expiry
 
-**Acceptable limitation**. Cross-tab sync via BroadcastChannel is out of scope.
+**Implementation**: See Cross-Tab Auth Synchronization section (v2.10 A9).
+
+**v3.0 Requirement**: All tabs MUST logout within 1 second of signout action.
+This prevents confusion where user thinks they've logged out but another tab
+is still authenticated.
 
 ### Back Button After Logout (NEW - SECURITY)
 
@@ -2129,8 +2714,8 @@ async function tryRefresh(): Promise<boolean> {
 | C1 | CRITICAL | `auth.py` | 1101-1103 | Hardcoded fallback secret | DELETE - switch to random tokens |
 | C2 | HIGH | `auth.py` | 1510-1529 | Mock tokens in prod | Add Lambda environment guard |
 | C3 | HIGH | `auth.py` | 1438-1443 | Non-atomic token use | Use conditional update |
-| C4 | CRITICAL | `router_v2.py` | 517-532 | `/admin/sessions/revoke` unprotected | Add `@require_role("admin")` |
-| C5 | HIGH | `router_v2.py` | 673-705 | `/users/lookup` unprotected | Add `@require_role("admin")` |
+| C4 | CRITICAL | `router_v2.py` | 517-532 | `/admin/sessions/revoke` unprotected | Add `@require_role("operator")  # v3.0: operator IS admin` |
+| C5 | HIGH | `router_v2.py` | 673-705 | `/users/lookup` unprotected | Add `@require_role("operator")  # v3.0: operator IS admin` |
 | C6 | HIGH | `auth-store.ts` | 57,276 | Tokens in localStorage | Remove zustand persist |
 | C6b | HIGH | `cookies.ts` | 13 | Non-httpOnly cookie | DELETE entire file |
 
@@ -2205,7 +2790,7 @@ async def revoke_sessions(...):
 from src.lambdas.shared.middleware.require_role import require_role
 
 @router.post("/admin/sessions/revoke")
-@require_role("admin")
+@require_role("operator")  # v3.0: operator IS admin
 async def revoke_sessions(...):
     ...
 ```
@@ -2221,7 +2806,7 @@ async def lookup_user(...):
 
 # AFTER (SECURE)
 @router.get("/users/lookup")
-@require_role("admin")
+@require_role("operator")  # v3.0: operator IS admin
 async def lookup_user(...):
     ...
 ```
@@ -2280,49 +2865,36 @@ export const useAuthStore = create<AuthState>((set, get) => ({...}));
 
 #### 1. Role Enum and Model Updates
 
+**v2.10 A2 FIX**: This section previously defined a DIFFERENT Role enum than the canonical
+definition in the Role System section (lines 834-873). The canonical definition uses
+`AUTHENTICATED` as the base authenticated role. This section now REFERENCES that definition
+instead of redefining it.
+
 ```python
-# src/lambdas/shared/models/role.py (NEW FILE)
-from enum import Enum
+# src/lambdas/shared/models/role.py
+# v3.0: DO NOT DEFINE Role here. Import from canonical location.
+from src.lambdas.shared.auth.constants import Role
 
-class Role(str, Enum):
-    """
-    User roles. Additive (users can have multiple).
-
-    Current:
-      - FREE: Default for all authenticated users
-      - ANONYMOUS: Unauthenticated temporary session
-
-    Future (schema ready, assignment API not implemented):
-      - PAID: Active subscription
-      - OPERATOR: Can manage other users
-      - ADMIN: Full system access
-    """
-    ANONYMOUS = "anonymous"
-    FREE = "free"           # Default for authenticated
-    PAID = "paid"           # Future: subscription active
-    OPERATOR = "operator"   # Future: user management
-    ADMIN = "admin"         # Future: system administration
-
+# v3.0 BREAKING CHANGE: Role enum values changed
+#   - AUTHENTICATED → FREE (renamed)
+#   - Tier concept REMOVED (role = tier)
+#   - See A18 section for canonical definition
 
 def get_roles_for_user(user: "User") -> list[str]:
     """
     Determine roles based on user state.
 
-    Current: Returns [ANONYMOUS] or [FREE] based on auth_type.
-    Future: Will check subscription_active, is_operator, is_admin fields.
+    v3.0: Returns [ANONYMOUS] or [FREE] (was AUTHENTICATED).
     """
     if user.auth_type == "anonymous":
         return [Role.ANONYMOUS.value]
 
-    roles = [Role.FREE.value]
+    roles = [Role.FREE.value]  # v3.0: Was AUTHENTICATED
 
-    # Future fields (not yet in User model)
     if getattr(user, "subscription_active", False):
         roles.append(Role.PAID.value)
     if getattr(user, "is_operator", False):
         roles.append(Role.OPERATOR.value)
-    if getattr(user, "is_admin", False):
-        roles.append(Role.ADMIN.value)
 
     return roles
 ```
@@ -2336,11 +2908,11 @@ class User(BaseModel):
     # ... existing fields ...
 
     # RBAC fields (Phase 1.5 - schema ready, assignment API in Phase 3+)
-    role: str = "free"                    # Primary role for quick checks
-    subscription_active: bool = False     # Future: billing integration
+    # v3.0: Default role is "free" (renamed from "authenticated")
+    role: str = "free"                    # v3.0: Was "authenticated"
+    subscription_active: bool = False     # Enables PAID role
     subscription_expires_at: datetime | None = None
-    is_operator: bool = False             # Future: admin console
-    is_admin: bool = False                # Future: system admin
+    is_operator: bool = False             # Enables OPERATOR role (this IS admin)
 ```
 
 #### 3. DynamoDB Schema Extension
@@ -2375,12 +2947,33 @@ claims = {
 }
 ```
 
-#### 5. Backward Compatibility
+#### 5. Backward Compatibility (v3.0 BREAKING CHANGE)
 
-- Existing users: `role` field absent → code treats as `"free"`
-- Existing JWTs: `roles` claim absent → code treats as `["authenticated"]`
-- No database migration required
-- No breaking changes to API
+**v3.0 Decision**: Reject old tokens, force re-login.
+
+- Existing users: `role` field absent → code treats as `"free"` (unchanged)
+- Existing JWTs: `roles` claim absent → **REJECT with 401** (v3.0 change)
+- Database migration: Not required (schemaless DynamoDB)
+- API breaking change: **YES** - old tokens will fail
+
+**Rationale (v3.0)**:
+Auto-promoting role-less tokens creates a security gap where an attacker with
+an old token could be granted implicit roles. Forcing re-login ensures all
+tokens have explicit role claims.
+
+**Migration Path**:
+1. Deploy v3.0 backend with strict role validation
+2. Old tokens return 401 → frontend clears state → user re-authenticates
+3. New token issued with explicit `roles: ["free"]` claim
+
+**Implementation**:
+```python
+# In validate_jwt_global()
+roles = payload.get("roles")
+if not roles:
+    logger.warning("jwt_missing_roles", sub=payload.get("sub"))
+    raise InvalidTokenError("AUTH_020", "Token missing roles claim")
+```
 
 #### Phase 1.5 Success Criteria
 
@@ -2523,16 +3116,96 @@ resource "aws_api_gateway_usage_plan" "auth" {
 }
 ```
 
-### Endpoint-Specific Limits
+### Endpoint-Specific Limits (v3.0 Updated)
 
 | Endpoint | Limit | Window | Key | Reason |
 |----------|-------|--------|-----|--------|
-| `/api/v2/auth/magic-link` | 5 | 1 hour | email | Prevent spam, enumeration |
+| `/api/v2/auth/magic-link` | 5 | 1 hour | email | Prevent spam to single user |
+| `/api/v2/auth/magic-link` | 20 | 1 hour | IP | v3.0: Prevent spam from single source |
 | `/api/v2/auth/magic-link/verify` | 10 | 1 min | IP | Brute-force protection |
 | `/api/v2/auth/refresh` | 30 | 1 min | user_id | Prevent token farming |
 | `/api/v2/auth/anonymous` | 100 | 1 min | IP | Prevent session exhaustion |
 | `/api/v2/auth/oauth/*` | 20 | 1 min | IP | OAuth abuse protection |
 | `/api/v2/auth/signout` | 10 | 1 min | user_id | Prevent logout DOS (A11 FIX) |
+
+**v3.0 Magic Link Rate Limiting**: Both limits apply (email AND IP). An attacker:
+- Cannot send >5 links to any single email (per-email limit)
+- Cannot send >20 links total from their IP (per-IP limit)
+
+This prevents distributed attacks where attacker spams many different emails.
+
+### Email Enumeration Defense (v3.0)
+
+**Attack Vector**: Attacker calls `POST /api/v2/auth/magic-link/request` with various emails to determine which are registered.
+
+**Defense Strategy**: Constant-time response + deferred user creation.
+
+```python
+# src/lambdas/dashboard/auth.py - Magic link request handler
+
+import time
+from secrets import compare_digest
+
+CONSTANT_RESPONSE_TIME_MS = 200  # Normalize all responses to this
+
+async def request_magic_link(email: str) -> dict:
+    """
+    v3.0 Email Enumeration Defense:
+    1. Always return same response regardless of email existence
+    2. Normalize response time to prevent timing attacks
+    3. Create MagicLinkToken for both known/unknown emails
+    4. User created on VERIFY, not REQUEST (prevents cost attack)
+    """
+    start = time.monotonic()
+
+    # Check if user exists (fast lookup)
+    user = await get_user_by_email(email)
+
+    if user:
+        # Known user: login flow
+        token = await create_magic_link_token(email, token_type="login")
+        await send_magic_link_email(email, token, template="login")
+    else:
+        # Unknown user: signup flow
+        token = await create_magic_link_token(email, token_type="signup")
+        await send_magic_link_email(email, token, template="signup")
+
+    # Normalize response time to prevent timing attack
+    elapsed = (time.monotonic() - start) * 1000
+    if elapsed < CONSTANT_RESPONSE_TIME_MS:
+        await asyncio.sleep((CONSTANT_RESPONSE_TIME_MS - elapsed) / 1000)
+
+    # Same response for both cases
+    return {"message": "Check your email for a login link"}
+```
+
+**MagicLinkToken Schema (v3.0)**:
+```python
+{
+    "PK": "MAGIC#{token_hash}",
+    "SK": "TOKEN",
+    "email": "user@example.com",
+    "type": "signup" | "login",  # v3.0: Determines verify behavior
+    "created_at": "2026-01-04T10:00:00Z",
+    "expires_at": "2026-01-04T10:15:00Z",  # 15 min TTL
+    "used": False,
+    "used_at": None
+}
+```
+
+**Verify Behavior (v3.0)**:
+- `type="login"`: Lookup user, create session
+- `type="signup"`: CREATE user, then create session (deferred creation)
+
+**Cost Attack Prevention**:
+- User NOT created on REQUEST (attacker can't create millions of users)
+- MagicLinkToken has 15-min TTL (auto-expires via DynamoDB TTL)
+- Rate limiting (5/email/hour + 10/IP/hour) limits total tokens created
+
+**Continued from table above:**
+
+| Endpoint | Limit | Window | Key | Reason |
+|----------|-------|--------|-----|--------|
 | `/api/v2/auth/session` | 60 | 1 min | user_id | Prevent session enumeration (A11 FIX) |
 | `/api/v2/auth/link-accounts` | 5 | 1 hour | user_id | Prevent brute-force merge (A11 FIX) |
 | `/api/v2/auth/validate` | 120 | 1 min | user_id | Allow frequent polling (A11 FIX) |
@@ -2632,7 +3305,18 @@ Tab 2: Finds expired token → calls /refresh → gets new tokens (race)
 
 **Resolution**: Server-side idempotent rotation. Both refreshes succeed, both get valid tokens.
 
-#### B1.2: Cross-Tab Logout Synchronization (v2.8 NEW)
+#### B1.2: Cross-Tab Logout Synchronization (v2.8 NEW, v2.10 REQUIRED)
+
+**v2.10 A9: IMPLEMENTATION REQUIRED**
+
+This feature was originally documented as an "acceptable limitation" but v2.8 added a full
+implementation. **v2.10 upgrades this from documentation to REQUIRED for Phase 0.**
+
+| Status | Requirement |
+|--------|-------------|
+| v2.7 | "Acceptable limitation" |
+| v2.8 | BroadcastChannel implementation specified |
+| **v2.10** | **REQUIRED - Must implement before production** |
 
 **Scenario**: User logs out in Tab A, Tab B still shows authenticated UI.
 
@@ -2641,7 +3325,7 @@ Tab 2: Finds expired token → calls /refresh → gets new tokens (race)
 - Tab B's next API call may succeed (access token still valid for up to 15min)
 - User expects "logout" to mean "logged out everywhere"
 
-**v2.8 Resolution**: BroadcastChannel with localStorage fallback.
+**v2.8 Resolution (v2.10 REQUIRED)**: BroadcastChannel with localStorage fallback.
 
 ```typescript
 // frontend/src/lib/auth/cross-tab-sync.ts
@@ -2782,21 +3466,33 @@ async signout() {
 3. **Safari ITP**: localStorage survives ITP (see B8: Safari ITP Compatibility)
 4. **Closed tabs**: Don't receive messages, but that's expected
 
-### B2: Private Browsing / Anonymous Mode
+### B2: Private Browsing / Anonymous Mode (v2.10 REQUIRED)
+
+**v2.10 A10: USER-FACING WARNING REQUIRED**
+
+Current implementation silently falls back to memory storage when localStorage is unavailable.
+This causes confusion when users expect their session to persist.
+
+| Status | Requirement |
+|--------|-------------|
+| v2.5 | Implementation requirement documented |
+| Current | Silent console.warn fallback only |
+| **v2.10** | **REQUIRED - User-facing Toast warning** |
 
 **Scenario**: User in incognito mode, localStorage unavailable, cookies may be blocked.
 
 **Current Handling (auth-store.ts:290-305)**: Falls back to memory if localStorage unavailable.
+**Current Problem**: Only logs `console.warn` - user has no idea session won't persist.
 
 **Missing**: What happens when cookies ALSO blocked?
 
-**Resolution**:
+**Resolution (v2.10 REQUIRED)**:
 - If httpOnly cookies blocked: Full anonymous experience only
 - No session persistence possible
 - User must re-authenticate on each page load
-- Display warning: "Private browsing detected - session will not persist"
+- **MUST display Toast warning**: "Private browsing detected - session will not persist"
 
-**Implementation Requirement (v2.5)**:
+**Implementation Requirement (v2.5, v2.10 UPGRADED TO REQUIRED)**:
 ```typescript
 // frontend/src/components/auth/PrivateBrowsingWarning.tsx
 export function PrivateBrowsingWarning() {
@@ -2966,54 +3662,124 @@ async function initSession() {
 
 **Resolution**: Force token refresh after tier change.
 
-**Backend Flow**:
+**Backend Flow (v2.9 H5 FIX: Atomic Transaction)**:
 ```python
 # Stripe webhook handler
+# v2.9 H5: MUST use DynamoDB TransactWriteItems for atomicity
+
 async def handle_subscription_created(event: StripeEvent):
     user_id = event.data.object.metadata.get("user_id")
     tier = map_stripe_plan_to_tier(event.data.object.plan.id)
 
-    # 1. Update user tier in database
-    await update_user_tier(user_id, tier)
+    # ┌─────────────────────────────────────────────────────────────────┐
+    # │ v2.9 H5 FIX: ATOMIC TIER + REVOCATION UPDATE                    │
+    # │                                                                 │
+    # │ Problem: If tier updates but revocation_id fails:               │
+    # │   - User has new tier in database                               │
+    # │   - But old tokens still valid (rev not incremented)            │
+    # │   - User sees paid features with stale token (inconsistent)     │
+    # │                                                                 │
+    # │ Solution: DynamoDB TransactWriteItems (all-or-nothing)          │
+    # │   - Either BOTH tier and revocation_id update                   │
+    # │   - Or NEITHER updates (safe to retry webhook)                  │
+    # └─────────────────────────────────────────────────────────────────┘
 
-    # 2. Increment revocation_id to invalidate current tokens
-    # This forces all tabs to refresh on next API call
-    await increment_revocation_id(user_id)
+    try:
+        await dynamodb.transact_write_items(
+            TransactItems=[
+                {
+                    "Update": {
+                        "TableName": "Users",
+                        "Key": {"PK": {"S": f"USER#{user_id}"}, "SK": {"S": "PROFILE"}},
+                        "UpdateExpression": "SET tier = :tier, updated_at = :now",
+                        "ExpressionAttributeValues": {
+                            ":tier": {"S": tier},
+                            ":now": {"S": datetime.now(UTC).isoformat()},
+                        },
+                    }
+                },
+                {
+                    "Update": {
+                        "TableName": "Users",
+                        "Key": {"PK": {"S": f"USER#{user_id}"}, "SK": {"S": "AUTH"}},
+                        "UpdateExpression": "SET revocation_id = revocation_id + :inc",
+                        "ExpressionAttributeValues": {
+                            ":inc": {"N": "1"},
+                        },
+                    }
+                },
+            ]
+        )
+        logger.info("tier_upgrade_atomic", user_id=user_id, tier=tier)
+    except ClientError as e:
+        logger.error("tier_upgrade_failed", user_id=user_id, error=str(e))
+        raise  # Stripe will retry webhook
 
-    # 3. Optional: Send push notification for instant refresh
+    # Optional: Send push notification for instant refresh
     await notify_user_tier_changed(user_id, tier)
 ```
 
-**Frontend Flow**:
+**Frontend Flow (v2.9 H5 FIX: Exponential Backoff)**:
 ```typescript
 // frontend/src/lib/stripe/payment-callback.ts
+// v2.9 H5: Use exponential backoff to handle delayed webhooks
 
 async function handlePaymentSuccess(sessionId: string) {
-  // 1. Poll for tier change (webhook may not have fired yet)
-  const maxAttempts = 10;
-  for (let i = 0; i < maxAttempts; i++) {
-    const response = await authApi.refresh();
-    if (response.user.tier === 'paid') {
-      // 2. Update local state
-      useAuthStore.getState().setUser(response.user);
+  // ┌─────────────────────────────────────────────────────────────────┐
+  // │ v2.9 H5 FIX: EXPONENTIAL BACKOFF POLLING                        │
+  // │                                                                 │
+  // │ Problem: Fixed 1-second polling with 10 attempts (10s max):     │
+  // │   - Stripe webhook can be delayed 30+ seconds under load        │
+  // │   - User pays but tier never upgrades (webhook missed)          │
+  // │   - Toast says "refresh page" but that doesn't help             │
+  // │                                                                 │
+  // │ Solution: Exponential backoff with 60-second total window       │
+  // │   - Attempts: 1s, 2s, 4s, 8s, 16s, 29s (6 attempts, 60s total)  │
+  // │   - Covers even slow webhook delivery                           │
+  // │   - Reduces server load vs fixed polling                        │
+  // └─────────────────────────────────────────────────────────────────┘
 
-      // 3. Notify other tabs
-      crossTabSync.broadcast({
-        type: 'LOGIN',  // Triggers refresh in other tabs
-        timestamp: Date.now(),
-        userId: response.user.id,
-      });
+  const maxWaitMs = 60_000;  // 60 seconds total
+  const baseDelayMs = 1_000; // Start with 1 second
+  let elapsedMs = 0;
+  let attempt = 0;
 
-      return;
+  while (elapsedMs < maxWaitMs) {
+    attempt++;
+    try {
+      const response = await authApi.refresh();
+      if (response.user.tier === 'paid') {
+        // Success! Update local state
+        useAuthStore.getState().setUser(response.user);
+
+        // Notify other tabs
+        crossTabSync.broadcast({
+          type: 'LOGIN',
+          timestamp: Date.now(),
+          userId: response.user.id,
+        });
+
+        logger.info('tier_upgrade_detected', { attempt, elapsedMs });
+        return;
+      }
+    } catch (error) {
+      // Refresh failed (network error, etc.) - continue polling
+      logger.warn('tier_poll_error', { attempt, error: String(error) });
     }
-    await sleep(1000);  // Wait 1 second between attempts
+
+    // Exponential backoff: 1s, 2s, 4s, 8s, 16s, ...
+    const delayMs = Math.min(baseDelayMs * Math.pow(2, attempt - 1), maxWaitMs - elapsedMs);
+    await sleep(delayMs);
+    elapsedMs += delayMs;
   }
 
-  // 4. Fallback: Show success but ask to refresh
+  // Fallback: Show success but ask to refresh
+  // This should rarely happen with 60s window
   showToast({
     type: 'info',
-    message: 'Payment successful! Please refresh the page to access premium features.',
+    message: 'Payment successful! Your premium access will activate shortly. If not, please refresh the page.',
   });
+  logger.warn('tier_upgrade_timeout', { attempts: attempt, elapsedMs });
 }
 ```
 
@@ -3151,18 +3917,21 @@ cors_configuration {
 
 ---
 
-## Role Future-Proofing (v2.4)
+## Role Future-Proofing (v2.4, updated v3.0)
 
-Current implementation supports `anonymous` and `authenticated` roles only. This section documents requirements for future `paid` and `operator` roles.
+**v3.0 Update**: All 4 roles now fully specified. "authenticated" renamed to "free". Tier concept removed (role = tier).
 
-### Current State
+### Current State (v3.0)
 
 ```python
-class Role(str, Enum):
-    ANONYMOUS = "anonymous"       # Implemented
-    AUTHENTICATED = "authenticated" # Implemented
-    PAID = "paid"                 # Schema only
-    OPERATOR = "operator"         # Schema only
+# v3.0: DO NOT REDEFINE. Import from canonical location:
+from src.lambdas.shared.auth.constants import Role
+
+# Role values:
+#   ANONYMOUS = "anonymous"   # Implemented
+#   FREE = "free"             # v3.0: Was AUTHENTICATED
+#   PAID = "paid"             # Implemented (assignment via Stripe webhook)
+#   OPERATOR = "operator"     # Implemented (this IS admin)
 ```
 
 ### Gaps for Future Roles
@@ -3170,46 +3939,46 @@ class Role(str, Enum):
 | Requirement | Current Status | Gap |
 |-------------|---------------|-----|
 | Role in JWT claims | ✅ Implemented | - |
-| @require_role decorator | ❌ Not implemented | Blocks all role work |
-| Role assignment API | ❌ Not specified | Need `POST /users/{id}/roles` |
-| Subscription webhook | ❌ Not specified | Need Stripe/billing integration |
+| @require_role decorator | ✅ Specified | See middleware section |
+| Role assignment API | ❌ Not specified | Need `POST /admin/users/{id}/role` |
+| Subscription webhook | ❌ Not specified | Need Stripe integration for paid→free transitions |
 | Operator admin UI | ❌ Out of scope | Phase 3+ |
 
 ### Schema Additions (Ready for Migration)
 
 ```python
 # User model additions (nullable, no breaking changes)
+# v3.0: Tier concept REMOVED. Role = billing tier.
 class User:
     # Existing fields...
 
-    # Future role fields (nullable defaults)
-    subscription_tier: str | None = None  # "free", "pro", "enterprise"
-    subscription_active: bool = False
+    # Role fields (v3.0 simplified)
+    role: str = "free"                    # v3.0: Was "authenticated"
+    subscription_active: bool = False     # True = PAID role
     subscription_expires_at: datetime | None = None
-    is_operator: bool = False
-    operator_level: int = 0  # 0=none, 1=support, 2=admin, 3=superadmin
+    is_operator: bool = False             # True = OPERATOR role (this IS admin)
     role_assigned_at: datetime | None = None
-    role_assigned_by: str | None = None  # user_id or "billing_webhook" or "manual"
+    role_assigned_by: str | None = None   # "stripe_webhook" or "admin:{user_id}"
 ```
 
 ### Reserved JWT Claims
 
-```python
-# Future claims (reserve namespace now)
-{
-    "sub": "user_id",
-    "roles": ["authenticated", "paid"],  # Additive
-    "subscription": {                     # Future
-        "tier": "pro",
-        "active": true,
-        "expires_at": 1735689600
-    },
-    "operator": {                         # Future
-        "level": 2,
-        "permissions": ["user:read", "user:write"]
-    }
-}
-```
+**v2.10 A8: VESTIGIAL CONTENT REMOVED**
+
+~~This section previously defined speculative nested claim structures (`subscription`, `operator`)
+that were never implemented and conflicted with the actual JWT claims structure.~~
+
+**Canonical JWT claims are defined in the "JWT Claims Structure" section (lines 875-980).**
+
+The following nested structures were removed as vestigial:
+- `subscription: { tier, active, expires_at }` - Use flat `tier` claim instead
+- `operator: { level, permissions }` - Use `roles` array with `"operator"` instead
+
+**Rationale (v2.10 A8)**:
+1. Nested structures increase token size unnecessarily
+2. Flat claims (`tier`, `roles`) are sufficient for current and planned use cases
+3. Speculative structures create implementation confusion
+4. JWT Claims Structure section is the single source of truth
 
 ### Implementation Order
 
@@ -3284,7 +4053,7 @@ Attributes:
   - email: str
   - created_at: ISO8601
   - expires_at: ISO8601
-  - consumed_at: ISO8601 | null
+  - used_at: ISO8601 | null  # v2.9 H4: Unified with code (was consumed_at)
   - anonymous_user_id: str | null (for account merge)
   - ttl: int (expires_at + 24h, DynamoDB TTL)
 ```
@@ -3461,28 +4230,101 @@ async def revoke_session(
     session_id: str,
     reason: str,
     table,
+    dynamodb_client,  # v2.9 B4: Need client for transactions
     logger,
 ) -> bool:
     """
     Revoke a specific session by deleting from Sessions table.
 
+    v2.9 B4 FIX: ATOMIC session deletion + blocklist entry.
+
+    ┌─────────────────────────────────────────────────────────────────┐
+    │ v2.9 B4 FIX: ATOMIC SESSION EVICTION                            │
+    │                                                                 │
+    │ Problem: Non-atomic eviction allows race condition:             │
+    │   1. Session eviction starts (new login at limit)               │
+    │   2. Old device sends refresh request (still in flight)         │
+    │   3. Session deleted                                            │
+    │   4. But refresh request still succeeds (checked before delete) │
+    │   5. Session limit bypassed!                                    │
+    │                                                                 │
+    │ Solution: DynamoDB TransactWriteItems                           │
+    │   - Delete session AND add to blocklist atomically              │
+    │   - Refresh endpoint checks blocklist BEFORE issuing new token  │
+    │   - No window for race condition                                │
+    │                                                                 │
+    │ Refresh endpoint MUST check:                                    │
+    │   1. Is refresh_token_hash in blocklist? → 401                  │
+    │   2. Is session_id valid? → 401 if not                          │
+    │   3. Issue new tokens only if both pass                         │
+    └─────────────────────────────────────────────────────────────────┘
+
     Returns True if session was deleted, False if not found.
     """
+    from datetime import datetime, timedelta, UTC
+
     try:
-        await table.delete_item(
+        # First, get the session to retrieve refresh_token_hash
+        session_response = await table.get_item(
             Key={"PK": f"USER#{user_id}", "SK": f"SESSION#{session_id}"},
-            ConditionExpression="attribute_exists(PK)",
+            ProjectionExpression="refresh_token_hash, expires_at",
+        )
+
+        if "Item" not in session_response:
+            return False  # Session doesn't exist
+
+        refresh_token_hash = session_response["Item"].get("refresh_token_hash")
+        original_expiry = session_response["Item"].get("expires_at")
+
+        # Calculate blocklist TTL: original token expiry + 24h buffer
+        blocklist_ttl = int(
+            (datetime.fromisoformat(original_expiry) + timedelta(hours=24)).timestamp()
+        ) if original_expiry else int((datetime.now(UTC) + timedelta(days=8)).timestamp())
+
+        # v2.9 B4: Atomic transaction - delete session AND add to blocklist
+        await dynamodb_client.transact_write_items(
+            TransactItems=[
+                {
+                    "Delete": {
+                        "TableName": table.table_name,
+                        "Key": {
+                            "PK": {"S": f"USER#{user_id}"},
+                            "SK": {"S": f"SESSION#{session_id}"},
+                        },
+                        "ConditionExpression": "attribute_exists(PK)",
+                    }
+                },
+                {
+                    "Put": {
+                        "TableName": table.table_name,
+                        "Item": {
+                            "PK": {"S": f"BLOCK#refresh#{refresh_token_hash}"},  # v3.0: type prefix
+                            "SK": {"S": "REVOKED"},
+                            "user_id": {"S": user_id},
+                            "session_id": {"S": session_id},
+                            "reason": {"S": reason},
+                            "revoked_at": {"S": datetime.now(UTC).isoformat()},
+                            "ttl": {"N": str(blocklist_ttl)},
+                        },
+                    }
+                },
+            ]
         )
 
         logger.info(
-            "session_revoked",
+            "session_revoked_atomic",
             user_id=user_id,
             session_id=session_id,
             reason=reason,
         )
         return True
 
-    except table.meta.client.exceptions.ConditionalCheckFailedException:
+    except dynamodb_client.exceptions.TransactionCanceledException as e:
+        # Transaction failed - session may have been deleted by another request
+        logger.warning("session_revoke_transaction_failed", error=str(e))
+        return False
+    except Exception as e:
+        logger.error("session_revoke_error", error=str(e))
         return False
 ```
 
@@ -3499,19 +4341,91 @@ async def create_session_with_limit_enforcement(
     tier: str | None,
     device_info: dict,
     table,
+    dynamodb_client,  # v2.9 B4: Need client for atomic revoke_session
     logger,
 ) -> str:
     """
     Create session with concurrent session limit enforcement.
 
     v2.8: Uses role for anonymous, tier for authenticated.
+    v2.9 H2 FIX: Caller MUST pass the NEW (post-transition) roles/tier.
+
+    ┌─────────────────────────────────────────────────────────────────┐
+    │ CRITICAL: Anonymous → Authenticated Transition                  │
+    │                                                                 │
+    │ When user logs in (magic link, OAuth), the CALLER must pass    │
+    │ the NEW roles/tier, not the old anonymous ones.                │
+    │                                                                 │
+    │ WRONG (breaks login at session limit):                         │
+    │   # User is anonymous with 1 session (at limit)                │
+    │   roles = ["anonymous"]  # OLD role                            │
+    │   tier = None                                                  │
+    │   limit = get_session_limit(roles, tier)  # Returns 1          │
+    │   # Login fails because we're already at limit!                │
+    │                                                                 │
+    │ CORRECT (allows login with higher limit):                      │
+    │   # User is logging in, assign NEW role FIRST                  │
+    │   roles = ["free"]           # v3.0: NEW role after login      │
+    │   limit = get_session_limit(roles)  # Returns 3                │
+    │   # Login succeeds, old anonymous session can be evicted       │
+    │                                                                 │
+    │ The login endpoint MUST:                                       │
+    │   1. Determine new role based on login type                    │
+    │   2. Pass new role to this function                            │
+    │   3. This function enforces limits using new role              │
+    │   4. Old session evicted if needed (uses new higher limit)     │
+    └─────────────────────────────────────────────────────────────────┘
 
     Returns: session_id
+
+    Raises:
+        ValueError: If roles/tier combination is invalid (v2.10 A6 guard)
     """
     import uuid
 
-    # Determine limit based on role/tier
-    max_sessions = get_session_limit(roles, tier)
+    # ┌─────────────────────────────────────────────────────────────────┐
+    # │ v2.10 A6 FIX: GUARD AGAINST TOCTOU WITH ANONYMOUS ROLES         │
+    # │                                                                 │
+    # │ Problem: Caller might accidentally pass OLD anonymous role      │
+    # │ when creating a session for an authenticated user. This would   │
+    # │ cause the session limit check to use the wrong limit (1 vs 3).  │
+    # │                                                                 │
+    # │ Solution: Validate that roles/tier combination is consistent.   │
+    # │ v3.0: tier removed, role = tier. Valid roles: anonymous, free, │
+    # │ paid, operator. "free" replaces "authenticated".               │
+    # └─────────────────────────────────────────────────────────────────┘
+
+    # v3.0: Validate role is from canonical set
+    VALID_ROLES = {"anonymous", "free", "paid", "operator"}
+    if not set(roles).issubset(VALID_ROLES):
+        invalid = set(roles) - VALID_ROLES
+        logger.error(
+            "session_creation_invalid_roles",
+            user_id=user_id,
+            roles=roles,
+            invalid_roles=list(invalid),
+            error=f"Invalid roles: {invalid}. Use 'free' not 'authenticated'.",
+        )
+        raise ValueError(
+            f"Invalid roles: {invalid}. Valid roles: {VALID_ROLES}. "
+            f"v3.0: Use 'free' instead of 'authenticated'."
+        )
+
+    if "anonymous" in roles and tier is not None:
+        logger.error(
+            "session_creation_conflicting_state",
+            user_id=user_id,
+            roles=roles,
+            tier=tier,
+            error="anonymous role with non-null tier is invalid",
+        )
+        raise ValueError(
+            f"Invalid roles: 'anonymous' role cannot coexist with {roles}. "
+            f"Anonymous users have roles=['anonymous'] only."
+        )
+
+    # v3.0: Determine limit based on role only (tier concept removed)
+    max_sessions = get_session_limit(roles)
 
     # Get current sessions (oldest first)
     response = await table.query(
@@ -3525,6 +4439,7 @@ async def create_session_with_limit_enforcement(
     sessions = response.get("Items", [])
 
     # Evict oldest if at limit
+    # v2.9 B4: Uses atomic revoke_session with blocklist entry
     if len(sessions) >= max_sessions:
         oldest = sessions[0]
         await revoke_session(
@@ -3532,6 +4447,7 @@ async def create_session_with_limit_enforcement(
             session_id=oldest["session_id"],
             reason="evicted_by_limit",
             table=table,
+            dynamodb_client=dynamodb_client,  # v2.9 B4: For atomic transaction
             logger=logger,
         )
         logger.info(
@@ -3676,9 +4592,8 @@ async def update_user_tier(
 2. **Operator role assignment** - Requires admin console (Phase 4+)
 3. **Multi-device session management** - Track sessions per device
 4. **Token revocation list** - Blacklist compromised tokens (allowlist preferred)
-5. ~~**Cross-tab session sync** - BroadcastChannel logout~~ → v2.8: Implemented
-6. **Audit logging** - Log all auth events
-7. **Account linking** - Multiple OAuth providers per user (see B4)
+5. **Audit logging** - Log all auth events
+6. **Account linking** - Multiple OAuth providers per user (see B4)
 
 ---
 
@@ -3846,33 +4761,36 @@ SESSION_LIMITS_BY_TIER = {
     "operator": 10,
 }
 
-# Anonymous is special: no tier, use role
-ANONYMOUS_SESSION_LIMIT = 1
+# v3.0: Session limits by role (tier concept removed)
+SESSION_LIMITS_BY_ROLE = {
+    "anonymous": 1,
+    "free": 3,
+    "paid": 5,
+    "operator": 10,
+}
 
 
-def get_session_limit(roles: list[str], tier: str | None) -> int:
+def get_session_limit(roles: list[str]) -> int:
     """
     Get max concurrent sessions for user.
 
-    v2.8: Anonymous uses role check (has no tier).
-    Authenticated users use tier-based limits.
+    v3.0: All users use role-based limits. Tier concept removed.
+    Returns highest limit from user's roles.
     """
-    # Anonymous users: role-based limit (tier is null)
-    if "anonymous" in roles:
-        return ANONYMOUS_SESSION_LIMIT
-
-    # Authenticated users: tier-based limit
-    return SESSION_LIMITS_BY_TIER.get(tier or "free", 3)
+    max_limit = 1  # Default for unknown roles
+    for role in roles:
+        limit = SESSION_LIMITS_BY_ROLE.get(role, 1)
+        max_limit = max(max_limit, limit)
+    return max_limit
 
 
 async def create_session(
     user_id: str,
     roles: list[str],
-    tier: str | None,
     device_info: dict,
 ) -> str:
-    """Create new session, evicting oldest if limit exceeded."""
-    max_sessions = get_session_limit(roles, tier)
+    """Create new session, evicting oldest if limit exceeded. v3.0: tier param removed."""
+    max_sessions = get_session_limit(roles)
 
     # Get current sessions ordered by created_at
     sessions = await get_active_sessions(user_id)
@@ -4053,6 +4971,13 @@ Auth errors return inconsistent messages:
 | `AUTH_010` | 410 | Magic link invalid | Request new magic link |
 | `AUTH_011` | 400 | Token format error | Resend request with correct format |
 | `AUTH_012` | 400 | OAuth state invalid | Restart OAuth flow |
+| `AUTH_013` | 401 | Credentials changed | Clear tokens, redirect to login (v2.11 A23) |
+| `AUTH_014` | 401 | Session evicted | Clear tokens, show "logged in elsewhere" (v2.11 A23) |
+| `AUTH_015` | 400 | Unknown provider | Show supported providers (v2.11 A23) |
+| `AUTH_016` | 400 | Provider mismatch | Restart OAuth flow (v2.11 A23) |
+| `AUTH_017` | 400 | Password requirements not met | Show password rules (v2.11 A23) |
+| `AUTH_018` | 401 | Token audience invalid (env) | Clear tokens, check environment (v2.11 A23) |
+| `AUTH_019` | 403 | Invalid CSRF token | Refresh page, retry request (v3.0 CSRF) |
 
 **A12 FIX - Error Response Security Guidelines**:
 
@@ -4129,6 +5054,15 @@ AUTH_ERRORS = {
     "AUTH_010": AuthError("AUTH_010", "Magic link invalid", 410),  # A12: NOT "expired" or "used"
     "AUTH_011": AuthError("AUTH_011", "Token format error", 400),  # A5: Query param token rejected
     "AUTH_012": AuthError("AUTH_012", "OAuth state invalid", 400),  # A8: CSRF protection
+    # v2.11 A23: New error codes
+    "AUTH_013": AuthError("AUTH_013", "Credentials have been changed", 401),  # Password changed
+    "AUTH_014": AuthError("AUTH_014", "Session limit exceeded", 401),  # Evicted by new login
+    "AUTH_015": AuthError("AUTH_015", "Unknown OAuth provider", 400),  # Unsupported provider
+    "AUTH_016": AuthError("AUTH_016", "OAuth provider mismatch", 400),  # State/callback mismatch
+    "AUTH_017": AuthError("AUTH_017", "Password requirements not met", 400),  # Weak password
+    "AUTH_018": AuthError("AUTH_018", "Token audience invalid", 401),  # Wrong environment
+    # v3.0: CSRF protection
+    "AUTH_019": AuthError("AUTH_019", "Invalid CSRF token", 403),  # CSRF validation failed
 }
 
 def raise_auth_error(code: str, **details):
@@ -4155,6 +5089,13 @@ const AUTH_ERROR_ACTIONS: Record<string, () => void> = {
   AUTH_010: () => showMagicLinkInvalid(),  // A12 FIX: Generic message
   AUTH_011: () => showError("Request format error"),  // A5: Query param rejection
   AUTH_012: () => restartOAuthFlow(),  // A8: CSRF protection
+  // v2.11 A23: New error handlers
+  AUTH_013: () => clearTokensAndRedirect("Your password was changed"),
+  AUTH_014: () => clearTokensAndRedirect("Signed in on another device"),
+  AUTH_015: () => showError("Unsupported login provider"),
+  AUTH_016: () => restartOAuthFlow(),  // Provider mismatch
+  AUTH_017: () => showPasswordRequirements(),
+  AUTH_018: () => clearTokensAndRedirect(),  // Wrong environment
 };
 ```
 
@@ -4408,10 +5349,10 @@ def set_refresh_cookie(response: dict, token: str, max_age: int = 604800) -> dic
     cookie_parts = [
         f"refresh_token={token}",
         f"Max-Age={max_age}",
-        "Path=/api/v2/auth/refresh",  # v2.8: Narrowed to refresh endpoint only
+        "Path=/api/v2/auth",  # v3.0: Widened for signout access
         "HttpOnly",
         "Secure",
-        "SameSite=Strict",
+        "SameSite=None",  # v3.0: OAuth/CORS support (CSRF via separate token)
     ]
 
     response.setdefault("multiValueHeaders", {})
@@ -4423,10 +5364,10 @@ def clear_refresh_cookie(response: dict) -> dict:
     cookie_parts = [
         "refresh_token=",
         "Max-Age=0",
-        "Path=/api/v2/auth/refresh",  # v2.8: Must match set path
+        "Path=/api/v2/auth",  # v3.0: Must match set path
         "HttpOnly",
         "Secure",
-        "SameSite=Strict",
+        "SameSite=None",  # v3.0: OAuth/CORS support
     ]
 
     response.setdefault("multiValueHeaders", {})
@@ -4441,3 +5382,697 @@ The file `frontend/src/lib/cookies.ts` MUST be deleted entirely:
 2. It uses `SameSite: Lax` (wrong)
 3. It uses `Path: /` (wrong)
 4. Cookies MUST be set by Lambda response headers only
+
+---
+
+## v2.11 Amendment Implementations
+
+This section contains complete implementations for all v2.11 amendments.
+
+### A11: Session Eviction Atomic Transaction (CRITICAL)
+
+**Problem**: Lines 3991-4025 show non-atomic session eviction - race condition allows session limit bypass.
+
+```python
+# src/lambdas/shared/auth/session_manager.py
+
+from botocore.exceptions import ClientError
+from datetime import datetime, timedelta, UTC
+import uuid
+
+class SessionLimitRaceError(Exception):
+    """Raised when concurrent session creation causes race condition."""
+    pass
+
+
+async def create_session_with_limit_enforcement(
+    user_id: str,
+    roles: list[str],
+    tier: str | None,
+    device_info: dict,
+) -> str:
+    """
+    Create session with atomic limit enforcement.
+
+    Uses DynamoDB transact_write_items for atomicity:
+    1. ConditionCheck: session count < limit
+    2. Put: new session
+    3. Delete: oldest session (if at limit)
+
+    v2.11 A11: Prevents race condition session limit bypass.
+    """
+    session_id = str(uuid.uuid4())
+    now = datetime.now(UTC)
+    expires_at = now + timedelta(days=7)
+
+    # Determine limit based on role (anonymous=1, authenticated=5, paid=10)
+    max_sessions = get_session_limit_for_roles(roles)
+
+    # Query current sessions (for eviction candidate)
+    sessions = await query_user_sessions(user_id)
+
+    if len(sessions) >= max_sessions:
+        # Must evict oldest - use transaction
+        oldest = min(sessions, key=lambda s: s["created_at"])
+
+        try:
+            await dynamodb.transact_write_items(
+                TransactItems=[
+                    # Condition: oldest session still exists (not already evicted)
+                    {
+                        "ConditionCheck": {
+                            "TableName": TABLE_NAME,
+                            "Key": {
+                                "PK": {"S": f"USER#{user_id}"},
+                                "SK": {"S": f"SESSION#{oldest['session_id']}"},
+                            },
+                            "ConditionExpression": "attribute_exists(PK)",
+                        }
+                    },
+                    # Delete oldest session
+                    {
+                        "Delete": {
+                            "TableName": TABLE_NAME,
+                            "Key": {
+                                "PK": {"S": f"USER#{user_id}"},
+                                "SK": {"S": f"SESSION#{oldest['session_id']}"},
+                            },
+                        }
+                    },
+                    # Add to blocklist (v3.0: type prefix for TTL optimization)
+                    {
+                        "Put": {
+                            "TableName": TABLE_NAME,
+                            "Item": {
+                                "PK": {"S": f"BLOCK#refresh#{oldest['token_hash']}"},
+                                "reason": {"S": "session_evicted"},
+                                "evicted_at": {"S": now.isoformat()},
+                                "ttl": {"N": str(int((now + timedelta(days=8)).timestamp()))},
+                            },
+                        }
+                    },
+                    # Create new session
+                    {
+                        "Put": {
+                            "TableName": TABLE_NAME,
+                            "Item": {
+                                "PK": {"S": f"USER#{user_id}"},
+                                "SK": {"S": f"SESSION#{session_id}"},
+                                "session_id": {"S": session_id},
+                                "created_at": {"S": now.isoformat()},
+                                "expires_at": {"S": expires_at.isoformat()},
+                                "device_info": {"M": serialize_device_info(device_info)},
+                                "ttl": {"N": str(int((expires_at + timedelta(days=1)).timestamp()))},
+                            },
+                            "ConditionExpression": "attribute_not_exists(PK)",
+                        }
+                    },
+                ]
+            )
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "TransactionCanceledException":
+                # Race condition: another request evicted first, retry
+                logger.warning("session_eviction_race", user_id=user_id)
+                raise SessionLimitRaceError("Retry session creation")
+            raise
+    else:
+        # Under limit - simple put with condition
+        await table.put_item(
+            Item={
+                "PK": f"USER#{user_id}",
+                "SK": f"SESSION#{session_id}",
+                "session_id": session_id,
+                "created_at": now.isoformat(),
+                "expires_at": expires_at.isoformat(),
+                "device_info": device_info,
+                "ttl": int((expires_at + timedelta(days=1)).timestamp()),
+            },
+            ConditionExpression="attribute_not_exists(PK)",
+        )
+
+    return session_id
+```
+
+### A12: OAuth redirect_uri Validation (CRITICAL)
+
+**Problem**: Line 4085 validates provider but not redirect_uri - open redirect vulnerability.
+
+```python
+# src/lambdas/shared/auth/oauth.py
+
+import hashlib
+from datetime import datetime, timedelta, UTC
+
+async def store_oauth_state(
+    state: str,
+    provider: str,
+    redirect_uri: str,  # v2.11 A12: Store for validation
+    ip_address: str,
+    user_agent: str,
+) -> None:
+    """Store OAuth state with redirect_uri for later validation."""
+    token_hash = hashlib.sha256(state.encode()).hexdigest()
+    expires_at = datetime.now(UTC) + timedelta(minutes=5)
+
+    await table.put_item(
+        Item={
+            "PK": f"OAUTH#{token_hash}",
+            "provider": provider,
+            "redirect_uri": redirect_uri,  # v2.11 A12
+            "ip_address": ip_address,
+            "user_agent": user_agent,
+            "consumed": False,
+            "created_at": datetime.now(UTC).isoformat(),
+            "expires_at": expires_at.isoformat(),
+            "ttl": int((expires_at + timedelta(hours=1)).timestamp()),
+        }
+    )
+
+
+async def consume_oauth_state(state: str, expected_redirect_uri: str) -> dict | None:
+    """
+    Consume OAuth state with redirect_uri validation.
+
+    v2.11 A12: Validates redirect_uri matches stored value to prevent
+    open redirect attacks.
+    """
+    token_hash = hashlib.sha256(state.encode()).hexdigest()
+
+    try:
+        response = await table.update_item(
+            Key={"PK": f"OAUTH#{token_hash}"},
+            UpdateExpression="SET consumed = :true, consumed_at = :now",
+            ConditionExpression=(
+                "attribute_exists(PK) "
+                "AND consumed = :false "
+                "AND expires_at > :now "
+                "AND redirect_uri = :redirect_uri"  # v2.11 A12: Validate redirect
+            ),
+            ExpressionAttributeValues={
+                ":true": True,
+                ":false": False,
+                ":now": datetime.now(UTC).isoformat(),
+                ":redirect_uri": expected_redirect_uri,
+            },
+            ReturnValues="ALL_OLD",
+        )
+        return response.get("Attributes")
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+            logger.warning(
+                "oauth_state_invalid",
+                reason="consumed_expired_or_redirect_mismatch",
+            )
+            return None
+        raise
+```
+
+### A13: OAuth Provider in Callback (CRITICAL)
+
+**Problem**: Callback doesn't validate provider matches state - provider confusion attack.
+
+```python
+# src/lambdas/dashboard/routes/auth.py
+
+@router.get("/oauth/callback/{provider}")
+async def oauth_callback(
+    request: Request,
+    provider: str,  # v2.11 A13: Provider in path, not inferred
+    code: str,
+    state: str,
+) -> TokenResponse:
+    """
+    OAuth callback handler.
+
+    v2.11 A13: Provider is explicit in URL path and validated against
+    stored state to prevent provider confusion attacks.
+    """
+    # Validate provider enum
+    if provider not in {"google", "github"}:
+        raise HTTPException(400, detail={"code": "AUTH_015", "message": "Unknown provider"})
+
+    # Get expected redirect_uri for this deployment
+    redirect_uri = f"{settings.API_URL}/api/v2/auth/oauth/callback/{provider}"
+
+    # Consume state with provider AND redirect_uri validation
+    state_data = await consume_oauth_state(
+        state=state,
+        expected_redirect_uri=redirect_uri,
+    )
+
+    if not state_data:
+        raise HTTPException(400, detail={"code": "AUTH_012", "message": "Invalid OAuth state"})
+
+    # v2.11 A13: Verify provider matches what was stored
+    if state_data.get("provider") != provider:
+        logger.warning(
+            "oauth_provider_mismatch",
+            expected=state_data.get("provider"),
+            received=provider,
+        )
+        raise HTTPException(400, detail={"code": "AUTH_016", "message": "Provider mismatch"})
+
+    # Exchange code with correct provider
+    oauth_tokens = await exchange_oauth_code(
+        provider=provider,
+        code=code,
+        redirect_uri=redirect_uri,
+    )
+
+    # ... rest of authentication flow
+```
+
+### A14: Revocation ID Atomic Check (CRITICAL)
+
+**Problem**: TOCTOU allows stale tokens after password change.
+
+```python
+# src/lambdas/shared/auth/tokens.py
+
+class RevocationRaceError(Exception):
+    """Raised when revocation_id changed during token creation."""
+    pass
+
+
+async def create_access_token_atomic(
+    user: User,
+    session_id: str,
+    device_info: dict | None = None,
+) -> tuple[str, str]:
+    """
+    Create access token with atomic revocation check.
+
+    v2.11 A14: Uses DynamoDB conditional write to ensure revocation_id
+    hasn't changed between read and token creation.
+    """
+    now = datetime.now(UTC)
+
+    # Read current revocation_id
+    user_data = await table.get_item(
+        Key={"PK": f"USER#{user.user_id}"},
+        ProjectionExpression="revocation_id, tier, email",
+    )
+
+    if "Item" not in user_data:
+        raise UserNotFoundError(user.user_id)
+
+    rev_id = user_data["Item"].get("revocation_id", 0)
+
+    # Generate tokens
+    access_token = _sign_access_token(
+        user=user,
+        session_id=session_id,
+        revocation_id=rev_id,
+        issued_at=now,
+    )
+
+    refresh_token = secrets.token_urlsafe(32)
+    refresh_hash = hashlib.sha256(refresh_token.encode()).hexdigest()
+
+    # Atomic write: store refresh token ONLY IF revocation_id unchanged
+    try:
+        await table.update_item(
+            Key={"PK": f"USER#{user.user_id}", "SK": f"SESSION#{session_id}"},
+            UpdateExpression="SET refresh_token_hash = :hash, token_issued_at = :now",
+            ConditionExpression="revocation_id = :expected_rev",
+            ExpressionAttributeValues={
+                ":hash": refresh_hash,
+                ":now": now.isoformat(),
+                ":expected_rev": rev_id,
+            },
+        )
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+            logger.warning(
+                "token_creation_revocation_race",
+                user_id=user.user_id,
+                expected_rev=rev_id,
+            )
+            raise RevocationRaceError(
+                "Credentials changed during authentication. Please retry."
+            )
+        raise
+
+    return access_token, refresh_token
+```
+
+### A18: Canonical Role/Tier Enums (HIGH)
+
+**Problem**: Role defined 3 times with inconsistencies.
+
+```python
+# src/lambdas/shared/models/enums.py
+"""
+Canonical enum definitions for auth system.
+
+v2.11 A18: Single source of truth. All other files MUST import from here.
+DO NOT define Role or Tier elsewhere.
+"""
+
+from enum import Enum
+
+
+class Role(str, Enum):
+    """
+    User roles for authorization AND billing/limits.
+
+    v3.0 CANONICAL DEFINITION - This is the ONLY Role enum in the spec.
+    All other definitions have been removed.
+
+    v3.0 Changes:
+    - AUTHENTICATED → FREE (renamed for clarity)
+    - Tier enum REMOVED (Role = Tier, single concept)
+    - "admin" role REMOVED (operator IS admin)
+    - "enterprise" tier REMOVED (use operator)
+
+    Role hierarchy (ascending privilege):
+    - ANONYMOUS: No identity, limited access, 1 session max
+    - FREE: Verified email, base access, 5 sessions max
+    - PAID: Subscription active, premium access, 10 sessions max
+    - OPERATOR: Admin privileges, all access, 50 sessions max
+    """
+    ANONYMOUS = "anonymous"
+    FREE = "free"           # v3.0: Renamed from AUTHENTICATED
+    PAID = "paid"
+    OPERATOR = "operator"   # v3.0: This IS the admin role
+
+
+# v3.0: Tier enum REMOVED - Role = Tier, single concept
+# All code referencing Tier should use Role instead
+
+
+SESSION_LIMITS: dict[str, int] = {
+    Role.ANONYMOUS.value: 1,
+    Role.FREE.value: 5,
+    Role.PAID.value: 10,
+    Role.OPERATOR.value: 50,  # v3.0: Was ENTERPRISE
+}
+
+
+def get_session_limit(role: Role | None) -> int:
+    """
+    Get session limit based on role.
+
+    v3.0: Simplified - tier parameter removed (role = tier).
+    """
+    if role is None or role == Role.ANONYMOUS:
+        return SESSION_LIMITS[Role.ANONYMOUS.value]
+    return SESSION_LIMITS.get(role.value, SESSION_LIMITS[Role.FREE.value])
+```
+
+### A20: Password Change Endpoint (HIGH)
+
+**Problem**: Referenced but never defined.
+
+```python
+# src/lambdas/dashboard/routes/auth.py
+
+@router.post("/auth/password")
+@require_role(Role.FREE)  # v3.0: Was AUTHENTICATED
+@rate_limit("password_change", limit=3, window_hours=1)
+async def change_password(
+    request: Request,
+    body: PasswordChangeRequest,
+    current_user: User = Depends(get_current_user),
+) -> PasswordChangeResponse:
+    """
+    Change user password and revoke all other sessions.
+
+    v2.11 A20: Complete password change implementation.
+    """
+    # Verify current password
+    if not await verify_password(current_user.user_id, body.current_password):
+        raise HTTPException(401, detail={"code": "AUTH_007", "message": "Invalid credentials"})
+
+    # Validate new password
+    validation_error = validate_password_strength(body.new_password)
+    if validation_error:
+        raise HTTPException(400, detail={"code": "AUTH_017", "message": validation_error})
+
+    # Get current session ID from JWT
+    current_session_id = request.state.jwt_claims.get("sid")
+
+    # Atomic: increment revocation_id + update password hash
+    new_rev_id = await increment_revocation_id_with_password(
+        user_id=current_user.user_id,
+        new_password_hash=hash_password(body.new_password),
+    )
+
+    # Revoke all sessions except current
+    revoked_count = await revoke_all_sessions_except(
+        user_id=current_user.user_id,
+        keep_session_id=current_session_id,
+        reason="password_changed",
+    )
+
+    return PasswordChangeResponse(
+        success=True,
+        message="Password changed. All other sessions have been revoked.",
+        revoked_sessions=revoked_count,
+    )
+
+
+def validate_password_strength(password: str) -> str | None:
+    """Validate password meets security requirements."""
+    if len(password) < 12:
+        return "Password must be at least 12 characters"
+    if len(password) > 128:
+        return "Password must be at most 128 characters"
+    if not re.search(r'[a-z]', password):
+        return "Password must contain a lowercase letter"
+    if not re.search(r'[A-Z]', password):
+        return "Password must contain an uppercase letter"
+    if not re.search(r'\d', password):
+        return "Password must contain a number"
+    return None
+```
+
+### A21: Blocklist Check Implementation (HIGH) + v3.0 Access Token Blocklist
+
+**Problem**: refresh_tokens() missing blocklist logic.
+
+**v3.0 Enhancement**: Access tokens NOW ALSO use jti blocklist for immediate revocation.
+
+```python
+# src/lambdas/shared/auth/token_blocklist.py
+
+async def is_token_blocked(identifier: str, token_type: str = "refresh") -> bool:
+    """
+    Check if token is in blocklist.
+
+    v2.11 A21: Called BEFORE token rotation in refresh flow.
+    v3.0: Also called during access token validation for jti check.
+
+    Args:
+        identifier: For refresh tokens, the token hash. For access tokens, the jti.
+        token_type: "refresh" or "access"
+    """
+    # v3.0: Unified key prefix for both token types
+    pk = f"BLOCK#{token_type}#{identifier}"
+
+    try:
+        response = await table.get_item(
+            Key={"PK": pk},
+            ProjectionExpression="reason, blocked_at, expires_at",
+        )
+
+        if "Item" in response:
+            logger.info(
+                "blocked_token_rejected",
+                token_type=token_type,
+                reason=response["Item"].get("reason"),
+            )
+            return True
+        return False
+    except ClientError:
+        logger.error("blocklist_check_failed", identifier=identifier[:8])
+        return True  # Fail closed on error
+
+
+async def block_access_token_jti(jti: str, reason: str, ttl_seconds: int = 900) -> None:
+    """
+    v3.0: Add access token jti to blocklist.
+
+    TTL defaults to 15 min (access token lifetime) + buffer.
+    No need to keep longer since token expires anyway.
+    """
+    await table.put_item(
+        Item={
+            "PK": f"BLOCK#access#{jti}",
+            "reason": reason,
+            "blocked_at": datetime.now(UTC).isoformat(),
+            "ttl": int(datetime.now(UTC).timestamp()) + ttl_seconds,
+        }
+    )
+
+
+# v3.0: Call this in validate_jwt_global() after signature verification
+async def validate_access_token_not_blocked(payload: dict) -> None:
+    """
+    v3.0: Check if access token jti is blocked.
+
+    Called after JWT signature validation, before returning claims.
+    """
+    jti = payload.get("jti")
+    if not jti:
+        raise InvalidTokenError("AUTH_020", "Token missing jti claim")
+
+    if await is_token_blocked(jti, token_type="access"):
+        raise InvalidTokenError("AUTH_021", "Access token has been revoked")
+
+
+async def refresh_tokens(refresh_token: str) -> TokenPair:
+    """
+    Refresh access token using refresh token.
+
+    v2.11 A21: Added blocklist check BEFORE rotation.
+    v3.0: Updated to use token_type parameter for blocklist check.
+    """
+    token_hash = hashlib.sha256(refresh_token.encode()).hexdigest()
+
+    # v2.11 A21 + v3.0: Blocklist check FIRST (with token_type)
+    if await is_token_blocked(token_hash, token_type="refresh"):
+        raise HTTPException(
+            401,
+            detail={"code": "AUTH_006", "message": "Session has been revoked"},
+        )
+
+    # Find session with this token hash
+    session = await find_session_by_token_hash(token_hash)
+    if not session:
+        raise HTTPException(
+            401,
+            detail={"code": "AUTH_006", "message": "Invalid refresh token"},
+        )
+
+    # Check revocation_id matches (A14)
+    user = await get_user(session["user_id"])
+    if session.get("revocation_id", 0) != user.get("revocation_id", 0):
+        raise HTTPException(
+            401,
+            detail={"code": "AUTH_013", "message": "Credentials have been changed"},
+        )
+
+    # Atomic rotation with new token
+    new_refresh_token = secrets.token_urlsafe(32)
+    new_token_hash = hashlib.sha256(new_refresh_token.encode()).hexdigest()
+
+    try:
+        await table.update_item(
+            Key={
+                "PK": f"USER#{session['user_id']}",
+                "SK": f"SESSION#{session['session_id']}",
+            },
+            UpdateExpression="SET refresh_token_hash = :new_hash, rotated_at = :now",
+            ConditionExpression="refresh_token_hash = :old_hash",
+            ExpressionAttributeValues={
+                ":new_hash": new_token_hash,
+                ":old_hash": token_hash,
+                ":now": datetime.now(UTC).isoformat(),
+            },
+        )
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+            raise HTTPException(
+                401,
+                detail={"code": "AUTH_006", "message": "Token already rotated"},
+            )
+        raise
+
+    access_token = create_access_token(user=user, session_id=session["session_id"])
+
+    return TokenPair(access_token=access_token, refresh_token=new_refresh_token)
+```
+
+### A22: Security Headers Requirements (MEDIUM)
+
+**Problem**: XSS mitigation only covers token storage.
+
+```python
+# src/lambdas/shared/middleware/security_headers.py
+
+CSP_POLICY = "; ".join([
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: https:",
+    "font-src 'self'",
+    "connect-src 'self' https://cognito-idp.*.amazonaws.com",
+    "frame-ancestors 'none'",
+    "form-action 'self'",
+    "base-uri 'self'",
+    "upgrade-insecure-requests",
+])
+
+SECURITY_HEADERS = {
+    "Content-Security-Policy": CSP_POLICY,
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
+}
+
+
+def add_security_headers(response: dict) -> dict:
+    """Add security headers to all responses. v2.11 A22."""
+    response.setdefault("headers", {})
+    for header, value in SECURITY_HEADERS.items():
+        response["headers"][header] = value
+    return response
+```
+
+```hcl
+# infrastructure/terraform/modules/cloudfront/security_headers.tf
+
+resource "aws_cloudfront_response_headers_policy" "security" {
+  name = "${var.project}-security-headers"
+
+  security_headers_config {
+    content_security_policy {
+      content_security_policy = local.csp_policy
+      override                = true
+    }
+
+    content_type_options {
+      override = true
+    }
+
+    frame_options {
+      frame_option = "DENY"
+      override     = true
+    }
+
+    referrer_policy {
+      referrer_policy = "strict-origin-when-cross-origin"
+      override        = true
+    }
+
+    strict_transport_security {
+      access_control_max_age_sec = 31536000
+      include_subdomains         = true
+      preload                    = true
+      override                   = true
+    }
+  }
+}
+```
+
+---
+
+## v2.11 Validation Checklist
+
+Before marking v2.11 complete, verify:
+
+- [ ] A11: Session eviction uses TransactWriteItems
+- [ ] A12: OAuth state stores and validates redirect_uri
+- [ ] A13: OAuth callback validates provider matches state
+- [ ] A14: Token creation uses conditional update on revocation_id
+- [ ] A15: JWT includes `jti` claim (UUID)
+- [ ] A16: JWT `aud` includes environment suffix
+- [ ] A17: jwt.decode() uses leeway=60
+- [ ] A18: Single Role/Tier enum in enums.py
+- [ ] A19: B9 section has complete tier upgrade flow
+- [ ] A20: POST /auth/password endpoint implemented
+- [ ] A21: refresh_tokens() checks blocklist first
+- [ ] A22: Security headers added to responses
+- [ ] A23: AUTH_013-AUTH_018 error codes implemented
