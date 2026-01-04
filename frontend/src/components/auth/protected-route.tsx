@@ -26,7 +26,8 @@ export function ProtectedRoute({
   className,
 }: ProtectedRouteProps) {
   const router = useRouter();
-  const { isAuthenticated, isAnonymous, isLoading, isInitialized } = useAuth();
+  // T015: Import and use hasHydrated from useAuth (FR-014)
+  const { hasHydrated, isAuthenticated, isAnonymous, isLoading, isInitialized } = useAuth();
 
   const hasAccess = requireUpgraded
     ? isAuthenticated && !isAnonymous
@@ -34,16 +35,22 @@ export function ProtectedRoute({
     ? isAuthenticated
     : true;
 
+  // T018: Only redirect AFTER hydration is complete + auth check fails
   useEffect(() => {
+    // Don't redirect during hydration - we don't know auth state yet
+    if (!hasHydrated) {
+      return;
+    }
     if (isInitialized && !isLoading && !hasAccess) {
       router.push(redirectTo);
     }
-  }, [isInitialized, isLoading, hasAccess, router, redirectTo]);
+  }, [hasHydrated, isInitialized, isLoading, hasAccess, router, redirectTo]);
 
-  // Show loading state while checking auth
-  if (!isInitialized || isLoading) {
+  // T16-T17: Show loading state during hydration phase OR while checking auth
+  // This prevents flash of incorrect UI before we know the real auth state
+  if (!hasHydrated || !isInitialized || isLoading) {
     return (
-      <div className={cn('min-h-[400px] flex items-center justify-center', className)}>
+      <div className={cn('min-h-[400px] flex items-center justify-center', className)} role="status" aria-label="Loading">
         <motion.div
           className="text-center space-y-4"
           initial={{ opacity: 0 }}
@@ -118,7 +125,13 @@ interface AuthGuardProps {
 }
 
 export function AuthGuard({ children, feature, fallback }: AuthGuardProps) {
-  const { isAuthenticated, isAnonymous } = useAuth();
+  // FR-018: AuthGuard is also hydration-aware
+  const { hasHydrated, isAuthenticated, isAnonymous } = useAuth();
+
+  // Don't render anything meaningful during hydration - parent handles loading state
+  if (!hasHydrated) {
+    return null;
+  }
 
   // Define which features require upgraded auth
   const requiresUpgrade = feature === 'alerts';

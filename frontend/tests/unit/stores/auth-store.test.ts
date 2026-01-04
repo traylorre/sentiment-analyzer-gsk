@@ -7,14 +7,40 @@ vi.mock('@/lib/cookies', () => ({
   clearAuthCookies: vi.fn(),
 }));
 
-// Mock fetch
-const mockFetch = vi.fn();
-global.fetch = mockFetch;
+// Mock API client setters (Feature 014: Sync userId/accessToken with API client)
+vi.mock('@/lib/api/client', () => ({
+  setUserId: vi.fn(),
+  setAccessToken: vi.fn(),
+  api: {
+    post: vi.fn(),
+    get: vi.fn(),
+  },
+}));
+
+// Mock authApi
+const mockCreateAnonymousSession = vi.fn();
+const mockRequestMagicLink = vi.fn();
+const mockVerifyMagicLink = vi.fn();
+const mockSignOut = vi.fn();
+
+vi.mock('@/lib/api/auth', () => ({
+  authApi: {
+    createAnonymousSession: () => mockCreateAnonymousSession(),
+    requestMagicLink: (email: string) => mockRequestMagicLink(email),
+    verifyMagicLink: (token: string, sig: string) => mockVerifyMagicLink(token, sig),
+    signOut: () => mockSignOut(),
+    getOAuthUrls: vi.fn(),
+    exchangeOAuthCode: vi.fn(),
+    refreshToken: vi.fn(),
+  },
+}));
 
 describe('Auth Store', () => {
   beforeEach(() => {
     // Reset store state before each test
     useAuthStore.getState().reset();
+    // FR-013: Simulate hydration complete for tests
+    useAuthStore.setState({ _hasHydrated: true });
     vi.clearAllMocks();
   });
 
@@ -162,13 +188,11 @@ describe('Auth Store', () => {
 
   describe('signInAnonymous', () => {
     it('should create anonymous session on success', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            userId: 'anon-123',
-            sessionExpiresAt: '2024-01-15T12:00:00Z',
-          }),
+      mockCreateAnonymousSession.mockResolvedValueOnce({
+        userId: 'anon-123',
+        authType: 'anonymous',
+        createdAt: '2024-01-15T10:00:00Z',
+        sessionExpiresAt: '2024-01-15T12:00:00Z',
       });
 
       await useAuthStore.getState().signInAnonymous();
@@ -181,10 +205,9 @@ describe('Auth Store', () => {
     });
 
     it('should handle error during anonymous sign in', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ message: 'Failed' }),
-      });
+      mockCreateAnonymousSession.mockRejectedValueOnce(
+        new Error('Failed to create anonymous session')
+      );
 
       await expect(useAuthStore.getState().signInAnonymous()).rejects.toThrow(
         'Failed to create anonymous session'
@@ -197,30 +220,17 @@ describe('Auth Store', () => {
 
   describe('signInWithMagicLink', () => {
     it('should send magic link request', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ success: true }),
-      });
+      mockRequestMagicLink.mockResolvedValueOnce({ message: 'Link sent', expiresIn: 300 });
 
       await useAuthStore
         .getState()
         .signInWithMagicLink('test@example.com', 'captcha-token');
 
-      expect(mockFetch).toHaveBeenCalledWith('/api/v2/auth/magic-link', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: 'test@example.com',
-          captchaToken: 'captcha-token',
-        }),
-      });
+      expect(mockRequestMagicLink).toHaveBeenCalledWith('test@example.com');
     });
 
     it('should handle error sending magic link', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ message: 'Rate limited' }),
-      });
+      mockRequestMagicLink.mockRejectedValueOnce(new Error('Rate limited'));
 
       await expect(
         useAuthStore
@@ -232,30 +242,25 @@ describe('Auth Store', () => {
 
   describe('verifyMagicLink', () => {
     it('should verify token and set user', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            user: {
-              userId: 'user-123',
-              email: 'test@example.com',
-              authType: 'email',
-              createdAt: '2024-01-15T10:00:00Z',
-              configurationCount: 0,
-              alertCount: 0,
-              emailNotificationsEnabled: true,
-            },
-            tokens: {
-              idToken: 'id-123',
-              accessToken: 'access-123',
-              refreshToken: 'refresh-456',
-              expiresIn: 3600,
-            },
-            sessionExpiresAt: '2024-01-15T12:00:00Z',
-          }),
+      mockVerifyMagicLink.mockResolvedValueOnce({
+        user: {
+          userId: 'user-123',
+          email: 'test@example.com',
+          authType: 'email',
+          createdAt: '2024-01-15T10:00:00Z',
+          configurationCount: 0,
+          alertCount: 0,
+          emailNotificationsEnabled: true,
+        },
+        tokens: {
+          idToken: 'id-123',
+          accessToken: 'access-123',
+          refreshToken: 'refresh-456',
+          expiresIn: 3600,
+        },
       });
 
-      await useAuthStore.getState().verifyMagicLink('valid-token');
+      await useAuthStore.getState().verifyMagicLink('valid-token', 'valid-sig');
 
       const state = useAuthStore.getState();
       expect(state.isAuthenticated).toBe(true);
@@ -264,13 +269,10 @@ describe('Auth Store', () => {
     });
 
     it('should handle invalid token', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ message: 'Token expired' }),
-      });
+      mockVerifyMagicLink.mockRejectedValueOnce(new Error('Token expired'));
 
       await expect(
-        useAuthStore.getState().verifyMagicLink('invalid-token')
+        useAuthStore.getState().verifyMagicLink('invalid-token', 'sig')
       ).rejects.toThrow('Token expired');
     });
   });
@@ -295,7 +297,7 @@ describe('Auth Store', () => {
         expiresIn: 3600,
       });
 
-      mockFetch.mockResolvedValueOnce({ ok: true });
+      mockSignOut.mockResolvedValueOnce(undefined);
 
       await signOut();
 
@@ -323,7 +325,7 @@ describe('Auth Store', () => {
         expiresIn: 3600,
       });
 
-      mockFetch.mockRejectedValueOnce(new Error('Network error'));
+      mockSignOut.mockRejectedValueOnce(new Error('Network error'));
 
       await signOut();
 
@@ -428,6 +430,8 @@ describe('Auth Store', () => {
 describe('Auth Store Selectors', () => {
   beforeEach(() => {
     useAuthStore.getState().reset();
+    // FR-013: Simulate hydration complete for tests
+    useAuthStore.setState({ _hasHydrated: true });
   });
 
   it('useUser should return user', () => {
@@ -453,6 +457,8 @@ describe('Auth Store Selectors', () => {
 describe('Feature 014: Auto-Session Creation', () => {
   beforeEach(() => {
     useAuthStore.getState().reset();
+    // FR-013: Simulate hydration complete for tests
+    useAuthStore.setState({ _hasHydrated: true });
     vi.clearAllMocks();
   });
 
@@ -468,15 +474,11 @@ describe('Feature 014: Auto-Session Creation', () => {
       expect(initialState.isAuthenticated).toBe(false);
 
       // Mock successful anonymous session creation
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            userId: 'auto-anon-123',
-            sessionExpiresAt: new Date(
-              Date.now() + 30 * 24 * 60 * 60 * 1000
-            ).toISOString(),
-          }),
+      mockCreateAnonymousSession.mockResolvedValueOnce({
+        userId: 'auto-anon-123',
+        authType: 'anonymous',
+        createdAt: new Date().toISOString(),
+        sessionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       });
 
       await useAuthStore.getState().signInAnonymous();
@@ -489,40 +491,32 @@ describe('Feature 014: Auto-Session Creation', () => {
 
     it('should NOT create new session if valid session exists in localStorage', async () => {
       // First create a session
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            userId: 'existing-anon-456',
-            sessionExpiresAt: new Date(
-              Date.now() + 30 * 24 * 60 * 60 * 1000
-            ).toISOString(),
-          }),
+      mockCreateAnonymousSession.mockResolvedValueOnce({
+        userId: 'existing-anon-456',
+        authType: 'anonymous',
+        createdAt: new Date().toISOString(),
+        sessionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       });
 
       await useAuthStore.getState().signInAnonymous();
 
       // Clear mock to track if new call is made
-      mockFetch.mockClear();
+      mockCreateAnonymousSession.mockClear();
 
       // Session should still be valid
       expect(useAuthStore.getState().isSessionValid()).toBe(true);
       expect(useAuthStore.getState().user?.userId).toBe('existing-anon-456');
 
       // No additional API call should be needed
-      expect(mockFetch).not.toHaveBeenCalled();
+      expect(mockCreateAnonymousSession).not.toHaveBeenCalled();
     });
 
     it('should persist anonymous session to localStorage', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            userId: 'persist-anon-789',
-            sessionExpiresAt: new Date(
-              Date.now() + 30 * 24 * 60 * 60 * 1000
-            ).toISOString(),
-          }),
+      mockCreateAnonymousSession.mockResolvedValueOnce({
+        userId: 'persist-anon-789',
+        authType: 'anonymous',
+        createdAt: new Date().toISOString(),
+        sessionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       });
 
       await useAuthStore.getState().signInAnonymous();
@@ -560,15 +554,11 @@ describe('Feature 014: Auto-Session Creation', () => {
     });
 
     it('should support X-User-ID header for anonymous sessions', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            userId: 'x-user-id-test',
-            sessionExpiresAt: new Date(
-              Date.now() + 30 * 24 * 60 * 60 * 1000
-            ).toISOString(),
-          }),
+      mockCreateAnonymousSession.mockResolvedValueOnce({
+        userId: 'x-user-id-test',
+        authType: 'anonymous',
+        createdAt: new Date().toISOString(),
+        sessionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       });
 
       await useAuthStore.getState().signInAnonymous();
@@ -581,15 +571,11 @@ describe('Feature 014: Auto-Session Creation', () => {
 
   describe('Session sharing across tabs', () => {
     it('should use localStorage for session persistence (enables cross-tab)', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            userId: 'cross-tab-user',
-            sessionExpiresAt: new Date(
-              Date.now() + 30 * 24 * 60 * 60 * 1000
-            ).toISOString(),
-          }),
+      mockCreateAnonymousSession.mockResolvedValueOnce({
+        userId: 'cross-tab-user',
+        authType: 'anonymous',
+        createdAt: new Date().toISOString(),
+        sessionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       });
 
       await useAuthStore.getState().signInAnonymous();

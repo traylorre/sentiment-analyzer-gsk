@@ -2,7 +2,7 @@
 
 import { useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuthStore } from '@/stores/auth-store';
+import { useAuthStore, useHasHydrated } from '@/stores/auth-store';
 import type { OAuthProvider } from '@/types/auth';
 
 // Session refresh interval (5 minutes before expiry)
@@ -19,6 +19,9 @@ export function useAuth(options: UseAuthOptions = {}) {
   const { redirectTo = '/auth/signin', requireAuth = false } = options;
   const router = useRouter();
   const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // T013: Expose hydration state for components (FR-013)
+  const hasHydrated = useHasHydrated();
 
   const {
     user,
@@ -41,8 +44,13 @@ export function useAuth(options: UseAuthOptions = {}) {
     setInitialized,
   } = useAuthStore();
 
-  // Initialize auth state
+  // Initialize auth state - T014: Wait for hydration before checking auth
   useEffect(() => {
+    // Don't initialize until hydration is complete
+    if (!hasHydrated) {
+      return;
+    }
+
     if (!isInitialized) {
       // Check if there's a stored session
       const hasStoredSession = isAuthenticated && isSessionValid();
@@ -57,11 +65,12 @@ export function useAuth(options: UseAuthOptions = {}) {
 
       setInitialized(true);
     }
-  }, [isInitialized, isAuthenticated, requireAuth, redirectTo, router, signInAnonymous, setInitialized, isSessionValid]);
+  }, [hasHydrated, isInitialized, isAuthenticated, requireAuth, redirectTo, router, signInAnonymous, setInitialized, isSessionValid]);
 
-  // Schedule session refresh
+  // Schedule session refresh - T014: Wait for hydration before scheduling
   useEffect(() => {
-    if (!isAuthenticated || !sessionExpiresAt) {
+    // Don't schedule refresh until hydration is complete
+    if (!hasHydrated || !isAuthenticated || !sessionExpiresAt) {
       return;
     }
 
@@ -108,6 +117,7 @@ export function useAuth(options: UseAuthOptions = {}) {
       clearInterval(checkInterval);
     };
   }, [
+    hasHydrated,
     isAuthenticated,
     sessionExpiresAt,
     requireAuth,
@@ -167,6 +177,8 @@ export function useAuth(options: UseAuthOptions = {}) {
   }, [signOut, router, redirectTo]);
 
   return {
+    // T013: Expose hydration state for components
+    hasHydrated,
     user,
     tokens,
     isAuthenticated,

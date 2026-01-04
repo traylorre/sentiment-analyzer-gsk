@@ -9,14 +9,37 @@ vi.mock('@/lib/cookies', () => ({
   clearAuthCookies: vi.fn(),
 }));
 
-// Mock fetch
-const mockFetch = vi.fn();
-global.fetch = mockFetch;
+// Mock API client setters (Feature 014: Sync userId/accessToken with API client)
+vi.mock('@/lib/api/client', () => ({
+  setUserId: vi.fn(),
+  setAccessToken: vi.fn(),
+  api: {
+    post: vi.fn(),
+    get: vi.fn(),
+  },
+}));
+
+// Mock authApi
+const mockCreateAnonymousSession = vi.fn();
+
+vi.mock('@/lib/api/auth', () => ({
+  authApi: {
+    createAnonymousSession: () => mockCreateAnonymousSession(),
+    requestMagicLink: vi.fn(),
+    verifyMagicLink: vi.fn(),
+    signOut: vi.fn(),
+    getOAuthUrls: vi.fn(),
+    exchangeOAuthCode: vi.fn(),
+    refreshToken: vi.fn(),
+  },
+}));
 
 describe('SessionProvider', () => {
   beforeEach(() => {
     // Reset store state before each test
     useAuthStore.getState().reset();
+    // FR-013: Simulate hydration complete for tests
+    useAuthStore.setState({ _hasHydrated: true });
     vi.clearAllMocks();
   });
 
@@ -26,8 +49,8 @@ describe('SessionProvider', () => {
 
   describe('Feature 014: Automatic Session Initialization', () => {
     it('should show loading state initially', () => {
-      // Don't resolve fetch yet to keep in loading state
-      mockFetch.mockImplementation(() => new Promise(() => {}));
+      // Reset hydration to simulate initial state
+      useAuthStore.setState({ _hasHydrated: false });
 
       render(
         <SessionProvider>
@@ -40,15 +63,11 @@ describe('SessionProvider', () => {
     });
 
     it('should render children after session is initialized', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            userId: 'test-user-123',
-            sessionExpiresAt: new Date(
-              Date.now() + 30 * 24 * 60 * 60 * 1000
-            ).toISOString(),
-          }),
+      mockCreateAnonymousSession.mockResolvedValueOnce({
+        userId: 'test-user-123',
+        authType: 'anonymous',
+        createdAt: new Date().toISOString(),
+        sessionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       });
 
       render(
@@ -63,7 +82,8 @@ describe('SessionProvider', () => {
     });
 
     it('should use custom loading component when provided', () => {
-      mockFetch.mockImplementation(() => new Promise(() => {}));
+      // Reset hydration to simulate initial state
+      useAuthStore.setState({ _hasHydrated: false });
 
       render(
         <SessionProvider loadingComponent={<div>Custom Loading...</div>}>
@@ -74,8 +94,13 @@ describe('SessionProvider', () => {
       expect(screen.getByText('Custom Loading...')).toBeInTheDocument();
     });
 
-    it('should render children immediately when showLoading=false', () => {
-      mockFetch.mockImplementation(() => new Promise(() => {}));
+    it('should render children immediately when showLoading=false', async () => {
+      mockCreateAnonymousSession.mockResolvedValueOnce({
+        userId: 'test-user-123',
+        authType: 'anonymous',
+        createdAt: new Date().toISOString(),
+        sessionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      });
 
       render(
         <SessionProvider showLoading={false}>
@@ -83,6 +108,7 @@ describe('SessionProvider', () => {
         </SessionProvider>
       );
 
+      // With showLoading=false, children render immediately
       expect(screen.getByTestId('content')).toBeInTheDocument();
     });
 
@@ -107,16 +133,13 @@ describe('SessionProvider', () => {
         </SessionProvider>
       );
 
-      // Should render immediately without fetch call
+      // Should render immediately without API call
       expect(screen.getByTestId('content')).toBeInTheDocument();
-      expect(mockFetch).not.toHaveBeenCalled();
+      expect(mockCreateAnonymousSession).not.toHaveBeenCalled();
     });
 
     it('should show custom error component on session init failure', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ message: 'Server error' }),
-      });
+      mockCreateAnonymousSession.mockRejectedValueOnce(new Error('Server error'));
 
       render(
         <SessionProvider
@@ -155,7 +178,7 @@ describe('SessionProvider', () => {
       );
 
       // Should not make API call - reuses localStorage session
-      expect(mockFetch).not.toHaveBeenCalled();
+      expect(mockCreateAnonymousSession).not.toHaveBeenCalled();
       expect(screen.getByTestId('content')).toBeInTheDocument();
     });
   });
@@ -164,19 +187,17 @@ describe('SessionProvider', () => {
 describe('useSessionInit hook', () => {
   beforeEach(() => {
     useAuthStore.getState().reset();
+    // FR-013: Simulate hydration complete for tests
+    useAuthStore.setState({ _hasHydrated: true });
     vi.clearAllMocks();
   });
 
   it('should call signInAnonymous when no session exists', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () =>
-        Promise.resolve({
-          userId: 'new-anon-user',
-          sessionExpiresAt: new Date(
-            Date.now() + 30 * 24 * 60 * 60 * 1000
-          ).toISOString(),
-        }),
+    mockCreateAnonymousSession.mockResolvedValueOnce({
+      userId: 'new-anon-user',
+      authType: 'anonymous',
+      createdAt: new Date().toISOString(),
+      sessionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
     });
 
     render(
@@ -186,23 +207,16 @@ describe('useSessionInit hook', () => {
     );
 
     await waitFor(() => {
-      expect(mockFetch).toHaveBeenCalledWith('/api/v2/auth/anonymous', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
+      expect(mockCreateAnonymousSession).toHaveBeenCalled();
     });
   });
 
   it('should set isReady to true after successful initialization', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () =>
-        Promise.resolve({
-          userId: 'ready-user',
-          sessionExpiresAt: new Date(
-            Date.now() + 30 * 24 * 60 * 60 * 1000
-          ).toISOString(),
-        }),
+    mockCreateAnonymousSession.mockResolvedValueOnce({
+      userId: 'ready-user',
+      authType: 'anonymous',
+      createdAt: new Date().toISOString(),
+      sessionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
     });
 
     render(
