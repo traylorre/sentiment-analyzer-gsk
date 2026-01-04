@@ -8,6 +8,8 @@ vi.mock('lightweight-charts', () => ({
     addSeries: vi.fn(() => ({
       setData: vi.fn(),
       applyOptions: vi.fn(),
+      attachPrimitive: vi.fn(),
+      detachPrimitive: vi.fn(),
     })),
     applyOptions: vi.fn(),
     priceScale: vi.fn(() => ({
@@ -41,7 +43,7 @@ const defaultChartData = {
   error: null,
   refetch: vi.fn(),
   resolutionFallback: false,
-  fallbackMessage: null,
+  fallbackMessage: null as string | null,
 };
 
 // Track calls to useChartData

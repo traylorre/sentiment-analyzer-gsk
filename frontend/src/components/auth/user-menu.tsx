@@ -19,9 +19,27 @@ interface UserMenuProps {
   className?: string;
 }
 
+// T019: Skeleton component for UserMenu during hydration (FR-017)
+function UserMenuSkeleton({ className }: { className?: string }) {
+  return (
+    <div className={cn('flex items-center gap-2', className)}>
+      {/* Animated shimmer placeholder matching UserMenu button dimensions */}
+      <div className="w-8 h-8 rounded-full bg-muted animate-pulse" />
+      <div className="hidden sm:block w-16 h-4 rounded bg-muted animate-pulse" />
+      <div className="w-4 h-4 rounded bg-muted animate-pulse" />
+    </div>
+  );
+}
+
 export function UserMenu({ className }: UserMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const { user, isAuthenticated, isAnonymous, signOut, isLoading } = useAuth();
+  // T020: Include hasHydrated to show skeleton during hydration
+  const { hasHydrated, user, isAuthenticated, isAnonymous, signOut, isLoading } = useAuth();
+
+  // FR-017: Show skeleton during hydration to prevent sign-in button flash
+  if (!hasHydrated) {
+    return <UserMenuSkeleton className={className} />;
+  }
 
   if (!isAuthenticated) {
     return (

@@ -8,6 +8,9 @@ import { setUserId, setAccessToken } from '@/lib/api/client';
 import { authApi } from '@/lib/api/auth';
 
 interface AuthStore extends AuthState {
+  // Hydration state (FR-013: zustand persist rehydration tracking)
+  _hasHydrated: boolean;
+
   // Loading states
   isLoading: boolean;
   isInitialized: boolean;
@@ -38,12 +41,13 @@ interface AuthStore extends AuthState {
   reset: () => void;
 }
 
-const initialState: AuthState & { isLoading: boolean; isInitialized: boolean; error: string | null } = {
+const initialState: AuthState & { _hasHydrated: boolean; isLoading: boolean; isInitialized: boolean; error: string | null } = {
   isAuthenticated: false,
   isAnonymous: false,
   user: null,
   tokens: null,
   sessionExpiresAt: null,
+  _hasHydrated: false, // FR-013: false until onRehydrateStorage fires
   isLoading: false,
   isInitialized: false,
   error: null,
@@ -270,14 +274,51 @@ export const useAuthStore = create<AuthStore>()(
     }),
     {
       name: TOKEN_STORAGE_KEY,
-      storage: createJSONStorage(() => localStorage),
+      // T037: Graceful fallback for localStorage unavailable (FR-004)
+      // createJSONStorage handles errors internally, but we wrap for extra safety
+      storage: createJSONStorage(() => {
+        // Check if localStorage is available (may not be in private browsing)
+        if (typeof window === 'undefined') {
+          // SSR - return a no-op storage
+          return {
+            getItem: () => null,
+            setItem: () => {},
+            removeItem: () => {},
+          };
+        }
+        try {
+          // Test localStorage availability
+          const testKey = '__storage_test__';
+          window.localStorage.setItem(testKey, testKey);
+          window.localStorage.removeItem(testKey);
+          return window.localStorage;
+        } catch {
+          // localStorage not available (private browsing, quota exceeded)
+          console.warn('[auth-store] localStorage unavailable, using in-memory storage');
+          // Return a simple in-memory storage fallback
+          const memoryStorage: Record<string, string> = {};
+          return {
+            getItem: (key: string) => memoryStorage[key] ?? null,
+            setItem: (key: string, value: string) => { memoryStorage[key] = value; },
+            removeItem: (key: string) => { delete memoryStorage[key]; },
+          };
+        }
+      }),
+      // FR-013: Exclude _hasHydrated from persistence - it's runtime-only state
       partialize: (state) => ({
         user: state.user,
         tokens: state.tokens,
         sessionExpiresAt: state.sessionExpiresAt,
         isAuthenticated: state.isAuthenticated,
         isAnonymous: state.isAnonymous,
+        // Note: _hasHydrated, isLoading, isInitialized, error are NOT persisted
       }),
+      // FR-013: Set _hasHydrated to true after zustand persist rehydrates from localStorage
+      onRehydrateStorage: () => (state) => {
+        // This callback fires AFTER rehydration completes (success or failure)
+        // state will be undefined if rehydration failed
+        useAuthStore.setState({ _hasHydrated: true });
+      },
     }
   )
 );
@@ -288,3 +329,6 @@ export const useIsAuthenticated = () => useAuthStore((state) => state.isAuthenti
 export const useIsAnonymous = () => useAuthStore((state) => state.isAnonymous);
 export const useAuthLoading = () => useAuthStore((state) => state.isLoading);
 export const useAuthError = () => useAuthStore((state) => state.error);
+
+// FR-013: Hydration state selector for components to check before reading auth state
+export const useHasHydrated = () => useAuthStore((state) => state._hasHydrated);

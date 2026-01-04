@@ -40,14 +40,32 @@ function SettingItem({ icon: Icon, label, description, children }: SettingItemPr
 
 export default function SettingsPage() {
   const { reducedMotion, hapticEnabled, setReducedMotion, setHapticEnabled } = useAnimationStore();
-  const { user, isAuthenticated, isAnonymous, signOut, isLoading } = useAuth();
+  // T040: Include hasHydrated for hydration-aware rendering (FR-018)
+  const { hasHydrated, user, isAuthenticated, isAnonymous, signOut, isLoading } = useAuth();
   const [signOutOpen, setSignOutOpen] = useState(false);
 
+  // All hooks must be called before early returns (React rules of hooks)
   const handleNotificationSave = useCallback(async (settings: { emailEnabled: boolean }) => {
     await notificationsApi.updatePreferences({
       email_enabled: settings.emailEnabled,
     });
   }, []);
+
+  // FR-018: Show skeleton/loading state during hydration to prevent fallback UI flash
+  if (!hasHydrated) {
+    return (
+      <PageTransition>
+        <div className="space-y-6 max-w-2xl mx-auto">
+          <div>
+            <div className="h-8 w-32 bg-muted rounded animate-pulse md:hidden" />
+            <div className="h-5 w-64 bg-muted rounded animate-pulse mt-1" />
+          </div>
+          <div className="h-48 bg-muted rounded-lg animate-pulse" />
+          <div className="h-32 bg-muted rounded-lg animate-pulse" />
+        </div>
+      </PageTransition>
+    );
+  }
 
   const authTypeLabel: Record<string, string> = {
     anonymous: 'Anonymous',

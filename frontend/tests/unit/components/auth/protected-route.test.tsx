@@ -26,6 +26,7 @@ describe('ProtectedRoute', () => {
   describe('loading state', () => {
     it('should show loading spinner when not initialized', () => {
       mockUseAuth.mockReturnValue({
+        hasHydrated: true,
         isAuthenticated: false,
         isAnonymous: false,
         isLoading: false,
@@ -44,6 +45,7 @@ describe('ProtectedRoute', () => {
 
     it('should show loading spinner when isLoading', () => {
       mockUseAuth.mockReturnValue({
+        hasHydrated: true,
         isAuthenticated: true,
         isAnonymous: false,
         isLoading: true,
@@ -63,6 +65,7 @@ describe('ProtectedRoute', () => {
   describe('authentication required', () => {
     it('should show children when authenticated', () => {
       mockUseAuth.mockReturnValue({
+        hasHydrated: true,
         isAuthenticated: true,
         isAnonymous: false,
         isLoading: false,
@@ -80,6 +83,7 @@ describe('ProtectedRoute', () => {
 
     it('should redirect when not authenticated', async () => {
       mockUseAuth.mockReturnValue({
+        hasHydrated: true,
         isAuthenticated: false,
         isAnonymous: false,
         isLoading: false,
@@ -99,6 +103,7 @@ describe('ProtectedRoute', () => {
 
     it('should redirect to custom path', async () => {
       mockUseAuth.mockReturnValue({
+        hasHydrated: true,
         isAuthenticated: false,
         isAnonymous: false,
         isLoading: false,
@@ -118,6 +123,7 @@ describe('ProtectedRoute', () => {
 
     it('should show fallback when not authenticated', () => {
       mockUseAuth.mockReturnValue({
+        hasHydrated: true,
         isAuthenticated: false,
         isAnonymous: false,
         isLoading: false,
@@ -138,6 +144,7 @@ describe('ProtectedRoute', () => {
   describe('upgraded auth required', () => {
     it('should show content for non-anonymous users', () => {
       mockUseAuth.mockReturnValue({
+        hasHydrated: true,
         isAuthenticated: true,
         isAnonymous: false,
         isLoading: false,
@@ -155,6 +162,7 @@ describe('ProtectedRoute', () => {
 
     it('should show upgrade prompt for anonymous users', () => {
       mockUseAuth.mockReturnValue({
+        hasHydrated: true,
         isAuthenticated: true,
         isAnonymous: true,
         isLoading: false,
@@ -173,6 +181,7 @@ describe('ProtectedRoute', () => {
 
     it('should have sign in button in upgrade prompt', () => {
       mockUseAuth.mockReturnValue({
+        hasHydrated: true,
         isAuthenticated: true,
         isAnonymous: true,
         isLoading: false,
@@ -192,6 +201,7 @@ describe('ProtectedRoute', () => {
   describe('no auth required', () => {
     it('should show content without authentication when requireAuth is false', () => {
       mockUseAuth.mockReturnValue({
+        hasHydrated: true,
         isAuthenticated: false,
         isAnonymous: false,
         isLoading: false,
@@ -216,6 +226,7 @@ describe('AuthGuard', () => {
 
   it('should show children when authenticated', () => {
     mockUseAuth.mockReturnValue({
+      hasHydrated: true,
       isAuthenticated: true,
       isAnonymous: false,
     });
@@ -231,6 +242,7 @@ describe('AuthGuard', () => {
 
   it('should show nothing when not authenticated', () => {
     mockUseAuth.mockReturnValue({
+      hasHydrated: true,
       isAuthenticated: false,
       isAnonymous: false,
     });
@@ -246,6 +258,7 @@ describe('AuthGuard', () => {
 
   it('should show fallback when not authenticated', () => {
     mockUseAuth.mockReturnValue({
+      hasHydrated: true,
       isAuthenticated: false,
       isAnonymous: false,
     });
@@ -262,6 +275,7 @@ describe('AuthGuard', () => {
   describe('feature guards', () => {
     it('should require upgrade for alerts feature when anonymous', () => {
       mockUseAuth.mockReturnValue({
+        hasHydrated: true,
         isAuthenticated: true,
         isAnonymous: true,
       });
@@ -278,6 +292,7 @@ describe('AuthGuard', () => {
 
     it('should show alerts for non-anonymous users', () => {
       mockUseAuth.mockReturnValue({
+        hasHydrated: true,
         isAuthenticated: true,
         isAnonymous: false,
       });
@@ -293,6 +308,7 @@ describe('AuthGuard', () => {
 
     it('should show configs for anonymous users', () => {
       mockUseAuth.mockReturnValue({
+        hasHydrated: true,
         isAuthenticated: true,
         isAnonymous: true,
       });
@@ -315,6 +331,7 @@ describe('withProtectedRoute HOC', () => {
 
   it('should wrap component with ProtectedRoute', () => {
     mockUseAuth.mockReturnValue({
+      hasHydrated: true,
       isAuthenticated: true,
       isAnonymous: false,
       isLoading: false,
@@ -334,6 +351,7 @@ describe('withProtectedRoute HOC', () => {
 
   it('should pass options to ProtectedRoute', () => {
     mockUseAuth.mockReturnValue({
+      hasHydrated: true,
       isAuthenticated: true,
       isAnonymous: true,
       isLoading: false,
@@ -357,6 +375,7 @@ describe('withProtectedRoute HOC', () => {
 
   it('should pass props to wrapped component', () => {
     mockUseAuth.mockReturnValue({
+      hasHydrated: true,
       isAuthenticated: true,
       isAnonymous: false,
       isLoading: false,
