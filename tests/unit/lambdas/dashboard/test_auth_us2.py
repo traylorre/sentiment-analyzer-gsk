@@ -5,6 +5,8 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from src.lambdas.dashboard.auth import (
     CheckEmailRequest,
     LinkAccountsRequest,
@@ -22,6 +24,10 @@ from src.lambdas.dashboard.auth import (
     request_magic_link,
     sign_out,
     verify_magic_link,
+)
+from src.lambdas.shared.errors.session_errors import (
+    TokenAlreadyUsedError,
+    TokenExpiredError,
 )
 from src.lambdas.shared.models.user import User
 
@@ -126,11 +132,14 @@ class TestVerifyMagicLink:
     """Tests for T091: verify_magic_link."""
 
     def test_verify_valid_token(self):
-        """Verifies valid token and creates session."""
+        """Verifies valid token and creates session.
+
+        Feature 1129: verify_magic_link now uses atomic token consumption.
+        Signature parameter removed - tokens are validated by UUID only.
+        """
         table = MagicMock()
         token_id = str(uuid.uuid4())
         email = "test@example.com"
-        sig = _generate_magic_link_signature(token_id, email)
         now = datetime.now(UTC)
 
         # Token in database
@@ -138,7 +147,7 @@ class TestVerifyMagicLink:
             "Item": {
                 "token_id": token_id,
                 "email": email,
-                "signature": sig,
+                "signature": "legacy-sig",  # No longer used for validation
                 "created_at": now.isoformat(),
                 "expires_at": (now + timedelta(hours=1)).isoformat(),
                 "used": False,
@@ -149,7 +158,8 @@ class TestVerifyMagicLink:
         table.query.return_value = {"Items": []}
         table.put_item.return_value = {}
 
-        response = verify_magic_link(table, token_id, sig)
+        # Feature 1129: New signature - no signature param, optional client_ip
+        response = verify_magic_link(table, token_id)
 
         assert response.status == "verified"
         # email is now masked for security
@@ -160,7 +170,12 @@ class TestVerifyMagicLink:
         assert response.refresh_token_for_cookie is not None
 
     def test_verify_used_token(self):
-        """Rejects already used token."""
+        """Rejects already used token with TokenAlreadyUsedError.
+
+        Feature 1129: verify_magic_link now raises exceptions instead
+        of returning error response objects. Router handles conversion
+        to HTTP 409 Conflict.
+        """
         table = MagicMock()
         token_id = str(uuid.uuid4())
         now = datetime.now(UTC)
@@ -176,13 +191,19 @@ class TestVerifyMagicLink:
             }
         }
 
-        response = verify_magic_link(table, token_id, "sig")
+        # Feature 1129: Now raises TokenAlreadyUsedError
+        with pytest.raises(TokenAlreadyUsedError) as exc_info:
+            verify_magic_link(table, token_id)
 
-        assert response.status == "invalid"
-        assert response.error == "token_used"
+        assert exc_info.value.token_id == token_id
 
     def test_verify_expired_token(self):
-        """Rejects expired token."""
+        """Rejects expired token with TokenExpiredError.
+
+        Feature 1129: verify_magic_link now raises exceptions instead
+        of returning error response objects. Router handles conversion
+        to HTTP 410 Gone.
+        """
         table = MagicMock()
         token_id = str(uuid.uuid4())
         now = datetime.now(UTC)
@@ -198,40 +219,19 @@ class TestVerifyMagicLink:
             }
         }
 
-        response = verify_magic_link(table, token_id, "sig")
+        # Feature 1129: Now raises TokenExpiredError
+        with pytest.raises(TokenExpiredError) as exc_info:
+            verify_magic_link(table, token_id)
 
-        assert response.status == "invalid"
-        assert response.error == "token_expired"
-
-    def test_verify_invalid_signature(self):
-        """Rejects invalid signature."""
-        table = MagicMock()
-        token_id = str(uuid.uuid4())
-        email = "test@example.com"
-        now = datetime.now(UTC)
-
-        table.get_item.return_value = {
-            "Item": {
-                "token_id": token_id,
-                "email": email,
-                "signature": _generate_magic_link_signature(token_id, email),
-                "created_at": now.isoformat(),
-                "expires_at": (now + timedelta(hours=1)).isoformat(),
-                "used": False,
-            }
-        }
-
-        response = verify_magic_link(table, token_id, "wrong_signature")
-
-        assert response.status == "invalid"
-        assert response.error == "invalid_signature"
+        assert exc_info.value.token_id == token_id
 
     def test_verify_nonexistent_token(self):
         """Rejects nonexistent token."""
         table = MagicMock()
         table.get_item.return_value = {}
 
-        response = verify_magic_link(table, "nonexistent", "sig")
+        # Feature 1129: Nonexistent tokens still return error response
+        response = verify_magic_link(table, "nonexistent")
 
         assert response.status == "invalid"
         assert response.error == "token_not_found"

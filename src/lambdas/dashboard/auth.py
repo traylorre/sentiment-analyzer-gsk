@@ -1359,88 +1359,49 @@ def verify_and_consume_token(
         raise RuntimeError("Failed to consume token") from e
 
 
-# T091: Magic Link Verification
+# T091: Magic Link Verification (Feature 1129: Atomic consumption)
 @xray_recorder.capture("verify_magic_link")
 def verify_magic_link(
     table: Any,
     token_id: str,
-    signature: str,
+    client_ip: str = "unknown",
 ) -> MagicLinkVerifyResponse:
-    """Verify a magic link token.
+    """Verify a magic link token using atomic consumption.
+
+    Feature 1129: Uses verify_and_consume_token() internally to prevent
+    race condition token reuse via DynamoDB conditional update.
 
     Args:
         table: DynamoDB Table resource
         token_id: Token UUID from URL
-        signature: HMAC signature from URL
+        client_ip: Client IP for audit trail (Feature 1129)
 
     Returns:
         MagicLinkVerifyResponse with user info and tokens
+
+    Raises:
+        TokenAlreadyUsedError: If token was already consumed (409)
+        TokenExpiredError: If token has expired (410)
     """
     logger.info(
         "Verifying magic link",
         extra={"token_prefix": sanitize_for_log(token_id[:8])},
     )
 
-    # Get token from database
-    try:
-        response = table.get_item(
-            Key={
-                "PK": f"TOKEN#{token_id}",
-                "SK": "MAGIC_LINK",
-            }
-        )
-    except Exception as e:
-        logger.error("Failed to get token", extra=get_safe_error_info(e))
+    # Feature 1129: Use atomic token consumption to prevent race conditions
+    # verify_and_consume_token uses ConditionExpression="used = :false"
+    # to ensure only one request can consume the token
+    token = verify_and_consume_token(table, token_id, client_ip)
+
+    if token is None:
         return MagicLinkVerifyResponse(
             status="invalid",
             error="token_not_found",
             message="Invalid link. Please request a new one.",
         )
 
-    item = response.get("Item")
-    if not item:
-        return MagicLinkVerifyResponse(
-            status="invalid",
-            error="token_not_found",
-            message="Invalid link. Please request a new one.",
-        )
-
-    token = MagicLinkToken.from_dynamodb_item(item)
-
-    # Check if token already used
-    if token.used:
-        return MagicLinkVerifyResponse(
-            status="invalid",
-            error="token_used",
-            message="This link has already been used.",
-        )
-
-    # Check if token expired
-    if datetime.now(UTC) > token.expires_at.replace(tzinfo=UTC):
-        return MagicLinkVerifyResponse(
-            status="invalid",
-            error="token_expired",
-            message="This link has expired. Please request a new one.",
-        )
-
-    # Verify signature
-    if not _verify_magic_link_signature(token_id, token.email, signature):
-        logger.warning(
-            "Invalid magic link signature",
-            extra={"token_prefix": sanitize_for_log(token_id[:8])},
-        )
-        return MagicLinkVerifyResponse(
-            status="invalid",
-            error="invalid_signature",
-            message="Invalid link. Please request a new one.",
-        )
-
-    # Mark token as used
-    table.update_item(
-        Key={"PK": f"TOKEN#{token_id}", "SK": "MAGIC_LINK"},
-        UpdateExpression="SET used = :used",
-        ExpressionAttributeValues={":used": True},
-    )
+    # TokenAlreadyUsedError and TokenExpiredError propagate up to router
+    # which converts them to 409 and 410 respectively
 
     # Find or create user (use GSI version for O(1) lookup)
     existing_user = get_user_by_email_gsi(table, token.email)
