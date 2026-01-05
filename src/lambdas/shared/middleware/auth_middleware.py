@@ -175,11 +175,10 @@ def validate_jwt(token: str, config: JWTConfig | None = None) -> JWTClaim | None
 
 
 def extract_user_id(event: dict[str, Any]) -> str | None:
-    """Extract user ID from either header format.
+    """Extract user ID from Authorization: Bearer header.
 
-    Supports hybrid authentication approach:
-    1. Authorization: Bearer {token} - preferred for new code
-    2. X-User-ID header - legacy, backward compatible
+    Feature 1146: X-User-ID header fallback REMOVED for security (CVSS 9.1).
+    Users MUST use Bearer token for authentication.
 
     Args:
         event: Lambda event dict with headers
@@ -192,7 +191,7 @@ def extract_user_id(event: dict[str, Any]) -> str | None:
     # Normalize header keys to lowercase for case-insensitive matching
     normalized_headers = {k.lower(): v for k, v in headers.items()}
 
-    # Try Bearer token first (preferred)
+    # Feature 1146: Only Bearer token is accepted (X-User-ID fallback removed)
     auth_header = normalized_headers.get("authorization", "")
     if auth_header.startswith("Bearer "):
         token = auth_header[7:]
@@ -201,16 +200,7 @@ def extract_user_id(event: dict[str, Any]) -> str | None:
             logger.debug(f"Extracted user_id from Bearer token: {user_id[:8]}...")
             return user_id
 
-    # Fall back to X-User-ID (legacy)
-    user_id = normalized_headers.get("x-user-id")
-    if user_id:
-        if _is_valid_uuid(user_id):
-            logger.debug(f"Extracted user_id from X-User-ID header: {user_id[:8]}...")
-            return user_id
-        else:
-            logger.warning(f"Invalid X-User-ID format: {user_id[:20]}...")
-            return None
-
+    # X-User-ID header is intentionally NOT checked (Feature 1146 security fix)
     logger.debug("No user_id found in request headers")
     return None
 
@@ -261,14 +251,16 @@ def _is_valid_uuid(value: str) -> bool:
 
 @xray_recorder.capture("extract_auth_context_typed")
 def extract_auth_context_typed(event: dict[str, Any]) -> AuthContext:
-    """Extract typed authentication context from request (Feature 1048).
+    """Extract typed authentication context from request (Feature 1048, 1146).
 
     CRITICAL: auth_type is determined by token validation, NOT request headers.
-    This prevents the X-Auth-Type header bypass vulnerability.
+    This prevents the X-Auth-Type header bypass vulnerability (Feature 1048).
+
+    Feature 1146: X-User-ID header fallback REMOVED for security (CVSS 9.1).
+    Users MUST use Bearer token for authentication.
 
     - JWT token with valid claims → AuthType.AUTHENTICATED
     - UUID token (no JWT) → AuthType.ANONYMOUS
-    - X-User-ID header (UUID only) → AuthType.ANONYMOUS
     - No valid token → AuthType.ANONYMOUS with user_id=None
 
     Args:
@@ -280,7 +272,7 @@ def extract_auth_context_typed(event: dict[str, Any]) -> AuthContext:
     headers = event.get("headers", {}) or {}
     normalized_headers = {k.lower(): v for k, v in headers.items()}
 
-    # Try Bearer token first (preferred)
+    # Feature 1146: Only Bearer token is accepted (X-User-ID fallback removed)
     auth_header = normalized_headers.get("authorization", "")
     if auth_header.startswith("Bearer "):
         token = auth_header[7:]
@@ -311,19 +303,7 @@ def extract_auth_context_typed(event: dict[str, Any]) -> AuthContext:
                 roles=["anonymous"],
             )
 
-    # Try X-User-ID header (legacy, always anonymous)
-    user_id = normalized_headers.get("x-user-id")
-    if user_id and _is_valid_uuid(user_id):
-        logger.debug(
-            f"Authenticated via X-User-ID: {user_id[:8]}... (auth_type=ANONYMOUS)"
-        )
-        return AuthContext(
-            user_id=user_id,
-            auth_type=AuthType.ANONYMOUS,
-            auth_method="x-user-id",
-            roles=["anonymous"],
-        )
-
+    # X-User-ID header is intentionally NOT checked (Feature 1146 security fix)
     # No valid auth
     logger.debug("No valid auth token found (auth_type=ANONYMOUS, user_id=None)")
     return AuthContext(
@@ -340,9 +320,11 @@ def extract_auth_context(event: dict[str, Any]) -> dict[str, Any]:
 
     DEPRECATED: Use extract_auth_context_typed() for new code.
 
+    Feature 1146: X-User-ID header fallback removed - Bearer only.
+
     Returns a dict with:
     - user_id: Extracted user ID or None
-    - auth_method: 'bearer' | 'x-user-id' | None
+    - auth_method: 'bearer' | None
     - is_authenticated: Whether user ID was found
     - auth_type: 'anonymous' | 'authenticated' (Feature 1048)
 

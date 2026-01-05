@@ -205,9 +205,9 @@ def auth_headers(jwt_env):
 def anonymous_headers():
     """Return anonymous session headers for public endpoints.
 
-    Uses X-User-ID with UUID - anonymous session (no JWT).
+    Feature 1146: Uses Bearer token with UUID (X-User-ID fallback removed).
     """
-    return {"X-User-ID": TEST_USER_ID}
+    return {"Authorization": f"Bearer {TEST_USER_ID}"}
 
 
 class TestAuthentication:
@@ -1357,12 +1357,25 @@ class TestSessionAuth:
     """
 
     @mock_aws
-    def test_session_auth_with_x_user_id(self, client, anonymous_headers):
-        """Test session auth with X-User-ID header succeeds."""
+    def test_session_auth_with_bearer_uuid(self, client, anonymous_headers):
+        """Test session auth with Bearer UUID token succeeds."""
         create_test_table()
 
         response = client.get("/api/v2/sentiment?tags=AI", headers=anonymous_headers)
         assert response.status_code == 200
+
+    def test_x_user_id_header_rejected(self, client):
+        """Feature 1146: X-User-ID header is rejected (security fix).
+
+        X-User-ID header fallback was removed to prevent impersonation attacks.
+        Users MUST use Bearer token for authentication.
+        """
+        response = client.get(
+            "/api/v2/sentiment?tags=AI",
+            headers={"X-User-ID": "12345678-1234-5678-1234-567812345678"},
+        )
+        # X-User-ID alone should return 401 (not authenticated)
+        assert response.status_code == 401
 
     @mock_aws
     def test_session_auth_with_bearer_token(self, client):

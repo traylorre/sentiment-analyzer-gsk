@@ -51,11 +51,19 @@ export function getAccessToken(): string | null {
 }
 
 /**
- * Feature 014: Set user ID for X-User-ID header (anonymous sessions).
- * Used as fallback when no access token is available.
+ * Feature 014: Set user ID for display purposes.
+ * Feature 1146: X-User-ID header fallback REMOVED for security (CVSS 9.1).
+ *
+ * DEPRECATED: This function no longer sets headers. Use setAccessToken() instead.
+ * For anonymous sessions, the userId IS the accessToken.
  */
 export function setUserId(id: string | null) {
   userId = id;
+  // Feature 1146: Also set as access token for anonymous sessions
+  // This ensures Bearer token is always used
+  if (id && !accessToken) {
+    accessToken = id;
+  }
 }
 
 export function getUserId(): string | null {
@@ -112,13 +120,12 @@ export async function apiClient<T>(
     headers.set('Content-Type', 'application/json');
   }
 
-  // Feature 014: Hybrid auth header support (FR-001)
-  // Prefer Bearer token when available, fall back to X-User-ID for anonymous
+  // Feature 1146: Bearer-only authentication (X-User-ID fallback removed)
+  // Security fix: All requests must use Authorization: Bearer header
   if (accessToken) {
     headers.set('Authorization', `Bearer ${accessToken}`);
-  } else if (userId) {
-    headers.set('X-User-ID', userId);
   }
+  // Note: X-User-ID fallback removed for security (CVSS 9.1)
 
   // Feature 1112: AbortController-based timeout support
   // Properly cancels the request (no orphaned connections)

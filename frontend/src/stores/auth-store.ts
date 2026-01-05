@@ -67,7 +67,8 @@ export const useAuthStore = create<AuthStore>()(
           isAuthenticated: !!user,
           isAnonymous,
         });
-        // Feature 014: Sync userId with API client for X-User-ID header
+        // Feature 1146: setUserId now also sets accessToken for Bearer auth
+        // This ensures anonymous sessions use Bearer token, not X-User-ID header
         setUserId(user?.userId ?? null);
       },
 

@@ -279,9 +279,14 @@ async def validate_session(
     request: Request,
     table=Depends(get_users_table),
 ):
-    """Validate session (T048)."""
-    user_id = request.headers.get("X-User-ID")
-    if not user_id:
+    """Validate session (T048).
+
+    Feature 1146: Uses Bearer token authentication (X-User-ID fallback removed).
+    """
+    # Feature 1146: Use auth middleware instead of direct header access
+    try:
+        user_id = get_user_id_from_request(request)
+    except HTTPException:
         return JSONResponse({"valid": False, "reason": "missing_user_id"})
 
     result = auth_service.validate_session(table=table, user_id=user_id)
@@ -317,8 +322,17 @@ async def request_magic_link(
     body: MagicLinkRequest,
     table=Depends(get_users_table),
 ):
-    """Request magic link email (T090)."""
-    user_id = request.headers.get("X-User-ID")  # Optional for linking
+    """Request magic link email (T090).
+
+    Feature 1146: Uses Bearer token authentication (X-User-ID fallback removed).
+    The anonymous_user_id is optional - used for linking anonymous to authenticated.
+    """
+    # Feature 1146: Use auth middleware instead of direct header access
+    # Optional: user may not have an anonymous session yet
+    try:
+        user_id = get_user_id_from_request(request)
+    except HTTPException:
+        user_id = None  # No anonymous session to link
     result = auth_service.request_magic_link(
         table=table,
         request=auth_service.MagicLinkRequest(
@@ -416,8 +430,15 @@ async def handle_oauth_callback(
     """Handle OAuth callback (T093).
 
     Security: refresh_token is set as HttpOnly cookie, NEVER in body.
+    Feature 1146: Uses Bearer token authentication (X-User-ID fallback removed).
+    The anonymous_user_id is optional - used for linking anonymous to authenticated.
     """
-    user_id = request.headers.get("X-User-ID")  # Optional for linking
+    # Feature 1146: Use auth middleware instead of direct header access
+    # Optional: user may not have an anonymous session yet
+    try:
+        user_id = get_user_id_from_request(request)
+    except HTTPException:
+        user_id = None  # No anonymous session to link
     result = auth_service.handle_oauth_callback(
         table=table,
         code=body.code,

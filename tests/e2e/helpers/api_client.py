@@ -98,9 +98,10 @@ class PreprodAPIClient:
             self._client = None
 
     def set_access_token(self, token: str) -> None:
-        """Set the access token for authenticated requests (X-User-ID header).
+        """Set the access token for authenticated requests (Bearer token).
 
-        This is for anonymous session tokens (UUIDs) which are sent via X-User-ID.
+        Feature 1146: X-User-ID header fallback REMOVED for security (CVSS 9.1).
+        Both anonymous session tokens (UUIDs) and JWTs are now sent via Bearer header.
         For authenticated JWT tokens, use set_bearer_token() instead.
         """
         self._access_token = token
@@ -158,10 +159,13 @@ class PreprodAPIClient:
     ) -> dict[str, str]:
         """Build request headers including auth if set.
 
-        Authentication priority (Feature 1053):
+        Feature 1146: Bearer-only authentication (X-User-ID fallback removed).
+        All authentication now uses Authorization: Bearer header.
+
+        Authentication priority:
         1. Bearer token (JWT) - sends Authorization: Bearer header
            → Server validates JWT and returns AuthType.AUTHENTICATED
-        2. Access token (UUID) - sends X-User-ID header
+        2. Access token (UUID) - sends Authorization: Bearer header
            → Server returns AuthType.ANONYMOUS
 
         Note: X-Auth-Type header is deprecated and ignored by server (Feature 1048).
@@ -172,8 +176,8 @@ class PreprodAPIClient:
         if self._bearer_token:
             headers["Authorization"] = f"Bearer {self._bearer_token}"
         elif self._access_token:
-            # Fallback to X-User-ID for anonymous UUID tokens
-            headers["X-User-ID"] = self._access_token
+            # Feature 1146: Use Bearer for anonymous UUID tokens (X-User-ID removed)
+            headers["Authorization"] = f"Bearer {self._access_token}"
 
         # X-Auth-Type is deprecated but kept for backwards compatibility
         # Server ignores this header after Feature 1048 security fix

@@ -256,13 +256,18 @@ class TestExtractUserId:
         user_id = extract_user_id(event)
         assert user_id == uuid_token
 
-    def test_x_user_id_header_fallback(self):
-        """Should fall back to X-User-ID header."""
+    def test_x_user_id_header_ignored(self):
+        """Feature 1146: X-User-ID header is IGNORED (security fix).
+
+        X-User-ID header fallback was removed to prevent impersonation attacks.
+        Users MUST use Bearer token for authentication.
+        """
         user_id_value = "550e8400-e29b-41d4-a716-446655440000"
         event = {"headers": {"X-User-ID": user_id_value}}
 
         user_id = extract_user_id(event)
-        assert user_id == user_id_value
+        # X-User-ID is ignored - returns None
+        assert user_id is None
 
     def test_no_auth_returns_none(self):
         """Should return None if no authentication present."""
