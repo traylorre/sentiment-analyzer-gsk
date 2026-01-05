@@ -48,11 +48,13 @@ class AuthContext:
         user_id: Validated user ID (or None if unauthenticated)
         auth_type: ANONYMOUS for UUID tokens, AUTHENTICATED for JWT
         auth_method: Where the credential came from ("bearer", "x-user-id", None)
+        roles: List of role strings from JWT 'roles' claim (Feature 1130)
     """
 
     user_id: str | None
     auth_type: AuthType
     auth_method: str | None = None
+    roles: list[str] | None = None
 
 
 @dataclass(frozen=True)
@@ -64,12 +66,14 @@ class JWTClaim:
         expiration: Token expiration timestamp
         issued_at: Token issued timestamp
         issuer: Token issuer (optional)
+        roles: List of user roles (from 'roles' claim, Feature 1130)
     """
 
     subject: str
     expiration: datetime
     issued_at: datetime
     issuer: str | None = None
+    roles: list[str] | None = None
 
 
 @dataclass(frozen=True)
@@ -147,6 +151,7 @@ def validate_jwt(token: str, config: JWTConfig | None = None) -> JWTClaim | None
             expiration=datetime.fromtimestamp(payload["exp"], tz=UTC),
             issued_at=datetime.fromtimestamp(payload["iat"], tz=UTC),
             issuer=payload.get("iss"),
+            roles=payload.get("roles"),
         )
 
     except jwt.ExpiredSignatureError:
@@ -291,6 +296,7 @@ def extract_auth_context_typed(event: dict[str, Any]) -> AuthContext:
                 user_id=jwt_claim.subject,
                 auth_type=AuthType.AUTHENTICATED,
                 auth_method="bearer",
+                roles=jwt_claim.roles,
             )
 
         # Fall back to UUID token (anonymous)
@@ -302,6 +308,7 @@ def extract_auth_context_typed(event: dict[str, Any]) -> AuthContext:
                 user_id=token,
                 auth_type=AuthType.ANONYMOUS,
                 auth_method="bearer",
+                roles=["anonymous"],
             )
 
     # Try X-User-ID header (legacy, always anonymous)
@@ -314,6 +321,7 @@ def extract_auth_context_typed(event: dict[str, Any]) -> AuthContext:
             user_id=user_id,
             auth_type=AuthType.ANONYMOUS,
             auth_method="x-user-id",
+            roles=["anonymous"],
         )
 
     # No valid auth
@@ -322,6 +330,7 @@ def extract_auth_context_typed(event: dict[str, Any]) -> AuthContext:
         user_id=None,
         auth_type=AuthType.ANONYMOUS,
         auth_method=None,
+        roles=None,
     )
 
 

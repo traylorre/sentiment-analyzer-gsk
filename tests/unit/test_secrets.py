@@ -184,8 +184,11 @@ class TestGetSecret:
 
     def test_cache_expiry(self, secrets_manager, monkeypatch):
         """Test that cache expires after TTL."""
-        # Set short TTL for test
-        os.environ["SECRETS_CACHE_TTL_SECONDS"] = "1"
+        # Clear any stale cache entries from previous tests
+        clear_cache()
+
+        # Set short TTL for test (use monkeypatch for proper cleanup)
+        monkeypatch.setenv("SECRETS_CACHE_TTL_SECONDS", "1")
 
         # First call - caches the secret
         get_secret("dev/sentiment-analyzer/tiingo")

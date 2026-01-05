@@ -6,6 +6,11 @@ while adding Feature 014 session-specific error types.
 
 # Re-export original error utilities (backward compatibility)
 # Feature 014: Session-specific error types
+from src.lambdas.shared.errors.auth_errors import (
+    InsufficientRoleError,
+    InvalidRoleError,
+    MissingRolesClaimError,
+)
 from src.lambdas.shared.errors.session_errors import (
     EmailAlreadyExistsError,
     InvalidMergeTargetError,
@@ -50,4 +55,8 @@ __all__ = [
     "SessionRevokedException",
     "TokenAlreadyUsedError",
     "TokenExpiredError",
+    # Feature 1130: RBAC errors
+    "InsufficientRoleError",
+    "InvalidRoleError",
+    "MissingRolesClaimError",
 ]
