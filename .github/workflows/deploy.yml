@@ -1249,9 +1249,10 @@ jobs:
           echo "This ensures observability tests have real metrics to validate."
           echo ""
 
-          # Feature 1047: Use X-User-ID for session auth (consistent with all endpoints)
+          # Feature 1047: Use Bearer token for session auth (consistent with all endpoints)
           # API key auth was removed in Feature 1039 - all endpoints now use session auth
-          # Feature 1049: X-User-ID must be a valid UUID format
+          # Feature 1049: User ID must be a valid UUID format
+          # Feature 1146: X-User-ID header fallback removed - use Bearer only
           WARMUP_USER_ID="00000000-0000-0000-0000-000000000001"
 
           # Invoke dashboard Lambda multiple times to generate metrics
@@ -1262,10 +1263,10 @@ jobs:
             echo "  ⚠️ Health endpoint returned $HTTP_CODE (continuing, may be cold start)"
           fi
 
-          # Feature 1047: Use X-User-ID header for session auth
+          # Feature 1146: Use Bearer token for session auth (X-User-ID removed)
           echo "2. Invoking /api/v2/metrics endpoint (session auth)..."
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-            -H "X-User-ID: ${WARMUP_USER_ID}" \
+            -H "Authorization: Bearer ${WARMUP_USER_ID}" \
             "${DASHBOARD_URL}/api/v2/metrics" || echo "000")
           echo "  HTTP $HTTP_CODE"
           if [ "$HTTP_CODE" != "200" ]; then
@@ -1274,10 +1275,10 @@ jobs:
             exit 1
           fi
 
-          # All endpoints now use X-User-ID header for session auth
+          # Feature 1146: All endpoints now use Bearer token for session auth
           echo "3. Invoking /api/v2/tickers/AAPL/sentiment/history endpoint (warmup only)..."
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-            -H "X-User-ID: ${WARMUP_USER_ID}" \
+            -H "Authorization: Bearer ${WARMUP_USER_ID}" \
             "${DASHBOARD_URL}/api/v2/tickers/AAPL/sentiment/history" || echo "000")
           echo "  HTTP $HTTP_CODE (non-critical warmup, any response is acceptable)"
 

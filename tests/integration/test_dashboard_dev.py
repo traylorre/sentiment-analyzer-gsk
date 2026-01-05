@@ -52,10 +52,10 @@ def client():
 def auth_headers():
     """Return valid authorization headers.
 
-    Feature 1039: Uses X-User-ID with anonymous UUID for session auth.
-    Anonymous sessions are accepted for public endpoints.
+    Feature 1146: Bearer-only authentication (X-User-ID fallback removed).
+    Anonymous sessions use Bearer token with UUID.
     """
-    return {"X-User-ID": "550e8400-e29b-41d4-a716-446655440000"}
+    return {"Authorization": "Bearer 550e8400-e29b-41d4-a716-446655440000"}
 
 
 class TestDashboardDevE2E:

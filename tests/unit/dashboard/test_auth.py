@@ -296,10 +296,15 @@ class TestExtendSession:
 
 
 class TestAuthContextTyped:
-    """Tests for extract_auth_context_typed function (Feature 1048).
+    """Tests for extract_auth_context_typed function (Feature 1048, 1146).
 
-    These tests verify that auth_type is determined by TOKEN VALIDATION,
-    not by request headers. This prevents the X-Auth-Type header bypass.
+    Feature 1048: auth_type is determined by TOKEN VALIDATION, not headers.
+    Feature 1146: X-User-ID header fallback REMOVED for security (CVSS 9.1).
+
+    These tests verify:
+    - ONLY Bearer tokens are accepted for authentication
+    - X-User-ID header is completely IGNORED
+    - X-Auth-Type header bypass is prevented
     """
 
     def test_uuid_bearer_returns_anonymous_auth_type(self):
@@ -313,16 +318,50 @@ class TestAuthContextTyped:
         assert context.auth_type == AuthType.ANONYMOUS
         assert context.auth_method == "bearer"
 
-    def test_x_user_id_header_returns_anonymous_auth_type(self):
-        """X-User-ID header should return AuthType.ANONYMOUS."""
+    def test_x_user_id_header_is_ignored(self):
+        """Feature 1146: X-User-ID header is IGNORED (security fix).
+
+        X-User-ID header fallback was removed to prevent impersonation attacks.
+        Users MUST use Bearer token for authentication.
+        """
         user_id = str(uuid.uuid4())
         event = {"headers": {"X-User-ID": user_id}}
 
         context = extract_auth_context_typed(event)
 
-        assert context.user_id == user_id
+        # X-User-ID is ignored - returns None user_id
+        assert context.user_id is None
         assert context.auth_type == AuthType.ANONYMOUS
-        assert context.auth_method == "x-user-id"
+        assert context.auth_method is None
+
+    def test_x_user_id_without_bearer_returns_unauthenticated(self):
+        """Feature 1146: X-User-ID alone returns 401-equivalent state.
+
+        This is the key security test - sending only X-User-ID header
+        should NOT authenticate the user.
+        """
+        user_id = str(uuid.uuid4())
+        event = {"headers": {"X-User-ID": user_id}}
+
+        context = extract_auth_context_typed(event)
+
+        # No user_id means 401 will be returned by protected endpoints
+        assert context.user_id is None
+        assert context.auth_method is None
+
+    def test_bearer_only_authentication(self):
+        """Feature 1146: Only Bearer token is accepted for authentication."""
+        user_id = str(uuid.uuid4())
+
+        # Bearer works
+        bearer_event = {"headers": {"Authorization": f"Bearer {user_id}"}}
+        bearer_context = extract_auth_context_typed(bearer_event)
+        assert bearer_context.user_id == user_id
+
+        # X-User-ID does NOT work
+        header_event = {"headers": {"X-User-ID": user_id}}
+        header_context = extract_auth_context_typed(header_event)
+        assert header_context.user_id is None
 
     def test_no_auth_returns_anonymous_with_none_user_id(self):
         """No auth headers should return ANONYMOUS with user_id=None."""
@@ -343,7 +382,7 @@ class TestAuthContextTyped:
         user_id = str(uuid.uuid4())
         event = {
             "headers": {
-                "X-User-ID": user_id,
+                "Authorization": f"Bearer {user_id}",
                 "X-Auth-Type": "authenticated",  # Bypass attempt - should be IGNORED
             }
         }
@@ -351,38 +390,42 @@ class TestAuthContextTyped:
         context = extract_auth_context_typed(event)
 
         # Auth type determined by token validation, not headers
+        # UUID bearer token = ANONYMOUS type
         assert context.auth_type == AuthType.ANONYMOUS
         assert context.user_id == user_id
 
-    def test_invalid_uuid_returns_none_user_id(self):
-        """Invalid UUID in X-User-ID should return None user_id."""
-        event = {"headers": {"X-User-ID": "not-a-valid-uuid"}}
+    def test_invalid_uuid_in_bearer_returns_none_user_id(self):
+        """Invalid UUID in Bearer token should return None user_id."""
+        event = {"headers": {"Authorization": "Bearer not-a-valid-uuid"}}
 
         context = extract_auth_context_typed(event)
 
         assert context.user_id is None
         assert context.auth_type == AuthType.ANONYMOUS
 
-    def test_bearer_prefers_over_x_user_id(self):
-        """Bearer token should take precedence over X-User-ID header."""
+    def test_bearer_used_even_with_x_user_id_present(self):
+        """Feature 1146: When both headers present, only Bearer is used."""
         bearer_id = str(uuid.uuid4())
         header_id = str(uuid.uuid4())
         event = {
             "headers": {
                 "Authorization": f"Bearer {bearer_id}",
-                "X-User-ID": header_id,
+                "X-User-ID": header_id,  # This should be completely ignored
             }
         }
 
         context = extract_auth_context_typed(event)
 
+        # Only Bearer token is used
         assert context.user_id == bearer_id
         assert context.auth_method == "bearer"
+        # Verify X-User-ID was NOT used
+        assert context.user_id != header_id
 
-    def test_case_insensitive_headers(self):
-        """Headers should be matched case-insensitively."""
+    def test_case_insensitive_authorization_header(self):
+        """Authorization header should be matched case-insensitively."""
         user_id = str(uuid.uuid4())
-        event = {"headers": {"x-user-id": user_id}}  # lowercase
+        event = {"headers": {"authorization": f"Bearer {user_id}"}}  # lowercase
 
         context = extract_auth_context_typed(event)
 

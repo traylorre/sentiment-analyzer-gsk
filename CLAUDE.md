@@ -51,6 +51,12 @@ Auto-generated from all feature plans. Last updated: 2025-11-26
 - N/A (configuration change) (1114-cors-api-gateway-fix)
 - TypeScript 5.x, React 18.x, Next.js 14.x (App Router) + zustand 5.x, @tanstack/react-query, next-auth (not used - custom auth), tailwindcss (1122-zustand-hydration-fix)
 - localStorage (zustand persist), React Query cache (1122-zustand-hydration-fix)
+- Python 3.13 + FastAPI, functools (stdlib), typing (stdlib) (1130-require-role-decorator)
+- N/A (roles read from JWT, no database access) (1130-require-role-decorator)
+- TypeScript 5.x (Next.js frontend) + Next.js, Zustand (state management) (1145-delete-cookies-ts)
+- N/A (removing storage mechanism) (1145-delete-cookies-ts)
+- Python 3.13 + FastAPI, PyJWT, boto3 (DynamoDB) (1146-remove-xuserid-fallback)
+- DynamoDB (users table, sessions) (1146-remove-xuserid-fallback)
 
 - **Python 3.13** with FastAPI, boto3, pydantic, aws-lambda-powertools, httpx
 - **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, CloudFront
@@ -828,9 +834,9 @@ aws cloudwatch get-metric-data --metric-data-queries '[...]' --start-time ... --
 ```
 
 ## Recent Changes
-- 1122-zustand-hydration-fix: Added TypeScript 5.x, React 18.x, Next.js 14.x (App Router) + zustand 5.x, @tanstack/react-query, next-auth (not used - custom auth), tailwindcss
-- 1114-cors-api-gateway-fix: Added Terraform 1.5+ (infrastructure change only) + AWS Amplify, Lambda Function URL
-- 1113-ohlc-intraday-backend: Added Python 3.13 + AWS Lambda, pydantic, httpx (Tiingo API client)
+- 1146-remove-xuserid-fallback: Added Python 3.13 + FastAPI, PyJWT, boto3 (DynamoDB)
+- 1145-delete-cookies-ts: Added TypeScript 5.x (Next.js frontend) + Next.js, Zustand (state management)
+- 1130-require-role-decorator: Added Python 3.13 + FastAPI, functools (stdlib), typing (stdlib)
 
 <!-- MANUAL ADDITIONS START -->
 

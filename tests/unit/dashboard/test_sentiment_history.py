@@ -17,7 +17,8 @@ client = TestClient(app)
 
 
 # Feature 1049: Valid UUID required for auth
-AUTH_HEADERS = {"X-User-ID": "12345678-1234-5678-1234-567812345678"}
+# Feature 1146: Bearer-only authentication (X-User-ID header fallback removed)
+AUTH_HEADERS = {"Authorization": "Bearer 12345678-1234-5678-1234-567812345678"}
 
 
 class TestSentimentHistoryEndpoint:

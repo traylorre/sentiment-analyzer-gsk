@@ -35,8 +35,8 @@ def test_client():
 
 @pytest.fixture
 def auth_headers():
-    """Headers with valid authentication (Feature 1049: valid UUID required)."""
-    return {"X-User-ID": "550e8400-e29b-41d4-a716-446655440000"}
+    """Headers with valid authentication (Feature 1146: Bearer-only auth)."""
+    return {"Authorization": "Bearer 550e8400-e29b-41d4-a716-446655440000"}
 
 
 class TestSentimentTickerBoundaries:
@@ -173,8 +173,8 @@ class TestSentimentAuthBoundaries:
 
     @pytest.mark.sentiment_history
     @pytest.mark.boundary
-    def test_sentiment_missing_user_id_header(self, test_client):
-        """Sentiment returns 401 when X-User-ID header is missing."""
+    def test_sentiment_missing_auth_header(self, test_client):
+        """Sentiment returns 401 when Authorization header is missing."""
         response = test_client.get("/api/v2/tickers/AAPL/sentiment/history")
 
         assert response.status_code == 401
@@ -182,14 +182,27 @@ class TestSentimentAuthBoundaries:
 
     @pytest.mark.sentiment_history
     @pytest.mark.boundary
-    def test_sentiment_empty_user_id_header(self, test_client):
-        """Sentiment returns 401 when X-User-ID header is empty."""
+    def test_sentiment_empty_bearer_token(self, test_client):
+        """Sentiment returns 401 when Bearer token is empty."""
         response = test_client.get(
-            "/api/v2/tickers/AAPL/sentiment/history", headers={"X-User-ID": ""}
+            "/api/v2/tickers/AAPL/sentiment/history",
+            headers={"Authorization": "Bearer "},
         )
 
         assert response.status_code == 401
         assert "Missing user identification" in response.json()["detail"]
+
+    @pytest.mark.sentiment_history
+    @pytest.mark.boundary
+    def test_sentiment_x_user_id_rejected(self, test_client):
+        """Feature 1146: X-User-ID header is rejected (security fix)."""
+        response = test_client.get(
+            "/api/v2/tickers/AAPL/sentiment/history",
+            headers={"X-User-ID": "550e8400-e29b-41d4-a716-446655440000"},
+        )
+
+        # X-User-ID alone should return 401 (not authenticated)
+        assert response.status_code == 401
 
 
 class TestSentimentSourceBoundaries:

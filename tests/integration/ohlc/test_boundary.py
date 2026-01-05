@@ -56,8 +56,8 @@ def test_client(mock_tiingo, mock_finnhub):
 
 @pytest.fixture
 def auth_headers():
-    """Headers with valid authentication (Feature 1049: valid UUID required)."""
-    return {"X-User-ID": "550e8400-e29b-41d4-a716-446655440000"}
+    """Headers with valid authentication (Feature 1146: Bearer-only auth)."""
+    return {"Authorization": "Bearer 550e8400-e29b-41d4-a716-446655440000"}
 
 
 class TestOHLCTickerBoundaries:
@@ -212,11 +212,11 @@ class TestOHLCDateBoundaries:
 class TestOHLCAuthBoundaries:
     """US4: OHLC authentication boundary testing."""
 
-    # T069-T072: Authentication boundaries
+    # T069-T072: Authentication boundaries (Feature 1146: Bearer-only auth)
     @pytest.mark.ohlc
     @pytest.mark.boundary
-    def test_ohlc_missing_user_id_header(self, test_client):
-        """OHLC returns 401 when X-User-ID header is missing."""
+    def test_ohlc_missing_auth_header(self, test_client):
+        """OHLC returns 401 when Authorization header is missing."""
         response = test_client.get("/api/v2/tickers/AAPL/ohlc")
 
         assert response.status_code == 401
@@ -224,10 +224,10 @@ class TestOHLCAuthBoundaries:
 
     @pytest.mark.ohlc
     @pytest.mark.boundary
-    def test_ohlc_empty_user_id_header(self, test_client):
-        """OHLC returns 401 when X-User-ID header is empty."""
+    def test_ohlc_empty_bearer_token(self, test_client):
+        """OHLC returns 401 when Bearer token is empty."""
         response = test_client.get(
-            "/api/v2/tickers/AAPL/ohlc", headers={"X-User-ID": ""}
+            "/api/v2/tickers/AAPL/ohlc", headers={"Authorization": "Bearer "}
         )
 
         assert response.status_code == 401
@@ -235,16 +235,26 @@ class TestOHLCAuthBoundaries:
 
     @pytest.mark.ohlc
     @pytest.mark.boundary
-    def test_ohlc_whitespace_user_id_header(self, test_client):
-        """OHLC handles whitespace-only X-User-ID."""
+    def test_ohlc_whitespace_bearer_token(self, test_client):
+        """OHLC handles whitespace-only Bearer token."""
         response = test_client.get(
-            "/api/v2/tickers/AAPL/ohlc", headers={"X-User-ID": "   "}
+            "/api/v2/tickers/AAPL/ohlc", headers={"Authorization": "Bearer    "}
         )
 
-        # Whitespace-only should be treated as valid (truthy string)
-        # or as invalid depending on implementation
-        # Current implementation treats non-empty as valid
-        assert response.status_code in (200, 401)
+        # Whitespace-only should be treated as invalid (empty after strip)
+        assert response.status_code == 401
+
+    @pytest.mark.ohlc
+    @pytest.mark.boundary
+    def test_ohlc_x_user_id_rejected(self, test_client):
+        """Feature 1146: X-User-ID header is rejected (security fix)."""
+        response = test_client.get(
+            "/api/v2/tickers/AAPL/ohlc",
+            headers={"X-User-ID": "550e8400-e29b-41d4-a716-446655440000"},
+        )
+
+        # X-User-ID alone should return 401 (not authenticated)
+        assert response.status_code == 401
 
 
 class TestOHLCTimeRangeBoundaries:

@@ -375,7 +375,7 @@ class TestConfigStreamEndpoint:
                         client = TestClient(app)
                         response = client.get(
                             "/api/v2/configurations/invalid-config/stream",
-                            headers={"X-User-ID": "user-123"},
+                            headers={"Authorization": "Bearer user-123"},
                         )
                         assert response.status_code == 404
 
