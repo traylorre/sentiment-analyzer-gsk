@@ -54,6 +54,7 @@ from src.lambdas.shared.middleware.auth_middleware import (
     AuthType,
     extract_auth_context_typed,
 )
+from src.lambdas.shared.middleware.require_role import require_role
 from src.lambdas.shared.response_models import (
     UserMeResponse,
     mask_email,
@@ -546,14 +547,16 @@ admin_router = APIRouter(prefix="/api/v2/admin", tags=["admin"])
 
 
 @admin_router.post("/sessions/revoke")
+@require_role("operator")
 async def revoke_sessions_bulk(
+    request: Request,
     body: BulkRevocationRequest,
     table=Depends(get_users_table),
 ):
     """Bulk session revocation - andon cord pattern (T057).
 
     Feature 014: Revoke multiple sessions at once for security incidents.
-    Requires admin authentication in production.
+    Protected by @require_role("operator") - Feature 1148.
     """
     result = auth_service.revoke_sessions_bulk(
         table=table,
