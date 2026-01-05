@@ -305,18 +305,39 @@ export const useAuthStore = create<AuthStore>()(
         }
       }),
       // FR-013: Exclude _hasHydrated from persistence - it's runtime-only state
+      // Feature 1131: Security fix - tokens MUST NOT be persisted to localStorage (CVSS 8.6)
+      // Tokens remain in-memory only to prevent XSS attacks from stealing credentials
       partialize: (state) => ({
         user: state.user,
-        tokens: state.tokens,
+        // SECURITY: tokens intentionally excluded - stored in memory only
         sessionExpiresAt: state.sessionExpiresAt,
         isAuthenticated: state.isAuthenticated,
         isAnonymous: state.isAnonymous,
-        // Note: _hasHydrated, isLoading, isInitialized, error are NOT persisted
+        // Note: _hasHydrated, isLoading, isInitialized, error, tokens are NOT persisted
       }),
       // FR-013: Set _hasHydrated to true after zustand persist rehydrates from localStorage
+      // Feature 1131: Also perform one-time migration to clear any existing tokens
       onRehydrateStorage: () => (state) => {
         // This callback fires AFTER rehydration completes (success or failure)
         // state will be undefined if rehydration failed
+
+        // Feature 1131: Migration - clear any existing tokens from localStorage
+        // This handles users who authenticated before the security fix
+        if (typeof window !== 'undefined') {
+          try {
+            const stored = window.localStorage.getItem(TOKEN_STORAGE_KEY);
+            if (stored) {
+              const parsed = JSON.parse(stored);
+              if (parsed.state?.tokens) {
+                delete parsed.state.tokens;
+                window.localStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify(parsed));
+              }
+            }
+          } catch {
+            // Ignore parse errors - localStorage may be corrupted or unavailable
+          }
+        }
+
         useAuthStore.setState({ _hasHydrated: true });
       },
     }

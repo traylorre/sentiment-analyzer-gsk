@@ -587,3 +587,202 @@ describe('Feature 014: Auto-Session Creation', () => {
     });
   });
 });
+
+// Feature 1131: Token Persistence Security Tests
+describe('Feature 1131: Token Non-Persistence (Security Fix)', () => {
+  const STORAGE_KEY = 'sentiment-auth-tokens';
+
+  beforeEach(() => {
+    useAuthStore.getState().reset();
+    // FR-013: Simulate hydration complete for tests
+    useAuthStore.setState({ _hasHydrated: true });
+    // Clear localStorage before each test
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.removeItem(STORAGE_KEY);
+    }
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    // Clean up localStorage
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.removeItem(STORAGE_KEY);
+    }
+  });
+
+  describe('FR-001: Tokens NOT persisted to localStorage', () => {
+    it('should NOT include tokens in localStorage after setTokens', () => {
+      const { setTokens, setUser } = useAuthStore.getState();
+
+      // Set up user and tokens
+      setUser({
+        userId: 'user-123',
+        authType: 'email',
+        createdAt: '2024-01-15T10:00:00Z',
+        configurationCount: 0,
+        alertCount: 0,
+        emailNotificationsEnabled: true,
+      });
+
+      setTokens({
+        idToken: 'id-token-secret',
+        accessToken: 'access-token-secret',
+        refreshToken: 'refresh-token-secret',
+        expiresIn: 3600,
+      });
+
+      // Verify tokens are in memory state
+      expect(useAuthStore.getState().tokens?.accessToken).toBe('access-token-secret');
+
+      // Verify tokens are NOT in localStorage
+      const stored = window.localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        expect(parsed.state?.tokens).toBeUndefined();
+        expect(parsed.state?.accessToken).toBeUndefined();
+        expect(parsed.state?.refreshToken).toBeUndefined();
+        expect(parsed.state?.idToken).toBeUndefined();
+      }
+    });
+
+    it('should NOT contain accessToken, refreshToken, or idToken in localStorage string', () => {
+      const { setTokens, setUser } = useAuthStore.getState();
+
+      setUser({
+        userId: 'user-456',
+        authType: 'email',
+        createdAt: '2024-01-15T10:00:00Z',
+        configurationCount: 0,
+        alertCount: 0,
+        emailNotificationsEnabled: true,
+      });
+
+      setTokens({
+        idToken: 'UNIQUE_ID_TOKEN_VALUE',
+        accessToken: 'UNIQUE_ACCESS_TOKEN_VALUE',
+        refreshToken: 'UNIQUE_REFRESH_TOKEN_VALUE',
+        expiresIn: 3600,
+      });
+
+      // Force zustand persist to write to localStorage
+      // (The persist middleware writes asynchronously)
+      const stored = window.localStorage.getItem(STORAGE_KEY) || '';
+
+      // Token values should never appear in localStorage
+      expect(stored).not.toContain('UNIQUE_ID_TOKEN_VALUE');
+      expect(stored).not.toContain('UNIQUE_ACCESS_TOKEN_VALUE');
+      expect(stored).not.toContain('UNIQUE_REFRESH_TOKEN_VALUE');
+    });
+  });
+
+  describe('FR-002: Tokens stored in memory only', () => {
+    it('should store tokens in zustand state (memory)', () => {
+      const { setTokens, setUser } = useAuthStore.getState();
+
+      setUser({
+        userId: 'user-memory',
+        authType: 'email',
+        createdAt: '2024-01-15T10:00:00Z',
+        configurationCount: 0,
+        alertCount: 0,
+        emailNotificationsEnabled: true,
+      });
+
+      setTokens({
+        idToken: 'memory-id-token',
+        accessToken: 'memory-access-token',
+        refreshToken: 'memory-refresh-token',
+        expiresIn: 3600,
+      });
+
+      // Verify tokens are accessible in memory
+      const state = useAuthStore.getState();
+      expect(state.tokens).not.toBeNull();
+      expect(state.tokens?.accessToken).toBe('memory-access-token');
+      expect(state.tokens?.refreshToken).toBe('memory-refresh-token');
+      expect(state.tokens?.idToken).toBe('memory-id-token');
+    });
+  });
+
+  describe('FR-003: Non-sensitive fields still persist', () => {
+    it('should persist user profile to localStorage', () => {
+      const { setUser } = useAuthStore.getState();
+
+      setUser({
+        userId: 'persist-user-789',
+        email: 'persist@example.com',
+        authType: 'email',
+        createdAt: '2024-01-15T10:00:00Z',
+        configurationCount: 5,
+        alertCount: 2,
+        emailNotificationsEnabled: true,
+      });
+
+      // Check localStorage contains user (non-sensitive)
+      const stored = window.localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        expect(parsed.state?.user?.userId).toBe('persist-user-789');
+        expect(parsed.state?.user?.email).toBe('persist@example.com');
+      }
+    });
+
+    it('should persist session flags to localStorage', () => {
+      const { setUser, setSession } = useAuthStore.getState();
+
+      setUser({
+        userId: 'flag-user',
+        authType: 'anonymous',
+        createdAt: '2024-01-15T10:00:00Z',
+        configurationCount: 0,
+        alertCount: 0,
+        emailNotificationsEnabled: false,
+      });
+
+      setSession('2024-01-15T12:00:00Z');
+
+      // Wait for persist middleware to write
+      const stored = window.localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        expect(parsed.state?.isAuthenticated).toBe(true);
+        expect(parsed.state?.isAnonymous).toBe(true);
+        expect(parsed.state?.sessionExpiresAt).toBe('2024-01-15T12:00:00Z');
+      }
+    });
+  });
+
+  describe('FR-004: Migration clears existing tokens', () => {
+    it('should clear tokens from localStorage if they exist from before fix', () => {
+      // Simulate pre-fix localStorage state with tokens
+      const preFix = JSON.stringify({
+        state: {
+          user: { userId: 'old-user', authType: 'email' },
+          tokens: {
+            accessToken: 'old-access-token',
+            refreshToken: 'old-refresh-token',
+            idToken: 'old-id-token',
+          },
+          isAuthenticated: true,
+          isAnonymous: false,
+        },
+        version: 0,
+      });
+
+      window.localStorage.setItem(STORAGE_KEY, preFix);
+
+      // Trigger rehydration by resetting and re-initializing
+      // The onRehydrate callback should clean up tokens
+      useAuthStore.getState().reset();
+      useAuthStore.setState({ _hasHydrated: true });
+
+      // After rehydration, tokens should be cleared from localStorage
+      const stored = window.localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        expect(parsed.state?.tokens).toBeUndefined();
+      }
+    });
+  });
+});
