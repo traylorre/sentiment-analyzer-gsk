@@ -9,6 +9,10 @@ from src.lambdas.shared.auth.cognito import (
     revoke_token,
     validate_access_token,
 )
+from src.lambdas.shared.auth.constants import (
+    VALID_ROLES,
+    Role,
+)
 from src.lambdas.shared.auth.merge import (
     MergeResult,
     merge_anonymous_data,
@@ -24,4 +28,7 @@ __all__ = [
     "validate_access_token",
     "MergeResult",
     "merge_anonymous_data",
+    # Feature 1130: RBAC constants
+    "Role",
+    "VALID_ROLES",
 ]

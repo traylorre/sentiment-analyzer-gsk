@@ -1,0 +1,139 @@
+# Role Decorator Contract
+# Feature: 1130-require-role-decorator
+# Date: 2026-01-05
+
+# This contract defines the behavior of the @require_role decorator
+# Not an API contract per se, but documents decorator behavior
+
+decorator:
+  name: require_role
+  module: src.lambdas.shared.middleware.require_role
+  signature: "require_role(required_role: str) -> Callable"
+
+# Valid role values (canonical)
+roles:
+  valid_values:
+    - anonymous
+    - free
+    - paid
+    - operator
+
+  validation:
+    timing: decoration_time  # Not runtime
+    error_type: ValueError
+    error_message: "Invalid role '{role}'. Valid roles: {sorted_valid_roles}"
+
+# Decorator behavior
+behavior:
+  # Order of checks
+  checks:
+    - name: authentication_check
+      condition: "user_id is None"
+      response:
+        status_code: 401
+        body:
+          detail: "Authentication required"
+
+    - name: roles_claim_check
+      condition: "roles claim missing from JWT"
+      response:
+        status_code: 401
+        body:
+          detail: "Invalid token structure"
+
+    - name: role_authorization_check
+      condition: "required_role not in user roles"
+      response:
+        status_code: 403
+        body:
+          detail: "Access denied"  # Generic - prevents enumeration
+
+    - name: success
+      condition: "all checks pass"
+      action: "proceed to decorated handler"
+
+# Error response schemas
+error_responses:
+  unauthorized:
+    status_code: 401
+    content_type: application/json
+    schema:
+      type: object
+      properties:
+        detail:
+          type: string
+          example: "Authentication required"
+      required:
+        - detail
+
+  forbidden:
+    status_code: 403
+    content_type: application/json
+    schema:
+      type: object
+      properties:
+        detail:
+          type: string
+          example: "Access denied"
+      required:
+        - detail
+
+# Security considerations
+security:
+  enumeration_prevention:
+    description: "Error messages MUST NOT reveal required role"
+    examples:
+      good:
+        - "Access denied"
+        - "Forbidden"
+      bad:
+        - "Requires operator role"
+        - "Missing role: operator"
+        - "Insufficient permissions for admin"
+
+  timing_attack_prevention:
+    description: "All authorization failures should take similar time"
+    implementation: "Use constant-time role check (set membership)"
+
+# Usage examples
+examples:
+  basic:
+    code: |
+      from src.lambdas.shared.middleware import require_role
+
+      @router.post("/admin/sessions/revoke")
+      @require_role("operator")
+      async def revoke_sessions(request: Request):
+          # Only operators reach this point
+          pass
+
+  with_dependencies:
+    code: |
+      @router.post("/admin/users/lookup")
+      @require_role("operator")
+      async def lookup_user(
+          request: Request,
+          table=Depends(get_users_table),
+      ):
+          # Operator role verified, table injected
+          pass
+
+  paid_feature:
+    code: |
+      @router.get("/premium/analytics")
+      @require_role("paid")
+      async def premium_analytics(request: Request):
+          # Only paid users can access
+          pass
+
+# Integration points
+integration:
+  auth_context:
+    function: extract_auth_context_typed
+    module: src.lambdas.shared.middleware.auth_middleware
+    role_extraction: "auth_context.roles from JWT 'roles' claim"
+
+  jwt_claim:
+    claim_name: "roles"
+    claim_type: "array of strings"
+    example: '["free", "paid"]'
