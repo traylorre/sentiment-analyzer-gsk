@@ -492,17 +492,23 @@ def create_test_jwt(
     secret: str | None = None,
     expires_in: timedelta = timedelta(minutes=15),
     issuer: str = "sentiment-analyzer",
+    audience: str = "sentiment-analyzer-api",
+    nbf_offset: timedelta = timedelta(seconds=0),
 ) -> str:
     """Create a valid JWT token for E2E tests (Feature 1053).
 
     This generates real JWT tokens that the auth middleware will validate
     as AuthType.AUTHENTICATED, unlike the deprecated X-Auth-Type header.
 
+    Feature 1147: Added audience and nbf claims for CVSS 7.8 security fix.
+
     Args:
         user_id: User ID for the token (defaults to random UUID)
         secret: JWT secret (defaults to env var or test default)
         expires_in: Token validity period
         issuer: Token issuer claim
+        audience: Audience claim (Feature 1147)
+        nbf_offset: Not-before offset from now (Feature 1147)
 
     Returns:
         Encoded JWT token string
@@ -518,6 +524,8 @@ def create_test_jwt(
         "exp": now + expires_in,
         "iat": now,
         "iss": issuer,
+        "aud": audience,
+        "nbf": now + nbf_offset,
     }
     return jwt.encode(payload, secret, algorithm="HS256")
 

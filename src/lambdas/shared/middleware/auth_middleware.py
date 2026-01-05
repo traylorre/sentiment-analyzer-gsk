@@ -84,6 +84,7 @@ class JWTConfig:
         secret: Secret key for HMAC validation
         algorithm: JWT algorithm (default: HS256)
         issuer: Expected issuer (optional, for validation)
+        audience: Expected audience claim (Feature 1147, CVSS 7.8 fix)
         leeway_seconds: Clock skew tolerance (default: 60s)
         access_token_lifetime_seconds: Expected token lifetime (default: 900s/15min)
     """
@@ -91,6 +92,7 @@ class JWTConfig:
     secret: str
     algorithm: str = "HS256"
     issuer: str | None = "sentiment-analyzer"
+    audience: str | None = None
     leeway_seconds: int = 60
     access_token_lifetime_seconds: int = 900
 
@@ -100,6 +102,13 @@ def _get_jwt_config() -> JWTConfig | None:
 
     Returns:
         JWTConfig if JWT_SECRET is set, None otherwise
+
+    Environment:
+        JWT_SECRET: Required secret key for validation
+        JWT_ALGORITHM: JWT algorithm (default: HS256)
+        JWT_ISSUER: Expected issuer (default: sentiment-analyzer)
+        JWT_AUDIENCE: Expected audience claim (Feature 1147)
+        JWT_LEEWAY_SECONDS: Clock skew tolerance (default: 60)
     """
     secret = os.environ.get("JWT_SECRET")
     if not secret:
@@ -109,6 +118,7 @@ def _get_jwt_config() -> JWTConfig | None:
         secret=secret,
         algorithm=os.environ.get("JWT_ALGORITHM", "HS256"),
         issuer=os.environ.get("JWT_ISSUER", "sentiment-analyzer"),
+        audience=os.environ.get("JWT_AUDIENCE"),
         leeway_seconds=int(os.environ.get("JWT_LEEWAY_SECONDS", "60")),
     )
 
@@ -116,7 +126,8 @@ def _get_jwt_config() -> JWTConfig | None:
 def validate_jwt(token: str, config: JWTConfig | None = None) -> JWTClaim | None:
     """Validate a JWT token and extract claims.
 
-    Validates the token signature, expiration, and required claims.
+    Validates the token signature, expiration, audience, not-before, and required claims.
+    Feature 1147: Added aud and nbf validation to close CVSS 7.8 vulnerabilities.
 
     Args:
         token: JWT token string (without "Bearer " prefix)
@@ -127,6 +138,7 @@ def validate_jwt(token: str, config: JWTConfig | None = None) -> JWTClaim | None
 
     Environment:
         JWT_SECRET: Required secret key for validation
+        JWT_AUDIENCE: Expected audience claim (Feature 1147)
     """
     if config is None:
         config = _get_jwt_config()
@@ -140,9 +152,10 @@ def validate_jwt(token: str, config: JWTConfig | None = None) -> JWTClaim | None
             config.secret,
             algorithms=[config.algorithm],
             issuer=config.issuer,
+            audience=config.audience,
             leeway=config.leeway_seconds,
             options={
-                "require": ["sub", "exp", "iat"],
+                "require": ["sub", "exp", "iat", "nbf"],
             },
         )
 
@@ -159,6 +172,14 @@ def validate_jwt(token: str, config: JWTConfig | None = None) -> JWTClaim | None
         return None
     except jwt.InvalidIssuerError:
         logger.debug("JWT token has invalid issuer")
+        return None
+    except jwt.InvalidAudienceError:
+        # Feature 1147: Security event - potential cross-service token replay
+        logger.warning("JWT audience mismatch detected")
+        return None
+    except jwt.ImmatureSignatureError:
+        # Feature 1147: Token not yet valid (nbf in future)
+        logger.debug("JWT not yet valid (nbf)")
         return None
     except jwt.InvalidSignatureError:
         logger.warning("JWT token has invalid signature")
