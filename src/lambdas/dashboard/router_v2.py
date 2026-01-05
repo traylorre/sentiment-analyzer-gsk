@@ -342,10 +342,20 @@ async def verify_magic_link(
     Feature 014 (T034): Returns appropriate error codes for race conditions:
     - 409 Conflict: Token already used by another request
     - 410 Gone: Token has expired
+
+    Feature 1129: Passes client_ip for atomic consumption audit trail.
     """
+    # Feature 1129: Extract client IP for audit trail
+    # X-Forwarded-For is set by ALB/API Gateway; fallback to direct client
+    client_ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+    if not client_ip:
+        client_ip = request.client.host if request.client else "unknown"
+
     # Try atomic verification first for race condition protection
     try:
-        result = auth_service.verify_magic_link(table=table, token=token)
+        result = auth_service.verify_magic_link(
+            table=table, token=token, client_ip=client_ip
+        )
     except TokenAlreadyUsedError as e:
         # Feature 014 (FR-005): 409 for token already used
         raise HTTPException(
