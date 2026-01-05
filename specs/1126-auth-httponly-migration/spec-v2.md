@@ -1,9 +1,9 @@
-# Feature Specification: Auth Architecture Rewrite (v3.0 - Canonical Reconciliation)
+# Feature Specification: Auth Architecture Rewrite (v3.2 - Identity Federation)
 
 **Feature Branch**: `1126-auth-rewrite`
 **Created**: 2026-01-03
 **Updated**: 2026-01-04
-**Status**: Draft v3.0 - Canonical Reconciliation Complete
+**Status**: Draft v3.2 - Identity Federation Model Complete
 **Priority**: P0 - Security + Architecture Foundation
 
 ---
@@ -134,7 +134,7 @@
 | Password Change | **ADDED** token invalidation requirement | All sessions must expire on password change |
 | Error Codes | **ADDED** AUTH_001-AUTH_010 taxonomy | Standardized error responses missing |
 | JWT_SECRET Rotation | **ADDED** operational runbook | No rotation procedure documented |
-| CSRF | **CLARIFIED** SameSite=Strict requirement | cookies.ts uses Lax (conflict) |
+| CSRF | **v3.0 RESOLVED** SameSite=None + CSRF tokens | v2.6 said Strict, v3.0 uses None for OAuth/CORS |
 | Cookie Path | **FIXED** from `/` to `/api/v2/auth` | Over-broad cookie scope |
 | Logging | **ADDED** PII guidelines | What to log/not log undefined |
 
@@ -144,7 +144,7 @@
 - Missing password change invalidation (tokens persist after password reset)
 - Missing error code taxonomy (inconsistent error responses)
 - Missing JWT_SECRET rotation runbook (operational blind spot)
-- SameSite conflict: spec says Strict, cookies.ts uses Lax
+- ~~SameSite conflict: spec says Strict, cookies.ts uses Lax~~ → v3.0: Resolved with None + CSRF tokens
 - Cookie path over-broad: `/` exposes tokens to all routes
 
 **Spec Additions (v2.6):**
@@ -432,6 +432,60 @@
 | Endpoint Schemas | Added `GET /auth/session` and `POST /auth/password` schemas |
 | Email Enumeration | Added constant-time + deferred user creation defense |
 | Cross-Tab | Clarified as REQUIRED + IMPLEMENTED, removed from Out of Scope |
+
+### v3.1 - Deep Audit Fixes (2026-01-04)
+
+| Section | Change | Reason |
+|---------|--------|--------|
+| SameSite | **RESOLVED** all Strict references → None | Canonical value is `None; Secure` + CSRF tokens |
+| ENVIRONMENT | **DOCUMENTED** Terraform requirement | `ENVIRONMENT` must be set in Lambda env vars |
+| Zustand | **FIXED** getter pattern → selector hooks | Getters not reactive; use `useIsAuthenticated()` pattern |
+| Refresh Token | **CLARIFIED** SHA-256 verification flow | Client sends plaintext → server hashes → compares |
+| redirect_uri | **DOCUMENTED** implicit whitelist security | Server-derived URLs, not user input |
+| Signout Cookie | **FIXED** "won't receive" → "CAN receive" | v3.0 widened path to `/api/v2/auth` |
+| crossTabSync | **ADDED** destroy() lifecycle guidance | Destroy after broadcast on signout + app unmount |
+| tier → role | **MIGRATED** remaining tier references | SESSION_LIMITS_BY_ROLE, update_user_role(), etc. |
+| User Schema | **FIXED** tier field → role field | DynamoDB schema aligned with v3.0 decision |
+
+**v3.1 Industry Best Practice Sources:**
+- SameSite: [web.dev](https://web.dev/articles/samesite-cookies-explained)
+- JWT Validation: [Curity](https://curity.io/resources/learn/jwt-best-practices/)
+- Refresh Tokens: [Auth0](https://auth0.com/blog/refresh-tokens-what-are-they-and-when-to-use-them/)
+- OAuth redirect_uri: [IETF RFC 9700](https://datatracker.ietf.org/doc/rfc9700/)
+
+### v3.2 - Identity Federation Model (2026-01-04)
+
+| Section | Change | Reason |
+|---------|--------|--------|
+| Session Limits | **RECONCILED** to Option B | free=5, paid=10, operator=50 (was inconsistent) |
+| Vestigial tier | **REMOVED** 6 dead references | tier→role migration complete |
+| AUTH_ERRORS | **ADDED** AUTH_020-024 | jti blocklist + identity federation errors |
+| jti Collision | **DOCUMENTED** UUID4 guarantee | ~10^-30 probability, acceptable false-negative |
+| jwt.decode | **ADDED** leeway=60 | Clock skew tolerance per A17 |
+| Refresh Response | **ADDED** refreshExpiresAt | Enables client-side proactive refresh |
+| Proactive Refresh | **ADDED** client logic | Prevents session loss when refresh token expires |
+| Audit Logging | **ADDED** Powertools pattern | AWS Lambda Powertools with field whitelist |
+| Identity Federation | **ADDED** comprehensive model | Verification state, linking flows, email_verified gate |
+| User Model | **EXTENDED** for federation | verification, linked_providers, provider_metadata |
+| Linking Rules | **ADDED** decision table | Same-domain auto-link, cross-domain prompt |
+| GitHub OAuth | **DOCUMENTED** as opaque identity | Never auto-link by email (security) |
+| Stripe Webhook | **ADDED** stub flow | paid→free role transition via webhook |
+| Operator Assignment | **ADDED** stub flow | Manual role assignment via admin API |
+| Future Work | **UPDATED** | jti collision detection, account linking specified |
+
+**v3.2 Audit Findings Addressed:**
+- 0 CRITICAL (none found in v3.1)
+- 3 HIGH: Access+refresh expiry edge case, Stripe webhook, Operator assignment
+- 8 MEDIUM: Vestigial tier refs, jti collision, leeway, session limit inconsistency
+- 3 LOW: Config style, session limit values
+- 6 VESTIGIAL: tier references removed
+- 2 CONTRADICTIONS: Session limit values reconciled
+
+**v3.2 Industry Best Practice Sources:**
+- Identity Federation: [Auth0 Account Linking](https://auth0.com/docs/manage-users/user-accounts/user-account-linking)
+- Refresh Token Rotation: [OWASP JWT Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/JSON_Web_Token_for_Java_Cheat_Sheet.html)
+- Audit Logging: [AWS Lambda Powertools](https://docs.powertools.aws.dev/lambda/python/latest/core/logger/)
+- Email Verification: [NIST 800-63B](https://pages.nist.gov/800-63-3/sp800-63b.html)
 
 ---
 
@@ -1166,6 +1220,13 @@ def get_roles_for_user(user: "User") -> list[str]:
 | `sid` | Session ID | Must exist in active sessions table (A1 fix) |
 | `jti` | Token ID | UUID for individual token revocation (v2.11 A15) |
 
+**v3.2: jti Uniqueness Guarantee:**
+The `jti` claim uses Python's `uuid.uuid4()` which generates 122 bits of randomness (2^122 possible values).
+The probability of collision is negligible for our token volume (~10^-30 for 1 billion tokens).
+No explicit collision handling is implemented; if a collision occurs, the token would be incorrectly
+rejected as revoked. This is an acceptable false-negative rate given the probability.
+**Future Work:** Add collision detection via DynamoDB conditional write on jti insert.
+
 **Future-Proof Claims (v2.6, updated v3.0):**
 | Claim | Purpose | Values | Required |
 |-------|---------|--------|----------|
@@ -1274,6 +1335,8 @@ async def create_access_token(user: "User", device_info: dict | None = None) -> 
         # Verification
         "iss": JWT_CONFIG.issuer,
         # v2.11 A16: Environment-specific audience prevents cross-env token replay
+        # v3.1: ENVIRONMENT must be set in Lambda environment variables via Terraform:
+        #       environment { variables = { ENVIRONMENT = var.environment } }
         "aud": f"sentiment-analyzer-api-{os.environ.get('ENVIRONMENT', 'dev')}",
     }
 
@@ -1357,6 +1420,7 @@ async def validate_jwt_global(token: str) -> dict | None:
             algorithms=[config.algorithm],
             issuer="sentiment-analyzer",           # A3: Global, not per-endpoint
             audience="sentiment-analyzer-api",     # A3: Global, not per-endpoint
+            leeway=60,                             # v3.2 A17: 60s clock skew tolerance
             options={
                 "require": ["sub", "exp", "iat", "nbf", "aud", "ver", "rev", "sid"],
                 "verify_nbf": True,
@@ -1807,6 +1871,8 @@ async def refresh_tokens(request: Request) -> Response:
         raise HTTPException(401, "No refresh token")
 
     # 2. Hash token for storage lookup (never store plaintext)
+    # v3.1: Verification flow: client sends plaintext → server hashes → compares to stored hash
+    # This prevents DB breach from exposing usable tokens (SHA-256 is one-way)
     token_hash = hashlib.sha256(refresh_token.encode()).hexdigest()
 
     # ┌─────────────────────────────────────────────────────────────────┐
@@ -1879,7 +1945,14 @@ async def refresh_tokens(request: Request) -> Response:
     access_token = create_access_token(user)
 
     # 7. Return with new cookie
-    resp = JSONResponse({"access_token": access_token, "user": user.to_dict()})
+    # v3.2: Include refreshExpiresAt for client-side proactive refresh
+    refresh_expires_at = (datetime.now(UTC) + timedelta(days=7)).isoformat()
+    resp = JSONResponse({
+        "access_token": access_token,
+        "expires_in": 900,  # 15 minutes in seconds
+        "refresh_expires_at": refresh_expires_at,  # v3.2: For proactive refresh
+        "user": user.to_dict(),
+    })
     resp.set_cookie(
         key="refresh_token",
         value=new_refresh_token,
@@ -2180,8 +2253,9 @@ Plus `Set-Cookie` header for refresh token.
        """
        Signout using JWT session_id, not refresh token cookie.
 
-       v2.8 CHANGE: Cookie path is /api/v2/auth/refresh, so signout
-       endpoint won't receive the cookie. Use JWT sid claim instead.
+       v3.0 UPDATE: Cookie path widened to /api/v2/auth, so signout
+       endpoint CAN receive the cookie (for clearing). JWT sid is still
+       used for session identification (more secure than cookie-based).
 
        Requires: Authorization: Bearer <access_token> header
        """
@@ -2333,12 +2407,14 @@ interface AuthActions {
   setLoading: (loading: boolean) => void;
   setInitialized: () => void;
   setError: (error: string | null) => void;
-
-  // Computed getters
-  isAuthenticated: () => boolean;
-  isAnonymous: () => boolean;
-  hasRole: (role: string) => boolean;
 }
+
+// v3.1: Use selectors for reactive state access (not store getters)
+// Custom hooks provide clean API and proper reactivity:
+export const useIsAuthenticated = () => useAuthStore((s) => !!s.accessToken);
+export const useIsAnonymous = () => useAuthStore((s) => s.user?.roles.includes('anonymous') ?? false);
+export const useHasRole = (role: string) => useAuthStore((s) => s.user?.roles.includes(role) ?? false);
+export const useUser = () => useAuthStore((s) => s.user);
 
 export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
   // Initial state
@@ -2348,10 +2424,12 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
   isInitialized: false,
   error: null,
 
-  // Computed
-  isAuthenticated: () => get().accessToken !== null,
-  isAnonymous: () => get().user?.roles.includes('anonymous') ?? false,
-  hasRole: (role: string) => get().user?.roles.includes(role) ?? false,
+  // Note: These are internal helpers. For reactive usage in components, use selectors:
+  //   const isAuthenticated = useAuthStore((s) => s.accessToken !== null);
+  //   const isAnonymous = useAuthStore((s) => s.user?.roles.includes('anonymous') ?? false);
+  // Or use custom hooks (recommended):
+  //   export const useIsAuthenticated = () => useAuthStore((s) => !!s.accessToken);
+  //   export const useHasRole = (role: string) => useAuthStore((s) => s.user?.roles.includes(role) ?? false);
 
   // Actions
   setAuth: (token, user) => set({
@@ -3442,13 +3520,22 @@ async signout() {
     // Clear local state
     this.clearAuth();
 
-    // Notify other tabs
+    // Notify other tabs BEFORE destroying channel
     crossTabSync.broadcast({
       type: 'LOGOUT',
       timestamp: Date.now(),
     });
+
+    // v3.1: Cleanup BroadcastChannel to prevent memory leaks
+    // destroy() AFTER broadcast so other tabs receive the logout message
+    crossTabSync.destroy();
   }
 }
+
+// v3.1: Also cleanup on app unmount (React)
+// useEffect(() => {
+//   return () => crossTabSync.destroy();
+// }, []);
 ```
 
 **Browser Compatibility:**
@@ -3608,7 +3695,7 @@ DELETE /api/v2/auth/sessions/{hash_prefix} → revoke specific session
 
 **Why we're compatible**:
 1. **First-party context**: Our cookies are same-origin, not third-party
-2. **SameSite=Strict**: No cross-site access, reduces ITP triggers
+2. **SameSite=None**: Required for OAuth/CORS (CSRF handled via tokens, not SameSite)
 3. **User interaction**: Active users interact regularly, resetting 7-day window
 4. **httpOnly**: Not accessible to JavaScript, less "tracking" behavior
 
@@ -3655,32 +3742,33 @@ async function initSession() {
 
 **Scenario**: User upgrades from free to paid mid-session.
 
-**Problem**: User's current access token has `tier: "free"`. After Stripe payment:
-- Token still says `tier: "free"` for up to 15 minutes
+**Problem**: User's current access token has `role: "free"`. After Stripe payment:
+- Token still says `role: "free"` for up to 15 minutes
 - Premium features should be available immediately
 - User expects instant access after payment
 
-**Resolution**: Force token refresh after tier change.
+**Resolution**: Force token refresh after role change.
 
 **Backend Flow (v2.9 H5 FIX: Atomic Transaction)**:
 ```python
 # Stripe webhook handler
 # v2.9 H5: MUST use DynamoDB TransactWriteItems for atomicity
+# v3.0: tier → role (tier concept removed)
 
 async def handle_subscription_created(event: StripeEvent):
     user_id = event.data.object.metadata.get("user_id")
-    tier = map_stripe_plan_to_tier(event.data.object.plan.id)
+    role = map_stripe_plan_to_role(event.data.object.plan.id)  # v3.0: was tier
 
     # ┌─────────────────────────────────────────────────────────────────┐
-    # │ v2.9 H5 FIX: ATOMIC TIER + REVOCATION UPDATE                    │
+    # │ v2.9 H5 FIX: ATOMIC ROLE + REVOCATION UPDATE (v3.0: was tier)   │
     # │                                                                 │
-    # │ Problem: If tier updates but revocation_id fails:               │
-    # │   - User has new tier in database                               │
+    # │ Problem: If role updates but revocation_id fails:               │
+    # │   - User has new role in database                               │
     # │   - But old tokens still valid (rev not incremented)            │
     # │   - User sees paid features with stale token (inconsistent)     │
     # │                                                                 │
     # │ Solution: DynamoDB TransactWriteItems (all-or-nothing)          │
-    # │   - Either BOTH tier and revocation_id update                   │
+    # │   - Either BOTH role and revocation_id update                   │
     # │   - Or NEITHER updates (safe to retry webhook)                  │
     # └─────────────────────────────────────────────────────────────────┘
 
@@ -3691,9 +3779,9 @@ async def handle_subscription_created(event: StripeEvent):
                     "Update": {
                         "TableName": "Users",
                         "Key": {"PK": {"S": f"USER#{user_id}"}, "SK": {"S": "PROFILE"}},
-                        "UpdateExpression": "SET tier = :tier, updated_at = :now",
+                        "UpdateExpression": "SET role = :role, updated_at = :now",
                         "ExpressionAttributeValues": {
-                            ":tier": {"S": tier},
+                            ":role": {"S": role},
                             ":now": {"S": datetime.now(UTC).isoformat()},
                         },
                     }
@@ -3710,13 +3798,13 @@ async def handle_subscription_created(event: StripeEvent):
                 },
             ]
         )
-        logger.info("tier_upgrade_atomic", user_id=user_id, tier=tier)
+        logger.info("role_upgrade_atomic", user_id=user_id, role=role)
     except ClientError as e:
-        logger.error("tier_upgrade_failed", user_id=user_id, error=str(e))
+        logger.error("role_upgrade_failed", user_id=user_id, error=str(e))
         raise  # Stripe will retry webhook
 
     # Optional: Send push notification for instant refresh
-    await notify_user_tier_changed(user_id, tier)
+    await notify_user_role_changed(user_id, role)
 ```
 
 **Frontend Flow (v2.9 H5 FIX: Exponential Backoff)**:
@@ -3748,7 +3836,7 @@ async function handlePaymentSuccess(sessionId: string) {
     attempt++;
     try {
       const response = await authApi.refresh();
-      if (response.user.tier === 'paid') {
+      if (response.user.roles.includes('paid')) {  // v3.0: roles array, not tier field
         // Success! Update local state
         useAuthStore.getState().setUser(response.user);
 
@@ -3759,12 +3847,12 @@ async function handlePaymentSuccess(sessionId: string) {
           userId: response.user.id,
         });
 
-        logger.info('tier_upgrade_detected', { attempt, elapsedMs });
+        logger.info('role_upgrade_detected', { attempt, elapsedMs });
         return;
       }
     } catch (error) {
       // Refresh failed (network error, etc.) - continue polling
-      logger.warn('tier_poll_error', { attempt, error: String(error) });
+      logger.warn('role_poll_error', { attempt, error: String(error) });
     }
 
     // Exponential backoff: 1s, 2s, 4s, 8s, 16s, ...
@@ -3787,14 +3875,15 @@ async function handlePaymentSuccess(sessionId: string) {
 Instead of polling, backend can immediately invalidate tokens:
 
 ```python
-async def handle_tier_upgrade(user_id: str, new_tier: str):
-    # Update tier
-    await update_user_tier(user_id, new_tier)
+async def handle_role_change(user_id: str, new_role: str):
+    """v3.2: Renamed from handle_tier_upgrade (tier concept removed)."""
+    # Update role
+    await update_user_role(user_id, new_role)
 
     # Invalidate ALL current tokens (forces refresh everywhere)
     await increment_revocation_id(user_id)
 
-    # Next API call with old token → 401 → automatic refresh → new tier
+    # Next API call with old token → 401 → automatic refresh → new role
 ```
 
 **Cross-Tab Tier Sync**:
@@ -3803,6 +3892,51 @@ After upgrade, all tabs need new tokens. Two approaches:
 2. **Eager**: BroadcastChannel triggers immediate refresh in all tabs
 
 **Recommended**: Lazy (simpler, no extra code). 401 interceptor already handles this.
+
+### v3.2: Proactive Token Refresh
+
+**Problem**: Access token is valid but refresh token is about to expire. If we wait for 401,
+the refresh will fail because the refresh token has expired.
+
+**Solution**: Server returns `refreshExpiresAt` in refresh response. Client proactively
+requests new refresh token before it expires.
+
+```typescript
+// Frontend: useRefreshCoordinator.ts
+
+interface RefreshResponse {
+  access_token: string;
+  expires_in: number;           // Access token lifetime (seconds)
+  refresh_expires_at: string;   // ISO8601 timestamp for refresh token expiry
+  user: User;
+}
+
+const PROACTIVE_REFRESH_THRESHOLD = 0.8;  // Refresh at 80% of lifetime
+
+function scheduleProactiveRefresh(response: RefreshResponse) {
+  const accessExpiresIn = response.expires_in * 1000;  // Convert to ms
+  const refreshExpiresAt = new Date(response.refresh_expires_at).getTime();
+  const now = Date.now();
+
+  // Calculate next access token refresh (at 80% of lifetime)
+  const nextAccessRefresh = now + (accessExpiresIn * PROACTIVE_REFRESH_THRESHOLD);
+
+  // If next access refresh would be AFTER refresh token expires,
+  // schedule refresh token renewal instead
+  if (nextAccessRefresh > refreshExpiresAt - 60000) {  // 1 min buffer
+    // Refresh token is about to expire - call /extend endpoint
+    scheduleRefreshTokenRenewal(refreshExpiresAt);
+  } else {
+    // Normal case - schedule access token refresh
+    setTimeout(() => refreshAccessToken(), accessExpiresIn * PROACTIVE_REFRESH_THRESHOLD);
+  }
+}
+```
+
+**Endpoint for refresh token renewal**: `POST /api/v2/auth/extend`
+- Requires valid access token (user must be authenticated)
+- Issues new refresh token with fresh 7-day lifetime
+- Use case: Long-running sessions that exceed refresh token lifetime
 
 **Edge Cases**:
 - **Downgrade**: Same flow - increment revocation_id, force refresh
@@ -3990,6 +4124,485 @@ The following nested structures were removed as vestigial:
 
 ---
 
+## v3.2: Identity Federation Model
+
+### Problem Statement
+
+Users can authenticate via multiple methods (email magic link, Google OAuth, GitHub OAuth).
+The system must handle:
+1. Account linking when same user uses multiple auth methods
+2. Verification state (pending vs verified)
+3. Preventing account takeover via OAuth email spoofing
+4. Audit trail for identity changes
+
+### Core Principle: Verified Email is the Anchor
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      IDENTITY RECORD                        │
+├─────────────────────────────────────────────────────────────┤
+│ user_id: "uuid"                ← Immutable primary key      │
+│ primary_email: "ceo@gmail.com" ← Verified, canonical        │
+│ linked_providers: ["email", "google", "github"]             │
+│ last_provider_used: "google"   ← For avatar selection       │
+│ provider_metadata: {                                        │
+│   "google": { sub: "goog-123", avatar: "...", linked_at }   │
+│   "github": { sub: "gh-456", avatar: "...", linked_at }     │
+│   "email": { verified_at: "...", linked_at }                │
+│ }                                                           │
+│ role: "free"                                                │
+│ verification: "verified"                                    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### User Model Extension (v3.2)
+
+```python
+# src/lambdas/shared/models/user.py
+
+from pydantic import BaseModel
+from datetime import datetime
+from typing import Literal
+
+
+class ProviderMetadata(BaseModel):
+    """Metadata for a linked auth provider."""
+    sub: str | None = None           # Provider's subject claim (OAuth only)
+    email: str | None = None         # Email from this provider
+    avatar: str | None = None        # Avatar URL from provider
+    linked_at: datetime              # When this provider was linked
+    verified_at: datetime | None = None  # For email provider
+
+
+class User(BaseModel):
+    user_id: str
+    created_at: datetime
+
+    # Role (v3.0: tier removed, role = tier)
+    role: Literal["anonymous", "free", "paid", "operator"] = "anonymous"
+
+    # v3.2: Verification state
+    verification: Literal["none", "pending", "verified"] = "none"
+    pending_email: str | None = None  # Only set when verification="pending"
+
+    # v3.2: Identity anchors (only populated when verified)
+    primary_email: str | None = None  # Set on first verification
+    linked_providers: list[Literal["email", "google", "github"]] = []
+    provider_metadata: dict[str, ProviderMetadata] = {}
+    last_provider_used: Literal["email", "google", "github"] | None = None
+
+    # Role assignment tracking
+    role_assigned_at: datetime | None = None
+    role_assigned_by: str | None = None  # "stripe_webhook" or "admin:{user_id}"
+
+    def get_avatar(self) -> str | None:
+        """Get avatar from most recently used provider."""
+        if self.last_provider_used and self.last_provider_used in self.provider_metadata:
+            return self.provider_metadata[self.last_provider_used].avatar
+        return None
+```
+
+### State Machine
+
+```
+                    ┌──────────────┐
+                    │  anonymous   │
+                    │ verification │
+                    │    =none     │
+                    └──────┬───────┘
+                           │
+           ┌───────────────┼───────────────┐
+           │               │               │
+           ▼               ▼               ▼
+    ┌─────────────┐  ┌───────────┐  ┌─────────────┐
+    │  anonymous  │  │   free    │  │    free     │
+    │ verification│  │ :google   │  │   :github   │
+    │  =pending   │  │ verified  │  │  verified   │
+    │ (email      │  │ by OAuth  │  │   by OAuth  │
+    │  claimed)   │  └─────┬─────┘  └──────┬──────┘
+    └──────┬──────┘        │               │
+           │               │               │
+           │ click         │               │
+           │ magic link    │               │
+           ▼               │               │
+    ┌─────────────┐        │               │
+    │    free     │        │               │
+    │   :email    │◄───────┴───────────────┘
+    │  verified   │        (can link)
+    └─────────────┘
+```
+
+### Identity Linking Flows
+
+#### Flow 1: Anonymous → Email Magic Link
+
+```python
+async def request_magic_link(email: str, session: Session) -> None:
+    """
+    Anonymous user requests magic link verification.
+    User stays anonymous until link is clicked.
+    """
+    # Update session to pending state
+    session.verification = "pending"
+    session.pending_email = email.lower()
+    await save_session(session)
+
+    # Generate and send magic link
+    token = generate_magic_link_token(email, session.session_id)
+    await send_magic_link_email(email, token)
+
+    # Audit log
+    log_auth_event(
+        AuthEventType.VERIFICATION_STARTED,
+        session_id=session.session_id,
+        auth_method="email",
+    )
+
+
+async def verify_magic_link(token: str, session: Session) -> User:
+    """
+    User clicks magic link. Upgrade to free:verified.
+    """
+    claims = verify_magic_link_token(token)
+    email = claims["email"]
+
+    # Check if email already exists (account linking scenario)
+    existing_user = await get_user_by_email(email)
+
+    if existing_user:
+        # Link to existing account
+        user = existing_user
+    else:
+        # Create new user
+        user = User(
+            user_id=str(uuid.uuid4()),
+            created_at=datetime.now(UTC),
+            role="free",
+            verification="verified",
+            primary_email=email,
+            linked_providers=["email"],
+            provider_metadata={
+                "email": ProviderMetadata(
+                    email=email,
+                    linked_at=datetime.now(UTC),
+                    verified_at=datetime.now(UTC),
+                )
+            },
+            last_provider_used="email",
+        )
+        await save_user(user)
+
+    # Clear pending state
+    session.verification = "verified"
+    session.pending_email = None
+    session.user_id = user.user_id
+
+    log_auth_event(
+        AuthEventType.VERIFICATION_COMPLETED,
+        user_id=user.user_id,
+        auth_method="email",
+    )
+
+    return user
+```
+
+#### Flow 2: Anonymous:pending → OAuth (Abandons Pending Verification)
+
+```python
+async def handle_oauth_callback(
+    provider: str,
+    oauth_claims: dict,
+    session: Session,
+) -> User:
+    """
+    OAuth callback. If session had pending email verification, abandon it.
+    """
+    email = oauth_claims.get("email", "").lower()
+    email_verified = oauth_claims.get("email_verified", False)
+
+    # v3.2: CRITICAL - Require email_verified from OAuth provider
+    if not email_verified:
+        raise AuthError("AUTH_022", "Email not verified by provider")
+
+    # If session was pending verification, abandon it
+    if session.verification == "pending":
+        log_auth_event(
+            AuthEventType.VERIFICATION_ABANDONED,
+            session_id=session.session_id,
+            auth_method="email",
+            provider=provider,  # Reason: superseded by OAuth
+        )
+        session.pending_email = None
+
+    # Check for existing user with this OAuth sub
+    existing_user = await get_user_by_provider_sub(provider, oauth_claims["sub"])
+
+    if existing_user:
+        user = existing_user
+        user.last_provider_used = provider
+    else:
+        # Check for existing user with same verified email (potential link)
+        existing_email_user = await get_user_by_email(email)
+        if existing_email_user:
+            # Will prompt for linking in UI
+            return await prompt_account_link(existing_email_user, provider, oauth_claims)
+
+        # Create new user
+        user = User(
+            user_id=str(uuid.uuid4()),
+            created_at=datetime.now(UTC),
+            role="free",
+            verification="verified",
+            primary_email=email,
+            linked_providers=[provider],
+            provider_metadata={
+                provider: ProviderMetadata(
+                    sub=oauth_claims["sub"],
+                    email=email,
+                    avatar=oauth_claims.get("picture"),
+                    linked_at=datetime.now(UTC),
+                )
+            },
+            last_provider_used=provider,
+        )
+        await save_user(user)
+
+    session.verification = "verified"
+    session.user_id = user.user_id
+
+    log_auth_event(
+        AuthEventType.LOGIN_SUCCESS,
+        user_id=user.user_id,
+        auth_method=provider,
+    )
+
+    return user
+```
+
+#### Flow 3: Free:email → OAuth (Linking - Same Domain Auto-Link)
+
+```python
+async def link_oauth_to_existing(
+    user: User,
+    provider: str,
+    oauth_claims: dict,
+    auto_link: bool,
+) -> User:
+    """
+    Link OAuth provider to existing email-verified user.
+
+    auto_link=True for same-domain (e.g., @gmail.com → Google)
+    auto_link=False requires user confirmation prompt
+    """
+    oauth_email = oauth_claims.get("email", "").lower()
+    email_verified = oauth_claims.get("email_verified", False)
+
+    if not email_verified:
+        raise AuthError("AUTH_022", "Email not verified by provider")
+
+    # Check if this provider sub is already linked to another user
+    existing = await get_user_by_provider_sub(provider, oauth_claims["sub"])
+    if existing and existing.user_id != user.user_id:
+        raise AuthError("AUTH_023", "This OAuth account is already linked")
+
+    # Add provider to user
+    if provider not in user.linked_providers:
+        user.linked_providers.append(provider)
+
+    user.provider_metadata[provider] = ProviderMetadata(
+        sub=oauth_claims["sub"],
+        email=oauth_email,
+        avatar=oauth_claims.get("picture"),
+        linked_at=datetime.now(UTC),
+    )
+    user.last_provider_used = provider
+    await save_user(user)
+
+    log_auth_event(
+        AuthEventType.AUTH_METHOD_LINKED,
+        user_id=user.user_id,
+        provider=provider,
+        link_type="auto" if auto_link else "manual",
+    )
+
+    return user
+```
+
+#### Flow 4: Free:google → Email Magic Link (Linking)
+
+```python
+async def link_email_to_oauth_user(
+    user: User,
+    email: str,
+) -> None:
+    """
+    OAuth user adds email verification.
+    Send magic link, link on verification.
+    """
+    if "email" in user.linked_providers:
+        raise ValueError("Email already linked")
+
+    # Store pending link
+    user.pending_email = email.lower()
+    await save_user(user)
+
+    # Generate and send magic link with user context
+    token = generate_magic_link_token(email, user_id=user.user_id)
+    await send_magic_link_email(email, token)
+
+
+async def complete_email_link(token: str, user: User) -> User:
+    """Called when OAuth user clicks magic link to add email."""
+    claims = verify_magic_link_token(token)
+    email = claims["email"]
+
+    if "email" not in user.linked_providers:
+        user.linked_providers.append("email")
+
+    user.provider_metadata["email"] = ProviderMetadata(
+        email=email,
+        linked_at=datetime.now(UTC),
+        verified_at=datetime.now(UTC),
+    )
+    user.pending_email = None
+    await save_user(user)
+
+    log_auth_event(
+        AuthEventType.AUTH_METHOD_LINKED,
+        user_id=user.user_id,
+        provider="email",
+        link_type="manual",
+    )
+
+    return user
+```
+
+#### Flow 5: OAuth → OAuth (Auto-Link)
+
+```python
+async def link_second_oauth(
+    user: User,
+    new_provider: str,
+    oauth_claims: dict,
+) -> User:
+    """
+    User with one OAuth adds another OAuth.
+    Auto-link since both are already verified by providers.
+    """
+    email_verified = oauth_claims.get("email_verified", False)
+    if not email_verified:
+        raise AuthError("AUTH_022", "Email not verified by provider")
+
+    # Both are OAuth - auto-link (both verified by trusted providers)
+    if new_provider not in user.linked_providers:
+        user.linked_providers.append(new_provider)
+
+    user.provider_metadata[new_provider] = ProviderMetadata(
+        sub=oauth_claims["sub"],
+        email=oauth_claims.get("email", "").lower(),
+        avatar=oauth_claims.get("picture"),
+        linked_at=datetime.now(UTC),
+    )
+    user.last_provider_used = new_provider
+    await save_user(user)
+
+    log_auth_event(
+        AuthEventType.AUTH_METHOD_LINKED,
+        user_id=user.user_id,
+        provider=new_provider,
+        link_type="auto",  # OAuth-to-OAuth is always auto
+    )
+
+    return user
+```
+
+### Linking Rules Table
+
+| Current State | Action | Same Email Domain? | Result |
+|---------------|--------|-------------------|--------|
+| anonymous | Magic link click | N/A | → free:email |
+| anonymous | Google OAuth | N/A | → free:google |
+| anonymous | GitHub OAuth | N/A | → free:github |
+| anonymous:pending | OAuth success | N/A | Abandon pending, → free:oauth |
+| free:email | Google OAuth | YES (@gmail.com) | Auto-link |
+| free:email | Google OAuth | NO | Prompt: Link or separate? |
+| free:email | GitHub OAuth | N/A | Prompt: Link or separate? |
+| free:google | GitHub OAuth | N/A | Auto-link (both OAuth) |
+| free:google | Magic link | N/A | Link on click |
+| free:github | Google OAuth | N/A | Auto-link (both OAuth) |
+
+### Email Verified Gate
+
+```python
+def can_auto_link_oauth(oauth_claims: dict, existing_user: User) -> bool:
+    """
+    Determine if OAuth can auto-link to existing account.
+
+    CRITICAL: Only auto-link if OAuth provider VERIFIED the email.
+    """
+    oauth_email = oauth_claims.get("email", "").lower()
+    email_verified = oauth_claims.get("email_verified", False)
+
+    # NEVER auto-link unverified OAuth email
+    if not email_verified:
+        return False
+
+    # Domain-based auto-link rules
+    provider = oauth_claims.get("iss", "")
+
+    # Google verifying @gmail.com is authoritative
+    if oauth_email.endswith("@gmail.com") and "google" in provider.lower():
+        return True
+
+    # GitHub OAuth is opaque - never auto-link by email
+    # (GitHub email could be any domain)
+    if "github" in provider.lower():
+        return False
+
+    # Cross-domain: require explicit confirmation
+    return False
+```
+
+### GitHub OAuth: Opaque Identity
+
+GitHub OAuth is treated as an opaque identity independent of email:
+- GitHub's `sub` claim is the identity anchor, NOT the email
+- Even if GitHub returns `ceo@gmail.com`, we do NOT auto-link to Google
+- User must explicitly link via magic link verification
+
+**Rationale**: GitHub allows any email domain, so email cannot be trusted
+for identity matching. Google verifying `@gmail.com` IS authoritative.
+
+### UI Prompts
+
+#### Link Prompt (Different Domain)
+
+```typescript
+// When free:email user authenticates with Google (different domain)
+interface LinkPromptProps {
+  existingMethod: "email";
+  existingEmail: string;  // Masked: "c**@hotmail.com"
+  newProvider: "google";
+  newEmail: string;       // Masked: "c**@gmail.com"
+}
+
+// UI shows:
+// "You're signed in with c**@hotmail.com.
+//  Would you like to link your Google account (c**@gmail.com)?
+//  [Link Accounts] [Use Google Only]"
+```
+
+#### Abandoned Verification Banner
+
+```typescript
+// When anonymous:pending user authenticates with OAuth
+// UI shows:
+// "Signed in with Google. Your email verification for c**@hotmail.com
+//  was cancelled. You can add it later in Settings."
+```
+
+---
+
 ## Complete DynamoDB Schema Reference (v2.8 NEW)
 
 All auth-related DynamoDB tables and access patterns.
@@ -4005,7 +4618,7 @@ Attributes:
   - email: str | null
   - email_hash: str (for GSI, privacy)
   - auth_type: "anonymous" | "email" | "google" | "github"
-  - tier: str | null ("free", "paid", "operator")
+  - role: str = "anonymous"  # v3.0: Was "tier". Values: "anonymous", "free", "paid", "operator"
   - revocation_id: int = 0  # v2.8: Increment on password change
   - created_at: ISO8601
   - updated_at: ISO8601
@@ -4338,7 +4951,6 @@ from boto3.dynamodb.conditions import Key
 async def create_session_with_limit_enforcement(
     user_id: str,
     roles: list[str],
-    tier: str | None,
     device_info: dict,
     table,
     dynamodb_client,  # v2.9 B4: Need client for atomic revoke_session
@@ -4347,26 +4959,25 @@ async def create_session_with_limit_enforcement(
     """
     Create session with concurrent session limit enforcement.
 
-    v2.8: Uses role for anonymous, tier for authenticated.
-    v2.9 H2 FIX: Caller MUST pass the NEW (post-transition) roles/tier.
+    v3.2: tier parameter removed (role = tier, single concept).
+    v2.9 H2 FIX: Caller MUST pass the NEW (post-transition) roles.
 
     ┌─────────────────────────────────────────────────────────────────┐
-    │ CRITICAL: Anonymous → Authenticated Transition                  │
+    │ CRITICAL: Anonymous → Free Transition                           │
     │                                                                 │
     │ When user logs in (magic link, OAuth), the CALLER must pass    │
-    │ the NEW roles/tier, not the old anonymous ones.                │
+    │ the NEW roles, not the old anonymous ones.                     │
     │                                                                 │
     │ WRONG (breaks login at session limit):                         │
     │   # User is anonymous with 1 session (at limit)                │
     │   roles = ["anonymous"]  # OLD role                            │
-    │   tier = None                                                  │
-    │   limit = get_session_limit(roles, tier)  # Returns 1          │
+    │   limit = get_session_limit(roles)  # Returns 1                │
     │   # Login fails because we're already at limit!                │
     │                                                                 │
     │ CORRECT (allows login with higher limit):                      │
     │   # User is logging in, assign NEW role FIRST                  │
     │   roles = ["free"]           # v3.0: NEW role after login      │
-    │   limit = get_session_limit(roles)  # Returns 3                │
+    │   limit = get_session_limit(roles)  # Returns 5                │
     │   # Login succeeds, old anonymous session can be evicted       │
     │                                                                 │
     │ The login endpoint MUST:                                       │
@@ -4544,20 +5155,21 @@ async def consume_oauth_state(
         return None
 ```
 
-### G6: update_user_tier()
+### G6: update_user_role() (v3.0: was update_user_tier)
 
 ```python
 # src/lambdas/shared/auth/users.py
 
-async def update_user_tier(
+async def update_user_role(
     user_id: str,
-    tier: str,
+    role: str,  # v3.0: was "tier"
     table,
     logger,
 ) -> None:
     """
-    Update user's billing tier.
+    Update user's role.
 
+    v3.0: Renamed from update_user_tier (tier concept removed, role = tier).
     Called by Stripe webhook on subscription change.
     Should be followed by increment_revocation_id() to force token refresh.
     """
@@ -4566,21 +5178,21 @@ async def update_user_tier(
     await table.update_item(
         Key={"PK": f"USER#{user_id}", "SK": "PROFILE"},
         UpdateExpression="""
-            SET tier = :tier,
+            SET role = :role,
                 subscription_active = :active,
                 updated_at = :now
         """,
         ExpressionAttributeValues={
-            ":tier": tier,
-            ":active": tier != "free",
+            ":role": role,
+            ":active": role == "paid",  # v3.0: Only "paid" role has active subscription
             ":now": now.isoformat(),
         },
     )
 
     logger.info(
-        "user_tier_updated",
+        "user_role_updated",
         user_id=user_id,
-        tier=tier,
+        role=role,
     )
 ```
 
@@ -4589,11 +5201,18 @@ async def update_user_tier(
 ## Out of Scope (Future Work)
 
 1. **Paid role assignment** - Requires billing integration (Phase 3+)
+   - Stub: `POST /api/v2/webhooks/stripe` receives `customer.subscription.created/deleted`
+   - Updates `user.role` to "paid" or "free" based on subscription status
+   - Calls `handle_role_change()` to invalidate tokens
 2. **Operator role assignment** - Requires admin console (Phase 4+)
+   - Stub: `POST /api/v2/admin/users/{user_id}/role` with `{"role": "operator"}`
+   - Requires caller to have "operator" role
+   - Updates `user.role` and `user.role_assigned_by = "admin:{caller_id}"`
 3. **Multi-device session management** - Track sessions per device
 4. **Token revocation list** - Blacklist compromised tokens (allowlist preferred)
-5. **Audit logging** - Log all auth events
-6. **Account linking** - Multiple OAuth providers per user (see B4)
+5. **Audit logging** - Specified in v3.2, implementation in Phase 2
+6. **Account linking** - Specified in v3.2 Identity Federation section
+7. **jti collision detection** - DynamoDB conditional write on jti insert (v3.2)
 
 ---
 
@@ -4734,39 +5353,34 @@ Users can have unlimited active sessions across devices. This creates:
 
 ### Policy (v2.8 Clarification)
 
-**Session limits use ROLE for anonymous, TIER for authenticated:**
+**v3.0: Session limits by ROLE (tier concept removed):**
 
-| Lookup Key | Max Sessions | Eviction Policy | Notes |
-|------------|--------------|-----------------|-------|
-| role=`anonymous` | 1 | Replace existing | v2.8: Use role, not tier (anonymous has tier=null) |
-| tier=`free` | 3 | Oldest evicted | Default for authenticated users |
-| tier=`paid` | 5 | Oldest evicted | Subscription users |
-| tier=`operator` | 10 | Oldest evicted | Internal team |
+| Role | Max Sessions | Eviction Policy | Notes |
+|------|--------------|-----------------|-------|
+| `anonymous` | 1 | Replace existing | Ephemeral, single device |
+| `free` | 5 | Oldest evicted | Verified users (was "authenticated") |
+| `paid` | 10 | Oldest evicted | Subscription users |
+| `operator` | 50 | Oldest evicted | Internal team (was "admin") |
 
 **A6 FIX**: Anonymous users limited to 1 session to prevent DOS via session exhaustion.
 Anonymous sessions are ephemeral and should not persist across devices.
 
-**v2.8 Note**: Anonymous has `tier: null` (no billing relationship). Session limit lookup
-uses role membership, not tier field. This is consistent with role vs tier separation.
+**v3.0 Note**: Tier concept removed. Role now represents both access level AND billing tier.
+Session limit lookup uses role field directly.
 
 ### Implementation (v2.8 Updated)
 
 ```python
 # src/lambdas/shared/auth/session_manager.py
 
-# Session limits by tier (for authenticated users)
-SESSION_LIMITS_BY_TIER = {
-    "free": 3,
-    "paid": 5,
-    "operator": 10,
-}
-
 # v3.0: Session limits by role (tier concept removed)
+# Note: SESSION_LIMITS_BY_TIER removed in v3.0
+# v3.2: Reconciled values across all definitions
 SESSION_LIMITS_BY_ROLE = {
     "anonymous": 1,
-    "free": 3,
-    "paid": 5,
-    "operator": 10,
+    "free": 5,
+    "paid": 10,
+    "operator": 50,
 }
 
 
@@ -5063,6 +5677,13 @@ AUTH_ERRORS = {
     "AUTH_018": AuthError("AUTH_018", "Token audience invalid", 401),  # Wrong environment
     # v3.0: CSRF protection
     "AUTH_019": AuthError("AUTH_019", "Invalid CSRF token", 403),  # CSRF validation failed
+    # v3.2: jti blocklist error codes
+    "AUTH_020": AuthError("AUTH_020", "Token identifier missing", 401),  # jti claim missing
+    "AUTH_021": AuthError("AUTH_021", "Token has been revoked", 401),  # jti in blocklist
+    # v3.2: Identity federation error codes
+    "AUTH_022": AuthError("AUTH_022", "Email not verified by provider", 400),  # OAuth email_verified=false
+    "AUTH_023": AuthError("AUTH_023", "Account linking declined", 400),  # User rejected link prompt
+    "AUTH_024": AuthError("AUTH_024", "Verification pending", 400),  # Magic link not yet clicked
 }
 
 def raise_auth_error(code: str, **details):
@@ -5244,7 +5865,7 @@ def hash_email(email: str) -> str:
 
 def sanitize_claims(claims: dict) -> dict:
     """Extract only safe claims for logging."""
-    SAFE_CLAIMS = {"sub", "roles", "exp", "iat", "tier"}
+    SAFE_CLAIMS = {"sub", "roles", "exp", "iat"}  # v3.2: tier removed
     return {k: v for k, v in claims.items() if k in SAFE_CLAIMS}
 
 def log_auth_event(event_type: str, **kwargs):
@@ -5289,54 +5910,173 @@ All auth events MUST be logged with:
 }
 ```
 
+### v3.2: Audit Logging with AWS Lambda Powertools
+
+**Library**: AWS Lambda Powertools (already in requirements.txt v3.23.0)
+
+```python
+# src/lambdas/shared/logging/audit.py
+
+from aws_lambda_powertools import Logger
+from aws_lambda_powertools.logging import correlation_paths
+from datetime import datetime, UTC
+from enum import Enum
+
+logger = Logger(service="auth-service")
+
+
+class AuthEventType(str, Enum):
+    """All auth event types for audit logging."""
+    # Core auth events
+    LOGIN_SUCCESS = "LOGIN_SUCCESS"
+    LOGIN_FAILURE = "LOGIN_FAILURE"
+    LOGOUT = "LOGOUT"
+    TOKEN_REFRESH = "TOKEN_REFRESH"
+    SESSION_REVOKE = "SESSION_REVOKE"
+
+    # v3.2: Identity federation events
+    VERIFICATION_STARTED = "VERIFICATION_STARTED"
+    VERIFICATION_COMPLETED = "VERIFICATION_COMPLETED"
+    VERIFICATION_ABANDONED = "VERIFICATION_ABANDONED"
+    AUTH_METHOD_LINKED = "AUTH_METHOD_LINKED"
+    AUTH_METHOD_LINK_DECLINED = "AUTH_METHOD_LINK_DECLINED"
+    SESSION_PROVIDER_SWITCHED = "SESSION_PROVIDER_SWITCHED"
+
+    # Security events
+    SUSPICIOUS_ACTIVITY = "SUSPICIOUS_ACTIVITY"
+    RATE_LIMIT_EXCEEDED = "RATE_LIMIT_EXCEEDED"
+
+
+# Whitelist approach: ONLY these fields can be logged
+# NEVER log user-provided strings directly (CodeQL violation)
+AUTH_AUDIT_FIELDS = {
+    "event_type",       # From AuthEventType enum (not user input)
+    "timestamp_utc",    # Server-generated ISO8601
+    "user_id_prefix",   # First 8 chars only (truncated)
+    "auth_method",      # From fixed set: email, google, github, anonymous
+    "outcome",          # success, failure (not user input)
+    "failure_reason",   # From AUTH_ERRORS registry (not user input)
+    "client_ip_hash",   # SHA256, not raw IP (GDPR)
+    "session_prefix",   # First 8 chars of session_id
+    "provider",         # For linking events
+    "link_type",        # auto, manual
+}
+
+
+def log_auth_event(
+    event_type: AuthEventType,
+    user_id: str | None = None,
+    auth_method: str | None = None,
+    outcome: str = "success",
+    failure_reason: str | None = None,
+    client_ip: str | None = None,
+    session_id: str | None = None,
+    **extra_fields,
+) -> None:
+    """
+    Log auth event with PII sanitization.
+
+    IMPORTANT: Never log user-provided strings. All failure_reason
+    values MUST come from AUTH_ERRORS registry.
+    """
+    import hashlib
+
+    audit_entry = {
+        "event_type": event_type.value,
+        "timestamp_utc": datetime.now(UTC).isoformat(),
+        "outcome": outcome,
+    }
+
+    # Truncate/hash sensitive fields
+    if user_id:
+        audit_entry["user_id_prefix"] = user_id[:8]
+    if auth_method:
+        audit_entry["auth_method"] = auth_method
+    if failure_reason:
+        audit_entry["failure_reason"] = failure_reason  # MUST be from enum
+    if client_ip:
+        audit_entry["client_ip_hash"] = hashlib.sha256(client_ip.encode()).hexdigest()[:16]
+    if session_id:
+        audit_entry["session_prefix"] = session_id[:8]
+
+    # Only include extra fields that are in whitelist
+    for key, value in extra_fields.items():
+        if key in AUTH_AUDIT_FIELDS:
+            audit_entry[key] = value
+
+    logger.info("auth_audit_event", extra=audit_entry)
+
+
+# Decorator for Lambda handlers
+@logger.inject_lambda_context(correlation_id_path=correlation_paths.API_GATEWAY_REST)
+def handler(event, context):
+    # ... auth logic
+    log_auth_event(
+        AuthEventType.LOGIN_SUCCESS,
+        user_id=user.user_id,
+        auth_method="magic_link",
+    )
+```
+
+### Retention Policy
+
+| Destination | Retention | Use Case |
+|-------------|-----------|----------|
+| CloudWatch Logs | 90 days | Real-time alerting, debugging |
+| S3 (via subscription) | 1 year | Compliance, audit trail |
+| S3 Glacier | 7 years | Long-term compliance (SOC2) |
+
 ---
 
-## Cookie Security Hardening (v2.6, updated v2.8)
+## Cookie Security Hardening (v2.6 → v2.8 → v3.0)
 
 ### Problem
 
 `cookies.ts` uses incorrect settings:
-- `SameSite: Lax` (should be `Strict`)
-- `Path: /` (should be `/api/v2/auth/refresh` per v2.8)
+- `SameSite: Lax` (v2.6 said Strict, v3.0 uses None)
+- `Path: /` (should be `/api/v2/auth` per v3.0)
 
-### Correct Settings (v2.8)
+### Correct Settings (v3.0)
 
 | Attribute | Value | Reason |
 |-----------|-------|--------|
 | `HttpOnly` | `true` | Prevents XSS token theft |
-| `Secure` | `true` | HTTPS only |
-| `SameSite` | `Strict` | Prevents CSRF |
-| `Path` | `/api/v2/auth/refresh` | v2.8: Minimum exposure (refresh only) |
+| `Secure` | `true` | HTTPS only (REQUIRED with SameSite=None) |
+| `SameSite` | `None` | v3.0: Required for cross-origin OAuth redirect flows |
+| `Path` | `/api/v2/auth` | v3.0: All auth endpoints (refresh, signout, session) |
 | `Domain` | (not set) | Current domain only |
 | `Max-Age` | `604800` | 7 days (refresh token) |
 
-### Why Strict, Not Lax
+### Why None, Not Strict (v3.0 Decision)
 
-`Lax` allows cookies on top-level navigation (clicking links).
-`Strict` blocks cookies on ALL cross-site requests.
+**v2.6-v2.8 recommended Strict** for CSRF protection.
+**v3.0 changed to None** because:
 
-**Risk with Lax**: Attacker emails link `https://evil.com/redirect?to=https://api.example.com/api/v2/auth/refresh`. User clicks, browser sends cookie, attacker captures new tokens.
+1. **OAuth flows require cross-origin cookies**: When user redirects from Google/GitHub back to our callback, the browser treats this as cross-site. `SameSite=Strict` would block the cookie, breaking OAuth.
 
-**With Strict**: Cross-site navigation does NOT send cookies. User must already be on same-origin.
+2. **CSRF protection via tokens instead**: With `SameSite=None`, we MUST implement CSRF tokens (double-submit cookie pattern). This is specified in the CSRF Tokens section.
 
-### Path Restriction (v2.8 Update)
+3. **CORS configuration required**: `SameSite=None` only works with proper CORS setup (`credentials: 'include'`).
+
+**Tradeoff accepted**: Slightly more complex implementation (CSRF tokens) in exchange for OAuth compatibility.
+
+### Path Scope (v3.0 Update)
 
 `Path: /` exposes refresh cookie to:
 - `/api/v2/metrics` (not needed)
 - `/api/v2/admin` (not needed)
 - Any future endpoint
 
-~~`Path: /api/v2/auth` limits cookie to:~~
-~~- `/api/v2/auth/refresh` (needed)~~
-~~- `/api/v2/auth/logout` (needed)~~
+**v3.0**: `Path: /api/v2/auth` limits cookie to all auth endpoints:
+- `/api/v2/auth/refresh` ✅ receives cookie
+- `/api/v2/auth/signout` ✅ receives cookie (can clear it)
+- `/api/v2/auth/session` ✅ receives cookie
 
-**v2.8**: `Path: /api/v2/auth/refresh` limits cookie to:
-- `/api/v2/auth/refresh` ONLY
-
-**Why not include `/signout`?** (v2.8)
-- Signout uses JWT session_id (`sid` claim) to identify session, not cookie
-- Signout endpoint receives `Authorization: Bearer` header, not cookie
-- This is MORE secure: anonymous users cannot terminate sessions
+**Why signout receives cookie (v3.0)**:
+- v2.8 used narrow path `/api/v2/auth/refresh` → signout couldn't clear cookie
+- v3.0 widened to `/api/v2/auth` → signout CAN receive and clear cookie
+- Signout STILL uses JWT `sid` claim for session revocation (more secure)
+- Cookie access is for clearing only, not for authentication
 - Cookie is cleared via `Set-Cookie` with matching path, doesn't need to be received
 
 ### Implementation (Lambda Response) - v2.8 Updated
@@ -5408,11 +6148,11 @@ class SessionLimitRaceError(Exception):
 async def create_session_with_limit_enforcement(
     user_id: str,
     roles: list[str],
-    tier: str | None,
     device_info: dict,
 ) -> str:
     """
     Create session with atomic limit enforcement.
+    v3.2: tier parameter removed (role = tier, single concept).
 
     Uses DynamoDB transact_write_items for atomicity:
     1. ConditionCheck: session count < limit
@@ -5425,7 +6165,7 @@ async def create_session_with_limit_enforcement(
     now = datetime.now(UTC)
     expires_at = now + timedelta(days=7)
 
-    # Determine limit based on role (anonymous=1, authenticated=5, paid=10)
+    # v3.2: Determine limit based on role (anonymous=1, free=5, paid=10, operator=50)
     max_sessions = get_session_limit_for_roles(roles)
 
     # Query current sessions (for eviction candidate)
@@ -5612,6 +6352,8 @@ async def oauth_callback(
         raise HTTPException(400, detail={"code": "AUTH_015", "message": "Unknown provider"})
 
     # Get expected redirect_uri for this deployment
+    # v3.1: redirect_uri is server-derived (not user input) - implicit whitelist security
+    # The only valid redirect_uri values are our own callback endpoints
     redirect_uri = f"{settings.API_URL}/api/v2/auth/oauth/callback/{provider}"
 
     # Consume state with provider AND redirect_uri validation
@@ -5670,7 +6412,7 @@ async def create_access_token_atomic(
     # Read current revocation_id
     user_data = await table.get_item(
         Key={"PK": f"USER#{user.user_id}"},
-        ProjectionExpression="revocation_id, tier, email",
+        ProjectionExpression="revocation_id, role, email",  # v3.2: tier→role
     )
 
     if "Item" not in user_data:
