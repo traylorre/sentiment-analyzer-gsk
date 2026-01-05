@@ -1511,12 +1511,27 @@ def _generate_tokens(user: User) -> tuple[dict, str]:
     """Generate mock tokens for testing.
 
     In production, tokens come from Cognito.
+    SECURITY: Blocked in Lambda environment to prevent authentication bypass.
 
     Returns:
         Tuple of (tokens_for_body, refresh_token_for_cookie)
         - tokens_for_body: NEVER contains refresh_token
         - refresh_token_for_cookie: For HttpOnly cookie
+
+    Raises:
+        RuntimeError: If called in Lambda environment (AWS_LAMBDA_FUNCTION_NAME is set)
     """
+    # SECURITY GUARD: Block mock tokens in Lambda environment
+    if os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
+        logger.error(
+            "SECURITY: Mock token generation blocked in Lambda environment. "
+            "Production must use Cognito tokens."
+        )
+        raise RuntimeError(
+            "Mock token generation is disabled in Lambda environment. "
+            "Use real Cognito tokens in production."
+        )
+
     refresh_token = f"mock_refresh_token_{user.user_id[:8]}"
 
     # Body tokens - NO refresh_token (that goes in HttpOnly cookie)
