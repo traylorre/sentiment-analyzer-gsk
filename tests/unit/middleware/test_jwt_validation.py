@@ -28,22 +28,48 @@ def create_test_token(
     secret: str = TEST_SECRET,
     expires_in: timedelta = timedelta(minutes=15),
     issuer: str = "sentiment-analyzer",
+    audience: str | None = "sentiment-analyzer-api",
+    nbf_offset: timedelta = timedelta(seconds=0),
     algorithm: str = "HS256",
     include_iat: bool = True,
     include_exp: bool = True,
     include_sub: bool = True,
+    include_nbf: bool = True,
+    include_aud: bool = True,
 ) -> str:
-    """Create a test JWT token."""
+    """Create a test JWT token.
+
+    Feature 1147: Added audience and nbf parameters for CVSS 7.8 fix.
+
+    Args:
+        user_id: Subject claim value
+        secret: Signing secret
+        expires_in: Expiration offset from now
+        issuer: Issuer claim value
+        audience: Audience claim value (Feature 1147)
+        nbf_offset: Not-before offset from now (negative = past, positive = future)
+        algorithm: JWT algorithm
+        include_iat: Include issued-at claim
+        include_exp: Include expiration claim
+        include_sub: Include subject claim
+        include_nbf: Include not-before claim (Feature 1147)
+        include_aud: Include audience claim (Feature 1147)
+    """
     payload = {}
+    now = datetime.now(UTC)
 
     if include_sub:
         payload["sub"] = user_id
     if include_exp:
-        payload["exp"] = datetime.now(UTC) + expires_in
+        payload["exp"] = now + expires_in
     if include_iat:
-        payload["iat"] = datetime.now(UTC)
+        payload["iat"] = now
     if issuer:
         payload["iss"] = issuer
+    if include_nbf:
+        payload["nbf"] = now + nbf_offset
+    if include_aud and audience:
+        payload["aud"] = audience
 
     return jwt.encode(payload, secret, algorithm=algorithm)
 
@@ -110,7 +136,7 @@ class TestValidateJWT:
     def test_valid_jwt_token(self):
         """Valid JWT tokens should return JWTClaim with correct subject."""
         token = create_test_token()
-        config = JWTConfig(secret=TEST_SECRET)
+        config = JWTConfig(secret=TEST_SECRET, audience="sentiment-analyzer-api")
 
         claim = validate_jwt(token, config)
 
@@ -123,14 +149,16 @@ class TestValidateJWT:
     def test_expired_jwt_token(self):
         """Expired JWT tokens should return None."""
         token = create_test_token(expires_in=timedelta(seconds=-60))
-        config = JWTConfig(secret=TEST_SECRET, leeway_seconds=0)
+        config = JWTConfig(
+            secret=TEST_SECRET, audience="sentiment-analyzer-api", leeway_seconds=0
+        )
 
         claim = validate_jwt(token, config)
         assert claim is None
 
     def test_malformed_jwt_token(self):
         """Malformed JWT tokens should return None."""
-        config = JWTConfig(secret=TEST_SECRET)
+        config = JWTConfig(secret=TEST_SECRET, audience="sentiment-analyzer-api")
 
         # Not a valid JWT structure
         claim = validate_jwt("not.a.valid.jwt", config)
@@ -148,14 +176,14 @@ class TestValidateJWT:
         """JWT tokens with invalid signatures should return None."""
         # Create token with one secret, validate with another
         token = create_test_token(secret="wrong-secret")
-        config = JWTConfig(secret=TEST_SECRET)
+        config = JWTConfig(secret=TEST_SECRET, audience="sentiment-analyzer-api")
 
         claim = validate_jwt(token, config)
         assert claim is None
 
     def test_missing_required_claims(self):
         """JWT tokens missing sub/exp/iat should return None."""
-        config = JWTConfig(secret=TEST_SECRET)
+        config = JWTConfig(secret=TEST_SECRET, audience="sentiment-analyzer-api")
 
         # Missing sub
         token = create_test_token(include_sub=False)
@@ -175,7 +203,7 @@ class TestValidateJWT:
     def test_jwt_performance_benchmark(self):
         """1000 JWT validations should complete in <1 second."""
         token = create_test_token()
-        config = JWTConfig(secret=TEST_SECRET)
+        config = JWTConfig(secret=TEST_SECRET, audience="sentiment-analyzer-api")
 
         start_time = time.time()
         for _ in range(1000):
@@ -199,7 +227,11 @@ class TestValidateJWT:
     def test_invalid_issuer_rejected(self):
         """JWT with wrong issuer should return None."""
         token = create_test_token(issuer="wrong-issuer")
-        config = JWTConfig(secret=TEST_SECRET, issuer="expected-issuer")
+        config = JWTConfig(
+            secret=TEST_SECRET,
+            audience="sentiment-analyzer-api",
+            issuer="expected-issuer",
+        )
 
         claim = validate_jwt(token, config)
         assert claim is None
@@ -207,10 +239,106 @@ class TestValidateJWT:
     def test_issuer_validation_skipped_if_none(self):
         """Issuer validation should be skipped if config.issuer is None."""
         token = create_test_token(issuer="any-issuer")
-        config = JWTConfig(secret=TEST_SECRET, issuer=None)
+        config = JWTConfig(
+            secret=TEST_SECRET, audience="sentiment-analyzer-api", issuer=None
+        )
 
         claim = validate_jwt(token, config)
         assert claim is not None
+
+    # Feature 1147: Audience (aud) validation tests
+
+    def test_rejects_wrong_audience(self):
+        """Feature 1147 US1: JWT with wrong audience should return None.
+
+        Prevents cross-service token replay attacks (CVSS 7.8).
+        """
+        token = create_test_token(audience="other-service-api")
+        config = JWTConfig(secret=TEST_SECRET, audience="sentiment-analyzer-api")
+
+        claim = validate_jwt(token, config)
+        assert claim is None
+
+    def test_accepts_correct_audience(self):
+        """Feature 1147 US1: JWT with correct audience should be accepted."""
+        token = create_test_token(audience="sentiment-analyzer-api")
+        config = JWTConfig(secret=TEST_SECRET, audience="sentiment-analyzer-api")
+
+        claim = validate_jwt(token, config)
+        assert claim is not None
+        assert claim.subject == TEST_USER_ID
+
+    def test_rejects_missing_audience(self):
+        """Feature 1147 US1: JWT without audience claim should return None.
+
+        When config has audience set, tokens must include the aud claim.
+        """
+        token = create_test_token(include_aud=False)
+        config = JWTConfig(secret=TEST_SECRET, audience="sentiment-analyzer-api")
+
+        claim = validate_jwt(token, config)
+        assert claim is None
+
+    # Feature 1147: Not-Before (nbf) validation tests
+
+    def test_rejects_future_nbf(self):
+        """Feature 1147 US2: JWT with future nbf should return None.
+
+        Prevents pre-generated token attacks (CVSS 7.8).
+        Token with nbf 5 minutes in future should be rejected.
+        """
+        token = create_test_token(nbf_offset=timedelta(minutes=5))
+        config = JWTConfig(secret=TEST_SECRET, audience="sentiment-analyzer-api")
+
+        claim = validate_jwt(token, config)
+        assert claim is None
+
+    def test_accepts_past_nbf(self):
+        """Feature 1147 US2: JWT with nbf in past should be accepted."""
+        token = create_test_token(nbf_offset=timedelta(seconds=-60))
+        config = JWTConfig(secret=TEST_SECRET, audience="sentiment-analyzer-api")
+
+        claim = validate_jwt(token, config)
+        assert claim is not None
+
+    def test_rejects_missing_nbf(self):
+        """Feature 1147 US2: JWT without nbf claim should return None.
+
+        nbf is now a required claim per Feature 1147.
+        """
+        token = create_test_token(include_nbf=False)
+        config = JWTConfig(secret=TEST_SECRET, audience="sentiment-analyzer-api")
+
+        claim = validate_jwt(token, config)
+        assert claim is None
+
+    # Feature 1147: Clock skew tolerance (leeway) tests
+
+    def test_accepts_nbf_within_leeway(self):
+        """Feature 1147 US3: JWT with nbf slightly in future within leeway accepted.
+
+        Default leeway is 60 seconds. Token with nbf 30s in future should be accepted.
+        """
+        token = create_test_token(nbf_offset=timedelta(seconds=30))
+        config = JWTConfig(
+            secret=TEST_SECRET, audience="sentiment-analyzer-api", leeway_seconds=60
+        )
+
+        claim = validate_jwt(token, config)
+        assert claim is not None
+
+    def test_rejects_nbf_beyond_leeway(self):
+        """Feature 1147 US3: JWT with nbf beyond leeway should be rejected.
+
+        Default leeway is 60 seconds. Token with nbf 120s in future should be rejected.
+        """
+        token = create_test_token(nbf_offset=timedelta(seconds=120))
+        config = JWTConfig(
+            secret=TEST_SECRET, audience="sentiment-analyzer-api", leeway_seconds=60
+        )
+
+        claim = validate_jwt(token, config)
+        assert claim is None
 
 
 class TestExtractUserIdFromToken:
@@ -226,7 +354,10 @@ class TestExtractUserIdFromToken:
         """JWT tokens should return the subject claim."""
         token = create_test_token()
 
-        with patch.dict("os.environ", {"JWT_SECRET": TEST_SECRET}):
+        with patch.dict(
+            "os.environ",
+            {"JWT_SECRET": TEST_SECRET, "JWT_AUDIENCE": "sentiment-analyzer-api"},
+        ):
             result = _extract_user_id_from_token(token)
             assert result == TEST_USER_ID
 
@@ -244,7 +375,10 @@ class TestExtractUserId:
         token = create_test_token()
         event = {"headers": {"Authorization": f"Bearer {token}"}}
 
-        with patch.dict("os.environ", {"JWT_SECRET": TEST_SECRET}):
+        with patch.dict(
+            "os.environ",
+            {"JWT_SECRET": TEST_SECRET, "JWT_AUDIENCE": "sentiment-analyzer-api"},
+        ):
             user_id = extract_user_id(event)
             assert user_id == TEST_USER_ID
 

@@ -170,21 +170,32 @@ TEST_USER_ID = "12345678-1234-5678-1234-567812345678"
 
 
 def create_test_jwt(user_id: str = TEST_USER_ID) -> str:
-    """Create a valid JWT token for testing authenticated endpoints."""
+    """Create a valid JWT token for testing authenticated endpoints.
 
+    Feature 1147: Added aud and nbf claims for CVSS 7.8 security fix.
+    """
+    now = datetime.now(UTC)
     payload = {
         "sub": user_id,
-        "exp": datetime.now(UTC) + timedelta(minutes=15),
-        "iat": datetime.now(UTC),
+        "exp": now + timedelta(minutes=15),
+        "iat": now,
         "iss": "sentiment-analyzer",
+        "aud": "sentiment-analyzer-api",
+        "nbf": now,
     }
     return jwt.encode(payload, TEST_JWT_SECRET, algorithm="HS256")
 
 
 @pytest.fixture
 def jwt_env():
-    """Set JWT_SECRET environment variable for authenticated tests."""
-    with patch.dict(os.environ, {"JWT_SECRET": TEST_JWT_SECRET}):
+    """Set JWT environment variables for authenticated tests.
+
+    Feature 1147: Added JWT_AUDIENCE for aud claim validation.
+    """
+    with patch.dict(
+        os.environ,
+        {"JWT_SECRET": TEST_JWT_SECRET, "JWT_AUDIENCE": "sentiment-analyzer-api"},
+    ):
         yield
 
 
