@@ -705,14 +705,16 @@ class UserLookupResponse(BaseModel):
 
 
 @users_router.get("/lookup")
+@require_role("operator")
 async def lookup_user_by_email(
+    request: Request,
     email: EmailStr = Query(..., description="Email address to look up"),
     table=Depends(get_users_table),
 ):
     """Look up user by email address (T044).
 
     Feature 014: Uses GSI for O(1) lookup performance.
-    Requires admin authentication in production.
+    Protected by @require_role("operator") - Feature 1149.
 
     Returns:
         UserLookupResponse with found=true if user exists
