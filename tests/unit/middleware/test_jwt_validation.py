@@ -457,14 +457,17 @@ class TestJWTRolesClaim:
         assert claim is not None
         assert claim.roles == []
 
-    def test_missing_roles_claim(self):
-        """Feature 1152: Missing roles claim should result in None roles."""
+    def test_missing_roles_claim_rejected(self):
+        """Feature 1153: Missing roles claim should REJECT token (v3.0 breaking change).
+
+        v3.0 requires all tokens to have explicit roles claim. Tokens without
+        roles are rejected to prevent auto-promotion security bypass.
+        """
         token = create_test_token(include_roles=False)
         config = JWTConfig(secret=TEST_SECRET, audience="sentiment-analyzer-api")
 
         claim = validate_jwt(token, config)
-        assert claim is not None
-        assert claim.roles is None
+        assert claim is None  # Token REJECTED - missing roles
 
     def test_anonymous_role(self):
         """Feature 1152: Anonymous users should have ['anonymous'] role."""
@@ -474,3 +477,36 @@ class TestJWTRolesClaim:
         claim = validate_jwt(token, config)
         assert claim is not None
         assert claim.roles == ["anonymous"]
+
+    def test_null_roles_rejected(self):
+        """Feature 1153: null roles value should be REJECTED.
+
+        roles: null is not the same as roles: [] - null means missing.
+        """
+        # Create token with roles explicitly set to None (simulating "roles": null)
+        token = create_test_token(include_roles=False)
+        config = JWTConfig(secret=TEST_SECRET, audience="sentiment-analyzer-api")
+
+        claim = validate_jwt(token, config)
+        assert claim is None  # Null roles treated same as missing
+
+    def test_v3_breaking_change_forces_relogin(self):
+        """Feature 1153: v3.0 tokens without roles force re-authentication.
+
+        This is the core v3.0 breaking change. Old tokens (pre-1152/1153)
+        will be rejected, forcing users to re-login and get new tokens
+        with explicit roles claims.
+        """
+        # Simulate old token without roles
+        token = create_test_token(include_roles=False)
+        config = JWTConfig(secret=TEST_SECRET, audience="sentiment-analyzer-api")
+
+        # Old token should be rejected
+        claim = validate_jwt(token, config)
+        assert claim is None, "Old tokens without roles must be rejected"
+
+        # New token with roles should work
+        new_token = create_test_token(roles=["free"])
+        new_claim = validate_jwt(new_token, config)
+        assert new_claim is not None, "New tokens with roles must be accepted"
+        assert new_claim.roles == ["free"]
