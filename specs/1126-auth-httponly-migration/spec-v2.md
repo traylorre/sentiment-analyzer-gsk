@@ -4603,11 +4603,16 @@ interface LinkPromptProps {
 
 ---
 
-## Complete DynamoDB Schema Reference (v2.8 NEW)
+## Complete DynamoDB Schema Reference (v2.10 - Single-Table Design)
 
-All auth-related DynamoDB tables and access patterns.
+**ARCHITECTURE NOTE**: This application uses **single-table design**. All entity types
+share one DynamoDB table (`DATABASE_TABLE` env var) with PK/SK patterns distinguishing entities.
+This enables efficient transactions, reduces operational overhead, and is the recommended
+pattern for serverless applications.
 
-### Table: Users
+### Entity: User (IMPLEMENTED)
+
+**Source**: `src/lambdas/shared/models/user.py`
 
 ```
 PK: USER#<user_id>
@@ -4615,22 +4620,55 @@ SK: PROFILE
 
 Attributes:
   - user_id: str (UUID)
-  - email: str | null
-  - email_hash: str (for GSI, privacy)
+  - email: str | null (GSI key - excluded when null)
+  - cognito_sub: str | null
   - auth_type: "anonymous" | "email" | "google" | "github"
-  - role: str = "anonymous"  # v3.0: Was "tier". Values: "anonymous", "free", "paid", "operator"
-  - revocation_id: int = 0  # v2.8: Increment on password change
   - created_at: ISO8601
-  - updated_at: ISO8601
+  - last_active_at: ISO8601
+  - session_expires_at: ISO8601
+  - timezone: str = "America/New_York"
+  - email_notifications_enabled: bool = true
+  - daily_email_count: int = 0
+  - entity_type: str = "USER"
+  # Feature 014: Session revocation
+  - revoked: bool = false
+  - revoked_at: ISO8601 | null
+  - revoked_reason: str | null
+  # Feature 014: Merge tracking
+  - merged_to: str | null
+  - merged_at: ISO8601 | null
+  # Feature 1151: RBAC fields
   - subscription_active: bool = false
   - subscription_expires_at: ISO8601 | null
-
-GSI: EmailIndex
-  PK: EMAIL#<email_hash>
-  SK: USER
+  - is_operator: bool = false
 ```
 
-### Table: Sessions
+### Entity: MagicLinkToken (IMPLEMENTED)
+
+**Source**: `src/lambdas/shared/models/magic_link_token.py`
+
+```
+PK: TOKEN#<token_id>
+SK: MAGIC_LINK
+
+Attributes:
+  - token_id: str (UUID)
+  - email: str
+  - signature: str (HMAC-SHA256)
+  - created_at: ISO8601
+  - expires_at: ISO8601 (+1 hour)
+  - used: bool = false
+  - anonymous_user_id: str | null (for account merge)
+  - entity_type: str = "MAGIC_LINK_TOKEN"
+  - ttl: int (expires_at + 24h, DynamoDB TTL)
+  # Feature 014: Atomic verification tracking
+  - used_at: ISO8601 | null
+  - used_by_ip: str | null
+```
+
+### Entity: Session (PROPOSED - v2.8)
+
+**Status**: Not yet implemented. Proposed for Phase 2.
 
 ```
 PK: USER#<user_id>
@@ -4648,30 +4686,13 @@ Attributes:
   - created_at: ISO8601
   - last_active_at: ISO8601
   - expires_at: ISO8601
+  - entity_type: str = "SESSION"
   - ttl: int (Unix timestamp for DynamoDB TTL)
-
-GSI: UserSessionsByDate
-  PK: USER#<user_id>
-  SK: created_at (for oldest-first eviction)
 ```
 
-### Table: MagicLinkTokens
+### Entity: OAuthState (PROPOSED - v2.8)
 
-```
-PK: MAGIC#<token_hash>
-SK: TOKEN
-
-Attributes:
-  - token_hash: str (SHA-256 of token)
-  - email: str
-  - created_at: ISO8601
-  - expires_at: ISO8601
-  - used_at: ISO8601 | null  # v2.9 H4: Unified with code (was consumed_at)
-  - anonymous_user_id: str | null (for account merge)
-  - ttl: int (expires_at + 24h, DynamoDB TTL)
-```
-
-### Table: OAuthState (v2.8 NEW)
+**Status**: Not yet implemented. Proposed for Phase 2.
 
 ```
 PK: OAUTH#<state>
@@ -4685,10 +4706,13 @@ Attributes:
   - user_agent: str
   - created_at: ISO8601
   - expires_at: ISO8601 (5 minutes from creation)
+  - entity_type: str = "OAUTH_STATE"
   - ttl: int (expires_at, DynamoDB TTL)
 ```
 
-### Table: RateLimits (v2.8 NEW)
+### Entity: RateLimit (PROPOSED - v2.8)
+
+**Status**: Not yet implemented. Proposed for Phase 2.
 
 ```
 PK: RATE#<key_hash>
@@ -4698,6 +4722,7 @@ Attributes:
   - key_hash: str (SHA-256 of rate limit key)
   - count: int
   - window_start: ISO8601
+  - entity_type: str = "RATE_LIMIT"
   - ttl: int (window_end, DynamoDB TTL)
 
 Key Patterns:
@@ -4707,7 +4732,9 @@ Key Patterns:
   - Anonymous create: "anon:{ip_address}"
 ```
 
-### Table: TokenBlocklist (v2.8 - If using blocklist pattern)
+### Entity: TokenBlocklist (PROPOSED - v2.8)
+
+**Status**: Not yet implemented. Optional for refresh token rotation.
 
 ```
 PK: BLOCK#<token_hash>
@@ -4718,7 +4745,26 @@ Attributes:
   - user_id: str
   - revoked_at: ISO8601
   - reason: "logout" | "password_change" | "admin_revoke" | "session_limit"
+  - entity_type: str = "TOKEN_BLOCKLIST"
   - ttl: int (original token expiry + 24h buffer)
+```
+
+### GSI Design (CURRENT)
+
+The table uses sparse GSIs where keys are only projected when non-null:
+
+```
+GSI: email-index (on User entity)
+  PK: email
+  SK: entity_type
+  Projection: user_id, auth_type, created_at
+  Notes: Only Users with email set appear in this index
+
+GSI: cognito-index (on User entity)
+  PK: cognito_sub
+  SK: entity_type
+  Projection: user_id, email, auth_type
+  Notes: Only Users with cognito_sub set appear in this index
 ```
 
 ---
