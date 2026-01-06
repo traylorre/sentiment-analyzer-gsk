@@ -430,13 +430,14 @@ async def verify_magic_link(
     response = JSONResponse(response_data)
 
     # Set refresh_token as HttpOnly, Secure cookie (NOT in response body)
+    # Feature 1159: SameSite=None for cross-origin cookie transmission (CloudFront → Lambda)
     if refresh_token:
         response.set_cookie(
             key="refresh_token",
             value=refresh_token,
             httponly=True,
-            secure=True,  # HTTPS only
-            samesite="strict",
+            secure=True,  # HTTPS only (required with SameSite=None)
+            samesite="none",  # Cross-origin transmission; CSRF protected by Feature 1158
             max_age=30 * 24 * 60 * 60,  # 30 days
             path="/api/v2/auth",  # Only sent to auth endpoints
         )
@@ -493,13 +494,14 @@ async def handle_oauth_callback(
     response = JSONResponse(response_data)
 
     # Set refresh_token as HttpOnly, Secure cookie (NOT in response body)
+    # Feature 1159: SameSite=None for cross-origin cookie transmission (CloudFront → Lambda)
     if refresh_token:
         response.set_cookie(
             key="refresh_token",
             value=refresh_token,
             httponly=True,
-            secure=True,  # HTTPS only
-            samesite="strict",
+            secure=True,  # HTTPS only (required with SameSite=None)
+            samesite="none",  # Cross-origin transmission; CSRF protected by Feature 1158
             max_age=30 * 24 * 60 * 60,  # 30 days
             path="/api/v2/auth",  # Only sent to auth endpoints
         )

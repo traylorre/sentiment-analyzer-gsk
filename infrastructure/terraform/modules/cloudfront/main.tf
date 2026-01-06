@@ -147,12 +147,13 @@ resource "aws_cloudfront_response_headers_policy" "cors_api" {
   name    = "${var.environment}-sentiment-cors-api"
   comment = "CORS headers for API routes"
 
+  # Feature 1159: Enable credentials for cross-origin cookie transmission
   cors_config {
-    access_control_allow_credentials = false
+    access_control_allow_credentials = true
     access_control_max_age_sec       = 86400
 
     access_control_allow_headers {
-      items = ["Authorization", "Content-Type", "X-User-ID", "Accept", "Origin"]
+      items = ["Authorization", "Content-Type", "X-User-ID", "Accept", "Origin", "X-CSRF-Token"]
     }
 
     access_control_allow_methods {

@@ -444,9 +444,10 @@ module "dashboard_lambda" {
   # BUFFERED mode for Mangum-based REST API (per research.md decision #2)
   # SSE streaming is handled by separate sse_streaming Lambda with RESPONSE_STREAM
   function_url_invoke_mode = "BUFFERED"
+  # Feature 1159: Enable credentials for cross-origin cookie transmission
   function_url_cors = {
-    allow_credentials = false
-    allow_headers     = ["content-type", "authorization", "x-api-key", "x-user-id", "x-auth-type"]
+    allow_credentials = true
+    allow_headers     = ["content-type", "authorization", "x-api-key", "x-user-id", "x-auth-type", "x-csrf-token"]
     allow_methods     = ["GET", "POST", "PUT", "PATCH", "DELETE"] # AWS handles OPTIONS preflight automatically
     # SECURITY: Require explicit origins - no wildcard fallback
     # For new deployments, cors_allowed_origins MUST be set in tfvars
@@ -764,8 +765,9 @@ module "sse_streaming_lambda" {
   create_function_url      = true
   function_url_auth_type   = "NONE"
   function_url_invoke_mode = "RESPONSE_STREAM"
+  # Feature 1159: Enable credentials for cross-origin cookie transmission
   function_url_cors = {
-    allow_credentials = false
+    allow_credentials = true
     allow_headers     = ["content-type", "x-user-id", "last-event-id"]
     allow_methods     = ["GET"]
     allow_origins = length(var.cors_allowed_origins) > 0 ? var.cors_allowed_origins : (

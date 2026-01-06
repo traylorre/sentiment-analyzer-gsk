@@ -129,7 +129,12 @@ export async function apiClient<T>(
 
   // Feature 1112: AbortController-based timeout support
   // Properly cancels the request (no orphaned connections)
-  const fetchOptionsWithSignal = { ...fetchOptions, headers } as RequestInit;
+  // Feature 1159: Include credentials for cross-origin cookie transmission
+  const fetchOptionsWithSignal = {
+    ...fetchOptions,
+    headers,
+    credentials: 'include' as RequestCredentials,
+  } as RequestInit;
   if (timeout !== undefined && timeout > 0) {
     fetchOptionsWithSignal.signal = AbortSignal.timeout(timeout);
   }

@@ -59,6 +59,8 @@ Auto-generated from all feature plans. Last updated: 2025-11-26
 - DynamoDB (users table, sessions) (1146-remove-xuserid-fallback)
 - Python 3.13 + PyJWT (existing), AWS Lambda, boto3 (1147-jwt-aud-nbf-validation)
 - N/A (stateless validation) (1147-jwt-aud-nbf-validation)
+- Python 3.13 + FastAPI, starlette (Response for cookies) (1158-csrf-double-submit)
+- N/A (stateless tokens) (1158-csrf-double-submit)
 
 - **Python 3.13** with FastAPI, boto3, pydantic, aws-lambda-powertools, httpx
 - **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, CloudFront
@@ -836,9 +838,9 @@ aws cloudwatch get-metric-data --metric-data-queries '[...]' --start-time ... --
 ```
 
 ## Recent Changes
+- 1158-csrf-double-submit: Added Python 3.13 + FastAPI, starlette (Response for cookies)
 - 1147-jwt-aud-nbf-validation: Added Python 3.13 + PyJWT (existing), AWS Lambda, boto3
 - 1146-remove-xuserid-fallback: Added Python 3.13 + FastAPI, PyJWT, boto3 (DynamoDB)
-- 1145-delete-cookies-ts: Added TypeScript 5.x (Next.js frontend) + Next.js, Zustand (state management)
 
 <!-- MANUAL ADDITIONS START -->
 
