@@ -157,6 +157,45 @@ def set_csrf_cookie(response: JSONResponse) -> None:
     )
 
 
+REFRESH_TOKEN_COOKIE_NAME = "refresh_token"  # noqa: S105 - cookie name, not a password
+
+
+def extract_refresh_token_from_cookie(request: Request) -> str | None:
+    """Extract refresh_token from httpOnly cookie.
+
+    Feature 1160: Extract refresh token from cookie instead of request body.
+    The browser sends the httpOnly cookie automatically - no JavaScript access needed.
+
+    Args:
+        request: FastAPI request object
+
+    Returns:
+        The refresh token string, or None if not present
+    """
+    return request.cookies.get(REFRESH_TOKEN_COOKIE_NAME)
+
+
+def set_refresh_token_cookie(response: Response, token: str) -> None:
+    """Set refresh_token as httpOnly cookie.
+
+    Feature 1160: Set rotated refresh token cookie on refresh response.
+    Uses same security attributes as login endpoints.
+
+    Args:
+        response: FastAPI response object
+        token: The new refresh token to set
+    """
+    response.set_cookie(
+        key=REFRESH_TOKEN_COOKIE_NAME,
+        value=token,
+        httponly=True,
+        secure=True,  # HTTPS only (required with SameSite=None)
+        samesite="strict",  # Will be "none" after Feature 1159 merges
+        max_age=30 * 24 * 60 * 60,  # 30 days
+        path="/api/v2/auth",  # Only sent to auth endpoints
+    )
+
+
 # =============================================================================
 # Create routers
 # =============================================================================
@@ -544,21 +583,48 @@ async def handle_oauth_callback(
 
 
 class RefreshTokenRequest(BaseModel):
-    refresh_token: str
+    """Request body for refresh endpoint (backwards compatibility)."""
+
+    refresh_token: str | None = None  # Optional - prefer cookie
 
 
 @auth_router.post("/refresh")
-async def refresh_tokens(body: RefreshTokenRequest):
+async def refresh_tokens(
+    request: Request,
+    body: RefreshTokenRequest | None = Body(default=None),
+):
     """Refresh access tokens (T094).
+
+    Feature 1160: Extract refresh token from httpOnly cookie.
+    The browser sends the cookie automatically - no JavaScript handling needed.
+    Falls back to request body for backwards compatibility.
 
     Feature 1158: Also refreshes CSRF token on successful refresh.
     Note: This endpoint is exempt from CSRF validation because it uses
     cookie-only authentication (no JavaScript access needed).
     """
-    result = auth_service.refresh_access_tokens(refresh_token=body.refresh_token)
+    # Feature 1160: Try cookie first (preferred), fall back to body
+    refresh_token = extract_refresh_token_from_cookie(request)
+    if not refresh_token and body and body.refresh_token:
+        refresh_token = body.refresh_token
+
+    if not refresh_token:
+        raise HTTPException(
+            status_code=401,
+            detail="Refresh token not found in cookie or request body",
+        )
+
+    result = auth_service.refresh_access_tokens(refresh_token=refresh_token)
     if isinstance(result, auth_service.ErrorResponse):
         raise HTTPException(status_code=401, detail=result.error.message)
+
     response = JSONResponse(result.model_dump())
+
+    # Feature 1160: Set rotated refresh token as httpOnly cookie
+    # The service returns the new refresh token - we set it as a cookie
+    if hasattr(result, "refresh_token_for_cookie") and result.refresh_token_for_cookie:
+        set_refresh_token_cookie(response, result.refresh_token_for_cookie)
+
     # Feature 1158: Refresh CSRF token along with session
     set_csrf_cookie(response)
     return response
