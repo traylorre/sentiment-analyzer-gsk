@@ -31,7 +31,7 @@ if [ "$ERROR_COUNT" -eq 0 ]; then
 fi
 
 # Check if tests passed
-if echo "$OUTPUT" | grep -q "passed"; then
+if echo "$OUTPUT" | grep "passed" >/dev/null 2>&1; then
     # Tests passed but ERROR logs exist - this is acceptable if they're being asserted
     # The key check: are there assert_error_logged calls in the test files?
     ASSERTION_COUNT=$(grep -r "assert_error_logged\|assert_warning_logged" tests/unit/ 2>/dev/null | grep -v "def assert" | wc -l || true)
