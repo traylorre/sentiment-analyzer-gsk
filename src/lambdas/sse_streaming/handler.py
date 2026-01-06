@@ -351,6 +351,7 @@ async def global_stream(
 async def config_stream(
     request: Request,
     config_id: str,
+    authorization: str | None = Header(None, alias="Authorization"),
     x_user_id: str | None = Header(None, alias="X-User-ID"),
     user_token: str | None = Query(None, description="User token for EventSource auth"),
     last_event_id: str | None = Header(None, alias="Last-Event-ID"),
@@ -358,20 +359,28 @@ async def config_stream(
     """Configuration-specific SSE stream endpoint.
 
     Streams real-time sentiment updates filtered to configured tickers.
-    Per FR-014: Requires authentication via X-User-ID header OR user_token query param
+    Per FR-014: Requires authentication via Bearer token, X-User-ID header,
+    or user_token query param.
     Per T035: GET /api/v2/configurations/{config_id}/stream
+    Per Feature 1154: Added Bearer token authentication support
 
     Path Parameters:
         config_id: Configuration ID to stream
 
     Headers:
-        X-User-ID: User ID for authentication (preferred for non-EventSource clients)
+        Authorization: Bearer token for authentication (preferred, Feature 1154)
+        X-User-ID: User ID for authentication (legacy fallback)
         Last-Event-ID: Optional event ID for reconnection resumption
 
     Query Parameters:
         user_token: User token for EventSource authentication (browser limitation workaround)
                    EventSource API does not support custom headers, so tokens must be
                    passed via query parameter. Use short-lived tokens for security.
+
+    Authentication Precedence (Feature 1154):
+        1. Authorization: Bearer {token} (highest priority)
+        2. X-User-ID header (legacy fallback)
+        3. user_token query parameter (lowest priority)
 
     Returns:
         EventSourceResponse streaming heartbeat and filtered sentiment events
@@ -387,15 +396,25 @@ async def config_stream(
         - Always use HTTPS to prevent token interception
         - Response includes Cache-Control: no-store to prevent caching
     """
-    # T034: Validate authentication - accept header OR query param
-    # Header takes precedence if both provided
+    # T034: Validate authentication - Bearer token > header > query param
+    # Feature 1154: Added Bearer token authentication support
     user_id = None
     auth_method = None
 
-    if x_user_id and x_user_id.strip():
+    # Check Authorization: Bearer header first (Feature 1154)
+    if authorization and authorization.startswith("Bearer "):
+        bearer_token = authorization[7:].strip()
+        if bearer_token:
+            user_id = bearer_token
+            auth_method = "bearer"
+
+    # Fallback to X-User-ID header (legacy)
+    if not user_id and x_user_id and x_user_id.strip():
         user_id = x_user_id.strip()
         auth_method = "header"
-    elif user_token and user_token.strip():
+
+    # Fallback to query parameter (for EventSource API)
+    if not user_id and user_token and user_token.strip():
         user_id = user_token.strip()
         auth_method = "query_param"
 
@@ -407,7 +426,10 @@ async def config_stream(
         return JSONResponse(
             status_code=401,
             content={
-                "detail": "Authentication required. Provide X-User-ID header or user_token query parameter."
+                "detail": (
+                    "Authentication required. Provide Authorization: Bearer header, "
+                    "X-User-ID header, or user_token query parameter."
+                )
             },
         )
 
