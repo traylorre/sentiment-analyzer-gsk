@@ -43,6 +43,18 @@ class User(BaseModel):
     )
     merged_at: datetime | None = Field(None, description="When merge occurred")
 
+    # Feature 1151: RBAC fields for get_roles_for_user()
+    subscription_active: bool = Field(
+        default=False, description="Whether user has active paid subscription"
+    )
+    subscription_expires_at: datetime | None = Field(
+        None,
+        description="When subscription expires (None = no expiry or not subscribed)",
+    )
+    is_operator: bool = Field(
+        default=False, description="Administrative flag for operator access"
+    )
+
     @property
     def pk(self) -> str:
         """DynamoDB partition key."""
@@ -92,6 +104,12 @@ class User(BaseModel):
         if self.merged_at is not None:
             item["merged_at"] = self.merged_at.isoformat()
 
+        # Feature 1151: RBAC fields
+        item["subscription_active"] = self.subscription_active
+        item["is_operator"] = self.is_operator
+        if self.subscription_expires_at is not None:
+            item["subscription_expires_at"] = self.subscription_expires_at.isoformat()
+
         return item
 
     @classmethod
@@ -105,6 +123,13 @@ class User(BaseModel):
         merged_at = None
         if item.get("merged_at"):
             merged_at = datetime.fromisoformat(item["merged_at"])
+
+        # Feature 1151: Parse subscription_expires_at
+        subscription_expires_at = None
+        if item.get("subscription_expires_at"):
+            subscription_expires_at = datetime.fromisoformat(
+                item["subscription_expires_at"]
+            )
 
         return cls(
             user_id=item["user_id"],
@@ -124,6 +149,10 @@ class User(BaseModel):
             revoked_reason=item.get("revoked_reason"),
             merged_to=item.get("merged_to"),
             merged_at=merged_at,
+            # Feature 1151: RBAC fields with backward-compatible defaults
+            subscription_active=item.get("subscription_active", False),
+            subscription_expires_at=subscription_expires_at,
+            is_operator=item.get("is_operator", False),
         )
 
 
