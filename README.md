@@ -187,100 +187,137 @@ Ingests financial news from external sources (Tiingo, Finnhub) and returns senti
 ```mermaid
 graph TB
     subgraph External["External Sources"]
-        Tiingo[Tiingo API<br/>Primary Source]
-        Finnhub[Finnhub API<br/>Secondary Source]
-    end
-
-    subgraph AWS["AWS Cloud"]
-        subgraph EdgeLayer["Edge Layer"]
-            CF[CloudFront<br/>Multi-Origin CDN]
-            S3UI[S3 Bucket<br/>Interview Dashboard]
-        end
-
-        subgraph IngestionLayer["Ingestion Layer"]
-            EB[EventBridge<br/>Scheduler<br/>5 min]
-            Ingestion[Ingestion Lambda<br/>Python 3.13]
-        end
-
-        subgraph ProcessingLayer["Processing Layer"]
-            SNS[SNS Topic<br/>sentiment-events]
-            Analysis[Analysis Lambda<br/>DistilBERT<br/>S3 Model Loading]
-            S3Model[S3 Bucket<br/>ML Model Storage<br/>model.tar.gz]
-        end
-
-        subgraph APILayer["API Layer"]
-            APIGW[API Gateway<br/>REST /api/*]
-            Dashboard[Dashboard Lambda<br/>FastAPI REST]
-            SSELambda[SSE Lambda<br/>RESPONSE_STREAM<br/>Docker + Web Adapter]
-        end
-
-        subgraph StorageLayer["Storage Layer"]
-            DDB[(DynamoDB<br/>sentiment-items)]
-            DLQ[DLQ<br/>Failed Messages]
-        end
-
-        subgraph MonitoringLayer["Monitoring"]
-            EBMetrics[EventBridge<br/>Scheduler<br/>1 min]
-            Metrics[Metrics Lambda<br/>Stuck Item Monitor]
-            CW[CloudWatch<br/>Logs & Alarms]
-            Budget[Budget Alerts]
-        end
+        Tiingo[Tiingo API<br/>Financial News]
+        Finnhub[Finnhub API<br/>Market Data]
+        SendGrid[SendGrid<br/>Email Delivery]
     end
 
     subgraph Users["Users"]
         Browser[Web Browser]
     end
 
-    Browser -->|HTTPS| CF
-    CF -->|/static/*| S3UI
-    CF -->|/api/*| APIGW
-    CF -->|/api/v2/stream*| SSELambda
+    subgraph AWS["AWS Cloud"]
+        subgraph AuthLayer["Authentication Layer"]
+            Cognito[Cognito<br/>User Pool]
+            Secrets[Secrets Manager<br/>API Keys + JWT Secret]
+        end
 
+        subgraph EdgeLayer["Edge Layer"]
+            CF[CloudFront<br/>Multi-Origin CDN]
+            Amplify[Amplify<br/>Next.js SSR<br/>Optional]
+        end
+
+        subgraph IngestionLayer["Ingestion Layer"]
+            EB[EventBridge<br/>5 min schedule]
+            Ingestion[Ingestion Lambda<br/>512MB · 60s]
+        end
+
+        subgraph ProcessingLayer["Processing Layer"]
+            SNS[SNS Topic<br/>analysis-requests]
+            Analysis[Analysis Lambda<br/>DistilBERT · 2048MB]
+            S3Model[S3<br/>ML Models]
+        end
+
+        subgraph APILayer["API Layer"]
+            APIGW[API Gateway<br/>REST /api/*]
+            Dashboard[Dashboard Lambda<br/>FastAPI · 1024MB]
+            SSELambda[SSE Lambda<br/>RESPONSE_STREAM<br/>900s timeout]
+            Notification[Notification Lambda<br/>Alerts + Digests]
+        end
+
+        subgraph StorageLayer["Storage Layer ── 4 Tables"]
+            DDBItems[(sentiment-items<br/>News + Scores<br/>TTL: 30d)]
+            DDBUsers[(sentiment-users<br/>Configs · Alerts<br/>Sessions)]
+            DDBTimeseries[(sentiment-timeseries<br/>Multi-Resolution<br/>1m→24h buckets)]
+            DDBOhlc[(ohlc-cache<br/>Price Data)]
+            DLQ[SQS DLQ<br/>Failed Messages]
+        end
+
+        subgraph MonitoringLayer["Monitoring"]
+            EBMetrics[EventBridge<br/>1 min schedule]
+            Metrics[Metrics Lambda<br/>Stuck Items]
+            CW[CloudWatch<br/>Logs · Alarms · RUM]
+        end
+    end
+
+    %% User flows - thicker lines for primary paths
+    Browser ==>|HTTPS| CF
+    Browser -.->|OAuth| Cognito
+    CF ==>|/static/*| Amplify
+    CF ==>|/api/*| APIGW
+    CF ==>|/api/v2/stream*| SSELambda
+
+    %% Auth flows
+    Cognito -.->|JWT validation| Dashboard
+    Cognito -.->|JWT validation| SSELambda
+    Secrets -.->|API keys| Ingestion
+    Secrets -.->|JWT secret| Dashboard
+
+    %% Ingestion pipeline
     EB -->|Trigger| Ingestion
-    Tiingo -->|Fetch Financial News| Ingestion
-    Finnhub -->|Fetch Market News| Ingestion
+    Tiingo -->|News articles| Ingestion
+    Finnhub -->|Market news| Ingestion
+    Ingestion ==>|Publish| SNS
+    Ingestion -->|Store raw| DDBItems
 
-    Ingestion -->|Publish| SNS
-    Ingestion -->|Store| DDB
+    %% Analysis pipeline
+    SNS ==>|Subscribe| Analysis
+    Analysis -->|Load model| S3Model
+    Analysis ==>|Store scores| DDBItems
+    Analysis -->|Fanout| DDBTimeseries
+    Analysis -.->|Failed| DLQ
 
-    SNS -->|Subscribe| Analysis
-    Analysis -->|Load Model| S3Model
-    Analysis -->|Store Results| DDB
-    Analysis -->|Failed| DLQ
+    %% API Layer
+    APIGW ==>|Invoke| Dashboard
+    Dashboard ==>|Query| DDBItems
+    Dashboard -->|User data| DDBUsers
+    Dashboard -->|OHLC| DDBOhlc
+    SSELambda ==>|Poll 5s| DDBItems
+    SSELambda -->|Timeseries| DDBTimeseries
+    SSELambda -.->|Stream| Browser
 
-    APIGW -->|Invoke| Dashboard
-    Dashboard -->|Query| DDB
-    SSELambda -->|Poll every 5s| DDB
-    SSELambda -.->|Stream Events| Browser
+    %% Notifications
+    Notification -->|Send| SendGrid
+    Notification -->|Read configs| DDBUsers
 
+    %% Monitoring
     EBMetrics -->|Trigger| Metrics
-    Metrics -->|Query by_status GSI| DDB
-    Metrics -->|Emit StuckItems| CW
+    Metrics -->|by_status GSI| DDBItems
+    Metrics -->|Emit| CW
 
+    %% Logging (dotted = async)
     Ingestion -.->|Logs| CW
     Analysis -.->|Logs| CW
     Dashboard -.->|Logs| CW
     SSELambda -.->|Logs| CW
-    Metrics -.->|Logs| CW
 
-    CW -.->|Cost Alerts| Budget
+    %% Styles - preserved color scheme
+    classDef layerBox fill:#fff8e1,stroke:#c9a227,stroke-width:3px,color:#333
+    classDef lambdaStyle fill:#7ec8e3,stroke:#3a7ca5,stroke-width:3px,color:#1a3a4a
+    classDef storageStyle fill:#a8d5a2,stroke:#4a7c4e,stroke-width:3px,color:#1e3a1e
+    classDef messagingStyle fill:#b39ddb,stroke:#673ab7,stroke-width:3px,color:#1a0a3e
+    classDef monitoringStyle fill:#ffb74d,stroke:#c77800,stroke-width:3px,color:#4a2800
+    classDef externalStyle fill:#ef5350,stroke:#b71c1c,stroke-width:3px,color:#fff
+    classDef edgeStyle fill:#ffccbc,stroke:#ff5722,stroke-width:3px,color:#4a1a00
+    classDef authStyle fill:#e1bee7,stroke:#8e24aa,stroke-width:3px,color:#4a148c
 
-    classDef layerBox fill:#fff8e1,stroke:#c9a227,stroke-width:2px,color:#333
-    classDef lambdaStyle fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
-    classDef storageStyle fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px,color:#1e3a1e
-    classDef messagingStyle fill:#b39ddb,stroke:#673ab7,stroke-width:2px,color:#1a0a3e
-    classDef monitoringStyle fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
-    classDef externalStyle fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
-    classDef edgeStyle fill:#ffccbc,stroke:#ff5722,stroke-width:2px,color:#4a1a00
-
-    class External,AWS,EdgeLayer,IngestionLayer,ProcessingLayer,APILayer,StorageLayer,MonitoringLayer,Users layerBox
-    class Ingestion,Analysis,Dashboard,SSELambda,Metrics lambdaStyle
-    class DDB,DLQ,S3Model storageStyle
+    class External,AWS,AuthLayer,EdgeLayer,IngestionLayer,ProcessingLayer,APILayer,StorageLayer,MonitoringLayer,Users layerBox
+    class Ingestion,Analysis,Dashboard,SSELambda,Metrics,Notification lambdaStyle
+    class DDBItems,DDBUsers,DDBTimeseries,DDBOhlc,DLQ,S3Model storageStyle
     class SNS messagingStyle
-    class CW,Budget,EBMetrics,EB monitoringStyle
-    class Tiingo,Finnhub,Browser externalStyle
-    class CF,S3UI,APIGW edgeStyle
+    class CW,EBMetrics,EB monitoringStyle
+    class Tiingo,Finnhub,SendGrid,Browser externalStyle
+    class CF,Amplify,APIGW edgeStyle
+    class Cognito,Secrets authStyle
 ```
+
+**Legend:**
+- **Solid thick lines (==>)**: Primary data paths
+- **Solid thin lines (-->)**: Secondary data paths
+- **Dotted lines (-.->)**: Async/logging flows
+- **Purple nodes**: Lambda functions (6 total)
+- **Green nodes**: Data stores (4 DynamoDB tables + S3 + DLQ)
+- **Orange nodes**: Edge/CDN layer
 
 ### Environment Promotion Pipeline
 
@@ -343,70 +380,180 @@ sequenceDiagram
     participant SNS as SNS Topic
     participant Ana as Analysis Lambda
     participant S3 as S3 Model Storage
-    participant DDB as DynamoDB
-    participant Dash as Dashboard Lambda
-    participant User as Browser (SSE)
+    participant Items as sentiment-items
+    participant TS as sentiment-timeseries
+    participant SSE as SSE Lambda
+    participant User as Browser
 
     EB->>Ing: Trigger (every 5 min)
-    Ing->>Tiingo: Fetch financial news (primary)
-    Tiingo-->>Ing: Articles JSON
-    Ing->>Finnhub: Fetch market news (secondary)
-    Finnhub-->>Ing: Articles JSON
 
-    Ing->>DDB: Check for duplicates
-    DDB-->>Ing: Dedup results
+    par Parallel fetch
+        Ing->>Tiingo: GET /news (primary)
+        Tiingo-->>Ing: Articles JSON
+    and
+        Ing->>Finnhub: GET /news (secondary)
+        Finnhub-->>Ing: Articles JSON
+    end
 
-    Ing->>DDB: Store raw article
-    Ing->>SNS: Publish event
+    Ing->>Items: Check dedup (SHA256 key)
+    Items-->>Ing: Existing items
 
-    SNS->>Ana: Trigger analysis
-    Ana->>S3: Load DistilBERT model (lazy)
-    S3-->>Ana: model.tar.gz
-    Ana->>Ana: Run DistilBERT inference
-    Ana->>DDB: Store sentiment results
+    Ing->>Items: Store new articles (status=pending)
+    Ing->>SNS: Publish batch (max 10)
 
-    User->>Dash: Connect SSE stream
-    Dash->>DDB: Query sentiment_index
-    DDB-->>Dash: Stream results
-    Dash-->>User: SSE events (JSON)
+    SNS->>Ana: Trigger (per message)
+    Ana->>S3: Load DistilBERT (cached)
+    S3-->>Ana: model weights
+    Ana->>Ana: Inference (<100ms warm)
+    Ana->>Items: UpdateItem (status=analyzed)
+    Ana->>TS: Fanout to 8 resolutions
 
-    Note over Dash,User: Real-time updates<br/>via Server-Sent Events
+    Note over Items,TS: Write fanout: 1 article → 8 timeseries buckets<br/>(1m, 5m, 10m, 1h, 3h, 6h, 12h, 24h)
+
+    User->>SSE: EventSource connect
+
+    loop Every 5 seconds
+        SSE->>Items: Poll by_status GSI
+        SSE->>TS: Query buckets
+        SSE-->>User: SSE event (sentiment_update)
+    end
+
+    loop Every 30 seconds
+        SSE-->>User: SSE event (heartbeat)
+    end
+
+    Note over SSE,User: RESPONSE_STREAM mode<br/>Lambda Web Adapter<br/>Max 15 min connection
 ```
 
 ### DynamoDB Table Design
 
-**Main Table:** `sentiment-items`
+This service uses **4 DynamoDB tables** with single-table design patterns:
 
-| Attribute | Type | Key Type | Description |
-|-----------|------|----------|-------------|
-| `item_id` | String | Partition Key (PK) | Unique identifier for each item |
-| `source_type` | String | - | Source system (e.g., "tiingo", "finnhub") |
-| `source_id` | String | - | External source identifier |
-| `title` | String | - | Article/item title |
-| `content` | String | - | Article text content |
-| `ingested_at` | Timestamp | - | When item was ingested |
-| `status` | String | - | Processing status ("pending", "analyzed") |
-| `sentiment_score` | Float | - | Sentiment score (0.0-1.0) |
-| `sentiment_label` | String | - | Sentiment classification (positive/neutral/negative) |
-| `analyzed_at` | Timestamp | - | When sentiment analysis completed |
-| `tags` | JSON | - | Associated tags for categorization |
+#### Table 1: `sentiment-items` (News & Scores)
 
-**Global Secondary Indexes (GSI):**
+| Attribute | Type | Key | Description |
+|-----------|------|-----|-------------|
+| `source_id` | String | PK | Composite: `{source}#{article_id}` |
+| `timestamp` | String | SK | ISO8601 ingestion time |
+| `status` | String | — | `pending` → `analyzed` |
+| `sentiment` | String | — | `positive` / `neutral` / `negative` |
+| `score` | Number | — | Confidence 0.0-1.0 |
+| `matched_tags` | StringSet | — | Matched tickers/tags |
+| `ttl_timestamp` | Number | TTL | Auto-delete after 30 days |
 
-1. **sentiment_index** - Query by sentiment
-   - PK: `sentiment_label`
-   - SK: `analyzed_at`
-   - Use case: Fetch all positive/negative items sorted by time
+**GSIs:** `by_sentiment`, `by_tag`, `by_status`
 
-2. **tag_index** - Query by tag
-   - PK: `tag`
-   - SK: `ingested_at`
-   - Use case: Fetch all items for a specific tag
+---
 
-3. **status_index** - Query by processing status
-   - PK: `status`
-   - SK: `ingested_at`
-   - Use case: Find pending items for processing
+#### Table 2: `sentiment-users` (Single-Table Design)
+
+| PK Pattern | SK Pattern | Entity | Description |
+|------------|------------|--------|-------------|
+| `USER#{id}` | `PROFILE` | User | Email, preferences, created_at |
+| `USER#{id}` | `CONFIG#{id}` | Config | Watch list (up to 5 tickers) |
+| `USER#{id}` | `ALERT#{id}` | Alert | Threshold rules |
+| `USER#{id}` | `SESSION#{id}` | Session | JWT refresh tokens (httpOnly) |
+| `TOKEN#{id}` | `TOKEN` | MagicLink | One-time tokens (TTL: 15min) |
+
+**GSIs:** `by_email`, `by_cognito_sub`, `by_entity_status`
+
+---
+
+#### Table 3: `sentiment-timeseries` (Multi-Resolution Buckets)
+
+| PK Pattern | SK Pattern | Data | TTL |
+|------------|------------|------|-----|
+| `{ticker}#1m` | ISO8601 | Aggregated score | 6 hours |
+| `{ticker}#5m` | ISO8601 | Aggregated score | 12 hours |
+| `{ticker}#1h` | ISO8601 | Aggregated score | 7 days |
+| `{ticker}#1d` | ISO8601 | Aggregated score | 90 days |
+
+**Write fanout:** Each analyzed article creates 8 bucket updates.
+
+---
+
+#### Table 4: `ohlc-cache` (Price Data)
+
+| PK Pattern | SK Pattern | Data |
+|------------|------------|------|
+| `{ticker}#tiingo` | `{resolution}#{timestamp}` | OHLC candles |
+
+**No TTL** - Historical price data preserved permanently.
+
+---
+
+### Authentication Flow (Target State)
+
+Post-Phase 0 security hardening with httpOnly cookies:
+
+```mermaid
+sequenceDiagram
+    participant Browser
+    participant Frontend as Next.js Frontend
+    participant CF as CloudFront
+    participant Dashboard as Dashboard Lambda
+    participant Cognito as Cognito User Pool
+    participant Users as sentiment-users
+
+    rect rgb(240, 248, 255)
+        Note over Browser,Users: Anonymous Session Flow
+        Browser->>Frontend: Visit site (no auth)
+        Frontend->>Dashboard: POST /api/v2/auth/anonymous
+        Dashboard->>Users: Create USER#{uuid}
+        Dashboard-->>Frontend: Set-Cookie: session_id (httpOnly)
+        Note right of Frontend: Anonymous user can:<br/>• View public sentiment<br/>• Create 1 config<br/>• No alerts
+    end
+
+    rect rgb(255, 248, 240)
+        Note over Browser,Users: OAuth Flow (Google/GitHub)
+        Browser->>Cognito: Redirect to hosted UI
+        Cognito->>Cognito: OAuth with provider
+        Cognito-->>Browser: Authorization code
+        Browser->>Frontend: Callback with code
+        Frontend->>Dashboard: POST /api/v2/auth/oauth/callback
+        Dashboard->>Cognito: Exchange code for tokens
+        Cognito-->>Dashboard: id_token, access_token, refresh_token
+        Dashboard->>Users: Upsert USER#{cognito_sub}
+        Dashboard->>Users: Migrate anonymous config (if exists)
+        Dashboard-->>Frontend: Set-Cookie: jwt (httpOnly, Secure, SameSite=Strict)
+        Note right of Frontend: Authenticated user can:<br/>• 2 configs (free) / 5+ (paid)<br/>• Alerts + digests<br/>• Full API access
+    end
+
+    rect rgb(248, 255, 240)
+        Note over Browser,Users: Magic Link Flow
+        Browser->>Frontend: Enter email
+        Frontend->>Dashboard: POST /api/v2/auth/magic-link
+        Dashboard->>Users: Store TOKEN#{random_256bit} (TTL: 15min)
+        Dashboard->>SendGrid: Send email with link
+        Note over Browser: User clicks email link
+        Browser->>Frontend: GET /auth/verify?token=xxx
+        Frontend->>Dashboard: POST /api/v2/auth/magic-link/verify
+        Dashboard->>Users: Atomic consume (ConditionExpression)
+        alt Token valid & unused
+            Dashboard-->>Frontend: Set-Cookie: jwt (httpOnly)
+        else Token expired/used
+            Dashboard-->>Frontend: 410 Gone / 409 Conflict
+        end
+    end
+
+    rect rgb(255, 240, 245)
+        Note over Browser,Users: Token Refresh (Silent)
+        Frontend->>Dashboard: GET /api/v2/auth/refresh (cookie auto-sent)
+        Dashboard->>Dashboard: Validate JWT (aud, nbf, exp)
+        alt Valid & not expired
+            Dashboard-->>Frontend: New Set-Cookie: jwt
+        else Invalid
+            Dashboard-->>Frontend: 401 → redirect to login
+        end
+    end
+```
+
+**Security Boundaries (Post-Phase 0):**
+- ❌ No tokens in localStorage (XSS protection)
+- ❌ No X-User-ID header fallback (impersonation protection)
+- ✅ httpOnly cookies only (CSRF mitigated via SameSite=Strict)
+- ✅ JWT claims: `aud`, `nbf`, `exp`, `roles` validated
+- ✅ Magic links: Random 256-bit tokens, atomic consumption
 
 ---
 

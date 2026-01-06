@@ -1,0 +1,144 @@
+%% Comprehensive Dataflow Diagram - All 5 Core Flows
+%% Last updated: 2026-01-05
+%% For interview deep-dives: explains WHERE data goes and WHY
+
+flowchart TB
+    subgraph External["External Systems"]
+        Tiingo[Tiingo API]
+        Finnhub[Finnhub API]
+        SendGrid[SendGrid]
+        OAuthProviders[Google/GitHub OAuth]
+    end
+
+    subgraph Browser["Browser (Next.js)"]
+        UI[Dashboard UI]
+        AuthStore[Auth Store<br/>zustand]
+        SSEClient[SSE Client<br/>EventSource]
+    end
+
+    subgraph Edge["Edge Layer"]
+        CF[CloudFront CDN]
+        Amplify[Amplify SSR]
+    end
+
+    subgraph Auth["Authentication Boundary"]
+        Cognito[Cognito User Pool]
+        Secrets[Secrets Manager]
+    end
+
+    subgraph Compute["Lambda Functions"]
+        Ingestion[Ingestion<br/>512MB · 60s]
+        Analysis[Analysis<br/>2048MB · 60s]
+        Dashboard[Dashboard<br/>1024MB · 60s]
+        SSE[SSE Streaming<br/>512MB · 900s]
+        Notification[Notification<br/>256MB · 30s]
+    end
+
+    subgraph Messaging["Event-Driven"]
+        SNS[SNS Topic]
+        DLQ[SQS DLQ]
+        EB[EventBridge]
+    end
+
+    subgraph Storage["DynamoDB Tables"]
+        Items[(sentiment-items<br/>PK: source_id<br/>SK: timestamp)]
+        Users[(sentiment-users<br/>PK: USER#id<br/>SK: entity)]
+        Timeseries[(sentiment-timeseries<br/>PK: ticker#resolution<br/>SK: bucket_ts)]
+        OHLCCache[(ohlc-cache<br/>PK: ticker#source<br/>SK: resolution#ts)]
+    end
+
+    subgraph Models["ML Models"]
+        S3Model[S3: DistilBERT<br/>~700MB]
+    end
+
+    %% ═══════════════════════════════════════════════════════════════════════
+    %% FLOW 1: SENTIMENT INGESTION PIPELINE (Primary value stream)
+    %% ═══════════════════════════════════════════════════════════════════════
+
+    EB -->|rate(5 min)| Ingestion
+    Ingestion -->|GET /news| Tiingo
+    Ingestion -->|GET /news| Finnhub
+    Ingestion -->|Dedup check| Items
+    Ingestion ==>|"Store raw (status=pending)"| Items
+    Ingestion ==>|Publish batch| SNS
+
+    SNS ==>|Subscribe| Analysis
+    Analysis -->|Load weights| S3Model
+    Analysis ==>|"UpdateItem (status=analyzed)"| Items
+    Analysis ==>|"Fanout: 8 resolutions"| Timeseries
+    Analysis -.->|Failed msgs| DLQ
+
+    %% ═══════════════════════════════════════════════════════════════════════
+    %% FLOW 2: USER AUTHENTICATION (Security boundary)
+    %% ═══════════════════════════════════════════════════════════════════════
+
+    UI -->|OAuth redirect| OAuthProviders
+    OAuthProviders -->|Auth code| Cognito
+    Cognito -->|Token exchange| Dashboard
+    Dashboard -->|"Upsert USER#{sub}"| Users
+    Dashboard -->|Set-Cookie httpOnly| UI
+
+    UI -->|Magic link request| Dashboard
+    Dashboard -->|"Store TOKEN#{random}"| Users
+    Dashboard -->|Send email| SendGrid
+
+    %% ═══════════════════════════════════════════════════════════════════════
+    %% FLOW 3: DASHBOARD DATA RETRIEVAL (User-facing API)
+    %% ═══════════════════════════════════════════════════════════════════════
+
+    UI ==>|HTTPS| CF
+    CF ==>|/api/*| Dashboard
+    Dashboard -->|Validate JWT| Secrets
+    Dashboard ==>|Query by_tag GSI| Items
+    Dashboard -->|User configs| Users
+    Dashboard -->|Price data| OHLCCache
+    Dashboard ==>|JSON response| UI
+
+    %% ═══════════════════════════════════════════════════════════════════════
+    %% FLOW 4: REAL-TIME SSE STREAMING (Live updates)
+    %% ═══════════════════════════════════════════════════════════════════════
+
+    SSEClient ==>|EventSource| CF
+    CF ==>|/api/v2/stream*| SSE
+    SSE -->|Validate session| Secrets
+
+    SSE -->|"Poll every 5s"| Items
+    SSE -->|Query buckets| Timeseries
+    SSE -.->|"SSE: sentiment_update"| SSEClient
+    SSE -.->|"SSE: heartbeat (30s)"| SSEClient
+
+    %% ═══════════════════════════════════════════════════════════════════════
+    %% FLOW 5: NOTIFICATIONS & ALERTS (Async delivery)
+    %% ═══════════════════════════════════════════════════════════════════════
+
+    EB -->|cron(0 * * * ? *)| Notification
+    Notification -->|Read alert rules| Users
+    Notification -->|Check thresholds| Items
+    Notification -->|Send alert/digest| SendGrid
+    SendGrid -.->|Email| UI
+
+    %% ═══════════════════════════════════════════════════════════════════════
+    %% STYLING
+    %% ═══════════════════════════════════════════════════════════════════════
+
+    classDef external fill:#ffebee,stroke:#c62828,stroke-width:3px
+    classDef browser fill:#e3f2fd,stroke:#1565c0,stroke-width:3px
+    classDef edge fill:#fff3e0,stroke:#ef6c00,stroke-width:3px
+    classDef auth fill:#f3e5f5,stroke:#6a1b9a,stroke-width:3px
+    classDef compute fill:#e8eaf6,stroke:#3949ab,stroke-width:3px
+    classDef messaging fill:#fce4ec,stroke:#c2185b,stroke-width:3px
+    classDef storage fill:#e8f5e9,stroke:#2e7d32,stroke-width:3px
+    classDef model fill:#fffde7,stroke:#f9a825,stroke-width:3px
+
+    class Tiingo,Finnhub,SendGrid,OAuthProviders external
+    class UI,AuthStore,SSEClient browser
+    class CF,Amplify edge
+    class Cognito,Secrets auth
+    class Ingestion,Analysis,Dashboard,SSE,Notification compute
+    class SNS,DLQ,EB messaging
+    class Items,Users,Timeseries,OHLCCache storage
+    class S3Model model
+
+    %% Legend annotations
+    linkStyle 0,1,2,3,4,5,6,7,8,9,10 stroke:#c62828,stroke-width:3px
+    linkStyle 11,12,13,14,15,16,17 stroke:#6a1b9a,stroke-width:2px

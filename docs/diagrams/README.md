@@ -26,11 +26,18 @@ This directory contains comprehensive system architecture diagrams for the Senti
 
 ---
 
-### 1. High-Level System Overview
-**File:** `diagram-1-high-level-overview.md`
+### 1. High-Level System Overview (UPDATED 2026-01-05)
+**File:** `high-level-overview.mmd`
 **Audience:** Non-technical stakeholders, product managers, executives
-**Purpose:** Understand data flow from external sources (Twitter, RSS) to storage
+**Purpose:** Understand data flow from external sources to storage
 **Focus:** External integrations, happy path only, minimal technical detail
+
+**⚠️ Major Update (2026-01-05):** Diagram rewritten to match Terraform canonical source:
+- ✅ Data sources: Tiingo + Finnhub (NOT Twitter/RSS)
+- ✅ 6 Lambda functions: ingestion, analysis, dashboard, sse, notification, metrics
+- ✅ 4 DynamoDB tables: sentiment-items, sentiment-users, sentiment-timeseries, ohlc-cache
+- ✅ Authentication: Cognito + Secrets Manager
+- ✅ Frontend: Amplify (optional)
 
 **Canvas Specifications:**
 - Size: 1920 x 1400 px (landscape)
@@ -247,7 +254,28 @@ classDef externalNode fill:#e5e7eb,stroke:#6b7280,stroke-width:2px,color:#1f2937
 
 ---
 
-### 3. SSE Lambda Streaming Architecture (NEW - Dec 2025)
+### 3. Comprehensive Dataflow Diagram (NEW - 2026-01-05)
+**File:** `dataflow-all-flows.mmd`
+**Audience:** Developers, architects, interviewers
+**Purpose:** Show ALL 5 core data flows through the system in one diagram
+**Focus:** Data boundaries, flow ownership, async vs sync paths
+
+**What It Shows:**
+- ✅ **Flow 1: Sentiment Pipeline** - Ingestion → Analysis → Storage → Timeseries fanout
+- ✅ **Flow 2: Authentication** - Anonymous → OAuth → Magic Link → httpOnly cookies
+- ✅ **Flow 3: Dashboard Retrieval** - REST API queries across all 4 tables
+- ✅ **Flow 4: SSE Streaming** - Real-time polling with heartbeat
+- ✅ **Flow 5: Notifications** - Alert evaluation → SendGrid delivery
+
+**Key Insights:**
+- Color-coded by flow for interview deep-dives
+- Shows all 4 DynamoDB tables and their access patterns
+- Distinguishes sync (solid) vs async (dotted) operations
+- Authentication boundary clearly marked
+
+---
+
+### 4. SSE Lambda Streaming Architecture (Dec 2025)
 **File:** `sse-lambda-streaming.mmd`
 **Audience:** Backend developers, SREs, streaming specialists
 **Purpose:** Understand how SSE Lambda works from connection to event delivery
@@ -271,7 +299,7 @@ classDef externalNode fill:#e5e7eb,stroke:#6b7280,stroke-width:2px,color:#1f2937
 
 ---
 
-### 4. CloudFront Multi-Origin Routing (NEW - Dec 2025)
+### 5. CloudFront Multi-Origin Routing (Dec 2025)
 **File:** `cloudfront-multi-origin.mmd`
 **Audience:** DevOps, architects, frontend developers
 **Purpose:** Understand how CloudFront routes requests to different backends
@@ -428,6 +456,8 @@ Keep Canva project active for future diagrams:
 
 ---
 
-**Last Updated:** 2025-12-16
-**Diagram Count:** 5 specs + 5 use-case sequences (+ 6 planned component diagrams)
-**Status:** SSE and CloudFront diagrams added; architecture diagrams updated with CloudFront CDN
+**Last Updated:** 2026-01-05
+**Diagram Count:** 6 Mermaid diagrams + 5 use-case sequences (+ 6 planned component diagrams)
+**Status:** Major update - all diagrams now Terraform-accurate (Tiingo/Finnhub, 6 Lambdas, 4 tables)
+
+**Deprecated:** `../architecture.mmd` - superseded by `high-level-overview.mmd`
