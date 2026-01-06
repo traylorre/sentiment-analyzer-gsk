@@ -17,6 +17,9 @@ from src.lambdas.shared.auth.merge import (
     MergeResult,
     merge_anonymous_data,
 )
+from src.lambdas.shared.auth.roles import (
+    get_roles_for_user,
+)
 
 __all__ = [
     "CognitoConfig",
@@ -31,4 +34,6 @@ __all__ = [
     # Feature 1130: RBAC constants
     "Role",
     "VALID_ROLES",
+    # Feature 1150: Role assignment
+    "get_roles_for_user",
 ]
