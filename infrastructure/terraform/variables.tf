@@ -199,6 +199,14 @@ variable "jwt_secret" {
   # For prod, use a strong, unique secret
 }
 
+variable "jwt_audience" {
+  description = "Expected audience claim for JWT validation (Feature 1147)"
+  type        = string
+  default     = "sentiment-analyzer-api"
+  # CVSS 7.8: Prevents cross-service token replay attacks
+  # Must match the 'aud' claim in tokens issued by auth services
+}
+
 # ===================================================================
 # Feature 1105: AWS Amplify Frontend
 # ===================================================================
