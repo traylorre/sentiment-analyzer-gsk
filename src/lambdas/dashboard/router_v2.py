@@ -41,6 +41,11 @@ from src.lambdas.dashboard import sse as sse_module
 from src.lambdas.dashboard import tickers as ticker_service
 from src.lambdas.dashboard import timeseries as timeseries_service
 from src.lambdas.dashboard import volatility as volatility_service
+from src.lambdas.shared.auth.csrf import (
+    CSRF_COOKIE_MAX_AGE,
+    CSRF_COOKIE_NAME,
+    generate_csrf_token,
+)
 from src.lambdas.shared.cache.ticker_cache import TickerCache, get_ticker_cache
 from src.lambdas.shared.dynamodb import get_table
 from src.lambdas.shared.errors import (
@@ -54,6 +59,7 @@ from src.lambdas.shared.middleware.auth_middleware import (
     AuthType,
     extract_auth_context_typed,
 )
+from src.lambdas.shared.middleware.csrf_middleware import require_csrf
 from src.lambdas.shared.middleware.require_role import require_role
 from src.lambdas.shared.response_models import (
     UserMeResponse,
@@ -126,15 +132,41 @@ async def no_cache_headers(response: Response) -> None:
     response.headers["Expires"] = "0"
 
 
+def set_csrf_cookie(response: JSONResponse) -> None:
+    """Set CSRF token cookie on a response.
+
+    Feature 1158: CSRF double-submit cookie pattern.
+    Sets a non-httpOnly cookie that JavaScript can read and send back
+    in the X-CSRF-Token header for state-changing requests.
+
+    Cookie settings:
+    - httponly=False: JavaScript must be able to read it
+    - secure=True: Only sent over HTTPS
+    - samesite="none": Required for cross-origin federation
+    - path="/api/v2": Limit scope to API endpoints
+    - max_age=86400: 24 hours, aligned with session lifetime
+    """
+    response.set_cookie(
+        key=CSRF_COOKIE_NAME,
+        value=generate_csrf_token(),
+        httponly=False,  # JS must read this
+        secure=True,
+        samesite="none",  # Required for cross-origin
+        max_age=CSRF_COOKIE_MAX_AGE,
+        path="/api/v2",
+    )
+
+
 # =============================================================================
 # Create routers
 # =============================================================================
 
 # Feature 1157: Apply no_cache_headers to prevent browser/proxy caching of auth data
+# Feature 1158: Apply require_csrf to validate CSRF tokens on state-changing requests
 auth_router = APIRouter(
     prefix="/api/v2/auth",
     tags=["auth"],
-    dependencies=[Depends(no_cache_headers)],
+    dependencies=[Depends(no_cache_headers), Depends(require_csrf)],
 )
 config_router = APIRouter(prefix="/api/v2/configurations", tags=["configurations"])
 ticker_router = APIRouter(prefix="/api/v2/tickers", tags=["tickers"])
@@ -440,6 +472,8 @@ async def verify_magic_link(
             max_age=30 * 24 * 60 * 60,  # 30 days
             path="/api/v2/auth",  # Only sent to auth endpoints
         )
+        # Feature 1158: Set CSRF token cookie for double-submit pattern
+        set_csrf_cookie(response)
 
     return response
 
@@ -503,6 +537,8 @@ async def handle_oauth_callback(
             max_age=30 * 24 * 60 * 60,  # 30 days
             path="/api/v2/auth",  # Only sent to auth endpoints
         )
+        # Feature 1158: Set CSRF token cookie for double-submit pattern
+        set_csrf_cookie(response)
 
     return response
 
@@ -513,11 +549,19 @@ class RefreshTokenRequest(BaseModel):
 
 @auth_router.post("/refresh")
 async def refresh_tokens(body: RefreshTokenRequest):
-    """Refresh access tokens (T094)."""
+    """Refresh access tokens (T094).
+
+    Feature 1158: Also refreshes CSRF token on successful refresh.
+    Note: This endpoint is exempt from CSRF validation because it uses
+    cookie-only authentication (no JavaScript access needed).
+    """
     result = auth_service.refresh_access_tokens(refresh_token=body.refresh_token)
     if isinstance(result, auth_service.ErrorResponse):
         raise HTTPException(status_code=401, detail=result.error.message)
-    return JSONResponse(result.model_dump())
+    response = JSONResponse(result.model_dump())
+    # Feature 1158: Refresh CSRF token along with session
+    set_csrf_cookie(response)
+    return response
 
 
 @auth_router.post("/signout")

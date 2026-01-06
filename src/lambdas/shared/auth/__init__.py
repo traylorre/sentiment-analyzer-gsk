@@ -13,6 +13,14 @@ from src.lambdas.shared.auth.constants import (
     VALID_ROLES,
     Role,
 )
+from src.lambdas.shared.auth.csrf import (
+    CSRF_COOKIE_MAX_AGE,
+    CSRF_COOKIE_NAME,
+    CSRF_HEADER_NAME,
+    generate_csrf_token,
+    is_csrf_exempt,
+    validate_csrf_token,
+)
 from src.lambdas.shared.auth.merge import (
     MergeResult,
     merge_anonymous_data,
@@ -36,4 +44,11 @@ __all__ = [
     "VALID_ROLES",
     # Feature 1150: Role assignment
     "get_roles_for_user",
+    # Feature 1158: CSRF protection
+    "CSRF_COOKIE_NAME",
+    "CSRF_HEADER_NAME",
+    "CSRF_COOKIE_MAX_AGE",
+    "generate_csrf_token",
+    "validate_csrf_token",
+    "is_csrf_exempt",
 ]
