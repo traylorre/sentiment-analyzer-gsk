@@ -159,12 +159,23 @@ def validate_jwt(token: str, config: JWTConfig | None = None) -> JWTClaim | None
             },
         )
 
+        # Feature 1153: v3.0 BREAKING CHANGE - Reject tokens without roles claim
+        # This forces re-login for users with old tokens (security: prevents
+        # auto-promotion of role-less tokens which could bypass RBAC checks)
+        roles = payload.get("roles")
+        if roles is None:
+            logger.warning(
+                "JWT rejected: missing 'roles' claim (v3.0 requirement). "
+                "User must re-authenticate to get a token with roles."
+            )
+            return None
+
         return JWTClaim(
             subject=payload["sub"],
             expiration=datetime.fromtimestamp(payload["exp"], tz=UTC),
             issued_at=datetime.fromtimestamp(payload["iat"], tz=UTC),
             issuer=payload.get("iss"),
-            roles=payload.get("roles"),
+            roles=roles,
         )
 
     except jwt.ExpiredSignatureError:
