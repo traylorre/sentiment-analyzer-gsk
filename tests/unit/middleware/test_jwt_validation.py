@@ -36,10 +36,13 @@ def create_test_token(
     include_sub: bool = True,
     include_nbf: bool = True,
     include_aud: bool = True,
+    roles: list[str] | None = None,
+    include_roles: bool = True,
 ) -> str:
     """Create a test JWT token.
 
     Feature 1147: Added audience and nbf parameters for CVSS 7.8 fix.
+    Feature 1152: Added roles parameter for RBAC support.
 
     Args:
         user_id: Subject claim value
@@ -54,6 +57,8 @@ def create_test_token(
         include_sub: Include subject claim
         include_nbf: Include not-before claim (Feature 1147)
         include_aud: Include audience claim (Feature 1147)
+        roles: User roles for RBAC (defaults to ["free"])
+        include_roles: Include roles claim (Feature 1152)
     """
     payload = {}
     now = datetime.now(UTC)
@@ -70,6 +75,8 @@ def create_test_token(
         payload["nbf"] = now + nbf_offset
     if include_aud and audience:
         payload["aud"] = audience
+    if include_roles:
+        payload["roles"] = roles if roles is not None else ["free"]
 
     return jwt.encode(payload, secret, algorithm=algorithm)
 
@@ -408,3 +415,62 @@ class TestExtractUserId:
         event = {"headers": {}}
         user_id = extract_user_id(event)
         assert user_id is None
+
+
+class TestJWTRolesClaim:
+    """Feature 1152: Tests for roles claim in JWT tokens."""
+
+    def test_roles_extracted_from_jwt(self):
+        """Feature 1152: Roles claim should be extracted from JWT."""
+        token = create_test_token(roles=["free", "paid"])
+        config = JWTConfig(secret=TEST_SECRET, audience="sentiment-analyzer-api")
+
+        claim = validate_jwt(token, config)
+        assert claim is not None
+        assert claim.roles == ["free", "paid"]
+
+    def test_default_roles_is_free(self):
+        """Feature 1152: Default roles should be ['free'] for authenticated users."""
+        token = create_test_token()  # No roles specified, uses default
+        config = JWTConfig(secret=TEST_SECRET, audience="sentiment-analyzer-api")
+
+        claim = validate_jwt(token, config)
+        assert claim is not None
+        assert claim.roles == ["free"]
+
+    def test_operator_roles(self):
+        """Feature 1152: Operator should have ['free', 'paid', 'operator'] roles."""
+        token = create_test_token(roles=["free", "paid", "operator"])
+        config = JWTConfig(secret=TEST_SECRET, audience="sentiment-analyzer-api")
+
+        claim = validate_jwt(token, config)
+        assert claim is not None
+        assert claim.roles == ["free", "paid", "operator"]
+        assert "operator" in claim.roles
+
+    def test_empty_roles_array(self):
+        """Feature 1152: Empty roles array is valid (user has no roles)."""
+        token = create_test_token(roles=[])
+        config = JWTConfig(secret=TEST_SECRET, audience="sentiment-analyzer-api")
+
+        claim = validate_jwt(token, config)
+        assert claim is not None
+        assert claim.roles == []
+
+    def test_missing_roles_claim(self):
+        """Feature 1152: Missing roles claim should result in None roles."""
+        token = create_test_token(include_roles=False)
+        config = JWTConfig(secret=TEST_SECRET, audience="sentiment-analyzer-api")
+
+        claim = validate_jwt(token, config)
+        assert claim is not None
+        assert claim.roles is None
+
+    def test_anonymous_role(self):
+        """Feature 1152: Anonymous users should have ['anonymous'] role."""
+        token = create_test_token(roles=["anonymous"])
+        config = JWTConfig(secret=TEST_SECRET, audience="sentiment-analyzer-api")
+
+        claim = validate_jwt(token, config)
+        assert claim is not None
+        assert claim.roles == ["anonymous"]

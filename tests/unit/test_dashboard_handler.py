@@ -169,11 +169,14 @@ TEST_JWT_SECRET = "test-secret-key-do-not-use-in-production"
 TEST_USER_ID = "12345678-1234-5678-1234-567812345678"
 
 
-def create_test_jwt(user_id: str = TEST_USER_ID) -> str:
+def create_test_jwt(user_id: str = TEST_USER_ID, roles: list[str] | None = None) -> str:
     """Create a valid JWT token for testing authenticated endpoints.
 
     Feature 1147: Added aud and nbf claims for CVSS 7.8 security fix.
+    Feature 1152: Added roles claim for RBAC support.
     """
+    if roles is None:
+        roles = ["free"]  # Default for authenticated users
     now = datetime.now(UTC)
     payload = {
         "sub": user_id,
@@ -182,6 +185,7 @@ def create_test_jwt(user_id: str = TEST_USER_ID) -> str:
         "iss": "sentiment-analyzer",
         "aud": "sentiment-analyzer-api",
         "nbf": now,
+        "roles": roles,  # Feature 1152: RBAC roles claim
     }
     return jwt.encode(payload, TEST_JWT_SECRET, algorithm="HS256")
 

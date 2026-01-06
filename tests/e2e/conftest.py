@@ -494,6 +494,7 @@ def create_test_jwt(
     issuer: str = "sentiment-analyzer",
     audience: str = "sentiment-analyzer-api",
     nbf_offset: timedelta = timedelta(seconds=0),
+    roles: list[str] | None = None,
 ) -> str:
     """Create a valid JWT token for E2E tests (Feature 1053).
 
@@ -501,6 +502,7 @@ def create_test_jwt(
     as AuthType.AUTHENTICATED, unlike the deprecated X-Auth-Type header.
 
     Feature 1147: Added audience and nbf claims for CVSS 7.8 security fix.
+    Feature 1152: Added roles claim for RBAC support.
 
     Args:
         user_id: User ID for the token (defaults to random UUID)
@@ -509,6 +511,7 @@ def create_test_jwt(
         issuer: Token issuer claim
         audience: Audience claim (Feature 1147)
         nbf_offset: Not-before offset from now (Feature 1147)
+        roles: User roles for RBAC (defaults to ["free"] for authenticated users)
 
     Returns:
         Encoded JWT token string
@@ -517,6 +520,8 @@ def create_test_jwt(
         user_id = str(uuid.uuid4())
     if secret is None:
         secret = os.environ.get("PREPROD_TEST_JWT_SECRET", _DEFAULT_TEST_JWT_SECRET)
+    if roles is None:
+        roles = ["free"]  # Default for authenticated users (Feature 1152)
 
     now = datetime.now(UTC)
     payload = {
@@ -526,6 +531,7 @@ def create_test_jwt(
         "iss": issuer,
         "aud": audience,
         "nbf": now + nbf_offset,
+        "roles": roles,  # Feature 1152: RBAC roles claim
     }
     return jwt.encode(payload, secret, algorithm="HS256")
 
