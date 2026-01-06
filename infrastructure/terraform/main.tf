@@ -422,6 +422,8 @@ module "dashboard_lambda" {
     TIMESERIES_TABLE = module.dynamodb.timeseries_table_name
     # Feature 1054: JWT secret for auth middleware token validation
     JWT_SECRET = var.jwt_secret
+    # Feature 1147: JWT audience for cross-service token replay prevention (CVSS 7.8)
+    JWT_AUDIENCE = var.jwt_audience
     # Feature 1056: OHLC data source secrets for Tiingo/Finnhub adapters
     TIINGO_SECRET_ARN  = module.secrets.tiingo_secret_arn
     FINNHUB_SECRET_ARN = module.secrets.finnhub_secret_arn
@@ -754,6 +756,8 @@ module "sse_streaming_lambda" {
     TIMESERIES_TABLE = module.dynamodb.timeseries_table_name
     # Feature 1054: JWT secret for auth middleware token validation
     JWT_SECRET = var.jwt_secret
+    # Feature 1147: JWT audience for cross-service token replay prevention (CVSS 7.8)
+    JWT_AUDIENCE = var.jwt_audience
   }
 
   # Function URL with RESPONSE_STREAM for true SSE streaming
