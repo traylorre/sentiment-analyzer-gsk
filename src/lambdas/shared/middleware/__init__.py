@@ -8,6 +8,9 @@ from src.lambdas.shared.middleware.auth_middleware import (
     extract_user_id,
     require_auth,
 )
+from src.lambdas.shared.middleware.csrf_middleware import (
+    require_csrf,
+)
 from src.lambdas.shared.middleware.hcaptcha import (
     CaptchaRequired,
     verify_captcha,
@@ -45,4 +48,6 @@ __all__ = [
     # Security headers
     "add_security_headers",
     "get_cors_headers",
+    # Feature 1158: CSRF protection
+    "require_csrf",
 ]
