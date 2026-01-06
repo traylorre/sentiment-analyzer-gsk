@@ -23,7 +23,7 @@ import os
 from typing import Literal
 
 from botocore.exceptions import ClientError
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr
 
@@ -104,8 +104,38 @@ logger = logging.getLogger(__name__)
 USERS_TABLE = os.environ["USERS_TABLE"]
 TICKER_CACHE_BUCKET = os.environ.get("TICKER_CACHE_BUCKET", "")
 
+
+# =============================================================================
+# Router-level dependencies (must be defined before routers that use them)
+# =============================================================================
+
+
+async def no_cache_headers(response: Response) -> None:
+    """Dependency to set cache-control headers on auth responses.
+
+    Feature 1157: Prevents browser and proxy caching of sensitive auth data.
+    Applied at router level to all auth endpoints.
+
+    Headers set:
+    - Cache-Control: no-store, no-cache, must-revalidate (RFC 7234)
+    - Pragma: no-cache (HTTP/1.0 compatibility)
+    - Expires: 0 (Legacy proxy compatibility)
+    """
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+
+
+# =============================================================================
 # Create routers
-auth_router = APIRouter(prefix="/api/v2/auth", tags=["auth"])
+# =============================================================================
+
+# Feature 1157: Apply no_cache_headers to prevent browser/proxy caching of auth data
+auth_router = APIRouter(
+    prefix="/api/v2/auth",
+    tags=["auth"],
+    dependencies=[Depends(no_cache_headers)],
+)
 config_router = APIRouter(prefix="/api/v2/configurations", tags=["configurations"])
 ticker_router = APIRouter(prefix="/api/v2/tickers", tags=["tickers"])
 alert_router = APIRouter(prefix="/api/v2/alerts", tags=["alerts"])
@@ -115,6 +145,11 @@ market_router = APIRouter(prefix="/api/v2/market", tags=["market"])
 users_router = APIRouter(prefix="/api/v2/users", tags=["users"])
 # Feature 1009: Timeseries router for multi-resolution sentiment time-series
 timeseries_router = APIRouter(prefix="/api/v2/timeseries", tags=["timeseries"])
+
+
+# =============================================================================
+# Endpoint-level dependencies
+# =============================================================================
 
 
 def get_users_table():
