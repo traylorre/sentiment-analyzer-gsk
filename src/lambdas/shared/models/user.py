@@ -6,7 +6,7 @@ Feature 1162: Added ProviderMetadata class and federation fields.
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, model_validator
 
 # Type aliases for federation
 ProviderType = Literal["email", "google", "github"]
@@ -113,6 +113,29 @@ class User(BaseModel):
     role_assigned_by: str | None = Field(
         None, description="Who changed the role (stripe_webhook or admin:{user_id})"
     )
+
+    @model_validator(mode="after")
+    def validate_role_verification_state(self) -> "User":
+        """Enforce role-verification state machine invariants.
+
+        Feature 1163: Validates cross-field constraints per spec-v2.md matrix:
+        - anonymous:none     → Valid
+        - anonymous:pending  → Valid
+        - anonymous:verified → Auto-upgrade to free:verified
+        - free/paid/operator → Must have verification="verified"
+        """
+        # Rule 1 & 2: anonymous + verified → auto-upgrade to free
+        if self.role == "anonymous" and self.verification == "verified":
+            object.__setattr__(self, "role", "free")
+
+        # Rule 3: non-anonymous requires verified
+        if self.role != "anonymous" and self.verification != "verified":
+            raise ValueError(
+                f"Invalid state: {self.role} role requires verified status, "
+                f"got verification={self.verification}"
+            )
+
+        return self
 
     @property
     def pk(self) -> str:
