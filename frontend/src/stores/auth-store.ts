@@ -208,7 +208,8 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
     try {
       // Use authApi to route to Lambda backend
-      const data = await authApi.refreshToken(tokens.refreshToken);
+      // Feature 1168: Refresh token now sent via httpOnly cookie, not in request body
+      const data = await authApi.refreshToken();
 
       // Update tokens with new access token (preserving refresh token)
       setTokens({

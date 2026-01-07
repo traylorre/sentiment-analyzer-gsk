@@ -35,9 +35,7 @@ export interface AuthResponse {
   tokens: AuthTokens;
 }
 
-export interface RefreshTokenRequest {
-  refreshToken: string;
-}
+// RefreshTokenRequest removed - refresh token now sent via httpOnly cookie only (Feature 1168)
 
 export interface RefreshTokenResponse {
   accessToken: string;
@@ -82,10 +80,11 @@ export const authApi = {
     api.post<AuthResponse>('/api/v2/auth/oauth/callback', { provider, code }),
 
   /**
-   * Refresh access token using refresh token
+   * Refresh access token using httpOnly cookie
+   * Feature 1168: Refresh token sent via cookie only, not in request body
    */
-  refreshToken: (refreshToken: string) =>
-    api.post<RefreshTokenResponse>('/api/v2/auth/refresh', { refreshToken }),
+  refreshToken: () =>
+    api.post<RefreshTokenResponse>('/api/v2/auth/refresh'),
 
   /**
    * Extend the current session
