@@ -33,18 +33,19 @@ interface UseChartDataOptions {
  * Supports resolution parameter for intraday data (T015-T017).
  *
  * Feature 1165: No hydration wait - memory-only store initializes immediately.
+ * Feature 1167: Removed X-User-ID - uses Bearer token via client.ts interceptor.
  */
 export function useOHLCData(
   ticker: string | null,
   timeRange: TimeRange = '1M',
   resolution: OHLCResolution = 'D'
 ) {
-  const userId = useAuthStore((state) => state.user?.userId);
+  const hasAccessToken = useAuthStore((state) => !!state.tokens?.accessToken);
 
   return useQuery<OHLCResponse>({
     queryKey: ['ohlc', ticker, timeRange, resolution],
-    queryFn: () => fetchOHLCData(ticker!, { range: timeRange, resolution }, userId!),
-    enabled: !!ticker && !!userId,
+    queryFn: () => fetchOHLCData(ticker!, { range: timeRange, resolution }),
+    enabled: !!ticker && hasAccessToken,
     staleTime: STALE_TIME_MS,
   });
 }
@@ -53,19 +54,20 @@ export function useOHLCData(
  * Hook to fetch sentiment history for a ticker.
  *
  * Feature 1165: No hydration wait - memory-only store initializes immediately.
+ * Feature 1167: Removed X-User-ID - uses Bearer token via client.ts interceptor.
  */
 export function useSentimentHistoryData(
   ticker: string | null,
   timeRange: TimeRange = '1M',
   source: ChartSentimentSource = 'aggregated'
 ) {
-  const userId = useAuthStore((state) => state.user?.userId);
+  const hasAccessToken = useAuthStore((state) => !!state.tokens?.accessToken);
 
   return useQuery<SentimentHistoryResponse>({
     queryKey: ['sentiment-history-chart', ticker, timeRange, source],
     queryFn: () =>
-      fetchSentimentHistory(ticker!, { range: timeRange, source }, userId!),
-    enabled: !!ticker && !!userId,
+      fetchSentimentHistory(ticker!, { range: timeRange, source }),
+    enabled: !!ticker && hasAccessToken,
     staleTime: STALE_TIME_MS,
   });
 }
@@ -78,6 +80,7 @@ export function useSentimentHistoryData(
  * Supports resolution parameter for intraday OHLC data (T015-T017).
  *
  * Feature 1165: No hydration wait - memory-only store initializes immediately.
+ * Feature 1167: Removed X-User-ID - uses Bearer token via client.ts interceptor.
  */
 export function useChartData({
   ticker,
@@ -89,20 +92,20 @@ export function useChartData({
   refetch: () => void;
   isStale: boolean;
 } {
-  const userId = useAuthStore((state) => state.user?.userId);
+  const hasAccessToken = useAuthStore((state) => !!state.tokens?.accessToken);
 
   const ohlcQuery = useQuery<OHLCResponse>({
     queryKey: ['ohlc', ticker, timeRange, resolution],
-    queryFn: () => fetchOHLCData(ticker!, { range: timeRange, resolution }, userId!),
-    enabled: enabled && !!ticker && !!userId,
+    queryFn: () => fetchOHLCData(ticker!, { range: timeRange, resolution }),
+    enabled: enabled && !!ticker && hasAccessToken,
     staleTime: STALE_TIME_MS,
   });
 
   const sentimentQuery = useQuery<SentimentHistoryResponse>({
     queryKey: ['sentiment-history-chart', ticker, timeRange, sentimentSource],
     queryFn: () =>
-      fetchSentimentHistory(ticker!, { range: timeRange, source: sentimentSource }, userId!),
-    enabled: enabled && !!ticker && !!userId,
+      fetchSentimentHistory(ticker!, { range: timeRange, source: sentimentSource }),
+    enabled: enabled && !!ticker && hasAccessToken,
     staleTime: STALE_TIME_MS,
   });
 
