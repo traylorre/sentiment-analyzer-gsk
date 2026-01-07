@@ -39,8 +39,7 @@ describe('Auth Store', () => {
   beforeEach(() => {
     // Reset store state before each test
     useAuthStore.getState().reset();
-    // FR-013: Simulate hydration complete for tests
-    useAuthStore.setState({ _hasHydrated: true });
+    // Feature 1165: No hydration concept - memory-only store
     vi.clearAllMocks();
   });
 
@@ -430,8 +429,7 @@ describe('Auth Store', () => {
 describe('Auth Store Selectors', () => {
   beforeEach(() => {
     useAuthStore.getState().reset();
-    // FR-013: Simulate hydration complete for tests
-    useAuthStore.setState({ _hasHydrated: true });
+    // Feature 1165: No hydration concept - memory-only store
   });
 
   it('useUser should return user', () => {
@@ -457,8 +455,7 @@ describe('Auth Store Selectors', () => {
 describe('Feature 014: Auto-Session Creation', () => {
   beforeEach(() => {
     useAuthStore.getState().reset();
-    // FR-013: Simulate hydration complete for tests
-    useAuthStore.setState({ _hasHydrated: true });
+    // Feature 1165: No hydration concept - memory-only store
     vi.clearAllMocks();
   });
 
@@ -589,13 +586,14 @@ describe('Feature 014: Auto-Session Creation', () => {
 });
 
 // Feature 1131: Token Persistence Security Tests
+// Feature 1165: These tests are now obsolete - localStorage is no longer used for auth
+// Keeping tests to verify tokens are NOT in localStorage (memory-only store)
 describe('Feature 1131: Token Non-Persistence (Security Fix)', () => {
   const STORAGE_KEY = 'sentiment-auth-tokens';
 
   beforeEach(() => {
     useAuthStore.getState().reset();
-    // FR-013: Simulate hydration complete for tests
-    useAuthStore.setState({ _hasHydrated: true });
+    // Feature 1165: No hydration concept - memory-only store
     // Clear localStorage before each test
     if (typeof window !== 'undefined' && window.localStorage) {
       window.localStorage.removeItem(STORAGE_KEY);
@@ -626,9 +624,9 @@ describe('Feature 1131: Token Non-Persistence (Security Fix)', () => {
       });
 
       setTokens({
-        idToken: 'id-token-secret',
-        accessToken: 'access-token-secret',
-        refreshToken: 'refresh-token-secret',
+        idToken: 'id-token-secret', // pragma: allowlist secret
+        accessToken: 'access-token-secret', // pragma: allowlist secret
+        refreshToken: 'refresh-token-secret', // pragma: allowlist secret
         expiresIn: 3600,
       });
 
@@ -659,9 +657,9 @@ describe('Feature 1131: Token Non-Persistence (Security Fix)', () => {
       });
 
       setTokens({
-        idToken: 'UNIQUE_ID_TOKEN_VALUE',
-        accessToken: 'UNIQUE_ACCESS_TOKEN_VALUE',
-        refreshToken: 'UNIQUE_REFRESH_TOKEN_VALUE',
+        idToken: 'UNIQUE_ID_TOKEN_VALUE', // pragma: allowlist secret
+        accessToken: 'UNIQUE_ACCESS_TOKEN_VALUE', // pragma: allowlist secret
+        refreshToken: 'UNIQUE_REFRESH_TOKEN_VALUE', // pragma: allowlist secret
         expiresIn: 3600,
       });
 
@@ -690,9 +688,9 @@ describe('Feature 1131: Token Non-Persistence (Security Fix)', () => {
       });
 
       setTokens({
-        idToken: 'memory-id-token',
-        accessToken: 'memory-access-token',
-        refreshToken: 'memory-refresh-token',
+        idToken: 'memory-id-token', // pragma: allowlist secret
+        accessToken: 'memory-access-token', // pragma: allowlist secret
+        refreshToken: 'memory-refresh-token', // pragma: allowlist secret
         expiresIn: 3600,
       });
 
@@ -754,35 +752,32 @@ describe('Feature 1131: Token Non-Persistence (Security Fix)', () => {
   });
 
   describe('FR-004: Migration clears existing tokens', () => {
-    it('should clear tokens from localStorage if they exist from before fix', () => {
-      // Simulate pre-fix localStorage state with tokens
-      const preFix = JSON.stringify({
-        state: {
-          user: { userId: 'old-user', authType: 'email' },
-          tokens: {
-            accessToken: 'old-access-token',
-            refreshToken: 'old-refresh-token',
-            idToken: 'old-id-token',
-          },
-          isAuthenticated: true,
-          isAnonymous: false,
-        },
-        version: 0,
+    it('should not use localStorage at all (Feature 1165: memory-only store)', () => {
+      // Feature 1165: Store is now memory-only, no localStorage usage at all
+      // This test verifies that localStorage is never written to
+      useAuthStore.getState().reset();
+
+      const { setUser, setTokens } = useAuthStore.getState();
+
+      setUser({
+        userId: 'test-user',
+        authType: 'email',
+        createdAt: '2024-01-15T10:00:00Z',
+        configurationCount: 0,
+        alertCount: 0,
+        emailNotificationsEnabled: true,
       });
 
-      window.localStorage.setItem(STORAGE_KEY, preFix);
+      setTokens({
+        idToken: 'test-id-token', // pragma: allowlist secret
+        accessToken: 'test-access-token', // pragma: allowlist secret
+        refreshToken: 'test-refresh-token', // pragma: allowlist secret
+        expiresIn: 3600,
+      });
 
-      // Trigger rehydration by resetting and re-initializing
-      // The onRehydrate callback should clean up tokens
-      useAuthStore.getState().reset();
-      useAuthStore.setState({ _hasHydrated: true });
-
-      // After rehydration, tokens should be cleared from localStorage
+      // Feature 1165: No localStorage usage - storage key should be empty/undefined
       const stored = window.localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        expect(parsed.state?.tokens).toBeUndefined();
-      }
+      expect(stored).toBeNull();
     });
   });
 });

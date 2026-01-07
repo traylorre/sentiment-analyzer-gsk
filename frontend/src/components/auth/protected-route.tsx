@@ -26,8 +26,8 @@ export function ProtectedRoute({
   className,
 }: ProtectedRouteProps) {
   const router = useRouter();
-  // T015: Import and use hasHydrated from useAuth (FR-014)
-  const { hasHydrated, isAuthenticated, isAnonymous, isLoading, isInitialized } = useAuth();
+  // Feature 1165: Use isInitialized instead of hasHydrated (memory-only store)
+  const { isAuthenticated, isAnonymous, isLoading, isInitialized } = useAuth();
 
   const hasAccess = requireUpgraded
     ? isAuthenticated && !isAnonymous
@@ -35,20 +35,15 @@ export function ProtectedRoute({
     ? isAuthenticated
     : true;
 
-  // T018: Only redirect AFTER hydration is complete + auth check fails
+  // Feature 1165: Only redirect after initialized + auth check fails
   useEffect(() => {
-    // Don't redirect during hydration - we don't know auth state yet
-    if (!hasHydrated) {
-      return;
-    }
     if (isInitialized && !isLoading && !hasAccess) {
       router.push(redirectTo);
     }
-  }, [hasHydrated, isInitialized, isLoading, hasAccess, router, redirectTo]);
+  }, [isInitialized, isLoading, hasAccess, router, redirectTo]);
 
-  // T16-T17: Show loading state during hydration phase OR while checking auth
-  // This prevents flash of incorrect UI before we know the real auth state
-  if (!hasHydrated || !isInitialized || isLoading) {
+  // Feature 1165: Show loading state until initialized
+  if (!isInitialized || isLoading) {
     return (
       <div className={cn('min-h-[400px] flex items-center justify-center', className)} role="status" aria-label="Loading">
         <motion.div
@@ -125,11 +120,11 @@ interface AuthGuardProps {
 }
 
 export function AuthGuard({ children, feature, fallback }: AuthGuardProps) {
-  // FR-018: AuthGuard is also hydration-aware
-  const { hasHydrated, isAuthenticated, isAnonymous } = useAuth();
+  // Feature 1165: Use isInitialized instead of hasHydrated (memory-only store)
+  const { isInitialized, isAuthenticated, isAnonymous } = useAuth();
 
-  // Don't render anything meaningful during hydration - parent handles loading state
-  if (!hasHydrated) {
+  // Don't render anything meaningful until initialized - parent handles loading state
+  if (!isInitialized) {
     return null;
   }
 

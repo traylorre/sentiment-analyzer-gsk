@@ -40,8 +40,8 @@ function SettingItem({ icon: Icon, label, description, children }: SettingItemPr
 
 export default function SettingsPage() {
   const { reducedMotion, hapticEnabled, setReducedMotion, setHapticEnabled } = useAnimationStore();
-  // T040: Include hasHydrated for hydration-aware rendering (FR-018)
-  const { hasHydrated, user, isAuthenticated, isAnonymous, signOut, isLoading } = useAuth();
+  // Feature 1165: Use isInitialized instead of hasHydrated (memory-only store)
+  const { isInitialized, user, isAuthenticated, isAnonymous, signOut, isLoading } = useAuth();
   const [signOutOpen, setSignOutOpen] = useState(false);
 
   // All hooks must be called before early returns (React rules of hooks)
@@ -51,8 +51,8 @@ export default function SettingsPage() {
     });
   }, []);
 
-  // FR-018: Show skeleton/loading state during hydration to prevent fallback UI flash
-  if (!hasHydrated) {
+  // Feature 1165: Show skeleton/loading state until initialized
+  if (!isInitialized) {
     return (
       <PageTransition>
         <div className="space-y-6 max-w-2xl mx-auto">

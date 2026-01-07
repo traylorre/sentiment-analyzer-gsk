@@ -38,8 +38,7 @@ describe('SessionProvider', () => {
   beforeEach(() => {
     // Reset store state before each test
     useAuthStore.getState().reset();
-    // FR-013: Simulate hydration complete for tests
-    useAuthStore.setState({ _hasHydrated: true });
+    // Feature 1165: No hydration concept - memory-only store
     vi.clearAllMocks();
   });
 
@@ -49,8 +48,7 @@ describe('SessionProvider', () => {
 
   describe('Feature 014: Automatic Session Initialization', () => {
     it('should show loading state initially', () => {
-      // Reset hydration to simulate initial state
-      useAuthStore.setState({ _hasHydrated: false });
+      // Feature 1165: Loading state shown until isInitialized is true
 
       render(
         <SessionProvider>
@@ -82,8 +80,7 @@ describe('SessionProvider', () => {
     });
 
     it('should use custom loading component when provided', () => {
-      // Reset hydration to simulate initial state
-      useAuthStore.setState({ _hasHydrated: false });
+      // Feature 1165: Loading state shown until isInitialized is true
 
       render(
         <SessionProvider loadingComponent={<div>Custom Loading...</div>}>
@@ -187,8 +184,7 @@ describe('SessionProvider', () => {
 describe('useSessionInit hook', () => {
   beforeEach(() => {
     useAuthStore.getState().reset();
-    // FR-013: Simulate hydration complete for tests
-    useAuthStore.setState({ _hasHydrated: true });
+    // Feature 1165: No hydration concept - memory-only store
     vi.clearAllMocks();
   });
 
