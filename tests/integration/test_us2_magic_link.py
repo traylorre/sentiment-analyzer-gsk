@@ -6,7 +6,7 @@ Tests the complete magic link authentication flow:
 1. User requests magic link
 2. Email is sent (mocked)
 3. User clicks link
-4. Token is verified
+4. Token is verified via database lookup (Feature 1166: HMAC removed)
 5. Anonymous data is merged
 6. User receives authenticated tokens
 
@@ -20,11 +20,9 @@ For On-Call Engineers:
     1. DynamoDB table schema matches expected keys (PK, SK)
     2. MagicLinkToken model TTL handling
     3. Email service integration (mocked in tests)
-    4. Token signature validation logic
+    4. Token verification via atomic DynamoDB consumption (Feature 1166)
 """
 
-import hashlib
-import hmac
 import os
 import secrets
 import uuid
@@ -42,10 +40,10 @@ def env_vars():
     """Set test environment variables."""
     os.environ["DATABASE_TABLE"] = "test-auth-table"
     os.environ["ENVIRONMENT"] = "test"
-    os.environ["MAGIC_LINK_SECRET"] = "test-secret-key-for-signing"
+    # Feature 1166: MAGIC_LINK_SECRET no longer needed - verification via DB lookup
     os.environ["DASHBOARD_URL"] = "https://test.sentiment-analyzer.com"
     yield
-    for key in ["DATABASE_TABLE", "ENVIRONMENT", "MAGIC_LINK_SECRET", "DASHBOARD_URL"]:
+    for key in ["DATABASE_TABLE", "ENVIRONMENT", "DASHBOARD_URL"]:
         os.environ.pop(key, None)
 
 
@@ -110,12 +108,9 @@ class TestMagicLinkFlow:
             assert magic_link_result["status"] == "email_sent"
             assert mock_send.called
             token_id = magic_link_result["token_id"]
-            signature = magic_link_result["signature"]
 
-        # Step 4: Verify magic link token
-        verify_result = _verify_magic_link(
-            table, token_id, signature, anonymous_user_id
-        )
+        # Step 4: Verify magic link token (Feature 1166: no signature param)
+        verify_result = _verify_magic_link(table, token_id, anonymous_user_id)
 
         assert verify_result["status"] == "verified"
         assert verify_result["email"] == email
@@ -151,18 +146,16 @@ class TestMagicLinkFlow:
         # Create an expired token
         email = "testuser@example.com"
         token_id = secrets.token_urlsafe(32)
-        signature = _generate_signature(token_id)
+        # Feature 1166: No signature needed
 
         # Store expired token (created 2 hours ago, expired 1 hour ago)
         created_at = datetime.now(UTC) - timedelta(hours=2)
         expires_at = datetime.now(UTC) - timedelta(hours=1)
 
-        _store_magic_link_token(
-            table, token_id, email, signature, created_at, expires_at
-        )
+        _store_magic_link_token(table, token_id, email, created_at, expires_at)
 
         # Attempt to verify expired token
-        verify_result = _verify_magic_link(table, token_id, signature, None)
+        verify_result = _verify_magic_link(table, token_id, None)
 
         assert verify_result["status"] == "invalid"
         assert verify_result["error"] == "token_expired"
@@ -191,14 +184,14 @@ class TestMagicLinkFlow:
             magic_link_result = _request_magic_link(table, email, None)
 
         token_id = magic_link_result["token_id"]
-        signature = magic_link_result["signature"]
+        # Feature 1166: signature removed - verification via token_id only
 
         # First verification - should succeed
-        first_verify = _verify_magic_link(table, token_id, signature, None)
+        first_verify = _verify_magic_link(table, token_id, None)
         assert first_verify["status"] == "verified"
 
         # Second verification - should fail (token already used)
-        second_verify = _verify_magic_link(table, token_id, signature, None)
+        second_verify = _verify_magic_link(table, token_id, None)
         assert second_verify["status"] == "invalid"
         assert second_verify["error"] == "token_used"
 
@@ -227,22 +220,18 @@ class TestMagicLinkFlow:
             # First request
             first_result = _request_magic_link(table, email, None)
             first_token_id = first_result["token_id"]
-            first_signature = first_result["signature"]
 
             # Second request (should invalidate first)
             second_result = _request_magic_link(table, email, None)
             second_token_id = second_result["token_id"]
-            second_signature = second_result["signature"]
 
         # First token should be invalidated
-        first_verify = _verify_magic_link(table, first_token_id, first_signature, None)
+        first_verify = _verify_magic_link(table, first_token_id, None)
         assert first_verify["status"] == "invalid"
         assert first_verify["error"] == "token_invalidated"
 
         # Second token should work
-        second_verify = _verify_magic_link(
-            table, second_token_id, second_signature, None
-        )
+        second_verify = _verify_magic_link(table, second_token_id, None)
         assert second_verify["status"] == "verified"
 
     @mock_aws
@@ -280,7 +269,6 @@ class TestMagicLinkFlow:
         verify_result = _verify_magic_link(
             table,
             magic_link_result["token_id"],
-            magic_link_result["signature"],
             anonymous_user_id,
         )
 
@@ -295,38 +283,6 @@ class TestMagicLinkFlow:
         config_names = [c["name"] for c in configs]
         assert "Config 1" in config_names
         assert "Config 2" in config_names
-
-    @mock_aws
-    def test_invalid_signature_rejected(self, env_vars):
-        """E2E: Invalid signatures are rejected."""
-        dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
-        table = dynamodb.create_table(
-            TableName="test-auth-table",
-            KeySchema=[
-                {"AttributeName": "PK", "KeyType": "HASH"},
-                {"AttributeName": "SK", "KeyType": "RANGE"},
-            ],
-            AttributeDefinitions=[
-                {"AttributeName": "PK", "AttributeType": "S"},
-                {"AttributeName": "SK", "AttributeType": "S"},
-            ],
-            BillingMode="PAY_PER_REQUEST",
-        )
-
-        # Request magic link
-        email = "testuser@example.com"
-        with patch("tests.integration.test_us2_magic_link._send_email") as mock_send:
-            mock_send.return_value = True
-            magic_link_result = _request_magic_link(table, email, None)
-
-        token_id = magic_link_result["token_id"]
-        invalid_signature = "invalid_signature_value"
-
-        # Attempt to verify with invalid signature
-        verify_result = _verify_magic_link(table, token_id, invalid_signature, None)
-
-        assert verify_result["status"] == "invalid"
-        assert verify_result["error"] == "invalid_signature"
 
     @mock_aws
     def test_existing_user_login(self, env_vars):
@@ -352,9 +308,7 @@ class TestMagicLinkFlow:
             mock_send.return_value = True
             first_magic_link = _request_magic_link(table, email, None)
 
-        first_verify = _verify_magic_link(
-            table, first_magic_link["token_id"], first_magic_link["signature"], None
-        )
+        first_verify = _verify_magic_link(table, first_magic_link["token_id"], None)
 
         first_user_id = first_verify["user_id"]
         assert first_verify["status"] == "verified"
@@ -364,9 +318,7 @@ class TestMagicLinkFlow:
             mock_send.return_value = True
             second_magic_link = _request_magic_link(table, email, None)
 
-        second_verify = _verify_magic_link(
-            table, second_magic_link["token_id"], second_magic_link["signature"], None
-        )
+        second_verify = _verify_magic_link(table, second_magic_link["token_id"], None)
 
         second_user_id = second_verify["user_id"]
 
@@ -445,9 +397,8 @@ def _request_magic_link(
     # Invalidate any existing tokens for this email
     _invalidate_existing_tokens(table, email)
 
-    # Generate token and signature
+    # Feature 1166: Generate random token only (no HMAC signature)
     token_id = secrets.token_urlsafe(32)
-    signature = _generate_signature(token_id)
 
     # Store token
     now = datetime.now(UTC)
@@ -457,21 +408,19 @@ def _request_magic_link(
         table,
         token_id,
         email,
-        signature,
         now,
         expires_at,
         anonymous_user_id,
     )
 
     # Send email (mocked)
-    _send_email(email, token_id, signature)
+    _send_email(email, token_id)
 
     return {
         "status": "email_sent",
         "email": email,
         "expires_in_seconds": 3600,
         "token_id": token_id,
-        "signature": signature,
     }
 
 
@@ -479,18 +428,19 @@ def _store_magic_link_token(
     table: Any,
     token_id: str,
     email: str,
-    signature: str,
     created_at: datetime,
     expires_at: datetime,
     anonymous_user_id: str | None = None,
 ) -> None:
-    """Store magic link token in DynamoDB."""
+    """Store magic link token in DynamoDB.
+
+    Feature 1166: signature parameter removed - verification via token_id lookup.
+    """
     item = {
         "PK": f"MAGIC_LINK#{token_id}",
         "SK": "TOKEN",
         "token_id": token_id,
         "email": email,
-        "signature": signature,
         "created_at": created_at.isoformat(),
         "expires_at": expires_at.isoformat(),
         "used": False,
@@ -542,10 +492,13 @@ def _invalidate_existing_tokens(table: Any, email: str) -> None:
 def _verify_magic_link(
     table: Any,
     token_id: str,
-    signature: str,
     anonymous_user_id: str | None,
 ) -> dict[str, Any]:
-    """Verify magic link token."""
+    """Verify magic link token.
+
+    Feature 1166: Removed signature parameter - verification via token_id lookup only.
+    Token security relies on randomness (secrets.token_urlsafe) and atomic consumption.
+    """
     # Get token from DynamoDB
     response = table.get_item(
         Key={
@@ -587,14 +540,7 @@ def _verify_magic_link(
             "message": "This link has expired. Please request a new one.",
         }
 
-    # Verify signature
-    expected_signature = _generate_signature(token_id)
-    if not hmac.compare_digest(signature, expected_signature):
-        return {
-            "status": "invalid",
-            "error": "invalid_signature",
-            "message": "Invalid link. Please request a new one.",
-        }
+    # Feature 1166: No signature verification - token_id is unguessable
 
     # Mark token as used
     table.update_item(
@@ -712,10 +658,7 @@ def _merge_anonymous_data(
     )
 
 
-def _generate_signature(token_id: str) -> str:
-    """Generate HMAC signature for token."""
-    secret = os.environ.get("MAGIC_LINK_SECRET", "default-secret")
-    return hmac.new(secret.encode(), token_id.encode(), hashlib.sha256).hexdigest()
+# Feature 1166: _generate_signature removed - HMAC no longer used
 
 
 def _generate_tokens(user_id: str) -> dict[str, Any]:
@@ -728,7 +671,10 @@ def _generate_tokens(user_id: str) -> dict[str, Any]:
     }
 
 
-def _send_email(email: str, token_id: str, signature: str) -> bool:
-    """Send magic link email (mocked in tests)."""
+def _send_email(email: str, token_id: str) -> bool:
+    """Send magic link email (mocked in tests).
+
+    Feature 1166: Removed signature parameter.
+    """
     # This would call SendGrid in production
     return True

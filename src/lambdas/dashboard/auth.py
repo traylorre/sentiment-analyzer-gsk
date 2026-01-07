@@ -30,12 +30,10 @@ Security Notes:
     - Anonymous IDs are UUIDs, not predictable
     - Session expiry is enforced server-side
     - Rate limiting prevents brute force
-    - Magic link tokens are HMAC-signed
+    - Magic link tokens verified via atomic DB consumption (Feature 1166)
     - OAuth tokens come from Cognito (verified via userinfo)
 """
 
-import hashlib
-import hmac
 import logging
 import os
 import uuid
@@ -1097,37 +1095,11 @@ class MergeStatusResponse(BaseModel):
     message: str | None = None
 
 
-# Feature 1164: Magic link secret - no hardcoded fallback, validated at use time
+# Feature 1166: HMAC completely removed - token security via:
+# 1. 256-bit random token (secrets.token_urlsafe) - unguessable
+# 2. Atomic DynamoDB consumption (ConditionExpression) - no replay
+# 3. Short expiry (1 hour) + rate limiting
 MAGIC_LINK_EXPIRY_HOURS = 1
-
-
-def _get_magic_link_secret() -> str:
-    """Get MAGIC_LINK_SECRET from environment, fail fast if not set.
-
-    Feature 1164: Removed hardcoded fallback for security.
-    Validation happens at first use, not import time, to allow test fixtures.
-    """
-    secret = os.environ.get("MAGIC_LINK_SECRET", "")
-    if not secret:
-        raise RuntimeError(
-            "MAGIC_LINK_SECRET environment variable is required but not set. "
-            "Set it to a secure random value (minimum 32 characters)."
-        )
-    return secret
-
-
-def _generate_magic_link_signature(token_id: str, email: str) -> str:
-    """Generate HMAC-SHA256 signature for magic link."""
-    message = f"{token_id}:{email}"
-    return hmac.new(
-        _get_magic_link_secret().encode(),
-        message.encode(),
-        hashlib.sha256,
-    ).hexdigest()
-
-
-# Feature 1164: Removed _verify_magic_link_signature() - orphaned dead code.
-# Verification uses atomic DynamoDB consumption via ConditionExpression, not HMAC.
 
 
 # T090: Magic Link Request
@@ -1157,16 +1129,15 @@ def request_magic_link(
     # Invalidate any existing tokens for this email
     _invalidate_existing_tokens(table, email)
 
-    # Create new token
+    # Feature 1166: Create token with random UUID (no HMAC signature)
+    # Security: 122-bit UUID entropy + atomic DB consumption prevents guessing/replay
     token_id = str(uuid.uuid4())
-    signature = _generate_magic_link_signature(token_id, email)
     now = datetime.now(UTC)
     expires_at = now + timedelta(hours=MAGIC_LINK_EXPIRY_HOURS)
 
     token = MagicLinkToken(
         token_id=token_id,
         email=email,
-        signature=signature,
         created_at=now,
         expires_at=expires_at,
         used=False,
@@ -1178,7 +1149,7 @@ def request_magic_link(
 
     # Send email (if callback provided)
     if send_email_callback:
-        send_email_callback(email, token_id, signature)
+        send_email_callback(email, token_id)
 
     return MagicLinkResponse(
         status="email_sent",
