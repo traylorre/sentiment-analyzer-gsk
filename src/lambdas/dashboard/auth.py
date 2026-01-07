@@ -1097,27 +1097,37 @@ class MergeStatusResponse(BaseModel):
     message: str | None = None
 
 
-# Magic link secret key from environment
-MAGIC_LINK_SECRET = os.environ.get(
-    "MAGIC_LINK_SECRET", "default-dev-secret-change-in-prod"
-)
+# Feature 1164: Magic link secret - no hardcoded fallback, validated at use time
 MAGIC_LINK_EXPIRY_HOURS = 1
+
+
+def _get_magic_link_secret() -> str:
+    """Get MAGIC_LINK_SECRET from environment, fail fast if not set.
+
+    Feature 1164: Removed hardcoded fallback for security.
+    Validation happens at first use, not import time, to allow test fixtures.
+    """
+    secret = os.environ.get("MAGIC_LINK_SECRET", "")
+    if not secret:
+        raise RuntimeError(
+            "MAGIC_LINK_SECRET environment variable is required but not set. "
+            "Set it to a secure random value (minimum 32 characters)."
+        )
+    return secret
 
 
 def _generate_magic_link_signature(token_id: str, email: str) -> str:
     """Generate HMAC-SHA256 signature for magic link."""
     message = f"{token_id}:{email}"
     return hmac.new(
-        MAGIC_LINK_SECRET.encode(),
+        _get_magic_link_secret().encode(),
         message.encode(),
         hashlib.sha256,
     ).hexdigest()
 
 
-def _verify_magic_link_signature(token_id: str, email: str, signature: str) -> bool:
-    """Verify magic link signature."""
-    expected = _generate_magic_link_signature(token_id, email)
-    return hmac.compare_digest(expected, signature)
+# Feature 1164: Removed _verify_magic_link_signature() - orphaned dead code.
+# Verification uses atomic DynamoDB consumption via ConditionExpression, not HMAC.
 
 
 # T090: Magic Link Request
