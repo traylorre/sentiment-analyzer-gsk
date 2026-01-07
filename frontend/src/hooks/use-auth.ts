@@ -1,8 +1,15 @@
 'use client';
 
+/**
+ * Auth Hook - Provides authentication state and actions.
+ *
+ * Feature 1165: Removed hydration dependencies.
+ * Auth state now initializes immediately (memory-only store).
+ */
+
 import { useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuthStore, useHasHydrated } from '@/stores/auth-store';
+import { useAuthStore } from '@/stores/auth-store';
 import type { OAuthProvider } from '@/types/auth';
 
 // Session refresh interval (5 minutes before expiry)
@@ -19,9 +26,6 @@ export function useAuth(options: UseAuthOptions = {}) {
   const { redirectTo = '/auth/signin', requireAuth = false } = options;
   const router = useRouter();
   const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // T013: Expose hydration state for components (FR-013)
-  const hasHydrated = useHasHydrated();
 
   const {
     user,
@@ -44,18 +48,13 @@ export function useAuth(options: UseAuthOptions = {}) {
     setInitialized,
   } = useAuthStore();
 
-  // Initialize auth state - T014: Wait for hydration before checking auth
+  // Initialize auth state - Feature 1165: No hydration wait needed
   useEffect(() => {
-    // Don't initialize until hydration is complete
-    if (!hasHydrated) {
-      return;
-    }
-
     if (!isInitialized) {
-      // Check if there's a stored session
-      const hasStoredSession = isAuthenticated && isSessionValid();
+      // Check if there's a valid session
+      const hasValidSession = isAuthenticated && isSessionValid();
 
-      if (!hasStoredSession && requireAuth) {
+      if (!hasValidSession && requireAuth) {
         // Try anonymous auth if no session
         signInAnonymous().catch(() => {
           // If anonymous fails and auth is required, redirect
@@ -65,12 +64,11 @@ export function useAuth(options: UseAuthOptions = {}) {
 
       setInitialized(true);
     }
-  }, [hasHydrated, isInitialized, isAuthenticated, requireAuth, redirectTo, router, signInAnonymous, setInitialized, isSessionValid]);
+  }, [isInitialized, isAuthenticated, requireAuth, redirectTo, router, signInAnonymous, setInitialized, isSessionValid]);
 
-  // Schedule session refresh - T014: Wait for hydration before scheduling
+  // Schedule session refresh
   useEffect(() => {
-    // Don't schedule refresh until hydration is complete
-    if (!hasHydrated || !isAuthenticated || !sessionExpiresAt) {
+    if (!isAuthenticated || !sessionExpiresAt) {
       return;
     }
 
@@ -117,7 +115,6 @@ export function useAuth(options: UseAuthOptions = {}) {
       clearInterval(checkInterval);
     };
   }, [
-    hasHydrated,
     isAuthenticated,
     sessionExpiresAt,
     requireAuth,
@@ -177,8 +174,6 @@ export function useAuth(options: UseAuthOptions = {}) {
   }, [signOut, router, redirectTo]);
 
   return {
-    // T013: Expose hydration state for components
-    hasHydrated,
     user,
     tokens,
     isAuthenticated,

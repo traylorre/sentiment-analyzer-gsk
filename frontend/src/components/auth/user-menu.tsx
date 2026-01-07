@@ -33,11 +33,11 @@ function UserMenuSkeleton({ className }: { className?: string }) {
 
 export function UserMenu({ className }: UserMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
-  // T020: Include hasHydrated to show skeleton during hydration
-  const { hasHydrated, user, isAuthenticated, isAnonymous, signOut, isLoading } = useAuth();
+  // Feature 1165: Use isInitialized instead of hasHydrated (memory-only store)
+  const { isInitialized, user, isAuthenticated, isAnonymous, signOut, isLoading } = useAuth();
 
-  // FR-017: Show skeleton during hydration to prevent sign-in button flash
-  if (!hasHydrated) {
+  // Feature 1165: Show skeleton until initialized to prevent sign-in button flash
+  if (!isInitialized) {
     return <UserMenuSkeleton className={className} />;
   }
 

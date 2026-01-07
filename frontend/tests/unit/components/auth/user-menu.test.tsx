@@ -29,7 +29,7 @@ describe('UserMenu', () => {
   describe('unauthenticated state', () => {
     it('should show sign in button when not authenticated', () => {
       mockUseAuth.mockReturnValue({
-        hasHydrated: true,
+        isInitialized: true, // Feature 1165: Use isInitialized instead of hasHydrated
         isAuthenticated: false,
         isAnonymous: false,
         user: null,
@@ -45,7 +45,7 @@ describe('UserMenu', () => {
     it('should redirect to sign in page when clicked', async () => {
       const user = userEvent.setup();
       mockUseAuth.mockReturnValue({
-        hasHydrated: true,
+        isInitialized: true, // Feature 1165: Use isInitialized instead of hasHydrated
         isAuthenticated: false,
         isAnonymous: false,
         user: null,
@@ -65,7 +65,7 @@ describe('UserMenu', () => {
   describe('authenticated state', () => {
     it('should show user display name', () => {
       mockUseAuth.mockReturnValue({
-        hasHydrated: true,
+        isInitialized: true, // Feature 1165: Use isInitialized instead of hasHydrated
         isAuthenticated: true,
         isAnonymous: false,
         user: {
@@ -84,7 +84,7 @@ describe('UserMenu', () => {
 
     it('should show Guest for anonymous users', () => {
       mockUseAuth.mockReturnValue({
-        hasHydrated: true,
+        isInitialized: true, // Feature 1165: Use isInitialized instead of hasHydrated
         isAuthenticated: true,
         isAnonymous: true,
         user: {
@@ -105,7 +105,7 @@ describe('UserMenu', () => {
     it('should toggle dropdown on click', async () => {
       const user = userEvent.setup();
       mockUseAuth.mockReturnValue({
-        hasHydrated: true,
+        isInitialized: true, // Feature 1165: Use isInitialized instead of hasHydrated
         isAuthenticated: true,
         isAnonymous: false,
         user: {
@@ -134,7 +134,7 @@ describe('UserMenu', () => {
     it('should show sign in with email option for anonymous users', async () => {
       const user = userEvent.setup();
       mockUseAuth.mockReturnValue({
-        hasHydrated: true,
+        isInitialized: true, // Feature 1165: Use isInitialized instead of hasHydrated
         isAuthenticated: true,
         isAnonymous: true,
         user: {
@@ -156,7 +156,7 @@ describe('UserMenu', () => {
     it('should show auth type label', async () => {
       const user = userEvent.setup();
       mockUseAuth.mockReturnValue({
-        hasHydrated: true,
+        isInitialized: true, // Feature 1165: Use isInitialized instead of hasHydrated
         isAuthenticated: true,
         isAnonymous: false,
         user: {
@@ -179,7 +179,7 @@ describe('UserMenu', () => {
     it('should call signOut when sign out clicked', async () => {
       const user = userEvent.setup();
       mockUseAuth.mockReturnValue({
-        hasHydrated: true,
+        isInitialized: true, // Feature 1165: Use isInitialized instead of hasHydrated
         isAuthenticated: true,
         isAnonymous: false,
         user: {
@@ -205,7 +205,7 @@ describe('UserMenu', () => {
     it('should navigate to settings when settings clicked', async () => {
       const user = userEvent.setup();
       mockUseAuth.mockReturnValue({
-        hasHydrated: true,
+        isInitialized: true, // Feature 1165: Use isInitialized instead of hasHydrated
         isAuthenticated: true,
         isAnonymous: false,
         user: {

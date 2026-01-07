@@ -1,9 +1,15 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+/**
+ * Chart Data Hooks - Fetch OHLC and sentiment data for visualization.
+ *
+ * Feature 1165: Removed hydration dependencies.
+ * Auth state now initializes immediately (memory-only store).
+ */
+
 import { useQuery } from '@tanstack/react-query';
 import { fetchOHLCData, fetchSentimentHistory } from '@/lib/api/ohlc';
-import { useAuthStore, useHasHydrated } from '@/stores/auth-store';
+import { useAuthStore } from '@/stores/auth-store';
 import type {
   TimeRange,
   OHLCResolution,
@@ -25,69 +31,43 @@ interface UseChartDataOptions {
 /**
  * Hook to fetch OHLC price data for a ticker.
  * Supports resolution parameter for intraday data (T015-T017).
- * FR-015: Hydration-aware - waits for zustand to rehydrate before enabling query.
+ *
+ * Feature 1165: No hydration wait - memory-only store initializes immediately.
  */
 export function useOHLCData(
   ticker: string | null,
   timeRange: TimeRange = '1M',
   resolution: OHLCResolution = 'D'
 ) {
-  // T027: Include hasHydrated in enabled check
-  const hasHydrated = useHasHydrated();
   const userId = useAuthStore((state) => state.user?.userId);
-  const prevUserIdRef = useRef<string | undefined>(undefined);
 
-  const query = useQuery<OHLCResponse>({
+  return useQuery<OHLCResponse>({
     queryKey: ['ohlc', ticker, timeRange, resolution],
     queryFn: () => fetchOHLCData(ticker!, { range: timeRange, resolution }, userId!),
-    // FR-015: Only enable after hydration AND when userId is available
-    enabled: hasHydrated && !!ticker && !!userId,
+    enabled: !!ticker && !!userId,
     staleTime: STALE_TIME_MS,
   });
-
-  // T028: Refetch when userId transitions from null to valid value after hydration
-  useEffect(() => {
-    if (hasHydrated && userId && !prevUserIdRef.current && query.data === undefined) {
-      query.refetch();
-    }
-    prevUserIdRef.current = userId;
-  }, [hasHydrated, userId, query]);
-
-  return query;
 }
 
 /**
  * Hook to fetch sentiment history for a ticker.
- * FR-015: Hydration-aware - waits for zustand to rehydrate before enabling query.
+ *
+ * Feature 1165: No hydration wait - memory-only store initializes immediately.
  */
 export function useSentimentHistoryData(
   ticker: string | null,
   timeRange: TimeRange = '1M',
   source: ChartSentimentSource = 'aggregated'
 ) {
-  // T027: Include hasHydrated in enabled check
-  const hasHydrated = useHasHydrated();
   const userId = useAuthStore((state) => state.user?.userId);
-  const prevUserIdRef = useRef<string | undefined>(undefined);
 
-  const query = useQuery<SentimentHistoryResponse>({
+  return useQuery<SentimentHistoryResponse>({
     queryKey: ['sentiment-history-chart', ticker, timeRange, source],
     queryFn: () =>
       fetchSentimentHistory(ticker!, { range: timeRange, source }, userId!),
-    // FR-015: Only enable after hydration AND when userId is available
-    enabled: hasHydrated && !!ticker && !!userId,
+    enabled: !!ticker && !!userId,
     staleTime: STALE_TIME_MS,
   });
-
-  // T028: Refetch when userId transitions from null to valid value after hydration
-  useEffect(() => {
-    if (hasHydrated && userId && !prevUserIdRef.current && query.data === undefined) {
-      query.refetch();
-    }
-    prevUserIdRef.current = userId;
-  }, [hasHydrated, userId, query]);
-
-  return query;
 }
 
 /**
@@ -96,7 +76,8 @@ export function useSentimentHistoryData(
  * Fetches both OHLC and sentiment history in parallel and combines them
  * into a single ChartDataBundle for the overlay chart component.
  * Supports resolution parameter for intraday OHLC data (T015-T017).
- * FR-015: Hydration-aware - waits for zustand to rehydrate before enabling queries.
+ *
+ * Feature 1165: No hydration wait - memory-only store initializes immediately.
  */
 export function useChartData({
   ticker,
@@ -108,16 +89,12 @@ export function useChartData({
   refetch: () => void;
   isStale: boolean;
 } {
-  // T027: Include hasHydrated in enabled check
-  const hasHydrated = useHasHydrated();
   const userId = useAuthStore((state) => state.user?.userId);
-  const prevUserIdRef = useRef<string | undefined>(undefined);
 
   const ohlcQuery = useQuery<OHLCResponse>({
     queryKey: ['ohlc', ticker, timeRange, resolution],
     queryFn: () => fetchOHLCData(ticker!, { range: timeRange, resolution }, userId!),
-    // FR-015: Only enable after hydration AND when userId is available
-    enabled: hasHydrated && enabled && !!ticker && !!userId,
+    enabled: enabled && !!ticker && !!userId,
     staleTime: STALE_TIME_MS,
   });
 
@@ -125,19 +102,9 @@ export function useChartData({
     queryKey: ['sentiment-history-chart', ticker, timeRange, sentimentSource],
     queryFn: () =>
       fetchSentimentHistory(ticker!, { range: timeRange, source: sentimentSource }, userId!),
-    // FR-015: Only enable after hydration AND when userId is available
-    enabled: hasHydrated && enabled && !!ticker && !!userId,
+    enabled: enabled && !!ticker && !!userId,
     staleTime: STALE_TIME_MS,
   });
-
-  // T028: Refetch when userId transitions from null to valid value after hydration
-  useEffect(() => {
-    if (hasHydrated && userId && !prevUserIdRef.current) {
-      if (ohlcQuery.data === undefined) ohlcQuery.refetch();
-      if (sentimentQuery.data === undefined) sentimentQuery.refetch();
-    }
-    prevUserIdRef.current = userId;
-  }, [hasHydrated, userId, ohlcQuery, sentimentQuery]);
 
   const isLoading = ohlcQuery.isLoading || sentimentQuery.isLoading;
   const error =
