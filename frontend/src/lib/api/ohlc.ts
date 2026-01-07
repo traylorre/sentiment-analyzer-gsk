@@ -28,15 +28,16 @@ interface SentimentHistoryParams {
 /**
  * Fetch OHLC price data for a ticker.
  *
+ * Authentication: Bearer token added by client.ts interceptor.
+ * Feature 1167: Removed X-User-ID header (CVSS 9.1 security fix).
+ *
  * @param ticker - Stock ticker symbol (e.g., AAPL)
  * @param params - Query parameters for time range and resolution (T013-T014)
- * @param userId - User ID for authentication
  * @returns OHLCResponse with candles array
  */
 export async function fetchOHLCData(
   ticker: string,
-  params: OHLCParams = {},
-  userId: string
+  params: OHLCParams = {}
 ): Promise<OHLCResponse> {
   return api.get<OHLCResponse>(`/api/v2/tickers/${ticker}/ohlc`, {
     params: {
@@ -45,24 +46,22 @@ export async function fetchOHLCData(
       start_date: params.start_date,
       end_date: params.end_date,
     },
-    headers: {
-      'X-User-ID': userId,
-    },
   });
 }
 
 /**
  * Fetch sentiment history for a ticker.
  *
+ * Authentication: Bearer token added by client.ts interceptor.
+ * Feature 1167: Removed X-User-ID header (CVSS 9.1 security fix).
+ *
  * @param ticker - Stock ticker symbol (e.g., AAPL)
  * @param params - Query parameters for source and time range
- * @param userId - User ID for authentication
  * @returns SentimentHistoryResponse with history array
  */
 export async function fetchSentimentHistory(
   ticker: string,
-  params: SentimentHistoryParams = {},
-  userId: string
+  params: SentimentHistoryParams = {}
 ): Promise<SentimentHistoryResponse> {
   return api.get<SentimentHistoryResponse>(`/api/v2/tickers/${ticker}/sentiment/history`, {
     params: {
@@ -70,9 +69,6 @@ export async function fetchSentimentHistory(
       range: params.range,
       start_date: params.start_date,
       end_date: params.end_date,
-    },
-    headers: {
-      'X-User-ID': userId,
     },
   });
 }

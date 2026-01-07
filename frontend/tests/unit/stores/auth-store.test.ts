@@ -550,9 +550,12 @@ describe('Feature 014: Auto-Session Creation', () => {
       // API client should use: Authorization: Bearer test-access-token
     });
 
-    it('should support X-User-ID header for anonymous sessions', async () => {
+    // Feature 1167: X-User-ID header removed (CVSS 9.1 security fix)
+    // Anonymous sessions now use Bearer token authentication like all other sessions.
+    // The userId is still stored for display purposes, but never sent as a header.
+    it('should store userId for anonymous sessions (display only, not auth)', async () => {
       mockCreateAnonymousSession.mockResolvedValueOnce({
-        userId: 'x-user-id-test',
+        userId: 'anon-user-id',
         authType: 'anonymous',
         createdAt: new Date().toISOString(),
         sessionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
@@ -561,8 +564,8 @@ describe('Feature 014: Auto-Session Creation', () => {
       await useAuthStore.getState().signInAnonymous();
 
       const state = useAuthStore.getState();
-      expect(state.user?.userId).toBe('x-user-id-test');
-      // API client should use: X-User-ID: x-user-id-test
+      expect(state.user?.userId).toBe('anon-user-id');
+      // Note: API client uses Bearer token (set via setTokens), NOT X-User-ID header
     });
   });
 
