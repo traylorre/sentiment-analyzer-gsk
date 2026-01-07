@@ -4,7 +4,7 @@
 
 - [x] T1161.1: Update CSRF_EXEMPT_PATHS in csrf.py
 - [x] T1161.2: Add unit test verifying exemptions
-- [ ] T1161.3: Verify E2E tests pass in CI
+- [x] T1161.3: Verify E2E tests pass in CI (Deploy Pipeline run 20767209754 - SUCCESS)
 
 ## Task Details
 

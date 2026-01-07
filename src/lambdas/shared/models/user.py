@@ -1,9 +1,35 @@
-"""User model with DynamoDB keys for Feature 006."""
+"""User model with DynamoDB keys for Feature 006.
+
+Feature 1162: Added ProviderMetadata class and federation fields.
+"""
 
 from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field
+
+# Type aliases for federation
+ProviderType = Literal["email", "google", "github"]
+RoleType = Literal["anonymous", "free", "paid", "operator"]
+VerificationType = Literal["none", "pending", "verified"]
+
+
+class ProviderMetadata(BaseModel):
+    """Per-provider OAuth data for federated authentication.
+
+    Feature 1162: Stores provider-specific metadata when a user links
+    an authentication provider (email, Google, GitHub).
+    """
+
+    sub: str | None = Field(
+        None, description="OAuth subject claim (provider's user ID)"
+    )
+    email: str | None = Field(None, description="Email address from this provider")
+    avatar: str | None = Field(None, description="Avatar URL from provider")
+    linked_at: datetime = Field(..., description="When provider was linked to account")
+    verified_at: datetime | None = Field(
+        None, description="For email provider: when email was verified"
+    )
 
 
 class User(BaseModel):
@@ -14,8 +40,11 @@ class User(BaseModel):
     email: EmailStr | None = Field(None, description="Set after auth")
     cognito_sub: str | None = Field(None, description="Cognito user pool sub")
 
-    # Authentication state
-    auth_type: Literal["anonymous", "email", "google", "github"] = "anonymous"
+    # Authentication state (DEPRECATED - use role + linked_providers instead)
+    auth_type: Literal["anonymous", "email", "google", "github"] = Field(
+        default="anonymous",
+        description="DEPRECATED: Use role and linked_providers instead.",
+    )
     created_at: datetime
     last_active_at: datetime
     session_expires_at: datetime  # 30 days, refreshed on activity
@@ -52,7 +81,37 @@ class User(BaseModel):
         description="When subscription expires (None = no expiry or not subscribed)",
     )
     is_operator: bool = Field(
-        default=False, description="Administrative flag for operator access"
+        default=False,
+        description="DEPRECATED: Use role == 'operator' instead. Administrative flag.",
+    )
+
+    # Feature 1162: Federation fields for multi-provider auth
+    role: RoleType = Field(
+        default="anonymous", description="User authorization tier (replaces auth_type)"
+    )
+    verification: VerificationType = Field(
+        default="none", description="Email verification state"
+    )
+    pending_email: str | None = Field(None, description="Email awaiting verification")
+    primary_email: str | None = Field(
+        None,
+        description="Verified canonical email",
+        serialization_alias="primary_email",
+    )
+    linked_providers: list[ProviderType] = Field(
+        default_factory=list, description="List of linked auth providers"
+    )
+    provider_metadata: dict[str, ProviderMetadata] = Field(
+        default_factory=dict, description="Metadata per provider"
+    )
+    last_provider_used: ProviderType | None = Field(
+        None, description="Most recent auth provider (for avatar selection)"
+    )
+    role_assigned_at: datetime | None = Field(
+        None, description="When role was last changed"
+    )
+    role_assigned_by: str | None = Field(
+        None, description="Who changed the role (stripe_webhook or admin:{user_id})"
     )
 
     @property
@@ -110,6 +169,25 @@ class User(BaseModel):
         if self.subscription_expires_at is not None:
             item["subscription_expires_at"] = self.subscription_expires_at.isoformat()
 
+        # Feature 1162: Federation fields
+        item["role"] = self.role
+        item["verification"] = self.verification
+        if self.pending_email is not None:
+            item["pending_email"] = self.pending_email
+        if self.primary_email is not None:
+            item["primary_email"] = self.primary_email
+        item["linked_providers"] = self.linked_providers
+        # Serialize provider_metadata as dict of dicts
+        item["provider_metadata"] = {
+            k: v.model_dump() for k, v in self.provider_metadata.items()
+        }
+        if self.last_provider_used is not None:
+            item["last_provider_used"] = self.last_provider_used
+        if self.role_assigned_at is not None:
+            item["role_assigned_at"] = self.role_assigned_at.isoformat()
+        if self.role_assigned_by is not None:
+            item["role_assigned_by"] = self.role_assigned_by
+
         return item
 
     @classmethod
@@ -130,6 +208,30 @@ class User(BaseModel):
             subscription_expires_at = datetime.fromisoformat(
                 item["subscription_expires_at"]
             )
+
+        # Feature 1162: Parse federation datetime fields
+        role_assigned_at = None
+        if item.get("role_assigned_at"):
+            role_assigned_at = datetime.fromisoformat(item["role_assigned_at"])
+
+        # Feature 1162: Parse provider_metadata from dict of dicts
+        provider_metadata_raw = item.get("provider_metadata", {})
+        provider_metadata = {}
+        for provider_key, metadata_dict in provider_metadata_raw.items():
+            # Convert linked_at/verified_at from ISO strings to datetime
+            if "linked_at" in metadata_dict and isinstance(
+                metadata_dict["linked_at"], str
+            ):
+                metadata_dict["linked_at"] = datetime.fromisoformat(
+                    metadata_dict["linked_at"]
+                )
+            if metadata_dict.get("verified_at") and isinstance(
+                metadata_dict["verified_at"], str
+            ):
+                metadata_dict["verified_at"] = datetime.fromisoformat(
+                    metadata_dict["verified_at"]
+                )
+            provider_metadata[provider_key] = ProviderMetadata(**metadata_dict)
 
         return cls(
             user_id=item["user_id"],
@@ -153,6 +255,16 @@ class User(BaseModel):
             subscription_active=item.get("subscription_active", False),
             subscription_expires_at=subscription_expires_at,
             is_operator=item.get("is_operator", False),
+            # Feature 1162: Federation fields with backward-compatible defaults
+            role=item.get("role", "anonymous"),
+            verification=item.get("verification", "none"),
+            pending_email=item.get("pending_email"),
+            primary_email=item.get("primary_email"),
+            linked_providers=item.get("linked_providers", []),
+            provider_metadata=provider_metadata,
+            last_provider_used=item.get("last_provider_used"),
+            role_assigned_at=role_assigned_at,
+            role_assigned_by=item.get("role_assigned_by"),
         )
 
 
