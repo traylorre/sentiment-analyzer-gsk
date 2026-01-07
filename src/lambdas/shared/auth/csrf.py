@@ -29,11 +29,17 @@ CSRF_COOKIE_MAX_AGE = 86400  # 24 hours, matches session lifetime
 CSRF_SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
 
 # Paths exempt from CSRF validation
+# Note: Bearer-token-authenticated endpoints are exempt because:
+# - Bearer tokens are NOT automatically attached by browsers (unlike cookies)
+# - Attackers cannot forge requests without stealing the token via XSS
+# - CSRF only protects cookie-based auth where browsers auto-attach credentials
 CSRF_EXEMPT_PATHS = frozenset(
     {
         "/api/v2/auth/refresh",  # Cookie-only auth, no JS access needed
         "/api/v2/auth/anonymous",  # Bootstrap endpoint: no session exists to protect
         "/api/v2/auth/magic-link",  # Magic link request (rate-limited separately)
+        "/api/v2/auth/signout",  # Bearer token auth - not CSRF-vulnerable (Feature 1161)
+        "/api/v2/auth/session/refresh",  # Bearer token auth - not CSRF-vulnerable (Feature 1161)
     }
 )
 
