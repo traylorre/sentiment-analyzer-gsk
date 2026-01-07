@@ -111,6 +111,22 @@ class TestIsCsrfExempt:
         """Magic link request should be exempt (rate-limited separately)."""
         assert is_csrf_exempt("POST", "/api/v2/auth/magic-link") is True
 
+    def test_signout_endpoint_exempt(self) -> None:
+        """Signout should be exempt (Bearer token auth, not CSRF-vulnerable).
+
+        Feature 1161: Bearer tokens are not automatically attached by browsers,
+        so attackers cannot forge requests without stealing the token via XSS.
+        """
+        assert is_csrf_exempt("POST", "/api/v2/auth/signout") is True
+
+    def test_session_refresh_endpoint_exempt(self) -> None:
+        """Session refresh should be exempt (Bearer token auth, not CSRF-vulnerable).
+
+        Feature 1161: Bearer tokens are not automatically attached by browsers,
+        so attackers cannot forge requests without stealing the token via XSS.
+        """
+        assert is_csrf_exempt("POST", "/api/v2/auth/session/refresh") is True
+
     def test_oauth_callback_exempt(self) -> None:
         """OAuth callback should be exempt (state provides CSRF protection)."""
         assert is_csrf_exempt("POST", "/api/v2/auth/oauth/callback") is True
