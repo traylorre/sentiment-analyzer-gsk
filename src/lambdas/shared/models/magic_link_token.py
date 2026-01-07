@@ -10,7 +10,8 @@ class MagicLinkToken(BaseModel):
 
     token_id: str = Field(..., description="UUID")
     email: EmailStr
-    signature: str  # HMAC-SHA256
+    # Feature 1166: signature deprecated - verification uses atomic DB consumption
+    signature: str | None = None
 
     created_at: datetime
     expires_at: datetime  # +1 hour
@@ -47,13 +48,15 @@ class MagicLinkToken(BaseModel):
             "SK": self.sk,
             "token_id": self.token_id,
             "email": self.email,
-            "signature": self.signature,
             "created_at": self.created_at.isoformat(),
             "expires_at": self.expires_at.isoformat(),
             "used": self.used,
             "ttl": ttl,
             "entity_type": "MAGIC_LINK_TOKEN",
         }
+        # Feature 1166: Only include signature if present (backwards compat)
+        if self.signature:
+            item["signature"] = self.signature
         if self.anonymous_user_id:
             item["anonymous_user_id"] = self.anonymous_user_id
 
@@ -76,7 +79,7 @@ class MagicLinkToken(BaseModel):
         return cls(
             token_id=item["token_id"],
             email=item["email"],
-            signature=item["signature"],
+            signature=item.get("signature"),  # Feature 1166: Optional
             created_at=datetime.fromisoformat(item["created_at"]),
             expires_at=datetime.fromisoformat(item["expires_at"]),
             used=item.get("used", False),

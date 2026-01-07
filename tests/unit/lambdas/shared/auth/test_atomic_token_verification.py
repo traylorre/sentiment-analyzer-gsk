@@ -37,7 +37,7 @@ class TestAtomicTokenVerification:
         token = MagicLinkToken(
             token_id=token_id,
             email="test@example.com",
-            signature="valid-signature",
+            # Feature 1166: signature removed
             created_at=now - timedelta(minutes=5),
             expires_at=now + timedelta(hours=1),
             used=False,
@@ -73,7 +73,7 @@ class TestAtomicTokenVerification:
         token = MagicLinkToken(
             token_id=token_id,
             email="test@example.com",
-            signature="valid-signature",
+            # Feature 1166: signature removed
             created_at=now - timedelta(minutes=5),
             expires_at=now + timedelta(hours=1),
             used=False,
@@ -134,7 +134,7 @@ class TestTokenAlreadyUsedError:
         token = MagicLinkToken(
             token_id=token_id,
             email="test@example.com",
-            signature="valid-signature",
+            # Feature 1166: signature removed
             created_at=now - timedelta(minutes=10),
             expires_at=now + timedelta(hours=1),
             used=True,
@@ -164,7 +164,7 @@ class TestTokenAlreadyUsedError:
         token = MagicLinkToken(
             token_id=token_id,
             email="test@example.com",
-            signature="valid-signature",
+            # Feature 1166: signature removed
             created_at=now - timedelta(minutes=5),
             expires_at=now + timedelta(hours=1),
             used=False,
@@ -220,7 +220,7 @@ class TestTokenExpiredError:
         token = MagicLinkToken(
             token_id=token_id,
             email="test@example.com",
-            signature="valid-signature",
+            # Feature 1166: signature removed
             created_at=now - timedelta(hours=2),
             expires_at=now - timedelta(minutes=30),
             used=False,
@@ -249,7 +249,7 @@ class TestTokenExpiredError:
         token = MagicLinkToken(
             token_id=token_id,
             email="test@example.com",
-            signature="valid-signature",
+            # Feature 1166: signature removed
             created_at=now - timedelta(hours=2),
             expires_at=now - timedelta(minutes=1),
             used=False,
@@ -289,7 +289,7 @@ class TestMagicLinkTokenModel:
         token = MagicLinkToken(
             token_id=str(uuid.uuid4()),
             email="test@example.com",
-            signature="sig",
+            # Feature 1166: signature removed
             created_at=now,
             expires_at=now + timedelta(hours=1),
             used=True,
@@ -311,7 +311,8 @@ class TestMagicLinkTokenModel:
             "SK": "MAGIC_LINK",
             "token_id": "abc123",
             "email": "test@example.com",
-            "signature": "sig",
+            # Feature 1166: signature optional - testing backwards compat with old tokens
+            "signature": "legacy-sig",
             "created_at": now.isoformat(),
             "expires_at": (now + timedelta(hours=1)).isoformat(),
             "used": True,
@@ -328,10 +329,10 @@ class TestMagicLinkTokenModel:
     def test_token_without_audit_fields_defaults_to_none(self):
         """Tokens without audit fields default to None."""
         now = datetime.now(UTC)
+        # Feature 1166: Test new tokens without signature field
         item = {
             "token_id": "abc123",
             "email": "test@example.com",
-            "signature": "sig",
             "created_at": now.isoformat(),
             "expires_at": (now + timedelta(hours=1)).isoformat(),
             "used": False,

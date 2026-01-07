@@ -12,7 +12,6 @@ from src.lambdas.dashboard.auth import (
     LinkAccountsRequest,
     MagicLinkRequest,
     OAuthCallbackRequest,
-    _generate_magic_link_signature,
     check_email_conflict,
     get_merge_status_endpoint,
     get_oauth_urls,
@@ -30,52 +29,14 @@ from src.lambdas.shared.errors.session_errors import (
 )
 from src.lambdas.shared.models.user import User
 
-
-class TestMagicLinkSignature:
-    """Tests for magic link signature generation.
-
-    Feature 1164: Removed _verify_magic_link_signature tests (function deleted).
-    Verification now uses atomic DynamoDB consumption, not HMAC validation.
-    """
-
-    @pytest.fixture(autouse=True)
-    def set_magic_link_secret(self, monkeypatch):
-        """Set MAGIC_LINK_SECRET for signature generation tests."""
-        monkeypatch.setenv(
-            "MAGIC_LINK_SECRET", "test-secret-minimum-32-chars-for-testing"
-        )
-
-    def test_generate_signature(self):
-        """Generates consistent HMAC signature."""
-        sig1 = _generate_magic_link_signature("token123", "user@example.com")
-        sig2 = _generate_magic_link_signature("token123", "user@example.com")
-
-        assert sig1 == sig2
-        assert len(sig1) == 64  # SHA256 hex length
-
-    def test_different_inputs_different_signature(self):
-        """Different inputs produce different signatures."""
-        sig1 = _generate_magic_link_signature("token123", "user@example.com")
-        sig2 = _generate_magic_link_signature("token456", "user@example.com")
-
-        assert sig1 != sig2
-
-    def test_missing_secret_raises_error(self, monkeypatch):
-        """Feature 1164: Raises RuntimeError if secret not set."""
-        monkeypatch.delenv("MAGIC_LINK_SECRET", raising=False)
-        with pytest.raises(RuntimeError, match="MAGIC_LINK_SECRET.*required"):
-            _generate_magic_link_signature("token", "email@test.com")
+# Feature 1166: TestMagicLinkSignature class removed - HMAC functions deleted.
+# Token security now relies on random UUID + atomic DynamoDB consumption.
 
 
 class TestRequestMagicLink:
     """Tests for T090: request_magic_link."""
 
-    @pytest.fixture(autouse=True)
-    def set_magic_link_secret(self, monkeypatch):
-        """Feature 1164: Set MAGIC_LINK_SECRET for request tests."""
-        monkeypatch.setenv(
-            "MAGIC_LINK_SECRET", "test-secret-minimum-32-chars-for-testing"
-        )
+    # Feature 1166: Removed set_magic_link_secret fixture - HMAC removed
 
     def test_creates_token_and_stores(self):
         """Creates token and stores in DynamoDB."""

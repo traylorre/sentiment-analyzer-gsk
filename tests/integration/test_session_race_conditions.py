@@ -77,7 +77,7 @@ class TestConcurrentTokenVerification:
         token = MagicLinkToken(
             token_id=token_id,
             email="concurrent@example.com",
-            signature="test-signature",
+            # Feature 1166: signature removed
             created_at=now,
             expires_at=now + timedelta(hours=1),
             used=False,
@@ -131,7 +131,7 @@ class TestConcurrentTokenVerification:
         token = MagicLinkToken(
             token_id=token_id,
             email="first-ip@example.com",
-            signature="test-signature",
+            # Feature 1166: signature removed
             created_at=now,
             expires_at=now + timedelta(hours=1),
             used=False,
@@ -167,7 +167,7 @@ class TestConcurrentTokenVerification:
         token = MagicLinkToken(
             token_id=token_id,
             email="expired@example.com",
-            signature="test-signature",
+            # Feature 1166: signature removed
             created_at=now - timedelta(hours=2),
             expires_at=now - timedelta(hours=1),  # Expired 1 hour ago
             used=False,
@@ -199,7 +199,7 @@ class TestAtomicTokenState:
         token = MagicLinkToken(
             token_id=token_id,
             email="atomic@example.com",
-            signature="test-signature",
+            # Feature 1166: signature removed
             created_at=now,
             expires_at=now + timedelta(hours=1),
             used=False,
@@ -237,7 +237,7 @@ class TestAtomicTokenState:
         token = MagicLinkToken(
             token_id=token_id,
             email="audit@example.com",
-            signature="test-signature",
+            # Feature 1166: signature removed
             created_at=now,
             expires_at=now + timedelta(hours=1),
             used=False,
