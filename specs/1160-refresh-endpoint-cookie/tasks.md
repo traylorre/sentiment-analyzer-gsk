@@ -7,7 +7,7 @@
 - [x] T3: Modify refresh endpoint to use cookie extraction
 - [x] T4: Add refresh token cookie to response
 - [x] T5: Add unit tests
-- [ ] T6: Run validation
+- [x] T6: Run validation
 
 ## Completion Criteria
 

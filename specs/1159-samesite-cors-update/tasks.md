@@ -14,7 +14,7 @@
 - [x] T10: Update SSE Lambda CORS - allow_credentials=true
 - [x] T11: Update frontend API client - credentials: 'include'
 - [x] T12: Add unit test for SameSite=None verification
-- [ ] T13: Run validation and tests
+- [x] T13: Run validation and tests
 
 ## Completion Criteria
 

@@ -19,8 +19,8 @@
 
 **Purpose**: Create CSRF module and middleware structure
 
-- [ ] T001 [P] Create CSRF token module at src/lambdas/shared/auth/csrf.py with generate_csrf_token() and validate_csrf_token() functions
-- [ ] T002 [P] Create CSRF middleware at src/lambdas/shared/middleware/csrf_middleware.py with require_csrf() dependency function
+- [x] T001 [P] Create CSRF token module at src/lambdas/shared/auth/csrf.py with generate_csrf_token() and validate_csrf_token() functions
+- [x] T002 [P] Create CSRF middleware at src/lambdas/shared/middleware/csrf_middleware.py with require_csrf() dependency function
 
 **Checkpoint**: CSRF module and middleware ready for router integration
 
@@ -44,14 +44,14 @@
 
 ### Tests for User Story 1
 
-- [ ] T003 [P] [US1] Create CSRF unit tests at tests/unit/middleware/test_csrf.py with test_generate_csrf_token_format, test_validate_matching_tokens, test_validate_mismatched_tokens, test_validate_missing_tokens
+- [x] T003 [P] [US1] Create CSRF unit tests at tests/unit/middleware/test_csrf.py with test_generate_csrf_token_format, test_validate_matching_tokens, test_validate_mismatched_tokens, test_validate_missing_tokens
 
 ### Implementation for User Story 1
 
-- [ ] T004 [US1] Integrate CSRF middleware into router_v2.py by adding require_csrf dependency to state-changing endpoints in auth_router
-- [ ] T005 [US1] Add CSRF token cookie setting in magic link verify response at src/lambdas/dashboard/router_v2.py
-- [ ] T006 [US1] Add CSRF token cookie setting in OAuth callback response at src/lambdas/dashboard/router_v2.py
-- [ ] T007 [US1] Configure exempt paths (/api/v2/auth/refresh) in csrf_middleware.py
+- [x] T004 [US1] Integrate CSRF middleware into router_v2.py by adding require_csrf dependency to state-changing endpoints in auth_router
+- [x] T005 [US1] Add CSRF token cookie setting in magic link verify response at src/lambdas/dashboard/router_v2.py
+- [x] T006 [US1] Add CSRF token cookie setting in OAuth callback response at src/lambdas/dashboard/router_v2.py
+- [x] T007 [US1] Configure exempt paths (/api/v2/auth/refresh) in csrf_middleware.py
 
 **Checkpoint**: At this point, User Story 1 should be fully functional and testable independently. Backend CSRF protection is complete.
 
@@ -65,13 +65,13 @@
 
 ### Tests for User Story 2
 
-- [ ] T008 [P] [US2] Create frontend unit tests at frontend/tests/unit/lib/test_csrf.ts for getCsrfToken() and includesCsrfHeader()
+- [x] T008 [P] [US2] Create frontend unit tests at frontend/tests/unit/lib/test_csrf.ts for getCsrfToken() and includesCsrfHeader()
 
 ### Implementation for User Story 2
 
-- [ ] T009 [US2] Add getCsrfToken() helper function in frontend/src/lib/api/client.ts to read csrf_token cookie
-- [ ] T010 [US2] Modify fetchWithAuth() in frontend/src/lib/api/client.ts to include X-CSRF-Token header for POST/PUT/PATCH/DELETE requests
-- [ ] T011 [US2] Add CSRF error handling in frontend to show user-friendly message on 403 CSRF rejection
+- [x] T009 [US2] Add getCsrfToken() helper function in frontend/src/lib/api/client.ts to read csrf_token cookie
+- [x] T010 [US2] Modify fetchWithAuth() in frontend/src/lib/api/client.ts to include X-CSRF-Token header for POST/PUT/PATCH/DELETE requests
+- [x] T011 [US2] Add CSRF error handling in frontend to show user-friendly message on 403 CSRF rejection
 
 **Checkpoint**: At this point, User Stories 1 AND 2 should both work independently. Full frontend-backend CSRF flow is operational.
 
@@ -85,8 +85,8 @@
 
 ### Implementation for User Story 3
 
-- [ ] T012 [US3] Add CSRF cookie refresh in token refresh endpoint response at src/lambdas/dashboard/router_v2.py
-- [ ] T013 [US3] Ensure CSRF cookie max_age aligns with session lifetime (86400 seconds)
+- [x] T012 [US3] Add CSRF cookie refresh in token refresh endpoint response at src/lambdas/dashboard/router_v2.py
+- [x] T013 [US3] Ensure CSRF cookie max_age aligns with session lifetime (86400 seconds)
 
 **Checkpoint**: All user stories should now be independently functional. Complete CSRF lifecycle management is in place.
 
@@ -96,8 +96,8 @@
 
 **Purpose**: Improvements that affect multiple user stories
 
-- [ ] T014 Run all unit tests to verify no regressions (pytest tests/unit/middleware/test_csrf.py)
-- [ ] T015 Verify existing authenticated flows still work with CSRF protection enabled
+- [x] T014 Run all unit tests to verify no regressions (pytest tests/unit/middleware/test_csrf.py)
+- [x] T015 Verify existing authenticated flows still work with CSRF protection enabled
 
 ---
 
