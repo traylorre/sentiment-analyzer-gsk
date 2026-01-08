@@ -16,6 +16,39 @@ function mapAnonymousSession(response: AnonymousSessionResponse): AnonymousSessi
   };
 }
 
+/**
+ * Raw /api/v2/auth/me response (snake_case per API contract).
+ * Feature 1174: Includes federation fields from Feature 1172.
+ */
+interface UserMeResponse {
+  auth_type: string;
+  email_masked: string | null;
+  configs_count: number;
+  max_configs: number;
+  session_expires_in_seconds: number | null;
+  role: string;
+  linked_providers: string[];
+  verification: string;
+  last_provider_used: string | null;
+}
+
+/**
+ * Map /api/v2/auth/me snake_case response to camelCase User type.
+ * Feature 1174: Maps federation fields for RBAC-aware UI.
+ */
+function mapUserMeResponse(response: UserMeResponse): Partial<User> {
+  return {
+    authType: response.auth_type as User['authType'],
+    email: response.email_masked ?? undefined,
+    configurationCount: response.configs_count,
+    // Feature 1174: Federation fields
+    role: response.role as User['role'],
+    linkedProviders: response.linked_providers as User['linkedProviders'],
+    verification: response.verification as User['verification'],
+    lastProviderUsed: (response.last_provider_used ?? undefined) as User['lastProviderUsed'],
+  };
+}
+
 export interface MagicLinkRequest {
   email: string;
 }
@@ -93,10 +126,13 @@ export const authApi = {
     api.post<{ expiresAt: string }>('/api/v2/auth/extend'),
 
   /**
-   * Get current user profile
+   * Get current user profile with federation fields.
+   * Feature 1174: Maps snake_case response to camelCase User type.
    */
-  getProfile: () =>
-    api.get<User>('/api/v2/auth/me'),
+  getProfile: async (): Promise<Partial<User>> => {
+    const response = await api.get<UserMeResponse>('/api/v2/auth/me');
+    return mapUserMeResponse(response);
+  },
 
   /**
    * Sign out and invalidate tokens
