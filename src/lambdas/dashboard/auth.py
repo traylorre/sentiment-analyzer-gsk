@@ -1601,6 +1601,8 @@ def handle_oauth_callback(
             avatar=claims.get("picture"),
             email_verified=claims.get("email_verified", False),
         )
+        # Advance role from anonymous to free (Feature 1170)
+        _advance_role(table=table, user=user, provider=request.provider)
         # Merge anonymous data
         if request.anonymous_user_id:
             result = merge_anonymous_data(
@@ -1624,6 +1626,8 @@ def handle_oauth_callback(
             avatar=claims.get("picture"),
             email_verified=claims.get("email_verified", False),
         )
+        # Advance role from anonymous to free (Feature 1170)
+        _advance_role(table=table, user=user, provider=request.provider)
         if request.anonymous_user_id:
             result = merge_anonymous_data(
                 table, request.anonymous_user_id, user.user_id
@@ -1753,6 +1757,69 @@ def _link_provider(
     except Exception as e:
         logger.warning(
             "Failed to link provider",
+            extra={
+                "provider": provider,
+                "user_id_prefix": sanitize_for_log(user.user_id[:8]),
+                **get_safe_error_info(e),
+            },
+        )
+
+
+def _advance_role(
+    table: Any,
+    user: User,
+    provider: str,
+) -> None:
+    """Advance user role from anonymous to free after OAuth (Feature 1170).
+
+    When a user completes OAuth authentication with role="anonymous", advance
+    them to role="free" and populate audit fields for compliance tracking.
+    Higher roles (free/paid/operator) are preserved without modification.
+
+    Follows silent failure pattern - logs warning but doesn't break OAuth flow.
+
+    Args:
+        table: DynamoDB table resource
+        user: User to potentially upgrade
+        provider: OAuth provider name (google, github) for audit trail
+    """
+    # Only advance from anonymous to free
+    if user.role != "anonymous":
+        logger.debug(
+            "Role advancement skipped - user already has role",
+            extra={
+                "current_role": user.role,
+                "user_id_prefix": sanitize_for_log(user.user_id[:8]),
+            },
+        )
+        return
+
+    try:
+        now = datetime.now(UTC)
+        role_assigned_by = f"oauth:{provider}"
+
+        table.update_item(
+            Key={"PK": user.pk, "SK": user.sk},
+            UpdateExpression="SET #role = :new_role, role_assigned_at = :assigned_at, role_assigned_by = :assigned_by",
+            ExpressionAttributeNames={"#role": "role"},
+            ExpressionAttributeValues={
+                ":new_role": "free",
+                ":assigned_at": now.isoformat(),
+                ":assigned_by": role_assigned_by,
+            },
+        )
+
+        logger.info(
+            "Role advanced from anonymous to free",
+            extra={
+                "provider": provider,
+                "user_id_prefix": sanitize_for_log(user.user_id[:8]),
+                "role_assigned_by": role_assigned_by,
+            },
+        )
+    except Exception as e:
+        logger.warning(
+            "Failed to advance role",
             extra={
                 "provider": provider,
                 "user_id_prefix": sanitize_for_log(user.user_id[:8]),
