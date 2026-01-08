@@ -1921,6 +1921,11 @@ async def get_current_user(
         configs_count=config_count,
         max_configs=2,
         session_expires_in_seconds=seconds_until(user.session_expires_at),
+        # Feature 1172: Federation fields for RBAC-aware UI
+        role=user.role,
+        linked_providers=user.linked_providers,
+        verification=user.verification,
+        last_provider_used=user.last_provider_used,
     )
 
     return JSONResponse(response.model_dump())
