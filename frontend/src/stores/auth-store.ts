@@ -34,6 +34,7 @@ interface AuthStore extends AuthState {
   signInWithOAuth: (provider: OAuthProvider) => Promise<void>;
   handleOAuthCallback: (code: string, provider: OAuthProvider) => Promise<void>;
   refreshSession: () => Promise<void>;
+  refreshUserProfile: () => Promise<void>; // Feature 1174: Refresh federation fields
   signOut: () => Promise<void>;
 
   // Session helpers
@@ -104,6 +105,11 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         configurationCount: 0,
         alertCount: 0,
         emailNotificationsEnabled: false,
+        // Feature 1174: Federation field defaults for anonymous users
+        role: 'anonymous',
+        linkedProviders: [],
+        verification: 'none',
+        lastProviderUsed: undefined,
       });
       setSession(data.sessionExpiresAt);
     } catch (error) {
@@ -220,6 +226,30 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Unknown error');
       // Don't throw - let the session expire gracefully
+    }
+  },
+
+  /**
+   * Refresh user profile to get updated federation fields.
+   * Feature 1174: Fetches /api/v2/auth/me and merges federation data into user state.
+   */
+  refreshUserProfile: async () => {
+    const { user, setUser, setError } = get();
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const profileData = await authApi.getProfile();
+      // Merge new profile data with existing user (preserving userId, createdAt, etc.)
+      setUser({
+        ...user,
+        ...profileData,
+      });
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Unknown error');
+      // Don't throw - profile refresh is non-critical
     }
   },
 
