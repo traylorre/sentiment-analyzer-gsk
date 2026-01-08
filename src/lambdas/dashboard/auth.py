@@ -63,7 +63,7 @@ from src.lambdas.shared.errors.session_errors import (
 )
 from src.lambdas.shared.logging_utils import get_safe_error_info, sanitize_for_log
 from src.lambdas.shared.models.magic_link_token import MagicLinkToken
-from src.lambdas.shared.models.user import User
+from src.lambdas.shared.models.user import ProviderMetadata, User
 
 logger = logging.getLogger(__name__)
 
@@ -1591,6 +1591,16 @@ def handle_oauth_callback(
         # Update cognito_sub if not set
         if not user.cognito_sub:
             _update_cognito_sub(table, user, cognito_sub)
+        # Link provider metadata (Feature 1169)
+        _link_provider(
+            table=table,
+            user=user,
+            provider=request.provider,
+            sub=cognito_sub,
+            email=email,
+            avatar=claims.get("picture"),
+            email_verified=claims.get("email_verified", False),
+        )
         # Merge anonymous data
         if request.anonymous_user_id:
             result = merge_anonymous_data(
@@ -1604,6 +1614,16 @@ def handle_oauth_callback(
             table, email, request.provider, request.anonymous_user_id
         )
         _update_cognito_sub(table, user, cognito_sub)
+        # Link provider metadata (Feature 1169)
+        _link_provider(
+            table=table,
+            user=user,
+            provider=request.provider,
+            sub=cognito_sub,
+            email=email,
+            avatar=claims.get("picture"),
+            email_verified=claims.get("email_verified", False),
+        )
         if request.anonymous_user_id:
             result = merge_anonymous_data(
                 table, request.anonymous_user_id, user.user_id
@@ -1642,6 +1662,102 @@ def _update_cognito_sub(table: Any, user: User, cognito_sub: str | None) -> None
         logger.warning(
             "Failed to update cognito_sub",
             extra=get_safe_error_info(e),
+        )
+
+
+def _link_provider(
+    table: Any,
+    user: User,
+    provider: str,
+    sub: str | None,
+    email: str | None,
+    avatar: str | None = None,
+    email_verified: bool = False,
+) -> None:
+    """Link OAuth provider metadata to user account (Feature 1169).
+
+    Populates federation fields: linked_providers, provider_metadata, last_provider_used.
+    Follows silent failure pattern - logs warning but doesn't break OAuth flow.
+
+    Args:
+        table: DynamoDB table resource
+        user: User to update
+        provider: OAuth provider name (google, github)
+        sub: OAuth subject claim (provider's user ID)
+        email: Email from provider (may differ from account email)
+        avatar: Profile picture URL from provider
+        email_verified: Whether provider verified the email
+    """
+    if not sub:
+        logger.warning(
+            "Cannot link provider without sub claim",
+            extra={
+                "provider": provider,
+                "user_id_prefix": sanitize_for_log(user.user_id[:8]),
+            },
+        )
+        return
+
+    try:
+        # Build provider metadata
+        now = datetime.now(UTC)
+        metadata = ProviderMetadata(
+            sub=sub,
+            email=email,
+            avatar=avatar,
+            linked_at=now,
+            verified_at=now if email_verified else None,
+        )
+
+        # Serialize metadata for DynamoDB
+        metadata_dict = {
+            "sub": metadata.sub,
+            "email": metadata.email,
+            "avatar": metadata.avatar,
+            "linked_at": metadata.linked_at.isoformat(),
+            "verified_at": metadata.verified_at.isoformat()
+            if metadata.verified_at
+            else None,
+        }
+
+        # Build update expression
+        # Always update provider_metadata and last_provider_used
+        update_expr = "SET provider_metadata.#provider = :metadata, last_provider_used = :provider_name"
+        attr_names = {"#provider": provider}
+        attr_values = {
+            ":metadata": metadata_dict,
+            ":provider_name": provider,
+        }
+
+        # Add provider to linked_providers if not already present
+        if provider not in user.linked_providers:
+            update_expr += ", linked_providers = list_append(if_not_exists(linked_providers, :empty), :new_provider)"
+            attr_values[":empty"] = []
+            attr_values[":new_provider"] = [provider]
+
+        table.update_item(
+            Key={"PK": user.pk, "SK": user.sk},
+            UpdateExpression=update_expr,
+            ExpressionAttributeNames=attr_names,
+            ExpressionAttributeValues=attr_values,
+        )
+
+        logger.info(
+            "Provider linked to account",
+            extra={
+                "provider": provider,
+                "user_id_prefix": sanitize_for_log(user.user_id[:8]),
+                "is_new_link": provider not in user.linked_providers,
+            },
+        )
+    except Exception as e:
+        logger.warning(
+            "Failed to link provider",
+            extra={
+                "provider": provider,
+                "user_id_prefix": sanitize_for_log(user.user_id[:8]),
+                **get_safe_error_info(e),
+            },
         )
 
 
