@@ -1601,6 +1601,14 @@ def handle_oauth_callback(
             avatar=claims.get("picture"),
             email_verified=claims.get("email_verified", False),
         )
+        # Mark email as verified from OAuth (Feature 1171)
+        _mark_email_verified(
+            table=table,
+            user=user,
+            provider=request.provider,
+            email=email,
+            email_verified=claims.get("email_verified", False),
+        )
         # Advance role from anonymous to free (Feature 1170)
         _advance_role(table=table, user=user, provider=request.provider)
         # Merge anonymous data
@@ -1624,6 +1632,14 @@ def handle_oauth_callback(
             sub=cognito_sub,
             email=email,
             avatar=claims.get("picture"),
+            email_verified=claims.get("email_verified", False),
+        )
+        # Mark email as verified from OAuth (Feature 1171)
+        _mark_email_verified(
+            table=table,
+            user=user,
+            provider=request.provider,
+            email=email,
             email_verified=claims.get("email_verified", False),
         )
         # Advance role from anonymous to free (Feature 1170)
@@ -1820,6 +1836,84 @@ def _advance_role(
     except Exception as e:
         logger.warning(
             "Failed to advance role",
+            extra={
+                "provider": provider,
+                "user_id_prefix": sanitize_for_log(user.user_id[:8]),
+                **get_safe_error_info(e),
+            },
+        )
+
+
+def _mark_email_verified(
+    table: Any,
+    user: User,
+    provider: str,
+    email: str,
+    email_verified: bool,
+) -> None:
+    """Mark email as verified from OAuth provider (Feature 1171).
+
+    Updates user.verification field based on JWT email_verified claim.
+    Must be called BEFORE _advance_role() to maintain state machine invariant:
+    verification should be set before role is advanced from anonymous to free.
+
+    Follows silent failure pattern - logs warning but doesn't break OAuth flow.
+
+    Args:
+        table: DynamoDB table resource
+        user: User to potentially update
+        provider: OAuth provider name (google, github) for audit trail
+        email: Email address from OAuth JWT
+        email_verified: email_verified claim from OAuth JWT (True/False)
+    """
+    # Only mark if provider says email is verified
+    if not email_verified:
+        logger.debug(
+            "Email verification skipped - provider did not verify",
+            extra={
+                "provider": provider,
+                "user_id_prefix": sanitize_for_log(user.user_id[:8]),
+            },
+        )
+        return
+
+    # Skip if already verified (idempotent)
+    if user.verification == "verified":
+        logger.debug(
+            "Email verification skipped - already verified",
+            extra={
+                "provider": provider,
+                "user_id_prefix": sanitize_for_log(user.user_id[:8]),
+            },
+        )
+        return
+
+    try:
+        now = datetime.now(UTC)
+        verification_marked_by = f"oauth:{provider}"
+
+        table.update_item(
+            Key={"PK": user.pk, "SK": user.sk},
+            UpdateExpression="SET verification = :verified, primary_email = :email, verification_marked_at = :marked_at, verification_marked_by = :marked_by",
+            ExpressionAttributeValues={
+                ":verified": "verified",
+                ":email": email,
+                ":marked_at": now.isoformat(),
+                ":marked_by": verification_marked_by,
+            },
+        )
+
+        logger.info(
+            "Email marked as verified from OAuth provider",
+            extra={
+                "provider": provider,
+                "user_id_prefix": sanitize_for_log(user.user_id[:8]),
+                "verification_marked_by": verification_marked_by,
+            },
+        )
+    except Exception as e:
+        logger.warning(
+            "Failed to mark email verified",
             extra={
                 "provider": provider,
                 "user_id_prefix": sanitize_for_log(user.user_id[:8]),
