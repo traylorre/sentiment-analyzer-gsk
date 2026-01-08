@@ -14,7 +14,7 @@ For On-Call Engineers:
 
 from datetime import UTC, datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 def mask_email(email: str | None) -> str | None:
@@ -55,6 +55,11 @@ class UserMeResponse(BaseModel):
     configs_count: int
     max_configs: int = 2
     session_expires_in_seconds: int | None = None
+    # Feature 1172: Federation fields for RBAC-aware UI
+    role: str = "anonymous"  # anonymous, free, paid, operator
+    linked_providers: list[str] = Field(default_factory=list)  # ["google", "github"]
+    verification: str = "none"  # none, pending, verified
+    last_provider_used: str | None = None  # Most recent provider for avatar
 
 
 class SessionValidResponse(BaseModel):
