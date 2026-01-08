@@ -1,5 +1,10 @@
 export type AuthType = 'anonymous' | 'email' | 'google' | 'github';
 
+// Feature 1173: Federation type aliases
+export type UserRole = 'anonymous' | 'free' | 'paid' | 'operator';
+export type VerificationStatus = 'none' | 'pending' | 'verified';
+export type ProviderType = 'email' | 'google' | 'github';
+
 export interface User {
   userId: string;
   authType: AuthType;
@@ -8,6 +13,11 @@ export interface User {
   configurationCount: number;
   alertCount: number;
   emailNotificationsEnabled: boolean;
+  // Feature 1173: Federation fields for RBAC-aware UI
+  role?: UserRole;
+  linkedProviders?: ProviderType[];
+  verification?: VerificationStatus;
+  lastProviderUsed?: ProviderType;
 }
 
 export interface AuthTokens {
