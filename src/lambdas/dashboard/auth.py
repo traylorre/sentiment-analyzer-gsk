@@ -1015,6 +1015,12 @@ class OAuthCallbackResponse(BaseModel):
     message: str | None = None
     error: str | None = None
 
+    # Feature 1176: Federation fields - enables frontend RBAC decisions
+    role: str = "anonymous"
+    verification: str = "none"
+    linked_providers: list[str] = Field(default_factory=list)
+    last_provider_used: str | None = None
+
 
 class RefreshTokenRequest(BaseModel):
     """Request body for POST /api/v2/auth/refresh."""
@@ -1651,6 +1657,20 @@ def handle_oauth_callback(
             merged_data = result.status == "completed"
 
     # Security: NO refresh_token in body, masked email
+    # Feature 1176: Compute federation state after mutations
+    # - _link_provider sets: linked_providers, last_provider_used
+    # - _mark_email_verified sets: verification="verified" if email_verified
+    # - _advance_role sets: role="free" if was "anonymous"
+    final_linked_providers = (
+        user.linked_providers
+        if request.provider in user.linked_providers
+        else user.linked_providers + [request.provider]
+    )
+    final_verification = (
+        "verified" if claims.get("email_verified", False) else user.verification
+    )
+    final_role = "free" if user.role == "anonymous" else user.role
+
     return OAuthCallbackResponse(
         status="authenticated",
         # user_id removed - frontend doesn't need it
@@ -1665,6 +1685,11 @@ def handle_oauth_callback(
         refresh_token_for_cookie=tokens.refresh_token,  # Router sets HttpOnly cookie
         merged_anonymous_data=merged_data,
         is_new_user=is_new_user,
+        # Feature 1176: Federation fields
+        role=final_role,
+        verification=final_verification,
+        linked_providers=final_linked_providers,
+        last_provider_used=request.provider,
     )
 
 
