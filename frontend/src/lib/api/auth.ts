@@ -33,6 +33,32 @@ interface UserMeResponse {
 }
 
 /**
+ * Raw /api/v2/auth/oauth/callback response (snake_case per API contract).
+ * Feature 1177: Maps backend OAuthCallbackResponse to frontend types.
+ */
+interface OAuthCallbackResponse {
+  status: string;
+  email_masked: string | null;
+  auth_type: string | null;
+  tokens: {
+    id_token: string;
+    access_token: string;
+    expires_in: number;
+  } | null;
+  merged_anonymous_data: boolean;
+  is_new_user: boolean;
+  conflict: boolean;
+  existing_provider: string | null;
+  message: string | null;
+  error: string | null;
+  // Feature 1176: Federation fields
+  role: string;
+  verification: string;
+  linked_providers: string[];
+  last_provider_used: string | null;
+}
+
+/**
  * Map /api/v2/auth/me snake_case response to camelCase User type.
  * Feature 1174: Maps federation fields for RBAC-aware UI.
  */
@@ -46,6 +72,57 @@ function mapUserMeResponse(response: UserMeResponse): Partial<User> {
     linkedProviders: response.linked_providers as User['linkedProviders'],
     verification: response.verification as User['verification'],
     lastProviderUsed: (response.last_provider_used ?? undefined) as User['lastProviderUsed'],
+  };
+}
+
+/**
+ * Map /api/v2/auth/oauth/callback snake_case response to camelCase AuthResponse.
+ * Feature 1177: Extracts federation fields for frontend RBAC-aware UI.
+ *
+ * Note: OAuth response doesn't include all User fields (userId, createdAt, etc.)
+ * These are set to placeholder values; auth store should merge with existing user data.
+ */
+function mapOAuthCallbackResponse(response: OAuthCallbackResponse): AuthResponse {
+  // Handle error/conflict responses
+  if (response.status === 'error' || response.error) {
+    throw new Error(response.error ?? response.message ?? 'OAuth authentication failed');
+  }
+  if (response.status === 'conflict') {
+    throw new Error(
+      response.message ?? `Account conflict: email already registered via ${response.existing_provider}`
+    );
+  }
+
+  return {
+    user: {
+      // Placeholder fields - OAuth callback doesn't return these
+      userId: '', // Will be populated from session or /me endpoint
+      createdAt: new Date().toISOString(),
+      configurationCount: 0,
+      alertCount: 0,
+      emailNotificationsEnabled: false,
+      // Fields from OAuth response
+      authType: (response.auth_type ?? 'anonymous') as User['authType'],
+      email: response.email_masked ?? undefined,
+      // Feature 1177: Federation fields from Feature 1176
+      role: (response.role ?? 'anonymous') as User['role'],
+      linkedProviders: (response.linked_providers ?? []) as User['linkedProviders'],
+      verification: (response.verification ?? 'none') as User['verification'],
+      lastProviderUsed: (response.last_provider_used ?? undefined) as User['lastProviderUsed'],
+    },
+    tokens: response.tokens
+      ? {
+          idToken: response.tokens.id_token,
+          accessToken: response.tokens.access_token,
+          refreshToken: '', // Refresh token is httpOnly cookie, not in response body
+          expiresIn: response.tokens.expires_in,
+        }
+      : {
+          idToken: '',
+          accessToken: '',
+          refreshToken: '',
+          expiresIn: 0,
+        },
   };
 }
 
@@ -107,10 +184,13 @@ export const authApi = {
     api.get<{ google: string; github: string }>('/api/v2/auth/oauth/urls'),
 
   /**
-   * Exchange OAuth code for tokens
+   * Exchange OAuth code for tokens.
+   * Feature 1177: Maps backend OAuthCallbackResponse to frontend AuthResponse with federation fields.
    */
-  exchangeOAuthCode: (provider: 'google' | 'github', code: string) =>
-    api.post<AuthResponse>('/api/v2/auth/oauth/callback', { provider, code }),
+  exchangeOAuthCode: async (provider: 'google' | 'github', code: string): Promise<AuthResponse> => {
+    const response = await api.post<OAuthCallbackResponse>('/api/v2/auth/oauth/callback', { provider, code });
+    return mapOAuthCallbackResponse(response);
+  },
 
   /**
    * Refresh access token using httpOnly cookie
