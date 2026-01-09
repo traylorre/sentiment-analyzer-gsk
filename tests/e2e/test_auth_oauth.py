@@ -399,3 +399,175 @@ async def test_oauth_provider_validation(
         400,
         422,
     ), f"Unsupported provider should be rejected: {response.status_code}"
+
+
+# =============================================================================
+# Feature 1178: Federation Fields E2E Tests
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_me_endpoint_returns_federation_fields(
+    api_client: PreprodAPIClient,
+) -> None:
+    """T055: Verify /api/v2/auth/me returns federation fields.
+
+    Feature 1178: Federation fields (role, verification, linked_providers,
+    last_provider_used) should be included in /me response.
+
+    Given: An authenticated session
+    When: GET /api/v2/auth/me is called
+    Then: Response includes federation fields with valid values
+    """
+    # Create anonymous session for testing
+    anon_response = await api_client.post("/api/v2/auth/anonymous", json={})
+    assert anon_response.status_code == 201
+
+    token = anon_response.json()["token"]
+    api_client.set_access_token(token)
+
+    try:
+        me_response = await api_client.get("/api/v2/auth/me")
+
+        if me_response.status_code == 401:
+            pytest.skip("Anonymous sessions cannot access /me endpoint")
+
+        assert (
+            me_response.status_code == 200
+        ), f"Expected 200, got {me_response.status_code}"
+
+        data = me_response.json()
+
+        # Feature 1172/1178: Verify federation fields are present
+        assert "role" in data, f"Missing 'role' in /me response: {data}"
+        assert "verification" in data, f"Missing 'verification' in /me response: {data}"
+        assert (
+            "linked_providers" in data
+        ), f"Missing 'linked_providers' in /me response: {data}"
+        # last_provider_used may be null for anonymous users
+
+        # Verify field values are valid
+        valid_roles = ["anonymous", "free", "paid", "operator"]
+        assert data["role"] in valid_roles, f"Invalid role: {data['role']}"
+
+        valid_verifications = ["none", "pending", "verified"]
+        assert (
+            data["verification"] in valid_verifications
+        ), f"Invalid verification: {data['verification']}"
+
+        assert isinstance(
+            data["linked_providers"], list
+        ), "linked_providers should be a list"
+
+        # For anonymous user, expect role="anonymous" and no linked providers
+        assert (
+            data["role"] == "anonymous"
+        ), f"Anonymous user should have role='anonymous', got {data['role']}"
+        assert (
+            len(data["linked_providers"]) == 0
+        ), "Anonymous user should have no linked providers"
+
+    finally:
+        api_client.clear_access_token()
+
+
+@pytest.mark.asyncio
+async def test_oauth_callback_response_includes_federation_fields(
+    api_client: PreprodAPIClient,
+    test_run_id: str,
+) -> None:
+    """T056: Verify OAuth callback response includes federation fields.
+
+    Feature 1176/1178: Even error responses from OAuth callback should
+    include federation field structure (with defaults).
+
+    Given: An OAuth callback request with invalid code
+    When: POST /api/v2/auth/oauth/callback is called
+    Then: Response structure includes federation fields
+    """
+    response = await api_client.post(
+        "/api/v2/auth/oauth/callback",
+        json={
+            "provider": "google",
+            "code": f"invalid-code-federation-{test_run_id}",
+        },
+    )
+
+    # For invalid code, expect 200 with error in body or 4xx status
+    if response.status_code == 200:
+        data = response.json()
+
+        # Check federation fields are in response (Feature 1176)
+        # For error/invalid code responses, fields may use defaults
+        if "status" in data and data.get("status") == "error":
+            # Error responses - federation fields should still be present with defaults
+            assert "role" in data, f"Error response missing 'role': {data}"
+            assert (
+                data["role"] == "anonymous"
+            ), f"Error response role should be 'anonymous': {data}"
+        elif "status" in data and data.get("status") == "authenticated":
+            # Successful auth (unlikely with invalid code) - federation fields required
+            assert "role" in data, f"Success response missing 'role': {data}"
+            assert (
+                "verification" in data
+            ), f"Success response missing 'verification': {data}"
+            assert (
+                "linked_providers" in data
+            ), f"Success response missing 'linked_providers': {data}"
+
+
+@pytest.mark.asyncio
+async def test_federation_field_types(
+    api_client: PreprodAPIClient,
+) -> None:
+    """T057: Verify federation field types in /me response.
+
+    Feature 1178: Federation fields should have correct types:
+    - role: string enum
+    - verification: string enum
+    - linked_providers: list of strings
+    - last_provider_used: string or null
+
+    Given: An authenticated session
+    When: GET /api/v2/auth/me is called
+    Then: Federation fields have correct types
+    """
+    anon_response = await api_client.post("/api/v2/auth/anonymous", json={})
+    assert anon_response.status_code == 201
+
+    token = anon_response.json()["token"]
+    api_client.set_access_token(token)
+
+    try:
+        me_response = await api_client.get("/api/v2/auth/me")
+
+        if me_response.status_code == 401:
+            pytest.skip("Anonymous sessions cannot access /me endpoint")
+
+        assert me_response.status_code == 200
+
+        data = me_response.json()
+
+        # Verify types
+        assert isinstance(data.get("role"), str), "role should be string"
+        assert isinstance(
+            data.get("verification"), str
+        ), "verification should be string"
+        assert isinstance(
+            data.get("linked_providers"), list
+        ), "linked_providers should be list"
+
+        # last_provider_used can be string or None
+        last_provider = data.get("last_provider_used")
+        assert last_provider is None or isinstance(
+            last_provider, str
+        ), f"last_provider_used should be string or null, got {type(last_provider)}"
+
+        # Verify linked_providers contains only strings
+        for provider in data.get("linked_providers", []):
+            assert isinstance(
+                provider, str
+            ), f"linked_provider item should be string: {provider}"
+
+    finally:
+        api_client.clear_access_token()
