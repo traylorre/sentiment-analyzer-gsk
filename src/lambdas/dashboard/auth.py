@@ -489,6 +489,68 @@ def get_user_by_email_gsi(table: Any, email: str) -> User | None:
         return None
 
 
+@xray_recorder.capture("get_user_by_provider_sub")
+def get_user_by_provider_sub(
+    table: Any,
+    provider: Literal["google", "github"],
+    sub: str,
+) -> User | None:
+    """Get user by OAuth provider sub using GSI query (Feature 1180).
+
+    Uses the by_provider_sub GSI for O(1) lookup performance.
+    Essential for account linking flows to detect duplicate provider linking.
+
+    Args:
+        table: DynamoDB Table resource
+        provider: OAuth provider ("google" or "github")
+        sub: OAuth subject claim (provider's user ID)
+
+    Returns:
+        User if found, None otherwise
+    """
+    if not provider or not sub:
+        logger.warning(
+            "Invalid provider_sub lookup - missing provider or sub",
+            extra={"has_provider": bool(provider), "has_sub": bool(sub)},
+        )
+        return None
+
+    # Build composite key: "{provider}:{sub}"
+    provider_sub = f"{provider}:{sub}"
+
+    logger.debug(
+        "GSI provider_sub lookup",
+        extra={"provider": provider, "sub_prefix": sanitize_for_log(sub[:8])},
+    )
+
+    try:
+        # GSI by_provider_sub has provider_sub as HASH
+        # Filter by entity_type to only return USER records
+        response = table.query(
+            IndexName="by_provider_sub",
+            KeyConditionExpression="provider_sub = :provider_sub",
+            FilterExpression="entity_type = :type",
+            ExpressionAttributeValues={
+                ":provider_sub": provider_sub,
+                ":type": "USER",
+            },
+            Limit=1,  # One provider:sub should map to at most one user
+        )
+
+        items = response.get("Items", [])
+        if not items:
+            return None
+
+        return User.from_dynamodb_item(items[0])
+
+    except Exception as e:
+        logger.error(
+            "Failed GSI provider_sub lookup",
+            extra=get_safe_error_info(e),
+        )
+        return None
+
+
 @xray_recorder.capture("create_user_with_email")
 def create_user_with_email(
     table: Any,
@@ -1766,12 +1828,19 @@ def _link_provider(
         }
 
         # Build update expression
-        # Always update provider_metadata and last_provider_used
-        update_expr = "SET provider_metadata.#provider = :metadata, last_provider_used = :provider_name"
+        # Always update provider_metadata, last_provider_used, and provider_sub (Feature 1180)
+        # provider_sub enables GSI lookup for account linking flows
+        provider_sub_value = f"{provider}:{sub}"
+        update_expr = (
+            "SET provider_metadata.#provider = :metadata, "
+            "last_provider_used = :provider_name, "
+            "provider_sub = :provider_sub"
+        )
         attr_names = {"#provider": provider}
         attr_values = {
             ":metadata": metadata_dict,
             ":provider_name": provider,
+            ":provider_sub": provider_sub_value,
         }
 
         # Add provider to linked_providers if not already present
