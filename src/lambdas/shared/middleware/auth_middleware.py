@@ -67,6 +67,8 @@ class JWTClaim:
         issued_at: Token issued timestamp
         issuer: Token issuer (optional)
         roles: List of user roles (from 'roles' claim, Feature 1130)
+        jti: JWT ID for unique token identity (Feature 1186, A15)
+        rev: Revocation ID for atomic rotation check (Feature 1186, A14)
     """
 
     subject: str
@@ -74,6 +76,9 @@ class JWTClaim:
     issued_at: datetime
     issuer: str | None = None
     roles: list[str] | None = None
+    # Feature 1186: JWT enhancements for A14/A15
+    jti: str | None = None
+    rev: int | None = None
 
 
 @dataclass(frozen=True)
@@ -170,12 +175,19 @@ def validate_jwt(token: str, config: JWTConfig | None = None) -> JWTClaim | None
             )
             return None
 
+        # Feature 1186: Extract jti and rev claims (A14/A15)
+        # These are optional for backward compatibility with existing tokens
+        jti = payload.get("jti")  # A15: Unique token ID
+        rev = payload.get("rev")  # A14: Revocation ID counter
+
         return JWTClaim(
             subject=payload["sub"],
             expiration=datetime.fromtimestamp(payload["exp"], tz=UTC),
             issued_at=datetime.fromtimestamp(payload["iat"], tz=UTC),
             issuer=payload.get("iss"),
             roles=roles,
+            jti=jti,
+            rev=rev,
         )
 
     except jwt.ExpiredSignatureError:
@@ -204,6 +216,47 @@ def validate_jwt(token: str, config: JWTConfig | None = None) -> JWTClaim | None
     except Exception as e:
         logger.warning(f"Unexpected error validating JWT: {e}")
         return None
+
+
+def check_revocation_id(jwt_claim: JWTClaim, user_revocation_id: int) -> bool:
+    """Check if JWT revocation ID matches user's current revocation ID.
+
+    Feature 1186 (A14): Prevents TOCTOU attacks during token rotation.
+    When a user changes password or force-revokes sessions, revocation_id
+    is incremented. Tokens with stale 'rev' claims are rejected.
+
+    Args:
+        jwt_claim: Validated JWT claim containing optional 'rev' field
+        user_revocation_id: Current revocation_id from user record
+
+    Returns:
+        True if token is valid (rev matches or rev not present)
+        False if rev mismatch detected (token should be rejected)
+
+    Note:
+        If jwt_claim.rev is None, returns True for backward compatibility
+        with tokens issued before A14 implementation.
+    """
+    if jwt_claim.rev is None:
+        # Backward compatibility: tokens without rev claim are allowed
+        logger.debug("JWT has no rev claim, skipping revocation check")
+        return True
+
+    if jwt_claim.rev != user_revocation_id:
+        logger.warning(
+            "JWT revocation ID mismatch - token revoked",
+            extra={
+                "token_rev": jwt_claim.rev,
+                "user_rev": user_revocation_id,
+                "user_id_prefix": jwt_claim.subject[:8] if jwt_claim.subject else "N/A",
+            },
+        )
+        return False
+
+    logger.debug(
+        f"JWT revocation ID valid: {jwt_claim.rev}",
+    )
+    return True
 
 
 def extract_user_id(event: dict[str, Any]) -> str | None:

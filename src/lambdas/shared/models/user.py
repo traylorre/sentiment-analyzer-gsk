@@ -66,6 +66,13 @@ class User(BaseModel):
         None, description="Reason for revocation (incident ID, admin action)"
     )
 
+    # Feature 1186: Revocation ID for atomic token rotation (A14)
+    revocation_id: int = Field(
+        default=0,
+        description="Increments on password change or force revocation. "
+        "Tokens with stale rev claim are rejected.",
+    )
+
     # Feature 014: Merge tracking fields (FR-013, FR-014, FR-015)
     merged_to: str | None = Field(
         None, description="Target user ID if this account was merged"
@@ -180,6 +187,9 @@ class User(BaseModel):
         if self.revoked_reason is not None:
             item["revoked_reason"] = self.revoked_reason
 
+        # Feature 1186: Revocation ID for atomic token rotation (A14)
+        item["revocation_id"] = self.revocation_id
+
         # Feature 014: Merge tracking fields
         if self.merged_to is not None:
             item["merged_to"] = self.merged_to
@@ -272,6 +282,8 @@ class User(BaseModel):
             revoked=item.get("revoked", False),
             revoked_at=revoked_at,
             revoked_reason=item.get("revoked_reason"),
+            # Feature 1186: Revocation ID for atomic token rotation (A14)
+            revocation_id=item.get("revocation_id", 0),
             merged_to=item.get("merged_to"),
             merged_at=merged_at,
             # Feature 1151: RBAC fields with backward-compatible defaults

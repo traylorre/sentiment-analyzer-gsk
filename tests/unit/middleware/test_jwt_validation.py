@@ -14,6 +14,7 @@ from src.lambdas.shared.middleware.auth_middleware import (
     JWTConfig,
     _extract_user_id_from_token,
     _get_jwt_config,
+    check_revocation_id,
     extract_user_id,
     validate_jwt,
 )
@@ -38,11 +39,16 @@ def create_test_token(
     include_aud: bool = True,
     roles: list[str] | None = None,
     include_roles: bool = True,
+    jti: str | None = None,
+    include_jti: bool = False,
+    rev: int | None = None,
+    include_rev: bool = False,
 ) -> str:
     """Create a test JWT token.
 
     Feature 1147: Added audience and nbf parameters for CVSS 7.8 fix.
     Feature 1152: Added roles parameter for RBAC support.
+    Feature 1186: Added jti and rev parameters for A14/A15 JWT enhancement.
 
     Args:
         user_id: Subject claim value
@@ -59,6 +65,10 @@ def create_test_token(
         include_aud: Include audience claim (Feature 1147)
         roles: User roles for RBAC (defaults to ["free"])
         include_roles: Include roles claim (Feature 1152)
+        jti: JWT ID for unique token identity (Feature 1186, A15)
+        include_jti: Include jti claim
+        rev: Revocation ID counter (Feature 1186, A14)
+        include_rev: Include rev claim
     """
     payload = {}
     now = datetime.now(UTC)
@@ -77,6 +87,10 @@ def create_test_token(
         payload["aud"] = audience
     if include_roles:
         payload["roles"] = roles if roles is not None else ["free"]
+    if include_jti:
+        payload["jti"] = jti if jti is not None else "test-token-id-12345"
+    if include_rev:
+        payload["rev"] = rev if rev is not None else 0
 
     return jwt.encode(payload, secret, algorithm=algorithm)
 
@@ -510,3 +524,188 @@ class TestJWTRolesClaim:
         new_claim = validate_jwt(new_token, config)
         assert new_claim is not None, "New tokens with roles must be accepted"
         assert new_claim.roles == ["free"]
+
+
+class TestJWTTokenId:
+    """Feature 1186 (A15): Tests for jti (JWT Token ID) claim."""
+
+    def test_jti_extracted_from_jwt(self):
+        """Feature 1186 A15: jti claim should be extracted from JWT."""
+        token = create_test_token(include_jti=True, jti="unique-token-id-abc123")
+        config = JWTConfig(secret=TEST_SECRET, audience="sentiment-analyzer-api")
+
+        claim = validate_jwt(token, config)
+        assert claim is not None
+        assert claim.jti == "unique-token-id-abc123"
+
+    def test_jti_none_when_not_present(self):
+        """Feature 1186 A15: jti should be None if not in token.
+
+        Backward compatibility: tokens without jti are still valid.
+        """
+        token = create_test_token(include_jti=False)
+        config = JWTConfig(secret=TEST_SECRET, audience="sentiment-analyzer-api")
+
+        claim = validate_jwt(token, config)
+        assert claim is not None
+        assert claim.jti is None
+
+    def test_jti_with_default_value(self):
+        """Feature 1186 A15: Default jti value when include_jti=True."""
+        token = create_test_token(
+            include_jti=True
+        )  # Uses default "test-token-id-12345"
+        config = JWTConfig(secret=TEST_SECRET, audience="sentiment-analyzer-api")
+
+        claim = validate_jwt(token, config)
+        assert claim is not None
+        assert claim.jti == "test-token-id-12345"
+
+
+class TestJWTRevocationId:
+    """Feature 1186 (A14): Tests for rev (Revocation ID) claim and check."""
+
+    def test_rev_extracted_from_jwt(self):
+        """Feature 1186 A14: rev claim should be extracted from JWT."""
+        token = create_test_token(include_rev=True, rev=5)
+        config = JWTConfig(secret=TEST_SECRET, audience="sentiment-analyzer-api")
+
+        claim = validate_jwt(token, config)
+        assert claim is not None
+        assert claim.rev == 5
+
+    def test_rev_none_when_not_present(self):
+        """Feature 1186 A14: rev should be None if not in token.
+
+        Backward compatibility: tokens without rev are still valid.
+        """
+        token = create_test_token(include_rev=False)
+        config = JWTConfig(secret=TEST_SECRET, audience="sentiment-analyzer-api")
+
+        claim = validate_jwt(token, config)
+        assert claim is not None
+        assert claim.rev is None
+
+    def test_rev_default_value(self):
+        """Feature 1186 A14: Default rev value is 0 when include_rev=True."""
+        token = create_test_token(include_rev=True)  # Uses default rev=0
+        config = JWTConfig(secret=TEST_SECRET, audience="sentiment-analyzer-api")
+
+        claim = validate_jwt(token, config)
+        assert claim is not None
+        assert claim.rev == 0
+
+    def test_check_revocation_id_matching(self):
+        """Feature 1186 A14: Matching rev should return True."""
+        token = create_test_token(include_rev=True, rev=3)
+        config = JWTConfig(secret=TEST_SECRET, audience="sentiment-analyzer-api")
+
+        claim = validate_jwt(token, config)
+        assert claim is not None
+
+        # Token rev matches user's revocation_id
+        result = check_revocation_id(claim, user_revocation_id=3)
+        assert result is True
+
+    def test_check_revocation_id_mismatch(self):
+        """Feature 1186 A14: Mismatched rev should return False.
+
+        This happens when user changed password or force-revoked sessions.
+        """
+        token = create_test_token(include_rev=True, rev=2)
+        config = JWTConfig(secret=TEST_SECRET, audience="sentiment-analyzer-api")
+
+        claim = validate_jwt(token, config)
+        assert claim is not None
+
+        # User's revocation_id was incremented (e.g., password change)
+        result = check_revocation_id(claim, user_revocation_id=3)
+        assert result is False
+
+    def test_check_revocation_id_no_rev_claim(self):
+        """Feature 1186 A14: Token without rev is valid (backward compatible)."""
+        token = create_test_token(include_rev=False)
+        config = JWTConfig(secret=TEST_SECRET, audience="sentiment-analyzer-api")
+
+        claim = validate_jwt(token, config)
+        assert claim is not None
+        assert claim.rev is None
+
+        # No rev claim means we skip the check (backward compatibility)
+        result = check_revocation_id(claim, user_revocation_id=5)
+        assert result is True
+
+    def test_check_revocation_id_zero_values(self):
+        """Feature 1186 A14: Both rev=0 should match."""
+        token = create_test_token(include_rev=True, rev=0)
+        config = JWTConfig(secret=TEST_SECRET, audience="sentiment-analyzer-api")
+
+        claim = validate_jwt(token, config)
+        assert claim is not None
+
+        result = check_revocation_id(claim, user_revocation_id=0)
+        assert result is True
+
+
+class TestJWTLeeway:
+    """Feature 1186 (A17): Tests for clock skew leeway configuration."""
+
+    def test_default_leeway_is_60_seconds(self):
+        """Feature 1186 A17: Default leeway should be 60 seconds."""
+        config = JWTConfig(secret=TEST_SECRET)
+        assert config.leeway_seconds == 60
+
+    def test_leeway_from_env_variable(self):
+        """Feature 1186 A17: Leeway should be configurable via JWT_LEEWAY_SECONDS."""
+        env_vars = {
+            "JWT_SECRET": TEST_SECRET,
+            "JWT_LEEWAY_SECONDS": "120",
+        }
+        with patch.dict("os.environ", env_vars):
+            config = _get_jwt_config()
+            assert config is not None
+            assert config.leeway_seconds == 120
+
+    def test_leeway_applied_to_expiration(self):
+        """Feature 1186 A17: Leeway allows recently expired tokens."""
+        # Token expired 30 seconds ago
+        token = create_test_token(expires_in=timedelta(seconds=-30))
+        # Config with 60 second leeway
+        config = JWTConfig(
+            secret=TEST_SECRET,
+            audience="sentiment-analyzer-api",
+            leeway_seconds=60,
+        )
+
+        # Should be accepted due to leeway
+        claim = validate_jwt(token, config)
+        assert claim is not None
+
+    def test_leeway_rejects_beyond_tolerance(self):
+        """Feature 1186 A17: Leeway doesn't allow tokens expired beyond tolerance."""
+        # Token expired 90 seconds ago
+        token = create_test_token(expires_in=timedelta(seconds=-90))
+        # Config with 60 second leeway
+        config = JWTConfig(
+            secret=TEST_SECRET,
+            audience="sentiment-analyzer-api",
+            leeway_seconds=60,
+        )
+
+        # Should be rejected - expired beyond leeway
+        claim = validate_jwt(token, config)
+        assert claim is None
+
+    def test_zero_leeway_strict_validation(self):
+        """Feature 1186 A17: Zero leeway enforces strict expiration."""
+        # Token expired 1 second ago
+        token = create_test_token(expires_in=timedelta(seconds=-1))
+        config = JWTConfig(
+            secret=TEST_SECRET,
+            audience="sentiment-analyzer-api",
+            leeway_seconds=0,
+        )
+
+        # Should be rejected with zero leeway
+        claim = validate_jwt(token, config)
+        assert claim is None
