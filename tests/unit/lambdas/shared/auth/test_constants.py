@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.lambdas.shared.auth.constants import VALID_ROLES, Role
+from src.lambdas.shared.auth.enums import VALID_ROLES, Role
 
 
 class TestRoleEnum:

@@ -1,7 +1,9 @@
-"""Canonical role definitions for RBAC (Feature 1130).
+"""Canonical enum definitions for auth RBAC (Feature 1184).
 
 This module defines the valid roles used throughout the application.
 Roles are validated at decoration time to catch typos early.
+
+All auth-related enums should be defined here to ensure a single source of truth.
 """
 
 from __future__ import annotations

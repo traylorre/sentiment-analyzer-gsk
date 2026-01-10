@@ -17,7 +17,7 @@ import pytest
 from fastapi import Depends, FastAPI, Request
 from fastapi.testclient import TestClient
 
-from src.lambdas.shared.auth.constants import VALID_ROLES
+from src.lambdas.shared.auth.enums import VALID_ROLES
 from src.lambdas.shared.errors.auth_errors import InvalidRoleError
 from src.lambdas.shared.middleware import AuthContext, AuthType
 from src.lambdas.shared.middleware.require_role import require_role

@@ -15,7 +15,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from src.lambdas.shared.auth.constants import Role
+from src.lambdas.shared.auth.enums import Role
 
 if TYPE_CHECKING:
     from src.lambdas.shared.models.user import User
