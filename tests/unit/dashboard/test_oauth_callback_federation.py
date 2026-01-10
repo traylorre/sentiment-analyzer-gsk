@@ -328,7 +328,7 @@ class TestOAuthCallbackFederationFieldsExistingUser:
     @patch("src.lambdas.dashboard.auth.get_user_by_email_gsi")
     @patch("src.lambdas.dashboard.auth.exchange_code_for_tokens")
     @patch("src.lambdas.dashboard.auth.decode_id_token")
-    def test_existing_user_new_provider_triggers_conflict(
+    def test_existing_oauth_user_auto_links_new_oauth_provider(
         self,
         mock_decode_id_token: MagicMock,
         mock_exchange: MagicMock,
@@ -337,11 +337,11 @@ class TestOAuthCallbackFederationFieldsExistingUser:
         mock_mark_verified: MagicMock,
         mock_link_provider: MagicMock,
     ) -> None:
-        """Existing user with different provider triggers conflict response.
+        """Existing OAuth user with different OAuth provider auto-links (Flow 5).
 
-        When a Google user tries to authenticate with GitHub, it triggers a
-        conflict flow requiring user confirmation. Federation fields use defaults
-        in conflict responses.
+        When a Google OAuth user authenticates with GitHub OAuth, the system
+        automatically links both accounts since both providers verify emails.
+        This is Federation Flow 5: OAuth-to-OAuth auto-link.
         """
         table = MagicMock()
         user = self._create_existing_user()  # Has google linked
@@ -356,11 +356,9 @@ class TestOAuthCallbackFederationFieldsExistingUser:
         request = OAuthCallbackRequest(code="auth-code", provider="github")
         response = handle_oauth_callback(table, request)
 
-        # Conflict response uses defaults for federation fields
-        assert response.status == "conflict"
-        assert response.existing_provider == "google"
-        assert response.role == "anonymous"  # Default, not populated in conflict
-        assert response.linked_providers == []  # Default, not populated in conflict
+        # Flow 5: OAuth-to-OAuth auto-links without conflict
+        assert response.status == "authenticated"
+        assert response.role == "free"  # Preserved from existing user
 
     @patch("src.lambdas.dashboard.auth._link_provider")
     @patch("src.lambdas.dashboard.auth._mark_email_verified")

@@ -1733,8 +1733,26 @@ def handle_oauth_callback(
                 message="Email not verified by provider. Cannot link accounts.",
             )
 
-        # Feature 1181: Flow 3 - Check if auto-link is possible
-        if can_auto_link_oauth(
+        # Feature 1183: Flow 5 - OAuth-to-OAuth auto-link
+        # If existing user is OAuth (google, github) and new provider is also OAuth,
+        # auto-link since both providers verify their emails
+        oauth_providers = {"google", "github"}
+        is_existing_oauth = existing_user.auth_type in oauth_providers
+        is_new_oauth = request.provider in oauth_providers
+
+        if is_existing_oauth and is_new_oauth:
+            # Auto-link: both are OAuth providers, proceed silently
+            logger.info(
+                "Auto-linking OAuth to existing OAuth account (Flow 5)",
+                extra={
+                    "existing_provider": existing_user.auth_type,
+                    "new_provider": request.provider,
+                    "link_type": "auto",
+                },
+            )
+            # Fall through to link the provider below
+        elif can_auto_link_oauth(
+            # Feature 1181: Flow 3 - Check if auto-link is possible (email → OAuth)
             oauth_email=email,
             oauth_email_verified=oauth_email_verified,
             provider=request.provider,
