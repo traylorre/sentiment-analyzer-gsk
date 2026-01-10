@@ -26,7 +26,7 @@ from typing import Any, TypeVar
 
 from fastapi import HTTPException, Request
 
-from src.lambdas.shared.auth.constants import VALID_ROLES
+from src.lambdas.shared.auth.enums import VALID_ROLES
 from src.lambdas.shared.errors.auth_errors import InvalidRoleError
 from src.lambdas.shared.middleware.auth_middleware import extract_auth_context_typed
 

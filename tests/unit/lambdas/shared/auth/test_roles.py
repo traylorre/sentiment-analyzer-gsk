@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.lambdas.shared.auth.constants import Role
+from src.lambdas.shared.auth.enums import Role
 from src.lambdas.shared.auth.roles import get_roles_for_user
 
 
@@ -196,7 +196,7 @@ class TestGetRolesForUser:
         roles = get_roles_for_user(mock_user_with_rbac)
 
         # All roles should be valid Role enum values
-        from src.lambdas.shared.auth.constants import VALID_ROLES
+        from src.lambdas.shared.auth.enums import VALID_ROLES
 
         for role in roles:
             assert role in VALID_ROLES, f"Role '{role}' not in VALID_ROLES"

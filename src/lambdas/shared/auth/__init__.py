@@ -9,10 +9,6 @@ from src.lambdas.shared.auth.cognito import (
     revoke_token,
     validate_access_token,
 )
-from src.lambdas.shared.auth.constants import (
-    VALID_ROLES,
-    Role,
-)
 from src.lambdas.shared.auth.csrf import (
     CSRF_COOKIE_MAX_AGE,
     CSRF_COOKIE_NAME,
@@ -20,6 +16,10 @@ from src.lambdas.shared.auth.csrf import (
     generate_csrf_token,
     is_csrf_exempt,
     validate_csrf_token,
+)
+from src.lambdas.shared.auth.enums import (
+    VALID_ROLES,
+    Role,
 )
 from src.lambdas.shared.auth.merge import (
     MergeResult,
