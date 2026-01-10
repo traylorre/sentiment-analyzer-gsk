@@ -8,13 +8,25 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from src.lambdas.dashboard.auth import (
-    OAuthCallbackRequest,
     OAuthCallbackResponse,
     handle_oauth_callback,
 )
 from src.lambdas.shared.auth.cognito import CognitoTokens
 from src.lambdas.shared.models.user import User
+
+
+# Feature 1185: Auto-mock OAuth state validation for all tests in this module
+@pytest.fixture(autouse=True)
+def mock_oauth_state_validation():
+    """Mock OAuth state validation to always pass for these tests."""
+    with patch(
+        "src.lambdas.dashboard.auth.validate_oauth_state",
+        return_value=(True, ""),
+    ):
+        yield
 
 
 class TestOAuthCallbackResponseModel:
@@ -113,8 +125,14 @@ class TestOAuthCallbackFederationFieldsNewUser:
             "email_verified": True,
         }
 
-        request = OAuthCallbackRequest(code="auth-code", provider="google")
-        response = handle_oauth_callback(table, request)
+        # Feature 1185: Use keyword args with required state/redirect_uri
+        response = handle_oauth_callback(
+            table=table,
+            code="auth-code",
+            provider="google",
+            redirect_uri="https://app.example.com/callback",
+            state="test_state_abc123",
+        )
 
         assert response.role == "free"
 
@@ -149,8 +167,14 @@ class TestOAuthCallbackFederationFieldsNewUser:
             "email_verified": True,
         }
 
-        request = OAuthCallbackRequest(code="auth-code", provider="google")
-        response = handle_oauth_callback(table, request)
+        # Feature 1185: Use keyword args with required state/redirect_uri
+        response = handle_oauth_callback(
+            table=table,
+            code="auth-code",
+            provider="google",
+            redirect_uri="https://app.example.com/callback",
+            state="test_state_abc123",
+        )
 
         assert response.verification == "verified"
 
@@ -185,8 +209,14 @@ class TestOAuthCallbackFederationFieldsNewUser:
             "email_verified": False,
         }
 
-        request = OAuthCallbackRequest(code="auth-code", provider="google")
-        response = handle_oauth_callback(table, request)
+        # Feature 1185: Use keyword args with required state/redirect_uri
+        response = handle_oauth_callback(
+            table=table,
+            code="auth-code",
+            provider="google",
+            redirect_uri="https://app.example.com/callback",
+            state="test_state_abc123",
+        )
 
         assert response.verification == "none"
 
@@ -221,8 +251,14 @@ class TestOAuthCallbackFederationFieldsNewUser:
             "email_verified": True,
         }
 
-        request = OAuthCallbackRequest(code="auth-code", provider="google")
-        response = handle_oauth_callback(table, request)
+        # Feature 1185: Use keyword args with required state/redirect_uri
+        response = handle_oauth_callback(
+            table=table,
+            code="auth-code",
+            provider="google",
+            redirect_uri="https://app.example.com/callback",
+            state="test_state_abc123",
+        )
 
         assert "google" in response.linked_providers
 
@@ -257,8 +293,14 @@ class TestOAuthCallbackFederationFieldsNewUser:
             "email_verified": True,
         }
 
-        request = OAuthCallbackRequest(code="auth-code", provider="google")
-        response = handle_oauth_callback(table, request)
+        # Feature 1185: Use keyword args with required state/redirect_uri
+        response = handle_oauth_callback(
+            table=table,
+            code="auth-code",
+            provider="google",
+            redirect_uri="https://app.example.com/callback",
+            state="test_state_abc123",
+        )
 
         assert response.last_provider_used == "google"
 
@@ -317,8 +359,14 @@ class TestOAuthCallbackFederationFieldsExistingUser:
             "email_verified": True,
         }
 
-        request = OAuthCallbackRequest(code="auth-code", provider="google")
-        response = handle_oauth_callback(table, request)
+        # Feature 1185: Use keyword args with required state/redirect_uri
+        response = handle_oauth_callback(
+            table=table,
+            code="auth-code",
+            provider="google",
+            redirect_uri="https://app.example.com/callback",
+            state="test_state_abc123",
+        )
 
         assert response.role == "free"
 
@@ -353,8 +401,14 @@ class TestOAuthCallbackFederationFieldsExistingUser:
             "email_verified": True,
         }
 
-        request = OAuthCallbackRequest(code="auth-code", provider="github")
-        response = handle_oauth_callback(table, request)
+        # Feature 1185: Use keyword args with required state/redirect_uri
+        response = handle_oauth_callback(
+            table=table,
+            code="auth-code",
+            provider="github",
+            redirect_uri="https://app.example.com/callback",
+            state="test_state_abc123",
+        )
 
         # Flow 5: OAuth-to-OAuth auto-links without conflict
         assert response.status == "authenticated"
@@ -386,8 +440,14 @@ class TestOAuthCallbackFederationFieldsExistingUser:
             "email_verified": True,
         }
 
-        request = OAuthCallbackRequest(code="auth-code", provider="google")
-        response = handle_oauth_callback(table, request)
+        # Feature 1185: Use keyword args with required state/redirect_uri
+        response = handle_oauth_callback(
+            table=table,
+            code="auth-code",
+            provider="google",
+            redirect_uri="https://app.example.com/callback",
+            state="test_state_abc123",
+        )
 
         assert response.linked_providers == ["google"]
 
@@ -417,7 +477,13 @@ class TestOAuthCallbackFederationFieldsExistingUser:
             "email_verified": True,
         }
 
-        request = OAuthCallbackRequest(code="auth-code", provider="google")
-        response = handle_oauth_callback(table, request)
+        # Feature 1185: Use keyword args with required state/redirect_uri
+        response = handle_oauth_callback(
+            table=table,
+            code="auth-code",
+            provider="google",
+            redirect_uri="https://app.example.com/callback",
+            state="test_state_abc123",
+        )
 
         assert response.last_provider_used == "google"

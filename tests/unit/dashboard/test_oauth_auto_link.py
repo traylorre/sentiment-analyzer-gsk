@@ -11,11 +11,21 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.lambdas.dashboard.auth import (
-    OAuthCallbackRequest,
     can_auto_link_oauth,
     handle_oauth_callback,
 )
 from src.lambdas.shared.models.user import User
+
+
+# Feature 1185: Auto-mock OAuth state validation for all tests in this module
+@pytest.fixture(autouse=True)
+def mock_oauth_state_validation():
+    """Mock OAuth state validation to always pass for these tests."""
+    with patch(
+        "src.lambdas.dashboard.auth.validate_oauth_state",
+        return_value=(True, ""),
+    ):
+        yield
 
 
 def _create_test_user(
@@ -180,13 +190,14 @@ class TestHandleOAuthCallbackFlow3:
                 return_value=different_user,
             ),
         ):
-            request = OAuthCallbackRequest(
+            # Feature 1185: Use keyword args with required state/redirect_uri
+            result = handle_oauth_callback(
+                table=mock_table,
                 code="test_code",
                 provider="google",
+                redirect_uri="https://app.example.com/callback",
+                state="test_state_abc123",
             )
-
-            # Act
-            result = handle_oauth_callback(mock_table, request)
 
             # Assert
             assert result.status == "error"
@@ -219,13 +230,14 @@ class TestHandleOAuthCallbackFlow3:
                 return_value=None,
             ),
         ):
-            request = OAuthCallbackRequest(
+            # Feature 1185: Use keyword args with required state/redirect_uri
+            result = handle_oauth_callback(
+                table=mock_table,
                 code="test_code",
                 provider="google",
+                redirect_uri="https://app.example.com/callback",
+                state="test_state_abc123",
             )
-
-            # Act
-            result = handle_oauth_callback(mock_table, request)
 
             # Assert
             assert result.status == "error"
@@ -264,13 +276,14 @@ class TestHandleOAuthCallbackFlow3:
             patch("src.lambdas.dashboard.auth._mark_email_verified"),
             patch("src.lambdas.dashboard.auth._advance_role"),
         ):
-            request = OAuthCallbackRequest(
+            # Feature 1185: Use keyword args with required state/redirect_uri
+            result = handle_oauth_callback(
+                table=mock_table,
                 code="test_code",
                 provider="google",
+                redirect_uri="https://app.example.com/callback",
+                state="test_state_abc123",
             )
-
-            # Act
-            result = handle_oauth_callback(mock_table, request)
 
             # Assert - should authenticate, not return conflict
             assert result.status == "authenticated"
@@ -304,13 +317,14 @@ class TestHandleOAuthCallbackFlow3:
                 return_value=None,
             ),
         ):
-            request = OAuthCallbackRequest(
+            # Feature 1185: Use keyword args with required state/redirect_uri
+            result = handle_oauth_callback(
+                table=mock_table,
                 code="test_code",
                 provider="google",
+                redirect_uri="https://app.example.com/callback",
+                state="test_state_abc123",
             )
-
-            # Act
-            result = handle_oauth_callback(mock_table, request)
 
             # Assert - should return conflict for manual linking
             assert result.status == "conflict"
@@ -343,13 +357,14 @@ class TestHandleOAuthCallbackFlow3:
                 return_value=None,
             ),
         ):
-            request = OAuthCallbackRequest(
+            # Feature 1185: Use keyword args with required state/redirect_uri
+            result = handle_oauth_callback(
+                table=mock_table,
                 code="test_code",
                 provider="github",
+                redirect_uri="https://app.example.com/callback",
+                state="test_state_abc123",
             )
-
-            # Act
-            result = handle_oauth_callback(mock_table, request)
 
             # Assert - should return conflict even with same email
             assert result.status == "conflict"

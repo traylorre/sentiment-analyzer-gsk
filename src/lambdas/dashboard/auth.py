@@ -56,6 +56,11 @@ from src.lambdas.shared.auth.merge import (
     get_merge_status,
     merge_anonymous_data,
 )
+from src.lambdas.shared.auth.oauth_state import (
+    generate_state,
+    store_oauth_state,
+    validate_oauth_state,
+)
 from src.lambdas.shared.errors.session_errors import (
     SessionRevokedException,
     TokenAlreadyUsedError,
@@ -1106,6 +1111,7 @@ class OAuthURLsResponse(BaseModel):
     """Response for GET /api/v2/auth/oauth/urls."""
 
     providers: dict
+    state: str  # Feature 1185: OAuth state for CSRF protection
 
 
 class OAuthCallbackRequest(BaseModel):
@@ -1113,6 +1119,8 @@ class OAuthCallbackRequest(BaseModel):
 
     code: str
     provider: Literal["google", "github"]
+    redirect_uri: str  # Feature 1185: For state validation
+    state: str  # Feature 1185: OAuth state for CSRF protection
     anonymous_user_id: str | None = None
 
 
@@ -1648,25 +1656,55 @@ def _mask_email(email: str | None) -> str | None:
 
 
 # T092: OAuth URLs
-def get_oauth_urls() -> OAuthURLsResponse:
+def get_oauth_urls(table: Any) -> OAuthURLsResponse:
     """Get OAuth authorization URLs for supported providers.
 
+    Feature 1185: Generates and stores OAuth state for CSRF protection.
+    Each provider gets its own state to prevent provider confusion attacks.
+    State is included in authorize URLs and must be validated on callback.
+
+    Args:
+        table: DynamoDB Table resource for storing state
+
     Returns:
-        OAuthURLsResponse with provider URLs
+        OAuthURLsResponse with provider URLs and state
     """
     config = CognitoConfig.from_env()
+
+    # Feature 1185: Generate separate state per provider for A13 validation
+    google_state = generate_state()
+    github_state = generate_state()
+
+    # Store state for Google
+    store_oauth_state(
+        table=table,
+        state_id=google_state,
+        provider="google",
+        redirect_uri=config.redirect_uri,
+    )
+
+    # Store state for GitHub
+    store_oauth_state(
+        table=table,
+        state_id=github_state,
+        provider="github",
+        redirect_uri=config.redirect_uri,
+    )
 
     return OAuthURLsResponse(
         providers={
             "google": {
-                "authorize_url": config.get_authorize_url("Google"),
+                "authorize_url": config.get_authorize_url("Google", state=google_state),
                 "icon": "google",
+                "state": google_state,  # Provider-specific state
             },
             "github": {
-                "authorize_url": config.get_authorize_url("GitHub"),
+                "authorize_url": config.get_authorize_url("GitHub", state=github_state),
                 "icon": "github",
+                "state": github_state,  # Provider-specific state
             },
-        }
+        },
+        state=google_state,  # Default for backward compatibility
     )
 
 
@@ -1674,27 +1712,55 @@ def get_oauth_urls() -> OAuthURLsResponse:
 @xray_recorder.capture("handle_oauth_callback")
 def handle_oauth_callback(
     table: Any,
-    request: OAuthCallbackRequest,
+    code: str,
+    provider: str,
+    redirect_uri: str,
+    state: str,
+    anonymous_user_id: str | None = None,
 ) -> OAuthCallbackResponse:
     """Handle OAuth callback from Cognito.
 
+    Feature 1185: Validates OAuth state to prevent CSRF and redirect attacks.
+
     Args:
         table: DynamoDB Table resource
-        request: OAuth callback request with code
+        code: Authorization code from OAuth provider
+        provider: OAuth provider ("google" | "github")
+        redirect_uri: Callback redirect URI
+        state: OAuth state for CSRF protection
+        anonymous_user_id: Optional anonymous user ID to link
 
     Returns:
         OAuthCallbackResponse with user info and tokens
     """
     logger.info(
         "Processing OAuth callback",
-        extra={"provider": request.provider},
+        extra={"provider": provider},
     )
+
+    # Feature 1185: Validate OAuth state (A12-A13)
+    is_valid, error_msg = validate_oauth_state(
+        table=table,
+        state_id=state,
+        provider=provider,
+        redirect_uri=redirect_uri,
+    )
+    if not is_valid:
+        logger.warning(
+            "OAuth state validation failed",
+            extra={"provider": provider},
+        )
+        return OAuthCallbackResponse(
+            status="error",
+            error="invalid_state",
+            message=error_msg,
+        )
 
     config = CognitoConfig.from_env()
 
     # Exchange code for tokens
     try:
-        tokens = exchange_code_for_tokens(config, request.code)
+        tokens = exchange_code_for_tokens(config, code)
     except TokenError as e:
         logger.warning(
             "OAuth token exchange failed",
@@ -1724,7 +1790,7 @@ def handle_oauth_callback(
     # Feature 1181: Check for duplicate provider_sub before linking (AUTH_023)
     oauth_email_verified = claims.get("email_verified", False)
     if cognito_sub:
-        existing_by_sub = get_user_by_provider_sub(table, request.provider, cognito_sub)
+        existing_by_sub = get_user_by_provider_sub(table, provider, cognito_sub)
         if existing_by_sub and (
             not existing_user or existing_by_sub.user_id != existing_user.user_id
         ):
@@ -1732,7 +1798,7 @@ def handle_oauth_callback(
             logger.warning(
                 "OAuth account already linked to different user (AUTH_023)",
                 extra={
-                    "provider": request.provider,
+                    "provider": provider,
                     "sub_prefix": sanitize_for_log(cognito_sub[:8]),
                 },
             )
@@ -1742,12 +1808,12 @@ def handle_oauth_callback(
                 message="This OAuth account is already linked to another user.",
             )
 
-    if existing_user and existing_user.auth_type != request.provider:
+    if existing_user and existing_user.auth_type != provider:
         # Feature 1181: Flow 3 - Check if email not verified by OAuth (AUTH_022)
         if not oauth_email_verified:
             logger.warning(
                 "OAuth email not verified by provider (AUTH_022)",
-                extra={"provider": request.provider},
+                extra={"provider": provider},
             )
             return OAuthCallbackResponse(
                 status="error",
@@ -1760,7 +1826,7 @@ def handle_oauth_callback(
         # auto-link since both providers verify their emails
         oauth_providers = {"google", "github"}
         is_existing_oauth = existing_user.auth_type in oauth_providers
-        is_new_oauth = request.provider in oauth_providers
+        is_new_oauth = provider in oauth_providers
 
         if is_existing_oauth and is_new_oauth:
             # Auto-link: both are OAuth providers, proceed silently
@@ -1768,7 +1834,7 @@ def handle_oauth_callback(
                 "Auto-linking OAuth to existing OAuth account (Flow 5)",
                 extra={
                     "existing_provider": existing_user.auth_type,
-                    "new_provider": request.provider,
+                    "new_provider": provider,
                     "link_type": "auto",
                 },
             )
@@ -1777,14 +1843,14 @@ def handle_oauth_callback(
             # Feature 1181: Flow 3 - Check if auto-link is possible (email → OAuth)
             oauth_email=email,
             oauth_email_verified=oauth_email_verified,
-            provider=request.provider,
+            provider=provider,
             existing_user_email=existing_user.email,
         ):
             # Auto-link: proceed silently (don't return conflict)
             logger.info(
                 "Auto-linking OAuth to existing email account (Flow 3)",
                 extra={
-                    "provider": request.provider,
+                    "provider": provider,
                     "link_type": "auto",
                 },
             )
@@ -1796,7 +1862,7 @@ def handle_oauth_callback(
                 conflict=True,
                 existing_provider=existing_user.auth_type,
                 email_masked=_mask_email(email),
-                message=f"An account with this email exists via {existing_user.auth_type}. Would you like to link your {request.provider.capitalize()} account?",
+                message=f"An account with this email exists via {existing_user.auth_type}. Would you like to link your {provider.capitalize()} account?",
             )
 
     merged_data = False
@@ -1811,7 +1877,7 @@ def handle_oauth_callback(
         _link_provider(
             table=table,
             user=user,
-            provider=request.provider,
+            provider=provider,
             sub=cognito_sub,
             email=email,
             avatar=claims.get("picture"),
@@ -1821,30 +1887,26 @@ def handle_oauth_callback(
         _mark_email_verified(
             table=table,
             user=user,
-            provider=request.provider,
+            provider=provider,
             email=email,
             email_verified=claims.get("email_verified", False),
         )
         # Advance role from anonymous to free (Feature 1170)
-        _advance_role(table=table, user=user, provider=request.provider)
+        _advance_role(table=table, user=user, provider=provider)
         # Merge anonymous data
-        if request.anonymous_user_id:
-            result = merge_anonymous_data(
-                table, request.anonymous_user_id, user.user_id
-            )
+        if anonymous_user_id:
+            result = merge_anonymous_data(table, anonymous_user_id, user.user_id)
             merged_data = result.status == "completed"
     else:
         # Create new user
         is_new_user = True
-        user = _create_authenticated_user(
-            table, email, request.provider, request.anonymous_user_id
-        )
+        user = _create_authenticated_user(table, email, provider, anonymous_user_id)
         _update_cognito_sub(table, user, cognito_sub)
         # Link provider metadata (Feature 1169)
         _link_provider(
             table=table,
             user=user,
-            provider=request.provider,
+            provider=provider,
             sub=cognito_sub,
             email=email,
             avatar=claims.get("picture"),
@@ -1854,16 +1916,14 @@ def handle_oauth_callback(
         _mark_email_verified(
             table=table,
             user=user,
-            provider=request.provider,
+            provider=provider,
             email=email,
             email_verified=claims.get("email_verified", False),
         )
         # Advance role from anonymous to free (Feature 1170)
-        _advance_role(table=table, user=user, provider=request.provider)
-        if request.anonymous_user_id:
-            result = merge_anonymous_data(
-                table, request.anonymous_user_id, user.user_id
-            )
+        _advance_role(table=table, user=user, provider=provider)
+        if anonymous_user_id:
+            result = merge_anonymous_data(table, anonymous_user_id, user.user_id)
             merged_data = result.status == "completed"
 
     # Security: NO refresh_token in body, masked email
@@ -1873,8 +1933,8 @@ def handle_oauth_callback(
     # - _advance_role sets: role="free" if was "anonymous"
     final_linked_providers = (
         user.linked_providers
-        if request.provider in user.linked_providers
-        else user.linked_providers + [request.provider]
+        if provider in user.linked_providers
+        else user.linked_providers + [provider]
     )
     final_verification = (
         "verified" if claims.get("email_verified", False) else user.verification
@@ -1885,7 +1945,7 @@ def handle_oauth_callback(
         status="authenticated",
         # user_id removed - frontend doesn't need it
         email_masked=_mask_email(user.email),
-        auth_type=request.provider,
+        auth_type=provider,
         tokens={
             "id_token": tokens.id_token,
             "access_token": tokens.access_token,
@@ -1899,7 +1959,7 @@ def handle_oauth_callback(
         role=final_role,
         verification=final_verification,
         linked_providers=final_linked_providers,
-        last_provider_used=request.provider,
+        last_provider_used=provider,
     )
 
 

@@ -519,9 +519,12 @@ async def verify_magic_link(
 
 
 @auth_router.get("/oauth/urls")
-async def get_oauth_urls():
-    """Get OAuth provider URLs (T092)."""
-    result = auth_service.get_oauth_urls()
+async def get_oauth_urls(table=Depends(get_users_table)):
+    """Get OAuth provider URLs (T092).
+
+    Feature 1185: Generates OAuth state for CSRF protection.
+    """
+    result = auth_service.get_oauth_urls(table)
     return JSONResponse(result.model_dump())
 
 
@@ -529,6 +532,7 @@ class OAuthCallbackRequest(BaseModel):
     code: str
     provider: str
     redirect_uri: str
+    state: str  # Feature 1185: OAuth state for CSRF protection
 
 
 @auth_router.post("/oauth/callback")
@@ -554,6 +558,7 @@ async def handle_oauth_callback(
         code=body.code,
         provider=body.provider,
         redirect_uri=body.redirect_uri,
+        state=body.state,  # Feature 1185: OAuth state for CSRF protection
         anonymous_user_id=user_id,
     )
     if isinstance(result, auth_service.ErrorResponse):
