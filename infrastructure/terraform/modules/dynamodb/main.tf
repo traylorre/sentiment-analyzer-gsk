@@ -299,6 +299,11 @@ resource "aws_dynamodb_table" "feature_006_users" {
     type = "S"
   }
 
+  attribute {
+    name = "provider_sub"
+    type = "S"
+  }
+
   # GSI 1: by_email
   # Query pattern: Find user by email address (for login/conflict detection)
   global_secondary_index {
@@ -324,6 +329,15 @@ resource "aws_dynamodb_table" "feature_006_users" {
     name            = "by_entity_status"
     hash_key        = "entity_type"
     range_key       = "status"
+    projection_type = "ALL"
+  }
+
+  # GSI 4: by_provider_sub (Feature 1180)
+  # Query pattern: Find user by OAuth provider sub for account linking
+  # Key format: "{provider}:{sub}" (e.g., "google:118368473829470293847")
+  global_secondary_index {
+    name            = "by_provider_sub"
+    hash_key        = "provider_sub"
     projection_type = "ALL"
   }
 
