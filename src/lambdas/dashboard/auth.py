@@ -551,6 +551,64 @@ def get_user_by_provider_sub(
         return None
 
 
+# Feature 1181: OAuth Auto-Link Detection
+def can_auto_link_oauth(
+    oauth_email: str,
+    oauth_email_verified: bool,
+    provider: str,
+    existing_user_email: str,
+) -> bool:
+    """Determine if OAuth can be auto-linked to existing email account (Feature 1181).
+
+    Auto-linking is allowed when:
+    1. OAuth email is verified by the provider
+    2. Provider is Google AND existing user email is @gmail.com
+
+    All other cases require manual confirmation (GitHub, cross-domain, unverified).
+
+    Args:
+        oauth_email: Email returned by OAuth provider
+        oauth_email_verified: Whether provider verified the email
+        provider: OAuth provider name ("google", "github")
+        existing_user_email: Existing user's email address
+
+    Returns:
+        True if auto-link is allowed, False if manual confirmation required
+    """
+    # Rule 1: Never auto-link unverified OAuth email
+    if not oauth_email_verified:
+        logger.debug(
+            "Auto-link rejected: OAuth email not verified",
+            extra={"provider": provider},
+        )
+        return False
+
+    # Rule 2: GitHub is opaque - never auto-link by email
+    if provider.lower() == "github":
+        logger.debug(
+            "Auto-link rejected: GitHub requires manual confirmation",
+            extra={"provider": provider},
+        )
+        return False
+
+    # Rule 3: Google verifying @gmail.com is authoritative
+    if provider.lower() == "google" and existing_user_email.lower().endswith(
+        "@gmail.com"
+    ):
+        logger.debug(
+            "Auto-link allowed: Google + @gmail.com domain match",
+            extra={"provider": provider},
+        )
+        return True
+
+    # Rule 4: All other cases require manual confirmation (cross-domain)
+    logger.debug(
+        "Auto-link rejected: Cross-domain requires manual confirmation",
+        extra={"provider": provider},
+    )
+    return False
+
+
 @xray_recorder.capture("create_user_with_email")
 def create_user_with_email(
     table: Any,
@@ -1641,15 +1699,65 @@ def handle_oauth_callback(
     # Check for existing user with this email (use GSI for O(1) lookup)
     existing_user = get_user_by_email_gsi(table, email)
 
+    # Feature 1181: Check for duplicate provider_sub before linking (AUTH_023)
+    oauth_email_verified = claims.get("email_verified", False)
+    if cognito_sub:
+        existing_by_sub = get_user_by_provider_sub(table, request.provider, cognito_sub)
+        if existing_by_sub and (
+            not existing_user or existing_by_sub.user_id != existing_user.user_id
+        ):
+            # OAuth account already linked to a different user
+            logger.warning(
+                "OAuth account already linked to different user (AUTH_023)",
+                extra={
+                    "provider": request.provider,
+                    "sub_prefix": sanitize_for_log(cognito_sub[:8]),
+                },
+            )
+            return OAuthCallbackResponse(
+                status="error",
+                error="AUTH_023",
+                message="This OAuth account is already linked to another user.",
+            )
+
     if existing_user and existing_user.auth_type != request.provider:
-        # Account conflict - mask email in response
-        return OAuthCallbackResponse(
-            status="conflict",
-            conflict=True,
-            existing_provider=existing_user.auth_type,
-            email_masked=_mask_email(email),
-            message=f"An account with this email exists via {existing_user.auth_type}. Would you like to link your {request.provider.capitalize()} account?",
-        )
+        # Feature 1181: Flow 3 - Check if email not verified by OAuth (AUTH_022)
+        if not oauth_email_verified:
+            logger.warning(
+                "OAuth email not verified by provider (AUTH_022)",
+                extra={"provider": request.provider},
+            )
+            return OAuthCallbackResponse(
+                status="error",
+                error="AUTH_022",
+                message="Email not verified by provider. Cannot link accounts.",
+            )
+
+        # Feature 1181: Flow 3 - Check if auto-link is possible
+        if can_auto_link_oauth(
+            oauth_email=email,
+            oauth_email_verified=oauth_email_verified,
+            provider=request.provider,
+            existing_user_email=existing_user.email,
+        ):
+            # Auto-link: proceed silently (don't return conflict)
+            logger.info(
+                "Auto-linking OAuth to existing email account (Flow 3)",
+                extra={
+                    "provider": request.provider,
+                    "link_type": "auto",
+                },
+            )
+            # Fall through to link the provider below
+        else:
+            # Manual link required - return conflict for user confirmation
+            return OAuthCallbackResponse(
+                status="conflict",
+                conflict=True,
+                existing_provider=existing_user.auth_type,
+                email_masked=_mask_email(email),
+                message=f"An account with this email exists via {existing_user.auth_type}. Would you like to link your {request.provider.capitalize()} account?",
+            )
 
     merged_data = False
     is_new_user = False

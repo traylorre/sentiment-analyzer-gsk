@@ -300,9 +300,23 @@ class TestHandleOAuthCallback:
                 "COGNITO_REDIRECT_URI": "https://app.example.com/callback",
             },
         ):
-            with patch(
-                "src.lambdas.dashboard.auth.exchange_code_for_tokens",
-                return_value=mock_tokens,
+            with (
+                patch(
+                    "src.lambdas.dashboard.auth.exchange_code_for_tokens",
+                    return_value=mock_tokens,
+                ),
+                patch(
+                    "src.lambdas.dashboard.auth.decode_id_token",
+                    return_value={
+                        "sub": "user123",
+                        "email": "test@example.com",
+                        "email_verified": True,  # Required for Flow 3 (Feature 1181)
+                    },
+                ),
+                patch(
+                    "src.lambdas.dashboard.auth.get_user_by_provider_sub",
+                    return_value=None,  # No duplicate provider_sub (Feature 1181)
+                ),
             ):
                 request = OAuthCallbackRequest(code="auth_code", provider="google")
 
