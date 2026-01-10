@@ -11,7 +11,6 @@ from src.lambdas.dashboard.auth import (
     CheckEmailRequest,
     LinkAccountsRequest,
     MagicLinkRequest,
-    OAuthCallbackRequest,
     check_email_conflict,
     get_merge_status_endpoint,
     get_oauth_urls,
@@ -210,7 +209,13 @@ class TestGetOAuthUrls:
     """Tests for T092: get_oauth_urls."""
 
     def test_returns_provider_urls(self):
-        """Returns OAuth URLs for all providers."""
+        """Returns OAuth URLs for all providers.
+
+        Feature 1185: Now requires table for OAuth state storage.
+        """
+        table = MagicMock()
+        table.put_item.return_value = {}
+
         with patch.dict(
             os.environ,
             {
@@ -221,13 +226,16 @@ class TestGetOAuthUrls:
                 "COGNITO_REDIRECT_URI": "https://app.example.com/callback",
             },
         ):
-            response = get_oauth_urls()
+            response = get_oauth_urls(table)
 
             assert "google" in response.providers
             assert "github" in response.providers
             assert "authorize_url" in response.providers["google"]
             assert "icon" in response.providers["google"]
             assert response.providers["google"]["icon"] == "google"
+            # Feature 1185: Verify state is returned
+            assert response.state is not None
+            assert len(response.state) > 0
 
 
 class TestHandleOAuthCallback:
@@ -237,11 +245,14 @@ class TestHandleOAuthCallback:
         """Creates new user on successful OAuth.
 
         (502-gsi-query-optimization: Updated to mock table.query instead of table.scan)
+        Feature 1185: Updated to use keyword args and mock state validation.
         """
         table = MagicMock()
         table.query.return_value = {"Items": []}  # No existing user (by_email GSI)
         table.put_item.return_value = {}
         table.update_item.return_value = {}
+        # Feature 1185: Mock get_item for state lookup
+        table.get_item.return_value = {"Item": None}
 
         mock_tokens = MagicMock()
         mock_tokens.id_token = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyMTIzIiwiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIn0.sig"
@@ -259,13 +270,24 @@ class TestHandleOAuthCallback:
                 "COGNITO_REDIRECT_URI": "https://app.example.com/callback",
             },
         ):
-            with patch(
-                "src.lambdas.dashboard.auth.exchange_code_for_tokens",
-                return_value=mock_tokens,
+            with (
+                patch(
+                    "src.lambdas.dashboard.auth.exchange_code_for_tokens",
+                    return_value=mock_tokens,
+                ),
+                patch(
+                    "src.lambdas.dashboard.auth.validate_oauth_state",
+                    return_value=(True, ""),
+                ),
             ):
-                request = OAuthCallbackRequest(code="auth_code", provider="google")
-
-                response = handle_oauth_callback(table, request)
+                # Feature 1185: Use keyword args with state and redirect_uri
+                response = handle_oauth_callback(
+                    table=table,
+                    code="auth_code",
+                    provider="google",
+                    redirect_uri="https://app.example.com/callback",
+                    state="test_state_abc123",
+                )
 
                 assert response.status == "authenticated"
                 assert response.is_new_user is True
@@ -274,6 +296,7 @@ class TestHandleOAuthCallback:
         """Returns conflict when email exists with different provider.
 
         (502-gsi-query-optimization: Updated to mock table.query instead of table.scan)
+        Feature 1185: Updated to use keyword args and mock state validation.
         """
         table = MagicMock()
         existing_user = User(
@@ -317,10 +340,19 @@ class TestHandleOAuthCallback:
                     "src.lambdas.dashboard.auth.get_user_by_provider_sub",
                     return_value=None,  # No duplicate provider_sub (Feature 1181)
                 ),
+                patch(
+                    "src.lambdas.dashboard.auth.validate_oauth_state",
+                    return_value=(True, ""),
+                ),
             ):
-                request = OAuthCallbackRequest(code="auth_code", provider="google")
-
-                response = handle_oauth_callback(table, request)
+                # Feature 1185: Use keyword args with state and redirect_uri
+                response = handle_oauth_callback(
+                    table=table,
+                    code="auth_code",
+                    provider="google",
+                    redirect_uri="https://app.example.com/callback",
+                    state="test_state_abc123",
+                )
 
                 assert response.status == "conflict"
                 assert response.conflict is True

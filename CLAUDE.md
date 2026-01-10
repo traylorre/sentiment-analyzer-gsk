@@ -65,6 +65,11 @@ Auto-generated from all feature plans. Last updated: 2025-11-26
 - DynamoDB (NoSQL - schema-flexible, no migration required) (1162-user-model-federation)
 - Python 3.13 + pydantic (BaseModel), threading (Lock), boto3 (DynamoDB sync) (1179-fix-quota-tracker-test-flaky)
 - DynamoDB (for persistence), in-memory cache (for fast access) (1179-fix-quota-tracker-test-flaky)
+- Python 3.13 + FastAPI, pydantic, boto3 (DynamoDB) (1181-oauth-auto-link)
+- DynamoDB (existing users table with `by_provider_sub` GSI from Feature 1180) (1181-oauth-auto-link)
+- Python 3.13 + FastAPI 0.127.0, boto3 1.42.17, pydantic 2.12.5, PyJWT 2.10.1, aws-xray-sdk 2.15.0 (1182-email-to-oauth-link)
+- DynamoDB with composite keys (PK/SK pattern), GSI by_email for O(1) lookups (1182-email-to-oauth-link)
+- Python 3.13 + N/A (pure refactoring, no new deps) (1184-role-enum-centralization)
 
 - **Python 3.13** with FastAPI, boto3, pydantic, aws-lambda-powertools, httpx
 - **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, CloudFront
@@ -842,9 +847,9 @@ aws cloudwatch get-metric-data --metric-data-queries '[...]' --start-time ... --
 ```
 
 ## Recent Changes
-- 1179-fix-quota-tracker-test-flaky: Added Python 3.13 + pydantic (BaseModel), threading (Lock), boto3 (DynamoDB sync)
-- 1162-user-model-federation: Added Python 3.13 + pydantic (existing), boto3/DynamoDB (existing)
-- 1158-csrf-double-submit: Added Python 3.13 + FastAPI, starlette (Response for cookies)
+- 1184-role-enum-centralization: Added Python 3.13 + N/A (pure refactoring, no new deps)
+- 1182-email-to-oauth-link: Added Python 3.13 + FastAPI 0.127.0, boto3 1.42.17, pydantic 2.12.5, PyJWT 2.10.1, aws-xray-sdk 2.15.0
+- 1181-oauth-auto-link: Added Python 3.13 + FastAPI, pydantic, boto3 (DynamoDB)
 
 <!-- MANUAL ADDITIONS START -->
 

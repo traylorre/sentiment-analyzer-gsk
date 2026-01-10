@@ -10,12 +10,20 @@ from uuid import uuid4
 import pytest
 from freezegun import freeze_time
 
-from src.lambdas.dashboard.auth import (
-    OAuthCallbackRequest,
-    handle_oauth_callback,
-)
+from src.lambdas.dashboard.auth import handle_oauth_callback
 from src.lambdas.shared.auth.cognito import CognitoTokens
 from src.lambdas.shared.models.user import ProviderMetadata, User
+
+
+# Feature 1185: Auto-mock OAuth state validation for all tests in this module
+@pytest.fixture(autouse=True)
+def mock_oauth_state_validation():
+    """Mock OAuth state validation to always pass for these tests."""
+    with patch(
+        "src.lambdas.dashboard.auth.validate_oauth_state",
+        return_value=(True, ""),
+    ):
+        yield
 
 
 @pytest.fixture
@@ -91,12 +99,6 @@ class TestOAuthToOAuthAutoLink:
     @freeze_time("2026-01-09 12:00:00")
     def test_google_user_links_github_auto(self, mock_table, google_oauth_user):
         """Google OAuth user logging in with GitHub auto-links without conflict."""
-        request = OAuthCallbackRequest(
-            provider="github",
-            code="github-auth-code",
-            state="test-state",
-        )
-
         # Mock Cognito token exchange
         github_claims = {
             "sub": "github-new-sub-456",
@@ -134,9 +136,13 @@ class TestOAuthToOAuthAutoLink:
                     ) as mock_get_by_sub:
                         mock_get_by_sub.return_value = None  # No collision
 
+                        # Feature 1185: Use keyword args with required state/redirect_uri
                         result = handle_oauth_callback(
                             table=mock_table,
-                            request=request,
+                            code="github-auth-code",
+                            provider="github",
+                            redirect_uri="https://app.example.com/callback",
+                            state="test-state",
                         )
 
         # Should succeed, not return conflict
@@ -146,12 +152,6 @@ class TestOAuthToOAuthAutoLink:
     @freeze_time("2026-01-09 12:00:00")
     def test_github_user_links_google_auto(self, mock_table, github_oauth_user):
         """GitHub OAuth user logging in with Google auto-links without conflict."""
-        request = OAuthCallbackRequest(
-            provider="google",
-            code="google-auth-code",
-            state="test-state",
-        )
-
         google_claims = {
             "sub": "google-new-sub-789",
             "email": "user@github.com",
@@ -187,9 +187,13 @@ class TestOAuthToOAuthAutoLink:
                     ) as mock_get_by_sub:
                         mock_get_by_sub.return_value = None
 
+                        # Feature 1185: Use keyword args with required state/redirect_uri
                         result = handle_oauth_callback(
                             table=mock_table,
-                            request=request,
+                            code="google-auth-code",
+                            provider="google",
+                            redirect_uri="https://app.example.com/callback",
+                            state="test-state",
                         )
 
         assert result.status == "authenticated"
@@ -200,12 +204,6 @@ class TestOAuthToOAuthAutoLink:
         self, mock_table, google_oauth_user
     ):
         """OAuth-to-OAuth link rejects if new provider's email is not verified."""
-        request = OAuthCallbackRequest(
-            provider="github",
-            code="github-auth-code",
-            state="test-state",
-        )
-
         github_claims = {
             "sub": "github-new-sub-456",
             "email": "user@gmail.com",
@@ -234,9 +232,13 @@ class TestOAuthToOAuthAutoLink:
                     ) as mock_get_by_sub:
                         mock_get_by_sub.return_value = None
 
+                        # Feature 1185: Use keyword args with required state/redirect_uri
                         result = handle_oauth_callback(
                             table=mock_table,
-                            request=request,
+                            code="github-auth-code",
+                            provider="github",
+                            redirect_uri="https://app.example.com/callback",
+                            state="test-state",
                         )
 
         assert result.status == "error"
@@ -245,12 +247,6 @@ class TestOAuthToOAuthAutoLink:
     @freeze_time("2026-01-09 12:00:00")
     def test_oauth_to_oauth_rejects_duplicate_sub(self, mock_table, google_oauth_user):
         """OAuth-to-OAuth link rejects if provider_sub already linked to different user."""
-        request = OAuthCallbackRequest(
-            provider="github",
-            code="github-auth-code",
-            state="test-state",
-        )
-
         github_claims = {
             "sub": "github-already-linked-sub",
             "email": "user@gmail.com",
@@ -294,9 +290,13 @@ class TestOAuthToOAuthAutoLink:
                     ) as mock_get_by_sub:
                         mock_get_by_sub.return_value = different_user  # Collision!
 
+                        # Feature 1185: Use keyword args with required state/redirect_uri
                         result = handle_oauth_callback(
                             table=mock_table,
-                            request=request,
+                            code="github-auth-code",
+                            provider="github",
+                            redirect_uri="https://app.example.com/callback",
+                            state="test-state",
                         )
 
         assert result.status == "error"
@@ -305,12 +305,6 @@ class TestOAuthToOAuthAutoLink:
     @freeze_time("2026-01-09 12:00:00")
     def test_oauth_to_oauth_logs_auto_link_event(self, mock_table, google_oauth_user):
         """OAuth-to-OAuth auto-link logs the appropriate audit event."""
-        request = OAuthCallbackRequest(
-            provider="github",
-            code="github-auth-code",
-            state="test-state",
-        )
-
         github_claims = {
             "sub": "github-new-sub-456",
             "email": "user@gmail.com",
@@ -346,9 +340,13 @@ class TestOAuthToOAuthAutoLink:
                         mock_get_by_sub.return_value = None
 
                         with patch("src.lambdas.dashboard.auth.logger") as mock_logger:
+                            # Feature 1185: Use keyword args with required state/redirect_uri
                             handle_oauth_callback(
                                 table=mock_table,
-                                request=request,
+                                code="github-auth-code",
+                                provider="github",
+                                redirect_uri="https://app.example.com/callback",
+                                state="test-state",
                             )
 
                             # Check that Flow 5 auto-link was logged
