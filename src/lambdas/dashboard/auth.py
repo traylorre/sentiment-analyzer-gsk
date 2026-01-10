@@ -1221,6 +1221,28 @@ class MergeStatusResponse(BaseModel):
     message: str | None = None
 
 
+# Feature 1182: Email-to-OAuth Link (Flow 4)
+class LinkEmailRequest(BaseModel):
+    """Request body for POST /api/v2/auth/link-email."""
+
+    email: EmailStr
+
+
+class LinkEmailResponse(BaseModel):
+    """Response for email linking operations (Flow 4)."""
+
+    status: str
+    message: str | None = None
+    linked_providers: list[str] | None = None
+    error: str | None = None
+
+
+class CompleteEmailLinkRequest(BaseModel):
+    """Request body for POST /api/v2/auth/complete-email-link."""
+
+    token: str
+
+
 # Feature 1166: HMAC completely removed - token security via:
 # 1. 256-bit random token (secrets.token_urlsafe) - unguessable
 # 2. Atomic DynamoDB consumption (ConditionExpression) - no replay
@@ -2366,4 +2388,278 @@ def get_merge_status_endpoint(
     return MergeStatusResponse(
         status=result.status,
         message=result.message,
+    )
+
+
+# =============================================================================
+# Feature 1182: Email-to-OAuth Link (Federation Flow 4)
+# =============================================================================
+
+
+@xray_recorder.capture("link_email_to_oauth_user")
+def link_email_to_oauth_user(
+    table: Any,
+    user: User,
+    email: str,
+    send_email_callback: Any = None,
+) -> LinkEmailResponse:
+    """Initiate email linking for an OAuth-authenticated user.
+
+    Flow 4: OAuth user (e.g., Google) wants to add email as additional auth method.
+    Stores pending_email on user record and sends magic link for verification.
+
+    Args:
+        table: DynamoDB Table resource
+        user: Authenticated OAuth user
+        email: Email address to link
+        send_email_callback: Optional callback to send magic link email
+
+    Returns:
+        LinkEmailResponse with status
+
+    Raises:
+        ValueError: If email is already linked to user
+    """
+    # Validate email not already linked
+    if "email" in user.linked_providers:
+        raise ValueError("Email already linked to this account")
+
+    normalized_email = email.lower()
+
+    logger.info(
+        "Email linking initiated",
+        extra={
+            "user_id_prefix": sanitize_for_log(user.user_id[:8]),
+            "email_domain": sanitize_for_log(normalized_email.split("@")[1]),
+        },
+    )
+
+    # Generate magic link token with user_id context
+    token_id = str(uuid.uuid4())
+    now = datetime.now(UTC)
+    expires_at = now + timedelta(hours=MAGIC_LINK_EXPIRY_HOURS)
+
+    # Store token in DynamoDB
+    token_item = {
+        "PK": f"TOKEN#{token_id}",
+        "SK": "EMAIL_LINK",
+        "entity_type": "EMAIL_LINK_TOKEN",
+        "token_id": token_id,
+        "email": normalized_email,
+        "user_id": user.user_id,  # Link token to authenticated user
+        "created_at": now.isoformat(),
+        "expires_at": expires_at.isoformat(),
+        "used": False,
+        "ttl": int(expires_at.timestamp()) + 3600,  # 1 hour buffer
+    }
+
+    try:
+        table.put_item(Item=token_item)
+    except Exception as e:
+        logger.error("Failed to store email link token", extra=get_safe_error_info(e))
+        raise
+
+    # Update user's pending_email
+    try:
+        table.update_item(
+            Key={"PK": f"USER#{user.user_id}", "SK": "PROFILE"},
+            UpdateExpression="SET pending_email = :pending_email",
+            ExpressionAttributeValues={":pending_email": normalized_email},
+        )
+    except Exception as e:
+        logger.warning("Failed to update pending_email", extra=get_safe_error_info(e))
+        # Continue anyway - token is created
+
+    # Send magic link email
+    if send_email_callback:
+        try:
+            send_email_callback(normalized_email, token_id)
+        except Exception as e:
+            logger.error(
+                "Failed to send magic link email", extra=get_safe_error_info(e)
+            )
+            # Don't raise - token exists, user can retry
+
+    logger.info(
+        "Email link token created",
+        extra={"token_prefix": sanitize_for_log(token_id[:8])},
+    )
+
+    return LinkEmailResponse(
+        status="pending",
+        message="Verification email sent",
+    )
+
+
+@xray_recorder.capture("complete_email_link")
+def complete_email_link(
+    table: Any,
+    user: User,
+    token_id: str,
+    client_ip: str,
+) -> LinkEmailResponse:
+    """Complete email linking after magic link verification.
+
+    Flow 4 completion: Verifies the magic link token and adds email to
+    user's linked_providers with provider_metadata.
+
+    Args:
+        table: DynamoDB Table resource
+        user: Authenticated OAuth user
+        token_id: Magic link token ID from email
+        client_ip: Client IP for audit logging
+
+    Returns:
+        LinkEmailResponse with updated linked_providers
+
+    Raises:
+        ValueError: If token is invalid, expired, or belongs to different user
+        TokenAlreadyUsedError: If token was already consumed
+        TokenExpiredError: If token has expired
+    """
+    # Retrieve token
+    try:
+        response = table.get_item(Key={"PK": f"TOKEN#{token_id}", "SK": "EMAIL_LINK"})
+    except Exception as e:
+        logger.error(
+            "Failed to retrieve email link token", extra=get_safe_error_info(e)
+        )
+        raise ValueError("Invalid or expired link") from None
+
+    item = response.get("Item")
+    if not item:
+        logger.warning(
+            "Email link token not found",
+            extra={"token_prefix": sanitize_for_log(token_id[:8])},
+        )
+        raise ValueError("Invalid or expired link")
+
+    # Validate token
+    now = datetime.now(UTC)
+    expires_at = datetime.fromisoformat(item["expires_at"].replace("Z", "+00:00"))
+
+    # Check already used
+    if item.get("used"):
+        used_at = item.get("used_at")
+        raise TokenAlreadyUsedError(
+            token_id=token_id,
+            used_at=datetime.fromisoformat(used_at) if used_at else None,
+        )
+
+    # Check expiry
+    if now > expires_at:
+        raise TokenExpiredError(token_id=token_id, expired_at=expires_at)
+
+    # Check user_id matches (security: prevent token theft)
+    if item.get("user_id") != user.user_id:
+        logger.warning(
+            "Email link token user mismatch",
+            extra={
+                "token_user_prefix": sanitize_for_log(item.get("user_id", "")[:8]),
+                "request_user_prefix": sanitize_for_log(user.user_id[:8]),
+            },
+        )
+        raise ValueError("Token does not belong to this user")
+
+    email = item["email"]
+
+    # Atomically consume token
+    try:
+        table.update_item(
+            Key={"PK": f"TOKEN#{token_id}", "SK": "EMAIL_LINK"},
+            UpdateExpression="SET used = :true, used_at = :now, used_by_ip = :ip",
+            ConditionExpression="used = :false",
+            ExpressionAttributeValues={
+                ":true": True,
+                ":false": False,
+                ":now": now.isoformat(),
+                ":ip": client_ip,
+            },
+        )
+    except table.meta.client.exceptions.ConditionalCheckFailedException:
+        raise TokenAlreadyUsedError(token_id=token_id, used_at=None) from None
+
+    # Build provider metadata
+    metadata_dict = {
+        "sub": None,  # Email provider has no sub
+        "email": email,
+        "avatar": None,
+        "linked_at": now.isoformat(),
+        "verified_at": now.isoformat(),  # Verified by magic link click
+    }
+
+    # Update user: add email to linked_providers and provider_metadata
+    try:
+        # Build update expression
+        update_parts = [
+            "provider_metadata.#email = :metadata",
+            "pending_email = :null",
+            "verification = :verified",
+        ]
+
+        attr_names = {"#email": "email"}
+        attr_values = {
+            ":metadata": metadata_dict,
+            ":null": None,
+            ":verified": "verified",
+        }
+
+        # Add to linked_providers if not present
+        if "email" not in user.linked_providers:
+            update_parts.append(
+                "linked_providers = list_append(if_not_exists(linked_providers, :empty), :new_provider)"
+            )
+            attr_values[":empty"] = []
+            attr_values[":new_provider"] = ["email"]
+
+        # Set primary_email if not set
+        if not user.primary_email:
+            update_parts.append("primary_email = :email")
+            attr_values[":email"] = email
+
+        update_expr = "SET " + ", ".join(update_parts)
+
+        table.update_item(
+            Key={"PK": f"USER#{user.user_id}", "SK": "PROFILE"},
+            UpdateExpression=update_expr,
+            ExpressionAttributeNames=attr_names,
+            ExpressionAttributeValues=attr_values,
+        )
+
+    except Exception as e:
+        logger.error(
+            "Failed to update user with email link", extra=get_safe_error_info(e)
+        )
+        raise
+
+    # Log audit event
+    logger.info(
+        "AUTH_METHOD_LINKED",
+        extra={
+            "event_type": "AUTH_METHOD_LINKED",
+            "user_id_prefix": sanitize_for_log(user.user_id[:8]),
+            "provider": "email",
+            "link_type": "manual",
+            "email_domain": sanitize_for_log(email.split("@")[1]),
+        },
+    )
+
+    # Build updated linked_providers for response
+    updated_providers = list(user.linked_providers)
+    if "email" not in updated_providers:
+        updated_providers.append("email")
+
+    logger.info(
+        "Email linked to OAuth user",
+        extra={
+            "user_id_prefix": sanitize_for_log(user.user_id[:8]),
+            "email_domain": sanitize_for_log(email.split("@")[1]),
+            "linked_providers": updated_providers,
+        },
+    )
+
+    return LinkEmailResponse(
+        status="linked",
+        message="Email linked successfully",
+        linked_providers=updated_providers,
     )
