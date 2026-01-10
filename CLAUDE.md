@@ -63,6 +63,8 @@ Auto-generated from all feature plans. Last updated: 2025-11-26
 - N/A (stateless tokens) (1158-csrf-double-submit)
 - Python 3.13 + pydantic (existing), boto3/DynamoDB (existing) (1162-user-model-federation)
 - DynamoDB (NoSQL - schema-flexible, no migration required) (1162-user-model-federation)
+- Python 3.13 + pydantic (BaseModel), threading (Lock), boto3 (DynamoDB sync) (1179-fix-quota-tracker-test-flaky)
+- DynamoDB (for persistence), in-memory cache (for fast access) (1179-fix-quota-tracker-test-flaky)
 
 - **Python 3.13** with FastAPI, boto3, pydantic, aws-lambda-powertools, httpx
 - **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, CloudFront
@@ -840,9 +842,9 @@ aws cloudwatch get-metric-data --metric-data-queries '[...]' --start-time ... --
 ```
 
 ## Recent Changes
+- 1179-fix-quota-tracker-test-flaky: Added Python 3.13 + pydantic (BaseModel), threading (Lock), boto3 (DynamoDB sync)
 - 1162-user-model-federation: Added Python 3.13 + pydantic (existing), boto3/DynamoDB (existing)
 - 1158-csrf-double-submit: Added Python 3.13 + FastAPI, starlette (Response for cookies)
-- 1147-jwt-aud-nbf-validation: Added Python 3.13 + PyJWT (existing), AWS Lambda, boto3
 
 <!-- MANUAL ADDITIONS START -->
 
