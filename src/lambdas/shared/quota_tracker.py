@@ -38,8 +38,11 @@ _quota_tracker_cache: tuple[float, "QuotaTracker", float] | None = None
 # Cache statistics for monitoring
 _quota_cache_stats = {"hits": 0, "misses": 0, "syncs": 0}
 
-# Thread-safety lock for cache access (Feature 1010)
-_quota_cache_lock = threading.Lock()
+# Thread-safety lock for cache access (Feature 1010, 1179)
+# RLock allows same thread to acquire lock multiple times (reentrant)
+# This is needed because record_call() wraps the full read-modify-write
+# cycle, but the helper functions also acquire the lock internally.
+_quota_cache_lock = threading.RLock()
 
 
 def _get_cached_tracker() -> "QuotaTracker | None":
@@ -424,6 +427,9 @@ class QuotaTrackerManager:
     ) -> QuotaTracker:
         """Record API call(s) and update cache.
 
+        Thread-safe: Uses _quota_cache_lock to protect the entire
+        read-modify-write cycle (Feature 1179 fix for race condition).
+
         Args:
             service: The service called
             count: Number of API calls made
@@ -431,16 +437,21 @@ class QuotaTrackerManager:
         Returns:
             Updated QuotaTracker
         """
-        tracker = self.get_tracker()
-        old_is_critical = getattr(tracker, service).is_critical
+        # Feature 1179: Wrap read-modify-write in lock to prevent lost updates
+        # when multiple threads record calls for different services concurrently.
+        with _quota_cache_lock:
+            tracker = self.get_tracker()
+            old_is_critical = getattr(tracker, service).is_critical
 
-        tracker.record_call(service, count)
+            tracker.record_call(service, count)
 
-        # Update cache
-        _set_cached_tracker(tracker, synced=False)
+            # Update cache
+            _set_cached_tracker(tracker, synced=False)
+
+            new_is_critical = getattr(tracker, service).is_critical
+        # Lock released - sync operations below have their own thread safety
 
         # Force sync if quota became critical
-        new_is_critical = getattr(tracker, service).is_critical
         if new_is_critical and not old_is_critical:
             logger.warning(
                 "Quota critical threshold reached",
