@@ -136,3 +136,25 @@ class InvalidMergeTargetError(SessionError):
         if reason:
             message += f" ({reason})"
         super().__init__(message)
+
+
+class SessionLimitRaceError(SessionError):
+    """Atomic session eviction failed due to concurrent modification.
+
+    Raised when TransactWriteItems fails because another request already
+    evicted the target session. This is a retriable error - the client
+    should retry the login request.
+
+    Feature 1188 (A11): Session eviction atomic transaction.
+    """
+
+    def __init__(
+        self,
+        user_id: str,
+        cancellation_reasons: list[dict] | None = None,
+    ):
+        self.user_id = user_id
+        self.cancellation_reasons = cancellation_reasons or []
+        self.retryable = True
+        message = f"Session limit race condition for user {user_id} - retry login"
+        super().__init__(message)
