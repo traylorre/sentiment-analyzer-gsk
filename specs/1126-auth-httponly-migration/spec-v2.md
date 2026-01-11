@@ -6862,5 +6862,5 @@ Before marking v2.11 complete, verify:
 - [ ] A19: B9 section has complete tier upgrade flow
 - [ ] A20: POST /auth/password endpoint implemented
 - [ ] A21: refresh_tokens() checks blocklist first
-- [ ] A22: Security headers added to responses
-- [ ] A23: AUTH_013-AUTH_018 error codes implemented
+- [x] A22: Security headers added to responses
+- [x] A23: AUTH_013-AUTH_018 error codes implemented

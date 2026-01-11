@@ -2033,6 +2033,19 @@ def handle_oauth_callback(
         extra={"provider": provider},
     )
 
+    # Feature 1190 A23: Validate OAuth provider (AUTH_015)
+    valid_providers = {"google", "github"}
+    if provider not in valid_providers:
+        logger.warning(
+            "Unknown OAuth provider (AUTH_015)",
+            extra={"provider": provider},
+        )
+        return OAuthCallbackResponse(
+            status="error",
+            error="AUTH_015",
+            message="Unknown OAuth provider",
+        )
+
     # Feature 1185: Validate OAuth state (A12-A13)
     is_valid, error_msg = validate_oauth_state(
         table=table,
