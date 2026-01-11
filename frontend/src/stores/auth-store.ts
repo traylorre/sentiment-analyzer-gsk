@@ -32,7 +32,12 @@ interface AuthStore extends AuthState {
   signInWithMagicLink: (email: string, token: string) => Promise<void>;
   verifyMagicLink: (token: string, sig?: string) => Promise<void>;
   signInWithOAuth: (provider: OAuthProvider) => Promise<void>;
-  handleOAuthCallback: (code: string, provider: OAuthProvider) => Promise<void>;
+  handleOAuthCallback: (
+    code: string,
+    provider: OAuthProvider,
+    state: string,
+    redirectUri: string
+  ) => Promise<void>;
   refreshSession: () => Promise<void>;
   refreshUserProfile: () => Promise<void>; // Feature 1174: Refresh federation fields
   signOut: () => Promise<void>;
@@ -172,13 +177,20 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
       // Use authApi to route to Lambda backend
       const urls = await authApi.getOAuthUrls();
+      const providerInfo = urls.providers[provider];
+
+      // Feature 1192: Store provider for callback page retrieval
+      // Feature 1193: Store state for CSRF validation
+      // sessionStorage chosen for cross-tab isolation (each tab has own OAuth flow)
+      sessionStorage.setItem('oauth_provider', provider);
+      sessionStorage.setItem('oauth_state', providerInfo.state);
 
       // Feature 1192: Store provider for callback page retrieval
       // sessionStorage chosen for cross-tab isolation (each tab has own OAuth flow)
       sessionStorage.setItem('oauth_provider', provider);
 
       // Redirect to OAuth provider
-      window.location.href = urls[provider];
+      window.location.href = providerInfo.authorize_url;
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Unknown error');
       setLoading(false);
@@ -186,7 +198,12 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     }
   },
 
-  handleOAuthCallback: async (code: string, provider: OAuthProvider) => {
+  handleOAuthCallback: async (
+    code: string,
+    provider: OAuthProvider,
+    state: string,
+    redirectUri: string
+  ) => {
     const { setLoading, setError, setUser, setTokens, setSession } = get();
 
     try {
@@ -194,7 +211,8 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       setError(null);
 
       // Use authApi to route to Lambda backend
-      const data = await authApi.exchangeOAuthCode(provider, code);
+      // Feature 1193: Send state and redirect_uri for CSRF validation
+      const data = await authApi.exchangeOAuthCode(provider, code, state, redirectUri);
 
       setUser(data.user);
       setTokens(data.tokens);

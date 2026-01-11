@@ -159,9 +159,10 @@ export function useAuth(options: UseAuthOptions = {}) {
   );
 
   // Handle OAuth callback
+  // Feature 1193: Accepts state and redirectUri for CSRF validation
   const handleCallback = useCallback(
-    async (code: string, provider: OAuthProvider) => {
-      await handleOAuthCallback(code, provider);
+    async (code: string, provider: OAuthProvider, state: string, redirectUri: string) => {
+      await handleOAuthCallback(code, provider, state, redirectUri);
       router.push('/');
     },
     [handleOAuthCallback, router]

@@ -6,12 +6,16 @@
  * Feature 1192: Receives authorization code from OAuth providers (Google/GitHub),
  * exchanges it for tokens via handleCallback(), and redirects to dashboard.
  *
+ * Feature 1193: Validates OAuth state parameter for CSRF protection.
+ * State is stored in sessionStorage before redirect, validated on callback.
+ *
  * Flow:
  * 1. OAuth provider redirects here with ?code=XXX&state=YYY
- * 2. Page retrieves stored provider from sessionStorage (set by signInWithOAuth)
- * 3. Calls handleCallback(code, provider) to exchange code for tokens
- * 4. On success, redirects to dashboard after brief success message
- * 5. On error, displays message with retry option
+ * 2. Page retrieves stored state and provider from sessionStorage
+ * 3. Validates state from URL matches stored state (CSRF check)
+ * 4. Calls handleCallback(code, provider, state, redirectUri) to exchange code for tokens
+ * 5. On success, redirects to dashboard after brief success message
+ * 6. On error, displays message with retry option
  */
 
 import { useEffect, useState, Suspense } from 'react';
@@ -32,6 +36,7 @@ function CallbackContent() {
   const [hasProcessed, setHasProcessed] = useState(false);
 
   const code = searchParams.get('code');
+  const stateFromUrl = searchParams.get('state');
   const errorParam = searchParams.get('error');
   const errorDescription = searchParams.get('error_description');
 
@@ -51,10 +56,13 @@ function CallbackContent() {
       return;
     }
 
-    // Retrieve and clear stored provider (set by signInWithOAuth before redirect)
+    // Retrieve and clear stored provider and state (set by signInWithOAuth before redirect)
     // Feature 1192: sessionStorage ensures cross-tab isolation
+    // Feature 1193: Validate state for CSRF protection
     const provider = sessionStorage.getItem('oauth_provider') as OAuthProvider | null;
+    const storedState = sessionStorage.getItem('oauth_state');
     sessionStorage.removeItem('oauth_provider');
+    sessionStorage.removeItem('oauth_state');
 
     // Validate required parameters
     if (!code) {
@@ -63,7 +71,19 @@ function CallbackContent() {
       return;
     }
 
+    if (!stateFromUrl) {
+      setStatus('error');
+      setErrorMessage('Invalid callback: missing state parameter');
+      return;
+    }
+
     if (!provider) {
+      setStatus('error');
+      setErrorMessage('Authentication session expired. Please try again.');
+      return;
+    }
+
+    if (!storedState) {
       setStatus('error');
       setErrorMessage('Authentication session expired. Please try again.');
       return;
@@ -76,10 +96,21 @@ function CallbackContent() {
       return;
     }
 
+    // Feature 1193: CSRF validation - state from URL must match stored state
+    if (stateFromUrl !== storedState) {
+      setStatus('error');
+      setErrorMessage('Authentication session invalid. Please try again.');
+      return;
+    }
+
+    // Calculate redirect URI (current page URL without query params)
+    const redirectUri = window.location.origin + window.location.pathname;
+
     // Exchange authorization code for tokens
     const exchangeCode = async () => {
       try {
-        await handleCallback(code, provider);
+        // Feature 1193: Pass state and redirectUri for backend CSRF validation
+        await handleCallback(code, provider, stateFromUrl, redirectUri);
         setStatus('success');
         // Brief success message before redirect (matches /auth/verify pattern)
         setTimeout(() => {
@@ -93,6 +124,8 @@ function CallbackContent() {
             setErrorMessage(err.message);
           } else if (err.message.includes('network') || err.message.includes('fetch')) {
             setErrorMessage('Connection error. Please try again.');
+          } else if (err.message.includes('Invalid OAuth state')) {
+            setErrorMessage('Authentication session expired. Please try again.');
           } else {
             setErrorMessage(err.message || 'Authentication failed');
           }
