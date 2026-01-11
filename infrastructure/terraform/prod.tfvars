@@ -43,3 +43,7 @@ cors_allowed_origins = []
 # Feature 1054: JWT Secret for auth middleware
 # IMPORTANT: Use a strong, unique secret for production
 # The value is passed via TF_VAR_jwt_secret in CI - never commit the actual secret
+
+# Feature 1189: Environment-specific JWT audience (A16)
+# Prevents cross-environment token replay attacks
+jwt_audience = "sentiment-api-prod"
