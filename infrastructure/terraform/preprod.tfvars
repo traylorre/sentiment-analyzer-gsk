@@ -39,3 +39,7 @@ cors_allowed_origins = [
 # GitHub PAT stored in Secrets Manager: preprod/amplify/github-token
 enable_amplify            = true
 amplify_github_repository = "https://github.com/traylorre/sentiment-analyzer-gsk"
+
+# Feature 1189: Environment-specific JWT audience (A16)
+# Prevents cross-environment token replay attacks
+jwt_audience = "sentiment-api-preprod"
