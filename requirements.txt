@@ -52,3 +52,6 @@ PyJWT==2.10.1
 
 # Retry Library - Feature 1032 (config API stability)
 tenacity==9.0.0
+
+# Stripe - Feature 1191 (mid-session tier upgrade)
+stripe==11.4.1

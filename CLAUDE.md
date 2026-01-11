@@ -74,6 +74,8 @@ Auto-generated from all feature plans. Last updated: 2025-11-26
 - DynamoDB (single table: `${environment}-sentiment-users`) (1188-session-eviction-transact)
 - Python 3.13 (backend), TypeScript/Next.js (frontend) + FastAPI (Response headers), Next.js middleware (1190-security-headers-error-codes)
 - N/A (header-only change) (1190-security-headers-error-codes)
+- Python 3.13 (backend), TypeScript 5.x (frontend) + FastAPI, boto3 (DynamoDB), Zustand (state), BroadcastChannel API (1191-mid-session-tier-upgrade)
+- DynamoDB (existing tables: Users, Sessions) (1191-mid-session-tier-upgrade)
 
 - **Python 3.13** with FastAPI, boto3, pydantic, aws-lambda-powertools, httpx
 - **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, CloudFront
@@ -851,6 +853,7 @@ aws cloudwatch get-metric-data --metric-data-queries '[...]' --start-time ... --
 ```
 
 ## Recent Changes
+- 1191-mid-session-tier-upgrade: Added Python 3.13 (backend), TypeScript 5.x (frontend) + FastAPI, boto3 (DynamoDB), Zustand (state), BroadcastChannel API
 - 1190-security-headers-error-codes: Added Python 3.13 (backend), TypeScript/Next.js (frontend) + FastAPI (Response headers), Next.js middleware
 - 1188-session-eviction-transact: Added Python 3.13 + boto3==1.42.17, FastAPI==0.127.0, pydantic==2.12.5, aws-lambda-powertools==3.23.0
 - 1184-role-enum-centralization: Added Python 3.13 + N/A (pure refactoring, no new deps)

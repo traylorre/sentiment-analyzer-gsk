@@ -84,3 +84,37 @@ def get_roles_for_user(user: User) -> list[str]:
         roles.append(Role.OPERATOR.value)
 
     return roles
+
+
+# Stripe price ID to role mapping (Feature 1191)
+# Update this mapping when adding new Stripe products
+STRIPE_PRICE_TO_ROLE: dict[str, str] = {
+    # Production prices
+    "price_paid_monthly": Role.PAID.value,
+    "price_paid_yearly": Role.PAID.value,
+    # Test prices (Stripe test mode)
+    "price_test_paid_monthly": Role.PAID.value,
+    "price_test_paid_yearly": Role.PAID.value,
+}
+
+
+def map_stripe_plan_to_role(price_id: str | None) -> str:
+    """Map Stripe price ID to internal role.
+
+    Args:
+        price_id: Stripe price ID from subscription
+
+    Returns:
+        Role string, defaults to 'paid' for unknown prices
+        (conservative: assume paying customers get paid access)
+
+    Example:
+        >>> map_stripe_plan_to_role("price_paid_monthly")
+        'paid'
+        >>> map_stripe_plan_to_role("unknown_price")
+        'paid'  # Conservative default
+    """
+    if price_id is None:
+        return Role.PAID.value  # Conservative: assume paid if we have subscription
+
+    return STRIPE_PRICE_TO_ROLE.get(price_id, Role.PAID.value)
