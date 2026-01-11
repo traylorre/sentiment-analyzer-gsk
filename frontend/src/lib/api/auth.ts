@@ -59,6 +59,24 @@ interface OAuthCallbackResponse {
 }
 
 /**
+ * Raw /api/v2/auth/oauth/urls response (snake_case per API contract).
+ * Feature 1193: Includes provider-specific state for CSRF protection.
+ */
+interface OAuthProviderInfo {
+  authorize_url: string;
+  icon: string;
+  state: string; // Provider-specific CSRF state
+}
+
+export interface OAuthUrlsResponse {
+  providers: {
+    google: OAuthProviderInfo;
+    github: OAuthProviderInfo;
+  };
+  state: string; // Legacy compatibility
+}
+
+/**
  * Map /api/v2/auth/me snake_case response to camelCase User type.
  * Feature 1174: Maps federation fields for RBAC-aware UI.
  */
@@ -178,17 +196,28 @@ export const authApi = {
     api.post<AuthResponse>('/api/v2/auth/magic-link/verify', { token, sig }),
 
   /**
-   * Get OAuth authorization URLs for all providers
+   * Get OAuth authorization URLs for all providers.
+   * Feature 1193: Returns provider-specific state for CSRF protection.
    */
-  getOAuthUrls: () =>
-    api.get<{ google: string; github: string }>('/api/v2/auth/oauth/urls'),
+  getOAuthUrls: () => api.get<OAuthUrlsResponse>('/api/v2/auth/oauth/urls'),
 
   /**
    * Exchange OAuth code for tokens.
    * Feature 1177: Maps backend OAuthCallbackResponse to frontend AuthResponse with federation fields.
+   * Feature 1193: Requires state and redirect_uri for CSRF validation.
    */
-  exchangeOAuthCode: async (provider: 'google' | 'github', code: string): Promise<AuthResponse> => {
-    const response = await api.post<OAuthCallbackResponse>('/api/v2/auth/oauth/callback', { provider, code });
+  exchangeOAuthCode: async (
+    provider: 'google' | 'github',
+    code: string,
+    state: string,
+    redirectUri: string
+  ): Promise<AuthResponse> => {
+    const response = await api.post<OAuthCallbackResponse>('/api/v2/auth/oauth/callback', {
+      provider,
+      code,
+      state,
+      redirect_uri: redirectUri,
+    });
     return mapOAuthCallbackResponse(response);
   },
 
