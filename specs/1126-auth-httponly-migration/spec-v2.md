@@ -6851,16 +6851,16 @@ resource "aws_cloudfront_response_headers_policy" "security" {
 
 Before marking v2.11 complete, verify:
 
-- [ ] A11: Session eviction uses TransactWriteItems
-- [ ] A12: OAuth state stores and validates redirect_uri
-- [ ] A13: OAuth callback validates provider matches state
-- [ ] A14: Token creation uses conditional update on revocation_id
-- [ ] A15: JWT includes `jti` claim (UUID)
-- [ ] A16: JWT `aud` includes environment suffix
-- [ ] A17: jwt.decode() uses leeway=60
-- [ ] A18: Single Role/Tier enum in enums.py
-- [ ] A19: B9 section has complete tier upgrade flow
-- [ ] A20: POST /auth/password endpoint implemented
-- [ ] A21: refresh_tokens() checks blocklist first
+- [x] A11: Session eviction uses TransactWriteItems
+- [x] A12: OAuth state stores and validates redirect_uri
+- [x] A13: OAuth callback validates provider matches state
+- [x] A14: Token creation uses conditional update on revocation_id
+- [~] A15: JWT includes `jti` claim (UUID) - parsing ready, generation deferred to Cognito
+- [x] A16: JWT `aud` includes environment suffix
+- [x] A17: jwt.decode() uses leeway=60
+- [x] A18: Single Role/Tier enum in enums.py
+- [x] A19: B9 section has complete tier upgrade flow
+- [N/A] A20: POST /auth/password endpoint - system uses passwordless auth (magic links + OAuth)
+- [x] A21: refresh_tokens() checks blocklist first
 - [x] A22: Security headers added to responses
 - [x] A23: AUTH_013-AUTH_018 error codes implemented
