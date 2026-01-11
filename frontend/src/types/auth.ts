@@ -18,6 +18,10 @@ export interface User {
   linkedProviders?: ProviderType[];
   verification?: VerificationStatus;
   lastProviderUsed?: ProviderType;
+  // Feature 1191: Subscription fields for tier upgrade
+  subscriptionActive?: boolean;
+  subscriptionExpiresAt?: string;
+  roleAssignedAt?: string;
 }
 
 export interface AuthTokens {

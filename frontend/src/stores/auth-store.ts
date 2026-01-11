@@ -304,3 +304,10 @@ export const useIsAuthenticated = () => useAuthStore((state) => state.isAuthenti
 export const useIsAnonymous = () => useAuthStore((state) => state.isAnonymous);
 export const useAuthLoading = () => useAuthStore((state) => state.isLoading);
 export const useAuthError = () => useAuthStore((state) => state.error);
+
+// Feature 1191: Subscription selector hooks
+export const useUserRole = () => useAuthStore((state) => state.user?.role);
+export const useIsSubscriptionActive = () =>
+  useAuthStore((state) => state.user?.subscriptionActive ?? false);
+export const useSubscriptionExpiresAt = () =>
+  useAuthStore((state) => state.user?.subscriptionExpiresAt);

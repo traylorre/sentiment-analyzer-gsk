@@ -64,6 +64,12 @@ from src.lambdas.shared.auth.oauth_state import (
     store_oauth_state,
     validate_oauth_state,
 )
+from src.lambdas.shared.auth.roles import map_stripe_plan_to_role
+from src.lambdas.shared.auth.stripe_utils import (
+    extract_price_id_from_subscription,
+    extract_user_id_from_subscription,
+    verify_stripe_signature,
+)
 from src.lambdas.shared.errors.session_errors import (
     SessionLimitRaceError,
     SessionRevokedException,
@@ -73,6 +79,7 @@ from src.lambdas.shared.errors.session_errors import (
 from src.lambdas.shared.logging_utils import get_safe_error_info, sanitize_for_log
 from src.lambdas.shared.models.magic_link_token import MagicLinkToken
 from src.lambdas.shared.models.user import ProviderMetadata, User
+from src.lambdas.shared.models.webhook_event import WebhookEvent
 
 logger = logging.getLogger(__name__)
 
@@ -3066,3 +3073,361 @@ def complete_email_link(
         message="Email linked successfully",
         linked_providers=updated_providers,
     )
+
+
+# =============================================================================
+# Stripe Webhook Handler (Feature 1191 - Mid-Session Tier Upgrade)
+# =============================================================================
+
+
+class StripeWebhookResponse(BaseModel):
+    """Response for Stripe webhook endpoint."""
+
+    status: str
+    message: str
+    event_id: str | None = None
+
+
+@xray_recorder.capture("handle_stripe_webhook")
+def handle_stripe_webhook(
+    table: Any,
+    dynamodb: Any,
+    payload: bytes,
+    signature: str,
+) -> StripeWebhookResponse:
+    """Handle Stripe webhook events for subscription lifecycle.
+
+    Implements:
+    - Signature verification (security)
+    - Idempotency via event_id tracking
+    - Atomic role + revocation_id update
+
+    Args:
+        table: DynamoDB table resource (high-level)
+        dynamodb: DynamoDB client (low-level, for transactions)
+        payload: Raw request body bytes
+        signature: Value of stripe-signature header
+
+    Returns:
+        StripeWebhookResponse with processing status
+
+    Raises:
+        SignatureVerificationError: If signature invalid (returns 400)
+    """
+    # 1. Verify signature and parse event
+    event = verify_stripe_signature(payload, signature)
+
+    # 2. Check idempotency - has this event been processed?
+    existing = table.get_item(
+        Key={"PK": f"WEBHOOK#{event.id}", "SK": f"WEBHOOK#{event.id}"}
+    ).get("Item")
+
+    if existing:
+        logger.info(
+            "stripe_webhook_already_processed",
+            extra={"event_id": event.id, "event_type": event.type},
+        )
+        return StripeWebhookResponse(
+            status="already_processed",
+            message="Event already processed",
+            event_id=event.id,
+        )
+
+    # 3. Route by event type
+    if event.type == "customer.subscription.created":
+        return _handle_subscription_created(table, dynamodb, event)
+    elif event.type == "customer.subscription.updated":
+        return _handle_subscription_updated(table, dynamodb, event)
+    elif event.type == "customer.subscription.deleted":
+        return _handle_subscription_deleted(table, dynamodb, event)
+    else:
+        # Acknowledge unhandled events (Stripe expects 200)
+        logger.info(
+            "stripe_webhook_unhandled_type",
+            extra={"event_id": event.id, "event_type": event.type},
+        )
+        return StripeWebhookResponse(
+            status="ignored",
+            message=f"Event type {event.type} not handled",
+            event_id=event.id,
+        )
+
+
+def _handle_subscription_created(
+    table: Any,
+    dynamodb: Any,
+    event: Any,
+) -> StripeWebhookResponse:
+    """Handle customer.subscription.created - upgrade user to paid.
+
+    Uses TransactWriteItems for atomic:
+    - User role update
+    - revocation_id increment (invalidates old tokens)
+    - WebhookEvent record (idempotency)
+    """
+    subscription = event.data.object
+    user_id = extract_user_id_from_subscription(subscription)
+
+    if not user_id:
+        logger.warning(
+            "stripe_webhook_no_user_id",
+            extra={"event_id": event.id, "subscription_id": subscription.id},
+        )
+        return StripeWebhookResponse(
+            status="skipped",
+            message="No user_id in subscription metadata",
+            event_id=event.id,
+        )
+
+    # Get user
+    user_response = table.get_item(
+        Key={"PK": f"USER#{user_id}", "SK": f"USER#{user_id}"}
+    )
+    user_item = user_response.get("Item")
+
+    if not user_item:
+        logger.warning(
+            "stripe_webhook_user_not_found",
+            extra={"event_id": event.id, "user_id": user_id},
+        )
+        return StripeWebhookResponse(
+            status="skipped",
+            message="User not found",
+            event_id=event.id,
+        )
+
+    # Determine new role from price
+    price_id = extract_price_id_from_subscription(subscription)
+    new_role = map_stripe_plan_to_role(price_id)
+
+    # Prepare webhook event for idempotency tracking
+    now = datetime.now(UTC)
+    ttl_30_days = int((now + timedelta(days=30)).timestamp())
+
+    webhook_event = WebhookEvent(
+        event_id=event.id,
+        event_type=event.type,
+        user_id=user_id,
+        subscription_id=subscription.id,
+        processed_at=now,
+        ttl=ttl_30_days,
+    )
+
+    # Get table name for transactions
+    table_name = table.table_name
+
+    # Build atomic transaction
+    transact_items = [
+        # Update user role and revocation_id
+        {
+            "Update": {
+                "TableName": table_name,
+                "Key": {
+                    "PK": {"S": f"USER#{user_id}"},
+                    "SK": {"S": f"USER#{user_id}"},
+                },
+                "UpdateExpression": (
+                    "SET #role = :new_role, "
+                    "subscription_active = :active, "
+                    "role_assigned_at = :assigned_at, "
+                    "role_assigned_by = :assigned_by, "
+                    "revocation_id = if_not_exists(revocation_id, :zero) + :inc"
+                ),
+                "ExpressionAttributeNames": {
+                    "#role": "role",  # Escape reserved word
+                },
+                "ExpressionAttributeValues": {
+                    ":new_role": {"S": new_role},
+                    ":active": {"BOOL": True},
+                    ":assigned_at": {"S": now.isoformat()},
+                    ":assigned_by": {"S": "stripe_webhook"},
+                    ":zero": {"N": "0"},
+                    ":inc": {"N": "1"},
+                },
+                "ConditionExpression": "attribute_exists(PK)",
+            }
+        },
+        # Record webhook event for idempotency
+        {
+            "Put": {
+                "TableName": table_name,
+                "Item": _serialize_for_transaction(webhook_event.to_dynamodb_item()),
+                "ConditionExpression": "attribute_not_exists(PK)",
+            }
+        },
+    ]
+
+    try:
+        dynamodb.transact_write_items(TransactItems=transact_items)
+        logger.info(
+            "stripe_webhook_role_upgraded",
+            extra={
+                "event_id": event.id,
+                "user_id": user_id,
+                "new_role": new_role,
+                "subscription_id": subscription.id,
+            },
+        )
+        return StripeWebhookResponse(
+            status="processed",
+            message=f"User upgraded to {new_role}",
+            event_id=event.id,
+        )
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "TransactionCanceledException":
+            reasons = e.response.get("CancellationReasons", [])
+            logger.warning(
+                "stripe_webhook_transaction_failed",
+                extra={
+                    "event_id": event.id,
+                    "user_id": user_id,
+                    "reasons": str(reasons),
+                },
+            )
+            # Check if it was idempotency (webhook already recorded)
+            if any(r.get("Code") == "ConditionalCheckFailed" for r in reasons):
+                return StripeWebhookResponse(
+                    status="already_processed",
+                    message="Event already processed (race condition)",
+                    event_id=event.id,
+                )
+        raise
+
+
+def _handle_subscription_updated(
+    table: Any,
+    dynamodb: Any,
+    event: Any,
+) -> StripeWebhookResponse:
+    """Handle customer.subscription.updated - sync subscription status."""
+    subscription = event.data.object
+    user_id = extract_user_id_from_subscription(subscription)
+
+    if not user_id:
+        return StripeWebhookResponse(
+            status="skipped",
+            message="No user_id in subscription metadata",
+            event_id=event.id,
+        )
+
+    # Only process if subscription is still active
+    if subscription.status not in ("active", "trialing"):
+        logger.info(
+            "stripe_webhook_subscription_not_active",
+            extra={
+                "event_id": event.id,
+                "user_id": user_id,
+                "status": subscription.status,
+            },
+        )
+        return StripeWebhookResponse(
+            status="ignored",
+            message=f"Subscription status {subscription.status} not handled",
+            event_id=event.id,
+        )
+
+    # Delegate to created handler for active subscriptions
+    return _handle_subscription_created(table, dynamodb, event)
+
+
+def _handle_subscription_deleted(
+    table: Any,
+    dynamodb: Any,
+    event: Any,
+) -> StripeWebhookResponse:
+    """Handle customer.subscription.deleted - downgrade to free.
+
+    Uses TransactWriteItems for atomic:
+    - User role downgrade to free
+    - revocation_id increment (invalidates old tokens)
+    - WebhookEvent record (idempotency)
+    """
+    subscription = event.data.object
+    user_id = extract_user_id_from_subscription(subscription)
+
+    if not user_id:
+        return StripeWebhookResponse(
+            status="skipped",
+            message="No user_id in subscription metadata",
+            event_id=event.id,
+        )
+
+    now = datetime.now(UTC)
+    ttl_30_days = int((now + timedelta(days=30)).timestamp())
+
+    webhook_event = WebhookEvent(
+        event_id=event.id,
+        event_type=event.type,
+        user_id=user_id,
+        subscription_id=subscription.id,
+        processed_at=now,
+        ttl=ttl_30_days,
+    )
+
+    table_name = table.table_name
+
+    transact_items = [
+        # Downgrade user to free
+        {
+            "Update": {
+                "TableName": table_name,
+                "Key": {
+                    "PK": {"S": f"USER#{user_id}"},
+                    "SK": {"S": f"USER#{user_id}"},
+                },
+                "UpdateExpression": (
+                    "SET #role = :free_role, "
+                    "subscription_active = :inactive, "
+                    "role_assigned_at = :assigned_at, "
+                    "role_assigned_by = :assigned_by, "
+                    "revocation_id = if_not_exists(revocation_id, :zero) + :inc"
+                ),
+                "ExpressionAttributeNames": {
+                    "#role": "role",
+                },
+                "ExpressionAttributeValues": {
+                    ":free_role": {"S": "free"},
+                    ":inactive": {"BOOL": False},
+                    ":assigned_at": {"S": now.isoformat()},
+                    ":assigned_by": {"S": "stripe_webhook"},
+                    ":zero": {"N": "0"},
+                    ":inc": {"N": "1"},
+                },
+                "ConditionExpression": "attribute_exists(PK)",
+            }
+        },
+        # Record webhook event
+        {
+            "Put": {
+                "TableName": table_name,
+                "Item": _serialize_for_transaction(webhook_event.to_dynamodb_item()),
+                "ConditionExpression": "attribute_not_exists(PK)",
+            }
+        },
+    ]
+
+    try:
+        dynamodb.transact_write_items(TransactItems=transact_items)
+        logger.info(
+            "stripe_webhook_role_downgraded",
+            extra={
+                "event_id": event.id,
+                "user_id": user_id,
+                "new_role": "free",
+            },
+        )
+        return StripeWebhookResponse(
+            status="processed",
+            message="User downgraded to free",
+            event_id=event.id,
+        )
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "TransactionCanceledException":
+            reasons = e.response.get("CancellationReasons", [])
+            if any(r.get("Code") == "ConditionalCheckFailed" for r in reasons):
+                return StripeWebhookResponse(
+                    status="already_processed",
+                    message="Event already processed (race condition)",
+                    event_id=event.id,
+                )
+        raise
