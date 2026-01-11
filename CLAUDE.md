@@ -70,6 +70,8 @@ Auto-generated from all feature plans. Last updated: 2025-11-26
 - Python 3.13 + FastAPI 0.127.0, boto3 1.42.17, pydantic 2.12.5, PyJWT 2.10.1, aws-xray-sdk 2.15.0 (1182-email-to-oauth-link)
 - DynamoDB with composite keys (PK/SK pattern), GSI by_email for O(1) lookups (1182-email-to-oauth-link)
 - Python 3.13 + N/A (pure refactoring, no new deps) (1184-role-enum-centralization)
+- Python 3.13 + boto3==1.42.17, FastAPI==0.127.0, pydantic==2.12.5, aws-lambda-powertools==3.23.0 (1188-session-eviction-transact)
+- DynamoDB (single table: `${environment}-sentiment-users`) (1188-session-eviction-transact)
 
 - **Python 3.13** with FastAPI, boto3, pydantic, aws-lambda-powertools, httpx
 - **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, CloudFront
@@ -847,9 +849,9 @@ aws cloudwatch get-metric-data --metric-data-queries '[...]' --start-time ... --
 ```
 
 ## Recent Changes
+- 1188-session-eviction-transact: Added Python 3.13 + boto3==1.42.17, FastAPI==0.127.0, pydantic==2.12.5, aws-lambda-powertools==3.23.0
 - 1184-role-enum-centralization: Added Python 3.13 + N/A (pure refactoring, no new deps)
 - 1182-email-to-oauth-link: Added Python 3.13 + FastAPI 0.127.0, boto3 1.42.17, pydantic 2.12.5, PyJWT 2.10.1, aws-xray-sdk 2.15.0
-- 1181-oauth-auto-link: Added Python 3.13 + FastAPI, pydantic, boto3 (DynamoDB)
 
 <!-- MANUAL ADDITIONS START -->
 

@@ -599,6 +599,7 @@ class RefreshTokenRequest(BaseModel):
 async def refresh_tokens(
     request: Request,
     body: RefreshTokenRequest | None = Body(default=None),
+    table=Depends(get_users_table),
 ):
     """Refresh access tokens (T094).
 
@@ -609,6 +610,8 @@ async def refresh_tokens(
     Feature 1158: Also refreshes CSRF token on successful refresh.
     Note: This endpoint is exempt from CSRF validation because it uses
     cookie-only authentication (no JavaScript access needed).
+
+    Feature 1188 (FR-007): Checks blocklist BEFORE issuing new tokens.
     """
     # Feature 1160: Try cookie first (preferred), fall back to body
     refresh_token = extract_refresh_token_from_cookie(request)
@@ -621,7 +624,10 @@ async def refresh_tokens(
             detail="Refresh token not found in cookie or request body",
         )
 
-    result = auth_service.refresh_access_tokens(refresh_token=refresh_token)
+    # Feature 1188: Pass table for blocklist check (FR-007)
+    result = auth_service.refresh_access_tokens(
+        refresh_token=refresh_token, table=table
+    )
     if isinstance(result, auth_service.ErrorResponse):
         raise HTTPException(status_code=401, detail=result.error.message)
 

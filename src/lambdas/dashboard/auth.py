@@ -34,13 +34,16 @@ Security Notes:
     - OAuth tokens come from Cognito (verified via userinfo)
 """
 
+import hashlib
 import logging
 import os
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
+import boto3
 from aws_xray_sdk.core import xray_recorder
+from botocore.exceptions import ClientError
 from pydantic import BaseModel, EmailStr, Field
 
 from src.lambdas.shared.auth.cognito import (
@@ -62,6 +65,7 @@ from src.lambdas.shared.auth.oauth_state import (
     validate_oauth_state,
 )
 from src.lambdas.shared.errors.session_errors import (
+    SessionLimitRaceError,
     SessionRevokedException,
     TokenAlreadyUsedError,
     TokenExpiredError,
@@ -114,6 +118,7 @@ class InvalidSessionResponse(BaseModel):
 # Constants
 
 SESSION_DURATION_DAYS = 30
+SESSION_LIMIT = 5  # Maximum concurrent sessions per user (A11)
 
 
 # Service functions
@@ -928,6 +933,296 @@ def extend_session_expiry(table: Any, user_id: str) -> User | None:
     except Exception as e:
         logger.error("Failed to extend session expiry", extra=get_safe_error_info(e))
         return None
+
+
+# Session Limit Enforcement (Feature 1188 - A11)
+
+
+def hash_refresh_token(token: str) -> str:
+    """Hash a refresh token for blocklist lookup.
+
+    Uses SHA-256 to create a deterministic, non-reversible hash.
+
+    Args:
+        token: The refresh token string
+
+    Returns:
+        Hex-encoded hash string
+    """
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def get_user_sessions(table: Any, user_id: str) -> list[dict]:
+    """Get all active sessions for a user (T004).
+
+    Queries the users table for all session records belonging to a user,
+    ordered by creation time (oldest first).
+
+    Args:
+        table: DynamoDB Table resource
+        user_id: User UUID
+
+    Returns:
+        List of session items sorted by created_at ascending
+    """
+    try:
+        response = table.query(
+            KeyConditionExpression="PK = :pk AND begins_with(SK, :sk_prefix)",
+            ExpressionAttributeValues={
+                ":pk": f"USER#{user_id}",
+                ":sk_prefix": "SESSION#",
+            },
+        )
+        sessions = response.get("Items", [])
+        # Sort by created_at ascending (oldest first)
+        return sorted(sessions, key=lambda x: x.get("created_at", ""))
+    except Exception as e:
+        logger.error(
+            "Failed to get user sessions",
+            extra={
+                "user_id_prefix": sanitize_for_log(user_id[:8]),
+                **get_safe_error_info(e),
+            },
+        )
+        return []
+
+
+def is_token_blocklisted(table: Any, refresh_token_hash: str) -> bool:
+    """Check if a refresh token has been blocklisted (FR-007, T009).
+
+    Args:
+        table: DynamoDB Table resource
+        refresh_token_hash: SHA-256 hash of the refresh token
+
+    Returns:
+        True if token is blocklisted (evicted or revoked)
+    """
+    try:
+        response = table.get_item(
+            Key={
+                "PK": f"BLOCK#refresh#{refresh_token_hash}",
+                "SK": "BLOCK",
+            },
+            ProjectionExpression="PK",
+        )
+        return "Item" in response
+    except Exception as e:
+        logger.error(
+            "Failed to check token blocklist",
+            extra=get_safe_error_info(e),
+        )
+        # Fail closed - treat as blocklisted on error
+        return True
+
+
+@xray_recorder.capture("evict_oldest_session_atomic")
+def evict_oldest_session_atomic(
+    table: Any,
+    user_id: str,
+    oldest_session: dict,
+    new_session_item: dict,
+    refresh_token_hash: str,
+) -> None:
+    """Atomically evict oldest session and create new one (FR-001 to FR-005, T005).
+
+    Uses DynamoDB TransactWriteItems to ensure all-or-nothing execution:
+    1. ConditionCheck: Verify oldest session still exists
+    2. Delete: Remove oldest session
+    3. Put: Add refresh token to blocklist
+    4. Put: Create new session
+
+    Args:
+        table: DynamoDB Table resource
+        user_id: User UUID
+        oldest_session: The session item to evict
+        new_session_item: The new session item to create
+        refresh_token_hash: Hash of the evicted session's refresh token
+
+    Raises:
+        SessionLimitRaceError: If transaction fails due to concurrent modification
+    """
+    table_name = table.name
+    now = datetime.now(UTC)
+    blocklist_ttl = int((now + timedelta(days=SESSION_DURATION_DAYS)).timestamp())
+
+    oldest_pk = oldest_session["PK"]
+    oldest_sk = oldest_session["SK"]
+
+    transact_items = [
+        # 1. Verify oldest session still exists (prevents double-eviction)
+        {
+            "ConditionCheck": {
+                "TableName": table_name,
+                "Key": {
+                    "PK": {"S": oldest_pk},
+                    "SK": {"S": oldest_sk},
+                },
+                "ConditionExpression": "attribute_exists(PK)",
+            }
+        },
+        # 2. Delete the oldest session
+        {
+            "Delete": {
+                "TableName": table_name,
+                "Key": {
+                    "PK": {"S": oldest_pk},
+                    "SK": {"S": oldest_sk},
+                },
+            }
+        },
+        # 3. Add evicted token to blocklist (FR-004, FR-006)
+        {
+            "Put": {
+                "TableName": table_name,
+                "Item": {
+                    "PK": {"S": f"BLOCK#refresh#{refresh_token_hash}"},
+                    "SK": {"S": "BLOCK"},
+                    "ttl": {"N": str(blocklist_ttl)},
+                    "evicted_at": {"S": now.isoformat()},
+                    "user_id": {"S": user_id},
+                    "reason": {"S": "session_limit_eviction"},
+                },
+            }
+        },
+        # 4. Create new session (fails if somehow already exists)
+        {
+            "Put": {
+                "TableName": table_name,
+                "Item": _serialize_for_transaction(new_session_item),
+                "ConditionExpression": "attribute_not_exists(PK)",
+            }
+        },
+    ]
+
+    try:
+        dynamodb = boto3.client("dynamodb")
+        dynamodb.transact_write_items(TransactItems=transact_items)
+        logger.info(
+            "Atomic session eviction completed",
+            extra={
+                "user_id_prefix": sanitize_for_log(user_id[:8]),
+                "evicted_session": sanitize_for_log(oldest_sk[:20]),
+            },
+        )
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "TransactionCanceledException":
+            reasons = e.response.get("CancellationReasons", [])
+            logger.warning(
+                "Session eviction race condition",
+                extra={
+                    "user_id_prefix": sanitize_for_log(user_id[:8]),
+                    "cancellation_reasons": str(reasons)[:100],
+                },
+            )
+            raise SessionLimitRaceError(user_id, reasons) from e
+        raise
+
+
+def _serialize_for_transaction(item: dict) -> dict:
+    """Convert a high-level DynamoDB item to low-level format for transactions.
+
+    TransactWriteItems requires low-level attribute format (e.g., {"S": "value"}).
+
+    Args:
+        item: High-level item dict (from Table resource format)
+
+    Returns:
+        Low-level format dict for use with DynamoDB client
+    """
+    result = {}
+    for key, value in item.items():
+        if isinstance(value, str):
+            result[key] = {"S": value}
+        elif isinstance(value, bool):
+            result[key] = {"BOOL": value}
+        elif isinstance(value, int | float):
+            result[key] = {"N": str(value)}
+        elif isinstance(value, list):
+            if all(isinstance(v, str) for v in value):
+                result[key] = {"SS": value} if value else {"L": []}
+            else:
+                result[key] = {"L": [_serialize_value(v) for v in value]}
+        elif isinstance(value, dict):
+            result[key] = {"M": _serialize_for_transaction(value)}
+        elif value is None:
+            result[key] = {"NULL": True}
+    return result
+
+
+def _serialize_value(value: Any) -> dict:
+    """Serialize a single value to DynamoDB low-level format."""
+    if isinstance(value, str):
+        return {"S": value}
+    elif isinstance(value, bool):
+        return {"BOOL": value}
+    elif isinstance(value, int | float):
+        return {"N": str(value)}
+    elif isinstance(value, dict):
+        return {"M": _serialize_for_transaction(value)}
+    elif value is None:
+        return {"NULL": True}
+    return {"S": str(value)}
+
+
+@xray_recorder.capture("create_session_with_limit_enforcement")
+def create_session_with_limit_enforcement(
+    table: Any,
+    user_id: str,
+    session_item: dict,
+    refresh_token: str | None = None,
+) -> bool:
+    """Create a new session, enforcing the session limit (T006).
+
+    If user is at or over SESSION_LIMIT, evicts the oldest session atomically
+    before creating the new one.
+
+    Args:
+        table: DynamoDB Table resource
+        user_id: User UUID
+        session_item: The session item to create
+        refresh_token: Optional refresh token to hash for blocklist
+
+    Returns:
+        True if session created successfully
+
+    Raises:
+        SessionLimitRaceError: If atomic eviction fails (client should retry)
+    """
+    sessions = get_user_sessions(table, user_id)
+
+    if len(sessions) >= SESSION_LIMIT:
+        oldest_session = sessions[0]
+
+        # Get refresh token hash from oldest session or use placeholder
+        oldest_token_hash = oldest_session.get("refresh_token_hash", "")
+        if not oldest_token_hash:
+            # Generate deterministic hash from session ID as fallback
+            oldest_token_hash = hash_refresh_token(oldest_session.get("SK", ""))
+
+        evict_oldest_session_atomic(
+            table=table,
+            user_id=user_id,
+            oldest_session=oldest_session,
+            new_session_item=session_item,
+            refresh_token_hash=oldest_token_hash,
+        )
+        return True
+
+    # Under limit - simple create
+    try:
+        table.put_item(
+            Item=session_item,
+            ConditionExpression="attribute_not_exists(PK)",
+        )
+        return True
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+            logger.warning(
+                "Session already exists (race condition)",
+                extra={"user_id_prefix": sanitize_for_log(user_id[:8])},
+            )
+            return True  # Session exists, treat as success
+        raise
 
 
 @xray_recorder.capture("refresh_session")
@@ -2227,15 +2522,32 @@ def _mark_email_verified(
 # T094: Token Refresh
 def refresh_access_tokens(
     refresh_token: str,
+    table: Any | None = None,
 ) -> RefreshTokenResponse:
     """Refresh access and ID tokens.
 
+    FR-007 (Feature 1188): Checks blocklist BEFORE issuing new tokens.
+
     Args:
         refresh_token: Current refresh token
+        table: DynamoDB Table resource (optional, for blocklist check)
 
     Returns:
         RefreshTokenResponse with new tokens
     """
+    # FR-007: Check blocklist BEFORE issuing new tokens (T010)
+    if table is not None:
+        token_hash = hash_refresh_token(refresh_token)
+        if is_token_blocklisted(table, token_hash):
+            logger.warning(
+                "Blocked refresh attempt for evicted token",
+                extra={"token_hash_prefix": token_hash[:8]},
+            )
+            return RefreshTokenResponse(
+                error="token_revoked",
+                message="Session has been revoked",
+            )
+
     config = CognitoConfig.from_env()
 
     try:
