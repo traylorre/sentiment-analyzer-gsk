@@ -173,6 +173,10 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       // Use authApi to route to Lambda backend
       const urls = await authApi.getOAuthUrls();
 
+      // Feature 1192: Store provider for callback page retrieval
+      // sessionStorage chosen for cross-tab isolation (each tab has own OAuth flow)
+      sessionStorage.setItem('oauth_provider', provider);
+
       // Redirect to OAuth provider
       window.location.href = urls[provider];
     } catch (error) {
