@@ -45,6 +45,9 @@ flowchart TB
         Users[(sentiment-users<br/>PK: USER#id<br/>SK: entity)]
         Timeseries[(sentiment-timeseries<br/>PK: ticker#resolution<br/>SK: bucket_ts)]
         OHLCCache[(ohlc-cache<br/>PK: ticker#source<br/>SK: resolution#ts)]
+        OAuthStates[(oauth-states<br/>PK: state<br/>TTL: 5min<br/>PKCE: code_verifier)]
+        MagicLinkTokens[(magic-link-tokens<br/>PK: token<br/>TTL: 1hour<br/>atomic consume)]
+        Sessions[(sessions<br/>PK: session_id<br/>TTL: 7days<br/>TransactWriteItems)]
     end
 
     subgraph Models["ML Models"]
@@ -70,17 +73,44 @@ flowchart TB
 
     %% ═══════════════════════════════════════════════════════════════════════
     %% FLOW 2: USER AUTHENTICATION (Security boundary)
+    %% Roles: anonymous → free → paid → operator (v3.0)
+    %% Access token: MEMORY ONLY (never localStorage)
     %% ═══════════════════════════════════════════════════════════════════════
 
-    UI -->|OAuth redirect| OAuthProviders
-    OAuthProviders -->|Auth code| Cognito
-    Cognito -->|Token exchange| Dashboard
-    Dashboard -->|"Upsert USER#{sub}"| Users
-    Dashboard -->|Set-Cookie httpOnly| UI
+    %% OAuth Flow with PKCE (RFC 7636) + State (A13)
+    UI -->|"1. GET /auth/oauth/urls"| Dashboard
+    Dashboard -->|"2. Generate PKCE pair<br/>code_verifier + code_challenge"| OAuthStates
+    Dashboard -->|"3. Store state + provider + code_verifier"| OAuthStates
+    Dashboard -->|"4. Return OAuth URL with state + challenge"| UI
+    UI -->|"5. Redirect with PKCE challenge"| OAuthProviders
+    OAuthProviders -->|"6. Auth code + state"| Cognito
+    Cognito -->|"7. Validate state, get code_verifier"| OAuthStates
+    Cognito -->|"8. Token exchange WITH code_verifier"| OAuthProviders
+    Cognito -->|"9. JWT with jti claim"| Dashboard
+    Dashboard -->|"10. A13: Validate provider matches state"| OAuthStates
+    Dashboard -->|"11. Upsert USER#{sub}"| Users
+    Dashboard -->|"12. Create session"| Sessions
+    Dashboard -->|"Set-Cookie: refresh_token<br/>HttpOnly; Secure; SameSite=None<br/>Path=/api/v2/auth"| UI
+    Dashboard -->|"Body: {access_token} → MEMORY"| AuthStore
 
-    UI -->|Magic link request| Dashboard
-    Dashboard -->|"Store TOKEN#{random}"| Users
-    Dashboard -->|Send email| SendGrid
+    %% Magic Link Flow (random tokens, NOT HMAC)
+    UI -->|"POST /auth/magic-link {email}"| Dashboard
+    Dashboard -->|"Generate secrets.token_urlsafe(32)"| MagicLinkTokens
+    Dashboard -->|"Store with email, 1h TTL"| MagicLinkTokens
+    Dashboard -->|"Send /auth/verify/<token> (path, NOT query)"| SendGrid
+
+    %% Magic Link Verification (atomic consume)
+    UI -->|"GET /auth/magic-link/verify/<token>"| Dashboard
+    Dashboard -->|"Atomic conditional update (used=false→true)"| MagicLinkTokens
+    Dashboard -->|"Create session"| Sessions
+    Dashboard -->|"Set-Cookie + Body:{access_token}"| UI
+
+    %% CSRF Protection (double-submit cookie)
+    UI -->|"Read csrf_token cookie (JS-readable)"| AuthStore
+    UI -->|"Include X-CSRF-Token header on mutations"| Dashboard
+
+    %% Session Eviction (A11: TransactWriteItems)
+    Dashboard -->|"Evict oldest session if limit exceeded"| Sessions
 
     %% ═══════════════════════════════════════════════════════════════════════
     %% FLOW 3: DASHBOARD DATA RETRIEVAL (User-facing API)
@@ -136,7 +166,7 @@ flowchart TB
     class Cognito,Secrets auth
     class Ingestion,Analysis,Dashboard,SSE,Notification compute
     class SNS,DLQ,EB messaging
-    class Items,Users,Timeseries,OHLCCache storage
+    class Items,Users,Timeseries,OHLCCache,OAuthStates,MagicLinkTokens,Sessions storage
     class S3Model model
 
     %% Legend annotations
