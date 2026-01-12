@@ -114,32 +114,24 @@ open https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/deplo
 git clone https://github.com/traylorre/sentiment-analyzer-gsk.git
 cd sentiment-analyzer-gsk
 
-# 2. Install prerequisites (see Prerequisites section)
-# Verify: aws --version, terraform --version, python --version
+# 2. Run bootstrap (checks prerequisites, fetches secrets, creates environment)
+./scripts/bootstrap-workspace.sh
 
-# 3. Set up Python environment
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install -r requirements-dev.txt
+# 3. Verify setup
+./scripts/verify-dev-environment.sh
 
-# 4. Install git hooks
-pre-commit install
-pre-commit install --hook-type pre-push
-
-# 5. Run tests locally
+# 4. Run tests
+source .venv/bin/activate
+source .env.local
 pytest
 
-# 6. Read project specification
-cat SPEC.md  # or open in your editor
-
-# 7. Review contribution guidelines
-cat CONTRIBUTING.md
-
-# 8. Create feature branch
+# 5. Create feature branch
 git checkout -b feature/your-feature-name
 ```
 
 **You're ready to contribute!** See [Development Workflow](#development-workflow) for next steps.
+
+> **New to the project?** See [docs/WORKSPACE_SETUP.md](docs/WORKSPACE_SETUP.md) for comprehensive setup instructions including WSL2, pyenv, and AWS configuration.
 
 ---
 
