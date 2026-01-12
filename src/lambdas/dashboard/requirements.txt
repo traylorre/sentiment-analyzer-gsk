@@ -31,3 +31,6 @@ tenacity>=9.0.0,<10.0.0
 
 # Server-Sent Events for real-time streaming (Feature 015)
 sse-starlette>=2.0.0,<3.0.0
+
+# Stripe SDK for payment webhooks and subscriptions (Feature 1191)
+stripe>=11.4.1,<12.0.0
