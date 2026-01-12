@@ -2,6 +2,7 @@
 flowchart TB
     subgraph External["External Services"]
         NewsAPI["NewsAPI<br/>News Articles"]
+        OAuthProviders["OAuth Providers<br/>Google, GitHub"]
     end
 
     subgraph EventBridge["Amazon EventBridge"]
@@ -9,23 +10,33 @@ flowchart TB
     end
 
     subgraph CDN["CloudFront CDN"]
-        CF["CloudFront Distribution<br/>Multi-Origin Routing"]
+        CF["CloudFront Distribution<br/>Multi-Origin Routing<br/>Forwards: Authorization, Cookies"]
+    end
+
+    subgraph APIGateway["API Gateway"]
+        APIGW["REST API<br/>CORS: allow_credentials=true<br/>Routes to Lambda"]
     end
 
     subgraph Frontend["Static Frontend"]
         S3["S3 Bucket<br/>Interview Dashboard"]
     end
 
+    subgraph Auth["Authentication (Cognito)"]
+        Cognito["Cognito User Pool<br/>OAuth: Google, GitHub<br/>Magic Link<br/>JWT jti generation"]
+    end
+
     subgraph Lambda["AWS Lambda Functions"]
         Ingestion["Ingestion Lambda<br/>512MB / 60s"]
         Analysis["Analysis Lambda<br/>1024MB / 30s"]
-        Dashboard["Dashboard Lambda<br/>512MB / 60s<br/>REST API"]
-        SSE["SSE Lambda<br/>512MB / 60s<br/>RESPONSE_STREAM"]
+        AuthLambda["Auth Lambda<br/>512MB / 30s<br/>/api/v2/auth/*<br/>PKCE, CSRF, Sessions"]
+        Dashboard["Dashboard Lambda<br/>512MB / 60s<br/>REST API<br/>@require_role decorator"]
+        SSE["SSE Lambda<br/>512MB / 60s<br/>RESPONSE_STREAM<br/>JWT validation"]
     end
 
     subgraph Storage["Data Storage"]
         DynamoDB["DynamoDB<br/>sentiment-items"]
-        Secrets["Secrets Manager<br/>API Keys"]
+        AuthTables["DynamoDB Auth Tables<br/>• oauth_states (PKCE, 5m TTL)<br/>• magic_link_tokens (1h TTL)<br/>• sessions (7d TTL)"]
+        Secrets["Secrets Manager<br/>API Keys<br/>JWT_SECRET"]
     end
 
     subgraph Messaging["Messaging"]
@@ -42,11 +53,24 @@ flowchart TB
         Browser["Web Browser"]
     end
 
-    %% User Request Flow (via CloudFront)
+    %% User Request Flow (via CloudFront → API Gateway)
     Browser -->|HTTPS| CF
     CF -->|"/static/*"| S3
-    CF -->|"/api/*"| Dashboard
+    CF -->|"/api/*"| APIGW
+    APIGW -->|"/api/v2/auth/*"| AuthLambda
+    APIGW -->|"/api/v2/*"| Dashboard
     CF -->|"/api/v2/stream*"| SSE
+
+    %% Authentication Flow
+    AuthLambda -->|OAuth redirect| Cognito
+    Cognito -->|OAuth callback| OAuthProviders
+    OAuthProviders -->|tokens| Cognito
+    Cognito -->|JWT with jti| AuthLambda
+    AuthLambda -->|PKCE state| AuthTables
+    AuthLambda -->|Magic link tokens| AuthTables
+    AuthLambda -->|Sessions| AuthTables
+    AuthLambda -->|JWT_SECRET| Secrets
+    AuthLambda -.->|Set-Cookie: refresh_token<br/>HttpOnly, Secure, SameSite=None| Browser
 
     %% Data Ingestion Flow
     Schedule -->|Trigger| Ingestion
@@ -84,11 +108,15 @@ flowchart TB
     classDef monitoring fill:#E8E4F2,stroke:#9013FE,stroke-width:2px
     classDef cdn fill:#F2D4E8,stroke:#E91E63,stroke-width:2px
     classDef frontend fill:#D4F2F2,stroke:#00BCD4,stroke-width:2px
+    classDef auth fill:#FFD4D4,stroke:#FF5252,stroke-width:2px
+    classDef gateway fill:#D4D4FF,stroke:#3F51B5,stroke-width:2px
 
-    class NewsAPI external
-    class Ingestion,Analysis,Dashboard,SSE lambda
-    class DynamoDB,Secrets storage
+    class NewsAPI,OAuthProviders external
+    class Ingestion,Analysis,AuthLambda,Dashboard,SSE lambda
+    class DynamoDB,AuthTables,Secrets storage
     class SNS,DLQ messaging
     class CloudWatch,Alarms monitoring
     class CF cdn
     class S3 frontend
+    class Cognito auth
+    class APIGW gateway
