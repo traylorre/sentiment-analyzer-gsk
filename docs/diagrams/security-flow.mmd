@@ -8,7 +8,9 @@ graph TB
         TwitterAPI[Twitter API Response<br/>⚠ XSS, SQL Injection<br/>⚠ Oversized: 2MB]
         RSSXML[RSS Feed XML<br/>⚠ XXE, SSRF<br/>⚠ Oversized: 10MB]
         AdminReq[Admin API Request<br/>⚠ SSRF, NoSQL Injection<br/>⚠ Rate abuse]
-        OAuthResp[OAuth Refresh<br/>⚠ Token injection<br/>⚠ Expired tokens]
+        OAuthResp[OAuth Callback<br/>⚠ Token injection<br/>⚠ Expired tokens<br/>⚠ CSRF via missing state<br/>⚠ Code interception (no PKCE)]
+        MagicLinkReq[Magic Link Request<br/>⚠ Email enumeration<br/>⚠ Token in query string leak<br/>⚠ Referer header exposure]
+        CSRFAttempt[Mutation Requests<br/>⚠ CSRF attacks<br/>⚠ Cross-origin requests<br/>⚠ Cookie-only auth bypass]
         SSEReq[SSE Stream Request<br/>⚠ Long-lived connection<br/>⚠ Connection exhaustion<br/>⚠ Token in query params]
     end
 
@@ -16,7 +18,10 @@ graph TB
         IngestT[ingestion-twitter<br/>✓ Size check: 2MB<br/>✓ JSON parsing<br/>✓ Schema validation<br/>✗ NO SANITIZATION<br/>→ Errors → DLQ]
         IngestR[ingestion-rss<br/>✓ Size check: 10MB<br/>✓ XML parsing secure<br/>✓ XXE prevention<br/>✗ NO SANITIZATION<br/>→ Errors → DLQ]
         AdminL["admin-api-lambda<br/>✓ Pydantic validation<br/>✓ Regex: ^[a-z0-9-]+$<br/>✓ HTTPS only<br/>✓ IP blocklist<br/>✓ Parameterized writes"]
-        OAuthV[OAuth Validation<br/>✓ Token expiry<br/>✓ Base64 decode<br/>✓ Circuit breaker<br/>Cache: 5-min TTL]
+        OAuthV[OAuth Validation<br/>✓ PKCE code_verifier (RFC 7636)<br/>✓ State with provider validation (A13)<br/>✓ Token expiry + jti claim<br/>✓ Circuit breaker<br/>Cache: 5-min TTL]
+        MagicLinkV[Magic Link Validation<br/>✓ Token in PATH only (not query)<br/>✓ Atomic conditional consume<br/>✓ One-time use enforcement<br/>✓ 1-hour TTL<br/>✗ Blocks ?token= query param]
+        CSRFValidation[CSRF Validation<br/>✓ Double-submit cookie pattern<br/>✓ X-CSRF-Token header check<br/>✓ Cookie vs header comparison<br/>✗ Exempt: /refresh, /callback]
+        TokenStorage[Token Storage Policy<br/>✓ Refresh: HttpOnly cookie<br/>✓ Access: MEMORY ONLY<br/>✗ No localStorage/sessionStorage<br/>✗ No document.cookie access]
         SSEL["sse-streaming-lambda<br/>✓ Connection pool: 100 max<br/>✓ Heartbeat: 30s<br/>✓ Config auth validation<br/>✓ Ticker filter validation<br/>⚠ Query param tokens"]
     end
 
@@ -49,7 +54,11 @@ graph TB
     TwitterAPI -->|HTTP Response<br/>TAINTED| IngestT
     RSSXML -->|XML Response<br/>TAINTED| IngestR
     AdminReq -->|JSON Body<br/>TAINTED| AdminL
-    OAuthResp -->|Token Response| OAuthV
+    OAuthResp -->|Code + State| OAuthV
+    MagicLinkReq -->|"/auth/verify/<token>"| MagicLinkV
+    CSRFAttempt -->|POST/PUT/PATCH/DELETE| CSRFValidation
+    OAuthV -->|Token Policy| TokenStorage
+    MagicLinkV -->|Token Policy| TokenStorage
     SSEReq -->|EventSource| SSEL
 
     IngestT -.->|GetSecret| SecretsM
@@ -92,7 +101,8 @@ graph TB
 
     class CFront,BrowserReq edge
     class TwitterAPI,RSSXML,AdminReq,OAuthResp,SSEReq untrusted
-    class IngestT,IngestR,AdminL,OAuthV,SSEL validation
+    class IngestT,IngestR,AdminL,OAuthV,SSEL,MagicLinkV,CSRFValidation,TokenStorage validation
+    class MagicLinkReq,CSRFAttempt untrusted
     class Queue,InferenceL,DLQ processing
     class DDBWrite,DDBRead,SecGuard protected
     class SecretsM,CW,S3Arch,S3Static infrastructure
