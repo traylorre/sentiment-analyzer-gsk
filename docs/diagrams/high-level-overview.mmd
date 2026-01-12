@@ -22,19 +22,22 @@ graph LR
     Notification["notification-lambda<br/>256MB | 30s<br/>Alerts + Digests"]
     Metrics["metrics-lambda<br/>128MB | 30s<br/>Stuck item monitor"]
 
-    %% Authentication
-    Cognito[Cognito<br/>User Pool<br/>OAuth + Magic Link]
-    Secrets[Secrets Manager<br/>API Keys<br/>JWT Secret]
+    %% Authentication (v3.0)
+    Cognito[Cognito User Pool<br/>OAuth: Google + GitHub<br/>Magic Link<br/>JWT jti claim generation<br/>Roles: anon→free→paid→operator]
+    Secrets[Secrets Manager<br/>API Keys<br/>JWT_SECRET]
 
     %% Messaging
     SNS[SNS Topic<br/>analysis-requests]
     DLQ[SQS DLQ<br/>14-day retention]
 
-    %% Storage (4 DynamoDB tables per Terraform)
+    %% Storage (7 DynamoDB tables per Terraform)
     Items[(sentiment-items<br/>News + Scores<br/>TTL: 30d)]
-    Users[(sentiment-users<br/>Configs · Alerts<br/>Sessions)]
+    Users[(sentiment-users<br/>Configs · Alerts<br/>Identity links)]
     Timeseries[(sentiment-timeseries<br/>Multi-Resolution<br/>1m→24h)]
     OHLC[(ohlc-cache<br/>Price Data)]
+    OAuthStates[(oauth-states<br/>PKCE: code_verifier<br/>TTL: 5min)]
+    MagicTokens[(magic-link-tokens<br/>Random tokens<br/>TTL: 1h · Atomic)]
+    Sessions[(sessions<br/>Refresh tokens<br/>TTL: 7d · Eviction)]
     S3Model[S3<br/>ML Models]
 
     %% Frontend
@@ -50,11 +53,20 @@ graph LR
     CloudFront ==>|/api/*| APIGateway
     CloudFront ==>|/api/v2/stream*| SSE
 
-    %% Auth flows
-    Cognito -.->|JWT validate| Dashboard
+    %% Auth flows (v3.0 federation)
+    Cognito -.->|JWT + jti| Dashboard
     Cognito -.->|JWT validate| SSE
     Secrets -.->|API keys| Ingestion
-    Secrets -.->|JWT secret| Dashboard
+    Secrets -.->|JWT_SECRET| Dashboard
+    Dashboard -->|PKCE state| OAuthStates
+    Dashboard -->|Magic tokens| MagicTokens
+    Dashboard -->|Session mgmt| Sessions
+    Dashboard -->|Identity links| Users
+
+    %% Federation: Identity Linking
+    Browser -.->|OAuth: Google| Cognito
+    Browser -.->|OAuth: GitHub| Cognito
+    Cognito -.->|Auto-link same domain| Users
 
     %% Ingestion Pipeline (5-minute schedule)
     EventBridge -->|rate(5 min)| Ingestion
@@ -112,7 +124,7 @@ graph LR
     class Tiingo,Finnhub,SendGrid,Browser external
     class Ingestion,Analysis,Dashboard,SSE,Notification,Metrics lambda
     class EventBridge,APIGateway,SNS,DLQ messaging
-    class Items,Users,Timeseries,OHLC,S3Model database
+    class Items,Users,Timeseries,OHLC,OAuthStates,MagicTokens,Sessions,S3Model database
     class CloudWatch support
     class CloudFront,Amplify cdn
     class Cognito,Secrets auth
