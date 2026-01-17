@@ -1,0 +1,177 @@
+#check win version
+# Run in PowerShell (no admin needed)
+winver
+
+#Check if Hyper-V is running
+# PowerShell - check virtualization
+systeminfo | findstr /i "Hyper-V"
+
+#Install Ubuntu 24.04 as wsl
+# Open PowerShell as Administrator
+# Right-click Start → "Windows Terminal (Admin)" or search "PowerShell" → Run as Admin
+
+wsl --install -d Ubuntu-24.04
+
+#If fails ...
+# Enable WSL feature
+dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
+
+# Enable Virtual Machine Platform
+dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart
+
+# Restart required
+Restart-Computer
+
+#After restart:
+# Set WSL2 as default
+wsl --set-default-version 2
+
+# Install Ubuntu
+wsl --install -d Ubuntu-24.04
+
+#check wsl2 active
+# In PowerShell (not WSL)
+wsl -l -v
+```
+
+**Expected output:**
+```
+  NAME            STATE           VERSION
+* Ubuntu-24.04    Running         2
+
+#check py version
+python3 --version
+
+#install build dependencies
+sudo apt update && sudo apt install -y make build-essential libssl-dev zlib1g-dev \
+  libbz2-dev libreadline-dev libsqlite3-dev wget curl llvm \
+  libncurses5-dev libncursesw5-dev xz-utils tk-dev libffi-dev \
+  liblzma-dev python3-openssl
+
+#install pyenv
+curl https://pyenv.run | bash
+
+#add pyenv to shell
+cat >> ~/.bashrc << 'EOF'
+export PYENV_ROOT="$HOME/.pyenv"
+[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init -)"
+EOF
+
+#reload shell
+source ~/.bashrc
+
+#verify pyenv working
+pyenv --version
+
+#install python 3.13
+pyenv install 3.13.0
+
+#clone repo
+cd ~
+git clone https://github.com/traylorre/sentiment-analyzer-gsk.git
+cd sentiment-analyzer-gsk
+
+#set python 3.13 for this folder
+pyenv local 3.13.0
+
+#This creates a .python-version file in the project directory. Now verify:
+python --version
+
+#check aws
+aws --version
+
+#install unzip
+sudo apt install -y unzip
+
+#install aws
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+sudo ./aws/install
+
+#verify aws version
+aws --version
+
+#cleanup install files
+rm -rf aws awscliv2.zip
+
+#check git version (need 2.30+)
+git --version
+
+#install jq
+sudo apt install -y jq
+jq --version
+
+#check jq version (need 1.6+)
+jq --version
+
+sudo apt update && sudo apt install -y make build-essential libssl-dev zlib1g-dev \
+  libbz2-dev libreadline-dev libsqlite3-dev wget curl llvm \
+  libncurses5-dev libncursesw5-dev xz-utils tk-dev libffi-dev \
+  liblzma-dev python3-openssl
+
+#install age
+sudo apt install age
+
+# check version
+age --version
+
+# need AWS ACCESS KEY and AWS SECRET ACCESS KEY
+# region:us-east-1
+# format: json
+aws configure
+
+#verify credentials work
+aws sts get-caller-identity
+
+#install terraform
+sudo apt-get update && sudo apt-get install -y gnupg software-properties-common
+
+wget -O- https://apt.releases.hashicorp.com/gpg | \
+  gpg --dearmor | \
+  sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg > /dev/null
+
+echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] \
+  https://apt.releases.hashicorp.com $(lsb_release -cs) main" | \
+  sudo tee /etc/apt/sources.list.d/hashicorp.list
+
+sudo apt update
+sudo apt-get install -y terraform
+
+#verify terraform
+terraform --version
+
+#install node
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt install -y nodejs
+
+#verify node
+node --version
+
+#install docker
+sudo apt install -y docker.io && sudo usermod -aG docker $USER
+
+#verify docker
+docker --version
+
+#install pre-commit
+pip install pre-commit
+
+#verify pre-commit
+pre-commit --version
+
+#Update NPM
+sudo npm install -g npm@11.7.0
+
+#Install Claude Code
+# Install via npm
+sudo npm install -g @anthropic-ai/claude-code
+
+# Verify
+claude --version
+
+# Authenticate (opens browser)
+claude auth login
+
+#run bootstrap script
+./scripts/bootstrap-workspace.sh --env preprod
+

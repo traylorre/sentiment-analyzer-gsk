@@ -55,7 +55,8 @@ get_version() {
             jq --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+'
             ;;
         age)
-            age --version 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | tr -d 'v'
+            # age outputs version without 'v' prefix (e.g., "1.1.1")
+            age --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+'
             ;;
         docker)
             docker --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+'
@@ -123,7 +124,7 @@ check_required_prereqs() {
 
     print_header "Required Prerequisites"
 
-    check_prereq "python3" "3.12.0" "pyenv install 3.13.0 && pyenv global 3.13.0" || ((failed++))
+    check_prereq "python3" "3.13.0" "pyenv install 3.13.0 && pyenv local 3.13.0" || ((failed++))
     check_prereq "aws" "2.0.0" "curl 'https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip' -o awscliv2.zip && unzip awscliv2.zip && sudo ./aws/install" || ((failed++))
     check_prereq "git" "2.30.0" "sudo apt install git" || ((failed++))
     check_prereq "jq" "1.6" "sudo apt install jq" || ((failed++))
@@ -176,12 +177,17 @@ check_aws_credentials() {
 }
 
 # Check Secrets Manager access
-# Returns: 0 if can list secrets, 1 otherwise
+# Returns: 0 if can access secrets, 1 otherwise
+# Uses DescribeSecret instead of ListSecrets to avoid requiring broad IAM permissions
 check_secrets_access() {
     local secret_prefix="${1:-dev/sentiment-analyzer}"
 
-    if ! aws secretsmanager list-secrets --filters Key=name,Values="${secret_prefix}" --max-results 1 &>/dev/null; then
-        print_status "FAIL" "Cannot access Secrets Manager" "Check IAM permissions for secretsmanager:ListSecrets"
+    # Try to describe a known secret (dashboard-api-key exists in all environments)
+    # This uses DescribeSecret permission which can be scoped to specific ARNs
+    local test_secret="${secret_prefix}/dashboard-api-key"
+
+    if ! aws secretsmanager describe-secret --secret-id "${test_secret}" &>/dev/null; then
+        print_status "FAIL" "Cannot access Secrets Manager" "Check IAM permissions for secretsmanager:DescribeSecret on ${test_secret}"
         return 1
     fi
 
