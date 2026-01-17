@@ -59,7 +59,7 @@ get_version() {
             age --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+'
             ;;
         docker)
-            docker --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+'
+            docker --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1
             ;;
         pre-commit)
             pre-commit --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+'

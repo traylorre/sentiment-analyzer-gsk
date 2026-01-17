@@ -174,4 +174,3 @@ claude auth login
 
 #run bootstrap script
 ./scripts/bootstrap-workspace.sh --env preprod
-

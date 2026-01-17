@@ -99,23 +99,25 @@ fetch_secret() {
 
 # Fetch all secrets and return as JSON object
 # Usage: fetch_all_secrets
-# Returns: JSON object with all secrets
+# Returns: JSON object with all secrets on stdout
+# Note: All informational output goes to stderr to keep stdout clean for JSON
 fetch_all_secrets() {
     local secrets_json="{}"
     local failed=0
 
-    print_header "Fetching Secrets"
-    print_status "INFO" "Environment: ${ENVIRONMENT:-dev}"
+    # Redirect all print_* output to stderr so stdout contains only JSON
+    print_header "Fetching Secrets" >&2
+    print_status "INFO" "Environment: ${ENVIRONMENT:-dev}" >&2
 
     for short_name in "${SECRET_NAMES[@]}"; do
         local secret_path
         secret_path=$(get_secret_path "${short_name}")
 
-        print_status "INFO" "Fetching: ${secret_path}..."
+        print_status "INFO" "Fetching: ${secret_path}..." >&2
 
         local secret_value
         if ! secret_value=$(fetch_secret "${secret_path}"); then
-            print_status "FAIL" "Failed to fetch: ${short_name}"
+            print_status "FAIL" "Failed to fetch: ${short_name}" >&2
             ((failed++))
             continue
         fi
@@ -129,11 +131,11 @@ fetch_all_secrets() {
             secrets_json=$(echo "${secrets_json}" | jq --arg val "${secret_value}" ". + {\"${short_name}\": \$val}")
         fi
 
-        print_status "PASS" "Fetched: ${short_name}"
+        print_status "PASS" "Fetched: ${short_name}" >&2
     done
 
     if [[ "${failed}" -gt 0 ]]; then
-        print_status "WARN" "Failed to fetch ${failed} secret(s)"
+        print_status "WARN" "Failed to fetch ${failed} secret(s)" >&2
         return 1
     fi
 
@@ -302,8 +304,8 @@ generate_env_local() {
     # Extract values with key normalization
     local dashboard_api_key tiingo_api_key finnhub_api_key sendgrid_api_key hcaptcha_secret hcaptcha_site
 
-    # Dashboard API key (simple string)
-    dashboard_api_key=$(echo "${secrets_json}" | jq -r '."dashboard-api-key" // empty')
+    # Dashboard API key (may be JSON object or string)
+    dashboard_api_key=$(echo "${secrets_json}" | jq -r '."dashboard-api-key" | if type == "object" then .api_key else . end // empty')
 
     # Tiingo (may be JSON object or string)
     tiingo_api_key=$(echo "${secrets_json}" | jq -r '.tiingo | if type == "object" then .api_key else . end // empty')
