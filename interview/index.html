@@ -1660,7 +1660,7 @@ infrastructure/terraform/modules/<br>
 ├── secrets/   # Secrets Manager<br>
 ├── sns/       # Event fan-out<br>
 ├── cognito/   # User pools<br>
-├── cloudfront/ # CDN<br>
+├── amplify/   # Frontend hosting<br>
 └── eventbridge/ # Schedules
                         </code>
                     </div>
@@ -1712,7 +1712,7 @@ infrastructure/terraform/modules/<br>
                             <td style="padding: 12px; text-align: center;">✅</td>
                         </tr>
                         <tr>
-                            <td style="padding: 12px;">CloudFront CDN</td>
+                            <td style="padding: 12px;">Amplify Hosting</td>
                             <td style="padding: 12px; text-align: center;">❌</td>
                             <td style="padding: 12px; text-align: center;">✅</td>
                             <td style="padding: 12px; text-align: center;">✅</td>
@@ -1732,10 +1732,10 @@ infrastructure/terraform/modules/<br>
     <div id="toast" class="toast"></div>
 
     <script>
-        // Configuration - Use CloudFront "ONE URL" for proper routing to both
+        // Configuration - Feature 1207: Use Amplify URLs (CloudFront removed)
         // Dashboard Lambda (REST API) and SSE Lambda (streaming)
         const ENVIRONMENTS = {
-            preprod: 'https://d2z9uvoj5xlbd2.cloudfront.net',
+            preprod: 'https://main.d29tlmksqcx494.amplifyapp.com',
             prod: 'https://prod.sentiment-analyzer.example.com'  // Update when available
         };
 

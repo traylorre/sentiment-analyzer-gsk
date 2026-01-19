@@ -89,12 +89,14 @@ with `if: false`. Pipeline completes after Preprod Integration Tests pass.
 
 ## Completed
 
-### CloudFront ONE URL (Feature 104)
-**Status**: Complete (PR #347)
-**Date**: 2025-12-12
+### CloudFront ONE URL (Feature 104) - SUPERSEDED
+**Status**: Superseded by Feature 1207
+**Date**: 2025-12-12 (Original), 2026-01-18 (Superseded)
 
-Updated "View Live Dashboard" link from Lambda Function URL to CloudFront ONE URL for proper routing to both Dashboard and SSE Lambdas.
+~~Updated "View Live Dashboard" link from Lambda Function URL to CloudFront ONE URL for proper routing to both Dashboard and SSE Lambdas.~~
+
+**Note**: Feature 1207 removed CloudFront entirely. Frontend now served by AWS Amplify.
 
 ---
 
-*Last updated: 2025-12-12*
+*Last updated: 2026-01-18*

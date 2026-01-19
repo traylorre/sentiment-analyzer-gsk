@@ -143,8 +143,7 @@ class TestSSEConnectionHealth:
         Then: Content-Type contains 'event-stream' or 'stream'
 
         EventSource API requires text/event-stream for proper connection.
-        Note: Lambda Function URLs may return application/octet-stream,
-        but CloudFront should preserve the original Content-Type.
+        Note: Lambda Function URLs may return application/octet-stream initially.
         """
         timeout = INITIAL_TIMEOUT
         last_error = None

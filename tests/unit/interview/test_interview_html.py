@@ -163,11 +163,11 @@ class TestJavaScript:
         assert "const ENVIRONMENTS = {" in content
 
     def test_preprod_url_defined(self):
-        """Preprod URL should be defined with CloudFront ONE URL."""
+        """Preprod URL should be defined with Amplify URL (Feature 1207: CloudFront removed)."""
         content = get_html_content()
         assert "preprod:" in content
-        # Uses CloudFront "ONE URL" for proper routing to Dashboard and SSE Lambdas
-        assert "d2z9uvoj5xlbd2.cloudfront.net" in content
+        # Uses Amplify URL for frontend hosting
+        assert "amplifyapp.com" in content
 
     def test_required_functions_defined(self):
         """All required JavaScript functions should be defined."""

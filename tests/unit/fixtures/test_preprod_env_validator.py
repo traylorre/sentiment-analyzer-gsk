@@ -191,9 +191,9 @@ class TestURLValidation:
 
         assert len(errors) == 0
 
-    def test_valid_cloudfront_url(self, validator, clean_env):
-        """CloudFront URL should pass."""
-        os.environ["PREPROD_DASHBOARD_URL"] = "https://d1234567890.cloudfront.net/"
+    def test_valid_amplify_url(self, validator, clean_env):
+        """Amplify URL should pass (Feature 1207: CloudFront removed)."""
+        os.environ["PREPROD_DASHBOARD_URL"] = "https://main.d1234567890.amplifyapp.com/"
 
         errors = validator._validate_urls()
 
