@@ -1,7 +1,7 @@
 """Unit tests for Feature 1159: SameSite=None cookie configuration.
 
 Verifies that auth cookies use SameSite=None for cross-origin transmission
-from CloudFront frontend to Lambda Function URL backend.
+from Amplify frontend to Lambda Function URL backend (Feature 1207: CloudFront removed).
 """
 
 from fastapi.responses import JSONResponse

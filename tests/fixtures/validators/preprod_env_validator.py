@@ -69,9 +69,10 @@ class PreprodEnvValidator:
     # URL pattern for Lambda function URLs
     URL_PATTERN = re.compile(r"^https://[a-z0-9]+\.lambda-url\.[a-z0-9-]+\.on\.aws/?$")
 
-    # Alternative URL patterns (CloudFront, API Gateway)
+    # Alternative URL patterns (Amplify, API Gateway)
+    # Feature 1207: CloudFront removed - Amplify serves frontend directly
     ALT_URL_PATTERNS = [
-        re.compile(r"^https://[a-z0-9]+\.cloudfront\.net/?.*$"),
+        re.compile(r"^https://[a-z0-9.-]+\.amplifyapp\.com/?.*$"),  # Amplify
         re.compile(r"^https://[a-z0-9]+\.execute-api\.[a-z0-9-]+\.amazonaws\.com/?.*$"),
         re.compile(r"^https?://localhost(:\d+)?/?.*$"),  # Local dev
     ]
@@ -235,7 +236,7 @@ class PreprodEnvValidator:
                         var=var,
                         message=(
                             f"URL format may be invalid: {url}. "
-                            f"Expected Lambda Function URL, CloudFront, or API Gateway URL."
+                            f"Expected Lambda Function URL, Amplify, or API Gateway URL."
                         ),
                         value=url,
                         suggestion=(
