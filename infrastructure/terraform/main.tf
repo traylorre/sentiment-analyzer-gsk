@@ -90,50 +90,24 @@ module "cognito" {
 }
 
 # ===================================================================
-# Module: CloudFront CDN (Feature 006)
-# ===================================================================
-
-module "cloudfront" {
-  source = "./modules/cloudfront"
-
-  environment    = var.environment
-  account_suffix = data.aws_caller_identity.current.account_id
-
-  # API Gateway integration
-  # Extract just the domain from API Gateway endpoint (strip https:// and path like /v1)
-  api_gateway_domain     = split("/", replace(module.api_gateway.api_endpoint, "https://", ""))[0]
-  api_gateway_stage_path = "/${module.api_gateway.stage_name}"
-
-  # SSE Lambda integration for streaming endpoints
-  # Extract domain from Function URL (strip https:// suffix)
-  sse_lambda_domain = split("/", replace(module.sse_streaming_lambda.function_url, "https://", ""))[0]
-
-  # CORS configuration for cross-origin API requests (Interview Dashboard on GitHub Pages)
-  cors_allowed_origins = var.cors_allowed_origins
-
-  # Custom domain (optional)
-  custom_domain       = var.cloudfront_custom_domain
-  acm_certificate_arn = var.cloudfront_acm_certificate_arn
-
-  depends_on = [module.api_gateway, module.sse_streaming_lambda]
-}
-
-# ===================================================================
 # Module: CloudWatch RUM (Feature 006)
 # ===================================================================
+# Note: CloudFront module removed (Feature 1203) - Amplify serves frontend directly
+# RUM now monitors Amplify domain instead of CloudFront distribution
 
 module "cloudwatch_rum" {
   source = "./modules/cloudwatch-rum"
 
   environment = var.environment
-  domain      = var.cloudfront_custom_domain != "" ? var.cloudfront_custom_domain : module.cloudfront.distribution_domain_name
+  # Feature 1203: Use Amplify domain for RUM monitoring (CloudFront removed)
+  domain = var.enable_amplify ? module.amplify_frontend[0].default_domain : "localhost"
 
   # RUM configuration
   allow_cookies       = true
   enable_xray         = true
   session_sample_rate = var.environment == "prod" ? 0.1 : 1.0 # 10% in prod, 100% in dev/preprod
 
-  depends_on = [module.cloudfront]
+  depends_on = [module.amplify_frontend]
 }
 
 # Data source for AWS account ID
@@ -416,7 +390,7 @@ module "dashboard_lambda" {
     ENVIRONMENT                  = var.environment
     CHAOS_EXPERIMENTS_TABLE      = module.dynamodb.chaos_experiments_table_name
     # CORS: Pass explicit origins from tfvars (no wildcard fallback)
-    # CloudFront domain is dynamically determined by Lambda at runtime
+    # Feature 1203: Amplify domain should be in cors_allowed_origins
     CORS_ORIGINS = join(",", var.cors_allowed_origins)
     # Feature 1009: Time-series table for multi-resolution queries
     TIMESERIES_TABLE = module.dynamodb.timeseries_table_name
@@ -556,8 +530,9 @@ module "notification_lambda" {
     DYNAMODB_TABLE      = module.dynamodb.feature_006_users_table_name
     SENDGRID_SECRET_ARN = module.secrets.sendgrid_secret_arn
     FROM_EMAIL          = var.notification_from_email
-    DASHBOARD_URL       = var.cloudfront_custom_domain != "" ? "https://${var.cloudfront_custom_domain}" : "https://${module.cloudfront.distribution_domain_name}"
-    ENVIRONMENT         = var.environment
+    # Feature 1203: Use Amplify URL for dashboard (CloudFront removed)
+    DASHBOARD_URL = var.enable_amplify ? module.amplify_frontend[0].production_url : "http://localhost:3000"
+    ENVIRONMENT   = var.environment
   }
 
   # No Function URL needed - triggered by SNS and EventBridge
@@ -576,7 +551,7 @@ module "notification_lambda" {
     Feature = "006-user-config-dashboard"
   }
 
-  depends_on = [module.iam, module.cloudfront]
+  depends_on = [module.iam, module.amplify_frontend]
 }
 
 # ===================================================================
@@ -1173,26 +1148,8 @@ output "cognito_oauth_issuer" {
   value       = module.cognito.oauth_issuer
 }
 
-# CloudFront outputs
-output "cloudfront_distribution_id" {
-  description = "ID of the CloudFront distribution"
-  value       = module.cloudfront.distribution_id
-}
-
-output "cloudfront_domain_name" {
-  description = "Domain name of the CloudFront distribution"
-  value       = module.cloudfront.distribution_domain_name
-}
-
-output "dashboard_s3_bucket" {
-  description = "S3 bucket for dashboard static assets"
-  value       = module.cloudfront.s3_bucket_name
-}
-
-output "dashboard_url" {
-  description = "URL for accessing the dashboard via CloudFront"
-  value       = module.cloudfront.dashboard_url
-}
+# Feature 1203: CloudFront outputs removed - Amplify serves frontend directly
+# Dashboard URL is now available via amplify_production_url output
 
 # CloudWatch RUM outputs
 output "rum_app_monitor_id" {
