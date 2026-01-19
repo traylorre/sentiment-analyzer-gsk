@@ -1,6 +1,7 @@
 %% High-Level System Overview - Terraform-Accurate
-%% Last updated: 2026-01-05
+%% Last updated: 2026-01-18
 %% Canonical source: infrastructure/terraform/
+%% Feature 1208: CloudFront removed - Amplify serves frontend directly
 
 graph LR
     %% External Sources
@@ -11,7 +12,6 @@ graph LR
 
     %% Entry Points
     EventBridge[EventBridge<br/>Schedulers]
-    CloudFront[CloudFront<br/>Multi-Origin CDN]
     APIGateway[API Gateway<br/>REST /api/*]
 
     %% Lambda Functions (6 total per Terraform)
@@ -40,18 +40,17 @@ graph LR
     Sessions[(sessions<br/>Refresh tokens<br/>TTL: 7d · Eviction)]
     S3Model[S3<br/>ML Models]
 
-    %% Frontend
-    Amplify[Amplify<br/>Next.js SSR<br/>Optional]
+    %% Frontend (Feature 1208: Amplify serves frontend directly)
+    Amplify[Amplify<br/>Next.js SSR<br/>Primary Frontend]
 
     %% Monitoring
     CloudWatch["CloudWatch<br/>Logs · Alarms · RUM"]
 
-    %% User Request Flow (via CloudFront) - thick lines for primary paths
-    Browser ==>|HTTPS| CloudFront
+    %% User Request Flow (Feature 1208: Direct to Amplify/API) - thick lines for primary paths
+    Browser ==>|HTTPS| Amplify
+    Browser ==>|/api/*| APIGateway
+    Browser ==>|/api/v2/stream*| SSE
     Browser -.->|OAuth redirect| Cognito
-    CloudFront ==>|/static/*| Amplify
-    CloudFront ==>|/api/*| APIGateway
-    CloudFront ==>|/api/v2/stream*| SSE
 
     %% Auth flows (v3.0 federation)
     Cognito -.->|JWT + jti| Dashboard
@@ -126,5 +125,5 @@ graph LR
     class EventBridge,APIGateway,SNS,DLQ messaging
     class Items,Users,Timeseries,OHLC,OAuthStates,MagicTokens,Sessions,S3Model database
     class CloudWatch support
-    class CloudFront,Amplify cdn
+    class Amplify cdn
     class Cognito,Secrets auth
