@@ -78,9 +78,11 @@ Auto-generated from all feature plans. Last updated: 2025-11-26
 - DynamoDB (existing tables: Users, Sessions) (1191-mid-session-tier-upgrade)
 - Terraform 1.5+ with AWS Provider ~> 5.0 + AWS CloudFront, S3, IAM, CloudWatch RUM (1203-remove-cloudfront-module)
 - N/A (infrastructure deletion) (1203-remove-cloudfront-module)
+- Markdown, Mermaid (documentation syntax) + N/A (documentation-only, no code dependencies) (1209-remove-cloudfront-docs)
+- N/A (file-based documentation) (1209-remove-cloudfront-docs)
 
 - **Python 3.13** with FastAPI, boto3, pydantic, aws-lambda-powertools, httpx
-- **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, CloudFront
+- **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, Amplify
 - **External APIs**: Tiingo (primary), Finnhub (secondary) for financial news sentiment
 - **Email**: SendGrid (100/day free tier)
 - **Bot Protection**: hCaptcha
@@ -141,7 +143,7 @@ tests/
 └── e2e/                 # Full E2E with synthetic data
 infrastructure/
 └── terraform/
-    └── modules/         # Lambda, DynamoDB, Cognito, CloudFront, etc.
+    └── modules/         # Lambda, DynamoDB, Cognito, Amplify, etc.
 ```
 
 ## Commands
@@ -855,9 +857,9 @@ aws cloudwatch get-metric-data --metric-data-queries '[...]' --start-time ... --
 ```
 
 ## Recent Changes
+- 1209-remove-cloudfront-docs: Added Markdown, Mermaid (documentation syntax) + N/A (documentation-only, no code dependencies)
 - 1203-remove-cloudfront-module: Added Terraform 1.5+ with AWS Provider ~> 5.0 + AWS CloudFront, S3, IAM, CloudWatch RUM
 - 1191-mid-session-tier-upgrade: Added Python 3.13 (backend), TypeScript 5.x (frontend) + FastAPI, boto3 (DynamoDB), Zustand (state), BroadcastChannel API
-- 1190-security-headers-error-codes: Added Python 3.13 (backend), TypeScript/Next.js (frontend) + FastAPI (Response headers), Next.js middleware
 
 <!-- MANUAL ADDITIONS START -->
 

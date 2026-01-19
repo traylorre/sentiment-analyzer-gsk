@@ -16,9 +16,8 @@ flowchart TB
         SSEClient[SSE Client<br/>EventSource]
     end
 
-    subgraph Edge["Edge Layer"]
-        CF[CloudFront CDN]
-        Amplify[Amplify SSR]
+    subgraph Edge["Frontend Layer"]
+        Amplify[Amplify SSR<br/>Next.js]
     end
 
     subgraph Auth["Authentication Boundary"]
@@ -116,8 +115,7 @@ flowchart TB
     %% FLOW 3: DASHBOARD DATA RETRIEVAL (User-facing API)
     %% ═══════════════════════════════════════════════════════════════════════
 
-    UI ==>|HTTPS| CF
-    CF ==>|/api/*| Dashboard
+    UI ==>|HTTPS| Dashboard
     Dashboard -->|Validate JWT| Secrets
     Dashboard ==>|Query by_tag GSI| Items
     Dashboard -->|User configs| Users
@@ -128,8 +126,7 @@ flowchart TB
     %% FLOW 4: REAL-TIME SSE STREAMING (Live updates)
     %% ═══════════════════════════════════════════════════════════════════════
 
-    SSEClient ==>|EventSource| CF
-    CF ==>|/api/v2/stream*| SSE
+    SSEClient ==>|EventSource| SSE
     SSE -->|Validate session| Secrets
 
     SSE -->|"Poll every 5s"| Items
@@ -162,7 +159,7 @@ flowchart TB
 
     class Tiingo,Finnhub,SendGrid,OAuthProviders external
     class UI,AuthStore,SSEClient browser
-    class CF,Amplify edge
+    class Amplify edge
     class Cognito,Secrets auth
     class Ingestion,Analysis,Dashboard,SSE,Notification compute
     class SNS,DLQ,EB messaging

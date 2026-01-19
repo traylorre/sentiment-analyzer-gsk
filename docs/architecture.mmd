@@ -9,8 +9,8 @@ flowchart TB
         Schedule["Schedule Rule<br/>(5 min)"]
     end
 
-    subgraph CDN["CloudFront CDN"]
-        CF["CloudFront Distribution<br/>Multi-Origin Routing<br/>Forwards: Authorization, Cookies"]
+    subgraph AmplifyFE["Amplify Frontend"]
+        AmplifyApp["Amplify App<br/>Next.js SSR<br/>Auto-deploy from GitHub"]
     end
 
     subgraph APIGateway["API Gateway"]
@@ -53,13 +53,13 @@ flowchart TB
         Browser["Web Browser"]
     end
 
-    %% User Request Flow (via CloudFront → API Gateway)
-    Browser -->|HTTPS| CF
-    CF -->|"/static/*"| S3
-    CF -->|"/api/*"| APIGW
+    %% User Request Flow (via Amplify + Lambda Function URLs)
+    Browser -->|HTTPS| AmplifyApp
+    AmplifyApp -->|Static assets| S3
+    Browser -->|API calls| APIGW
     APIGW -->|"/api/v2/auth/*"| AuthLambda
     APIGW -->|"/api/v2/*"| Dashboard
-    CF -->|"/api/v2/stream*"| SSE
+    Browser -->|"/api/v2/stream*"| SSE
 
     %% Authentication Flow
     AuthLambda -->|OAuth redirect| Cognito

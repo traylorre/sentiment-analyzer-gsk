@@ -17,7 +17,7 @@ CTRL+7,8,9 keyboard shortcuts navigate to wrong sections compared to hamburger m
 ONE URL dashboard shows "Disconnected" because SSE stream endpoint routes to wrong Lambda.
 - Dashboard Lambda has BUFFERED mode
 - SSE requires RESPONSE_STREAM mode
-- Need CloudFront routing fix or graceful fallback
+- ~~Need CloudFront routing fix or graceful fallback~~ *(Superseded: CloudFront removed in Feature 1203)*
 
 ---
 

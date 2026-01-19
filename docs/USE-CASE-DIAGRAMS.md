@@ -223,7 +223,7 @@ sequenceDiagram
     autonumber
     actor User
     participant Browser
-    participant CF as CloudFront
+    participant Amplify as Amplify<br/>(Next.js SSR)
     participant API as API Gateway
     participant Auth as Auth Lambda
     participant DDB as DynamoDB
@@ -231,9 +231,9 @@ sequenceDiagram
     participant Cognito as Cognito
 
     User->>Browser: Visit dashboard URL
-    Browser->>CF: GET /
-    CF-->>Browser: SPA bundle (index.html)
-    Browser->>Browser: Initialize React app
+    Browser->>Amplify: GET /
+    Amplify-->>Browser: Next.js SSR page
+    Browser->>Browser: Hydrate React app
 
     Browser->>API: POST /api/v2/auth/anonymous
     API->>Auth: Invoke handler

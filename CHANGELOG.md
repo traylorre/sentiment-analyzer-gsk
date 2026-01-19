@@ -36,7 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **SendGrid** - Email notifications for magic links and alerts
 - **AWS X-Ray** - Day 1 mandatory distributed tracing (all 4 Lambdas)
 - **CloudWatch RUM** - Client-side user behavior analytics
-- **CloudFront + S3** - CDN for dashboard static assets
+- **CloudFront + S3** - CDN for dashboard static assets *(Note: CloudFront removed in Feature 1203; now using AWS Amplify)*
 
 ### Migration Notes
 
@@ -64,7 +64,7 @@ Target: <$100/month with 50% headroom (~$50/month estimated)
 | Cognito | ~$5 |
 | Lambda (4 functions) | ~$10 |
 | DynamoDB | ~$15 |
-| CloudFront | ~$10 |
+| CloudFront | ~$10 | *(Removed in Feature 1203)*
 | S3 | ~$2 |
 | CloudWatch RUM | ~$5 |
 | X-Ray | ~$3 |

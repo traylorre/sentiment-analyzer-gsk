@@ -164,7 +164,7 @@ function_url_auth_type = "NONE"  # Anyone can invoke Lambda
 **Mitigation**:
 - Change to `auth_type = "AWS_IAM"`
 - Use API Gateway with custom authorizer (API key validation)
-- Implement CloudFront signed URLs for static content
+- (Future option) Implement CloudFront signed URLs for static content
 
 **Priority**: **CRITICAL** - Implement with P0-1 (API Gateway migration)
 
@@ -317,6 +317,8 @@ T+60s:  All dashboard functionality unavailable
 
 ## Recommended Architecture
 
+> **Note**: This diagram shows a *proposed future architecture*. CloudFront is **not currently deployed** (removed in Feature 1203). The current architecture uses AWS Amplify for frontend hosting and Lambda Function URLs for API access. The recommendations below are options for future security enhancements.
+
 ```mermaid
 %%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
 graph TB
@@ -367,7 +369,7 @@ graph TB
 
 ### Phase 3: High Priority (Deploy within 2 weeks)
 
-- [ ] Add CloudFront CDN for DDoS protection
+- [ ] (Optional) Add CloudFront CDN for DDoS protection (not currently deployed)
 - [ ] Implement AWS WAF with IP-based rate limiting
 - [ ] **P2-1**: Add request quotas per API key
 - [ ] Create incident response runbook for attacks
