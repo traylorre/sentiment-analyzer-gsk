@@ -13,14 +13,23 @@ readonly SECRETS_IDENTITY_FILE="${SECRETS_CONFIG_DIR}/age-identity.txt"
 readonly SECRETS_METADATA_FILE="${SECRETS_CONFIG_DIR}/cache-metadata.json"
 readonly SECRETS_TTL_DAYS=30
 
-# Secret names to fetch from AWS Secrets Manager
-readonly SECRETS_TO_FETCH=(
-    "dev/sentiment-analyzer/dashboard-api-key"
-    "dev/sentiment-analyzer/tiingo"
-    "dev/sentiment-analyzer/finnhub"
-    "dev/sentiment-analyzer/sendgrid"
-    "dev/sentiment-analyzer/hcaptcha"
+# Secret names (without environment prefix) to fetch from AWS Secrets Manager
+# The environment prefix is added dynamically based on ENVIRONMENT variable
+readonly SECRET_NAMES=(
+    "dashboard-api-key"
+    "tiingo"
+    "finnhub"
+    "sendgrid"
+    "hcaptcha"
 )
+
+# Get full secret path for a given secret name
+# Usage: get_secret_path "tiingo"  # Returns "dev/sentiment-analyzer/tiingo" or "preprod/sentiment-analyzer/tiingo"
+get_secret_path() {
+    local secret_name="$1"
+    local env="${ENVIRONMENT:-dev}"
+    echo "${env}/sentiment-analyzer/${secret_name}"
+}
 
 # Initialize secrets config directory
 # Usage: init_secrets_dir
@@ -90,22 +99,25 @@ fetch_secret() {
 
 # Fetch all secrets and return as JSON object
 # Usage: fetch_all_secrets
-# Returns: JSON object with all secrets
+# Returns: JSON object with all secrets on stdout
+# Note: All informational output goes to stderr to keep stdout clean for JSON
 fetch_all_secrets() {
     local secrets_json="{}"
     local failed=0
 
-    print_header "Fetching Secrets"
+    # Redirect all print_* output to stderr so stdout contains only JSON
+    print_header "Fetching Secrets" >&2
+    print_status "INFO" "Environment: ${ENVIRONMENT:-dev}" >&2
 
-    for secret_name in "${SECRETS_TO_FETCH[@]}"; do
-        local short_name
-        short_name=$(basename "${secret_name}")
+    for short_name in "${SECRET_NAMES[@]}"; do
+        local secret_path
+        secret_path=$(get_secret_path "${short_name}")
 
-        print_status "INFO" "Fetching: ${secret_name}..."
+        print_status "INFO" "Fetching: ${secret_path}..." >&2
 
         local secret_value
-        if ! secret_value=$(fetch_secret "${secret_name}"); then
-            print_status "FAIL" "Failed to fetch: ${short_name}"
+        if ! secret_value=$(fetch_secret "${secret_path}"); then
+            print_status "FAIL" "Failed to fetch: ${short_name}" >&2
             ((failed++))
             continue
         fi
@@ -119,11 +131,11 @@ fetch_all_secrets() {
             secrets_json=$(echo "${secrets_json}" | jq --arg val "${secret_value}" ". + {\"${short_name}\": \$val}")
         fi
 
-        print_status "PASS" "Fetched: ${short_name}"
+        print_status "PASS" "Fetched: ${short_name}" >&2
     done
 
     if [[ "${failed}" -gt 0 ]]; then
-        print_status "WARN" "Failed to fetch ${failed} secret(s)"
+        print_status "WARN" "Failed to fetch ${failed} secret(s)" >&2
         return 1
     fi
 
@@ -152,9 +164,10 @@ encrypt_secrets_cache() {
     chmod 600 "${SECRETS_CACHE_FILE}"
 
     # Write metadata
-    local now expires_at
+    local now expires_at env
     now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
     expires_at=$(date -u -d "+${SECRETS_TTL_DAYS} days" +"%Y-%m-%dT%H:%M:%SZ")
+    env="${ENVIRONMENT:-dev}"
 
     cat > "${SECRETS_METADATA_FILE}" <<EOF
 {
@@ -162,7 +175,7 @@ encrypt_secrets_cache() {
   "ttl_days": ${SECRETS_TTL_DAYS},
   "expires_at": "${expires_at}",
   "secrets_version": "1.0",
-  "environment": "dev"
+  "environment": "${env}"
 }
 EOF
 
@@ -291,8 +304,8 @@ generate_env_local() {
     # Extract values with key normalization
     local dashboard_api_key tiingo_api_key finnhub_api_key sendgrid_api_key hcaptcha_secret hcaptcha_site
 
-    # Dashboard API key (simple string)
-    dashboard_api_key=$(echo "${secrets_json}" | jq -r '."dashboard-api-key" // empty')
+    # Dashboard API key (may be JSON object or string)
+    dashboard_api_key=$(echo "${secrets_json}" | jq -r '."dashboard-api-key" | if type == "object" then .api_key else . end // empty')
 
     # Tiingo (may be JSON object or string)
     tiingo_api_key=$(echo "${secrets_json}" | jq -r '.tiingo | if type == "object" then .api_key else . end // empty')
