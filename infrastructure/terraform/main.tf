@@ -1305,3 +1305,17 @@ output "amplify_console_url" {
   description = "AWS Console URL for Amplify app management"
   value       = var.enable_amplify ? module.amplify_frontend[0].console_url : ""
 }
+
+# ===================================================================
+# Feature 1202: Cognito Callback URL Validation Outputs
+# ===================================================================
+
+output "cognito_callback_urls" {
+  description = "Cognito OAuth callback URLs (Terraform-configured values)"
+  value       = module.cognito.callback_urls
+}
+
+output "cognito_logout_urls" {
+  description = "Cognito OAuth logout URLs (Terraform-configured values)"
+  value       = module.cognito.logout_urls
+}
