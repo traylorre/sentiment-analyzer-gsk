@@ -54,7 +54,7 @@
   - Production: Restrict to specific domains
 - [ ] Dashboard handler CORS in `src/lambdas/dashboard/handler.py:109`
   - Current: `allow_origins=["*"]`
-  - Production: Restrict to CloudFront domain or specific origins
+  - Production: Restrict to Amplify domain or specific origins
 
 #### API Keys & Secrets
 - [ ] NewsAPI key is valid and has production quota

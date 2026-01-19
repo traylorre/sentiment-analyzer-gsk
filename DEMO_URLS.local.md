@@ -87,7 +87,7 @@ curl -s "$API/api/v2/configurations/{CONFIG_ID}/sentiment" \
 
 - **Serverless**: AWS Lambda (Python 3.13)
 - **Database**: DynamoDB single-table design
-- **CDN**: CloudFront (d2z9uvoj5xlbd2.cloudfront.net)
+- **Frontend**: AWS Amplify (Next.js SSR)
 - **Auth**: Anonymous, Magic Link, OAuth (Google/GitHub)
 - **External APIs**: Tiingo, Finnhub
 - **CI/CD**: GitHub Actions with GPG-signed commits

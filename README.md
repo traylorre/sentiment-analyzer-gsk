@@ -148,7 +148,7 @@ Ingests financial news from external sources (Tiingo, Finnhub) and returns senti
 
 ### Architecture
 
-- **Edge/CDN**: CloudFront with multi-origin routing (S3, API Gateway, SSE Lambda)
+- **Frontend**: AWS Amplify (Next.js SSR) with direct Lambda Function URL access
 - **Compute**: AWS Lambda (Python 3.13) - 5 functions (Ingestion, Analysis, Dashboard, SSE, Metrics)
 - **Real-time**: SSE Lambda with Lambda Web Adapter for RESPONSE_STREAM mode
 - **Orchestration**: EventBridge, SNS, SQS
@@ -173,9 +173,9 @@ Ingests financial news from external sources (Tiingo, Finnhub) and returns senti
 
 ✅ **Promotion pipeline** - Automated artifact promotion with validation gates
 
-✅ **Real-time streaming** - SSE Lambda with CloudFront multi-origin routing
+✅ **Real-time streaming** - SSE Lambda with Lambda Function URL (RESPONSE_STREAM mode)
 
-✅ **CDN-delivered UI** - Interview Dashboard served via CloudFront edge
+✅ **Amplify-hosted UI** - Interview Dashboard served via AWS Amplify (Next.js SSR)
 
 ---
 
@@ -205,9 +205,8 @@ graph TB
             Secrets[Secrets Manager<br/>API Keys + JWT Secret]
         end
 
-        subgraph EdgeLayer["Edge Layer"]
-            CF[CloudFront<br/>Multi-Origin CDN]
-            Amplify[Amplify<br/>Next.js SSR<br/>Optional]
+        subgraph EdgeLayer["Frontend Layer"]
+            Amplify[Amplify<br/>Next.js SSR]
         end
 
         subgraph IngestionLayer["Ingestion Layer"]
@@ -492,9 +491,8 @@ Post-Phase 0 security hardening with httpOnly cookies:
 ```mermaid
 sequenceDiagram
     participant Browser
-    participant Frontend as Next.js Frontend
-    participant CF as CloudFront
-    participant Dashboard as Dashboard Lambda
+    participant Frontend as Next.js Frontend<br/>(Amplify)
+    participant Dashboard as Dashboard Lambda<br/>(Function URL)
     participant Cognito as Cognito User Pool
     participant Users as sentiment-users
 
@@ -1012,7 +1010,6 @@ See [SECURITY.md](./SECURITY.md) for full security policy.
 | **Security Flow** | Trust zones and data sanitization | [security-flow.mmd](./docs/diagrams/security-flow.mmd) |
 | **Auth Use Cases** | Authentication flows (UC3) | [USE-CASE-DIAGRAMS.md](./docs/USE-CASE-DIAGRAMS.md#uc3-user-authentication-flow-v30) |
 | **SSE Streaming** | Real-time event streaming architecture | [sse-lambda-streaming.mmd](./docs/diagrams/sse-lambda-streaming.mmd) |
-| **CloudFront Routing** | Multi-origin CDN configuration | [cloudfront-multi-origin.mmd](./docs/diagrams/cloudfront-multi-origin.mmd) |
 
 ### Operations Documentation
 

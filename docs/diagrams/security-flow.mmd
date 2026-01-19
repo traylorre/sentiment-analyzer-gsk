@@ -1,6 +1,7 @@
 graph TB
-    subgraph Zone0[" ZONE 0: EDGE - CloudFront Security Boundary "]
-        CFront[CloudFront Distribution<br/>✓ DDoS protection<br/>✓ TLS 1.2+ only<br/>✓ Origin access control<br/>✓ Geographic restrictions<br/>✓ WAF integration ready]
+    subgraph Zone0[" ZONE 0: EDGE - Lambda Function URL + Amplify "]
+        Amplify[Amplify Frontend<br/>✓ Managed TLS<br/>✓ Next.js SSR<br/>✓ Global CDN]
+        LambdaURL[Lambda Function URL<br/>✓ IAM auth support<br/>✓ TLS 1.2+ only<br/>✓ CORS configured<br/>✓ 15-min timeout]
         BrowserReq[Browser Request<br/>⚠ XSS payloads<br/>⚠ CSRF attempts<br/>⚠ Token theft]
     end
 
@@ -44,11 +45,12 @@ graph TB
         S3Static[S3 Static Assets<br/>✓ OAC access only<br/>✓ No public access<br/>✓ Versioning enabled]
     end
 
-    %% CloudFront Edge Flow
-    BrowserReq -->|HTTPS only| CFront
-    CFront -->|/api/v2/stream*| SSEReq
-    CFront -->|/api/*| AdminReq
-    CFront -->|/static/*| S3Static
+    %% Edge Flow (Lambda Function URL + Amplify)
+    BrowserReq -->|HTTPS| Amplify
+    Amplify -->|Static assets| S3Static
+    BrowserReq -->|API calls| LambdaURL
+    LambdaURL -->|/api/v2/stream*| SSEReq
+    LambdaURL -->|/api/*| AdminReq
 
     %% Data Flow
     TwitterAPI -->|HTTP Response<br/>TAINTED| IngestT

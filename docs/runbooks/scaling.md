@@ -10,7 +10,7 @@ The system uses AWS serverless architecture:
 |-----------|---------|--------------|------------------|
 | API | Lambda | Auto (concurrent) | 1000 concurrent |
 | Database | DynamoDB | On-demand | Auto |
-| CDN | CloudFront | Auto | Global |
+| Frontend | Amplify | Auto | Global |
 | Ingestion | Lambda + EventBridge | Scheduled | Every 15 min |
 
 ## Monitoring Dashboards
@@ -198,7 +198,7 @@ k6 run --env API_URL=$PREPROD_API_URL --env STAGE=stress tests/load/api-load-tes
 | Increase Lambda memory | +$$ | CPU-bound operations |
 | Provisioned concurrency | +$$$ | Cold start sensitive |
 | DynamoDB provisioned | -$ at scale | Predictable traffic |
-| CloudFront caching | -$ | Static content |
+| Amplify caching | -$ | Static content |
 | Reserved capacity | -30% | Long-term commitment |
 
 ## Contacts

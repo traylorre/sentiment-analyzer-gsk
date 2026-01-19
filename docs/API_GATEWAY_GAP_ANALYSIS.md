@@ -1,5 +1,7 @@
 # API Gateway Gap Analysis: Why We Actually Need It
 
+> **Note**: This document analyzes protection options including CloudFront. CloudFront is **not currently deployed** (removed in Feature 1203). The current architecture uses AWS Amplify for frontend hosting and Lambda Function URLs for API access. CloudFront references below are *proposed future enhancement options*.
+
 **Question**: Do we not already have IP-based blocking? Where is the gap?
 
 **Answer**: You have **PARTIAL** protection (SSE connections only), but **ZERO** protection against the #1 budget threat.
@@ -178,7 +180,7 @@ But wait! Per-IP rate limiting (100 req/5min):
 - Botnet becomes EXPENSIVE ($50-100/month for 30 residential IPs)
 - Makes attack economically UNVIABLE
 
-With WAF + CloudFront:
+With WAF + CloudFront (proposed option):
 - DDoS protection at edge (Shield Standard: FREE)
 - Geographic blocking (block countries you don't serve)
 - IP reputation lists (block known bad actors)
@@ -238,7 +240,7 @@ With WAF + CloudFront:
 - S3: ~$1
 - **API Gateway**: $3.50/million requests (~$0.10 for your traffic)
 - **WAF**: $5/month (1 web ACL) + $1/rule ($1 for rate limiting)
-- CloudFront: $1/month (caching + Shield)
+- CloudFront (optional): $1/month (caching + Shield)
 - **Total**: ~$19/month
 
 **Risk Costs** (10% probability with mitigations):
@@ -435,7 +437,7 @@ boto3==1.41.0        # AWS SDK
    - Your dashboard is **public** (external users)
 
 4. **Future-Proof**
-   - Enables CloudFront (DDoS protection)
+   - Enables CloudFront option (DDoS protection)
    - Enables WAF (advanced filtering)
    - Enables custom authorizers (JWT rotation)
    - Enables API versioning
