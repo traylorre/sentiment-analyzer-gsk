@@ -8,7 +8,7 @@ For On-Call Engineers:
     When rate limit is exceeded, 429 Too Many Requests is returned.
 
 Security Notes:
-    - IP address is extracted from X-Forwarded-For header (API Gateway/CloudFront)
+    - IP address is extracted from X-Forwarded-For header (API Gateway/ALB)
     - Rate limits are per-IP, per-action
     - Anonymous users have stricter limits than authenticated users
 """
@@ -94,7 +94,7 @@ def get_client_ip(event: dict[str, Any]) -> str:
     if "sourceIp" in request_context:
         return request_context["sourceIp"]
 
-    # X-Forwarded-For header (from CloudFront/ALB)
+    # X-Forwarded-For header (from ALB/API Gateway)
     headers = event.get("headers", {})
     forwarded_for = headers.get("x-forwarded-for") or headers.get("X-Forwarded-For")
     if forwarded_for:
