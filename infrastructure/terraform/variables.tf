@@ -63,9 +63,9 @@ variable "cors_allowed_origins" {
   description = <<-EOT
     List of allowed CORS origins for the dashboard Lambda.
     SECURITY: Wildcards are NOT allowed - specify exact origins.
-    For production: Include your CloudFront domain (output as cloudfront_domain_name after first deploy).
+    For production: Include your Amplify domain (output as amplify_production_url after first deploy).
     For preprod: localhost origins are auto-added if this is empty.
-    Example: ["https://d1234567890.cloudfront.net", "https://mydomain.com"]
+    Example: ["https://main.d1234567890.amplifyapp.com", "https://mydomain.com"]
   EOT
   type        = list(string)
   default     = []
@@ -137,21 +137,7 @@ variable "github_oauth_client_secret" {
   sensitive   = true
 }
 
-# ===================================================================
-# Feature 006: CloudFront Variables
-# ===================================================================
-
-variable "cloudfront_custom_domain" {
-  description = "Custom domain for CloudFront distribution (optional)"
-  type        = string
-  default     = ""
-}
-
-variable "cloudfront_acm_certificate_arn" {
-  description = "ACM certificate ARN for custom domain (required if custom_domain is set)"
-  type        = string
-  default     = ""
-}
+# Feature 1203: CloudFront variables removed - Amplify serves frontend directly
 
 # ===================================================================
 # Feature 006: Notification Variables

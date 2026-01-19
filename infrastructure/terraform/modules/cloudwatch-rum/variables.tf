@@ -4,7 +4,7 @@ variable "environment" {
 }
 
 variable "domain" {
-  description = "Domain to monitor (e.g., dashboard.example.com or *.cloudfront.net)"
+  description = "Domain to monitor (e.g., dashboard.example.com or *.amplifyapp.com)"
   type        = string
 }
 
