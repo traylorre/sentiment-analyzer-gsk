@@ -2,28 +2,13 @@
 
 This document provides canonical source citations for IAM policy patterns that trigger validator warnings but are justified for this project.
 
-## IAM-002: CloudFront Cache Policy Operations
+## IAM-002: CloudFront Cache Policy Operations - SUPERSEDED
 
-**Finding**: `Resource: "*"` in CloudFront cache policy statement
+**Status**: REMOVED (Feature 1208, 2026-01-18)
 
-**Justification**: CloudFront List operations require `Resource: "*"` per AWS Service Authorization Reference.
+~~**Finding**: `Resource: "*"` in CloudFront cache policy statement~~
 
-| Action | Resource Types | Requirement |
-|--------|----------------|-------------|
-| `cloudfront:GetCachePolicy` | `cache-policy*` | Resource-level supported |
-| `cloudfront:GetOriginRequestPolicy` | `origin-request-policy*` | Resource-level supported |
-| `cloudfront:ListCachePolicies` | **None** | **Requires `*`** |
-| `cloudfront:ListOriginRequestPolicies` | **None** | **Requires `*`** |
-
-**Canonical Source**: https://docs.aws.amazon.com/service-authorization/latest/reference/list_amazoncloudfront.html
-
-**Verification**: The "Resource types" column for List operations is empty, indicating resource-level permissions are not supported. The wildcard is an AWS API limitation, not a policy design flaw.
-
-**Affected Files**:
-- `infrastructure/iam-policies/preprod-deployer-policy.json` (CloudFrontCachePolicies statement)
-- `infrastructure/iam-policies/prod-deployer-policy.json` (if applicable)
-
-**Note**: The IAMValidator in the template methodology does not currently support allowlist suppressions for IAM-002. This finding is expected and documented here as the canonical justification.
+**Note**: CloudFront module was removed in Feature 1203. This justification is retained for historical reference only. The CloudFront IAM permissions have been removed from all policy files.
 
 ---
 

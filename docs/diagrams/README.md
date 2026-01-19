@@ -294,33 +294,23 @@ classDef externalNode fill:#e5e7eb,stroke:#6b7280,stroke-width:2px,color:#1f2937
 **Key Insights:**
 - Lambda Web Adapter enables HTTP/1.1 streaming (not possible with Mangum)
 - RESPONSE_STREAM invoke mode required for SSE
-- Heartbeats prevent CloudFront's 60s origin timeout from disconnecting
+- Heartbeats keep SSE connections alive (Lambda timeout handling)
 - Last-Event-ID enables client reconnection resumption
 
 ---
 
-### 5. CloudFront Multi-Origin Routing (Dec 2025)
-**File:** `cloudfront-multi-origin.mmd`
-**Audience:** DevOps, architects, frontend developers
-**Purpose:** Understand how CloudFront routes requests to different backends
-**Focus:** Cache behaviors, origin configuration, path-based routing
+### 5. CloudFront Multi-Origin Routing - REMOVED
 
-**What It Shows:**
-- ✅ CloudFront edge entry point
-- ✅ Three cache behaviors (priority order):
-  1. `/api/v2/stream*` → SSE Lambda (TTL=0, no compression)
-  2. `/api/*` → API Gateway (TTL=0, forward Authorization)
-  3. `/*` → S3 Dashboard (TTL=1 day, compression enabled)
-- ✅ Origin configurations (timeouts, keepalive)
-- ✅ Lambda Web Adapter integration
-- ✅ S3 Origin Access Control (OAC)
-- ✅ Data flow to DynamoDB
+**Status:** SUPERSEDED by Feature 1208 (2026-01-18)
 
-**Key Insights:**
-- SSE requires separate origin due to RESPONSE_STREAM requirement
-- Path patterns evaluated in precedence order (most specific first)
-- Static assets cached at edge, APIs never cached
-- OAC replaces deprecated OAI for S3 access
+This diagram (`cloudfront-multi-origin.mmd`) has been removed. CloudFront was eliminated from the architecture in favor of AWS Amplify serving the frontend directly via Lambda Function URLs.
+
+**Current Architecture:**
+- Browser → Amplify (frontend hosting)
+- Browser → API Gateway (REST APIs)
+- Browser → SSE Lambda Function URL (streaming)
+
+See `high-level-overview.mmd` for the updated architecture.
 
 ---
 
