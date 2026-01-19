@@ -34,10 +34,11 @@ monthly_budget_limit = 100
 model_layer_arns = []
 
 # CORS: Production requires explicit origins - NO WILDCARDS
-# IMPORTANT: Set this to your CloudFront domain before deploying to production
-# The CloudFront domain is output after first deployment as cloudfront_domain_name
-# Example: ["https://d1234567890.cloudfront.net"]
-# You can also add custom domains: ["https://dashboard.example.com", "https://d1234567890.cloudfront.net"]
+# IMPORTANT: Set this to your Amplify domain before deploying to production
+# The Amplify domain is output after first deployment as amplify_production_url
+# Example: ["https://main.d1234567890.amplifyapp.com"]
+# You can also add custom domains: ["https://dashboard.example.com"]
+# Feature 1204: CloudFront removed - Amplify serves frontend directly
 cors_allowed_origins = []
 
 # Feature 1054: JWT Secret for auth middleware

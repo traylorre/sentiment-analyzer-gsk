@@ -19,10 +19,10 @@ tags = {
 # in the Terraform modules with environment-appropriate defaults.
 # DynamoDB uses on-demand billing (no reserved capacity).
 
-# CORS: Preprod allows the CloudFront dashboard domain, Amplify, GitHub Pages, and localhost for testing.
+# CORS: Preprod allows Amplify frontend, GitHub Pages, and localhost for testing.
 # No wildcard allowed per security policy.
+# Feature 1204: CloudFront URL removed - Amplify serves frontend directly
 cors_allowed_origins = [
-  "https://d2z9uvoj5xlbd2.cloudfront.net",      # CloudFront dashboard (legacy)
   "https://main.d29tlmksqcx494.amplifyapp.com", # AWS Amplify frontend (Feature 1105)
   "https://traylorre.github.io",                # GitHub Pages interview demo
   "http://localhost:3000",                      # Local development
