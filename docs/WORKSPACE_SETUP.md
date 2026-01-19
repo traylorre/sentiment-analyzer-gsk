@@ -12,8 +12,10 @@ Complete guide for setting up a development environment on a new machine.
   - [1. WSL2 Setup (Windows)](#1-wsl2-setup-windows)
   - [2. Python Setup (pyenv)](#2-python-setup-pyenv)
   - [3. AWS Configuration](#3-aws-configuration)
-  - [4. Repository Setup](#4-repository-setup)
-  - [5. Bootstrap Workspace](#5-bootstrap-workspace)
+  - [4. GitHub CLI Setup](#4-github-cli-setup)
+  - [5. Repository Setup](#5-repository-setup)
+  - [6. GPG Signing Setup](#6-gpg-signing-setup-required)
+  - [7. Bootstrap Workspace](#7-bootstrap-workspace)
 - [Verification](#verification)
 - [Troubleshooting](#troubleshooting)
 - [Offline Development](#offline-development)
@@ -22,11 +24,13 @@ Complete guide for setting up a development environment on a new machine.
 
 | Tool | Minimum Version | Purpose |
 |------|-----------------|---------|
-| Python | 3.12.0 | Primary language |
+| Python | 3.13.0 | Primary language (Lambda runtime) |
 | AWS CLI | 2.0.0 | AWS Secrets Manager access |
 | Git | 2.30.0 | Version control |
 | jq | 1.6 | JSON processing |
 | age | 1.0.0 | Secrets encryption |
+| unzip | any | AWS CLI installation |
+| GitHub CLI (gh) | 2.0.0 | Git authentication (recommended) |
 
 **Optional** (recommended):
 - Terraform 1.5+ (infrastructure)
@@ -74,7 +78,7 @@ Update Ubuntu packages:
 sudo apt update && sudo apt upgrade -y
 
 # Install essential build tools
-sudo apt install -y build-essential curl wget git jq age
+sudo apt install -y build-essential curl wget git jq age unzip
 ```
 
 ### 2. Python Setup (pyenv)
@@ -103,10 +107,9 @@ source ~/.bashrc
 
 # Install Python 3.13
 pyenv install 3.13.0
-pyenv global 3.13.0
 
-# Verify
-python --version  # Should show Python 3.13.0
+# NOTE: Don't use pyenv global - set version per-project to preserve system Python
+# System Python (3.10) is needed for apt tools; pyenv local only affects this repo
 ```
 
 ### 3. AWS Configuration
@@ -139,18 +142,81 @@ aws configure sso
 aws sts get-caller-identity
 ```
 
-### 4. Repository Setup
+### 4. GitHub CLI Setup
+
+Install GitHub CLI for authentication (avoids SSH key management):
+
+```bash
+# Install gh CLI
+(type -p wget >/dev/null || (sudo apt update && sudo apt-get install wget -y)) \
+  && sudo mkdir -p -m 755 /etc/apt/keyrings \
+  && out=$(mktemp) && wget -nv -O$out https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+  && cat $out | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
+  && sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+  && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+  && sudo apt update \
+  && sudo apt install gh -y
+
+# Authenticate with GitHub (opens browser)
+gh auth login
+# Select: GitHub.com → HTTPS → Yes (authenticate Git) → Login with web browser
+
+# Configure git to use gh for credentials
+gh auth setup-git
+```
+
+### 5. Repository Setup
 
 ```bash
 # Clone the repository
 git clone https://github.com/traylorre/sentiment-analyzer-gsk.git
 cd sentiment-analyzer-gsk
 
-# (Optional) GPG signing setup
-# See docs/GPG_SIGNING_SETUP.md for details
+# Set Python version for this project (uses pyenv)
+pyenv local 3.13.0
+python --version  # Should show Python 3.13.0
+
+# Configure git identity (use GitHub noreply email for privacy)
+# Find your ID at: GitHub → Settings → Emails
+git config user.name "Your Name"
+git config user.email "ID+username@users.noreply.github.com"
 ```
 
-### 5. Bootstrap Workspace
+### 6. GPG Signing Setup (Required)
+
+All commits must be GPG-signed per project security policy:
+
+```bash
+# Generate GPG key (no passphrase for convenience)
+cat <<'EOF' | gpg --batch --generate-key
+%no-protection
+Key-Type: RSA
+Key-Length: 4096
+Subkey-Type: RSA
+Subkey-Length: 4096
+Name-Real: Your Name
+Name-Email: ID+username@users.noreply.github.com
+Expire-Date: 0
+%commit
+EOF
+
+# Get key ID
+gpg --list-secret-keys --keyid-format=long
+# Look for line like: sec   rsa4096/XXXXXXXXXXXXXXXX
+# The XXXXXXXXXXXXXXXX is your key ID
+
+# Configure git to use key
+git config --global user.signingkey XXXXXXXXXXXXXXXX
+git config --global commit.gpgsign true
+
+# Export public key for GitHub
+gpg --armor --export XXXXXXXXXXXXXXXX | clip.exe  # Windows/WSL
+# Or: gpg --armor --export XXXXXXXXXXXXXXXX | xclip -selection clipboard  # Linux
+
+# Add to GitHub: Settings → SSH and GPG keys → New GPG key → Paste
+```
+
+### 7. Bootstrap Workspace
 
 The bootstrap script automates the remaining setup:
 
@@ -265,7 +331,10 @@ rm -rf age age.tar.gz
 ```bash
 # Install latest with pyenv
 pyenv install 3.13.0
-pyenv global 3.13.0
+
+# Set for this project only (preserves system Python for apt tools)
+cd ~/projects/sentiment-analyzer-gsk
+pyenv local 3.13.0
 hash -r  # Refresh shell hash
 
 # Verify

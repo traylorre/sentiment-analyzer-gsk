@@ -839,98 +839,7 @@ jobs:
             -lock-timeout=5m
           echo "✅ State refresh complete"
 
-      - name: Fix CloudFront Invalid Timeout (AWS CLI)
-        run: |
-          echo "🔍 Checking CloudFront distribution for invalid timeout values..."
-
-          # Get the CloudFront distribution ID from Terraform outputs
-          DIST_ID=$(terraform output -raw cloudfront_distribution_id 2>/dev/null || echo "")
-
-          if [ -z "$DIST_ID" ]; then
-            echo "⚠️ No CloudFront distribution found - skipping timeout check"
-            exit 0
-          fi
-
-          echo "Distribution ID: $DIST_ID"
-
-          # Get current distribution config
-          aws cloudfront get-distribution-config --id "$DIST_ID" > /tmp/cf-config.json
-          ETAG=$(jq -r '.ETag' /tmp/cf-config.json)
-
-          # Check if any origin has invalid timeout (>180)
-          INVALID_TIMEOUT=$(jq -r '.DistributionConfig.Origins.Items[]? |
-            select(.CustomOriginConfig.OriginReadTimeout > 180) |
-            "\(.Id): \(.CustomOriginConfig.OriginReadTimeout)s"' /tmp/cf-config.json)
-
-          if [ -z "$INVALID_TIMEOUT" ]; then
-            echo "✅ All origin timeouts are valid (<=180s)"
-            exit 0
-          fi
-
-          echo "⚠️ Found invalid timeout values:"
-          echo "$INVALID_TIMEOUT"
-          echo ""
-          echo "🔧 Fixing timeout values via AWS CLI..."
-
-          # Update config: set all origin_read_timeout > 180 to 180
-          jq '.DistributionConfig.Origins.Items = [.DistributionConfig.Origins.Items[] |
-            if .CustomOriginConfig.OriginReadTimeout > 180
-            then .CustomOriginConfig.OriginReadTimeout = 180
-            else . end]' /tmp/cf-config.json > /tmp/cf-config-fixed.json
-
-          # Also fix keepalive timeout if > 60
-          jq '.DistributionConfig.Origins.Items = [.DistributionConfig.Origins.Items[] |
-            if .CustomOriginConfig.OriginKeepaliveTimeout > 60
-            then .CustomOriginConfig.OriginKeepaliveTimeout = 60
-            else . end]' /tmp/cf-config-fixed.json > /tmp/cf-config-final.json
-
-          # Extract just the DistributionConfig for the update
-          jq '.DistributionConfig' /tmp/cf-config-final.json > /tmp/cf-update.json
-
-          # Update the distribution
-          aws cloudfront update-distribution \
-            --id "$DIST_ID" \
-            --if-match "$ETAG" \
-            --distribution-config file:///tmp/cf-update.json
-
-          echo "✅ CloudFront distribution updated with valid timeout values"
-          echo ""
-          echo "⏳ Waiting 30s for CloudFront to propagate changes..."
-          sleep 30
-
-      - name: Reset CloudFront Terraform State
-        run: |
-          echo "🔄 Resetting CloudFront resource in Terraform state..."
-          echo "This fixes state drift that causes InvalidOriginReadTimeout errors"
-          echo ""
-
-          DIST_ID=$(terraform output -raw cloudfront_distribution_id 2>/dev/null || echo "")
-
-          if [ -z "$DIST_ID" ]; then
-            echo "⚠️ No CloudFront distribution found - skipping state reset"
-            exit 0
-          fi
-
-          echo "Distribution ID: $DIST_ID"
-          echo ""
-
-          # Remove CloudFront distribution from state
-          echo "📤 Removing CloudFront distribution from Terraform state..."
-          terraform state rm module.cloudfront.aws_cloudfront_distribution.dashboard || {
-            echo "⚠️ Resource not in state (may have already been removed)"
-          }
-
-          # Re-import the CloudFront distribution
-          echo "📥 Re-importing CloudFront distribution into Terraform state..."
-          terraform import \
-            -var-file=preprod.tfvars \
-            -var="model_version=${{ needs.build.outputs.artifact-sha }}" \
-            -var="lambda_package_version=${{ needs.build.outputs.artifact-sha }}" \
-            -var="jwt_secret=${{ secrets.PREPROD_JWT_SECRET }}" \
-            module.cloudfront.aws_cloudfront_distribution.dashboard "$DIST_ID"
-
-          echo ""
-          echo "✅ CloudFront state reset complete - state now matches AWS"
+      # Feature 1205: CloudFront steps removed - Amplify serves frontend directly
 
       - name: Terraform Plan (Preprod)
         id: plan
@@ -1036,19 +945,17 @@ jobs:
           SNS_TOPIC_ARN=$(terraform output -raw sns_topic_arn 2>/dev/null || echo "")
           SSE_LAMBDA_URL=$(terraform output -raw sse_lambda_function_url 2>/dev/null || echo "")
           DASHBOARD_S3_BUCKET=$(terraform output -raw dashboard_s3_bucket 2>/dev/null || echo "")
-          CLOUDFRONT_DISTRIBUTION_ID=$(terraform output -raw cloudfront_distribution_id 2>/dev/null || echo "")
+          # Feature 1205: CloudFront removed - Amplify serves frontend directly
 
           echo "dashboard_url=${DASHBOARD_URL}" >> $GITHUB_OUTPUT
           echo "api_url=${API_URL}" >> $GITHUB_OUTPUT
           echo "sns_topic_arn=${SNS_TOPIC_ARN}" >> $GITHUB_OUTPUT
           echo "sse_lambda_url=${SSE_LAMBDA_URL}" >> $GITHUB_OUTPUT
           echo "dashboard_s3_bucket=${DASHBOARD_S3_BUCKET}" >> $GITHUB_OUTPUT
-          echo "cloudfront_distribution_id=${CLOUDFRONT_DISTRIBUTION_ID}" >> $GITHUB_OUTPUT
 
       - name: Deploy Dashboard to S3 (Preprod)
         run: |
           BUCKET="${{ steps.outputs.outputs.dashboard_s3_bucket }}"
-          DISTRIBUTION_ID="${{ steps.outputs.outputs.cloudfront_distribution_id }}"
 
           if [ -z "$BUCKET" ]; then
             echo "⚠️ Dashboard S3 bucket not found - skipping dashboard deploy"
@@ -1076,23 +983,13 @@ jobs:
             --content-type "text/html"
 
           echo "✅ Dashboard deployed to S3"
-
-          # Invalidate CloudFront cache for immediate update
-          if [ -n "$DISTRIBUTION_ID" ]; then
-            echo "🔄 Invalidating CloudFront cache..."
-            aws cloudfront create-invalidation \
-              --distribution-id "$DISTRIBUTION_ID" \
-              --paths "/*" \
-              --query 'Invalidation.Id' \
-              --output text
-            echo "✅ CloudFront invalidation created"
-          fi
+          # Feature 1205: CloudFront cache invalidation removed - Amplify serves frontend
 
       - name: Smoke Test (Post-Deployment)
         id: smoke_test
         timeout-minutes: 2
         run: |
-          # Use API Gateway URL for health check (CloudFront only routes /api/* to API Gateway)
+          # Feature 1205: Using API Gateway URL for health check (Amplify serves frontend)
           API_URL="${{ steps.outputs.outputs.api_url }}"
 
           if [ -z "$API_URL" ]; then
@@ -1772,83 +1669,7 @@ jobs:
             -lock-timeout=5m
           echo "✅ State refresh complete"
 
-      - name: Fix CloudFront Invalid Timeout (AWS CLI)
-        run: |
-          echo "🔍 Checking CloudFront distribution for invalid timeout values..."
-
-          DIST_ID=$(terraform output -raw cloudfront_distribution_id 2>/dev/null || echo "")
-
-          if [ -z "$DIST_ID" ]; then
-            echo "⚠️ No CloudFront distribution found - skipping timeout check"
-            exit 0
-          fi
-
-          echo "Distribution ID: $DIST_ID"
-
-          aws cloudfront get-distribution-config --id "$DIST_ID" > /tmp/cf-config.json
-          ETAG=$(jq -r '.ETag' /tmp/cf-config.json)
-
-          INVALID_TIMEOUT=$(jq -r '.DistributionConfig.Origins.Items[]? |
-            select(.CustomOriginConfig.OriginReadTimeout > 180) |
-            "\(.Id): \(.CustomOriginConfig.OriginReadTimeout)s"' /tmp/cf-config.json)
-
-          if [ -z "$INVALID_TIMEOUT" ]; then
-            echo "✅ All origin timeouts are valid (<=180s)"
-            exit 0
-          fi
-
-          echo "⚠️ Found invalid timeout values:"
-          echo "$INVALID_TIMEOUT"
-          echo ""
-          echo "🔧 Fixing timeout values via AWS CLI..."
-
-          jq '.DistributionConfig.Origins.Items = [.DistributionConfig.Origins.Items[] |
-            if .CustomOriginConfig.OriginReadTimeout > 180
-            then .CustomOriginConfig.OriginReadTimeout = 180
-            else . end]' /tmp/cf-config.json > /tmp/cf-config-fixed.json
-
-          jq '.DistributionConfig.Origins.Items = [.DistributionConfig.Origins.Items[] |
-            if .CustomOriginConfig.OriginKeepaliveTimeout > 60
-            then .CustomOriginConfig.OriginKeepaliveTimeout = 60
-            else . end]' /tmp/cf-config-fixed.json > /tmp/cf-config-final.json
-
-          jq '.DistributionConfig' /tmp/cf-config-final.json > /tmp/cf-update.json
-
-          aws cloudfront update-distribution \
-            --id "$DIST_ID" \
-            --if-match "$ETAG" \
-            --distribution-config file:///tmp/cf-update.json
-
-          echo "✅ CloudFront distribution updated with valid timeout values"
-          echo ""
-          echo "⏳ Waiting 30s for CloudFront to propagate changes..."
-          sleep 30
-
-      - name: Reset CloudFront Terraform State
-        run: |
-          echo "🔄 Resetting CloudFront resource in Terraform state..."
-
-          DIST_ID=$(terraform output -raw cloudfront_distribution_id 2>/dev/null || echo "")
-
-          if [ -z "$DIST_ID" ]; then
-            echo "⚠️ No CloudFront distribution found - skipping state reset"
-            exit 0
-          fi
-
-          echo "Distribution ID: $DIST_ID"
-
-          terraform state rm module.cloudfront.aws_cloudfront_distribution.dashboard || {
-            echo "⚠️ Resource not in state"
-          }
-
-          terraform import \
-            -var-file=prod.tfvars \
-            -var="model_version=${{ needs.build.outputs.artifact-sha }}" \
-            -var="lambda_package_version=${{ needs.build.outputs.artifact-sha }}" \
-            -var="jwt_secret=${{ secrets.PROD_JWT_SECRET }}" \
-            module.cloudfront.aws_cloudfront_distribution.dashboard "$DIST_ID"
-
-          echo "✅ CloudFront state reset complete"
+      # Feature 1205: CloudFront steps removed - Amplify serves frontend directly
 
       - name: Terraform Plan (Production)
         id: plan
@@ -1923,7 +1744,7 @@ jobs:
       - name: Run Canary Health Check
         timeout-minutes: 2
         run: |
-          # Use API Gateway URL for health check (more reliable than CloudFront for canary)
+          # Feature 1205: Use API Gateway URL for health check (Amplify serves frontend)
           API_URL="${{ needs.deploy-prod.outputs.api_url }}"
 
           echo "🔍 Running canary test against: ${API_URL}"

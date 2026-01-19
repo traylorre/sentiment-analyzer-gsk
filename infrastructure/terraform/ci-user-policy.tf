@@ -13,7 +13,7 @@
 # - ci_deploy_core: Lambda, DynamoDB, SNS, SQS, EventBridge, Secrets, ECR
 # - ci_deploy_monitoring: CloudWatch, Cognito
 # - ci_deploy_iam: IAM, FIS, X-Ray
-# - ci_deploy_storage: S3, CloudFront, ACM, Backup, Budgets, RUM, KMS
+# - ci_deploy_storage: S3, ACM, Backup, Budgets, RUM, KMS (Feature 1203: CloudFront removed)
 #
 # BOOTSTRAP REQUIREMENT:
 # ----------------------
@@ -794,7 +794,8 @@ data "aws_iam_policy_document" "ci_deploy_iam" {
 }
 
 # ==================================================================
-# POLICY 3: Storage & CDN (S3, CloudFront, ACM, Backup, Budgets, RUM)
+# POLICY 3: Storage (S3, ACM, Backup, Budgets, RUM, KMS)
+# Feature 1203: CloudFront removed - Amplify serves frontend directly
 # ==================================================================
 
 data "aws_iam_policy_document" "ci_deploy_storage" {
@@ -879,82 +880,7 @@ data "aws_iam_policy_document" "ci_deploy_storage" {
     ]
   }
 
-  # CloudFront Distribution (tag-protected)
-  # SECURITY: Scoped via tag condition to *-sentiment-* (FR-011)
-  # Note: Only distributions support ABAC (tag-based conditions) in CloudFront
-  statement {
-    sid    = "CloudFrontDistribution"
-    effect = "Allow"
-    actions = [
-      "cloudfront:CreateDistribution",
-      "cloudfront:UpdateDistribution",
-      "cloudfront:DeleteDistribution",
-      "cloudfront:GetDistribution",
-      "cloudfront:GetDistributionConfig",
-      "cloudfront:TagResource",
-      "cloudfront:UntagResource",
-      "cloudfront:ListTagsForResource",
-      "cloudfront:CreateInvalidation" # For deploy workflow cache invalidation
-    ]
-    resources = [
-      "arn:aws:cloudfront::*:distribution/*"
-    ]
-    condition {
-      test     = "StringLike"
-      variable = "aws:ResourceTag/Name"
-      values   = ["*-sentiment-*"]
-    }
-  }
-
-  # CloudFront Policies (no tag support)
-  # SECURITY: Origin access controls, cache policies, and response headers policies
-  # do NOT support ABAC (tag-based conditions) in CloudFront. Access is scoped by
-  # naming convention in Terraform code (preprod-sentiment-*, prod-sentiment-*).
-  # See: https://docs.aws.amazon.com/service-authorization/latest/reference/list_amazoncloudfront.html
-  statement {
-    sid    = "CloudFrontPolicies"
-    effect = "Allow"
-    actions = [
-      "cloudfront:CreateOriginAccessControl",
-      "cloudfront:UpdateOriginAccessControl",
-      "cloudfront:DeleteOriginAccessControl",
-      "cloudfront:GetOriginAccessControl",
-      "cloudfront:GetOriginAccessControlConfig",
-      "cloudfront:CreateCachePolicy",
-      "cloudfront:UpdateCachePolicy",
-      "cloudfront:DeleteCachePolicy",
-      "cloudfront:GetCachePolicy",
-      "cloudfront:CreateResponseHeadersPolicy",
-      "cloudfront:UpdateResponseHeadersPolicy",
-      "cloudfront:DeleteResponseHeadersPolicy",
-      "cloudfront:GetResponseHeadersPolicy"
-    ]
-    resources = [
-      "arn:aws:cloudfront::*:origin-access-control/*",
-      "arn:aws:cloudfront::*:cache-policy/*",
-      "arn:aws:cloudfront::*:response-headers-policy/*"
-    ]
-  }
-
-  # CloudFront List/Get operations - require wildcard for Terraform state refresh
-  statement {
-    sid    = "CloudFrontRead"
-    effect = "Allow"
-    actions = [
-      "cloudfront:ListDistributions",
-      "cloudfront:ListOriginAccessControls",
-      "cloudfront:ListCachePolicies",
-      "cloudfront:ListResponseHeadersPolicies",
-      "cloudfront:ListTagsForResource",
-      "cloudfront:GetDistribution",
-      "cloudfront:GetDistributionConfig",
-      "cloudfront:GetOriginAccessControl",
-      "cloudfront:GetOriginAccessControlConfig",
-      "cloudfront:GetCachePolicy",
-      "cloudfront:GetResponseHeadersPolicy"
-    ]
-    resources = ["*"]
-  }
+  # Feature 1203: CloudFront IAM permissions removed - Amplify serves frontend directly
 
   # ACM Certificates (read-only)
   statement {
@@ -1206,7 +1132,7 @@ resource "aws_iam_policy" "ci_deploy_monitoring" {
 
 resource "aws_iam_policy" "ci_deploy_storage" {
   name        = "CIDeployStorage"
-  description = "CI/CD storage and CDN: S3, CloudFront, ACM, Backup, Budgets, RUM, KMS"
+  description = "CI/CD storage: S3, ACM, Backup, Budgets, RUM, KMS" # Feature 1203: CloudFront removed
   policy      = data.aws_iam_policy_document.ci_deploy_storage.json
 
   tags = {
