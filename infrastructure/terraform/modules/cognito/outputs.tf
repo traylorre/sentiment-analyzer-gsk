@@ -38,5 +38,15 @@ output "jwks_uri" {
   value       = "https://cognito-idp.${data.aws_region.current.name}.amazonaws.com/${aws_cognito_user_pool.main.id}/.well-known/jwks.json"
 }
 
+output "callback_urls" {
+  description = "Configured callback URLs for OAuth redirects"
+  value       = aws_cognito_user_pool_client.dashboard.callback_urls
+}
+
+output "logout_urls" {
+  description = "Configured logout URLs for OAuth redirects"
+  value       = aws_cognito_user_pool_client.dashboard.logout_urls
+}
+
 # Data source for current region
 data "aws_region" "current" {}
