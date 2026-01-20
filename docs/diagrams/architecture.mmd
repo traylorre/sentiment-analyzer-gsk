@@ -1,4 +1,4 @@
-%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#4A90A4', 'secondaryColor': '#F5A623', 'tertiaryColor': '#7ED321'}}}%%
+%%{init: {"theme": "dark", "themeVariables": {"primaryColor": "#4A90A4", "secondaryColor": "#F5A623", "tertiaryColor": "#2d2d2d", "lineColor": "#88CCFF", "primaryTextColor": "#FFFFFF", "secondaryTextColor": "#FFFFFF", "tertiaryTextColor": "#FFFFFF", "nodeTextColor": "#FFFFFF", "edgeLabelBackground": "#333333", "clusterBkg": "#2d2d2d", "clusterBorder": "#555555"}, "flowchart": {"curve": "basis", "nodeSpacing": 60, "rankSpacing": 100}}}%%
 flowchart TB
     subgraph External["External Services"]
         NewsAPI["NewsAPI<br/>News Articles"]
@@ -100,16 +100,16 @@ flowchart TB
     SSE -->|Logs| CloudWatch
     CloudWatch -->|Triggers| Alarms
 
-    %% Styling
-    classDef external fill:#FFE4B5,stroke:#F5A623,stroke-width:2px
-    classDef lambda fill:#D4E8F2,stroke:#4A90A4,stroke-width:2px
-    classDef storage fill:#D4F2D4,stroke:#7ED321,stroke-width:2px
-    classDef messaging fill:#F2E4D4,stroke:#D0021B,stroke-width:2px
-    classDef monitoring fill:#E8E4F2,stroke:#9013FE,stroke-width:2px
-    classDef cdn fill:#F2D4E8,stroke:#E91E63,stroke-width:2px
-    classDef frontend fill:#D4F2F2,stroke:#00BCD4,stroke-width:2px
-    classDef auth fill:#FFD4D4,stroke:#FF5252,stroke-width:2px
-    classDef gateway fill:#D4D4FF,stroke:#3F51B5,stroke-width:2px
+    %% Styling - Dark theme with white text
+    classDef external fill:#8B6914,stroke:#F5A623,stroke-width:2px,color:#FFFFFF
+    classDef lambda fill:#2B5F7C,stroke:#4A90A4,stroke-width:2px,color:#FFFFFF
+    classDef storage fill:#3D6B3D,stroke:#7ED321,stroke-width:2px,color:#FFFFFF
+    classDef messaging fill:#8B4513,stroke:#D0021B,stroke-width:2px,color:#FFFFFF
+    classDef monitoring fill:#4B3D6B,stroke:#9013FE,stroke-width:2px,color:#FFFFFF
+    classDef cdn fill:#6B3D5C,stroke:#E91E63,stroke-width:2px,color:#FFFFFF
+    classDef frontend fill:#2B6B6B,stroke:#00BCD4,stroke-width:2px,color:#FFFFFF
+    classDef auth fill:#8B3D3D,stroke:#FF5252,stroke-width:2px,color:#FFFFFF
+    classDef gateway fill:#3D3D6B,stroke:#3F51B5,stroke-width:2px,color:#FFFFFF
 
     class NewsAPI,OAuthProviders external
     class Ingestion,Analysis,AuthLambda,Dashboard,SSE lambda
