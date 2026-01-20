@@ -781,7 +781,6 @@ Response:
 
 ## Related Documentation
 
-- [Model Versioning Strategy](./MODEL_VERSIONING.md) (to be created)
-- [DynamoDB Schema](../infrastructure/terraform/main.tf)
-- [API Documentation](./API.md) (to be created)
-- [On-Call Runbooks](./ON_CALL_SOP.md)
+- [DynamoDB Schema](../../infrastructure/terraform/main.tf)
+- [FAILURE_RECOVERY_RUNBOOK](../operations/FAILURE_RECOVERY_RUNBOOK.md) - Incident response
+- [TROUBLESHOOTING](../operations/TROUBLESHOOTING.md) - Common issues

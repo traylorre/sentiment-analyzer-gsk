@@ -187,3 +187,7 @@ model/
 *-credentials.json
 
 model.tar.gz
+
+# Local demo URLs (contains environment-specific URLs)
+DEMO_URLS.local.md
+*.local.md

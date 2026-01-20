@@ -131,7 +131,7 @@ git checkout -b feature/your-feature-name
 
 **You're ready to contribute!** See [Development Workflow](#development-workflow) for next steps.
 
-> **New to the project?** See [docs/WORKSPACE_SETUP.md](docs/WORKSPACE_SETUP.md) for comprehensive setup instructions including WSL2, pyenv, and AWS configuration.
+> **New to the project?** See [docs/setup/WORKSPACE_SETUP.md](docs/setup/WORKSPACE_SETUP.md) for comprehensive setup instructions including WSL2, pyenv, and AWS configuration.
 
 ---
 
@@ -566,10 +566,10 @@ sequenceDiagram
 
 | Document | Purpose |
 |----------|---------|
-| [Quickstart Guide](./specs/001-interactive-dashboard-demo/quickstart.md) | Step-by-step deployment |
-| [Implementation Plan](./specs/001-interactive-dashboard-demo/plan.md) | Architecture & design decisions |
-| [Feature Spec](./specs/001-interactive-dashboard-demo/spec.md) | Requirements & acceptance criteria |
-| [On-Call SOP](./specs/001-interactive-dashboard-demo/ON_CALL_SOP.md) | Incident response runbooks |
+| [SPEC.md](./SPEC.md) | Complete technical specification |
+| [DEPLOYMENT.md](./docs/deployment/DEPLOYMENT.md) | Deployment procedures |
+| [TROUBLESHOOTING.md](./docs/operations/TROUBLESHOOTING.md) | Common issues and solutions |
+| [FAILURE_RECOVERY_RUNBOOK.md](./docs/operations/FAILURE_RECOVERY_RUNBOOK.md) | Incident response procedures |
 
 ### Running Locally
 
@@ -647,7 +647,7 @@ pre-commit install --hook-type pre-push
 1. SPEC.md              # Complete technical specification
 2. CONTRIBUTING.md      # Collaboration guidelines
 3. SECURITY.md          # Security policy
-4. docs/DEPLOYMENT.md   # Deployment procedures
+4. docs/deployment/DEPLOYMENT.md   # Deployment procedures
 ```
 
 ---
@@ -813,7 +813,7 @@ gh run watch
 gh run view <run-id> --log
 ```
 
-See [DEPLOYMENT.md](docs/DEPLOYMENT.md) for detailed deployment procedures and rollback strategies.
+See [DEPLOYMENT.md](docs/deployment/DEPLOYMENT.md) for detailed deployment procedures and rollback strategies.
 
 ---
 
@@ -821,7 +821,7 @@ See [DEPLOYMENT.md](docs/DEPLOYMENT.md) for detailed deployment procedures and r
 
 ### For On-Call Engineers
 
-**Start here during incidents**: [ON_CALL_SOP.md](./specs/001-interactive-dashboard-demo/ON_CALL_SOP.md)
+**Start here during incidents**: [FAILURE_RECOVERY_RUNBOOK.md](./docs/operations/FAILURE_RECOVERY_RUNBOOK.md)
 
 12 documented scenarios with step-by-step CLI commands:
 - SC-01: Service Degradation
@@ -920,12 +920,11 @@ sentiment-analyzer-gsk/
 │       └── cloudfront-multi-origin.mmd   # CDN routing
 │
 ├── specs/                       # Feature specifications
-│   └── 001-interactive-dashboard-demo/
+│   └── {feature-id}-{name}/     # Feature specifications
 │       ├── spec.md              # Feature requirements
 │       ├── plan.md              # Implementation plan
 │       ├── tasks.md             # Task breakdown
-│       ├── quickstart.md        # Getting started
-│       └── ON_CALL_SOP.md       # Operations runbook
+│       └── quickstart.md        # Getting started guide
 │
 └── .github/                     # GitHub configuration
     ├── workflows/               # CI/CD workflows
@@ -998,8 +997,8 @@ See [SECURITY.md](./SECURITY.md) for full security policy.
 | **[SPEC.md](./SPEC.md)** | Complete technical specification | Developers, architects |
 | **[CONTRIBUTING.md](./CONTRIBUTING.md)** | Collaboration guidelines | All contributors |
 | **[SECURITY.md](./SECURITY.md)** | Security policy | Security researchers, contributors |
-| **[DEPLOYMENT.md](./docs/DEPLOYMENT.md)** | Deployment procedures | DevOps, on-call |
-| **[IAM_TERRAFORM_TROUBLESHOOTING.md](./docs/IAM_TERRAFORM_TROUBLESHOOTING.md)** | IAM debugging guide | DevOps, on-call |
+| **[DEPLOYMENT.md](./docs/deployment/DEPLOYMENT.md)** | Deployment procedures | DevOps, on-call |
+| **[IAM_TERRAFORM_TROUBLESHOOTING.md](./docs/security/IAM_TERRAFORM_TROUBLESHOOTING.md)** | IAM debugging guide | DevOps, on-call |
 
 ### Architecture Diagrams
 
@@ -1008,16 +1007,16 @@ See [SECURITY.md](./SECURITY.md) for full security policy.
 | **System Overview** | High-level architecture with all components | [high-level-overview.mmd](./docs/diagrams/high-level-overview.mmd) |
 | **All Data Flows** | Complete data flow including auth (v3.0) | [dataflow-all-flows.mmd](./docs/diagrams/dataflow-all-flows.mmd) |
 | **Security Flow** | Trust zones and data sanitization | [security-flow.mmd](./docs/diagrams/security-flow.mmd) |
-| **Auth Use Cases** | Authentication flows (UC3) | [USE-CASE-DIAGRAMS.md](./docs/USE-CASE-DIAGRAMS.md#uc3-user-authentication-flow-v30) |
+| **Auth Use Cases** | Authentication flows (UC3) | [USE-CASE-DIAGRAMS.md](./docs/architecture/USE-CASE-DIAGRAMS.md#uc3-user-authentication-flow-v30) |
 | **SSE Streaming** | Real-time event streaming architecture | [sse-lambda-streaming.mmd](./docs/diagrams/sse-lambda-streaming.mmd) |
 
 ### Operations Documentation
 
 | Document | Purpose |
 |----------|---------|
-| [ON_CALL_SOP.md](./specs/001-interactive-dashboard-demo/ON_CALL_SOP.md) | Incident response runbooks |
-| [TROUBLESHOOTING.md](./docs/TROUBLESHOOTING.md) | Common issues and solutions |
-| [DEMO_CHECKLIST.md](./docs/DEMO_CHECKLIST.md) | Demo day preparation |
+| [FAILURE_RECOVERY_RUNBOOK.md](./docs/operations/FAILURE_RECOVERY_RUNBOOK.md) | Incident response runbooks |
+| [TROUBLESHOOTING.md](./docs/operations/TROUBLESHOOTING.md) | Common issues and solutions |
+| [DEMO_CHECKLIST.md](./docs/operations/DEMO_CHECKLIST.md) | Demo day preparation |
 
 ---
 

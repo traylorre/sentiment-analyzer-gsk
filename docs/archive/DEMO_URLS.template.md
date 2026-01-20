@@ -1,22 +1,24 @@
-# Demo URLs for Interview (LOCAL - DO NOT COMMIT)
+# Demo URLs for Interview (TEMPLATE)
+
+Copy this to `DEMO_URLS.local.md` in root and fill in actual URLs.
 
 ## Quick Access
 
 **Main Dashboard (Browser):**
-https://cjx6qw4a7xqw6cuifvkbi6ae2e0evviw.lambda-url.us-east-1.on.aws/
+https://YOUR_LAMBDA_URL.lambda-url.us-east-1.on.aws/
 
 **API Docs:**
-https://cjx6qw4a7xqw6cuifvkbi6ae2e0evviw.lambda-url.us-east-1.on.aws/docs
+https://YOUR_LAMBDA_URL.lambda-url.us-east-1.on.aws/docs
 
 **OAuth URLs (GET - no auth):**
-https://cjx6qw4a7xqw6cuifvkbi6ae2e0evviw.lambda-url.us-east-1.on.aws/api/v2/auth/oauth/urls
+https://YOUR_LAMBDA_URL.lambda-url.us-east-1.on.aws/api/v2/auth/oauth/urls
 
 ---
 
 ## API Base URL
 
 ```
-API=https://cjx6qw4a7xqw6cuifvkbi6ae2e0evviw.lambda-url.us-east-1.on.aws
+API=https://YOUR_LAMBDA_URL.lambda-url.us-east-1.on.aws
 ```
 
 ---
@@ -24,7 +26,7 @@ API=https://cjx6qw4a7xqw6cuifvkbi6ae2e0evviw.lambda-url.us-east-1.on.aws
 ## Terminal Demo Script
 
 ```bash
-API="https://cjx6qw4a7xqw6cuifvkbi6ae2e0evviw.lambda-url.us-east-1.on.aws"
+API="https://YOUR_LAMBDA_URL.lambda-url.us-east-1.on.aws"
 
 # 1. Get anonymous token (POST required)
 TOKEN=$(curl -s -X POST "$API/api/v2/auth/anonymous" \
@@ -77,7 +79,6 @@ curl -s "$API/api/v2/configurations/{CONFIG_ID}/sentiment" \
 ## GitHub URLs
 
 - **Repository:** https://github.com/traylorre/sentiment-analyzer-gsk
-- **Latest PR:** https://github.com/traylorre/sentiment-analyzer-gsk/pull/207
 - **CI/CD:** https://github.com/traylorre/sentiment-analyzer-gsk/actions
 - **Terraform:** https://github.com/traylorre/sentiment-analyzer-gsk/tree/main/infrastructure/terraform
 
@@ -91,7 +92,3 @@ curl -s "$API/api/v2/configurations/{CONFIG_ID}/sentiment" \
 - **Auth**: Anonymous, Magic Link, OAuth (Google/GitHub)
 - **External APIs**: Tiingo, Finnhub
 - **CI/CD**: GitHub Actions with GPG-signed commits
-
----
-
-*Generated: 2025-11-29*

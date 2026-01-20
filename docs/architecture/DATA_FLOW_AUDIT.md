@@ -567,6 +567,6 @@ aws logs start-query \
 
 ## Related Documents
 
-- [SECURITY_REVIEW.md](./SECURITY_REVIEW.md) - Security audit
-- [ON_CALL_SOP.md](./ON_CALL_SOP.md) - Operational procedures
-- [specs/006-user-config-dashboard/](../specs/006-user-config-dashboard/) - Feature 006 spec
+- [DASHBOARD_SECURITY_ANALYSIS.md](../security/DASHBOARD_SECURITY_ANALYSIS.md) - Security audit
+- [FAILURE_RECOVERY_RUNBOOK.md](../operations/FAILURE_RECOVERY_RUNBOOK.md) - Operational procedures
+- [specs/006-user-config-dashboard/](../../specs/006-user-config-dashboard/) - Feature 006 spec

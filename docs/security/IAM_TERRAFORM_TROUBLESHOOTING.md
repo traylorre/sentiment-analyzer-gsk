@@ -735,7 +735,7 @@ terraform force-unlock <LOCK_ID>
 
 ## Related Documentation
 
-- [Deployment Concurrency](./DEPLOYMENT_CONCURRENCY.md) - Race condition prevention
-- [Failure Recovery Runbook](./FAILURE_RECOVERY_RUNBOOK.md) - General deployment failures
-- [GitHub Secrets Configuration](./GITHUB_SECRETS_CONFIGURATION.md) - Credential setup
-- [GitHub Environments Setup](./GITHUB_ENVIRONMENTS_SETUP.md) - Environment protection rules
+- [Deployment Concurrency](../deployment/DEPLOYMENT_CONCURRENCY.md) - Race condition prevention
+- [Failure Recovery Runbook](../operations/FAILURE_RECOVERY_RUNBOOK.md) - General deployment failures
+- [GitHub Secrets Setup](../deployment/GITHUB_SECRETS_SETUP.md) - Credential setup
+- [GitHub Environments Setup](../deployment/GITHUB_ENVIRONMENTS_SETUP.md) - Environment protection rules

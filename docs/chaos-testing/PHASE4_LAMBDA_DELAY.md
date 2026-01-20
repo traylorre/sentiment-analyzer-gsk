@@ -438,8 +438,7 @@ actual_delay = base_delay * multiplier
 
 ## References
 
-- [Phase 1: DynamoDB Table + Dashboard UI](./PHASE1_FOUNDATION.md)
-- [Phase 2: DynamoDB Throttling with AWS FIS](./PHASE2_DYNAMODB_THROTTLE.md)
-- [Phase 3: NewsAPI Failure Simulation](./PHASE3_NEWSAPI_FAILURE.md)
+- [Phase 3: API Failure Simulation](./PHASE3_API_FAILURE.md)
+- [Chaos Testing Operator Guide](../testing/CHAOS_TESTING_OPERATOR_GUIDE.md)
 - [AWS Lambda Cold Starts](https://aws.amazon.com/blogs/compute/operating-lambda-performance-optimization-part-1/)
 - [Chaos Engineering Principles](https://principlesofchaos.org/)
