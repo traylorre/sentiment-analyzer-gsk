@@ -82,9 +82,9 @@ class TestZoomPluginLoaded:
 
         has_comment = "Feature 1070" in html_content or "1070" in js_content
 
-        assert has_comment, (
-            "Missing Feature 1070 reference. " "Add a comment for traceability."
-        )
+        assert (
+            has_comment
+        ), "Missing Feature 1070 reference. Add a comment for traceability."
 
 
 class TestZoomConfiguration:
@@ -118,9 +118,9 @@ class TestZoomConfiguration:
 
         # Look for mode: 'y' configuration
         mode_pattern = r"mode:\s*['\"]y['\"]"
-        assert re.search(mode_pattern, content), (
-            "Zoom mode not set to 'y'. " "Use mode: 'y' for vertical-only zoom."
-        )
+        assert re.search(
+            mode_pattern, content
+        ), "Zoom mode not set to 'y'. Use mode: 'y' for vertical-only zoom."
 
 
 class TestZoomResetFunctionality:
@@ -139,10 +139,9 @@ class TestZoomResetFunctionality:
         """Verify double-click event listener is bound for zoom reset."""
         content = read_ohlc_js()
 
-        assert "dblclick" in content, (
-            "Double-click event handler not found. "
-            "Add dblclick listener to reset zoom."
-        )
+        assert (
+            "dblclick" in content
+        ), "Double-click event handler not found. Add dblclick listener to reset zoom."
 
     def test_reset_zoom_calls_chart_method(self) -> None:
         """Verify resetZoom uses Chart.js resetZoom method."""
@@ -179,10 +178,9 @@ class TestSentimentAxisFixed:
             "Sentiment axis missing min configuration. "
             "Add min: -1.0 to sentiment scale."
         )
-        assert re.search(sentiment_max_pattern, content, re.DOTALL), (
-            "Sentiment axis missing max configuration. "
-            "Add max: 1.0 to sentiment scale."
-        )
+        assert re.search(
+            sentiment_max_pattern, content, re.DOTALL
+        ), "Sentiment axis missing max configuration. Add max: 1.0 to sentiment scale."
 
     def test_zoom_on_zoom_callback_restores_sentiment(self) -> None:
         """Verify onZoom callback restores sentiment axis bounds."""

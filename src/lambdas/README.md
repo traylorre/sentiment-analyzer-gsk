@@ -6,7 +6,7 @@ Each Lambda has a single responsibility in the sentiment analysis pipeline:
 
 | Lambda | Trigger | Purpose | Memory | Timeout | Concurrency |
 |--------|---------|---------|--------|---------|-------------|
-| ingestion | EventBridge (5min) | Fetch NewsAPI articles | 512MB | 60s | 1 |
+| ingestion | EventBridge (5min) | Fetch Tiingo/Finnhub news | 512MB | 60s | 1 |
 | analysis | SNS | Run DistilBERT inference | 1024MB | 30s | 5 |
 | dashboard | Function URL | Serve UI + API | 512MB | 60s | 10 |
 
@@ -54,5 +54,5 @@ All Lambdas receive:
 - `MODEL_VERSION` - Sentiment model version
 
 Lambda-specific:
-- Ingestion: `WATCH_TAGS`, `SNS_TOPIC_ARN`, `NEWSAPI_SECRET_ARN`
+- Ingestion: `WATCH_TAGS`, `SNS_TOPIC_ARN`, `TIINGO_SECRET_ARN`, `FINNHUB_SECRET_ARN`
 - Dashboard: `DASHBOARD_API_KEY_SECRET_ARN`

@@ -80,6 +80,8 @@ Auto-generated from all feature plans. Last updated: 2025-11-26
 - N/A (infrastructure deletion) (1203-remove-cloudfront-module)
 - Markdown, Mermaid (documentation syntax) + N/A (documentation-only, no code dependencies) (1209-remove-cloudfront-docs)
 - N/A (file-based documentation) (1209-remove-cloudfront-docs)
+- Markdown (diagrams), Python 3.13 (URL generation script) + zlib, base64, json (all stdlib) (1215-fix-diagram-inconsistencies)
+- N/A (documentation-only) (1215-fix-diagram-inconsistencies)
 
 - **Python 3.13** with FastAPI, boto3, pydantic, aws-lambda-powertools, httpx
 - **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, Amplify
@@ -857,9 +859,9 @@ aws cloudwatch get-metric-data --metric-data-queries '[...]' --start-time ... --
 ```
 
 ## Recent Changes
+- 1215-fix-diagram-inconsistencies: Added Markdown (diagrams), Python 3.13 (URL generation script) + zlib, base64, json (all stdlib)
 - 1209-remove-cloudfront-docs: Added Markdown, Mermaid (documentation syntax) + N/A (documentation-only, no code dependencies)
 - 1203-remove-cloudfront-module: Added Terraform 1.5+ with AWS Provider ~> 5.0 + AWS CloudFront, S3, IAM, CloudWatch RUM
-- 1191-mid-session-tier-upgrade: Added Python 3.13 (backend), TypeScript 5.x (frontend) + FastAPI, boto3 (DynamoDB), Zustand (state), BroadcastChannel API
 
 <!-- MANUAL ADDITIONS START -->
 
