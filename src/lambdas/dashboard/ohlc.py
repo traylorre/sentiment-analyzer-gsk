@@ -337,9 +337,15 @@ async def get_ohlc_data(
     )
     cached_response = _get_cached_ohlc(cache_key, resolution.value)
     if cached_response:
+        safe_cache_key = (
+            str(cache_key)
+            .replace("\r\n", " ")
+            .replace("\n", " ")
+            .replace("\r", " ")[:200]
+        )
         logger.info(
             "OHLC cache hit",
-            extra={"cache_key": cache_key, "stats": get_ohlc_cache_stats()},
+            extra={"cache_key": safe_cache_key, "stats": get_ohlc_cache_stats()},
         )
         # Return cached OHLCResponse directly
         return OHLCResponse(**cached_response)
@@ -473,9 +479,15 @@ async def get_ohlc_data(
         end_date_value,
     )
     _set_cached_ohlc(actual_cache_key, response.model_dump(mode="json"))
+    safe_actual_cache_key = (
+        str(actual_cache_key)
+        .replace("\r\n", " ")
+        .replace("\n", " ")
+        .replace("\r", " ")[:200]
+    )
     logger.debug(
         "OHLC response cached",
-        extra={"cache_key": actual_cache_key, "stats": get_ohlc_cache_stats()},
+        extra={"cache_key": safe_actual_cache_key, "stats": get_ohlc_cache_stats()},
     )
 
     return response

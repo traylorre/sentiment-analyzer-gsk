@@ -535,9 +535,12 @@ def get_user_by_provider_sub(
     # Build composite key: "{provider}:{sub}"
     provider_sub = f"{provider}:{sub}"
 
+    safe_provider = (
+        str(provider).replace("\r\n", " ").replace("\n", " ").replace("\r", " ")[:200]
+    )
     logger.debug(
         "GSI provider_sub lookup",
-        extra={"provider": provider, "sub_prefix": sanitize_for_log(sub[:8])},
+        extra={"provider": safe_provider, "sub_prefix": sanitize_for_log(sub[:8])},
     )
 
     try:
@@ -594,17 +597,29 @@ def can_auto_link_oauth(
     """
     # Rule 1: Never auto-link unverified OAuth email
     if not oauth_email_verified:
+        safe_provider = (
+            str(provider)
+            .replace("\r\n", " ")
+            .replace("\n", " ")
+            .replace("\r", " ")[:200]
+        )
         logger.debug(
             "Auto-link rejected: OAuth email not verified",
-            extra={"provider": provider},
+            extra={"provider": safe_provider},
         )
         return False
 
     # Rule 2: GitHub is opaque - never auto-link by email
     if provider.lower() == "github":
+        safe_provider = (
+            str(provider)
+            .replace("\r\n", " ")
+            .replace("\n", " ")
+            .replace("\r", " ")[:200]
+        )
         logger.debug(
             "Auto-link rejected: GitHub requires manual confirmation",
-            extra={"provider": provider},
+            extra={"provider": safe_provider},
         )
         return False
 
@@ -612,16 +627,25 @@ def can_auto_link_oauth(
     if provider.lower() == "google" and existing_user_email.lower().endswith(
         "@gmail.com"
     ):
+        safe_provider = (
+            str(provider)
+            .replace("\r\n", " ")
+            .replace("\n", " ")
+            .replace("\r", " ")[:200]
+        )
         logger.debug(
             "Auto-link allowed: Google + @gmail.com domain match",
-            extra={"provider": provider},
+            extra={"provider": safe_provider},
         )
         return True
 
     # Rule 4: All other cases require manual confirmation (cross-domain)
+    safe_provider = (
+        str(provider).replace("\r\n", " ").replace("\n", " ").replace("\r", " ")[:200]
+    )
     logger.debug(
         "Auto-link rejected: Cross-domain requires manual confirmation",
-        extra={"provider": provider},
+        extra={"provider": safe_provider},
     )
     return False
 
@@ -2035,9 +2059,12 @@ def handle_oauth_callback(
     Returns:
         OAuthCallbackResponse with user info and tokens
     """
+    safe_provider = (
+        str(provider).replace("\r\n", " ").replace("\n", " ").replace("\r", " ")[:200]
+    )
     logger.info(
         "Processing OAuth callback",
-        extra={"provider": provider},
+        extra={"provider": safe_provider},
     )
 
     # Feature 1190 A23: Validate OAuth provider (AUTH_015)
@@ -2045,7 +2072,7 @@ def handle_oauth_callback(
     if provider not in valid_providers:
         logger.warning(
             "Unknown OAuth provider (AUTH_015)",
-            extra={"provider": provider},
+            extra={"provider": safe_provider},
         )
         return OAuthCallbackResponse(
             status="error",
@@ -2061,9 +2088,15 @@ def handle_oauth_callback(
         redirect_uri=redirect_uri,
     )
     if not is_valid:
+        safe_provider_state = (
+            str(provider)
+            .replace("\r\n", " ")
+            .replace("\n", " ")
+            .replace("\r", " ")[:200]
+        )
         logger.warning(
             "OAuth state validation failed",
-            extra={"provider": provider},
+            extra={"provider": safe_provider_state},
         )
         return OAuthCallbackResponse(
             status="error",
@@ -2110,10 +2143,16 @@ def handle_oauth_callback(
             not existing_user or existing_by_sub.user_id != existing_user.user_id
         ):
             # OAuth account already linked to a different user
+            safe_provider_auth023 = (
+                str(provider)
+                .replace("\r\n", " ")
+                .replace("\n", " ")
+                .replace("\r", " ")[:200]
+            )
             logger.warning(
                 "OAuth account already linked to different user (AUTH_023)",
                 extra={
-                    "provider": provider,
+                    "provider": safe_provider_auth023,
                     "sub_prefix": sanitize_for_log(cognito_sub[:8]),
                 },
             )
@@ -2126,9 +2165,15 @@ def handle_oauth_callback(
     if existing_user and existing_user.auth_type != provider:
         # Feature 1181: Flow 3 - Check if email not verified by OAuth (AUTH_022)
         if not oauth_email_verified:
+            safe_provider_auth022 = (
+                str(provider)
+                .replace("\r\n", " ")
+                .replace("\n", " ")
+                .replace("\r", " ")[:200]
+            )
             logger.warning(
                 "OAuth email not verified by provider (AUTH_022)",
-                extra={"provider": provider},
+                extra={"provider": safe_provider_auth022},
             )
             return OAuthCallbackResponse(
                 status="error",
@@ -2145,11 +2190,23 @@ def handle_oauth_callback(
 
         if is_existing_oauth and is_new_oauth:
             # Auto-link: both are OAuth providers, proceed silently
+            safe_existing_provider = (
+                str(existing_user.auth_type)
+                .replace("\r\n", " ")
+                .replace("\n", " ")
+                .replace("\r", " ")[:200]
+            )
+            safe_new_provider = (
+                str(provider)
+                .replace("\r\n", " ")
+                .replace("\n", " ")
+                .replace("\r", " ")[:200]
+            )
             logger.info(
                 "Auto-linking OAuth to existing OAuth account (Flow 5)",
                 extra={
-                    "existing_provider": existing_user.auth_type,
-                    "new_provider": provider,
+                    "existing_provider": safe_existing_provider,
+                    "new_provider": safe_new_provider,
                     "link_type": "auto",
                 },
             )
@@ -2162,10 +2219,16 @@ def handle_oauth_callback(
             existing_user_email=existing_user.email,
         ):
             # Auto-link: proceed silently (don't return conflict)
+            safe_provider_flow3 = (
+                str(provider)
+                .replace("\r\n", " ")
+                .replace("\n", " ")
+                .replace("\r", " ")[:200]
+            )
             logger.info(
                 "Auto-linking OAuth to existing email account (Flow 3)",
                 extra={
-                    "provider": provider,
+                    "provider": safe_provider_flow3,
                     "link_type": "auto",
                 },
             )
@@ -2319,10 +2382,16 @@ def _link_provider(
         email_verified: Whether provider verified the email
     """
     if not sub:
+        safe_provider = (
+            str(provider)
+            .replace("\r\n", " ")
+            .replace("\n", " ")
+            .replace("\r", " ")[:200]
+        )
         logger.warning(
             "Cannot link provider without sub claim",
             extra={
-                "provider": provider,
+                "provider": safe_provider,
                 "user_id_prefix": sanitize_for_log(user.user_id[:8]),
             },
         )
@@ -2379,19 +2448,31 @@ def _link_provider(
             ExpressionAttributeValues=attr_values,
         )
 
+        safe_provider_linked = (
+            str(provider)
+            .replace("\r\n", " ")
+            .replace("\n", " ")
+            .replace("\r", " ")[:200]
+        )
         logger.info(
             "Provider linked to account",
             extra={
-                "provider": provider,
+                "provider": safe_provider_linked,
                 "user_id_prefix": sanitize_for_log(user.user_id[:8]),
                 "is_new_link": provider not in user.linked_providers,
             },
         )
     except Exception as e:
+        safe_provider_failed = (
+            str(provider)
+            .replace("\r\n", " ")
+            .replace("\n", " ")
+            .replace("\r", " ")[:200]
+        )
         logger.warning(
             "Failed to link provider",
             extra={
-                "provider": provider,
+                "provider": safe_provider_failed,
                 "user_id_prefix": sanitize_for_log(user.user_id[:8]),
                 **get_safe_error_info(e),
             },
@@ -2442,19 +2523,31 @@ def _advance_role(
             },
         )
 
+        safe_provider_role = (
+            str(provider)
+            .replace("\r\n", " ")
+            .replace("\n", " ")
+            .replace("\r", " ")[:200]
+        )
         logger.info(
             "Role advanced from anonymous to free",
             extra={
-                "provider": provider,
+                "provider": safe_provider_role,
                 "user_id_prefix": sanitize_for_log(user.user_id[:8]),
                 "role_assigned_by": role_assigned_by,
             },
         )
     except Exception as e:
+        safe_provider_role_fail = (
+            str(provider)
+            .replace("\r\n", " ")
+            .replace("\n", " ")
+            .replace("\r", " ")[:200]
+        )
         logger.warning(
             "Failed to advance role",
             extra={
-                "provider": provider,
+                "provider": safe_provider_role_fail,
                 "user_id_prefix": sanitize_for_log(user.user_id[:8]),
                 **get_safe_error_info(e),
             },
@@ -2485,10 +2578,16 @@ def _mark_email_verified(
     """
     # Only mark if provider says email is verified
     if not email_verified:
+        safe_provider_skip = (
+            str(provider)
+            .replace("\r\n", " ")
+            .replace("\n", " ")
+            .replace("\r", " ")[:200]
+        )
         logger.debug(
             "Email verification skipped - provider did not verify",
             extra={
-                "provider": provider,
+                "provider": safe_provider_skip,
                 "user_id_prefix": sanitize_for_log(user.user_id[:8]),
             },
         )
@@ -2496,10 +2595,16 @@ def _mark_email_verified(
 
     # Skip if already verified (idempotent)
     if user.verification == "verified":
+        safe_provider_already = (
+            str(provider)
+            .replace("\r\n", " ")
+            .replace("\n", " ")
+            .replace("\r", " ")[:200]
+        )
         logger.debug(
             "Email verification skipped - already verified",
             extra={
-                "provider": provider,
+                "provider": safe_provider_already,
                 "user_id_prefix": sanitize_for_log(user.user_id[:8]),
             },
         )
@@ -2520,19 +2625,31 @@ def _mark_email_verified(
             },
         )
 
+        safe_provider_verified = (
+            str(provider)
+            .replace("\r\n", " ")
+            .replace("\n", " ")
+            .replace("\r", " ")[:200]
+        )
         logger.info(
             "Email marked as verified from OAuth provider",
             extra={
-                "provider": provider,
+                "provider": safe_provider_verified,
                 "user_id_prefix": sanitize_for_log(user.user_id[:8]),
                 "verification_marked_by": verification_marked_by,
             },
         )
     except Exception as e:
+        safe_provider_verify_fail = (
+            str(provider)
+            .replace("\r\n", " ")
+            .replace("\n", " ")
+            .replace("\r", " ")[:200]
+        )
         logger.warning(
             "Failed to mark email verified",
             extra={
-                "provider": provider,
+                "provider": safe_provider_verify_fail,
                 "user_id_prefix": sanitize_for_log(user.user_id[:8]),
                 **get_safe_error_info(e),
             },

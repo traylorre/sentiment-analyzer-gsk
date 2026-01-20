@@ -78,9 +78,6 @@ def validate_mermaid_syntax(code: str) -> list[str]:
         )
 
     # Check for common syntax errors
-    if re.search(r"-->\s*$", code, re.MULTILINE):
-        errors.append("Arrow without target node (line ends with -->)")
-
     if re.search(r"==>\s*$", code, re.MULTILINE):
         errors.append("Thick arrow without target node (line ends with ==>)")
 
