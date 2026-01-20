@@ -202,6 +202,16 @@ cost-baseline: ## Save current costs as baseline
 	infracost breakdown --path $(TF_DIR) --format json > infracost-baseline.json
 
 # ============================================================================
+# Documentation
+# ============================================================================
+
+regenerate-mermaid-url: ## Generate mermaid.live URL from architecture diagram
+	@python scripts/regenerate-mermaid-url.py docs/diagrams/architecture.mmd
+
+validate-mermaid: ## Validate mermaid diagram syntax
+	@python scripts/regenerate-mermaid-url.py --validate-only docs/diagrams/architecture.mmd
+
+# ============================================================================
 # Cleanup
 # ============================================================================
 

@@ -1,7 +1,8 @@
 %%{init: {"theme": "dark", "themeVariables": {"primaryColor": "#4A90A4", "secondaryColor": "#F5A623", "tertiaryColor": "#2d2d2d", "lineColor": "#88CCFF", "primaryTextColor": "#FFFFFF", "secondaryTextColor": "#FFFFFF", "tertiaryTextColor": "#FFFFFF", "nodeTextColor": "#FFFFFF", "edgeLabelBackground": "#333333", "clusterBkg": "#2d2d2d", "clusterBorder": "#555555"}, "flowchart": {"curve": "basis", "nodeSpacing": 60, "rankSpacing": 100}}}%%
 flowchart TB
     subgraph External["External Services"]
-        NewsAPI["NewsAPI<br/>News Articles"]
+        Tiingo["Tiingo API<br/>Financial News"]
+        Finnhub["Finnhub API<br/>Market Data"]
         OAuthProviders["OAuth Providers<br/>Google, GitHub"]
     end
 
@@ -74,7 +75,8 @@ flowchart TB
 
     %% Data Ingestion Flow
     Schedule -->|Trigger| Ingestion
-    NewsAPI -->|Articles| Ingestion
+    Tiingo -->|Financial News| Ingestion
+    Finnhub -->|Market Data| Ingestion
     Secrets -->|API Key| Ingestion
     Ingestion -->|Store Items| DynamoDB
     Ingestion -->|Publish| SNS
@@ -111,12 +113,11 @@ flowchart TB
     classDef auth fill:#8B3D3D,stroke:#FF5252,stroke-width:2px,color:#FFFFFF
     classDef gateway fill:#3D3D6B,stroke:#3F51B5,stroke-width:2px,color:#FFFFFF
 
-    class NewsAPI,OAuthProviders external
+    class Tiingo,Finnhub,OAuthProviders external
     class Ingestion,Analysis,AuthLambda,Dashboard,SSE lambda
     class DynamoDB,AuthTables,Secrets storage
     class SNS,DLQ messaging
     class CloudWatch,Alarms monitoring
-    class CF cdn
     class S3 frontend
     class Cognito auth
     class APIGW gateway
