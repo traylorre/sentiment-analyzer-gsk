@@ -90,10 +90,13 @@ def store_oauth_state(
 
     table.put_item(Item=item)
 
+    safe_provider = (
+        str(provider).replace("\r\n", " ").replace("\n", " ").replace("\r", " ")[:200]
+    )
     logger.info(
         "OAuth state stored",
         extra={
-            "provider": provider,
+            "provider": safe_provider,
             "has_user_id": user_id is not None,
             "ttl_seconds": OAUTH_STATE_TTL_SECONDS,
         },
@@ -188,17 +191,41 @@ def validate_oauth_state(
 
     # Check provider match
     if state.provider != provider:
+        safe_expected = (
+            str(state.provider)
+            .replace("\r\n", " ")
+            .replace("\n", " ")
+            .replace("\r", " ")[:200]
+        )
+        safe_received = (
+            str(provider)
+            .replace("\r\n", " ")
+            .replace("\n", " ")
+            .replace("\r", " ")[:200]
+        )
         logger.warning(
             "OAuth state validation failed: provider mismatch",
-            extra={"expected": state.provider, "received": provider},
+            extra={"expected": safe_expected, "received": safe_received},
         )
         return False, generic_error
 
     # Check redirect_uri match
     if state.redirect_uri != redirect_uri:
+        safe_expected_uri = (
+            str(state.redirect_uri)
+            .replace("\r\n", " ")
+            .replace("\n", " ")
+            .replace("\r", " ")[:200]
+        )
+        safe_received_uri = (
+            str(redirect_uri)
+            .replace("\r\n", " ")
+            .replace("\n", " ")
+            .replace("\r", " ")[:200]
+        )
         logger.warning(
             "OAuth state validation failed: redirect_uri mismatch",
-            extra={"expected": state.redirect_uri, "received": redirect_uri},
+            extra={"expected": safe_expected_uri, "received": safe_received_uri},
         )
         return False, generic_error
 
@@ -215,8 +242,11 @@ def validate_oauth_state(
         logger.warning("OAuth state validation failed: concurrent use detected")
         return False, generic_error
 
+    safe_provider_validated = (
+        str(provider).replace("\r\n", " ").replace("\n", " ").replace("\r", " ")[:200]
+    )
     logger.info(
         "OAuth state validated successfully",
-        extra={"provider": provider},
+        extra={"provider": safe_provider_validated},
     )
     return True, ""
