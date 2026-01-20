@@ -94,9 +94,9 @@ class TestLegendRemoved:
 
         # Look for legend configuration with display: false
         legend_pattern = r"legend:\s*\{[^}]*display:\s*false"
-        assert re.search(legend_pattern, content, re.DOTALL), (
-            "Legend not disabled. " "Add legend: { display: false } to chart plugins."
-        )
+        assert re.search(
+            legend_pattern, content, re.DOTALL
+        ), "Legend not disabled. Add legend: { display: false } to chart plugins."
 
     def test_has_feature_1072_legend_comment(self) -> None:
         """Verify Feature 1072 comment exists for legend configuration."""
@@ -131,10 +131,9 @@ class TestPriceAutoFit:
         # Look for Feature 1075 comment near limits calculation
         has_limits_comment = "Feature 1075" in content and "limits" in content.lower()
 
-        assert has_limits_comment, (
-            "Missing Feature 1075 reference for limits. "
-            "Add a comment for traceability."
-        )
+        assert (
+            has_limits_comment
+        ), "Missing Feature 1075 reference for limits. Add a comment for traceability."
 
 
 class TestTooltipStillWorks:

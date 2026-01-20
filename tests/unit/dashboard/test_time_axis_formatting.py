@@ -55,10 +55,9 @@ class TestDayBoundaryDetection:
         """Verify Feature 1081 comment exists in ohlc.js for traceability."""
         content = read_ohlc_js()
 
-        assert "Feature 1081" in content or "1081" in content, (
-            "Missing Feature 1081 reference in ohlc.js. "
-            "Add a comment for traceability."
-        )
+        assert (
+            "Feature 1081" in content or "1081" in content
+        ), "Missing Feature 1081 reference in ohlc.js. Add a comment for traceability."
 
 
 class TestFormatTimestampSignature:
@@ -177,10 +176,9 @@ class TestCategoryXAxis:
         """Verify Feature 1082 comment exists for traceability."""
         content = read_ohlc_js()
 
-        assert "Feature 1082" in content, (
-            "Missing Feature 1082 reference in ohlc.js. "
-            "Add a comment for traceability."
-        )
+        assert (
+            "Feature 1082" in content
+        ), "Missing Feature 1082 reference in ohlc.js. Add a comment for traceability."
 
 
 class TestDayResolutionUnchanged:
