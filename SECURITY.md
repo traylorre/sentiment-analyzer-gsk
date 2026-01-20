@@ -21,7 +21,7 @@ Please report security vulnerabilities privately to the project maintainers. Do 
 
 ### Critical Issues Status
 
-**Dashboard Lambda Security** - See `specs/001-interactive-dashboard-demo/SECURITY_REVIEW.md` for full details:
+**Dashboard Lambda Security** - See `docs/security/DASHBOARD_SECURITY_ANALYSIS.md` for full details:
 - **P0-1**: ✅ FIXED - IP-based rate limiting with DynamoDB tracking
 - **P0-2**: ✅ FIXED - SSE connection limits implemented (max 2 per IP)
 - **P0-3**: ✅ FIXED - Cognito authentication replaces static API key

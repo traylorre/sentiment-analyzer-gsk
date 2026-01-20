@@ -29,7 +29,7 @@ If you're here during an incident:
    - API key validation: Look for `compare_digest` calls
    - API v2 endpoints: Check `/api/v2/*` routes
 
-See `specs/001-interactive-dashboard-demo/ON_CALL_SOP.md` for full runbooks.
+See `docs/operations/FAILURE_RECOVERY_RUNBOOK.md` for full runbooks.
 
 ## For Developers
 

@@ -316,10 +316,10 @@ Secrets Manager supports 90-day rotation (Phase 2):
 
 ## References
 
-- **Architecture**: See `/specs/001-interactive-dashboard-demo/plan.md`
-- **Data Model**: See `/specs/001-interactive-dashboard-demo/data-model.md`
-- **Security Review**: See `/specs/001-interactive-dashboard-demo/SECURITY_REVIEW.md`
-- **Lambda Contracts**: See `/specs/001-interactive-dashboard-demo/contracts/*.md`
+- **Architecture**: See `/docs/architecture/ARCHITECTURE_DECISIONS.md`
+- **Data Flow**: See `/docs/architecture/DATA_FLOW_AUDIT.md`
+- **Security Review**: See `/docs/security/DASHBOARD_SECURITY_ANALYSIS.md`
+- **Deployment**: See `/docs/deployment/TERRAFORM_DEPLOYMENT_FLOW.md`
 
 ---
 

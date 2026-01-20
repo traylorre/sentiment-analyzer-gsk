@@ -388,9 +388,8 @@ aws cloudwatch get-metric-statistics \
 
 ## References
 
-- [ON_CALL_SOP.md](../specs/001-interactive-dashboard-demo/ON_CALL_SOP.md) - Incident response procedures
-- [TROUBLESHOOTING.md](TROUBLESHOOTING.md) - Development environment issues
-- [tasks.md](../specs/001-interactive-dashboard-demo/tasks.md) - Implementation tasks
+- [TROUBLESHOOTING.md](../operations/TROUBLESHOOTING.md) - Development environment issues
+- [FAILURE_RECOVERY_RUNBOOK.md](../operations/FAILURE_RECOVERY_RUNBOOK.md) - Incident response procedures
 
 ---
 

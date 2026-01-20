@@ -372,7 +372,6 @@ else:
 
 ## References
 
-- [Phase 1: DynamoDB Table + Dashboard UI](./PHASE1_FOUNDATION.md)
-- [Phase 2: DynamoDB Throttling with AWS FIS](./PHASE2_DYNAMODB_THROTTLE.md)
-- [Phase 4: Lambda Cold Start Delays](./PHASE4_LAMBDA_DELAY.md) (planned)
+- [Phase 4: Lambda Cold Start Delays](./PHASE4_LAMBDA_DELAY.md)
+- [Chaos Testing Operator Guide](../testing/CHAOS_TESTING_OPERATOR_GUIDE.md)
 - [Chaos Engineering Principles](https://principlesofchaos.org/)

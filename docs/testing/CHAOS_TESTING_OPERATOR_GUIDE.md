@@ -659,9 +659,8 @@ After EVERY experiment:
 
 ## References
 
-- [Phase 2: DynamoDB Throttling Documentation](./chaos-testing/PHASE2_DYNAMODB_THROTTLE.md)
-- [Phase 3: API Failure Documentation](./chaos-testing/PHASE3_API_FAILURE.md)
-- [Phase 4: Lambda Delay Documentation](./chaos-testing/PHASE4_LAMBDA_DELAY.md)
+- [Phase 3: API Failure Documentation](../chaos-testing/PHASE3_API_FAILURE.md)
+- [Phase 4: Lambda Delay Documentation](../chaos-testing/PHASE4_LAMBDA_DELAY.md)
 - [Chaos Engineering Principles](https://principlesofchaos.org/)
 - [AWS FIS Best Practices](https://docs.aws.amazon.com/fis/latest/userguide/best-practices.html)
 
