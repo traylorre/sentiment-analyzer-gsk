@@ -16,6 +16,7 @@ A cloud-hosted Sentiment Analyzer service built with serverless AWS architecture
 [![Deploy Pipeline](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/deploy.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/deploy.yml)
 
 ```mermaid
+%%{init: {"theme": "dark", "themeVariables": {"primaryColor": "#4A90A4", "tertiaryColor": "#2d2d2d", "lineColor": "#88CCFF", "primaryTextColor": "#FFFFFF", "clusterBkg": "#2d2d2d", "clusterBorder": "#555555"}, "flowchart": {"curve": "basis", "nodeSpacing": 50, "rankSpacing": 60}}}%%
 flowchart LR
     subgraph Build["Build Stage"]
         build["Build Lambda<br/>Packages"]
@@ -48,10 +49,10 @@ flowchart LR
     deploy_prod --> canary
     canary --> summary
 
-    classDef buildNode fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px
-    classDef imageNode fill:#b39ddb,stroke:#673ab7,stroke-width:2px
-    classDef preprodNode fill:#ffb74d,stroke:#c77800,stroke-width:2px
-    classDef prodNode fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
+    classDef buildNode fill:#3D5C3D,stroke:#4a7c4e,stroke-width:2px,color:#FFFFFF
+    classDef imageNode fill:#4A3D6B,stroke:#673ab7,stroke-width:2px,color:#FFFFFF
+    classDef preprodNode fill:#8B5A00,stroke:#c77800,stroke-width:2px,color:#FFFFFF
+    classDef prodNode fill:#6B2020,stroke:#b71c1c,stroke-width:2px,color:#FFFFFF
 
     class build,test buildNode
     class sse_img,analysis_img imageNode
@@ -188,6 +189,7 @@ Ingests financial news from external sources (Tiingo, Finnhub) and returns senti
 ### High-Level System Architecture
 
 ```mermaid
+%%{init: {"theme": "dark", "themeVariables": {"primaryColor": "#4A90A4", "tertiaryColor": "#2d2d2d", "lineColor": "#88CCFF", "primaryTextColor": "#FFFFFF", "clusterBkg": "#2d2d2d", "clusterBorder": "#555555"}, "flowchart": {"curve": "basis", "nodeSpacing": 50, "rankSpacing": 60}}}%%
 graph TB
     subgraph External["External Sources"]
         Tiingo[Tiingo API<br/>Financial News]
@@ -293,15 +295,15 @@ graph TB
     Dashboard -.->|Logs| CW
     SSELambda -.->|Logs| CW
 
-    %% Styles - preserved color scheme
-    classDef layerBox fill:#fff8e1,stroke:#c9a227,stroke-width:3px,color:#333
-    classDef lambdaStyle fill:#7ec8e3,stroke:#3a7ca5,stroke-width:3px,color:#1a3a4a
-    classDef storageStyle fill:#a8d5a2,stroke:#4a7c4e,stroke-width:3px,color:#1e3a1e
-    classDef messagingStyle fill:#b39ddb,stroke:#673ab7,stroke-width:3px,color:#1a0a3e
-    classDef monitoringStyle fill:#ffb74d,stroke:#c77800,stroke-width:3px,color:#4a2800
-    classDef externalStyle fill:#ef5350,stroke:#b71c1c,stroke-width:3px,color:#fff
-    classDef edgeStyle fill:#ffccbc,stroke:#ff5722,stroke-width:3px,color:#4a1a00
-    classDef authStyle fill:#e1bee7,stroke:#8e24aa,stroke-width:3px,color:#4a148c
+    %% Styles - Dark theme with white text
+    classDef layerBox fill:#2d2d2d,stroke:#555555,stroke-width:2px,color:#FFFFFF
+    classDef lambdaStyle fill:#2B5F7C,stroke:#4A90A4,stroke-width:2px,color:#FFFFFF
+    classDef storageStyle fill:#3D6B3D,stroke:#7ED321,stroke-width:2px,color:#FFFFFF
+    classDef messagingStyle fill:#4A3D6B,stroke:#673ab7,stroke-width:2px,color:#FFFFFF
+    classDef monitoringStyle fill:#8B5A00,stroke:#c77800,stroke-width:2px,color:#FFFFFF
+    classDef externalStyle fill:#6B2020,stroke:#b71c1c,stroke-width:2px,color:#FFFFFF
+    classDef edgeStyle fill:#8B4513,stroke:#ff5722,stroke-width:2px,color:#FFFFFF
+    classDef authStyle fill:#5C3D6B,stroke:#8e24aa,stroke-width:2px,color:#FFFFFF
 
     class External,AWS,AuthLayer,EdgeLayer,IngestionLayer,ProcessingLayer,APILayer,StorageLayer,MonitoringLayer,Users layerBox
     class Ingestion,Analysis,Dashboard,SSELambda,Metrics,Notification lambdaStyle
@@ -324,6 +326,7 @@ graph TB
 ### Environment Promotion Pipeline
 
 ```mermaid
+%%{init: {"theme": "dark", "themeVariables": {"primaryColor": "#4A90A4", "tertiaryColor": "#2d2d2d", "lineColor": "#88CCFF", "primaryTextColor": "#FFFFFF", "clusterBkg": "#2d2d2d", "clusterBorder": "#555555"}, "flowchart": {"curve": "basis", "nodeSpacing": 50, "rankSpacing": 60}}}%%
 graph LR
     subgraph Source["Source"]
         Code[Feature Branch]
@@ -358,11 +361,11 @@ graph LR
     ProdDeploy --> Canary
     Canary --> ProdMonitor
 
-    classDef sourceNode fill:#b39ddb,stroke:#673ab7,stroke-width:2px
-    classDef buildNode fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px
-    classDef preprodNode fill:#ffb74d,stroke:#c77800,stroke-width:2px
-    classDef prodNode fill:#ef5350,stroke:#b71c1c,stroke-width:2px,color:#fff
-    classDef gateStyle fill:#ffcc80,stroke:#e65100,stroke-width:2px
+    classDef sourceNode fill:#4A3D6B,stroke:#673ab7,stroke-width:2px,color:#FFFFFF
+    classDef buildNode fill:#3D5C3D,stroke:#4a7c4e,stroke-width:2px,color:#FFFFFF
+    classDef preprodNode fill:#8B5A00,stroke:#c77800,stroke-width:2px,color:#FFFFFF
+    classDef prodNode fill:#6B2020,stroke:#b71c1c,stroke-width:2px,color:#FFFFFF
+    classDef gateStyle fill:#8B4500,stroke:#e65100,stroke-width:2px,color:#FFFFFF
 
     class Code sourceNode
     class GHA,Artifact buildNode
@@ -374,6 +377,7 @@ graph LR
 ### Data Flow: Real-Time Sentiment Processing
 
 ```mermaid
+%%{init: {"theme": "dark", "themeVariables": {"primaryColor": "#4A90A4", "lineColor": "#88CCFF", "primaryTextColor": "#FFFFFF", "actorTextColor": "#FFFFFF", "actorBkg": "#2B5F7C", "actorBorder": "#4A90A4", "signalColor": "#88CCFF", "signalTextColor": "#FFFFFF", "noteBkgColor": "#3D3D3D", "noteTextColor": "#FFFFFF", "activationBkgColor": "#2d2d2d"}}}%%
 sequenceDiagram
     participant EB as EventBridge
     participant Ing as Ingestion Lambda
@@ -489,6 +493,7 @@ This service uses **4 DynamoDB tables** with single-table design patterns:
 Post-Phase 0 security hardening with httpOnly cookies:
 
 ```mermaid
+%%{init: {"theme": "dark", "themeVariables": {"primaryColor": "#4A90A4", "lineColor": "#88CCFF", "primaryTextColor": "#FFFFFF", "actorTextColor": "#FFFFFF", "actorBkg": "#2B5F7C", "actorBorder": "#4A90A4", "signalColor": "#88CCFF", "signalTextColor": "#FFFFFF", "noteBkgColor": "#3D3D3D", "noteTextColor": "#FFFFFF", "activationBkgColor": "#2d2d2d"}}}%%
 sequenceDiagram
     participant Browser
     participant Frontend as Next.js Frontend<br/>(Amplify)
@@ -496,7 +501,7 @@ sequenceDiagram
     participant Cognito as Cognito User Pool
     participant Users as sentiment-users
 
-    rect rgb(240, 248, 255)
+    rect rgb(30, 40, 60)
         Note over Browser,Users: Anonymous Session Flow
         Browser->>Frontend: Visit site (no auth)
         Frontend->>Dashboard: POST /api/v2/auth/anonymous
@@ -505,7 +510,7 @@ sequenceDiagram
         Note right of Frontend: Anonymous user can:<br/>• View public sentiment<br/>• Create 1 config<br/>• No alerts
     end
 
-    rect rgb(255, 248, 240)
+    rect rgb(60, 40, 30)
         Note over Browser,Users: OAuth Flow (Google/GitHub)
         Browser->>Cognito: Redirect to hosted UI
         Cognito->>Cognito: OAuth with provider
@@ -520,7 +525,7 @@ sequenceDiagram
         Note right of Frontend: Authenticated user can:<br/>• 2 configs (free) / 5+ (paid)<br/>• Alerts + digests<br/>• Full API access
     end
 
-    rect rgb(248, 255, 240)
+    rect rgb(30, 50, 30)
         Note over Browser,Users: Magic Link Flow
         Browser->>Frontend: Enter email
         Frontend->>Dashboard: POST /api/v2/auth/magic-link
@@ -537,7 +542,7 @@ sequenceDiagram
         end
     end
 
-    rect rgb(255, 240, 245)
+    rect rgb(50, 30, 35)
         Note over Browser,Users: Token Refresh (Silent)
         Frontend->>Dashboard: GET /api/v2/auth/refresh (cookie auto-sent)
         Dashboard->>Dashboard: Validate JWT (aud, nbf, exp)
