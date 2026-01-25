@@ -97,7 +97,9 @@ def generate_mermaid_url(diagram_code: str) -> str:
     Returns:
         A mermaid.live URL that can be used directly in browser.
     """
-    # Build the payload with dark theme settings
+    # Build the payload with dark theme settings and viewport reset
+    # pan/zoom/rough params ensure diagram starts centered instead of
+    # inheriting previous viewport state from localStorage
     payload = {
         "code": diagram_code,
         "mermaid": {
@@ -113,6 +115,9 @@ def generate_mermaid_url(diagram_code: str) -> str:
         },
         "autoSync": True,
         "updateDiagram": True,
+        "pan": {"x": 0, "y": 0},
+        "zoom": 1,
+        "rough": False,
     }
 
     # Serialize to JSON
