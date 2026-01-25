@@ -104,11 +104,16 @@ import base64
 import json
 
 def generate_mermaid_url(diagram_code: str) -> str:
+    # pan/zoom/rough params reset viewport to prevent black screen
+    # (mermaid.live stores viewport state in localStorage)
     payload = {
         "code": diagram_code,
         "mermaid": {"theme": "dark"},
         "autoSync": True,
-        "updateDiagram": True
+        "updateDiagram": True,
+        "pan": {"x": 0, "y": 0},
+        "zoom": 1,
+        "rough": False,
     }
     json_str = json.dumps(payload)
     compressed = zlib.compress(json_str.encode('utf-8'), 9)
