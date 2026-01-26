@@ -17,10 +17,10 @@ boto3==1.42.17
 botocore==1.42.17
 
 # Web Framework - Dashboard Lambda
-fastapi==0.127.0
-mangum==0.19.0
+fastapi==0.128.0
+mangum==0.20.0
 uvicorn==0.40.0
-sse-starlette==3.0.4
+sse-starlette==3.2.0
 
 # HTTP Client - Financial API adapters (Tiingo, Finnhub)
 requests==2.32.5
@@ -40,7 +40,7 @@ aws-xray-sdk==2.15.0
 sendgrid==6.12.5
 
 # AWS Lambda Powertools - Enhanced observability
-aws-lambda-powertools==3.23.0
+aws-lambda-powertools==3.24.0
 
 # =============================================================================
 # Testing Dependencies (from requirements-dev.txt)
@@ -52,7 +52,7 @@ pytest-cov==7.0.0
 pytest-asyncio==1.3.0
 
 # AWS Mocking - Critical for unit tests
-moto[all]==5.1.18
+moto[all]==5.1.20
 
 # HTTP Mocking - For NewsAPI adapter tests
 responses==0.25.8
@@ -61,17 +61,17 @@ responses==0.25.8
 black==25.12.0
 ruff==0.14.14
 pre-commit==4.5.1
-bandit==1.9.2
+bandit==1.9.3
 
 # Type Checking
 mypy==1.19.1
-boto3-stubs==1.42.14
+boto3-stubs==1.42.34
 
 # Testing Utilities
 freezegun==1.5.5
 
 # Property-Based Testing (tests/property/ requires this)
-hypothesis==6.148.7
+hypothesis==6.151.2
 
 # Terraform HCL Parsing - For resource_naming validator tests
 python-hcl2==7.3.1
@@ -80,7 +80,7 @@ python-hcl2==7.3.1
 PyJWT==2.10.1
 
 # Retry Library - Feature 1032 (config API stability)
-tenacity==9.0.0
+tenacity==9.1.2
 
 # Stripe - Feature 1191 (mid-session tier upgrade)
 stripe==11.4.1
