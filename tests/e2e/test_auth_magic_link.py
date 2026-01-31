@@ -79,7 +79,12 @@ async def test_magic_link_request_rate_limited(
 
     # 500 is a server error - test should fail, not skip
     assert (
-        first_response.status_code in (200, 202, 204)
+        first_response.status_code
+        in (
+            200,
+            202,
+            204,
+        )
     ), f"Magic link request failed: {first_response.status_code} - {first_response.text}"
 
     # Make rapid follow-up requests - try more requests for preprod
@@ -126,7 +131,12 @@ async def test_magic_link_verification(
 
     # 500 is a server error - test should fail, not skip
     assert (
-        request_response.status_code in (200, 202, 204)
+        request_response.status_code
+        in (
+            200,
+            202,
+            204,
+        )
     ), f"Magic link request failed: {request_response.status_code} - {request_response.text}"
 
     # Get synthetic token from handler
@@ -231,7 +241,12 @@ async def test_anonymous_data_merge(
 
     # 500 is a server error - test should fail, not skip
     assert (
-        magic_response.status_code in (200, 202, 204)
+        magic_response.status_code
+        in (
+            200,
+            202,
+            204,
+        )
     ), f"Magic link request failed: {magic_response.status_code} - {magic_response.text}"
 
     # Step 4: Get synthetic token and verify with anonymous session
@@ -333,7 +348,12 @@ async def test_full_anonymous_to_authenticated_journey(
 
     # 500 is a server error - test should fail, not skip
     assert (
-        magic_response.status_code in (200, 202, 204)
+        magic_response.status_code
+        in (
+            200,
+            202,
+            204,
+        )
     ), f"Magic link request failed: {magic_response.status_code} - {magic_response.text}"
 
     # === Phase 4: Verify Magic Link ===
