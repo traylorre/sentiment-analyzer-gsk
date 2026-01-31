@@ -34,7 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **ATR Volatility** - Average True Range calculation from OHLC data
 - **AWS Cognito** - OAuth authentication (Google, GitHub)
 - **SendGrid** - Email notifications for magic links and alerts
-- **AWS X-Ray** - Day 1 mandatory distributed tracing (all 4 Lambdas)
+- **AWS X-Ray** - Day 1 mandatory distributed tracing (all 6 Lambdas)
 - **CloudWatch RUM** - Client-side user behavior analytics
 - **CloudFront + S3** - CDN for dashboard static assets *(Note: CloudFront removed in Feature 1203; now using AWS Amplify)*
 

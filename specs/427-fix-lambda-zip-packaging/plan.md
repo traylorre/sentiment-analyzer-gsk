@@ -69,7 +69,7 @@ src/validators/docker_import.py  # LPK-* patterns (in template repo)
 | Aspect | Complexity | Justification |
 |--------|------------|---------------|
 | Files Changed | 1 | Only deploy.yml |
-| Lines Changed | ~40 | 4 Lambdas × ~10 lines each |
+| Lines Changed | ~60 | 6 Lambdas × ~10 lines each |
 | Risk | Low | Applying known-working pattern |
 | Testing | E2E | Lambda invocation tests cover the fix |
 

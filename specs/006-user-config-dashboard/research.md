@@ -360,7 +360,7 @@ class CircuitBreaker:
 
 ### Decision: Day 1 Mandatory with SNS Message Attribute Propagation
 
-**Chosen**: AWS X-Ray on all 4 Lambdas using AWSXRayDaemonWriteAccess managed policy
+**Chosen**: AWS X-Ray on all 6 Lambdas using AWSXRayDaemonWriteAccess managed policy
 
 **Rationale**:
 - Full observability from day 1 (not deferred to Phase 2)

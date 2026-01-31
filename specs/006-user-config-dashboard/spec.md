@@ -50,7 +50,7 @@ Both APIs will be queried for the same tickers. The dashboard displays:
 - Q: News source selection? → A: Pivot to financial news APIs (Tiingo + Finnhub) for privacy compliance
 - Q: Date range handling? → A: Match API limitations (Tiingo decades, Finnhub 1 year on free tier)
 - Q: Distributed tracing approach? → A: AWS X-Ray native with SNS message attribute propagation
-- Q: Trace scope? → A: All 4 Lambdas (comprehensive coverage)
+- Q: Trace scope? → A: All 6 Lambdas (comprehensive coverage)
 - Q: X-Ray IAM policy? → A: Use AWS managed policy AWSXRayDaemonWriteAccess
 - Q: Email service? → A: SendGrid free tier (100 emails/day) with API key in AWS Secrets Manager
 - Q: Auth provider? → A: AWS Cognito for Google/GitHub OAuth
@@ -401,7 +401,7 @@ An admin receives a support request that a user's alerts never fire. The admin i
 **Observability**
 - **FR-033**: System MUST emit structured logs for all authentication events via AWS Lambda Powertools
 - **FR-034**: System MUST track metrics for: conversion rate, Tiingo/Finnhub latency/error rate, notification delivery success rate, configuration CRUD operations
-- **FR-035**: System MUST implement AWS X-Ray distributed tracing across ALL 4 Lambdas using AWSXRayDaemonWriteAccess managed policy, with SNS message attribute propagation (Day 1 mandatory - NOT Phase 2)
+- **FR-035**: System MUST implement AWS X-Ray distributed tracing across ALL 6 Lambdas using AWSXRayDaemonWriteAccess managed policy, with SNS message attribute propagation (Day 1 mandatory - NOT Phase 2)
 - **FR-036**: System MUST alert operators when Tiingo/Finnhub error rate exceeds 5% or notification delivery success drops below 95%
 - **FR-037**: System MUST implement CloudWatch RUM for client-side user behavior analytics
 - **FR-038**: System MUST alert operators when daily cost burn rate exceeds $3.33 (1/30th of $100 budget)
@@ -537,7 +537,7 @@ All code changes for this feature MUST include automated tests OR provide writte
 | CloudFront | ~$10 | ~100GB transfer/mo |
 | S3 | ~$2 | Static assets + state |
 | CloudWatch RUM | ~$5 | ~50K sessions/mo |
-| X-Ray | ~$3 | Tracing all 4 Lambdas |
+| X-Ray | ~$3 | Tracing all 6 Lambdas |
 | **Total** | **~$50/mo** | 50% headroom to $100 budget |
 
 ### Attacker Cost Perspective

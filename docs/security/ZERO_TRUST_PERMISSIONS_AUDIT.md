@@ -565,8 +565,8 @@ prod_model_version = "distilbert-v1.2.3"  # Pin to tested version
 
 | Resource Pattern | Occurrences | Condition Applied | Compliance |
 |------------------|-------------|-------------------|------------|
-| `*` (CloudWatch Logs) | 3 actions × 4 Lambdas = 12 | N/A (AWS managed policy) | ✅ Standard pattern |
-| `*` (CloudWatch Metrics) | 1 action × 4 Lambdas = 4 | `cloudwatch:namespace = "SentimentAnalyzer"` | ✅ Namespace-restricted |
+| `*` (CloudWatch Logs) | 3 actions × 6 Lambdas = 18 | N/A (AWS managed policy) | ✅ Standard pattern |
+| `*` (CloudWatch Metrics) | 1 action × 6 Lambdas = 6 | `cloudwatch:namespace = "SentimentAnalyzer"` | ✅ Namespace-restricted |
 | `bucket/*` (S3 objects) | 1 | N/A (bucket-scoped) | ✅ Standard S3 pattern |
 | `api/*/*` (API Gateway) | 1 | N/A (API ID-scoped) | ✅ Standard API Gateway pattern |
 

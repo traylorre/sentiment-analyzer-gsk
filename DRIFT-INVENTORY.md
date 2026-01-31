@@ -349,3 +349,38 @@ cd infrastructure/terraform && terraform output
 - **Terraform Truth:** `infrastructure/terraform/main.tf`, `outputs.tf`
 - **Primary Docs:** `README.md`, `docs/architecture/`
 - **Target Repo Config:** Template's `.specify/target-repo.yaml` (path updated to /home/zeebo/)
+
+---
+
+## Audit #10 - Lambda Count Correction (2026-01-30)
+
+**Discovery**: Systematic blind spot - Lambda count was "4" but actual count is "6" (notification + sse-streaming were added later).
+
+**Files Fixed (17 references across 8 files)**:
+| File | Lines | Change |
+|------|-------|--------|
+| SECURITY.md | 40, 69 | 4 → 6 Lambdas |
+| CHANGELOG.md | 37 | 4 → 6 Lambdas |
+| infrastructure/terraform/README.md | 103 | 4 → 6 Lambda functions |
+| specs/006-user-config-dashboard/plan.md | 188 | 4 → 6 Lambdas |
+| specs/006-user-config-dashboard/spec.md | 53, 404, 540 | 4 → 6 Lambdas |
+| specs/006-user-config-dashboard/checklists/requirements.md | 90 | 4 → 6 Lambdas |
+| specs/006-user-config-dashboard/research.md | 363 | 4 → 6 Lambdas |
+| specs/427-fix-lambda-zip-packaging/plan.md | 72 | 4 → 6 Lambdas, ~40 → ~60 lines |
+| specs/427-fix-lambda-zip-packaging/research.md | 25 | 5 → 6 Lambdas |
+| docs/security/ZERO_TRUST_PERMISSIONS_AUDIT.md | 568-569 | Math updated for 6 Lambdas |
+
+**Remaining**: IMPLEMENTATION_GUIDE.md needs archival (references phantom inference.lambda_handler)
+
+### Additional Critical Fixes (Audit #10 continued)
+
+| File | Issue | Fix |
+|------|-------|-----|
+| docs/architecture/INTERFACE-ANALYSIS-SUMMARY.md:179 | Wrong counts: "7 SQS, 3 SNS, 2 DDB" | Fixed to: "1 SQS, 2 SNS, 5 DDB" |
+| infrastructure/docs/TERRAFORM_RESOURCE_VERIFICATION.md:27-32 | Listed only 3 Lambdas | Added metrics, notification, sse-streaming |
+| infrastructure/docs/TERRAFORM_RESOURCE_VERIFICATION.md:258 | "Lambda \| 3" | Fixed to "Lambda \| 6" |
+| infrastructure/docs/TERRAFORM_RESOURCE_VERIFICATION.md:266 | Total Resources: 20 | Fixed to Total Resources: 23 |
+| docs/reference/IMPLEMENTATION_GUIDE.md | Phantom "inference.lambda_handler" refs | Moved to docs/archive/ |
+| docs/README.md:131 | Reference to active IMPLEMENTATION_GUIDE | Updated path to archive with note |
+
+**Total Audit #10 fixes**: 23 references across 12 files

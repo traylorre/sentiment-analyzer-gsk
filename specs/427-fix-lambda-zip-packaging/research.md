@@ -22,7 +22,7 @@ This fix applies an existing pattern (dashboard Lambda) to broken Lambdas. Minim
 | Alternative | Rejected Because |
 |-------------|------------------|
 | Convert to relative imports | Breaks local development, requires code changes |
-| Use Lambda layers | Overkill for 5 Lambdas, adds complexity |
+| Use Lambda layers | Overkill for 6 Lambdas, adds complexity |
 | Flat imports with PYTHONPATH | Doesn't fix the core structure issue |
 
 ## Canonical Sources

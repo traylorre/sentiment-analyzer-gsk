@@ -176,7 +176,7 @@ DYNAMODB (Green Zone - Protected)
 
 ### Analysis Artifacts
 - Interface catalog: 27 interfaces documented
-- Component inventory: 6 Lambdas, 2 DynamoDB tables, 3 SNS topics, 7 SQS queues
+- Component inventory: 6 Lambdas, 5 DynamoDB tables, 2 SNS topics, 1 SQS queue
 - Error handling: Retry logic, DLQs, circuit breakers
 - Data flow diagrams: Text-based sequence flows
 
