@@ -241,8 +241,8 @@ Operational Behaviors (must implement)
     - Free tier: reserved concurrency = 10 (conservative limit for 1,500 tweets/month, ~50 tweets/day)
     - Basic tier: reserved concurrency = 20 (supports 50K tweets/month, ~1,666 tweets/day)
     - Pro tier: reserved concurrency = 50 (supports 1M tweets/month, ~33,333 tweets/day)
-  - Analysis Lambda: 1024 MB memory, 30s timeout, reserved concurrency: 20 (processes SQS messages, performs DistilBERT sentiment analysis, writes to DynamoDB)
-  - Quota Reset Lambda: 256 MB memory, 60s timeout, reserved concurrency: 1 (monthly quota counter reset for Twitter sources)
+  - Analysis Lambda: 2048 MB memory, 60s timeout, reserved concurrency: 20 (processes SNS messages via container deployment, performs DistilBERT sentiment analysis, writes to DynamoDB)
+  - Quota Reset Lambda: 256 MB memory, 60s timeout, reserved concurrency: 1 (monthly quota counter reset for Twitter sources) **[NOT IMPLEMENTED - requires code + Terraform]**
     - Trigger: EventBridge scheduled rule `cron(0 0 1 * ? *)` (first day of month, midnight UTC)
     - Behavior:
       1. Scan source-configs table for all Twitter sources (type = "twitter")
@@ -254,6 +254,10 @@ Operational Behaviors (must implement)
     - IAM Permissions: dynamodb:Scan, dynamodb:UpdateItem (source-configs), cloudwatch:PutMetricData, logs:CreateLogStream, logs:PutLogEvents
     - CloudWatch Alarm: twitter.quota_reset_count = 0 on month boundary (evaluation: 24 hours after 1st of month) → CRITICAL (indicates quota reset did not run)
     - DLQ: quota-reset-lambda-dlq (14-day retention, S3 archival after 10 days)
+  - Dashboard Lambda: 1024 MB memory, 60s timeout, container deployment (FastAPI + Mangum), Lambda Function URL with IAM auth
+  - Metrics Lambda: 128 MB memory, 30s timeout, EventBridge trigger (every 1 minute), monitors stuck items in pending status, emits CloudWatch metrics
+  - Notification Lambda: 256 MB memory, 30s timeout, SNS + EventBridge triggers, sends email alerts, magic links, and digests via SendGrid
+  - SSE Streaming Lambda: 512 MB memory, 900s timeout (15 min), container deployment (FastAPI + sse-starlette), Lambda Function URL with RESPONSE_STREAM invoke mode for real-time sentiment updates
 - Expected Throughput:
   - Average load: 100 items/minute (~1.7 items/second)
   - Peak load: 1,000 items/minute (~16.7 items/second) during viral events or breaking news
