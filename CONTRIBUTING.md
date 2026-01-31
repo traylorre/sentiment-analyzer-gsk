@@ -223,11 +223,11 @@ git pull origin main
 git checkout -b feature/your-feature-name
 
 # Naming conventions:
-# - feature/add-twitter-ingestion
+# - feature/enhance-tiingo-ingestion
 # - fix/scheduler-timeout-bug
 # - docs/update-contributing-guide
 # - refactor/lambda-error-handling
-# - test/add-rss-parser-tests
+# - test/add-finnhub-integration-tests
 ```
 
 ### Creating a Pull Request

@@ -1,8 +1,8 @@
 # Architecture Drift Inventory
 
 Generated: 2026-01-29
-Updated: 2026-01-30 (Excision Pass #1 + #2 + #3 + Phase 5)
-Status: Active audit in progress - Phase 5 complete, Phase 6-7 pending
+Updated: 2026-01-30 (Excision Pass #1 + #2 + #3 + Phase 5 + Phase 6)
+Status: Active audit in progress - Phase 6 complete, Phase 7 (Final audit) pending
 
 ## Summary
 
@@ -31,6 +31,12 @@ Status: Active audit in progress - Phase 5 complete, Phase 6-7 pending
 - Phantom log groups: ✅ Fixed 3 refs in SPECIFICATION-GAPS.md (lines 560, 570, 592-600)
 - Missing Lambda in diagram: ✅ Added Metrics Lambda to dataflow-all-flows.mmd
 - **CRITICAL REMAINING:** security-flow.mmd needs complete rewrite (Phase 5)
+
+**Phase 6 Complete (2026-01-30) - README Overhaul:**
+- README.md:153 - Fixed Lambda count from "5 functions" to "6 functions (Ingestion, Analysis, Dashboard, SSE-Streaming, Notification, Metrics)"
+- README.md:731 - Fixed branch example from "feature/add-rss-parser" to "feature/enhance-tiingo-integration"
+- CONTRIBUTING.md:226 - "feature/add-twitter-ingestion" → "feature/enhance-tiingo-ingestion"
+- CONTRIBUTING.md:230 - "test/add-rss-parser-tests" → "test/add-finnhub-integration-tests"
 
 **Phase 5 Complete (2026-01-30) - Diagram Rewrites:**
 All 5 diagram files in docs/diagrams/ have been corrected:
@@ -293,9 +299,14 @@ All 5 diagram files have been corrected with complete rewrites:
 21. [x] ~~DIAGRAM-CREATION-CHECKLIST.md phantom cleanup~~ (all naming corrected)
 22. [x] ~~docs/diagrams/README.md phantom cleanup~~ (9 references updated)
 
-### Remaining (Phase 6-7)
-23. [ ] **Phase 6:** README overhaul (API Gateway as primary, Lambda Function URL as legacy)
-24. [ ] **Phase 7:** Final audit and verification
+### Phase 6 Complete (2026-01-30) - README Overhaul
+23. [x] ~~README.md:153 - Fixed Lambda count from "5 functions" to "6 functions (Ingestion, Analysis, Dashboard, SSE-Streaming, Notification, Metrics)"~~
+24. [x] ~~README.md:731 - Fixed branch example from "feature/add-rss-parser" to "feature/enhance-tiingo-integration"~~
+25. [x] ~~CONTRIBUTING.md:226 - "feature/add-twitter-ingestion" → "feature/enhance-tiingo-ingestion"~~
+26. [x] ~~CONTRIBUTING.md:230 - "test/add-rss-parser-tests" → "test/add-finnhub-integration-tests"~~
+
+### Remaining (Phase 7)
+27. [ ] **Phase 7:** Final audit and verification
 
 ---
 

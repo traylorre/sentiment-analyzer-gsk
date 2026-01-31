@@ -150,7 +150,7 @@ Ingests financial news from external sources (Tiingo, Finnhub) and returns senti
 ### Architecture
 
 - **Frontend**: AWS Amplify (Next.js SSR) with API Gateway backend
-- **Compute**: AWS Lambda (Python 3.13) - 5 functions (Ingestion, Analysis, Dashboard, SSE, Metrics)
+- **Compute**: AWS Lambda (Python 3.13) - 6 functions (Ingestion, Analysis, Dashboard, SSE-Streaming, Notification, Metrics)
 - **Real-time**: SSE Lambda with Lambda Web Adapter for RESPONSE_STREAM mode
 - **Orchestration**: EventBridge, SNS, SQS
 - **Storage**: DynamoDB (on-demand capacity), S3 (static assets, ML models)
@@ -728,7 +728,7 @@ git pull origin main
 git checkout -b feature/your-feature-name
 
 # Branch naming convention:
-# - feature/add-rss-parser
+# - feature/enhance-tiingo-integration
 # - fix/scheduler-timeout
 # - docs/update-readme
 ```
