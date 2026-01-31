@@ -19,12 +19,12 @@ High-level architecture (short)
 - Terraform + Terraform Cloud (TFC) manage infra; GitHub Actions run checks and publish artifacts.
 
 Ingestion Flow Details:
-- Single EventBridge scheduled rule (rate: 1 minute) triggers scheduler Lambda.
-- Scheduler Lambda scans source-configs table for all enabled sources, filters by poll_interval_seconds (e.g., only sources with next_poll_time <= now).
-- For each eligible source, scheduler Lambda invokes ingestion Lambda asynchronously with source_id as event payload.
-- Ingestion Lambda reads source config from DynamoDB, fetches new items from endpoint, deduplicates, publishes to SNS.
-- After successful poll, ingestion Lambda updates next_poll_time = now + poll_interval_seconds in source-configs.
-- Scaling: This pattern supports unlimited sources (no EventBridge 300-rule limit), with all sources checked every minute.
+- EventBridge scheduled rule (rate: 5 minutes) triggers Ingestion Lambda directly.
+- Ingestion Lambda fetches active configurations from DynamoDB via GSI query, aggregates unique tickers.
+- Ingestion Lambda fetches news from Tiingo and Finnhub APIs in parallel (circuit breaker + quota tracking).
+- Items are deduplicated using SHA256 hash of normalized headline + source, stored in DynamoDB.
+- Batch publishes to SNS (max 10 per batch) for Analysis Lambda processing.
+- Self-healing mechanism auto-republishes items stuck in pending status > 1 hour.
 
 Technology Stack
 ----------------
@@ -236,8 +236,8 @@ Operational Behaviors (must implement)
 - Watch filters: admin can set up to 5 watch keywords/hashtags per scope. Matching is token/hashtag exact match (case-insensitive). UI must reflect changes within ≤5s.
 - Backpressure: use SQS retention and DLQs; tune visibility timeout > expected processing time (60 seconds based on 30s Lambda timeout + buffer); reserved concurrency for Lambdas to protect downstream.
 - Lambda Configuration (tier-aware for ingestion Lambda):
-  - Scheduler Lambda: 256 MB memory, 60s timeout, reserved concurrency: 1 (single invocation per minute, scans DynamoDB, invokes ingestion Lambdas)
-  - Ingestion Lambda: 256 MB memory, 60s timeout, reserved concurrency tier-based (controlled via Terraform variable `var.twitter_api_tier`):
+  - Ingestion Lambda: 512 MB memory, 60s timeout, EventBridge trigger (every 5 minutes), parallel fetching from Tiingo/Finnhub
+  - Ingestion concurrency tier-based (controlled via Terraform variable `var.twitter_api_tier`):
     - Free tier: reserved concurrency = 10 (conservative limit for 1,500 tweets/month, ~50 tweets/day)
     - Basic tier: reserved concurrency = 20 (supports 50K tweets/month, ~1,666 tweets/day)
     - Pro tier: reserved concurrency = 50 (supports 1M tweets/month, ~33,333 tweets/day)
@@ -277,7 +277,7 @@ Operational Behaviors (must implement)
     - DynamoDB: $10-20/month (on-demand, ~1M writes/month)
     - API Gateway + CloudWatch + Secrets Manager: $15-30/month
   - Architectural change: Migrate to Query pattern (GSI) around 50 sources (+$2/month GSI cost)
-  - Bottleneck: Scheduler Lambda scan/query time approaching 15-20s
+  - Bottleneck: Ingestion Lambda execution time approaching 15-20s
 
   **Phase 3: 100-500 Sources (Scale-up)**
   - Twitter Basic → Pro tier: ~$200-2,000/month total (highly variable based on per-source activity)
@@ -291,8 +291,8 @@ Operational Behaviors (must implement)
     - Lambda: $100-200/month (50 reserved concurrency, ~5M invocations/month)
     - DynamoDB: $150-300/month (on-demand, ~10M writes/month - consider provisioned migration)
     - API Gateway + CloudWatch + Secrets Manager: $50-100/month
-  - Architectural change: Sharded schedulers or Step Functions required around 100-150 sources
-  - Bottleneck: Scheduler timeout (60s), ingestion Lambda concurrency
+  - Architectural change: Sharded ingestion or Step Functions required around 100-150 sources
+  - Bottleneck: Ingestion Lambda timeout (60s), parallel fetch capacity
 
   **Phase 4: 500-5,000 Sources (Enterprise)**
   - Twitter Pro tier required: ~$5,200-10,000/month total
@@ -333,7 +333,7 @@ Operational Behaviors (must implement)
   - Async invocations (EventBridge → Scheduler, Scheduler → Ingestion): MaximumRetryAttempts=2, MaximumEventAge=3600s (1 hour)
   - SQS event source (SQS → Inference): ReportBatchItemFailures enabled, maxReceiveCount=3 before DLQ
   - DLQ Configuration (with archival for data loss prevention):
-    - scheduler-lambda-dlq: Stores failed scheduler invocations
+    - ingestion-lambda-dlq: Stores failed ingestion invocations
     - ingestion-lambda-dlq: Stores failed ingestion invocations (Twitter/RSS fetch failures)
     - inference-lambda-dlq: Stores failed sentiment analysis invocations
   - Message retention: 14 days (maximum) in all DLQs
@@ -369,11 +369,11 @@ This service has architectural scaling limits that require proactive monitoring 
 
 **Phase 2: 50-100 Sources (Performance Degradation Begins)**
 - Expected cost: $130-160/month (Twitter Basic tier required)
-- Bottleneck #1: Scheduler Lambda DynamoDB Scan performance (15-20s scan time)
-  - Symptom: CloudWatch metric `scheduler.scan_duration_ms` exceeds 15,000ms
-  - Impact: Reduced polling accuracy, sources miss scheduled windows
-  - Migration trigger: When scan duration >15s for 2 consecutive days
-  - Fix: Migrate scheduler Lambda from Scan to Query using GSI polling-schedule-index
+- Bottleneck #1: Ingestion Lambda configuration fetch performance (15-20s query time)
+  - Symptom: CloudWatch metric `ingestion.config_fetch_duration_ms` exceeds 15,000ms
+  - Impact: Reduced polling accuracy, ingestion misses scheduled windows
+  - Migration trigger: When config fetch duration >15s for 2 consecutive days
+  - Fix: Use GSI query with caching (already implemented via DFA-003 5-minute cache)
   - Effort: 2-3 days engineering (update Lambda code, deploy)
   - Cost impact: Minimal (GSI adds ~$1-2/month)
 - Bottleneck #2: Twitter API Free tier rate limit (30 req/min)
@@ -389,11 +389,11 @@ This service has architectural scaling limits that require proactive monitoring 
 
 **Phase 3: 100-500 Sources (Architectural Change Required)**
 - Expected cost: $200-2,000/month (depends on Twitter usage per source)
-- Bottleneck #4: Scheduler Lambda timeout (60s hard AWS limit)
-  - Symptom: Scheduler Lambda timeout errors in CloudWatch Logs, incomplete source polling
+- Bottleneck #4: Ingestion Lambda timeout (60s hard AWS limit)
+  - Symptom: Ingestion Lambda timeout errors in CloudWatch Logs, incomplete source polling
   - Impact: CATASTROPHIC - some sources never polled, silent data gaps
-  - Migration trigger: When scheduler execution time >45s for 3 consecutive cycles
-  - Fix: Implement ONE of three architectural options (see "Scheduler Scaling Options" below)
+  - Migration trigger: When ingestion execution time >45s for 3 consecutive cycles
+  - Fix: Increase parallelism (ThreadPoolExecutor workers) or split into sharded ingestion Lambdas
   - Effort: 1-2 weeks engineering (Option A), 2-4 weeks (Option B/C)
   - Cost impact: Minimal for Option A/B, +$10-20/month for Option C (Step Functions)
 - Bottleneck #5: API Gateway API Key daily quota (1,000 req/day)
@@ -428,87 +428,34 @@ This service has architectural scaling limits that require proactive monitoring 
   - Multi-region deployment (reduce latency, increase availability)
 - Effort: 3-6 months engineering + dedicated SRE team
 
-### Scheduler Scaling Options (Phase 3 Migration)
+### Ingestion Scaling (Current Architecture)
 
-When scheduler Lambda execution time exceeds 45s (typically around 100 sources), implement ONE of the following architectural patterns:
+The current implementation uses a simpler architecture than originally planned:
 
-**Option A: Query Pattern with GSI (RECOMMENDED for 100-500 sources)**
-- Prerequisites: GSI polling-schedule-index already exists (defined in DynamoDB schema above)
-- Change: Replace DynamoDB Scan with Query in scheduler Lambda
-- Before (O(n) Scan):
-  ```python
-  response = dynamodb.scan(
-      TableName='source-configs',
-      FilterExpression='enabled = :true AND next_poll_time <= :now'
-  )
-  # Scans entire table, returns filtered results
-  # 100 sources: ~7-10s, 500 sources: ~40-60s (timeout risk)
-  ```
-- After (O(log n) Query):
-  ```python
-  response = dynamodb.query(
-      TableName='source-configs',
-      IndexName='polling-schedule-index',
-      KeyConditionExpression='enabled = :true AND next_poll_time <= :now'
-  )
-  # Queries only eligible sources using index
-  # 100 sources: <1s, 500 sources: <2s, 1,000 sources: <3s
-  ```
-- Performance improvement: 10-20x faster query time
-- Scales to: ~500 sources before hitting other limits (ingestion concurrency, cost)
-- Cost: +$1-2/month (GSI storage and read capacity)
-- Effort: 2-3 days (update Lambda code, test, deploy)
-- Rollback: Easy (revert Lambda code to Scan, GSI remains unused)
+**Actual Implementation:**
+- EventBridge rule (every 5 minutes) triggers Ingestion Lambda directly
+- Ingestion Lambda fetches active configurations via GSI query (DFA-003 caching)
+- Parallel fetching from Tiingo/Finnhub using ThreadPoolExecutor (max 4 workers)
+- Circuit breaker and quota tracking per source
 
-**Option B: Sharded Schedulers (for 500-5,000 sources)**
-- Architecture: Split sources across multiple scheduler Lambdas
-  - EventBridge rule 1 (every 1 min) → Scheduler-Shard-0 (handles sources 0-99)
-  - EventBridge rule 2 (every 1 min) → Scheduler-Shard-1 (handles sources 100-199)
-  - EventBridge rule 3 (every 1 min) → Scheduler-Shard-2 (handles sources 200-299)
-  - etc. (dynamically scale shards as sources grow)
-- Implementation:
-  - Add `shard_id` field to source-configs table (0-49 for 50 shards)
-  - Assign shard_id during source creation (round-robin or hash-based)
-  - Each shard queries: `shard_id = X AND enabled = true AND next_poll_time <= now`
-  - Requires GSI: PK=shard_id, SK=next_poll_time (or composite GSI)
-- Scales to: ~5,000 sources (50 shards × 100 sources/shard)
-- Cost: Same as Option A (no additional costs beyond GSI)
-- Effort: 1-2 weeks (design sharding strategy, update source creation logic, deploy multiple schedulers)
-- Operational complexity: Managing 10-50 EventBridge rules, monitoring multiple schedulers
-- Rollback: Moderate difficulty (requires data migration to remove shard_id)
-
-**Option C: Step Functions State Machine (for unlimited sources)**
-- Architecture: Replace scheduler Lambda with Step Functions workflow
-  - EventBridge rule (every 1 min) → Step Functions execution
-  - Step Functions queries DynamoDB (paginated, handles 1M+ sources)
-  - Map state (parallel mode) fans out to ingestion Lambdas (up to 10,000 parallel branches)
-  - No timeout constraint (Step Functions max execution: 1 year)
-- Workflow:
-  ```
-  1. Query DynamoDB (parallel, paginated if >1MB results)
-  2. Map state: For each eligible source → Invoke ingestion Lambda
-  3. Aggregate results, update CloudWatch metrics
-  4. Handle errors (DLQ integration)
-  ```
-- Scales to: Unlimited sources (tested to 100,000+ by AWS customers)
-- Cost: $0.025 per 1,000 state transitions (~$1-5/month for 100-1,000 sources)
-- Effort: 2-4 weeks (learn Step Functions, design workflow, migrate logic, test at scale)
-- Benefits: Built-in retry logic, visual workflow, better observability
-- Drawbacks: New orchestration paradigm, team learning curve
-- Rollback: Difficult (significant architectural change)
+**Scaling Options (if needed):**
+- Increase ThreadPoolExecutor workers for more parallelism
+- Increase Lambda memory (currently 512MB) for more CPU
+- Split into sharded ingestion Lambdas if execution time exceeds 45s
+- Consider Step Functions for unlimited source scalability
 
 ### CloudWatch Alarms for Proactive Scaling
 
 Implement these alarms to trigger migrations BEFORE failures occur:
 
-**Scheduler Performance (Critical - Bottleneck #2 & #4)**
-- Metric: `scheduler.scan_duration_ms` (custom metric, emit from scheduler Lambda)
-- Alarm 1: WARN when scan_duration >10,000ms for 2 consecutive minutes
-  - Action: Investigate source count growth, prepare for GSI migration
-- Alarm 2: CRITICAL when scan_duration >15,000ms for 2 consecutive minutes
-  - Action: Immediately migrate to Query pattern (Option A)
-- Alarm 3: EMERGENCY when execution_duration >45,000ms for 1 minute
-  - Action: Risk of timeout, urgently deploy Option A or B
+**Ingestion Performance (Critical)**
+- Metric: `ingestion.execution_duration_ms` (custom metric from Ingestion Lambda)
+- Alarm 1: WARN when execution_duration >30,000ms for 2 consecutive cycles
+  - Action: Investigate parallel fetch bottlenecks, consider increasing workers
+- Alarm 2: CRITICAL when execution_duration >45,000ms for 2 consecutive cycles
+  - Action: Approaching timeout, increase parallelism or consider sharding
+- Alarm 3: EMERGENCY when execution_duration >55,000ms for 1 cycle
+  - Action: Risk of timeout, urgent action required
 
 **Twitter API Quota (Critical - Bottleneck #1 & #4)**
 - Metric: `twitter.quota_utilization_pct` (custom metric: monthly_tweets_consumed ÷ tier_limit × 100)
@@ -540,8 +487,8 @@ Implement these alarms to trigger migrations BEFORE failures occur:
 | Current State | Symptom | Bottleneck | Recommended Fix | Effort | Cost Impact |
 |---------------|---------|------------|-----------------|--------|-------------|
 | 30 sources | Twitter quota 80% | Twitter Free tier | Upgrade to Basic ($100/mo) | 15 min | +$100/mo |
-| 50 sources | Scan time >10s | Scheduler Scan | Deploy Query pattern (Option A) | 2-3 days | +$2/mo |
-| 100 sources | Execution time >45s | Scheduler timeout | Already using Query? Deploy shards (Option B) | 1-2 weeks | +$0/mo |
+| 50 sources | Scan time >10s | Ingestion fetch | Deploy Query pattern (Option A) | 2-3 days | +$2/mo |
+| 100 sources | Execution time >45s | Ingestion timeout | Already using Query? Deploy shards (Option B) | 1-2 weeks | +$0/mo |
 | 500 sources | Quota 80% (Basic) | Twitter Basic tier | Upgrade to Pro ($5K/mo) | 15 min | +$4,900/mo |
 | 1,000 sources | DynamoDB cost >$500/mo | On-demand pricing | Migrate to provisioned capacity | 1 week | -$400/mo (savings) |
 | 5,000 sources | Shard management burden | Operational complexity | Migrate to Step Functions (Option C) | 2-4 weeks | +$20/mo |
@@ -552,15 +499,15 @@ Before each migration, validate with load testing:
 
 **Pre-Migration Validation (Query Pattern - Option A)**
 1. Populate source-configs table with 100 test sources
-2. Run scheduler Lambda with current Scan implementation, measure duration (baseline)
+2. Run ingestion Lambda with current Scan implementation, measure duration (baseline)
 3. Deploy Query pattern implementation to staging environment
-4. Run scheduler Lambda with Query, measure duration (should be <1s vs 10-15s baseline)
+4. Run ingestion Lambda with Query, measure duration (should be <1s vs 10-15s baseline)
 5. Verify all 100 sources are correctly identified and invoked
 6. Monitor for 24 hours to confirm no regressions
 
 **Pre-Migration Validation (Sharded Schedulers - Option B)**
 1. Create test sources distributed across 5 shards (20 sources each)
-2. Deploy 5 scheduler Lambda instances (1 per shard)
+2. Deploy 5 ingestion Lambda instances (1 per shard)
 3. Verify each shard only processes its assigned sources (no overlap)
 4. Simulate shard failure (disable 1 scheduler), verify only 1/5 of sources affected
 5. Validate shard rebalancing when new sources added
@@ -630,7 +577,7 @@ Table: sentiment-items
 Table: source-configs
 - Partition Key (PK): `source_id` (STRING) - unique identifier for each source
 - Attributes: type (STRING: "rss"|"twitter"), endpoint (STRING), auth_secret_ref (STRING: ARN), poll_interval_seconds (NUMBER), enabled (BOOLEAN), next_poll_time (NUMBER: Unix timestamp), last_poll_time (NUMBER: Unix timestamp), etag (STRING, optional for RSS), last_modified (STRING, optional for RSS), twitter_api_tier (STRING: "free"|"basic"|"pro", for Twitter sources only), monthly_tweets_consumed (NUMBER: for Twitter sources, resets monthly), last_quota_reset (NUMBER: Unix timestamp, for Twitter sources), quota_exhausted (BOOLEAN: for Twitter sources, auto-disable when monthly cap reached), created_at (ISO8601), updated_at (ISO8601)
-- GSI-1 (polling-schedule-index): PK=enabled (BOOLEAN), SK=next_poll_time (NUMBER) - Enables efficient Query instead of Scan for scheduler Lambda
+- GSI-1 (polling-schedule-index): PK=enabled (BOOLEAN), SK=next_poll_time (NUMBER) - Enables efficient Query instead of Scan for ingestion Lambda
   - Projection: ALL (project all attributes to avoid base table lookups)
   - Purpose: Critical scaling optimization - replaces O(n) Scan with O(log n) Query
   - Query pattern: `enabled = true AND next_poll_time <= now` (returns only sources ready to poll)
@@ -638,7 +585,7 @@ Table: source-configs
 - Purpose: Stores source subscription configurations accessed by Admin API and polling scheduler
 - Access pattern:
   - Admin API: GetItem by source_id (single source lookup)
-  - Scheduler Lambda: Query on GSI polling-schedule-index (find sources ready to poll)
+  - Ingestion Lambda: Query on GSI polling-schedule-index (find sources ready to poll)
   - Migration note: Initial implementation may use Scan (simpler), migrate to Query when approaching 50 sources
 - Capacity Mode: On-demand (low-volume table, predictable costs)
 - Encryption: Server-side encryption (SSE) with AWS-managed keys
@@ -719,10 +666,10 @@ Metrics & dashboard mapping
   - `sentiment.watch_match_count{filter}`
   - `sentiment.dedup_rate`
 - Scaling & Performance Metrics (critical for proactive bottleneck detection):
-  - `scheduler.scan_duration_ms` - Time to scan/query source-configs table (emit from scheduler Lambda)
+  - `ingestion.fetch_duration_ms` - Time to scan/query source-configs table (emit from ingestion Lambda)
     - WARN alarm: >10,000ms for 2 consecutive minutes
     - CRITICAL alarm: >15,000ms for 2 consecutive minutes (triggers GSI migration)
-  - `scheduler.execution_duration_ms` - Total scheduler Lambda execution time including invocations
+  - `ingestion.execution_duration_ms` - Total ingestion Lambda execution time including invocations
     - WARN alarm: >30,000ms for 2 consecutive minutes
     - EMERGENCY alarm: >45,000ms for 1 minute (risk of 60s timeout)
   - `scheduler.sources_polled` - Count of sources processed per scheduler invocation
@@ -739,13 +686,13 @@ Metrics & dashboard mapping
   - `dynamodb.consumed_read_capacity{table}` - Track DynamoDB read consumption for cost optimization analysis
   - `dynamodb.consumed_write_capacity{table}` - Track DynamoDB write consumption for provisioned capacity migration planning
   - **EventBridge Health Metrics** (prevents scheduler silent failures):
-    - `eventbridge.scheduler_rule_invocations` - Count of scheduler Lambda invocations per hour
+    - `eventbridge.scheduler_rule_invocations` - Count of ingestion Lambda invocations per hour
       - CRITICAL alarm: <50 invocations/hour (rule disabled or EventBridge failure)
       - Expected: 60 invocations/hour (1 per minute)
     - `eventbridge.rule_state{rule_name}` - Boolean metric indicating rule enabled/disabled state
-      - CRITICAL alarm: scheduler-rule state = DISABLED for >2 consecutive minutes
+      - CRITICAL alarm: ingestion-rule state = DISABLED for >2 consecutive minutes
       - Emit via Lambda that checks rule state every 5 minutes
-    - `eventbridge.missed_invocations` - Count of scheduler invocations that didn't execute
+    - `eventbridge.missed_invocations` - Count of ingestion invocations that didn't execute
       - Calculated: Expected (60/hour) - Actual invocations
       - WARN alarm: >5 missed invocations in 1 hour
 - Dashboard widgets must reference these exact metric names.
@@ -769,7 +716,7 @@ Metrics & dashboard mapping
       - Any metric with source_id dimension (competitive intelligence - enables source usage tracking)
       - Any metric with api_key_id dimension (usage tracking)
       - twitter.quota_utilization_pct (enables quota exhaustion attack planning)
-      - scheduler.scan_duration_ms (timing attack vector)
+      - ingestion.fetch_duration_ms (timing attack vector)
       - dlq.oldest_message_age_days (reveals incident duration)
       - oauth.refresh_failure_rate (reveals auth issues)
       - dynamodb.throttled_requests (hot partition attack data)
@@ -872,10 +819,10 @@ This section documents known operational fragilities, attack vectors, and mitiga
 
 ### Critical Operational Fragilities (Top 10)
 
-**1. Scheduler Lambda Timeout at Scale (CRITICAL)**
+**1. Ingestion Lambda Timeout at Scale (CRITICAL)**
 - **Failure Mode:** Scheduler hits 60s AWS timeout when scanning 100+ sources
 - **Impact:** Sources after timeout cutoff NEVER polled → silent permanent data gaps
-- **Detection:** CloudWatch alarm scheduler.execution_duration_ms >45s
+- **Detection:** CloudWatch alarm ingestion.execution_duration_ms >45s
 - **MTTR:** 1-2 weeks (requires GSI migration)
 - **Mitigation:** Deploy GSI polling-schedule-index BEFORE reaching 50 sources (preventive)
 - **Status:** GSI defined in schema, Query pattern documented in Scaling section
@@ -907,7 +854,7 @@ This section documents known operational fragilities, attack vectors, and mitiga
 **5. EventBridge Rule Silent Disable (HIGH)**
 - **Failure Mode:** Scheduler rule gets disabled (human error, AWS issue)
 - **Impact:** Complete ingestion halt, no new data processed
-- **Detection:** CloudWatch alarm when scheduler invocations <50/hour
+- **Detection:** CloudWatch alarm when ingestion invocations <50/hour
 - **MTTR:** 2-4 hours (investigate, re-enable rule)
 - **Mitigation:** EventBridge rule state monitoring every 5 minutes, auto-enable trigger
 - **Status:** IMPLEMENTED in spec lines 648-657
@@ -960,7 +907,7 @@ This section documents known operational fragilities, attack vectors, and mitiga
 - **Detection time:** 1-2 days (80% alarm)
 - **Mitigation:** Source creation rate limits (10/hour), max sources per tier, auto-throttling at 60%
 
-**Most Damaging Attack:** Scheduler timeout DoS
+**Most Damaging Attack:** Ingestion timeout DoS
 - **Attacker cost:** $0 (create 100+ sources via Admin API)
 - **Defender cost:** 1-2 weeks engineering time for GSI migration
 - **Detection time:** 45 seconds (execution time alarm)
@@ -1035,8 +982,8 @@ Contact / ownership
 - Q: Which AWS region should host the infrastructure? → A: us-west-2 (Oregon) - Good alternative to us-east-1, slightly higher availability due to fewer outages historically, minimal cost difference
 - Q: What technology should implement the externally-facing dashboard with metrics and admin controls? → A: CloudWatch Dashboard (native AWS) - Zero infrastructure overhead, direct metric integration, built-in auth via IAM/SSO, limited customization for admin controls
 - Q: Where should source configuration data (from POST /v1/sources) be persisted? → A: DynamoDB table (source-configs) with source_id as PK - Native serverless integration, fast Lambda access, supports atomic updates, consistent with existing data layer
-- Q: What should trigger the periodic polling of RSS/Twitter feeds for each configured source? → A: Single EventBridge rule (1-minute) → Scheduler Lambda scans source-configs → Invokes ingestion Lambda per eligible source - Avoids 300-rule limit, scales indefinitely
-- Q: How to handle more than 300 sources (EventBridge rule limit)? → A: Single EventBridge rule (1-minute interval) → Scheduler Lambda scans source-configs table → Invokes ingestion Lambda per enabled source - Scales indefinitely, simpler operations, all sources checked every minute
+- Q: What should trigger the periodic polling of news APIs for each configured source? → A: EventBridge rule (every 5 minutes) triggers Ingestion Lambda directly. Ingestion Lambda fetches active configs via GSI query, aggregates tickers, fetches from Tiingo/Finnhub in parallel with circuit breaker protection.
+- Q: How does the architecture handle scaling? → A: Ingestion Lambda processes all active configurations in a single invocation using parallel ThreadPoolExecutor fetching. Scales via increased memory/timeout if needed.
 - Q: What memory allocation should the sentiment inference Lambda function use? → A: 1024 MB - Required for DistilBERT model + Python runtime + logging, comfortable headroom for model loading, faster inference with more allocated CPU
 - Q: Which DynamoDB capacity mode should the tables use? → A: On-demand capacity - Pay per request ($1.25/M writes, $0.25/M reads), no throttling, instant scaling, unpredictable costs - Best for MVP with unknown traffic patterns
 - Q: Which Twitter API v2 tier should the service use? → A: Free tier - $0/month, 1,500 tweets/month, 50 requests/day, 10,000 characters/month - Only suitable for demo/testing, not production
@@ -1048,5 +995,5 @@ Contact / ownership
 - Q: What input validation rules should the Admin API enforce? → A: Comprehensive validation with pydantic models - source_id: regex `^[a-z0-9-]{1,64}$`, endpoint: HTTPS URL max 2048 chars, poll_interval: integer 60-86400, reject control characters - Use API Gateway request validation + Lambda pydantic models
 - Q: How should the service handle data deletion requests (GDPR "right to be forgotten")? → A: DELETE endpoint + cascading deletion - DELETE /v1/items/{source}/{item_id} removes record from sentiment-items table, audit logs deletion with timestamp and requester, returns 204 No Content - Full GDPR compliance
 - Q: Should the Twitter API tier configuration be hardcoded or externalized to support future upgrades (Free → Basic → Pro)? → A: Externalized via Terraform variable `twitter_api_tier` - Enables seamless tier upgrades with zero code changes, tier-aware Lambda concurrency scaling (10→20→50), DynamoDB quota tracking fields, automatic tier detection via environment variables - Upgrade procedure: change Terraform variable + apply (zero downtime)
-- Q: What are the architectural scaling bottlenecks and when should migrations be triggered? → A: 32 identified bottlenecks across 9 categories - Top 3: (1) Twitter Free tier quota at 1,500 tweets/month, (2) Scheduler Lambda DynamoDB Scan at ~50-100 sources (15-20s scan time), (3) Scheduler timeout (60s) at ~100-150 sources - Mitigation: GSI (polling-schedule-index) enables Query pattern for 10-20x performance improvement, supports scaling to 500 sources before requiring sharded schedulers or Step Functions - Proactive monitoring via CloudWatch alarms (scheduler.scan_duration_ms >15s triggers migration)
-- Q: What are the operational fragilities and can this service run unattended for 1 year? → A: 68 fragilities identified across 7 categories (19 CRITICAL, 24 HIGH, 17 MEDIUM, 8 LOW) - Top 5 service-killing issues: (1) Scheduler timeout at 100 sources (guaranteed failure), (2) OAuth refresh cascade (mass source failures), (3) DLQ 14-day expiry (permanent data loss), (4) Twitter quota exhaustion attack ($0 attack cost), (5) Regional AWS outage (4-12 hour RTO) - Service CAN run 1 year unattended IF: OAuth token caching+jitter implemented, DLQ S3 archival enabled, Twitter auto-throttling at 60%, EventBridge rule monitoring active, GSI deployed before 50 sources, monthly quota reset automation added - Service CANNOT run 1 year unattended WITHOUT these protections due to guaranteed failures at scale
+- Q: What are the architectural scaling bottlenecks and when should migrations be triggered? → A: 32 identified bottlenecks across 9 categories - Top 3: (1) Twitter Free tier quota at 1,500 tweets/month, (2) Ingestion Lambda DynamoDB Scan at ~50-100 sources (15-20s scan time), (3) Ingestion timeout (60s) at ~100-150 sources - Mitigation: GSI (polling-schedule-index) enables Query pattern for 10-20x performance improvement, supports scaling to 500 sources before requiring sharded schedulers or Step Functions - Proactive monitoring via CloudWatch alarms (ingestion.fetch_duration_ms >15s triggers migration)
+- Q: What are the operational fragilities and can this service run unattended for 1 year? → A: 68 fragilities identified across 7 categories (19 CRITICAL, 24 HIGH, 17 MEDIUM, 8 LOW) - Top 5 service-killing issues: (1) Ingestion timeout at 100 sources (guaranteed failure), (2) OAuth refresh cascade (mass source failures), (3) DLQ 14-day expiry (permanent data loss), (4) Twitter quota exhaustion attack ($0 attack cost), (5) Regional AWS outage (4-12 hour RTO) - Service CAN run 1 year unattended IF: OAuth token caching+jitter implemented, DLQ S3 archival enabled, Twitter auto-throttling at 60%, EventBridge rule monitoring active, GSI deployed before 50 sources, monthly quota reset automation added - Service CANNOT run 1 year unattended WITHOUT these protections due to guaranteed failures at scale

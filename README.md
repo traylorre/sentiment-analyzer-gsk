@@ -149,7 +149,7 @@ Ingests financial news from external sources (Tiingo, Finnhub) and returns senti
 
 ### Architecture
 
-- **Frontend**: AWS Amplify (Next.js SSR) with direct Lambda Function URL access
+- **Frontend**: AWS Amplify (Next.js SSR) with API Gateway backend
 - **Compute**: AWS Lambda (Python 3.13) - 5 functions (Ingestion, Analysis, Dashboard, SSE, Metrics)
 - **Real-time**: SSE Lambda with Lambda Web Adapter for RESPONSE_STREAM mode
 - **Orchestration**: EventBridge, SNS, SQS
@@ -244,7 +244,7 @@ graph TB
         end
     end
 
-    %% User flows - thicker lines for primary paths (direct to Amplify/Lambda Function URLs)
+    %% User flows - thicker lines for primary paths (via API Gateway)
     Browser ==>|Static| Amplify
     Browser ==>|/api/*| APIGW
     Browser ==>|/api/v2/stream*| SSELambda
@@ -496,7 +496,7 @@ Post-Phase 0 security hardening with httpOnly cookies:
 sequenceDiagram
     participant Browser
     participant Frontend as Next.js Frontend<br/>(Amplify)
-    participant Dashboard as Dashboard Lambda<br/>(Function URL)
+    participant Dashboard as Dashboard Lambda<br/>(API Gateway)
     participant Cognito as Cognito User Pool
     participant Users as sentiment-users
 

@@ -1,6 +1,6 @@
 """Contract tests for OHLC endpoint (Feature 011).
 
-Validates that OHLC endpoint conforms to ohlc-api.yaml contract:
+Validates OHLC endpoint response structure:
 - GET /api/v2/tickers/{ticker}/ohlc (OHLC price data)
 """
 
@@ -8,7 +8,7 @@ from datetime import date
 
 from pydantic import BaseModel, Field
 
-# --- Response Schema Definitions (from ohlc-api.yaml) ---
+# --- Response Schema Definitions ---
 
 
 class PriceCandle(BaseModel):

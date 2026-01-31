@@ -81,10 +81,10 @@
   Every 60 seconds
   ```
 
-**Arrow: EventBridge → Scheduler Lambda**
-- From: (610, 250) → To: (700, 250)
+**Arrow: EventBridge → Ingestion Lambda**
+- From: (610, 250) → To: (700, 350)
 - Style: Solid, 3px, `#81C784`
-- Label: "Trigger (1/min)"
+- Label: "Trigger (5min)"
 
 **Component: API Gateway**
 - Position: (450, 600)
@@ -107,23 +107,6 @@
 ---
 
 ### Layer 3: Lambda Functions (x: 700-900)
-
-**Component: Scheduler Lambda**
-- Position: (700, 150)
-- Size: 180 x 140 px
-- Shape: Rounded rectangle
-- Color: `#E1BEE7` (light purple - pastel)
-- Border: 2px solid `#9C27B0`
-- Text:
-  ```
-  scheduler-lambda
-  256 MB | 60s timeout
-  Concurrency: 1
-
-  • Query source-configs
-  • Filter: enabled=true
-  • Invoke ingestion
-  ```
 
 **Component: Ingestion Lambda (Twitter)**
 - Position: (700, 350)
@@ -174,16 +157,6 @@
   • CRUD sources
   • Validation
   ```
-
-**Arrow: Scheduler → Ingestion (Twitter)**
-- From: (800, 290) → To: (800, 350)
-- Style: Solid, 4px (thick), `#9C27B0`
-- Label: "Invoke N times\n(N = source count)"
-
-**Arrow: Scheduler → Ingestion (RSS)**
-- From: (800, 290) → To: (800, 530)
-- Style: Solid, 4px (thick), `#9C27B0`
-- Label: "Async invocation"
 
 **Arrow: Twitter API → Ingestion Twitter**
 - From: (330, 260) → To: (700, 420)

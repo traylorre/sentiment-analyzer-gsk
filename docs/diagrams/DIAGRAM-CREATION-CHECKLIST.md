@@ -68,9 +68,6 @@ Zone 5 (Infrastructure): #E3F2FD (Very Light Blue)
   - Fill: #F3E5F5, Border: #CE93D8 2px
 
 **Layer 3: Lambda Functions (x: 700-900)**
-- [ ] Scheduler Lambda (700, 150) - Size: 180x140
-  - Fill: #E1BEE7, Border: #9C27B0 2px
-  - Text: "scheduler-lambda\n256 MB | 60s timeout\nConcurrency: 1"
 - [ ] Ingestion Lambda Twitter (700, 350) - Size: 180x140
 - [ ] Ingestion Lambda RSS (700, 530) - Size: 180x140
 - [ ] Admin API Lambda (700, 710) - Size: 180x140
@@ -101,8 +98,7 @@ Zone 5 (Infrastructure): #E3F2FD (Very Light Blue)
 ### Arrows (Connect components)
 
 **Traffic Volume Indicators:**
-- [ ] EventBridge → Scheduler: 3px solid #81C784
-- [ ] Scheduler → Ingestion (Twitter/RSS): 4px solid #9C27B0 (thick)
+- [ ] EventBridge → Ingestion: 3px solid #81C784 - Label: "Trigger (5min)"
 - [ ] Ingestion → SNS: 5px solid #F48FB1 (very thick) - Label: "10-100 items/poll"
 - [ ] SNS → SQS: 4px solid #FFF176
 - [ ] SQS → Inference: 5px solid #9C27B0 (very thick) - Label: "Poll (batch: 10)"

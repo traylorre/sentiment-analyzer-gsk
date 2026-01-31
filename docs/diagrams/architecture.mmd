@@ -27,11 +27,12 @@ flowchart TB
     end
 
     subgraph Lambda["AWS Lambda Functions"]
-        Ingestion["Ingestion Lambda<br/>512MB / 60s"]
-        Analysis["Analysis Lambda<br/>1024MB / 30s"]
-        AuthLambda["Auth Lambda<br/>512MB / 30s<br/>/api/v2/auth/*<br/>PKCE, CSRF, Sessions"]
-        Dashboard["Dashboard Lambda<br/>512MB / 60s<br/>REST API<br/>@require_role decorator"]
+        Ingestion["Ingestion Lambda<br/>512MB / 60s<br/>EventBridge trigger"]
+        Analysis["Analysis Lambda<br/>1024MB / 30s<br/>SNS trigger"]
+        Dashboard["Dashboard Lambda<br/>512MB / 60s<br/>REST API + Auth<br/>/api/v2/* routes<br/>PKCE, CSRF, Sessions"]
         SSE["SSE Lambda<br/>512MB / 60s<br/>RESPONSE_STREAM<br/>JWT validation"]
+        Metrics["Metrics Lambda<br/>128MB / 30s<br/>EventBridge 1min<br/>StuckItems metric"]
+        Notification["Notification Lambda<br/>256MB / 30s<br/>SNS + EventBridge<br/>SendGrid emails"]
     end
 
     subgraph Storage["Data Storage"]
@@ -54,24 +55,23 @@ flowchart TB
         Browser["Web Browser"]
     end
 
-    %% User Request Flow (via Amplify + Lambda Function URLs)
+    %% User Request Flow (via Amplify + API Gateway)
     Browser -->|HTTPS| AmplifyApp
     AmplifyApp -->|Static assets| S3
     Browser -->|API calls| APIGW
-    APIGW -->|"/api/v2/auth/*"| AuthLambda
     APIGW -->|"/api/v2/*"| Dashboard
     Browser -->|"/api/v2/stream*"| SSE
 
-    %% Authentication Flow
-    AuthLambda -->|OAuth redirect| Cognito
+    %% Authentication Flow (handled by Dashboard Lambda)
+    Dashboard -->|OAuth redirect| Cognito
     Cognito -->|OAuth callback| OAuthProviders
     OAuthProviders -->|tokens| Cognito
-    Cognito -->|JWT with jti| AuthLambda
-    AuthLambda -->|PKCE state| AuthTables
-    AuthLambda -->|Magic link tokens| AuthTables
-    AuthLambda -->|Sessions| AuthTables
-    AuthLambda -->|JWT_SECRET| Secrets
-    AuthLambda -.->|Set-Cookie: refresh_token<br/>HttpOnly, Secure, SameSite=None| Browser
+    Cognito -->|JWT with jti| Dashboard
+    Dashboard -->|PKCE state| AuthTables
+    Dashboard -->|Magic link tokens| AuthTables
+    Dashboard -->|Sessions| AuthTables
+    Dashboard -->|JWT_SECRET| Secrets
+    Dashboard -.->|Set-Cookie: refresh_token<br/>HttpOnly, Secure, SameSite=None| Browser
 
     %% Data Ingestion Flow
     Schedule -->|Trigger| Ingestion
@@ -95,11 +95,23 @@ flowchart TB
     SSE -->|Poll/Scan| DynamoDB
     SSE -.->|Stream Events| Browser
 
+    %% Metrics Lambda Flow
+    Schedule -->|1min trigger| Metrics
+    Metrics -->|Query by_status GSI| DynamoDB
+    Metrics -->|StuckItems metric| CloudWatch
+
+    %% Notification Lambda Flow
+    SNS -->|Alert trigger| Notification
+    Notification -->|User lookup| DynamoDB
+    Notification -->|SendGrid API| External
+
     %% Monitoring
     Ingestion -->|Logs| CloudWatch
     Analysis -->|Logs| CloudWatch
     Dashboard -->|Logs| CloudWatch
     SSE -->|Logs| CloudWatch
+    Metrics -->|Logs| CloudWatch
+    Notification -->|Logs| CloudWatch
     CloudWatch -->|Triggers| Alarms
 
     %% Styling - Dark theme with white text
@@ -114,7 +126,7 @@ flowchart TB
     classDef gateway fill:#3D3D6B,stroke:#3F51B5,stroke-width:2px,color:#FFFFFF
 
     class Tiingo,Finnhub,OAuthProviders external
-    class Ingestion,Analysis,AuthLambda,Dashboard,SSE lambda
+    class Ingestion,Analysis,Dashboard,SSE,Metrics,Notification lambda
     class DynamoDB,AuthTables,Secrets storage
     class SNS,DLQ messaging
     class CloudWatch,Alarms monitoring

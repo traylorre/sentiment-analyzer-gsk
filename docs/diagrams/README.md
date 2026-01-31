@@ -345,11 +345,6 @@ Keep Canva project active for future diagrams:
    - Focus: CRUD operations, SSRF prevention, rate limiting
    - Audience: API integrators
 
-6. **Scheduler Scaling (Scan vs Query)**
-   - Components: Scheduler Lambda, DynamoDB, GSI
-   - Focus: Performance comparison, migration path
-   - Audience: Performance engineers
-
 ---
 
 ## Exporting Diagrams

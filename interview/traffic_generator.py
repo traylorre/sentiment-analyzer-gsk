@@ -17,10 +17,16 @@ Usage:
     python3 traffic_generator.py --env preprod --scenario price-sentiment
     python3 traffic_generator.py --env preprod --scenario circuit-breaker
     python3 traffic_generator.py --env preprod --scenario rate-limit
+    python3 traffic_generator.py --url https://custom.example.com --scenario basic
+
+Environment Variables:
+    SENTIMENT_PREPROD_URL: Override preprod Lambda URL
+    SENTIMENT_PROD_URL: Override prod Lambda URL
 """
 
 import argparse
 import asyncio
+import os
 import random
 import sys
 import time
@@ -30,10 +36,17 @@ from typing import Any
 
 import httpx
 
-# Environment configurations
+# Environment configurations - use env vars with fallback to defaults
+# Set SENTIMENT_PREPROD_URL or SENTIMENT_PROD_URL to override
 ENVIRONMENTS = {
-    "preprod": "https://cjx6qw4a7xqw6cuifvkbi6ae2e0evviw.lambda-url.us-east-1.on.aws",
-    "prod": "https://prod-sentiment-dashboard.lambda-url.us-east-1.on.aws",
+    "preprod": os.environ.get(
+        "SENTIMENT_PREPROD_URL",
+        "https://cjx6qw4a7xqw6cuifvkbi6ae2e0evviw.lambda-url.us-east-1.on.aws",
+    ),
+    "prod": os.environ.get(
+        "SENTIMENT_PROD_URL",
+        "https://prod-sentiment-dashboard.lambda-url.us-east-1.on.aws",
+    ),
 }
 
 # Sample data for generating realistic traffic
@@ -588,13 +601,23 @@ async def main():
         action="store_true",
         help="Reduce output verbosity",
     )
+    parser.add_argument(
+        "--url",
+        type=str,
+        default=None,
+        help="Override base URL (ignores --env if set)",
+    )
 
     args = parser.parse_args()
 
-    base_url = ENVIRONMENTS.get(args.env)
-    if not base_url:
-        print(f"Unknown environment: {args.env}")
-        sys.exit(1)
+    # URL priority: --url flag > environment variable > default
+    if args.url:
+        base_url = args.url
+    else:
+        base_url = ENVIRONMENTS.get(args.env)
+        if not base_url:
+            print(f"Unknown environment: {args.env}")
+            sys.exit(1)
 
     print(
         f"""

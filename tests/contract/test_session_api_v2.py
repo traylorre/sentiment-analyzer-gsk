@@ -4,8 +4,6 @@ Tests for:
 - POST /api/v2/auth/anonymous (T015)
 - GET /api/v2/auth/session (T016)
 - POST /api/v2/auth/magic-link/verify - 409 response (T030)
-
-Validates responses conform to contracts/session-api-v2.yaml schema.
 """
 
 import uuid
@@ -15,7 +13,7 @@ from typing import Any
 import pytest
 from pydantic import BaseModel, Field
 
-# --- Response Schema Definitions (from session-api-v2.yaml) ---
+# --- Response Schema Definitions ---
 
 
 class SessionResponse(BaseModel):

@@ -385,8 +385,7 @@
   ```
   Dead Letter Queue (DLQ)
 
-  3 DLQs:
-  • scheduler-lambda-dlq
+  2 DLQs:
   • ingestion-lambda-dlq
   • inference-lambda-dlq
 
