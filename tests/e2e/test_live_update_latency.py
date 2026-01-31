@@ -275,12 +275,10 @@ class TestLiveUpdateLatency:
                 break
 
             # Get current samples
-            result = await page.evaluate(
-                """() => ({
+            result = await page.evaluate("""() => ({
                     samples: window.latencySamples.slice(),
                     lastMetrics: window.lastLatencyMetrics
-                })"""
-            )
+                })""")
 
             samples = result.get("samples", [])
 

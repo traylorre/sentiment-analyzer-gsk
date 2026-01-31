@@ -300,7 +300,12 @@ async def test_magic_link_rate_limit(
     # 500 is a server error - test should fail, not skip
     # Should succeed
     assert (
-        first_response.status_code in (200, 202, 204)
+        first_response.status_code
+        in (
+            200,
+            202,
+            204,
+        )
     ), f"Magic link request failed: {first_response.status_code} - {first_response.text}"
 
     # Make rapid follow-up requests
