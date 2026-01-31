@@ -557,17 +557,17 @@ GDPR/Compliance (7 years):
 
 Operational (1 year):
   Log Groups:
-    - /aws/lambda/admin-api-lambda
+    - /aws/lambda/{env}-sentiment-dashboard
       - Reason: API access audit
       - Retention: 1 year (365 days)
       - Cost: ~$20-30/month
 
 Operational (90 days):
   Log Groups:
-    - /aws/lambda/scheduler-lambda
+    - /aws/lambda/{env}-sentiment-ingestion  # Ingestion Lambda (EventBridge-triggered scheduler)
     - /aws/lambda/ingestion-lambda-rss
     - /aws/lambda/ingestion-lambda-twitter
-    - /aws/lambda/inference-lambda
+    - /aws/lambda/{env}-sentiment-analysis
     - /aws/lambda/dlq-archival-lambda
     - /aws/lambda/quota-reset-lambda
       - Reason: Troubleshooting recent issues
@@ -589,13 +589,13 @@ Terraform Configuration:
     retention_in_days = 2557  # 7 years
   }
 
-  resource "aws_cloudwatch_log_group" "admin_api_logs" {
-    name              = "/aws/lambda/admin-api-lambda"
+  resource "aws_cloudwatch_log_group" "dashboard_logs" {
+    name              = "/aws/lambda/${var.env}-sentiment-dashboard"
     retention_in_days = 365   # 1 year
   }
 
-  resource "aws_cloudwatch_log_group" "inference_logs" {
-    name              = "/aws/lambda/inference-lambda"
+  resource "aws_cloudwatch_log_group" "analysis_logs" {
+    name              = "/aws/lambda/${var.env}-sentiment-analysis"
     retention_in_days = 90    # 90 days
   }
 
@@ -654,7 +654,7 @@ Migration Decision Tree:
 
 ---
 
-### Conflict 3: Scheduler Scan vs Query
+### Conflict 3: Ingestion Lambda Scan vs Query
 
 **Location 1:** Line 23 - "Uses Scan"
 **Location 2:** Line 387 - "Use Query with GSI"

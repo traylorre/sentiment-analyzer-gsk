@@ -1,24 +1,36 @@
 # Architecture Drift Inventory
 
 Generated: 2026-01-29
-Updated: 2026-01-30 (Excision Pass #1)
-Status: Active audit in progress - Pass #1 complete
+Updated: 2026-01-30 (Excision Pass #1 + #2 + #3)
+Status: Active audit in progress - Pass #3 complete, Phase 5 pending
 
 ## Summary
 
 | Category | Count | Status | Severity |
 |----------|-------|--------|----------|
-| Phantom Components | 4 → 1 | ✅ 3 fixed, 1 partial | HIGH |
+| Phantom Components | 4 → 0 | ✅ All fixed | HIGH |
 | Deprecated Paths Still Primary | 2 | ⏳ Pending | HIGH |
-| Hardcoded URLs | 8 → 5 | ✅ 3 fixed | MEDIUM |
+| Hardcoded URLs | 8 → 3 | ✅ 5 fixed | MEDIUM |
 | Legacy Code Markers | 12 | ⏳ Pending | LOW |
 | Archive Directories | 3 | ✅ Acceptable | INFO |
 | Commented-Out Terraform | 9 | ⏳ Pending | LOW |
+| Diagram Rewrite Required | 1 | ⏳ Phase 5 | CRITICAL |
 
 **Pass #1 Progress (2026-01-30):**
 - Phantom Auth Lambda: ✅ Fixed in architecture.mmd
 - Phantom Scheduler Lambda: ✅ Fixed in 4 diagram files, ⚠️ ~15 refs remain in SPEC.md
 - Hardcoded URLs: ✅ Fixed in traffic_generator.py (env vars) and ohlc-api.yaml (server vars)
+
+**Pass #2 Progress (2026-01-30):**
+- Phantom Scheduler Lambda: ✅ Fixed 3 more deceptive refs (docs/diagrams/README.md, SPECIFICATION-GAPS.md x2)
+- Hardcoded URLs: ✅ Fixed 2 in interview/index.html (Amplify URLs + S3 metadata URL now configurable)
+- Remaining scheduler refs: Documented as conceptual/acceptable (EventBridge scheduling discussions, not phantom Lambda)
+
+**Pass #3 Progress (2026-01-30) - Blind Spot Detection:**
+- INFERENCE → ANALYSIS naming: ✅ Fixed 3 refs in SPEC.md (lines 244, 338, 537-547)
+- Phantom log groups: ✅ Fixed 3 refs in SPECIFICATION-GAPS.md (lines 560, 570, 592-600)
+- Missing Lambda in diagram: ✅ Added Metrics Lambda to dataflow-all-flows.mmd
+- **CRITICAL REMAINING:** security-flow.mmd needs complete rewrite (Phase 5)
 
 ---
 
@@ -41,7 +53,7 @@ Documentation references Lambda functions that do not exist.
 | Auth Lambda | ✅ FIXED | Removed from architecture.mmd; auth handled by Dashboard Lambda |
 | Config Lambda | ✅ FIXED | USE-CASE-DIAGRAMS.md deleted (2026-01-29) |
 | Alert Lambda | ✅ FIXED | USE-CASE-DIAGRAMS.md deleted; alerts handled by Notification Lambda |
-| Scheduler Lambda | ⚠️ PARTIAL | Removed from diagram docs; ~15 refs remain in SPEC.md (Pass #2) |
+| Scheduler Lambda | ✅ FIXED | All deceptive refs fixed; remaining refs are conceptual (EventBridge scheduling) |
 
 **Completed Actions:**
 - ✅ USE-CASE-DIAGRAMS.md deleted (2026-01-29)
@@ -50,9 +62,25 @@ Documentation references Lambda functions that do not exist.
 - ✅ DIAGRAM-CREATION-CHECKLIST.md fixed (2026-01-30)
 - ✅ diagram-2-security-flow.md DLQ list fixed (2026-01-30)
 - ✅ docs/diagrams/README.md Scheduler section removed (2026-01-30)
+- ✅ docs/diagrams/README.md:51 Lambda list corrected (2026-01-30 Pass #2)
+- ✅ docs/reference/SPECIFICATION-GAPS.md:567 phantom log group fixed (2026-01-30 Pass #2)
+- ✅ docs/reference/SPECIFICATION-GAPS.md:657 section title fixed (2026-01-30 Pass #2)
+- ✅ SPEC.md:244 "Inference Lambda" → "Analysis Lambda" (2026-01-30 Pass #3)
+- ✅ SPEC.md:338 "inference-lambda-dlq" → "analysis-lambda-dlq" (2026-01-30 Pass #3)
+- ✅ SPEC.md:537-547 Terraform module example fixed to use ${var.environment}-sentiment-analysis (2026-01-30 Pass #3)
+- ✅ SPECIFICATION-GAPS.md:560 "/aws/lambda/admin-api-lambda" → "/aws/lambda/{env}-sentiment-dashboard" (2026-01-30 Pass #3)
+- ✅ SPECIFICATION-GAPS.md:570 "/aws/lambda/inference-lambda" → "/aws/lambda/{env}-sentiment-analysis" (2026-01-30 Pass #3)
+- ✅ SPECIFICATION-GAPS.md:592-600 Terraform log group resources (admin_api_logs → dashboard_logs, inference_logs → analysis_logs) (2026-01-30 Pass #3)
+- ✅ dataflow-all-flows.mmd added Metrics Lambda to Compute subgraph (was showing 5 of 6 Lambdas) (2026-01-30 Pass #3)
 
-**Remaining (Pass #2):**
-- ⏳ SPEC.md has ~15 Scheduler Lambda refs in bottleneck/scaling analysis sections
+**Conceptual Scheduler Refs (Acceptable - Not Phantom):**
+These use "scheduler" generically to describe EventBridge scheduling behavior, NOT a phantom Lambda:
+- README.md:146 - "EventBridge scheduler + Lambda processors"
+- README.md:732 - Example branch name `fix/scheduler-timeout`
+- CONTRIBUTING.md:227 - Example branch name
+- SPEC.md:323, 427, 512, 584-585, 675-677, 688-691 - Scaling discussions and metric names
+- src/lambdas/ingestion/handler.py:15, 169 - Correctly references "EventBridge scheduler"
+- src/lambdas/metrics/handler.py:9 - Correctly references "EventBridge scheduler"
 
 ---
 
@@ -103,11 +131,17 @@ output "dashboard_api_url" {
 
 ### S3 URLs
 
-| URL | Files |
-|-----|-------|
-| `preprod-sentiment-lambda-deployments.s3.amazonaws.com/deployment-metadata.json` | interview/index.html:1815 |
+| URL | Files | Status |
+|-----|-------|--------|
+| `preprod-sentiment-lambda-deployments.s3.amazonaws.com/deployment-metadata.json` | ~~interview/index.html:1815~~ | ✅ FIXED (configurable via window.DEPLOYMENT_METADATA_URL) |
 
-**Action Required:** Replace hardcoded URLs with environment variables or Terraform outputs
+### Amplify URLs
+
+| URL | Files | Status |
+|-----|-------|--------|
+| Hardcoded Amplify domain URLs | ~~interview/index.html:1738~~ | ✅ FIXED (configurable via window.ENVIRONMENT_URLS) |
+
+**Remaining:** API Gateway URLs in historical spec docs (acceptable for documentation purposes)
 
 ---
 
@@ -160,6 +194,32 @@ Well-organized archives exist at:
 
 ---
 
+## Category 7: Diagram Rewrite Required (CRITICAL - Phase 5)
+
+### security-flow.mmd - Fundamentally Broken
+
+The security flow diagram contains multiple phantom components and outdated naming that cannot be fixed with simple edits. It requires a complete rewrite.
+
+**Phantom Components in Diagram:**
+| Phantom | Actual |
+|---------|--------|
+| Twitter ingestion Lambda | Tiingo API via single Ingestion Lambda |
+| RSS ingestion Lambda | Finnhub API via single Ingestion Lambda |
+| admin-api-lambda | Dashboard Lambda handles admin |
+| inference-lambda | Analysis Lambda |
+
+**Missing Lambdas (3 of 6 not shown):**
+- Notification Lambda
+- Metrics Lambda
+- SSE Streaming Lambda
+
+**Additional Reference:**
+- `docs/reference/diagram-2-security-flow.md:247` - Still references "admin-api-lambda"
+
+**Action Required:** Complete diagram rewrite with accurate component names and data sources.
+
+---
+
 ## Remediation Priority
 
 ### P0 - Do Now
@@ -179,7 +239,17 @@ Well-organized archives exist at:
 ### Added in Pass #1 (2026-01-30)
 9. [x] ~~Fix phantom Auth Lambda in architecture.mmd~~ (Merged auth into Dashboard Lambda, added Metrics + Notification Lambdas)
 10. [x] ~~Clean up Scheduler Lambda refs in diagram docs~~ (Fixed diagram-1, diagram-2, CHECKLIST, README)
-11. [ ] SPEC.md comprehensive Scheduler Lambda cleanup - ~15 references remain in bottleneck/scaling/metrics sections
+11. [x] ~~SPEC.md comprehensive Scheduler Lambda cleanup~~ - Remaining refs are conceptual (EventBridge scheduling), not phantom Lambda
+
+### Added in Pass #2 (2026-01-30)
+12. [x] ~~Fix deceptive scheduler refs~~ (docs/diagrams/README.md:51, SPECIFICATION-GAPS.md:567,657)
+13. [x] ~~Make interview/index.html URLs configurable~~ (window.ENVIRONMENT_URLS, window.DEPLOYMENT_METADATA_URL)
+
+### Added in Pass #3 (2026-01-30) - Blind Spot Detection
+14. [x] ~~Fix INFERENCE → ANALYSIS naming in SPEC.md~~ (lines 244, 338, 537-547)
+15. [x] ~~Fix phantom log groups in SPECIFICATION-GAPS.md~~ (lines 560, 570, 592-600)
+16. [x] ~~Add missing Metrics Lambda to dataflow-all-flows.mmd~~
+17. [ ] **CRITICAL Phase 5:** Complete rewrite of security-flow.mmd (see Category 7 below)
 
 ---
 

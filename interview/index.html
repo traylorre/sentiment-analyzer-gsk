@@ -1734,10 +1734,11 @@ infrastructure/terraform/modules/<br>
     <script>
         // Configuration - Feature 1207: Use Amplify URLs (CloudFront removed)
         // Dashboard Lambda (REST API) and SSE Lambda (streaming)
-        const ENVIRONMENTS = {
+        // Override via window.ENVIRONMENT_URLS = { preprod: '...', prod: '...' }
+        const ENVIRONMENTS = Object.assign({
             preprod: 'https://main.d29tlmksqcx494.amplifyapp.com',
             prod: 'https://prod.sentiment-analyzer.example.com'  // Update when available
-        };
+        }, window.ENVIRONMENT_URLS || {});
 
         let currentEnv = 'preprod';
         let authToken = null;
@@ -1812,7 +1813,8 @@ infrastructure/terraform/modules/<br>
         document.addEventListener('touchend', handleTouchEnd, { passive: true });
 
         // Deployment metadata URL (S3 bucket with public read)
-        const METADATA_URL = 'https://preprod-sentiment-lambda-deployments.s3.amazonaws.com/deployment-metadata.json';
+        // Override via window.DEPLOYMENT_METADATA_URL = 'https://...'
+        const METADATA_URL = window.DEPLOYMENT_METADATA_URL || 'https://preprod-sentiment-lambda-deployments.s3.amazonaws.com/deployment-metadata.json';
 
         // Cache for deployment metadata
         let deploymentMetadata = null;

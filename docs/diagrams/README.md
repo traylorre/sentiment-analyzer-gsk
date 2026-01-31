@@ -48,7 +48,7 @@ This directory contains comprehensive system architecture diagrams for the Senti
 **What It Shows:**
 - ✅ External sources (Twitter API, RSS feeds, Admin users)
 - ✅ Entry points (EventBridge, API Gateway)
-- ✅ Lambda functions (scheduler, ingestion, inference, admin API, metrics)
+- ✅ Lambda functions (ingestion, analysis, dashboard, notification, metrics, sse-streaming)
 - ✅ Messaging (SNS topics, SQS queues)
 - ✅ Data storage (DynamoDB tables)
 - ✅ Support services (Secrets Manager, CloudWatch, S3)

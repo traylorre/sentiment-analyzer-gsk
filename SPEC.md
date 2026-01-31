@@ -241,7 +241,7 @@ Operational Behaviors (must implement)
     - Free tier: reserved concurrency = 10 (conservative limit for 1,500 tweets/month, ~50 tweets/day)
     - Basic tier: reserved concurrency = 20 (supports 50K tweets/month, ~1,666 tweets/day)
     - Pro tier: reserved concurrency = 50 (supports 1M tweets/month, ~33,333 tweets/day)
-  - Inference Lambda: 1024 MB memory, 30s timeout, reserved concurrency: 20 (processes SQS messages, performs DistilBERT sentiment analysis, writes to DynamoDB)
+  - Analysis Lambda: 1024 MB memory, 30s timeout, reserved concurrency: 20 (processes SQS messages, performs DistilBERT sentiment analysis, writes to DynamoDB)
   - Quota Reset Lambda: 256 MB memory, 60s timeout, reserved concurrency: 1 (monthly quota counter reset for Twitter sources)
     - Trigger: EventBridge scheduled rule `cron(0 0 1 * ? *)` (first day of month, midnight UTC)
     - Behavior:
@@ -335,7 +335,7 @@ Operational Behaviors (must implement)
   - DLQ Configuration (with archival for data loss prevention):
     - ingestion-lambda-dlq: Stores failed ingestion invocations
     - ingestion-lambda-dlq: Stores failed ingestion invocations (Twitter/RSS fetch failures)
-    - inference-lambda-dlq: Stores failed sentiment analysis invocations
+    - analysis-lambda-dlq: Stores failed sentiment analysis invocations (naming: {env}-sentiment-analysis-dlq in Terraform)
   - Message retention: 14 days (maximum) in all DLQs
   - **DLQ Archival Protection** (prevents 14-day data loss):
     - CloudWatch alarm: "DLQ oldest message age >7 days" → CRITICAL (50% of retention consumed)
@@ -536,7 +536,7 @@ module "sqs_queue" {
 
 module "lambda_function" {
   source         = "./modules/lambda"
-  name           = "inference-consumer"
+  name           = "${var.environment}-sentiment-analysis"  # e.g., dev-sentiment-analysis
   runtime        = "python3.13"
   handler        = "handler.lambda_handler"
   memory_size    = 1024                   # MB - required for DistilBERT model + Python runtime
