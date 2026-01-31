@@ -436,3 +436,31 @@ cd infrastructure/terraform && terraform output
 | dashboard.tf:48 | Metrics Lambda not in Errors widget | Added metric |
 
 **Total Audit #12**: 5 issues across 3 files
+
+---
+
+## Audit #13 - SSE-Streaming Coverage + Lambda Count Refs (2026-01-30)
+
+**Issue Trend**: 28 → 8 → 5 → 10 (new category: SSE-streaming gaps discovered)
+
+**Discovery**: SSE-streaming Lambda (added recently) was missing from monitoring dashboards and chaos testing. Also found stale "3 Lambdas" references in active docs.
+
+### Infrastructure Fixes
+| File | Issue | Fix |
+|------|-------|-----|
+| modules/monitoring/dashboard.tf | SSE-streaming missing from Invocations widget | Added metric |
+| modules/monitoring/dashboard.tf | SSE-streaming missing from Errors widget | Added metric |
+| main.tf:921-928 | Chaos module only had 3 Lambdas | Added metrics, notification, sse-streaming |
+
+### Documentation Fixes
+| File | Line | Change |
+|------|------|--------|
+| docs/architecture/ADR-005-LAMBDA-PACKAGING-STRATEGY.md | 368 | Clarified "3 container-based Lambdas (6 total)" |
+| docs/security/EXECUTIVE_SUMMARY.md | 272 | Changed "3 Lambda packages" → "6 Lambda packages" |
+
+### Noted for Future (not fixed this pass)
+- SPEC.md: 4 of 6 Lambdas missing from Lambda Configuration section
+- Runbooks: Zero per-Lambda troubleshooting guides
+- Phantom quota-reset-lambda: 45+ refs in SPEC.md and SPECIFICATION-GAPS.md
+
+**Total Audit #13 fixes**: 5 issues across 4 files

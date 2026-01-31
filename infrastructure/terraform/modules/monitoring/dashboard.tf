@@ -27,6 +27,7 @@ resource "aws_cloudwatch_dashboard" "main" {
             [".", ".", ".", "${var.environment}-sentiment-analysis", { stat = "Sum", period = 300 }],
             [".", ".", ".", "${var.environment}-sentiment-notification", { stat = "Sum", period = 300 }],
             ["AWS/Lambda", "Invocations", "FunctionName", "${var.environment}-sentiment-metrics"],
+            ["AWS/Lambda", "Invocations", "FunctionName", "${var.environment}-sentiment-sse-streaming"],
           ]
           view = "timeSeries"
         }
@@ -46,6 +47,7 @@ resource "aws_cloudwatch_dashboard" "main" {
             [".", ".", ".", "${var.environment}-sentiment-analysis", { stat = "Sum", period = 300, color = "#2ca02c" }],
             [".", ".", ".", "${var.environment}-sentiment-notification", { stat = "Sum", period = 300, color = "#9467bd" }],
             ["AWS/Lambda", "Errors", "FunctionName", "${var.environment}-sentiment-metrics"],
+            ["AWS/Lambda", "Errors", "FunctionName", "${var.environment}-sentiment-sse-streaming"],
           ]
           view = "timeSeries"
         }
