@@ -160,7 +160,7 @@ class TestJavaScript:
     def test_environments_defined(self):
         """ENVIRONMENTS constant should be defined."""
         content = get_html_content()
-        assert "const ENVIRONMENTS = {" in content
+        assert "const ENVIRONMENTS = Object.assign({" in content
 
     def test_preprod_url_defined(self):
         """Preprod URL should be defined with Amplify URL (Feature 1207: CloudFront removed)."""
