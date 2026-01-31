@@ -77,7 +77,11 @@ def validate_mermaid_syntax(code: str) -> list[str]:
             f"Unbalanced parentheses: {code.count('(')} opening, {code.count(')')} closing"
         )
 
-    # Check for common syntax errors
+    # Check for common Mermaid syntax errors (not HTML filtering)
+    # CodeQL py/bad-tag-filter: False positive - validates Mermaid arrow syntax, not HTML
+    if re.search(r"-->\s*$", code, re.MULTILINE):  # lgtm[py/bad-tag-filter]
+        errors.append("Arrow without target node (line ends with -->)")
+
     if re.search(r"==>\s*$", code, re.MULTILINE):
         errors.append("Thick arrow without target node (line ends with ==>)")
 
