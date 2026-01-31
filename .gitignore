@@ -191,3 +191,6 @@ model.tar.gz
 # Local demo URLs (contains environment-specific URLs)
 DEMO_URLS.local.md
 *.local.md
+
+# Local-only context/session files (not for version control)
+CONTEXT-CARRYOVER*.md
