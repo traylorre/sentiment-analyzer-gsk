@@ -712,6 +712,7 @@ jobs:
       dashboard_url: ${{ steps.outputs.outputs.dashboard_url }}
       sns_topic_arn: ${{ steps.outputs.outputs.sns_topic_arn }}
       sse_lambda_url: ${{ steps.outputs.outputs.sse_lambda_url }}
+      amplify_url: ${{ steps.outputs.outputs.amplify_url }}
 
     defaults:
       run:
@@ -945,6 +946,7 @@ jobs:
           SNS_TOPIC_ARN=$(terraform output -raw sns_topic_arn 2>/dev/null || echo "")
           SSE_LAMBDA_URL=$(terraform output -raw sse_lambda_function_url 2>/dev/null || echo "")
           DASHBOARD_S3_BUCKET=$(terraform output -raw dashboard_s3_bucket 2>/dev/null || echo "")
+          AMPLIFY_URL=$(terraform output -raw amplify_production_url 2>/dev/null || echo "")
           # Feature 1205: CloudFront removed - Amplify serves frontend directly
 
           echo "dashboard_url=${DASHBOARD_URL}" >> $GITHUB_OUTPUT
@@ -952,6 +954,7 @@ jobs:
           echo "sns_topic_arn=${SNS_TOPIC_ARN}" >> $GITHUB_OUTPUT
           echo "sse_lambda_url=${SSE_LAMBDA_URL}" >> $GITHUB_OUTPUT
           echo "dashboard_s3_bucket=${DASHBOARD_S3_BUCKET}" >> $GITHUB_OUTPUT
+          echo "amplify_url=${AMPLIFY_URL}" >> $GITHUB_OUTPUT
 
       - name: Deploy Dashboard to S3 (Preprod)
         run: |
@@ -1110,8 +1113,25 @@ jobs:
           pip install -e .
           pip install -r requirements-dev.txt
 
-      - name: Install Playwright browsers
+      - name: Install Playwright browsers (Python)
         run: playwright install chromium --with-deps
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Install Frontend Dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Install Playwright Browsers (Node.js)
+        run: |
+          cd frontend
+          npx playwright install chromium --with-deps
 
       - name: Configure AWS Credentials (Preprod)
         uses: aws-actions/configure-aws-credentials@v5
@@ -1354,6 +1374,61 @@ jobs:
           echo "  - Failed: Check test output above for specific failures"
           echo "  - Auth: Endpoints use session auth (X-User-ID header), not API key (Feature 1039)"
           exit 1
+
+      - name: Run Playwright Sanity Tests
+        if: steps.integration-tests.outputs.passed == 'true'
+        id: playwright-sanity
+        env:
+          # Use Amplify URL for frontend E2E tests (Feature 1205)
+          PREPROD_FRONTEND_URL: ${{ needs.deploy-preprod.outputs.amplify_url }}
+        run: |
+          echo "Running Playwright sanity tests against preprod frontend..."
+          echo "Frontend URL: ${PREPROD_FRONTEND_URL}"
+
+          if [ -z "$PREPROD_FRONTEND_URL" ]; then
+            echo "WARNING: Amplify URL not available - skipping Playwright tests"
+            echo "skipped=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          cd frontend
+
+          # Run sanity tests with the preprod frontend URL
+          # Timeout: 5 minutes for E2E tests
+          set +e
+          timeout 300 npx playwright test tests/e2e/sanity.spec.ts \
+            --project="Desktop Chrome" \
+            --reporter=list \
+            2>&1 | tee playwright-output.txt
+          PLAYWRIGHT_EXIT_CODE=$?
+          set -e
+
+          if [ $PLAYWRIGHT_EXIT_CODE -eq 0 ]; then
+            echo "passed=true" >> $GITHUB_OUTPUT
+            echo "Playwright sanity tests passed"
+          elif [ $PLAYWRIGHT_EXIT_CODE -eq 124 ]; then
+            echo "passed=false" >> $GITHUB_OUTPUT
+            echo "reason=timeout" >> $GITHUB_OUTPUT
+            echo "WARNING: Playwright tests timed out (5 min limit)"
+          else
+            echo "passed=false" >> $GITHUB_OUTPUT
+            echo "reason=failed" >> $GITHUB_OUTPUT
+            echo "WARNING: Playwright sanity tests failed with exit code $PLAYWRIGHT_EXIT_CODE"
+          fi
+
+          # Always exit 0 to allow workflow to continue (sanity tests are non-blocking for now)
+          exit 0
+
+      - name: Upload Playwright Test Results
+        if: always() && steps.playwright-sanity.outputs.skipped != 'true'
+        uses: actions/upload-artifact@v6
+        with:
+          name: playwright-results-${{ needs.build.outputs.artifact-sha }}
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 30
+          if-no-files-found: ignore
 
       - name: Create Validation Metadata
         if: steps.integration-tests.outputs.passed == 'true'

@@ -1,5 +1,10 @@
 import { defineConfig, devices } from '@playwright/test';
 
+// Support running against deployed environments (preprod/prod) or local dev server
+// PREPROD_FRONTEND_URL is set in CI for testing deployed Amplify frontend
+const baseURL = process.env.PREPROD_FRONTEND_URL || 'http://localhost:3000';
+const isRemote = !!process.env.PREPROD_FRONTEND_URL;
+
 export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: true,
@@ -8,7 +13,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: 'html',
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL,
     trace: 'on-first-retry',
   },
   projects: [
@@ -25,9 +30,14 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
   ],
-  webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:3000',
-    reuseExistingServer: !process.env.CI,
-  },
+  // Only start local dev server when testing locally (not against deployed environment)
+  ...(isRemote
+    ? {}
+    : {
+        webServer: {
+          command: 'npm run dev',
+          url: 'http://localhost:3000',
+          reuseExistingServer: !process.env.CI,
+        },
+      }),
 });
