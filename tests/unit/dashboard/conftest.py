@@ -13,9 +13,27 @@ For Developers:
     - Test-specific fixtures belong in individual test files
 """
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def mock_stripe_webhook_secret():
+    """
+    Auto-mock get_secret for Stripe webhook secret retrieval.
+
+    This fixture ensures that tests don't require actual AWS Secrets Manager
+    access. The STRIPE_WEBHOOK_SECRET_ARN env var points to a test ARN,
+    and this mock returns the test secret value.
+
+    Feature: 1191 - Mid-Session Tier Upgrade
+    """
+    with patch("src.lambdas.shared.secrets.get_secret") as mock_get_secret:
+        mock_get_secret.return_value = {
+            "webhook_secret": "whsec_test_secret_for_unit_tests"
+        }
+        yield mock_get_secret
 
 
 @pytest.fixture

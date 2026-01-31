@@ -160,6 +160,38 @@ resource "aws_secretsmanager_secret_rotation" "hcaptcha" {
   count = var.rotation_lambda_arn != null ? 1 : 0
 }
 
+# Stripe Webhook Secret (Payment webhook signature verification)
+# Blind spot fix: STRIPE_WEBHOOK_SECRET was missing from infrastructure
+resource "aws_secretsmanager_secret" "stripe_webhook" {
+  name        = "${var.environment}/sentiment-analyzer/stripe-webhook"
+  description = "Stripe webhook secret for signature verification"
+  kms_key_id  = var.kms_key_arn # Customer-managed encryption (FR-019)
+
+  recovery_window_in_days = 7
+
+  tags = {
+    Environment = var.environment
+    Feature     = "006-user-config-dashboard"
+    Purpose     = "stripe-webhook-verification"
+  }
+
+  # SECURITY: Prevent accidental deletion of credentials (FR-016)
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "aws_secretsmanager_secret_rotation" "stripe_webhook" {
+  secret_id           = aws_secretsmanager_secret.stripe_webhook.id
+  rotation_lambda_arn = var.rotation_lambda_arn
+
+  rotation_rules {
+    automatically_after_days = 90
+  }
+
+  count = var.rotation_lambda_arn != null ? 1 : 0
+}
+
 # NOTE: Secret values are NOT stored in Terraform state
 # Use AWS CLI or Console to set initial secret values:
 #

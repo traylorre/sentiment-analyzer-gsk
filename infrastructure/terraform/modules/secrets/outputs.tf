@@ -49,3 +49,14 @@ output "hcaptcha_secret_name" {
   description = "Name of the hCaptcha secret"
   value       = aws_secretsmanager_secret.hcaptcha.name
 }
+
+# Stripe Webhook Secret
+output "stripe_webhook_secret_arn" {
+  description = "ARN of the Stripe webhook secret for signature verification"
+  value       = aws_secretsmanager_secret.stripe_webhook.arn
+}
+
+output "stripe_webhook_secret_name" {
+  description = "Name of the Stripe webhook secret"
+  value       = aws_secretsmanager_secret.stripe_webhook.name
+}

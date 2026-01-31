@@ -9,8 +9,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-# Set STRIPE_WEBHOOK_SECRET before importing modules that need it
-os.environ.setdefault("STRIPE_WEBHOOK_SECRET", "whsec_test_secret_for_unit_tests")
+# Set STRIPE_WEBHOOK_SECRET_ARN before importing modules that need it
+# The actual secret value will be mocked via get_secret patch
+os.environ.setdefault(
+    "STRIPE_WEBHOOK_SECRET_ARN",
+    "arn:aws:secretsmanager:us-east-1:123456789012:secret:test/stripe-webhook",
+)
 
 from src.lambdas.shared.models.webhook_event import WebhookEvent
 
