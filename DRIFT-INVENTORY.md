@@ -384,3 +384,31 @@ cd infrastructure/terraform && terraform output
 | docs/README.md:131 | Reference to active IMPLEMENTATION_GUIDE | Updated path to archive with note |
 
 **Total Audit #10 fixes**: 23 references across 12 files
+
+---
+
+## Audit #11 - DynamoDB Count + Lambda Naming (2026-01-30)
+
+**Issue Trend**: Audit #10: 28 → Audit #11: 8 (71% reduction)
+
+**Discovery**: DynamoDB table count was "4" but actual is "5" (chaos_experiments table missing from docs). Also found incorrect Lambda naming pattern (sentiment-analyzer- instead of sentiment-).
+
+### DynamoDB Count Fixes (6 refs)
+| File | Lines | Change |
+|------|-------|--------|
+| README.md | 232, 322, 435 | 4 → 5 tables, added chaos-experiments section |
+| docs/diagrams/README.md | 38, 266, 272, 446 | 4 → 5 tables |
+
+### Lambda Naming Fixes (4 refs)
+| File | Line | Change |
+|------|------|--------|
+| tests/integration/test_dashboard_preprod.py | 124 | sentiment-analyzer-dashboard → sentiment-dashboard |
+| specs/1126-auth-httponly-migration/spec-v2.md | 5865 | sentiment-analyzer-dashboard → ${env}-sentiment-dashboard |
+| docs/security/DASHBOARD_SECURITY_TEST_COVERAGE.md | 154, 256 | sentiment-analyzer-dashboard → sentiment-dashboard |
+
+### Terraform Output Gap Fixed (1 ref)
+| File | Change |
+|------|--------|
+| infrastructure/terraform/main.tf | Added metrics_lambda_arn and metrics_lambda_name outputs |
+
+**Total Audit #11**: 8 issues across 6 files

@@ -151,7 +151,7 @@ def test_authentication_logs_invalid_api_key_with_ip(self, client, caplog):
 
 2. **Verify CloudWatch Logging**:
    ```bash
-   aws logs tail /aws/lambda/preprod-sentiment-analyzer-dashboard --follow \
+   aws logs tail /aws/lambda/preprod-sentiment-dashboard --follow \
      | grep "Invalid API key attempt"
    ```
 
@@ -253,7 +253,7 @@ curl -H "Authorization: Bearer wrong-key" \
 # Wait 30 seconds for logs to propagate
 
 # Check CloudWatch
-aws logs tail /aws/lambda/preprod-sentiment-analyzer-dashboard \
+aws logs tail /aws/lambda/preprod-sentiment-dashboard \
   --follow | grep "198.51.100.TEST"
 ```
 

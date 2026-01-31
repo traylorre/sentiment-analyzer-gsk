@@ -229,7 +229,7 @@ graph TB
             Notification[Notification Lambda<br/>Alerts + Digests]
         end
 
-        subgraph StorageLayer["Storage Layer ── 4 Tables"]
+        subgraph StorageLayer["Storage Layer ── 5 Tables"]
             DDBItems[(sentiment-items<br/>News + Scores<br/>TTL: 30d)]
             DDBUsers[(sentiment-users<br/>Configs · Alerts<br/>Sessions)]
             DDBTimeseries[(sentiment-timeseries<br/>Multi-Resolution<br/>1m→24h buckets)]
@@ -319,7 +319,7 @@ graph TB
 - **Solid thin lines (-->)**: Secondary data paths
 - **Dotted lines (-.->)**: Async/logging flows
 - **Purple nodes**: Lambda functions (6 total)
-- **Green nodes**: Data stores (4 DynamoDB tables + S3 + DLQ)
+- **Green nodes**: Data stores (5 DynamoDB tables + S3 + DLQ)
 - **Orange nodes**: Edge/CDN layer
 
 ### Environment Promotion Pipeline
@@ -432,7 +432,7 @@ sequenceDiagram
 
 ### DynamoDB Table Design
 
-This service uses **4 DynamoDB tables** with single-table design patterns:
+This service uses **5 DynamoDB tables** with single-table design patterns:
 
 #### Table 1: `sentiment-items` (News & Scores)
 
@@ -484,6 +484,21 @@ This service uses **4 DynamoDB tables** with single-table design patterns:
 | `{ticker}#tiingo` | `{resolution}#{timestamp}` | OHLC candles |
 
 **No TTL** - Historical price data preserved permanently.
+
+---
+
+#### Table 5: `chaos-experiments` (Chaos Engineering)
+
+| Attribute | Type | Key | Description |
+|-----------|------|-----|-------------|
+| `experiment_id` | String | PK | Unique experiment identifier |
+| `created_at` | String | SK | ISO8601 creation time |
+| `type` | String | — | Experiment type (latency, error, etc.) |
+| `target` | String | — | Target component |
+| `status` | String | — | `scheduled` / `running` / `completed` |
+| `results` | Map | — | Experiment results and metrics |
+
+**GSIs:** `by_status`, `by_type`
 
 ---
 

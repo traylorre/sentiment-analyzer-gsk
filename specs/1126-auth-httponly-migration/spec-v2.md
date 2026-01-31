@@ -5862,7 +5862,7 @@ aws secretsmanager put-secret-value \
 
 # Force Lambda refresh
 aws lambda update-function-configuration \
-  --function-name sentiment-analyzer-dashboard \
+  --function-name ${env}-sentiment-dashboard \
   --environment "Variables={FORCE_REFRESH=$(date +%s)}"
 ```
 

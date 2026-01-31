@@ -1205,6 +1205,17 @@ output "notification_lambda_name" {
   value       = module.notification_lambda.function_name
 }
 
+# Metrics Lambda outputs
+output "metrics_lambda_arn" {
+  description = "ARN of the Metrics Lambda function"
+  value       = module.metrics_lambda.function_arn
+}
+
+output "metrics_lambda_name" {
+  description = "Name of the Metrics Lambda function"
+  value       = module.metrics_lambda.function_name
+}
+
 # ===================================================================
 # Feature 016: SSE Streaming Lambda Outputs
 # ===================================================================

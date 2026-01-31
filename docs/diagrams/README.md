@@ -35,7 +35,7 @@ This directory contains comprehensive system architecture diagrams for the Senti
 **⚠️ Major Update (2026-01-05):** Diagram rewritten to match Terraform canonical source:
 - ✅ Data sources: Tiingo + Finnhub (NOT Twitter/RSS)
 - ✅ 6 Lambda functions: ingestion, analysis, dashboard, sse, notification, metrics
-- ✅ 4 DynamoDB tables: sentiment-items, sentiment-users, sentiment-timeseries, ohlc-cache
+- ✅ 5 DynamoDB tables: sentiment-items, sentiment-users, sentiment-timeseries, ohlc-cache, chaos-experiments
 - ✅ Authentication: Cognito + Secrets Manager
 - ✅ Frontend: Amplify (optional)
 
@@ -263,13 +263,13 @@ classDef externalNode fill:#e5e7eb,stroke:#6b7280,stroke-width:2px,color:#1f2937
 **What It Shows:**
 - ✅ **Flow 1: Sentiment Pipeline** - Ingestion → Analysis → Storage → Timeseries fanout
 - ✅ **Flow 2: Authentication** - Anonymous → OAuth → Magic Link → httpOnly cookies
-- ✅ **Flow 3: Dashboard Retrieval** - REST API queries across all 4 tables
+- ✅ **Flow 3: Dashboard Retrieval** - REST API queries across all 5 tables
 - ✅ **Flow 4: SSE Streaming** - Real-time polling with heartbeat
 - ✅ **Flow 5: Notifications** - Alert evaluation → SendGrid delivery
 
 **Key Insights:**
 - Color-coded by flow for interview deep-dives
-- Shows all 4 DynamoDB tables and their access patterns
+- Shows all 5 DynamoDB tables and their access patterns
 - Distinguishes sync (solid) vs async (dotted) operations
 - Authentication boundary clearly marked
 
@@ -443,6 +443,6 @@ Keep Canva project active for future diagrams:
 
 **Last Updated:** 2026-01-05
 **Diagram Count:** 6 Mermaid diagrams + 5 use-case sequences (+ 6 planned component diagrams)
-**Status:** Major update - all diagrams now Terraform-accurate (Tiingo/Finnhub, 6 Lambdas, 4 tables)
+**Status:** Major update - all diagrams now Terraform-accurate (Tiingo/Finnhub, 6 Lambdas, 5 tables)
 
 **Deprecated:** `../architecture.mmd` - superseded by `high-level-overview.mmd`

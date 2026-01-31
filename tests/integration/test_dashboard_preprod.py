@@ -121,7 +121,7 @@ class TestSecurityIntegration:
 
         # Manual verification:
         # aws lambda get-function-configuration \
-        #   --function-name preprod-sentiment-analyzer-dashboard \
+        #   --function-name preprod-sentiment-dashboard \
         #   --query 'Environment.Variables.MAX_SSE_CONNECTIONS_PER_IP'
 
     def test_production_blocks_requests_without_cors_origins(self):
