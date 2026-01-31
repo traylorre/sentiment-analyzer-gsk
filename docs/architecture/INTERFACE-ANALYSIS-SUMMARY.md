@@ -65,11 +65,11 @@
 
 ### ✅ Added Specifications (Now in SPECIFICATION-GAPS.md)
 
-**1. Monthly Quota Reset Lambda** (CRITICAL)
-- EventBridge cron: `cron(0 0 1 * ? *)`
-- Resets monthly_tweets_consumed to 0
-- Re-enables quota-disabled sources
-- Includes CloudWatch alarm for failure detection
+**1. Standardized Quota Tracking** (CRITICAL)
+- Quota tracking via `resets_at` field in DynamoDB
+- Monthly quotas reset automatically based on timestamp comparison
+- No separate Lambda required - logic embedded in ingestion/analysis flows
+- Includes CloudWatch alarm for quota threshold alerts
 
 **2. Standardized Error Response Schema**
 ```json
@@ -199,10 +199,10 @@ DYNAMODB (Green Zone - Protected)
    - Follow checklist
 
 ### Specification Gap Fixes (Before Implementation)
-7. **Add Monthly Quota Reset Lambda** (~4 hours)
-   - Write Lambda code
-   - Add Terraform resources
-   - Update SPEC.md
+7. **Verify Quota Tracking Logic** (~2 hours)
+   - Confirm `resets_at` field logic in ingestion Lambda
+   - Validate quota threshold alerts in CloudWatch
+   - Update SPEC.md if needed
 8. **Define Error Response Schema** (~2 hours)
    - Update SPEC.md
    - Create Pydantic models
@@ -303,7 +303,7 @@ DYNAMODB (Green Zone - Protected)
 
 **Action Required:**
 - 3 CRITICAL specification gaps must be fixed BEFORE implementation
-- Monthly quota reset Lambda missing (sources will stick disabled)
+- Quota tracking logic needs validation (uses `resets_at` field, not separate Lambda)
 - Error response schema needs standardization
 - Metric access control needs explicit allow/deny lists
 

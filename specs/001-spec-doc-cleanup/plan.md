@@ -2,10 +2,13 @@
 
 **Branch**: `001-spec-doc-cleanup` | **Date**: 2026-01-31 | **Spec**: [spec.md](./spec.md)
 **Input**: Feature specification from `/specs/001-spec-doc-cleanup/spec.md`
+**Status**: QUOTA-RESET CLEANUP COMPLETED (via B-blind-spot-fixes branch, 2026-01-31)
 
 ## Summary
 
 Full audit and cleanup of SPEC.md to remove orphaned Twitter API documentation and any other phantom features that don't exist in the actual codebase. Changes made via atomic commits for granular rollback capability.
+
+**Completion Note**: The phantom quota-reset-lambda cleanup has been completed as part of the B-blind-spot-fixes branch work.
 
 ## Technical Context
 
@@ -118,13 +121,15 @@ grep -n "quota-reset-lambda\|Quota Reset" SPEC.md
 
 ### Atomic Commit Strategy
 
-| Commit # | Scope | Verification |
-|----------|-------|--------------|
-| 1 | Remove Quota Reset Lambda section | `grep -c "Quota Reset" SPEC.md` = 0 |
-| 2 | Remove Twitter tier logic | `grep -c "twitter_api_tier" SPEC.md` = 0 |
-| 3 | Remove Twitter-related fields | `grep -ci "twitter\|tweets" SPEC.md` = 0 |
-| 4 | Remove cross-references (DLQ, failure modes) | Manual verification |
-| 5 | Final verification commit | All grep checks pass |
+| Commit # | Scope | Verification | Status |
+|----------|-------|--------------|--------|
+| 1 | Remove Quota Reset Lambda section | `grep -c "Quota Reset" SPEC.md` = 0 | **COMPLETED** |
+| 2 | Remove Twitter tier logic | `grep -c "twitter_api_tier" SPEC.md` = 0 | **COMPLETED** |
+| 3 | Remove Twitter-related fields | `grep -ci "twitter\|tweets" SPEC.md` = 0 | **COMPLETED** |
+| 4 | Remove cross-references (DLQ, failure modes) | Manual verification | **COMPLETED** |
+| 5 | Final verification commit | All grep checks pass | **COMPLETED** |
+
+**Note**: All quota-reset phantom Lambda cleanup completed via B-blind-spot-fixes branch (2026-01-31).
 
 ### Post-Cleanup Verification
 

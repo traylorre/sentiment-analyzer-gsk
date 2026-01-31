@@ -1,112 +1,17 @@
 # Specification Gaps & Resolutions
 **Date:** 2025-11-16
-**Status:** ✅ ALL CRITICAL GAPS RESOLVED (3 of 3 complete)
+**Status:** ✅ ALL CRITICAL GAPS RESOLVED (2 of 2 complete)
 **Source:** Comprehensive interface analysis
 
 **Progress:**
-- ✅ Gap 1: Monthly Quota Reset Lambda - **RESOLVED** (SPEC.md lines 204-215)
-- ✅ Gap 2: Standardized Error Response Schema - **RESOLVED** (SPEC.md lines 148-188)
-- ✅ Gap 3: Metric Dimension Access Control - **RESOLVED** (SPEC.md lines 753-820)
+- ✅ Gap 1: Standardized Error Response Schema - **RESOLVED** (SPEC.md lines 148-188)
+- ✅ Gap 2: Metric Dimension Access Control - **RESOLVED** (SPEC.md lines 753-820)
 
 ---
 
 ## CRITICAL Gaps (MUST FIX - P0)
 
-### Gap 1: Monthly Quota Reset Lambda ✅ RESOLVED
-
-**Current State:** ~~SPEC.md mentions "auto-reset at month boundary" (lines 58, 70) but NO implementation specified~~
-
-**Resolution Status:** ✅ **COMPLETE** - Full specification added to SPEC.md lines 204-215
-
-**Risk:** ~~Sources remain disabled after quota reset, losing 30 days of data~~ MITIGATED
-
-**Resolution Implemented:**
-
-```yaml
-# Add to SPEC.md - Section: Lambda Functions
-
-Lambda Function: quota-reset-lambda
-Runtime: Python 3.13
-Memory: 256 MB
-Timeout: 60s
-Concurrency: 1 (reserved)
-
-Trigger:
-  - EventBridge scheduled rule
-  - Schedule: cron(0 0 1 * ? *)  # First day of month, midnight UTC
-  - Time zone: UTC
-
-Behavior:
-  1. Scan source-configs table for all Twitter sources (type = "twitter")
-  2. For each source:
-     a. Set monthly_tweets_consumed = 0
-     b. Set last_quota_reset = current_timestamp (ISO 8601)
-     c. Set quota_exhausted = false
-     d. If source.enabled = false AND disable_reason = "quota_exhausted":
-        - Set enabled = true
-        - Calculate next_poll_time = current_time + poll_interval_seconds
-  3. Emit CloudWatch metric: twitter.quota_reset_count (value = source count)
-  4. Log completion to CloudWatch Logs
-
-Error Handling:
-  - DynamoDB UpdateItem failures: Log error, continue to next source
-  - Partial failures: Emit metric twitter.quota_reset_failures
-  - Complete failure: Send to DLQ, trigger CRITICAL alarm
-
-Validation:
-  - CloudWatch Alarm: twitter.quota_reset_count = 0 on month boundary → CRITICAL
-  - Manual verification: Check source-configs on 2nd of month
-  - Test: Invoke Lambda manually with test event (dry-run mode)
-
-IAM Permissions:
-  - dynamodb:Scan (source-configs table)
-  - dynamodb:UpdateItem (source-configs table)
-  - cloudwatch:PutMetricData
-  - logs:CreateLogStream, logs:PutLogEvents
-
-DLQ: quota-reset-lambda-dlq (14-day retention)
-```
-
-**Terraform Addition:**
-
-```hcl
-resource "aws_cloudwatch_event_rule" "monthly_quota_reset" {
-  name                = "monthly-quota-reset"
-  description         = "Reset Twitter quota counters on first day of month"
-  schedule_expression = "cron(0 0 1 * ? *)"
-}
-
-resource "aws_cloudwatch_event_target" "quota_reset_lambda" {
-  rule      = aws_cloudwatch_event_rule.monthly_quota_reset.name
-  target_id = "quota-reset-lambda"
-  arn       = aws_lambda_function.quota_reset_lambda.arn
-
-  dead_letter_config {
-    arn = aws_sqs_queue.quota_reset_dlq.arn
-  }
-}
-
-resource "aws_cloudwatch_metric_alarm" "quota_reset_missing" {
-  alarm_name          = "quota-reset-missing"
-  comparison_operator = "LessThanThreshold"
-  evaluation_periods  = 1
-  metric_name         = "quota_reset_count"
-  namespace           = "SentimentAnalyzer/Twitter"
-  period              = 86400  # 24 hours
-  statistic           = "Sum"
-  threshold           = 1
-  alarm_description   = "Quota reset did not run on month boundary"
-  treat_missing_data  = "breaching"
-
-  dimensions = {
-    FunctionName = "quota-reset-lambda"
-  }
-}
-```
-
----
-
-### Gap 2: Standardized Error Response Schema ✅ RESOLVED
+### Gap 1: Standardized Error Response Schema ✅ RESOLVED
 
 **Current State:** ~~SPEC.md mentions "Return 400 Bad Request with specific validation error messages" (line 740) but NO schema defined~~
 
@@ -213,7 +118,7 @@ Implementation Notes:
 
 ---
 
-### Gap 3: Metric Dimension Access Control ✅ RESOLVED
+### Gap 2: Metric Dimension Access Control ✅ RESOLVED
 
 **Current State:** ~~SPEC.md mentions "contributor dashboard shows filtered metrics" but WHICH filters not specified~~
 
@@ -323,7 +228,7 @@ Rationale:
 
 ## HIGH Priority Gaps (Should Fix - P1)
 
-### Gap 4: API Key Lifecycle Management (UNDERSPECIFIED)
+### Gap 3: API Key Lifecycle Management (UNDERSPECIFIED)
 
 **Current:** "API Gateway API Keys with usage plans" (line 133)
 
@@ -384,7 +289,7 @@ Monitoring:
 
 ---
 
-### Gap 5: Canary Deployment Rollback Thresholds (QUANTIFY)
+### Gap 4: Canary Deployment Rollback Thresholds (QUANTIFY)
 
 **Current:** "Rollback if error rate >5%" (line 625) but measurement period not specified
 
@@ -476,7 +381,7 @@ Monitoring During Deployment:
 
 ## MEDIUM Priority Gaps (Nice to Have - P2)
 
-### Gap 6: FinBERT/DistilBERT Score Normalization Formula (AMBIGUOUS)
+### Gap 5: FinBERT/DistilBERT Score Normalization Formula (AMBIGUOUS)
 
 **Current:** "score: 0.0-1.0" (line 177)
 
@@ -536,7 +441,7 @@ Validation:
 
 ---
 
-### Gap 7: CloudWatch Log Retention (PER LOG GROUP)
+### Gap 6: CloudWatch Log Retention (PER LOG GROUP)
 
 **Current:** "7-year CloudWatch Logs retention for compliance" (line 104)
 
@@ -567,7 +472,6 @@ Operational (90 days):
     - /aws/lambda/{env}-sentiment-ingestion  # Ingestion Lambda (EventBridge-triggered scheduler)
     - /aws/lambda/{env}-sentiment-analysis
     - /aws/lambda/dlq-archival-lambda
-    - /aws/lambda/quota-reset-lambda
       - Reason: Troubleshooting recent issues
       - Retention: 90 days
       - Cost: ~$50-100/month (combined, high volume)
@@ -678,27 +582,22 @@ Migration Procedure:
 
 ## Summary & Next Steps
 
-**Total Gaps Identified:** 7 (3 CRITICAL, 2 HIGH, 2 MEDIUM)
+**Total Gaps Identified:** 6 (2 CRITICAL, 2 HIGH, 2 MEDIUM)
 **Conflicts Resolved:** 3
 
 **Immediate Actions (Before Implementation):**
 
-1. **Add Monthly Quota Reset Lambda** (4 hours)
-   - Write Lambda code
-   - Add Terraform resources
-   - Update SPEC.md
-
-2. **Define Error Response Schema** (2 hours)
+1. **Define Error Response Schema** (2 hours)
    - Document in SPEC.md
    - Create Pydantic models
    - Update all Lambda functions
 
-3. **Specify Metric Access Control** (4 hours)
+2. **Specify Metric Access Control** (4 hours)
    - Create contributor dashboard definition
    - Update IAM policies
    - Document in SPEC.md
 
-**Timeline:** 10 hours (1-2 days) to resolve all CRITICAL gaps
+**Timeline:** 6 hours (1 day) to resolve all CRITICAL gaps
 
 **Validation:** After fixes, run specification completeness check:
 - [ ] All Lambda functions specified

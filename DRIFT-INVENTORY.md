@@ -461,7 +461,9 @@ cd infrastructure/terraform && terraform output
 ### Noted for Future (not fixed this pass)
 - SPEC.md: 4 of 6 Lambdas missing from Lambda Configuration section
 - Runbooks: Zero per-Lambda troubleshooting guides
-- Phantom quota-reset-lambda: 45+ refs in SPEC.md and SPECIFICATION-GAPS.md
+
+### Cleaned (B-blind-spot-fixes branch)
+- ✅ Phantom quota-reset-lambda: 45+ refs in SPEC.md and SPECIFICATION-GAPS.md have been removed
 
 **Total Audit #13 fixes**: 5 issues across 4 files
 

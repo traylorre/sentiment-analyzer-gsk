@@ -3,6 +3,7 @@
 **Feature**: 001-spec-doc-cleanup
 **Branch**: `001-spec-doc-cleanup`
 **Generated**: 2026-01-31
+**Status**: QUOTA-RESET CLEANUP COMPLETED (via B-blind-spot-fixes branch, 2026-01-31)
 **Spec**: [spec.md](./spec.md) | **Plan**: [plan.md](./plan.md) | **Research**: [research.md](./research.md)
 
 ## Summary
@@ -14,6 +15,7 @@
 | Phases | 5 |
 | Parallel Opportunities | 3 tasks |
 | Estimated Commits | 7 atomic commits |
+| **Quota-Reset Cleanup** | **COMPLETED** |
 
 ---
 
@@ -59,13 +61,15 @@
 
 **Independent Test**: Count of Lambdas in SPEC.md equals count in src/lambdas/ (6)
 
+**Status**: COMPLETED (via B-blind-spot-fixes branch, 2026-01-31)
+
 ### Tasks
 
-- [ ] T010 [US2] Remove Quota Reset Lambda section (lines 245-256) from SPEC.md
-- [ ] T011 [P] [US2] Remove quota-reset-lambda-dlq references and Twitter-tier concurrency (lines 240-243) from SPEC.md
-- [ ] T012 [US2] Remove Twitter-related CloudWatch metrics and alarms from SPEC.md
+- [x] T010 [US2] Remove Quota Reset Lambda section (lines 245-256) from SPEC.md - **COMPLETED**
+- [x] T011 [P] [US2] Remove quota-reset-lambda-dlq references and Twitter-tier concurrency (lines 240-243) from SPEC.md - **COMPLETED**
+- [x] T012 [US2] Remove Twitter-related CloudWatch metrics and alarms from SPEC.md - **COMPLETED**
 
-**Verification**: After Phase 4, run `grep -c "Quota Reset\|quota_reset" SPEC.md` - must return 0
+**Verification**: After Phase 4, run `grep -c "Quota Reset\|quota_reset" SPEC.md` - must return 0 - **VERIFIED**
 
 ---
 
