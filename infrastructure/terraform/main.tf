@@ -37,6 +37,15 @@ provider "aws" {
   }
 }
 
+# Blind spot fix: Fail plan if CORS origins empty in production
+# Without this, prod silently blocks all frontend requests with no warning
+check "cors_production_validation" {
+  assert {
+    condition     = var.environment != "prod" || length(var.cors_allowed_origins) > 0
+    error_message = "cors_allowed_origins cannot be empty when environment='prod'. Set explicit origins to allow frontend requests."
+  }
+}
+
 # ===================================================================
 # ===================================================================
 # Module: KMS (FR-018 to FR-022)
@@ -385,10 +394,14 @@ module "dashboard_lambda" {
     HCAPTCHA_SECRET_ARN          = module.secrets.hcaptcha_secret_arn
     COGNITO_USER_POOL_ID         = module.cognito.user_pool_id
     COGNITO_CLIENT_ID            = module.cognito.client_id
-    TICKER_CACHE_BUCKET          = aws_s3_bucket.ticker_cache.id
-    SSE_POLL_INTERVAL            = tostring(var.sse_poll_interval)
-    ENVIRONMENT                  = var.environment
-    CHAOS_EXPERIMENTS_TABLE      = module.dynamodb.chaos_experiments_table_name
+    # Blind spot fix: Add missing Cognito OAuth env vars (cognito.py expects these)
+    COGNITO_DOMAIN = module.cognito.domain
+    # COGNITO_CLIENT_SECRET not set - module has generate_secret=false, code handles None
+    COGNITO_REDIRECT_URI    = length(var.cognito_callback_urls) > 0 ? var.cognito_callback_urls[0] : ""
+    TICKER_CACHE_BUCKET     = aws_s3_bucket.ticker_cache.id
+    SSE_POLL_INTERVAL       = tostring(var.sse_poll_interval)
+    ENVIRONMENT             = var.environment
+    CHAOS_EXPERIMENTS_TABLE = module.dynamodb.chaos_experiments_table_name
     # CORS: Pass explicit origins from tfvars (no wildcard fallback)
     # Feature 1203: Amplify domain should be in cors_allowed_origins
     CORS_ORIGINS = join(",", var.cors_allowed_origins)
@@ -401,6 +414,8 @@ module "dashboard_lambda" {
     # Feature 1056: OHLC data source secrets for Tiingo/Finnhub adapters
     TIINGO_SECRET_ARN  = module.secrets.tiingo_secret_arn
     FINNHUB_SECRET_ARN = module.secrets.finnhub_secret_arn
+    # Blind spot fix: Add Stripe webhook secret ARN for payment verification
+    STRIPE_WEBHOOK_SECRET_ARN = module.secrets.stripe_webhook_secret_arn
     # Feature 1087: OHLC persistent cache table for write-through caching
     OHLC_CACHE_TABLE = module.dynamodb.ohlc_cache_table_name
     # Feature 1097: SSE Lambda URL for frontend to connect to streaming endpoint

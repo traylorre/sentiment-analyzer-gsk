@@ -30,7 +30,8 @@ from typing import Any
 
 # Environment
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "dev")
-DASHBOARD_URL = os.environ.get("DASHBOARD_URL", "https://sentiment-analyzer.com")
+# Blind spot fix: Use localhost as fallback (matches Terraform dev default, not hardcoded prod URL)
+DASHBOARD_URL = os.environ.get("DASHBOARD_URL", "http://localhost:3000")
 
 # Security headers configuration
 SECURITY_HEADERS = {

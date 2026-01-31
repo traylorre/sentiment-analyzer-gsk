@@ -13,12 +13,27 @@ logger = logging.getLogger(__name__)
 
 
 def _get_webhook_secret() -> str:
-    """Get Stripe webhook secret from environment.
+    """Get Stripe webhook secret from Secrets Manager.
 
     Amendment 1.15 compliant - fail if missing, no fallback.
+    Uses ARN pattern consistent with other project secrets.
     Lazy-loaded to allow module import during testing.
     """
-    return os.environ["STRIPE_WEBHOOK_SECRET"]
+    secret_arn = os.environ.get("STRIPE_WEBHOOK_SECRET_ARN", "")
+    if not secret_arn:
+        raise RuntimeError("STRIPE_WEBHOOK_SECRET_ARN environment variable not set")
+
+    # Import here to avoid circular imports
+    from src.lambdas.shared.secrets import get_secret
+
+    secret_data = get_secret(secret_arn)
+
+    # Handle both formats: {"webhook_secret": "..."} or plain string
+    if isinstance(secret_data, dict):
+        return secret_data.get(
+            "webhook_secret", secret_data.get("STRIPE_WEBHOOK_SECRET", "")
+        )
+    return str(secret_data)
 
 
 def verify_stripe_signature(payload: bytes, signature: str) -> stripe.Event:
