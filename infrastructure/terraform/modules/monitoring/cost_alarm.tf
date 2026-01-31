@@ -67,7 +67,7 @@ resource "aws_cloudwatch_metric_alarm" "lambda_daily_invocations" {
 
   metric_query {
     id          = "total"
-    expression  = "dashboard + ingestion + analysis + notification + metrics"
+    expression  = "dashboard + ingestion + analysis + notification + metrics + sse_streaming"
     label       = "Total Lambda Invocations"
     return_data = true
   }
@@ -133,6 +133,19 @@ resource "aws_cloudwatch_metric_alarm" "lambda_daily_invocations" {
       stat        = "Sum"
       dimensions = {
         FunctionName = "${var.environment}-sentiment-metrics"
+      }
+    }
+  }
+
+  metric_query {
+    id = "sse_streaming"
+    metric {
+      metric_name = "Invocations"
+      namespace   = "AWS/Lambda"
+      period      = 86400
+      stat        = "Sum"
+      dimensions = {
+        FunctionName = "${var.environment}-sentiment-sse-streaming"
       }
     }
   }
