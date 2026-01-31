@@ -412,3 +412,27 @@ cd infrastructure/terraform && terraform output
 | infrastructure/terraform/main.tf | Added metrics_lambda_arn and metrics_lambda_name outputs |
 
 **Total Audit #11**: 8 issues across 6 files
+
+---
+
+## Audit #12 - Infrastructure Cross-Reference Gaps (2026-01-30)
+
+**Issue Trend**: Audit #10: 28 → Audit #11: 8 → Audit #12: 5 (consistent decay)
+
+**Discovery**: Import scripts and monitoring configs were incomplete - metrics/notification/sse-streaming Lambdas added but not reflected in all infrastructure tooling.
+
+### Import Script Fixes (import-existing.sh)
+| Line | Issue | Fix |
+|------|-------|-----|
+| 89 | Stale SNS reference `.analysis` | Changed to `.analysis_requests` |
+| 81+ | Missing IAM role imports | Added notification_lambda, sse_streaming_lambda |
+| 109+ | Missing log group imports | Added metrics, notification, sse-streaming |
+
+### Monitoring Coverage Fixes
+| File | Issue | Fix |
+|------|-------|-----|
+| cost_alarm.tf:70 | Metrics Lambda excluded from cost alarm | Added to expression and metric_query |
+| dashboard.tf:29 | Metrics Lambda not in Invocations widget | Added metric |
+| dashboard.tf:48 | Metrics Lambda not in Errors widget | Added metric |
+
+**Total Audit #12**: 5 issues across 3 files

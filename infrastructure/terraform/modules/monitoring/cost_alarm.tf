@@ -67,7 +67,7 @@ resource "aws_cloudwatch_metric_alarm" "lambda_daily_invocations" {
 
   metric_query {
     id          = "total"
-    expression  = "dashboard + ingestion + analysis + notification"
+    expression  = "dashboard + ingestion + analysis + notification + metrics"
     label       = "Total Lambda Invocations"
     return_data = true
   }
@@ -120,6 +120,19 @@ resource "aws_cloudwatch_metric_alarm" "lambda_daily_invocations" {
       stat        = "Sum"
       dimensions = {
         FunctionName = "${var.environment}-sentiment-notification"
+      }
+    }
+  }
+
+  metric_query {
+    id = "metrics"
+    metric {
+      metric_name = "Invocations"
+      namespace   = "AWS/Lambda"
+      period      = 86400
+      stat        = "Sum"
+      dimensions = {
+        FunctionName = "${var.environment}-sentiment-metrics"
       }
     }
   }

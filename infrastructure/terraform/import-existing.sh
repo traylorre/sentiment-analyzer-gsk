@@ -79,6 +79,8 @@ import_resource "module.iam.aws_iam_role.ingestion_lambda" "$ENVIRONMENT-ingesti
 import_resource "module.iam.aws_iam_role.analysis_lambda" "$ENVIRONMENT-analysis-lambda-role" || true
 import_resource "module.iam.aws_iam_role.dashboard_lambda" "$ENVIRONMENT-dashboard-lambda-role" || true
 import_resource "module.iam.aws_iam_role.metrics_lambda" "$ENVIRONMENT-metrics-lambda-role" || true
+import_resource "module.iam.aws_iam_role.notification_lambda" "$ENVIRONMENT-notification-lambda-role" || true
+import_resource "module.iam.aws_iam_role.sse_streaming_lambda" "$ENVIRONMENT-sse-streaming-lambda-role" || true
 
 echo ""
 echo "========== Importing S3 Buckets =========="
@@ -86,7 +88,7 @@ import_resource "aws_s3_bucket.lambda_deployments" "$ENVIRONMENT-sentiment-lambd
 
 echo ""
 echo "========== Importing SNS Topics =========="
-import_resource "module.sns.aws_sns_topic.analysis" "arn:aws:sns:$AWS_REGION:$ACCOUNT_ID:$ENVIRONMENT-sentiment-analysis" || true
+import_resource "module.sns.aws_sns_topic.analysis_requests" "arn:aws:sns:$AWS_REGION:$ACCOUNT_ID:$ENVIRONMENT-sentiment-analysis" || true
 
 echo ""
 echo "========== Importing EventBridge =========="
@@ -107,6 +109,9 @@ echo "========== Importing CloudWatch Log Groups =========="
 import_resource "module.analysis_lambda.aws_cloudwatch_log_group.lambda" "/aws/lambda/$ENVIRONMENT-sentiment-analysis" || true
 import_resource "module.dashboard_lambda.aws_cloudwatch_log_group.lambda" "/aws/lambda/$ENVIRONMENT-sentiment-dashboard" || true
 import_resource "module.ingestion_lambda.aws_cloudwatch_log_group.lambda" "/aws/lambda/$ENVIRONMENT-sentiment-ingestion" || true
+import_resource "module.metrics_lambda.aws_cloudwatch_log_group.lambda" "/aws/lambda/$ENVIRONMENT-sentiment-metrics" || true
+import_resource "module.notification_lambda.aws_cloudwatch_log_group.lambda" "/aws/lambda/$ENVIRONMENT-sentiment-notification" || true
+import_resource "module.sse_streaming_lambda.aws_cloudwatch_log_group.lambda" "/aws/lambda/$ENVIRONMENT-sentiment-sse-streaming" || true
 
 echo ""
 echo "========== Importing Backup Plans =========="
