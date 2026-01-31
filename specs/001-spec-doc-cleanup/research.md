@@ -2,6 +2,7 @@
 
 **Date**: 2026-01-31
 **Feature**: 001-spec-doc-cleanup
+**Status**: COMPLETED (2026-01-31)
 
 ## Discovery Summary
 
@@ -11,6 +12,7 @@
 | Sections affected | **10+ sections** |
 | Phantom Lambdas documented | 1 (Quota Reset Lambda) |
 | Actual Lambdas in codebase | 6 |
+| **Cleanup Status** | **COMPLETED** (B-blind-spot-fixes branch) |
 
 ## Task 1: Twitter-Related Content Inventory
 
@@ -66,9 +68,11 @@ The SPEC.md contains **89 lines** referencing Twitter, tweets, quota_reset, or t
 | metrics | ✅ | ✅ | ✅ |
 | notification | ✅ | ✅ | ✅ |
 | sse_streaming | ✅ | ✅ | ✅ |
-| **quota_reset** | ❌ | ❌ | ⚠️ (marked NOT IMPLEMENTED) |
+| **quota_reset** | ❌ | ❌ | ✅ REMOVED |
 
 **Decision**: Remove Quota Reset Lambda documentation entirely (already marked as NOT IMPLEMENTED in PR #681).
+
+**Status**: COMPLETED - Phantom quota-reset-lambda references removed as part of B-blind-spot-fixes branch work (2026-01-31).
 
 ## Task 3: Cross-Reference Scan
 
@@ -130,9 +134,13 @@ Additional patterns checked:
 | Break internal links | Low | Low | Markdown linter check |
 | Confusion about costs | Medium | Medium | Add Tiingo/Finnhub actual costs |
 
-## Next Steps
+## Completion Status
 
-1. Proceed to `/speckit.tasks` to generate task list
-2. Execute cleanup via atomic commits
-3. Verify with grep checks after each commit
-4. Final audit and PR creation
+The quota-reset phantom Lambda cleanup has been completed as part of the B-blind-spot-fixes branch work (2026-01-31).
+
+### Completed Actions
+
+1. ~~Proceed to `/speckit.tasks` to generate task list~~ DONE
+2. ~~Execute cleanup via atomic commits~~ DONE (B-blind-spot-fixes branch)
+3. ~~Verify with grep checks after each commit~~ DONE
+4. ~~Final audit and PR creation~~ IN PROGRESS (B-blind-spot-fixes branch)

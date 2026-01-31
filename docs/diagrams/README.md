@@ -379,7 +379,7 @@ Keep Canva project active for future diagrams:
 **Version History:**
 - v1.0 (2025-11-16): Initial high-level overview and security flow diagrams
 - v1.1 (2025-11-24): Added Metrics Lambda for operational monitoring (StuckItems detection)
-- v1.2 (TBD): Add monthly quota reset Lambda (after specification gap fix)
+- v1.2 (TBD): Document quota tracking via `resets_at` field (no separate Lambda needed)
 - v2.0 (TBD): Add focused component diagrams (OAuth, DLQ, Retry)
 
 ---

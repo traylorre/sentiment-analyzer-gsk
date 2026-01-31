@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-spec-doc-cleanup`
 **Created**: 2026-01-31
-**Status**: Draft
+**Status**: COMPLETED (quota-reset cleanup done via B-blind-spot-fixes branch, 2026-01-31)
 **Input**: User description: "work to resolve the issues identified with SPEC.md"
 
 ## User Scenarios & Testing *(mandatory)*
@@ -109,9 +109,18 @@ A technical auditor or architect reviews the system documentation for accuracy a
 
 - The sentiment-analyzer-gsk project uses Tiingo and Finnhub as its only external data sources
 - Twitter integration was never implemented in this project (documentation was copied from another project)
-- The Quota Reset Lambda documentation describes functionality for a different project and should be removed entirely
+- ~~The Quota Reset Lambda documentation describes functionality for a different project and should be removed entirely~~ COMPLETED
 - If rate limiting is needed for Tiingo/Finnhub, it will be specified in a separate feature specification
 - The recent PR #681 updates (Analysis Lambda memory fix, 4 new Lambda entries) are correct and should be preserved
+
+## Completion Notes
+
+**Quota-Reset Cleanup Status**: COMPLETED (2026-01-31)
+
+The phantom quota-reset-lambda references have been removed as part of the B-blind-spot-fixes branch work. This includes:
+- Removal of quota-reset-lambda documentation from SPEC.md
+- Removal of associated DLQ references
+- Removal of Twitter-specific quota management documentation
 
 ## Out of Scope
 
