@@ -17,46 +17,32 @@
 
 ### Layer 1: External Sources (Left Side - x: 100-300)
 
-**Component: Twitter API**
+**Component: Tiingo API**
 - Position: (150, 200)
 - Size: 180 x 120 px
 - Shape: Rounded rectangle
 - Color: `#E3F2FD` (light blue - pastel)
-- Icon: Twitter bird (optional)
+- Icon: Chart/stock icon (optional)
 - Border: 2px solid `#90CAF9`
 - Text:
   ```
-  Twitter API
-  Rate: 450 req/15min
-  Quota: Tier-based
+  Tiingo API
+  Financial market data
+  REST API | API Key Auth
   ```
 
-**Component: RSS Feeds (Multiple)**
+**Component: Finnhub API**
 - Position: (150, 400)
 - Size: 180 x 120 px
 - Shape: Rounded rectangle
 - Color: `#FFF3E0` (light orange - pastel)
-- Icon: RSS icon (optional)
+- Icon: News/finance icon (optional)
 - Border: 2px solid `#FFB74D`
 - Text:
   ```
-  RSS/Atom Feeds
-  Size: ≤10 MB
-  Format: XML
-  ```
-
-**Component: Admin User**
-- Position: (150, 600)
-- Size: 180 x 120 px
-- Shape: Rounded rectangle
-- Color: `#F3E5F5` (light purple - pastel)
-- Icon: User icon
-- Border: 2px solid `#CE93D8`
-- Text:
-  ```
-  Admin User
-  API Gateway
-  REST API
+  Finnhub API
+  Stock quotes & news
+  REST API | API Key Auth
   ```
 
 **Label (Above all sources):**
@@ -69,7 +55,7 @@
 
 ### Layer 2: Entry Points (x: 400-600)
 
-**Component: EventBridge Scheduler**
+**Component: EventBridge Scheduler (Ingestion)**
 - Position: (450, 200)
 - Size: 160 x 100 px
 - Shape: Hexagon (or rounded rect)
@@ -78,7 +64,7 @@
 - Text:
   ```
   EventBridge
-  Every 60 seconds
+  Every 5 minutes
   ```
 
 **Arrow: EventBridge → Ingestion Lambda**
@@ -86,8 +72,8 @@
 - Style: Solid, 3px, `#81C784`
 - Label: "Trigger (5min)"
 
-**Component: API Gateway**
-- Position: (450, 600)
+**Component: API Gateway (Dashboard)**
+- Position: (450, 500)
 - Size: 160 x 100 px
 - Shape: Rounded rectangle
 - Color: `#F3E5F5` (light purple)
@@ -96,80 +82,111 @@
   ```
   API Gateway
   REST API
-  API Key Auth
+  Dashboard endpoints
   ```
 
-**Arrow: Admin User → API Gateway**
-- From: (330, 660) → To: (450, 660)
+**Arrow: API Gateway → Dashboard Lambda**
+- From: (610, 550) → To: (700, 550)
 - Style: Solid, 2px, `#CE93D8`
-- Label: "POST/GET/PATCH/DELETE"
+- Label: "HTTP requests"
 
 ---
 
 ### Layer 3: Lambda Functions (x: 700-900)
 
-**Component: Ingestion Lambda (Twitter)**
-- Position: (700, 350)
+**Component: Ingestion Lambda**
+- Position: (700, 200)
 - Size: 180 x 140 px
 - Shape: Rounded rectangle
 - Color: `#E1BEE7` (light purple)
 - Border: 2px solid `#9C27B0`
 - Text:
   ```
-  ingestion-twitter
+  ingestion-lambda
   256 MB | 60s timeout
-  Tier concurrency
 
-  • OAuth refresh
-  • Fetch tweets
+  • Fetch Tiingo/Finnhub
+  • Write to DynamoDB
   • Publish to SNS
   ```
 
-**Component: Ingestion Lambda (RSS)**
-- Position: (700, 530)
+**Component: Analysis Lambda**
+- Position: (700, 380)
 - Size: 180 x 140 px
 - Shape: Rounded rectangle
 - Color: `#E1BEE7` (light purple)
 - Border: 2px solid `#9C27B0`
 - Text:
   ```
-  ingestion-rss
-  256 MB | 60s timeout
-  Tier concurrency
+  analysis-lambda
+  512 MB | 30s timeout
+  Concurrency: 20
 
-  • HTTP GET feed
-  • Parse XML
-  • Publish to SNS
+  • SNS trigger
+  • DistilBERT analysis
+  • Write to DynamoDB
   ```
 
-**Component: Admin API Lambda**
-- Position: (700, 710)
+**Component: Dashboard Lambda**
+- Position: (700, 560)
 - Size: 180 x 140 px
 - Shape: Rounded rectangle
 - Color: `#E1BEE7` (light purple)
 - Border: 2px solid `#9C27B0`
 - Text:
   ```
-  admin-api-lambda
+  dashboard-lambda
   256 MB | 30s timeout
-  Concurrency: 10
 
-  • CRUD sources
-  • Validation
+  • FastAPI/Mangum
+  • API Gateway trigger
+  • Query DynamoDB
   ```
 
-**Arrow: Twitter API → Ingestion Twitter**
-- From: (330, 260) → To: (700, 420)
+**Component: SSE-Streaming Lambda**
+- Position: (700, 740)
+- Size: 180 x 140 px
+- Shape: Rounded rectangle
+- Color: `#E1BEE7` (light purple)
+- Border: 2px solid `#9C27B0`
+- Text:
+  ```
+  sse-streaming-lambda
+  256 MB | 900s timeout
+
+  • Function URL
+  • Server-Sent Events
+  • Real-time updates
+  ```
+
+**Component: Notification Lambda**
+- Position: (950, 740)
+- Size: 180 x 140 px
+- Shape: Rounded rectangle
+- Color: `#E1BEE7` (light purple)
+- Border: 2px solid `#9C27B0`
+- Text:
+  ```
+  notification-lambda
+  128 MB | 30s timeout
+
+  • SNS/EventBridge trigger
+  • SendGrid integration
+  • Alert delivery
+  ```
+
+**Arrow: Tiingo API → Ingestion Lambda**
+- From: (330, 260) → To: (700, 270)
 - Style: Dashed, 2px, `#90CAF9`
-- Label: "HTTP GET\n/tweets/search/recent"
+- Label: "HTTP GET\n/tiingo/daily"
 
-**Arrow: RSS Feeds → Ingestion RSS**
-- From: (330, 460) → To: (700, 600)
+**Arrow: Finnhub API → Ingestion Lambda**
+- From: (330, 460) → To: (700, 270)
 - Style: Dashed, 2px, `#FFB74D`
-- Label: "HTTP GET\nfeed.xml"
+- Label: "HTTP GET\n/quote, /news"
 
-**Arrow: API Gateway → Admin API Lambda**
-- From: (610, 660) → To: (700, 780)
+**Arrow: API Gateway → Dashboard Lambda**
+- From: (610, 550) → To: (700, 630)
 - Style: Solid, 2px, `#CE93D8`
 - Label: "Invoke"
 
@@ -187,10 +204,10 @@
   ```
   SNS Topics
 
-  ingest-topic-twitter
-  ingest-topic-rss
+  sentiment-ingestion-topic
+  sentiment-alerts-topic
 
-  Fan-out to SQS
+  Fan-out to Analysis Lambda
   ```
 
 **Component: SQS Queues (Group)**
@@ -203,21 +220,21 @@
   ```
   SQS Queues
 
-  ingest-queue-twitter
-  ingest-queue-rss
+  sentiment-analysis-queue
+  sentiment-dlq
 
   Batch: 10 messages
   ```
 
-**Arrow: Ingestion Twitter → SNS**
-- From: (880, 420) → To: (1050, 450)
+**Arrow: Ingestion Lambda → SNS**
+- From: (880, 270) → To: (1050, 450)
 - Style: Solid, 5px (very thick), `#F48FB1`
 - Label: "Publish\n10-100 items/poll"
 
-**Arrow: Ingestion RSS → SNS**
-- From: (880, 600) → To: (1050, 550)
-- Style: Solid, 5px (very thick), `#F48FB1`
-- Label: "Publish\n10-100 items/poll"
+**Arrow: SNS → Analysis Lambda**
+- From: (1050, 400) → To: (880, 450)
+- Style: Solid, 4px, `#F48FB1`
+- Label: "Trigger"
 
 **Arrow: SNS → SQS**
 - From: (1140, 600) → To: (1140, 650)
@@ -228,7 +245,7 @@
 
 ### Layer 5: Processing (x: 1300-1500)
 
-**Component: Inference Lambda**
+**Component: Metrics Lambda**
 - Position: (1350, 500)
 - Size: 180 x 160 px
 - Shape: Rounded rectangle
@@ -236,19 +253,19 @@
 - Border: 2px solid `#9C27B0`
 - Text:
   ```
-  inference-lambda
-  512 MB | 30s timeout
-  Concurrency: 20
+  metrics-lambda
+  128 MB | 30s timeout
+  Concurrency: 1
 
-  • DistilBERT analysis
-  • Compute sentiment
-  • Write to DynamoDB
+  • EventBridge 1min trigger
+  • Query DynamoDB
+  • Emit CloudWatch metrics
   ```
 
-**Arrow: SQS → Inference**
-- From: (1230, 720) → To: (1350, 580)
-- Style: Solid, 5px (very thick), `#9C27B0`
-- Label: "Poll (batch: 10)"
+**Arrow: EventBridge → Metrics Lambda**
+- From: (1210, 550) → To: (1350, 550)
+- Style: Solid, 3px, `#81C784`
+- Label: "Trigger (1/min)"
 
 ---
 
@@ -297,14 +314,14 @@
 - Label: "Update\n(next_poll_time, etag)"
 - Curve: Arc
 
-**Arrow: Admin API → source-configs (CRUD)**
-- From: (880, 780) → To: (1650, 340)
-- Style: Solid, 3px, `#66BB6A`
-- Label: "CRUD operations"
+**Arrow: Dashboard Lambda → source-configs (Read)**
+- From: (880, 630) → To: (1650, 340)
+- Style: Dashed, 2px, `#66BB6A`
+- Label: "Query operations"
 - Curve: Arc downward
 
-**Arrow: Inference → sentiment-items (Write)**
-- From: (1530, 580) → To: (1650, 580)
+**Arrow: Analysis Lambda → sentiment-items (Write)**
+- From: (880, 450) → To: (1650, 580)
 - Style: Solid, 5px (very thick), `#66BB6A`
 - Label: "PutItem\n(conditional)"
 
@@ -324,36 +341,14 @@
   Every 1 minute
   ```
 
-**Component: Metrics Lambda**
-- Position: (1350, 850)
-- Size: 180 x 140 px
-- Shape: Rounded rectangle
-- Color: `#E1BEE7` (light purple)
-- Border: 2px solid `#9C27B0`
-- Text:
-  ```
-  metrics-lambda
-  128 MB | 30s timeout
-  Concurrency: 1
-
-  • Query by_status GSI
-  • Detect stuck items
-  • Emit CloudWatch metric
-  ```
-
-**Arrow: EventBridge Metrics → Metrics Lambda**
-- From: (1210, 900) → To: (1350, 900)
-- Style: Solid, 3px, `#81C784`
-- Label: "Trigger (1/min)"
-
 **Arrow: Metrics Lambda → DynamoDB**
-- From: (1530, 920) → To: (1650, 640)
+- From: (1530, 580) → To: (1650, 580)
 - Style: Dashed, 2px, `#66BB6A`
 - Label: "Query\n(by_status GSI)"
 - Curve: Arc
 
 **Arrow: Metrics Lambda → CloudWatch**
-- From: (1440, 990) → To: (790, 1050)
+- From: (1440, 660) → To: (790, 1050)
 - Style: Solid, 3px, `#FF8A65`
 - Label: "PutMetricData\n(StuckItems)"
 
@@ -370,8 +365,9 @@
 - Text:
   ```
   Secrets Manager
-  OAuth tokens
-  API keys
+  Tiingo API key
+  Finnhub API key
+  SendGrid API key
   ```
 
 **Component: CloudWatch**
@@ -399,10 +395,10 @@
   90-day retention
   ```
 
-**Arrow: Ingestion Twitter → Secrets Manager**
-- From: (790, 490) → To: (540, 1050)
+**Arrow: Ingestion Lambda → Secrets Manager**
+- From: (790, 340) → To: (540, 1050)
 - Style: Dashed, 1px (thin), `#4DB6AC`
-- Label: "GetSecret\n(OAuth token)"
+- Label: "GetSecret\n(API keys)"
 
 **Arrow: All Lambdas → CloudWatch**
 - From multiple Lambda boxes → (790, 1050)
@@ -440,14 +436,14 @@
 - Position: (650, 70)
 - Font: Regular, 14px
 - Color: `#757575` (medium gray)
-- Text: "Event-driven serverless architecture for Twitter & RSS sentiment analysis"
+- Text: "Event-driven serverless architecture for Tiingo & Finnhub financial sentiment analysis"
 
 ---
 
 ## Color Palette Summary
 
 **Pastel Colors (Low Saturation):**
-- External Sources: `#E3F2FD` (light blue), `#FFF3E0` (light orange), `#F3E5F5` (light purple)
+- External Sources: `#E3F2FD` (light blue - Tiingo), `#FFF3E0` (light orange - Finnhub)
 - Lambdas: `#E1BEE7` (light purple)
 - Messaging: `#FCE4EC` (light pink), `#FFF9C4` (light yellow)
 - Databases: `#C8E6C9` (light green)
@@ -483,8 +479,8 @@
 After main diagram, create these variants (save as separate Canva pages):
 
 1. **Simplified Version** - Remove support services, show only main flow
-2. **Twitter Flow Only** - Highlight Twitter path, gray out RSS
-3. **RSS Flow Only** - Highlight RSS path, gray out Twitter
-4. **Admin API Focus** - Highlight admin operations, gray out ingestion
+2. **Tiingo Flow Only** - Highlight Tiingo market data path, gray out Finnhub
+3. **Finnhub Flow Only** - Highlight Finnhub news/quotes path, gray out Tiingo
+4. **Dashboard/SSE Focus** - Highlight real-time dashboard and SSE streaming paths
 
 Keep all in same Canva project for easy switching.

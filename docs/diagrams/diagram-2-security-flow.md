@@ -28,7 +28,7 @@
 **Zone 3: PROCESSING (Yellow Zone)**
 - Background: `#FFFDE7` (very light yellow - pastel)
 - Border: 3px solid `#FDD835` (yellow)
-- Components: Inference Lambda, SNS/SQS
+- Components: Analysis Lambda, SNS/SQS
 
 **Zone 4: PROTECTED (Green Zone)**
 - Background: `#E8F5E9` (very light green - pastel)
@@ -84,7 +84,7 @@
 - Border: 3px solid `#EF5350`
 - Label: **"ZONE 1: UNTRUSTED (Internet Input)"**
 
-**Component: Twitter API Response**
+**Component: Tiingo API Response**
 - Position: (200, 250)
 - Size: 280 x 160 px
 - Shape: Rounded rectangle
@@ -92,20 +92,20 @@
 - Border: 2px solid `#E57373`
 - Text:
   ```
-  Twitter API Response
+  Tiingo API Response
 
   TAINTED FIELDS:
-  • data[].text (user content)
-  • data[].author_id
-  • data[].id
+  • ticker (symbol validation)
+  • adjClose (numeric validation)
+  • adjVolume (numeric validation)
 
   THREATS:
-  ⚠ XSS: <script>alert()</script>
-  ⚠ SQL Injection: '; DROP TABLE--
+  ⚠ Injection: Malformed ticker symbols
+  ⚠ Type confusion: String vs numeric
   ⚠ Oversized: Up to 2 MB
   ```
 
-**Component: RSS Feed XML**
+**Component: Finnhub API Response**
 - Position: (550, 250)
 - Size: 280 x 160 px
 - Shape: Rounded rectangle
@@ -113,20 +113,20 @@
 - Border: 2px solid `#E57373`
 - Text:
   ```
-  RSS Feed XML
+  Finnhub API Response
 
   TAINTED FIELDS:
-  • <item><description>
-  • <item><link> (SSRF risk)
-  • <item><title>
+  • symbol (ticker validation)
+  • headline (user content)
+  • summary (SSRF risk in URLs)
 
   THREATS:
-  ⚠ XXE: <!ENTITY xxe SYSTEM>
-  ⚠ Malicious URLs
-  ⚠ Oversized: Up to 10 MB
+  ⚠ XSS: <script>alert()</script>
+  ⚠ Malicious URLs in content
+  ⚠ Oversized: Up to 5 MB
   ```
 
-**Component: Admin API Request**
+**Component: API Key Validation**
 - Position: (900, 250)
 - Size: 280 x 160 px
 - Shape: Rounded rectangle
@@ -134,20 +134,20 @@
 - Border: 2px solid `#E57373`
 - Text:
   ```
-  Admin API Request
+  API Key Response
 
   TAINTED FIELDS:
-  • endpoint (SSRF vector)
-  • source_id (injection risk)
-  • poll_interval_seconds
+  • api_key (from Secrets Manager)
+  • rate_limit_remaining
+  • rate_limit_reset
 
   THREATS:
-  ⚠ SSRF: http://169.254.169.254
-  ⚠ NoSQL Injection: {"$ne": null}
-  ⚠ Rate abuse: 1000s of sources
+  ⚠ Key exposure in logs
+  ⚠ Rate limit manipulation
+  ⚠ Invalid/expired keys
   ```
 
-**Component: OAuth Tokens**
+**Component: Dashboard Request**
 - Position: (1250, 250)
 - Size: 280 x 160 px
 - Shape: Rounded rectangle
@@ -155,17 +155,17 @@
 - Border: 2px solid `#E57373`
 - Text:
   ```
-  OAuth Refresh Response
+  Dashboard API Request
 
   TAINTED FIELDS:
-  • access_token
-  • refresh_token
-  • expires_in
+  • ticker (query param)
+  • date_range (validation)
+  • sort_order (enum)
 
   THREATS:
-  ⚠ Token injection
-  ⚠ Replay attacks
-  ⚠ Expired tokens
+  ⚠ NoSQL Injection: {"$ne": null}
+  ⚠ Parameter tampering
+  ⚠ Unauthorized access
   ```
 
 ---
@@ -179,23 +179,24 @@
 - Background: `#FFF3E0` (light orange pastel)
 - Label: **"ZONE 2: VALIDATION & SANITIZATION"**
 
-**Validation Checkpoint 1: Ingestion Lambda (Twitter)**
+**Validation Checkpoint 1: Ingestion Lambda (Tiingo)**
 - Position: (200, 560)
 - Size: 320 x 260 px
 - Color: `#FFE0B2` (light orange)
 - Border: 2px solid `#FFB74D`
 - Text:
   ```
-  ingestion-lambda-twitter
+  ingestion-lambda-tiingo
 
   ✓ VALIDATIONS:
   1. Size check: response <2 MB
   2. JSON parsing (strict mode)
   3. Schema validation
-  4. Rate limit headers
+  4. API key header validation
+  5. Rate limit header check
 
   ✗ NO SANITIZATION YET
-  → Raw text preserved
+  → Raw data preserved
 
   ERRORS → DLQ:
   • ValidationError
@@ -208,28 +209,29 @@
   • DLQ after 3 failures
   ```
 
-**Validation Checkpoint 2: Ingestion Lambda (RSS)**
+**Validation Checkpoint 2: Ingestion Lambda (Finnhub)**
 - Position: (580, 560)
 - Size: 320 x 260 px
 - Color: `#FFE0B2` (light orange)
 - Border: 2px solid `#FFB74D`
 - Text:
   ```
-  ingestion-lambda-rss
+  ingestion-lambda-finnhub
 
   ✓ VALIDATIONS:
-  1. Size check: response <10 MB
-  2. XML parsing (feedparser)
-  3. XXE prevention (secure mode)
-  4. URL validation
+  1. Size check: response <5 MB
+  2. JSON parsing (strict mode)
+  3. Schema validation
+  4. API key header validation
+  5. URL sanitization
 
   ✗ NO SANITIZATION YET
   → Raw content preserved
 
   ERRORS → DLQ:
-  • XMLParseError
+  • JSONDecodeError
   • SizeExceededError
-  • HTTPError (404, 500)
+  • HTTPError (401, 429, 5xx)
 
   RETRY LOGIC:
   • Max retries: 2
@@ -237,46 +239,44 @@
   • DLQ after 3 failures
   ```
 
-**Validation Checkpoint 3: Admin API Lambda**
+**Validation Checkpoint 3: Dashboard Lambda**
 - Position: (960, 560)
 - Size: 320 x 260 px
 - Color: `#FFE0B2` (light orange)
 - Border: 2px solid `#FFB74D`
 - Text:
   ```
-  admin-api-lambda
+  dashboard-lambda
 
   ✓ VALIDATIONS:
-  1. Pydantic schema validation
-  2. Regex: source_id ^[a-z0-9-]{1,64}$
-  3. HTTPS URL only
-  4. DNS resolution check
-  5. IP blocklist:
-     - 127.0.0.0/8 (localhost)
-     - 10.0.0.0/8 (private)
-     - 169.254.0.0/16 (metadata)
+  1. API Gateway request validation
+  2. Pydantic schema validation
+  3. Regex: ticker ^[A-Z]{1,5}$
+  4. Date range bounds check
+  5. Pagination limits
 
   ✓ SANITIZATION:
-  → Parameterized DynamoDB writes
+  → Parameterized DynamoDB queries
+  → HTML entity encoding
 
   ERRORS → HTTP:
   • 400 Bad Request (validation)
-  • 409 Conflict (duplicate)
+  • 401 Unauthorized
   • 429 Too Many Requests
   ```
 
-**Validation Checkpoint 4: OAuth Refresh**
+**Validation Checkpoint 4: API Key Validation**
 - Position: (1340, 560)
 - Size: 320 x 260 px
 - Color: `#FFE0B2` (light orange)
 - Border: 2px solid `#FFB74D`
 - Text:
   ```
-  OAuth Token Refresh
+  API Key Validation
 
   ✓ VALIDATIONS:
-  1. Token expiry check
-  2. Base64 decode test
+  1. Key presence check
+  2. Key format validation
   3. Length validation
   4. Response schema check
 
@@ -290,12 +290,12 @@
   • Fallback: Cache only
 
   ERRORS:
-  • InvalidRefreshToken → Disable source
+  • InvalidApiKey → Disable source
   • ThrottlingException → Circuit open
   ```
 
 **Arrow: Zone 1 → Zone 2 (Data Flow)**
-- From: Bottom of Twitter API (340, 410) → Top of Ingestion Twitter (340, 560)
+- From: Bottom of Tiingo API (340, 410) → Top of Ingestion Tiingo (340, 560)
 - Style: Solid, 4px, `#EF5350` → `#FF9800` gradient
 - Label: "HTTP Response\n(TAINTED)"
 - Annotation: "⚠ Untrusted data enters system"
@@ -340,14 +340,14 @@
   • Archive trigger: >10 days old
   ```
 
-**Component: Inference Lambda**
+**Component: Analysis Lambda**
 - Position: (640, 960)
 - Size: 420 x 260 px
 - Color: `#FFF59D` (light yellow)
 - Border: 2px solid `#FFEB3B`
 - Text:
   ```
-  inference-lambda
+  analysis-lambda
 
   PROCESSING:
   1. Extract text (STILL TAINTED)
@@ -376,8 +376,46 @@
   • Max retries: 3
   ```
 
-**Component: DLQ Processing**
+**Component: Notification Lambda**
 - Position: (1120, 960)
+- Size: 380 x 130 px
+- Color: `#FFF59D` (light yellow)
+- Border: 2px solid `#FFEB3B`
+- Text:
+  ```
+  notification-lambda
+
+  SECURITY:
+  • SendGrid API key from Secrets Manager
+  • Email template validation
+  • Recipient allowlist
+
+  THREATS:
+  • Email injection prevention
+  • Rate limiting per recipient
+  ```
+
+**Component: SSE-Streaming Lambda**
+- Position: (1120, 1100)
+- Size: 380 x 130 px
+- Color: `#FFF59D` (light yellow)
+- Border: 2px solid `#FFEB3B`
+- Text:
+  ```
+  sse-streaming-lambda
+
+  SECURITY:
+  • WebSocket connection validation
+  • Connection timeout: 5 min
+  • Message size limit: 32 KB
+
+  THREATS:
+  • Connection exhaustion prevention
+  • Reserved concurrency limit
+  ```
+
+**Component: DLQ Processing**
+- Position: (1560, 960)
 - Size: 380 x 260 px
 - Color: `#FFCCBC` (light red-orange)
 - Border: 2px solid `#FF8A65`
@@ -387,7 +425,7 @@
 
   2 DLQs:
   • ingestion-lambda-dlq
-  • inference-lambda-dlq
+  • analysis-lambda-dlq
 
   FAILURE SCENARIOS:
   1. Validation errors
@@ -406,13 +444,13 @@
   • Oldest message >7 days
   ```
 
-**Arrow: SQS → Inference**
+**Arrow: SQS → Analysis**
 - From: (580, 1090) → To: (640, 1090)
 - Style: Solid, 5px (very thick), `#FFEB3B`
 - Label: "Poll (batch: 10)\nHigh traffic"
 
-**Arrow: Inference → DLQ (Error Path)**
-- From: (850, 1220) → To: (1120, 1150)
+**Arrow: Analysis → DLQ (Error Path)**
+- From: (850, 1220) → To: (1560, 1150)
 - Style: Dashed, 3px, `#FF5722` (red-orange)
 - Label: "FAILURE\n(after 3 retries)"
 - Annotation: "⚠ Error path"
@@ -439,11 +477,11 @@
 
   ✓ PARAMETERIZED (NoSQL Injection Protected):
   {
-    'source_key': {'S': 'twitter#source-1'},  ← Safe (controlled)
-    'item_id': {'S': 'e3b0c44...'},           ← Safe (SHA-256 hash)
-    'text': {'S': '<script>alert()</script>'}, ← TAINTED but safe
-    'sentiment': {'S': 'neutral'},             ← Safe (enum)
-    'score': {'N': '0.5'}                      ← Safe (float)
+    'source_key': {'S': 'tiingo#AAPL'},           ← Safe (controlled)
+    'item_id': {'S': 'e3b0c44...'},               ← Safe (SHA-256 hash)
+    'text': {'S': '<script>alert()</script>'},   ← TAINTED but safe
+    'sentiment': {'S': 'neutral'},                ← Safe (enum)
+    'score': {'N': '0.5'}                         ← Safe (float)
   }
 
   ConditionExpression:
@@ -466,8 +504,8 @@
   ✅ No SQL injection (DynamoDB NoSQL)
   ✅ No NoSQL injection (parameterized expressions)
   ✅ No code execution (strings stored as-is)
-  ✅ No XXE attacks (feedparser secure mode)
-  ✅ No SSRF (DNS + IP blocklist)
+  ✅ No SSRF (URL validation + allowlist)
+  ✅ API keys secured in Secrets Manager
 
   ⚠ RESIDUAL RISKS:
   • XSS if text displayed in web UI without escaping
@@ -478,7 +516,7 @@
   • CloudWatch filters control characters
   ```
 
-**Arrow: Inference → DynamoDB**
+**Arrow: Analysis → DynamoDB**
 - From: (850, 1220) → To: (550, 1360)
 - Style: Solid, 5px (very thick), `#66BB6A`
 - Label: "PutItem\n(conditional)\n100-1000 writes/min"
@@ -504,10 +542,10 @@
   Secrets Manager
 
   STORED SECRETS:
-  • OAuth access tokens
-  • OAuth refresh tokens
-  • API keys
-  • HMAC webhook secrets
+  • Tiingo API key
+  • Finnhub API key
+  • SendGrid API key
+  • Database credentials
 
   CACHING STRATEGY:
   • /tmp cache (5-min TTL)
@@ -545,7 +583,7 @@
   ALARMS:
   • DLQ depth >10
   • StuckItems >0 for 10 min
-  • OAuth failures >5%
+  • API key failures >5%
   • Scheduler timeout
   • Quota >80%
   ```
@@ -619,7 +657,7 @@
   • Visibility timeout: 60s
   • ReportBatchItemFailures: ON
 
-  TWITTER API:
+  TIINGO/FINNHUB API:
   • 429 Rate Limit:
     - Wait for X-RateLimit-Reset
     - Max wait: 15 minutes
@@ -627,10 +665,10 @@
     - Exponential backoff: 1s, 2s, 4s
     - Max retries: 3
 
-  OAUTH REFRESH:
+  API KEY REFRESH:
   • Retries: 3
   • Backoff: 1s, 2s, 4s
-  • 400 Invalid Token → Disable source
+  • 401 Invalid Key → Disable source
 
   SECRETS MANAGER:
   • Circuit breaker: 3 failures
@@ -650,8 +688,8 @@
   {
     "error": {
       "code": "VALIDATION_ERROR",
-      "message": "source_id must be lowercase alphanumeric",
-      "field": "source_id",
+      "message": "ticker must be uppercase alphanumeric",
+      "field": "ticker",
       "request_id": "uuid",
       "timestamp": "2025-11-16T12:00:00Z",
       "docs_url": "https://docs.example.com/errors/VALIDATION_ERROR"
@@ -676,7 +714,7 @@
   ```
   CASCADING FAILURE PREVENTION
 
-  SCENARIO 1: Twitter API Outage
+  SCENARIO 1: Tiingo/Finnhub API Outage
   ✓ MITIGATION:
   • Rate smoothing (prevent burst after recovery)
   • Circuit breaker (stop requests during outage)
@@ -684,7 +722,7 @@
 
   SCENARIO 2: Secrets Manager Throttling
   ✓ MITIGATION:
-  • Token caching (/tmp, 5-min TTL)
+  • API key caching (/tmp, 5-min TTL)
   • Refresh jitter (0-300s random delay)
   • Circuit breaker (fallback to cache)
 
@@ -750,17 +788,17 @@
 - Position: (550, 820)
 - Arrow: From Ingestion Lambda → DLQ
 - Style: Dashed, 3px, `#FF5722` (red)
-- Label: "VALIDATION FAILED\n(malformed JSON/XML)"
+- Label: "VALIDATION FAILED\n(malformed JSON)"
 
 **Annotation 3: DynamoDB Throttling Path**
 - Position: (1060, 1220)
-- Arrow: From Inference Lambda → DLQ
+- Arrow: From Analysis Lambda → DLQ
 - Style: Dashed, 3px, `#FF5722` (red)
 - Label: "THROTTLING\n(ProvisionedThroughputExceeded)"
 
 **Annotation 4: Circuit Breaker Open**
 - Position: (1340, 820)
-- Arrow: From OAuth component → CloudWatch alarm
+- Arrow: From API Key component → CloudWatch alarm
 - Style: Dashed, 2px, `#FF9800` (orange)
 - Label: "CIRCUIT OPEN\n(3 failures)"
 
@@ -794,9 +832,9 @@
   RED (untrusted) → ORANGE (validation) → YELLOW (processing) → GREEN (protected)
 
   SANITIZATION CHECKPOINTS:
-  1. Size limits (2 MB / 10 MB)
-  2. Schema validation (JSON/XML parsing)
-  3. DNS resolution + IP blocklist (SSRF prevention)
+  1. Size limits (2 MB / 5 MB)
+  2. Schema validation (JSON parsing)
+  3. API key validation + rate limit tracking
   4. Parameterized DynamoDB writes (NoSQL injection prevention)
   ```
 
@@ -838,7 +876,7 @@
 
 Keep in same Canva project for reuse:
 
-1. **OAuth Flow Deep Dive** - Just OAuth refresh + Secrets Manager + circuit breaker
+1. **API Key Flow Deep Dive** - Just API key refresh + Secrets Manager + circuit breaker
 2. **DLQ Processing Flow** - SQS → DLQ → S3 archival → Reprocessing
 3. **Retry Logic Diagram** - All retry patterns in one view
 4. **Cascading Failure Scenarios** - Show 4 failure scenarios side-by-side

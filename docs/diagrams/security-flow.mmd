@@ -6,29 +6,31 @@ graph TB
     end
 
     subgraph Zone1[" ZONE 1: UNTRUSTED - Internet Input "]
-        TwitterAPI[Twitter API Response<br/>⚠ XSS, SQL Injection<br/>⚠ Oversized: 2MB]
-        RSSXML[RSS Feed XML<br/>⚠ XXE, SSRF<br/>⚠ Oversized: 10MB]
-        AdminReq[Admin API Request<br/>⚠ SSRF, NoSQL Injection<br/>⚠ Rate abuse]
+        TiingoAPI[Tiingo API Response<br/>⚠ XSS, SQL Injection<br/>⚠ Oversized: 2MB<br/>⚠ Rate limited: 500/day]
+        FinnhubAPI[Finnhub API Response<br/>⚠ XSS, SQL Injection<br/>⚠ Oversized: 2MB<br/>⚠ WebSocket data]
+        DashboardReq[Dashboard API Request<br/>⚠ SSRF, NoSQL Injection<br/>⚠ Rate abuse]
         OAuthResp[OAuth Callback<br/>⚠ Token injection<br/>⚠ Expired tokens<br/>⚠ CSRF via missing state<br/>⚠ Code interception (no PKCE)]
         MagicLinkReq[Magic Link Request<br/>⚠ Email enumeration<br/>⚠ Token in query string leak<br/>⚠ Referer header exposure]
         CSRFAttempt[Mutation Requests<br/>⚠ CSRF attacks<br/>⚠ Cross-origin requests<br/>⚠ Cookie-only auth bypass]
         SSEReq[SSE Stream Request<br/>⚠ Long-lived connection<br/>⚠ Connection exhaustion<br/>⚠ Token in query params]
+        NotifyReq[Notification Events<br/>⚠ SNS injection<br/>⚠ EventBridge spoofing<br/>⚠ Oversized payloads]
     end
 
     subgraph Zone2[" ZONE 2: VALIDATION & SANITIZATION "]
-        IngestT[ingestion-twitter<br/>✓ Size check: 2MB<br/>✓ JSON parsing<br/>✓ Schema validation<br/>✗ NO SANITIZATION<br/>→ Errors → DLQ]
-        IngestR[ingestion-rss<br/>✓ Size check: 10MB<br/>✓ XML parsing secure<br/>✓ XXE prevention<br/>✗ NO SANITIZATION<br/>→ Errors → DLQ]
-        AdminL["admin-api-lambda<br/>✓ Pydantic validation<br/>✓ Regex: ^[a-z0-9-]+$<br/>✓ HTTPS only<br/>✓ IP blocklist<br/>✓ Parameterized writes"]
+        IngestionL["{env}-sentiment-ingestion<br/>EventBridge 5min trigger<br/>✓ Size check: 2MB<br/>✓ JSON parsing<br/>✓ Schema validation<br/>✓ Tiingo + Finnhub fetch<br/>→ DynamoDB + SNS"]
+        DashboardL["{env}-sentiment-dashboard<br/>API Gateway trigger<br/>✓ FastAPI/Mangum<br/>✓ Pydantic validation<br/>✓ Regex: ^[a-z0-9-]+$<br/>✓ HTTPS only<br/>✓ Handles auth/config/admin"]
         OAuthV[OAuth Validation<br/>✓ PKCE code_verifier (RFC 7636)<br/>✓ State with provider validation (A13)<br/>✓ Token expiry + jti claim<br/>✓ Circuit breaker<br/>Cache: 5-min TTL]
         MagicLinkV[Magic Link Validation<br/>✓ Token in PATH only (not query)<br/>✓ Atomic conditional consume<br/>✓ One-time use enforcement<br/>✓ 1-hour TTL<br/>✗ Blocks ?token= query param]
         CSRFValidation[CSRF Validation<br/>✓ Double-submit cookie pattern<br/>✓ X-CSRF-Token header check<br/>✓ Cookie vs header comparison<br/>✗ Exempt: /refresh, /callback]
         TokenStorage[Token Storage Policy<br/>✓ Refresh: HttpOnly cookie<br/>✓ Access: MEMORY ONLY<br/>✗ No localStorage/sessionStorage<br/>✗ No document.cookie access]
-        SSEL["sse-streaming-lambda<br/>✓ Connection pool: 100 max<br/>✓ Heartbeat: 30s<br/>✓ Config auth validation<br/>✓ Ticker filter validation<br/>⚠ Query param tokens"]
+        SSEL["{env}-sentiment-sse-streaming<br/>Function URL (RESPONSE_STREAM)<br/>✓ Connection pool: 100 max<br/>✓ Heartbeat: 30s<br/>✓ Config auth validation<br/>✓ Ticker filter validation<br/>⚠ Query param tokens"]
+        NotifyL["{env}-sentiment-notification<br/>SNS/EventBridge trigger<br/>✓ Event schema validation<br/>✓ SendGrid integration<br/>✓ DynamoDB persistence<br/>✓ Template sanitization"]
     end
 
     subgraph Zone3[" ZONE 3: PROCESSING - Still Tainted "]
         Queue[SNS → SQS<br/>TAINTED DATA<br/>Batch: 10 msgs<br/>maxReceiveCount: 3<br/>Visibility: 60s]
-        InferenceL[inference-lambda<br/>1. Extract text TAINTED<br/>2. DistilBERT analysis<br/>3. SHA-256 hash<br/>✓ Partial sanitization<br/>✗ text field: RAW]
+        AnalysisL["{env}-sentiment-analysis<br/>SNS trigger<br/>1. Extract text TAINTED<br/>2. DistilBERT analysis<br/>3. SHA-256 hash<br/>✓ Partial sanitization<br/>✗ text field: RAW"]
+        MetricsL["{env}-sentiment-metrics<br/>EventBridge 1min trigger<br/>✓ DynamoDB aggregation<br/>✓ CloudWatch publish<br/>✓ Metric validation"]
         DLQ[Dead Letter Queue<br/>3 DLQs total<br/>Retention: 14 days<br/>Archive to S3: 10 days<br/>⚠ ALARM: depth > 10]
     end
 
@@ -39,10 +41,13 @@ graph TB
     end
 
     subgraph Zone5[" ZONE 5: INFRASTRUCTURE "]
-        SecretsM[Secrets Manager<br/>OAuth tokens<br/>Cache: 5-min<br/>Circuit breaker<br/>Throttle: 5K/day]
+        SecretsM[Secrets Manager<br/>Tiingo/Finnhub API keys<br/>SendGrid API key<br/>Cache: 5-min<br/>Circuit breaker<br/>Throttle: 5K/day]
         CW[CloudWatch<br/>Retention: 7 years<br/>Secret filtering<br/>Alarms: DLQ > 10]
         S3Arch[S3 DLQ Archive<br/>Age > 10 days<br/>Retention: 90 days<br/>Glacier storage]
         S3Static[S3 Static Assets<br/>✓ OAC access only<br/>✓ No public access<br/>✓ Versioning enabled]
+        SendGrid[SendGrid<br/>Email delivery<br/>Rate limited<br/>Template validation]
+        EventBridge[EventBridge<br/>✓ 5min ingestion schedule<br/>✓ 1min metrics schedule<br/>✓ Notification triggers]
+        APIGateway[API Gateway<br/>✓ Dashboard routing<br/>✓ Request validation<br/>✓ Rate limiting<br/>✓ WAF integration]
     end
 
     %% Edge Flow (Lambda Function URL + Amplify)
@@ -50,47 +55,63 @@ graph TB
     Amplify -->|Static assets| S3Static
     BrowserReq -->|API calls| LambdaURL
     LambdaURL -->|/api/v2/stream*| SSEReq
-    LambdaURL -->|/api/*| AdminReq
+    BrowserReq -->|/api/*| APIGateway
 
-    %% Data Flow
-    TwitterAPI -->|HTTP Response<br/>TAINTED| IngestT
-    RSSXML -->|XML Response<br/>TAINTED| IngestR
-    AdminReq -->|JSON Body<br/>TAINTED| AdminL
+    %% Data Flow - Ingestion
+    EventBridge -->|5min schedule| IngestionL
+    TiingoAPI -->|HTTP Response<br/>TAINTED| IngestionL
+    FinnhubAPI -->|HTTP Response<br/>TAINTED| IngestionL
+    IngestionL -.->|GetSecret| SecretsM
+    IngestionL ==>|Publish<br/>TAINTED| Queue
+    IngestionL ==>|PutItem raw data| DDBWrite
+
+    %% Dashboard Flow
+    APIGateway -->|Route requests| DashboardL
+    DashboardReq -->|JSON Body<br/>TAINTED| DashboardL
     OAuthResp -->|Code + State| OAuthV
     MagicLinkReq -->|"/auth/verify/<token>"| MagicLinkV
     CSRFAttempt -->|POST/PUT/PATCH/DELETE| CSRFValidation
     OAuthV -->|Token Policy| TokenStorage
     MagicLinkV -->|Token Policy| TokenStorage
+    DashboardL -->|Auth/Config/Admin| DDBRead
+    DashboardL -->|Config updates| DDBWrite
+
+    %% SSE Streaming Flow
     SSEReq -->|EventSource| SSEL
-
-    IngestT -.->|GetSecret| SecretsM
-    IngestR -.->|GetSecret| SecretsM
-
-    IngestT ==>|Publish 10-100<br/>TAINTED| Queue
-    IngestR ==>|Publish 10-100<br/>TAINTED| Queue
-
-    Queue ==>|Poll batch: 10<br/>TAINTED| InferenceL
-
-    %% Error Paths
-    IngestT -.->|FAILURE<br/>after 3 retries| DLQ
-    IngestR -.->|FAILURE<br/>ValidationError| DLQ
-    InferenceL -.->|FAILURE<br/>ThrottlingError| DLQ
-    DLQ -.->|Age > 10 days| S3Arch
-
-    %% Success Path
-    InferenceL ==>|PutItem<br/>100-1000/min<br/>PARAMETERIZED| DDBWrite
-    DDBWrite --> SecGuard
-
-    %% SSE Stream Path
     SSEL -->|Poll every 5s<br/>PARAMETERIZED| DDBRead
-    DDBRead --> SecGuard
     SSEL -.->|Stream Events| BrowserReq
 
-    %% Monitoring
-    IngestT -.->|Logs & Metrics| CW
-    IngestR -.->|Logs & Metrics| CW
-    InferenceL -.->|Logs & Metrics| CW
-    AdminL -.->|Logs & Metrics| CW
+    %% Analysis Flow
+    Queue ==>|Poll batch: 10<br/>TAINTED| AnalysisL
+    AnalysisL ==>|PutItem<br/>100-1000/min<br/>PARAMETERIZED| DDBWrite
+
+    %% Metrics Flow
+    EventBridge -->|1min schedule| MetricsL
+    MetricsL -->|Query aggregates| DDBRead
+    MetricsL -.->|PutMetricData| CW
+
+    %% Notification Flow
+    NotifyReq -->|SNS/EventBridge| NotifyL
+    NotifyL -->|Email delivery| SendGrid
+    NotifyL -->|Log notification| DDBWrite
+    NotifyL -.->|GetSecret| SecretsM
+
+    %% Error Paths
+    IngestionL -.->|FAILURE<br/>after 3 retries| DLQ
+    AnalysisL -.->|FAILURE<br/>ThrottlingError| DLQ
+    NotifyL -.->|FAILURE<br/>SendGrid error| DLQ
+    DLQ -.->|Age > 10 days| S3Arch
+
+    %% Security Guarantees
+    DDBWrite --> SecGuard
+    DDBRead --> SecGuard
+
+    %% Monitoring - All 6 Lambdas
+    IngestionL -.->|Logs & Metrics| CW
+    AnalysisL -.->|Logs & Metrics| CW
+    DashboardL -.->|Logs & Metrics| CW
+    MetricsL -.->|Logs & Metrics| CW
+    NotifyL -.->|Logs & Metrics| CW
     SSEL -.->|Logs & Metrics| CW
 
     %% Styling
@@ -101,10 +122,10 @@ graph TB
     classDef protected fill:#E8F5E9,stroke:#66BB6A,stroke-width:3px
     classDef infrastructure fill:#E3F2FD,stroke:#42A5F5,stroke-width:2px
 
-    class CFront,BrowserReq edge
-    class TwitterAPI,RSSXML,AdminReq,OAuthResp,SSEReq untrusted
-    class IngestT,IngestR,AdminL,OAuthV,SSEL,MagicLinkV,CSRFValidation,TokenStorage validation
+    class Amplify,LambdaURL,BrowserReq edge
+    class TiingoAPI,FinnhubAPI,DashboardReq,OAuthResp,SSEReq,NotifyReq untrusted
+    class IngestionL,DashboardL,OAuthV,SSEL,MagicLinkV,CSRFValidation,TokenStorage,NotifyL validation
     class MagicLinkReq,CSRFAttempt untrusted
-    class Queue,InferenceL,DLQ processing
+    class Queue,AnalysisL,MetricsL,DLQ processing
     class DDBWrite,DDBRead,SecGuard protected
-    class SecretsM,CW,S3Arch,S3Static infrastructure
+    class SecretsM,CW,S3Arch,S3Static,SendGrid,EventBridge,APIGateway infrastructure

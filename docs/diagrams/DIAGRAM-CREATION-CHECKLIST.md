@@ -18,8 +18,8 @@
 **Palette 1: High-Level Overview (Pastels)**
 ```
 External Sources:
-- Light Blue: #E3F2FD (Twitter)
-- Light Orange: #FFF3E0 (RSS)
+- Light Blue: #E3F2FD (Tiingo)
+- Light Orange: #FFF3E0 (Finnhub)
 - Light Purple: #F3E5F5 (Admin)
 
 Lambdas: #E1BEE7 (Light Purple)
@@ -50,12 +50,12 @@ Zone 5 (Infrastructure): #E3F2FD (Very Light Blue)
 ### Component Creation (Follow Left-to-Right)
 
 **Layer 1: External Sources (x: 100-300)**
-- [ ] Twitter API component (150, 200) - Size: 180x120
+- [ ] Tiingo API component (150, 200) - Size: 180x120
   - Fill: #E3F2FD, Border: #90CAF9 2px
-  - Text: "Twitter API\nRate: 450 req/15min\nQuota: Tier-based"
-- [ ] RSS Feeds component (150, 400) - Size: 180x120
+  - Text: "Tiingo API\nRate: 450 req/15min\nQuota: Tier-based"
+- [ ] Finnhub API component (150, 400) - Size: 180x120
   - Fill: #FFF3E0, Border: #FFB74D 2px
-  - Text: "RSS/Atom Feeds\nSize: ≤10 MB\nFormat: XML"
+  - Text: "Finnhub API\nStock Market Data\nFormat: JSON"
 - [ ] Admin User component (150, 600) - Size: 180x120
   - Fill: #F3E5F5, Border: #CE93D8 2px
   - Text: "Admin User\nAPI Gateway\nREST API"
@@ -68,9 +68,9 @@ Zone 5 (Infrastructure): #E3F2FD (Very Light Blue)
   - Fill: #F3E5F5, Border: #CE93D8 2px
 
 **Layer 3: Lambda Functions (x: 700-900)**
-- [ ] Ingestion Lambda Twitter (700, 350) - Size: 180x140
-- [ ] Ingestion Lambda RSS (700, 530) - Size: 180x140
-- [ ] Admin API Lambda (700, 710) - Size: 180x140
+- [ ] Ingestion Lambda Tiingo (700, 350) - Size: 180x140
+- [ ] Ingestion Lambda Finnhub (700, 530) - Size: 180x140
+- [ ] Dashboard Lambda (700, 710) - Size: 180x140
 
 **Layer 4: Messaging (x: 1000-1200)**
 - [ ] SNS Topics group (1050, 400) - Size: 180x200
@@ -79,7 +79,7 @@ Zone 5 (Infrastructure): #E3F2FD (Very Light Blue)
   - Fill: #FFF9C4, Border: #FFF176 2px
 
 **Layer 5: Processing (x: 1300-1500)**
-- [ ] Inference Lambda (1350, 500) - Size: 180x160
+- [ ] Analysis Lambda (1350, 500) - Size: 180x160
   - Fill: #E1BEE7, Border: #9C27B0 2px
 
 **Layer 6: Data Storage (x: 1600-1800)**
@@ -101,8 +101,8 @@ Zone 5 (Infrastructure): #E3F2FD (Very Light Blue)
 - [ ] EventBridge → Ingestion: 3px solid #81C784 - Label: "Trigger (5min)"
 - [ ] Ingestion → SNS: 5px solid #F48FB1 (very thick) - Label: "10-100 items/poll"
 - [ ] SNS → SQS: 4px solid #FFF176
-- [ ] SQS → Inference: 5px solid #9C27B0 (very thick) - Label: "Poll (batch: 10)"
-- [ ] Inference → DynamoDB: 5px solid #66BB6A (very thick) - Label: "100-1000 writes/min"
+- [ ] SQS → Analysis: 5px solid #9C27B0 (very thick) - Label: "Poll (batch: 10)"
+- [ ] Analysis → DynamoDB: 5px solid #66BB6A (very thick) - Label: "100-1000 writes/min"
 
 **Support Connections (thin):**
 - [ ] Ingestion → Secrets Manager: 1px dashed #4DB6AC
@@ -156,25 +156,25 @@ Zone 5 (Infrastructure): #E3F2FD (Very Light Blue)
 ### Components Inside Zones
 
 **Zone 1 (Untrusted Input):**
-- [ ] Twitter API Response (200, 250) - Size: 280x160
+- [ ] Tiingo API Response (200, 250) - Size: 280x160
   - Fill: #FFCDD2, Border: #E57373 2px
   - Text includes: "TAINTED FIELDS", "THREATS: ⚠ XSS, SQL Injection"
-- [ ] RSS Feed XML (550, 250) - Size: 280x160
-- [ ] Admin API Request (900, 250) - Size: 280x160
+- [ ] Finnhub API Response (550, 250) - Size: 280x160
+- [ ] Dashboard API Request (900, 250) - Size: 280x160
 - [ ] OAuth Tokens (1250, 250) - Size: 280x160
 
 **Zone 2 (Validation):**
-- [ ] Ingestion Lambda Twitter (200, 560) - Size: 320x260
+- [ ] Ingestion Lambda Tiingo (200, 560) - Size: 320x260
   - Fill: #FFE0B2, Border: #FFB74D 2px
   - Text includes: "✓ VALIDATIONS", "✗ NO SANITIZATION YET", "ERRORS → DLQ"
-- [ ] Ingestion Lambda RSS (580, 560) - Size: 320x260
-- [ ] Admin API Lambda (960, 560) - Size: 320x260
+- [ ] Ingestion Lambda Finnhub (580, 560) - Size: 320x260
+- [ ] Dashboard Lambda (960, 560) - Size: 320x260
 - [ ] OAuth Refresh (1340, 560) - Size: 320x260
 
 **Zone 3 (Processing):**
 - [ ] SNS/SQS Queue (200, 960) - Size: 380x260
   - Fill: #FFF9C4, Border: #FFF176 2px
-- [ ] Inference Lambda (640, 960) - Size: 420x260
+- [ ] Analysis Lambda (640, 960) - Size: 420x260
   - Fill: #FFF59D, Border: #FFEB3B 2px
   - Text includes: "PARTIAL SANITIZATION", "IDEMPOTENCY"
 - [ ] DLQ Processing (1120, 960) - Size: 380x260
@@ -205,14 +205,14 @@ Zone 5 (Infrastructure): #E3F2FD (Very Light Blue)
 **Happy Paths (Solid):**
 - [ ] Zone 1 → Zone 2: 4px solid, gradient #EF5350 → #FF9800
   - Label: "HTTP Response (TAINTED)"
-- [ ] SQS → Inference: 5px solid #FFEB3B
-- [ ] Inference → DynamoDB: 5px solid #66BB6A
+- [ ] SQS → Analysis: 5px solid #FFEB3B
+- [ ] Analysis → DynamoDB: 5px solid #66BB6A
 
 **Error Paths (Dashed):**
 - [ ] Ingestion → DLQ: 3px dashed #FF5722
   - Label: "FAILURE (after 3 retries)"
   - Add ⚠ warning icon
-- [ ] Inference → DLQ: 3px dashed #FF5722
+- [ ] Analysis → DLQ: 3px dashed #FF5722
 - [ ] OAuth → Circuit Breaker: 2px dashed #FF9800
 
 ### Annotations
@@ -258,9 +258,9 @@ Zone 5 (Infrastructure): #E3F2FD (Very Light Blue)
 - [ ] Save Canva project link in README
 - [ ] Create "Variations" pages in same project:
   - Simplified version (main flow only)
-  - Twitter flow only
-  - RSS flow only
-  - Admin API focus
+  - Tiingo flow only
+  - Finnhub flow only
+  - Dashboard API focus
 - [ ] Keep project active for future updates
 
 ### Validation

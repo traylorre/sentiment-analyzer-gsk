@@ -46,7 +46,7 @@ This directory contains comprehensive system architecture diagrams for the Senti
 - Line Thickness: Indicates traffic volume (1px to 5px)
 
 **What It Shows:**
-- ✅ External sources (Twitter API, RSS feeds, Admin users)
+- ✅ External sources (Tiingo API, Finnhub API, Admin users)
 - ✅ Entry points (EventBridge, API Gateway)
 - ✅ Lambda functions (ingestion, analysis, dashboard, notification, metrics, sse-streaming)
 - ✅ Messaging (SNS topics, SQS queues)
@@ -58,8 +58,8 @@ This directory contains comprehensive system architecture diagrams for the Senti
 
 **Variants Available:**
 - Simplified version (main flow only)
-- Twitter flow only (highlighted)
-- RSS flow only (highlighted)
+- Tiingo flow only (highlighted)
+- Finnhub flow only (highlighted)
 - Admin API focus
 
 ---
@@ -87,9 +87,9 @@ This directory contains comprehensive system architecture diagrams for the Senti
 - ✅ All retry logic with backoff strategies
 
 **Trust Zones:**
-1. 🔴 **RED (Untrusted):** Internet-facing input (Twitter API, RSS feeds, Admin API)
+1. 🔴 **RED (Untrusted):** Internet-facing input (Tiingo API, Finnhub API, Admin API)
 2. 🟠 **ORANGE (Validation):** Ingestion Lambdas, API Gateway
-3. 🟡 **YELLOW (Processing):** Inference Lambda, SNS/SQS
+3. 🟡 **YELLOW (Processing):** Analysis Lambda, SNS/SQS
 4. 🟢 **GREEN (Protected):** DynamoDB (parameterized writes only)
 5. 🔵 **BLUE (Infrastructure):** Secrets Manager, CloudWatch, S3
 
@@ -213,8 +213,8 @@ classDef externalNode fill:#e5e7eb,stroke:#6b7280,stroke-width:2px,color:#1f2937
 
 | Component Type | Fill Color | Border Color | Hex Code (Fill) |
 |----------------|------------|--------------|-----------------|
-| External Sources (Twitter) | Light Blue | Blue | `#E3F2FD` / `#90CAF9` |
-| External Sources (RSS) | Light Orange | Orange | `#FFF3E0` / `#FFB74D` |
+| External Sources (Tiingo) | Light Blue | Blue | `#E3F2FD` / `#90CAF9` |
+| External Sources (Finnhub) | Light Orange | Orange | `#FFF3E0` / `#FFB74D` |
 | External Sources (Admin) | Light Purple | Purple | `#F3E5F5` / `#CE93D8` |
 | Lambda Functions | Light Purple | Purple | `#E1BEE7` / `#9C27B0` |
 | SNS Topics | Light Pink | Pink | `#FCE4EC` / `#F48FB1` |
@@ -239,7 +239,7 @@ classDef externalNode fill:#e5e7eb,stroke:#6b7280,stroke-width:2px,color:#1f2937
 ## Line Thickness Legend
 
 **Diagram 1 (Traffic Volume):**
-- Very thick (5px): High traffic (100-1,000 items/min) - SNS → SQS → Inference
+- Very thick (5px): High traffic (100-1,000 items/min) - SNS → SQS → Analysis
 - Thick (4px): Medium traffic (1-10 invocations/min) - Scheduler → Ingestion
 - Medium (3px): Regular traffic - Admin API operations
 - Thin (2px): Low traffic - Configuration reads
@@ -321,7 +321,7 @@ Keep Canva project active for future diagrams:
 ### Focused Component Diagrams (2-3 components each):
 
 1. **OAuth Flow Deep Dive**
-   - Components: Ingestion Lambda (Twitter), Secrets Manager, Circuit Breaker
+   - Components: Ingestion Lambda (Tiingo), Secrets Manager, Circuit Breaker
    - Focus: Token refresh, caching, error handling
    - Audience: Developers implementing OAuth
 
@@ -337,7 +337,7 @@ Keep Canva project active for future diagrams:
 
 4. **Cascading Failure Scenarios**
    - Components: 4 failure scenarios side-by-side
-   - Focus: Twitter outage, Secrets throttling, DynamoDB hotspot, Lambda timeout
+   - Focus: Tiingo outage, Secrets throttling, DynamoDB hotspot, Lambda timeout
    - Audience: Incident responders
 
 5. **Admin API Flow**

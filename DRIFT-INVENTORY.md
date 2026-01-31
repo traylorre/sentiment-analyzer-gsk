@@ -1,8 +1,8 @@
 # Architecture Drift Inventory
 
 Generated: 2026-01-29
-Updated: 2026-01-30 (Excision Pass #1 + #2 + #3)
-Status: Active audit in progress - Pass #3 complete, Phase 5 pending
+Updated: 2026-01-30 (Excision Pass #1 + #2 + #3 + Phase 5)
+Status: Active audit in progress - Phase 5 complete, Phase 6-7 pending
 
 ## Summary
 
@@ -14,7 +14,7 @@ Status: Active audit in progress - Pass #3 complete, Phase 5 pending
 | Legacy Code Markers | 12 | ⏳ Pending | LOW |
 | Archive Directories | 3 | ✅ Acceptable | INFO |
 | Commented-Out Terraform | 9 | ⏳ Pending | LOW |
-| Diagram Rewrite Required | 1 | ⏳ Phase 5 | CRITICAL |
+| Diagram Rewrite Required | 5 | ✅ Phase 5 Complete | CRITICAL |
 
 **Pass #1 Progress (2026-01-30):**
 - Phantom Auth Lambda: ✅ Fixed in architecture.mmd
@@ -31,6 +31,36 @@ Status: Active audit in progress - Pass #3 complete, Phase 5 pending
 - Phantom log groups: ✅ Fixed 3 refs in SPECIFICATION-GAPS.md (lines 560, 570, 592-600)
 - Missing Lambda in diagram: ✅ Added Metrics Lambda to dataflow-all-flows.mmd
 - **CRITICAL REMAINING:** security-flow.mmd needs complete rewrite (Phase 5)
+
+**Phase 5 Complete (2026-01-30) - Diagram Rewrites:**
+All 5 diagram files in docs/diagrams/ have been corrected:
+
+1. **security-flow.mmd** - Complete rewrite
+   - Removed phantom Twitter/RSS ingestion Lambdas
+   - Removed admin-api-lambda, inference-lambda phantoms
+   - Added all 6 actual Lambdas with correct security zones
+   - Added Tiingo/Finnhub as data sources
+
+2. **diagram-1-high-level-overview.md** - Complete rewrite
+   - External Sources: Twitter/RSS → Tiingo/Finnhub
+   - Lambda Functions: Added all 6 actual Lambdas
+   - Messaging: Generic topic/queue names
+   - Processing: inference-lambda → Analysis Lambda
+
+3. **diagram-2-security-flow.md** - Complete rewrite
+   - Zone 1: Twitter API → Tiingo API, RSS Feed → Finnhub API
+   - Zone 2: Corrected validation checkpoints
+   - Zone 3: inference-lambda → Analysis Lambda
+   - Added missing: Dashboard, Notification, SSE-Streaming Lambdas
+   - Removed all XXE/XML references
+
+4. **DIAGRAM-CREATION-CHECKLIST.md** - Phantom cleanup
+   - All Twitter/RSS → Tiingo/Finnhub
+   - All inference-lambda → analysis-lambda
+   - All admin-api-lambda → dashboard-lambda
+
+5. **README.md** - Phantom cleanup
+   - 9 references updated
 
 ---
 
@@ -194,29 +224,34 @@ Well-organized archives exist at:
 
 ---
 
-## Category 7: Diagram Rewrite Required (CRITICAL - Phase 5)
+## Category 7: Diagram Rewrite Required (CRITICAL - Phase 5) ✅ COMPLETE
 
-### security-flow.mmd - Fundamentally Broken
+### Phase 5 Completion (2026-01-30)
 
-The security flow diagram contains multiple phantom components and outdated naming that cannot be fixed with simple edits. It requires a complete rewrite.
+All 5 diagram files have been corrected with complete rewrites:
 
-**Phantom Components in Diagram:**
-| Phantom | Actual |
-|---------|--------|
-| Twitter ingestion Lambda | Tiingo API via single Ingestion Lambda |
-| RSS ingestion Lambda | Finnhub API via single Ingestion Lambda |
-| admin-api-lambda | Dashboard Lambda handles admin |
-| inference-lambda | Analysis Lambda |
+| File | Changes |
+|------|---------|
+| `docs/diagrams/security-flow.mmd` | Complete rewrite - removed phantom Twitter/RSS/admin-api/inference Lambdas, added all 6 actual Lambdas with correct security zones, added Tiingo/Finnhub data sources |
+| `docs/diagrams/diagram-1-high-level-overview.md` | Complete rewrite - External Sources: Twitter/RSS → Tiingo/Finnhub, added all 6 actual Lambdas, generic topic/queue names |
+| `docs/diagrams/diagram-2-security-flow.md` | Complete rewrite - Zone 1: Twitter API → Tiingo API, RSS Feed → Finnhub API; Zone 3: inference-lambda → Analysis Lambda; added Dashboard, Notification, SSE-Streaming Lambdas; removed XXE/XML references |
+| `docs/diagrams/DIAGRAM-CREATION-CHECKLIST.md` | Phantom cleanup - Twitter/RSS → Tiingo/Finnhub, inference-lambda → analysis-lambda, admin-api-lambda → dashboard-lambda |
+| `docs/diagrams/README.md` | Phantom cleanup - 9 references updated |
 
-**Missing Lambdas (3 of 6 not shown):**
-- Notification Lambda
-- Metrics Lambda
-- SSE Streaming Lambda
+### Previous Issues (Now Resolved)
 
-**Additional Reference:**
-- `docs/reference/diagram-2-security-flow.md:247` - Still references "admin-api-lambda"
+~~**Phantom Components in Diagram:**~~
+| ~~Phantom~~ | ~~Actual~~ | Status |
+|---------|--------|--------|
+| ~~Twitter ingestion Lambda~~ | Tiingo API via single Ingestion Lambda | ✅ Fixed |
+| ~~RSS ingestion Lambda~~ | Finnhub API via single Ingestion Lambda | ✅ Fixed |
+| ~~admin-api-lambda~~ | Dashboard Lambda handles admin | ✅ Fixed |
+| ~~inference-lambda~~ | Analysis Lambda | ✅ Fixed |
 
-**Action Required:** Complete diagram rewrite with accurate component names and data sources.
+~~**Missing Lambdas (3 of 6 not shown):**~~
+- ~~Notification Lambda~~ ✅ Added
+- ~~Metrics Lambda~~ ✅ Added
+- ~~SSE Streaming Lambda~~ ✅ Added
 
 ---
 
@@ -249,7 +284,18 @@ The security flow diagram contains multiple phantom components and outdated nami
 14. [x] ~~Fix INFERENCE → ANALYSIS naming in SPEC.md~~ (lines 244, 338, 537-547)
 15. [x] ~~Fix phantom log groups in SPECIFICATION-GAPS.md~~ (lines 560, 570, 592-600)
 16. [x] ~~Add missing Metrics Lambda to dataflow-all-flows.mmd~~
-17. [ ] **CRITICAL Phase 5:** Complete rewrite of security-flow.mmd (see Category 7 below)
+17. [x] ~~**CRITICAL Phase 5:** Complete rewrite of security-flow.mmd~~ (see Category 7)
+
+### Phase 5 Complete (2026-01-30) - Diagram Rewrites
+18. [x] ~~security-flow.mmd complete rewrite~~ (removed phantoms, added all 6 Lambdas, Tiingo/Finnhub sources)
+19. [x] ~~diagram-1-high-level-overview.md complete rewrite~~ (Twitter/RSS → Tiingo/Finnhub, all 6 Lambdas)
+20. [x] ~~diagram-2-security-flow.md complete rewrite~~ (zones corrected, XXE removed, all Lambdas added)
+21. [x] ~~DIAGRAM-CREATION-CHECKLIST.md phantom cleanup~~ (all naming corrected)
+22. [x] ~~docs/diagrams/README.md phantom cleanup~~ (9 references updated)
+
+### Remaining (Phase 6-7)
+23. [ ] **Phase 6:** README overhaul (API Gateway as primary, Lambda Function URL as legacy)
+24. [ ] **Phase 7:** Final audit and verification
 
 ---
 
