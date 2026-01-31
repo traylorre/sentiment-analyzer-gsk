@@ -565,8 +565,6 @@ Operational (1 year):
 Operational (90 days):
   Log Groups:
     - /aws/lambda/{env}-sentiment-ingestion  # Ingestion Lambda (EventBridge-triggered scheduler)
-    - /aws/lambda/ingestion-lambda-rss
-    - /aws/lambda/ingestion-lambda-twitter
     - /aws/lambda/{env}-sentiment-analysis
     - /aws/lambda/dlq-archival-lambda
     - /aws/lambda/quota-reset-lambda
@@ -617,8 +615,8 @@ Cost Optimization:
 **Resolution:** Update line 332 to reflect tier-based values
 
 ```diff
-- ingestion-lambda-rss: 256 MB, 60s timeout, concurrency: 10
-+ ingestion-lambda-rss: 256 MB, 60s timeout, concurrency: tier-based (10/20/50)
+- {env}-sentiment-ingestion: 256 MB, 60s timeout, concurrency: 10
++ {env}-sentiment-ingestion: 256 MB, 60s timeout, concurrency: tier-based (10/20/50)
 
 Tier Mapping:
   - Free tier: 10 concurrent executions
