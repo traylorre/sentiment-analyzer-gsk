@@ -480,3 +480,22 @@ cd infrastructure/terraform && terraform output
 | modules/monitoring/cost_alarm.tf:139+ | SSE-streaming metric_query missing | Added metric block |
 
 **Total Audit #14**: 1 issue in 1 file
+
+---
+
+## Audit #15 - Deploy Script Lambda List (2026-01-30)
+
+**Issue Trend**: 28 → 8 → 5 → 10 → 1 → 1 (persistent gap found)
+
+**Discovery**: deploy.sh listed wrong Lambdas for ZIP packaging. It had container-based (analysis, dashboard) instead of ZIP-based (metrics, notification).
+
+### Fix
+| File | Line | Change |
+|------|------|--------|
+| infrastructure/scripts/deploy.sh | 83 | Changed LAMBDAS from ("ingestion" "analysis" "dashboard") to ("ingestion" "metrics" "notification") |
+
+**Lambda Deployment Model**:
+- ZIP-based (S3): ingestion, metrics, notification
+- Container-based (ECR): analysis, dashboard, sse-streaming
+
+**Total Audit #15**: 1 issue in 1 file
