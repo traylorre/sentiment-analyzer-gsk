@@ -365,7 +365,7 @@ resource "aws_iam_policy" "lambda_ecr_pull" {
 #### 5. Increased ECR Costs (Containers)
 - **Storage**: ~$0.10/month per container image (200MB @ $0.10/GB-month)
 - **Comparison**: ZIP in S3 costs ~$0.01/month (10MB @ $0.023/GB-month)
-- **Total Impact**: +$0.27/month for 3 Lambdas (negligible for production workload)
+- **Total Impact**: +$0.27/month for 3 container-based Lambdas (negligible for production workload; 6 Lambdas total: 3 container-based, 3 ZIP-based)
 
 ---
 

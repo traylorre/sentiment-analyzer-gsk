@@ -80,7 +80,7 @@ fi
 # Step 2: Build Lambda packages
 log_info "Building Lambda deployment packages..."
 
-LAMBDAS=("ingestion" "analysis" "dashboard")
+LAMBDAS=("ingestion" "metrics" "notification")
 BUILD_DIR="${PROJECT_ROOT}/build"
 mkdir -p "${BUILD_DIR}"
 

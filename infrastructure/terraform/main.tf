@@ -921,7 +921,10 @@ module "chaos" {
   lambda_arns = [
     module.ingestion_lambda.function_arn,
     module.analysis_lambda.function_arn,
-    module.dashboard_lambda.function_arn
+    module.dashboard_lambda.function_arn,
+    module.metrics_lambda.function_arn,
+    module.notification_lambda.function_arn,
+    module.sse_streaming_lambda.function_arn
   ]
 
   # Kill switch - stops experiments if Lambda errors spike
@@ -931,7 +934,7 @@ module "chaos" {
   dynamodb_table_arn       = module.dynamodb.table_arn
   write_throttle_alarm_arn = module.dynamodb.cloudwatch_alarm_write_throttles_arn
 
-  depends_on = [module.ingestion_lambda, module.analysis_lambda, module.dashboard_lambda, module.monitoring]
+  depends_on = [module.ingestion_lambda, module.analysis_lambda, module.dashboard_lambda, module.metrics_lambda, module.notification_lambda, module.sse_streaming_lambda, module.monitoring]
 }
 
 # ===================================================================
@@ -1203,6 +1206,17 @@ output "notification_lambda_arn" {
 output "notification_lambda_name" {
   description = "Name of the Notification Lambda function"
   value       = module.notification_lambda.function_name
+}
+
+# Metrics Lambda outputs
+output "metrics_lambda_arn" {
+  description = "ARN of the Metrics Lambda function"
+  value       = module.metrics_lambda.function_arn
+}
+
+output "metrics_lambda_name" {
+  description = "Name of the Metrics Lambda function"
+  value       = module.metrics_lambda.function_name
 }
 
 # ===================================================================

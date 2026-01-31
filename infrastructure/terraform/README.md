@@ -100,7 +100,7 @@ terraform apply -var-file=dev.tfvars
 ```
 
 **What gets deployed**:
-- IAM roles for all 4 Lambda functions
+- IAM roles for all 6 Lambda functions
 - SNS topic with Lambda subscription
 - EventBridge schedules (ingestion every 5 min, metrics every 1 min)
 

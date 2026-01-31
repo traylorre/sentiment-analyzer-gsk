@@ -128,7 +128,7 @@ Specifications and technical references.
 | File | Description |
 |------|-------------|
 | [DASHBOARD_SPEC.md](./reference/DASHBOARD_SPEC.md) | Dashboard specification |
-| [IMPLEMENTATION_GUIDE.md](./reference/IMPLEMENTATION_GUIDE.md) | Implementation patterns |
+| [IMPLEMENTATION_GUIDE.md](./archive/IMPLEMENTATION_GUIDE.md) | Implementation patterns (archived - historical design) |
 | [TECH_DEBT_REGISTRY.md](./reference/TECH_DEBT_REGISTRY.md) | Technical debt tracking |
 | [SPECIFICATION-GAPS.md](./reference/SPECIFICATION-GAPS.md) | Spec gap analysis |
 | [API_GATEWAY_GAP_ANALYSIS.md](./reference/API_GATEWAY_GAP_ANALYSIS.md) | API analysis |

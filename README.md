@@ -149,8 +149,8 @@ Ingests financial news from external sources (Tiingo, Finnhub) and returns senti
 
 ### Architecture
 
-- **Frontend**: AWS Amplify (Next.js SSR) with direct Lambda Function URL access
-- **Compute**: AWS Lambda (Python 3.13) - 5 functions (Ingestion, Analysis, Dashboard, SSE, Metrics)
+- **Frontend**: AWS Amplify (Next.js SSR) with API Gateway backend
+- **Compute**: AWS Lambda (Python 3.13) - 6 functions (Ingestion, Analysis, Dashboard, SSE-Streaming, Notification, Metrics)
 - **Real-time**: SSE Lambda with Lambda Web Adapter for RESPONSE_STREAM mode
 - **Orchestration**: EventBridge, SNS, SQS
 - **Storage**: DynamoDB (on-demand capacity), S3 (static assets, ML models)
@@ -229,7 +229,7 @@ graph TB
             Notification[Notification Lambda<br/>Alerts + Digests]
         end
 
-        subgraph StorageLayer["Storage Layer ── 4 Tables"]
+        subgraph StorageLayer["Storage Layer ── 5 Tables"]
             DDBItems[(sentiment-items<br/>News + Scores<br/>TTL: 30d)]
             DDBUsers[(sentiment-users<br/>Configs · Alerts<br/>Sessions)]
             DDBTimeseries[(sentiment-timeseries<br/>Multi-Resolution<br/>1m→24h buckets)]
@@ -244,7 +244,7 @@ graph TB
         end
     end
 
-    %% User flows - thicker lines for primary paths (direct to Amplify/Lambda Function URLs)
+    %% User flows - thicker lines for primary paths (via API Gateway)
     Browser ==>|Static| Amplify
     Browser ==>|/api/*| APIGW
     Browser ==>|/api/v2/stream*| SSELambda
@@ -319,7 +319,7 @@ graph TB
 - **Solid thin lines (-->)**: Secondary data paths
 - **Dotted lines (-.->)**: Async/logging flows
 - **Purple nodes**: Lambda functions (6 total)
-- **Green nodes**: Data stores (4 DynamoDB tables + S3 + DLQ)
+- **Green nodes**: Data stores (5 DynamoDB tables + S3 + DLQ)
 - **Orange nodes**: Edge/CDN layer
 
 ### Environment Promotion Pipeline
@@ -432,7 +432,7 @@ sequenceDiagram
 
 ### DynamoDB Table Design
 
-This service uses **4 DynamoDB tables** with single-table design patterns:
+This service uses **5 DynamoDB tables** with single-table design patterns:
 
 #### Table 1: `sentiment-items` (News & Scores)
 
@@ -487,6 +487,21 @@ This service uses **4 DynamoDB tables** with single-table design patterns:
 
 ---
 
+#### Table 5: `chaos-experiments` (Chaos Engineering)
+
+| Attribute | Type | Key | Description |
+|-----------|------|-----|-------------|
+| `experiment_id` | String | PK | Unique experiment identifier |
+| `created_at` | String | SK | ISO8601 creation time |
+| `type` | String | — | Experiment type (latency, error, etc.) |
+| `target` | String | — | Target component |
+| `status` | String | — | `scheduled` / `running` / `completed` |
+| `results` | Map | — | Experiment results and metrics |
+
+**GSIs:** `by_status`, `by_type`
+
+---
+
 ### Authentication Flow (Target State)
 
 Post-Phase 0 security hardening with httpOnly cookies:
@@ -496,7 +511,7 @@ Post-Phase 0 security hardening with httpOnly cookies:
 sequenceDiagram
     participant Browser
     participant Frontend as Next.js Frontend<br/>(Amplify)
-    participant Dashboard as Dashboard Lambda<br/>(Function URL)
+    participant Dashboard as Dashboard Lambda<br/>(API Gateway)
     participant Cognito as Cognito User Pool
     participant Users as sentiment-users
 
@@ -728,7 +743,7 @@ git pull origin main
 git checkout -b feature/your-feature-name
 
 # Branch naming convention:
-# - feature/add-rss-parser
+# - feature/enhance-tiingo-integration
 # - fix/scheduler-timeout
 # - docs/update-readme
 ```

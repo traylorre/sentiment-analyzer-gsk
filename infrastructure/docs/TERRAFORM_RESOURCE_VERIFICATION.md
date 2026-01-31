@@ -27,6 +27,9 @@
 | Lambda Ingestion | `modules/lambda` (main.tf) | `${var.environment}-sentiment-ingestion` | ✅ | Line 95 (main.tf) |
 | Lambda Analysis | `modules/lambda` (main.tf) | `${var.environment}-sentiment-analysis` | ✅ | Line 149 (main.tf) |
 | Lambda Dashboard | `modules/lambda` (main.tf) | `${var.environment}-sentiment-dashboard` | ✅ | Line 199 (main.tf) |
+| Lambda Metrics | `modules/lambda` (main.tf) | `${var.environment}-sentiment-metrics` | ✅ | Verified in code |
+| Lambda Notification | `modules/lambda` (main.tf) | `${var.environment}-sentiment-notification` | ✅ | Verified in code |
+| Lambda SSE-Streaming | `modules/lambda` (main.tf) | `${var.environment}-sentiment-sse-streaming` | ✅ | Verified in code |
 | S3 Lambda Packages | `main.tf` | `${var.environment}-sentiment-lambda-deployments` | ✅ | Line 69 |
 | CloudWatch Alarms | `modules/dynamodb` | `${var.environment}-dynamodb-*` | ✅ | Lines 166, 188, 210 |
 | Log Groups | `modules/lambda` | `/aws/lambda/${var.environment}-sentiment-*` | ✅ | Auto-created by Lambda |
@@ -252,7 +255,7 @@ resource "aws_iam_role" "ingestion" {
 | Category | Resources Checked | Issues Found | Status |
 |----------|-------------------|--------------|--------|
 | DynamoDB | 4 | 0 | ✅ PASS |
-| Lambda | 3 | 0 | ✅ PASS |
+| Lambda | 6 | 0 | ✅ PASS |
 | SNS/SQS | 2 | 0 | ✅ PASS |
 | EventBridge | 2 | 0 | ✅ PASS |
 | IAM | 3 | 0 | ✅ PASS |
@@ -260,7 +263,7 @@ resource "aws_iam_role" "ingestion" {
 | Secrets | 2 | 0 | ✅ PASS |
 | CloudWatch | 3 | 0 | ✅ PASS |
 
-**Total Resources**: 20
+**Total Resources**: 23
 **Issues Found**: 0
 **Overall Status**: ✅ **READY FOR PREPROD DEPLOYMENT**
 

@@ -37,7 +37,7 @@ Please report security vulnerabilities privately to the project maintainers. Do 
 
 - **Circuit Breaker**: Per-service protection (Tiingo, Finnhub, SendGrid)
 - **Quota Tracking**: External API rate limit management
-- **X-Ray Tracing**: Day 1 mandatory on all 4 Lambdas
+- **X-Ray Tracing**: Day 1 mandatory on all 6 Lambdas
 - **hCaptcha**: Bot protection for sensitive endpoints
 - **Magic Links**: HMAC-signed passwordless authentication
 
@@ -66,7 +66,7 @@ Key areas requiring hardening before production deployment:
 - All secrets managed via AWS Secrets Manager with 5-minute TTL caching
 - Authentication via AWS Cognito (JWT tokens, OAuth providers, magic links)
 - External APIs: Tiingo (primary), Finnhub (secondary), SendGrid (notifications)
-- X-Ray distributed tracing on all 4 Lambdas
+- X-Ray distributed tracing on all 6 Lambdas
 - TLS 1.2+ enforced for all external communications
 
 ## Known Limitations

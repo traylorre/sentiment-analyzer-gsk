@@ -31,6 +31,7 @@ flowchart TB
         Dashboard[Dashboard<br/>1024MB · 60s]
         SSE[SSE Streaming<br/>512MB · 900s]
         Notification[Notification<br/>256MB · 30s]
+        Metrics["Metrics\n128MB · 30s"]
     end
 
     subgraph Messaging["Event-Driven"]
@@ -161,7 +162,7 @@ flowchart TB
     class UI,AuthStore,SSEClient browser
     class Amplify edge
     class Cognito,Secrets auth
-    class Ingestion,Analysis,Dashboard,SSE,Notification compute
+    class Ingestion,Analysis,Dashboard,SSE,Notification,Metrics compute
     class SNS,DLQ,EB messaging
     class Items,Users,Timeseries,OHLCCache,OAuthStates,MagicLinkTokens,Sessions storage
     class S3Model model

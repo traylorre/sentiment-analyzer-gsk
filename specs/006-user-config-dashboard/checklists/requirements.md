@@ -87,7 +87,7 @@ All checklist items pass. The specification is comprehensive and ready for `/spe
 | Sentiment | Our model on Tiingo news + Finnhub built-in scores |
 | Auth | AWS Cognito for OAuth, custom Lambda + SendGrid for magic links |
 | Anonymous | Browser localStorage only, proactive upgrade prompts |
-| Tracing | AWS X-Ray on all 4 Lambdas with managed policy |
+| Tracing | AWS X-Ray on all 6 Lambdas with managed policy |
 | Email | SendGrid free tier, API key in Secrets Manager |
 | Markets | US only (NYSE/NASDAQ/AMEX), ~8K symbol cache |
 | Refresh | 5-min periodic with countdown + manual button |

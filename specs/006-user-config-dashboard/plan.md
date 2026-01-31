@@ -185,7 +185,7 @@ graph TB
 | **Deployment: Serverless on AWS** | ✅ PASS | Lambda + SNS + DynamoDB + S3 |
 | **Deployment: Infrastructure as Code** | ✅ PASS | Terraform with S3 backend |
 | **Observability: Structured logs** | ✅ PASS | Lambda Powertools JSON logging |
-| **Observability: X-Ray tracing** | ✅ PASS | Day 1 mandatory (all 4 Lambdas) |
+| **Observability: X-Ray tracing** | ✅ PASS | Day 1 mandatory (all 6 Lambdas) |
 | **Observability: CloudWatch metrics** | ✅ PASS | Custom metrics + alarms |
 | **Testing: Unit + Integration** | ✅ PASS | pytest + moto (unit), real AWS (integration) |
 | **Dashboard: External metrics view** | ✅ PASS | CloudWatch RUM + metrics dashboard |
