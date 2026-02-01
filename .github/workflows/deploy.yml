@@ -945,48 +945,18 @@ jobs:
           API_URL=$(terraform output -raw dashboard_api_url 2>/dev/null || echo "")
           SNS_TOPIC_ARN=$(terraform output -raw sns_topic_arn 2>/dev/null || echo "")
           SSE_LAMBDA_URL=$(terraform output -raw sse_lambda_function_url 2>/dev/null || echo "")
-          DASHBOARD_S3_BUCKET=$(terraform output -raw dashboard_s3_bucket 2>/dev/null || echo "")
+          # Feature 1205: dashboard_s3_bucket removed - Amplify now serves the frontend directly
           AMPLIFY_URL=$(terraform output -raw amplify_production_url 2>/dev/null || echo "")
-          # Feature 1205: CloudFront removed - Amplify serves frontend directly
 
           echo "dashboard_url=${DASHBOARD_URL}" >> $GITHUB_OUTPUT
           echo "api_url=${API_URL}" >> $GITHUB_OUTPUT
           echo "sns_topic_arn=${SNS_TOPIC_ARN}" >> $GITHUB_OUTPUT
           echo "sse_lambda_url=${SSE_LAMBDA_URL}" >> $GITHUB_OUTPUT
-          echo "dashboard_s3_bucket=${DASHBOARD_S3_BUCKET}" >> $GITHUB_OUTPUT
           echo "amplify_url=${AMPLIFY_URL}" >> $GITHUB_OUTPUT
 
-      - name: Deploy Dashboard to S3 (Preprod)
-        run: |
-          BUCKET="${{ steps.outputs.outputs.dashboard_s3_bucket }}"
-
-          if [ -z "$BUCKET" ]; then
-            echo "⚠️ Dashboard S3 bucket not found - skipping dashboard deploy"
-            exit 0
-          fi
-
-          echo "📤 Deploying dashboard to S3: ${BUCKET}"
-
-          # Sync dashboard files to S3 with appropriate cache headers
-          # HTML files: no-cache (always fetch fresh)
-          # JS/CSS files: cache for 1 year (versioned by content hash)
-          aws s3 sync ../../src/dashboard/ s3://${BUCKET}/ \
-            --exclude ".gitkeep" \
-            --exclude "README.md" \
-            --cache-control "public, max-age=31536000" \
-            --delete
-
-          # Override cache for HTML files (no cache)
-          aws s3 cp ../../src/dashboard/index.html s3://${BUCKET}/index.html \
-            --cache-control "no-cache, no-store, must-revalidate" \
-            --content-type "text/html"
-
-          aws s3 cp ../../src/dashboard/chaos.html s3://${BUCKET}/chaos.html \
-            --cache-control "no-cache, no-store, must-revalidate" \
-            --content-type "text/html"
-
-          echo "✅ Dashboard deployed to S3"
-          # Feature 1205: CloudFront cache invalidation removed - Amplify serves frontend
+      # Feature 1205: "Deploy Dashboard to S3" step removed - Amplify now serves the frontend directly
+      # The S3 bucket was used for static dashboard files, but Amplify handles this natively.
+      # Removed: aws s3 sync to dashboard bucket, cache control headers, HTML file uploads
 
       - name: Smoke Test (Post-Deployment)
         id: smoke_test
