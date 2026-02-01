@@ -1750,7 +1750,7 @@ jobs:
         if: success()
         run: |
           ENV="prod"
-          BUCKET="preprod-sentiment-lambda-deployments"
+          BUCKET="prod-sentiment-lambda-deployments"
           DASHBOARD_URL="${{ steps.outputs.outputs.dashboard_url }}"
           TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           SHA="${GITHUB_SHA:0:7}"
