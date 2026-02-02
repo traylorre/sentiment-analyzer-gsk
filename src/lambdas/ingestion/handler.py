@@ -248,6 +248,29 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         tiingo_adapter = TiingoAdapter(api_key=tiingo_key) if tiingo_key else None
         finnhub_adapter = FinnhubAdapter(api_key=finnhub_key) if finnhub_key else None
 
+        # CRITICAL: At least one adapter must be available
+        # Silent failure here causes "no articles" which looks like no news
+        if not tiingo_adapter and not finnhub_adapter:
+            error_msg = (
+                "CONFIGURATION ERROR: Both API keys missing. "
+                f"tiingo_secret_arn={config['tiingo_secret_arn']}, "
+                f"finnhub_secret_arn={config['finnhub_secret_arn']}"
+            )
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
+
+        # Warn if running in degraded mode (only one source)
+        if not tiingo_adapter:
+            logger.warning(
+                "Running in degraded mode: Tiingo adapter unavailable",
+                extra={"tiingo_secret_arn": config["tiingo_secret_arn"]},
+            )
+        if not finnhub_adapter:
+            logger.warning(
+                "Running in degraded mode: Finnhub adapter unavailable",
+                extra={"finnhub_secret_arn": config["finnhub_secret_arn"]},
+            )
+
         # Get SNS client
         sns_client = _get_sns_client(config["aws_region"])
 
