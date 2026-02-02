@@ -7,7 +7,9 @@ import logging
 import os
 
 import stripe
-from stripe.error import SignatureVerificationError
+
+# Stripe SDK v8+: SignatureVerificationError moved from stripe.error to stripe
+from stripe import SignatureVerificationError
 
 logger = logging.getLogger(__name__)
 
