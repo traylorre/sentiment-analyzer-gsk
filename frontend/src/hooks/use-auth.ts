@@ -56,7 +56,9 @@ export function useAuth(options: UseAuthOptions = {}) {
 
       if (!hasValidSession && requireAuth) {
         // Try anonymous auth if no session
-        signInAnonymous().catch(() => {
+        signInAnonymous().catch((error) => {
+          // Log the error for debugging - silent failures are hard to diagnose
+          console.error('[useAuth] Anonymous sign-in failed:', error);
           // If anonymous fails and auth is required, redirect
           router.push(redirectTo);
         });
