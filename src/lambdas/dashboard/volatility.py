@@ -286,10 +286,23 @@ def get_correlation_data(
     Returns:
         CorrelationResponse with correlation data
     """
+    # Warn if trends are not provided - this causes all tickers to show "stable" which is misleading
+    if sentiment_trends is None:
+        logger.warning(
+            "get_correlation_data called without sentiment_trends - all tickers will show stable trend",
+            extra={"config_id": sanitize_for_log(config_id[:8] if config_id else "")},
+        )
+    if volatility_trends is None:
+        logger.warning(
+            "get_correlation_data called without volatility_trends - all tickers will show stable trend",
+            extra={"config_id": sanitize_for_log(config_id[:8] if config_id else "")},
+        )
+
     ticker_correlations = []
 
     for symbol in tickers:
         # Get trends (default to stable if not provided)
+        # NOTE: Default "→" is a fallback pattern - if you see this in logs, caller should provide real data
         sentiment_arrow = (sentiment_trends or {}).get(symbol, "→")
         volatility_arrow = (volatility_trends or {}).get(symbol, "→")
 
