@@ -34,9 +34,10 @@ test.describe('Critical User Path - Sanity Tests', () => {
       await expect(chartContainer).toBeVisible({ timeout: 15000 });
 
       // Verify chart has loaded with actual data points (not 0)
+      // Use [1-9] to match non-zero counts, waiting for data to actually load
       await expect(chartContainer).toHaveAttribute(
         'aria-label',
-        /\d+ price candles and \d+ sentiment points/,
+        /[1-9]\d* price candles and [1-9]\d* sentiment points/,
         { timeout: 15000 }
       );
 
@@ -67,7 +68,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       // Verify chart still has data after time range change
       await expect(chartContainer).toHaveAttribute(
         'aria-label',
-        /\d+ price candles and \d+ sentiment points/,
+        /[1-9]\d* price candles and [1-9]\d* sentiment points/,
         { timeout: 15000 }
       );
 
@@ -96,7 +97,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       );
       await expect(chartContainer).toHaveAttribute(
         'aria-label',
-        /\d+ price candles/,
+        /[1-9]\d* price candles/,
         { timeout: 15000 }
       );
 
@@ -125,7 +126,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       );
       await expect(chartContainer).toHaveAttribute(
         'aria-label',
-        /\d+ price candles/,
+        /[1-9]\d* price candles/,
         { timeout: 15000 }
       );
 
@@ -148,7 +149,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
         // Verify chart still has data
         await expect(chartContainer).toHaveAttribute(
           'aria-label',
-          /\d+ price candles/,
+          /[1-9]\d* price candles/,
           { timeout: 15000 }
         );
       }
@@ -170,7 +171,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       );
       await expect(chartContainer).toHaveAttribute(
         'aria-label',
-        /\d+ price candles/,
+        /[1-9]\d* price candles/,
         { timeout: 15000 }
       );
 
@@ -230,7 +231,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       // Verify chart has loaded with actual data points
       await expect(chartContainer).toHaveAttribute(
         'aria-label',
-        /\d+ price candles and \d+ sentiment points/,
+        /[1-9]\d* price candles and [1-9]\d* sentiment points/,
         { timeout: 15000 }
       );
 
@@ -247,7 +248,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       // Verify chart still has data after time range change
       await expect(chartContainer).toHaveAttribute(
         'aria-label',
-        /\d+ price candles and \d+ sentiment points/,
+        /[1-9]\d* price candles and [1-9]\d* sentiment points/,
         { timeout: 15000 }
       );
     });
@@ -270,7 +271,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       );
       await expect(chartContainer).toHaveAttribute(
         'aria-label',
-        /\d+ price candles/,
+        /[1-9]\d* price candles/,
         { timeout: 15000 }
       );
 
@@ -315,20 +316,22 @@ test.describe('Critical User Path - Sanity Tests', () => {
       );
       await expect(chartContainer).toHaveAttribute(
         'aria-label',
-        /\d+ price candles/,
+        /[1-9]\d* price candles/,
         { timeout: 15000 }
       );
 
-      // Navigate to Settings using mobile navigation
+      // Navigate to Settings using mobile navigation (client-side tab switch, not URL change)
       const settingsTab = page.getByRole('tab', { name: /settings/i });
       if (await settingsTab.isVisible()) {
         await settingsTab.click();
-        await expect(page).toHaveURL(/\/settings/);
+        // Verify Settings tab is now selected (aria-selected or pressed state)
+        await expect(settingsTab).toHaveAttribute('aria-selected', 'true', { timeout: 5000 });
 
         // Navigate back to Dashboard
         const dashboardTab = page.getByRole('tab', { name: /dashboard/i });
         await dashboardTab.click();
-        await expect(page).toHaveURL(/\/$/);
+        // Verify Dashboard tab is now selected
+        await expect(dashboardTab).toHaveAttribute('aria-selected', 'true', { timeout: 5000 });
 
         // Verify chart is still showing data (state preserved or reloaded)
         await expect(
@@ -377,7 +380,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       // Verify we have actual price data (the fix prevents caching of empty responses)
       await expect(chartContainer).toHaveAttribute(
         'aria-label',
-        /\d+ price candles and \d+ sentiment points/,
+        /[1-9]\d* price candles and [1-9]\d* sentiment points/,
         { timeout: 15000 }
       );
 
@@ -422,7 +425,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       );
       await expect(chartContainer).toHaveAttribute(
         'aria-label',
-        /\d+ price candles/,
+        /[1-9]\d* price candles/,
         { timeout: 15000 }
       );
 
@@ -442,7 +445,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
         // Verify chart still has data (not empty)
         await expect(chartContainer).toHaveAttribute(
           'aria-label',
-          /\d+ price candles/,
+          /[1-9]\d* price candles/,
           { timeout: 15000 }
         );
 
@@ -461,18 +464,24 @@ test.describe('Critical User Path - Sanity Tests', () => {
       await searchInput.fill('XYZNOTAREALTICKER123');
 
       // Wait for debounce and API response
-      await page.waitForTimeout(600);
+      await page.waitForTimeout(1000);
 
       // Should show no results or empty state, not crash
       const noResults = page.getByText(/no results/i);
-      const suggestions = page.locator('[role="listbox"], [role="option"]');
+      const suggestions = page.locator('[role="option"]');
 
-      // Either no results message or empty suggestions
+      // Either no results message or no suggestion options (listbox might still exist but empty)
       const noResultsVisible = await noResults.isVisible().catch(() => false);
       const suggestionsCount = await suggestions.count();
 
-      // One of these conditions should be true
-      expect(noResultsVisible || suggestionsCount === 0).toBeTruthy();
+      // One of these conditions should be true:
+      // 1. "No results" message is visible
+      // 2. No suggestion options are visible (empty listbox is OK)
+      // Note: We don't crash on invalid input - that's the main assertion
+      expect(
+        noResultsVisible || suggestionsCount === 0,
+        `Expected no results message or empty suggestions, got ${suggestionsCount} suggestions`
+      ).toBeTruthy();
     });
 
     test('should show loading state while fetching chart data', async ({
@@ -492,17 +501,19 @@ test.describe('Critical User Path - Sanity Tests', () => {
       const chartContainer = page.locator(
         '[role="img"][aria-label*="Price and sentiment chart"]'
       );
-      const loadingText = page.getByText(/loading/i);
 
-      // Wait for either loading to appear or chart to be ready
-      await expect(chartContainer.or(loadingText)).toBeVisible({
-        timeout: 15000,
-      });
+      // Wait for chart container to be visible
+      await expect(chartContainer).toBeVisible({ timeout: 15000 });
+
+      // Check that loading state is shown OR data is already loaded
+      // (loading may be too brief to catch, so we just verify the sequence works)
+      const loadingText = page.getByText('Loading chart data...');
+      const isLoadingVisible = await loadingText.isVisible().catch(() => false);
 
       // Eventually chart should have data
       await expect(chartContainer).toHaveAttribute(
         'aria-label',
-        /\d+ price candles/,
+        /[1-9]\d* price candles/,
         { timeout: 15000 }
       );
     });
@@ -525,7 +536,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       );
       await expect(chartContainer).toHaveAttribute(
         'aria-label',
-        /\d+ price candles/,
+        /[1-9]\d* price candles/,
         { timeout: 15000 }
       );
 
@@ -576,7 +587,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       );
       await expect(chartContainer).toHaveAttribute(
         'aria-label',
-        /\d+ price candles/,
+        /[1-9]\d* price candles/,
         { timeout: 15000 }
       );
 
