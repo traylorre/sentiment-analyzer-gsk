@@ -42,16 +42,16 @@ export const tickersApi = {
 
   /**
    * Validate multiple ticker symbols (client-side batch)
+   *
+   * Throws on API errors to distinguish from validation failures.
+   * Callers should handle errors appropriately.
    */
   validateMany: async (symbols: string[]): Promise<TickerValidationResult> => {
+    // Validate all symbols - let API errors propagate
     const results = await Promise.all(
       symbols.map(async (symbol) => {
-        try {
-          const result = await tickersApi.validate(symbol);
-          return { symbol, ...result };
-        } catch {
-          return { symbol, valid: false };
-        }
+        const result = await tickersApi.validate(symbol);
+        return { symbol, ...result };
       })
     );
 

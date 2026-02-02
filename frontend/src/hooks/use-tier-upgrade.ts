@@ -12,6 +12,7 @@ import { useAuthStore } from '@/stores/auth-store';
 import { authApi } from '@/lib/api';
 import { getAuthBroadcastSync } from '@/lib/sync/broadcast-channel';
 import { toast } from 'sonner';
+import { ApiClientError } from '@/lib/api/client';
 
 // Exponential backoff intervals (total: 60s)
 const BACKOFF_INTERVALS = [1000, 2000, 4000, 8000, 16000, 29000];
@@ -124,8 +125,24 @@ export function useTierUpgrade(): UseTierUpgradeReturn {
           return true;
         }
       } catch (error) {
-        // Log but continue polling (transient errors shouldn't stop polling)
-        console.warn('[useTierUpgrade] Poll attempt failed:', error);
+        // Distinguish permanent vs transient errors
+        if (error instanceof ApiClientError) {
+          // 4xx errors are permanent - stop polling
+          if (error.status >= 400 && error.status < 500) {
+            console.error('[useTierUpgrade] Permanent error, stopping poll:', error.code, error.message);
+            setState({
+              isPolling: false,
+              attemptCount: i + 1,
+              success: false,
+              timedOut: false,
+              error: error.message,
+            });
+            toast.error(`Upgrade check failed: ${error.message}`);
+            return false;
+          }
+        }
+        // 5xx, network errors, timeouts - continue polling (transient)
+        console.warn('[useTierUpgrade] Transient error, continuing poll:', error);
       }
     }
 
