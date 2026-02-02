@@ -363,8 +363,8 @@ test.describe('Critical User Path - Sanity Tests', () => {
       // Wait for debounce plus API response
       await page.waitForTimeout(600);
 
-      // Step 2: Select GOOG from suggestions
-      const suggestion = page.getByRole('option', { name: /GOOG/i });
+      // Step 2: Select GOOG from suggestions (first match to avoid GOOGL)
+      const suggestion = page.getByRole('option', { name: /GOOG.*Alphabet.*Class C/i });
       await expect(suggestion).toBeVisible({ timeout: 10000 });
       await suggestion.click();
 
@@ -411,7 +411,8 @@ test.describe('Critical User Path - Sanity Tests', () => {
       await searchInput.fill('GOOG');
       await page.waitForTimeout(600);
 
-      const suggestion = page.getByRole('option', { name: /GOOG/i });
+      // Select GOOG from suggestions (first match to avoid GOOGL)
+      const suggestion = page.getByRole('option', { name: /GOOG.*Alphabet.*Class C/i });
       await expect(suggestion).toBeVisible({ timeout: 10000 });
       await suggestion.click();
 
