@@ -83,4 +83,4 @@ PyJWT==2.10.1
 tenacity==9.0.0
 
 # Stripe - Feature 1191 (mid-session tier upgrade)
-stripe==11.4.1
+stripe==14.1.0
