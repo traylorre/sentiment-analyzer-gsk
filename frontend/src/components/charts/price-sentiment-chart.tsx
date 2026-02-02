@@ -532,8 +532,8 @@ export function PriceSentimentChart({
               className={cn(
                 'px-3 py-1 text-sm font-medium rounded-md transition-colors',
                 timeRange === range
-                  ? 'bg-accent text-accent-foreground'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-card'
+                  ? 'bg-cyan-500/20 border border-cyan-500 text-cyan-400'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-card border border-transparent'
               )}
               aria-pressed={timeRange === range}
               aria-label={`${range} time range`}
@@ -552,8 +552,8 @@ export function PriceSentimentChart({
               className={cn(
                 'px-2 py-1 text-sm font-medium rounded-md transition-colors',
                 resolution === res
-                  ? 'bg-purple-500/20 border border-purple-500 text-purple-400'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-card'
+                  ? 'bg-cyan-500/20 border border-cyan-500 text-cyan-400'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-card border border-transparent'
               )}
               aria-pressed={resolution === res}
               aria-label={`${RESOLUTION_LABELS[res]} resolution`}
@@ -578,24 +578,19 @@ export function PriceSentimentChart({
         </select>
 
         {/* Layer toggles */}
-        {/* Layer toggles - colors match chart series */}
+        {/* Layer toggles */}
         <div className="flex gap-2">
           <button
             onClick={() => setShowCandles(!showCandles)}
             className={cn(
               'px-3 py-1 text-sm font-medium rounded-md transition-colors border flex items-center gap-1.5',
               showCandles
-                ? 'bg-amber-500/20 border-amber-500 text-amber-400'
+                ? 'bg-green-500/20 border-green-500 text-green-400'
                 : 'bg-card/50 border-border text-muted-foreground'
             )}
             aria-pressed={showCandles}
             aria-label="Toggle price candles"
           >
-            {/* Mini legend showing both up/down colors */}
-            <span className="flex gap-0.5">
-              <span className="w-1.5 h-3 bg-green-500 rounded-sm" />
-              <span className="w-1.5 h-3 bg-red-500 rounded-sm" />
-            </span>
             Price
           </button>
           <button
@@ -603,14 +598,12 @@ export function PriceSentimentChart({
             className={cn(
               'px-3 py-1 text-sm font-medium rounded-md transition-colors border flex items-center gap-1.5',
               showSentiment
-                ? 'bg-cyan-500/20 border-cyan-500 text-cyan-400'
+                ? 'bg-green-500/20 border-green-500 text-green-400'
                 : 'bg-card/50 border-border text-muted-foreground'
             )}
             aria-pressed={showSentiment}
             aria-label="Toggle sentiment line"
           >
-            {/* Mini legend showing sentiment line color */}
-            <span className="w-4 h-0.5 bg-cyan-500 rounded-full" />
             Sentiment
           </button>
         </div>

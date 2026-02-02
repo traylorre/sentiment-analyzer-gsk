@@ -55,7 +55,7 @@ describe('TickerInput', () => {
     const user = userEvent.setup();
     renderWithProvider(<TickerInput onSelect={mockOnSelect} />);
 
-    const input = screen.getByRole('textbox');
+    const input = screen.getByRole('combobox');
     await user.type(input, 'aapl');
 
     expect(input).toHaveValue('AAPL');
@@ -69,7 +69,7 @@ describe('TickerInput', () => {
     const user = userEvent.setup();
     renderWithProvider(<TickerInput onSelect={mockOnSelect} />);
 
-    const input = screen.getByRole('textbox');
+    const input = screen.getByRole('combobox');
     await user.type(input, 'A');
 
     await waitFor(() => {
@@ -86,7 +86,7 @@ describe('TickerInput', () => {
     const user = userEvent.setup();
     renderWithProvider(<TickerInput onSelect={mockOnSelect} />);
 
-    const input = screen.getByRole('textbox');
+    const input = screen.getByRole('combobox');
     await user.type(input, 'A');
 
     await waitFor(() => {
@@ -103,7 +103,7 @@ describe('TickerInput', () => {
     const user = userEvent.setup();
     renderWithProvider(<TickerInput onSelect={mockOnSelect} />);
 
-    const input = screen.getByRole('textbox');
+    const input = screen.getByRole('combobox');
     await user.type(input, 'A');
 
     await waitFor(() => {
@@ -127,7 +127,7 @@ describe('TickerInput', () => {
     const user = userEvent.setup();
     renderWithProvider(<TickerInput onSelect={mockOnSelect} />);
 
-    const input = screen.getByRole('textbox');
+    const input = screen.getByRole('combobox');
     await user.type(input, 'A');
 
     await waitFor(() => {
@@ -145,7 +145,7 @@ describe('TickerInput', () => {
     const user = userEvent.setup();
     renderWithProvider(<TickerInput onSelect={mockOnSelect} />);
 
-    const input = screen.getByRole('textbox');
+    const input = screen.getByRole('combobox');
     await user.type(input, 'XYZ');
 
     await waitFor(() => {
@@ -156,14 +156,14 @@ describe('TickerInput', () => {
   it('should be disabled when disabled prop is true', () => {
     renderWithProvider(<TickerInput onSelect={mockOnSelect} disabled />);
 
-    expect(screen.getByRole('textbox')).toBeDisabled();
+    expect(screen.getByRole('combobox')).toBeDisabled();
   });
 
   it('should clear input when X button is clicked', async () => {
     const user = userEvent.setup();
     renderWithProvider(<TickerInput onSelect={mockOnSelect} />);
 
-    const input = screen.getByRole('textbox');
+    const input = screen.getByRole('combobox');
     await user.type(input, 'AAPL');
 
     expect(input).toHaveValue('AAPL');

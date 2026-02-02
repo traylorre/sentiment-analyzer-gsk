@@ -112,6 +112,15 @@ export function TickerInput({
         <Input
           ref={inputRef}
           type="text"
+          role="combobox"
+          aria-autocomplete="list"
+          aria-controls="ticker-search-listbox"
+          aria-expanded={isOpen}
+          aria-activedescendant={
+            isOpen && results.length > 0
+              ? `ticker-option-${results[highlightedIndex]?.symbol}`
+              : undefined
+          }
           value={query}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
@@ -144,6 +153,9 @@ export function TickerInput({
         {isOpen && (
           <motion.div
             ref={listRef}
+            role="listbox"
+            id="ticker-search-listbox"
+            aria-label="Ticker search results"
             className="absolute z-50 w-full mt-1 bg-card border border-border rounded-lg shadow-lg overflow-hidden"
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -151,44 +163,44 @@ export function TickerInput({
             transition={{ duration: 0.15 }}
           >
             {isLoading ? (
-              <div className="p-4 text-center text-muted-foreground">
+              <div className="p-4 text-center text-muted-foreground" role="status" aria-live="polite">
                 <div className="inline-block w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                <span className="sr-only">Searching...</span>
               </div>
             ) : results.length > 0 ? (
-              <ul className="max-h-60 overflow-auto py-1">
+              <ul className="max-h-60 overflow-auto py-1" role="presentation">
                 {results.map((ticker, index) => (
                   <motion.li
                     key={ticker.symbol}
+                    role="option"
+                    id={`ticker-option-${ticker.symbol}`}
+                    aria-selected={highlightedIndex === index}
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.03 }}
+                    onClick={() => handleSelect(ticker)}
+                    onMouseEnter={() => setHighlightedIndex(index)}
+                    className={cn(
+                      'w-full px-4 py-2 text-left flex items-center justify-between transition-colors cursor-pointer',
+                      highlightedIndex === index
+                        ? 'bg-accent/10 text-accent'
+                        : 'hover:bg-muted/50'
+                    )}
                   >
-                    <button
-                      type="button"
-                      onClick={() => handleSelect(ticker)}
-                      onMouseEnter={() => setHighlightedIndex(index)}
-                      className={cn(
-                        'w-full px-4 py-2 text-left flex items-center justify-between transition-colors',
-                        highlightedIndex === index
-                          ? 'bg-accent/10 text-accent'
-                          : 'hover:bg-muted/50'
-                      )}
-                    >
-                      <div>
-                        <span className="font-medium">{ticker.symbol}</span>
-                        <span className="ml-2 text-sm text-muted-foreground">
-                          {ticker.name}
-                        </span>
-                      </div>
-                      <span className="text-xs text-muted-foreground">
-                        {ticker.exchange}
+                    <div>
+                      <span className="font-medium">{ticker.symbol}</span>
+                      <span className="ml-2 text-sm text-muted-foreground">
+                        {ticker.name}
                       </span>
-                    </button>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {ticker.exchange}
+                    </span>
                   </motion.li>
                 ))}
               </ul>
             ) : query.length >= 1 ? (
-              <div className="p-4 text-center text-muted-foreground">
+              <div className="p-4 text-center text-muted-foreground" role="status">
                 No tickers found for &quot;{query}&quot;
               </div>
             ) : null}
