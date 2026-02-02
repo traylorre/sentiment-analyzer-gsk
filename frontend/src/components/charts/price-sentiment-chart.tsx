@@ -156,6 +156,7 @@ export function PriceSentimentChart({
     refetch,
     resolutionFallback,
     fallbackMessage,
+    isAuthReady,
   } = useChartData({
     ticker,
     timeRange,
@@ -244,9 +245,24 @@ export function PriceSentimentChart({
     });
 
     // Configure right scale for sentiment range (-1 to +1)
+    // Add padding (0.15) so -1 and +1 values don't sit exactly at the edge
     chart.priceScale('right').applyOptions({
       autoScale: false,
-      scaleMargins: { top: 0.1, bottom: 0.1 },
+      scaleMargins: { top: 0.15, bottom: 0.15 },
+    });
+
+    // Force the sentiment series to use fixed min/max for consistent -1 to +1 display
+    sentimentSeries.applyOptions({
+      autoscaleInfoProvider: () => ({
+        priceRange: {
+          minValue: -1,
+          maxValue: 1,
+        },
+        margins: {
+          above: 0.15,
+          below: 0.15,
+        },
+      }),
     });
 
     // Create and attach gap shader primitive for market closure visualization
@@ -562,31 +578,39 @@ export function PriceSentimentChart({
         </select>
 
         {/* Layer toggles */}
+        {/* Layer toggles - colors match chart series */}
         <div className="flex gap-2">
           <button
             onClick={() => setShowCandles(!showCandles)}
             className={cn(
-              'px-3 py-1 text-sm font-medium rounded-md transition-colors border',
+              'px-3 py-1 text-sm font-medium rounded-md transition-colors border flex items-center gap-1.5',
               showCandles
-                ? 'bg-green-500/20 border-green-500 text-green-500'
+                ? 'bg-amber-500/20 border-amber-500 text-amber-400'
                 : 'bg-card/50 border-border text-muted-foreground'
             )}
             aria-pressed={showCandles}
             aria-label="Toggle price candles"
           >
+            {/* Mini legend showing both up/down colors */}
+            <span className="flex gap-0.5">
+              <span className="w-1.5 h-3 bg-green-500 rounded-sm" />
+              <span className="w-1.5 h-3 bg-red-500 rounded-sm" />
+            </span>
             Price
           </button>
           <button
             onClick={() => setShowSentiment(!showSentiment)}
             className={cn(
-              'px-3 py-1 text-sm font-medium rounded-md transition-colors border',
+              'px-3 py-1 text-sm font-medium rounded-md transition-colors border flex items-center gap-1.5',
               showSentiment
-                ? 'bg-cyan-500/20 border-cyan-500 text-cyan-500'
+                ? 'bg-cyan-500/20 border-cyan-500 text-cyan-400'
                 : 'bg-card/50 border-border text-muted-foreground'
             )}
             aria-pressed={showSentiment}
             aria-label="Toggle sentiment line"
           >
+            {/* Mini legend showing sentiment line color */}
+            <span className="w-4 h-0.5 bg-cyan-500 rounded-full" />
             Sentiment
           </button>
         </div>
@@ -710,8 +734,8 @@ export function PriceSentimentChart({
         </div>
       )}
 
-      {/* Empty state - no data available (not loading, no error, but no data) */}
-      {!isLoading && !error && priceData.length === 0 && isReady && (
+      {/* Empty state - no data available (auth ready, not loading, no error, but no data) */}
+      {isAuthReady && !isLoading && !error && priceData.length === 0 && isReady && (
         <div className="absolute inset-0 flex items-center justify-center bg-card/80 rounded-lg z-10">
           <div className="flex flex-col items-center gap-3 text-center px-4">
             <svg

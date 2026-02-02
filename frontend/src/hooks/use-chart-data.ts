@@ -91,8 +91,11 @@ export function useChartData({
 }: UseChartDataOptions): ChartDataBundle & {
   refetch: () => void;
   isStale: boolean;
+  /** True when auth is ready and queries can execute */
+  isAuthReady: boolean;
 } {
   const hasAccessToken = useAuthStore((state) => !!state.tokens?.accessToken);
+  const isInitialized = useAuthStore((state) => state.isInitialized);
 
   const ohlcQuery = useQuery<OHLCResponse>({
     queryKey: ['ohlc', ticker, timeRange, resolution],
@@ -109,7 +112,11 @@ export function useChartData({
     staleTime: STALE_TIME_MS,
   });
 
-  const isLoading = ohlcQuery.isLoading || sentimentQuery.isLoading;
+  // Auth must be initialized and have a token before queries can run
+  const isAuthReady = isInitialized && hasAccessToken;
+
+  // isLoading should also include waiting for auth
+  const isLoading = !isAuthReady || ohlcQuery.isLoading || sentimentQuery.isLoading;
   const error =
     ohlcQuery.error?.message ||
     sentimentQuery.error?.message ||
@@ -149,5 +156,6 @@ export function useChartData({
       sentimentQuery.refetch();
     },
     isStale: ohlcQuery.isStale || sentimentQuery.isStale,
+    isAuthReady,
   };
 }
