@@ -9,6 +9,7 @@ import type { User, AuthTokens, AnonymousSession, AnonymousSessionResponse } fro
 function mapAnonymousSession(response: AnonymousSessionResponse): AnonymousSession {
   return {
     userId: response.user_id,
+    token: response.token,
     authType: response.auth_type,
     createdAt: response.created_at,
     sessionExpiresAt: response.session_expires_at,

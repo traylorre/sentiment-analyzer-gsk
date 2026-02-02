@@ -33,6 +33,7 @@ export interface AuthTokens {
 
 export interface AnonymousSession {
   userId: string;
+  token: string;  // Bearer token (same as userId for anonymous)
   authType: 'anonymous';
   createdAt: string;
   sessionExpiresAt: string;
@@ -46,6 +47,7 @@ export interface AnonymousSession {
  */
 export interface AnonymousSessionResponse {
   user_id: string;
+  token: string;  // Bearer token (same as user_id for anonymous)
   auth_type: 'anonymous';
   created_at: string;
   session_expires_at: string;

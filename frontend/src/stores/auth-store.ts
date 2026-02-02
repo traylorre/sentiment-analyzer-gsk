@@ -93,7 +93,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   setInitialized: (initialized) => set({ isInitialized: initialized }),
 
   signInAnonymous: async () => {
-    const { setLoading, setError, setUser, setSession } = get();
+    const { setLoading, setError, setUser, setSession, setTokens } = get();
 
     try {
       setLoading(true);
@@ -115,6 +115,14 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         linkedProviders: [],
         verification: 'none',
         lastProviderUsed: undefined,
+      });
+      // Set tokens so useChartData's hasAccessToken check passes
+      // For anonymous sessions, token === userId (no refresh token or id token)
+      setTokens({
+        accessToken: data.token,
+        refreshToken: '',  // Empty string for anonymous (no refresh)
+        idToken: '',       // Empty string for anonymous (no id token)
+        expiresIn: 0,      // Session expiry handled separately
       });
       setSession(data.sessionExpiresAt);
     } catch (error) {
