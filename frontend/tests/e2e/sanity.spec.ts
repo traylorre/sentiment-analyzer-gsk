@@ -338,6 +338,120 @@ test.describe('Critical User Path - Sanity Tests', () => {
     });
   });
 
+  test.describe('GOOG Ticker - Tiingo Fix Verification', () => {
+    /**
+     * Regression test for the "no data" bug with GOOG ticker.
+     *
+     * Root cause (fixed in b2a7e40):
+     * - Tiingo adapter returned [] on 404 responses
+     * - Empty array was cached for 30-60 minutes
+     * - Users saw "no data" with no error message
+     *
+     * This test verifies:
+     * 1. GOOG can be added as a ticker
+     * 2. Price data loads and displays (not empty state)
+     * 3. Data persists across time frame changes
+     */
+    test('should display GOOG price data after fix', async ({ page }) => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+
+      // Step 1: Search for GOOG ticker
+      const searchInput = page.getByPlaceholder(/search tickers/i);
+      await expect(searchInput).toBeVisible();
+      await searchInput.fill('GOOG');
+
+      // Wait for debounce plus API response
+      await page.waitForTimeout(600);
+
+      // Step 2: Select GOOG from suggestions
+      const suggestion = page.getByRole('option', { name: /GOOG/i });
+      await expect(suggestion).toBeVisible({ timeout: 10000 });
+      await suggestion.click();
+
+      // Step 3: Verify chart loads with data (NOT empty state)
+      const chartContainer = page.locator(
+        '[role="img"][aria-label*="Price and sentiment chart"]'
+      );
+      await expect(chartContainer).toBeVisible({ timeout: 15000 });
+
+      // Verify we have actual price data (the fix prevents caching of empty responses)
+      await expect(chartContainer).toHaveAttribute(
+        'aria-label',
+        /\d+ price candles and \d+ sentiment points/,
+        { timeout: 15000 }
+      );
+
+      // Extract and verify non-zero data points
+      const ariaLabel = await chartContainer.getAttribute('aria-label');
+      const priceMatch = ariaLabel?.match(/(\d+) price candles/);
+      expect(priceMatch).toBeTruthy();
+      const priceCount = parseInt(priceMatch![1], 10);
+      expect(priceCount).toBeGreaterThan(0);
+
+      // Verify GOOG ticker name is displayed
+      await expect(page.getByText('GOOG').first()).toBeVisible();
+
+      // Verify actual price value is shown (not empty state)
+      await expect(page.getByText(/\$\d+\.\d{2}/)).toBeVisible({
+        timeout: 10000,
+      });
+
+      // Verify empty state is NOT shown
+      const emptyState = page.getByText(/no price data available/i);
+      await expect(emptyState).not.toBeVisible();
+    });
+
+    test('should maintain GOOG data across time frame changes', async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+
+      // Add GOOG ticker
+      const searchInput = page.getByPlaceholder(/search tickers/i);
+      await searchInput.fill('GOOG');
+      await page.waitForTimeout(600);
+
+      const suggestion = page.getByRole('option', { name: /GOOG/i });
+      await expect(suggestion).toBeVisible({ timeout: 10000 });
+      await suggestion.click();
+
+      // Wait for initial load
+      const chartContainer = page.locator(
+        '[role="img"][aria-label*="Price and sentiment chart"]'
+      );
+      await expect(chartContainer).toHaveAttribute(
+        'aria-label',
+        /\d+ price candles/,
+        { timeout: 15000 }
+      );
+
+      // Test each time range - verify data loads for each
+      const timeRanges = ['1W', '1M', '3M', '6M', '1Y'];
+
+      for (const range of timeRanges) {
+        const button = page.getByRole('button', {
+          name: `${range} time range`,
+        });
+        await expect(button).toBeVisible();
+        await button.click();
+
+        // Wait for data to reload
+        await page.waitForTimeout(600);
+
+        // Verify chart still has data (not empty)
+        await expect(chartContainer).toHaveAttribute(
+          'aria-label',
+          /\d+ price candles/,
+          { timeout: 15000 }
+        );
+
+        // Verify empty state is NOT shown after time range change
+        const emptyState = page.getByText(/no price data available/i);
+        await expect(emptyState).not.toBeVisible();
+      }
+    });
+  });
+
   test.describe('Error Handling', () => {
     test('should handle search with no results gracefully', async ({
       page,
