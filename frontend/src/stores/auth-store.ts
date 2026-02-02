@@ -284,8 +284,11 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         // authApi automatically handles Authorization header
         await authApi.signOut();
       }
-    } catch {
-      // Ignore logout errors - still clear local state
+    } catch (error) {
+      // Log sign-out errors for debugging - backend session may remain active
+      console.error('[authStore.signOut] Failed to sign out from backend:', error);
+      // Still clear local state to prevent UI lockout, but backend token may persist
+      // This is a known trade-off: prioritize user experience over perfect cleanup
     } finally {
       reset();
     }

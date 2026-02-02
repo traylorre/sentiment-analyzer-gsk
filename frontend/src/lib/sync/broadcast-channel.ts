@@ -165,8 +165,9 @@ export class AuthBroadcastSync {
     try {
       const message = JSON.parse(event.newValue) as BroadcastMessage;
       this.handleMessage(message);
-    } catch {
-      // Ignore parse errors
+    } catch (error) {
+      // Log parse errors for debugging cross-tab sync issues
+      console.warn('[AuthBroadcastSync] Failed to parse localStorage message:', error);
     }
   };
 }
