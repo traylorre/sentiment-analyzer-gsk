@@ -115,6 +115,24 @@ export function useChartData({
     sentimentQuery.error?.message ||
     null;
 
+  // Debug logging for troubleshooting "no data" issues
+  // TODO: Remove after GOOG issue is resolved
+  if (process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_DEBUG_CHART) {
+    if (ticker && !isLoading) {
+      console.log('[useChartData] State for', ticker, {
+        hasAccessToken,
+        enabled,
+        ohlcStatus: ohlcQuery.status,
+        ohlcDataLength: ohlcQuery.data?.candles?.length ?? 'undefined',
+        ohlcError: ohlcQuery.error,
+        ohlcErrorMessage: ohlcQuery.error?.message ?? 'none',
+        sentimentStatus: sentimentQuery.status,
+        sentimentDataLength: sentimentQuery.data?.history?.length ?? 'undefined',
+        sentimentError: sentimentQuery.error,
+      });
+    }
+  }
+
   return {
     ticker: ticker || '',
     priceData: ohlcQuery.data?.candles || [],

@@ -697,9 +697,42 @@ export function PriceSentimentChart({
 
       {/* Error state */}
       {error && !isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-card/80 rounded-lg">
+        <div className="absolute inset-0 flex items-center justify-center bg-card/80 rounded-lg z-10">
           <div className="flex flex-col items-center gap-3 text-center px-4">
             <span className="text-red-500 text-sm">{error}</span>
+            <button
+              onClick={() => refetch()}
+              className="px-4 py-2 bg-accent text-accent-foreground rounded-lg text-sm font-medium hover:bg-accent/90 transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Empty state - no data available (not loading, no error, but no data) */}
+      {!isLoading && !error && priceData.length === 0 && isReady && (
+        <div className="absolute inset-0 flex items-center justify-center bg-card/80 rounded-lg z-10">
+          <div className="flex flex-col items-center gap-3 text-center px-4">
+            <svg
+              className="w-12 h-12 text-muted-foreground"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+              />
+            </svg>
+            <span className="text-muted-foreground text-sm">
+              No price data available for {ticker}
+            </span>
+            <span className="text-muted-foreground text-xs">
+              Try a different ticker or time range
+            </span>
             <button
               onClick={() => refetch()}
               className="px-4 py-2 bg-accent text-accent-foreground rounded-lg text-sm font-medium hover:bg-accent/90 transition-colors"

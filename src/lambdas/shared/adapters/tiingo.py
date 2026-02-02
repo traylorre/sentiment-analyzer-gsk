@@ -136,6 +136,12 @@ class TiingoAdapter(BaseAdapter):
             raise AdapterError("Tiingo authentication failed: Invalid API key")
 
         if response.status_code == 404:
+            # Log 404 for debugging - this is often the root cause of "no data" issues
+            # Note: 404 means ticker not found, NOT "no data for date range"
+            logger.warning(
+                "Tiingo returned 404 - ticker may not exist or not be supported",
+                extra={"status_code": 404, "endpoint": str(response.url)},
+            )
             return []
 
         if not response.is_success:
@@ -197,9 +203,14 @@ class TiingoAdapter(BaseAdapter):
                     params=cache_params,
                 )
                 data = self._handle_response(response)
-                # Cache the raw response
-                _put_in_cache(cache_key, data)
-                logger.debug(f"Tiingo news cache miss for {tickers_param}, cached")
+                # Only cache non-empty responses - 404s return [] and should not be cached
+                if data:
+                    _put_in_cache(cache_key, data)
+                    logger.debug(f"Tiingo news cache miss for {tickers_param}, cached")
+                else:
+                    logger.warning(
+                        f"Tiingo news returned empty data for {tickers_param}, NOT caching"
+                    )
             except httpx.RequestError as e:
                 logger.error(f"Tiingo request failed: {e}")
                 raise AdapterError(f"Tiingo request failed: {e}") from e
@@ -290,11 +301,19 @@ class TiingoAdapter(BaseAdapter):
                     },
                 )
                 data = self._handle_response(response)
-                # Cache the raw response
-                _put_in_cache(cache_key, data)
-                logger.debug(
-                    "Tiingo OHLC cache miss for %s, cached", sanitize_for_log(ticker)
-                )
+                # Only cache non-empty responses - 404s return [] and should not be cached
+                # This prevents "no data" errors from being cached for 1 hour
+                if data:
+                    _put_in_cache(cache_key, data)
+                    logger.debug(
+                        "Tiingo OHLC cache miss for %s, cached",
+                        sanitize_for_log(ticker),
+                    )
+                else:
+                    logger.warning(
+                        "Tiingo OHLC returned empty data for %s, NOT caching",
+                        sanitize_for_log(ticker),
+                    )
             except httpx.RequestError as e:
                 logger.error(f"Tiingo OHLC request failed: {e}")
                 raise AdapterError(f"Tiingo OHLC request failed: {e}") from e
@@ -388,13 +407,20 @@ class TiingoAdapter(BaseAdapter):
                     },
                 )
                 data = self._handle_response(response)
-                # Cache the raw response
-                _put_in_cache(cache_key, data)
-                logger.debug(
-                    "Tiingo IEX intraday cache miss for %s (%s), cached",
-                    sanitize_for_log(ticker),
-                    resample_freq,
-                )
+                # Only cache non-empty responses - 404s return [] and should not be cached
+                if data:
+                    _put_in_cache(cache_key, data)
+                    logger.debug(
+                        "Tiingo IEX intraday cache miss for %s (%s), cached",
+                        sanitize_for_log(ticker),
+                        resample_freq,
+                    )
+                else:
+                    logger.warning(
+                        "Tiingo IEX intraday returned empty data for %s (%s), NOT caching",
+                        sanitize_for_log(ticker),
+                        resample_freq,
+                    )
             except httpx.RequestError as e:
                 logger.error(f"Tiingo IEX intraday request failed: {e}")
                 raise AdapterError(f"Tiingo IEX intraday request failed: {e}") from e
