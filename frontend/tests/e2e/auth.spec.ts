@@ -111,3 +111,129 @@ test.describe('Anonymous Mode', () => {
     await expect(upgradePrompt.or(accountSection)).toBeVisible();
   });
 });
+
+/**
+ * OAuth Callback Error Handling Tests
+ *
+ * These tests verify the OAuth callback page correctly handles various error scenarios.
+ * The callback page is at /auth/callback and receives authorization codes from OAuth providers.
+ *
+ * Since we can't actually complete OAuth flows in E2E tests (external providers),
+ * we test the error handling by navigating directly to the callback with various
+ * error conditions.
+ */
+test.describe('OAuth Callback Error Handling', () => {
+  test('should handle missing authorization code', async ({ page }) => {
+    // Navigate to callback without code parameter
+    await page.goto('/auth/callback?state=test-state');
+
+    // Should show error message about missing code
+    await expect(page.getByText(/missing authorization code|invalid callback/i)).toBeVisible({
+      timeout: 5000,
+    });
+
+    // Should show try again button
+    await expect(page.getByRole('button', { name: /try again/i })).toBeVisible();
+  });
+
+  test('should handle missing state parameter', async ({ page }) => {
+    // Navigate to callback without state parameter
+    await page.goto('/auth/callback?code=test-code');
+
+    // Should show error about missing state
+    await expect(page.getByText(/missing state|invalid callback/i)).toBeVisible({
+      timeout: 5000,
+    });
+
+    // Should show try again button
+    await expect(page.getByRole('button', { name: /try again/i })).toBeVisible();
+  });
+
+  test('should handle expired/missing session (no stored provider)', async ({ page }) => {
+    // Clear any stored OAuth state before test
+    await page.goto('/');
+    await page.evaluate(() => {
+      sessionStorage.removeItem('oauth_provider');
+      sessionStorage.removeItem('oauth_state');
+    });
+
+    // Navigate to callback with code and state but no stored session
+    await page.goto('/auth/callback?code=test-code&state=test-state');
+
+    // Should show session expired error
+    await expect(page.getByText(/session expired|please try again/i)).toBeVisible({
+      timeout: 5000,
+    });
+
+    // Should show try again button
+    await expect(page.getByRole('button', { name: /try again/i })).toBeVisible();
+  });
+
+  test('should handle state mismatch (CSRF protection)', async ({ page }) => {
+    // Set up stored state that doesn't match URL state
+    await page.goto('/');
+    await page.evaluate(() => {
+      sessionStorage.setItem('oauth_provider', 'google');
+      sessionStorage.setItem('oauth_state', 'stored-state-123');
+    });
+
+    // Navigate with different state in URL
+    await page.goto('/auth/callback?code=test-code&state=different-state-456');
+
+    // Should show session invalid error (CSRF check failed)
+    await expect(page.getByText(/session invalid|please try again/i)).toBeVisible({
+      timeout: 5000,
+    });
+
+    // Should show try again button
+    await expect(page.getByRole('button', { name: /try again/i })).toBeVisible();
+  });
+
+  test('should handle provider denial (user cancelled)', async ({ page }) => {
+    // OAuth providers return error parameter when user cancels
+    await page.goto('/auth/callback?error=access_denied&error_description=User%20denied%20access');
+
+    // Should show error heading
+    await expect(page.getByRole('heading', { name: /sign in failed/i })).toBeVisible({
+      timeout: 5000,
+    });
+
+    // Should show the specific error description
+    await expect(page.getByText('User denied access')).toBeVisible();
+
+    // Should show try again button
+    await expect(page.getByRole('button', { name: /try again/i })).toBeVisible();
+  });
+
+  test('should handle provider error without description', async ({ page }) => {
+    // Some providers only return error without description
+    await page.goto('/auth/callback?error=server_error');
+
+    // Should show error heading
+    await expect(page.getByRole('heading', { name: /sign in failed/i })).toBeVisible({
+      timeout: 5000,
+    });
+
+    // Should show generic cancellation message
+    await expect(page.getByText('Authentication was cancelled')).toBeVisible();
+
+    // Should show try again button
+    await expect(page.getByRole('button', { name: /try again/i })).toBeVisible();
+  });
+
+  test('should redirect to signin when clicking try again', async ({ page }) => {
+    // Navigate to callback with missing code
+    await page.goto('/auth/callback?state=test-state');
+
+    // Wait for error to display
+    await expect(page.getByText(/missing authorization code|invalid callback/i)).toBeVisible({
+      timeout: 5000,
+    });
+
+    // Click try again
+    await page.getByRole('button', { name: /try again/i }).click();
+
+    // Should redirect to signin page
+    await expect(page).toHaveURL(/\/auth\/signin/);
+  });
+});
