@@ -245,9 +245,9 @@ export function PriceSentimentChart({
     });
 
     // Configure right scale for sentiment range (-1 to +1)
-    // Add padding (0.15) so -1 and +1 values don't sit exactly at the edge
+    // Keep autoScale: true (default) so autoscaleInfoProvider on the series works
+    // Ref: https://tradingview.github.io/lightweight-charts/tutorials/customization/price-scale
     chart.priceScale('right').applyOptions({
-      autoScale: false,
       scaleMargins: { top: 0.15, bottom: 0.15 },
     });
 
@@ -418,19 +418,22 @@ export function PriceSentimentChart({
   useEffect(() => {
     if (!chartRef.current || (!priceData.length && !sentimentData.length)) return;
 
-    // First fit all content
+    // Always fit all content first - especially important when time range changes
     chartRef.current.timeScale().fitContent();
 
-    // For intraday resolutions, limit visible range to show candlesticks clearly
-    const visibleCount = VISIBLE_CANDLES[resolution];
-    const dataLength = priceData.length || sentimentData.length;
+    // For INTRADAY resolutions only, limit visible range to show candlesticks clearly
+    // Daily resolution ('D') should always show full time range (user selected 1W/1M/3M/6M/1Y)
+    if (resolution !== 'D') {
+      const visibleCount = VISIBLE_CANDLES[resolution];
+      const dataLength = priceData.length || sentimentData.length;
 
-    if (visibleCount > 0 && dataLength > visibleCount) {
-      // Show most recent candles (scroll to right edge)
-      chartRef.current.timeScale().setVisibleLogicalRange({
-        from: dataLength - visibleCount,
-        to: dataLength - 1,
-      });
+      if (visibleCount > 0 && dataLength > visibleCount) {
+        // Show most recent candles (scroll to right edge)
+        chartRef.current.timeScale().setVisibleLogicalRange({
+          from: dataLength - visibleCount,
+          to: dataLength - 1,
+        });
+      }
     }
   }, [priceData, sentimentData, resolution]);
 
