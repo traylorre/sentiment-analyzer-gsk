@@ -90,6 +90,7 @@ export function NotificationPreferences({
             checked={settings.emailEnabled}
             onCheckedChange={(checked) => updateSetting('emailEnabled', checked)}
             disabled={isLoading}
+            aria-label="Email Notifications"
           />
         </div>
 
@@ -151,6 +152,7 @@ export function NotificationPreferences({
             checked={settings.quietHoursEnabled}
             onCheckedChange={(checked) => updateSetting('quietHoursEnabled', checked)}
             disabled={isLoading}
+            aria-label="Quiet Hours"
           />
         </div>
 

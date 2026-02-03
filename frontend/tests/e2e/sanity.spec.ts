@@ -18,10 +18,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       await expect(searchInput).toBeVisible();
       await searchInput.fill('AAPL');
 
-      // Wait for debounce (500ms) plus some buffer for API response
-      await page.waitForTimeout(600);
-
-      // Step 2: Click to select AAPL from suggestions
+      // The expect below will wait up to 10s for debounce + API response
       const suggestion = page.getByRole('option', { name: /AAPL/i });
       await expect(suggestion).toBeVisible({ timeout: 10000 });
       await suggestion.click();
@@ -62,8 +59,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       await expect(threeMonthButton).toBeVisible();
       await threeMonthButton.click();
 
-      // Wait for data to reload
-      await page.waitForTimeout(600);
+      // The expect below will wait for data to reload
 
       // Verify chart still has data after time range change
       await expect(chartContainer).toHaveAttribute(
@@ -85,7 +81,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       // Search and select AAPL
       const searchInput = page.getByPlaceholder(/search tickers/i);
       await searchInput.fill('AAPL');
-      await page.waitForTimeout(600);
+      // Wait implicitly via the expect timeout below
 
       const suggestion = page.getByRole('option', { name: /AAPL/i });
       await expect(suggestion).toBeVisible({ timeout: 10000 });
@@ -114,7 +110,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       // Search and select AAPL
       const searchInput = page.getByPlaceholder(/search tickers/i);
       await searchInput.fill('AAPL');
-      await page.waitForTimeout(600);
+      // Wait implicitly via the expect timeout below
 
       const suggestion = page.getByRole('option', { name: /AAPL/i });
       await expect(suggestion).toBeVisible({ timeout: 10000 });
@@ -139,11 +135,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
         });
         await expect(button).toBeVisible();
         await button.click();
-
-        // Wait for data to reload
-        await page.waitForTimeout(600);
-
-        // Verify button is now pressed
+        // The expect below will wait for button state to update
         await expect(button).toHaveAttribute('aria-pressed', 'true');
 
         // Verify chart still has data
@@ -159,7 +151,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       // Search and select AAPL
       const searchInput = page.getByPlaceholder(/search tickers/i);
       await searchInput.fill('AAPL');
-      await page.waitForTimeout(600);
+      // Wait implicitly via the expect timeout below
 
       const suggestion = page.getByRole('option', { name: /AAPL/i });
       await expect(suggestion).toBeVisible({ timeout: 10000 });
@@ -214,8 +206,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       await expect(searchInput).toBeVisible();
       await searchInput.fill('AAPL');
 
-      // Wait for debounce
-      await page.waitForTimeout(600);
+      // The expect below will wait for debounce + API response
 
       // Step 2: Click to select AAPL from suggestions
       const suggestion = page.getByRole('option', { name: /AAPL/i });
@@ -242,8 +233,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       await expect(oneMonthButton).toBeVisible();
       await oneMonthButton.click();
 
-      // Wait for data to reload
-      await page.waitForTimeout(600);
+      // The expect below will wait for data to reload
 
       // Verify chart still has data after time range change
       await expect(chartContainer).toHaveAttribute(
@@ -259,7 +249,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       // Search and select AAPL
       const searchInput = page.getByPlaceholder(/search tickers/i);
       await searchInput.fill('AAPL');
-      await page.waitForTimeout(600);
+      // Wait implicitly via the expect timeout below
 
       const suggestion = page.getByRole('option', { name: /AAPL/i });
       await expect(suggestion).toBeVisible({ timeout: 10000 });
@@ -304,7 +294,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       // Search and select AAPL
       const searchInput = page.getByPlaceholder(/search tickers/i);
       await searchInput.fill('AAPL');
-      await page.waitForTimeout(600);
+      // Wait implicitly via the expect timeout below
 
       const suggestion = page.getByRole('option', { name: /AAPL/i });
       await expect(suggestion).toBeVisible({ timeout: 10000 });
@@ -362,11 +352,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       const searchInput = page.getByPlaceholder(/search tickers/i);
       await expect(searchInput).toBeVisible();
       await searchInput.fill('GOOG');
-
-      // Wait for debounce plus API response
-      await page.waitForTimeout(600);
-
-      // Step 2: Select GOOG from suggestions (first match to avoid GOOGL)
+      // Wait implicitly via the expect timeout below (first match to avoid GOOGL)
       const suggestion = page.getByRole('option', { name: /GOOG.*Alphabet.*Class C/i });
       await expect(suggestion).toBeVisible({ timeout: 10000 });
       await suggestion.click();
@@ -412,9 +398,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       // Add GOOG ticker
       const searchInput = page.getByPlaceholder(/search tickers/i);
       await searchInput.fill('GOOG');
-      await page.waitForTimeout(600);
-
-      // Select GOOG from suggestions (first match to avoid GOOGL)
+      // Wait implicitly via the expect timeout below (first match to avoid GOOGL)
       const suggestion = page.getByRole('option', { name: /GOOG.*Alphabet.*Class C/i });
       await expect(suggestion).toBeVisible({ timeout: 10000 });
       await suggestion.click();
@@ -438,11 +422,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
         });
         await expect(button).toBeVisible();
         await button.click();
-
-        // Wait for data to reload
-        await page.waitForTimeout(600);
-
-        // Verify chart still has data (not empty)
+        // The expect below will wait for chart data to update
         await expect(chartContainer).toHaveAttribute(
           'aria-label',
           /[1-9]\d* price candles/,
@@ -468,7 +448,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       // Add GOOG ticker
       const searchInput = page.getByPlaceholder(/search tickers/i);
       await searchInput.fill('GOOG');
-      await page.waitForTimeout(600);
+      // Wait implicitly via the expect timeout below
 
       const suggestion = page.getByRole('option', { name: /GOOG.*Alphabet.*Class C/i });
       await expect(suggestion).toBeVisible({ timeout: 10000 });
@@ -481,7 +461,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       // Select 1W first
       const oneWeekButton = page.getByRole('button', { name: '1W time range' });
       await oneWeekButton.click();
-      await page.waitForTimeout(600);
+      // The expect below will wait for data to load
 
       await expect(chartContainer).toHaveAttribute(
         'aria-label',
@@ -498,7 +478,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       // Switch to 6M
       const sixMonthButton = page.getByRole('button', { name: '6M time range' });
       await sixMonthButton.click();
-      await page.waitForTimeout(600);
+      // The expect below will wait for data to load
 
       await expect(chartContainer).toHaveAttribute(
         'aria-label',
@@ -532,7 +512,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       // Add GOOG ticker
       const searchInput = page.getByPlaceholder(/search tickers/i);
       await searchInput.fill('GOOG');
-      await page.waitForTimeout(600);
+      // Wait implicitly via the expect timeout below
 
       const suggestion = page.getByRole('option', { name: /GOOG.*Alphabet.*Class C/i });
       await expect(suggestion).toBeVisible({ timeout: 10000 });
@@ -598,7 +578,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       // Step 1: Search and select GOOG
       const searchInput = page.getByPlaceholder(/search tickers/i);
       await searchInput.fill('GOOG');
-      await page.waitForTimeout(600);
+      // Wait implicitly via the expect timeout below
 
       const googSuggestion = page.getByRole('option', { name: /GOOG.*Alphabet.*Class C/i });
       await expect(googSuggestion).toBeVisible({ timeout: 10000 });
@@ -618,24 +598,20 @@ test.describe('Critical User Path - Sanity Tests', () => {
       const oneYearButton = page.getByRole('button', { name: '1Y time range' });
       await expect(oneYearButton).toBeVisible();
       await oneYearButton.click();
-      await page.waitForTimeout(600);
-
-      // Verify 1Y is selected
+      // The expect below will wait for button state to update
       await expect(oneYearButton).toHaveAttribute('aria-pressed', 'true');
 
       // Step 3: Set Day resolution
       const dayResButton = page.getByRole('button', { name: 'Day resolution' });
       await expect(dayResButton).toBeVisible();
       await dayResButton.click();
-      await page.waitForTimeout(600);
-
-      // Verify Day is selected
+      // The expect below will wait for button state to update
       await expect(dayResButton).toHaveAttribute('aria-pressed', 'true');
 
       // Step 4: Now switch to AAPL ticker
       await searchInput.clear();
       await searchInput.fill('AAPL');
-      await page.waitForTimeout(600);
+      // Wait implicitly via the expect timeout below
 
       const aaplSuggestion = page.getByRole('option', { name: /AAPL/i });
       await expect(aaplSuggestion).toBeVisible({ timeout: 10000 });
@@ -678,7 +654,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       // Search and select GOOG
       const searchInput = page.getByPlaceholder(/search tickers/i);
       await searchInput.fill('GOOG');
-      await page.waitForTimeout(600);
+      // Wait implicitly via the expect timeout below
 
       const suggestion = page.getByRole('option', { name: /GOOG.*Alphabet.*Class C/i });
       await expect(suggestion).toBeVisible({ timeout: 10000 });
@@ -696,14 +672,10 @@ test.describe('Critical User Path - Sanity Tests', () => {
       // Set 1M time range
       const oneMonthButton = page.getByRole('button', { name: '1M time range' });
       await oneMonthButton.click();
-      await page.waitForTimeout(600);
-
-      // Set 1h resolution
+      // No explicit wait needed - resolution button click below
       const hourResButton = page.getByRole('button', { name: '1h resolution' });
       await hourResButton.click();
-      await page.waitForTimeout(1000); // Allow time for data reload
-
-      // Wait for chart to update with hourly data
+      // The expect below will wait for chart data to update
       await expect(chartContainer).toHaveAttribute(
         'aria-label',
         /[1-9]\d* price candles/,
@@ -730,8 +702,8 @@ test.describe('Critical User Path - Sanity Tests', () => {
       const searchInput = page.getByPlaceholder(/search tickers/i);
       await searchInput.fill('XYZNOTAREALTICKER123');
 
-      // Wait for debounce and API response
-      await page.waitForTimeout(1000);
+      // Wait for debounce (500ms) and API response via network idle
+      await page.waitForLoadState('networkidle');
 
       // Should show no results or empty state, not crash
       const noResults = page.getByText(/no results/i);
@@ -757,7 +729,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       // Search and select AAPL
       const searchInput = page.getByPlaceholder(/search tickers/i);
       await searchInput.fill('AAPL');
-      await page.waitForTimeout(600);
+      // Wait implicitly via the expect timeout below
 
       const suggestion = page.getByRole('option', { name: /AAPL/i });
       await expect(suggestion).toBeVisible({ timeout: 10000 });
@@ -791,7 +763,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       // Search and select AAPL
       const searchInput = page.getByPlaceholder(/search tickers/i);
       await searchInput.fill('AAPL');
-      await page.waitForTimeout(600);
+      // Wait implicitly via the expect timeout below
 
       const suggestion = page.getByRole('option', { name: /AAPL/i });
       await expect(suggestion).toBeVisible({ timeout: 10000 });
@@ -838,9 +810,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       const searchInput = page.getByPlaceholder(/search tickers/i);
       await searchInput.focus();
       await searchInput.fill('AAPL');
-      await page.waitForTimeout(600);
-
-      // Wait for suggestions
+      // Wait implicitly via the expect timeout below
       const suggestion = page.getByRole('option', { name: /AAPL/i });
       await expect(suggestion).toBeVisible({ timeout: 10000 });
 

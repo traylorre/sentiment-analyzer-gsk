@@ -184,7 +184,7 @@ export default function SettingsPage() {
               label="Dark Mode"
               description="Always on (system default)"
             >
-              <Switch checked disabled />
+              <Switch checked disabled aria-label="Dark Mode" />
             </SettingItem>
 
             <SettingItem
@@ -196,6 +196,7 @@ export default function SettingsPage() {
                 id="haptic"
                 checked={hapticEnabled}
                 onCheckedChange={setHapticEnabled}
+                aria-label="Haptic Feedback"
               />
             </SettingItem>
 
@@ -208,6 +209,7 @@ export default function SettingsPage() {
                 id="reduced-motion"
                 checked={reducedMotion}
                 onCheckedChange={setReducedMotion}
+                aria-label="Reduced Motion"
               />
             </SettingItem>
           </Card>

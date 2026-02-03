@@ -51,9 +51,7 @@ test.describe('First Impression Flow', () => {
 
     // Type a search query
     await searchInput.fill('AAPL');
-
-    // Wait for search results to appear
-    await page.waitForTimeout(500); // Debounce delay
+    // The expect below will wait for debounce + API response
 
     // Should show suggestions or no results message
     const suggestions = page.locator('[role="listbox"], [role="option"]');
