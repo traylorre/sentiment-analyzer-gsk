@@ -454,6 +454,129 @@ test.describe('Critical User Path - Sanity Tests', () => {
         await expect(emptyState).not.toBeVisible();
       }
     });
+
+    /**
+     * Verify that data count increases for longer time ranges.
+     * This indirectly tests the auto-zoom fix - if fitContent() is called,
+     * we should see more data points for longer ranges.
+     */
+    test('should load more data points for longer time ranges', async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+
+      // Add GOOG ticker
+      const searchInput = page.getByPlaceholder(/search tickers/i);
+      await searchInput.fill('GOOG');
+      await page.waitForTimeout(600);
+
+      const suggestion = page.getByRole('option', { name: /GOOG.*Alphabet.*Class C/i });
+      await expect(suggestion).toBeVisible({ timeout: 10000 });
+      await suggestion.click();
+
+      const chartContainer = page.locator(
+        '[role="img"][aria-label*="Price and sentiment chart"]'
+      );
+
+      // Select 1W first
+      const oneWeekButton = page.getByRole('button', { name: '1W time range' });
+      await oneWeekButton.click();
+      await page.waitForTimeout(600);
+
+      await expect(chartContainer).toHaveAttribute(
+        'aria-label',
+        /[1-9]\d* price candles/,
+        { timeout: 15000 }
+      );
+
+      // Get 1W candle count
+      const oneWeekLabel = await chartContainer.getAttribute('aria-label');
+      const oneWeekMatch = oneWeekLabel?.match(/(\d+) price candles/);
+      expect(oneWeekMatch).toBeTruthy();
+      const oneWeekCount = parseInt(oneWeekMatch![1], 10);
+
+      // Switch to 6M
+      const sixMonthButton = page.getByRole('button', { name: '6M time range' });
+      await sixMonthButton.click();
+      await page.waitForTimeout(600);
+
+      await expect(chartContainer).toHaveAttribute(
+        'aria-label',
+        /[1-9]\d* price candles/,
+        { timeout: 15000 }
+      );
+
+      // Get 6M candle count
+      const sixMonthLabel = await chartContainer.getAttribute('aria-label');
+      const sixMonthMatch = sixMonthLabel?.match(/(\d+) price candles/);
+      expect(sixMonthMatch).toBeTruthy();
+      const sixMonthCount = parseInt(sixMonthMatch![1], 10);
+
+      // 6M should have significantly more data points than 1W
+      // (6 months ≈ 126 trading days vs 1 week ≈ 5 trading days)
+      expect(sixMonthCount).toBeGreaterThan(oneWeekCount);
+
+      // Verify 6M has at least 60 candles (conservative estimate for 3 months of trading)
+      expect(sixMonthCount).toBeGreaterThanOrEqual(60);
+    });
+
+    /**
+     * Verify sentiment data is present when sentiment toggle is active.
+     * Regression test for sentiment line visibility fix.
+     */
+    test('should have sentiment data when toggle is active', async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+
+      // Add GOOG ticker
+      const searchInput = page.getByPlaceholder(/search tickers/i);
+      await searchInput.fill('GOOG');
+      await page.waitForTimeout(600);
+
+      const suggestion = page.getByRole('option', { name: /GOOG.*Alphabet.*Class C/i });
+      await expect(suggestion).toBeVisible({ timeout: 10000 });
+      await suggestion.click();
+
+      const chartContainer = page.locator(
+        '[role="img"][aria-label*="Price and sentiment chart"]'
+      );
+
+      // Wait for both price AND sentiment data
+      await expect(chartContainer).toHaveAttribute(
+        'aria-label',
+        /[1-9]\d* price candles and [1-9]\d* sentiment points/,
+        { timeout: 15000 }
+      );
+
+      // Verify sentiment toggle is pressed (active)
+      const sentimentToggle = page.getByRole('button', { name: 'Toggle sentiment line' });
+      await expect(sentimentToggle).toHaveAttribute('aria-pressed', 'true');
+
+      // Extract sentiment count
+      const ariaLabel = await chartContainer.getAttribute('aria-label');
+      const sentimentMatch = ariaLabel?.match(/(\d+) sentiment points/);
+      expect(sentimentMatch).toBeTruthy();
+      const sentimentCount = parseInt(sentimentMatch![1], 10);
+
+      // Should have multiple sentiment data points
+      expect(sentimentCount).toBeGreaterThan(5);
+
+      // Toggle sentiment off
+      await sentimentToggle.click();
+      await expect(sentimentToggle).toHaveAttribute('aria-pressed', 'false');
+
+      // Toggle back on
+      await sentimentToggle.click();
+      await expect(sentimentToggle).toHaveAttribute('aria-pressed', 'true');
+
+      // Aria-label should still show sentiment data (data persists across toggle)
+      await expect(chartContainer).toHaveAttribute(
+        'aria-label',
+        /[1-9]\d* sentiment points/,
+        { timeout: 5000 }
+      );
+    });
   });
 
   test.describe('Error Handling', () => {
