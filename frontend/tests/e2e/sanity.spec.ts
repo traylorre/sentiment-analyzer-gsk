@@ -579,6 +579,150 @@ test.describe('Critical User Path - Sanity Tests', () => {
     });
   });
 
+  test.describe('Settings Persistence', () => {
+    /**
+     * T026: Verify timeRange and resolution persist across ticker switches.
+     *
+     * Root cause (fixed):
+     * - When activeTicker changes, React remounts PriceSentimentChart
+     * - Resolution was persisted via sessionStorage, but timeRange was not
+     * - User selected 1Y + Day for GOOG, switched to AAPL, saw 1M + Day reset
+     *
+     * Fix: Add sessionStorage persistence for timeRange following same pattern as resolution.
+     */
+    test('should persist timeRange and resolution when switching tickers', async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+
+      // Step 1: Search and select GOOG
+      const searchInput = page.getByPlaceholder(/search tickers/i);
+      await searchInput.fill('GOOG');
+      await page.waitForTimeout(600);
+
+      const googSuggestion = page.getByRole('option', { name: /GOOG.*Alphabet.*Class C/i });
+      await expect(googSuggestion).toBeVisible({ timeout: 10000 });
+      await googSuggestion.click();
+
+      // Wait for chart to load
+      const chartContainer = page.locator(
+        '[role="img"][aria-label*="Price and sentiment chart"]'
+      );
+      await expect(chartContainer).toHaveAttribute(
+        'aria-label',
+        /[1-9]\d* price candles/,
+        { timeout: 15000 }
+      );
+
+      // Step 2: Set 1Y time range
+      const oneYearButton = page.getByRole('button', { name: '1Y time range' });
+      await expect(oneYearButton).toBeVisible();
+      await oneYearButton.click();
+      await page.waitForTimeout(600);
+
+      // Verify 1Y is selected
+      await expect(oneYearButton).toHaveAttribute('aria-pressed', 'true');
+
+      // Step 3: Set Day resolution
+      const dayResButton = page.getByRole('button', { name: 'Day resolution' });
+      await expect(dayResButton).toBeVisible();
+      await dayResButton.click();
+      await page.waitForTimeout(600);
+
+      // Verify Day is selected
+      await expect(dayResButton).toHaveAttribute('aria-pressed', 'true');
+
+      // Step 4: Now switch to AAPL ticker
+      await searchInput.clear();
+      await searchInput.fill('AAPL');
+      await page.waitForTimeout(600);
+
+      const aaplSuggestion = page.getByRole('option', { name: /AAPL/i });
+      await expect(aaplSuggestion).toBeVisible({ timeout: 10000 });
+      await aaplSuggestion.click();
+
+      // Wait for AAPL chart to load
+      await expect(chartContainer).toHaveAttribute(
+        'aria-label',
+        /AAPL.*[1-9]\d* price candles/,
+        { timeout: 15000 }
+      );
+
+      // Step 5: Verify 1Y and Day are STILL selected (persisted)
+      const oneYearButtonAfterSwitch = page.getByRole('button', { name: '1Y time range' });
+      const dayResButtonAfterSwitch = page.getByRole('button', { name: 'Day resolution' });
+
+      await expect(oneYearButtonAfterSwitch).toHaveAttribute('aria-pressed', 'true');
+      await expect(dayResButtonAfterSwitch).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    /**
+     * Verify intraday resolution loads sufficient data for the selected time range.
+     *
+     * Context (related to zoom fix):
+     * - VISIBLE_CANDLES logic limited 1h resolution ZOOM to 40 candles (~5-6 days)
+     * - User selected 1M + 1h but only saw last week of data (rest was off-screen)
+     * - Data WAS present (confirmed by zooming out)
+     * - Fix: Removed setVisibleLogicalRange() call for intraday, fitContent() now shows full range
+     *
+     * This test verifies:
+     * - Data is fetched correctly for 1M + 1h (>60 hourly candles)
+     * - Note: Cannot verify visible zoom level via Playwright (canvas-based chart)
+     * - Visual verification: Chart should show full month on initial load, not just 5-6 days
+     */
+    test('should load sufficient data for intraday resolution', async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+
+      // Search and select GOOG
+      const searchInput = page.getByPlaceholder(/search tickers/i);
+      await searchInput.fill('GOOG');
+      await page.waitForTimeout(600);
+
+      const suggestion = page.getByRole('option', { name: /GOOG.*Alphabet.*Class C/i });
+      await expect(suggestion).toBeVisible({ timeout: 10000 });
+      await suggestion.click();
+
+      const chartContainer = page.locator(
+        '[role="img"][aria-label*="Price and sentiment chart"]'
+      );
+      await expect(chartContainer).toHaveAttribute(
+        'aria-label',
+        /[1-9]\d* price candles/,
+        { timeout: 15000 }
+      );
+
+      // Set 1M time range
+      const oneMonthButton = page.getByRole('button', { name: '1M time range' });
+      await oneMonthButton.click();
+      await page.waitForTimeout(600);
+
+      // Set 1h resolution
+      const hourResButton = page.getByRole('button', { name: '1h resolution' });
+      await hourResButton.click();
+      await page.waitForTimeout(1000); // Allow time for data reload
+
+      // Wait for chart to update with hourly data
+      await expect(chartContainer).toHaveAttribute(
+        'aria-label',
+        /[1-9]\d* price candles/,
+        { timeout: 15000 }
+      );
+
+      // Get candle count - for 1M at 1h resolution, should have ~160 candles
+      // (20 trading days × 8 hours = 160 hourly candles)
+      const ariaLabel = await chartContainer.getAttribute('aria-label');
+      const candleMatch = ariaLabel?.match(/(\d+) price candles/);
+      expect(candleMatch).toBeTruthy();
+      const candleCount = parseInt(candleMatch![1], 10);
+
+      // Should have significantly more than 40 candles (the old VISIBLE_CANDLES limit)
+      // Relaxed threshold: at least 60 candles for 1M of hourly data
+      expect(candleCount).toBeGreaterThan(60);
+    });
+  });
+
   test.describe('Error Handling', () => {
     test('should handle search with no results gracefully', async ({
       page,
