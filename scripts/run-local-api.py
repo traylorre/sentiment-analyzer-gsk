@@ -127,7 +127,6 @@ def create_mock_tables():
     )
 
     # Create OHLC cache table (CACHE-001)
-    # Matches production schema from infrastructure/terraform/modules/dynamodb/main.tf
     dynamodb.create_table(
         TableName="local-ohlc-cache",
         KeySchema=[
