@@ -1,10 +1,11 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { LayoutDashboard, Settings2, Bell, Cog, LogOut, User } from 'lucide-react';
+import { LayoutDashboard, Settings2, Bell, Cog } from 'lucide-react';
 import { useViewStore, type ViewType } from '@/stores/view-store';
 import { useHaptic } from '@/hooks/use-haptic';
 import { cn } from '@/lib/utils';
+import { UserMenu } from '@/components/auth/user-menu';
 
 interface NavItem {
   view: ViewType;
@@ -21,14 +22,9 @@ const NAV_ITEMS: NavItem[] = [
 
 interface DesktopNavProps {
   className?: string;
-  onSignOut?: () => void;
-  user?: {
-    name: string;
-    email: string;
-  } | null;
 }
 
-export function DesktopNav({ className, onSignOut, user }: DesktopNavProps) {
+export function DesktopNav({ className }: DesktopNavProps) {
   const { currentView, setView } = useViewStore();
   const haptic = useHaptic();
 
@@ -101,34 +97,7 @@ export function DesktopNav({ className, onSignOut, user }: DesktopNavProps) {
 
       {/* User section */}
       <div className="px-3 py-4 border-t border-border">
-        {user ? (
-          <div className="flex items-center gap-3 px-3 py-2">
-            <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center">
-              <User className="w-4 h-4 text-muted-foreground" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-foreground truncate">{user.name}</p>
-              <p className="text-xs text-muted-foreground truncate">{user.email}</p>
-            </div>
-            {onSignOut && (
-              <button
-                onClick={onSignOut}
-                className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                aria-label="Sign out"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="flex items-center gap-3 px-3 py-2">
-            <div className="w-9 h-9 rounded-full bg-muted animate-pulse" />
-            <div className="flex-1 space-y-2">
-              <div className="h-3 w-24 bg-muted rounded animate-pulse" />
-              <div className="h-2 w-32 bg-muted rounded animate-pulse" />
-            </div>
-          </div>
-        )}
+        <UserMenu className="w-full justify-start" />
       </div>
     </aside>
   );
