@@ -412,6 +412,17 @@ def _read_from_dynamodb(...):
 
 ---
 
+## Clarifications
+
+### Session 2026-02-03
+- Q: Env var fallback policy for `_get_table_name()` when `OHLC_CACHE_TABLE` is not set? → A: Remove fallback, raise ValueError if env var missing (fail-fast)
+- Q: Resolution format mismatch - docstring shows "5m" but code passes "5"? → A: Use OHLCResolution enum values as-is ("5", "60", "D") - fix misleading docstring
+- Q: Distinguishing cache miss vs cache error? → A: Log at ERROR level for failures, add CloudWatch metric for cache errors, add alarm that fires once on non-zero then mutes for 1 hour
+- Q: Async/sync event loop blocking from sync DynamoDB calls in async endpoint? → A: Wrap sync DynamoDB calls in `asyncio.to_thread()` now
+- Q: Integration test to prevent regression of cache not being called? → A: Functional test - first request writes to mock DDB, second request reads from it (verify actual data round-trip)
+
+---
+
 ## 11. Critical Blind Spots (Principal Engineer Analysis)
 
 This section documents silent failure modes discovered during deep-dive analysis. These are not just "edge cases" but architectural gaps that could cause production issues without any visible error.
@@ -422,20 +433,47 @@ This section documents silent failure modes discovered during deep-dive analysis
 
 **Impact:** CI pipeline shows green; team believes caching works; users experience 500-2000ms latency on every request.
 
-**Mitigation:**
-1. Add integration test that verifies DynamoDB is actually called from `get_ohlc_data()`
-2. Test must fail if import statement is missing
-3. Test must fail if function call is commented out
+**Decision (Clarified 2026-02-03):** Functional test - first request writes to mock DDB, second request reads from it (verify actual data round-trip).
+
+**Required Fix:**
+Add integration test that verifies complete cache round-trip:
 
 ```python
 # tests/integration/test_ohlc_cache_integration.py
-def test_ohlc_endpoint_calls_dynamodb(mock_aws, test_client):
-    """Verify endpoint actually calls DynamoDB, not just that cache functions work."""
-    with patch('src.lambdas.shared.cache.ohlc_cache.get_cached_candles') as mock_get:
-        mock_get.return_value = OHLCCacheResult(cache_hit=False)
-        test_client.get("/api/v2/tickers/AAPL/ohlc?range=1M&resolution=D")
-        mock_get.assert_called_once()  # FAILS if import is missing
+@pytest.fixture
+def mock_tiingo_response():
+    """Mock Tiingo API to return known candles."""
+    return [OHLCCandle(date=date(2026, 1, 15), open=150.0, high=155.0, low=149.0, close=154.0, volume=1000000)]
+
+def test_ohlc_cache_round_trip(mock_aws, test_client, mock_tiingo_response, mocker):
+    """Verify first request writes to DDB, second request reads from DDB (not API)."""
+    # Mock Tiingo to return known data
+    mocker.patch.object(TiingoAdapter, 'get_ohlc', return_value=mock_tiingo_response)
+
+    # First request: should call Tiingo API and write to DDB
+    response1 = test_client.get("/api/v2/tickers/AAPL/ohlc?range=1W&resolution=D")
+    assert response1.status_code == 200
+    assert len(response1.json()["candles"]) == 1
+
+    # Clear in-memory cache to force DDB read
+    from src.lambdas.dashboard.ohlc import invalidate_ohlc_cache
+    invalidate_ohlc_cache("AAPL")
+
+    # Second request: should read from DDB (Tiingo not called again)
+    mocker.patch.object(TiingoAdapter, 'get_ohlc', side_effect=Exception("Should not be called"))
+    response2 = test_client.get("/api/v2/tickers/AAPL/ohlc?range=1W&resolution=D")
+    assert response2.status_code == 200
+    assert len(response2.json()["candles"]) == 1  # Data came from DDB cache
+
+    # Verify data integrity
+    assert response1.json()["candles"] == response2.json()["candles"]
 ```
+
+**Test guarantees:**
+1. Fails if write-through is not called (second request would hit exception)
+2. Fails if read-from-DDB is not called (second request would hit exception)
+3. Fails if data is corrupted in round-trip (candle comparison fails)
+4. Fails if cache key mismatch (second request wouldn't find first request's data)
 
 ### 11.2 Env Var Fallback Masks Misconfiguration
 
@@ -443,7 +481,9 @@ def test_ohlc_endpoint_calls_dynamodb(mock_aws, test_client):
 
 **Impact:** Query silently fails (caught as ClientError), logged as warning, gracefully degrades to API. No alarm fires.
 
-**Mitigation:**
+**Decision (Clarified 2026-02-03):** Remove fallback, raise ValueError if env var missing (fail-fast).
+
+**Required Fix:**
 1. REMOVE the fallback - if env var is not set, raise immediately
 2. Fail fast on Lambda cold start, not silently on first query
 
@@ -500,20 +540,34 @@ def _read_from_dynamodb(...):
 
 **Problem:** `get_ohlc_data()` is async. `get_cached_candles()` is sync (blocking). Sync call from async function blocks the event loop.
 
-**Impact:** Lambda latency increases subtly; blamed on "slow API" not "event loop blocking".
+**Impact:** Lambda latency increases subtly; blamed on "slow API" not "event loop blocking". DynamoDB cold connections can hit 100-200ms.
 
-**Mitigation:**
-1. Wrap sync DynamoDB calls in `asyncio.to_thread()` to avoid blocking
-2. Add latency tracing to identify blocking operations
+**Decision (Clarified 2026-02-03):** Wrap sync DynamoDB calls in `asyncio.to_thread()` now.
+
+**Required Fix:**
+1. Rename `_read_from_dynamodb()` to `_read_from_dynamodb_sync()`
+2. Create async wrapper `_read_from_dynamodb()` using `asyncio.to_thread()`
+3. Similarly wrap `_write_through_to_dynamodb()` for consistency
 
 ```python
 import asyncio
 
-async def _read_from_dynamodb_async(...):
+def _read_from_dynamodb_sync(...) -> list[PriceCandle] | None:
+    """Sync implementation - do not call directly from async code."""
+    # ... existing implementation ...
+
+async def _read_from_dynamodb(...) -> list[PriceCandle] | None:
     """Non-blocking DynamoDB cache read."""
     return await asyncio.to_thread(
         _read_from_dynamodb_sync,
         ticker, source, resolution, start_date, end_date
+    )
+
+async def _write_through_to_dynamodb(...) -> None:
+    """Non-blocking DynamoDB cache write."""
+    await asyncio.to_thread(
+        _write_through_to_dynamodb_sync,
+        ticker, source, resolution, ohlc_candles
     )
 ```
 
@@ -541,30 +595,16 @@ def candles_to_cached(candles: list, source: str, resolution: str) -> list[Cache
 
 ### 11.6 Resolution Format Mismatch
 
-**Problem:** Cache module uses resolution formats like `"5m"`, `"1h"`. OHLC endpoint uses `"5"`, `"60"`, `"D"`.
+**Problem:** Cache module docstring shows resolution formats like `"5m"`, `"1h"`. OHLC endpoint uses `"5"`, `"60"`, `"D"`.
 
-**Impact:** Cache write with `"5"`, cache read with `"5m"` → cache miss every time.
+**Impact:** Misleading documentation could cause future developers to introduce format mismatches.
 
-**Mitigation:**
-1. Normalize resolution format at module boundary
-2. Add mapping from OHLCResolution enum to cache resolution string
-3. Add unit test asserting format consistency
+**Decision (Clarified 2026-02-03):** Use OHLCResolution enum values as-is ("5", "60", "D") - fix misleading docstring in `ohlc_cache.py`.
 
-```python
-# Mapping from OHLCResolution enum value to cache format
-RESOLUTION_CACHE_FORMAT = {
-    "1": "1m",
-    "5": "5m",
-    "15": "15m",
-    "30": "30m",
-    "60": "1h",
-    "D": "D",
-}
-
-def _resolution_to_cache_format(resolution: str) -> str:
-    """Convert OHLC resolution to cache key format."""
-    return RESOLUTION_CACHE_FORMAT.get(resolution, resolution)
-```
+**Required Fix:**
+1. Update docstring in `ohlc_cache.py` line 8-9 from `"5m#2025-12-27T10:30:00Z"` to `"5#2025-12-27T10:30:00Z"`
+2. Verify current code already uses consistent format (it does - no mapping needed)
+3. Add unit test asserting format consistency between write and read
 
 ### 11.7 Graceful Degradation = Silent Failure
 
@@ -572,29 +612,39 @@ def _resolution_to_cache_format(resolution: str) -> str:
 
 **Impact:** Misconfiguration, permission issues, and bugs all look like "cache miss". No visibility into why cache isn't working.
 
-**Mitigation:**
-1. Distinguish between "cache miss" (no data) and "cache error" (query failed)
-2. Log ERROR for unexpected failures (not just WARNING)
-3. Add metric for cache errors (separate from misses)
+**Decision (Clarified 2026-02-03):** Log at ERROR level for failures, add CloudWatch metric, add alarm with 1-hour mute period.
+
+**Required Fix:**
+1. Change `logger.warning()` to `logger.error()` for DynamoDB query/write failures
+2. Add CloudWatch metric `OHLCCacheError` (Count) on each failure
+3. Add CloudWatch alarm:
+   - Metric: `OHLCCacheError > 0` in 1-minute period
+   - Action: SNS notification
+   - Treat missing data as: Not breaching
+   - Period: 1 minute, Evaluation periods: 1
+   - **Alarm suppression: 1 hour after first trigger** (prevents alert fatigue)
 
 ```python
-class CacheReadResult(Enum):
-    HIT = "hit"
-    MISS = "miss"
-    PARTIAL = "partial"
-    ERROR = "error"
-
-def _read_from_dynamodb(...) -> tuple[list[PriceCandle] | None, CacheReadResult]:
-    """Returns (candles, result_type) for observability."""
+# In _read_from_dynamodb() exception handler:
+except Exception as e:
+    logger.error(  # Changed from warning
+        "DynamoDB cache read failed, falling back to API",
+        extra=get_safe_error_info(e),
+    )
+    # Emit CloudWatch metric for alerting
     try:
-        result = get_cached_candles(...)
-        if not result.cache_hit:
-            return None, CacheReadResult.MISS
-        if len(price_candles) < expected * 0.8:
-            return None, CacheReadResult.PARTIAL
-        return price_candles, CacheReadResult.HIT
+        cloudwatch = boto3.client('cloudwatch')
+        cloudwatch.put_metric_data(
+            Namespace='SentimentAnalyzer/OHLCCache',
+            MetricData=[{
+                'MetricName': 'CacheError',
+                'Value': 1,
+                'Unit': 'Count',
+            }]
+        )
     except Exception:
-        return None, CacheReadResult.ERROR  # Distinguishable from MISS
+        pass  # Metric emission should not fail the request
+    return None
 ```
 
 ---
