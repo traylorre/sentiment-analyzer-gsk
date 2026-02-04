@@ -75,6 +75,7 @@ os.environ.setdefault("ENVIRONMENT", "local")
 os.environ.setdefault("USERS_TABLE", "local-users")
 os.environ.setdefault("SENTIMENTS_TABLE", "local-sentiments")
 os.environ.setdefault("CHAOS_EXPERIMENTS_TABLE", "local-chaos")
+os.environ.setdefault("OHLC_CACHE_TABLE", "local-ohlc-cache")  # CACHE-001
 os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
 os.environ.setdefault("AWS_REGION", "us-east-1")
 os.environ.setdefault("CLOUD_REGION", "us-east-1")
@@ -125,7 +126,24 @@ def create_mock_tables():
         BillingMode="PAY_PER_REQUEST",
     )
 
-    logger.info("Created mock DynamoDB tables")
+    # Create OHLC cache table (CACHE-001)
+    # Matches production schema from infrastructure/terraform/modules/dynamodb/main.tf
+    dynamodb.create_table(
+        TableName="local-ohlc-cache",
+        KeySchema=[
+            {"AttributeName": "PK", "KeyType": "HASH"},
+            {"AttributeName": "SK", "KeyType": "RANGE"},
+        ],
+        AttributeDefinitions=[
+            {"AttributeName": "PK", "AttributeType": "S"},
+            {"AttributeName": "SK", "AttributeType": "S"},
+        ],
+        BillingMode="PAY_PER_REQUEST",
+    )
+
+    logger.info(
+        "Created mock DynamoDB tables: local-users, local-sentiments, local-ohlc-cache"
+    )
     return mock
 
 

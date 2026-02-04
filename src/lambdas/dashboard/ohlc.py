@@ -24,6 +24,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from src.lambdas.shared.adapters.finnhub import FinnhubAdapter
 from src.lambdas.shared.adapters.tiingo import TiingoAdapter
+from src.lambdas.shared.cache.ohlc_cache import (
+    candles_to_cached,
+    get_cached_candles,
+    put_cached_candles,
+)
 from src.lambdas.shared.logging_utils import get_safe_error_info
 from src.lambdas.shared.middleware import extract_auth_context
 from src.lambdas.shared.models import (
@@ -69,33 +74,37 @@ def _get_ohlc_cache_key(
     ticker: str,
     resolution: str,
     time_range: str,
-    start_date: date | None = None,
-    end_date: date | None = None,
+    start_date: date,
+    end_date: date,
 ) -> str:
-    """Generate cache key for OHLC request.
+    """Generate cache key for OHLC request including end_date.
 
-    Feature 1078: Use time_range (e.g., "1M", "1W") for predefined ranges instead
-    of actual dates. This ensures cache hits when users switch resolutions, since
-    predefined ranges are relative to "today" and would otherwise generate unique
-    keys each day.
+    Cache Remediation (CACHE-001): Always include end_date in cache key to prevent
+    stale data across days. Previously, predefined ranges used only the range name,
+    which caused the same cache key on different days (e.g., "1W" on Monday vs Friday
+    would return Monday's data on Friday).
 
     Args:
         ticker: Stock ticker symbol
         resolution: OHLC resolution (1, 5, 15, 30, 60, D)
         time_range: Time range string ("1W", "1M", "3M", "6M", "1Y", or "custom")
-        start_date: Only used for custom ranges
-        end_date: Only used for custom ranges
+        start_date: Range start date (used for custom ranges)
+        end_date: Range end date (used for day-anchoring all ranges)
 
     Returns:
-        Cache key string
+        Cache key string with end_date included
     """
-    if time_range == "custom" and start_date and end_date:
-        # Custom ranges use actual dates (user provided specific dates)
-        return f"ohlc:{ticker.upper()}:{resolution}:custom:{start_date.isoformat()}:{end_date.isoformat()}"
+    ticker_upper = ticker.upper()
+    date_anchor = end_date.isoformat()
+
+    if time_range == "custom":
+        # Custom ranges include both dates for full specificity
+        return f"ohlc:{ticker_upper}:{resolution}:custom:{start_date.isoformat()}:{date_anchor}"
     else:
-        # Predefined ranges use the range name, not dates
-        # This ensures cache hits across requests within the same day
-        return f"ohlc:{ticker.upper()}:{resolution}:{time_range}"
+        # Predefined ranges include end_date to prevent cross-day staleness
+        # Same day + same range + same resolution = cache hit (correct)
+        # Different day + same range = different key (prevents stale data)
+        return f"ohlc:{ticker_upper}:{resolution}:{time_range}:{date_anchor}"
 
 
 def _get_cached_ohlc(cache_key: str, resolution: str) -> dict | None:
@@ -161,6 +170,248 @@ def invalidate_ohlc_cache(ticker: str | None = None) -> int:
     for key in keys_to_remove:
         del _ohlc_cache[key]
     return len(keys_to_remove)
+
+
+# ============================================================================
+# DynamoDB Persistent Cache (Feature 1087 / CACHE-001)
+# ============================================================================
+# Write-through caching: After fetching from Tiingo, persist to DynamoDB.
+# This survives Lambda cold starts and reduces external API calls.
+# ============================================================================
+
+
+def _write_through_to_dynamodb(
+    ticker: str,
+    source: str,
+    resolution: str,
+    ohlc_candles: list,
+) -> None:
+    """Persist OHLC candles to DynamoDB for cross-invocation caching.
+
+    Fire-and-forget: errors are logged but don't fail the request.
+    Historical data is immutable, so overwrites are safe.
+
+    Args:
+        ticker: Stock symbol (e.g., "AAPL")
+        source: Data provider ("tiingo" or "finnhub")
+        resolution: Candle resolution ("D", "1", "5", etc.)
+        ohlc_candles: List of OHLCCandle from adapter
+    """
+    if not ohlc_candles:
+        logger.debug("No candles to cache", extra={"ticker": ticker})
+        return
+
+    try:
+        # Convert adapter candles to cache format
+        cached_candles = candles_to_cached(ohlc_candles, source, resolution)
+
+        if not cached_candles:
+            logger.debug(
+                "Candle conversion produced no results",
+                extra={"ticker": ticker, "input_count": len(ohlc_candles)},
+            )
+            return
+
+        # Write to DynamoDB (batched, max 25 per request)
+        written = put_cached_candles(
+            ticker=ticker,
+            source=source,
+            resolution=resolution,
+            candles=cached_candles,
+        )
+
+        logger.info(
+            "OHLC write-through complete",
+            extra={
+                "ticker": ticker,
+                "source": source,
+                "resolution": resolution,
+                "candles_written": written,
+                "candles_input": len(ohlc_candles),
+            },
+        )
+    except Exception as e:
+        # Log but don't fail - write-through is best-effort
+        logger.warning(
+            "OHLC write-through failed",
+            extra=get_safe_error_info(e),
+        )
+
+
+def _read_from_dynamodb(
+    ticker: str,
+    source: str,
+    resolution: OHLCResolution,
+    start_date: date,
+    end_date: date,
+) -> list[PriceCandle] | None:
+    """Query DynamoDB for cached OHLC candles.
+
+    Returns None if:
+    - No data found
+    - Query fails (graceful degradation to API)
+    - Partial data (less than 80% expected candles)
+
+    Args:
+        ticker: Stock symbol
+        source: Data provider
+        resolution: Candle resolution
+        start_date: Range start
+        end_date: Range end
+
+    Returns:
+        List of PriceCandle if cache hit, None otherwise
+    """
+    try:
+        # Import here to avoid potential import timing issues
+        from datetime import UTC
+        from datetime import time as dt_time
+
+        # Convert dates to datetime for cache query
+        start_time = datetime.combine(start_date, dt_time.min, tzinfo=UTC)
+        end_time = datetime.combine(end_date, dt_time.max, tzinfo=UTC)
+
+        result = get_cached_candles(
+            ticker=ticker,
+            source=source,
+            resolution=resolution.value,
+            start_time=start_time,
+            end_time=end_time,
+        )
+
+        if not result.cache_hit or not result.candles:
+            logger.debug(
+                "DynamoDB cache miss",
+                extra={"ticker": ticker, "resolution": resolution.value},
+            )
+            return None
+
+        # Convert CachedCandle to PriceCandle
+        price_candles = [
+            PriceCandle.from_cached_candle(c, resolution) for c in result.candles
+        ]
+
+        # Validate we have reasonable coverage (80% threshold)
+        expected_candles = _estimate_expected_candles(start_date, end_date, resolution)
+        if len(price_candles) < expected_candles * 0.8:
+            # Less than 80% coverage - treat as miss, fetch fresh
+            logger.info(
+                "DynamoDB cache partial hit, fetching fresh",
+                extra={
+                    "ticker": ticker,
+                    "found": len(price_candles),
+                    "expected": expected_candles,
+                },
+            )
+            return None
+
+        logger.info(
+            "OHLC cache hit (DynamoDB)",
+            extra={
+                "ticker": ticker,
+                "source": source,
+                "resolution": resolution.value,
+                "candle_count": len(price_candles),
+            },
+        )
+        return price_candles
+
+    except Exception as e:
+        # Graceful degradation - log and fall through to API
+        logger.warning(
+            "DynamoDB cache read failed, falling back to API",
+            extra=get_safe_error_info(e),
+        )
+        return None
+
+
+def _estimate_expected_candles(
+    start_date: date,
+    end_date: date,
+    resolution: OHLCResolution,
+) -> int:
+    """Estimate expected candle count for cache validation.
+
+    Used to detect partial cache hits (missing data).
+    Returns conservative estimates to avoid false negatives.
+
+    Args:
+        start_date: Range start
+        end_date: Range end
+        resolution: Candle resolution
+
+    Returns:
+        Estimated number of candles expected
+    """
+    days = (end_date - start_date).days + 1
+
+    if resolution == OHLCResolution.DAILY:
+        # ~252 trading days/year, ~5 per week
+        return int(days * 5 / 7)
+    elif resolution == OHLCResolution.ONE_HOUR:
+        # 6.5 market hours/day, 5 days/week
+        return int(days * 5 / 7 * 7)
+    else:
+        # Intraday: estimate based on resolution
+        candles_per_hour = {
+            OHLCResolution.ONE_MINUTE: 60,
+            OHLCResolution.FIVE_MINUTES: 12,
+            OHLCResolution.FIFTEEN_MINUTES: 4,
+            OHLCResolution.THIRTY_MINUTES: 2,
+        }
+        per_hour = candles_per_hour.get(resolution, 12)
+        return int(days * 5 / 7 * 6.5 * per_hour)
+
+
+def _build_response_from_cache(
+    ticker: str,
+    candles: list[PriceCandle],
+    resolution: OHLCResolution,
+    time_range_str: str,
+    source: str = "tiingo",
+) -> OHLCResponse:
+    """Build OHLCResponse from cached candles.
+
+    Args:
+        ticker: Stock symbol
+        candles: List of PriceCandle from cache
+        resolution: Original resolution
+        time_range_str: Time range string for response
+        source: Original data source
+
+    Returns:
+        OHLCResponse built from cached data
+    """
+    # Sort by date
+    candles.sort(key=lambda c: c.date)
+
+    # Extract dates, handling datetime vs date types
+    first_candle_date = candles[0].date
+    last_candle_date = candles[-1].date
+    start_date_value = (
+        first_candle_date.date()
+        if isinstance(first_candle_date, datetime)
+        else first_candle_date
+    )
+    end_date_value = (
+        last_candle_date.date()
+        if isinstance(last_candle_date, datetime)
+        else last_candle_date
+    )
+
+    return OHLCResponse(
+        ticker=ticker,
+        candles=candles,
+        time_range=time_range_str,
+        start_date=start_date_value,
+        end_date=end_date_value,
+        count=len(candles),
+        source=source,
+        cache_expires_at=get_cache_expiration(),
+        resolution=resolution.value,
+        resolution_fallback=False,
+        fallback_message=None,
+    )
 
 
 # Create router
@@ -344,11 +595,38 @@ async def get_ohlc_data(
             .replace("\r", " ")[:200]
         )
         logger.info(
-            "OHLC cache hit",
+            "OHLC cache hit (in-memory)",
             extra={"cache_key": safe_cache_key, "stats": get_ohlc_cache_stats()},
         )
         # Return cached OHLCResponse directly
         return OHLCResponse(**cached_response)
+
+    # =========================================================================
+    # Cache check #2: DynamoDB persistent cache (Feature 1087 / CACHE-001)
+    # Survives Lambda cold starts, reduces external API calls
+    # =========================================================================
+    ddb_candles = _read_from_dynamodb(
+        ticker=ticker,
+        source="tiingo",  # Primary source
+        resolution=resolution,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+    if ddb_candles:
+        # Build response from DynamoDB data
+        response = _build_response_from_cache(
+            ticker=ticker,
+            candles=ddb_candles,
+            resolution=resolution,
+            time_range_str=time_range_str,
+            source="tiingo",
+        )
+
+        # Populate in-memory cache for subsequent requests
+        _set_cached_ohlc(cache_key, response.model_dump(mode="json"))
+
+        return response
 
     # Track fallback state
     resolution_fallback = False
@@ -369,6 +647,13 @@ async def get_ohlc_data(
                 candles = [
                     PriceCandle.from_ohlc_candle(c, resolution) for c in ohlc_candles
                 ]
+                # Write-through to DynamoDB (CACHE-001)
+                _write_through_to_dynamodb(
+                    ticker=ticker,
+                    source=source,
+                    resolution=resolution.value,
+                    ohlc_candles=ohlc_candles,
+                )
         except Exception as e:
             logger.warning(
                 "Tiingo daily OHLC fetch failed",
@@ -384,6 +669,13 @@ async def get_ohlc_data(
                 candles = [
                     PriceCandle.from_ohlc_candle(c, resolution) for c in ohlc_candles
                 ]
+                # Write-through to DynamoDB (CACHE-001)
+                _write_through_to_dynamodb(
+                    ticker=ticker,
+                    source=source,
+                    resolution=resolution.value,
+                    ohlc_candles=ohlc_candles,
+                )
         except Exception as e:
             logger.warning(
                 "Tiingo IEX intraday fetch failed",
@@ -410,6 +702,13 @@ async def get_ohlc_data(
                     PriceCandle.from_ohlc_candle(c, actual_resolution)
                     for c in ohlc_candles
                 ]
+                # Write-through to DynamoDB (CACHE-001)
+                _write_through_to_dynamodb(
+                    ticker=ticker,
+                    source=source,
+                    resolution=actual_resolution.value,
+                    ohlc_candles=ohlc_candles,
+                )
         except Exception as e:
             logger.warning(
                 "Tiingo daily fallback failed",
