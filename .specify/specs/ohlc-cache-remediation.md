@@ -169,7 +169,7 @@ def _read_from_dynamodb(
     Returns None if:
     - No data found
     - Query fails (graceful degradation)
-    - Partial data (<80% coverage)
+    - Incomplete data (<100% expected candles)
     """
     try:
         start_time = datetime.combine(start_date, dt_time.min, tzinfo=UTC)
@@ -193,11 +193,11 @@ def _read_from_dynamodb(
             for c in result.candles
         ]
 
-        # Validate coverage (80% threshold)
+        # Validate coverage (100% required - no partial hits)
         expected = _estimate_expected_candles(start_date, end_date, resolution)
-        if len(price_candles) < expected * 0.8:
+        if len(price_candles) < expected:
             logger.info(
-                "DynamoDB cache partial hit, fetching fresh",
+                "DynamoDB cache incomplete, fetching fresh",
                 extra={"found": len(price_candles), "expected": expected},
             )
             return None
@@ -298,9 +298,9 @@ Request: GET /api/v2/tickers/AAPL/ohlc?range=1M&resolution=D
 
 ## 6. Edge Cases & Error Handling
 
-### 6.1 Partial Cache Hit (<80% Coverage)
-**Behavior:** Treat as cache miss, fetch fresh from Tiingo
-**Rationale:** Partial data is confusing; users expect complete ranges
+### 6.1 Incomplete Cache Data
+**Behavior:** Treat as cache miss if cache has fewer candles than expected, fetch fresh from Tiingo
+**Rationale:** Users expect complete data; no "good enough" shortcuts (clarified 2026-02-03)
 
 ### 6.2 DynamoDB Query Failure
 **Behavior:** Log warning, fall through to Tiingo API
@@ -347,7 +347,7 @@ def _read_from_dynamodb(...):
 | `test_write_through_failure_does_not_raise` | Write failure doesn't fail request |
 | `test_read_returns_candles_on_hit` | Cache hit returns converted candles |
 | `test_read_returns_none_on_miss` | Cache miss returns None |
-| `test_read_returns_none_on_partial_hit` | <80% coverage treated as miss |
+| `test_read_returns_none_on_incomplete_data` | <100% expected candles treated as miss |
 | `test_from_cached_candle_daily` | Daily candles convert timestamp to date |
 | `test_from_cached_candle_intraday` | Intraday candles preserve datetime |
 | `test_round_trip_preserves_data` | OHLCCandle → CachedCandle → PriceCandle equality |
@@ -420,6 +420,20 @@ def _read_from_dynamodb(...):
 - Q: Distinguishing cache miss vs cache error? → A: Log at ERROR level for failures, add CloudWatch metric for cache errors, add alarm that fires once on non-zero then mutes for 1 hour
 - Q: Async/sync event loop blocking from sync DynamoDB calls in async endpoint? → A: Wrap sync DynamoDB calls in `asyncio.to_thread()` now
 - Q: Integration test to prevent regression of cache not being called? → A: Functional test - first request writes to mock DDB, second request reads from it (verify actual data round-trip)
+
+### Session 2026-02-03 (Round 2)
+- Q: Volume=None from Tiingo IEX crashes cache write with int(None) - how to handle? → A: Fix at adapter layer - Tiingo adapter should return volume=0 when unavailable, not None. Normalize data at system boundary.
+- Q: DynamoDB query pagination not handled - silent truncation if >1MB? → A: Add warning log if LastEvaluatedKey present, but don't paginate (detect before it bites)
+- Q: Estimate function has math error - line 353 multiplies by 7 instead of 6.5? → A: Fix math to `return int(days * 5 / 7 * 6.5)` to match comment
+- Q: 80% coverage threshold allows serving incomplete/stale data - acceptable? → A: Remove 80% threshold entirely - require 100% expected candles for cache hit. User always gets complete data.
+- Q: Three cache layers with separate invalidation - risk of partial invalidation bugs? → A: Add unified `invalidate_all_caches(ticker)` that clears all layers. Remove/replace obsolete partial invalidate functions - ONE function clears ALL layers.
+
+### Session 2026-02-03 (Round 3)
+- Q: Unprocessed BatchWriteItems logged but NOT retried - data silently lost? → A: Add retry loop with exponential backoff (max 3 retries) + CloudWatch metric for unprocessed items
+- Q: DynamoDB client created fresh every call - connection overhead? → A: Cache client at module level (singleton pattern) + audit ALL cache clients across codebase are singletons
+- Q: Finnhub adapter also has volume=None bug (line 378) - fix for consistency? → A: Fix Finnhub adapter to return volume=0 when unavailable (same as Tiingo fix)
+- Q: No circuit breaker for DynamoDB failures - latency penalty during outages? → A: Add simple circuit breaker (skip DDB for 60s after 3 consecutive failures) + CloudWatch metric that triggers alarm then mutes for 1 hour
+- Q: No production verification of cache effectiveness - mocked tests don't catch deployment issues? → A: Add post-deployment smoke test that fetches ticker twice and verifies cache hit in logs
 
 ---
 
@@ -645,6 +659,418 @@ except Exception as e:
     except Exception:
         pass  # Metric emission should not fail the request
     return None
+```
+
+### 11.8 DynamoDB Query Pagination Not Handled
+
+**Problem:** `get_cached_candles()` performs DynamoDB Query but doesn't check for `LastEvaluatedKey`. If results exceed 1MB, remaining data is silently lost.
+
+**Impact:** Currently safe (max ~429KB for 1-month 1-minute data), but silent truncation if data grows.
+
+**Decision (Clarified 2026-02-03):** Add warning log if `LastEvaluatedKey` present, but don't implement full pagination (detect before it bites).
+
+**Required Fix:**
+Add after line 185 in `ohlc_cache.py`:
+```python
+response = client.query(...)
+
+# Detect pagination (would indicate silent data truncation)
+if response.get("LastEvaluatedKey"):
+    logger.error(
+        "DynamoDB query returned paginated results - data truncated!",
+        extra={
+            "ticker": ticker,
+            "source": source,
+            "resolution": resolution,
+            "items_returned": len(response.get("Items", [])),
+        },
+    )
+    # Emit CloudWatch metric for alerting
+    try:
+        cloudwatch = boto3.client('cloudwatch')
+        cloudwatch.put_metric_data(
+            Namespace='SentimentAnalyzer/OHLCCache',
+            MetricData=[{
+                'MetricName': 'CachePaginationTruncation',
+                'Value': 1,
+                'Unit': 'Count',
+            }]
+        )
+    except Exception:
+        pass
+```
+
+### 11.9 Estimate Function Has Math Error
+
+**Problem:** `_estimate_expected_candles()` line 353 has incorrect math:
+```python
+return int(days * 5 / 7 * 7)  # BUG: equals days * 5, not days * 5/7 * 6.5
+```
+
+**Impact:** Overestimates hourly candles by ~8%, causing valid cache hits to be rejected as "partial" (<80% coverage).
+
+**Decision (Clarified 2026-02-03):** Fix math to match documented intent.
+
+**Required Fix:**
+Update `src/lambdas/dashboard/ohlc.py` line 353:
+```python
+# Before (broken)
+return int(days * 5 / 7 * 7)
+
+# After (fixed)
+return int(days * 5 / 7 * 6.5)
+```
+
+### 11.10 80% Coverage Threshold Serves Incomplete Data
+
+**Problem:** The 80% coverage threshold in `_read_from_dynamodb()` allows cache hits when up to 20% of data is missing. This is a "good enough" shortcut that can serve stale/incomplete data.
+
+**Impact:** User may see gaps or miss the most recent candles (which are often the most valuable).
+
+**Decision (Clarified 2026-02-03):** Remove 80% threshold entirely - require 100% expected candles for cache hit. User always gets complete data.
+
+**Required Fix:**
+Update `src/lambdas/dashboard/ohlc.py` `_read_from_dynamodb()`:
+```python
+# Before (80% threshold)
+if len(price_candles) < expected * 0.8:
+    logger.info("DynamoDB cache partial hit, fetching fresh", ...)
+    return None
+
+# After (100% threshold)
+if len(price_candles) < expected:
+    logger.info("DynamoDB cache incomplete, fetching fresh", ...)
+    return None
+```
+
+**Also update:**
+- Section 4.3 code example (change 0.8 to 1.0)
+- Section 6.1 description (update "80%" references)
+- Test `test_read_returns_none_on_partial_hit` (update threshold)
+
+### 11.11 Three-Layer Cache with Partial Invalidation
+
+**Problem:** Three caching layers exist:
+1. Tiingo adapter in-memory cache (5 min TTL)
+2. OHLC response in-memory cache (`_ohlc_cache`)
+3. DynamoDB persistent cache (new)
+
+Current `invalidate_ohlc_cache()` only clears layer 2. Callers might think they've invalidated all caches but layer 1 still serves stale data.
+
+**Impact:** Subtle bugs where cache appears invalidated but stale data is still served. Integration tests may pass incorrectly.
+
+**Decision (Clarified 2026-02-03):** Add unified `invalidate_all_caches(ticker)` that clears all layers. Remove/replace obsolete partial invalidate functions - ONE function clears ALL layers.
+
+**Required Fix:**
+1. Create `src/lambdas/shared/cache/cache_manager.py`:
+```python
+"""Unified cache management for OHLC data."""
+
+from src.lambdas.shared.adapters.tiingo import invalidate_tiingo_cache
+from src.lambdas.dashboard.ohlc import _ohlc_cache
+
+def invalidate_all_caches(ticker: str | None = None) -> dict[str, int]:
+    """Invalidate ALL cache layers for a ticker.
+
+    Args:
+        ticker: Stock symbol, or None to clear all entries
+
+    Returns:
+        Dict with count of invalidated entries per layer
+    """
+    results = {}
+
+    # Layer 1: Tiingo adapter cache
+    results["tiingo_adapter"] = invalidate_tiingo_cache(ticker)
+
+    # Layer 2: OHLC response cache
+    results["ohlc_response"] = _invalidate_ohlc_response_cache(ticker)
+
+    # Layer 3: DynamoDB (optional - usually not needed, data is immutable)
+    # Don't delete from DDB by default - historical data doesn't go stale
+
+    return results
+```
+
+2. Remove or deprecate `invalidate_ohlc_cache()` from `ohlc.py` - replace all usages with `invalidate_all_caches()`
+
+3. Add `invalidate_tiingo_cache()` to Tiingo adapter if not exists
+
+### 11.12 Unprocessed BatchWriteItems Silently Lost
+
+**Problem:** `put_cached_candles()` line 308-313 comment says "Retry unprocessed items" but NO RETRY actually happens. Unprocessed items are logged and then silently lost.
+
+**Impact:** Under DynamoDB throttling, cache writes partially fail. Data is lost without alerting.
+
+**Decision (Clarified 2026-02-03):** Add retry loop with exponential backoff (max 3 retries) + CloudWatch metric for unprocessed items.
+
+**Required Fix:**
+Update `src/lambdas/shared/cache/ohlc_cache.py` `put_cached_candles()`:
+```python
+import time
+
+# Inside the batch loop:
+for i in range(0, len(write_requests), 25):
+    batch = write_requests[i : i + 25]
+    unprocessed = batch
+    retries = 0
+    max_retries = 3
+
+    while unprocessed and retries < max_retries:
+        response = client.batch_write_item(
+            RequestItems={table_name: unprocessed if retries > 0 else batch},
+        )
+        unprocessed = response.get("UnprocessedItems", {}).get(table_name, [])
+
+        if unprocessed:
+            retries += 1
+            if retries < max_retries:
+                # Exponential backoff: 100ms, 200ms, 400ms
+                time.sleep(0.1 * (2 ** (retries - 1)))
+
+    written += len(batch) - len(unprocessed)
+
+    if unprocessed:
+        logger.error(
+            "OHLC cache writes failed after retries",
+            extra={"count": len(unprocessed), "retries": max_retries},
+        )
+        # Emit CloudWatch metric
+        try:
+            cloudwatch = boto3.client('cloudwatch')
+            cloudwatch.put_metric_data(
+                Namespace='SentimentAnalyzer/OHLCCache',
+                MetricData=[{
+                    'MetricName': 'UnprocessedWriteItems',
+                    'Value': len(unprocessed),
+                    'Unit': 'Count',
+                }]
+            )
+        except Exception:
+            pass
+```
+
+### 11.13 DynamoDB Client Created Fresh Every Call
+
+**Problem:** `_get_dynamodb_client()` creates a new boto3 client on every call, adding ~50-100ms connection overhead per operation.
+
+**Impact:** Cache operations that should be fast (~20ms) become slow (~70-120ms), negating performance benefits.
+
+**Decision (Clarified 2026-02-03):** Cache client at module level (singleton pattern) + audit ALL cache clients across codebase.
+
+**Audit Findings (boto3 client patterns in codebase):**
+
+| Pattern | Files | Status |
+|---------|-------|--------|
+| Singleton (good) | `chaos_injection.py`, `chaos.py`, `analysis/handler.py` | ✓ |
+| Fresh each call (bad) | `ohlc_cache.py`, `ticker_cache.py`, `sse_streaming/config.py`, `auth.py` | FIX |
+| Dependency injection (good) | `notification.py`, `metrics.py` | ✓ |
+
+**Required Fix for ohlc_cache.py:**
+```python
+# Module-level singleton
+_dynamodb_client = None
+
+def _get_dynamodb_client():
+    """Get or create DynamoDB client (singleton)."""
+    global _dynamodb_client
+    if _dynamodb_client is None:
+        region = os.environ.get("AWS_REGION") or os.environ.get(
+            "AWS_DEFAULT_REGION", "us-east-1"
+        )
+        _dynamodb_client = boto3.client("dynamodb", region_name=region)
+    return _dynamodb_client
+```
+
+**Follow-up task:** Audit and fix other fresh-client patterns in `ticker_cache.py`, `sse_streaming/config.py`, `auth.py`, etc.
+
+### 11.14 Volume=None Crashes Cache Write for Intraday Data
+
+**Problem:** `candles_to_cached()` line 374 calls `int(getattr(candle, "volume", 0))`. Both Tiingo IEX and Finnhub can return `volume=None`. `int(None)` raises TypeError.
+
+**Affected Adapters:**
+- `tiingo.py` line 446: `volume=None,  # IEX doesn't include volume`
+- `finnhub.py` line 378: `volume=int(volumes[i]) if i < len(volumes) else None`
+
+**Impact:** Cache writes silently fail for intraday data from either adapter.
+
+**Decision (Clarified 2026-02-03):** Fix at adapter layer - ALL adapters should return `volume=0` when unavailable, not `None`. Normalize data at system boundary.
+
+**Required Fix:**
+1. Update `src/lambdas/shared/adapters/tiingo.py` line 446:
+   ```python
+   # Before (broken)
+   volume=None,  # IEX doesn't include volume in resampled data
+
+   # After (fixed)
+   volume=0,  # IEX doesn't include volume in resampled data
+   ```
+
+2. Update `src/lambdas/shared/adapters/finnhub.py` line 378:
+   ```python
+   # Before (broken)
+   volume=int(volumes[i]) if i < len(volumes) else None,
+
+   # After (fixed)
+   volume=int(volumes[i]) if i < len(volumes) else 0,
+   ```
+
+3. Add defensive check in `candles_to_cached()` as belt-and-suspenders:
+   ```python
+   volume=int(getattr(candle, "volume", 0) or 0),
+   ```
+
+### 11.15 No Production Verification of Cache Effectiveness
+
+**Problem:** Integration tests use moto (mocked DynamoDB), not real AWS. Deployments could fail due to IAM permissions, missing tables, or network issues that mocked tests don't catch.
+
+**Impact:** Cache could be broken in production while all tests pass green.
+
+**Decision (Clarified 2026-02-03):** Add post-deployment smoke test that fetches ticker twice and verifies cache hit in logs.
+
+**Required Fix:**
+Add `scripts/smoke-test-cache.py`:
+```python
+#!/usr/bin/env python3
+"""Post-deployment smoke test for OHLC cache.
+
+Run after deployment to verify cache is working in production.
+Usage: python scripts/smoke-test-cache.py --env preprod
+"""
+import argparse
+import json
+import subprocess
+import time
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--env", required=True, choices=["dev", "preprod", "prod"])
+    args = parser.parse_args()
+
+    api_url = f"https://api.{args.env}.sentiment-analyzer.example.com"
+    ticker = "AAPL"
+    endpoint = f"{api_url}/api/v2/tickers/{ticker}/ohlc?range=1W&resolution=D"
+
+    print(f"Testing cache on {args.env}...")
+
+    # Request 1: Should write to DynamoDB cache
+    print(f"Request 1: Fetching {ticker}...")
+    result1 = subprocess.run(
+        ["curl", "-s", "-w", "%{http_code}", endpoint],
+        capture_output=True, text=True
+    )
+    assert result1.returncode == 0, "Request 1 failed"
+
+    # Wait for write-through to complete
+    time.sleep(2)
+
+    # Request 2: Should read from DynamoDB cache
+    print(f"Request 2: Fetching {ticker} again...")
+    result2 = subprocess.run(
+        ["curl", "-s", "-w", "%{http_code}", endpoint],
+        capture_output=True, text=True
+    )
+    assert result2.returncode == 0, "Request 2 failed"
+
+    # Verify cache hit in CloudWatch logs
+    print("Checking CloudWatch logs for cache hit...")
+    log_check = subprocess.run(
+        [
+            "aws", "logs", "filter-log-events",
+            "--log-group-name", f"/aws/lambda/{args.env}-dashboard",
+            "--filter-pattern", '"OHLC cache hit (DynamoDB)"',
+            "--start-time", str(int((time.time() - 60) * 1000)),
+        ],
+        capture_output=True, text=True
+    )
+
+    if "OHLC cache hit (DynamoDB)" in log_check.stdout:
+        print("✅ PASS: Cache hit detected in logs")
+    else:
+        print("❌ FAIL: No cache hit in logs - cache may not be working")
+        exit(1)
+
+if __name__ == "__main__":
+    main()
+```
+
+**Integration with CI/CD:**
+Add to deployment pipeline after `terraform apply`:
+```yaml
+- name: Smoke test cache
+  run: python scripts/smoke-test-cache.py --env ${{ env.ENVIRONMENT }}
+```
+
+### 11.16 No Circuit Breaker for DynamoDB Failures
+
+**Problem:** If DynamoDB is unavailable, every request attempts read + write, adding ~100-200ms latency with no mechanism to skip failing operations.
+
+**Impact:** During DynamoDB outages, all OHLC requests are slower even though graceful degradation works.
+
+**Decision (Clarified 2026-02-03):** Add simple circuit breaker (skip DDB for 60s after 3 consecutive failures) + CloudWatch metric with alarm (1-hour mute).
+
+**Required Fix:**
+Add to `src/lambdas/shared/cache/ohlc_cache.py`:
+```python
+import time
+
+# Circuit breaker state (module-level)
+_circuit_breaker = {
+    "failures": 0,
+    "open_until": 0,  # Unix timestamp when circuit closes
+    "threshold": 3,   # Failures before opening
+    "timeout": 60,    # Seconds to keep circuit open
+}
+
+def _is_circuit_open() -> bool:
+    """Check if circuit breaker is open (skip DynamoDB)."""
+    if _circuit_breaker["open_until"] > time.time():
+        return True
+    return False
+
+def _record_failure():
+    """Record a DynamoDB failure, potentially opening circuit."""
+    _circuit_breaker["failures"] += 1
+    if _circuit_breaker["failures"] >= _circuit_breaker["threshold"]:
+        _circuit_breaker["open_until"] = time.time() + _circuit_breaker["timeout"]
+        _circuit_breaker["failures"] = 0
+        logger.error(
+            "DynamoDB circuit breaker OPEN - skipping cache for 60s",
+            extra={"timeout": _circuit_breaker["timeout"]},
+        )
+        # Emit CloudWatch metric for alerting
+        try:
+            cloudwatch = boto3.client('cloudwatch')
+            cloudwatch.put_metric_data(
+                Namespace='SentimentAnalyzer/OHLCCache',
+                MetricData=[{
+                    'MetricName': 'CircuitBreakerOpen',
+                    'Value': 1,
+                    'Unit': 'Count',
+                }]
+            )
+        except Exception:
+            pass
+
+def _record_success():
+    """Record a DynamoDB success, resetting failure count."""
+    _circuit_breaker["failures"] = 0
+```
+
+**Integration in get_cached_candles():**
+```python
+def get_cached_candles(...) -> OHLCCacheResult:
+    if _is_circuit_open():
+        logger.debug("DynamoDB circuit open, skipping cache read")
+        return OHLCCacheResult(cache_hit=False)
+
+    try:
+        # ... existing query logic ...
+        _record_success()
+        return result
+    except ClientError as e:
+        _record_failure()
+        return OHLCCacheResult(cache_hit=False)
 ```
 
 ---
