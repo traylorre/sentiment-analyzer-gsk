@@ -3376,7 +3376,7 @@ def isolated_dynamodb(mock_dynamodb):
 | A: Cache Keys | 10 | 0 | 0 | 10 |
 | B: Data Integrity | 12 | 0 | 2 (B13-B14) | 14 |
 | C: Timing & TTL | 13 | 0 | 2 (C14-C15) | 15 |
-| D: Race Conditions | 12 | 1 (D14) | 6 (D15-D20) | 19 |
+| D: Race Conditions | 12 | 1 (D14) | 4 (D17-D20; D15-D16 removed Round 18) | 17 |
 | E: Dependencies | 26 | 4 (E27-E30) | 0 | 30 |
 | F: State Management | 9 | 2 (F10-F11) | 0 | 11 |
 | G: Edge Cases | 19 | 0 | 0 | 19 |
@@ -3443,31 +3443,19 @@ class TestCrossLayerTracing:
 
 ```python
 # tests/unit/cache/test_conditional_writes.py
-"""Tests for conditional write protection against stale data."""
+"""Tests for conditional write protection against stale data.
+
+NOTE (Round 18): D15 and D16 REMOVED — `updated_at` ConditionExpression dropped
+because BatchWriteItem does not support ConditionExpression, and OHLC candle data
+is idempotent (writing the same candle twice is harmless).
+Lock acquisition PutItem retains its ConditionExpression.
+"""
 
 class TestConditionalWrites:
     """Verify frozen Lambda cannot overwrite fresh data."""
 
-    def test_D15_frozen_lambda_stale_write_rejected(self, mock_dynamodb):
-        """Lambda frozen during request cannot overwrite newer data."""
-        from src.lambdas.shared.cache.ohlc_cache import put_cached_candles
-        from datetime import datetime, timezone
-
-        old_time = datetime(2026, 2, 5, 10, 0, 0, tzinfo=timezone.utc)
-        new_time = datetime(2026, 2, 5, 10, 1, 0, tzinfo=timezone.utc)
-
-        # Fresh Lambda writes first (10:01 AM)
-        result1 = put_cached_candles("AAPL", "tiingo", "D", candles, new_time)
-        assert result1 is True
-
-        # Frozen Lambda wakes up with stale timestamp (10:00 AM)
-        result2 = put_cached_candles("AAPL", "tiingo", "D", candles, old_time)
-        assert result2 is False  # Rejected by ConditionExpression
-
-    def test_D16_conditional_write_newer_wins(self, mock_dynamodb):
-        """Newer timestamp always wins regardless of write order."""
-        # Verify DynamoDB has ConditionExpression: updated_at < :new_timestamp
-        pass
+    # D15 REMOVED (Round 18): Candle writes are idempotent, no stale-write protection needed
+    # D16 REMOVED (Round 18): Candle writes are idempotent, no stale-write protection needed
 
     def test_D17_concurrent_cold_starts_single_api_call(self, mock_tiingo):
         """10 concurrent requests result in exactly 1 Tiingo API call."""
