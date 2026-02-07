@@ -139,12 +139,44 @@ Principal-level review of testing strategy, working backwards from failure modes
 - Q: How should tests verify that missing or misconfigured environment variables fail fast rather than causing silent cache misconfigurations? → A: Full approach - (1) CI lint rule blocks direct `os.environ` access, forces all env vars through pydantic Settings class, (2) pydantic validates at import time, (3) custom Secrets Manager fetch with actionable errors, (4) E24-E26 tests verify error messages are actionable
 - Q: How should Playwright tests verify that changing ticker mid-request doesn't cause stale data from the previous ticker to display? → A: Skip H23 - frontend uses TanStack Query (@tanstack/react-query v5) which automatically cancels in-flight requests when query key changes; library handles this race condition by design
 
+## Session 2026-02-07 (Round 19 - Source Code Blind Spots)
+
+**Methodology:** Post-testing deep analysis of source code implications. Cross-referenced spec against actual codebase (7 source files, 4 dependency files, 3 adapter files) to find implementation-breaking blind spots.
+
+**Decisions (Q1-Q5 + FQ1-FQ5):**
+
+- Q1: `CircuitBreakerManager` circular dependency — persists state TO DynamoDB, can't record DynamoDB failure when DynamoDB is down? → A: **In-memory-only `LocalCircuitBreaker`** for DynamoDB cache service. `@protect_me` decorator pattern (module-level singleton, nanosecond `is_open()` check). Protects both reads and writes. **Supersedes Round 18 Q4** — `"dynamodb_cache"` NOT added to distributed `CircuitBreakerManager`.
+
+- Q2: Resolution fallback creates orphaned lock — lock key uses original resolution, data written under fallback resolution, waiters never find data? → A: **Cache aliasing (double write)** — write under BOTH original and fallback resolution keys. Alias gets shorter TTL.
+
+- Q3: `_tiingo_cache` survives Round 18 consolidation — 4th cache layer causes TTL inversion (adapter's 1hr TTL defeats DynamoDB's 5min intraday TTL)? → A: **Surgical bypass** — OHLC methods pass `use_cache=False`, News/Sentiment keep adapter cache. Adapter stateless for OHLC only.
+
+- Q4: `@dynamodb_retry` + `dynamodb_batch_write_with_retry` compound to 9 retries? → A: **Strict boundary** — `@dynamodb_retry` single-item only, `batch_write_with_retry` batch only, never nest. 10s hard cap. EMF metrics inside worker thread. X-Ray on event loop thread only.
+
+- Q5: `cachetools` missing from all deps, `from typing import Callable` violates Ruff UP035? → A: **Skip `cachetools`** — reuse `ResolutionCache` (existing `OrderedDict` LRU). Modify to accept `default_ttl` parameter. `from collections.abc import Callable, Awaitable`.
+
+- FQ1: Cache alias rejected by completeness check — 5 daily candles ≠ 390 expected 5-min candles? → A: **Add `res_a` metadata field** — completeness check validates against actual resolution, not requested. Frontend uses existing `resolution_fallback: true`.
+
+- FQ2: Removing `_tiingo_cache` breaks News/Sentiment (shared dict)? → A: **Option A — surgical bypass** — OHLC methods hardcode `use_cache=False`, News/Sentiment unchanged.
+
+- FQ3: X-Ray subsegments inside `asyncio.to_thread()` are orphaned (thread-local storage gap)? → A: **Post-await instrumentation** — X-Ray subsegments on event loop thread, EMF metrics inside worker thread. `batch_write_with_retry` returns `BatchWriteStats` dict for annotation enrichment.
+
+- FQ4: Round 15 SLRU decision conflicts with `ResolutionCache` reuse? → A: **Simple LRU, rollback SLRU** — DynamoDB ~20ms miss penalty makes SLRU unjustified. Lambda lifecycle too short for frequency tracking. Modify `ResolutionCache` to accept optional `default_ttl: int | None = None` (~3-5 line delta).
+
+- FQ5: `@protect_me` on writes too? → A: **Protect both reads and writes** — prevents "zombie writes" wasting Lambda duration and thread pool resources during DynamoDB brownout.
+
+**Rollbacks:**
+- Round 18 Q4 (`CircuitBreakerManager` for `dynamodb_cache`) → Superseded by in-memory `LocalCircuitBreaker`
+- Round 15 (SLRU ~30 lines custom code) → Downgraded to simple LRU via existing `ResolutionCache`
+
+**Total tests:** 160 across 11 categories (unchanged from Round 18)
+
 ## Session 2026-02-06 (Round 18 - Architecture Reconciliation)
 
 - Q: BatchWriteItem vs ConditionExpression (`updated_at`) incompatibility — DynamoDB BatchWriteItem does NOT support ConditionExpression? → A: Drop `updated_at` ConditionExpression for cache writes — candle data is idempotent. Lock PutItem retains its ConditionExpression. Tests D15/D16 removed.
 - Q: 4 cache layers (not 3) — `_ohlc_cache` dict + `OHLCReadThroughCache` are parallel in-memory caches storing different types? → A: Replace `_ohlc_cache` with `OHLCReadThroughCache` — single in-memory layer. Remove `_ohlc_cache`, `_get_cached_ohlc()`, `_set_cached_ohlc()`, `_ohlc_cache_stats`, `invalidate_ohlc_cache()`.
 - Q: `_calculate_ttl()` uses `date.today()` (UTC) — ~3 hours/day incorrect TTL assignment? → A: Use `datetime.now(ZoneInfo("America/New_York")).date()` — market-timezone-aware, covers DST automatically.
-- Q: Existing `CircuitBreakerManager` (474 lines, DynamoDB-persisted, thread-safe) vs spec's simple dict-based CB? → A: Reuse existing — add `"dynamodb_cache"` as service. Remove spec's dict-based `_circuit_breaker`.
+- Q: Existing `CircuitBreakerManager` (474 lines, DynamoDB-persisted, thread-safe) vs spec's simple dict-based CB? → A: ~~Reuse existing — add `"dynamodb_cache"` as service.~~ (SUPERSEDED by Round 19 Q1: Use in-memory `LocalCircuitBreaker` instead — avoids circular dependency where DynamoDB monitors itself.)
 - Q: Eager singleton `aws_clients.py` breaks moto/LocalStack test isolation? → A: Lazy singleton in existing `dynamodb.py` with `_reset_all_clients()`. No new file.
 
 ## Session 2026-02-04 (Round 15 - Session Summary)
@@ -158,7 +190,7 @@ Principal-level review of testing strategy, working backwards from failure modes
 - Tab staleness: Auto-refresh on focus after 5+ minutes
 - Schema drift: Trust adapter layer (no contract tests)
 - Time mocking: Use freezegun (not cross-timezone patch)
-- Cache eviction: Implement SLRU (~30 lines custom code)
+- Cache eviction: ~~Implement SLRU (~30 lines custom code)~~ (SUPERSEDED by Round 19 FQ4: Simple LRU via existing `ResolutionCache` with `default_ttl` parameter — DynamoDB ~20ms miss penalty makes SLRU unjustified in Lambda's short lifecycle)
 - Animation testing: Deterministic stubs (not disabled, not real-time)
 - DB isolation: Autouse cleanup + short TTL (already established)
 - Error retry: TanStack recommended + 429 Retry-After handling
