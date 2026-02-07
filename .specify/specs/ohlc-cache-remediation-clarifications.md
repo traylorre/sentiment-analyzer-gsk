@@ -139,6 +139,14 @@ Principal-level review of testing strategy, working backwards from failure modes
 - Q: How should tests verify that missing or misconfigured environment variables fail fast rather than causing silent cache misconfigurations? → A: Full approach - (1) CI lint rule blocks direct `os.environ` access, forces all env vars through pydantic Settings class, (2) pydantic validates at import time, (3) custom Secrets Manager fetch with actionable errors, (4) E24-E26 tests verify error messages are actionable
 - Q: How should Playwright tests verify that changing ticker mid-request doesn't cause stale data from the previous ticker to display? → A: Skip H23 - frontend uses TanStack Query (@tanstack/react-query v5) which automatically cancels in-flight requests when query key changes; library handles this race condition by design
 
+## Session 2026-02-06 (Round 18 - Architecture Reconciliation)
+
+- Q: BatchWriteItem vs ConditionExpression (`updated_at`) incompatibility — DynamoDB BatchWriteItem does NOT support ConditionExpression? → A: Drop `updated_at` ConditionExpression for cache writes — candle data is idempotent. Lock PutItem retains its ConditionExpression. Tests D15/D16 removed.
+- Q: 4 cache layers (not 3) — `_ohlc_cache` dict + `OHLCReadThroughCache` are parallel in-memory caches storing different types? → A: Replace `_ohlc_cache` with `OHLCReadThroughCache` — single in-memory layer. Remove `_ohlc_cache`, `_get_cached_ohlc()`, `_set_cached_ohlc()`, `_ohlc_cache_stats`, `invalidate_ohlc_cache()`.
+- Q: `_calculate_ttl()` uses `date.today()` (UTC) — ~3 hours/day incorrect TTL assignment? → A: Use `datetime.now(ZoneInfo("America/New_York")).date()` — market-timezone-aware, covers DST automatically.
+- Q: Existing `CircuitBreakerManager` (474 lines, DynamoDB-persisted, thread-safe) vs spec's simple dict-based CB? → A: Reuse existing — add `"dynamodb_cache"` as service. Remove spec's dict-based `_circuit_breaker`.
+- Q: Eager singleton `aws_clients.py` breaks moto/LocalStack test isolation? → A: Lazy singleton in existing `dynamodb.py` with `_reset_all_clients()`. No new file.
+
 ## Session 2026-02-04 (Round 15 - Session Summary)
 
 **Tests Added:** D14, E27-E30, F10-F11, H24-H27, O2 (+12 tests, total 146)
