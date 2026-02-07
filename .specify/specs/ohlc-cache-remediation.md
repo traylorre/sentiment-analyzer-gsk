@@ -29,7 +29,7 @@ The OHLC caching infrastructure is **partially implemented but non-functional**:
 1. **Enable DynamoDB cache writes** - After fetching from Tiingo, write candles to DynamoDB
 2. **Enable DynamoDB cache reads** - Before calling Tiingo, check DynamoDB for cached data
 3. **Fix cache key design** - Include end_date in cache key to prevent stale data across days
-4. **Add `PriceCandle.from_cached_candle()`** - Converter method for cached data
+4. **Verify `PriceCandle.from_cached_candle()`** - Already exists at `models/ohlc.py:121-155`; verify correctness, update volume type
 5. **Add local OHLC table** - Enable local development and testing
 
 ### Secondary Goals
@@ -222,35 +222,7 @@ def _read_from_dynamodb(
 ### 4.4 PriceCandle Converter
 
 **File:** `src/lambdas/shared/models/ohlc.py`
-**New Method:** `PriceCandle.from_cached_candle()`
-
-**Implementation:**
-```python
-@classmethod
-def from_cached_candle(
-    cls,
-    cached: "CachedCandle",
-    resolution: OHLCResolution,
-) -> "PriceCandle":
-    """Create PriceCandle from DynamoDB cached candle."""
-    # Import here to avoid circular dependency
-    from src.lambdas.shared.cache.ohlc_cache import CachedCandle
-
-    # Format date based on resolution
-    if resolution == OHLCResolution.DAILY:
-        date_value = cached.timestamp.date()
-    else:
-        date_value = cached.timestamp
-
-    return cls(
-        date=date_value,
-        open=cached.open,
-        high=cached.high,
-        low=cached.low,
-        close=cached.close,
-        volume=cached.volume,
-    )
-```
+**Method:** `PriceCandle.from_cached_candle()` — **Already exists** at `models/ohlc.py:121-155`. No new method needed. Verify existing implementation handles resolution-based date formatting correctly (daily → `date()`, intraday → `datetime`). Update `volume` type per Round 17 Q5 (`int = 0`).
 
 ### 4.5 Local API Table Setup
 
@@ -320,8 +292,17 @@ def _calculate_ttl(resolution: str, end_date: date) -> int:
         - Historical data (any date before today): 90-day TTL
         - Today's intraday data: 5-minute TTL (auto-refresh for freshness)
         - Today's daily data: 90-day TTL (daily bar won't change until tomorrow)
+
+    IMPORTANT (Clarified 2026-02-06 Round 18):
+        Uses market timezone (ET) not UTC for "today" determination.
+        Without this, ~3 hours/day (4PM ET to midnight UTC) would incorrectly
+        assign 5-minute TTL to finalized daily data.
     """
-    is_today = end_date >= date.today()
+    from src.lambdas.shared.utils.market import ET  # ZoneInfo("America/New_York")
+    from datetime import datetime
+
+    market_today = datetime.now(ET).date()
+    is_today = end_date >= market_today
     is_intraday = resolution != "D"
 
     if is_today and is_intraday:
@@ -863,7 +844,7 @@ Key edge cases to test:
 
 | # | Task | File | Priority | Depends On |
 |---|------|------|----------|------------|
-| 1 | Create singleton client factory | `shared/aws_clients.py` | P0 | - |
+| 1 | Add lazy singleton clients to existing `dynamodb.py` | `shared/dynamodb.py` | P0 | - |
 | 2 | Fix cache key design | `ohlc.py` | P0 | - |
 | 3 | Add write-through | `ohlc.py` | P1 | #1, #2 |
 | 4 | Add read-through cache class | `ohlc_cache.py` | P1 | #1 |
@@ -956,6 +937,18 @@ Key edge cases to test:
 
 **Full History:** See [ohlc-cache-remediation-clarifications.md](ohlc-cache-remediation-clarifications.md) for Rounds 1-15.
 
+### Session 2026-02-06 (Round 18 - Architecture Reconciliation)
+
+- Q: BatchWriteItem (Section 4.2 write-through, 25-item batches) vs ConditionExpression (`updated_at` from Round 16) are architecturally incompatible — DynamoDB BatchWriteItem does NOT support ConditionExpression. How do we reconcile? → A: **Drop `updated_at` ConditionExpression for cache writes** — accept that frozen Lambda can overwrite newer data (rare edge case). OHLC candle data is immutable historical data; the only risk is a frozen Lambda writing the same candle with a slightly different timestamp, which is idempotent. Lock acquisition (single PutItem) retains its ConditionExpression. Tests D15/D16 (`test_frozen_lambda_stale_write_rejected`, `test_conditional_write_newer_wins`) removed — candle writes are idempotent, no stale-write protection needed.
+
+- Q: Codebase has 4 cache layers (not 3): Layer 0 `_tiingo_cache` (raw API, 1h TTL), Layer 1 `_ohlc_cache` dict (JSON response, 5-60min TTL), Layer 2 `OHLCReadThroughCache._cache` (PriceCandle list, 1h TTL), Layer 3 DynamoDB. Layers 1 and 2 store different types with different TTLs — dual in-memory caches cause invalidation risk and doubled heap usage. How do we consolidate? → A: **Replace `_ohlc_cache` dict with `OHLCReadThroughCache`** — single in-memory layer storing PriceCandle objects. Refactor `get_ohlc_data()` to use `OHLCReadThroughCache.get_or_fetch()` exclusively. Remove `_ohlc_cache`, `_get_cached_ohlc()`, `_set_cached_ohlc()`, `_ohlc_cache_stats`, `invalidate_ohlc_cache()`. Unified invalidation — one cache to clear, not two. Memory-efficient — no duplicate storage of same data in different formats. Return frozen/immutable copies from cache to prevent mutation on shared event loop.
+
+- Q: `_calculate_ttl()` uses `date.today()` which returns UTC date. Between 4PM ET (market close) and midnight UTC (~3 hours/day), finalized daily data incorrectly gets 5-minute TTL instead of 90-day TTL because UTC date still equals "today" even though the market day is over. → A: **Use `datetime.now(ZoneInfo("America/New_York")).date()`** in `_calculate_ttl()`. `zoneinfo` is stdlib (Python 3.9+). Reuse existing `ET = ZoneInfo("America/New_York")` from `shared/utils/market.py`. Also use market-timezone-aware date for the `is_today` check. Covers DST transitions automatically.
+
+- Q: Existing `circuit_breaker.py` (474 lines, DynamoDB-persisted, thread-safe, Pydantic models, per-service locks, half-open state) vs spec's simple dict-based circuit breaker (Section 11.16) — two incompatible CB implementations in the same codebase. → A: **Reuse existing `CircuitBreakerManager`** — register `"dynamodb_cache"` as a new service. Widen `Literal["tiingo", "finnhub", "sendgrid"]` to include `"dynamodb_cache"`. Add entry in `_service_locks`. Gets DynamoDB persistence, thread-safety, half-open recovery, and unified observability for free. Remove spec's dict-based `_circuit_breaker`, `_is_circuit_open()`, `_record_failure()`, `_record_success()` from Section 11.16. Async wrapper calls `CircuitBreakerManager.can_execute("dynamodb_cache")` on event loop thread (preserving thread-boundary rule).
+
+- Q: Eager singleton `aws_clients.py` (Section 11.13) creates boto3 clients at module load time. But moto `@mock_aws` and LocalStack `endpoint_url` need to intercept client creation, which happens before test fixtures run. Module-level initialization breaks test isolation. → A: **Lazy singleton with `_reset_for_testing()`** — client created on first use (not import time), cached thereafter. `_reset_for_testing()` clears cached client so moto/@mock_aws works. Checks `LOCALSTACK_ENDPOINT` env var at creation time. Add to existing `shared/dynamodb.py` rather than creating new `aws_clients.py`. Uses Lambda Init phase burst CPU on first handler invocation (still fast). Pattern matches existing `chaos_injection.py:34-43` singleton.
+
 ### Session 2026-02-06 (Round 17 - Source Code Blind Spots)
 
 - Q: Dual X-Ray instrumentation — existing codebase uses raw `aws-xray-sdk` (`patch_all()` in `handler.py:35`, 30+ `@xray_recorder.capture()` decorators across auth/notifications/alerts) while spec Section 12.4 introduces Powertools `Tracer`. How do we prevent double-patched boto3 clients and duplicate X-Ray segments? → A: **Coexist safely**: Use `Tracer(auto_patch=False)` for new cache code only. Existing `@xray_recorder.capture()` decorators remain untouched. No scope creep into auth/notifications/alerts in this PR. Full codebase migration to Powertools Tracer tracked as future work in HL.
@@ -990,14 +983,12 @@ Key edge cases to test:
   - Annotations on traces: `put_annotation("CacheLayer", "dynamodb")` for filtering by cache behavior
   - Add tests: O3 `test_trace_id_propagated_through_cache_layers`, O4 `test_emf_metrics_emit_cache_hit_miss`
 
-- Q: What happens when Lambda is frozen (not crashed) mid-request due to concurrency limit? Could it overwrite data from a later request after lock TTL expires? → A: **Conditional write with timestamp-based ConditionExpression**:
-  - Add `updated_at` timestamp to each cache item
-  - DynamoDB write uses `ConditionExpression: "attribute_not_exists(updated_at) OR updated_at < :new_timestamp"`
-  - Frozen Lambda wakes up with stale data (10:00 AM), fresh Lambda already wrote (10:01 AM)
-  - DynamoDB rejects stale write because 10:01 > 10:00 - no data corruption
-  - Superior to optimistic versioning: no read-modify-write cycle needed
-  - Implementation: `SET val = :val, updated_at = :now WHERE updated_at < :now`
-  - Add tests: D15 `test_frozen_lambda_stale_write_rejected`, D16 `test_conditional_write_newer_wins`
+- Q: What happens when Lambda is frozen (not crashed) mid-request due to concurrency limit? Could it overwrite data from a later request after lock TTL expires? → A: ~~**Conditional write with timestamp-based ConditionExpression**~~ (SUPERSEDED by Round 18 Q1: `updated_at` ConditionExpression dropped because BatchWriteItem does not support it, and OHLC candle data is idempotent — writing the same candle twice is harmless):
+  - ~~Add `updated_at` timestamp to each cache item~~ (REMOVED)
+  - ~~DynamoDB write uses `ConditionExpression: "attribute_not_exists(updated_at) OR updated_at < :new_timestamp"`~~ (REMOVED)
+  - Lock acquisition PutItem retains its ConditionExpression (single-item operation, no conflict)
+  - Frozen Lambda writes are harmless: same immutable candle data, same PK/SK → DynamoDB overwrites with identical values
+  - ~~Add tests: D15 `test_frozen_lambda_stale_write_rejected`, D16 `test_conditional_write_newer_wins`~~ (REMOVED — candle writes are idempotent)
 
 - Q: How do we prevent thundering herd when multiple Lambdas cold start simultaneously after DynamoDB outage? → A: **Existing lock is sufficient**:
   - Distributed lock already ensures only 1 Lambda calls Tiingo (thundering herd to external API prevented)
@@ -1012,10 +1003,10 @@ Key edge cases to test:
   - Touch is priority because mobile is primary user base for chart viewing
   - Link accessibility future work in Section 14
 
-- Q: How do we test "gray failure" where DynamoDB is slow (1500ms) but not failing? → A: **~~Lock holder heartbeat with~~ AWS FIS testing** (Updated 2026-02-06: heartbeat removed per Round 17 Q3 — background threads violate event-loop-only thread boundary rule and freeze with Lambda runtime; 30s lock TTL + `updated_at` ConditionExpression already cover crash/freeze scenarios):
+- Q: How do we test "gray failure" where DynamoDB is slow (1500ms) but not failing? → A: **~~Lock holder heartbeat with~~ AWS FIS testing** (Updated 2026-02-06: heartbeat removed per Round 17 Q3 — background threads violate event-loop-only thread boundary rule and freeze with Lambda runtime; 30s lock TTL covers crash/freeze scenarios; candle writes are idempotent per Round 18 Q1):
   - ~~Lock holder updates `last_heartbeat` attribute on lock item every 5 seconds during long operations~~ (REMOVED)
   - ~~Waiters check: if `currentTime - last_heartbeat < threshold`, continue polling~~ (REMOVED)
-  - Lock waiters rely on 30s TTL for crash recovery; `updated_at` ConditionExpression prevents stale writes from frozen Lambdas
+  - Lock waiters rely on 30s TTL for crash recovery; candle writes are idempotent (frozen Lambda overwrites same data harmlessly)
   - Use AWS Fault Injection Service (FIS) in preprod to inject DynamoDB latency (40ms → 1500ms)
   - Confirms lock TTL + conditional writes handle gray failures without heartbeat complexity
   - ~~Add tests: D18 `test_lock_heartbeat_updated_during_slow_operation`, D19 `test_waiter_respects_heartbeat_during_latency_spike`~~ (REMOVED)
@@ -1071,9 +1062,9 @@ def test_ohlc_cache_round_trip(mock_aws, test_client, mock_tiingo_response, mock
     assert response1.status_code == 200
     assert len(response1.json()["candles"]) == 1
 
-    # Clear in-memory cache to force DDB read
-    from src.lambdas.dashboard.ohlc import invalidate_ohlc_cache
-    invalidate_ohlc_cache("AAPL")
+    # Clear in-memory cache to force DDB read (Round 18: _ohlc_cache replaced by OHLCReadThroughCache)
+    from src.lambdas.shared.cache.ohlc_cache import _ohlc_read_through_cache
+    _ohlc_read_through_cache._cache.clear()
 
     # Second request: should read from DDB (Tiingo not called again)
     mocker.patch.object(TiingoAdapter, 'get_ohlc', side_effect=Exception("Should not be called"))
@@ -1131,12 +1122,12 @@ def _get_table_name() -> str:
 3. Add dashboard widget for cache hit rate
 
 ```python
-from src.lambdas.shared.aws_clients import get_cloudwatch_client
+from src.lambdas.shared.dynamodb import get_cloudwatch_client
 
 def _read_from_dynamodb(...):
     # ... query logic ...
 
-    # Emit CloudWatch metric (using eager singleton)
+    # Emit CloudWatch metric (using lazy singleton)
     try:
         get_cloudwatch_client().put_metric_data(
             Namespace='SentimentAnalyzer/OHLCCache',
@@ -1261,7 +1252,7 @@ def candles_to_cached(candles: list, source: str, resolution: str) -> list[Cache
    - **Alarm suppression: 1 hour after first trigger** (prevents alert fatigue)
 
 ```python
-from src.lambdas.shared.aws_clients import get_cloudwatch_client
+from src.lambdas.shared.dynamodb import get_cloudwatch_client
 
 # In _read_from_dynamodb() exception handler:
 except Exception as e:
@@ -1269,7 +1260,7 @@ except Exception as e:
         "DynamoDB cache read failed, falling back to API",
         extra=get_safe_error_info(e),
     )
-    # Emit CloudWatch metric for alerting (using eager singleton)
+    # Emit CloudWatch metric for alerting (using lazy singleton)
     try:
         get_cloudwatch_client().put_metric_data(
             Namespace='SentimentAnalyzer/OHLCCache',
@@ -1295,7 +1286,7 @@ except Exception as e:
 **Required Fix:**
 Add after line 185 in `ohlc_cache.py`:
 ```python
-from src.lambdas.shared.aws_clients import get_cloudwatch_client
+from src.lambdas.shared.dynamodb import get_cloudwatch_client
 
 response = client.query(...)
 
@@ -1310,7 +1301,7 @@ if response.get("LastEvaluatedKey"):
             "items_returned": len(response.get("Items", [])),
         },
     )
-    # Emit CloudWatch metric for alerting (using eager singleton)
+    # Emit CloudWatch metric for alerting (using lazy singleton)
     try:
         get_cloudwatch_client().put_metric_data(
             Namespace='SentimentAnalyzer/OHLCCache',
@@ -1528,59 +1519,84 @@ if failed:
 | Fresh each call (bad) | `ohlc_cache.py`, `ticker_cache.py`, `sse_streaming/config.py`, `auth.py` | FIX |
 | Dependency injection (good) | `notification.py`, `metrics.py` | ✓ |
 
-**Required Fix - Unified Client Factory (Eager Singleton):**
+**Required Fix - Lazy Singleton Client Factory (Clarified 2026-02-06 Round 18):**
+
+Add lazy singleton pattern to existing `src/lambdas/shared/dynamodb.py` (no new `aws_clients.py` file needed). Lazy initialization ensures moto `@mock_aws` and LocalStack `endpoint_url` work correctly — client created on first use inside handler context, not at import time.
 
 ```python
-# src/lambdas/shared/aws_clients.py
-"""Eager singleton boto3 client factory.
-
-ARCHITECTURAL PRINCIPLE: All boto3 clients MUST be singletons.
-Fresh client creation adds ~50-100ms overhead per call (TCP+TLS handshake).
-
-Pattern: Eager initialization at module load (Lambda cold start).
-Benefits:
-- Cold start absorbs all client init (~100-200ms total)
-- Request handling is always fast (no surprise latency)
-- Connection pools are warm for all subsequent requests
-
-Usage:
-    from src.lambdas.shared.aws_clients import get_dynamodb_client, get_cloudwatch_client
-
-    client = get_dynamodb_client()  # Returns pre-initialized singleton
-"""
+# Add to src/lambdas/shared/dynamodb.py (alongside existing get_dynamodb_resource/get_table)
 import os
 import boto3
+
+# ARCHITECTURAL PRINCIPLE: All boto3 clients MUST be singletons.
+# Fresh client creation adds ~50-100ms overhead per call (TCP+TLS handshake).
+#
+# Pattern: Lazy singleton — created on first use, cached thereafter.
+# Benefits:
+# - First handler invocation absorbs client init (Lambda Init phase burst CPU)
+# - Connection pools warm for all subsequent requests
+# - moto/@mock_aws can intercept because client created after test fixtures
+# - LocalStack endpoint_url picked up from env vars at creation time
+#
+# Usage:
+#     from src.lambdas.shared.dynamodb import get_dynamo_client, get_cloudwatch_client
+#
+#     client = get_dynamo_client()  # Returns cached singleton
+
+_DYNAMO_CLIENT = None
+_CLOUDWATCH_CLIENT = None
+_S3_CLIENT = None
 
 def _get_region() -> str:
     return os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
 
-# Eager initialization at module load (Lambda cold start)
-_dynamodb_client = boto3.client("dynamodb", region_name=_get_region())
-_cloudwatch_client = boto3.client("cloudwatch", region_name=_get_region())
-_s3_client = boto3.client("s3", region_name=_get_region())
-
-def get_dynamodb_client():
-    """Get DynamoDB client (eager singleton)."""
-    return _dynamodb_client
+def get_dynamo_client():
+    """Get DynamoDB client (lazy singleton)."""
+    global _DYNAMO_CLIENT
+    if _DYNAMO_CLIENT is None:
+        endpoint_url = os.environ.get("LOCALSTACK_ENDPOINT")
+        _DYNAMO_CLIENT = boto3.client(
+            "dynamodb",
+            region_name=_get_region(),
+            endpoint_url=endpoint_url,
+            config=RETRY_CONFIG,  # Reuse existing RETRY_CONFIG from dynamodb.py
+        )
+    return _DYNAMO_CLIENT
 
 def get_cloudwatch_client():
-    """Get CloudWatch client (eager singleton)."""
-    return _cloudwatch_client
+    """Get CloudWatch client (lazy singleton)."""
+    global _CLOUDWATCH_CLIENT
+    if _CLOUDWATCH_CLIENT is None:
+        endpoint_url = os.environ.get("LOCALSTACK_ENDPOINT")
+        _CLOUDWATCH_CLIENT = boto3.client(
+            "cloudwatch",
+            region_name=_get_region(),
+            endpoint_url=endpoint_url,
+        )
+    return _CLOUDWATCH_CLIENT
 
 def get_s3_client():
-    """Get S3 client (eager singleton)."""
-    return _s3_client
+    """Get S3 client (lazy singleton)."""
+    global _S3_CLIENT
+    if _S3_CLIENT is None:
+        endpoint_url = os.environ.get("LOCALSTACK_ENDPOINT")
+        _S3_CLIENT = boto3.client(
+            "s3",
+            region_name=_get_region(),
+            endpoint_url=endpoint_url,
+        )
+    return _S3_CLIENT
 
 def _reset_all_clients():
-    """Recreate all clients from current env vars. FOR TESTING ONLY.
+    """Clear cached clients. FOR TESTING ONLY.
 
-    Use in test fixtures when env vars change between tests (e.g., LocalStack).
-    Not needed in production - Lambda cold start handles initialization.
+    Call in test fixtures (e.g., conftest.py autouse fixture) so that
+    moto/@mock_aws intercepts the next client creation.
     """
-    global _dynamodb_client, _cloudwatch_client, _s3_client
-    _dynamodb_client = boto3.client("dynamodb", region_name=_get_region())
-    _cloudwatch_client = boto3.client("cloudwatch", region_name=_get_region())
-    _s3_client = boto3.client("s3", region_name=_get_region())
+    global _DYNAMO_CLIENT, _CLOUDWATCH_CLIENT, _S3_CLIENT
+    _DYNAMO_CLIENT = None
+    _CLOUDWATCH_CLIENT = None
+    _S3_CLIENT = None
 ```
 
 **Update Metric Emission Code:**
@@ -1590,19 +1606,20 @@ def _reset_all_clients():
 cloudwatch = boto3.client('cloudwatch')
 cloudwatch.put_metric_data(...)
 
-# After (good - uses singleton)
-from src.lambdas.shared.aws_clients import get_cloudwatch_client
+# After (good - uses lazy singleton)
+from src.lambdas.shared.dynamodb import get_cloudwatch_client
 
 cloudwatch = get_cloudwatch_client()
 cloudwatch.put_metric_data(...)
 ```
 
 **Follow-up Tasks:**
-1. Create `src/lambdas/shared/aws_clients.py` with singleton factory
-2. Update `ohlc_cache.py` to use factory
-3. Update all metric emission code to use factory
+1. Add lazy singleton functions to existing `src/lambdas/shared/dynamodb.py`
+2. Update `ohlc_cache.py` to use `get_dynamo_client()` singleton
+3. Update all metric emission code to use `get_cloudwatch_client()` singleton
 4. Audit and fix `ticker_cache.py`, `sse_streaming/config.py`, `auth.py`
 5. Add linting rule to prevent direct `boto3.client()` calls (future)
+6. Add `_reset_all_clients()` call to `tests/conftest.py` autouse fixture
 
 ### 11.14 Volume=None Crashes Cache Write for Intraday Data
 
@@ -1782,64 +1799,26 @@ Add to deployment pipeline after `terraform apply`:
 
 **Impact:** During DynamoDB outages, all OHLC requests are slower even though graceful degradation works.
 
-**Decision (Clarified 2026-02-03):** Add simple circuit breaker (skip DDB for 60s after 3 consecutive failures) + CloudWatch metric with alarm (1-hour mute).
+**Decision (Clarified 2026-02-03, updated 2026-02-06 Round 18):** Reuse existing `CircuitBreakerManager` from `shared/circuit_breaker.py` — register `"dynamodb_cache"` as a new service alongside `tiingo`/`finnhub`/`sendgrid`.
 
-**Required Fix:**
-Add to `src/lambdas/shared/cache/ohlc_cache.py`:
-```python
-import time
-from src.lambdas.shared.aws_clients import get_cloudwatch_client
+**Why reuse existing (Round 18):** The existing `CircuitBreakerManager` (474 lines) provides DynamoDB-persisted state (survives cold starts, shared across Lambda instances), per-service threading locks, half-open recovery, and unified observability. A second dict-based CB would fragment monitoring and lack persistence.
 
-# Circuit breaker state (module-level)
-_circuit_breaker = {
-    "failures": 0,
-    "open_until": 0,  # Unix timestamp when circuit closes
-    "threshold": 3,   # Failures before opening
-    "timeout": 60,    # Seconds to keep circuit open
-}
-
-def _is_circuit_open() -> bool:
-    """Check if circuit breaker is open (skip DynamoDB)."""
-    if _circuit_breaker["open_until"] > time.time():
-        return True
-    return False
-
-def _record_failure():
-    """Record a DynamoDB failure, potentially opening circuit."""
-    _circuit_breaker["failures"] += 1
-    if _circuit_breaker["failures"] >= _circuit_breaker["threshold"]:
-        _circuit_breaker["open_until"] = time.time() + _circuit_breaker["timeout"]
-        _circuit_breaker["failures"] = 0
-        logger.error(
-            "DynamoDB circuit breaker OPEN - skipping cache for 60s",
-            extra={"timeout": _circuit_breaker["timeout"]},
-        )
-        # Emit CloudWatch metric for alerting (using eager singleton)
-        try:
-            get_cloudwatch_client().put_metric_data(
-                Namespace='SentimentAnalyzer/OHLCCache',
-                MetricData=[{
-                    'MetricName': 'CircuitBreakerOpen',
-                    'Value': 1,
-                    'Unit': 'Count',
-                }]
-            )
-        except Exception:
-            pass
-
-def _record_success():
-    """Record a DynamoDB success, resetting failure count."""
-    _circuit_breaker["failures"] = 0
-```
+**Required Changes to `shared/circuit_breaker.py`:**
+1. Widen service Literal: `Literal["tiingo", "finnhub", "sendgrid", "dynamodb_cache"]`
+2. Add lock: `_service_locks["dynamodb_cache"] = threading.Lock()`
+3. No other changes — existing `CircuitBreakerManager.can_execute()`, `record_failure()`, `record_success()` are generic.
 
 **Integration in async wrapper layer (Clarified 2026-02-06):**
 
 Circuit breaker checks MUST run on the event loop thread (async wrappers), NOT inside the sync functions that run in `asyncio.to_thread()`. This preserves the thread-boundary rule from Section 4.8.
 
 ```python
+from src.lambdas.shared.circuit_breaker import CircuitBreakerManager
+
 # In the async wrapper (event loop thread) — NOT inside get_cached_candles_sync()
 async def _read_from_dynamodb(...) -> list[PriceCandle] | None:
-    if _is_circuit_open():
+    cb_manager = CircuitBreakerManager(table)
+    if not cb_manager.can_execute("dynamodb_cache"):
         logger.debug("DynamoDB circuit open, skipping cache read")
         return None
 
@@ -1847,10 +1826,10 @@ async def _read_from_dynamodb(...) -> list[PriceCandle] | None:
         result = await asyncio.to_thread(
             _read_from_dynamodb_sync, ticker, source, resolution, start_date, end_date
         )
-        _record_success()  # Event loop thread — safe
+        cb_manager.record_success("dynamodb_cache")  # Event loop thread — safe
         return result
     except ClientError as e:
-        _record_failure()  # Event loop thread — safe
+        cb_manager.record_failure("dynamodb_cache")  # Event loop thread — safe
         return None
 ```
 
@@ -2054,7 +2033,7 @@ fields @timestamp, @message, ticker, cache_key, request_id
 
 ## 15. Canonical Test Plan (Backwards-Engineered)
 
-**Full Test Plan:** See [ohlc-cache-remediation-tests.md](ohlc-cache-remediation-tests.md) (162 tests across 11 categories).
+**Full Test Plan:** See [ohlc-cache-remediation-tests.md](ohlc-cache-remediation-tests.md) (160 tests across 11 categories; D15/D16 removed Round 18).
 
 ### Quick Reference
 
@@ -2063,7 +2042,7 @@ fields @timestamp, @message, ticker, cache_key, request_id
 | A: Cache Keys | 10 | Stale data, key collisions |
 | B: Data Integrity | 14 | Corruption, precision, truncation |
 | C: Timing & TTL | 15 | Expiry, freshness, clock drift |
-| D: Race Conditions | 19 | Thundering herd, locks, dirty reads |
+| D: Race Conditions | 17 | Thundering herd, locks, dirty reads (D15/D16 removed Round 18) |
 | E: Dependencies | 30 | DynamoDB, Tiingo, CloudWatch outages |
 | F: State Management | 11 | Multi-layer cache, invalidation |
 | G: Edge Cases | 19 | Boundaries, holidays, ticker changes |
