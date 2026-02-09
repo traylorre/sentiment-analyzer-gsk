@@ -51,6 +51,195 @@ The OHLC caching infrastructure is **partially implemented but non-functional**:
 
 ## 4. Technical Specification
 
+### 4.0 Request Context Object (Round 24)
+
+**File:** `src/lambdas/dashboard/ohlc.py`
+
+**Problem (identified Round 24):** The call chain `get_ohlc_handler → _get_ohlc_data_with_write_context → _fetch_with_lock → _read_from_dynamodb` passes 5-7 individual parameters through each level. `start_date`, `end_date`, and `source` were undefined in intermediate signatures (NameError). Adding future params (e.g., `user_tier`, `is_test_request`) would require refactoring every function in the chain.
+
+**Solution:** Frozen dataclass groups all request-scoped values. Constructed once at handler entry point, passed as single `ctx` param through the chain.
+
+```python
+from dataclasses import dataclass
+from datetime import date
+
+@dataclass(frozen=True)
+class OHLCRequestContext:
+    """Immutable request context for the OHLC cache pipeline.
+
+    Constructed once in get_ohlc_handler(), passed through the entire
+    L1 → L2 → Lock → Tiingo → Phase 2 chain. Frozen for thread safety
+    (safe to pass into asyncio.to_thread() closures).
+    """
+    ticker: str
+    resolution: str
+    time_range: str
+    start_date: date
+    end_date: date
+    source: str        # "tiingo" or "finnhub" — determined at handler entry
+    cache_key: str     # Pre-computed by _get_ohlc_cache_key()
+
+    def to_metadata(self) -> dict:
+        """For X-Ray put_metadata() and EMF dimensions."""
+        return {
+            "ticker": self.ticker,
+            "resolution": self.resolution,
+            "time_range": self.time_range,
+            "source": self.source,
+            "cache_key": self.cache_key,
+        }
+```
+
+**Usage pattern:**
+```python
+# Handler entry point — construct once
+start_date, end_date = _resolve_date_range(time_range)
+cache_key = _get_ohlc_cache_key(ticker, resolution, time_range, start_date, end_date)
+ctx = OHLCRequestContext(
+    ticker=ticker, resolution=resolution, time_range=time_range,
+    start_date=start_date, end_date=end_date,
+    source=_get_default_source(ticker), cache_key=cache_key,
+)
+
+# Pass through chain
+result, pending_write = await _get_ohlc_data_with_write_context(ctx, response)
+```
+
+**Test fixture pattern:**
+```python
+# tests/conftest.py
+@pytest.fixture
+def ohlc_ctx() -> OHLCRequestContext:
+    return OHLCRequestContext(
+        ticker="AAPL", resolution="D", time_range="1W",
+        start_date=date(2026, 2, 1), end_date=date(2026, 2, 8),
+        source="tiingo", cache_key="ohlc:AAPL:D:1W:2026-02-08",
+    )
+
+# Per-test override (frozen → use dataclasses.replace)
+from dataclasses import replace
+msft_ctx = replace(ohlc_ctx, ticker="MSFT", cache_key="ohlc:MSFT:D:1W:2026-02-08")
+```
+
+**Refactored signatures (Round 24):**
+
+| Before | After |
+|--------|-------|
+| `_get_ohlc_data_with_write_context(ticker, resolution, time_range, response, cache_key)` | `_get_ohlc_data_with_write_context(ctx: OHLCRequestContext, response: Response)` |
+| `_fetch_with_lock(ticker, cache_key, source, resolution, start_date, end_date)` | `_fetch_with_lock(ctx: OHLCRequestContext)` |
+| `_read_from_dynamodb(ticker, source, resolution, start_date, end_date)` | `_read_from_dynamodb(ctx: OHLCRequestContext)` |
+| `_write_through_to_dynamodb(ticker, source, resolution, candles, end_date)` | `_write_through_to_dynamodb(ctx: OHLCRequestContext, candles: list[PriceCandle])` |
+| Write context dict: `{"ticker": ..., "source": ..., "candles": ...}` | `{"ctx": ctx, "candles": candles}` |
+
+### 4.0.1 Handler Entry Helpers (Round 25)
+
+**File:** `src/lambdas/dashboard/ohlc.py`
+
+**Problem (identified Round 25):** `_resolve_date_range(time_range)` and `_get_default_source(ticker)` are called at handler entry (lines 993, 998) to construct `OHLCRequestContext`, but neither function was defined anywhere in the spec or codebase. Double `NameError` — 100% crash rate before the cache pipeline even starts.
+
+**Solution:** Define both as pure, stateless helper functions. No I/O, no state, trivially testable.
+
+```python
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
+
+# Reuse existing market timezone constant (shared/utils/market.py)
+ET = ZoneInfo("America/New_York")
+
+# Predefined time range mappings (calendar days, not trading days)
+_TIME_RANGE_DAYS: dict[str, int] = {
+    "1D": 1,
+    "1W": 7,
+    "1M": 30,
+    "3M": 90,
+    "6M": 180,
+    "1Y": 365,
+    "YTD": -1,  # Sentinel: computed dynamically
+}
+
+def _resolve_date_range(time_range: str) -> tuple[date, date]:
+    """Map time_range string to (start_date, end_date) in ET market time.
+
+    Uses market timezone (ET) per Round 18 — NOT date.today() (UTC).
+    Prevents ~3-hour ET/UTC gap from creating wrong date anchors
+    between 4PM ET and midnight UTC.
+
+    For "custom" ranges, caller must pass start/end explicitly
+    (not handled here — custom ranges bypass this helper).
+
+    Raises:
+        ValueError: If time_range is not a recognized predefined range.
+    """
+    market_today = datetime.now(ET).date()
+    end_date = market_today
+
+    if time_range == "custom":
+        raise ValueError(
+            "Custom ranges must provide explicit start_date and end_date. "
+            "Do not call _resolve_date_range for custom ranges."
+        )
+
+    if time_range == "YTD":
+        start_date = date(market_today.year, 1, 1)
+        return start_date, end_date
+
+    days = _TIME_RANGE_DAYS.get(time_range)
+    if days is None:
+        raise ValueError(
+            f"Unknown time_range '{time_range}'. "
+            f"Valid values: {', '.join(_TIME_RANGE_DAYS.keys())}, custom"
+        )
+
+    start_date = end_date - timedelta(days=days)
+    return start_date, end_date
+
+
+def _get_default_source(ticker: str) -> str:
+    """Return the primary OHLC data provider for a ticker.
+
+    Currently returns "tiingo" unconditionally — Tiingo is the primary
+    source for all OHLC data. Finnhub is available as a manual fallback
+    (resolution fallback uses it), but automatic source selection is
+    future work.
+
+    Centralized here as a single "knob" — if Tiingo has a major outage,
+    update this one function to re-route dashboard traffic to Finnhub.
+    """
+    return "tiingo"
+```
+
+**Test coverage:**
+```python
+# tests/unit/test_ohlc_helpers.py
+from datetime import date
+from freezegun import freeze_time
+
+class TestResolveDateRange:
+    @freeze_time("2026-02-08 14:00:00", tz_offset=-5)  # 2PM ET
+    def test_1W_returns_7_day_range(self):
+        start, end = _resolve_date_range("1W")
+        assert end == date(2026, 2, 8)
+        assert start == date(2026, 2, 1)
+
+    @freeze_time("2026-02-08 14:00:00", tz_offset=-5)
+    def test_YTD_starts_jan_1(self):
+        start, end = _resolve_date_range("YTD")
+        assert start == date(2026, 1, 1)
+
+    def test_custom_raises_ValueError(self):
+        with pytest.raises(ValueError, match="custom"):
+            _resolve_date_range("custom")
+
+    def test_unknown_range_raises_ValueError(self):
+        with pytest.raises(ValueError, match="Unknown"):
+            _resolve_date_range("5Y")
+
+class TestGetDefaultSource:
+    def test_returns_tiingo(self):
+        assert _get_default_source("AAPL") == "tiingo"
+        assert _get_default_source("BRK.B") == "tiingo"
+```
+
 ### 4.1 Cache Key Fix
 
 **File:** `src/lambdas/dashboard/ohlc.py`
@@ -98,79 +287,115 @@ from src.lambdas.shared.cache.ohlc_cache import (
     candles_to_cached,
 )
 
-def _write_through_to_dynamodb(
-    ticker: str,
-    source: str,
-    resolution: str,
-    ohlc_candles: list,
-    end_date: date,  # Required for TTL calculation
+async def _write_through_to_dynamodb(  # Round 23: async def (was sync def — await crashed with TypeError)
+    ctx: OHLCRequestContext,  # Round 24: replaces (ticker, source, resolution, end_date) params
+    candles: list[PriceCandle],  # Round 23: renamed from ohlc_candles to match domain language
 ) -> None:
-    """Persist OHLC candles to DynamoDB for cross-invocation caching.
+    """Phase 2 Awaited: Persist OHLC candles to DynamoDB for cross-invocation caching.
+
+    Awaited before handler returns to prevent Lambda freeze mid-write.
+    Invisible to user latency; additive to billed duration only (~50ms normal).
+    Errors are logged but do not fail the request (non-fatal).
+
+    Contributes to _DDB_BREAKER health (Round 24 Q2): record_success() on
+    successful write, record_failure() on exception. DynamoDB is a single
+    service — write failures are a leading indicator of read failures.
+    During HALF_OPEN, a successful write helps close the circuit faster.
+
+    Uses asyncio.to_thread() to offload blocking boto3 batch_write_item() to a
+    worker thread (Round 1 Q4 architectural decision). Prevents event loop freeze
+    during DynamoDB throttling (up to 10s hard cap).
+
+    Invariant: User P99 = 5s (Phase 1). Write integrity = guaranteed (Phase 2).
 
     Args:
-        end_date: The request's end_date, used to determine TTL strategy
-                  (5min for today's intraday, 90d for historical/daily)
-
-    Fire-and-forget - errors are logged but don't fail the request.
+        ctx: Frozen request context (Round 24). Thread-safe for asyncio.to_thread().
+        candles: PriceCandle list from Tiingo/Finnhub fetch (Round 23: aligned
+                 with _fetch_with_lock write_context dict key)
     """
+    # Round 24 Q2: Breaker check encapsulated here (was in handler guard)
+    if _DDB_BREAKER.is_open():
+        logger.debug("DynamoDB circuit open, skipping write-through",
+                      extra={"ticker": ctx.ticker})
+        return
+
     try:
-        cached_candles = candles_to_cached(ohlc_candles, source, resolution)
+        cached_candles = candles_to_cached(candles, ctx.source, ctx.resolution)
         if not cached_candles:
-            logger.debug("No candles to cache", extra={"ticker": ticker})
+            logger.debug("No candles to cache", extra={"ticker": ctx.ticker})
             return
 
-        written = put_cached_candles(
-            ticker=ticker,
-            source=source,
-            resolution=resolution,
+        # Offload blocking DynamoDB I/O to worker thread (Round 23)
+        # Event loop remains free to serve concurrent requests during Phase 2
+        # ctx is frozen (thread-safe) — safe to read from worker thread
+        written = await asyncio.to_thread(
+            put_cached_candles,
+            ticker=ctx.ticker,
+            source=ctx.source,
+            resolution=ctx.resolution,
             candles=cached_candles,
-            end_date=end_date,  # For TTL calculation
+            end_date=ctx.end_date,  # For TTL calculation
         )
+
+        # Round 24 Q2: Write success feeds into breaker — unified health signal
+        _DDB_BREAKER.record_success()
 
         logger.info(
             "OHLC write-through complete",
             extra={
-                "ticker": ticker,
-                "source": source,
-                "resolution": resolution,
+                "ticker": ctx.ticker,
+                "source": ctx.source,
+                "resolution": ctx.resolution,
                 "candles_written": written,
             },
         )
     except Exception as e:
+        # Round 24 Q2: Write failure feeds into breaker — proactive resilience
+        # Prevents burning 200ms per request on a dead write path
+        _DDB_BREAKER.record_failure()
+
         logger.warning(
             "OHLC write-through failed",
             extra=get_safe_error_info(e),
         )
 ```
 
-**Call Sites:**
-1. After daily OHLC fetch (line ~371)
-2. After intraday OHLC fetch (line ~386)
-3. After fallback daily fetch (line ~412)
+**Call Site (Round 21+):**
+Called exclusively from `get_ohlc_handler()` Phase 2, outside the `asyncio.wait_for(timeout=5.0)` boundary. No longer called inline at individual fetch sites — write context is passed up from `_fetch_with_lock()` through `_get_ohlc_data_with_write_context()` to the handler, which awaits the write in Phase 2.
 
 **Constraints:**
 - Never cache error responses (404, 503)
 - Never cache empty candle lists
-- Fire-and-forget: errors logged but don't fail request
+- Phase 2 awaited: errors logged, non-fatal, but write completion guaranteed under normal conditions (Round 22 — replaces "fire-and-forget" per Round 20/21 architecture)
+- Skipped when DDB circuit breaker is open (encapsulated: `_DDB_BREAKER.is_open()` check inside function, Round 24 Q2)
+- Contributes to `_DDB_BREAKER` health: `record_success()` on write completion, `record_failure()` on exception (Round 24 Q2 — unified breaker visibility)
 
 ### 4.3 Cache Reading (Query DynamoDB First)
 
 **File:** `src/lambdas/dashboard/ohlc.py`
-**New Functions:** `_read_from_dynamodb()`, `_estimate_expected_candles()`, `_build_response_from_cache()`
+**New Functions:** `_read_from_dynamodb_sync()` (inner sync logic), `_read_from_dynamodb()` (async wrapper — see Section 11.7), `_estimate_expected_candles()`, `_build_response_from_cache()`
 
-**Implementation:**
+**Implementation (sync inner function — Round 25: renamed from `_read_from_dynamodb`):**
+
+> **IMPORTANT:** This is the sync inner function. It performs blocking DynamoDB I/O.
+> Callers MUST use the async wrapper `_read_from_dynamodb()` from Section 11.7,
+> which wraps this in `asyncio.to_thread()` and manages `_DDB_BREAKER` state.
+> Direct calls from async code will block the event loop.
+
 ```python
 from datetime import UTC, datetime, time as dt_time
 from src.lambdas.shared.cache.ohlc_cache import get_cached_candles
 
-def _read_from_dynamodb(
-    ticker: str,
-    source: str,
-    resolution: OHLCResolution,
-    start_date: date,
-    end_date: date,
+def _read_from_dynamodb_sync(
+    ctx: OHLCRequestContext,  # Round 24: replaces (ticker, source, resolution, start_date, end_date)
+    consistent_read: bool = False,  # Round 20: eventual (1 RCU) vs strong (2 RCU)
 ) -> list[PriceCandle] | None:
-    """Query DynamoDB for cached OHLC candles.
+    """Sync inner implementation: query DynamoDB for cached OHLC candles.
+
+    NOTE: Must be called via the async wrapper _read_from_dynamodb() in
+    Section 11.7. The async wrapper adds: (1) _DDB_BREAKER.is_open() guard,
+    (2) asyncio.to_thread() for non-blocking I/O, (3) record_success/failure
+    for circuit breaker health. This function contains only the data logic.
 
     Returns None if:
     - No data found
@@ -178,29 +403,31 @@ def _read_from_dynamodb(
     - Incomplete data (<100% expected candles)
     """
     try:
-        start_time = datetime.combine(start_date, dt_time.min, tzinfo=UTC)
-        end_time = datetime.combine(end_date, dt_time.max, tzinfo=UTC)
+        start_time = datetime.combine(ctx.start_date, dt_time.min, tzinfo=UTC)
+        end_time = datetime.combine(ctx.end_date, dt_time.max, tzinfo=UTC)
 
         result = get_cached_candles(
-            ticker=ticker,
-            source=source,
-            resolution=resolution.value,
+            ticker=ctx.ticker,
+            source=ctx.source,
+            resolution=ctx.resolution,
             start_time=start_time,
             end_time=end_time,
         )
 
         if not result.cache_hit or not result.candles:
-            logger.debug("DynamoDB cache miss", extra={"ticker": ticker})
+            logger.debug("DynamoDB cache miss", extra={"ticker": ctx.ticker})
             return None
 
         # Convert CachedCandle to PriceCandle
         price_candles = [
-            PriceCandle.from_cached_candle(c, resolution)
+            PriceCandle.from_cached_candle(c, ctx.resolution)  # Round 25: was bare `resolution` (NameError)
             for c in result.candles
         ]
 
         # Validate coverage (100% required - no partial hits)
-        expected = _estimate_expected_candles(start_date, end_date, resolution)
+        # Round 26 Q2: resolution must be OHLCResolution enum for type-safe bars_per_day lookup
+        res_enum = OHLCResolution(ctx.resolution)  # str → enum conversion
+        expected = _estimate_expected_candles(ctx.start_date, ctx.end_date, res_enum)
         if len(price_candles) < expected:
             logger.info(
                 "DynamoDB cache incomplete, fetching fresh",
@@ -410,31 +637,30 @@ def _release_fetch_lock(cache_key: str, lock_id: str) -> None:
 
 **Integration in OHLC fetch flow:**
 ```python
-async def _fetch_with_lock(ticker: str, cache_key: str, ...):
+# NOTE: This is the simplified pre-Round-20 version. See Section 4.8 for
+# the canonical implementation with degraded mode, uniform tuple returns,
+# Round 24 OHLCRequestContext, and two-phase write architecture.
+async def _fetch_with_lock(ctx: OHLCRequestContext):
     """Fetch from API with distributed lock to prevent thundering herd."""
 
-    # Try to acquire lock
-    lock_id = _acquire_fetch_lock(cache_key)
+    lock_id = _acquire_fetch_lock(ctx.cache_key)
 
     if lock_id:
-        # We won the lock - fetch from API
         try:
-            candles = await _fetch_from_tiingo(ticker, ...)
-            await _write_through_to_dynamodb(ticker, candles, ...)
-            return candles
+            candles = await _fetch_from_tiingo(ctx.ticker, ...)
+            return candles, {"ctx": ctx, "candles": candles}
         finally:
-            _release_fetch_lock(cache_key, lock_id)
+            _release_fetch_lock(ctx.cache_key, lock_id)
     else:
-        # Another caller is fetching - wait and retry from cache
         for _ in range(LOCK_MAX_RETRIES):
             await asyncio.sleep(LOCK_WAIT_MS / 1000)
-            cached = await _read_from_dynamodb(ticker, ...)
+            cached = await _read_from_dynamodb(ctx)
             if cached:
-                return cached
+                return cached, None
 
-        # Lock holder may have failed - fall through to API
         logger.warning("Lock wait timeout, falling back to API fetch")
-        return await _fetch_from_tiingo(ticker, ...)
+        candles = await _fetch_from_tiingo(ctx.ticker, ...)
+        return candles, {"ctx": ctx, "candles": candles}
 ```
 
 **Behavior:**
@@ -483,27 +709,93 @@ async def _fetch_with_lock(ticker: str, cache_key: str, ...):
 **Implementation:**
 
 ```python
-from typing import Callable
-from cachetools import TTLCache
+from collections.abc import Callable, Awaitable  # PEP 585/603 (Round 19 Q5)
+from src.lib.timeseries.cache import ResolutionCache  # Reuse internal LRU (Round 19 Q5)
 
 class OHLCReadThroughCache:
     """In-memory cache with read-through to DynamoDB.
 
-    Eviction Policy: LRU (Least Recently Used) when maxsize reached.
+    Eviction Policy: LRU (Least Recently Used) via ResolutionCache when max_size reached.
     This is acceptable because DynamoDB provides the durable cache layer.
     Evicted entries will be re-fetched from DynamoDB (~40ms) on next access.
 
-    THREAD SAFETY (Clarified 2026-02-06):
-    cachetools.TTLCache is NOT thread-safe. ALL reads/writes to self._cache
-    MUST happen on the event loop thread. asyncio.to_thread() wraps only the
-    raw DynamoDB I/O and returns data to the event loop thread, which then
-    updates the cache. Never pass self._cache into a to_thread() callable.
+    Age Tracking (Clarified 2026-02-08 Round 21, refined Round 22):
+    ResolutionCache stores (value, inserted_at) tuples internally — atomic eviction
+    ensures timestamp is physically removed when LRU evicts an entry. No separate
+    _timestamps dict needed. Eliminates "zombie age" bug where evicted-then-reinserted
+    keys could return stale ages. get_age() derives from tuple metadata.
+
+    ResolutionCache Modification Required (Round 22, extended Round 23):
+    - set(key, value) stores (value, time.time()) tuple internally
+    - get(key) returns unwrapped value (not the tuple)
+    - get_with_age(key) -> tuple[Any | None, float]: returns (value, age_seconds) on hit,
+      returns (None, 0.0) sentinel tuple on miss (Round 23 — zero-surprise contract,
+      callers always destructure safely without guards or try/except)
+    - Eviction (popitem) removes both value and timestamp atomically
+    - invalidate(prefix: str) -> int: removes all keys starting with prefix, returns count (Round 23)
+    - clear() -> int: clears all entries, returns count of evicted items (Round 23)
+    - ~10-15 line delta to existing OrderedDict-based implementation
+
+    THREAD SAFETY (Clarified 2026-02-06, updated 2026-02-07 Round 20):
+    ResolutionCache (like cachetools.TTLCache) is NOT thread-safe.
+    ALL reads/writes via self._cache MUST happen on the event loop thread.
+    asyncio.to_thread() wraps only the raw DynamoDB I/O and returns data
+    to the event loop thread, which then updates the cache via .get()/.set().
+    Never pass self._cache into a to_thread() callable.
     """
 
-    def __init__(self, maxsize: int = 1000, ttl: int = 3600):
-        # maxsize=1000 balances memory usage with hit rate
-        # ttl=3600 (1hr) matches typical Lambda warm instance lifetime
-        self._cache = TTLCache(maxsize=maxsize, ttl=ttl)
+    def __init__(self, max_size: int = 1000, default_ttl: int = 3600):
+        # max_size=1000 balances memory usage with hit rate
+        # default_ttl=3600 (1hr) matches typical Lambda warm instance lifetime
+        self._cache = ResolutionCache(max_size=max_size, default_ttl=default_ttl)
+
+    def get(self, key: str) -> list[PriceCandle] | None:
+        """Get from in-memory cache. Returns None on miss.
+
+        ResolutionCache.get() unwraps the (value, timestamp) tuple internally,
+        returning only the value. Callers never see the tuple.
+        """
+        return self._cache.get(key)
+
+    def set(self, key: str, value: list[PriceCandle]) -> None:
+        """Set in in-memory cache. Event-loop-thread only.
+
+        ResolutionCache.set() stores (value, time.time()) tuple internally.
+        Eviction of oldest entry (if at max_size) atomically removes both
+        value and timestamp — no orphaned metadata (Round 22).
+        """
+        self._cache.set(key, value)
+
+    def get_age(self, key: str) -> int:
+        """Get age in seconds since entry was set(). Returns 0 if not found.
+
+        Uses ResolutionCache.get_with_age() which reads the stored timestamp
+        from the (value, inserted_at) tuple. Atomically correct — if the entry
+        was evicted and re-inserted, returns age from the latest insertion.
+        """
+        _, age = self._cache.get_with_age(key)
+        return max(0, int(age))
+
+    def has(self, key: str) -> bool:
+        """Check if key exists in cache without triggering LRU update."""
+        return self._cache.get(key) is not None
+
+    def invalidate(self, ticker: str) -> int:
+        """Remove all cache entries for a ticker. Delegates to ResolutionCache.
+
+        Scans keys matching "ohlc:{ticker}:" prefix. O(N) on max_size=1000
+        takes <1ms — safe for event loop thread. Returns count of evicted entries.
+
+        Used by invalidate_ohlc_cache() public API (Section 11.11).
+        """
+        return self._cache.invalidate(f"ohlc:{ticker.upper()}:")
+
+    def clear(self) -> int:
+        """Clear all cache entries. Delegates to ResolutionCache.
+
+        Returns count of evicted entries. Used by invalidate_ohlc_cache(None).
+        """
+        return self._cache.clear()
 
     async def get_or_fetch(
         self,
@@ -521,9 +813,10 @@ class OHLCReadThroughCache:
         """
         # Check in-memory first (same-instance optimization, ~1ms)
         # SAFE: runs on event loop thread
-        if key in self._cache:
+        cached = self._cache.get(key)
+        if cached is not None:
             logger.debug("In-memory cache hit", extra={"key": key})
-            return self._cache[key]
+            return cached
 
         # Read-through to DynamoDB (strong consistency, ~40ms)
         # fetch_from_dynamodb() awaits asyncio.to_thread() internally,
@@ -531,7 +824,7 @@ class OHLCReadThroughCache:
         result = await fetch_from_dynamodb()
         if result:
             # SAFE: cache write on event loop thread (after await returns)
-            self._cache[key] = result
+            self.set(key, result)  # Stores (value, timestamp) tuple atomically (Round 22)
             logger.debug("DynamoDB cache hit, populated in-memory", extra={"key": key})
 
         return result
@@ -572,46 +865,86 @@ def get_cached_candles(
 **Updated Lock Wait Flow:**
 
 ```python
-async def _fetch_with_lock(ticker: str, cache_key: str, ...):
+async def _fetch_with_lock(
+    ctx: OHLCRequestContext,  # Round 24: replaces (ticker, cache_key, source, resolution, start_date, end_date)
+) -> tuple[list[PriceCandle], dict | None]:
     """Fetch from API with distributed lock and read-through cache.
+
+    Returns:
+        Uniform tuple (candles, write_context | None) for ALL code paths (Round 22).
+        - Cache hit: (candles, None) — no persistence needed
+        - Fresh fetch: (candles, {"ctx": ctx, "candles": ...}) — caller awaits write in Phase 2
+        - Degraded mode: (candles, None) — DDB unavailable, skip write
 
     Consistency Strategy (Cost Optimization):
     - Initial read: eventual consistency (1 RCU, ~20ms) - miss is acceptable
     - Lock waiter retries: strong consistency (2 RCU, ~40ms) - must see recent writes
     - Double-check after lock: strong consistency - prevent duplicate fetches
+
+    Degraded Mode (Clarified 2026-02-07 Round 20):
+    - When LocalCircuitBreaker is open, skip lock+poll entirely
+    - Direct-to-Tiingo (~800ms) vs wasted 3s polling dead DynamoDB
+    - Tiingo still protected by its own distributed CircuitBreakerManager
     """
 
-    # Step 1: Check read-through cache (in-memory → eventual DynamoDB)
-    # Eventual consistency is fine here - a miss just means we fetch from Tiingo
-    cached = await _ohlc_read_through_cache.get_or_fetch(
-        key=cache_key,
-        fetch_from_dynamodb=lambda: _read_from_dynamodb(
-            ticker, source, resolution, start_date, end_date,
-            consistent_read=False  # Eventual: cost-efficient for initial check
-        )
-    )
-    if cached:
-        return cached
+    # Step 0: Check DynamoDB health ONCE at flow start (Round 20)
+    ddb_healthy = not _DDB_BREAKER.is_open()
 
-    # Step 2: Acquire lock (cache miss confirmed)
-    lock_id = _acquire_fetch_lock(cache_key)
+    # Step 1: Check read-through cache (in-memory → eventual DynamoDB)
+    if ddb_healthy:
+        cached = await _ohlc_read_through_cache.get_or_fetch(
+            key=ctx.cache_key,
+            fetch_from_dynamodb=lambda: _read_from_dynamodb(
+                ctx, consistent_read=False  # Eventual: cost-efficient for initial check
+            )
+        )
+        if cached:
+            return cached, None  # Cache hit — no write needed (Round 22)
+    else:
+        # CB open: check in-memory only (no DynamoDB call)
+        cached = _ohlc_read_through_cache.get(ctx.cache_key)
+        if cached is not None:
+            return cached, None  # L1 hit while degraded — no write needed (Round 22)
+
+    # Step 1.5: DEGRADED MODE — skip lock+poll, direct to Tiingo (Round 20)
+    if not ddb_healthy:
+        logger.info(
+            "DynamoDB degraded (CB open), bypassing lock — direct to Tiingo",
+            extra={"ticker": ctx.ticker, "cache_key": ctx.cache_key},
+        )
+        candles = await _fetch_from_tiingo(ctx.ticker, ...)
+        return candles, None  # DDB broken — skip write (Round 22)
+
+    # Step 2: Acquire lock (cache miss confirmed, DynamoDB healthy)
+    lock_id = _acquire_fetch_lock(ctx.cache_key)
 
     if lock_id:
         try:
             # Step 3a: Double-check after lock (another caller might have just written)
             # Strong consistency required - we're about to call Tiingo if miss
-            cached = await _read_from_dynamodb(..., consistent_read=True)
+            cached = await _read_from_dynamodb(ctx, consistent_read=True)
             if cached:
-                _ohlc_read_through_cache._cache[cache_key] = cached
-                return cached
+                _ohlc_read_through_cache.set(ctx.cache_key, cached)
+                return cached, None  # Double-check hit — no write needed (Round 22)
 
-            # Step 4: Fetch from Tiingo (write-through)
-            candles = await _fetch_from_tiingo(ticker, ...)
-            await _write_through_to_dynamodb(ticker, source, resolution, candles, end_date)
-            _ohlc_read_through_cache._cache[cache_key] = candles
-            return candles
+            # Step 4: Fetch from Tiingo (Critical Section — lock protects THIS)
+            candles = await _fetch_from_tiingo(ctx.ticker, ...)
+
+            # Step 5: Populate L1 in-memory BEFORE releasing lock (Round 20)
+            # Same-instance waiters see data immediately via L1
+            _ohlc_read_through_cache.set(ctx.cache_key, candles)
         finally:
-            _release_fetch_lock(cache_key, lock_id)
+            # Step 6: Release lock BEFORE write-through (Round 20 "Fast Release")
+            # Lock hold = ~800ms (API only), NOT ~10,800ms (API + throttled batch write)
+            _release_fetch_lock(ctx.cache_key, lock_id)
+
+        # Step 7: Return write context to caller (Round 21 "Two-Phase" refinement)
+        # Lock is already released — other instances unblocked.
+        # Write-through is NOT awaited here — it's deferred to the handler's
+        # Phase 2 (outside asyncio.wait_for) to prevent timeout cancellation.
+        # Preserves Round 20 Q3 guarantee: write completes before Lambda freeze.
+        # Round 24: ctx is frozen — safe to pass through write context dict.
+        return candles, {"ctx": ctx, "candles": candles}
     else:
         # Step 3b: Lock not acquired - wait and poll read-through cache
         for _ in range(LOCK_MAX_RETRIES):
@@ -619,79 +952,104 @@ async def _fetch_with_lock(ticker: str, cache_key: str, ...):
 
             # Poll with STRONG consistency - must see lock holder's write
             cached = await _ohlc_read_through_cache.get_or_fetch(
-                key=cache_key,
+                key=ctx.cache_key,
                 fetch_from_dynamodb=lambda: _read_from_dynamodb(
-                    ticker, source, resolution, start_date, end_date,
-                    consistent_read=True  # Strong: must see recent writes
+                    ctx, consistent_read=True  # Strong: must see recent writes
                 )
             )
             if cached:
-                return cached
+                return cached, None  # Lock waiter got data — no write needed (Round 22)
 
         # Fallback: fetch anyway (availability over consistency)
         logger.warning("Lock wait timeout, falling back to API fetch")
-        return await _fetch_from_tiingo(ticker, ...)
+        candles = await _fetch_from_tiingo(ctx.ticker, ...)
+        # Timeout fallback also needs write — data fetched but not yet in DDB
+        return candles, {"ctx": ctx, "candles": candles}
 ```
 
 **Guarantees:**
 1. Same-instance requests: In-memory hit (~1ms)
 2. Initial cache check: Eventual consistency (~20ms, 1 RCU) - miss triggers lock acquisition
-3. Lock waiters: Strong consistency (~40ms, 2 RCU) - guaranteed to see lock holder's write
-4. Double-check after lock: Strong consistency - prevents duplicate Tiingo fetches
-5. Cost optimization: Happy path (cache hit) uses eventual consistency (half the cost)
+3. Lock hold duration: ~800ms (Tiingo API only) — write-through deferred to handler Phase 2 outside timeout boundary (Round 21)
+4. Lock waiters: Strong consistency (~40ms, 2 RCU) - guaranteed to see lock holder's write
+5. Degraded mode (CB open): Skip lock+poll entirely, direct to Tiingo (~800ms) — no 3s wasted polling (Round 20)
+6. Double-check after lock: Strong consistency - prevents duplicate Tiingo fetches
+7. Cost optimization: Happy path (cache hit) uses eventual consistency (half the cost)
 
 ### 4.9 Cache Source Response Header
 
-**Decision (Clarified 2026-02-04):** Add `X-Cache-Source` response header for immediate cache verification and debugging.
+**Decision (Clarified 2026-02-04, extended 2026-02-07 Round 20):** Add `X-Cache-Source` and `X-Cache-Age` response headers for immediate cache verification and debugging.
 
 **Header Values:**
 
-| Value | Meaning | Latency |
-|-------|---------|---------|
-| `in-memory` | Served from Lambda instance cache | ~1ms |
-| `dynamodb` | Served from DynamoDB persistent cache | ~40ms |
-| `tiingo` | Fetched fresh from Tiingo API | ~500-2000ms |
-| `finnhub` | Fetched fresh from Finnhub API | ~500-2000ms |
+| Header | Value | Meaning | Latency |
+|--------|-------|---------|---------|
+| `X-Cache-Source` | `in-memory` | Served from Lambda instance cache | ~1ms |
+| `X-Cache-Source` | `dynamodb` | Served from DynamoDB persistent cache | ~40ms |
+| `X-Cache-Source` | `tiingo` | Fetched fresh from Tiingo API | ~500-2000ms |
+| `X-Cache-Source` | `finnhub` | Fetched fresh from Finnhub API | ~500-2000ms |
+| `X-Cache-Source` | `stale` | Timeout fallback — served last-known data from L1/L2 (Round 20) | <5s |
+| `X-Cache-Age` | `<seconds>` | Age in seconds since data was cached (Round 20). `0` for fresh fetches. Enables frontend "Last updated Xm ago" display. | — |
 
-**Implementation:**
+**Implementation (Rewritten Round 22 to align with Two-Phase Handler):**
+
+This function is called by the handler's Phase 1 (`asyncio.wait_for`). It delegates to `_fetch_with_lock()` which returns a uniform `(candles, write_context | None)` tuple. Headers are determined by which cache layer served the data.
 
 ```python
+import time
 from fastapi import Response
 
-async def get_ohlc_data(
-    ticker: str,
-    resolution: str,
-    time_range: str,
-    response: Response,  # FastAPI injects this
-) -> OHLCResponse:
-    """Get OHLC data with cache source tracking."""
+async def _get_ohlc_data_with_write_context(
+    ctx: OHLCRequestContext,  # Round 24: replaces (ticker, resolution, time_range, cache_key)
+    response: Response,
+) -> tuple[OHLCResponse, dict | None]:
+    """Fetch OHLC data with cache source tracking + deferred write context.
 
+    Returns:
+        (OHLCResponse with headers set, write_context | None for Phase 2)
+
+    Header determination uses the cache layer that served the data:
+    - L1 hit (in-memory): X-Cache-Source: in-memory, age from get_age()
+    - L2 hit (DynamoDB): X-Cache-Source: dynamodb, age from ExpiresAt derivation
+    - L3 fresh (Tiingo): X-Cache-Source: tiingo, age = 0
+    - Degraded (CB open): X-Cache-Source: tiingo, age = 0 (bypassed DDB)
+    """
     cache_source = "tiingo"  # Default: will fetch from API
+    cache_age = 0
 
-    # Check read-through cache
-    cache_key = _get_ohlc_cache_key(ticker, resolution, time_range, start_date, end_date)
-
-    # In-memory check
-    if cache_key in _ohlc_read_through_cache._cache:
-        candles = _ohlc_read_through_cache._cache[cache_key]
+    # Step 1: Check L1 in-memory (same-instance, ~1ms)
+    cached = _ohlc_read_through_cache.get(ctx.cache_key)
+    if cached is not None:
         cache_source = "in-memory"
+        cache_age = _ohlc_read_through_cache.get_age(ctx.cache_key)  # Round 22: atomic tuple
+        response.headers["X-Cache-Source"] = cache_source
+        response.headers["X-Cache-Age"] = str(cache_age)
+        response.headers["X-Cache-Key"] = ctx.cache_key
+        return OHLCResponse(candles=cached, ...), None  # No write needed
+
+    # Step 2: Delegate to _fetch_with_lock (L2 → Lock → L3 flow)
+    # Returns uniform (candles, write_context | None) tuple (Round 22)
+    candles, write_context = await _fetch_with_lock(ctx)  # Round 24: single ctx param
+
+    # Step 3: Determine cache source from write_context
+    if write_context is not None:
+        # Fresh fetch from Tiingo — data not yet in DDB
+        cache_source = ctx.source  # Round 24: use actual source from ctx
+        cache_age = 0
+    elif candles is not None:
+        # Cache hit (L2 DynamoDB or lock-waiter poll)
+        cache_source = "dynamodb"
+        cache_age = _estimate_cache_age_from_dynamodb(candles, ctx.resolution)  # Round 21
     else:
-        # DynamoDB check (strong consistency)
-        dynamodb_result = await _read_from_dynamodb(...)
-        if dynamodb_result:
-            candles = dynamodb_result
-            cache_source = "dynamodb"
-            _ohlc_read_through_cache._cache[cache_key] = candles
-        else:
-            # Fetch from API (with lock)
-            candles = await _fetch_with_lock(ticker, cache_key, ...)
-            cache_source = "tiingo"  # or "finnhub" based on adapter used
+        cache_source = ctx.source
+        cache_age = 0
 
-    # Set response header
+    # Step 4: Set response headers
     response.headers["X-Cache-Source"] = cache_source
-    response.headers["X-Cache-Key"] = cache_key  # Useful for debugging
+    response.headers["X-Cache-Age"] = str(cache_age)
+    response.headers["X-Cache-Key"] = ctx.cache_key
 
-    return OHLCResponse(candles=candles, ...)
+    return OHLCResponse(candles=candles, ...), write_context
 ```
 
 **Benefits:**
@@ -700,6 +1058,272 @@ async def get_ohlc_data(
 - Useful for debugging slow requests
 - Smoke tests can assert on header value
 - API contract, not log format dependency
+- `X-Cache-Age` derives from `ResolutionCache` tuple (L1) or `ExpiresAt` derivation (L2) — no stale references (Round 22)
+- `stale` source (set by handler on timeout) enables automated synthetic monitors to alert on degradation
+- Uniform tuple return aligns with handler Phase 1/Phase 2 architecture (Round 21+22)
+
+### 4.10 Handler Two-Phase Architecture ("Emergency Brake")
+
+**Decision (2026-02-07 Round 20, refined 2026-02-08 Round 21):** Split the handler into two distinct phases: (1) Response Phase capped at 5s via `asyncio.wait_for()`, (2) Persistence Phase uncapped but awaited before handler returns. Guarantees both deterministic P99 user latency AND write-through completion (no Lambda freeze mid-write).
+
+**Problem (Round 20):** Without a handler-level timeout, worst-case flow is ~47 seconds:
+```
+L1 miss (1ms) → L2 retry (3.5s) → Lock (50ms) → Double-check L2 (3.5s) → Tiingo (30s!) → Write (10s) = ~47s
+```
+API Gateway hard limit is 29s → user sees 504 while Lambda keeps burning compute.
+
+**Refinement (Round 21 Q1):** Round 20's original design placed write-through INSIDE the 5s `asyncio.wait_for()`. This creates a contradiction: `batch_write_with_retry` has a 10s hard cap, but if the handler reaches write-through at t=4.5s, the 5s timeout cancels the write at t=5.0s — the exact "Lambda freeze mid-write" scenario Round 20 Q3 was designed to prevent. Solution: **separate the clock for the user from the clock for the database**.
+
+**Constants:**
+
+```python
+# Phase 1: Response — user gets candles within this window, always.
+DASHBOARD_TIMEOUT_SECONDS = 5.0
+
+# Tiingo httpx timeout — must be < DASHBOARD_TIMEOUT to leave buffer for recovery.
+# Buffer (1s) covers: double-check L2 read (~200ms), JSON serialization (~150ms),
+# X-Ray/EMF flush (~50ms), stale fallback logic (~100ms).
+TIINGO_HTTP_TIMEOUT_SECONDS = 4.0  # Was: 30.0 in tiingo.py:85
+
+# Phase 2: Persistence — no user-facing timeout, but batch_write_with_retry
+# has its own 10s MAX_BATCH_RETRY_DURATION_SECONDS hard cap (Round 19 Q4).
+```
+
+**Implementation:**
+
+**Response Models (Round 26 Q1 — Discriminated Union):**
+
+```python
+from pydantic import BaseModel, Field
+from typing import Literal, Union
+
+class OHLCErrorResponse(BaseModel):
+    """Dedicated error/degraded response for timeout and failure paths.
+
+    Separates success and failure contracts (Round 26): OHLCResponse requires
+    all 7 mandatory fields (ticker, time_range, start_date, etc.) which are
+    not available during emergency timeout. OHLCErrorResponse is "cheap" to
+    construct — no cache_expires_at, no count, no source required.
+
+    Frontend uses TypeScript type guard: if ('status' in response) → error path.
+    CloudWatch Logs Insights: stats count(*) by status for degradation tracking.
+    """
+    status: Literal["degraded", "error"]
+    message: str
+    candles: list[PriceCandle] = Field(default_factory=list)
+    ticker: str | None = None  # Optional in error state
+
+# Handler return type — discriminated union
+OHLCHandlerResponse = Union[OHLCResponse, OHLCErrorResponse]
+```
+
+**Implementation:**
+
+```python
+import asyncio
+from fastapi import Response
+
+async def get_ohlc_handler(
+    ticker: str,
+    resolution: str,
+    time_range: str,
+    response: Response,
+) -> OHLCHandlerResponse:  # Round 26: was OHLCResponse — crashed on timeout paths
+    """Top-level OHLC handler with two-phase architecture.
+
+    Phase 1 (Response): L1 → L2 → Lock → Tiingo under 5s hard ceiling.
+        Returns candles + cache_source to user. On timeout: stale fallback.
+    Phase 2 (Persistence): Write-through to DynamoDB AFTER response is built.
+        Awaited before handler returns to prevent Lambda freeze mid-write.
+        Invisible to user latency; additive to billed duration only (~50ms normal).
+
+    Invariant: User P99 = 5s. Write integrity = guaranteed.
+    """
+    # ── CONTEXT CONSTRUCTION (Round 24) ───────────────────────────────
+    start_date, end_date = _resolve_date_range(time_range)
+    cache_key = _get_ohlc_cache_key(ticker, resolution, time_range, start_date, end_date)
+    ctx = OHLCRequestContext(
+        ticker=ticker, resolution=resolution, time_range=time_range,
+        start_date=start_date, end_date=end_date,
+        source=_get_default_source(ticker), cache_key=cache_key,
+    )
+    pending_write = None  # Deferred write-through context (Round 21)
+
+    # ── PHASE 1: RESPONSE (capped at 5s) ──────────────────────────────
+    try:
+        # Returns (OHLCResponse, pending_write_context | None)
+        # pending_write_context is {"ctx": ctx, "candles": candles} for Phase 2
+        result, pending_write = await asyncio.wait_for(
+            _get_ohlc_data_with_write_context(ctx, response),
+            timeout=DASHBOARD_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        logger.warning(
+            "Handler timeout — serving stale fallback",
+            extra={"ticker": ctx.ticker, "cache_key": ctx.cache_key},
+        )
+
+        # Stale fallback: L1 first (0ms), then "last gasp" L2 (100ms, no retries)
+        stale_candles = _ohlc_read_through_cache.get(ctx.cache_key)
+        stale_age = 0
+
+        if stale_candles is None and not _DDB_BREAKER.is_open():
+            # Cold start: L1 empty, but L2 might have data from prior invocation.
+            # Quick read: 100ms limit, no retries, eventual consistency (cheapest).
+            try:
+                stale_candles = await asyncio.wait_for(
+                    _read_from_dynamodb(
+                        ctx, consistent_read=False,  # Round 24: ctx carries all params
+                    ),
+                    timeout=0.1,  # 100ms — "last gasp"
+                )
+                if stale_candles:
+                    stale_age = _estimate_cache_age_from_dynamodb(stale_candles, ctx.resolution)  # Round 24 Q3: was missing resolution param
+            except (asyncio.TimeoutError, Exception):
+                pass  # L2 also unavailable — proceed to error response
+
+        if stale_candles:
+            response.headers["X-Cache-Source"] = "stale"
+            response.headers["X-Cache-Age"] = str(stale_age)
+            response.headers["X-Cache-Key"] = ctx.cache_key
+            # Round 26 Q1: OHLCErrorResponse (not OHLCResponse) — avoids pydantic
+            # ValidationError from missing 7 required fields during emergency timeout
+            result = OHLCErrorResponse(
+                status="degraded",
+                message="Serving cached data due to upstream latency",
+                candles=stale_candles,
+                ticker=ctx.ticker,
+            )
+        else:
+            # Total failure: no stale data available (cold start + L2 unavailable)
+            response.status_code = 503
+            response.headers["X-Cache-Source"] = "none"
+            response.headers["Retry-After"] = "5"
+            # Round 26 Q1: OHLCErrorResponse — cheap to construct, no cache_expires_at needed
+            result = OHLCErrorResponse(
+                status="error",
+                message="Service temporarily unavailable — please retry",
+                ticker=ctx.ticker,
+            )
+
+    # ── PHASE 2: PERSISTENCE (outside 5s cap, awaited before handler returns) ──
+    if pending_write:
+        # Round 24 Q2: Breaker check moved INSIDE _write_through_to_dynamodb.
+        # Function is self-contained: is_open() → early return, record_success/failure
+        # on outcome. Handler only needs to check if write context exists.
+        # Write-through runs AFTER user response is built but BEFORE Lambda freezes.
+        # Billed duration: ~50ms normal, up to 10s under throttling (hard cap).
+        # X-Ray: separate "DynamoDB_Write" segment after "Response" segment.
+        await _write_through_to_dynamodb(**pending_write)
+
+    return result
+```
+
+**Key Design: `_get_ohlc_data_with_write_context()`**
+
+The inner fetch function returns a tuple: `(response, pending_write_context)`. When fresh data is fetched from Tiingo, instead of awaiting write-through inline, it bundles the write arguments into a dict and returns them to the handler. The handler then awaits the write outside the timeout boundary.
+
+```python
+async def _get_ohlc_data_with_write_context(
+    ctx: OHLCRequestContext,  # Round 24: frozen dataclass carries all request params
+    response: Response,
+) -> tuple[OHLCResponse, dict | None]:
+    """Fetch OHLC data, returning response + deferred write context.
+
+    The write context (if any) is a dict with keys {ctx, candles} for Phase 2.
+    Caller is responsible for awaiting the write OUTSIDE the timeout boundary.
+    """
+    # ... L1 → L2 → Lock → Tiingo flow (same as _fetch_with_lock) ...
+    # On cache hit: return (response, None)  — no write needed
+    # On fresh fetch: return (response, {"ctx": ctx, "candles": candles})
+```
+
+**Cache Age Derivation (Round 21):**
+
+```python
+import time
+
+def _estimate_cache_age_from_dynamodb(candles: list, resolution: str) -> int:
+    """Derive cache age from DynamoDB ExpiresAt — no extra attribute needed.
+
+    Formula: WrittenAt = ExpiresAt - TTL_DURATION
+             Age = now - WrittenAt
+
+    Uses the first candle's ExpiresAt (all candles in a batch share the same TTL).
+    Returns 0 if ExpiresAt is missing (defensive — should not happen).
+    Clamps to max(0, age) to handle minor clock skew.
+    """
+    if not candles:
+        return 0
+
+    # ExpiresAt is on the raw DynamoDB item; candles here are PriceCandle objects
+    # converted from DynamoDB items. The caller must pass the raw ExpiresAt
+    # from the first item in the query response.
+    expires_at = getattr(candles[0], '_expires_at', 0)  # Set during conversion
+    if not expires_at:
+        return 0
+
+    # Reverse the TTL calculation from Section 4.6
+    is_intraday = resolution != "D"
+    if is_intraday:
+        ttl_duration = TTL_MINUTES_TODAY_INTRADAY * 60  # 5 min = 300s
+    else:
+        ttl_duration = TTL_DAYS_HISTORICAL * 24 * 60 * 60  # 90 days
+
+    written_at = expires_at - ttl_duration
+    return max(0, int(time.time() - written_at))
+```
+
+**Note:** During `PriceCandle.from_cached_candle()` conversion, store the raw `ExpiresAt` value as a transient `_expires_at` attribute on the first candle. This avoids passing DynamoDB metadata through the entire call chain while keeping the derivation clean.
+
+**Tiingo Adapter Change:**
+
+```python
+# src/lambdas/shared/adapters/tiingo.py:85
+# BEFORE:
+TIMEOUT = 30.0
+
+# AFTER (Round 20):
+TIMEOUT = 4.0  # Must be < DASHBOARD_TIMEOUT_SECONDS (5s) to leave buffer for stale fallback
+```
+
+**Worst-Case Timeline (Two-Phase):**
+
+```
+─── PHASE 1: RESPONSE (user-facing, 5s cap) ───
+0ms     L1 miss
+100ms   L2 read (throttled, 1st attempt fails, 2nd starts)
+500ms   L2 miss confirmed
+550ms   Lock acquired + double-check L2
+800ms   Tiingo returns candles → populate L1 → release lock
+850ms   Response built: 200 OK, X-Cache-Source: tiingo
+        ← User latency ends here (~850ms) →
+
+─── PHASE 2: PERSISTENCE (invisible to user) ───
+850ms   Write-through begins (outside asyncio.wait_for)
+900ms   batch_write_item completes (~50ms normal)
+900ms   Handler returns → Lambda environment safe to freeze
+        ← Billed duration: ~900ms total →
+
+─── WORST CASE: TIMEOUT + THROTTLED WRITE ───
+0ms     L1 miss
+4500ms  Tiingo 4s timeout fires → L1 populated with partial/stale
+5000ms  Handler timeout fires → stale fallback response sent
+        ← User latency: 5000ms (hard cap) →
+5001ms  Phase 2: pending_write from pre-timeout Tiingo fetch
+15000ms Write completes after DynamoDB throttling retries (10s hard cap)
+15000ms Handler returns
+        ← Billed duration: ~15s, but user saw response at 5s →
+```
+
+**Guarantees:**
+1. User P99 latency capped at 5s regardless of downstream health
+2. Write-through always completes before Lambda freeze — no orphaned writes, no corrupted connection pools (Round 20 Q3 preserved)
+3. Stale data preferred over 504 — "stale is better than broken"
+4. `X-Cache-Source: stale` + `X-Cache-Age` enable frontend "Last updated Xm ago" display
+5. CloudWatch Synthetics can alert on stale percentage >5%
+6. Billed duration may exceed 5s under throttling, but user latency never does
+7. X-Ray trace shows clean separation: Response segment (~850ms) + DynamoDB_Write segment (~50ms)
 
 ---
 
@@ -708,22 +1332,51 @@ async def get_ohlc_data(
 ```
 Request: GET /api/v2/tickers/AAPL/ohlc?range=1M&resolution=D
 
-1. Check Read-Through Cache (in-memory → strong DynamoDB)
-   ├─ IN-MEMORY HIT → Return cached OHLCResponse (~1ms)
-   ├─ DYNAMODB HIT → Populate in-memory, return (~40ms)
-   └─ BOTH MISS ↓
+══════════════════════════════════════════════════════════════════════
+  PHASE 1: RESPONSE (capped at 5s — user-facing latency)
+══════════════════════════════════════════════════════════════════════
+┌─ asyncio.wait_for(timeout=5.0) ─────────────────────────────────────┐
+│                                                                      │
+│  0. Check DynamoDB Health (LocalCircuitBreaker) — Round 20 Q1        │
+│     ├─ CB OPEN → Skip to step 4 (Degraded Mode, direct to Tiingo)   │
+│     └─ CB CLOSED ↓                                                   │
+│                                                                      │
+│  1. Check Read-Through Cache (in-memory → eventual DynamoDB)         │
+│     ├─ IN-MEMORY HIT → Return (response, None)  (~1ms)              │
+│     ├─ DYNAMODB HIT → Populate L1, return (response, None)  (~40ms) │
+│     └─ BOTH MISS ↓                                                   │
+│                                                                      │
+│  2. Acquire Distributed Lock (DynamoDB conditional write)            │
+│     ├─ ACQUIRED → Proceed to step 3                                  │
+│     └─ LOCKED → Wait 200ms, retry step 1 (up to 15×200ms / 3s)     │
+│                                                                      │
+│  3. Double-Check DynamoDB (strong consistency)                       │
+│     ├─ HIT → Populate L1, release lock, return (response, None)     │
+│     └─ MISS ↓                                                        │
+│                                                                      │
+│  4. Call Tiingo API (4s httpx timeout) — Round 20                    │
+│     ├─ SUCCESS → Populate L1, release lock,                          │
+│     │            return (response, pending_write_context) ← NEW R21  │
+│     └─ FAILURE → Release lock, fall through ↓                       │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
+     │ TIMEOUT or FAILURE ↓
+     │
+5. Stale Fallback (Round 20)
+   ├─ L1 HAS DATA → Return 200 + X-Cache-Source: stale + X-Cache-Age
+   ├─ L1 EMPTY + CB CLOSED → "Last gasp" L2 read (100ms, no retries)
+   │   ├─ L2 HIT → Return 200 + X-Cache-Source: stale
+   │   └─ L2 MISS ↓
+   └─ TOTAL FAILURE → Return 503 + Retry-After: 5
 
-2. Acquire Distributed Lock (DynamoDB conditional write)
-   ├─ ACQUIRED → Proceed to step 3
-   └─ LOCKED → Wait 200ms, retry step 1 (up to 15 times / 3s total), then fallback to step 3
-
-3. Double-Check DynamoDB (another caller might have just written)
-   ├─ HIT → Populate in-memory, release lock, return
-   └─ MISS ↓
-
-4. Call Tiingo API
-   ├─ SUCCESS → Write-through to DynamoDB, populate in-memory, release lock, return
-   └─ FAILURE → Release lock, return 503/404 error
+══════════════════════════════════════════════════════════════════════
+  PHASE 2: PERSISTENCE (outside 5s cap — invisible to user)  ← R21
+══════════════════════════════════════════════════════════════════════
+6. If pending_write_context exists AND CB closed:
+   ├─ await _write_through_to_dynamodb(**pending_write_context)
+   │   ├─ SUCCESS → L2 populated, cross-instance cache warm (~50ms)
+   │   └─ FAILURE → Log warning, non-fatal (L1 still has data)
+   └─ Handler returns → Lambda environment safe to freeze
 ```
 
 **Cache Layers:**
@@ -772,6 +1425,17 @@ def _read_from_dynamodb(...):
 ### 6.8 Weekend/Holiday Handling
 **Decision:** DynamoDB query range includes weekends; only trading day candles exist
 **Behavior:** Works correctly - no trading data on weekends
+
+### 6.9 Concurrent Resolution Fallback (Duplicate Tiingo Calls)
+**Decision (Clarified 2026-02-08 Round 21):** Accept as known trade-off — document, do not fix.
+**Scenario:** Requests for different resolutions (5-min, 60-min) on the same ticker both fall back to daily ("D"). Each acquires a separate lock (different cache key), both call Tiingo for the same daily data, both write under `ohlc:AAPL:D:1M:...` (last-write-wins, idempotent).
+**Why accept:**
+- Natural cap: at most ~3 concurrent fallback paths (number of standard resolutions), not a true thundering herd
+- Writes are idempotent: identical daily candle data, DynamoDB overwrites with same values
+- Self-correcting: once the first write completes, all subsequent requests (any resolution) hit cache
+- Secondary lock (Option B) risks deadlocks with nested DynamoDB locks under Lambda timeout pressure
+- Pre-check alias read (Option C) adds strongly consistent read cost to every fallback, penalizing 100% to save <1%
+- Parallel calls actually increase availability: if one Lambda freezes, the other still populates the cache
 
 ---
 
@@ -893,6 +1557,7 @@ Key edge cases to test:
 | Circular imports | Low | Medium | Local imports in functions |
 | Production bug requires rollback | Low | Medium | Fix-forward strategy (see below) |
 | Hot partition (popular tickers) | Low | Medium | Monitor ConsumedCapacity; shard if needed (see below) |
+| CB convergence spike (brownout) | Medium | Low | 50 instances × 3 threshold = 150 failed calls before all breakers open; DynamoDB on-demand absorbs; `CircuitBreakerOpenCount` Sum alarm detects correlated events (Round 20 Q5) |
 
 ### 10.2 Hot Partition Scaling Strategy
 
@@ -936,6 +1601,80 @@ Key edge cases to test:
 ## Clarifications
 
 **Full History:** See [ohlc-cache-remediation-clarifications.md](ohlc-cache-remediation-clarifications.md) for Rounds 1-15.
+
+### Session 2026-02-08 (Round 25 - Post-Round-24 Full Drift Audit)
+
+- Q: `_get_default_source(ticker)` and `_resolve_date_range(time_range)` are called at handler entry (Sections 4.0/4.10) to construct `OHLCRequestContext`, but neither function is defined anywhere — double NameError, 100% crash rate before cache pipeline starts. → A: **Define both as pure stateless helpers in new Section 4.0.1.** `_resolve_date_range` maps predefined time_range strings ("1D", "1W", "1M", "3M", "6M", "1Y", "YTD") to `(start_date, end_date)` using ET market timezone (per Round 18). Raises `ValueError` for unknown/custom ranges. `_get_default_source` returns `"tiingo"` — centralized "knob" for future Finnhub failover. Both are pure, no I/O, trivially testable. Also fixed Section 4.3 bare `resolution`/`start_date`/`end_date` variables → `ctx.resolution`/`ctx.start_date`/`ctx.end_date`.
+
+- Q: Section 4.3 defines `_read_from_dynamodb` as sync `def` but every caller uses `await`. Section 11.7 defines the async wrapper with the same name. Implementers reading Section 4.3 in isolation would write a sync function, then hit `TypeError` at every call site — same bug class as Round 23 Q4. → A: **Rename Section 4.3 function to `_read_from_dynamodb_sync`** with cross-reference to Section 11.7 async wrapper. Establishes naming symmetry with write path (`_write_through_to_dynamodb` async + `put_cached_candles` sync inner). Section 4.3 = data logic (completeness gate, resolution validation). Section 11.7 = resilience logic (breaker, `to_thread`, error recording). Implementer reads both; neither is complete alone.
+
+- Q: Section 12.4 observability snippets use pre-Round-24 signature `_read_from_dynamodb(ticker: str, source: str, resolution: str, ...)` with bare `cache_key` variable (never a parameter) and `@tracer.capture_method` on the sync function (orphaned X-Ray segments in worker thread). Handler snippet also uses bare `ticker`, `cache_key`, `resolution`. → A: **Update all Section 12.4 snippets to `ctx: OHLCRequestContext` pattern with post-await X-Ray instrumentation.** Handler snippet uses `ctx.ticker`, `ctx.cache_key`, `ctx.resolution`, `ctx.source`. Cache-specific logging moves to async wrapper with `tracer.provider.in_subsegment()` on event loop thread, `asyncio.to_thread()` for sync I/O, and post-await annotation enrichment (`status: hit/miss/error`). Matches Round 19 Q4 "Clean Room" pattern: sync function = pure I/O, async wrapper = orchestration + tracing. Ensures CloudWatch Logs Insights queries reference `ctx.*` fields that actually exist.
+
+- Q: Section 15 Quick Reference says "176 tests" and "D: 28 tests" — stale after Round 24 added D36-D39 (total 180, D: 36). Test plan file header correctly says 180. Quick Reference is the most frequently consulted section — stale counts create "Shadow Debt" where developers think they've finished before CI catches the gap. → A: **Update Section 15 counts to match canonical test plan.** D: 28 → 36. Total: 176 → 180. Added R24 and R25 mentions to parenthetical history. R25 helper function tests (`_resolve_date_range`, `_get_default_source`) to be formally numbered during `/speckit.plan`.
+
+- Q: Test C14 calls `_resolve_date_range("1D")` and `_get_ohlc_cache_key(...)` without importing either — NameError. Test M1 calls `_read_from_dynamodb("AAPL", "tiingo", "D", ...)` with pre-Round-24 positional string arguments — TypeError. Both are in the canonical test plan that implementers build to. → A: **Fix both tests to use Round 24+25 ctx pattern.** C14: add explicit imports `from src.lambdas.dashboard.ohlc import OHLCRequestContext, _resolve_date_range, _get_ohlc_cache_key`. M1/M2: construct `OHLCRequestContext` fixture, call `await _read_from_dynamodb(ctx, consistent_read=False)` and `await _write_through_to_dynamodb(ctx, [...])`. Test bodies verify same metric assertions — only the call interface changed.
+
+### Session 2026-02-08 (Round 24 - OHLCRequestContext & Circuit Breaker Audit)
+
+- Q: Handler uses `start_date`, `end_date`, `source` as bare variables but they aren't in `_get_ohlc_data_with_write_context` or `_fetch_with_lock` signatures — NameError at runtime. The call chain passes 5-7 individual params through each level (Data Clump anti-pattern). Adding future params (e.g., `user_tier`) would require refactoring every function. → A: **Introduce frozen `OHLCRequestContext` dataclass** — constructed once at handler entry, passed as single `ctx` param through the entire L1 → L2 → Lock → Tiingo → Phase 2 chain. Frozen for thread safety (`asyncio.to_thread()` closures). Includes `to_metadata()` for X-Ray/EMF. Test fixtures use `dataclasses.replace()` for per-test overrides. Refactored: `_get_ohlc_data_with_write_context(ctx, response)`, `_fetch_with_lock(ctx)`, `_read_from_dynamodb(ctx, consistent_read)`, `_write_through_to_dynamodb(ctx, candles)`. Write context dict simplified from 5 keys to 2: `{"ctx": ctx, "candles": candles}`.
+
+- Q: Sections 11.3 and 11.7 contain async wrapper snippets still using pre-Round-24 individual parameters (`ticker, source, resolution, start_date, end_date`) instead of `OHLCRequestContext`. Section 11.7 write wrapper also missing `_DDB_BREAKER` calls from Q2. Implementers copying these snippets would get NameErrors and re-introduce the breaker blind spot. → A: **Update all three snippets to `ctx: OHLCRequestContext` pattern** — Section 11.7 read wrapper: `_read_from_dynamodb(ctx, consistent_read)` with breaker integration. Section 11.7 write wrapper: `_write_through_to_dynamodb(ctx, candles)` with `is_open()` guard, `record_success()`, `record_failure()`. Section 11.3 breaker integration: `_read_from_dynamodb_sync, ctx, consistent_read`. All supplementary sections now speak the same language as canonical Sections 4.2-4.10. Zero architectural drift.
+
+- Q: Test plan has zero Round 24 coverage — no R24 column in summary table. `OHLCRequestContext` construction, circuit breaker write visibility (`record_success()`/`record_failure()` in `_write_through_to_dynamodb`), and timeout fallback age fix (`ctx.resolution` param) have no tests. C14 uses stale `OHLCRequestContext.create()` factory method that doesn't exist in spec. → A: **Update test plan with D36-D39** — D36: write success calls `record_success()`, D37: write failures trip breaker open, D38: timeout fallback age uses `ctx.resolution` (daily vs intraday derive different ages), D39: `OHLCRequestContext` frozen + `to_metadata()` + `dataclasses.replace()`. Fixed C14 stale factory method to use direct constructor. Summary table extended with R24 column. Total 176 → 180.
+
+- Q: Handler timeout fallback (line 1031) calls `_estimate_cache_age_from_dynamodb(stale_candles)` — missing `resolution` parameter. Function signature is `(candles: list, resolution: str) -> int`. `TypeError` every time a user hits the 5s timeout and L2 has stale data. Happy path in Section 4.9 already passes `ctx.resolution` correctly. Error path was never updated — classic "happy path updated but error path missed" bug. Turns graceful degradation into a total dashboard crash. → A: **Pass `ctx.resolution`** — ctx is in scope, resolution needed for TTL duration lookup (intraday=5min vs daily=90d). Fixed to `_estimate_cache_age_from_dynamodb(stale_candles, ctx.resolution)`. Matches Section 4.9 happy-path pattern. X-Cache-Age now accurate in stale fallback. Avoids data bloat (Option B would inject resolution into every PriceCandle or DynamoDB metadata).
+
+- Q: `_write_through_to_dynamodb` catches exceptions and logs but never calls `_DDB_BREAKER.record_failure()` or `record_success()`. The circuit breaker is "deaf" to write-side health — only read failures feed it. A DynamoDB outage affecting writes only (WCU throttling) would never trip the breaker. Phase 2 keeps attempting writes on every request, burning ~200ms per attempt on a dead write path. During HALF_OPEN, write outcomes don't contribute to recovery detection. → A: **Writes contribute to the same `_DDB_BREAKER`** — DynamoDB is a single service; write failures are a leading indicator of read failures. Add `_DDB_BREAKER.is_open()` early return inside `_write_through_to_dynamodb` (encapsulates breaker check, handler guard simplified to `if pending_write:`). Add `record_success()` after successful `asyncio.to_thread(put_cached_candles, ...)`. Add `record_failure()` in except block. During HALF_OPEN, successful write helps close circuit faster. X-Ray Service Map now reflects holistic DDB health. `CircuitBreakerOpenCount` EMF metric becomes single indicator of database health.
+
+### Session 2026-02-08 (Round 23 - Post-Round-22 Deep Audit)
+
+- Q: `_write_through_to_dynamodb(**pending_write)` crashes with `TypeError` — write context dict uses key `"candles"` (lines 703, 725) but function parameter is `ohlc_candles` (line 105). Every Tiingo fetch succeeds but Phase 2 write silently fails (caught by `except Exception`), so L2 DynamoDB cache is never populated. Cross-Lambda requests always hit Tiingo, defeating the cache. → A: **Rename function parameter from `ohlc_candles` to `candles`** — aligns with ubiquitous domain language used throughout the stack (Pydantic models, `OHLCReadThroughCache`, adapters, write context dict). Makes `**pending_write` kwargs unpacking self-documenting. Type hint tightened to `list[PriceCandle]`. Body reference updated (`candles_to_cached(candles, ...)`). Zero external impact — purely internal function.
+
+- Q: `OHLCReadThroughCache` class spec defines `get`, `set`, `get_age`, `has`, `get_or_fetch` — but Section 11.11's `invalidate_ohlc_cache()` public API calls `.invalidate(ticker)` and `.clear()`, which don't exist. `AttributeError` crashes the entire cache invalidation subsystem — Round 22 Q4 fixed the import boundary but didn't add the methods it delegates to. → A: **Delegate to `ResolutionCache` directly** — add `invalidate(prefix) -> int` and `clear() -> int` to `ResolutionCache` (data layer owns data operations). `OHLCReadThroughCache` wraps them as thin domain-specific delegates: `.invalidate(ticker)` maps to `self._cache.invalidate(f"ohlc:{ticker.upper()}:")`, `.clear()` maps to `self._cache.clear()`. O(1000) key scan <1ms — safe for event loop. Reusable if `ResolutionCache` serves other domain caches (News, Sentiment).
+
+- Q: Test plan file says 162 tests but main spec says 172. D28-D31 (Round 21), D21-D27 + E31 (Round 20) never propagated to the canonical test plan. Round 22/23 introduced `get_with_age()`, `invalidate()`, `.clear()`, `invalidate_ohlc_cache()` with zero test coverage. Test plan is the implementation contract — implementers build to it. → A: **Update test plan file as canonical source of truth**. Added: D21-D27 (degraded mode + handler timeout, 7 tests), E31 (Tiingo timeout budget, 1 test), D28-D31 (two-phase handler + half-open CB, 4 tests), D32-D35 (invalidation API + cache age, 4 tests). Total updated from 162 → 178. Summary table extended with R20/R21/R23 columns. Section 11.1 test example updated to use `invalidate_ohlc_cache()` public API.
+
+- Q: `_write_through_to_dynamodb` is `def` (sync) but Phase 2 does `await _write_through_to_dynamodb(**pending_write)` — `TypeError: object NoneType can't be used in 'await' expression`. Every fresh Tiingo fetch crashes at Phase 2. Additionally, the sync function blocks the event loop during DynamoDB I/O (50ms-10s), freezing concurrent requests on the same Lambda instance. → A: **Make `async def` with `asyncio.to_thread()` wrapping `put_cached_candles()`** — function becomes awaitable, event loop stays free during Phase 2 DDB write. Aligns with Round 1 Q4 ("wrap sync DynamoDB calls in `asyncio.to_thread()`"). Caller `await` at line 965 now works correctly. Future migration to `aioboto3` requires only swapping the internal implementation, no caller changes.
+
+- Q: `ResolutionCache.get_with_age()` behavior on missing keys is unspecified. `OHLCReadThroughCache.get_age()` does `_, age = self._cache.get_with_age(key)` then `return max(0, int(age))`. If `get_with_age("missing")` returns `None`, tuple unpacking crashes with `TypeError: cannot unpack non-iterable NoneType`. Docstring says "Returns 0 if not found" but the implementation depends on `get_with_age()` returning a specific structure for misses. → A: **Return `(None, 0.0)` sentinel tuple for missing keys** — zero-surprise contract. Callers always get a 2-tuple, always destructure safely without guards or `try/except`. `get_age()` path: `_, age = (None, 0.0)` → `max(0, int(0.0))` → `0`. Type signature: `get_with_age(key: str) -> tuple[Any | None, float]`. Self-documenting: a miss has age zero.
+
+### Session 2026-02-08 (Round 22 - Post-Round-21 Consistency Audit)
+
+- Q: `_fetch_with_lock` has inconsistent return types after Round 21 — Step 7 returns `(candles, write_dict)` tuple, but all cache-hit paths (Steps 1, 1.5, 3a, 3b) and fallback paths return bare `candles`. Handler destructures `result, pending_write = await ...` which crashes on bare returns (`ValueError: too many values to unpack`). → A: **Uniform tuple contract**: ALL return paths return `(candles, write_context | None)`. Cache hits return `(candles, None)`. Fresh Tiingo fetches return `(candles, {"ticker": ..., ...})`. Degraded mode returns `(candles, None)` since DDB is broken. Wait-timeout fallback also returns `(candles, write_dict)` since data was fetched but not persisted. Type signature: `-> tuple[list[PriceCandle], dict | None]`. Zero-overhead branching in handler: `if pending_write: await _write_through(...)`.
+
+- Q: `OHLCReadThroughCache._timestamps` dict (Round 21) grows unbounded — `ResolutionCache` evicts LRU entries but `_timestamps` keys are never removed, causing memory leak and "zombie age" bug where evicted-then-reinserted keys return stale ages. → A: **Store `(value, inserted_at)` tuples inside `ResolutionCache` directly** — atomic eviction removes both value and timestamp in the same `popitem()` call. No separate `_timestamps` dict needed. `ResolutionCache` modification: `set()` stores `(value, time.time())`, `get()` unwraps and returns value only, new `get_with_age()` returns `(value, age_seconds)`. ~3-5 line delta to existing `OrderedDict` implementation. Zero maintenance (no pruner), zero memory leak, 100% accurate ages.
+
+- Q: Section 4.9 `get_ohlc_data()` references non-existent `dynamodb_result.age_seconds` attribute and uses pre-Round-21 single-return pattern that conflicts with two-phase handler's `(response, write_context)` tuple contract. Handler calls `result, pending_write = await ...` but old `get_ohlc_data()` returns bare `OHLCResponse`. → A: **Rewrite Section 4.9 as `_get_ohlc_data_with_write_context()`** — returns `tuple[OHLCResponse, dict | None]`. L1 cache age from `_ohlc_read_through_cache.get_age()` (Round 22 atomic tuples). L2 cache age from `_estimate_cache_age_from_dynamodb()` (Round 21). Write context passthrough from `_fetch_with_lock()` uniform tuple. Headers set inside function. Handler Phase 1 calls this directly.
+
+- Q: Section 11.11 `invalidate_all_caches()` imports `from src.lambdas.dashboard.ohlc import _ohlc_cache` — but `_ohlc_cache` was removed in Round 18 and replaced by `OHLCReadThroughCache` (`_ohlc_read_through_cache`). This `ImportError` makes the entire cache invalidation subsystem dead on arrival. Additionally, `_invalidate_ohlc_response_cache(ticker)` is a phantom function never defined anywhere. → A: **Export a named `invalidate_ohlc_cache(ticker)` function from `ohlc.py`** — a public API that delegates to `_ohlc_read_through_cache.invalidate(ticker)` / `.clear()`. `cache_manager.py` imports the function, not the private instance. Preserves encapsulation: `ohlc.py` can change internal storage (singleton → pool) without breaking consumers. Eliminates phantom helper. Enables X-Ray subsegment tracing on invalidation and clean `pytest` mocking of a top-level function.
+
+- Q: Section 4.2 `_write_through_to_dynamodb()` docstring says "Fire-and-forget" and constraints repeat "Fire-and-forget: errors logged but don't fail request" — but Round 20 Q2+Q3 changed write-through to **awaited** (prevent Lambda freeze mid-write) and Round 21 Q1 refined it into Phase 2 of the Two-Phase Handler. The term "fire-and-forget" implies no `await`, no completion guarantee, and safe to skip — contradicting the actual `await _write_through_to_dynamodb(**pending_write)` in Phase 2. → A: **Replace "fire-and-forget" with "Phase 2 awaited"** — docstring becomes: "Awaited before handler returns to prevent Lambda freeze mid-write. Invisible to user latency; additive to billed duration only (~50ms normal). Errors are logged but do not fail the request (non-fatal)." Constraints become: "Phase 2 awaited: errors logged, non-fatal, but write completion guaranteed under normal conditions." Call sites updated to reflect single Phase 2 call site (no longer inline at each fetch).
+
+### Session 2026-02-08 (Round 21 - Two-Phase Handler Architecture)
+
+- Q: Write-through `await` (Round 20 Q2+Q3) runs INSIDE `asyncio.wait_for(timeout=5.0)` — but `batch_write_with_retry` has a 10s hard cap. If handler reaches write-through at t=4.5s, the 5s timeout cancels the write at t=5.0s, creating the exact "Lambda freeze mid-write" scenario Round 20 Q3 was designed to prevent. How do we satisfy both the 5s user SLA and write-through completion guarantee? → A: **Two-Phase Handler Architecture — separate the clock for the user from the clock for the database**. Phase 1 (Response): `asyncio.wait_for(timeout=5.0)` wraps only the L1→L2→Lock→Tiingo flow. Returns `(response, pending_write_context)` — candles to user + deferred write args. Phase 2 (Persistence): Outside the timeout boundary, `await _write_through_to_dynamodb(**pending_write_context)` runs before handler returns. User latency capped at 5s (Phase 1). Write integrity guaranteed (Phase 2 awaited, no Lambda freeze). Billed duration may exceed 5s under throttling but user never waits. X-Ray shows clean two-segment trace: Response (~850ms) + DynamoDB_Write (~50ms). Refines Round 20 Q2+Q3 — `_fetch_with_lock` returns write context instead of awaiting inline. Add test: D28 `test_write_through_outside_handler_timeout`, D29 `test_phase2_skipped_when_cb_open`.
+
+- Q: `LocalCircuitBreaker` half-open recovery behavior unspecified — how many probe requests, what success threshold to close, what if probe succeeds but next request fails? → A: **Single-probe model**: After 30s timeout, state transitions OPEN→HALF_OPEN, exactly 1 request probes. Success → CLOSED (reset failure count, lock re-enabled). Failure → OPEN (another 30s). During HALF_OPEN, all requests except the in-flight probe are blocked. Matches existing `CircuitBreakerManager` pattern for SRE consistency. Multi-probe (2 extra ~200ms penalties) and gradual ramp (designed for long-lived clusters) are over-engineering for Lambda's ephemeral lifecycle. Single-probe provides instant recovery detection with zero flapping risk. `record_success()` in CLOSED state also resets failure count to prevent slow accumulation across unrelated transient errors. Add `reset()` method for test isolation. Add test: D30 `test_half_open_single_probe_success_closes_circuit`, D31 `test_half_open_probe_failure_reopens_for_30s`.
+
+- Q: Concurrent resolution fallback creates duplicate Tiingo calls — requests for 5-min and 60-min both fall back to daily, acquire separate locks (different cache keys), both call Tiingo for same daily data. Lock only prevents thundering herd for same cache key, not across resolutions. → A: **Accept as known trade-off — do not fix**. Natural cap of ~3 standard resolutions limits concurrent fallbacks (not a true herd). Writes are idempotent (identical daily candle data). Self-correcting: first write populates cache, ending the race for all subsequent requests. Secondary lock (Option B) risks deadlocks with nested DynamoDB locks. Pre-check alias (Option C) adds consistent read cost to 100% of fallbacks to save <1%. Parallel calls actually increase availability (if one Lambda freezes, other still populates cache). Documented in Section 6.9.
+
+- Q: `_estimate_cache_age_from_dynamodb()` and `OHLCReadThroughCache.get_age()` are referenced in code but never defined — `X-Cache-Age` would always be 0, breaking frontend "Last updated" display and CloudWatch staleness alerting. → A: **Derivation over redundancy (no new DynamoDB attributes)**. L1 (in-memory): `OHLCReadThroughCache` stores `_timestamps` dict mapping key→insertion time; `get_age(key)` returns `int(time.time() - inserted_at)`. Negligible memory (one float per entry). L2 (DynamoDB): derive from existing `ExpiresAt` attribute — `WrittenAt = ExpiresAt - TTL_DURATION`, `Age = now - WrittenAt`. No new `WrittenAt` attribute needed (saves storage cost across millions of rows). `_expires_at` stored as transient attribute on first `PriceCandle` during conversion. `max(0, age)` clamps for minor clock skew. Updated `OHLCReadThroughCache.set()` to track timestamps; updated `get_or_fetch()` to use `self.set()` (not `self._cache.set()`) for timestamp consistency.
+
+- Q: `_estimate_expected_candles()` may drift by 1 candle on US DST transition days (2 days/year) because formula assumes fixed 6.5 trading hours — actual candle count from Tiingo may differ. With 100% completeness threshold, this forces unnecessary Tiingo re-fetch on those days. Worth fixing? → A: **Accept as known limitation — document, do not fix**. Cost is ~100 extra Tiingo API calls/year (~50 tickers × 2 DST days). Self-correcting: fresh fetch populates cache with actual candle count. `exchange_calendars` (Option B) adds maintenance tax and dependency to hot path for 0.6% of days. 1-candle tolerance (Option C) weakens data contract for all 363 normal days to handle 2 edge-case days — technically allows incomplete data into cache permanently. Documented in Section 11.9 code comments.
+
+### Session 2026-02-07 (Round 20 - Implementation Timing & Degraded Mode)
+
+- Q: When `LocalCircuitBreaker` is open (DynamoDB degraded), `_fetch_with_lock` still attempts lock acquisition (DynamoDB PutItem), fails, enters "lock not acquired" branch, polls DynamoDB 15×200ms = 3s — all returning `None`. Burns 3 seconds doing nothing before falling through to Tiingo. → A: **CB open → skip lock+poll entirely, fetch directly from Tiingo ("Degraded Mode")**. The thundering herd lock is a luxury provided by DynamoDB as coordination service. If the coordination service is down, the lock is unavailable — attempting to wait on a broken lock degrades P99 latency for zero functional gain. When `_DDB_BREAKER.is_open()`, bypass the entire lock+poll path and go direct-to-source (~800ms Tiingo latency vs 3800ms wasted). Tiingo is still protected by its own distributed `CircuitBreakerManager`. Half-open probe on `LocalCircuitBreaker` automatically re-enables locking when DynamoDB recovers. X-Ray traces during degraded mode show clean direct line to Tiingo (no noise from 15 failed polls). Add test: D21 `test_cb_open_skips_lock_direct_to_tiingo`.
+
+- Q: `_fetch_with_lock` holds the lock during Tiingo fetch (~800ms) AND `batch_write_with_retry` (up to 10s hard cap during throttling) = 10,800ms total lock hold. But waiters timeout at 3000ms — they all fall through to Tiingo, defeating the thundering herd lock. → A: **Release lock after Tiingo fetch + in-memory populate, fire-and-forget write-through AFTER lock release ("Fast Release" pattern)**. The lock's purpose is to serialize the Tiingo fetch (expensive: latency + API credits), NOT the DynamoDB write. Once data is in `ResolutionCache` (L1), the thundering herd is defeated for same-instance waiters. Cross-instance waiters polling DynamoDB will see data as soon as the background write completes (~50ms normal, up to 10s throttled) — still within their 3s polling window for the normal case. Lock hold reduced from ~10,800ms worst-case to ~800ms (API latency only). Write-through `await`-ed after lock release — NOT `asyncio.create_task()` (see Q3 refinement below). X-Ray shows `DynamoDBLock` segment closing quickly, `BatchWrite` as separate awaited segment. Add test: D22 `test_lock_released_before_write_through`.
+
+- Q: `asyncio.create_task()` fire-and-forget write-through (Q2) risks Lambda freeze mid-write — AWS Lambda can freeze the execution environment after handler returns, leaving stale TCP connections, orphaned boto3 sessions, and lost writes. → A: **`await` the write-through after lock release, not `create_task()`**. Refines Q2: the lock is still released after Tiingo fetch + L1 populate (~800ms hold), but the write-through is `await`-ed before the handler returns (~50ms additional billed time). This guarantees: (1) DynamoDB write completes before freeze, (2) boto3 connection pool returns to clean state for next warm start, (3) no "retry storms" from frozen writes failing on next invocation, (4) X-Ray trace shows complete Lock→Tiingo→Write sequence with no orphaned segments. The ~50ms write cost is the price of reliability — avoidable only if candle data were truly disposable (it isn't: cache misses spike Tiingo bill). Add test: D23 `test_write_through_completes_before_handler_returns`.
+
+- Q: `LocalCircuitBreaker` is per-instance (in-memory-only). 50 concurrent Lambda instances during DynamoDB brownout = 50 independent breakers, each needing 3 failures to open = 150-call spike before all breakers converge. Cold starts reset breakers even if DynamoDB still degraded. No cross-instance visibility. → A: **Accept as trade-off of cell-based resilience — document and alert, no external coordination**. Adding SSM Parameter Store (~50ms per request) or Lambda config API creates a permanent latency tax on healthy requests and adds a new critical-path dependency during the exact moment regional services may be under pressure. The 150-call spike is a statistical blip for DynamoDB on-demand billing (~2-3 seconds across staggered cold starts). Many discovery failures occur during Lambda Init phase (free 10s burst CPU window) — users may not feel it. Cross-instance visibility via EMF: emit `CircuitBreakerOpenCount` metric from each instance; CloudWatch alarm on Sum > 10 in 1 minute fires high-severity SNS alert, providing "global visibility from local intelligence." Each instance as independent cell = high availability (Instance A's flaky network path doesn't drag down Instance B). Add test: D24 `test_cold_start_resets_circuit_breaker_to_closed`.
+
+- Q: Section 4.8 `OHLCReadThroughCache` still uses `from cachetools import TTLCache` (not in requirements) and `from typing import Callable` (Ruff UP035 violation). All direct `._cache[key]` access patterns assume `TTLCache` dict-like interface, but `ResolutionCache` uses `.get()`/`.set()` methods. → A: **Update Section 4.8 to use `ResolutionCache(max_size=1000, default_ttl=3600)` with `.get()`/`.set()` interface**. Imports changed to `from collections.abc import Callable, Awaitable` (PEP 585/603). All direct `._cache[key] = value` access replaced with `_ohlc_read_through_cache.set(key, value)` and `._cache[key]` reads with `.get(key)`. `OHLCReadThroughCache` exposes `.get()`, `.set()`, `.has()`, `.get_age()` methods wrapping `ResolutionCache`. Thread safety rule unchanged — all access on event loop thread only. `ResolutionCache.clear()` used for test isolation.
+
+- Q: No handler-level hard timeout — worst-case flow (all dependencies slow): L1 miss + L2 retry (3.5s) + lock (50ms) + double-check L2 (3.5s) + Tiingo (30s!) + write-through (10s) = ~47s. API Gateway 29s limit → user sees 504 while Lambda keeps burning compute. → A: **`asyncio.wait_for()` handler-level "Emergency Brake" with 5s hard ceiling + stale fallback**. `DASHBOARD_TIMEOUT_SECONDS = 5.0` wraps entire L1→L2→Lock→L3 flow. Tiingo `httpx.Client.TIMEOUT` reduced from 30s to 4s (1s buffer for: double-check L2 ~200ms, JSON serialization ~150ms, X-Ray/EMF flush ~50ms, stale fallback logic ~100ms). On `TimeoutError`: (1) check L1 for stale data (0ms), (2) if L1 empty and CB closed, "last gasp" L2 read with 100ms timeout + no retries + eventual consistency, (3) if any data found, return 200 OK with `X-Cache-Source: stale` + `X-Cache-Age: <seconds>`, (4) if total failure (cold start + L2 unavailable), return 503 + `Retry-After: 5`. `X-Cache-Age` header enables frontend "Last updated Xm ago" display. CloudWatch Synthetics alert on stale percentage >5%. P99 latency deterministically capped at 5s. New section 4.10 added. Add tests: D25 `test_handler_timeout_serves_stale_l1_data`, D26 `test_handler_timeout_last_gasp_l2_read`, D27 `test_handler_timeout_total_failure_returns_503`, E31 `test_tiingo_4s_timeout_within_handler_5s_budget`.
 
 ### Session 2026-02-07 (Round 19 - Source Code Blind Spots)
 
@@ -1074,9 +1813,9 @@ def test_ohlc_cache_round_trip(mock_aws, test_client, mock_tiingo_response, mock
     assert response1.status_code == 200
     assert len(response1.json()["candles"]) == 1
 
-    # Clear in-memory cache to force DDB read (Round 18: _ohlc_cache replaced by OHLCReadThroughCache)
-    from src.lambdas.shared.cache.ohlc_cache import _ohlc_read_through_cache
-    _ohlc_read_through_cache._cache.clear()
+    # Clear in-memory cache to force DDB read (Round 23: use public .clear() method)
+    from src.lambdas.dashboard.ohlc import invalidate_ohlc_cache
+    invalidate_ohlc_cache()  # Clears all L1 entries via public API (Round 22/23)
 
     # Second request: should read from DDB (Tiingo not called again)
     mocker.patch.object(TiingoAdapter, 'get_ohlc', side_effect=Exception("Should not be called"))
@@ -1176,27 +1915,54 @@ def _read_from_dynamodb_sync(...) -> list[PriceCandle] | None:
     """Sync implementation - do not call directly from async code."""
     # ... existing implementation ...
 
-async def _read_from_dynamodb(...) -> list[PriceCandle] | None:
+async def _read_from_dynamodb(
+    ctx: OHLCRequestContext,  # Round 24: frozen context, thread-safe
+    consistent_read: bool = False,
+) -> list[PriceCandle] | None:
     """Non-blocking DynamoDB cache read.
 
     THREAD BOUNDARY (Clarified 2026-02-06): asyncio.to_thread() wraps
     ONLY the DynamoDB I/O. The returned data is handled on the event loop
     thread. Never touch TTLCache or module-level dicts inside to_thread().
     """
-    return await asyncio.to_thread(
-        _read_from_dynamodb_sync,
-        ticker, source, resolution, start_date, end_date
-    )
+    if _DDB_BREAKER.is_open():
+        return None
 
-async def _write_through_to_dynamodb(...) -> None:
-    """Non-blocking DynamoDB cache write.
+    try:
+        result = await asyncio.to_thread(
+            _read_from_dynamodb_sync, ctx, consistent_read
+        )
+        _DDB_BREAKER.record_success()
+        return result
+    except ClientError:
+        _DDB_BREAKER.record_failure()
+        return None
+
+async def _write_through_to_dynamodb(
+    ctx: OHLCRequestContext,  # Round 24: frozen context, thread-safe
+    candles: list[PriceCandle],
+) -> None:
+    """Non-blocking DynamoDB cache write (Phase 2 Awaited).
 
     Same thread boundary rule: only DynamoDB I/O inside to_thread().
+    See Section 4.2 for full implementation (Round 23: async def + to_thread).
+    Round 24 Q2: contributes to _DDB_BREAKER health.
     """
-    await asyncio.to_thread(
-        _write_through_to_dynamodb_sync,
-        ticker, source, resolution, ohlc_candles
-    )
+    if _DDB_BREAKER.is_open():
+        return
+
+    try:
+        cached_candles = candles_to_cached(candles, ctx.source, ctx.resolution)
+        if not cached_candles:
+            return
+        await asyncio.to_thread(
+            put_cached_candles,
+            ticker=ctx.ticker, source=ctx.source, resolution=ctx.resolution,
+            candles=cached_candles, end_date=ctx.end_date,
+        )
+        _DDB_BREAKER.record_success()
+    except Exception:
+        _DDB_BREAKER.record_failure()
 ```
 
 **Codebase Audit Required:**
@@ -1338,14 +2104,35 @@ return int(days * 5 / 7 * 7)  # BUG: equals days * 5, not days * 5/7 * 6.5
 
 **Decision (Clarified 2026-02-03):** Fix math to match documented intent.
 
-**Required Fix:**
-Update `src/lambdas/dashboard/ohlc.py` line 353:
-```python
-# Before (broken)
-return int(days * 5 / 7 * 7)
+**Required Fix (Round 26 Q2 — aligned to source ohlc.py:328):**
 
-# After (fixed)
-return int(days * 5 / 7 * 6.5)
+Update `src/lambdas/dashboard/ohlc.py` line 353. The source code signature
+`(start_date: date, end_date: date, resolution: OHLCResolution)` is canonical.
+Section 4.3 line 428 calls as `(ctx.start_date, ctx.end_date, ctx.resolution)` —
+caller must pass `OHLCResolution(ctx.resolution)` if `ctx.resolution` is str.
+
+```python
+def _estimate_expected_candles(
+    start_date: date, end_date: date, resolution: OHLCResolution,
+) -> int:
+    """Estimated count for the 100% completeness gate.
+
+    Round 26 Q2: Signature preserved from source (ohlc.py:328). Uses date
+    range (not days int) for accurate trading-day calculation. Uses
+    OHLCResolution enum (not str) for type-safe bars_per_day lookup.
+
+    Known Limitation (Clarified 2026-02-08 Round 21 — DST Transition):
+    May drift by 1 candle on US DST transition days (2 days/year: March,
+    November). This results in a safe cache-miss/re-fetch, not data corruption.
+    Cost: ~100 extra Tiingo API calls/year across ~50 active tickers.
+    Self-correcting: fresh fetch populates cache with actual candle count.
+    Not worth fixing: exchange_calendars adds maintenance tax to hot path,
+    and a 1-candle tolerance (Option C) weakens the data contract for all
+    363 normal days just to handle 2 edge-case days.
+    """
+    total_days = (end_date - start_date).days
+    trading_days = int(total_days * 5 / 7)  # Approximate weekday filter
+    return trading_days * resolution.bars_per_day
 ```
 
 ### 11.10 80% Coverage Threshold Serves Incomplete Data
@@ -1379,22 +2166,44 @@ if len(price_candles) < expected:
 
 **Problem:** Three caching layers exist:
 1. Tiingo adapter in-memory cache (5 min TTL)
-2. OHLC response in-memory cache (`_ohlc_cache`)
+2. OHLC response in-memory cache (`_ohlc_read_through_cache` — `OHLCReadThroughCache` instance, Round 18)
 3. DynamoDB persistent cache (new)
 
-Current `invalidate_ohlc_cache()` only clears layer 2. Callers might think they've invalidated all caches but layer 1 still serves stale data.
+No unified invalidation exists. Callers might think they've invalidated all caches but layer 1 still serves stale data.
 
 **Impact:** Subtle bugs where cache appears invalidated but stale data is still served. Integration tests may pass incorrectly.
 
-**Decision (Clarified 2026-02-03):** Add unified `invalidate_all_caches(ticker)` that clears all layers. Remove/replace obsolete partial invalidate functions - ONE function clears ALL layers.
+**Decision (Clarified 2026-02-03, updated Round 22):** Add unified `invalidate_all_caches(ticker)` that clears all layers. Each module exports a **public invalidation function** — consumers import functions, never private instances.
 
 **Required Fix:**
-1. Create `src/lambdas/shared/cache/cache_manager.py`:
+
+1. Export public invalidation API from `ohlc.py` (Round 22 — encapsulation boundary):
+```python
+# src/lambdas/dashboard/ohlc.py
+
+_ohlc_read_through_cache = OHLCReadThroughCache(...)
+
+def invalidate_ohlc_cache(ticker: str | None = None) -> int:
+    """Public API for L2 cache invalidation.
+
+    Args:
+        ticker: Stock symbol, or None to clear the entire L1 in-memory cache.
+
+    Returns:
+        Count of invalidated entries.
+    """
+    if ticker:
+        return _ohlc_read_through_cache.invalidate(ticker)
+    else:
+        return _ohlc_read_through_cache.clear()
+```
+
+2. Create `src/lambdas/shared/cache/cache_manager.py`:
 ```python
 """Unified cache management for OHLC data."""
 
 from src.lambdas.shared.adapters.tiingo import invalidate_tiingo_cache
-from src.lambdas.dashboard.ohlc import _ohlc_cache
+from src.lambdas.dashboard.ohlc import invalidate_ohlc_cache  # Round 22: public API, not private instance
 
 def invalidate_all_caches(ticker: str | None = None) -> dict[str, int]:
     """Invalidate ALL cache layers for a ticker.
@@ -1410,8 +2219,8 @@ def invalidate_all_caches(ticker: str | None = None) -> dict[str, int]:
     # Layer 1: Tiingo adapter cache
     results["tiingo_adapter"] = invalidate_tiingo_cache(ticker)
 
-    # Layer 2: OHLC response cache
-    results["ohlc_response"] = _invalidate_ohlc_response_cache(ticker)
+    # Layer 2: OHLC response cache (via public API — encapsulation preserved)
+    results["ohlc_response"] = invalidate_ohlc_cache(ticker)
 
     # Layer 3: DynamoDB (optional - usually not needed, data is immutable)
     # Don't delete from DDB by default - historical data doesn't go stale
@@ -1419,9 +2228,9 @@ def invalidate_all_caches(ticker: str | None = None) -> dict[str, int]:
     return results
 ```
 
-2. Remove or deprecate `invalidate_ohlc_cache()` from `ohlc.py` - replace all usages with `invalidate_all_caches()`
-
 3. Add `invalidate_tiingo_cache()` to Tiingo adapter if not exists
+
+4. Ensure `OHLCReadThroughCache` exposes `.invalidate(ticker) -> int` and `.clear() -> int` methods (return count of evicted entries)
 
 ### 11.12 Unprocessed BatchWriteItems Silently Lost
 
@@ -1811,37 +2620,108 @@ Add to deployment pipeline after `terraform apply`:
 
 **Impact:** During DynamoDB outages, all OHLC requests are slower even though graceful degradation works.
 
-**Decision (Clarified 2026-02-03, updated 2026-02-06 Round 18):** Reuse existing `CircuitBreakerManager` from `shared/circuit_breaker.py` — register `"dynamodb_cache"` as a new service alongside `tiingo`/`finnhub`/`sendgrid`.
+**Decision (Clarified 2026-02-03, updated 2026-02-07 Round 19+20):** Use in-memory-only `LocalCircuitBreaker` with `@protect_me` decorator — NOT the DynamoDB-persisted `CircuitBreakerManager` (which has circular dependency: can't record DynamoDB failure when DynamoDB is down). See Round 19 Q1 for full rationale.
 
-**Why reuse existing (Round 18):** The existing `CircuitBreakerManager` (474 lines) provides DynamoDB-persisted state (survives cold starts, shared across Lambda instances), per-service threading locks, half-open recovery, and unified observability. A second dict-based CB would fragment monitoring and lack persistence.
+**Degraded Mode (Clarified 2026-02-07 Round 20):** When `LocalCircuitBreaker` is open, skip the entire lock+poll path and fetch directly from Tiingo. The lock is a luxury provided by DynamoDB as coordination service — if the coordinator is down, waiting on a broken lock wastes 3 seconds for zero gain. See Section 4.8 updated flow.
 
-**Required Changes to `shared/circuit_breaker.py`:**
-1. Widen service Literal: `Literal["tiingo", "finnhub", "sendgrid", "dynamodb_cache"]`
-2. Add lock: `_service_locks["dynamodb_cache"] = threading.Lock()`
-3. No other changes — existing `CircuitBreakerManager.can_execute()`, `record_failure()`, `record_success()` are generic.
+**Half-Open Recovery Behavior (Clarified 2026-02-08 Round 21):**
 
-**Integration in async wrapper layer (Clarified 2026-02-06):**
+Single-probe model — matches existing `CircuitBreakerManager` pattern for SRE consistency:
+
+| State | Behavior | Transition |
+|-------|----------|------------|
+| **CLOSED** | All requests pass through. Failure count tracked. | → OPEN when `failure_count >= threshold` (3) |
+| **OPEN** | All requests short-circuited (return None). | → HALF_OPEN when `time.time() > next_probe_time` (30s) |
+| **HALF_OPEN** | Exactly 1 probe request allowed through. | Success → CLOSED (reset failures). Failure → OPEN (another 30s). |
+
+**Why single-probe:** In Lambda's short lifecycle, multi-probe (Option B) adds 2 extra ~200ms penalties before giving up. Gradual ramp (Option C) is designed for long-lived 100-node clusters, not ephemeral containers. Single-probe provides instant recovery detection with zero flapping risk — the first failure during half-open immediately re-opens for another protection window.
+
+**Implementation:**
+
+```python
+import time
+
+class LocalCircuitBreaker:
+    """In-memory-only circuit breaker for DynamoDB cache.
+
+    States: CLOSED → OPEN → HALF_OPEN → CLOSED (or back to OPEN).
+    Single-probe half-open: exactly 1 request probes after timeout.
+    No network I/O. No external state. Nanosecond checks.
+    """
+
+    def __init__(self, threshold: int = 3, timeout: int = 30):
+        self.threshold = threshold
+        self.timeout = timeout
+        self.failure_count = 0
+        self.state = "CLOSED"
+        self.next_probe_time = 0.0
+
+    def is_open(self) -> bool:
+        """Check if circuit is open (should skip DynamoDB)."""
+        if self.state == "CLOSED":
+            return False
+        if self.state == "OPEN" and time.time() > self.next_probe_time:
+            self.state = "HALF_OPEN"
+            logger.info("Circuit HALF_OPEN — allowing single probe request")
+            return False  # Allow probe through
+        if self.state == "HALF_OPEN":
+            return True  # Block all requests except the one probe already in flight
+        return True  # OPEN and timeout not reached
+
+    def record_success(self):
+        """Record successful DynamoDB operation."""
+        if self.state == "HALF_OPEN":
+            self.state = "CLOSED"
+            self.failure_count = 0
+            logger.info("Circuit RECOVERED — DynamoDB healthy, lock re-enabled")
+        elif self.state == "CLOSED":
+            # Reset failure count on any success (prevent slow accumulation)
+            self.failure_count = 0
+
+    def record_failure(self):
+        """Record failed DynamoDB operation."""
+        self.failure_count += 1
+        if self.state == "HALF_OPEN" or self.failure_count >= self.threshold:
+            self.state = "OPEN"
+            self.next_probe_time = time.time() + self.timeout
+            logger.warning(
+                "Circuit OPENED — DynamoDB degraded, entering bypass mode",
+                extra={"failures": self.failure_count, "probe_in": self.timeout},
+            )
+
+    def reset(self):
+        """Reset to CLOSED. FOR TESTING ONLY."""
+        self.state = "CLOSED"
+        self.failure_count = 0
+        self.next_probe_time = 0.0
+
+# Module-level singleton — nanosecond is_open() check, no network I/O
+_DDB_BREAKER = LocalCircuitBreaker(threshold=3, timeout=30)
+```
+
+**Integration in async wrapper layer:**
 
 Circuit breaker checks MUST run on the event loop thread (async wrappers), NOT inside the sync functions that run in `asyncio.to_thread()`. This preserves the thread-boundary rule from Section 4.8.
 
 ```python
-from src.lambdas.shared.circuit_breaker import CircuitBreakerManager
-
-# In the async wrapper (event loop thread) — NOT inside get_cached_candles_sync()
-async def _read_from_dynamodb(...) -> list[PriceCandle] | None:
-    cb_manager = CircuitBreakerManager(table)
-    if not cb_manager.can_execute("dynamodb_cache"):
+# In the async wrapper (event loop thread)
+# Round 24: ctx replaces individual params; frozen for thread safety
+async def _read_from_dynamodb(
+    ctx: OHLCRequestContext,
+    consistent_read: bool = False,
+) -> list[PriceCandle] | None:
+    if _DDB_BREAKER.is_open():
         logger.debug("DynamoDB circuit open, skipping cache read")
         return None
 
     try:
         result = await asyncio.to_thread(
-            _read_from_dynamodb_sync, ticker, source, resolution, start_date, end_date
+            _read_from_dynamodb_sync, ctx, consistent_read
         )
-        cb_manager.record_success("dynamodb_cache")  # Event loop thread — safe
+        _DDB_BREAKER.record_success()  # Event loop thread — safe
         return result
     except ClientError as e:
-        cb_manager.record_failure("dynamodb_cache")  # Event loop thread — safe
+        _DDB_BREAKER.record_failure()  # Event loop thread — safe
         return None
 ```
 
@@ -1857,6 +2737,7 @@ async def _read_from_dynamodb(...) -> list[PriceCandle] | None:
 |--------|-----------|-------------|----------|----------|
 | `OHLCCacheError` | >10 in 1 min | Slack #alerts | Warning | Investigate during business hours |
 | `CircuitBreakerOpen` | >0 | PagerDuty | Critical | Page on-call immediately |
+| `CircuitBreakerOpenCount` | Sum >10 in 1 min | PagerDuty | Critical | Correlated DynamoDB brownout — multiple instances opened breakers (Round 20 Q5) |
 | `CachePaginationTruncation` | >0 | PagerDuty | Critical | Page on-call - data loss occurring |
 | `UnprocessedWriteItems` | >100 in 5 min | Slack #alerts | Warning | Check DynamoDB throttling |
 | `CacheHitRate` | <50% over 15 min | Slack #alerts | Warning | Investigate cache effectiveness |
@@ -1971,38 +2852,64 @@ logger = Logger(service="ohlc-cache")
 tracer = Tracer(service="ohlc-cache", auto_patch=False)  # handler.py already calls patch_all()
 metrics = Metrics(service="ohlc-cache", namespace="SentimentAnalyzer/OHLCCache")
 
-# Usage in handler
+# Usage in handler (Round 25: ctx.* accessors replace bare variables)
 @logger.inject_lambda_context(log_event=True)
 @tracer.capture_lambda_handler
 @metrics.log_metrics(capture_cold_start_metric=True)
 def handler(event, context):
+    # ctx constructed per Section 4.0/4.0.1 (Round 24+25)
     logger.info("Cache lookup", extra={
-        "ticker": ticker,
-        "cache_key": cache_key,
-        "resolution": resolution,
+        "ticker": ctx.ticker,
+        "cache_key": ctx.cache_key,
+        "resolution": ctx.resolution,
+        "source": ctx.source,
     })
     # request_id, function_name, cold_start automatically injected
 ```
 
-**Cache-Specific Logging:**
+**Cache-Specific Logging (Round 25: post-await instrumentation pattern):**
+
+X-Ray subsegments MUST be created on the event loop thread (async wrapper), NOT inside `asyncio.to_thread()` worker threads. Worker threads lack X-Ray context — subsegments created there become orphaned segments. This follows the "Clean Room" pattern from Round 19 Q4: sync function = pure I/O, async wrapper = orchestration + tracing.
 
 ```python
-# Log on cache miss (for debugging)
-@tracer.capture_method
-def _read_from_dynamodb(ticker: str, source: str, resolution: str, ...):
+# In the async wrapper (Section 11.7) — event loop thread
+# Round 25: replaces pre-Round-24 @tracer.capture_method on sync function
+async def _read_from_dynamodb(
+    ctx: OHLCRequestContext,
+    consistent_read: bool = False,
+) -> list[PriceCandle] | None:
+    if _DDB_BREAKER.is_open():
+        return None
+
+    # X-Ray subsegment on event loop thread (safe)
     with tracer.provider.in_subsegment("dynamodb_cache_read") as subsegment:
-        subsegment.put_annotation("ticker", ticker)
-        subsegment.put_annotation("cache_key", cache_key)
+        subsegment.put_annotation("ticker", ctx.ticker)
+        subsegment.put_annotation("cache_key", ctx.cache_key)
+        subsegment.put_annotation("consistent_read", consistent_read)
 
-        result = client.query(...)
+        try:
+            # Blocking I/O offloaded to worker thread (Section 4.3 sync inner)
+            result = await asyncio.to_thread(
+                _read_from_dynamodb_sync, ctx, consistent_read
+            )
 
-        if not result.get("Items"):
-            logger.info("Cache miss", extra={
-                "ticker": ticker,
-                "cache_key": cache_key,
-                "reason": "no_items",
-            })
-        return result
+            # Post-await enrichment — back on event loop thread
+            subsegment.put_annotation("status", "hit" if result else "miss")
+            _DDB_BREAKER.record_success()
+
+            if not result:
+                logger.info("Cache miss", extra={
+                    "ticker": ctx.ticker,
+                    "cache_key": ctx.cache_key,
+                    "reason": "no_items_or_incomplete",
+                })
+
+            return result
+        except ClientError as e:
+            subsegment.put_annotation("status", "error")
+            subsegment.add_exception(e)
+            _DDB_BREAKER.record_failure()
+            return None
 ```
 
 **X-Ray Trace Structure:**
@@ -2033,9 +2940,9 @@ def test_O1_correlation_id_in_logs(caplog, lambda_context):
             f"Log entry missing correlation ID: {record.message}"
 ```
 
-**CloudWatch Logs Insights Query (for debugging):**
+**CloudWatch Logs Insights Query (for debugging, Round 25: ctx-aware field names):**
 ```sql
-fields @timestamp, @message, ticker, cache_key, request_id
+fields @timestamp, @message, ticker, cache_key, source, request_id
 | filter @message like /Cache miss/
 | sort @timestamp desc
 | limit 100
@@ -2045,7 +2952,7 @@ fields @timestamp, @message, ticker, cache_key, request_id
 
 ## 15. Canonical Test Plan (Backwards-Engineered)
 
-**Full Test Plan:** See [ohlc-cache-remediation-tests.md](ohlc-cache-remediation-tests.md) (160 tests across 11 categories; D15/D16 removed Round 18).
+**Full Test Plan:** See [ohlc-cache-remediation-tests.md](ohlc-cache-remediation-tests.md) (180 tests across 11 categories; D15/D16 removed R18; D21-D27, E31 added R20; D28-D31 added R21; D32-D35 added R23; D36-D39 added R24). R25 helper function tests (`_resolve_date_range`, `_get_default_source`) to be formally numbered during `/speckit.plan`.
 
 ### Quick Reference
 
@@ -2054,8 +2961,8 @@ fields @timestamp, @message, ticker, cache_key, request_id
 | A: Cache Keys | 10 | Stale data, key collisions |
 | B: Data Integrity | 14 | Corruption, precision, truncation |
 | C: Timing & TTL | 15 | Expiry, freshness, clock drift |
-| D: Race Conditions | 17 | Thundering herd, locks, dirty reads (D15/D16 removed Round 18) |
-| E: Dependencies | 30 | DynamoDB, Tiingo, CloudWatch outages |
+| D: Race Conditions | 36 | Thundering herd, locks, dirty reads, degraded mode, handler timeout, two-phase persistence, half-open probing, breaker write visibility, OHLCRequestContext (D15/D16 removed R18; D21-D27 added R20; D28-D31 added R21; D32-D35 added R23; D36-D39 added R24) |
+| E: Dependencies | 31 | DynamoDB, Tiingo, CloudWatch outages, Tiingo 4s timeout (E31 added R20) |
 | F: State Management | 11 | Multi-layer cache, invalidation |
 | G: Edge Cases | 19 | Boundaries, holidays, ticker changes |
 | H: Playwright | 29 | Viewport, touch, network, animation |
