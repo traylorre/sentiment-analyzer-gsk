@@ -2,7 +2,7 @@
 
 **Parent Spec:** [ohlc-cache-remediation.md](ohlc-cache-remediation.md)
 **Feature ID:** CACHE-001
-**Total Tests:** 162
+**Total Tests:** 180
 
 This document contains the comprehensive test plan derived by working backwards from failure modes. Extracted from the parent spec for context management.
 
@@ -2319,9 +2319,16 @@ class TestAlertingMetricEmission:
 
     def test_M1_cache_error_on_dynamodb_read_failure(self, mock_cloudwatch, mock_dynamodb_failure):
         """CacheError metric emitted when DynamoDB read fails."""
-        from src.lambdas.dashboard.ohlc import _read_from_dynamodb
+        # Round 25: use ctx pattern (was positional string args — TypeError)
+        from src.lambdas.dashboard.ohlc import _read_from_dynamodb, OHLCRequestContext
 
-        _read_from_dynamodb("AAPL", "tiingo", "D", ...)
+        ctx = OHLCRequestContext(
+            ticker="AAPL", resolution="D", time_range="1W",
+            start_date=date(2026, 2, 1), end_date=date(2026, 2, 8),
+            source="tiingo", cache_key="ohlc:AAPL:D:1W:2026-02-08",
+        )
+
+        await _read_from_dynamodb(ctx, consistent_read=False)
 
         # Verify metric emission
         mock_cloudwatch.put_metric_data.assert_called()
@@ -2335,9 +2342,16 @@ class TestAlertingMetricEmission:
 
     def test_M2_cache_error_on_dynamodb_write_failure(self, mock_cloudwatch, mock_dynamodb_failure):
         """CacheError metric emitted when DynamoDB write fails."""
-        from src.lambdas.dashboard.ohlc import _write_through_to_dynamodb
+        # Round 25: use ctx pattern (was positional string args — TypeError)
+        from src.lambdas.dashboard.ohlc import _write_through_to_dynamodb, OHLCRequestContext
 
-        _write_through_to_dynamodb("AAPL", "tiingo", "D", [...], date.today())
+        ctx = OHLCRequestContext(
+            ticker="AAPL", resolution="D", time_range="1W",
+            start_date=date(2026, 2, 1), end_date=date(2026, 2, 8),
+            source="tiingo", cache_key="ohlc:AAPL:D:1W:2026-02-08",
+        )
+
+        await _write_through_to_dynamodb(ctx, [...])
 
         mock_cloudwatch.put_metric_data.assert_called()
         metric = mock_cloudwatch.put_metric_data.call_args.kwargs["MetricData"][0]
@@ -2345,15 +2359,16 @@ class TestAlertingMetricEmission:
 
     def test_M3_circuit_breaker_open_metric(self, mock_cloudwatch):
         """CircuitBreakerOpen metric emitted when breaker trips (3 failures)."""
-        from src.lambdas.shared.cache.ohlc_cache import _record_failure, _circuit_breaker
+        # Round 26 Q5: Updated from pre-R19 dict-based breaker to LocalCircuitBreaker
+        from src.lambdas.dashboard.ohlc import _DDB_BREAKER
 
-        # Reset circuit breaker state
-        _circuit_breaker["failures"] = 0
-        _circuit_breaker["open_until"] = 0
+        # Reset circuit breaker state (Round 19: class method, not dict access)
+        _DDB_BREAKER.reset()
 
-        # Trigger 3 failures to trip breaker
+        # Trigger 3 failures to trip breaker (Round 19: method call, not standalone function)
         for _ in range(3):
-            _record_failure()
+            _DDB_BREAKER.record_failure()
+        assert _DDB_BREAKER.is_open()
 
         # Verify the CRITICAL metric was emitted exactly once
         calls = mock_cloudwatch.put_metric_data.call_args_list
@@ -3371,20 +3386,21 @@ def isolated_dynamodb(mock_dynamodb):
 
 #### 15.19.7 Updated Test Count Summary
 
-| Category | Original | R15 Added | R16 Added | New Total |
-|----------|----------|-----------|-----------|-----------|
-| A: Cache Keys | 10 | 0 | 0 | 10 |
-| B: Data Integrity | 12 | 0 | 2 (B13-B14) | 14 |
-| C: Timing & TTL | 13 | 0 | 2 (C14-C15) | 15 |
-| D: Race Conditions | 12 | 1 (D14) | 4 (D17-D20; D15-D16 removed Round 18) | 17 |
-| E: Dependencies | 26 | 4 (E27-E30) | 0 | 30 |
-| F: State Management | 9 | 2 (F10-F11) | 0 | 11 |
-| G: Edge Cases | 19 | 0 | 0 | 19 |
-| H: Playwright | 22 | 4 (H24-H27) | 3 (H28-H30) | 29 |
-| S: Security | 5 | 0 | 0 | 5 |
-| M: Metrics | 5 | 0 | 0 | 5 |
-| O: Observability | 1 | 1 (O2) | 3 (O3-O5) | 5 |
-| **Total** | **134** | **12** | **16** | **162** |
+| Category | Original | R15 Added | R16 Added | R20 Added | R21 Added | R23 Added | R24 Added | New Total |
+|----------|----------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|
+| A: Cache Keys | 10 | 0 | 0 | 0 | 0 | 0 | 0 | 10 |
+| B: Data Integrity | 12 | 0 | 2 (B13-B14) | 0 | 0 | 0 | 0 | 14 |
+| C: Timing & TTL | 13 | 0 | 2 (C14-C15) | 0 | 0 | 0 | 0 | 15 |
+| D: Race Conditions | 12 | 1 (D14) | 4 (D17-D20; D15-D16 removed R18) | 7 (D21-D27) | 4 (D28-D31) | 4 (D32-D35) | 4 (D36-D39) | 36 |
+| E: Dependencies | 26 | 4 (E27-E30) | 0 | 1 (E31) | 0 | 0 | 0 | 31 |
+| F: State Management | 9 | 2 (F10-F11) | 0 | 0 | 0 | 0 | 0 | 11 |
+| G: Edge Cases | 19 | 0 | 0 | 0 | 0 | 0 | 0 | 19 |
+| H: Playwright | 22 | 4 (H24-H27) | 3 (H28-H30) | 0 | 0 | 0 | 0 | 29 |
+| S: Security | 5 | 0 | 0 | 0 | 0 | 0 | 0 | 5 |
+| M: Metrics | 5 | 0 | 0 | 0 | 0 | 0 | 0 | 5 |
+| O: Observability | 1 | 1 (O2) | 3 (O3-O5) | 0 | 0 | 0 | 0 | 5 |
+| **Total** | **134** | **12** | **14** | **8** | **4** | **4** | **4** | **180** |
+| *(D15-D16 removed R18: -2 from R16 gross 16)* | | | | | | | | |
 
 #### 15.19.8 Round 16 Test Additions (Debugging Nightmare Prevention)
 
@@ -3548,16 +3564,28 @@ class TestMidnightSpanningRequests:
     @freeze_time("2026-02-05 04:59:58", tz_offset=0)  # 11:59:58 PM ET
     def test_C14_midnight_spanning_request_consistent_cache_key(self):
         """Cache key computed once at request start, used throughout."""
-        from src.lambdas.dashboard.ohlc import OHLCRequestContext
+        from src.lambdas.dashboard.ohlc import (  # Round 25: proper imports
+            OHLCRequestContext,
+            _resolve_date_range,
+            _get_ohlc_cache_key,
+        )
 
         # Start request at 11:59:58 PM ET
-        ctx = OHLCRequestContext.create("AAPL", "D", "1D")
+        # Round 24: direct constructor (not factory method)
+        # Round 25: _resolve_date_range now defined in Section 4.0.1
+        start_date, end_date = _resolve_date_range("1D")
+        cache_key = _get_ohlc_cache_key("AAPL", "D", "1D", start_date, end_date)
+        ctx = OHLCRequestContext(
+            ticker="AAPL", resolution="D", time_range="1D",
+            start_date=start_date, end_date=end_date,
+            source="tiingo", cache_key=cache_key,
+        )
         cache_key_at_start = ctx.cache_key
 
         # Simulate 4 seconds of processing (now 12:00:02 AM ET next day)
         time.sleep(0.001)  # freezegun advances
 
-        # Cache key should NOT change
+        # Cache key should NOT change — ctx is frozen (Round 24)
         assert ctx.cache_key == cache_key_at_start
         assert "2026-02-05" in cache_key_at_start  # Uses request start date
 
@@ -3632,6 +3660,412 @@ test.describe('Mobile Touch Gestures', () => {
     await expect(page.locator('[data-testid="candle-tooltip"]')).toContainText('Open:');
   });
 });
+```
+
+---
+
+#### 15.19.9 Round 20 Test Additions (Degraded Mode & Handler Timeout)
+
+**Race Condition Tests (D21-D27):**
+
+```python
+# tests/unit/cache/test_degraded_mode.py
+"""Tests for circuit breaker degraded mode and handler timeout behavior."""
+
+class TestDegradedMode:
+    """Verify circuit breaker bypass and handler-level timeout."""
+
+    def test_D21_cb_open_skips_lock_direct_to_tiingo(self, mock_tiingo, mock_ddb_failing):
+        """When LocalCircuitBreaker is open, skip lock+poll entirely, fetch direct from Tiingo."""
+        from src.lambdas.dashboard.ohlc import _fetch_with_lock, _DDB_BREAKER
+
+        # Force circuit breaker open
+        for _ in range(3):
+            _DDB_BREAKER.record_failure()
+        assert _DDB_BREAKER.is_open()
+
+        # Round 26 Q5: Updated from positional params to ctx pattern (Round 24)
+        ctx = make_test_ctx(ticker="AAPL", resolution="D", time_range="1W")
+        candles, write_context = await _fetch_with_lock(ctx)
+        assert candles is not None
+        assert write_context is None  # DDB broken — skip write
+
+    def test_D22_lock_released_before_write_through(self, mock_tiingo, mock_ddb):
+        """Lock is released after Tiingo fetch + L1 populate, BEFORE Phase 2 write."""
+        from src.lambdas.dashboard.ohlc import _fetch_with_lock, _release_fetch_lock
+        import time
+
+        lock_released_at = None
+        original_release = _release_fetch_lock
+
+        def track_release(*args, **kwargs):
+            nonlocal lock_released_at
+            lock_released_at = time.time()
+            return original_release(*args, **kwargs)
+
+        # Round 26 Q5: Updated to ctx pattern (Round 24)
+        ctx = make_test_ctx(ticker="AAPL", resolution="D", time_range="1W")
+        # Monkeypatch to track release timing
+        candles, write_context = await _fetch_with_lock(ctx)
+        assert lock_released_at is not None
+        assert write_context is not None  # Write deferred, not done yet
+
+    def test_D23_write_through_completes_before_handler_returns(self, mock_tiingo, mock_ddb):
+        """Phase 2 write-through is awaited (not fire-and-forget) before handler returns."""
+        from src.lambdas.dashboard.ohlc import get_ohlc_handler
+
+        write_completed = False
+        # Monkeypatch _write_through_to_dynamodb to track completion
+        # Round 26 Q5: get_ohlc_handler takes (ticker, resolution, time_range, response)
+        mock_response = MagicMock()
+        mock_response.headers = {}
+        result = await get_ohlc_handler("AAPL", "D", "1W", mock_response)
+        assert write_completed  # Write finished before handler returned
+
+    def test_D24_cold_start_resets_circuit_breaker_to_closed(self):
+        """New Lambda instance starts with circuit breaker CLOSED."""
+        # Simulate fresh import (cold start)
+        import importlib
+        import src.lambdas.dashboard.ohlc as module
+        importlib.reload(module)
+
+        assert not module._DDB_BREAKER.is_open()
+        assert module._DDB_BREAKER.state == "CLOSED"
+        assert module._DDB_BREAKER.failure_count == 0
+
+
+class TestHandlerTimeout:
+    """Verify handler-level 5s hard ceiling with stale fallback."""
+
+    def test_D25_handler_timeout_serves_stale_l1_data(self, mock_tiingo_slow):
+        """On 5s timeout, serve stale L1 data with X-Cache-Source: stale."""
+        from src.lambdas.dashboard.ohlc import get_ohlc_handler, _ohlc_read_through_cache
+
+        # Pre-populate L1 with stale data
+        _ohlc_read_through_cache.set("ohlc:AAPL:D:1W:2026-02-08", stale_candles)
+
+        # Round 26 Q5: Explicit params for get_ohlc_handler
+        mock_response = MagicMock()
+        mock_response.headers = {}
+        # Trigger timeout (Tiingo mock takes >5s)
+        result = await get_ohlc_handler("AAPL", "D", "1W", mock_response)
+        assert result.candles == stale_candles
+        # Verify headers set by handler
+        assert mock_response.headers["X-Cache-Source"] == "stale"
+
+    def test_D26_handler_timeout_last_gasp_l2_read(self, mock_tiingo_slow, mock_ddb):
+        """On 5s timeout with empty L1, attempt last-gasp L2 read."""
+        from src.lambdas.dashboard.ohlc import get_ohlc_handler
+
+        # Round 26 Q5: Explicit params for get_ohlc_handler
+        mock_response = MagicMock()
+        mock_response.headers = {}
+        # L1 empty, L2 has data, Tiingo slow
+        result = await get_ohlc_handler("AAPL", "D", "1W", mock_response)
+        assert result.candles is not None
+        assert mock_response.headers["X-Cache-Source"] == "stale"
+
+    def test_D27_handler_timeout_total_failure_returns_503(self, mock_tiingo_slow, mock_ddb_failing):
+        """On 5s timeout with no cached data anywhere, return 503."""
+        from src.lambdas.dashboard.ohlc import get_ohlc_handler
+        from src.lambdas.shared.models.ohlc import OHLCErrorResponse
+
+        # Round 26 Q5: Explicit params + OHLCErrorResponse (Round 26 Q1)
+        mock_response = MagicMock()
+        mock_response.headers = {}
+        # L1 empty, L2 failing, Tiingo slow
+        result = await get_ohlc_handler("AAPL", "D", "1W", mock_response)
+        assert isinstance(result, OHLCErrorResponse)
+        assert result.status == "error"
+        assert mock_response.status_code == 503
+        assert mock_response.headers["Retry-After"] == "5"
+```
+
+**Dependency Tests (E31):**
+
+```python
+# tests/unit/cache/test_tiingo_timeout.py
+"""Test Tiingo HTTP timeout fits within handler budget."""
+
+class TestTiingoTimeoutBudget:
+    def test_E31_tiingo_4s_timeout_within_handler_5s_budget(self):
+        """Tiingo HTTP timeout (4s) + buffer (1s) = handler timeout (5s)."""
+        from src.lambdas.dashboard.ohlc import DASHBOARD_TIMEOUT_SECONDS, TIINGO_HTTP_TIMEOUT_SECONDS
+
+        assert TIINGO_HTTP_TIMEOUT_SECONDS < DASHBOARD_TIMEOUT_SECONDS
+        buffer = DASHBOARD_TIMEOUT_SECONDS - TIINGO_HTTP_TIMEOUT_SECONDS
+        assert buffer >= 0.8  # Minimum 800ms buffer for overhead
+```
+
+#### 15.19.10 Round 21 Test Additions (Two-Phase Handler & Circuit Breaker Half-Open)
+
+**Race Condition Tests (D28-D31):**
+
+```python
+# tests/unit/cache/test_two_phase_handler.py
+"""Tests for Two-Phase Handler architecture and circuit breaker half-open behavior."""
+
+class TestTwoPhaseHandler:
+    """Verify Phase 1/Phase 2 boundary semantics."""
+
+    def test_D28_write_through_outside_handler_timeout(self, mock_tiingo, mock_ddb):
+        """Phase 2 write-through runs OUTSIDE the 5s asyncio.wait_for boundary."""
+        import asyncio
+        from src.lambdas.dashboard.ohlc import get_ohlc_handler, DASHBOARD_TIMEOUT_SECONDS
+
+        # Mock Tiingo to take 4.5s (within Phase 1 budget)
+        # Mock DDB write to take 3s (would blow Phase 1 if inside timeout)
+        # Handler should complete: Phase 1 (4.5s) + Phase 2 (3s) = 7.5s total
+        # But user response determined at 4.5s mark
+        result = await get_ohlc_handler(...)
+        assert result.candles is not None  # Phase 1 succeeded
+        # DDB write completed (Phase 2) — verify data in mock DDB
+
+    def test_D29_phase2_skipped_when_cb_open(self, mock_tiingo, mock_ddb_failing):
+        """Phase 2 write-through is skipped when circuit breaker is open."""
+        from src.lambdas.dashboard.ohlc import get_ohlc_handler, _DDB_BREAKER
+
+        # Force circuit breaker open
+        for _ in range(3):
+            _DDB_BREAKER.record_failure()
+
+        result = await get_ohlc_handler(...)
+        assert result.candles is not None  # Phase 1 succeeded (direct to Tiingo)
+        # Verify NO DDB write attempted in Phase 2
+
+
+class TestCircuitBreakerHalfOpen:
+    """Verify LocalCircuitBreaker OPEN → HALF_OPEN → CLOSED/OPEN transitions."""
+
+    def test_D30_half_open_single_probe_success_closes_circuit(self):
+        """After 30s timeout, single probe success transitions HALF_OPEN → CLOSED."""
+        from src.lambdas.dashboard.ohlc import LocalCircuitBreaker
+        import time
+
+        cb = LocalCircuitBreaker(threshold=3, timeout=0.1)  # 100ms timeout for test speed
+
+        # Trip the breaker
+        for _ in range(3):
+            cb.record_failure()
+        assert cb.state == "OPEN"
+
+        # Wait for timeout
+        time.sleep(0.15)
+
+        # First call should be allowed (HALF_OPEN probe)
+        assert not cb.is_open()  # Transitions to HALF_OPEN, allows probe
+        assert cb.state == "HALF_OPEN"
+
+        # Probe succeeds
+        cb.record_success()
+        assert cb.state == "CLOSED"
+        assert cb.failure_count == 0
+
+    def test_D31_half_open_probe_failure_reopens_for_30s(self):
+        """After 30s timeout, probe failure transitions HALF_OPEN → OPEN."""
+        from src.lambdas.dashboard.ohlc import LocalCircuitBreaker
+        import time
+
+        cb = LocalCircuitBreaker(threshold=3, timeout=0.1)
+
+        # Trip the breaker
+        for _ in range(3):
+            cb.record_failure()
+        assert cb.state == "OPEN"
+
+        # Wait for timeout
+        time.sleep(0.15)
+
+        # Probe allowed
+        assert not cb.is_open()
+        assert cb.state == "HALF_OPEN"
+
+        # Probe fails
+        cb.record_failure()
+        assert cb.state == "OPEN"
+
+        # Should block again (no immediate retry)
+        assert cb.is_open()
+```
+
+#### 15.19.11 Round 23 Test Additions (Invalidation & Cache Age)
+
+**Race Condition Tests (D32-D35):**
+
+```python
+# tests/unit/cache/test_cache_invalidation.py
+"""Tests for cache invalidation public API and ResolutionCache age tracking."""
+
+class TestResolutionCacheInvalidation:
+    """Verify ResolutionCache.invalidate() and .clear() methods."""
+
+    def test_D32_resolution_cache_invalidate_by_ticker(self):
+        """invalidate(prefix) removes all matching keys, returns count."""
+        from src.lambdas.shared.cache.resolution_cache import ResolutionCache
+
+        cache = ResolutionCache(max_size=100, default_ttl=3600)
+        cache.set("ohlc:AAPL:D:1W:2026-02-08", ([{"close": 150}], time.time()))
+        cache.set("ohlc:AAPL:5:1D:2026-02-08", ([{"close": 151}], time.time()))
+        cache.set("ohlc:MSFT:D:1W:2026-02-08", ([{"close": 300}], time.time()))
+
+        removed = cache.invalidate("ohlc:AAPL:")
+        assert removed == 2  # Both AAPL entries removed
+        assert cache.get("ohlc:MSFT:D:1W:2026-02-08") is not None  # MSFT untouched
+
+    def test_D33_ohlc_read_through_cache_clear_all(self):
+        """OHLCReadThroughCache.clear() removes all entries, returns count."""
+        from src.lambdas.dashboard.ohlc import OHLCReadThroughCache
+
+        cache = OHLCReadThroughCache(max_size=100)
+        cache.set("ohlc:AAPL:D:1W:2026-02-08", mock_candles)
+        cache.set("ohlc:MSFT:D:1W:2026-02-08", mock_candles)
+
+        count = cache.clear()
+        assert count == 2
+        assert cache.get("ohlc:AAPL:D:1W:2026-02-08") is None
+        assert cache.get("ohlc:MSFT:D:1W:2026-02-08") is None
+
+
+class TestPublicInvalidationAPI:
+    """Verify invalidate_ohlc_cache() public API (Section 11.11 Round 22/23)."""
+
+    def test_D34_public_api_invalidate_ohlc_cache_per_ticker(self):
+        """invalidate_ohlc_cache(ticker) delegates to OHLCReadThroughCache.invalidate()."""
+        from src.lambdas.dashboard.ohlc import invalidate_ohlc_cache, _ohlc_read_through_cache
+
+        _ohlc_read_through_cache.set("ohlc:AAPL:D:1W:2026-02-08", mock_candles)
+        _ohlc_read_through_cache.set("ohlc:MSFT:D:1W:2026-02-08", mock_candles)
+
+        count = invalidate_ohlc_cache("AAPL")
+        assert count == 1  # Only AAPL removed
+        assert _ohlc_read_through_cache.get("ohlc:MSFT:D:1W:2026-02-08") is not None
+
+
+class TestCacheAgeTracking:
+    """Verify ResolutionCache.get_with_age() returns accurate ages."""
+
+    def test_D35_get_with_age_returns_correct_seconds(self):
+        """get_with_age() returns (value, age_seconds) from stored tuple."""
+        from src.lambdas.dashboard.ohlc import OHLCReadThroughCache
+        import time
+
+        cache = OHLCReadThroughCache(max_size=100)
+        cache.set("ohlc:AAPL:D:1W:2026-02-08", mock_candles)
+
+        time.sleep(0.5)  # Wait 500ms
+
+        age = cache.get_age("ohlc:AAPL:D:1W:2026-02-08")
+        assert 0 <= age <= 2  # Should be ~0-1 seconds
+
+        # Non-existent key returns 0
+        age_missing = cache.get_age("ohlc:NOPE:D:1W:2026-02-08")
+        assert age_missing == 0
+```
+
+#### 15.19.12 Round 24 Test Additions (OHLCRequestContext & Breaker Write Visibility)
+
+**Race Condition Tests (D36-D39):**
+
+```python
+# tests/unit/cache/test_write_breaker_integration.py
+"""Tests for circuit breaker write-side visibility (Round 24 Q2)."""
+
+from dataclasses import replace
+from datetime import date
+from unittest.mock import AsyncMock, patch
+
+import pytest
+
+
+class TestWriteThroughBreakerIntegration:
+    """Verify _write_through_to_dynamodb contributes to _DDB_BREAKER state."""
+
+    @pytest.fixture
+    def ohlc_ctx(self):
+        from src.lambdas.dashboard.ohlc import OHLCRequestContext
+        return OHLCRequestContext(
+            ticker="AAPL", resolution="D", time_range="1W",
+            start_date=date(2026, 2, 1), end_date=date(2026, 2, 8),
+            source="tiingo", cache_key="ohlc:AAPL:D:1W:2026-02-08",
+        )
+
+    async def test_D36_write_success_calls_record_success(self, ohlc_ctx, mock_ddb):
+        """Successful write-through feeds record_success() into _DDB_BREAKER."""
+        from src.lambdas.dashboard.ohlc import _write_through_to_dynamodb, _DDB_BREAKER
+
+        _DDB_BREAKER.reset()
+        initial_failures = _DDB_BREAKER.failure_count
+
+        await _write_through_to_dynamodb(ohlc_ctx, mock_candles)
+
+        # Breaker should have recorded success (failure count stays 0)
+        assert _DDB_BREAKER.failure_count == initial_failures
+        assert _DDB_BREAKER.state == "CLOSED"
+
+    async def test_D37_write_failure_calls_record_failure_trips_breaker(self, ohlc_ctx):
+        """Repeated write failures trip the circuit breaker open."""
+        from src.lambdas.dashboard.ohlc import _write_through_to_dynamodb, _DDB_BREAKER
+
+        _DDB_BREAKER.reset()
+
+        # Inject DynamoDB write failures
+        with patch("src.lambdas.dashboard.ohlc.put_cached_candles", side_effect=Exception("DDB throttled")):
+            for _ in range(3):  # threshold = 3
+                await _write_through_to_dynamodb(ohlc_ctx, mock_candles)
+
+        # Breaker should now be OPEN from write failures
+        assert _DDB_BREAKER.state == "OPEN"
+        assert _DDB_BREAKER.is_open()
+
+    async def test_D38_timeout_fallback_age_uses_ctx_resolution(self, ohlc_ctx):
+        """Handler timeout fallback passes ctx.resolution to _estimate_cache_age_from_dynamodb."""
+        from src.lambdas.dashboard.ohlc import _estimate_cache_age_from_dynamodb
+        import time
+
+        # Simulate stale candles with _expires_at attribute
+        stale_candles = [type("Candle", (), {"_expires_at": int(time.time()) - 300})]
+
+        # Daily resolution uses 90-day TTL for age derivation
+        age_daily = _estimate_cache_age_from_dynamodb(stale_candles, "D")
+        assert age_daily >= 0  # Should compute valid age
+
+        # Intraday resolution uses 5-min TTL — same data, different age
+        age_intraday = _estimate_cache_age_from_dynamodb(stale_candles, "5")
+        # Different TTL durations → different derived ages from same ExpiresAt
+        assert age_daily != age_intraday
+
+
+class TestOHLCRequestContext:
+    """Verify OHLCRequestContext construction and immutability (Round 24 Q1)."""
+
+    def test_D39_context_frozen_and_to_metadata(self):
+        """OHLCRequestContext is frozen (thread-safe) and to_metadata() returns expected shape."""
+        from src.lambdas.dashboard.ohlc import OHLCRequestContext
+
+        ctx = OHLCRequestContext(
+            ticker="AAPL", resolution="D", time_range="1W",
+            start_date=date(2026, 2, 1), end_date=date(2026, 2, 8),
+            source="tiingo", cache_key="ohlc:AAPL:D:1W:2026-02-08",
+        )
+
+        # Frozen: mutation raises FrozenInstanceError
+        with pytest.raises(AttributeError):
+            ctx.ticker = "MSFT"
+
+        # to_metadata() returns expected keys for X-Ray/EMF
+        meta = ctx.to_metadata()
+        assert meta == {
+            "ticker": "AAPL",
+            "resolution": "D",
+            "time_range": "1W",
+            "source": "tiingo",
+            "cache_key": "ohlc:AAPL:D:1W:2026-02-08",
+        }
+
+        # dataclasses.replace() works for test overrides
+        msft_ctx = replace(ctx, ticker="MSFT", cache_key="ohlc:MSFT:D:1W:2026-02-08")
+        assert msft_ctx.ticker == "MSFT"
+        assert ctx.ticker == "AAPL"  # Original unchanged
 ```
 
 ---

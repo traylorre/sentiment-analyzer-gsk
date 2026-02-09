@@ -171,6 +171,106 @@ Principal-level review of testing strategy, working backwards from failure modes
 
 **Total tests:** 160 across 11 categories (unchanged from Round 18)
 
+## Session 2026-02-08 (Round 25 - Post-Round-24 Full Drift Audit)
+
+**Methodology:** Full drift audit of spec (2830 lines) and test plan (3950 lines) post-Round-24. Parallel subagent scan with line-by-line verification against `OHLCRequestContext` refactoring. Found: 2 undefined helper functions blocking handler construction (100% crash rate), sync/async naming collision, observability section with stale signatures, test plan with broken imports and pre-R24 positional args, quick reference count drift. 5 HIGH, 3 MEDIUM, 1 LOW = 9 actionable issues.
+
+**Decisions (Q1-Q5):**
+
+- Q1: `_get_default_source(ticker)` and `_resolve_date_range(time_range)` called at handler entry but never defined — double NameError before `OHLCRequestContext` even constructed. → A: **Define both in new Section 4.0.1** — `_resolve_date_range` maps "1D/1W/1M/3M/6M/1Y/YTD" to `(start_date, end_date)` using ET market timezone. `_get_default_source` returns `"tiingo"` (centralized failover knob). Also fixed Section 4.3 bare variables → `ctx.*`.
+
+- Q2: Section 4.3 `_read_from_dynamodb` defined as sync `def` but called with `await` everywhere — `TypeError` at every call site (same bug class as Round 23 Q4). → A: **Rename to `_read_from_dynamodb_sync`** with cross-reference to Section 11.7 async wrapper. Naming symmetry with write path.
+
+- Q3: Section 12.4 observability snippets use pre-Round-24 `(ticker: str, source: str, ...)` signature, bare `cache_key`, and `@tracer.capture_method` on sync function (orphaned X-Ray segments). → A: **Update to `ctx: OHLCRequestContext` + post-await X-Ray instrumentation.** "Clean Room" pattern: sync = pure I/O, async wrapper = orchestration + tracing.
+
+- Q4: Section 15 Quick Reference says 176 tests / D:28 — stale after R24 added D36-D39 (180 / D:36). → A: **Update counts to match canonical test plan.** D: 28→36, Total: 176→180, add R24/R25 mentions.
+
+- Q5: Test C14 calls `_resolve_date_range` and `_get_ohlc_cache_key` without importing. Test M1/M2 use pre-R24 positional string args. → A: **Fix both to ctx pattern** — C14 adds explicit imports, M1/M2 construct `OHLCRequestContext` and use `await`.
+
+**Tests Fixed:** C14 (missing imports), M1 (old signature), M2 (old signature). R25 helper function tests to be formally numbered during `/speckit.plan`.
+
+**Sections Updated:** 4.0.1 (NEW: handler entry helpers), 4.3 (renamed to `_read_from_dynamodb_sync` + cross-ref), 12.4 (ctx pattern + post-await X-Ray), 15 Quick Reference (counts + R24/R25), Clarifications (Round 25 session), test plan (C14 imports, M1/M2 ctx pattern).
+
+## Session 2026-02-08 (Round 24 - OHLCRequestContext & Circuit Breaker Audit)
+
+**Methodology:** Deep audit using parallel subagent scan of the full spec post-Round-23. Principal-level scrutiny of: Data Clump anti-pattern in call chain signatures, circuit breaker observability gaps (write-side blind spot), error-path/happy-path parameter parity, test plan coverage for new constructs, and supplementary section drift from canonical implementation. Found 1 NameError (undeclared params), 1 design gap (breaker deaf to writes), 1 TypeError (missing param in error path), 1 test coverage gap, 1 stale code drift.
+
+**Decisions (Q1-Q5):**
+
+- Q1: Handler uses `start_date`, `end_date`, `source` as bare variables not in intermediate function signatures — NameError. Call chain passes 5-7 individual params (Data Clump). → A: **Introduce frozen `OHLCRequestContext` dataclass** — constructed once at handler entry, passed as single `ctx` param. Frozen for `asyncio.to_thread()` safety. `to_metadata()` for X-Ray/EMF. Write context dict simplified to `{"ctx": ctx, "candles": candles}`. Refactored 4 function signatures.
+
+- Q2: `_write_through_to_dynamodb` never calls `record_failure()`/`record_success()` — circuit breaker "deaf" to write-side DynamoDB health. Write failures burn ~200ms per request on dead path. → A: **Writes contribute to same `_DDB_BREAKER`** — `is_open()` guard encapsulated inside function (handler guard simplified to `if pending_write:`). `record_success()` after write, `record_failure()` in except. During HALF_OPEN, write success helps close circuit faster.
+
+- Q3: Handler timeout fallback calls `_estimate_cache_age_from_dynamodb(stale_candles)` — missing `resolution` param. TypeError turns graceful degradation into dashboard crash. Happy path already passes `ctx.resolution`. → A: **Pass `ctx.resolution`** — matches happy-path pattern. Correct TTL lookup (5min intraday vs 90d daily). Zero data bloat.
+
+- Q4: Test plan has zero Round 24 coverage. No R24 column. OHLCRequestContext, breaker write visibility, timeout age fix all untested. C14 uses stale `.create()` factory method. → A: **Add D36-D39** — D36: write success → `record_success()`, D37: write failures trip breaker, D38: timeout age uses `ctx.resolution`, D39: frozen + `to_metadata()` + `replace()`. Fixed C14. Total 176 → 180.
+
+- Q5: Sections 11.3 and 11.7 async wrappers use pre-Round-24 individual params. Section 11.7 write wrapper missing `_DDB_BREAKER` calls. Implementers copying would get NameErrors and re-introduce breaker blind spot. → A: **Update all three snippets to `ctx: OHLCRequestContext` pattern** — read wrapper: `(ctx, consistent_read)` + breaker. Write wrapper: `(ctx, candles)` + `is_open()` + `record_success/failure`. Zero architectural drift between supplementary and canonical sections.
+
+**Tests Added:** D36-D39 (+4 tests, total 180 across 11 categories). C14 stale factory method fixed.
+
+**Sections Updated:** 4.0 (NEW: OHLCRequestContext dataclass), 4.2 (ctx param + breaker calls), 4.3 (ctx param + consistent_read), 4.8 (ctx param + write context dict), 4.9 (ctx param), 4.10 (ctx construction + simplified Phase 2 guard), 11.3 (ctx in breaker snippet), 11.7 (ctx in async wrappers + breaker calls), test plan (D36-D39 + R24 column + C14 fix)
+
+## Session 2026-02-08 (Round 23 - Post-Round-22 Deep Audit)
+
+**Methodology:** Deep audit using 3 parallel subagent scans across the full spec (2600+ lines) and test plan (3600+ lines). Principal-level scrutiny of: kwargs contract alignment, method completeness across delegation chains, sync/async boundary correctness, test plan canonical accuracy, and cache API sentinel behavior. Found 3 runtime-crashing bugs (TypeError, AttributeError, TypeError) and 1 documentation inconsistency.
+
+**Decisions (Q1-Q5):**
+
+- Q1: `_write_through_to_dynamodb(**pending_write)` crashes — write context dict key `"candles"` mismatches function parameter `ohlc_candles`. L2 cache never populated. → A: **Rename parameter to `candles`** — ubiquitous domain language, kwargs unpacking self-documenting. Type hint tightened to `list[PriceCandle]`.
+
+- Q2: `OHLCReadThroughCache` missing `.invalidate()` and `.clear()` methods — Section 11.11 public API calls them, crashes with `AttributeError`. → A: **Delegate to `ResolutionCache`** — add `invalidate(prefix)` and `clear()` to data layer, `OHLCReadThroughCache` wraps as thin delegates. O(1000) scan <1ms.
+
+- Q3: Test plan says 162 tests, main spec says 172. D21-D31 never propagated to canonical test plan. Round 22/23 constructs untested. → A: **Update test plan as canonical source** — added D21-D35, E31. Total 162 → 178. Summary table extended.
+
+- Q4: `_write_through_to_dynamodb` is `def` (sync) but handler does `await` on it — `TypeError`. Also blocks event loop during DDB I/O. → A: **Make `async def` with `asyncio.to_thread(put_cached_candles, ...)`** — aligns with Round 1 Q4 architectural decision.
+
+- Q5: `ResolutionCache.get_with_age()` behavior on missing keys unspecified — `get_age()` tuple unpacking crashes with `TypeError`. → A: **Return `(None, 0.0)` sentinel tuple** — zero-surprise contract, callers always destructure safely.
+
+**Tests Added:** D32-D35 (+4 tests, total 178 across 11 categories)
+
+**Sections Updated:** 4.2 (async def + to_thread + param rename), 4.8 OHLCReadThroughCache (.invalidate/.clear methods), ResolutionCache modification spec (sentinel tuple, invalidate, clear), 11.1 (test example public API), 11.7 (stale ohlc_candles reference), 11.11 (confirmed working after Q2), test plan file (D21-D35 + E31 + summary table)
+
+## Session 2026-02-08 (Round 22 - Post-Round-21 Consistency Audit)
+
+**Methodology:** Systematic audit of cascading consistency failures introduced by Round 21's Two-Phase Handler refactor. Principal-level scan for: return type mismatches, memory leaks from new data structures, stale code references to removed/renamed entities, and terminology drift from superseded designs.
+
+**Decisions (Q1-Q5):**
+
+- Q1: `_fetch_with_lock` has inconsistent return types — Step 7 returns tuple but all other paths return bare values. Handler destructures `result, pending_write = await ...` which crashes on bare returns. → A: **Uniform tuple contract**: ALL return paths return `(candles, write_context | None)`. Type signature: `-> tuple[list[PriceCandle], dict | None]`.
+
+- Q2: `OHLCReadThroughCache._timestamps` dict (Round 21 Q4) grows unbounded — `ResolutionCache` evicts LRU but `_timestamps` keys never removed, causing memory leak and zombie ages. → A: **Store `(value, inserted_at)` tuples inside `ResolutionCache` directly** — atomic eviction removes both in same `popitem()`. New `get_with_age()` method. Zero maintenance, zero leak.
+
+- Q3: Section 4.9 `get_ohlc_data()` references non-existent `dynamodb_result.age_seconds` and uses pre-Round-21 single-return pattern conflicting with two-phase handler. → A: **Rewrite as `_get_ohlc_data_with_write_context()`** — returns `tuple[OHLCResponse, dict | None]`. L1 age via `get_age()`, L2 age via `_estimate_cache_age_from_dynamodb()`.
+
+- Q4: Section 11.11 `invalidate_all_caches()` imports `_ohlc_cache` (removed Round 18) and calls phantom `_invalidate_ohlc_response_cache()`. ImportError crashes entire invalidation subsystem. → A: **Export named `invalidate_ohlc_cache(ticker)` function from `ohlc.py`** — public API delegates to `_ohlc_read_through_cache`. `cache_manager.py` imports function, not private instance. Encapsulation preserved, mockable, X-Ray traceable.
+
+- Q5: Section 4.2 "Fire-and-forget" docstring and constraints contradict Round 20/21 "awaited" design. Term implies no `await`, safe to skip — misleads developers into re-introducing Lambda freeze bug. → A: **Replace with "Phase 2 awaited"** — docstring: "Awaited before handler returns to prevent Lambda freeze mid-write. Invisible to user latency; additive to billed duration only (~50ms)." Constraints: "Phase 2 awaited: errors logged, non-fatal, write completion guaranteed."
+
+**Tests Added:** None (consistency fixes to existing spec sections, no new behavioral requirements)
+
+**Sections Updated:** 4.2 (docstring + constraints + call sites), 4.8 (_fetch_with_lock uniform tuple), 4.8 (OHLCReadThroughCache atomic tuple storage), 4.9 (rewritten as _get_ohlc_data_with_write_context), 11.11 (invalidation encapsulation boundary)
+
+## Session 2026-02-08 (Round 21 - Two-Phase Handler Architecture)
+
+**Methodology:** Post-Round-20 architectural reconciliation. Cross-referenced timing constraints, circuit breaker state machine, resolution fallback races, undefined helper functions, and DST edge cases. Principal-level analysis focused on implementation-breaking contradictions.
+
+**Decisions (Q1-Q5):**
+
+- Q1: Write-through `await` inside `asyncio.wait_for(timeout=5.0)` contradicts `batch_write_with_retry` 10s hard cap — timeout cancels write mid-batch. → A: **Two-Phase Handler Architecture**: Phase 1 (Response, 5s cap) returns `(response, pending_write_context)`. Phase 2 (Persistence, outside timeout) awaits write-through before handler returns. User latency capped. Write integrity guaranteed. Refines Round 20 Q2+Q3.
+
+- Q2: `LocalCircuitBreaker` half-open probe behavior unspecified — how many probes, what closes/re-opens. → A: **Single-probe model**: OPEN→HALF_OPEN after 30s timeout, 1 request probes. Success → CLOSED. Failure → OPEN (another 30s). Matches existing `CircuitBreakerManager` for SRE consistency. Multi-probe/gradual ramp over-engineering for Lambda lifecycle.
+
+- Q3: Concurrent resolution fallback creates duplicate Tiingo calls — different locks for 5-min/60-min both fall back to daily. → A: **Accept as known trade-off**. Natural cap ~3 resolutions. Idempotent writes. Self-correcting. Secondary lock risks deadlocks. Documented in Section 6.9.
+
+- Q4: `_estimate_cache_age_from_dynamodb()` and `get_age()` referenced but never defined — X-Cache-Age always 0. → A: **Derivation over redundancy**. L1: `_timestamps` dict tracks insertion time. L2: derive from `ExpiresAt - TTL_DURATION`. No new DynamoDB attribute needed.
+
+- Q5: `_estimate_expected_candles()` drifts by 1 candle on DST transition days (2/year) — forces unnecessary re-fetch. → A: **Accept as known limitation**. ~100 extra API calls/year. Self-correcting. `exchange_calendars` adds maintenance tax. 1-candle tolerance weakens data contract for 363 normal days.
+
+**Tests Added:** D28-D31 (+4 tests, total 172 across 11 categories)
+
+**Sections Updated:** 4.8 (fetch_with_lock step 7, guarantees), 4.10 (two-phase handler), 5 (data flow diagram), 6.9 (new: concurrent resolution fallback), 11.9 (DST limitation), 11.16 (half-open state machine + full implementation), OHLCReadThroughCache (age tracking)
+
 ## Session 2026-02-06 (Round 18 - Architecture Reconciliation)
 
 - Q: BatchWriteItem vs ConditionExpression (`updated_at`) incompatibility — DynamoDB BatchWriteItem does NOT support ConditionExpression? → A: Drop `updated_at` ConditionExpression for cache writes — candle data is idempotent. Lock PutItem retains its ConditionExpression. Tests D15/D16 removed.
@@ -198,3 +298,32 @@ Principal-level review of testing strategy, working backwards from failure modes
 **Deferred:**
 1. WebSocket/Real-Time Cache Invalidation
 2. Multi-Region/Disaster Recovery
+
+## Session 2026-02-08 (Round 26 - Source Code Cross-Reference Audit)
+
+**Methodology:** Cross-referenced ~2930 lines of spec against ~2795 lines of source code across 7 files (ohlc.py, ohlc_cache.py, models/ohlc.py, cache.py, circuit_breaker.py, base.py, tiingo.py). Verified function signatures, import paths, module boundaries, and deeply-piped data structures. Found 3 HIGH (runtime-crashing), 2 MEDIUM (implementation blockers). All pre-existing from original spec construction meeting source code reality — none introduced by previous rounds.
+
+**Decisions (Q1-Q5):**
+
+- Q1 (HIGH): `OHLCResponse(status="degraded")` in timeout handler (Section 4.10) crashes — OHLCResponse has no `status`/`message` field, missing 7 required fields. Every timeout = pydantic `ValidationError`. → A: **Discriminated union `OHLCHandlerResponse = Union[OHLCResponse, OHLCErrorResponse]`** — dedicated `OHLCErrorResponse(status, message, candles, ticker)` for timeout/failure paths. Clean contract separation: success model strict (99% path), error model cheap to construct (emergency path). Frontend TypeScript type guard on `status` field.
+
+- Q2 (HIGH): `_estimate_expected_candles` has 3 incompatible signatures: source (date, date, OHLCResolution), spec 4.3 (ctx.start_date, ctx.end_date, ctx.resolution as str), spec 11.9 (days: int, resolution: str). → A: **Keep source signature `(start_date: date, end_date: date, resolution: OHLCResolution)`** — most correct and complete. Fixed Section 11.9 to match. Section 4.3 call site adds `OHLCResolution(ctx.resolution)` conversion.
+
+- Q3 (HIGH): `get_ohlc_handler` (spec Section 4.10) disconnected from actual FastAPI route `get_ohlc_data` — 5 incompatibilities (enum vs string, Depends, custom dates, timezone, time range values). → A: **OPEN — BLOCKED on FastAPI+Mangum removal.** Deep dive confirmed FastAPI is production architecture (Mangum + Lambda Function URL + API Gateway dual entry points). However, user has decided to rip out FastAPI+Mangum before continuing cache work. Q3 resolution deferred until new handler architecture is established.
+
+- Q4 (MEDIUM): `put_cached_candles` missing `end_date` param, `ExpiresAt` attribute, `get_cached_candles` missing `ExpiresAt` in ProjectionExpression. → A: **Spec already correct** — Sections 4.2 (line 337), 4.6 (line 494, 543-548), 11.16 (line 1247-1277) all specify ExpiresAt correctly. This is a source-code-only gap; no spec changes needed.
+
+- Q5 (MEDIUM): Tests D21-D27 use pre-R24 positional params, M3 uses pre-R19 dict breaker. → A: **Fixed immediately** — D21/D22 updated to `_fetch_with_lock(ctx)`, D23/D25-D27 updated with explicit `get_ohlc_handler("AAPL", "D", "1W", mock_response)`, D27 updated to assert `OHLCErrorResponse`. M3 updated from `_record_failure()` standalone function to `_DDB_BREAKER.record_failure()` method.
+
+**Tests Fixed:** M3 (pre-R19 dict breaker → LocalCircuitBreaker), D21-D22 (positional → ctx), D23/D25-D27 (ellipsis → explicit params), D27 (OHLCResponse → OHLCErrorResponse assertion).
+
+**Sections Updated:** 4.3 (OHLCResolution enum conversion at call site), 4.10 (OHLCErrorResponse model + discriminated union + fixed timeout constructors), 11.9 (signature aligned to source), test plan (M3, D21-D27).
+
+**Status: BENCHED** — Cache remediation work paused pending FastAPI+Mangum removal (thicker architectural change). Q3 remains OPEN.
+
+---
+
+## Standing Architectural Notes
+
+**DO NOT SUGGEST FastAPI + Mangum (Standing Note, 2026-02-08):**
+The FastAPI + Mangum + Lambda Function URL architecture is scheduled for removal. Do not suggest, re-introduce, or build upon this pattern. The caching layer must not depend on FastAPI routing, `Depends()` injection, or Mangum event translation. When cache work resumes post-removal, Q3 will be re-evaluated against the new handler architecture.
