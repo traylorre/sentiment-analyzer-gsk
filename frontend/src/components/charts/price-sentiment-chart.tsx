@@ -24,20 +24,6 @@ import { RESOLUTION_LABELS } from '@/types/chart';
 import { GapShaderPrimitive } from './primitives';
 
 /**
- * Number of candlesticks to show initially for each resolution.
- * Higher-frequency data needs narrower initial view for visibility.
- * 0 means show all data (fitContent).
- */
-const VISIBLE_CANDLES: Record<OHLCResolution, number> = {
-  '1': 120,   // 2 hours of 1-min candles
-  '5': 78,    // 1 trading day of 5-min candles
-  '15': 52,   // 2 trading days
-  '30': 26,   // 2 trading days
-  '60': 40,   // 5 trading days
-  'D': 40,    // ~2 months of trading days (scrollable)
-};
-
-/**
  * Convert date value to lightweight-charts Time type.
  * Handles both ISO strings (from API) and numeric timestamps (from tests/legacy).
  * - Intraday (1m, 5m, 15m, 30m, 1h): Unix timestamp in seconds
@@ -121,7 +107,16 @@ export function PriceSentimentChart({
 
   const [isReady, setIsReady] = useState(false);
   const [tooltip, setTooltip] = useState<TooltipData | null>(null);
-  const [timeRange, setTimeRange] = useState<TimeRange>(initialTimeRange);
+  // T026: Read initial timeRange from sessionStorage (persist across ticker switches)
+  const [timeRange, setTimeRange] = useState<TimeRange>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = sessionStorage.getItem('ohlc_preferred_time_range');
+      if (stored && ['1W', '1M', '3M', '6M', '1Y'].includes(stored)) {
+        return stored as TimeRange;
+      }
+    }
+    return initialTimeRange;
+  });
   // Track gap markers for tooltip display (use ref for access in crosshair handler)
   const gapMarkersMapRef = useRef<Map<string | number, GapMarker>>(new Map());
   // T024: Read initial resolution from sessionStorage
@@ -146,6 +141,13 @@ export function PriceSentimentChart({
       sessionStorage.setItem('ohlc_preferred_resolution', resolution);
     }
   }, [resolution]);
+
+  // T026: Persist timeRange to sessionStorage when it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('ohlc_preferred_time_range', timeRange);
+    }
+  }, [timeRange]);
 
   // Fetch chart data with resolution support (T020)
   const {
@@ -245,9 +247,9 @@ export function PriceSentimentChart({
     });
 
     // Configure right scale for sentiment range (-1 to +1)
-    // Add padding (0.15) so -1 and +1 values don't sit exactly at the edge
+    // Keep autoScale: true (default) so autoscaleInfoProvider on the series works
+    // Ref: https://tradingview.github.io/lightweight-charts/tutorials/customization/price-scale
     chart.priceScale('right').applyOptions({
-      autoScale: false,
       scaleMargins: { top: 0.15, bottom: 0.15 },
     });
 
@@ -414,25 +416,15 @@ export function PriceSentimentChart({
     sentimentSeriesRef.current.setData(chartData);
   }, [sentimentData, resolution]);
 
-  // Fit content when data changes, with resolution-aware visible range
+  // Fit content when data changes to show full selected time range
+  // Removed VISIBLE_CANDLES logic - user expects to see full selected range
+  // (The old logic limited intraday to ~40 candles, showing only 5-6 days for 1h resolution)
   useEffect(() => {
     if (!chartRef.current || (!priceData.length && !sentimentData.length)) return;
 
-    // First fit all content
+    // Show all data for the selected time range
     chartRef.current.timeScale().fitContent();
-
-    // For intraday resolutions, limit visible range to show candlesticks clearly
-    const visibleCount = VISIBLE_CANDLES[resolution];
-    const dataLength = priceData.length || sentimentData.length;
-
-    if (visibleCount > 0 && dataLength > visibleCount) {
-      // Show most recent candles (scroll to right edge)
-      chartRef.current.timeScale().setVisibleLogicalRange({
-        from: dataLength - visibleCount,
-        to: dataLength - 1,
-      });
-    }
-  }, [priceData, sentimentData, resolution]);
+  }, [priceData, sentimentData, resolution, timeRange]);
 
   // Update series visibility
   useEffect(() => {

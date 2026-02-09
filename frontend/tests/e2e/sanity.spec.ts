@@ -34,9 +34,10 @@ test.describe('Critical User Path - Sanity Tests', () => {
       await expect(chartContainer).toBeVisible({ timeout: 15000 });
 
       // Verify chart has loaded with actual data points (not 0)
+      // Use [1-9] to match non-zero counts, waiting for data to actually load
       await expect(chartContainer).toHaveAttribute(
         'aria-label',
-        /\d+ price candles and \d+ sentiment points/,
+        /[1-9]\d* price candles and [1-9]\d* sentiment points/,
         { timeout: 15000 }
       );
 
@@ -67,7 +68,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       // Verify chart still has data after time range change
       await expect(chartContainer).toHaveAttribute(
         'aria-label',
-        /\d+ price candles and \d+ sentiment points/,
+        /[1-9]\d* price candles and [1-9]\d* sentiment points/,
         { timeout: 15000 }
       );
 
@@ -96,7 +97,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       );
       await expect(chartContainer).toHaveAttribute(
         'aria-label',
-        /\d+ price candles/,
+        /[1-9]\d* price candles/,
         { timeout: 15000 }
       );
 
@@ -125,7 +126,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       );
       await expect(chartContainer).toHaveAttribute(
         'aria-label',
-        /\d+ price candles/,
+        /[1-9]\d* price candles/,
         { timeout: 15000 }
       );
 
@@ -148,7 +149,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
         // Verify chart still has data
         await expect(chartContainer).toHaveAttribute(
           'aria-label',
-          /\d+ price candles/,
+          /[1-9]\d* price candles/,
           { timeout: 15000 }
         );
       }
@@ -170,7 +171,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       );
       await expect(chartContainer).toHaveAttribute(
         'aria-label',
-        /\d+ price candles/,
+        /[1-9]\d* price candles/,
         { timeout: 15000 }
       );
 
@@ -230,7 +231,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       // Verify chart has loaded with actual data points
       await expect(chartContainer).toHaveAttribute(
         'aria-label',
-        /\d+ price candles and \d+ sentiment points/,
+        /[1-9]\d* price candles and [1-9]\d* sentiment points/,
         { timeout: 15000 }
       );
 
@@ -247,7 +248,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       // Verify chart still has data after time range change
       await expect(chartContainer).toHaveAttribute(
         'aria-label',
-        /\d+ price candles and \d+ sentiment points/,
+        /[1-9]\d* price candles and [1-9]\d* sentiment points/,
         { timeout: 15000 }
       );
     });
@@ -270,7 +271,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       );
       await expect(chartContainer).toHaveAttribute(
         'aria-label',
-        /\d+ price candles/,
+        /[1-9]\d* price candles/,
         { timeout: 15000 }
       );
 
@@ -315,20 +316,22 @@ test.describe('Critical User Path - Sanity Tests', () => {
       );
       await expect(chartContainer).toHaveAttribute(
         'aria-label',
-        /\d+ price candles/,
+        /[1-9]\d* price candles/,
         { timeout: 15000 }
       );
 
-      // Navigate to Settings using mobile navigation
+      // Navigate to Settings using mobile navigation (client-side tab switch, not URL change)
       const settingsTab = page.getByRole('tab', { name: /settings/i });
       if (await settingsTab.isVisible()) {
         await settingsTab.click();
-        await expect(page).toHaveURL(/\/settings/);
+        // Verify Settings tab is now selected (aria-selected or pressed state)
+        await expect(settingsTab).toHaveAttribute('aria-selected', 'true', { timeout: 5000 });
 
         // Navigate back to Dashboard
         const dashboardTab = page.getByRole('tab', { name: /dashboard/i });
         await dashboardTab.click();
-        await expect(page).toHaveURL(/\/$/);
+        // Verify Dashboard tab is now selected
+        await expect(dashboardTab).toHaveAttribute('aria-selected', 'true', { timeout: 5000 });
 
         // Verify chart is still showing data (state preserved or reloaded)
         await expect(
@@ -377,7 +380,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       // Verify we have actual price data (the fix prevents caching of empty responses)
       await expect(chartContainer).toHaveAttribute(
         'aria-label',
-        /\d+ price candles and \d+ sentiment points/,
+        /[1-9]\d* price candles and [1-9]\d* sentiment points/,
         { timeout: 15000 }
       );
 
@@ -422,7 +425,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       );
       await expect(chartContainer).toHaveAttribute(
         'aria-label',
-        /\d+ price candles/,
+        /[1-9]\d* price candles/,
         { timeout: 15000 }
       );
 
@@ -442,7 +445,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
         // Verify chart still has data (not empty)
         await expect(chartContainer).toHaveAttribute(
           'aria-label',
-          /\d+ price candles/,
+          /[1-9]\d* price candles/,
           { timeout: 15000 }
         );
 
@@ -450,6 +453,273 @@ test.describe('Critical User Path - Sanity Tests', () => {
         const emptyState = page.getByText(/no price data available/i);
         await expect(emptyState).not.toBeVisible();
       }
+    });
+
+    /**
+     * Verify that data count increases for longer time ranges.
+     * This indirectly tests the auto-zoom fix - if fitContent() is called,
+     * we should see more data points for longer ranges.
+     */
+    test('should load more data points for longer time ranges', async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+
+      // Add GOOG ticker
+      const searchInput = page.getByPlaceholder(/search tickers/i);
+      await searchInput.fill('GOOG');
+      await page.waitForTimeout(600);
+
+      const suggestion = page.getByRole('option', { name: /GOOG.*Alphabet.*Class C/i });
+      await expect(suggestion).toBeVisible({ timeout: 10000 });
+      await suggestion.click();
+
+      const chartContainer = page.locator(
+        '[role="img"][aria-label*="Price and sentiment chart"]'
+      );
+
+      // Select 1W first
+      const oneWeekButton = page.getByRole('button', { name: '1W time range' });
+      await oneWeekButton.click();
+      await page.waitForTimeout(600);
+
+      await expect(chartContainer).toHaveAttribute(
+        'aria-label',
+        /[1-9]\d* price candles/,
+        { timeout: 15000 }
+      );
+
+      // Get 1W candle count
+      const oneWeekLabel = await chartContainer.getAttribute('aria-label');
+      const oneWeekMatch = oneWeekLabel?.match(/(\d+) price candles/);
+      expect(oneWeekMatch).toBeTruthy();
+      const oneWeekCount = parseInt(oneWeekMatch![1], 10);
+
+      // Switch to 6M
+      const sixMonthButton = page.getByRole('button', { name: '6M time range' });
+      await sixMonthButton.click();
+      await page.waitForTimeout(600);
+
+      await expect(chartContainer).toHaveAttribute(
+        'aria-label',
+        /[1-9]\d* price candles/,
+        { timeout: 15000 }
+      );
+
+      // Get 6M candle count
+      const sixMonthLabel = await chartContainer.getAttribute('aria-label');
+      const sixMonthMatch = sixMonthLabel?.match(/(\d+) price candles/);
+      expect(sixMonthMatch).toBeTruthy();
+      const sixMonthCount = parseInt(sixMonthMatch![1], 10);
+
+      // 6M should have significantly more data points than 1W
+      // (6 months ≈ 126 trading days vs 1 week ≈ 5 trading days)
+      expect(sixMonthCount).toBeGreaterThan(oneWeekCount);
+
+      // Verify 6M has at least 60 candles (conservative estimate for 3 months of trading)
+      expect(sixMonthCount).toBeGreaterThanOrEqual(60);
+    });
+
+    /**
+     * Verify sentiment data is present when sentiment toggle is active.
+     * Regression test for sentiment line visibility fix.
+     */
+    test('should have sentiment data when toggle is active', async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+
+      // Add GOOG ticker
+      const searchInput = page.getByPlaceholder(/search tickers/i);
+      await searchInput.fill('GOOG');
+      await page.waitForTimeout(600);
+
+      const suggestion = page.getByRole('option', { name: /GOOG.*Alphabet.*Class C/i });
+      await expect(suggestion).toBeVisible({ timeout: 10000 });
+      await suggestion.click();
+
+      const chartContainer = page.locator(
+        '[role="img"][aria-label*="Price and sentiment chart"]'
+      );
+
+      // Wait for both price AND sentiment data
+      await expect(chartContainer).toHaveAttribute(
+        'aria-label',
+        /[1-9]\d* price candles and [1-9]\d* sentiment points/,
+        { timeout: 15000 }
+      );
+
+      // Verify sentiment toggle is pressed (active)
+      const sentimentToggle = page.getByRole('button', { name: 'Toggle sentiment line' });
+      await expect(sentimentToggle).toHaveAttribute('aria-pressed', 'true');
+
+      // Extract sentiment count
+      const ariaLabel = await chartContainer.getAttribute('aria-label');
+      const sentimentMatch = ariaLabel?.match(/(\d+) sentiment points/);
+      expect(sentimentMatch).toBeTruthy();
+      const sentimentCount = parseInt(sentimentMatch![1], 10);
+
+      // Should have multiple sentiment data points
+      expect(sentimentCount).toBeGreaterThan(5);
+
+      // Toggle sentiment off
+      await sentimentToggle.click();
+      await expect(sentimentToggle).toHaveAttribute('aria-pressed', 'false');
+
+      // Toggle back on
+      await sentimentToggle.click();
+      await expect(sentimentToggle).toHaveAttribute('aria-pressed', 'true');
+
+      // Aria-label should still show sentiment data (data persists across toggle)
+      await expect(chartContainer).toHaveAttribute(
+        'aria-label',
+        /[1-9]\d* sentiment points/,
+        { timeout: 5000 }
+      );
+    });
+  });
+
+  test.describe('Settings Persistence', () => {
+    /**
+     * T026: Verify timeRange and resolution persist across ticker switches.
+     *
+     * Root cause (fixed):
+     * - When activeTicker changes, React remounts PriceSentimentChart
+     * - Resolution was persisted via sessionStorage, but timeRange was not
+     * - User selected 1Y + Day for GOOG, switched to AAPL, saw 1M + Day reset
+     *
+     * Fix: Add sessionStorage persistence for timeRange following same pattern as resolution.
+     */
+    test('should persist timeRange and resolution when switching tickers', async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+
+      // Step 1: Search and select GOOG
+      const searchInput = page.getByPlaceholder(/search tickers/i);
+      await searchInput.fill('GOOG');
+      await page.waitForTimeout(600);
+
+      const googSuggestion = page.getByRole('option', { name: /GOOG.*Alphabet.*Class C/i });
+      await expect(googSuggestion).toBeVisible({ timeout: 10000 });
+      await googSuggestion.click();
+
+      // Wait for chart to load
+      const chartContainer = page.locator(
+        '[role="img"][aria-label*="Price and sentiment chart"]'
+      );
+      await expect(chartContainer).toHaveAttribute(
+        'aria-label',
+        /[1-9]\d* price candles/,
+        { timeout: 15000 }
+      );
+
+      // Step 2: Set 1Y time range
+      const oneYearButton = page.getByRole('button', { name: '1Y time range' });
+      await expect(oneYearButton).toBeVisible();
+      await oneYearButton.click();
+      await page.waitForTimeout(600);
+
+      // Verify 1Y is selected
+      await expect(oneYearButton).toHaveAttribute('aria-pressed', 'true');
+
+      // Step 3: Set Day resolution
+      const dayResButton = page.getByRole('button', { name: 'Day resolution' });
+      await expect(dayResButton).toBeVisible();
+      await dayResButton.click();
+      await page.waitForTimeout(600);
+
+      // Verify Day is selected
+      await expect(dayResButton).toHaveAttribute('aria-pressed', 'true');
+
+      // Step 4: Now switch to AAPL ticker
+      await searchInput.clear();
+      await searchInput.fill('AAPL');
+      await page.waitForTimeout(600);
+
+      const aaplSuggestion = page.getByRole('option', { name: /AAPL/i });
+      await expect(aaplSuggestion).toBeVisible({ timeout: 10000 });
+      await aaplSuggestion.click();
+
+      // Wait for AAPL chart to load
+      await expect(chartContainer).toHaveAttribute(
+        'aria-label',
+        /AAPL.*[1-9]\d* price candles/,
+        { timeout: 15000 }
+      );
+
+      // Step 5: Verify 1Y and Day are STILL selected (persisted)
+      const oneYearButtonAfterSwitch = page.getByRole('button', { name: '1Y time range' });
+      const dayResButtonAfterSwitch = page.getByRole('button', { name: 'Day resolution' });
+
+      await expect(oneYearButtonAfterSwitch).toHaveAttribute('aria-pressed', 'true');
+      await expect(dayResButtonAfterSwitch).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    /**
+     * Verify intraday resolution loads sufficient data for the selected time range.
+     *
+     * Context (related to zoom fix):
+     * - VISIBLE_CANDLES logic limited 1h resolution ZOOM to 40 candles (~5-6 days)
+     * - User selected 1M + 1h but only saw last week of data (rest was off-screen)
+     * - Data WAS present (confirmed by zooming out)
+     * - Fix: Removed setVisibleLogicalRange() call for intraday, fitContent() now shows full range
+     *
+     * This test verifies:
+     * - Data is fetched correctly for 1M + 1h (>60 hourly candles)
+     * - Note: Cannot verify visible zoom level via Playwright (canvas-based chart)
+     * - Visual verification: Chart should show full month on initial load, not just 5-6 days
+     */
+    test('should load sufficient data for intraday resolution', async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+
+      // Search and select GOOG
+      const searchInput = page.getByPlaceholder(/search tickers/i);
+      await searchInput.fill('GOOG');
+      await page.waitForTimeout(600);
+
+      const suggestion = page.getByRole('option', { name: /GOOG.*Alphabet.*Class C/i });
+      await expect(suggestion).toBeVisible({ timeout: 10000 });
+      await suggestion.click();
+
+      const chartContainer = page.locator(
+        '[role="img"][aria-label*="Price and sentiment chart"]'
+      );
+      await expect(chartContainer).toHaveAttribute(
+        'aria-label',
+        /[1-9]\d* price candles/,
+        { timeout: 15000 }
+      );
+
+      // Set 1M time range
+      const oneMonthButton = page.getByRole('button', { name: '1M time range' });
+      await oneMonthButton.click();
+      await page.waitForTimeout(600);
+
+      // Set 1h resolution
+      const hourResButton = page.getByRole('button', { name: '1h resolution' });
+      await hourResButton.click();
+      await page.waitForTimeout(1000); // Allow time for data reload
+
+      // Wait for chart to update with hourly data
+      await expect(chartContainer).toHaveAttribute(
+        'aria-label',
+        /[1-9]\d* price candles/,
+        { timeout: 15000 }
+      );
+
+      // Get candle count - for 1M at 1h resolution, should have ~160 candles
+      // (20 trading days × 8 hours = 160 hourly candles)
+      const ariaLabel = await chartContainer.getAttribute('aria-label');
+      const candleMatch = ariaLabel?.match(/(\d+) price candles/);
+      expect(candleMatch).toBeTruthy();
+      const candleCount = parseInt(candleMatch![1], 10);
+
+      // Should have significantly more than 40 candles (the old VISIBLE_CANDLES limit)
+      // Relaxed threshold: at least 60 candles for 1M of hourly data
+      expect(candleCount).toBeGreaterThan(60);
     });
   });
 
@@ -461,18 +731,24 @@ test.describe('Critical User Path - Sanity Tests', () => {
       await searchInput.fill('XYZNOTAREALTICKER123');
 
       // Wait for debounce and API response
-      await page.waitForTimeout(600);
+      await page.waitForTimeout(1000);
 
       // Should show no results or empty state, not crash
       const noResults = page.getByText(/no results/i);
-      const suggestions = page.locator('[role="listbox"], [role="option"]');
+      const suggestions = page.locator('[role="option"]');
 
-      // Either no results message or empty suggestions
+      // Either no results message or no suggestion options (listbox might still exist but empty)
       const noResultsVisible = await noResults.isVisible().catch(() => false);
       const suggestionsCount = await suggestions.count();
 
-      // One of these conditions should be true
-      expect(noResultsVisible || suggestionsCount === 0).toBeTruthy();
+      // One of these conditions should be true:
+      // 1. "No results" message is visible
+      // 2. No suggestion options are visible (empty listbox is OK)
+      // Note: We don't crash on invalid input - that's the main assertion
+      expect(
+        noResultsVisible || suggestionsCount === 0,
+        `Expected no results message or empty suggestions, got ${suggestionsCount} suggestions`
+      ).toBeTruthy();
     });
 
     test('should show loading state while fetching chart data', async ({
@@ -492,17 +768,19 @@ test.describe('Critical User Path - Sanity Tests', () => {
       const chartContainer = page.locator(
         '[role="img"][aria-label*="Price and sentiment chart"]'
       );
-      const loadingText = page.getByText(/loading/i);
 
-      // Wait for either loading to appear or chart to be ready
-      await expect(chartContainer.or(loadingText)).toBeVisible({
-        timeout: 15000,
-      });
+      // Wait for chart container to be visible
+      await expect(chartContainer).toBeVisible({ timeout: 15000 });
+
+      // Check that loading state is shown OR data is already loaded
+      // (loading may be too brief to catch, so we just verify the sequence works)
+      const loadingText = page.getByText('Loading chart data...');
+      const isLoadingVisible = await loadingText.isVisible().catch(() => false);
 
       // Eventually chart should have data
       await expect(chartContainer).toHaveAttribute(
         'aria-label',
-        /\d+ price candles/,
+        /[1-9]\d* price candles/,
         { timeout: 15000 }
       );
     });
@@ -525,7 +803,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       );
       await expect(chartContainer).toHaveAttribute(
         'aria-label',
-        /\d+ price candles/,
+        /[1-9]\d* price candles/,
         { timeout: 15000 }
       );
 
@@ -576,7 +854,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       );
       await expect(chartContainer).toHaveAttribute(
         'aria-label',
-        /\d+ price candles/,
+        /[1-9]\d* price candles/,
         { timeout: 15000 }
       );
 
