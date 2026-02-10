@@ -145,13 +145,13 @@ Ingests financial news from external sources (Tiingo, Finnhub) and returns senti
 - **Confidence scores**: 0.0-1.0 range
 - **Real-time & batch processing**: EventBridge scheduler + Lambda processors
 - **Deduplication**: Avoids reprocessing duplicate items
-- **Live dashboard**: FastAPI + SSE for real-time sentiment streaming
+- **Live dashboard**: Lambda Powertools + SSE for real-time sentiment streaming
 
 ### Architecture
 
 - **Frontend**: AWS Amplify (Next.js SSR) with API Gateway backend
 - **Compute**: AWS Lambda (Python 3.13) - 6 functions (Ingestion, Analysis, Dashboard, SSE-Streaming, Notification, Metrics)
-- **Real-time**: SSE Lambda with Lambda Web Adapter for RESPONSE_STREAM mode
+- **Real-time**: SSE Lambda with custom Runtime API bootstrap for RESPONSE_STREAM mode
 - **Orchestration**: EventBridge, SNS, SQS
 - **Storage**: DynamoDB (on-demand capacity), S3 (static assets, ML models)
 - **Sentiment Model**: DistilBERT (fine-tuned for social media)
@@ -427,7 +427,7 @@ sequenceDiagram
         SSE-->>User: SSE event (heartbeat)
     end
 
-    Note over SSE,User: RESPONSE_STREAM mode<br/>Lambda Web Adapter<br/>Max 15 min connection
+    Note over SSE,User: RESPONSE_STREAM mode<br/>Custom Runtime API bootstrap<br/>Max 15 min connection
 ```
 
 ### DynamoDB Table Design
