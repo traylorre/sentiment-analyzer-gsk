@@ -196,6 +196,72 @@ def mock_lambda_context():
     return context
 
 
+def make_function_url_event(
+    method: str = "GET",
+    path: str = "/",
+    headers: dict[str, str] | None = None,
+    query_params: dict[str, str] | None = None,
+    source_ip: str = "127.0.0.1",
+) -> dict:
+    """Construct a mock Lambda Function URL v2 event for SSE streaming tests.
+
+    The SSE streaming handler uses Function URL v2 format which differs from
+    API Gateway Proxy Integration format. This helper creates events matching
+    the Function URL v2 schema.
+
+    Args:
+        method: HTTP method (GET).
+        path: Request path (e.g., "/api/v2/stream/status").
+        headers: HTTP headers dict.
+        query_params: Query string parameters.
+        source_ip: Client source IP address.
+
+    Returns:
+        Lambda Function URL v2 event dict.
+    """
+    return {
+        "requestContext": {
+            "http": {
+                "method": method,
+                "path": path,
+                "sourceIp": source_ip,
+            }
+        },
+        "rawPath": path,
+        "headers": headers or {},
+        "queryStringParameters": query_params or {},
+    }
+
+
+# Null byte separator for Lambda Function URL streaming protocol
+_NULL_SEPARATOR = b"\x00" * 8
+
+
+def parse_streaming_response(gen) -> tuple[dict, bytes]:
+    """Consume an SSE streaming handler generator and parse the response.
+
+    Collects all yielded bytes from a streaming handler, splits the metadata
+    prelude from the body using the 8-null-byte separator.
+
+    Args:
+        gen: Generator[bytes] from the SSE streaming handler.
+
+    Returns:
+        Tuple of (metadata_dict, body_bytes).
+        metadata_dict has keys: statusCode, headers, cookies.
+        body_bytes is the raw response body (JSON or SSE chunks).
+    """
+    chunks = list(gen)
+    full_response = b"".join(chunks)
+    if _NULL_SEPARATOR in full_response:
+        metadata_json, body = full_response.split(_NULL_SEPARATOR, 1)
+        import json
+
+        metadata = json.loads(metadata_json)
+        return metadata, body
+    return {"statusCode": 0, "headers": {}, "cookies": []}, full_response
+
+
 @pytest.fixture(autouse=True)
 def reset_env_vars():
     """
@@ -586,36 +652,6 @@ def edge_case_generator():
     from tests.fixtures.synthetic.edge_case_generator import EdgeCaseGenerator
 
     return EdgeCaseGenerator(base_date=date.today())
-
-
-@pytest.fixture
-def ohlc_test_client(mock_tiingo, mock_finnhub):
-    """Test client for OHLC endpoint with mock adapters injected.
-
-    Uses FastAPI's dependency override to inject mock adapters
-    instead of real Tiingo/Finnhub adapters.
-    """
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-
-    from src.lambdas.dashboard.ohlc import (
-        get_finnhub_adapter,
-        get_tiingo_adapter,
-        router,
-    )
-
-    app = FastAPI()
-    app.include_router(router)
-
-    # Override adapter dependencies with mocks
-    app.dependency_overrides[get_tiingo_adapter] = lambda: mock_tiingo
-    app.dependency_overrides[get_finnhub_adapter] = lambda: mock_finnhub
-
-    with TestClient(app) as client:
-        yield client
-
-    # Cleanup
-    app.dependency_overrides.clear()
 
 
 # =============================================================================
