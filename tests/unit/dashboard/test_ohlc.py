@@ -1,15 +1,15 @@
 """Unit tests for OHLC endpoint (Feature 011)."""
 
+import json
 from datetime import date, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
-from src.lambdas.dashboard.ohlc import router
+from src.lambdas.dashboard.handler import lambda_handler
 from src.lambdas.shared.adapters.base import OHLCCandle
 from src.lambdas.shared.models import RESOLUTION_MAX_DAYS, OHLCResolution, TimeRange
+from tests.conftest import make_event
 
 
 @pytest.fixture(autouse=True)
@@ -54,30 +54,32 @@ def _create_ohlc_candles(
 # Test constants (Feature 1049: valid UUID required for auth)
 TEST_USER_ID = "12345678-1234-5678-1234-567812345678"
 
-# Create test app
-app = FastAPI()
-app.include_router(router)
-client = TestClient(app)
-
 
 class TestOHLCEndpoint:
     """Tests for GET /api/v2/tickers/{ticker}/ohlc endpoint."""
 
     @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
     @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
-    def test_returns_ohlc_response(self, mock_finnhub_cls, mock_tiingo_cls):
+    def test_returns_ohlc_response(
+        self, mock_finnhub_cls, mock_tiingo_cls, mock_lambda_context
+    ):
         """Should return OHLCResponse with candles."""
         mock_tiingo = MagicMock()
         mock_tiingo.get_ohlc.return_value = _create_ohlc_candles(10)
         mock_tiingo_cls.return_value = mock_tiingo
 
-        response = client.get(
-            "/api/v2/tickers/AAPL/ohlc",
-            headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+        response = lambda_handler(
+            make_event(
+                method="GET",
+                path="/api/v2/tickers/AAPL/ohlc",
+                path_params={"ticker": "AAPL"},
+                headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+            ),
+            mock_lambda_context,
         )
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
         assert data["ticker"] == "AAPL"
         assert "candles" in data
         assert data["count"] > 0
@@ -85,28 +87,46 @@ class TestOHLCEndpoint:
 
     @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
     @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
-    def test_validates_user_id_header(self, mock_finnhub_cls, mock_tiingo_cls):
+    def test_validates_user_id_header(
+        self, mock_finnhub_cls, mock_tiingo_cls, mock_lambda_context
+    ):
         """Should require X-User-ID header."""
-        response = client.get("/api/v2/tickers/AAPL/ohlc")
-
-        assert response.status_code == 401
-        assert "Missing user identification" in response.json()["detail"]
-
-    @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
-    @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
-    def test_validates_ticker_symbol(self, mock_finnhub_cls, mock_tiingo_cls):
-        """Should reject invalid ticker symbols."""
-        response = client.get(
-            "/api/v2/tickers/INVALID123/ohlc",
-            headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+        response = lambda_handler(
+            make_event(
+                method="GET",
+                path="/api/v2/tickers/AAPL/ohlc",
+                path_params={"ticker": "AAPL"},
+            ),
+            mock_lambda_context,
         )
 
-        assert response.status_code == 400
-        assert "Invalid ticker symbol" in response.json()["detail"]
+        assert response["statusCode"] == 401
+        assert "Missing user identification" in json.loads(response["body"])["detail"]
 
     @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
     @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
-    def test_returns_404_when_tiingo_fails(self, mock_finnhub_cls, mock_tiingo_cls):
+    def test_validates_ticker_symbol(
+        self, mock_finnhub_cls, mock_tiingo_cls, mock_lambda_context
+    ):
+        """Should reject invalid ticker symbols."""
+        response = lambda_handler(
+            make_event(
+                method="GET",
+                path="/api/v2/tickers/INVALID123/ohlc",
+                path_params={"ticker": "INVALID123"},
+                headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+            ),
+            mock_lambda_context,
+        )
+
+        assert response["statusCode"] == 400
+        assert "Invalid ticker symbol" in json.loads(response["body"])["detail"]
+
+    @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
+    @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
+    def test_returns_404_when_tiingo_fails(
+        self, mock_finnhub_cls, mock_tiingo_cls, mock_lambda_context
+    ):
         """Should return 404 if Tiingo daily fails (no Finnhub fallback).
 
         Feature 1055: Finnhub free tier doesn't support stock candles (403 error),
@@ -119,17 +139,24 @@ class TestOHLCEndpoint:
         mock_finnhub = MagicMock()
         mock_finnhub_cls.return_value = mock_finnhub
 
-        response = client.get(
-            "/api/v2/tickers/AAPL/ohlc",
-            headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+        response = lambda_handler(
+            make_event(
+                method="GET",
+                path="/api/v2/tickers/AAPL/ohlc",
+                path_params={"ticker": "AAPL"},
+                headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+            ),
+            mock_lambda_context,
         )
 
-        assert response.status_code == 404
-        assert "No price data available" in response.json()["detail"]
+        assert response["statusCode"] == 404
+        assert "No price data available" in json.loads(response["body"])["detail"]
 
     @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
     @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
-    def test_returns_404_when_no_data(self, mock_finnhub_cls, mock_tiingo_cls):
+    def test_returns_404_when_no_data(
+        self, mock_finnhub_cls, mock_tiingo_cls, mock_lambda_context
+    ):
         """Should return 404 when no data available."""
         mock_tiingo = MagicMock()
         mock_tiingo.get_ohlc.return_value = []
@@ -139,89 +166,135 @@ class TestOHLCEndpoint:
         mock_finnhub.get_ohlc.return_value = []
         mock_finnhub_cls.return_value = mock_finnhub
 
-        response = client.get(
-            "/api/v2/tickers/AAPL/ohlc",
-            headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+        response = lambda_handler(
+            make_event(
+                method="GET",
+                path="/api/v2/tickers/AAPL/ohlc",
+                path_params={"ticker": "AAPL"},
+                headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+            ),
+            mock_lambda_context,
         )
 
-        assert response.status_code == 404
-        assert "No price data available" in response.json()["detail"]
+        assert response["statusCode"] == 404
+        assert "No price data available" in json.loads(response["body"])["detail"]
 
     @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
     @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
-    def test_supports_time_range_param(self, mock_finnhub_cls, mock_tiingo_cls):
+    def test_supports_time_range_param(
+        self, mock_finnhub_cls, mock_tiingo_cls, mock_lambda_context
+    ):
         """Should support time range query parameter."""
         mock_tiingo = MagicMock()
         mock_tiingo.get_ohlc.return_value = _create_ohlc_candles(90)
         mock_tiingo_cls.return_value = mock_tiingo
 
-        response = client.get(
-            "/api/v2/tickers/AAPL/ohlc?range=3M",
-            headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+        response = lambda_handler(
+            make_event(
+                method="GET",
+                path="/api/v2/tickers/AAPL/ohlc",
+                path_params={"ticker": "AAPL"},
+                query_params={"range": "3M"},
+                headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+            ),
+            mock_lambda_context,
         )
 
-        assert response.status_code == 200
-        assert response.json()["time_range"] == "3M"
+        assert response["statusCode"] == 200
+        assert json.loads(response["body"])["time_range"] == "3M"
 
     @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
     @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
-    def test_supports_custom_date_range(self, mock_finnhub_cls, mock_tiingo_cls):
+    def test_supports_custom_date_range(
+        self, mock_finnhub_cls, mock_tiingo_cls, mock_lambda_context
+    ):
         """Should support custom start_date and end_date."""
         mock_tiingo = MagicMock()
         mock_tiingo.get_ohlc.return_value = _create_ohlc_candles(30)
         mock_tiingo_cls.return_value = mock_tiingo
 
-        response = client.get(
-            "/api/v2/tickers/AAPL/ohlc?start_date=2024-01-01&end_date=2024-01-31",
-            headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+        response = lambda_handler(
+            make_event(
+                method="GET",
+                path="/api/v2/tickers/AAPL/ohlc",
+                path_params={"ticker": "AAPL"},
+                query_params={"start_date": "2024-01-01", "end_date": "2024-01-31"},
+                headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+            ),
+            mock_lambda_context,
         )
 
-        assert response.status_code == 200
-        assert response.json()["time_range"] == "custom"
+        assert response["statusCode"] == 200
+        assert json.loads(response["body"])["time_range"] == "custom"
 
     @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
     @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
-    def test_validates_date_range_order(self, mock_finnhub_cls, mock_tiingo_cls):
+    def test_validates_date_range_order(
+        self, mock_finnhub_cls, mock_tiingo_cls, mock_lambda_context
+    ):
         """Should reject when start_date is after end_date."""
-        response = client.get(
-            "/api/v2/tickers/AAPL/ohlc?start_date=2024-12-31&end_date=2024-01-01",
-            headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+        response = lambda_handler(
+            make_event(
+                method="GET",
+                path="/api/v2/tickers/AAPL/ohlc",
+                path_params={"ticker": "AAPL"},
+                query_params={"start_date": "2024-12-31", "end_date": "2024-01-01"},
+                headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+            ),
+            mock_lambda_context,
         )
 
-        assert response.status_code == 400
-        assert "start_date must be before end_date" in response.json()["detail"]
+        assert response["statusCode"] == 400
+        assert (
+            "start_date must be before end_date"
+            in json.loads(response["body"])["detail"]
+        )
 
     @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
     @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
-    def test_includes_cache_expiration(self, mock_finnhub_cls, mock_tiingo_cls):
+    def test_includes_cache_expiration(
+        self, mock_finnhub_cls, mock_tiingo_cls, mock_lambda_context
+    ):
         """Should include cache_expires_at in response."""
         mock_tiingo = MagicMock()
         mock_tiingo.get_ohlc.return_value = _create_ohlc_candles(10)
         mock_tiingo_cls.return_value = mock_tiingo
 
-        response = client.get(
-            "/api/v2/tickers/AAPL/ohlc",
-            headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+        response = lambda_handler(
+            make_event(
+                method="GET",
+                path="/api/v2/tickers/AAPL/ohlc",
+                path_params={"ticker": "AAPL"},
+                headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+            ),
+            mock_lambda_context,
         )
 
-        assert response.status_code == 200
-        assert "cache_expires_at" in response.json()
+        assert response["statusCode"] == 200
+        assert "cache_expires_at" in json.loads(response["body"])
 
     @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
     @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
-    def test_normalizes_ticker_to_uppercase(self, mock_finnhub_cls, mock_tiingo_cls):
+    def test_normalizes_ticker_to_uppercase(
+        self, mock_finnhub_cls, mock_tiingo_cls, mock_lambda_context
+    ):
         """Should normalize ticker to uppercase."""
         mock_tiingo = MagicMock()
         mock_tiingo.get_ohlc.return_value = _create_ohlc_candles(10)
         mock_tiingo_cls.return_value = mock_tiingo
 
-        response = client.get(
-            "/api/v2/tickers/aapl/ohlc",
-            headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+        response = lambda_handler(
+            make_event(
+                method="GET",
+                path="/api/v2/tickers/aapl/ohlc",
+                path_params={"ticker": "aapl"},
+                headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+            ),
+            mock_lambda_context,
         )
 
-        assert response.status_code == 200
-        assert response.json()["ticker"] == "AAPL"
+        assert response["statusCode"] == 200
+        assert json.loads(response["body"])["ticker"] == "AAPL"
 
 
 class TestTimeRangeEnum:
@@ -269,7 +342,9 @@ class TestOHLCResolutionEndpoint:
 
     @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
     @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
-    def test_accepts_resolution_parameter(self, mock_finnhub_cls, mock_tiingo_cls):
+    def test_accepts_resolution_parameter(
+        self, mock_finnhub_cls, mock_tiingo_cls, mock_lambda_context
+    ):
         """Should accept resolution query parameter.
 
         Feature 1055: Tiingo IEX is used for intraday resolutions.
@@ -281,35 +356,50 @@ class TestOHLCResolutionEndpoint:
         mock_finnhub = MagicMock()
         mock_finnhub_cls.return_value = mock_finnhub
 
-        response = client.get(
-            "/api/v2/tickers/AAPL/ohlc?resolution=5",
-            headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+        response = lambda_handler(
+            make_event(
+                method="GET",
+                path="/api/v2/tickers/AAPL/ohlc",
+                path_params={"ticker": "AAPL"},
+                query_params={"resolution": "5"},
+                headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+            ),
+            mock_lambda_context,
         )
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
         assert data["resolution"] == "5"
 
     @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
     @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
-    def test_default_resolution_is_daily(self, mock_finnhub_cls, mock_tiingo_cls):
+    def test_default_resolution_is_daily(
+        self, mock_finnhub_cls, mock_tiingo_cls, mock_lambda_context
+    ):
         """Should default to daily resolution."""
         mock_tiingo = MagicMock()
         mock_tiingo.get_ohlc.return_value = _create_ohlc_candles(10)
         mock_tiingo_cls.return_value = mock_tiingo
 
-        response = client.get(
-            "/api/v2/tickers/AAPL/ohlc",
-            headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+        response = lambda_handler(
+            make_event(
+                method="GET",
+                path="/api/v2/tickers/AAPL/ohlc",
+                path_params={"ticker": "AAPL"},
+                headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+            ),
+            mock_lambda_context,
         )
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
         assert data["resolution"] == "D"
 
     @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
     @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
-    def test_uses_tiingo_iex_for_intraday(self, mock_finnhub_cls, mock_tiingo_cls):
+    def test_uses_tiingo_iex_for_intraday(
+        self, mock_finnhub_cls, mock_tiingo_cls, mock_lambda_context
+    ):
         """Should use Tiingo IEX for intraday resolutions.
 
         Feature 1055: Finnhub free tier returns 403 for stock candles,
@@ -322,12 +412,18 @@ class TestOHLCResolutionEndpoint:
         mock_finnhub = MagicMock()
         mock_finnhub_cls.return_value = mock_finnhub
 
-        response = client.get(
-            "/api/v2/tickers/AAPL/ohlc?resolution=5",
-            headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+        response = lambda_handler(
+            make_event(
+                method="GET",
+                path="/api/v2/tickers/AAPL/ohlc",
+                path_params={"ticker": "AAPL"},
+                query_params={"resolution": "5"},
+                headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+            ),
+            mock_lambda_context,
         )
 
-        assert response.status_code == 200
+        assert response["statusCode"] == 200
         # Tiingo IEX should be called for intraday
         mock_tiingo.get_intraday_ohlc.assert_called_once()
         # Tiingo daily should not be called for intraday
@@ -338,20 +434,25 @@ class TestOHLCResolutionEndpoint:
     @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
     @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
     def test_resolution_response_includes_fallback_fields(
-        self, mock_finnhub_cls, mock_tiingo_cls
+        self, mock_finnhub_cls, mock_tiingo_cls, mock_lambda_context
     ):
         """Should include resolution_fallback and fallback_message in response."""
         mock_tiingo = MagicMock()
         mock_tiingo.get_ohlc.return_value = _create_ohlc_candles(10)
         mock_tiingo_cls.return_value = mock_tiingo
 
-        response = client.get(
-            "/api/v2/tickers/AAPL/ohlc",
-            headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+        response = lambda_handler(
+            make_event(
+                method="GET",
+                path="/api/v2/tickers/AAPL/ohlc",
+                path_params={"ticker": "AAPL"},
+                headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+            ),
+            mock_lambda_context,
         )
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
         assert "resolution_fallback" in data
         assert data["resolution_fallback"] is False
         assert data["fallback_message"] is None
@@ -359,7 +460,7 @@ class TestOHLCResolutionEndpoint:
     @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
     @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
     def test_fallback_to_daily_when_intraday_unavailable(
-        self, mock_finnhub_cls, mock_tiingo_cls
+        self, mock_finnhub_cls, mock_tiingo_cls, mock_lambda_context
     ):
         """Should fall back to daily when intraday data unavailable.
 
@@ -375,13 +476,19 @@ class TestOHLCResolutionEndpoint:
         mock_finnhub = MagicMock()
         mock_finnhub_cls.return_value = mock_finnhub
 
-        response = client.get(
-            "/api/v2/tickers/AAPL/ohlc?resolution=5",
-            headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+        response = lambda_handler(
+            make_event(
+                method="GET",
+                path="/api/v2/tickers/AAPL/ohlc",
+                path_params={"ticker": "AAPL"},
+                query_params={"resolution": "5"},
+                headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+            ),
+            mock_lambda_context,
         )
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
         assert data["resolution"] == "D"  # Fell back to daily
         assert data["resolution_fallback"] is True
         assert "unavailable" in data["fallback_message"].lower()
@@ -393,7 +500,7 @@ class TestOHLCResolutionEndpoint:
         ["1", "5", "15", "30", "60", "D"],
     )
     def test_all_resolutions_accepted(
-        self, mock_finnhub_cls, mock_tiingo_cls, resolution
+        self, mock_finnhub_cls, mock_tiingo_cls, resolution, mock_lambda_context
     ):
         """Should accept all valid resolution values.
 
@@ -407,20 +514,34 @@ class TestOHLCResolutionEndpoint:
         mock_finnhub = MagicMock()
         mock_finnhub_cls.return_value = mock_finnhub
 
-        response = client.get(
-            f"/api/v2/tickers/AAPL/ohlc?resolution={resolution}",
-            headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+        response = lambda_handler(
+            make_event(
+                method="GET",
+                path="/api/v2/tickers/AAPL/ohlc",
+                path_params={"ticker": "AAPL"},
+                query_params={"resolution": resolution},
+                headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+            ),
+            mock_lambda_context,
         )
 
-        assert response.status_code == 200
+        assert response["statusCode"] == 200
 
     @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
     @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
-    def test_invalid_resolution_rejected(self, mock_finnhub_cls, mock_tiingo_cls):
+    def test_invalid_resolution_rejected(
+        self, mock_finnhub_cls, mock_tiingo_cls, mock_lambda_context
+    ):
         """Should reject invalid resolution values."""
-        response = client.get(
-            "/api/v2/tickers/AAPL/ohlc?resolution=invalid",
-            headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+        response = lambda_handler(
+            make_event(
+                method="GET",
+                path="/api/v2/tickers/AAPL/ohlc",
+                path_params={"ticker": "AAPL"},
+                query_params={"resolution": "invalid"},
+                headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+            ),
+            mock_lambda_context,
         )
 
-        assert response.status_code == 422  # Validation error
+        assert response["statusCode"] == 422  # Validation error

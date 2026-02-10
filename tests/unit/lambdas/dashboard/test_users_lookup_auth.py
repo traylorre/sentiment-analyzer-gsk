@@ -1,16 +1,15 @@
 """Tests for /users/lookup endpoint authorization (Feature 1149).
 
 Verifies that the user lookup endpoint is properly protected
-by @require_role("operator") decorator.
+by require_role_middleware("operator") via Powertools middleware.
 """
 
+import json
 from unittest.mock import MagicMock, patch
 
-import pytest
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-
+from src.lambdas.dashboard.handler import lambda_handler
 from src.lambdas.shared.middleware import AuthContext, AuthType
+from tests.conftest import make_event
 
 
 def mock_auth_context(
@@ -27,36 +26,10 @@ def mock_auth_context(
     )
 
 
-@pytest.fixture
-def mock_users_table() -> MagicMock:
-    """Mock DynamoDB users table."""
-    return MagicMock()
-
-
-@pytest.fixture
-def app(mock_users_table: MagicMock) -> FastAPI:
-    """Create a FastAPI app with the users router for testing."""
-    from src.lambdas.dashboard.router_v2 import get_users_table, users_router
-
-    test_app = FastAPI()
-    test_app.include_router(users_router)
-
-    # Override the users table dependency
-    test_app.dependency_overrides[get_users_table] = lambda: mock_users_table
-
-    return test_app
-
-
-@pytest.fixture
-def client(app: FastAPI) -> TestClient:
-    """Create a test client for the app."""
-    return TestClient(app, raise_server_exceptions=False)
-
-
 class TestUsersLookupAuth:
     """Tests for /users/lookup authorization (Feature 1149)."""
 
-    def test_lookup_without_jwt_returns_401(self, client: TestClient) -> None:
+    def test_lookup_without_jwt_returns_401(self, mock_lambda_context) -> None:
         """Unauthenticated requests should return 401 Authentication required."""
         mock_ctx = mock_auth_context(user_id=None, roles=None)
 
@@ -64,14 +37,20 @@ class TestUsersLookupAuth:
             "src.lambdas.shared.middleware.require_role.extract_auth_context_typed",
             return_value=mock_ctx,
         ):
-            response = client.get(
-                "/api/v2/users/lookup",
-                params={"email": "test@example.com"},
+            response = lambda_handler(
+                make_event(
+                    method="GET",
+                    path="/api/v2/users/lookup",
+                    query_params={"email": "test@example.com"},
+                ),
+                mock_lambda_context,
             )
-            assert response.status_code == 401
-            assert response.json()["detail"] == "Authentication required"
+            assert response["statusCode"] == 401
+            assert json.loads(response["body"])["detail"] == "Authentication required"
 
-    def test_lookup_without_operator_role_returns_403(self, client: TestClient) -> None:
+    def test_lookup_without_operator_role_returns_403(
+        self, mock_lambda_context
+    ) -> None:
         """Authenticated users without operator role should get 403."""
         mock_ctx = mock_auth_context(roles=["free"])
 
@@ -79,14 +58,18 @@ class TestUsersLookupAuth:
             "src.lambdas.shared.middleware.require_role.extract_auth_context_typed",
             return_value=mock_ctx,
         ):
-            response = client.get(
-                "/api/v2/users/lookup",
-                params={"email": "test@example.com"},
+            response = lambda_handler(
+                make_event(
+                    method="GET",
+                    path="/api/v2/users/lookup",
+                    query_params={"email": "test@example.com"},
+                ),
+                mock_lambda_context,
             )
-            assert response.status_code == 403
-            assert response.json()["detail"] == "Access denied"
+            assert response["statusCode"] == 403
+            assert json.loads(response["body"])["detail"] == "Access denied"
 
-    def test_lookup_with_paid_role_returns_403(self, client: TestClient) -> None:
+    def test_lookup_with_paid_role_returns_403(self, mock_lambda_context) -> None:
         """Paid users without operator role should still get 403."""
         mock_ctx = mock_auth_context(roles=["free", "paid"])
 
@@ -94,16 +77,18 @@ class TestUsersLookupAuth:
             "src.lambdas.shared.middleware.require_role.extract_auth_context_typed",
             return_value=mock_ctx,
         ):
-            response = client.get(
-                "/api/v2/users/lookup",
-                params={"email": "test@example.com"},
+            response = lambda_handler(
+                make_event(
+                    method="GET",
+                    path="/api/v2/users/lookup",
+                    query_params={"email": "test@example.com"},
+                ),
+                mock_lambda_context,
             )
-            assert response.status_code == 403
-            assert response.json()["detail"] == "Access denied"
+            assert response["statusCode"] == 403
+            assert json.loads(response["body"])["detail"] == "Access denied"
 
-    def test_lookup_with_operator_role_succeeds(
-        self, client: TestClient, mock_users_table: MagicMock
-    ) -> None:
+    def test_lookup_with_operator_role_succeeds(self, mock_lambda_context) -> None:
         """Operators should be able to access the lookup endpoint."""
         mock_ctx = mock_auth_context(roles=["free", "operator"])
 
@@ -116,6 +101,10 @@ class TestUsersLookupAuth:
             patch(
                 "src.lambdas.dashboard.router_v2.auth_service.get_user_by_email_gsi"
             ) as mock_lookup,
+            patch(
+                "src.lambdas.dashboard.router_v2.get_users_table",
+                return_value=MagicMock(),
+            ),
         ):
             # Create a mock user object
             mock_user = MagicMock()
@@ -126,20 +115,24 @@ class TestUsersLookupAuth:
 
             # Mock the mask_email function
             with patch(
-                "src.lambdas.dashboard.router_v2.auth_service._mask_email",
+                "src.lambdas.dashboard.router_v2.mask_email",
                 return_value="t***@example.com",
             ):
-                response = client.get(
-                    "/api/v2/users/lookup",
-                    params={"email": "test@example.com"},
+                response = lambda_handler(
+                    make_event(
+                        method="GET",
+                        path="/api/v2/users/lookup",
+                        query_params={"email": "test@example.com"},
+                    ),
+                    mock_lambda_context,
                 )
-                assert response.status_code == 200
-                data = response.json()
+                assert response["statusCode"] == 200
+                data = json.loads(response["body"])
                 assert data["found"] is True
                 assert data["user_id"] == "found-user-id"
 
     def test_lookup_user_not_found_returns_200_with_found_false(
-        self, client: TestClient, mock_users_table: MagicMock
+        self, mock_lambda_context
     ) -> None:
         """Operators looking up non-existent users should get 200 with found=false."""
         mock_ctx = mock_auth_context(roles=["free", "operator"])
@@ -153,17 +146,25 @@ class TestUsersLookupAuth:
                 "src.lambdas.dashboard.router_v2.auth_service.get_user_by_email_gsi",
                 return_value=None,
             ),
+            patch(
+                "src.lambdas.dashboard.router_v2.get_users_table",
+                return_value=MagicMock(),
+            ),
         ):
-            response = client.get(
-                "/api/v2/users/lookup",
-                params={"email": "nonexistent@example.com"},
+            response = lambda_handler(
+                make_event(
+                    method="GET",
+                    path="/api/v2/users/lookup",
+                    query_params={"email": "nonexistent@example.com"},
+                ),
+                mock_lambda_context,
             )
-            assert response.status_code == 200
-            data = response.json()
+            assert response["statusCode"] == 200
+            data = json.loads(response["body"])
             assert data["found"] is False
             assert data["user_id"] is None
 
-    def test_error_message_does_not_enumerate_roles(self, client: TestClient) -> None:
+    def test_error_message_does_not_enumerate_roles(self, mock_lambda_context) -> None:
         """403 error should NOT reveal required role (security requirement)."""
         mock_ctx = mock_auth_context(roles=["free"])
 
@@ -171,16 +172,20 @@ class TestUsersLookupAuth:
             "src.lambdas.shared.middleware.require_role.extract_auth_context_typed",
             return_value=mock_ctx,
         ):
-            response = client.get(
-                "/api/v2/users/lookup",
-                params={"email": "test@example.com"},
+            response = lambda_handler(
+                make_event(
+                    method="GET",
+                    path="/api/v2/users/lookup",
+                    query_params={"email": "test@example.com"},
+                ),
+                mock_lambda_context,
             )
-            detail = response.json()["detail"]
+            detail = json.loads(response["body"])["detail"]
             # Must NOT contain the required role name
             assert "operator" not in detail.lower()
             assert detail == "Access denied"
 
-    def test_anonymous_token_returns_401(self, client: TestClient) -> None:
+    def test_anonymous_token_returns_401(self, mock_lambda_context) -> None:
         """Anonymous tokens should return 401."""
         mock_ctx = mock_auth_context(
             user_id=None,
@@ -192,8 +197,12 @@ class TestUsersLookupAuth:
             "src.lambdas.shared.middleware.require_role.extract_auth_context_typed",
             return_value=mock_ctx,
         ):
-            response = client.get(
-                "/api/v2/users/lookup",
-                params={"email": "test@example.com"},
+            response = lambda_handler(
+                make_event(
+                    method="GET",
+                    path="/api/v2/users/lookup",
+                    query_params={"email": "test@example.com"},
+                ),
+                mock_lambda_context,
             )
-            assert response.status_code == 401
+            assert response["statusCode"] == 401
