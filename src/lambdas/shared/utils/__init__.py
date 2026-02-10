@@ -5,6 +5,7 @@ from src.lambdas.shared.utils.dedup import (
     generate_dedup_key,
     generate_dedup_key_from_article,
 )
+from src.lambdas.shared.utils.error_handler import handle_request
 from src.lambdas.shared.utils.event_helpers import (
     get_header,
     get_path_params,
@@ -30,6 +31,7 @@ __all__ = [
     "generate_dedup_key",
     "generate_dedup_key_from_article",
     "get_cache_expiration",
+    "handle_request",
     "get_header",
     "get_path_params",
     "get_query_params",
