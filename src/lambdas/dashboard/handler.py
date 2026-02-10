@@ -2,7 +2,7 @@
 Dashboard Lambda Handler
 ========================
 
-FastAPI application serving the sentiment analyzer dashboard API v2.
+Powertools-based Lambda handler serving the sentiment analyzer dashboard API v2.
 
 For On-Call Engineers:
     If dashboard is not accessible:
@@ -13,40 +13,36 @@ For On-Call Engineers:
     See SC-05 in ON_CALL_SOP.md for dashboard-related incidents.
 
 For Developers:
-    - Uses Mangum adapter for Lambda Function URL compatibility
+    - Uses AWS Lambda Powertools APIGatewayRestResolver for routing
     - Static files served from /static/ prefix
     - CORS enabled for all origins (demo configuration)
 
 Auth (Feature 1039):
-    - All /api/* endpoints use session-based auth via X-User-ID or Bearer token
+    - All /api/* endpoints use session-based auth via Bearer token
     - Public endpoints (metrics, sentiment, trends, articles) accept anonymous sessions
     - Chaos endpoints require authenticated (non-anonymous) sessions
-    - Legacy vanilla JS frontend (/src/dashboard/) needs X-User-ID header update
-    - Next.js frontend (/frontend/) already uses session auth
 
 X-Ray Tracing:
     X-Ray is enabled for distributed tracing across all Lambda invocations.
     This is Day 1 mandatory per constitution v1.1.
 """
 
-# X-Ray must be imported and patched before other imports
+# X-Ray must be imported and patched before other imports (FR-034, T017)
 from aws_xray_sdk.core import patch_all
 
 patch_all()
 
-import logging
+import base64
 import os
-from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request
-
-# CORSMiddleware removed - CORS handled by Lambda Function URL
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
-
-# Feature 1039: APIKeyHeader removed - using session auth only
-from mangum import Mangum
+import orjson
+from aws_lambda_powertools import Logger, Tracer
+from aws_lambda_powertools.event_handler import (
+    APIGatewayRestResolver,
+    Response,
+)
 
 from src.lambdas.dashboard.api_v2 import (
     get_articles_by_tags,
@@ -71,42 +67,42 @@ from src.lambdas.shared.logging_utils import (
     get_safe_error_message_for_user,
     sanitize_for_log,
 )
+from src.lambdas.shared.middleware.auth_middleware import (
+    AuthType,
+    extract_auth_context,
+    extract_auth_context_typed,
+)
+from src.lambdas.shared.utils.event_helpers import get_query_params
 
-# Structured logging
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+# Structured logging (FR-028: module-level logging replaces lifespan)
+logger = Logger(service="dashboard")
+tracer = Tracer(service="dashboard")
 
 # Configuration from environment
 # CRITICAL: These must be set - no defaults to prevent wrong-environment data corruption
-# Feature 1043: Clear naming - separate tables for different data types
-USERS_TABLE = os.environ["USERS_TABLE"]  # sessions, configs, alerts (PK/SK design)
-SENTIMENTS_TABLE = os.environ[
-    "SENTIMENTS_TABLE"
-]  # news items, sentiment analysis (has GSIs)
+USERS_TABLE = os.environ["USERS_TABLE"]
+SENTIMENTS_TABLE = os.environ["SENTIMENTS_TABLE"]
 CHAOS_EXPERIMENTS_TABLE = os.environ.get("CHAOS_EXPERIMENTS_TABLE", "")
 ENVIRONMENT = os.environ["ENVIRONMENT"]
-# Feature 1097: SSE Lambda URL for two-Lambda architecture
 SSE_LAMBDA_URL = os.environ.get("SSE_LAMBDA_URL", "")
 
-
-# Feature 1039: get_api_key() removed - using session auth only
-# CORS configuration removed - handled by Lambda Function URL
-# See infrastructure/terraform/main.tf for CORS allowed origins
-
+# Module-level init logging (FR-028: replaces FastAPI lifespan no-op)
+logger.info(
+    "Dashboard Lambda starting",
+    extra={
+        "environment": ENVIRONMENT,
+        "table": SENTIMENTS_TABLE,
+    },
+)
 
 # Path to static dashboard files
-# In Lambda, handler.py is at ROOT (/var/task/) and static files are at /var/task/src/dashboard/
-# Locally, handler.py is at src/lambdas/dashboard/ and static files are at src/dashboard/
 _handler_dir = Path(__file__).parent
 if _handler_dir.name == "task" or str(_handler_dir) == "/var/task":
-    # Lambda runtime: handler.py at ROOT
     STATIC_DIR = _handler_dir / "src" / "dashboard"
 else:
-    # Local development: handler.py at src/lambdas/dashboard/
     STATIC_DIR = _handler_dir.parent.parent / "dashboard"
 
-# Whitelist of allowed static files (path injection defense - CodeQL py/path-injection)
-# Only these files can be served via /static/ endpoint
+# Whitelist of allowed static files (path injection defense)
 ALLOWED_STATIC_FILES: dict[str, str] = {
     "app.js": "application/javascript",
     "cache.js": "application/javascript",
@@ -115,423 +111,329 @@ ALLOWED_STATIC_FILES: dict[str, str] = {
     "timeseries.js": "application/javascript",
     "unified-resolution.js": "application/javascript",
     "styles.css": "text/css",
-    "favicon.ico": "image/x-icon",  # Feature 1096
+    "favicon.ico": "image/x-icon",
 }
 
-# Feature 1039: api_key_header removed - using session auth only
+# Create Powertools resolver (FR-001, R1)
+app = APIGatewayRestResolver()
 
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """
-    Application lifespan manager.
-
-    Logs startup and shutdown events for monitoring.
-    """
-    logger.info(
-        "Dashboard Lambda starting",
-        extra={
-            "environment": ENVIRONMENT,
-            "table": SENTIMENTS_TABLE,
-        },
-    )
-    yield
-    logger.info("Dashboard Lambda shutting down")
-
-
-# Create FastAPI app
-app = FastAPI(
-    title="Sentiment Analyzer Dashboard",
-    description="Real-time sentiment analysis dashboard with SSE updates",
-    version="1.0.0",
-    lifespan=lifespan,
-)
-
-# CORS is handled by Lambda Function URL configuration in Terraform
-# DO NOT add CORSMiddleware here - it causes duplicate Access-Control-Allow-Origin headers
-# which browsers reject with "Failed to fetch" errors.
-# See infrastructure/terraform/main.tf for CORS configuration.
-logger.info(
-    "CORS handled by Lambda Function URL",
-    extra={"environment": ENVIRONMENT},
-)
-
-# Include Feature 006 API v2 routers
-from src.lambdas.dashboard.router_v2 import (
-    get_authenticated_user_id,
-    get_user_id_from_request,
-    include_routers,
-)
+# Include all routers
+from src.lambdas.dashboard.router_v2 import include_routers
 
 include_routers(app)
-logger.info("Feature 006 API v2 routers included")
+logger.info("API v2 routers included")
 
 
-# Feature 1039: verify_api_key() removed - using session auth only
-# All endpoints now use get_user_id_from_request() or get_authenticated_user_id()
+# ===================================================================
+# Static file and root endpoints (defined on app directly)
+# ===================================================================
 
 
-@app.get("/", response_class=HTMLResponse)
-async def serve_index():
-    """
-    Serve the main dashboard HTML page.
+def _get_user_id_from_event(event: dict, validate_session: bool = True) -> str:
+    """Extract user_id from event headers.
+
+    Args:
+        event: API Gateway event dict.
+        validate_session: Whether to validate session (unused currently).
 
     Returns:
-        HTML content of index.html
+        user_id string.
 
-    On-Call Note:
-        If this returns 404, verify:
-        1. src/dashboard/index.html exists
-        2. Lambda deployment includes dashboard files
-
-    Feature 1039:
-        API key injection removed - frontend uses session auth.
-        Session token is obtained via /api/v2/session endpoint.
+    Raises:
+        ValueError: If no valid user ID found.
     """
+    auth_context = extract_auth_context(event)
+    user_id = auth_context.get("user_id")
+    if not user_id:
+        return ""
+    return user_id
+
+
+def _get_authenticated_user_id_from_event(event: dict) -> str | None:
+    """Extract authenticated (non-anonymous) user_id from event.
+
+    Returns:
+        user_id string or None if not authenticated.
+    """
+    auth_context = extract_auth_context_typed(event)
+    if auth_context.user_id is None:
+        return None
+    if auth_context.auth_type == AuthType.ANONYMOUS:
+        return None
+    return auth_context.user_id
+
+
+@app.get("/")
+def serve_index():
+    """Serve the main dashboard HTML page."""
     index_path = STATIC_DIR / "index.html"
-
     if not index_path.exists():
-        logger.error(
-            "index.html not found",
-            extra={"path": str(index_path)},
-        )
-        raise HTTPException(
+        logger.error("index.html not found", extra={"path": str(index_path)})
+        return Response(
             status_code=404,
-            detail="Dashboard index.html not found",
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Dashboard index.html not found"}).decode(),
         )
-
-    # Feature 1039: No API key injection - frontend uses session auth
-    return FileResponse(index_path, media_type="text/html")
+    content = index_path.read_bytes()
+    return Response(
+        status_code=200,
+        content_type="text/html",
+        body=content.decode("utf-8"),
+    )
 
 
 @app.get("/favicon.ico")
-async def serve_favicon():
-    """
-    Serve the favicon.ico file (Feature 1096).
-
-    Browsers request /favicon.ico directly from root, so we need
-    a dedicated route rather than relying on /static/favicon.ico.
-
-    Returns:
-        Favicon ICO file (16x16 stock chart icon)
-    """
+def serve_favicon():
+    """Serve the favicon.ico file (Feature 1096)."""
     favicon_path = STATIC_DIR / "favicon.ico"
-
     if not favicon_path.exists():
-        raise HTTPException(
+        return Response(
             status_code=404,
-            detail="Favicon not found",
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Favicon not found"}).decode(),
         )
+    content = favicon_path.read_bytes()
+    return Response(
+        status_code=200,
+        content_type="image/x-icon",
+        body=base64.b64encode(content).decode("utf-8"),
+        headers={"isBase64Encoded": "true"},
+    )
 
-    return FileResponse(favicon_path, media_type="image/x-icon")
 
-
-@app.get("/chaos", response_class=HTMLResponse)
-async def serve_chaos():
-    """
-    Serve the chaos testing UI page.
-
-    Returns:
-        HTML content of chaos.html
-
-    On-Call Note:
-        If this returns 404, verify:
-        1. src/dashboard/chaos.html exists
-        2. Lambda deployment includes chaos.html
-    """
+@app.get("/chaos")
+def serve_chaos():
+    """Serve the chaos testing UI page."""
     chaos_path = STATIC_DIR / "chaos.html"
-
     if not chaos_path.exists():
-        logger.error(
-            "chaos.html not found",
-            extra={"path": str(chaos_path)},
-        )
-        raise HTTPException(
+        logger.error("chaos.html not found", extra={"path": str(chaos_path)})
+        return Response(
             status_code=404,
-            detail="Chaos testing page not found",
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Chaos testing page not found"}).decode(),
         )
+    content = chaos_path.read_bytes()
+    return Response(
+        status_code=200,
+        content_type="text/html",
+        body=content.decode("utf-8"),
+    )
 
-    return FileResponse(chaos_path, media_type="text/html")
 
-
-@app.get("/static/{filename}")
-async def serve_static(filename: str):
-    """
-    Serve static dashboard files (CSS, JS).
-
-    Args:
-        filename: Name of static file
-
-    Returns:
-        File content with appropriate media type
-
-    Security Note:
-        Path injection prevented using strict whitelist (ALLOWED_STATIC_FILES).
-        Only pre-approved files can be served - no user input reaches filesystem.
-    """
-    # Whitelist-based routing - completely eliminates path injection risk
-    # CodeQL py/path-injection: Use explicit string literals for file paths
-    # Each case uses a hardcoded string, not user input
-    if filename == "app.js":
-        safe_path = STATIC_DIR / "app.js"
-        media_type = "application/javascript"
-    elif filename == "cache.js":
-        safe_path = STATIC_DIR / "cache.js"
-        media_type = "application/javascript"
-    elif filename == "config.js":
-        safe_path = STATIC_DIR / "config.js"
-        media_type = "application/javascript"
-    elif filename == "ohlc.js":
-        safe_path = STATIC_DIR / "ohlc.js"
-        media_type = "application/javascript"
-    elif filename == "timeseries.js":
-        safe_path = STATIC_DIR / "timeseries.js"
-        media_type = "application/javascript"
-    elif filename == "unified-resolution.js":
-        safe_path = STATIC_DIR / "unified-resolution.js"
-        media_type = "application/javascript"
-    elif filename == "styles.css":
-        safe_path = STATIC_DIR / "styles.css"
-        media_type = "text/css"
-    elif filename == "favicon.ico":
-        safe_path = STATIC_DIR / "favicon.ico"
-        media_type = "image/x-icon"
-    else:
+@app.get("/static/<filename>")
+def serve_static(filename: str):
+    """Serve static dashboard files (CSS, JS) from whitelist."""
+    if filename not in ALLOWED_STATIC_FILES:
         logger.warning(
             "Static file request for non-whitelisted file",
             extra={"requested": sanitize_for_log(filename)},
         )
-        raise HTTPException(
+        return Response(
             status_code=404,
-            detail="Static file not found",
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Static file not found"}).decode(),
         )
+
+    media_type = ALLOWED_STATIC_FILES[filename]
+    # Security: Use hardcoded path lookup to prevent path injection
+    safe_path = STATIC_DIR / filename
 
     if not safe_path.exists():
-        raise HTTPException(
+        return Response(
             status_code=404,
-            detail="Static file not found",
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Static file not found"}).decode(),
         )
 
-    return FileResponse(safe_path, media_type=media_type)
+    content = safe_path.read_bytes()
+
+    # Binary files (favicon) need base64 encoding
+    if media_type.startswith("image/"):
+        return Response(
+            status_code=200,
+            content_type=media_type,
+            body=base64.b64encode(content).decode("utf-8"),
+            headers={"isBase64Encoded": "true"},
+        )
+
+    return Response(
+        status_code=200,
+        content_type=media_type,
+        body=content.decode("utf-8"),
+    )
 
 
 @app.get("/api")
-async def api_index():
-    """
-    API index listing all available endpoints.
-
-    Returns:
-        JSON with categorized list of all API endpoints
-    """
-    return JSONResponse(
-        {
-            "name": "Sentiment Analyzer API",
-            "version": "2.0",
-            "endpoints": {
-                "health": {
-                    "GET /health": "Health check with DynamoDB connectivity test",
+def api_index():
+    """API index listing all available endpoints."""
+    return Response(
+        status_code=200,
+        content_type="application/json",
+        body=orjson.dumps(
+            {
+                "name": "Sentiment Analyzer API",
+                "version": "2.0",
+                "endpoints": {
+                    "health": {
+                        "GET /health": "Health check with DynamoDB connectivity test",
+                    },
+                    "sentiment": {
+                        "GET /api/v2/sentiment": "Get sentiment data by tags",
+                        "GET /api/v2/trends": "Get sentiment trends",
+                        "GET /api/v2/articles": "Get news articles",
+                    },
+                    "auth": {
+                        "POST /api/v2/auth/anonymous": "Create anonymous session",
+                        "GET /api/v2/auth/validate": "Validate token",
+                        "POST /api/v2/auth/extend": "Extend session",
+                        "POST /api/v2/auth/magic-link": "Send magic link email",
+                        "GET /api/v2/auth/magic-link/verify": "Verify magic link",
+                        "GET /api/v2/auth/oauth/urls": "Get OAuth authorization URLs",
+                        "POST /api/v2/auth/oauth/callback": "OAuth callback",
+                        "POST /api/v2/auth/refresh": "Refresh access token",
+                        "POST /api/v2/auth/signout": "Sign out",
+                        "GET /api/v2/auth/session": "Get current session",
+                        "GET /api/v2/auth/me": "Get current user profile",
+                    },
+                    "configurations": {
+                        "POST /api/v2/configurations": "Create configuration",
+                        "GET /api/v2/configurations": "List configurations",
+                        "GET /api/v2/configurations/{id}": "Get configuration",
+                        "PATCH /api/v2/configurations/{id}": "Update configuration",
+                        "DELETE /api/v2/configurations/{id}": "Delete configuration",
+                        "GET /api/v2/configurations/{id}/sentiment": "Get sentiment data",
+                        "GET /api/v2/configurations/{id}/sentiment/{ticker}/history": "Get ticker sentiment history",
+                        "GET /api/v2/configurations/{id}/heatmap": "Get heat map data",
+                        "GET /api/v2/configurations/{id}/volatility": "Get volatility data",
+                        "GET /api/v2/configurations/{id}/correlation": "Get correlation data",
+                        "GET /api/v2/configurations/{id}/alerts": "Get config alerts",
+                        "POST /api/v2/configurations/{id}/refresh": "Trigger refresh",
+                        "GET /api/v2/configurations/{id}/refresh/status": "Get refresh status",
+                        "GET /api/v2/configurations/{id}/premarket": "Get pre-market data",
+                    },
+                    "tickers": {
+                        "GET /api/v2/tickers/search": "Search tickers",
+                        "GET /api/v2/tickers/validate": "Validate ticker symbol",
+                        "GET /api/v2/tickers/{ticker}/ohlc": "Get OHLC price data",
+                        "GET /api/v2/tickers/{ticker}/sentiment/history": "Get sentiment history",
+                    },
+                    "alerts": {
+                        "POST /api/v2/alerts": "Create alert",
+                        "GET /api/v2/alerts": "List alerts",
+                        "GET /api/v2/alerts/{id}": "Get alert",
+                        "PATCH /api/v2/alerts/{id}": "Update alert",
+                        "DELETE /api/v2/alerts/{id}": "Delete alert",
+                        "POST /api/v2/alerts/{id}/toggle": "Toggle alert enabled",
+                    },
+                    "notifications": {
+                        "GET /api/v2/notifications": "List notifications",
+                        "GET /api/v2/notifications/{id}": "Get notification",
+                        "GET /api/v2/notifications/preferences": "Get notification preferences",
+                        "PATCH /api/v2/notifications/preferences": "Update preferences",
+                        "POST /api/v2/notifications/disable-all": "Disable all notifications",
+                        "GET /api/v2/notifications/unsubscribe": "Unsubscribe from notifications",
+                        "POST /api/v2/notifications/resubscribe": "Resubscribe to notifications",
+                        "GET /api/v2/notifications/digest": "Get digest settings",
+                        "PATCH /api/v2/notifications/digest": "Update digest settings",
+                        "POST /api/v2/notifications/digest/test": "Send test digest",
+                    },
+                    "market": {
+                        "GET /api/v2/market/status": "Get market status",
+                    },
+                    "chaos": {
+                        "POST /chaos/experiments": "Create chaos experiment",
+                        "GET /chaos/experiments": "List experiments",
+                        "GET /chaos/experiments/{id}": "Get experiment",
+                        "POST /chaos/experiments/{id}/start": "Start experiment",
+                        "POST /chaos/experiments/{id}/stop": "Stop experiment",
+                        "DELETE /chaos/experiments/{id}": "Delete experiment",
+                    },
                 },
-                "sentiment": {
-                    "GET /api/v2/sentiment": "Get sentiment data by tags",
-                    "GET /api/v2/trends": "Get sentiment trends",
-                    "GET /api/v2/articles": "Get news articles",
-                },
-                "auth": {
-                    "POST /api/v2/auth/anonymous": "Create anonymous session",
-                    "GET /api/v2/auth/validate": "Validate token",
-                    "POST /api/v2/auth/extend": "Extend session",
-                    "POST /api/v2/auth/magic-link": "Send magic link email",
-                    "GET /api/v2/auth/magic-link/verify": "Verify magic link",
-                    "GET /api/v2/auth/oauth/urls": "Get OAuth authorization URLs",
-                    "POST /api/v2/auth/oauth/callback": "OAuth callback",
-                    "POST /api/v2/auth/refresh": "Refresh access token",
-                    "POST /api/v2/auth/signout": "Sign out",
-                    "GET /api/v2/auth/session": "Get current session",
-                    "GET /api/v2/auth/me": "Get current user profile",
-                },
-                "configurations": {
-                    "POST /api/v2/configurations": "Create configuration",
-                    "GET /api/v2/configurations": "List configurations",
-                    "GET /api/v2/configurations/{id}": "Get configuration",
-                    "PATCH /api/v2/configurations/{id}": "Update configuration",
-                    "DELETE /api/v2/configurations/{id}": "Delete configuration",
-                    "GET /api/v2/configurations/{id}/sentiment": "Get sentiment data",
-                    "GET /api/v2/configurations/{id}/sentiment/{ticker}/history": "Get ticker sentiment history",
-                    "GET /api/v2/configurations/{id}/heatmap": "Get heat map data",
-                    "GET /api/v2/configurations/{id}/volatility": "Get volatility data",
-                    "GET /api/v2/configurations/{id}/correlation": "Get correlation data",
-                    "GET /api/v2/configurations/{id}/alerts": "Get config alerts",
-                    "POST /api/v2/configurations/{id}/refresh": "Trigger refresh",
-                    "GET /api/v2/configurations/{id}/refresh/status": "Get refresh status",
-                    "GET /api/v2/configurations/{id}/premarket": "Get pre-market data",
-                },
-                "tickers": {
-                    "GET /api/v2/tickers/search": "Search tickers",
-                    "GET /api/v2/tickers/validate": "Validate ticker symbol",
-                    "GET /api/v2/tickers/{ticker}/ohlc": "Get OHLC price data",
-                    "GET /api/v2/tickers/{ticker}/sentiment/history": "Get sentiment history",
-                },
-                "alerts": {
-                    "POST /api/v2/alerts": "Create alert",
-                    "GET /api/v2/alerts": "List alerts",
-                    "GET /api/v2/alerts/{id}": "Get alert",
-                    "PATCH /api/v2/alerts/{id}": "Update alert",
-                    "DELETE /api/v2/alerts/{id}": "Delete alert",
-                    "POST /api/v2/alerts/{id}/toggle": "Toggle alert enabled",
-                },
-                "notifications": {
-                    "GET /api/v2/notifications": "List notifications",
-                    "GET /api/v2/notifications/{id}": "Get notification",
-                    "GET /api/v2/notifications/preferences": "Get notification preferences",
-                    "PATCH /api/v2/notifications/preferences": "Update preferences",
-                    "POST /api/v2/notifications/disable-all": "Disable all notifications",
-                    "GET /api/v2/notifications/unsubscribe": "Unsubscribe from notifications",
-                    "POST /api/v2/notifications/resubscribe": "Resubscribe to notifications",
-                    "GET /api/v2/notifications/digest": "Get digest settings",
-                    "PATCH /api/v2/notifications/digest": "Update digest settings",
-                    "POST /api/v2/notifications/digest/test": "Send test digest",
-                },
-                "market": {
-                    "GET /api/v2/market/status": "Get market status",
-                },
-                "chaos": {
-                    "POST /chaos/experiments": "Create chaos experiment",
-                    "GET /chaos/experiments": "List experiments",
-                    "GET /chaos/experiments/{id}": "Get experiment",
-                    "POST /chaos/experiments/{id}/start": "Start experiment",
-                    "POST /chaos/experiments/{id}/stop": "Stop experiment",
-                    "DELETE /chaos/experiments/{id}": "Delete experiment",
-                },
-            },
-            "docs": {
-                "openapi": "/docs",
-                "redoc": "/redoc",
-            },
-        }
+            }
+        ).decode(),
     )
 
 
 @app.get("/health")
-async def health_check():
-    """
-    Health check endpoint with DynamoDB connectivity test.
-
-    Returns:
-        JSON with status and optional error details
-
-    On-Call Note:
-        If health check fails:
-        1. Check DynamoDB table exists
-        2. Verify Lambda IAM role has dynamodb:DescribeTable permission
-        3. Check network connectivity (VPC configuration)
-    """
+def health_check():
+    """Health check endpoint with DynamoDB connectivity test."""
     try:
         table = get_table(SENTIMENTS_TABLE)
+        _ = table.table_status
 
-        # Test connectivity by describing table
-        _ = table.table_status  # This triggers a DescribeTable call
-
-        return JSONResponse(
-            {
-                "status": "healthy",
-                "table": SENTIMENTS_TABLE,
-                "environment": ENVIRONMENT,
-            }
+        return Response(
+            status_code=200,
+            content_type="application/json",
+            body=orjson.dumps(
+                {
+                    "status": "healthy",
+                    "table": SENTIMENTS_TABLE,
+                    "environment": ENVIRONMENT,
+                }
+            ).decode(),
         )
-
     except Exception as e:
         logger.error(
             "Health check failed",
             extra={"table": SENTIMENTS_TABLE, **get_safe_error_info(e)},
         )
-
-        return JSONResponse(
+        return Response(
             status_code=503,
-            content={
-                "status": "unhealthy",
-                "error": get_safe_error_message_for_user(e),
-                "table": SENTIMENTS_TABLE,
-            },
+            content_type="application/json",
+            body=orjson.dumps(
+                {
+                    "status": "unhealthy",
+                    "error": get_safe_error_message_for_user(e),
+                    "table": SENTIMENTS_TABLE,
+                }
+            ).decode(),
         )
 
 
-# ===================================================================
-# API v2 Endpoints (POWERPLAN Mobile Dashboard)
-# ===================================================================
-
-
 @app.get("/api/v2/runtime")
-async def get_runtime_config():
-    """
-    Get runtime configuration for the frontend (Feature 1097).
-
-    Returns URLs and settings that may vary by environment.
-    Used by frontend to discover the SSE Lambda URL for streaming.
-
-    Returns:
-        JSON with runtime configuration including SSE Lambda URL
-    """
-    return JSONResponse(
-        {
-            "sse_url": SSE_LAMBDA_URL or None,  # Empty string -> null for frontend
-            "environment": ENVIRONMENT,
-        }
+def get_runtime_config():
+    """Get runtime configuration for the frontend (Feature 1097)."""
+    return Response(
+        status_code=200,
+        content_type="application/json",
+        body=orjson.dumps(
+            {
+                "sse_url": SSE_LAMBDA_URL or None,
+                "environment": ENVIRONMENT,
+            }
+        ).decode(),
     )
 
 
 @app.get("/api/v2/metrics")
-async def get_metrics_v2(
-    request: Request,
-    hours: int = 24,
-):
-    """
-    Get aggregated dashboard metrics.
-
-    Query Parameters:
-        hours: Time window for metrics (default: 24 hours, max: 168)
-
-    Returns:
-        JSON with aggregated metrics including:
-        - total: Total items
-        - positive/neutral/negative: Sentiment counts
-        - by_tag: Tag distribution
-        - rate_last_hour: Items in last hour
-        - rate_last_24h: Items in last 24 hours
-        - recent_items: Recent analyzed items
-
-    On-Call Note:
-        If metrics return zeros:
-        1. Verify DynamoDB table has data
-        2. Check GSIs exist (by_sentiment, by_status)
-        3. Verify items have status='analyzed'
-
-    Auth:
-        Feature 1039: Uses session auth (anonymous sessions OK).
-        Session ID logged for audit trail.
-    """
+def get_metrics_v2():
+    """Get aggregated dashboard metrics."""
     from src.lambdas.dashboard.metrics import aggregate_dashboard_metrics
 
-    # Feature 1039: Session auth - anonymous sessions OK for public metrics
-    _user_id = get_user_id_from_request(request, validate_session=False)
+    event = app.current_event.raw_event
+    _user_id = _get_user_id_from_event(event, validate_session=False)
 
-    # Validate hours parameter
+    params = get_query_params(event)
+    hours = int(params.get("hours", "24"))
     if hours < 1:
         hours = 1
-    elif hours > 168:  # Max 7 days
+    elif hours > 168:
         hours = 168
 
     try:
         table = get_table(SENTIMENTS_TABLE)
         metrics = aggregate_dashboard_metrics(table, hours=hours)
 
-        # Sanitize recent items for response
         if "recent_items" in metrics:
             metrics["recent_items"] = [
                 sanitize_item_for_response(item) for item in metrics["recent_items"]
             ]
 
-        return JSONResponse(metrics)
-
+        return Response(
+            status_code=200,
+            content_type="application/json",
+            body=orjson.dumps(metrics).decode(),
+        )
     except Exception as e:
         logger.error(
             "Failed to get dashboard metrics",
@@ -540,83 +442,60 @@ async def get_metrics_v2(
                 **get_safe_error_info(e),
             },
         )
-        raise HTTPException(
+        return Response(
             status_code=500,
-            detail="Failed to retrieve dashboard metrics",
-        ) from e
+            content_type="application/json",
+            body=orjson.dumps(
+                {"detail": "Failed to retrieve dashboard metrics"}
+            ).decode(),
+        )
 
 
 @app.get("/api/v2/sentiment")
-async def get_sentiment_v2(
-    request: Request,
-    tags: str,
-    start: str | None = None,
-    end: str | None = None,
-):
-    """
-    Get aggregated sentiment for multiple tags (POWERPLAN).
-
-    Query Parameters:
-        tags: Comma-separated list of topic tags (max 5)
-        start: ISO8601 start timestamp (default: 24 hours ago)
-        end: ISO8601 end timestamp (default: now)
-
-    Returns:
-        JSON with per-tag sentiment breakdown and overall aggregate
-
-    Example:
-        GET /api/v2/sentiment?tags=AI,climate,economy&start=2025-11-24T00:00:00Z
-
-    On-Call Note:
-        If all sentiment values are 0:
-        1. Verify by_tag GSI exists on the table
-        2. Check items exist with matching tags
-        3. Verify time range covers existing data
-
-    Auth:
-        Feature 1039: Uses session auth (anonymous sessions OK).
-    """
+def get_sentiment_v2():
+    """Get aggregated sentiment for multiple tags."""
     from datetime import UTC, datetime, timedelta
 
-    # Feature 1039: Session auth - anonymous sessions OK for public sentiment
-    _user_id = get_user_id_from_request(request, validate_session=False)
+    event = app.current_event.raw_event
+    _user_id = _get_user_id_from_event(event, validate_session=False)
 
-    # Parse tags
+    params = get_query_params(event)
+    tags = params.get("tags", "")
+    start = params.get("start")
+    end = params.get("end")
+
     tag_list = [t.strip() for t in tags.split(",") if t.strip()]
     if not tag_list:
-        raise HTTPException(
+        return Response(
             status_code=400,
-            detail="At least one tag is required",
+            content_type="application/json",
+            body=orjson.dumps({"detail": "At least one tag is required"}).decode(),
         )
     if len(tag_list) > 5:
-        raise HTTPException(
+        return Response(
             status_code=400,
-            detail="Maximum 5 tags allowed",
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Maximum 5 tags allowed"}).decode(),
         )
 
-    # Parse time range
     now = datetime.now(UTC)
-    if not end:
-        end_time = now.isoformat()
-    else:
-        end_time = end
-
-    if not start:
-        start_time = (now - timedelta(hours=24)).isoformat()
-    else:
-        start_time = start
+    end_time = end if end else now.isoformat()
+    start_time = start if start else (now - timedelta(hours=24)).isoformat()
 
     try:
         table = get_table(SENTIMENTS_TABLE)
         result = get_sentiment_by_tags(table, tag_list, start_time, end_time)
-        return JSONResponse(result)
-
+        return Response(
+            status_code=200,
+            content_type="application/json",
+            body=orjson.dumps(result).decode(),
+        )
     except ValueError as e:
-        raise HTTPException(
+        return Response(
             status_code=400,
-            detail=str(e),
-        ) from e
-
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
+        )
     except Exception as e:
         logger.error(
             "Failed to get sentiment by tags",
@@ -625,104 +504,100 @@ async def get_sentiment_v2(
                 **get_safe_error_info(e),
             },
         )
-        raise HTTPException(
+        return Response(
             status_code=500,
-            detail="Failed to retrieve sentiment data",
-        ) from e
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Failed to retrieve sentiment data"}).decode(),
+        )
 
 
 @app.get("/api/v2/trends")
-async def get_trends_v2(
-    request: Request,
-    tags: str,
-    interval: str = "1h",
-    range: str = "24h",
-):
-    """
-    Get trend data for sparkline visualizations (POWERPLAN).
+def get_trends_v2():
+    """Get trend data for sparkline visualizations."""
+    event = app.current_event.raw_event
+    _user_id = _get_user_id_from_event(event, validate_session=False)
 
-    Query Parameters:
-        tags: Comma-separated list of topic tags (max 5)
-        interval: Time interval for aggregation (1h, 6h, 1d)
-        range: Time range to look back (e.g., 24h, 7d)
+    params = get_query_params(event)
+    tags = params.get("tags", "")
+    interval = params.get("interval", "1h")
+    range_str = params.get("range", "24h")
 
-    Returns:
-        JSON with time-series data for each tag
-
-    Example:
-        GET /api/v2/trends?tags=AI,climate&interval=1h&range=7d
-
-    On-Call Note:
-        If trend data is empty or sparse:
-        1. Verify ingestion is running
-        2. Check time range covers data ingestion period
-        3. Verify by_tag GSI exists
-
-    Auth:
-        Feature 1039: Uses session auth (anonymous sessions OK).
-    """
-    # Feature 1039: Session auth - anonymous sessions OK for public trends
-    _user_id = get_user_id_from_request(request, validate_session=False)
-
-    # Parse tags
     tag_list = [t.strip() for t in tags.split(",") if t.strip()]
     if not tag_list:
-        raise HTTPException(
+        return Response(
             status_code=400,
-            detail="At least one tag is required",
+            content_type="application/json",
+            body=orjson.dumps({"detail": "At least one tag is required"}).decode(),
         )
     if len(tag_list) > 5:
-        raise HTTPException(
+        return Response(
             status_code=400,
-            detail="Maximum 5 tags allowed",
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Maximum 5 tags allowed"}).decode(),
         )
 
-    # Validate interval
     if interval not in ["1h", "6h", "1d"]:
-        raise HTTPException(
+        return Response(
             status_code=400,
-            detail="Invalid interval. Use: 1h, 6h, or 1d",
+            content_type="application/json",
+            body=orjson.dumps(
+                {"detail": "Invalid interval. Use: 1h, 6h, or 1d"}
+            ).decode(),
         )
 
-    # Parse range to hours
-    range_hours = 24  # default
-    if range.endswith("h"):
+    range_hours = 24
+    if range_str.endswith("h"):
         try:
-            range_hours = int(range[:-1])
-        except ValueError as e:
-            raise HTTPException(
+            range_hours = int(range_str[:-1])
+        except ValueError:
+            return Response(
                 status_code=400,
-                detail="Invalid range format. Use: Nh (e.g., 24h) or Nd (e.g., 7d)",
-            ) from e
-    elif range.endswith("d"):
+                content_type="application/json",
+                body=orjson.dumps(
+                    {
+                        "detail": "Invalid range format. Use: Nh (e.g., 24h) or Nd (e.g., 7d)"
+                    }
+                ).decode(),
+            )
+    elif range_str.endswith("d"):
         try:
-            range_hours = int(range[:-1]) * 24
-        except ValueError as e:
-            raise HTTPException(
+            range_hours = int(range_str[:-1]) * 24
+        except ValueError:
+            return Response(
                 status_code=400,
-                detail="Invalid range format. Use: Nh (e.g., 24h) or Nd (e.g., 7d)",
-            ) from e
+                content_type="application/json",
+                body=orjson.dumps(
+                    {
+                        "detail": "Invalid range format. Use: Nh (e.g., 24h) or Nd (e.g., 7d)"
+                    }
+                ).decode(),
+            )
     else:
-        raise HTTPException(
+        return Response(
             status_code=400,
-            detail="Invalid range format. Use: Nh (e.g., 24h) or Nd (e.g., 7d)",
+            content_type="application/json",
+            body=orjson.dumps(
+                {"detail": "Invalid range format. Use: Nh (e.g., 24h) or Nd (e.g., 7d)"}
+            ).decode(),
         )
 
-    # Cap at 7 days
     if range_hours > 168:
         range_hours = 168
 
     try:
         table = get_table(SENTIMENTS_TABLE)
         result = get_trend_data(table, tag_list, interval, range_hours)
-        return JSONResponse(result)
-
+        return Response(
+            status_code=200,
+            content_type="application/json",
+            body=orjson.dumps(result).decode(),
+        )
     except ValueError as e:
-        raise HTTPException(
+        return Response(
             status_code=400,
-            detail=str(e),
-        ) from e
-
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
+        )
     except Exception as e:
         logger.error(
             "Failed to get trend data",
@@ -732,70 +607,52 @@ async def get_trends_v2(
                 **get_safe_error_info(e),
             },
         )
-        raise HTTPException(
+        return Response(
             status_code=500,
-            detail="Failed to retrieve trend data",
-        ) from e
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Failed to retrieve trend data"}).decode(),
+        )
 
 
 @app.get("/api/v2/articles")
-async def get_articles_v2(
-    request: Request,
-    tags: str,
-    limit: int = 20,
-    sentiment: str | None = None,
-):
-    """
-    Get recent articles for specified tags (POWERPLAN).
+def get_articles_v2():
+    """Get recent articles for specified tags."""
+    event = app.current_event.raw_event
+    _user_id = _get_user_id_from_event(event, validate_session=False)
 
-    Query Parameters:
-        tags: Comma-separated list of topic tags (max 5)
-        limit: Maximum articles to return (default: 20, max: 100)
-        sentiment: Optional filter (positive, neutral, negative)
+    params = get_query_params(event)
+    tags = params.get("tags", "")
+    limit = int(params.get("limit", "20"))
+    sentiment = params.get("sentiment")
 
-    Returns:
-        JSON array of articles sorted by timestamp descending
-
-    Example:
-        GET /api/v2/articles?tags=AI,climate&limit=10&sentiment=positive
-
-    On-Call Note:
-        If articles list is empty:
-        1. Verify by_tag GSI exists
-        2. Check ingestion is working
-        3. Verify sentiment filter matches existing data
-
-    Auth:
-        Feature 1039: Uses session auth (anonymous sessions OK).
-    """
-    # Feature 1039: Session auth - anonymous sessions OK for public articles
-    _user_id = get_user_id_from_request(request, validate_session=False)
-
-    # Parse tags
     tag_list = [t.strip() for t in tags.split(",") if t.strip()]
     if not tag_list:
-        raise HTTPException(
+        return Response(
             status_code=400,
-            detail="At least one tag is required",
+            content_type="application/json",
+            body=orjson.dumps({"detail": "At least one tag is required"}).decode(),
         )
     if len(tag_list) > 5:
-        raise HTTPException(
+        return Response(
             status_code=400,
-            detail="Maximum 5 tags allowed",
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Maximum 5 tags allowed"}).decode(),
         )
 
-    # Validate limit
     if limit < 1 or limit > 100:
-        raise HTTPException(
+        return Response(
             status_code=400,
-            detail="Limit must be between 1 and 100",
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Limit must be between 1 and 100"}).decode(),
         )
 
-    # Validate sentiment filter
     if sentiment and sentiment.lower() not in ["positive", "neutral", "negative"]:
-        raise HTTPException(
+        return Response(
             status_code=400,
-            detail="Invalid sentiment. Use: positive, neutral, or negative",
+            content_type="application/json",
+            body=orjson.dumps(
+                {"detail": "Invalid sentiment. Use: positive, neutral, or negative"}
+            ).decode(),
         )
 
     try:
@@ -807,19 +664,21 @@ async def get_articles_v2(
             sentiment_filter=sentiment,
         )
 
-        # Sanitize articles for response
         sanitized = [
             sanitize_item_for_response(parse_dynamodb_item(item)) for item in articles
         ]
 
-        return JSONResponse(sanitized)
-
+        return Response(
+            status_code=200,
+            content_type="application/json",
+            body=orjson.dumps(sanitized).decode(),
+        )
     except ValueError as e:
-        raise HTTPException(
+        return Response(
             status_code=400,
-            detail=str(e),
-        ) from e
-
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
+        )
     except Exception as e:
         logger.error(
             "Failed to get articles by tags",
@@ -828,46 +687,32 @@ async def get_articles_v2(
                 **get_safe_error_info(e),
             },
         )
-        raise HTTPException(
+        return Response(
             status_code=500,
-            detail="Failed to retrieve articles",
-        ) from e
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Failed to retrieve articles"}).decode(),
+        )
 
 
 # ===================================================================
-# Chaos Testing Endpoints (Phase 1b)
+# Chaos Testing Endpoints
 # ===================================================================
 
 
 @app.post("/chaos/experiments")
-async def create_chaos_experiment(
-    request: Request,
-):
-    """
-    Create a new chaos experiment.
-
-    Request body:
-        {
-            "scenario_type": "dynamodb_throttle|ingestion_failure|lambda_cold_start",
-            "blast_radius": 10-100,
-            "duration_seconds": 5-300,
-            "parameters": {}
-        }
-
-    Returns:
-        Created experiment JSON
-
-    Security Note:
-        Environment gating enforced in chaos module (preprod only).
-
-    Auth:
-        Feature 1039: Requires authenticated session (non-anonymous).
-    """
-    # Feature 1039: Chaos endpoints require authenticated users (not anonymous)
-    _user_id = get_authenticated_user_id(request)
+def create_chaos_experiment():
+    """Create a new chaos experiment."""
+    event = app.current_event.raw_event
+    user_id = _get_authenticated_user_id_from_event(event)
+    if user_id is None:
+        return Response(
+            status_code=401,
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Authentication required"}).decode(),
+        )
 
     try:
-        body = await request.json()
+        body = app.current_event.json_body
 
         experiment = create_experiment(
             scenario_type=body["scenario_type"],
@@ -876,96 +721,87 @@ async def create_chaos_experiment(
             parameters=body.get("parameters"),
         )
 
-        return JSONResponse(experiment, status_code=201)
-
+        return Response(
+            status_code=201,
+            content_type="application/json",
+            body=orjson.dumps(experiment).decode(),
+        )
     except EnvironmentNotAllowedError as e:
         logger.warning(
             "Chaos testing attempted in disallowed environment",
             extra={"environment": ENVIRONMENT},
         )
-        raise HTTPException(
+        return Response(
             status_code=403,
-            detail=str(e),
-        ) from e
-
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
+        )
     except (KeyError, ValueError) as e:
-        raise HTTPException(
+        return Response(
             status_code=400,
-            detail=f"Invalid request: {e}",
-        ) from e
-
+            content_type="application/json",
+            body=orjson.dumps({"detail": f"Invalid request: {e}"}).decode(),
+        )
     except ChaosError as e:
-        raise HTTPException(
+        return Response(
             status_code=500,
-            detail=f"Failed to create experiment: {e}",
-        ) from e
+            content_type="application/json",
+            body=orjson.dumps({"detail": f"Failed to create experiment: {e}"}).decode(),
+        )
 
 
 @app.get("/chaos/experiments")
-async def list_chaos_experiments(
-    request: Request,
-    status: str | None = None,
-    limit: int = 20,
-):
-    """
-    List chaos experiments with optional status filter.
+def list_chaos_experiments():
+    """List chaos experiments with optional status filter."""
+    event = app.current_event.raw_event
+    user_id = _get_authenticated_user_id_from_event(event)
+    if user_id is None:
+        return Response(
+            status_code=401,
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Authentication required"}).decode(),
+        )
 
-    Query parameters:
-        status: Optional filter (pending|running|completed|failed|stopped)
-        limit: Maximum experiments to return (default: 20, max: 100)
-
-    Returns:
-        Array of experiment JSON objects
-
-    Auth:
-        Feature 1039: Requires authenticated session (non-anonymous).
-    """
-    # Feature 1039: Chaos endpoints require authenticated users (not anonymous)
-    _user_id = get_authenticated_user_id(request)
+    params = get_query_params(event)
+    status = params.get("status")
+    limit = int(params.get("limit", "20"))
 
     try:
         experiments = list_experiments(status=status, limit=limit)
-        return JSONResponse(experiments)
-
+        return Response(
+            status_code=200,
+            content_type="application/json",
+            body=orjson.dumps(experiments).decode(),
+        )
     except ValueError as e:
-        raise HTTPException(
+        return Response(
             status_code=400,
-            detail=str(e),
-        ) from e
-
-
-@app.get("/chaos/experiments/{experiment_id}")
-async def get_chaos_experiment(
-    request: Request,
-    experiment_id: str,
-):
-    """
-    Get chaos experiment by ID with enriched FIS status.
-
-    Path parameters:
-        experiment_id: Experiment UUID
-
-    Returns:
-        Experiment JSON with FIS status (if applicable) or 404 if not found
-
-    Phase 2.2 Enhancement:
-        Enriches response with real-time FIS experiment status for DynamoDB throttle scenarios.
-
-    Auth:
-        Feature 1039: Requires authenticated session (non-anonymous).
-    """
-    # Feature 1039: Chaos endpoints require authenticated users (not anonymous)
-    _user_id = get_authenticated_user_id(request)
-
-    experiment = get_experiment(experiment_id)
-
-    if not experiment:
-        raise HTTPException(
-            status_code=404,
-            detail="Experiment not found",
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
         )
 
-    # Enrich with FIS status if experiment is running and has FIS experiment ID
+
+@app.get("/chaos/experiments/<experiment_id>")
+def get_chaos_experiment(experiment_id: str):
+    """Get chaos experiment by ID with enriched FIS status."""
+    event = app.current_event.raw_event
+    user_id = _get_authenticated_user_id_from_event(event)
+    if user_id is None:
+        return Response(
+            status_code=401,
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Authentication required"}).decode(),
+        )
+
+    experiment = get_experiment(experiment_id)
+    if not experiment:
+        return Response(
+            status_code=404,
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Experiment not found"}).decode(),
+        )
+
+    # Enrich with FIS status if applicable
     if (
         experiment.get("status") == "running"
         and experiment.get("scenario_type") == "dynamodb_throttle"
@@ -984,40 +820,34 @@ async def get_chaos_experiment(
                     "error": sanitize_for_log(str(e)),
                 },
             )
-            # Don't fail the request if FIS status fetch fails
             experiment["fis_status"] = {"error": "Failed to fetch FIS status"}
 
-    return JSONResponse(experiment)
+    return Response(
+        status_code=200,
+        content_type="application/json",
+        body=orjson.dumps(experiment).decode(),
+    )
 
 
-@app.post("/chaos/experiments/{experiment_id}/start")
-async def start_chaos_experiment(
-    request: Request,
-    experiment_id: str,
-):
-    """
-    Start a chaos experiment.
-
-    Path parameters:
-        experiment_id: Experiment UUID
-
-    Returns:
-        Updated experiment JSON
-
-    Phase 2 Note:
-        This endpoint now integrates with AWS FIS for DynamoDB throttling.
-        Other scenarios (ingestion failure, Lambda delay) will be implemented in Phase 3-4.
-
-    Auth:
-        Feature 1039: Requires authenticated session (non-anonymous).
-    """
-    # Feature 1039: Chaos endpoints require authenticated users (not anonymous)
-    _user_id = get_authenticated_user_id(request)
+@app.post("/chaos/experiments/<experiment_id>/start")
+def start_chaos_experiment(experiment_id: str):
+    """Start a chaos experiment."""
+    event = app.current_event.raw_event
+    user_id = _get_authenticated_user_id_from_event(event)
+    if user_id is None:
+        return Response(
+            status_code=401,
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Authentication required"}).decode(),
+        )
 
     try:
         updated_experiment = start_experiment(experiment_id)
-        return JSONResponse(updated_experiment)
-
+        return Response(
+            status_code=200,
+            content_type="application/json",
+            body=orjson.dumps(updated_experiment).decode(),
+        )
     except ChaosError as e:
         logger.error(
             "Chaos experiment start failed",
@@ -1026,45 +856,38 @@ async def start_chaos_experiment(
                 "error": sanitize_for_log(str(e)),
             },
         )
-        raise HTTPException(
+        return Response(
             status_code=500,
-            detail=str(e),
-        ) from e
-
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
+        )
     except EnvironmentNotAllowedError as e:
-        raise HTTPException(
+        return Response(
             status_code=403,
-            detail=str(e),
-        ) from e
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
+        )
 
 
-@app.post("/chaos/experiments/{experiment_id}/stop")
-async def stop_chaos_experiment(
-    request: Request,
-    experiment_id: str,
-):
-    """
-    Stop a running chaos experiment.
-
-    Path parameters:
-        experiment_id: Experiment UUID
-
-    Returns:
-        Updated experiment JSON
-
-    Phase 2 Note:
-        This endpoint now integrates with AWS FIS to stop experiments.
-
-    Auth:
-        Feature 1039: Requires authenticated session (non-anonymous).
-    """
-    # Feature 1039: Chaos endpoints require authenticated users (not anonymous)
-    _user_id = get_authenticated_user_id(request)
+@app.post("/chaos/experiments/<experiment_id>/stop")
+def stop_chaos_experiment(experiment_id: str):
+    """Stop a running chaos experiment."""
+    event = app.current_event.raw_event
+    user_id = _get_authenticated_user_id_from_event(event)
+    if user_id is None:
+        return Response(
+            status_code=401,
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Authentication required"}).decode(),
+        )
 
     try:
         updated_experiment = stop_experiment(experiment_id)
-        return JSONResponse(updated_experiment)
-
+        return Response(
+            status_code=200,
+            content_type="application/json",
+            body=orjson.dumps(updated_experiment).decode(),
+        )
     except ChaosError as e:
         logger.error(
             "Chaos experiment stop failed",
@@ -1073,81 +896,72 @@ async def stop_chaos_experiment(
                 "error": sanitize_for_log(str(e)),
             },
         )
-        raise HTTPException(
+        return Response(
             status_code=500,
-            detail=str(e),
-        ) from e
-
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
+        )
     except EnvironmentNotAllowedError as e:
-        raise HTTPException(
+        return Response(
             status_code=403,
-            detail=str(e),
-        ) from e
-
-
-@app.delete("/chaos/experiments/{experiment_id}")
-async def delete_chaos_experiment(
-    request: Request,
-    experiment_id: str,
-):
-    """
-    Delete a chaos experiment.
-
-    Path parameters:
-        experiment_id: Experiment UUID
-
-    Returns:
-        Success message
-
-    Auth:
-        Feature 1039: Requires authenticated session (non-anonymous).
-    """
-    # Feature 1039: Chaos endpoints require authenticated users (not anonymous)
-    _user_id = get_authenticated_user_id(request)
-
-    success = delete_experiment(experiment_id)
-
-    if not success:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to delete experiment",
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
         )
 
-    return JSONResponse({"message": "Experiment deleted successfully"})
+
+@app.delete("/chaos/experiments/<experiment_id>")
+def delete_chaos_experiment(experiment_id: str):
+    """Delete a chaos experiment."""
+    event = app.current_event.raw_event
+    user_id = _get_authenticated_user_id_from_event(event)
+    if user_id is None:
+        return Response(
+            status_code=401,
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Authentication required"}).decode(),
+        )
+
+    success = delete_experiment(experiment_id)
+    if not success:
+        return Response(
+            status_code=500,
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Failed to delete experiment"}).decode(),
+        )
+
+    return Response(
+        status_code=200,
+        content_type="application/json",
+        body=orjson.dumps({"message": "Experiment deleted successfully"}).decode(),
+    )
 
 
-# Mangum adapter for AWS Lambda
-handler = Mangum(app, lifespan="off")
-
-
-# Lambda handler function
+# Lambda handler entry point
+@logger.inject_lambda_context
+@tracer.capture_lambda_handler
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
-    """
-    AWS Lambda entry point.
+    """AWS Lambda entry point.
 
-    Wraps the FastAPI app with Mangum for Lambda Function URL compatibility.
+    Uses Powertools APIGatewayRestResolver for routing.
 
     Args:
-        event: Lambda event (API Gateway or Function URL format)
+        event: Lambda event (API Gateway Proxy Integration format)
         context: Lambda context
 
     Returns:
-        HTTP response dict
-
-    On-Call Note:
-        If Lambda returns 500 errors:
-        1. Check CloudWatch logs for detailed error
-        2. Verify all environment variables are set
-        3. Check IAM permissions for DynamoDB access
+        HTTP response dict (API Gateway Proxy Integration format)
     """
     logger.info(
         "Dashboard Lambda invoked",
         extra={
             "path": event.get("rawPath", event.get("path", "unknown")),
-            "method": event.get("requestContext", {})
-            .get("http", {})
-            .get("method", "unknown"),
+            "method": event.get(
+                "httpMethod",
+                event.get("requestContext", {})
+                .get("http", {})
+                .get("method", "unknown"),
+            ),
         },
     )
 
-    return handler(event, context)
+    return app.resolve(event, context)
