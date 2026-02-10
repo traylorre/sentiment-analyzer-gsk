@@ -2,7 +2,7 @@
 
 Tests /api/v2/stream and /api/v2/stream/status endpoints per FR-004 and FR-014.
 
-Uses direct handler invocation for testing.
+Migrated from FastAPI TestClient to direct handler invocation (001-fastapi-purge).
 Note: /health and /debug endpoints no longer exist and tests for them have been removed.
 """
 
