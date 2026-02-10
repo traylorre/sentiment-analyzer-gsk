@@ -32,7 +32,9 @@ For Developers:
 import logging
 import os
 from pathlib import Path
+from unittest.mock import MagicMock
 
+import orjson
 import pytest
 
 # =============================================================================
@@ -107,6 +109,91 @@ if "TIINGO_API_KEY" not in os.environ:
     os.environ["TIINGO_API_KEY"] = "test-tiingo-key"
 if "FINNHUB_API_KEY" not in os.environ:
     os.environ["FINNHUB_API_KEY"] = "test-finnhub-key"
+
+
+# =============================================================================
+# Mock Lambda Event & Context Fixtures (001-fastapi-purge, FR-058)
+# =============================================================================
+
+
+def make_event(
+    method: str = "GET",
+    path: str = "/",
+    path_params: dict[str, str] | None = None,
+    query_params: dict[str, str] | None = None,
+    headers: dict[str, str] | None = None,
+    body: dict | str | None = None,
+    cookies: str | None = None,
+) -> dict:
+    """Construct a mock API Gateway Proxy Integration event.
+
+    This is the canonical test factory for all handler tests migrated from
+    TestClient to direct handler invocation. Produces events matching the
+    API Gateway Proxy Integration format.
+
+    Args:
+        method: HTTP method (GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD).
+        path: Request path (e.g., "/api/v2/sentiment").
+        path_params: Path parameters (e.g., {"ticker": "AAPL"}).
+        query_params: Query string parameters (e.g., {"range": "1M"}).
+        headers: HTTP headers (keys will be lowercased per API Gateway behavior).
+        body: Request body. Dicts are JSON-serialized; strings are passed as-is.
+        cookies: Cookie header value (e.g., "session_id=abc; csrf_token=xyz").
+
+    Returns:
+        Complete API Gateway Proxy Integration event dict.
+    """
+    base_headers = {"content-type": "application/json"}
+    if headers:
+        base_headers.update({k.lower(): v for k, v in headers.items()})
+    if cookies:
+        base_headers["cookie"] = cookies
+
+    serialized_body = None
+    if isinstance(body, dict):
+        serialized_body = orjson.dumps(body).decode()
+    elif isinstance(body, str):
+        serialized_body = body
+
+    return {
+        "httpMethod": method,
+        "path": path,
+        "resource": "/{proxy+}",
+        "pathParameters": path_params,
+        "queryStringParameters": query_params,
+        "multiValueQueryStringParameters": (
+            {k: [v] for k, v in query_params.items()} if query_params else None
+        ),
+        "headers": base_headers,
+        "body": serialized_body,
+        "isBase64Encoded": False,
+        "requestContext": {
+            "authorizer": {},
+            "identity": {"sourceIp": "127.0.0.1"},
+            "requestId": "test-request-id",
+            "stage": "test",
+        },
+    }
+
+
+@pytest.fixture
+def mock_lambda_context():
+    """Mock Lambda context object with standard attributes.
+
+    Provides a minimal mock context that satisfies the Lambda handler
+    contract for context.function_name, context.memory_limit_in_mb, etc.
+    """
+    context = MagicMock()
+    context.function_name = "test-function"
+    context.memory_limit_in_mb = 256
+    context.invoked_function_arn = (
+        "arn:aws:lambda:us-east-1:123456789012:function:test-function"
+    )
+    context.aws_request_id = "test-request-id"
+    context.log_group_name = "/aws/lambda/test-function"
+    context.log_stream_name = "2026/02/09/[$LATEST]test-stream"
+    context.get_remaining_time_in_millis.return_value = 300000
+    return context
 
 
 @pytest.fixture(autouse=True)
