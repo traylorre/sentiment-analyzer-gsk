@@ -672,10 +672,6 @@ jobs:
           # Core imports - must work for Lambda to start
           from handler import lambda_handler
 
-          # FastAPI and Mangum - web framework
-          from fastapi import FastAPI
-          from mangum import Mangum
-
           # Pydantic - the whole point of container deployment
           # This import would fail with ZIP deployment due to binary incompatibility
           import pydantic
@@ -1553,8 +1549,6 @@ jobs:
           docker run --rm -e ENVIRONMENT=prod -e USERS_TABLE=prod-sentiment-users -e SENTIMENTS_TABLE=prod-sentiment-items --entrypoint python "$IMAGE" -c "
           import sys
           from handler import lambda_handler
-          from fastapi import FastAPI
-          from mangum import Mangum
           import pydantic
           from pydantic import BaseModel
           print(f'pydantic version: {pydantic.__version__}')

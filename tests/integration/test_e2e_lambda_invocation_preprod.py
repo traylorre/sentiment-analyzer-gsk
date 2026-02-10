@@ -10,7 +10,7 @@ deployment issues like:
 - Environment variable issues
 
 CRITICAL DIFFERENCE from test_dashboard_preprod.py:
-- test_dashboard_preprod.py: Uses FastAPI TestClient (in-process, no Lambda)
+- test_dashboard_preprod.py: Uses direct lambda_handler invocation (in-process, no Lambda)
 - THIS FILE: Makes real HTTPS requests to deployed Lambda Function URL
 
 These tests are the LAST LINE OF DEFENSE before production deployment.
@@ -25,7 +25,7 @@ For On-Call Engineers:
 
 For Developers:
     - These tests REQUIRE the preprod environment to be deployed
-    - Tests use REAL HTTP requests (not TestClient)
+    - Tests use REAL HTTP requests (not in-process handler invocation)
     - Tests verify cold start works (tests import issues)
     - Tests cover full request/response cycle through AWS infrastructure
 """

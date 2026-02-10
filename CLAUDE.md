@@ -7,15 +7,15 @@ Auto-generated from all feature plans. Last updated: 2025-11-26
 - Python 3.13 + pytest, pytest-asyncio, httpx, boto3, moto (for local unit tests only), aws-xray-sdk (008-e2e-validation-suite)
 - DynamoDB (preprod - real AWS, no mocks for E2E) (008-e2e-validation-suite)
 - Python 3.13 + pytest, pytest-asyncio, httpx, boto3, moto (unit tests only) (009-e2e-test-oracle-validation)
-- Python 3.13 (backend), TypeScript 5 (frontend) + FastAPI 0.121.3, httpx 0.28.1, TradingView Lightweight Charts 5.0.9, React 18, Next.js 14.2.21, Zustand 5.0.8, React Query 5.90.11 (011-price-sentiment-overlay)
+- Python 3.13 (backend), TypeScript 5 (frontend) + aws-lambda-powertools, httpx 0.28.1, TradingView Lightweight Charts 5.0.9, React 18, Next.js 14.2.21, Zustand 5.0.8, React Query 5.90.11 (011-price-sentiment-overlay)
 - DynamoDB (single-table design), in-memory cache for OHLC data (011-price-sentiment-overlay)
 - Python 3.13 + pytest, pytest-asyncio, httpx, responses, moto (unit tests only) (012-ohlc-sentiment-e2e-tests)
 - N/A (test suite - no storage requirements) (012-ohlc-sentiment-e2e-tests)
 - JavaScript ES6+ (vanilla, no framework) + Hammer.js or custom touch event handling (research needed) (013-interview-swipe-gestures)
 - N/A (stateless UI feature) (013-interview-swipe-gestures)
-- Python 3.13 (backend), TypeScript 5 (frontend) + FastAPI 0.121.3, boto3, pydantic, aws-lambda-powertools (backend); React 18, Next.js 14.2.21, Zustand 5.0.8, React Query 5.90.11 (frontend) (014-session-consistency)
+- Python 3.13 (backend), TypeScript 5 (frontend) + aws-lambda-powertools, boto3, pydantic (backend); React 18, Next.js 14.2.21, Zustand 5.0.8, React Query 5.90.11 (frontend) (014-session-consistency)
 - DynamoDB (single-table design with GSIs for email lookup) (014-session-consistency)
-- Python 3.13 + FastAPI, sse-starlette, boto3, aws-xray-sdk, AWS Lambda Web Adapter (016-sse-streaming-lambda)
+- Python 3.13 + aws-lambda-powertools, boto3, aws-xray-sdk, awslambdaric (016-sse-streaming-lambda)
 - DynamoDB (existing tables - read-only access for SSE Lambda) (016-sse-streaming-lambda)
 - N/A (IAM Policy JSON, HCL configuration) + AWS IAM, S3, Terraform (018-tfstate-bucket-fix)
 - S3 (Terraform state bucket) (018-tfstate-bucket-fix)
@@ -37,11 +37,11 @@ Auto-generated from all feature plans. Last updated: 2025-11-26
 - DynamoDB (preprod-sentiment-users table with by_entity_status GSI) (503-consolidate-status-field)
 - Python 3.13 (existing project standard) + boto3, aws-xray-sdk (existing) (1003-self-healing-ingestion)
 - DynamoDB with `by_status` GSI (hash: status, range: timestamp, projection: KEYS_ONLY) (1003-self-healing-ingestion)
-- Python 3.13 (existing project standard) + FastAPI, boto3, sse-starlette (existing SSE stack), pydantic (1009-realtime-multi-resolution)
+- Python 3.13 (existing project standard) + aws-lambda-powertools, boto3, pydantic (1009-realtime-multi-resolution)
 - DynamoDB with new time-series table (`{env}-sentiment-timeseries`) (1009-realtime-multi-resolution)
 - Python 3.13 (for any helper scripts), Terraform HCL (infrastructure) + infracost CLI, make, jq (for parsing) (1020-validate-budget-60-month)
 - N/A (documentation output only) (1020-validate-budget-60-month)
-- Python 3.13 (backend Lambda), TypeScript 5 / React 18 (frontend) + FastAPI (backend routing), lightweight-charts 5.0.9 (charting), React Query (data fetching) (1035-ohlc-resolution-selector)
+- Python 3.13 (backend Lambda), TypeScript 5 / React 18 (frontend) + aws-lambda-powertools (backend routing), lightweight-charts 5.0.9 (charting), React Query (data fetching) (1035-ohlc-resolution-selector)
 - Session storage for resolution preference (browser-side only) (1035-ohlc-resolution-selector)
 - TypeScript 5.x (Next.js 14 frontend) + Zustand (state), fetch API, AbortController (1112-session-init-timeout)
 - localStorage (session persistence via Zustand persist) (1112-session-init-timeout)
@@ -51,30 +51,30 @@ Auto-generated from all feature plans. Last updated: 2025-11-26
 - N/A (configuration change) (1114-cors-api-gateway-fix)
 - TypeScript 5.x, React 18.x, Next.js 14.x (App Router) + zustand 5.x, @tanstack/react-query, next-auth (not used - custom auth), tailwindcss (1122-zustand-hydration-fix)
 - localStorage (zustand persist), React Query cache (1122-zustand-hydration-fix)
-- Python 3.13 + FastAPI, functools (stdlib), typing (stdlib) (1130-require-role-decorator)
+- Python 3.13 + aws-lambda-powertools, functools (stdlib), typing (stdlib) (1130-require-role-decorator)
 - N/A (roles read from JWT, no database access) (1130-require-role-decorator)
 - TypeScript 5.x (Next.js frontend) + Next.js, Zustand (state management) (1145-delete-cookies-ts)
 - N/A (removing storage mechanism) (1145-delete-cookies-ts)
-- Python 3.13 + FastAPI, PyJWT, boto3 (DynamoDB) (1146-remove-xuserid-fallback)
+- Python 3.13 + aws-lambda-powertools, PyJWT, boto3 (DynamoDB) (1146-remove-xuserid-fallback)
 - DynamoDB (users table, sessions) (1146-remove-xuserid-fallback)
 - Python 3.13 + PyJWT (existing), AWS Lambda, boto3 (1147-jwt-aud-nbf-validation)
 - N/A (stateless validation) (1147-jwt-aud-nbf-validation)
-- Python 3.13 + FastAPI, starlette (Response for cookies) (1158-csrf-double-submit)
+- Python 3.13 + aws-lambda-powertools, pydantic (cookie helpers) (1158-csrf-double-submit)
 - N/A (stateless tokens) (1158-csrf-double-submit)
 - Python 3.13 + pydantic (existing), boto3/DynamoDB (existing) (1162-user-model-federation)
 - DynamoDB (NoSQL - schema-flexible, no migration required) (1162-user-model-federation)
 - Python 3.13 + pydantic (BaseModel), threading (Lock), boto3 (DynamoDB sync) (1179-fix-quota-tracker-test-flaky)
 - DynamoDB (for persistence), in-memory cache (for fast access) (1179-fix-quota-tracker-test-flaky)
-- Python 3.13 + FastAPI, pydantic, boto3 (DynamoDB) (1181-oauth-auto-link)
+- Python 3.13 + aws-lambda-powertools, pydantic, boto3 (DynamoDB) (1181-oauth-auto-link)
 - DynamoDB (existing users table with `by_provider_sub` GSI from Feature 1180) (1181-oauth-auto-link)
-- Python 3.13 + FastAPI 0.127.0, boto3 1.42.17, pydantic 2.12.5, PyJWT 2.10.1, aws-xray-sdk 2.15.0 (1182-email-to-oauth-link)
+- Python 3.13 + aws-lambda-powertools 3.23.0, boto3 1.42.17, pydantic 2.12.5, PyJWT 2.10.1, aws-xray-sdk 2.15.0 (1182-email-to-oauth-link)
 - DynamoDB with composite keys (PK/SK pattern), GSI by_email for O(1) lookups (1182-email-to-oauth-link)
 - Python 3.13 + N/A (pure refactoring, no new deps) (1184-role-enum-centralization)
-- Python 3.13 + boto3==1.42.17, FastAPI==0.127.0, pydantic==2.12.5, aws-lambda-powertools==3.23.0 (1188-session-eviction-transact)
+- Python 3.13 + boto3==1.42.17, aws-lambda-powertools==3.23.0, pydantic==2.12.5 (1188-session-eviction-transact)
 - DynamoDB (single table: `${environment}-sentiment-users`) (1188-session-eviction-transact)
-- Python 3.13 (backend), TypeScript/Next.js (frontend) + FastAPI (Response headers), Next.js middleware (1190-security-headers-error-codes)
+- Python 3.13 (backend), TypeScript/Next.js (frontend) + aws-lambda-powertools (response headers), Next.js middleware (1190-security-headers-error-codes)
 - N/A (header-only change) (1190-security-headers-error-codes)
-- Python 3.13 (backend), TypeScript 5.x (frontend) + FastAPI, boto3 (DynamoDB), Zustand (state), BroadcastChannel API (1191-mid-session-tier-upgrade)
+- Python 3.13 (backend), TypeScript 5.x (frontend) + aws-lambda-powertools, boto3 (DynamoDB), Zustand (state), BroadcastChannel API (1191-mid-session-tier-upgrade)
 - DynamoDB (existing tables: Users, Sessions) (1191-mid-session-tier-upgrade)
 - Terraform 1.5+ with AWS Provider ~> 5.0 + AWS CloudFront, S3, IAM, CloudWatch RUM (1203-remove-cloudfront-module)
 - N/A (infrastructure deletion) (1203-remove-cloudfront-module)
@@ -86,7 +86,7 @@ Auto-generated from all feature plans. Last updated: 2025-11-26
 - Python 3.13 (pyproject.toml `requires-python = ">=3.13"`, Lambda base image `public.ecr.aws/lambda/python:3.13`) + aws-lambda-powertools 3.23.0 (routing, middleware), orjson (JSON serialization — new), pydantic 2.12.5 (validation), boto3 1.42.26 (AWS SDK), aws-xray-sdk 2.15.0 (tracing), awslambdaric (streaming — bundled in base image) (001-fastapi-purge)
 - DynamoDB (existing tables unchanged), S3 (model artifacts unchanged) (001-fastapi-purge)
 
-- **Python 3.13** with FastAPI, boto3, pydantic, aws-lambda-powertools, httpx
+- **Python 3.13** with aws-lambda-powertools, boto3, pydantic, httpx, orjson
 - **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, Amplify
 - **External APIs**: Tiingo (primary), Finnhub (secondary) for financial news sentiment
 - **Email**: SendGrid (100/day free tier)
@@ -424,17 +424,17 @@ vi.mock('@/stores/auth-store', () => ({
 
 ### Two-Lambda Architecture
 The project uses two Lambdas for different concerns:
-- **Dashboard Lambda**: REST APIs with BUFFERED invoke mode (Mangum adapter)
-- **SSE Lambda**: Streaming with RESPONSE_STREAM invoke mode (AWS Lambda Web Adapter)
+- **Dashboard Lambda**: REST APIs with BUFFERED invoke mode (Powertools resolver)
+- **SSE Lambda**: Streaming with RESPONSE_STREAM invoke mode (custom Runtime API bootstrap)
 
 ```text
 src/lambdas/
-├── dashboard/           # REST APIs (BUFFERED mode via Mangum)
-│   ├── handler.py       # FastAPI app wrapped with Mangum
+├── dashboard/           # REST APIs (BUFFERED mode via Powertools)
+│   ├── handler.py       # Powertools APIGatewayRestResolver
 │   └── ...
-└── sse_streaming/       # SSE streaming (RESPONSE_STREAM mode via Lambda Web Adapter)
-    ├── Dockerfile       # Docker image with Lambda Web Adapter
-    ├── handler.py       # FastAPI app with SSE endpoints
+└── sse_streaming/       # SSE streaming (RESPONSE_STREAM mode via custom bootstrap)
+    ├── Dockerfile       # Docker image with custom Runtime API bootstrap
+    ├── handler.py       # Generator-based SSE handler
     ├── connection.py    # Thread-safe ConnectionManager
     ├── stream.py        # SSE event generators
     ├── polling.py       # DynamoDB polling service
@@ -510,36 +510,23 @@ from src.lambdas.sse_streaming.models import (
 ```
 
 ### Testing SSE Endpoints
-**IMPORTANT**: FastAPI's TestClient hangs on SSE endpoints because streams never complete. Use these patterns:
+SSE handler tests use `make_function_url_event()` and `parse_streaming_response()` from `tests/conftest.py`:
 
 ```python
-# DON'T: Hit SSE endpoint directly (causes hanging)
-# response = client.get("/api/v2/stream")  # HANGS FOREVER!
+from src.lambdas.sse_streaming.handler import handler
+from tests.conftest import make_function_url_event, parse_streaming_response
 
-# DO: Test route registration instead
-from starlette.routing import Route
-from src.lambdas.sse_streaming.handler import app
-
-def test_global_stream_endpoint_registered():
-    stream_route = None
-    for route in app.routes:
-        if isinstance(route, Route) and route.path == "/api/v2/stream":
-            stream_route = route
-            break
-    assert stream_route is not None
-    assert "GET" in stream_route.methods
-
-# DO: Test non-streaming endpoints normally
 def test_stream_status():
-    client = TestClient(app)
-    response = client.get("/api/v2/stream/status")
-    assert response.status_code == 200
+    event = make_function_url_event(path="/api/v2/stream/status")
+    gen = handler(event, None)
+    metadata, body = parse_streaming_response(gen)
+    assert metadata["statusCode"] == 200
 
-# DO: Test error responses (non-streaming)
 def test_config_stream_requires_auth():
-    client = TestClient(app)
-    response = client.get("/api/v2/configurations/test/stream")
-    assert response.status_code == 401  # Returns immediately (not streaming)
+    event = make_function_url_event(path="/api/v2/configurations/test/stream")
+    gen = handler(event, None)
+    metadata, body = parse_streaming_response(gen)
+    assert metadata["statusCode"] == 401
 ```
 
 ### Frontend SSE Integration
