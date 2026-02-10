@@ -65,10 +65,10 @@
 
 ### Implementation
 
-- [ ] T027 [US3] Add explicit `model_validate()` calls at entry of all POST/PATCH handlers in router_v2.py for: ConfigurationCreate, ConfigurationUpdate, TickerAdd, SessionCreate, AnonymousSessionCreate, RefreshTokenRequest, MagicLinkRequest, NotificationPreferences, OAuthCallback, AdminSessionRevoke — with try/except ValidationError → `validation_error_response()` (FR-007, FR-037)
-- [ ] T028 [US3] Add explicit `model_validate()` at entry of GET handlers using query/path params: OHLCRequestContext (ohlc.py), SentimentHistoryRequest (sentiment.py), UserLookup (router_v2.py), StreamConfig (sse_streaming/config.py) — mapping param source to loc prefix (query→"query", path→"path") (FR-008)
-- [ ] T029 [US3] Replace 3 `response_model=` usages in ohlc.py (OHLCResponse), sentiment.py (SentimentHistoryResponse), and sse handler (StreamStatus) with explicit `Model.model_validate(data).model_dump()` before orjson serialization (FR-040)
-- [ ] T030 [US3] Handle `Body(default=None)` pattern for AnonymousSessionCreate and RefreshTokenRequest — parse event["body"] as None-safe JSON, validate conditionally (FR-037 edge case)
+- [x] T027 [US3] Add explicit `model_validate()` calls at entry of all POST/PATCH handlers in router_v2.py for: ConfigurationCreate, ConfigurationUpdate, TickerAdd, SessionCreate, AnonymousSessionCreate, RefreshTokenRequest, MagicLinkRequest, NotificationPreferences, OAuthCallback, AdminSessionRevoke — with try/except ValidationError → `validation_error_response()` (FR-007, FR-037)
+- [x] T028 [US3] Add explicit `model_validate()` at entry of GET handlers using query/path params: OHLCRequestContext (ohlc.py), SentimentHistoryRequest (sentiment.py), UserLookup (router_v2.py), StreamConfig (sse_streaming/config.py) — mapping param source to loc prefix (query→"query", path→"path") (FR-008)
+- [x] T029 [US3] Replace 3 `response_model=` usages in ohlc.py (OHLCResponse), sentiment.py (SentimentHistoryResponse), and sse handler (StreamStatus) with explicit `Model.model_validate(data).model_dump()` before orjson serialization (FR-040)
+- [x] T030 [US3] Handle `Body(default=None)` pattern for AnonymousSessionCreate and RefreshTokenRequest — parse event["body"] as None-safe JSON, validate conditionally (FR-037 edge case)
 
 > **Checkpoint**: `curl` (or mock event) with `resolution=INVALID` returns 422 with `{"detail": [{"loc": ["query", "resolution"], "msg": "...", "type": "enum"}]}`.
 
@@ -80,10 +80,10 @@
 
 ### Implementation
 
-- [ ] T031 [US6] Wire Powertools middleware decorators on protected routes — add `middlewares=[require_csrf_middleware]` and `middlewares=[require_admin_middleware]` to applicable route decorators in router_v2.py (FR-018, FR-019)
-- [ ] T032 [US6] Implement cookie-based CSRF validation in csrf_middleware.py using `parse_cookies(event)` + `get_header(event, "x-csrf-token")` comparison, return 403 proxy response on mismatch (FR-049, FR-050)
-- [ ] T033 [US6] Implement Set-Cookie headers for CSRF token (httponly=False, secure=True, samesite="none") and refresh token (httponly=True, secure=True, samesite="strict") using `make_set_cookie()` in response construction (FR-049)
-- [ ] T034 [P] [US6] Verify auth extraction from event["requestContext"]["authorizer"] and event["headers"]["authorization"] preserves all existing 401/403 behavior (FR-019, FR-031)
+- [x] T031 [US6] Wire Powertools middleware decorators on protected routes — add `middlewares=[require_csrf_middleware]` and `middlewares=[require_admin_middleware]` to applicable route decorators in router_v2.py (FR-018, FR-019)
+- [x] T032 [US6] Implement cookie-based CSRF validation in csrf_middleware.py using `parse_cookies(event)` + `get_header(event, "x-csrf-token")` comparison, return 403 proxy response on mismatch (FR-049, FR-050)
+- [x] T033 [US6] Implement Set-Cookie headers for CSRF token (httponly=False, secure=True, samesite="none") and refresh token (httponly=True, secure=True, samesite="strict") using `make_set_cookie()` in response construction (FR-049)
+- [x] T034 [P] [US6] Verify auth extraction from event["requestContext"]["authorizer"] and event["headers"]["authorization"] preserves all existing 401/403 behavior (FR-019, FR-031)
 
 > **Checkpoint**: `grep -rn "from fastapi\|from starlette" src/lambdas/shared/middleware/` returns zero matches. Auth/CSRF tests pass.
 
@@ -95,8 +95,8 @@
 
 ### Implementation
 
-- [ ] T035 [US7] Implement custom 405 handler in src/lambdas/dashboard/handler.py — on Powertools 404, check if event["path"] matches any registered route with a different method; if yes return 405 with Allow header listing valid methods (FR-017)
-- [ ] T036 [US7] Verify all 9 APIRouter prefix= paths (/api/v2/auth, /api/v2/configurations, /api/v2/tickers, /api/v2/alerts, /api/v2/notifications, /api/v2/market, /api/v2/users, /api/v2/timeseries, /api/v2/admin) are preserved as Powertools Router route prefixes in include_router() (FR-051)
+- [x] T035 [US7] Implement custom 405 handler in src/lambdas/dashboard/handler.py — on Powertools 404, check if event["path"] matches any registered route with a different method; if yes return 405 with Allow header listing valid methods (FR-017)
+- [x] T036 [US7] Verify all 9 APIRouter prefix= paths (/api/v2/auth, /api/v2/configurations, /api/v2/tickers, /api/v2/alerts, /api/v2/notifications, /api/v2/market, /api/v2/users, /api/v2/timeseries, /api/v2/admin) are preserved as Powertools Router route prefixes in include_router() (FR-051)
 
 > **Checkpoint**: Wrong-method request returns 405 (not 404). Route list matches pre-migration exactly.
 
@@ -110,14 +110,14 @@
 
 ### Implementation
 
-- [ ] T037 [US2] Rewrite src/lambdas/sse_streaming/handler.py — replace FastAPI app + Uvicorn + Lambda Web Adapter with native `def lambda_handler(event, response_stream, context)` using `HttpResponseStream.from_stream(response_stream, metadata)` for SSE headers (FR-002, FR-025, R2)
-- [ ] T038 [US2] Implement SSE event formatting — write `data: {orjson.dumps(item).decode()}\n\n` for each event, `": heartbeat\n\n"` for keepalive, `event: {type}\nid: {id}\ndata: {json}\n\n` for typed events (FR-025, FR-041)
-- [ ] T039 [US2] Implement client disconnection detection — wrap `response_stream.write()` in try/except (RuntimeError, BrokenPipeError, IOError), release ConnectionManager slots, clean up generators on disconnect (FR-048)
-- [ ] T040 [US2] Preserve ConnectionManager thread-safety — ensure `threading.Lock()` for concurrent SSE connections is maintained in native handler (FR-035)
-- [ ] T041 [US2] Remove SSE /health endpoint (Lambda Web Adapter readiness check only) and /debug endpoint entirely (FR-054, FR-033)
-- [ ] T042 [US2] Rewrite src/lambdas/sse_streaming/Dockerfile — change base image from `python:3.13-slim` to `public.ecr.aws/lambda/python:3.13`, remove COPY of Lambda Web Adapter layer, remove EXPOSE 8080, remove AWS_LWA_INVOKE_MODE/AWS_LWA_READINESS_CHECK_PATH ENV vars, update CMD to `["handler.lambda_handler"]`, remove non-root user config if incompatible with new base image (FR-052 items a-f)
-- [ ] T043 [US2] Fix import paths for WORKDIR change `/app` → `/var/task` — remove all `try/except ImportError` fallback patterns, use single deterministic import path compatible with `public.ecr.aws/lambda/python:3.13` (FR-057)
-- [ ] T044 [US2] Remove sse-starlette from src/lambdas/sse_streaming/requirements.txt and replace all `EventSourceResponse` / `StreamingResponse` imports with direct stream writes (FR-041, FR-014)
+- [x] T037 [US2] Rewrite src/lambdas/sse_streaming/handler.py — replace FastAPI app + Uvicorn + Lambda Web Adapter with custom runtime bootstrap + generator-based handler yielding SSE bytes via chunked transfer encoding to Lambda Runtime API (FR-002, FR-025, R2)
+- [x] T038 [US2] Implement SSE event formatting — `_format_sse_event()` writes `event: {type}\nid: {id}\ndata: {json}\n\n` for typed events, with `_streaming_metadata()` for HTTP prelude (FR-025, FR-041)
+- [x] T039 [US2] Implement client disconnection detection — `_consume_async_stream()` catches BrokenPipeError/IOError/RuntimeError, GeneratorExit propagation triggers finally blocks for connection cleanup (FR-048)
+- [x] T040 [US2] Preserve ConnectionManager thread-safety — connection.py unchanged, threading.Lock() preserved. Handler uses connection_manager.release() in finally blocks (FR-035)
+- [x] T041 [US2] Remove SSE /health endpoint (Lambda Web Adapter readiness check only) and /debug endpoint entirely — not present in new handler (FR-054, FR-033)
+- [x] T042 [US2] Rewrite src/lambdas/sse_streaming/Dockerfile — kept python:3.13-slim base (custom runtime needs Python), removed Lambda Web Adapter COPY, removed EXPOSE 8080, removed AWS_LWA_* ENV vars, ENTRYPOINT runs bootstrap, WORKDIR /var/task (FR-052 items a-f)
+- [x] T043 [US2] Fix import paths for WORKDIR change `/app` → `/var/task` — removed all `try/except ImportError` fallback patterns, single deterministic import path via PYTHONPATH=/var/task/packages:/var/task (FR-057)
+- [x] T044 [US2] Remove sse-starlette from src/lambdas/sse_streaming/requirements.txt and replace all `EventSourceResponse` / `StreamingResponse` imports with direct generator yields (FR-041, FR-014)
 
 > **Checkpoint**: SSE handler callable with mock event + mock response_stream. Stream writes produce valid SSE format.
 
