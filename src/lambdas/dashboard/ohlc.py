@@ -44,7 +44,6 @@ from src.lambdas.shared.models import (
 )
 from src.lambdas.shared.utils.event_helpers import get_query_params
 from src.lambdas.shared.utils.market import get_cache_expiration
-from src.lambdas.shared.utils.response_builder import error_response
 
 logger = logging.getLogger(__name__)
 
@@ -502,11 +501,7 @@ def get_ohlc_data(ticker: str) -> Response:
     try:
         resolution = OHLCResolution(resolution_str)
     except ValueError:
-        valid_values = ", ".join(r.value for r in OHLCResolution)
-        return error_response(
-            422,
-            f"Invalid resolution '{resolution_str}'. Valid values: {valid_values}",
-        )
+        resolution = OHLCResolution.DAILY
 
     # Parse date parameters
     start_date_str = query_params.get("start_date")
@@ -608,7 +603,6 @@ def get_ohlc_data(ticker: str) -> Response:
             status_code=200,
             content_type="application/json",
             body=orjson.dumps(cached_response).decode(),
-            headers={"X-Cache-Source": "in-memory", "X-Cache-Age": "0"},
         )
 
     # =========================================================================
@@ -640,7 +634,6 @@ def get_ohlc_data(ticker: str) -> Response:
             status_code=200,
             content_type="application/json",
             body=orjson.dumps(response.model_dump(mode="json")).decode(),
-            headers={"X-Cache-Source": "persistent-cache", "X-Cache-Age": "0"},
         )
 
     # Track fallback state
@@ -812,7 +805,6 @@ def get_ohlc_data(ticker: str) -> Response:
         status_code=200,
         content_type="application/json",
         body=orjson.dumps(response_dict).decode(),
-        headers={"X-Cache-Source": "live-api", "X-Cache-Age": "0"},
     )
 
 

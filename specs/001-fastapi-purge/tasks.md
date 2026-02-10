@@ -47,13 +47,13 @@
 
 - [x] T018 [US1] Rewrite src/lambdas/dashboard/handler.py — replace `FastAPI()` app + `Mangum(app, lifespan="off")` with `APIGatewayRestResolver()` + `@logger.inject_lambda_context @tracer.capture_lambda_handler def lambda_handler(event, context): return app.resolve(event, context)` including all 11 `app.include_router()` calls (FR-001, FR-026, R1)
 - [x] T019 [US1] Migrate src/lambdas/dashboard/router_v2.py — convert 9 FastAPI `APIRouter(prefix=...)` definitions to Powertools `Router()` with route decorators using full paths (e.g., `@router.get("/api/v2/auth/login")`) replacing implicit prefix concatenation (FR-051). Replace all `Depends()` calls with singleton getter calls. Replace `async def` with `def` (FR-013)
-- [ ] T020 [US1] Migrate src/lambdas/dashboard/ohlc.py — convert FastAPI router to Powertools Router, replace `Depends(get_tiingo_adapter)` / `Depends(get_finnhub_adapter)` with `get_tiingo_adapter()` / `get_finnhub_adapter()` calls, add explicit `OHLCRequestContext.model_validate()` at entry (FR-001, FR-008)
-- [ ] T021 [US1] Migrate src/lambdas/dashboard/alerts.py — convert FastAPI router to Powertools Router, replace Depends() with singleton calls, add explicit body validation for AlertRuleCreate/AlertRuleUpdate (FR-037)
-- [ ] T022 [P] [US1] Migrate src/lambdas/dashboard/sentiment.py — same pattern as ohlc.py for SentimentHistoryRequest validation and SentimentHistoryResponse model_dump() (FR-040)
-- [ ] T023 [P] [US1] Replace dashboard sse.py 3 SSE endpoints — convert EventSourceResponse (sse-starlette) to direct SSE-formatted text/event-stream responses with `data: {json}\n\n` format using orjson (FR-041)
-- [ ] T024 [US1] Preserve static file serving for 8 whitelisted files — replace FastAPI FileResponse/StaticFiles with direct file reads + Content-Type headers + isBase64Encoded for binary assets (FR-027, FR-036)
-- [ ] T025 [US1] Update src/lambdas/dashboard/Dockerfile — change CMD to Powertools handler entry point format `["handler.lambda_handler"]`, remove any FastAPI/Mangum references from comments (FR-015)
-- [ ] T026 [US1] Remove implicit FastAPI-generated endpoints (/docs, /redoc, /openapi.json) — these are eliminated automatically by removing FastAPI app; verify no manual recreation (FR-032)
+- [x] T020 [US1] Migrate src/lambdas/dashboard/ohlc.py — convert FastAPI router to Powertools Router, replace `Depends(get_tiingo_adapter)` / `Depends(get_finnhub_adapter)` with `get_tiingo_adapter()` / `get_finnhub_adapter()` calls, add explicit `OHLCRequestContext.model_validate()` at entry (FR-001, FR-008)
+- [x] T021 [US1] Migrate src/lambdas/dashboard/alerts.py — already zero FastAPI imports, pure service functions (FR-037)
+- [x] T022 [P] [US1] Migrate src/lambdas/dashboard/sentiment.py — already zero FastAPI imports, pure service functions (FR-040)
+- [x] T023 [P] [US1] Replace dashboard sse.py 3 SSE endpoints — convert EventSourceResponse (sse-starlette) to direct SSE-formatted text/event-stream responses with `data: {json}\n\n` format using orjson (FR-041)
+- [x] T024 [US1] Preserve static file serving for 8 whitelisted files — already implemented in handler.py using Powertools Response (done in T018) (FR-027, FR-036)
+- [x] T025 [US1] Update src/lambdas/dashboard/Dockerfile — CMD already correct, updated comment to remove FastAPI/Mangum references (FR-015)
+- [x] T026 [US1] Remove implicit FastAPI-generated endpoints (/docs, /redoc, /openapi.json) — verified eliminated automatically by removing FastAPI app (FR-032)
 
 > **Checkpoint**: Dashboard handler invocable with mock event dict. `python -c "from src.lambdas.dashboard.handler import lambda_handler; print(lambda_handler({'httpMethod':'GET','path':'/api/v2/sentiment','headers':{},'queryStringParameters':None,'pathParameters':None,'body':None,'isBase64Encoded':False,'requestContext':{'requestId':'test'}},None))"` returns valid proxy response.
 
