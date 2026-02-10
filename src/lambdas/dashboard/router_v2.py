@@ -2115,12 +2115,7 @@ def get_current_user():
 
 
 def include_routers(app):
-    """Include all v2 routers in the Powertools app.
-
-    Note: ohlc_module.router and sse_module.router are still FastAPI-based
-    and will be migrated in T020 and T023 respectively. They are temporarily
-    excluded until their migration is complete.
-    """
+    """Include all v2 routers in the Powertools app."""
     app.include_router(auth_router)
     app.include_router(config_router)
     app.include_router(ticker_router)
@@ -2133,4 +2128,11 @@ def include_routers(app):
     app.include_router(admin_router)
     # Feature 1009: Multi-resolution sentiment time-series
     app.include_router(timeseries_router)
-    # NOTE: ohlc_module.router and sse_module.router excluded until T020/T023
+    # OHLC router (migrated to Powertools in T020)
+    from src.lambdas.dashboard.ohlc import router as ohlc_router
+
+    app.include_router(ohlc_router)
+    # SSE router (migrated to Powertools in T023)
+    from src.lambdas.dashboard.sse import router as sse_router
+
+    app.include_router(sse_router)
