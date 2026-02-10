@@ -1,0 +1,169 @@
+#!/usr/bin/env python3
+"""Custom runtime bootstrap for Lambda RESPONSE_STREAM mode.
+
+Polls the Lambda Runtime API for invocation events, calls the handler,
+and streams yielded bytes back via chunked transfer encoding.
+
+The handler returns a generator that yields bytes. The first yield contains
+the HTTP metadata prelude (JSON + 8 null bytes) for Lambda Function URL
+integration. Subsequent yields are SSE event chunks.
+
+Protocol:
+    POST /runtime/invocation/{id}/response
+    Headers:
+        Lambda-Runtime-Function-Response-Mode: streaming
+        Transfer-Encoding: chunked
+        Content-Type: application/vnd.awslambda.http-integration-response
+
+Reference: https://docs.aws.amazon.com/lambda/latest/dg/runtimes-custom.html
+"""
+
+import json
+import os
+import sys
+import traceback
+from http.client import HTTPConnection
+
+# Set up paths before importing handler
+LAMBDA_TASK_ROOT = os.environ.get("LAMBDA_TASK_ROOT", "/var/task")
+sys.path.insert(0, LAMBDA_TASK_ROOT)
+sys.path.insert(0, os.path.join(LAMBDA_TASK_ROOT, "packages"))
+
+# Lambda Runtime API endpoint
+RUNTIME_API = os.environ["AWS_LAMBDA_RUNTIME_API"]
+
+# Import handler after path setup
+from handler import handler  # noqa: E402
+
+
+def _get_next_invocation():
+    """Poll Lambda Runtime API for the next invocation event.
+
+    Returns:
+        Tuple of (event_data dict, invocation_id str)
+    """
+    conn = HTTPConnection(RUNTIME_API)
+    conn.request("GET", "/2018-06-01/runtime/invocation/next")
+    response = conn.getresponse()
+    invocation_id = response.getheader("Lambda-Runtime-Aws-Request-Id")
+    event_data = json.loads(response.read().decode("utf-8"))
+    conn.close()
+    return event_data, invocation_id
+
+
+def _send_streaming_response(invocation_id, data_generator):
+    """Stream handler output to Lambda Runtime API.
+
+    Sends response with streaming headers and chunked transfer encoding.
+    Each chunk from the generator is sent as-is (handler provides metadata
+    prelude as first chunk).
+
+    Args:
+        invocation_id: Lambda invocation request ID
+        data_generator: Generator yielding bytes chunks
+    """
+    conn = HTTPConnection(RUNTIME_API)
+    conn.putrequest(
+        "POST",
+        f"/2018-06-01/runtime/invocation/{invocation_id}/response",
+    )
+    conn.putheader("Lambda-Runtime-Function-Response-Mode", "streaming")
+    conn.putheader("Transfer-Encoding", "chunked")
+    conn.putheader(
+        "Content-Type", "application/vnd.awslambda.http-integration-response"
+    )
+    conn.endheaders()
+
+    try:
+        for chunk in data_generator:
+            if chunk:
+                # HTTP/1.1 chunked transfer encoding: size in hex, CRLF, data, CRLF
+                chunk_header = f"{len(chunk):X}\r\n".encode("ascii")
+                conn.send(chunk_header + chunk + b"\r\n")
+
+        # Send terminating chunk (0-length)
+        conn.send(b"0\r\n\r\n")
+    except Exception:
+        # If streaming fails mid-response, we can't change the status code
+        # Log and let the connection close
+        traceback.print_exc()
+    finally:
+        try:
+            conn.getresponse()
+        except Exception as exc:
+            print(f"DEBUG: getresponse() cleanup failed: {exc}", file=sys.stderr)
+        conn.close()
+
+
+def _send_error(invocation_id, error_type, error_message):
+    """Report an invocation error to the Lambda Runtime API.
+
+    Args:
+        invocation_id: Lambda invocation request ID
+        error_type: Error type string
+        error_message: Error message string
+    """
+    conn = HTTPConnection(RUNTIME_API)
+    error_body = json.dumps(
+        {
+            "errorType": error_type,
+            "errorMessage": error_message,
+        }
+    ).encode("utf-8")
+    conn.request(
+        "POST",
+        f"/2018-06-01/runtime/invocation/{invocation_id}/error",
+        body=error_body,
+        headers={
+            "Content-Type": "application/json",
+            "Lambda-Runtime-Function-Error-Type": "Runtime.HandlerError",
+        },
+    )
+    conn.getresponse()
+    conn.close()
+
+
+def _send_init_error(error_type, error_message):
+    """Report an initialization error to the Lambda Runtime API.
+
+    Args:
+        error_type: Error type string
+        error_message: Error message string
+    """
+    conn = HTTPConnection(RUNTIME_API)
+    error_body = json.dumps(
+        {
+            "errorType": error_type,
+            "errorMessage": error_message,
+        }
+    ).encode("utf-8")
+    conn.request(
+        "POST",
+        "/2018-06-01/runtime/init/error",
+        body=error_body,
+        headers={
+            "Content-Type": "application/json",
+            "Lambda-Runtime-Function-Error-Type": "Runtime.InitError",
+        },
+    )
+    conn.getresponse()
+    conn.close()
+
+
+# Main event loop
+if __name__ == "__main__":
+    while True:
+        try:
+            event_data, invocation_id = _get_next_invocation()
+        except Exception as e:
+            print(f"ERROR: Failed to get next invocation: {e}", file=sys.stderr)
+            traceback.print_exc()
+            continue
+
+        try:
+            result = handler(event_data, None)
+            _send_streaming_response(invocation_id, result)
+        except Exception as e:
+            print(f"ERROR: Handler failed: {e}", file=sys.stderr)
+            traceback.print_exc()
+            _send_error(invocation_id, type(e).__name__, str(e))
