@@ -8,15 +8,15 @@
 
 > Purpose: Install new dependencies, create shared utilities, establish test fixtures that all subsequent phases depend on.
 
-- [ ] T001 Add orjson dependency to pyproject.toml `[project.optional-dependencies]` and src/lambdas/dashboard/requirements.txt and src/lambdas/sse_streaming/requirements.txt (FR-011, FR-012, R3)
-- [ ] T002 Create src/lambdas/shared/utils/event_helpers.py with `get_header(event, name, default)` for case-insensitive header lookup (FR-061, R7) and `get_query_params(event)` / `get_path_params(event)` returning empty dict on None (FR-043)
-- [ ] T003 Create src/lambdas/shared/utils/url_decode.py with `decode_path_param(value)` using `urllib.parse.unquote()` for URL-encoded path parameters like BRK%2EB → BRK.B (FR-044)
-- [ ] T004 Create src/lambdas/shared/utils/cookie_helpers.py with `parse_cookies(event)` and `make_set_cookie(name, value, httponly, secure, samesite, max_age, path)` using stdlib `http.cookies.SimpleCookie` (FR-049, FR-050, R5)
-- [ ] T005 Create src/lambdas/shared/utils/response_builder.py with `json_response(status_code, body, headers=None)` using orjson.dumps().decode() and `error_response(status_code, detail)` and `validation_error_response(pydantic_error)` producing FastAPI-parity 422 format (FR-005, FR-009, FR-011)
-- [ ] T006 Create src/lambdas/shared/utils/event_validator.py with `validate_apigw_event(event)` checking for httpMethod, resource, requestContext keys; raise on unrecognized shapes (FR-045)
-- [ ] T007 Create src/lambdas/shared/utils/payload_guard.py with `check_response_size(body_str)` detecting >6MB responses before return, returning 502 with ERROR log (FR-046)
-- [ ] T008 Add `make_event()` mock Lambda event factory fixture to tests/conftest.py supporting method, path, path_params, query_params, headers, body, cookies parameters per contracts/mock-event-factory.yaml (FR-058)
-- [ ] T009 Add `mock_lambda_context` fixture to tests/conftest.py returning a mock object with function_name, memory_limit_in_mb, invoked_function_arn, aws_request_id attributes
+- [x] T001 Add orjson dependency to pyproject.toml `[project.optional-dependencies]` and src/lambdas/dashboard/requirements.txt and src/lambdas/sse_streaming/requirements.txt (FR-011, FR-012, R3)
+- [x] T002 Create src/lambdas/shared/utils/event_helpers.py with `get_header(event, name, default)` for case-insensitive header lookup (FR-061, R7) and `get_query_params(event)` / `get_path_params(event)` returning empty dict on None (FR-043)
+- [x] T003 Create src/lambdas/shared/utils/url_decode.py with `decode_path_param(value)` using `urllib.parse.unquote()` for URL-encoded path parameters like BRK%2EB → BRK.B (FR-044)
+- [x] T004 Create src/lambdas/shared/utils/cookie_helpers.py with `parse_cookies(event)` and `make_set_cookie(name, value, httponly, secure, samesite, max_age, path)` using stdlib `http.cookies.SimpleCookie` (FR-049, FR-050, R5)
+- [x] T005 Create src/lambdas/shared/utils/response_builder.py with `json_response(status_code, body, headers=None)` using orjson.dumps().decode() and `error_response(status_code, detail)` and `validation_error_response(pydantic_error)` producing FastAPI-parity 422 format (FR-005, FR-009, FR-011)
+- [x] T006 Create src/lambdas/shared/utils/event_validator.py with `validate_apigw_event(event)` checking for httpMethod, resource, requestContext keys; raise on unrecognized shapes (FR-045)
+- [x] T007 Create src/lambdas/shared/utils/payload_guard.py with `check_response_size(body_str)` detecting >6MB responses before return, returning 502 with ERROR log (FR-046)
+- [x] T008 Add `make_event()` mock Lambda event factory fixture to tests/conftest.py supporting method, path, path_params, query_params, headers, body, cookies parameters per contracts/mock-event-factory.yaml (FR-058)
+- [x] T009 Add `mock_lambda_context` fixture to tests/conftest.py returning a mock object with function_name, memory_limit_in_mb, invoked_function_arn, aws_request_id attributes
 
 > **Checkpoint**: `pytest tests/unit/ -k "test_event_helpers or test_cookie or test_response_builder"` passes (utilities are independently testable).
 
