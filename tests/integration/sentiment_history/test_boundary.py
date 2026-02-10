@@ -14,23 +14,13 @@ For On-Call Engineers:
     3. Sentiment label threshold logic (0.33, -0.33)
 """
 
+import json
 from datetime import date, timedelta
 
 import pytest
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
-from src.lambdas.dashboard.ohlc import router
-
-
-@pytest.fixture
-def test_client():
-    """Create test client for sentiment history endpoint."""
-    app = FastAPI()
-    app.include_router(router)
-
-    with TestClient(app) as client:
-        yield client
+from src.lambdas.dashboard.handler import lambda_handler
+from tests.conftest import make_event
 
 
 @pytest.fixture
@@ -45,67 +35,84 @@ class TestSentimentTickerBoundaries:
     @pytest.mark.sentiment_history
     @pytest.mark.boundary
     def test_sentiment_ticker_1_char_valid(
-        self, test_client, auth_headers, sentiment_validator
+        self, mock_lambda_context, auth_headers, sentiment_validator
     ):
         """Sentiment accepts 1-character ticker (minimum length)."""
-        response = test_client.get(
-            "/api/v2/tickers/A/sentiment/history", headers=auth_headers
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/A/sentiment/history",
+            headers=auth_headers,
         )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
         assert data["ticker"] == "A"
         sentiment_validator.assert_valid(data)
 
     @pytest.mark.sentiment_history
     @pytest.mark.boundary
     def test_sentiment_ticker_5_chars_valid(
-        self, test_client, auth_headers, sentiment_validator
+        self, mock_lambda_context, auth_headers, sentiment_validator
     ):
         """Sentiment accepts 5-character ticker (maximum length)."""
-        response = test_client.get(
-            "/api/v2/tickers/TSLA/sentiment/history", headers=auth_headers
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/TSLA/sentiment/history",
+            headers=auth_headers,
         )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
         assert data["ticker"] == "TSLA"
         sentiment_validator.assert_valid(data)
 
     @pytest.mark.sentiment_history
     @pytest.mark.boundary
-    def test_sentiment_ticker_6_chars_invalid(self, test_client, auth_headers):
+    def test_sentiment_ticker_6_chars_invalid(self, mock_lambda_context, auth_headers):
         """Sentiment rejects 6-character ticker (exceeds maximum)."""
-        response = test_client.get(
-            "/api/v2/tickers/ABCDEF/sentiment/history", headers=auth_headers
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/ABCDEF/sentiment/history",
+            headers=auth_headers,
         )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 400
-        assert "Invalid ticker symbol" in response.json()["detail"]
+        assert response["statusCode"] == 400
+        assert "Invalid ticker symbol" in json.loads(response["body"])["detail"]
 
     @pytest.mark.sentiment_history
     @pytest.mark.boundary
-    def test_sentiment_ticker_with_digits_invalid(self, test_client, auth_headers):
+    def test_sentiment_ticker_with_digits_invalid(
+        self, mock_lambda_context, auth_headers
+    ):
         """Sentiment rejects ticker containing digits."""
-        response = test_client.get(
-            "/api/v2/tickers/ABC1/sentiment/history", headers=auth_headers
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/ABC1/sentiment/history",
+            headers=auth_headers,
         )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 400
-        assert "Invalid ticker symbol" in response.json()["detail"]
+        assert response["statusCode"] == 400
+        assert "Invalid ticker symbol" in json.loads(response["body"])["detail"]
 
     @pytest.mark.sentiment_history
     @pytest.mark.boundary
     def test_sentiment_ticker_mixed_case_normalized(
-        self, test_client, auth_headers, sentiment_validator
+        self, mock_lambda_context, auth_headers, sentiment_validator
     ):
         """Sentiment normalizes mixed case ticker to uppercase."""
-        response = test_client.get(
-            "/api/v2/tickers/MsFt/sentiment/history", headers=auth_headers
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/MsFt/sentiment/history",
+            headers=auth_headers,
         )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
         assert data["ticker"] == "MSFT"
         sentiment_validator.assert_valid(data)
 
@@ -116,17 +123,20 @@ class TestSentimentDateBoundaries:
     @pytest.mark.sentiment_history
     @pytest.mark.boundary
     def test_sentiment_single_day_range(
-        self, test_client, auth_headers, sentiment_validator
+        self, mock_lambda_context, auth_headers, sentiment_validator
     ):
         """Sentiment accepts single-day range (start == end)."""
         today = date.today()
-        response = test_client.get(
-            f"/api/v2/tickers/AAPL/sentiment/history?start_date={today}&end_date={today}",
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/AAPL/sentiment/history",
+            query_params={"start_date": str(today), "end_date": str(today)},
             headers=auth_headers,
         )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
         sentiment_validator.assert_valid(data)
         # Single day should have exactly 1 data point
         assert data["count"] == 1
@@ -134,37 +144,46 @@ class TestSentimentDateBoundaries:
     @pytest.mark.sentiment_history
     @pytest.mark.boundary
     def test_sentiment_start_date_after_end_date_invalid(
-        self, test_client, auth_headers
+        self, mock_lambda_context, auth_headers
     ):
         """Sentiment rejects when start_date > end_date."""
         today = date.today()
         yesterday = today - timedelta(days=1)
 
-        response = test_client.get(
-            f"/api/v2/tickers/AAPL/sentiment/history?start_date={today}&end_date={yesterday}",
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/AAPL/sentiment/history",
+            query_params={"start_date": str(today), "end_date": str(yesterday)},
             headers=auth_headers,
         )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 400
-        assert "start_date must be before end_date" in response.json()["detail"]
+        assert response["statusCode"] == 400
+        assert (
+            "start_date must be before end_date"
+            in json.loads(response["body"])["detail"]
+        )
 
     @pytest.mark.sentiment_history
     @pytest.mark.boundary
     def test_sentiment_future_end_date(
-        self, test_client, auth_headers, sentiment_validator
+        self, mock_lambda_context, auth_headers, sentiment_validator
     ):
         """Sentiment handles future end_date gracefully."""
         future = date.today() + timedelta(days=30)
         start = date.today() - timedelta(days=7)
 
-        response = test_client.get(
-            f"/api/v2/tickers/MSFT/sentiment/history?start_date={start}&end_date={future}",
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/MSFT/sentiment/history",
+            query_params={"start_date": str(start), "end_date": str(future)},
             headers=auth_headers,
         )
+        response = lambda_handler(event, mock_lambda_context)
 
         # Should succeed - sentiment generation creates data for all requested days
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
         sentiment_validator.assert_valid(data)
 
 
@@ -173,36 +192,41 @@ class TestSentimentAuthBoundaries:
 
     @pytest.mark.sentiment_history
     @pytest.mark.boundary
-    def test_sentiment_missing_auth_header(self, test_client):
+    def test_sentiment_missing_auth_header(self, mock_lambda_context):
         """Sentiment returns 401 when Authorization header is missing."""
-        response = test_client.get("/api/v2/tickers/AAPL/sentiment/history")
+        event = make_event(method="GET", path="/api/v2/tickers/AAPL/sentiment/history")
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 401
-        assert "Missing user identification" in response.json()["detail"]
+        assert response["statusCode"] == 401
+        assert "Missing user identification" in json.loads(response["body"])["detail"]
 
     @pytest.mark.sentiment_history
     @pytest.mark.boundary
-    def test_sentiment_empty_bearer_token(self, test_client):
+    def test_sentiment_empty_bearer_token(self, mock_lambda_context):
         """Sentiment returns 401 when Bearer token is empty."""
-        response = test_client.get(
-            "/api/v2/tickers/AAPL/sentiment/history",
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/AAPL/sentiment/history",
             headers={"Authorization": "Bearer "},
         )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 401
-        assert "Missing user identification" in response.json()["detail"]
+        assert response["statusCode"] == 401
+        assert "Missing user identification" in json.loads(response["body"])["detail"]
 
     @pytest.mark.sentiment_history
     @pytest.mark.boundary
-    def test_sentiment_x_user_id_rejected(self, test_client):
+    def test_sentiment_x_user_id_rejected(self, mock_lambda_context):
         """Feature 1146: X-User-ID header is rejected (security fix)."""
-        response = test_client.get(
-            "/api/v2/tickers/AAPL/sentiment/history",
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/AAPL/sentiment/history",
             headers={"X-User-ID": "550e8400-e29b-41d4-a716-446655440000"},
         )
+        response = lambda_handler(event, mock_lambda_context)
 
         # X-User-ID alone should return 401 (not authenticated)
-        assert response.status_code == 401
+        assert response["statusCode"] == 401
 
 
 class TestSentimentSourceBoundaries:
@@ -210,30 +234,38 @@ class TestSentimentSourceBoundaries:
 
     @pytest.mark.sentiment_history
     @pytest.mark.boundary
-    def test_sentiment_invalid_source(self, test_client, auth_headers):
-        """Sentiment rejects invalid source value."""
-        response = test_client.get(
-            "/api/v2/tickers/AAPL/sentiment/history?source=invalid_source",
+    def test_sentiment_invalid_source(self, mock_lambda_context, auth_headers):
+        """Sentiment falls back to default source for invalid source value."""
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/AAPL/sentiment/history",
+            query_params={"source": "invalid_source"},
             headers=auth_headers,
         )
+        response = lambda_handler(event, mock_lambda_context)
 
-        # FastAPI validation should reject invalid enum
-        assert response.status_code == 422
+        # Powertools handler falls back to default source (aggregated) for invalid enum
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
+        assert data["source"] == "aggregated"  # Default fallback
 
     @pytest.mark.sentiment_history
     @pytest.mark.boundary
     @pytest.mark.parametrize("source", ["tiingo", "finnhub", "our_model", "aggregated"])
     def test_sentiment_all_sources_valid(
-        self, test_client, auth_headers, sentiment_validator, source
+        self, mock_lambda_context, auth_headers, sentiment_validator, source
     ):
         """Sentiment accepts all valid source values."""
-        response = test_client.get(
-            f"/api/v2/tickers/NVDA/sentiment/history?source={source}",
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/NVDA/sentiment/history",
+            query_params={"source": source},
             headers=auth_headers,
         )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
         sentiment_validator.assert_valid(data)
         assert data["source"] == source
 
@@ -243,29 +275,36 @@ class TestSentimentTimeRangeBoundaries:
 
     @pytest.mark.sentiment_history
     @pytest.mark.boundary
-    def test_sentiment_invalid_time_range(self, test_client, auth_headers):
-        """Sentiment rejects invalid time range value."""
-        response = test_client.get(
-            "/api/v2/tickers/AAPL/sentiment/history?range=2W", headers=auth_headers
+    def test_sentiment_invalid_time_range(self, mock_lambda_context, auth_headers):
+        """Sentiment falls back to default range for invalid time range value."""
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/AAPL/sentiment/history",
+            query_params={"range": "2W"},
+            headers=auth_headers,
         )
+        response = lambda_handler(event, mock_lambda_context)
 
-        # FastAPI validation should reject invalid enum
-        assert response.status_code == 422
+        # Powertools handler falls back to default range (1M) for invalid enum
+        assert response["statusCode"] == 200
 
     @pytest.mark.sentiment_history
     @pytest.mark.boundary
     @pytest.mark.parametrize("time_range", ["1W", "1M", "3M", "6M", "1Y"])
     def test_sentiment_all_time_ranges_valid(
-        self, test_client, auth_headers, sentiment_validator, time_range
+        self, mock_lambda_context, auth_headers, sentiment_validator, time_range
     ):
         """Sentiment accepts all valid time range values."""
-        response = test_client.get(
-            f"/api/v2/tickers/GOOGL/sentiment/history?range={time_range}",
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/GOOGL/sentiment/history",
+            query_params={"range": time_range},
             headers=auth_headers,
         )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
         sentiment_validator.assert_valid(data)
 
 
@@ -273,23 +312,27 @@ class TestSentimentLabelThresholds:
     """US4: Sentiment label threshold boundary testing.
 
     Tests verify that labels are correctly assigned at exact threshold values:
-    - score >= 0.33 → positive
-    - score <= -0.33 → negative
-    - -0.33 < score < 0.33 → neutral
+    - score >= 0.33 -> positive
+    - score <= -0.33 -> negative
+    - -0.33 < score < 0.33 -> neutral
     """
 
     @pytest.mark.sentiment_history
     @pytest.mark.boundary
     def test_sentiment_labels_follow_threshold_rules(
-        self, test_client, auth_headers, sentiment_validator
+        self, mock_lambda_context, auth_headers, sentiment_validator
     ):
         """Verify all sentiment labels follow threshold rules."""
-        response = test_client.get(
-            "/api/v2/tickers/AAPL/sentiment/history?range=1M", headers=auth_headers
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/AAPL/sentiment/history",
+            query_params={"range": "1M"},
+            headers=auth_headers,
         )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
         sentiment_validator.assert_valid(data)
 
         # Verify every point's label matches its score
@@ -312,14 +355,18 @@ class TestSentimentLabelThresholds:
 
     @pytest.mark.sentiment_history
     @pytest.mark.boundary
-    def test_sentiment_score_bounds(self, test_client, auth_headers):
+    def test_sentiment_score_bounds(self, mock_lambda_context, auth_headers):
         """All sentiment scores are within [-1.0, 1.0] bounds."""
-        response = test_client.get(
-            "/api/v2/tickers/TSLA/sentiment/history?range=3M", headers=auth_headers
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/TSLA/sentiment/history",
+            query_params={"range": "3M"},
+            headers=auth_headers,
         )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
 
         for point in data["history"]:
             score = point["score"]
@@ -327,14 +374,18 @@ class TestSentimentLabelThresholds:
 
     @pytest.mark.sentiment_history
     @pytest.mark.boundary
-    def test_sentiment_confidence_bounds(self, test_client, auth_headers):
+    def test_sentiment_confidence_bounds(self, mock_lambda_context, auth_headers):
         """All confidence values are within [0.0, 1.0] bounds."""
-        response = test_client.get(
-            "/api/v2/tickers/META/sentiment/history?range=1M", headers=auth_headers
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/META/sentiment/history",
+            query_params={"range": "1M"},
+            headers=auth_headers,
         )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
 
         for point in data["history"]:
             if "confidence" in point and point["confidence"] is not None:

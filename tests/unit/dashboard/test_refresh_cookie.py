@@ -1,58 +1,41 @@
 """Unit tests for Feature 1160: Refresh endpoint cookie extraction.
 
 Verifies that the refresh endpoint extracts tokens from httpOnly cookies
-and falls back to request body for backwards compatibility.
+in the Lambda event and creates correct Set-Cookie header values.
 """
-
-from unittest.mock import MagicMock
-
-from fastapi import Request
-from fastapi.responses import JSONResponse
 
 from src.lambdas.dashboard.router_v2 import (
     REFRESH_TOKEN_COOKIE_NAME,
-    extract_refresh_token_from_cookie,
-    set_refresh_token_cookie,
+    _extract_refresh_token_from_event,
+    _make_refresh_token_cookie,
 )
 
 
-class TestExtractRefreshTokenFromCookie:
-    """Test refresh token extraction from httpOnly cookie."""
+class TestExtractRefreshTokenFromEvent:
+    """Test refresh token extraction from httpOnly cookie in Lambda event."""
 
     def test_extracts_token_from_cookie(self):
-        """Successfully extracts refresh_token from cookie."""
-        # Arrange
-        mock_request = MagicMock(spec=Request)
-        mock_request.cookies = {"refresh_token": "test_refresh_token_123"}
-
-        # Act
-        result = extract_refresh_token_from_cookie(mock_request)
-
-        # Assert
+        """Successfully extracts refresh_token from event cookie header."""
+        event = {"headers": {"cookie": "refresh_token=test_refresh_token_123"}}
+        result = _extract_refresh_token_from_event(event)
         assert result == "test_refresh_token_123"
 
     def test_returns_none_when_cookie_not_present(self):
         """Returns None when refresh_token cookie is not present."""
-        # Arrange
-        mock_request = MagicMock(spec=Request)
-        mock_request.cookies = {}
+        event = {"headers": {"cookie": ""}}
+        result = _extract_refresh_token_from_event(event)
+        assert result is None
 
-        # Act
-        result = extract_refresh_token_from_cookie(mock_request)
-
-        # Assert
+    def test_returns_none_when_no_headers(self):
+        """Returns None when headers are missing."""
+        event = {"headers": {}}
+        result = _extract_refresh_token_from_event(event)
         assert result is None
 
     def test_returns_none_when_different_cookie_present(self):
         """Returns None when other cookies exist but not refresh_token."""
-        # Arrange
-        mock_request = MagicMock(spec=Request)
-        mock_request.cookies = {"access_token": "abc", "session": "xyz"}
-
-        # Act
-        result = extract_refresh_token_from_cookie(mock_request)
-
-        # Assert
+        event = {"headers": {"cookie": "access_token=abc; session=xyz"}}
+        result = _extract_refresh_token_from_event(event)
         assert result is None
 
     def test_cookie_name_constant(self):
@@ -60,49 +43,28 @@ class TestExtractRefreshTokenFromCookie:
         assert REFRESH_TOKEN_COOKIE_NAME == "refresh_token"
 
 
-class TestSetRefreshTokenCookie:
-    """Test setting refresh token as httpOnly cookie."""
+class TestMakeRefreshTokenCookie:
+    """Test building Set-Cookie header for refresh token."""
 
     def test_sets_cookie_with_correct_attributes(self):
         """Sets refresh_token cookie with security attributes."""
-        # Arrange
-        response = JSONResponse(content={})
-
-        # Act
-        set_refresh_token_cookie(response, "new_refresh_token_456")
-
-        # Assert
-        set_cookie_header = response.headers.get("set-cookie", "")
-        assert "refresh_token=new_refresh_token_456" in set_cookie_header
-        assert "httponly" in set_cookie_header.lower()
-        assert "secure" in set_cookie_header.lower()
-        assert "path=/api/v2/auth" in set_cookie_header.lower()
+        cookie_str = _make_refresh_token_cookie("new_refresh_token_456")
+        assert "refresh_token=new_refresh_token_456" in cookie_str
+        assert "httponly" in cookie_str.lower()
+        assert "secure" in cookie_str.lower()
+        assert "path=/api/v2/auth" in cookie_str.lower()
 
     def test_sets_30_day_expiry(self):
         """Sets 30 day max-age on refresh token cookie."""
-        # Arrange
-        response = JSONResponse(content={})
-
-        # Act
-        set_refresh_token_cookie(response, "test_token")
-
-        # Assert
-        set_cookie_header = response.headers.get("set-cookie", "")
+        cookie_str = _make_refresh_token_cookie("test_token")
         # 30 days = 30 * 24 * 60 * 60 = 2592000 seconds
-        assert "max-age=2592000" in set_cookie_header.lower()
+        assert "max-age=2592000" in cookie_str.lower()
 
     def test_sets_samesite_attribute(self):
         """Sets SameSite attribute on cookie."""
-        # Arrange
-        response = JSONResponse(content={})
-
-        # Act
-        set_refresh_token_cookie(response, "test_token")
-
-        # Assert
-        set_cookie_header = response.headers.get("set-cookie", "")
-        # Should have samesite (either strict or none depending on feature flags)
-        assert "samesite=" in set_cookie_header.lower()
+        cookie_str = _make_refresh_token_cookie("test_token")
+        # Should have samesite attribute (value depends on feature flag)
+        assert "samesite=" in cookie_str.lower()
 
 
 class TestRefreshEndpointIntegration:
@@ -112,19 +74,14 @@ class TestRefreshEndpointIntegration:
         """Cookie takes precedence over request body."""
         # This test verifies the priority logic in the endpoint
         # Cookie should be preferred when both are present
-        mock_request = MagicMock(spec=Request)
-        mock_request.cookies = {"refresh_token": "cookie_token"}
-
-        # The endpoint should use cookie_token, not body_token
-        cookie_token = extract_refresh_token_from_cookie(mock_request)
+        event = {"headers": {"cookie": "refresh_token=cookie_token"}}
+        cookie_token = _extract_refresh_token_from_event(event)
         assert cookie_token == "cookie_token"
 
     def test_falls_back_to_body_when_no_cookie(self):
         """Falls back to body when cookie is not present."""
-        mock_request = MagicMock(spec=Request)
-        mock_request.cookies = {}
-
+        event = {"headers": {}}
         # No cookie, so endpoint would use body
-        cookie_token = extract_refresh_token_from_cookie(mock_request)
+        cookie_token = _extract_refresh_token_from_event(event)
         assert cookie_token is None
         # In this case, endpoint uses body.refresh_token

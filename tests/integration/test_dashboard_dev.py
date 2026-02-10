@@ -19,13 +19,14 @@ For Developers:
     - Safe to run locally and in CI
 """
 
+import json
 import os
 
 import pytest
-from fastapi.testclient import TestClient
 from moto import mock_aws
 
-from src.lambdas.dashboard.handler import app
+from src.lambdas.dashboard.handler import lambda_handler
+from tests.conftest import make_event
 
 
 @pytest.fixture
@@ -43,12 +44,6 @@ def env_vars():
 
 
 @pytest.fixture
-def client():
-    """Create TestClient for FastAPI app."""
-    return TestClient(app)
-
-
-@pytest.fixture
 def auth_headers():
     """Return valid authorization headers.
 
@@ -62,7 +57,7 @@ class TestDashboardDevE2E:
     """Dev environment E2E tests with mocked AWS."""
 
     @mock_aws
-    def test_health_check(self, env_vars, client):
+    def test_health_check(self, env_vars, mock_lambda_context):
         """E2E: Health check returns healthy status."""
         # Create mock DynamoDB table
         import boto3
@@ -81,15 +76,20 @@ class TestDashboardDevE2E:
             BillingMode="PAY_PER_REQUEST",
         )
 
-        response = client.get("/health")
+        response = lambda_handler(
+            make_event(method="GET", path="/health"),
+            mock_lambda_context,
+        )
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
         assert data["status"] == "healthy"
         assert data["table"] == "test-sentiment-items"
 
     @mock_aws
-    def test_sentiment_endpoint_schema(self, env_vars, client, auth_headers):
+    def test_sentiment_endpoint_schema(
+        self, env_vars, mock_lambda_context, auth_headers
+    ):
         """E2E: Sentiment endpoint returns correct schema."""
         # Create mock table with by_tag GSI required for v2 API
         import boto3
@@ -137,10 +137,18 @@ class TestDashboardDevE2E:
             BillingMode="PAY_PER_REQUEST",
         )
 
-        response = client.get("/api/v2/sentiment?tags=test", headers=auth_headers)
+        response = lambda_handler(
+            make_event(
+                method="GET",
+                path="/api/v2/sentiment",
+                query_params={"tags": "test"},
+                headers=auth_headers,
+            ),
+            mock_lambda_context,
+        )
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
 
         # Verify schema
         required_fields = [
@@ -152,7 +160,7 @@ class TestDashboardDevE2E:
             assert field in data
 
     @mock_aws
-    def test_session_auth_validation(self, env_vars, client):
+    def test_session_auth_validation(self, env_vars, mock_lambda_context):
         """E2E: Session auth validation rejects missing/invalid credentials.
 
         Feature 1039: API key auth removed, now uses session-based auth.
@@ -174,12 +182,24 @@ class TestDashboardDevE2E:
         )
 
         # Missing auth
-        response = client.get("/api/v2/sentiment?tags=test")
-        assert response.status_code == 401
+        response = lambda_handler(
+            make_event(
+                method="GET",
+                path="/api/v2/sentiment",
+                query_params={"tags": "test"},
+            ),
+            mock_lambda_context,
+        )
+        assert response["statusCode"] == 401
 
         # Invalid token (not a valid JWT/UUID)
-        response = client.get(
-            "/api/v2/sentiment?tags=test",
-            headers={"Authorization": "Bearer invalid-token"},
+        response = lambda_handler(
+            make_event(
+                method="GET",
+                path="/api/v2/sentiment",
+                query_params={"tags": "test"},
+                headers={"Authorization": "Bearer invalid-token"},
+            ),
+            mock_lambda_context,
         )
-        assert response.status_code == 401
+        assert response["statusCode"] == 401
