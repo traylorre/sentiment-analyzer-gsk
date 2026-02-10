@@ -6,3 +6,6 @@ boto3>=1.35.0,<2.0.0
 pydantic>=2.9.0,<3.0.0
 email-validator>=2.1.0,<3.0.0  # Required for pydantic EmailStr in shared models
 aws-xray-sdk>=2.14.0,<3.0.0
+
+# JSON serialization - Fast native datetime/dataclass handling (001-fastapi-purge, R3)
+orjson>=3.10.0,<4.0.0
