@@ -26,14 +26,14 @@
 
 > ⚠️ CRITICAL: These tasks modify shared code used by multiple handlers. Complete and verify before proceeding to handler migration.
 
-- [ ] T010 Create src/lambdas/shared/dependencies.py with 6 lazy-init singleton getters: `get_users_table()`, `get_tiingo_adapter()`, `get_finnhub_adapter()`, `get_ticker_cache_dependency()`, `get_no_cache_headers()`, `get_require_csrf()` — replacing 68 Depends() invocations (FR-013, R6)
-- [ ] T011 Migrate src/lambdas/shared/middleware/csrf_middleware.py — replace FastAPI `Request`/`HTTPException`/`Depends` with raw event dict extraction using `get_header()` and `parse_cookies()`, return proxy error dict on failure (FR-018)
-- [ ] T012 Migrate src/lambdas/shared/middleware/require_role.py — replace FastAPI `Depends`/`HTTPException` with Powertools middleware signature `(app, next_middleware)` extracting auth from `app.current_event` (FR-018)
-- [ ] T013 Migrate src/lambdas/shared/auth/ modules — replace `extract_auth_context` and `extract_auth_context_typed` to extract Bearer tokens from raw event["headers"]["authorization"] instead of FastAPI Request (FR-031)
-- [ ] T014 [P] Replace FastAPI `Response` base class parameter usage in `no_cache_headers` and `set_refresh_token_cookie` functions (src/lambdas/dashboard/router_v2.py) with direct header dict manipulation on proxy response (FR-042)
-- [ ] T015 Create top-level error handler pattern in src/lambdas/shared/utils/error_handler.py — `handle_request(handler_fn, event, context)` wrapping handler in try/except, converting ValidationError → 422 and Exception → 500 with full traceback logging (FR-023, FR-024, FR-039, FR-010)
-- [ ] T016 Replace FastAPI lifespan function (src/lambdas/dashboard/handler.py lines 124-139, currently no-op with logging only) with module-level logging during Lambda init (FR-028)
-- [ ] T017 Preserve X-Ray `patch_all()` at module level before other imports in src/lambdas/dashboard/handler.py and src/lambdas/sse_streaming/handler.py (FR-034)
+- [x] T010 Create src/lambdas/shared/dependencies.py with 6 lazy-init singleton getters: `get_users_table()`, `get_tiingo_adapter()`, `get_finnhub_adapter()`, `get_ticker_cache_dependency()`, `get_no_cache_headers()`, `get_require_csrf()` — replacing 68 Depends() invocations (FR-013, R6)
+- [x] T011 Migrate src/lambdas/shared/middleware/csrf_middleware.py — replace FastAPI `Request`/`HTTPException`/`Depends` with raw event dict extraction using `get_header()` and `parse_cookies()`, return proxy error dict on failure (FR-018)
+- [x] T012 Migrate src/lambdas/shared/middleware/require_role.py — replace FastAPI `Depends`/`HTTPException` with Powertools middleware signature `(app, next_middleware)` extracting auth from `app.current_event` (FR-018)
+- [x] T013 Migrate src/lambdas/shared/auth/ modules — replace `extract_auth_context` and `extract_auth_context_typed` to extract Bearer tokens from raw event["headers"]["authorization"] instead of FastAPI Request (FR-031)
+- [x] T014 [P] Replace FastAPI `Response` base class parameter usage in `no_cache_headers` and `set_refresh_token_cookie` functions (src/lambdas/dashboard/router_v2.py) with direct header dict manipulation on proxy response (FR-042)
+- [x] T015 Create top-level error handler pattern in src/lambdas/shared/utils/error_handler.py — `handle_request(handler_fn, event, context)` wrapping handler in try/except, converting ValidationError → 422 and Exception → 500 with full traceback logging (FR-023, FR-024, FR-039, FR-010)
+- [x] T016 Replace FastAPI lifespan function (src/lambdas/dashboard/handler.py lines 124-139, currently no-op with logging only) with module-level logging during Lambda init (FR-028)
+- [x] T017 Preserve X-Ray `patch_all()` at module level before other imports in src/lambdas/dashboard/handler.py and src/lambdas/sse_streaming/handler.py (FR-034)
 
 > **Checkpoint**: All shared modules importable with zero fastapi/starlette imports. `grep -rn "from fastapi\|from starlette" src/lambdas/shared/` returns zero matches.
 
