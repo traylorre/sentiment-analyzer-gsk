@@ -1,218 +1,215 @@
-"""SSE Streaming Lambda handler.
+"""SSE Streaming Lambda handler with native RESPONSE_STREAM support.
 
-FastAPI application for Server-Sent Events streaming.
-Uses AWS Lambda Web Adapter with RESPONSE_STREAM invoke mode.
+Custom runtime handler for Server-Sent Events streaming. Uses a Python generator
+to yield SSE chunks, consumed by the bootstrap which streams them to clients via
+the Lambda Runtime API with chunked transfer encoding.
+
+Architecture:
+    bootstrap.py polls Runtime API → calls handler(event, context) → handler yields bytes
+    → bootstrap POSTs chunks to Runtime API with streaming headers
+
+Endpoints:
+- GET /api/v2/stream/status: Connection pool status (non-streaming, returns dict)
+- GET /api/v2/stream: Global SSE stream with optional filters (streaming)
+- GET /api/v2/configurations/{config_id}/stream: Authenticated config-specific stream
+
+For On-Call Engineers:
+    If SSE streaming stops working after deployment:
+    1. Check that the bootstrap file is executable and at /var/task/bootstrap
+    2. Check that the Lambda runtime is set to 'provided.al2023' (custom runtime)
+    3. Check that the Function URL invoke mode is RESPONSE_STREAM
+    4. Check CloudWatch logs for bootstrap or handler errors
 """
 
+import asyncio
+import json
 import logging
 import os
+import re
+from collections.abc import Generator
 
-# X-Ray tracing setup - must be done before other imports
 from aws_xray_sdk.core import patch_all, xray_recorder
 
 patch_all()
 
-# Use absolute imports instead of relative imports to work when
-# handler.py is imported directly (not as part of a package).
-# The Dockerfile sets PYTHONPATH=/app so these modules are findable.
-# For tests, conftest.py adds the Lambda directory to sys.path.
 from config import config_lookup_service
 from connection import connection_manager
-from fastapi import FastAPI, Header, Query, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from metrics import metrics_emitter
 from models import StreamStatus
-from sse_starlette.sse import EventSourceResponse
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import StreamingResponse
 from stream import get_stream_generator
 
-# Import logging utilities - try Docker path first (logging_utils.py copied to /app/),
-# fall back to full path for tests
-try:
-    from logging_utils import sanitize_for_log
-except ImportError:
-    from src.lambdas.shared.logging_utils import sanitize_for_log
+from src.lambdas.shared.logging_utils import sanitize_for_log
 
-# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
-# Environment configuration
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "dev")
 
-# Create FastAPI app
-app = FastAPI(
-    title="SSE Streaming Lambda",
-    description="Real-time Server-Sent Events for sentiment updates",
-    version="1.0.0",
-)
+# Null byte separator for Lambda Function URL streaming protocol
+# 8 null bytes separate HTTP metadata prelude from response body
+_NULL_SEPARATOR = b"\x00\x00\x00\x00\x00\x00\x00\x00"
 
 
-# Path normalization middleware - Fix(141): Lambda Web Adapter sends double slashes
-class PathNormalizationMiddleware(BaseHTTPMiddleware):
-    """Normalize request paths to handle Lambda Web Adapter double-slash issue.
+# =============================================================================
+# Helper Functions
+# =============================================================================
 
-    Lambda Web Adapter v0.9.1 can forward requests with double slashes
-    (e.g., //health instead of /health), causing 404 errors since FastAPI
-    routes don't match paths with leading double slashes.
 
-    This middleware normalizes the path before routing by collapsing
-    consecutive slashes into single slashes.
+def _get_header(event: dict, name: str) -> str | None:
+    """Extract header from Lambda event (case-insensitive).
+
+    Args:
+        event: Lambda event dict
+        name: Header name to find
+
+    Returns:
+        Header value if found, None otherwise
     """
-
-    async def dispatch(self, request: Request, call_next):
-        # Normalize path by collapsing multiple slashes
-        original_path = request.scope.get("path", "")
-        if "//" in original_path:
-            import re
-
-            normalized_path = re.sub(r"/+", "/", original_path)
-            # Note: Paths are user-provided - sanitize to prevent log injection (CWE-117)
-            logger.debug(
-                "Path normalized",
-                extra={
-                    "original": sanitize_for_log(original_path),
-                    "normalized": sanitize_for_log(normalized_path),
-                },
-            )
-            request.scope["path"] = normalized_path
-        return await call_next(request)
+    headers = event.get("headers") or {}
+    name_lower = name.lower()
+    for key, value in headers.items():
+        if key.lower() == name_lower:
+            return value
+    return None
 
 
-# Add path normalization middleware (applied first, before CORS)
-app.add_middleware(PathNormalizationMiddleware)
+def _get_query_param(event: dict, name: str) -> str | None:
+    """Extract query parameter from Lambda event.
 
-# CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Configured per environment in production
-    allow_credentials=True,
-    allow_methods=["GET"],
-    allow_headers=["*"],
-    expose_headers=["X-Request-ID"],
-)
+    Args:
+        event: Lambda event dict
+        name: Query parameter name
 
-
-@app.get("/health")
-async def health_check() -> dict:
-    """Health check endpoint for Lambda Web Adapter."""
-    return {"status": "healthy", "environment": ENVIRONMENT}
-
-
-@app.get("/debug")
-async def debug_info() -> dict:
-    """Debug endpoint for diagnosing Lambda configuration issues.
-
-    Returns Lambda environment info and registered routes.
-    Only available in non-prod environments for security.
-
-    Fix(141): Added to diagnose path translation issues in preprod.
+    Returns:
+        Parameter value if found, None otherwise
     """
-    if ENVIRONMENT == "prod":
-        return {"error": "Debug endpoint disabled in production"}
+    params = event.get("queryStringParameters") or {}
+    return params.get(name)
 
-    # Get registered routes
-    routes = []
-    for route in app.routes:
-        if hasattr(route, "path") and hasattr(route, "methods"):
-            routes.append(
-                {
-                    "path": route.path,
-                    "methods": list(route.methods) if route.methods else [],
-                    "name": route.name if hasattr(route, "name") else None,
-                }
-            )
 
-    # Get relevant environment variables (exclude secrets)
-    safe_env_vars = {
-        "ENVIRONMENT": os.environ.get("ENVIRONMENT"),
-        "AWS_REGION": os.environ.get("AWS_REGION"),
-        "AWS_LAMBDA_FUNCTION_NAME": os.environ.get("AWS_LAMBDA_FUNCTION_NAME"),
-        "AWS_LAMBDA_FUNCTION_VERSION": os.environ.get("AWS_LAMBDA_FUNCTION_VERSION"),
-        "AWS_LAMBDA_FUNCTION_MEMORY_SIZE": os.environ.get(
-            "AWS_LAMBDA_FUNCTION_MEMORY_SIZE"
-        ),
-        "AWS_LWA_INVOKE_MODE": os.environ.get("AWS_LWA_INVOKE_MODE"),
-        "AWS_LWA_READINESS_CHECK_PATH": os.environ.get("AWS_LWA_READINESS_CHECK_PATH"),
-        "PYTHONPATH": os.environ.get("PYTHONPATH"),
-        "SSE_HEARTBEAT_INTERVAL": os.environ.get("SSE_HEARTBEAT_INTERVAL", "30"),
-        "SSE_MAX_CONNECTIONS": os.environ.get("SSE_MAX_CONNECTIONS", "100"),
-        "SSE_POLL_INTERVAL": os.environ.get("SSE_POLL_INTERVAL", "5"),
+def _match_config_stream_path(path: str) -> str | None:
+    """Extract config_id from /api/v2/configurations/{config_id}/stream path.
+
+    Args:
+        path: Request path
+
+    Returns:
+        config_id if path matches, None otherwise
+    """
+    match = re.match(r"^/api/v2/configurations/([^/]+)/stream$", path)
+    return match.group(1) if match else None
+
+
+def _format_sse_event(event_dict: dict) -> bytes:
+    """Format an SSE event dict as protocol bytes.
+
+    Args:
+        event_dict: Dict with keys: event, id, data, retry (optional)
+
+    Returns:
+        UTF-8 encoded SSE event string
+    """
+    lines = []
+    if "event" in event_dict:
+        lines.append(f"event: {event_dict['event']}")
+    if "id" in event_dict:
+        lines.append(f"id: {event_dict['id']}")
+    if "retry" in event_dict:
+        lines.append(f"retry: {event_dict['retry']}")
+    if "data" in event_dict:
+        lines.append(f"data: {event_dict['data']}")
+    lines.append("")  # Empty line terminates SSE event
+    return ("\n".join(lines) + "\n").encode("utf-8")
+
+
+def _streaming_metadata(
+    status_code: int = 200,
+    content_type: str = "text/event-stream",
+    extra_headers: dict | None = None,
+) -> bytes:
+    """Build HTTP metadata prelude for Lambda Function URL streaming.
+
+    The metadata prelude is JSON followed by 8 null bytes, per the
+    application/vnd.awslambda.http-integration-response protocol.
+
+    Args:
+        status_code: HTTP status code
+        content_type: Content-Type header value
+        extra_headers: Additional headers to include
+
+    Returns:
+        Encoded metadata prelude bytes (JSON + 8 null bytes)
+    """
+    headers = {"Content-Type": content_type}
+    if extra_headers:
+        headers.update(extra_headers)
+
+    metadata = {
+        "statusCode": status_code,
+        "headers": headers,
+        "cookies": [],
     }
-
-    return {
-        "status": "debug",
-        "environment": ENVIRONMENT,
-        "routes": routes,
-        "env_vars": safe_env_vars,
-        "python_version": f"{__import__('sys').version_info.major}.{__import__('sys').version_info.minor}.{__import__('sys').version_info.micro}",
-    }
+    return json.dumps(metadata).encode("utf-8") + _NULL_SEPARATOR
 
 
-@app.get("/api/v2/stream/status", response_model=StreamStatus)
+def _error_metadata_and_body(
+    status_code: int, detail: str, extra_headers: dict | None = None
+) -> bytes:
+    """Build a complete non-streaming error response (metadata + body).
+
+    Args:
+        status_code: HTTP status code
+        detail: Error detail message
+        extra_headers: Additional headers
+
+    Returns:
+        Complete response bytes (metadata prelude + JSON error body)
+    """
+    metadata = _streaming_metadata(
+        status_code=status_code,
+        content_type="application/json",
+        extra_headers=extra_headers,
+    )
+    body = json.dumps({"detail": detail}).encode("utf-8")
+    return metadata + body
+
+
+# =============================================================================
+# Route Handlers
+# =============================================================================
+
+
 @xray_recorder.capture("stream_status")
-async def stream_status() -> StreamStatus:
-    """Get SSE connection pool status.
+def _handle_stream_status() -> Generator[bytes]:
+    """Handle GET /api/v2/stream/status (non-streaming).
 
-    Returns current connection count, max connections, available slots,
-    and Lambda uptime. Non-streaming endpoint.
+    Yields a single complete response with connection pool status.
     """
     status = connection_manager.get_status()
     logger.info("Stream status requested", extra=status)
-    return StreamStatus(**status)
+
+    metadata = _streaming_metadata(
+        status_code=200,
+        content_type="application/json",
+    )
+    body = StreamStatus(**status).model_dump_json().encode("utf-8")
+    yield metadata + body
 
 
-@app.get("/api/v2/stream")
-# Note: X-Ray @xray_recorder.capture() is intentionally NOT used here.
-# The capture decorator only works with synchronous functions (per AWS docs)
-# and interferes with async streaming responses. Streaming requests are traced
-# via the X-Ray middleware applied at startup via patch_all().
-async def global_stream(
-    request: Request,
-    last_event_id: str | None = Header(None, alias="Last-Event-ID"),
-    resolutions: str | None = Query(
-        None,
-        description="Comma-separated resolution filters (e.g., '1m,5m,1h'). "
-        "Valid: 1m,5m,10m,1h,3h,6h,12h,24h. Empty = all resolutions.",
-    ),
-    tickers: str | None = Query(
-        None,
-        description="Comma-separated ticker filters (e.g., 'AAPL,MSFT,GOOGL'). "
-        "Empty = all tickers. Case-insensitive.",
-    ),
-):
-    """Global SSE stream endpoint.
+def _handle_global_stream(event: dict) -> Generator[bytes]:
+    """Handle GET /api/v2/stream (streaming SSE).
 
-    Streams real-time sentiment metrics to all connected clients.
-    Per FR-004: Global stream at /api/v2/stream
-    Per FR-014: No authentication required (public metrics)
-
-    Feature 1009: Multi-resolution time-series streaming
-    Canonical: [CS-007] "SSE for real-time updates at subscribed resolutions"
-
-    Feature 1009 Phase 6 (T051): Multi-ticker streaming
-    Canonical: [CS-002] "ticker#resolution composite key for filtering"
-
-    Headers:
-        Last-Event-ID: Optional event ID for reconnection resumption
-
-    Query Parameters:
-        resolutions: Comma-separated list of resolution levels to subscribe to.
-                    Valid values: 1m, 5m, 10m, 1h, 3h, 6h, 12h, 24h
-                    Empty or not specified = subscribe to all resolutions.
-        tickers: Comma-separated list of ticker symbols to subscribe to.
-                Case-insensitive (e.g., 'aapl' matches 'AAPL').
-                Empty or not specified = subscribe to all tickers.
-
-    Returns:
-        EventSourceResponse streaming heartbeat and metrics events
+    Streams real-time sentiment metrics to connected clients.
+    Supports optional resolution and ticker filters via query params.
     """
-    # Feature 1009: Parse and validate resolution filters
+    last_event_id = _get_header(event, "Last-Event-ID")
+    resolutions = _get_query_param(event, "resolutions")
+    tickers = _get_query_param(event, "tickers")
+
+    # Parse resolution filters
     resolution_filters: list[str] = []
     valid_resolutions = {"1m", "5m", "10m", "1h", "3h", "6h", "12h", "24h"}
     if resolutions:
@@ -220,8 +217,6 @@ async def global_stream(
             res = res.strip().lower()
             if res and res in valid_resolutions:
                 resolution_filters.append(res)
-        # Log invalid resolutions for debugging
-        # Note: User input must be sanitized to prevent log injection (CWE-117)
         requested = {r.strip().lower() for r in resolutions.split(",") if r.strip()}
         invalid = requested - valid_resolutions
         if invalid:
@@ -233,8 +228,7 @@ async def global_stream(
                 },
             )
 
-    # Feature 1009 Phase 6 (T051): Parse ticker filters
-    # Tickers are case-insensitive (stored uppercase for consistency)
+    # Parse ticker filters
     ticker_filters: list[str] = []
     if tickers:
         for ticker in tickers.split(","):
@@ -242,14 +236,13 @@ async def global_stream(
             if ticker:
                 ticker_filters.append(ticker)
 
-    # Log connection attempt
-    # Note: All user-provided values MUST be sanitized to prevent log injection (CWE-117)
+    client_host = (
+        event.get("requestContext", {}).get("http", {}).get("sourceIp", "unknown")
+    )
     logger.info(
         "Global stream connection attempt",
         extra={
-            "client_host": sanitize_for_log(
-                request.client.host if request.client else "unknown"
-            ),
+            "client_host": sanitize_for_log(client_host),
             "last_event_id": sanitize_for_log(last_event_id) if last_event_id else None,
             "resolution_filters": (
                 [sanitize_for_log(r) for r in resolution_filters]
@@ -264,28 +257,23 @@ async def global_stream(
         },
     )
 
-    # Acquire connection slot with resolution and ticker filters
+    # Acquire connection slot
     connection = connection_manager.acquire(
         resolution_filters=resolution_filters, ticker_filters=ticker_filters
     )
     if connection is None:
-        # Connection limit reached - return 503
         logger.warning(
             "Connection limit reached, rejecting request",
             extra={"max_connections": connection_manager.max_connections},
         )
         metrics_emitter.emit_connection_acquire_failure()
-        return JSONResponse(
-            status_code=503,
-            content={
-                "detail": "Connection limit reached. Try again later.",
-                "max_connections": connection_manager.max_connections,
-                "retry_after": 30,
-            },
-            headers={"Retry-After": "30"},
+        yield _error_metadata_and_body(
+            503,
+            "Connection limit reached. Try again later.",
+            extra_headers={"Retry-After": "30"},
         )
+        return
 
-    # Log successful connection
     logger.info(
         "Global stream connection established",
         extra={
@@ -295,125 +283,58 @@ async def global_stream(
     )
     metrics_emitter.emit_connection_count(connection_manager.count)
 
-    async def event_generator():
-        """Generate SSE events and handle cleanup.
-
-        Formats events as SSE protocol strings for StreamingResponse.
-        Using StreamingResponse instead of EventSourceResponse for better
-        Content-Type header handling with Lambda Web Adapter.
-        """
-        try:
-            async for event_dict in get_stream_generator().generate_global_stream(
-                connection, last_event_id
-            ):
-                # Format as SSE protocol string
-                lines = []
-                if "event" in event_dict:
-                    lines.append(f"event: {event_dict['event']}")
-                if "id" in event_dict:
-                    lines.append(f"id: {event_dict['id']}")
-                if "retry" in event_dict:
-                    lines.append(f"retry: {event_dict['retry']}")
-                if "data" in event_dict:
-                    lines.append(f"data: {event_dict['data']}")
-                lines.append("")  # Empty line terminates event
-                yield "\n".join(lines) + "\n"
-        finally:
-            # Release connection on disconnect
-            connection_manager.release(connection.connection_id)
-            logger.info(
-                "Global stream connection closed",
-                extra={
-                    "connection_id": connection.connection_id,
-                    "total_connections": connection_manager.count,
-                },
-            )
-            metrics_emitter.emit_connection_count(connection_manager.count)
-
-    # Use StreamingResponse instead of EventSourceResponse for better
-    # Content-Type header handling with Lambda Web Adapter
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
+    # Yield SSE metadata prelude
+    yield _streaming_metadata(
+        extra_headers={
             "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
             "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
         },
     )
 
+    # Bridge async generator to sync yields
+    try:
+        yield from _consume_async_stream(
+            get_stream_generator().generate_global_stream(connection, last_event_id),
+            connection.connection_id,
+        )
+    finally:
+        connection_manager.release(connection.connection_id)
+        logger.info(
+            "Global stream connection closed",
+            extra={
+                "connection_id": connection.connection_id,
+                "total_connections": connection_manager.count,
+            },
+        )
+        metrics_emitter.emit_connection_count(connection_manager.count)
 
-@app.get("/api/v2/configurations/{config_id}/stream")
-# Note: X-Ray @xray_recorder.capture() is intentionally NOT used here.
-# The capture decorator only works with synchronous functions (per AWS docs)
-# and interferes with async streaming responses. Streaming requests are traced
-# via the X-Ray middleware applied at startup via patch_all().
-async def config_stream(
-    request: Request,
-    config_id: str,
-    authorization: str | None = Header(None, alias="Authorization"),
-    x_user_id: str | None = Header(None, alias="X-User-ID"),
-    user_token: str | None = Query(None, description="User token for EventSource auth"),
-    last_event_id: str | None = Header(None, alias="Last-Event-ID"),
-):
-    """Configuration-specific SSE stream endpoint.
 
-    Streams real-time sentiment updates filtered to configured tickers.
-    Per FR-014: Requires authentication via Bearer token, X-User-ID header,
-    or user_token query param.
-    Per T035: GET /api/v2/configurations/{config_id}/stream
-    Per Feature 1154: Added Bearer token authentication support
+def _handle_config_stream(event: dict, config_id: str) -> Generator[bytes]:
+    """Handle GET /api/v2/configurations/{config_id}/stream (streaming SSE).
 
-    Path Parameters:
-        config_id: Configuration ID to stream
-
-    Headers:
-        Authorization: Bearer token for authentication (preferred, Feature 1154)
-        X-User-ID: User ID for authentication (legacy fallback)
-        Last-Event-ID: Optional event ID for reconnection resumption
-
-    Query Parameters:
-        user_token: User token for EventSource authentication (browser limitation workaround)
-                   EventSource API does not support custom headers, so tokens must be
-                   passed via query parameter. Use short-lived tokens for security.
-
-    Authentication Precedence (Feature 1154):
-        1. Authorization: Bearer {token} (highest priority)
-        2. X-User-ID header (legacy fallback)
-        3. user_token query parameter (lowest priority)
-
-    Returns:
-        EventSourceResponse streaming heartbeat and filtered sentiment events
-
-    Raises:
-        401: Missing or invalid authentication (T034)
-        404: Configuration not found or doesn't belong to user (T037)
-        503: Connection limit reached
-
-    Security Notes:
-        - Query param tokens appear in logs, browser history, and caches
-        - Use short-lived tokens (5-min expiry recommended)
-        - Always use HTTPS to prevent token interception
-        - Response includes Cache-Control: no-store to prevent caching
+    Streams config-specific sentiment updates with authentication.
+    Authentication precedence: Bearer token > X-User-ID header > user_token query param.
     """
-    # T034: Validate authentication - Bearer token > header > query param
-    # Feature 1154: Added Bearer token authentication support
+    authorization = _get_header(event, "Authorization")
+    x_user_id = _get_header(event, "X-User-ID")
+    user_token = _get_query_param(event, "user_token")
+    last_event_id = _get_header(event, "Last-Event-ID")
+
+    # Resolve user identity
     user_id = None
     auth_method = None
 
-    # Check Authorization: Bearer header first (Feature 1154)
     if authorization and authorization.startswith("Bearer "):
         bearer_token = authorization[7:].strip()
         if bearer_token:
             user_id = bearer_token
             auth_method = "bearer"
 
-    # Fallback to X-User-ID header (legacy)
     if not user_id and x_user_id and x_user_id.strip():
         user_id = x_user_id.strip()
         auth_method = "header"
 
-    # Fallback to query parameter (for EventSource API)
     if not user_id and user_token and user_token.strip():
         user_id = user_token.strip()
         auth_method = "query_param"
@@ -423,31 +344,28 @@ async def config_stream(
             "Config stream rejected - missing authentication",
             extra={"config_id": sanitize_for_log(config_id[:8] if config_id else "")},
         )
-        return JSONResponse(
-            status_code=401,
-            content={
-                "detail": (
-                    "Authentication required. Provide Authorization: Bearer header, "
-                    "X-User-ID header, or user_token query parameter."
-                )
-            },
+        yield _error_metadata_and_body(
+            401,
+            "Authentication required. Provide Authorization: Bearer header, "
+            "X-User-ID header, or user_token query parameter.",
         )
+        return
 
-    # Log connection attempt (redact token from query params for security)
+    client_host = (
+        event.get("requestContext", {}).get("http", {}).get("sourceIp", "unknown")
+    )
     logger.info(
         "Config stream connection attempt",
         extra={
             "config_id": sanitize_for_log(config_id[:8] if config_id else ""),
             "user_id_prefix": sanitize_for_log(user_id[:8] if user_id else ""),
             "auth_method": auth_method,
-            "client_host": sanitize_for_log(
-                request.client.host if request.client else "unknown"
-            ),
+            "client_host": sanitize_for_log(client_host),
             "last_event_id": sanitize_for_log(last_event_id) if last_event_id else None,
         },
     )
 
-    # T037: Validate configuration exists and belongs to user
+    # Validate configuration access
     has_access, ticker_filters = config_lookup_service.validate_user_access(
         user_id, config_id
     )
@@ -459,19 +377,16 @@ async def config_stream(
                 "user_id_prefix": sanitize_for_log(user_id[:8] if user_id else ""),
             },
         )
-        return JSONResponse(
-            status_code=404,
-            content={"detail": "Configuration not found"},
-        )
+        yield _error_metadata_and_body(404, "Configuration not found")
+        return
 
-    # Acquire connection slot with ticker filters
+    # Acquire connection slot
     connection = connection_manager.acquire(
         user_id=user_id,
         config_id=config_id,
-        ticker_filters=ticker_filters,
+        ticker_filters=ticker_filters or [],
     )
     if connection is None:
-        # Connection limit reached - return 503
         logger.warning(
             "Connection limit reached for config stream, rejecting request",
             extra={
@@ -480,18 +395,13 @@ async def config_stream(
             },
         )
         metrics_emitter.emit_connection_acquire_failure()
-        return JSONResponse(
-            status_code=503,
-            content={
-                "detail": "Connection limit reached. Try again later.",
-                "max_connections": connection_manager.max_connections,
-                "retry_after": 30,
-            },
-            headers={"Retry-After": "30"},
+        yield _error_metadata_and_body(
+            503,
+            "Connection limit reached. Try again later.",
+            extra_headers={"Retry-After": "30"},
         )
+        return
 
-    # Log successful connection
-    # Note: ticker_filters comes from DynamoDB (trusted) but sanitize defensively
     logger.info(
         "Config stream connection established",
         extra={
@@ -505,52 +415,135 @@ async def config_stream(
     )
     metrics_emitter.emit_connection_count(connection_manager.count)
 
-    async def event_generator():
-        """Generate SSE events and handle cleanup."""
-        try:
-            # T036: Ticker filtering is handled in generate_config_stream
-            async for event_str in get_stream_generator().generate_config_stream(
-                connection, last_event_id
-            ):
-                yield event_str
-        finally:
-            # Release connection on disconnect
-            connection_manager.release(connection.connection_id)
-            logger.info(
-                "Config stream connection closed",
-                extra={
-                    "connection_id": connection.connection_id,
-                    "config_id": sanitize_for_log(config_id),
-                    "total_connections": connection_manager.count,
-                },
-            )
-            metrics_emitter.emit_connection_count(connection_manager.count)
-
-    return EventSourceResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            # Prevent caching of authenticated streams (security: token in URL)
+    # Yield SSE metadata prelude with no-store for authenticated streams
+    yield _streaming_metadata(
+        extra_headers={
             "Cache-Control": "no-store, no-cache, private, must-revalidate",
+            "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
             "Pragma": "no-cache",
         },
     )
 
+    # Bridge async generator to sync yields
+    try:
+        yield from _consume_async_stream(
+            get_stream_generator().generate_config_stream(connection, last_event_id),
+            connection.connection_id,
+        )
+    finally:
+        connection_manager.release(connection.connection_id)
+        logger.info(
+            "Config stream connection closed",
+            extra={
+                "connection_id": connection.connection_id,
+                "config_id": sanitize_for_log(config_id),
+                "total_connections": connection_manager.count,
+            },
+        )
+        metrics_emitter.emit_connection_count(connection_manager.count)
 
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    """Global exception handler with logging."""
-    logger.error(
-        "Unhandled exception",
-        extra={
-            "path": request.url.path,
-            "method": request.method,
-            "error": str(exc),
-        },
-        exc_info=True,
-    )
-    return JSONResponse(
-        status_code=500,
-        content={"detail": "Internal server error"},
-    )
+
+# =============================================================================
+# Async-to-Sync Bridge
+# =============================================================================
+
+
+def _consume_async_stream(
+    async_gen,
+    connection_id: str,
+) -> Generator[bytes]:
+    """Bridge async SSE generator to sync byte yields.
+
+    Runs the async generator in a new event loop and yields SSE-formatted
+    bytes for each event. Handles client disconnection gracefully.
+
+    Args:
+        async_gen: Async generator yielding event dicts
+        connection_id: Connection ID for logging
+    """
+    loop = asyncio.new_event_loop()
+    try:
+        # Collect events from async generator one at a time
+        # We use __anext__() in a sync loop to yield between events
+        async def _get_next():
+            return await async_gen.__anext__()
+
+        while True:
+            try:
+                event_dict = loop.run_until_complete(_get_next())
+                yield _format_sse_event(event_dict)
+            except StopAsyncIteration:
+                break
+            except (OSError, BrokenPipeError, RuntimeError) as e:
+                logger.info(
+                    "Client disconnected during streaming",
+                    extra={"connection_id": connection_id, "error": str(e)},
+                )
+                break
+    finally:
+        # Clean up the async generator
+        try:
+            loop.run_until_complete(async_gen.aclose())
+        except Exception as exc:
+            logger.debug("Async generator cleanup: %s", exc)
+        loop.close()
+
+
+# =============================================================================
+# Lambda Handler Entry Point
+# =============================================================================
+
+
+def handler(event: dict, context) -> Generator[bytes]:
+    """Lambda handler for RESPONSE_STREAM invoke mode (custom runtime).
+
+    Called by bootstrap.py which streams yielded bytes to the Lambda Runtime API.
+    Returns a generator that yields bytes for streaming, or yields a single
+    complete response for non-streaming endpoints.
+
+    Args:
+        event: Lambda event dict (Function URL format)
+        context: Lambda context (unused, passed by bootstrap as None)
+
+    Yields:
+        Response bytes — metadata prelude followed by body chunks
+    """
+    try:
+        method = event.get("requestContext", {}).get("http", {}).get("method", "GET")
+        path = event.get("rawPath", event.get("path", "/"))
+
+        # Normalize double slashes (legacy Lambda Web Adapter artifact)
+        if "//" in path:
+            path = re.sub(r"/+", "/", path)
+
+        if method == "GET" and path == "/api/v2/stream/status":
+            yield from _handle_stream_status()
+            return
+
+        if method == "GET" and path == "/api/v2/stream":
+            yield from _handle_global_stream(event)
+            return
+
+        if method == "GET":
+            config_id = _match_config_stream_path(path)
+            if config_id:
+                yield from _handle_config_stream(event, config_id)
+                return
+
+        logger.warning(
+            "Route not found",
+            extra={"method": method, "path": sanitize_for_log(path)},
+        )
+        yield _error_metadata_and_body(404, "Not found")
+
+    except Exception as e:
+        logger.error(
+            "Unhandled exception in handler",
+            extra={
+                "path": sanitize_for_log(event.get("rawPath", event.get("path", ""))),
+                "error": str(e),
+            },
+            exc_info=True,
+        )
+        yield _error_metadata_and_body(500, "Internal server error")
