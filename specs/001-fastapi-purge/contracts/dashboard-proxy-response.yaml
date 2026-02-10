@@ -1,0 +1,130 @@
+# Dashboard Lambda Proxy Integration Response Contract
+# All 102 dashboard endpoints return this format (BUFFERED invoke mode)
+
+openapi: "3.1.0"
+info:
+  title: Dashboard Lambda Proxy Response
+  version: "2.0.0"
+
+components:
+  schemas:
+    ProxyResponse:
+      type: object
+      required: [statusCode, headers, body]
+      properties:
+        statusCode:
+          type: integer
+          enum: [200, 201, 204, 400, 401, 403, 404, 405, 422, 500, 502, 503]
+        headers:
+          type: object
+          required: [Content-Type]
+          properties:
+            Content-Type:
+              type: string
+              enum:
+                - application/json
+                - text/html; charset=utf-8
+                - text/css
+                - application/javascript
+                - image/x-icon
+                - text/event-stream
+            Cache-Control:
+              type: string
+            Set-Cookie:
+              type: string
+            X-Request-Id:
+              type: string
+          additionalProperties:
+            type: string
+        body:
+          type: string
+          description: JSON string for API responses, HTML/CSS/JS for static assets
+        isBase64Encoded:
+          type: boolean
+          default: false
+          description: true only for binary static assets (favicon.ico)
+
+    # JSON API response body (parsed from ProxyResponse.body)
+    SuccessResponse:
+      type: object
+      description: Varies per endpoint. Always valid JSON when Content-Type is application/json.
+
+    ErrorResponse:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          oneOf:
+            - type: string
+              description: Simple error message (401, 403, 404, 500)
+            - type: array
+              description: Validation error details (422)
+              items:
+                $ref: "#/components/schemas/ValidationErrorDetail"
+
+    ValidationErrorDetail:
+      type: object
+      required: [loc, msg, type]
+      properties:
+        loc:
+          type: array
+          items:
+            oneOf:
+              - type: string
+              - type: integer
+          description: "Location path, e.g. ['query', 'resolution'] or ['body', 'ticker']"
+        msg:
+          type: string
+          description: Human-readable error message
+        type:
+          type: string
+          description: "Pydantic error type, e.g. 'enum', 'string_type', 'missing'"
+
+  examples:
+    success_200:
+      summary: Successful JSON response
+      value:
+        statusCode: 200
+        headers:
+          Content-Type: application/json
+          Cache-Control: "max-age=300"
+        body: '{"data": [{"ticker": "AAPL", "score": 0.75}]}'
+        isBase64Encoded: false
+
+    validation_422:
+      summary: Validation error (FastAPI-parity)
+      value:
+        statusCode: 422
+        headers:
+          Content-Type: application/json
+        body: '{"detail": [{"loc": ["query", "resolution"], "msg": "Input should be ''D'', ''W'', ''M'' or ''Y''", "type": "enum"}]}'
+        isBase64Encoded: false
+
+    not_found_404:
+      summary: Route not found
+      value:
+        statusCode: 404
+        headers:
+          Content-Type: application/json
+        body: '{"detail": "Not Found"}'
+        isBase64Encoded: false
+
+    method_not_allowed_405:
+      summary: Valid route, wrong HTTP method
+      value:
+        statusCode: 405
+        headers:
+          Content-Type: application/json
+          Allow: "GET, HEAD"
+        body: '{"detail": "Method Not Allowed"}'
+        isBase64Encoded: false
+
+    static_asset:
+      summary: Static file response (HTML)
+      value:
+        statusCode: 200
+        headers:
+          Content-Type: "text/html; charset=utf-8"
+          Cache-Control: "public, max-age=3600"
+        body: "<!DOCTYPE html>..."
+        isBase64Encoded: false
