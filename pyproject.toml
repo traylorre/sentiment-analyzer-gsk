@@ -113,11 +113,7 @@ external = ["B108", "B202", "B324"]
 "src/lambdas/*/handler.py" = [
     "E402",  # X-Ray must be imported and patched before other imports
 ]
-"src/lambdas/dashboard/router_v2.py" = [
-    "B008",  # Depends() in function defaults is FastAPI's recommended pattern
-]
 "src/lambdas/dashboard/ohlc.py" = [
-    "B008",  # Query/Depends in function defaults is FastAPI's recommended pattern
     "S311",  # random module used for synthetic test data generation
 ]
 # MD5 used for cache keys (non-cryptographic) - pre-existing code

@@ -371,7 +371,7 @@ module "dashboard_lambda" {
   image_uri = "${aws_ecr_repository.dashboard.repository_url}:latest"
 
   # Resource configuration per task spec
-  # JUSTIFICATION (FR-024): 1024MB required for FastAPI+Mangum with async handlers
+  # JUSTIFICATION (FR-024): 1024MB required for Powertools resolver with handler
   memory_size          = 1024
   timeout              = 60
   reserved_concurrency = 10
@@ -430,7 +430,7 @@ module "dashboard_lambda" {
   # This prevents duplicate Access-Control-Allow-Origin headers
   create_function_url    = true
   function_url_auth_type = "NONE"
-  # BUFFERED mode for Mangum-based REST API (per research.md decision #2)
+  # BUFFERED mode for Powertools REST API (per research.md decision #2)
   # SSE streaming is handled by separate sse_streaming Lambda with RESPONSE_STREAM
   function_url_invoke_mode = "BUFFERED"
   # Feature 1159: Enable credentials for cross-origin cookie transmission
@@ -572,8 +572,8 @@ module "notification_lambda" {
 # ===================================================================
 # Module: SSE Streaming Lambda (Feature 016 - Real-time SSE)
 # ===================================================================
-# Uses AWS Lambda Web Adapter with RESPONSE_STREAM invoke mode
-# Separate from dashboard Lambda which uses Mangum/BUFFERED mode
+# Uses custom Runtime API bootstrap with RESPONSE_STREAM invoke mode
+# Separate from dashboard Lambda which uses Powertools/BUFFERED mode
 
 locals {
   sse_lambda_name = "${var.environment}-sentiment-sse-streaming"
@@ -739,10 +739,6 @@ module "sse_streaming_lambda" {
     SSE_MAX_CONNECTIONS    = "100"
     SSE_POLL_INTERVAL      = tostring(var.sse_poll_interval)
     ENVIRONMENT            = var.environment
-    AWS_LWA_INVOKE_MODE    = "RESPONSE_STREAM"
-    # Fix(141): Tell Lambda Web Adapter to check /health instead of default /
-    # This fixes "GET / HTTP/1.1 404 Not Found" logs during Lambda init
-    AWS_LWA_READINESS_CHECK_PATH = "/health"
     # Feature 1009: Time-series table for multi-resolution queries and streaming
     TIMESERIES_TABLE = module.dynamodb.timeseries_table_name
     # Feature 1054: JWT secret for auth middleware token validation
