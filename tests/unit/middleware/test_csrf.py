@@ -3,10 +3,10 @@
 Feature: 1158-csrf-double-submit
 """
 
+import json
 from unittest.mock import MagicMock
 
 import pytest
-from fastapi import HTTPException
 
 from src.lambdas.shared.auth.csrf import (
     CSRF_COOKIE_NAME,
@@ -15,7 +15,7 @@ from src.lambdas.shared.auth.csrf import (
     is_csrf_exempt,
     validate_csrf_token,
 )
-from src.lambdas.shared.middleware.csrf_middleware import require_csrf
+from src.lambdas.shared.middleware.csrf_middleware import require_csrf_middleware
 
 
 class TestGenerateCsrfToken:
@@ -138,74 +138,90 @@ class TestIsCsrfExempt:
         assert is_csrf_exempt("Get", "/api/v2/some/path") is True
 
 
-class TestRequireCsrf:
-    """Tests for require_csrf FastAPI dependency."""
+class TestRequireCsrfMiddleware:
+    """Tests for require_csrf_middleware Powertools middleware."""
 
     @pytest.fixture
-    def mock_request(self) -> MagicMock:
-        """Create a mock FastAPI request."""
-        request = MagicMock()
-        request.method = "POST"
-        request.url.path = "/api/v2/some/endpoint"
-        request.cookies = {}
-        request.headers = {}
-        return request
+    def mock_app(self) -> MagicMock:
+        """Create a mock Powertools app with a POST event."""
+        app = MagicMock()
+        app.current_event.raw_event = {
+            "httpMethod": "POST",
+            "path": "/api/v2/some/endpoint",
+            "headers": {},
+        }
+        return app
 
-    @pytest.mark.asyncio
-    async def test_valid_csrf_passes(self, mock_request: MagicMock) -> None:
+    @pytest.fixture
+    def mock_next(self) -> MagicMock:
+        """Create mock next_middleware callable."""
+        return MagicMock(return_value={"statusCode": 200, "body": '{"ok": true}'})
+
+    def test_valid_csrf_passes(self, mock_app: MagicMock, mock_next: MagicMock) -> None:
         """Valid matching CSRF tokens should pass."""
         token = generate_csrf_token()
-        mock_request.cookies = {CSRF_COOKIE_NAME: token}
-        mock_request.headers = {CSRF_HEADER_NAME: token}
+        mock_app.current_event.raw_event["headers"]["cookie"] = (
+            f"{CSRF_COOKIE_NAME}={token}"
+        )
+        mock_app.current_event.raw_event["headers"][CSRF_HEADER_NAME.lower()] = token
 
-        # Should not raise
-        await require_csrf(mock_request)
+        require_csrf_middleware(mock_app, mock_next)
+        mock_next.assert_called_once_with(mock_app)
 
-    @pytest.mark.asyncio
-    async def test_missing_cookie_fails(self, mock_request: MagicMock) -> None:
+    def test_missing_cookie_fails(
+        self, mock_app: MagicMock, mock_next: MagicMock
+    ) -> None:
         """Missing CSRF cookie should fail with 403."""
         token = generate_csrf_token()
-        mock_request.headers = {CSRF_HEADER_NAME: token}
+        mock_app.current_event.raw_event["headers"][CSRF_HEADER_NAME.lower()] = token
 
-        with pytest.raises(HTTPException) as exc_info:
-            await require_csrf(mock_request)
+        result = require_csrf_middleware(mock_app, mock_next)
+        assert result["statusCode"] == 403
+        body = json.loads(result["body"])
+        assert body["error_code"] == "AUTH_019"
 
-        assert exc_info.value.status_code == 403
-        assert exc_info.value.detail["error_code"] == "AUTH_019"
-
-    @pytest.mark.asyncio
-    async def test_missing_header_fails(self, mock_request: MagicMock) -> None:
+    def test_missing_header_fails(
+        self, mock_app: MagicMock, mock_next: MagicMock
+    ) -> None:
         """Missing CSRF header should fail with 403."""
         token = generate_csrf_token()
-        mock_request.cookies = {CSRF_COOKIE_NAME: token}
+        mock_app.current_event.raw_event["headers"]["cookie"] = (
+            f"{CSRF_COOKIE_NAME}={token}"
+        )
 
-        with pytest.raises(HTTPException) as exc_info:
-            await require_csrf(mock_request)
+        result = require_csrf_middleware(mock_app, mock_next)
+        assert result["statusCode"] == 403
+        body = json.loads(result["body"])
+        assert body["error_code"] == "AUTH_019"
 
-        assert exc_info.value.status_code == 403
-        assert exc_info.value.detail["error_code"] == "AUTH_019"
-
-    @pytest.mark.asyncio
-    async def test_mismatched_tokens_fails(self, mock_request: MagicMock) -> None:
+    def test_mismatched_tokens_fails(
+        self, mock_app: MagicMock, mock_next: MagicMock
+    ) -> None:
         """Mismatched CSRF tokens should fail with 403."""
-        mock_request.cookies = {CSRF_COOKIE_NAME: generate_csrf_token()}
-        mock_request.headers = {CSRF_HEADER_NAME: generate_csrf_token()}
+        mock_app.current_event.raw_event["headers"]["cookie"] = (
+            f"{CSRF_COOKIE_NAME}={generate_csrf_token()}"
+        )
+        mock_app.current_event.raw_event["headers"][CSRF_HEADER_NAME.lower()] = (
+            generate_csrf_token()
+        )
 
-        with pytest.raises(HTTPException) as exc_info:
-            await require_csrf(mock_request)
+        result = require_csrf_middleware(mock_app, mock_next)
+        assert result["statusCode"] == 403
 
-        assert exc_info.value.status_code == 403
-
-    @pytest.mark.asyncio
-    async def test_get_request_exempt(self, mock_request: MagicMock) -> None:
+    def test_get_request_exempt(
+        self, mock_app: MagicMock, mock_next: MagicMock
+    ) -> None:
         """GET requests should be exempt from CSRF validation."""
-        mock_request.method = "GET"
+        mock_app.current_event.raw_event["httpMethod"] = "GET"
         # No tokens set - should still pass because GET is exempt
-        await require_csrf(mock_request)
+        require_csrf_middleware(mock_app, mock_next)
+        mock_next.assert_called_once_with(mock_app)
 
-    @pytest.mark.asyncio
-    async def test_refresh_endpoint_exempt(self, mock_request: MagicMock) -> None:
+    def test_refresh_endpoint_exempt(
+        self, mock_app: MagicMock, mock_next: MagicMock
+    ) -> None:
         """Refresh endpoint should be exempt from CSRF validation."""
-        mock_request.url.path = "/api/v2/auth/refresh"
+        mock_app.current_event.raw_event["path"] = "/api/v2/auth/refresh"
         # No tokens set - should still pass because refresh is exempt
-        await require_csrf(mock_request)
+        require_csrf_middleware(mock_app, mock_next)
+        mock_next.assert_called_once_with(mock_app)

@@ -13,21 +13,18 @@ For On-Call Engineers:
     These tests use mock adapters - no real API calls.
     If tests fail, check:
     1. MockTiingoAdapter is returning valid OHLCCandle objects
-    2. FastAPI dependency overrides are set correctly
+    2. Mock patches for get_tiingo_adapter are correct
     3. Response model serialization is correct
 """
 
+import json
 from datetime import date, timedelta
+from unittest.mock import patch
 
 import pytest
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
-from src.lambdas.dashboard.ohlc import (
-    get_finnhub_adapter,
-    get_tiingo_adapter,
-    router,
-)
+from src.lambdas.dashboard.handler import lambda_handler
+from tests.conftest import make_event
 from tests.fixtures.mocks.mock_finnhub import MockFinnhubAdapter
 from tests.fixtures.mocks.mock_tiingo import MockTiingoAdapter
 
@@ -45,21 +42,6 @@ def mock_finnhub():
 
 
 @pytest.fixture
-def test_client(mock_tiingo, mock_finnhub):
-    """Create test client with mock adapters injected."""
-    app = FastAPI()
-    app.include_router(router)
-
-    app.dependency_overrides[get_tiingo_adapter] = lambda: mock_tiingo
-    app.dependency_overrides[get_finnhub_adapter] = lambda: mock_finnhub
-
-    with TestClient(app) as client:
-        yield client
-
-    app.dependency_overrides.clear()
-
-
-@pytest.fixture
 def auth_headers():
     """Headers with valid authentication (Feature 1146: Bearer-only auth)."""
     return {"Authorization": "Bearer 550e8400-e29b-41d4-a716-446655440000"}
@@ -70,14 +52,24 @@ class TestOHLCHappyPath:
 
     # T016: Valid ticker with default parameters
     @pytest.mark.ohlc
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
     def test_ohlc_valid_ticker_default_params(
-        self, test_client, auth_headers, ohlc_validator
+        self,
+        mock_tiingo_dep,
+        mock_lambda_context,
+        auth_headers,
+        ohlc_validator,
+        mock_tiingo,
     ):
         """OHLC endpoint returns valid data for ticker with default params."""
-        response = test_client.get("/api/v2/tickers/AAPL/ohlc", headers=auth_headers)
+        mock_tiingo_dep.return_value = mock_tiingo
+        event = make_event(
+            method="GET", path="/api/v2/tickers/AAPL/ohlc", headers=auth_headers
+        )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
 
         # Validate response structure and business rules
         ohlc_validator.assert_valid(data)
@@ -96,17 +88,28 @@ class TestOHLCHappyPath:
         ["1", "5", "15", "30", "60"],
         ids=["1min", "5min", "15min", "30min", "60min"],
     )
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
     def test_ohlc_intraday_resolutions(
-        self, test_client, auth_headers, ohlc_validator, resolution
+        self,
+        mock_tiingo_dep,
+        mock_lambda_context,
+        auth_headers,
+        ohlc_validator,
+        resolution,
+        mock_tiingo,
     ):
         """OHLC endpoint returns valid data for intraday resolutions (Feature 1056)."""
-        response = test_client.get(
-            f"/api/v2/tickers/AAPL/ohlc?resolution={resolution}&range=1W",
+        mock_tiingo_dep.return_value = mock_tiingo
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/AAPL/ohlc",
+            query_params={"resolution": resolution, "range": "1W"},
             headers=auth_headers,
         )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
 
         ohlc_validator.assert_valid(data)
         assert data["ticker"] == "AAPL"
@@ -128,22 +131,30 @@ class TestOHLCHappyPath:
         ],
         ids=["1W", "1M", "3M", "6M", "1Y"],
     )
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
     def test_ohlc_time_ranges(
         self,
-        test_client,
+        mock_tiingo_dep,
+        mock_lambda_context,
         auth_headers,
         ohlc_validator,
         time_range,
         expected_days_min,
         expected_days_max,
+        mock_tiingo,
     ):
         """OHLC endpoint returns appropriate data for each time range."""
-        response = test_client.get(
-            f"/api/v2/tickers/MSFT/ohlc?range={time_range}", headers=auth_headers
+        mock_tiingo_dep.return_value = mock_tiingo
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/MSFT/ohlc",
+            query_params={"range": time_range},
+            headers=auth_headers,
         )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
 
         ohlc_validator.assert_valid(data)
         assert data["time_range"] == time_range
@@ -152,18 +163,30 @@ class TestOHLCHappyPath:
 
     # T018: Custom date range
     @pytest.mark.ohlc
-    def test_ohlc_custom_date_range(self, test_client, auth_headers, ohlc_validator):
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
+    def test_ohlc_custom_date_range(
+        self,
+        mock_tiingo_dep,
+        mock_lambda_context,
+        auth_headers,
+        ohlc_validator,
+        mock_tiingo,
+    ):
         """OHLC endpoint accepts custom start_date and end_date."""
+        mock_tiingo_dep.return_value = mock_tiingo
         start = date.today() - timedelta(days=14)
         end = date.today()
 
-        response = test_client.get(
-            f"/api/v2/tickers/GOOGL/ohlc?start_date={start}&end_date={end}",
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/GOOGL/ohlc",
+            query_params={"start_date": str(start), "end_date": str(end)},
             headers=auth_headers,
         )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
 
         ohlc_validator.assert_valid(data)
         assert data["time_range"] == "custom"
@@ -172,14 +195,24 @@ class TestOHLCHappyPath:
 
     # T019: Lowercase ticker normalization
     @pytest.mark.ohlc
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
     def test_ohlc_lowercase_ticker_normalization(
-        self, test_client, auth_headers, ohlc_validator
+        self,
+        mock_tiingo_dep,
+        mock_lambda_context,
+        auth_headers,
+        ohlc_validator,
+        mock_tiingo,
     ):
         """OHLC endpoint normalizes lowercase ticker to uppercase."""
-        response = test_client.get("/api/v2/tickers/aapl/ohlc", headers=auth_headers)
+        mock_tiingo_dep.return_value = mock_tiingo
+        event = make_event(
+            method="GET", path="/api/v2/tickers/aapl/ohlc", headers=auth_headers
+        )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
 
         # Ticker should be normalized to uppercase
         assert data["ticker"] == "AAPL"
@@ -187,12 +220,19 @@ class TestOHLCHappyPath:
 
     # T020: Cache expires at field present
     @pytest.mark.ohlc
-    def test_ohlc_cache_expires_at_field(self, test_client, auth_headers):
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
+    def test_ohlc_cache_expires_at_field(
+        self, mock_tiingo_dep, mock_lambda_context, auth_headers, mock_tiingo
+    ):
         """OHLC response includes cache_expires_at timestamp."""
-        response = test_client.get("/api/v2/tickers/NVDA/ohlc", headers=auth_headers)
+        mock_tiingo_dep.return_value = mock_tiingo
+        event = make_event(
+            method="GET", path="/api/v2/tickers/NVDA/ohlc", headers=auth_headers
+        )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
 
         assert "cache_expires_at" in data
         # Should be a valid ISO 8601 datetime string
@@ -202,56 +242,77 @@ class TestOHLCHappyPath:
 
     # T021: Source field shows tiingo when primary succeeds
     @pytest.mark.ohlc
-    def test_ohlc_source_field_tiingo(self, test_client, auth_headers):
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
+    def test_ohlc_source_field_tiingo(
+        self, mock_tiingo_dep, mock_lambda_context, auth_headers, mock_tiingo
+    ):
         """OHLC response shows 'tiingo' as source when primary succeeds."""
-        response = test_client.get("/api/v2/tickers/TSLA/ohlc", headers=auth_headers)
+        mock_tiingo_dep.return_value = mock_tiingo
+        event = make_event(
+            method="GET", path="/api/v2/tickers/TSLA/ohlc", headers=auth_headers
+        )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
 
         # Primary source (tiingo) should be used when it succeeds
         assert data["source"] == "tiingo"
 
     # T022: Returns 404 when Tiingo fails (Feature 1055: no Finnhub fallback)
     @pytest.mark.ohlc
-    def test_ohlc_returns_404_when_tiingo_fails(self, auth_headers):
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
+    def test_ohlc_returns_404_when_tiingo_fails(
+        self, mock_tiingo_dep, mock_lambda_context, auth_headers
+    ):
         """OHLC returns 404 when tiingo fails (Feature 1055: no Finnhub fallback for OHLC)."""
         # Create failing Tiingo adapter
         tiingo_failing = MockTiingoAdapter(seed=42, fail_mode=True)
-        finnhub_working = MockFinnhubAdapter(seed=42)
+        mock_tiingo_dep.return_value = tiingo_failing
 
-        app = FastAPI()
-        app.include_router(router)
-        app.dependency_overrides[get_tiingo_adapter] = lambda: tiingo_failing
-        app.dependency_overrides[get_finnhub_adapter] = lambda: finnhub_working
-
-        with TestClient(app) as client:
-            response = client.get("/api/v2/tickers/AMD/ohlc", headers=auth_headers)
+        event = make_event(
+            method="GET", path="/api/v2/tickers/AMD/ohlc", headers=auth_headers
+        )
+        response = lambda_handler(event, mock_lambda_context)
 
         # Feature 1055: No Finnhub fallback - Tiingo failure returns 404
-        assert response.status_code == 404
-        assert "No price data available" in response.json()["detail"]
+        assert response["statusCode"] == 404
+        assert "No price data available" in json.loads(response["body"])["detail"]
 
     # T023: Count matches candles array length
     @pytest.mark.ohlc
-    def test_ohlc_count_matches_candles_length(self, test_client, auth_headers):
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
+    def test_ohlc_count_matches_candles_length(
+        self, mock_tiingo_dep, mock_lambda_context, auth_headers, mock_tiingo
+    ):
         """OHLC response count field equals len(candles)."""
-        response = test_client.get("/api/v2/tickers/META/ohlc", headers=auth_headers)
+        mock_tiingo_dep.return_value = mock_tiingo
+        event = make_event(
+            method="GET", path="/api/v2/tickers/META/ohlc", headers=auth_headers
+        )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
 
         assert data["count"] == len(data["candles"])
         assert data["count"] > 0
 
     # T024: Start date matches first candle date
     @pytest.mark.ohlc
-    def test_ohlc_start_date_matches_first_candle(self, test_client, auth_headers):
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
+    def test_ohlc_start_date_matches_first_candle(
+        self, mock_tiingo_dep, mock_lambda_context, auth_headers, mock_tiingo
+    ):
         """OHLC response start_date equals first candle's date."""
-        response = test_client.get("/api/v2/tickers/AMZN/ohlc", headers=auth_headers)
+        mock_tiingo_dep.return_value = mock_tiingo
+        event = make_event(
+            method="GET", path="/api/v2/tickers/AMZN/ohlc", headers=auth_headers
+        )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
 
         assert len(data["candles"]) > 0
         first_candle_date = data["candles"][0]["date"]
@@ -259,12 +320,19 @@ class TestOHLCHappyPath:
 
     # T025: End date matches last candle date
     @pytest.mark.ohlc
-    def test_ohlc_end_date_matches_last_candle(self, test_client, auth_headers):
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
+    def test_ohlc_end_date_matches_last_candle(
+        self, mock_tiingo_dep, mock_lambda_context, auth_headers, mock_tiingo
+    ):
         """OHLC response end_date equals last candle's date."""
-        response = test_client.get("/api/v2/tickers/NFLX/ohlc", headers=auth_headers)
+        mock_tiingo_dep.return_value = mock_tiingo
+        event = make_event(
+            method="GET", path="/api/v2/tickers/NFLX/ohlc", headers=auth_headers
+        )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
 
         assert len(data["candles"]) > 0
         last_candle_date = data["candles"][-1]["date"]
@@ -275,25 +343,40 @@ class TestOHLCCandleValidation:
     """Additional tests for OHLC candle data validation."""
 
     @pytest.mark.ohlc
-    def test_ohlc_candles_sorted_by_date_ascending(self, test_client, auth_headers):
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
+    def test_ohlc_candles_sorted_by_date_ascending(
+        self, mock_tiingo_dep, mock_lambda_context, auth_headers, mock_tiingo
+    ):
         """OHLC candles are sorted by date in ascending order."""
-        response = test_client.get(
-            "/api/v2/tickers/AAPL/ohlc?range=1M", headers=auth_headers
+        mock_tiingo_dep.return_value = mock_tiingo
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/AAPL/ohlc",
+            query_params={"range": "1M"},
+            headers=auth_headers,
         )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
 
         dates = [candle["date"] for candle in data["candles"]]
         assert dates == sorted(dates), "Candles should be sorted by date ascending"
 
     @pytest.mark.ohlc
-    def test_ohlc_candle_prices_positive(self, test_client, auth_headers):
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
+    def test_ohlc_candle_prices_positive(
+        self, mock_tiingo_dep, mock_lambda_context, auth_headers, mock_tiingo
+    ):
         """All OHLC prices are positive."""
-        response = test_client.get("/api/v2/tickers/MSFT/ohlc", headers=auth_headers)
+        mock_tiingo_dep.return_value = mock_tiingo
+        event = make_event(
+            method="GET", path="/api/v2/tickers/MSFT/ohlc", headers=auth_headers
+        )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
 
         for candle in data["candles"]:
             assert candle["open"] > 0, "open must be positive"
@@ -302,12 +385,19 @@ class TestOHLCCandleValidation:
             assert candle["close"] > 0, "close must be positive"
 
     @pytest.mark.ohlc
-    def test_ohlc_candle_high_low_relationship(self, test_client, auth_headers):
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
+    def test_ohlc_candle_high_low_relationship(
+        self, mock_tiingo_dep, mock_lambda_context, auth_headers, mock_tiingo
+    ):
         """OHLC high >= low for all candles."""
-        response = test_client.get("/api/v2/tickers/GOOGL/ohlc", headers=auth_headers)
+        mock_tiingo_dep.return_value = mock_tiingo
+        event = make_event(
+            method="GET", path="/api/v2/tickers/GOOGL/ohlc", headers=auth_headers
+        )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
 
         for i, candle in enumerate(data["candles"]):
             assert (
@@ -315,12 +405,19 @@ class TestOHLCCandleValidation:
             ), f"Candle {i}: high ({candle['high']}) must be >= low ({candle['low']})"
 
     @pytest.mark.ohlc
-    def test_ohlc_candle_open_close_within_range(self, test_client, auth_headers):
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
+    def test_ohlc_candle_open_close_within_range(
+        self, mock_tiingo_dep, mock_lambda_context, auth_headers, mock_tiingo
+    ):
         """OHLC open and close are within [low, high] range."""
-        response = test_client.get("/api/v2/tickers/NVDA/ohlc", headers=auth_headers)
+        mock_tiingo_dep.return_value = mock_tiingo
+        event = make_event(
+            method="GET", path="/api/v2/tickers/NVDA/ohlc", headers=auth_headers
+        )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
 
         for i, candle in enumerate(data["candles"]):
             assert candle["low"] <= candle["open"] <= candle["high"], (
