@@ -1,5 +1,5 @@
 # Dashboard Lambda - Docker Image
-# FastAPI + Mangum for serving dashboard UI and API endpoints
+# Powertools APIGatewayRestResolver for serving dashboard UI and API endpoints
 # Feature 1036: Container-based deployment to fix pydantic binary incompatibility
 #
 # Build context: src/ (allows importing from lambdas/ and lib/)
