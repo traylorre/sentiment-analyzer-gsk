@@ -22,7 +22,6 @@ import logging
 from typing import Literal
 
 import orjson
-from aws_lambda_powertools.event_handler import Response
 from aws_lambda_powertools.event_handler.api_gateway import Router
 from botocore.exceptions import ClientError
 from pydantic import BaseModel, EmailStr, ValidationError
@@ -134,7 +133,7 @@ admin_router = Router()
 
 
 # =============================================================================
-# Helper functions for raw API Gateway event dicts
+# Helper functions (migrated from FastAPI Request/Response to raw event dicts)
 # =============================================================================
 
 
@@ -184,26 +183,27 @@ def _json_response_with_cookies(
     status_code: int = 200,
     cookies: list[str] | None = None,
     extra_headers: dict[str, str] | None = None,
-) -> Response:
+) -> dict:
     """Build a JSON response with optional Set-Cookie headers.
 
-    Returns a Powertools Response object. Set-Cookie headers are passed
-    via the headers dict as a list, which Powertools serializes into
-    multiValueHeaders in the API Gateway response format.
+    Uses multiValueHeaders for multiple Set-Cookie headers since
+    API Gateway requires this for multiple cookies.
     """
-    headers: dict[str, str | list[str]] = {}
+    headers = {"Content-Type": "application/json"}
     if extra_headers:
         headers.update(extra_headers)
 
-    if cookies:
-        headers["Set-Cookie"] = cookies
+    response = {
+        "statusCode": status_code,
+        "headers": headers,
+        "body": orjson.dumps(body).decode(),
+        "isBase64Encoded": False,
+    }
 
-    return Response(
-        status_code=status_code,
-        content_type="application/json",
-        body=orjson.dumps(body).decode(),
-        headers=headers,
-    )
+    if cookies:
+        response["multiValueHeaders"] = {"Set-Cookie": cookies}
+
+    return response
 
 
 def get_user_id_from_event(
@@ -226,7 +226,7 @@ def get_user_id_from_event(
     Note:
         On error, this function returns None and callers should check and
         return the appropriate error response. We use a sentinel pattern
-        to avoid exception-based flow control with HTTP exceptions.
+        to avoid exception-based flow control with FastAPI HTTPException.
     """
     auth_context = extract_auth_context(event)
 
@@ -2115,7 +2115,12 @@ def get_current_user():
 
 
 def include_routers(app):
-    """Include all v2 routers in the Powertools app."""
+    """Include all v2 routers in the Powertools app.
+
+    Note: ohlc_module.router and sse_module.router are still FastAPI-based
+    and will be migrated in T020 and T023 respectively. They are temporarily
+    excluded until their migration is complete.
+    """
     app.include_router(auth_router)
     app.include_router(config_router)
     app.include_router(ticker_router)
@@ -2128,11 +2133,4 @@ def include_routers(app):
     app.include_router(admin_router)
     # Feature 1009: Multi-resolution sentiment time-series
     app.include_router(timeseries_router)
-    # OHLC router (migrated to Powertools in T020)
-    from src.lambdas.dashboard.ohlc import router as ohlc_router
-
-    app.include_router(ohlc_router)
-    # SSE router (migrated to Powertools in T023)
-    from src.lambdas.dashboard.sse import router as sse_router
-
-    app.include_router(sse_router)
+    # NOTE: ohlc_module.router and sse_module.router excluded until T020/T023
