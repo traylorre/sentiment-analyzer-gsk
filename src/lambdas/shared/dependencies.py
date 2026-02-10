@@ -58,7 +58,7 @@ def get_tiingo_adapter():
     """
     global _tiingo_adapter
     if _tiingo_adapter is None:
-        from src.lambdas.dashboard.ohlc import TiingoAdapter
+        from src.lambdas.shared.adapters.tiingo import TiingoAdapter
         from src.lambdas.shared.logging_utils import get_safe_error_info
 
         api_key = os.environ.get("TIINGO_API_KEY")
@@ -95,7 +95,7 @@ def get_finnhub_adapter():
     """
     global _finnhub_adapter
     if _finnhub_adapter is None:
-        from src.lambdas.dashboard.ohlc import FinnhubAdapter
+        from src.lambdas.shared.adapters.finnhub import FinnhubAdapter
         from src.lambdas.shared.logging_utils import get_safe_error_info
 
         api_key = os.environ.get("FINNHUB_API_KEY")
