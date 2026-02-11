@@ -176,8 +176,8 @@ class TestRequireCsrfMiddleware:
         mock_app.current_event.raw_event["headers"][CSRF_HEADER_NAME.lower()] = token
 
         result = require_csrf_middleware(mock_app, mock_next)
-        assert result["statusCode"] == 403
-        body = json.loads(result["body"])
+        assert result.status_code == 403
+        body = json.loads(result.body)
         assert body["error_code"] == "AUTH_019"
 
     def test_missing_header_fails(
@@ -190,8 +190,8 @@ class TestRequireCsrfMiddleware:
         )
 
         result = require_csrf_middleware(mock_app, mock_next)
-        assert result["statusCode"] == 403
-        body = json.loads(result["body"])
+        assert result.status_code == 403
+        body = json.loads(result.body)
         assert body["error_code"] == "AUTH_019"
 
     def test_mismatched_tokens_fails(
@@ -206,7 +206,7 @@ class TestRequireCsrfMiddleware:
         )
 
         result = require_csrf_middleware(mock_app, mock_next)
-        assert result["statusCode"] == 403
+        assert result.status_code == 403
 
     def test_get_request_exempt(
         self, mock_app: MagicMock, mock_next: MagicMock

@@ -11,7 +11,7 @@ Tests cover:
 
 import json
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -21,9 +21,9 @@ from src.lambdas.dashboard.sse import (
     HeartbeatEventData,
     MetricsEventData,
     NewItemEventData,
+    _build_sse_snapshot,
     _generate_event_id,
     connection_manager,
-    create_event_generator,
 )
 from tests.conftest import make_event
 
@@ -211,51 +211,40 @@ class TestEventGeneration:
         ids = [_generate_event_id() for _ in range(100)]
         assert len(set(ids)) == 100
 
-    @pytest.mark.asyncio
-    async def test_create_event_generator_yields_heartbeat(self):
-        """Event generator yields heartbeat events (FR-004)."""
+    def test_build_sse_snapshot_contains_metrics_and_heartbeat(self):
+        """SSE snapshot contains metrics and heartbeat events (FR-004)."""
         with patch(
             "src.lambdas.dashboard.sse._get_metrics_data",
-            new_callable=AsyncMock,
             return_value=MetricsEventData(),
         ):
-            gen = create_event_generator(heartbeat_interval=0.1, metrics_interval=0.1)
+            snapshot = _build_sse_snapshot()
 
-            # Get first event
-            event = await gen.__anext__()
+            # Should contain both event types
+            assert "event: metrics" in snapshot
+            assert "event: heartbeat" in snapshot
 
-            # Should be either metrics or heartbeat
-            assert event["event"] in ("metrics", "heartbeat")
-            assert "id" in event
-            assert event["id"].startswith("evt_")
-            assert "data" in event
+            # Should contain event IDs
+            assert "id: evt_" in snapshot
 
-            # Parse data as JSON
-            data = json.loads(event["data"])
-            assert "origin_timestamp" in data
+            # Parse the metrics data line
+            for line in snapshot.split("\n"):
+                if line.startswith("data: ") and "origin_timestamp" in line:
+                    data = json.loads(line[6:])
+                    assert "origin_timestamp" in data
+                    break
+            else:
+                pytest.fail("No data line with origin_timestamp found")
 
-            # Cancel generator
-            await gen.aclose()
-
-    @pytest.mark.asyncio
-    async def test_create_event_generator_with_last_event_id(self):
-        """Event generator accepts Last-Event-ID for reconnection (FR-005)."""
+    def test_build_sse_snapshot_with_last_event_id(self):
+        """SSE snapshot accepts Last-Event-ID for reconnection (FR-005)."""
         with patch(
             "src.lambdas.dashboard.sse._get_metrics_data",
-            new_callable=AsyncMock,
             return_value=MetricsEventData(),
         ):
-            gen = create_event_generator(
-                heartbeat_interval=0.1,
-                metrics_interval=0.1,
-                last_event_id="evt_abc123",
-            )
-
             # Should not raise - just accept the ID
-            event = await gen.__anext__()
-            assert event is not None
-
-            await gen.aclose()
+            snapshot = _build_sse_snapshot(last_event_id="evt_abc123")
+            assert snapshot is not None
+            assert "event: metrics" in snapshot
 
 
 # =============================================================================
@@ -276,15 +265,12 @@ class TestGlobalStreamEndpoint:
         """
         from src.lambdas.dashboard.sse import router
 
-        # Verify the router has the stream route by checking its routes list
-        route_paths = []
-        for route in router._routes:
-            route_paths.append(route.path)
+        # Verify the router has the stream route by checking its routes dict
+        route_paths = [key[0] for key in router._routes]
 
         assert "/api/v2/stream" in route_paths, "Stream endpoint should be registered"
 
-    @pytest.mark.asyncio
-    async def test_stream_503_when_limit_reached(self, mock_lambda_context):
+    def test_stream_503_when_limit_reached(self, mock_lambda_context):
         """Global stream returns 503 when connection limit reached (FR-015)."""
         # Set connection manager to limit
         original_count = connection_manager._count
@@ -313,8 +299,7 @@ class TestGlobalStreamEndpoint:
 class TestConfigStreamEndpoint:
     """Tests for GET /api/v2/configurations/{config_id}/stream endpoint."""
 
-    @pytest.mark.asyncio
-    async def test_config_stream_requires_auth(self, mock_lambda_context):
+    def test_config_stream_requires_auth(self, mock_lambda_context):
         """Config stream returns 401 without authentication (FR-007)."""
         # Reset connection manager
         original_count = connection_manager._count
@@ -333,16 +318,15 @@ class TestConfigStreamEndpoint:
         finally:
             connection_manager._count = original_count
 
-    @pytest.mark.asyncio
-    async def test_config_stream_404_invalid_config(self, mock_lambda_context):
+    def test_config_stream_404_invalid_config(self, mock_lambda_context):
         """Config stream returns 404 for invalid config ID (FR-008)."""
         # Reset connection manager
         original_count = connection_manager._count
         connection_manager._count = 0
 
         with patch(
-            "src.lambdas.dashboard.router_v2.get_user_id_from_request",
-            return_value="user-123",
+            "src.lambdas.dashboard.sse.extract_auth_context",
+            return_value={"user_id": "user-123"},
         ):
             with patch(
                 "src.lambdas.dashboard.sse.SENTIMENTS_TABLE",

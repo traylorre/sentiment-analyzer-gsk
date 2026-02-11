@@ -1,8 +1,8 @@
-"""Response builder utilities for API Gateway Proxy Integration responses.
+"""Response builder utilities for Powertools-based Lambda handlers.
 
 Provides standardized response construction using orjson for serialization.
-Produces responses in the exact API Gateway Proxy Integration format:
-    {"statusCode": int, "headers": dict, "body": str, "isBase64Encoded": bool}
+Returns Powertools Response objects compatible with APIGatewayRestResolver
+route handlers and middleware.
 
 References:
     FR-005: All dashboard responses use proxy integration dicts
@@ -11,6 +11,7 @@ References:
 """
 
 import orjson
+from aws_lambda_powertools.event_handler import Response
 from pydantic import ValidationError
 
 
@@ -18,8 +19,8 @@ def json_response(
     status_code: int,
     body: dict | list,
     headers: dict[str, str] | None = None,
-) -> dict:
-    """Build a JSON API Gateway Proxy Integration response.
+) -> Response:
+    """Build a JSON response as a Powertools Response object.
 
     Args:
         status_code: HTTP status code.
@@ -27,20 +28,17 @@ def json_response(
         headers: Additional response headers.
 
     Returns:
-        API Gateway Proxy Integration response dict.
+        Powertools Response object.
     """
-    response_headers = {"Content-Type": "application/json"}
-    if headers:
-        response_headers.update(headers)
-    return {
-        "statusCode": status_code,
-        "headers": response_headers,
-        "body": orjson.dumps(body).decode(),
-        "isBase64Encoded": False,
-    }
+    return Response(
+        status_code=status_code,
+        content_type="application/json",
+        body=orjson.dumps(body).decode(),
+        headers=headers or {},
+    )
 
 
-def error_response(status_code: int, detail: str) -> dict:
+def error_response(status_code: int, detail: str) -> Response:
     """Build an error response with a detail message.
 
     Args:
@@ -48,12 +46,12 @@ def error_response(status_code: int, detail: str) -> dict:
         detail: Human-readable error message.
 
     Returns:
-        API Gateway Proxy Integration response dict.
+        Powertools Response object.
     """
     return json_response(status_code, {"detail": detail})
 
 
-def validation_error_response(exc: ValidationError) -> dict:
+def validation_error_response(exc: ValidationError) -> Response:
     """Build a 422 validation error response in FastAPI-parity format.
 
     Produces: {"detail": [{"loc": [...], "msg": "...", "type": "..."}]}
@@ -64,6 +62,6 @@ def validation_error_response(exc: ValidationError) -> dict:
         exc: Pydantic ValidationError instance.
 
     Returns:
-        API Gateway Proxy Integration response dict with 422 status.
+        Powertools Response object with 422 status.
     """
     return json_response(422, {"detail": exc.errors()})

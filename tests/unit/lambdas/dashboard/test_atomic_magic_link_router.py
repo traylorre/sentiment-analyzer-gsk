@@ -47,7 +47,7 @@ class TestMagicLinkRouterAtomicIntegration:
         mock_auth_service.ErrorResponse = type("ErrorResponse", (), {})
 
         event = make_event(
-            method="POST",
+            method="GET",
             path="/api/v2/auth/magic-link/verify",
             query_params={"token": "test-token-123"},
         )
@@ -72,7 +72,7 @@ class TestMagicLinkRouterAtomicIntegration:
         mock_auth_service.ErrorResponse = type("ErrorResponse", (), {})
 
         event = make_event(
-            method="POST",
+            method="GET",
             path="/api/v2/auth/magic-link/verify",
             query_params={"token": "test-token-123"},
             headers={"X-Forwarded-For": "10.0.0.1, 192.168.1.1"},
@@ -97,7 +97,7 @@ class TestMagicLinkRouterAtomicIntegration:
         )
 
         event = make_event(
-            method="POST",
+            method="GET",
             path="/api/v2/auth/magic-link/verify",
             query_params={"token": "test-token-123"},
         )
@@ -121,7 +121,7 @@ class TestMagicLinkRouterAtomicIntegration:
         )
 
         event = make_event(
-            method="POST",
+            method="GET",
             path="/api/v2/auth/magic-link/verify",
             query_params={"token": "test-token-123"},
         )
@@ -148,7 +148,7 @@ class TestMagicLinkRouterAtomicIntegration:
         mock_auth_service.ErrorResponse = type("ErrorResponse", (), {})
 
         event = make_event(
-            method="POST",
+            method="GET",
             path="/api/v2/auth/magic-link/verify",
             query_params={"token": "test-token-123"},
         )
@@ -172,7 +172,7 @@ class TestMagicLinkRouterAtomicIntegration:
         mock_auth_service.ErrorResponse = type("ErrorResponse", (), {})
 
         event = make_event(
-            method="POST",
+            method="GET",
             path="/api/v2/auth/magic-link/verify",
             query_params={"token": "test-token-123"},
         )
@@ -199,7 +199,7 @@ class TestMagicLinkRouterAtomicIntegration:
 
         # Event with no X-Forwarded-For; sourceIp comes from requestContext
         event = make_event(
-            method="POST",
+            method="GET",
             path="/api/v2/auth/magic-link/verify",
             query_params={"token": "test-token-123"},
         )

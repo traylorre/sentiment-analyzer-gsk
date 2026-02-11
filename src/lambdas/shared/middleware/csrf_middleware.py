@@ -20,7 +20,7 @@ from src.lambdas.shared.auth.csrf import (
 )
 from src.lambdas.shared.utils.cookie_helpers import parse_cookies
 from src.lambdas.shared.utils.event_helpers import get_header
-from src.lambdas.shared.utils.response_builder import error_response
+from src.lambdas.shared.utils.response_builder import json_response
 
 # Error code for CSRF validation failure
 CSRF_ERROR_CODE = "AUTH_019"
@@ -61,7 +61,7 @@ def require_csrf_middleware(app, next_middleware):
 
     # Validate tokens match
     if not validate_csrf_token(cookie_token, header_token):
-        return error_response(
+        return json_response(
             403,
             {
                 "error_code": CSRF_ERROR_CODE,
