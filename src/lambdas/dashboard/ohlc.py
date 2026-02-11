@@ -44,6 +44,7 @@ from src.lambdas.shared.models import (
 )
 from src.lambdas.shared.utils.event_helpers import get_query_params
 from src.lambdas.shared.utils.market import get_cache_expiration
+from src.lambdas.shared.utils.response_builder import error_response
 
 logger = logging.getLogger(__name__)
 
@@ -501,7 +502,11 @@ def get_ohlc_data(ticker: str) -> Response:
     try:
         resolution = OHLCResolution(resolution_str)
     except ValueError:
-        resolution = OHLCResolution.DAILY
+        valid_values = ", ".join(r.value for r in OHLCResolution)
+        return error_response(
+            422,
+            f"Invalid resolution '{resolution_str}'. Valid values: {valid_values}",
+        )
 
     # Parse date parameters
     start_date_str = query_params.get("start_date")

@@ -366,9 +366,10 @@ class TestStaticFiles:
         assert (
             response["statusCode"] == 200
         ), f"Expected 200 for index.html, got {response['statusCode']}"
-        # Should be HTML content
-        headers = response.get("headers", {})
-        content_type = headers.get("Content-Type", headers.get("content-type", ""))
+        # Powertools puts Content-Type in multiValueHeaders
+        multi_headers = response.get("multiValueHeaders", {})
+        content_type_list = multi_headers.get("Content-Type", [])
+        content_type = content_type_list[0] if content_type_list else ""
         assert "text/html" in content_type
 
     def test_static_css_served(self, mock_lambda_context):
@@ -378,8 +379,9 @@ class TestStaticFiles:
         assert (
             response["statusCode"] == 200
         ), f"Expected 200 for styles.css, got {response['statusCode']}"
-        headers = response.get("headers", {})
-        content_type = headers.get("Content-Type", headers.get("content-type", ""))
+        multi_headers = response.get("multiValueHeaders", {})
+        content_type_list = multi_headers.get("Content-Type", [])
+        content_type = content_type_list[0] if content_type_list else ""
         assert "text/css" in content_type
 
     def test_static_js_served(self, mock_lambda_context):
@@ -389,8 +391,9 @@ class TestStaticFiles:
         assert (
             response["statusCode"] == 200
         ), f"Expected 200 for app.js, got {response['statusCode']}"
-        headers = response.get("headers", {})
-        content_type = headers.get("Content-Type", headers.get("content-type", ""))
+        multi_headers = response.get("multiValueHeaders", {})
+        content_type_list = multi_headers.get("Content-Type", [])
+        content_type = content_type_list[0] if content_type_list else ""
         assert "javascript" in content_type
 
     def test_path_traversal_blocked(self, mock_lambda_context):
@@ -685,8 +688,9 @@ class TestChaosUIEndpoint:
         event = make_event(method="GET", path="/chaos")
         response = lambda_handler(event, mock_lambda_context)
         assert response["statusCode"] == 200
-        headers = response.get("headers", {})
-        content_type = headers.get("Content-Type", headers.get("content-type", ""))
+        multi_headers = response.get("multiValueHeaders", {})
+        content_type_list = multi_headers.get("Content-Type", [])
+        content_type = content_type_list[0] if content_type_list else ""
         assert "text/html" in content_type
 
     def test_chaos_page_no_auth_required(self, mock_lambda_context):

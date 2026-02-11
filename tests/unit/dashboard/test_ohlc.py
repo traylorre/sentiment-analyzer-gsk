@@ -58,15 +58,12 @@ TEST_USER_ID = "12345678-1234-5678-1234-567812345678"
 class TestOHLCEndpoint:
     """Tests for GET /api/v2/tickers/{ticker}/ohlc endpoint."""
 
-    @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
-    @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
-    def test_returns_ohlc_response(
-        self, mock_finnhub_cls, mock_tiingo_cls, mock_lambda_context
-    ):
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
+    def test_returns_ohlc_response(self, mock_get_tiingo, mock_lambda_context):
         """Should return OHLCResponse with candles."""
         mock_tiingo = MagicMock()
         mock_tiingo.get_ohlc.return_value = _create_ohlc_candles(10)
-        mock_tiingo_cls.return_value = mock_tiingo
+        mock_get_tiingo.return_value = mock_tiingo
 
         response = lambda_handler(
             make_event(
@@ -85,11 +82,8 @@ class TestOHLCEndpoint:
         assert data["count"] > 0
         assert data["source"] == "tiingo"
 
-    @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
-    @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
-    def test_validates_user_id_header(
-        self, mock_finnhub_cls, mock_tiingo_cls, mock_lambda_context
-    ):
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
+    def test_validates_user_id_header(self, mock_get_tiingo, mock_lambda_context):
         """Should require X-User-ID header."""
         response = lambda_handler(
             make_event(
@@ -103,11 +97,8 @@ class TestOHLCEndpoint:
         assert response["statusCode"] == 401
         assert "Missing user identification" in json.loads(response["body"])["detail"]
 
-    @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
-    @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
-    def test_validates_ticker_symbol(
-        self, mock_finnhub_cls, mock_tiingo_cls, mock_lambda_context
-    ):
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
+    def test_validates_ticker_symbol(self, mock_get_tiingo, mock_lambda_context):
         """Should reject invalid ticker symbols."""
         response = lambda_handler(
             make_event(
@@ -122,11 +113,8 @@ class TestOHLCEndpoint:
         assert response["statusCode"] == 400
         assert "Invalid ticker symbol" in json.loads(response["body"])["detail"]
 
-    @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
-    @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
-    def test_returns_404_when_tiingo_fails(
-        self, mock_finnhub_cls, mock_tiingo_cls, mock_lambda_context
-    ):
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
+    def test_returns_404_when_tiingo_fails(self, mock_get_tiingo, mock_lambda_context):
         """Should return 404 if Tiingo daily fails (no Finnhub fallback).
 
         Feature 1055: Finnhub free tier doesn't support stock candles (403 error),
@@ -134,10 +122,7 @@ class TestOHLCEndpoint:
         """
         mock_tiingo = MagicMock()
         mock_tiingo.get_ohlc.side_effect = Exception("Tiingo error")
-        mock_tiingo_cls.return_value = mock_tiingo
-
-        mock_finnhub = MagicMock()
-        mock_finnhub_cls.return_value = mock_finnhub
+        mock_get_tiingo.return_value = mock_tiingo
 
         response = lambda_handler(
             make_event(
@@ -152,19 +137,12 @@ class TestOHLCEndpoint:
         assert response["statusCode"] == 404
         assert "No price data available" in json.loads(response["body"])["detail"]
 
-    @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
-    @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
-    def test_returns_404_when_no_data(
-        self, mock_finnhub_cls, mock_tiingo_cls, mock_lambda_context
-    ):
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
+    def test_returns_404_when_no_data(self, mock_get_tiingo, mock_lambda_context):
         """Should return 404 when no data available."""
         mock_tiingo = MagicMock()
         mock_tiingo.get_ohlc.return_value = []
-        mock_tiingo_cls.return_value = mock_tiingo
-
-        mock_finnhub = MagicMock()
-        mock_finnhub.get_ohlc.return_value = []
-        mock_finnhub_cls.return_value = mock_finnhub
+        mock_get_tiingo.return_value = mock_tiingo
 
         response = lambda_handler(
             make_event(
@@ -179,15 +157,12 @@ class TestOHLCEndpoint:
         assert response["statusCode"] == 404
         assert "No price data available" in json.loads(response["body"])["detail"]
 
-    @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
-    @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
-    def test_supports_time_range_param(
-        self, mock_finnhub_cls, mock_tiingo_cls, mock_lambda_context
-    ):
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
+    def test_supports_time_range_param(self, mock_get_tiingo, mock_lambda_context):
         """Should support time range query parameter."""
         mock_tiingo = MagicMock()
         mock_tiingo.get_ohlc.return_value = _create_ohlc_candles(90)
-        mock_tiingo_cls.return_value = mock_tiingo
+        mock_get_tiingo.return_value = mock_tiingo
 
         response = lambda_handler(
             make_event(
@@ -203,15 +178,12 @@ class TestOHLCEndpoint:
         assert response["statusCode"] == 200
         assert json.loads(response["body"])["time_range"] == "3M"
 
-    @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
-    @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
-    def test_supports_custom_date_range(
-        self, mock_finnhub_cls, mock_tiingo_cls, mock_lambda_context
-    ):
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
+    def test_supports_custom_date_range(self, mock_get_tiingo, mock_lambda_context):
         """Should support custom start_date and end_date."""
         mock_tiingo = MagicMock()
         mock_tiingo.get_ohlc.return_value = _create_ohlc_candles(30)
-        mock_tiingo_cls.return_value = mock_tiingo
+        mock_get_tiingo.return_value = mock_tiingo
 
         response = lambda_handler(
             make_event(
@@ -227,11 +199,8 @@ class TestOHLCEndpoint:
         assert response["statusCode"] == 200
         assert json.loads(response["body"])["time_range"] == "custom"
 
-    @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
-    @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
-    def test_validates_date_range_order(
-        self, mock_finnhub_cls, mock_tiingo_cls, mock_lambda_context
-    ):
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
+    def test_validates_date_range_order(self, mock_get_tiingo, mock_lambda_context):
         """Should reject when start_date is after end_date."""
         response = lambda_handler(
             make_event(
@@ -250,15 +219,12 @@ class TestOHLCEndpoint:
             in json.loads(response["body"])["detail"]
         )
 
-    @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
-    @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
-    def test_includes_cache_expiration(
-        self, mock_finnhub_cls, mock_tiingo_cls, mock_lambda_context
-    ):
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
+    def test_includes_cache_expiration(self, mock_get_tiingo, mock_lambda_context):
         """Should include cache_expires_at in response."""
         mock_tiingo = MagicMock()
         mock_tiingo.get_ohlc.return_value = _create_ohlc_candles(10)
-        mock_tiingo_cls.return_value = mock_tiingo
+        mock_get_tiingo.return_value = mock_tiingo
 
         response = lambda_handler(
             make_event(
@@ -273,15 +239,12 @@ class TestOHLCEndpoint:
         assert response["statusCode"] == 200
         assert "cache_expires_at" in json.loads(response["body"])
 
-    @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
-    @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
-    def test_normalizes_ticker_to_uppercase(
-        self, mock_finnhub_cls, mock_tiingo_cls, mock_lambda_context
-    ):
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
+    def test_normalizes_ticker_to_uppercase(self, mock_get_tiingo, mock_lambda_context):
         """Should normalize ticker to uppercase."""
         mock_tiingo = MagicMock()
         mock_tiingo.get_ohlc.return_value = _create_ohlc_candles(10)
-        mock_tiingo_cls.return_value = mock_tiingo
+        mock_get_tiingo.return_value = mock_tiingo
 
         response = lambda_handler(
             make_event(
@@ -340,21 +303,15 @@ class TestOHLCResolutionEnum:
 class TestOHLCResolutionEndpoint:
     """Tests for OHLC endpoint resolution parameter (T009)."""
 
-    @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
-    @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
-    def test_accepts_resolution_parameter(
-        self, mock_finnhub_cls, mock_tiingo_cls, mock_lambda_context
-    ):
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
+    def test_accepts_resolution_parameter(self, mock_get_tiingo, mock_lambda_context):
         """Should accept resolution query parameter.
 
         Feature 1055: Tiingo IEX is used for intraday resolutions.
         """
         mock_tiingo = MagicMock()
         mock_tiingo.get_intraday_ohlc.return_value = _create_ohlc_candles(10)
-        mock_tiingo_cls.return_value = mock_tiingo
-
-        mock_finnhub = MagicMock()
-        mock_finnhub_cls.return_value = mock_finnhub
+        mock_get_tiingo.return_value = mock_tiingo
 
         response = lambda_handler(
             make_event(
@@ -371,15 +328,12 @@ class TestOHLCResolutionEndpoint:
         data = json.loads(response["body"])
         assert data["resolution"] == "5"
 
-    @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
-    @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
-    def test_default_resolution_is_daily(
-        self, mock_finnhub_cls, mock_tiingo_cls, mock_lambda_context
-    ):
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
+    def test_default_resolution_is_daily(self, mock_get_tiingo, mock_lambda_context):
         """Should default to daily resolution."""
         mock_tiingo = MagicMock()
         mock_tiingo.get_ohlc.return_value = _create_ohlc_candles(10)
-        mock_tiingo_cls.return_value = mock_tiingo
+        mock_get_tiingo.return_value = mock_tiingo
 
         response = lambda_handler(
             make_event(
@@ -395,11 +349,8 @@ class TestOHLCResolutionEndpoint:
         data = json.loads(response["body"])
         assert data["resolution"] == "D"
 
-    @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
-    @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
-    def test_uses_tiingo_iex_for_intraday(
-        self, mock_finnhub_cls, mock_tiingo_cls, mock_lambda_context
-    ):
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
+    def test_uses_tiingo_iex_for_intraday(self, mock_get_tiingo, mock_lambda_context):
         """Should use Tiingo IEX for intraday resolutions.
 
         Feature 1055: Finnhub free tier returns 403 for stock candles,
@@ -407,10 +358,7 @@ class TestOHLCResolutionEndpoint:
         """
         mock_tiingo = MagicMock()
         mock_tiingo.get_intraday_ohlc.return_value = _create_ohlc_candles(10)
-        mock_tiingo_cls.return_value = mock_tiingo
-
-        mock_finnhub = MagicMock()
-        mock_finnhub_cls.return_value = mock_finnhub
+        mock_get_tiingo.return_value = mock_tiingo
 
         response = lambda_handler(
             make_event(
@@ -428,18 +376,15 @@ class TestOHLCResolutionEndpoint:
         mock_tiingo.get_intraday_ohlc.assert_called_once()
         # Tiingo daily should not be called for intraday
         mock_tiingo.get_ohlc.assert_not_called()
-        # Finnhub should not be called (free tier doesn't support candles)
-        mock_finnhub.get_ohlc.assert_not_called()
 
-    @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
-    @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
     def test_resolution_response_includes_fallback_fields(
-        self, mock_finnhub_cls, mock_tiingo_cls, mock_lambda_context
+        self, mock_get_tiingo, mock_lambda_context
     ):
         """Should include resolution_fallback and fallback_message in response."""
         mock_tiingo = MagicMock()
         mock_tiingo.get_ohlc.return_value = _create_ohlc_candles(10)
-        mock_tiingo_cls.return_value = mock_tiingo
+        mock_get_tiingo.return_value = mock_tiingo
 
         response = lambda_handler(
             make_event(
@@ -457,10 +402,9 @@ class TestOHLCResolutionEndpoint:
         assert data["resolution_fallback"] is False
         assert data["fallback_message"] is None
 
-    @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
-    @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
     def test_fallback_to_daily_when_intraday_unavailable(
-        self, mock_finnhub_cls, mock_tiingo_cls, mock_lambda_context
+        self, mock_get_tiingo, mock_lambda_context
     ):
         """Should fall back to daily when intraday data unavailable.
 
@@ -471,10 +415,7 @@ class TestOHLCResolutionEndpoint:
         # Return empty for intraday, return data for daily
         mock_tiingo.get_intraday_ohlc.return_value = []
         mock_tiingo.get_ohlc.return_value = _create_ohlc_candles(10)
-        mock_tiingo_cls.return_value = mock_tiingo
-
-        mock_finnhub = MagicMock()
-        mock_finnhub_cls.return_value = mock_finnhub
+        mock_get_tiingo.return_value = mock_tiingo
 
         response = lambda_handler(
             make_event(
@@ -493,14 +434,13 @@ class TestOHLCResolutionEndpoint:
         assert data["resolution_fallback"] is True
         assert "unavailable" in data["fallback_message"].lower()
 
-    @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
-    @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
     @pytest.mark.parametrize(
         "resolution",
         ["1", "5", "15", "30", "60", "D"],
     )
     def test_all_resolutions_accepted(
-        self, mock_finnhub_cls, mock_tiingo_cls, resolution, mock_lambda_context
+        self, mock_get_tiingo, resolution, mock_lambda_context
     ):
         """Should accept all valid resolution values.
 
@@ -509,10 +449,7 @@ class TestOHLCResolutionEndpoint:
         mock_tiingo = MagicMock()
         mock_tiingo.get_ohlc.return_value = _create_ohlc_candles(10)
         mock_tiingo.get_intraday_ohlc.return_value = _create_ohlc_candles(10)
-        mock_tiingo_cls.return_value = mock_tiingo
-
-        mock_finnhub = MagicMock()
-        mock_finnhub_cls.return_value = mock_finnhub
+        mock_get_tiingo.return_value = mock_tiingo
 
         response = lambda_handler(
             make_event(
@@ -527,11 +464,8 @@ class TestOHLCResolutionEndpoint:
 
         assert response["statusCode"] == 200
 
-    @patch("src.lambdas.dashboard.ohlc.TiingoAdapter")
-    @patch("src.lambdas.dashboard.ohlc.FinnhubAdapter")
-    def test_invalid_resolution_rejected(
-        self, mock_finnhub_cls, mock_tiingo_cls, mock_lambda_context
-    ):
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
+    def test_invalid_resolution_rejected(self, mock_get_tiingo, mock_lambda_context):
         """Should reject invalid resolution values."""
         response = lambda_handler(
             make_event(
