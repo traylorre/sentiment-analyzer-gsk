@@ -28,7 +28,7 @@ from src.lambdas.shared.utils.response_builder import (
 logger = logging.getLogger(__name__)
 
 
-def handle_request(handler_fn, event: dict, context) -> dict:
+def handle_request(handler_fn, event: dict, context):
     """Execute a handler function with structured error handling.
 
     Catches and converts exceptions to API Gateway Proxy Integration

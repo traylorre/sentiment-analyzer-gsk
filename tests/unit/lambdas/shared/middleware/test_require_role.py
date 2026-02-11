@@ -290,7 +290,7 @@ class TestPaidRoleRequirement:
             mock_next = MagicMock()
             result = middleware(mock_app, mock_next)
             mock_next.assert_not_called()
-            assert result["statusCode"] == 403
+            assert result.status_code == 403
 
 
 class TestFreeRoleRequirement:
@@ -465,7 +465,7 @@ class TestEdgeCases:
             mock_next = MagicMock()
             result = middleware(mock_app, mock_next)
             mock_next.assert_not_called()
-            assert result["statusCode"] == 403
+            assert result.status_code == 403
 
     def test_case_sensitive_role_matching(self) -> None:
         """Role matching should be case-sensitive."""
@@ -486,7 +486,7 @@ class TestEdgeCases:
             mock_next = MagicMock()
             result = middleware(mock_app, mock_next)
             mock_next.assert_not_called()
-            assert result["statusCode"] == 403  # Case mismatch should fail
+            assert result.status_code == 403  # Case mismatch should fail
 
     def test_anonymous_role_for_public_with_tracking(self) -> None:
         """Anonymous role should work for public content with session tracking."""
