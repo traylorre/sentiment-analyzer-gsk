@@ -129,22 +129,22 @@
 
 ### Implementation
 
-- [ ] T045 [US5] Remove unused `ohlc_test_client` fixture from tests/conftest.py (lines 504-531) — dead code using dependency_overrides and TestClient that is never imported by any test (FR-038)
-- [ ] T046 [US5] Migrate 3 OHLC integration test files using dependency_overrides (tests/integration/ohlc/test_happy_path.py, test_boundary.py, test_error_resilience.py) — replace `app.dependency_overrides[get_tiingo_adapter]` with `patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter", return_value=mock)`, replace TestClient with `make_event()` + direct handler call (FR-038, FR-020)
-- [ ] T047 [US5] Migrate 2 integration sentiment_history test files (tests/integration/sentiment_history/test_happy_path.py, test_boundary.py) — same TestClient → make_event() pattern (FR-020)
-- [ ] T048 [US5] Migrate 2 Lambda auth test files using dependency_overrides (tests/unit/lambdas/dashboard/test_admin_sessions_revoke_auth.py, test_users_lookup_auth.py) — replace `app.dependency_overrides[get_users_table]` with `patch()` (FR-038)
-- [ ] T049 [P] [US5] Migrate module-level TestClient construction in tests/unit/dashboard/test_ohlc.py and tests/unit/dashboard/test_sentiment_history.py — move `app = FastAPI(); client = TestClient(app)` from module level into fixtures (FR-060)
-- [ ] T050 [P] [US5] Migrate tests/unit/dashboard/test_sse.py — replace FastAPI WebSocket/TestClient imports with mock event dict testing (FR-020)
-- [ ] T051 [P] [US5] Migrate tests/unit/dashboard/test_cache_headers.py and test_refresh_cookie.py — replace `from fastapi import Response` with plain dict test patterns (FR-062)
-- [ ] T052 [P] [US5] Migrate tests/unit/lambdas/dashboard/test_serve_index.py and test_atomic_magic_link_router.py — TestClient → make_event() (FR-020)
-- [ ] T053 [P] [US5] Migrate tests/unit/lambdas/shared/middleware/test_require_role.py and tests/unit/middleware/test_csrf.py — FastAPI Request/app imports → raw event dict testing (FR-020)
-- [ ] T054 [P] [US5] Migrate 4 SSE streaming unit tests (tests/unit/sse_streaming/test_config_stream.py, test_connection_limit.py, test_global_stream.py, test_path_normalization.py) — replace Starlette/FastAPI TestClient with mock event + mock response_stream (FR-020)
-- [ ] T055 [P] [US5] Migrate tests/unit/test_dashboard_handler.py and test_preload_strategy.py — TestClient → make_event() + direct handler invocation (FR-020)
-- [ ] T056 [P] [US5] Migrate 2 integration dashboard tests (tests/integration/test_dashboard_dev.py, test_dashboard_preprod.py) — TestClient → make_event() (FR-020)
-- [ ] T057 [US5] Migrate tests/integration/test_e2e_lambda_invocation_preprod.py — TestClient → make_event() if applicable; may already use direct invocation (FR-020)
-- [ ] T058 [US5] Migrate all 16 contract test files (462 tests in tests/contract/) — replace `response.status_code` → `response["statusCode"]`, `response.json()` → `json.loads(response["body"])`, `response.headers` → `response["headers"]` (FR-059)
-- [ ] T059 [US5] Verify case-insensitive header lookup works in all migrated tests — ensure tests using `headers={"Authorization": "Bearer ..."}` work with lowercase normalization in `make_event()` (FR-061)
-- [ ] T060 [US5] Verify E2E tests (tests/e2e/) pass UNMODIFIED — they hit API Gateway/Function URLs, not handler directly; no migration needed (SC-006)
+- [x] T045 [US5] Remove unused `ohlc_test_client` fixture from tests/conftest.py (lines 504-531) — dead code using dependency_overrides and TestClient that is never imported by any test (FR-038)
+- [x] T046 [US5] Migrate 3 OHLC integration test files using dependency_overrides (tests/integration/ohlc/test_happy_path.py, test_boundary.py, test_error_resilience.py) — replace `app.dependency_overrides[get_tiingo_adapter]` with `patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter", return_value=mock)`, replace TestClient with `make_event()` + direct handler call (FR-038, FR-020)
+- [x] T047 [US5] Migrate 2 integration sentiment_history test files (tests/integration/sentiment_history/test_happy_path.py, test_boundary.py) — same TestClient → make_event() pattern (FR-020)
+- [x] T048 [US5] Migrate 2 Lambda auth test files using dependency_overrides (tests/unit/lambdas/dashboard/test_admin_sessions_revoke_auth.py, test_users_lookup_auth.py) — replace `app.dependency_overrides[get_users_table]` with `patch()` (FR-038)
+- [x] T049 [P] [US5] Migrate module-level TestClient construction in tests/unit/dashboard/test_ohlc.py and tests/unit/dashboard/test_sentiment_history.py — move `app = FastAPI(); client = TestClient(app)` from module level into fixtures (FR-060)
+- [x] T050 [P] [US5] Migrate tests/unit/dashboard/test_sse.py — replace FastAPI WebSocket/TestClient imports with mock event dict testing (FR-020)
+- [x] T051 [P] [US5] Migrate tests/unit/dashboard/test_cache_headers.py and test_refresh_cookie.py — replace `from fastapi import Response` with plain dict test patterns (FR-062)
+- [x] T052 [P] [US5] Migrate tests/unit/lambdas/dashboard/test_serve_index.py and test_atomic_magic_link_router.py — TestClient → make_event() (FR-020)
+- [x] T053 [P] [US5] Migrate tests/unit/lambdas/shared/middleware/test_require_role.py and tests/unit/middleware/test_csrf.py — FastAPI Request/app imports → raw event dict testing (FR-020)
+- [x] T054 [P] [US5] Migrate 4 SSE streaming unit tests (tests/unit/sse_streaming/test_config_stream.py, test_connection_limit.py, test_global_stream.py, test_path_normalization.py) — replace Starlette/FastAPI TestClient with mock event + mock response_stream (FR-020)
+- [x] T055 [P] [US5] Migrate tests/unit/test_dashboard_handler.py and test_preload_strategy.py — TestClient → make_event() + direct handler invocation (FR-020)
+- [x] T056 [P] [US5] Migrate 2 integration dashboard tests (tests/integration/test_dashboard_dev.py, test_dashboard_preprod.py) — TestClient → make_event() (FR-020)
+- [x] T057 [US5] Migrate tests/integration/test_e2e_lambda_invocation_preprod.py — TestClient → make_event() if applicable; may already use direct invocation (FR-020)
+- [x] T058 [US5] Migrate all 16 contract test files (462 tests in tests/contract/) — replace `response.status_code` → `response["statusCode"]`, `response.json()` → `json.loads(response["body"])`, `response.headers` → `response["headers"]` (FR-059)
+- [x] T059 [US5] Verify case-insensitive header lookup works in all migrated tests — ensure tests using `headers={"Authorization": "Bearer ..."}` work with lowercase normalization in `make_event()` (FR-061)
+- [x] T060 [US5] Verify E2E tests (tests/e2e/) pass UNMODIFIED — they hit API Gateway/Function URLs, not handler directly; no migration needed (SC-006)
 
 > **Checkpoint**: `pytest tests/ -v --ignore=tests/e2e` passes. `grep -rn "from fastapi\|from starlette\|TestClient" tests/ --include="*.py"` returns zero matches (excluding tests/e2e/).
 
@@ -156,14 +156,14 @@
 
 ### Implementation
 
-- [ ] T061 [US4] Remove fastapi, mangum, uvicorn, starlette, sse-starlette from root requirements.txt, requirements-dev.txt, requirements-ci.txt, and all per-Lambda requirements.txt files (FR-014)
-- [ ] T062 [US4] Remove ruff B008 lint exceptions for Depends()/Query() from pyproject.toml `[tool.ruff.per-file-ignores]` or `[tool.ruff.lint]` (FR-021)
-- [ ] T063 [US4] Remove or replace run-local-api.py — eliminate FastAPI/Uvicorn dependency, replace with direct handler invocation script or SAM CLI instructions (FR-022)
-- [ ] T064 [US4] Update CI/CD deploy.yml smoke test imports — replace `from fastapi import FastAPI` and `from mangum import Mangum` (preprod ~line 675, prod ~line 1556) with native handler import verification (FR-055)
-- [ ] T065 [US4] Remove AWS_LWA_INVOKE_MODE and AWS_LWA_READINESS_CHECK_PATH from Terraform SSE Lambda module environment_variables block in infrastructure/terraform/ (FR-056, FR-052g)
-- [ ] T066 [US4] Run full trace removal scan (FR-053) — remove all comments, docstrings, inline annotations referencing fastapi/mangum/uvicorn/starlette/TestClient/Lambda Web Adapter across: Python files, Dockerfiles, requirements.txt, pyproject.toml, Makefile, CLAUDE.md, SPEC.md, Terraform .tf files, Mermaid .mmd diagrams, non-exempt docs/ files. Exempt: specs/001-fastapi-purge/, docs/fastapi-purge/
+- [x] T061 [US4] Remove fastapi, mangum, uvicorn, starlette, sse-starlette from root requirements.txt, requirements-dev.txt, requirements-ci.txt, and all per-Lambda requirements.txt files (FR-014)
+- [x] T062 [US4] Remove ruff B008 lint exceptions for Depends()/Query() from pyproject.toml `[tool.ruff.per-file-ignores]` or `[tool.ruff.lint]` (FR-021)
+- [x] T063 [US4] Remove or replace run-local-api.py — eliminate FastAPI/Uvicorn dependency, replace with direct handler invocation script or SAM CLI instructions (FR-022)
+- [x] T064 [US4] Update CI/CD deploy.yml smoke test imports — replace `from fastapi import FastAPI` and `from mangum import Mangum` (preprod ~line 675, prod ~line 1556) with native handler import verification (FR-055)
+- [x] T065 [US4] Remove AWS_LWA_INVOKE_MODE and AWS_LWA_READINESS_CHECK_PATH from Terraform SSE Lambda module environment_variables block in infrastructure/terraform/ (FR-056, FR-052g)
+- [x] T066 [US4] Run full trace removal scan (FR-053) — remove all comments, docstrings, inline annotations referencing fastapi/mangum/uvicorn/starlette/TestClient/Lambda Web Adapter across: Python files, Dockerfiles, requirements.txt, pyproject.toml, Makefile, CLAUDE.md, SPEC.md, Terraform .tf files, Mermaid .mmd diagrams, non-exempt docs/ files. Exempt: specs/001-fastapi-purge/, docs/fastapi-purge/
 - [ ] T067 [US4] Verify Docker image sizes measurably smaller — rebuild dashboard and SSE images, compare sizes against pre-migration baseline (SC-007 target: ≥5MB each)
-- [ ] T068 [US4] Run SC-008 verification: `grep -rn "fastapi\|mangum\|starlette\|uvicorn\|TestClient\|Mangum\|aws-lambda-adapter\|Lambda Web Adapter" . --include="*.py" --include="*.txt" --include="*.toml" --include="*.yml" --include="*.yaml" --include="*.tf" --include="*.md" --include="*.mmd" --exclude-dir=specs/001-fastapi-purge --exclude-dir=docs/fastapi-purge` returns zero matches
+- [x] T068 [US4] Run SC-008 verification: `grep -rn "fastapi\|mangum\|starlette\|uvicorn\|TestClient\|Mangum\|aws-lambda-adapter\|Lambda Web Adapter" . --include="*.py" --include="*.txt" --include="*.toml" --include="*.yml" --include="*.yaml" --include="*.tf" --include="*.md" --include="*.mmd" --exclude-dir=specs/001-fastapi-purge --exclude-dir=docs/fastapi-purge` returns zero matches
 
 > **Checkpoint**: SC-008 scan passes. `pip install -r requirements.txt` installs none of removed packages. Docker images are smaller.
 
@@ -175,7 +175,7 @@
 
 ### Implementation
 
-- [ ] T069 [US8] Create scripts/generate_openapi.py — read route registry + all 16 Pydantic request models + 3 response models, assemble OpenAPI 3.1 spec using `model_json_schema()`, write to stdout or file (FR-029, R4)
+- [x] T069 [US8] Create scripts/generate_openapi.py — read route registry + all 16 Pydantic request models + 3 response models, assemble OpenAPI 3.1 spec using `model_json_schema()`, write to stdout or file (FR-029, R4)
 - [ ] T070 [US8] Add `generate-openapi` Makefile target and integrate into CI/CD pipeline as build artifact (FR-029, FR-030)
 - [ ] T071 [US8] Validate generated OpenAPI spec — check all 102 endpoints present, request/response schemas match Pydantic models, no /docs or /redoc endpoints appear (FR-030, SC-014)
 
@@ -185,13 +185,13 @@
 
 > Purpose: Final verification, performance benchmarking, documentation updates.
 
-- [ ] T072 [P] Verify CORS is handled exclusively by Lambda Function URL config — confirm no application-level CORS middleware remains (FR-006)
+- [x] T072 [P] Verify CORS is handled exclusively by Lambda Function URL config — confirm no application-level CORS middleware remains (FR-006)
 - [ ] T073 [P] Benchmark dashboard cold start and peak memory — verify ≥10ms cold start reduction (SC-002) and ≥10MB memory reduction (SC-003)
 - [ ] T074 [P] Benchmark SSE event latency — verify within 50ms of pre-migration baseline (SC-004)
 - [ ] T075 [P] Benchmark JSON serialization — verify orjson faster per invocation than FastAPI baseline (SC-013)
 - [ ] T076 Run full test suite: `pytest tests/ -v` — verify SC-005 (zero removed package imports), SC-015 (test count ≥ pre-migration)
 - [ ] T077 Verify X-Ray distributed tracing — confirm subsegments for boto3/httpx appear in CloudWatch after deployment (SC-016)
-- [ ] T078 Update CONTEXT-CARRYOVER document with final migration status, post-migration metrics, and any remaining follow-up items
+- [x] T078 Update CONTEXT-CARRYOVER document with final migration status, post-migration metrics, and any remaining follow-up items
 
 > **Checkpoint**: All 21 success criteria (SC-001 through SC-021) verified. Full test suite green. Zero trace of removed packages.
 

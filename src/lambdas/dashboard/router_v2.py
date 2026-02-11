@@ -22,6 +22,7 @@ import logging
 from typing import Literal
 
 import orjson
+from aws_lambda_powertools.event_handler import Response
 from aws_lambda_powertools.event_handler.api_gateway import Router
 from botocore.exceptions import ClientError
 from pydantic import BaseModel, EmailStr, ValidationError
@@ -183,27 +184,26 @@ def _json_response_with_cookies(
     status_code: int = 200,
     cookies: list[str] | None = None,
     extra_headers: dict[str, str] | None = None,
-) -> dict:
+) -> Response:
     """Build a JSON response with optional Set-Cookie headers.
 
-    Uses multiValueHeaders for multiple Set-Cookie headers since
-    API Gateway requires this for multiple cookies.
+    Returns a Powertools Response object. Set-Cookie headers are passed
+    via the headers dict as a list, which Powertools serializes into
+    multiValueHeaders in the API Gateway response format.
     """
-    headers = {"Content-Type": "application/json"}
+    headers: dict[str, str | list[str]] = {}
     if extra_headers:
         headers.update(extra_headers)
 
-    response = {
-        "statusCode": status_code,
-        "headers": headers,
-        "body": orjson.dumps(body).decode(),
-        "isBase64Encoded": False,
-    }
-
     if cookies:
-        response["multiValueHeaders"] = {"Set-Cookie": cookies}
+        headers["Set-Cookie"] = cookies
 
-    return response
+    return Response(
+        status_code=status_code,
+        content_type="application/json",
+        body=orjson.dumps(body).decode(),
+        headers=headers,
+    )
 
 
 def get_user_id_from_event(
