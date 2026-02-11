@@ -412,6 +412,12 @@ def get_metrics_v2():
 
     event = app.current_event.raw_event
     _user_id = _get_user_id_from_event(event, validate_session=False)
+    if not _user_id:
+        return Response(
+            status_code=401,
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Missing user identification"}).decode(),
+        )
 
     params = get_query_params(event)
     hours = int(params.get("hours", "24"))
@@ -458,6 +464,12 @@ def get_sentiment_v2():
 
     event = app.current_event.raw_event
     _user_id = _get_user_id_from_event(event, validate_session=False)
+    if not _user_id:
+        return Response(
+            status_code=401,
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Missing user identification"}).decode(),
+        )
 
     params = get_query_params(event)
     tags = params.get("tags", "")
@@ -516,6 +528,12 @@ def get_trends_v2():
     """Get trend data for sparkline visualizations."""
     event = app.current_event.raw_event
     _user_id = _get_user_id_from_event(event, validate_session=False)
+    if not _user_id:
+        return Response(
+            status_code=401,
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Missing user identification"}).decode(),
+        )
 
     params = get_query_params(event)
     tags = params.get("tags", "")
@@ -619,6 +637,12 @@ def get_articles_v2():
     """Get recent articles for specified tags."""
     event = app.current_event.raw_event
     _user_id = _get_user_id_from_event(event, validate_session=False)
+    if not _user_id:
+        return Response(
+            status_code=401,
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Missing user identification"}).decode(),
+        )
 
     params = get_query_params(event)
     tags = params.get("tags", "")
