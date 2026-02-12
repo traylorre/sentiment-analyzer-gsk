@@ -513,7 +513,7 @@ def handler(event: dict, context) -> Generator[bytes]:
         method = event.get("requestContext", {}).get("http", {}).get("method", "GET")
         path = event.get("rawPath", event.get("path", "/"))
 
-        # Normalize double slashes (legacy Lambda Web Adapter artifact)
+        # Normalize double slashes in request paths
         if "//" in path:
             path = re.sub(r"/+", "/", path)
 

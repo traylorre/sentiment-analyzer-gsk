@@ -6,7 +6,7 @@ route handlers and middleware.
 
 References:
     FR-005: All dashboard responses use proxy integration dicts
-    FR-009: 422 validation errors in FastAPI-parity format
+    FR-009: 422 validation errors in standard format
     FR-011: orjson for JSON serialization
 """
 
@@ -52,10 +52,10 @@ def error_response(status_code: int, detail: str) -> Response:
 
 
 def validation_error_response(exc: ValidationError) -> Response:
-    """Build a 422 validation error response in FastAPI-parity format.
+    """Build a 422 validation error response in standard format.
 
     Produces: {"detail": [{"loc": [...], "msg": "...", "type": "..."}]}
-    This format is byte-identical to FastAPI's automatic 422 responses,
+    This format follows the standard Pydantic ValidationError structure,
     ensuring frontend compatibility.
 
     Args:

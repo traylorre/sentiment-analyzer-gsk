@@ -34,7 +34,7 @@ graph TB
 **Current Authentication Flow**:
 1. Client sends `GET /api/metrics` with `Authorization: Bearer <key>`
 2. Lambda Function URL accepts request (no AWS-level auth)
-3. FastAPI `verify_api_key()` compares against static env var
+3. `verify_api_key()` compares against static env var
 4. If valid, query DynamoDB (~6 queries per request)
 5. Return metrics JSON
 

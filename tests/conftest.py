@@ -112,7 +112,7 @@ if "FINNHUB_API_KEY" not in os.environ:
 
 
 # =============================================================================
-# Mock Lambda Event & Context Fixtures (001-fastapi-purge, FR-058)
+# Mock Lambda Event & Context Fixtures (FR-058)
 # =============================================================================
 
 

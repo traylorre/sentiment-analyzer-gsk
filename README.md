@@ -224,7 +224,7 @@ graph TB
 
         subgraph APILayer["API Layer"]
             APIGW[API Gateway<br/>REST /api/*]
-            Dashboard[Dashboard Lambda<br/>FastAPI · 1024MB]
+            Dashboard[Dashboard Lambda<br/>1024MB]
             SSELambda[SSE Lambda<br/>RESPONSE_STREAM<br/>900s timeout]
             Notification[Notification Lambda<br/>Alerts + Digests]
         end
@@ -915,7 +915,7 @@ sentiment-analyzer-gsk/
 │   ├── lambdas/
 │   │   ├── ingestion/           # Ingestion Lambda
 │   │   ├── analysis/            # Analysis Lambda
-│   │   ├── dashboard/           # Dashboard Lambda (FastAPI REST)
+│   │   ├── dashboard/           # Dashboard Lambda (REST API)
 │   │   ├── sse_streaming/       # SSE Lambda (real-time streaming)
 │   │   ├── metrics/             # Metrics Lambda (stuck item monitor)
 │   │   └── shared/              # Shared Lambda utilities

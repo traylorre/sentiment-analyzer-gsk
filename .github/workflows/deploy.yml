@@ -515,7 +515,7 @@ jobs:
           print('Testing imports...')
 
           # These imports must work for the Lambda to start
-          from handler import app
+          from handler import handler
           from config import config_lookup_service
           from stream import stream_generator
           from src.lambdas.shared.logging_utils import sanitize_for_log
@@ -1166,7 +1166,7 @@ jobs:
           echo "  HTTP $HTTP_CODE (non-critical warmup, any response is acceptable)"
 
           # Warm up SSE Lambda (Feature 140: SSE tests were failing due to cold start)
-          # SSE Lambda uses Docker image with Lambda Web Adapter, needs warmup
+          # SSE Lambda uses Docker image with custom runtime, needs warmup
           # Fix(141): Add retry with backoff to handle cold start delays (10-20s for Docker Lambdas)
           echo ""
           echo "4. Invoking SSE Lambda /health endpoint (with retry)..."
@@ -1478,7 +1478,7 @@ jobs:
           # Feature 1043: USERS_TABLE for config queries, SENTIMENTS_TABLE for sentiment data
           docker run --rm -e PYTHONPATH=/app/packages:/app -e USERS_TABLE=prod-sentiment-users -e SENTIMENTS_TABLE=prod-sentiment-items --entrypoint python "$IMAGE" -c "
           import sys
-          from handler import app
+          from handler import handler
           from config import config_lookup_service
           from stream import stream_generator
           from src.lambdas.shared.logging_utils import sanitize_for_log

@@ -21,7 +21,7 @@
 
 We have 3 AWS Lambda functions with different characteristics:
 - **Analysis Lambda**: ML inference with 1.1GB DistilBERT model
-- **Dashboard Lambda**: FastAPI web API with 80MB dependencies
+- **Dashboard Lambda**: REST API with 80MB dependencies
 - **Ingestion Lambda**: HTTP client + DynamoDB writes with 50MB dependencies
 
 ### Decision

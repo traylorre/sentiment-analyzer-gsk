@@ -1,6 +1,6 @@
 """Cookie parsing and construction utilities using stdlib http.cookies.
 
-Replaces FastAPI's Request.cookies and Response.set_cookie with
+Cookie parsing and set-cookie header construction using
 zero-dependency stdlib equivalents.
 
 References:

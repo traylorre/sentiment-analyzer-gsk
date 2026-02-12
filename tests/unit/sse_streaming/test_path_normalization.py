@@ -1,11 +1,7 @@
 """Unit tests for path normalization in the SSE streaming handler.
 
 Tests that the handler's inline path normalization (re.sub(r"/+", "/", path))
-correctly handles double-slash paths from Lambda Web Adapter (Fix 141).
-
-Migrated from PathNormalizationMiddleware + Starlette tests to direct handler
-invocation (001-fastapi-purge). The middleware no longer exists; path normalization
-is now inline in the handler function.
+correctly handles double-slash paths. Uses direct handler invocation.
 """
 
 import json

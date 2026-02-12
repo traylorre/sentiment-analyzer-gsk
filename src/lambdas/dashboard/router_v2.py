@@ -134,7 +134,7 @@ admin_router = Router()
 
 
 # =============================================================================
-# Helper functions (migrated from FastAPI Request/Response to raw event dicts)
+# Helper functions for raw API Gateway event dicts
 # =============================================================================
 
 
@@ -226,7 +226,7 @@ def get_user_id_from_event(
     Note:
         On error, this function returns None and callers should check and
         return the appropriate error response. We use a sentinel pattern
-        to avoid exception-based flow control with FastAPI HTTPException.
+        to avoid exception-based flow control with HTTP exceptions.
     """
     auth_context = extract_auth_context(event)
 

@@ -114,6 +114,6 @@ A security analyst reviews gap analysis documents to understand current security
 
 - Amplify URL format follows pattern: `main.d*.amplifyapp.com`
 - Lambda Function URLs are the primary API entry points (no API Gateway in front)
-- SSE streaming uses Lambda Web Adapter with response streaming (no CloudFront timeout workarounds needed)
+- SSE streaming uses custom runtime with response streaming (no CloudFront timeout workarounds needed)
 - The removal is documentation-only; no infrastructure code changes required
 - Existing audit trail comments ("Feature 1203: CloudFront removed") in code should be preserved

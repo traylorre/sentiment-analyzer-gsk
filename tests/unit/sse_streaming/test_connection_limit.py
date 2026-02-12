@@ -3,7 +3,7 @@
 Tests the 503 Service Unavailable response when connection limit (100) is reached.
 Per FR-008: Maximum 100 concurrent connections per Lambda instance.
 
-Migrated from FastAPI TestClient to direct handler invocation (001-fastapi-purge).
+Uses direct handler invocation for testing.
 """
 
 import json
