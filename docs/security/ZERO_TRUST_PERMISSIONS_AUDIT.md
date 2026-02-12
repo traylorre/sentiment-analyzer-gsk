@@ -107,7 +107,7 @@
 ### 3. Dashboard Lambda (`sentiment-dashboard`)
 
 **Principal**: `${environment}-dashboard-lambda-role`
-**Business Function**: Serve FastAPI dashboard → Query DynamoDB → Return JSON/HTML/SSE
+**Business Function**: Serve dashboard → Query DynamoDB → Return JSON/HTML/SSE
 **External Access**: Yes (public API Gateway endpoint)
 **Security Posture**: **STRICTLY READ-ONLY** (no write permissions)
 

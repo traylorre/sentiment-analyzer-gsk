@@ -17,7 +17,7 @@ graph LR
     %% Lambda Functions (6 total per Terraform)
     Ingestion["ingestion-lambda<br/>512MB | 60s<br/>Parallel fetch"]
     Analysis["analysis-lambda<br/>2048MB | 60s<br/>DistilBERT container"]
-    Dashboard["dashboard-lambda<br/>1024MB | 60s<br/>FastAPI + Mangum"]
+    Dashboard["dashboard-lambda<br/>1024MB | 60s<br/>Powertools"]
     SSE["sse-streaming-lambda<br/>512MB | 900s<br/>RESPONSE_STREAM"]
     Notification["notification-lambda<br/>256MB | 30s<br/>Alerts + Digests"]
     Metrics["metrics-lambda<br/>128MB | 30s<br/>Stuck item monitor"]

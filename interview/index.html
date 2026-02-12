@@ -856,7 +856,7 @@
                     <div class="card-body">
                         <ul style="margin-left: 16px; color: var(--text-secondary);">
                             <li>Single-table DynamoDB design with 3 GSIs</li>
-                            <li>Lambda with FastAPI (not API Gateway)</li>
+                            <li>Lambda with Function URL (not API Gateway)</li>
                             <li>In-memory caching for warm invocations</li>
                             <li>Circuit breakers per external service</li>
                         </ul>
@@ -909,7 +909,7 @@
                     </div>
                     <div class="timeline-item">
                         <div class="timeline-title">4. Dashboard Lambda</div>
-                        <div class="timeline-desc">FastAPI serving REST endpoints → Query GSIs → Return aggregated data</div>
+                        <div class="timeline-desc">REST API serving endpoints → Query GSIs → Return aggregated data</div>
                     </div>
                     <div class="timeline-item">
                         <div class="timeline-title">5. Notification Lambda</div>
@@ -945,7 +945,7 @@ by_tag: tag → timestamp</div>
                         <table style="width: 100%; font-size: 13px;">
                             <tr><td><strong>ingestion</strong></td><td>News fetcher (5min schedule)</td></tr>
                             <tr><td><strong>analysis</strong></td><td>Sentiment scorer (SNS trigger)</td></tr>
-                            <tr><td><strong>dashboard</strong></td><td>FastAPI REST API</td></tr>
+                            <tr><td><strong>dashboard</strong></td><td>REST API</td></tr>
                             <tr><td><strong>notification</strong></td><td>Alert evaluator & emailer</td></tr>
                             <tr><td><strong>metrics</strong></td><td>CloudWatch metrics (1min)</td></tr>
                         </table>
@@ -1610,7 +1610,7 @@ python3 traffic_generator.py --env preprod --scenario all
                     </div>
                     <div class="card-body">
                         <ul style="margin-left: 16px; color: var(--text-secondary);">
-                            <li>FastAPI TestClient</li>
+                            <li>Direct handler invocation</li>
                             <li>Cross-component flows</li>
                             <li>Mocked external APIs</li>
                             <li>Contract validation</li>

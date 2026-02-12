@@ -93,7 +93,7 @@ done
 | **Request Inspection** | ❌ NONE | ✅ AWS WAF | MEDIUM |
 | **Geographic Blocking** | ❌ NONE | ✅ WAF Geo Rules | LOW |
 | **API Key Validation** | ✅ In Lambda | ✅ Custom Authorizer | NONE |
-| **CORS Enforcement** | ✅ FastAPI | ✅ Gateway + FastAPI | NONE |
+| **CORS Enforcement** | ✅ Handler | ✅ Gateway + Handler | NONE |
 
 ---
 
@@ -355,11 +355,11 @@ def rate_limit_check(ip: str, max_requests: int = 100, window: int = 300):
 3. Add WAF with rate-based rule
 4. Update Terraform outputs (new URL)
 5. Test with load simulator
-6. **NO NEW DEPENDENCIES** (Mangum already installed)
+6. **NO NEW DEPENDENCIES** (Lambda handler adapter already installed)
 
 **Code Changes**: Minimal
 - Terraform only (new resources)
-- Lambda code unchanged (Mangum handles both)
+- Lambda code unchanged (handler adapter supports both)
 - Environment variable: `API_GATEWAY_ID` (optional)
 
 ### Phase 2: XXE Fix (Easy - 1 day)
@@ -392,26 +392,21 @@ def rate_limit_check(ip: str, max_requests: int = 100, window: int = 300):
 **New Dependencies**: ❌ **NONE!**
 
 **Why No New Deps**:
-- Mangum already installed (requirements.txt:8)
-  ```
-  mangum==0.19.0  # Lambda adapter for ASGI apps (FastAPI)
-  ```
-- Mangum handles BOTH Lambda Function URL AND API Gateway
+- Lambda handler adapter already installed
+- Handler adapter supports BOTH Lambda Function URL AND API Gateway
 - Same Lambda code works for both
 - Only Terraform changes required
 
 **Existing Dependencies**:
 ```
-fastapi==0.121.3     # Web framework
-mangum==0.19.0       # Lambda adapter (ALREADY INSTALLED)
-sse-starlette==3.0.3 # SSE support
-pydantic==2.12.4     # Validation
-boto3==1.41.0        # AWS SDK
+aws-lambda-powertools  # Lambda framework
+pydantic==2.12.4       # Validation
+boto3==1.41.0          # AWS SDK
 ```
 
-**Potential Conflict**: ❌ **NONE**
+**Potential Conflict**: N/A - **NONE**
 - All dependencies already pinned
-- Mangum supports both deployment modes
+- Handler adapter supports both deployment modes
 - No version upgrades needed
 
 ---
@@ -427,7 +422,7 @@ boto3==1.41.0        # AWS SDK
    - With API Gateway: $100 lasts 30+ days (economically unviable for attacker)
 
 2. **No New Dependencies**
-   - Mangum already installed
+   - Lambda handler adapter already installed
    - Zero package conflicts
    - Terraform-only change
 

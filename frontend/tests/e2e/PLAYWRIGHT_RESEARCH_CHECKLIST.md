@@ -107,7 +107,7 @@
 
 - [x] **Ticker search API returning "No tickers found" for valid tickers (AAPL, GOOG)** FIXED
   - **Root causes identified and fixed (2026-02-03)**:
-    1. **No local backend server**: Created `scripts/run-local-api.py` to run FastAPI locally with mock DynamoDB
+    1. **No local backend server**: Created `scripts/run-local-api.py` to run API locally with mock DynamoDB
     2. **CORS blocking**: Added CORS middleware to local dev server
     3. **Missing API keys**: Script now loads TIINGO_API_KEY from `.env.local`
     4. **Chart NaN assertion error**: Fixed whitespace candle format in `price-sentiment-chart.tsx`

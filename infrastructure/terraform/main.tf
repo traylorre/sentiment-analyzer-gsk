@@ -728,7 +728,7 @@ module "sse_streaming_lambda" {
 
   # Environment variables
   # Note: PYTHONPATH must be set here, not just in Docker ENV, because
-  # Lambda Web Adapter runs Python in a subprocess that doesn't reliably
+  # the custom runtime bootstrap runs Python in a subprocess that doesn't reliably
   # inherit container environment variables.
   # Feature 1043: Clear env var naming - USERS_TABLE for configs, SENTIMENTS_TABLE for sentiment data
   environment_variables = {
