@@ -4,7 +4,7 @@ Tests that config streams require authentication (Bearer token, X-User-ID header
 or user_token query param) per FR-014 (global stream is public, config streams
 require auth).
 
-Migrated from FastAPI TestClient to direct handler invocation (001-fastapi-purge).
+Uses direct handler invocation for testing.
 """
 
 import json

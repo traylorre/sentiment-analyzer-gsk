@@ -7,7 +7,7 @@ Common issues and solutions for the Sentiment Analyzer project.
 - [Development Environment Issues](#development-environment-issues)
   - [OpenSSL/pyOpenSSL Compatibility](#opensslpyopenssl-compatibility)
   - [Python Version Issues](#python-version-issues)
-  - [httpx Missing for FastAPI TestClient](#httpx-missing-for-fastapi-testclient)
+  - [httpx Missing for Test Client](#httpx-missing-for-test-client)
 - [Test Issues](#test-issues)
   - [Moto Tests Failing](#moto-tests-failing)
 - [Infrastructure Issues](#infrastructure-issues)
@@ -98,18 +98,18 @@ sudo apt install python-is-python3
 
 ---
 
-### httpx Missing for FastAPI TestClient
+### httpx Missing for Test Client
 
 **Error:**
 ```
-RuntimeError: The starlette.testclient module requires the httpx package to be installed.
+RuntimeError: The TestClient module requires the httpx package to be installed.
 Install it by running the command:
 
     pip install httpx
 ```
 
 **Cause:**
-FastAPI's `TestClient` (from Starlette) requires `httpx` for making test requests, but it's not automatically installed with FastAPI.
+The `TestClient` requires `httpx` for making test requests, but it is not automatically installed as a dependency.
 
 **Solution:**
 Install httpx:
@@ -285,4 +285,4 @@ If you encounter an issue not covered here:
 
 ---
 
-*Last updated: 2025-11-17 (added httpx and Terraform init issues)*
+*Last updated: 2026-02-11 (updated httpx and Terraform init issues)*

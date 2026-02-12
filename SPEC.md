@@ -195,10 +195,10 @@ Operational Behaviors (must implement)
 - Lambda Configuration:
   - Ingestion Lambda: 512 MB memory, 60s timeout, EventBridge trigger (every 5 minutes), parallel fetching from Tiingo/Finnhub, reserved concurrency: 10
   - Analysis Lambda: 2048 MB memory, 60s timeout, reserved concurrency: 20 (processes SNS messages via container deployment, performs DistilBERT sentiment analysis, writes to DynamoDB)
-  - Dashboard Lambda: 1024 MB memory, 60s timeout, container deployment (FastAPI + Mangum), Lambda Function URL with IAM auth
+  - Dashboard Lambda: 1024 MB memory, 60s timeout, container deployment (Lambda Powertools), Lambda Function URL with IAM auth
   - Metrics Lambda: 128 MB memory, 30s timeout, EventBridge trigger (every 1 minute), monitors stuck items in pending status, emits CloudWatch metrics
   - Notification Lambda: 256 MB memory, 30s timeout, SNS + EventBridge triggers, sends email alerts, magic links, and digests via SendGrid
-  - SSE Streaming Lambda: 512 MB memory, 900s timeout (15 min), container deployment (FastAPI + sse-starlette), Lambda Function URL with RESPONSE_STREAM invoke mode for real-time sentiment updates
+  - SSE Streaming Lambda: 512 MB memory, 900s timeout (15 min), container deployment (custom runtime bootstrap), Lambda Function URL with RESPONSE_STREAM invoke mode for real-time sentiment updates
 - Expected Throughput:
   - Average load: 100 items/minute (~1.7 items/second)
   - Peak load: 1,000 items/minute (~16.7 items/second) during viral events or breaking news

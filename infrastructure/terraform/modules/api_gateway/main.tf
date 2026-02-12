@@ -21,9 +21,9 @@
 #     3. Check Lambda logs for errors
 #
 # For Developers:
-#     - Mangum adapter in Lambda handles both Function URL and API Gateway
+#     - Lambda handler manages both Function URL and API Gateway requests
 #     - No Lambda code changes required
-#     - CORS configured at both API Gateway and FastAPI levels
+#     - CORS configured at both API Gateway and application levels
 #     - Usage Plan provides rate limiting without additional cost
 
 # API Gateway REST API

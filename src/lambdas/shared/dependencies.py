@@ -1,6 +1,6 @@
 """Lazy-init singleton dependency getters (FR-013, R6).
 
-Replaces FastAPI's Depends() injection with module-level singletons.
+Module-level singleton dependency providers.
 Each getter initializes its resource on first call and caches it for
 the Lambda container lifetime. Thread-safe for SSE Lambda.
 

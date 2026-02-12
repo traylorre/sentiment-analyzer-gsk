@@ -2,8 +2,8 @@
 sequenceDiagram
     autonumber
     participant Browser as Browser<br/>(EventSource API)
-    participant LWA as Lambda Function URL<br/>(Lambda Web Adapter)
-    participant Handler as FastAPI Handler<br/>(sse_streaming)
+    participant LWA as Lambda Function URL<br/>(Custom Runtime)
+    participant Handler as SSE Handler<br/>(sse_streaming)
     participant Pool as Connection Manager<br/>(Max 100)
     participant DDB as DynamoDB<br/>(sentiment-items)
     participant CW as CloudWatch<br/>(Metrics)

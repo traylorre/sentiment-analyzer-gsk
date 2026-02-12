@@ -83,8 +83,10 @@ Auto-generated from all feature plans. Last updated: 2025-11-26
 - Markdown (diagrams), Python 3.13 (URL generation script) + zlib, base64, json (all stdlib) (1215-fix-diagram-inconsistencies)
 - N/A (documentation-only) (1215-fix-diagram-inconsistencies)
 - N/A (Documentation-only changes) + grep, git (for atomic commits and verification) (001-spec-doc-cleanup)
-- Python 3.13 (pyproject.toml `requires-python = ">=3.13"`, Lambda base image `public.ecr.aws/lambda/python:3.13`) + aws-lambda-powertools 3.23.0 (routing, middleware), orjson (JSON serialization — new), pydantic 2.12.5 (validation), boto3 1.42.26 (AWS SDK), aws-xray-sdk 2.15.0 (tracing), awslambdaric (streaming — bundled in base image) (001-fastapi-purge)
-- DynamoDB (existing tables unchanged), S3 (model artifacts unchanged) (001-fastapi-purge)
+- Python 3.13 (pyproject.toml `requires-python = ">=3.13"`, Lambda base image `public.ecr.aws/lambda/python:3.13`) + aws-lambda-powertools 3.23.0 (routing, middleware), orjson (JSON serialization — new), pydantic 2.12.5 (validation), boto3 1.42.26 (AWS SDK), aws-xray-sdk 2.15.0 (tracing), awslambdaric (streaming — bundled in base image) (001-powertools-migration)
+- DynamoDB (existing tables unchanged), S3 (model artifacts unchanged) (001-powertools-migration)
+- Python 3.13 (existing project standard), HCL/Terraform 1.5+, YAML (GitHub Actions), Bash (validation scripts) + AWS Lambda Powertools (routing), boto3 (AWS SDK), pydantic (validation) — all already in place (1217-infra-purge)
+- N/A (no data storage changes) (1217-infra-purge)
 
 - **Python 3.13** with aws-lambda-powertools, boto3, pydantic, httpx, orjson
 - **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, Amplify
@@ -849,9 +851,8 @@ aws cloudwatch get-metric-data --metric-data-queries '[...]' --start-time ... --
 ```
 
 ## Recent Changes
-- 001-fastapi-purge: Added Python 3.13 (pyproject.toml `requires-python = ">=3.13"`, Lambda base image `public.ecr.aws/lambda/python:3.13`) + aws-lambda-powertools 3.23.0 (routing, middleware), orjson (JSON serialization — new), pydantic 2.12.5 (validation), boto3 1.42.26 (AWS SDK), aws-xray-sdk 2.15.0 (tracing), awslambdaric (streaming — bundled in base image)
+- 1217-infra-purge: Added Python 3.13 (existing project standard), HCL/Terraform 1.5+, YAML (GitHub Actions), Bash (validation scripts) + AWS Lambda Powertools (routing), boto3 (AWS SDK), pydantic (validation) — all already in place
 - 001-spec-doc-cleanup: Added N/A (Documentation-only changes) + grep, git (for atomic commits and verification)
-- 1215-fix-diagram-inconsistencies: Added Markdown (diagrams), Python 3.13 (URL generation script) + zlib, base64, json (all stdlib)
 
 <!-- MANUAL ADDITIONS START -->
 

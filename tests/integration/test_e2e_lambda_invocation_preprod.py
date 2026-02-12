@@ -105,10 +105,10 @@ class TestLambdaColdStart:
 
     def test_sentiment_endpoint_requires_dependencies(self, auth_headers):
         """
-        E2E: Sentiment endpoint works with all FastAPI/Pydantic dependencies.
+        E2E: Sentiment endpoint works with all handler dependencies.
 
         This test verifies:
-        - FastAPI can process requests
+        - Lambda handler can process requests
         - Pydantic validation works (uses pydantic_core)
         - DynamoDB client works
         - Response serialization works
@@ -196,7 +196,7 @@ class TestLambdaHTTPRouting:
         """
         E2E: Lambda returns 404 for non-existent endpoints.
 
-        Verifies FastAPI routing works correctly.
+        Verifies request routing works correctly.
         """
         response = requests.get(
             f"{DASHBOARD_URL}/api/nonexistent",
@@ -389,7 +389,7 @@ class TestLambdaErrorHandling:
         if response.status_code == 401:
             pytest.skip("Auth format incompatible - API v2 uses X-User-ID header")
 
-        # FastAPI returns 422 for validation errors
+        # Returns 422 for validation errors
         assert response.status_code == 422
 
     def test_malformed_json_handled_gracefully(self, auth_headers):

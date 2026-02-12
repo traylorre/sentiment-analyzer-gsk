@@ -52,7 +52,7 @@ flowchart TB
     end
 
     subgraph DashboardFlow["Dashboard API Flow"]
-        DASH["Dashboard Lambda<br/>FastAPI"]
+        DASH["Dashboard Lambda"]
 
         subgraph DashCache["Caching Layer"]
             MC["Metrics Cache<br/>30s TTL<br/>✅ FIXED"]
