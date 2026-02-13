@@ -24,13 +24,13 @@ This results in:
 
 ## Work Order
 
-| # | Task | File | Status | Priority |
-|---|------|------|--------|----------|
-| 1 | Fix cache key design | [fix-cache-key.md](./fix-cache-key.md) | [ ] TODO | P0 |
-| 2 | Fix cache writing (write-through) | [fix-cache-writing.md](./fix-cache-writing.md) | [ ] TODO | P1 |
-| 3 | Fix cache reading (query DDB first) | [fix-cache-reading.md](./fix-cache-reading.md) | [ ] TODO | P2 |
-| 4 | Local API table setup | [fix-local-api-tables.md](./fix-local-api-tables.md) | [ ] TODO | P3 |
-| 5 | Add tests | [fix-cache-tests.md](./fix-cache-tests.md) | [ ] TODO | P4 |
+| # | Task | File | Status | Priority | Code Location |
+|---|------|------|--------|----------|---------------|
+| 1 | Fix cache key design | [fix-cache-key.md](./fix-cache-key.md) | [x] DONE | P0 | `ohlc.py:75-109` (`_get_ohlc_cache_key` includes end_date) |
+| 2 | Fix cache writing (write-through) | [fix-cache-writing.md](./fix-cache-writing.md) | [x] DONE | P1 | `ohlc.py:185-237` (`_write_through_to_dynamodb`, called at 717, 749, 792) |
+| 3 | Fix cache reading (query DDB first) | [fix-cache-reading.md](./fix-cache-reading.md) | [x] DONE | P2 | `ohlc.py:239-314` (`_read_from_dynamodb`, called at 650) |
+| 4 | Local API table setup | [fix-local-api-tables.md](./fix-local-api-tables.md) | [x] DONE | P3 | `run-local-api.py:79,132` |
+| 5 | Add tests | [fix-cache-tests.md](./fix-cache-tests.md) | [x] DONE | P4 | `tests/unit/shared/cache/test_ohlc_persistent_cache.py` (16 tests), `tests/unit/dashboard/test_ohlc.py` (33 tests) |
 
 **Rationale for order:**
 1. **Key first** - If cache key is wrong, reads/writes will miss even after fix

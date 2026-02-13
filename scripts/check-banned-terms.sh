@@ -38,7 +38,6 @@ EXCLUDE_PATHS=(
   "./specs/archive/"
   "./docs/archive/"
   "./docs/archived-specs/"
-  "./docs/cache/"
   "./specs/1217-fastapi-infra-purge/"
   "./.specify/"
 )

@@ -190,7 +190,7 @@ def _write_through_to_dynamodb(
 ) -> None:
     """Persist OHLC candles to DynamoDB for cross-invocation caching.
 
-    Fire-and-forget: errors are logged but don't fail the request.
+    Errors propagate to caller for explicit degradation handling.
     Historical data is immutable, so overwrites are safe.
 
     Args:
@@ -198,46 +198,42 @@ def _write_through_to_dynamodb(
         source: Data provider ("tiingo" or "finnhub")
         resolution: Candle resolution ("D", "1", "5", etc.)
         ohlc_candles: List of OHLCCandle from adapter
+
+    Raises:
+        ClientError: If DynamoDB write fails (propagated to caller)
     """
     if not ohlc_candles:
         logger.debug("No candles to cache", extra={"ticker": ticker})
         return
 
-    try:
-        # Convert adapter candles to cache format
-        cached_candles = candles_to_cached(ohlc_candles, source, resolution)
+    # Convert adapter candles to cache format
+    cached_candles = candles_to_cached(ohlc_candles, source, resolution)
 
-        if not cached_candles:
-            logger.debug(
-                "Candle conversion produced no results",
-                extra={"ticker": ticker, "input_count": len(ohlc_candles)},
-            )
-            return
+    if not cached_candles:
+        logger.debug(
+            "Candle conversion produced no results",
+            extra={"ticker": ticker, "input_count": len(ohlc_candles)},
+        )
+        return
 
-        # Write to DynamoDB (batched, max 25 per request)
-        written = put_cached_candles(
-            ticker=ticker,
-            source=source,
-            resolution=resolution,
-            candles=cached_candles,
-        )
+    # Write to DynamoDB (batched, max 25 per request)
+    written = put_cached_candles(
+        ticker=ticker,
+        source=source,
+        resolution=resolution,
+        candles=cached_candles,
+    )
 
-        logger.info(
-            "OHLC write-through complete",
-            extra={
-                "ticker": ticker,
-                "source": source,
-                "resolution": resolution,
-                "candles_written": written,
-                "candles_input": len(ohlc_candles),
-            },
-        )
-    except Exception as e:
-        # Log but don't fail - write-through is best-effort
-        logger.warning(
-            "OHLC write-through failed",
-            extra=get_safe_error_info(e),
-        )
+    logger.info(
+        "OHLC write-through complete",
+        extra={
+            "ticker": ticker,
+            "source": source,
+            "resolution": resolution,
+            "candles_written": written,
+            "candles_input": len(ohlc_candles),
+        },
+    )
 
 
 def _read_from_dynamodb(
@@ -249,10 +245,8 @@ def _read_from_dynamodb(
 ) -> list[PriceCandle] | None:
     """Query DynamoDB for cached OHLC candles.
 
-    Returns None if:
-    - No data found
-    - Query fails (graceful degradation to API)
-    - Partial data (less than 80% expected candles)
+    Returns None if no data found or partial data (less than 80% expected).
+    Raises on DynamoDB errors — caller handles explicit degradation.
 
     Args:
         ticker: Stock symbol
@@ -262,69 +256,62 @@ def _read_from_dynamodb(
         end_date: Range end
 
     Returns:
-        List of PriceCandle if cache hit, None otherwise
+        List of PriceCandle if cache hit, None if cache miss
+
+    Raises:
+        ClientError: If DynamoDB query fails (propagated to caller)
     """
-    try:
-        # Import here to avoid potential import timing issues
-        from datetime import UTC
-        from datetime import time as dt_time
+    from datetime import UTC
+    from datetime import time as dt_time
 
-        # Convert dates to datetime for cache query
-        start_time = datetime.combine(start_date, dt_time.min, tzinfo=UTC)
-        end_time = datetime.combine(end_date, dt_time.max, tzinfo=UTC)
+    # Convert dates to datetime for cache query
+    start_time = datetime.combine(start_date, dt_time.min, tzinfo=UTC)
+    end_time = datetime.combine(end_date, dt_time.max, tzinfo=UTC)
 
-        result = get_cached_candles(
-            ticker=ticker,
-            source=source,
-            resolution=resolution.value,
-            start_time=start_time,
-            end_time=end_time,
-        )
+    result = get_cached_candles(
+        ticker=ticker,
+        source=source,
+        resolution=resolution.value,
+        start_time=start_time,
+        end_time=end_time,
+    )
 
-        if not result.cache_hit or not result.candles:
-            logger.debug(
-                "DynamoDB cache miss",
-                extra={"ticker": ticker, "resolution": resolution.value},
-            )
-            return None
-
-        # Convert CachedCandle to PriceCandle
-        price_candles = [
-            PriceCandle.from_cached_candle(c, resolution) for c in result.candles
-        ]
-
-        # Validate we have reasonable coverage (80% threshold)
-        expected_candles = _estimate_expected_candles(start_date, end_date, resolution)
-        if len(price_candles) < expected_candles * 0.8:
-            # Less than 80% coverage - treat as miss, fetch fresh
-            logger.info(
-                "DynamoDB cache partial hit, fetching fresh",
-                extra={
-                    "ticker": ticker,
-                    "found": len(price_candles),
-                    "expected": expected_candles,
-                },
-            )
-            return None
-
-        logger.info(
-            "OHLC cache hit (DynamoDB)",
-            extra={
-                "ticker": ticker,
-                "source": source,
-                "resolution": resolution.value,
-                "candle_count": len(price_candles),
-            },
-        )
-        return price_candles
-
-    except Exception as e:
-        # Graceful degradation - log and fall through to API
-        logger.warning(
-            "DynamoDB cache read failed, falling back to API",
-            extra=get_safe_error_info(e),
+    if not result.cache_hit or not result.candles:
+        logger.debug(
+            "DynamoDB cache miss",
+            extra={"ticker": ticker, "resolution": resolution.value},
         )
         return None
+
+    # Convert CachedCandle to PriceCandle
+    price_candles = [
+        PriceCandle.from_cached_candle(c, resolution) for c in result.candles
+    ]
+
+    # Validate we have reasonable coverage (80% threshold)
+    expected_candles = _estimate_expected_candles(start_date, end_date, resolution)
+    if len(price_candles) < expected_candles * 0.8:
+        # Less than 80% coverage - treat as miss, fetch fresh
+        logger.info(
+            "DynamoDB cache partial hit, fetching fresh",
+            extra={
+                "ticker": ticker,
+                "found": len(price_candles),
+                "expected": expected_candles,
+            },
+        )
+        return None
+
+    logger.info(
+        "OHLC cache hit (DynamoDB)",
+        extra={
+            "ticker": ticker,
+            "source": source,
+            "resolution": resolution.value,
+            "candle_count": len(price_candles),
+        },
+    )
+    return price_candles
 
 
 def _estimate_expected_candles(
@@ -414,6 +401,34 @@ def _build_response_from_cache(
         resolution_fallback=False,
         fallback_message=None,
     )
+
+
+def _build_cache_headers(
+    source: str,
+    age: int,
+    error: str | None,
+    write_error: bool,
+) -> dict[str, str]:
+    """Build X-Cache-* response headers per contract (Feature 1218).
+
+    Args:
+        source: Cache source value (in-memory, persistent-cache, live-api, live-api-degraded)
+        age: Cache age in seconds (0 for live-api/degraded)
+        error: Error description string (only for degraded mode)
+        write_error: Whether a cache write failed
+
+    Returns:
+        Dict of cache headers to include in Response
+    """
+    headers: dict[str, str] = {
+        "X-Cache-Source": source,
+        "X-Cache-Age": str(age),
+    }
+    if error is not None:
+        headers["X-Cache-Error"] = error
+    if write_error:
+        headers["X-Cache-Write-Error"] = "true"
+    return headers
 
 
 # Create router
@@ -586,6 +601,14 @@ def get_ohlc_data(ticker: str) -> Response:
     # See: https://github.com/github/codeql/discussions/10702
     logger.info("Fetching OHLC data")
 
+    # =========================================================================
+    # Cache observability tracking (Feature 1218 / OHLC Cache Reconciliation)
+    # =========================================================================
+    cache_source = "live-api"  # Default: no cache hit
+    cache_age = 0
+    cache_error = None
+    cache_write_error = False
+
     # Feature 1076/1078: Check cache before making external API calls
     # Use time_range_str (not dates) for cache key to ensure hits on predefined ranges
     cache_key = _get_ohlc_cache_key(
@@ -603,24 +626,45 @@ def get_ohlc_data(ticker: str) -> Response:
             "OHLC cache hit (in-memory)",
             extra={"cache_key": safe_cache_key, "stats": get_ohlc_cache_stats()},
         )
+        # Calculate in-memory cache age
+        if cache_key in _ohlc_cache:
+            cache_age = int(time.time() - _ohlc_cache[cache_key][0])
+        cache_headers = _build_cache_headers("in-memory", cache_age, None, False)
         # Return cached OHLCResponse directly
         return Response(
             status_code=200,
             content_type="application/json",
             body=orjson.dumps(cached_response).decode(),
+            headers=cache_headers,
         )
 
     # =========================================================================
     # Cache check #2: DynamoDB persistent cache (Feature 1087 / CACHE-001)
     # Survives Lambda cold starts, reduces external API calls
+    # Errors propagate for explicit degradation (Feature 1218)
     # =========================================================================
-    ddb_candles = _read_from_dynamodb(
-        ticker=ticker,
-        source="tiingo",  # Primary source
-        resolution=resolution,
-        start_date=start_date,
-        end_date=end_date,
-    )
+    ddb_candles = None
+    try:
+        ddb_candles = _read_from_dynamodb(
+            ticker=ticker,
+            source="tiingo",  # Primary source
+            resolution=resolution,
+            start_date=start_date,
+            end_date=end_date,
+        )
+    except Exception as e:
+        # Explicit degradation: log ERROR, set degradation context, continue to API
+        error_desc = f"DynamoDB {type(e).__name__}: {e}"
+        logger.error(
+            "DynamoDB cache read failed, degrading to live API",
+            extra={
+                "error": error_desc,
+                "ticker": ticker,
+                "resolution": resolution.value,
+            },
+        )
+        cache_source = "live-api-degraded"
+        cache_error = error_desc
 
     if ddb_candles:
         # Build response from DynamoDB data
@@ -635,10 +679,14 @@ def get_ohlc_data(ticker: str) -> Response:
         # Populate in-memory cache for subsequent requests
         _set_cached_ohlc(cache_key, response.model_dump(mode="json"))
 
+        # Calculate persistent cache age from fetched_at (approximate)
+        # Use 0 as default since we don't have fetched_at in the response model
+        cache_headers = _build_cache_headers("persistent-cache", 0, None, False)
         return Response(
             status_code=200,
             content_type="application/json",
             body=orjson.dumps(response.model_dump(mode="json")).decode(),
+            headers=cache_headers,
         )
 
     # Track fallback state
@@ -661,12 +709,22 @@ def get_ohlc_data(ticker: str) -> Response:
                     PriceCandle.from_ohlc_candle(c, resolution) for c in ohlc_candles
                 ]
                 # Write-through to DynamoDB (CACHE-001)
-                _write_through_to_dynamodb(
-                    ticker=ticker,
-                    source=source,
-                    resolution=resolution.value,
-                    ohlc_candles=ohlc_candles,
-                )
+                try:
+                    _write_through_to_dynamodb(
+                        ticker=ticker,
+                        source=source,
+                        resolution=resolution.value,
+                        ohlc_candles=ohlc_candles,
+                    )
+                except Exception as write_err:
+                    logger.error(
+                        "DynamoDB cache write failed",
+                        extra={
+                            "error": str(write_err),
+                            "ticker": ticker,
+                        },
+                    )
+                    cache_write_error = True
         except Exception as e:
             logger.warning(
                 "Tiingo daily OHLC fetch failed",
@@ -683,12 +741,22 @@ def get_ohlc_data(ticker: str) -> Response:
                     PriceCandle.from_ohlc_candle(c, resolution) for c in ohlc_candles
                 ]
                 # Write-through to DynamoDB (CACHE-001)
-                _write_through_to_dynamodb(
-                    ticker=ticker,
-                    source=source,
-                    resolution=resolution.value,
-                    ohlc_candles=ohlc_candles,
-                )
+                try:
+                    _write_through_to_dynamodb(
+                        ticker=ticker,
+                        source=source,
+                        resolution=resolution.value,
+                        ohlc_candles=ohlc_candles,
+                    )
+                except Exception as write_err:
+                    logger.error(
+                        "DynamoDB cache write failed",
+                        extra={
+                            "error": str(write_err),
+                            "ticker": ticker,
+                        },
+                    )
+                    cache_write_error = True
         except Exception as e:
             logger.warning(
                 "Tiingo IEX intraday fetch failed",
@@ -716,12 +784,22 @@ def get_ohlc_data(ticker: str) -> Response:
                     for c in ohlc_candles
                 ]
                 # Write-through to DynamoDB (CACHE-001)
-                _write_through_to_dynamodb(
-                    ticker=ticker,
-                    source=source,
-                    resolution=actual_resolution.value,
-                    ohlc_candles=ohlc_candles,
-                )
+                try:
+                    _write_through_to_dynamodb(
+                        ticker=ticker,
+                        source=source,
+                        resolution=actual_resolution.value,
+                        ohlc_candles=ohlc_candles,
+                    )
+                except Exception as write_err:
+                    logger.error(
+                        "DynamoDB cache write failed",
+                        extra={
+                            "error": str(write_err),
+                            "ticker": ticker,
+                        },
+                    )
+                    cache_write_error = True
         except Exception as e:
             logger.warning(
                 "Tiingo daily fallback failed",
@@ -731,12 +809,16 @@ def get_ohlc_data(ticker: str) -> Response:
     # Check if we got any data
     if not candles:
         logger.warning("No OHLC data available from any source")
+        cache_headers = _build_cache_headers(
+            cache_source, 0, cache_error, cache_write_error
+        )
         return Response(
             status_code=404,
             content_type="application/json",
             body=orjson.dumps(
                 {"detail": f"No price data available for {ticker}"}
             ).decode(),
+            headers=cache_headers,
         )
 
     # Sort candles by date (oldest first)
@@ -806,10 +888,16 @@ def get_ohlc_data(ticker: str) -> Response:
         extra={"cache_key": safe_actual_cache_key, "stats": get_ohlc_cache_stats()},
     )
 
+    # Build cache headers for the response
+    cache_headers = _build_cache_headers(
+        cache_source, cache_age, cache_error, cache_write_error
+    )
+
     return Response(
         status_code=200,
         content_type="application/json",
         body=orjson.dumps(response_dict).decode(),
+        headers=cache_headers,
     )
 
 

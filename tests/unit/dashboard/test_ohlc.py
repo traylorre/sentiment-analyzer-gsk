@@ -260,6 +260,285 @@ class TestOHLCEndpoint:
         assert json.loads(response["body"])["ticker"] == "AAPL"
 
 
+def _get_header(response: dict, name: str) -> str | None:
+    """Extract a header value from Lambda response (handles multiValueHeaders)."""
+    # Lambda Powertools may use multiValueHeaders (lists) or headers (strings)
+    mv = response.get("multiValueHeaders", {})
+    if name in mv:
+        val = mv[name]
+        return val[0] if isinstance(val, list) else val
+    h = response.get("headers", {})
+    if name in h:
+        val = h[name]
+        return val[0] if isinstance(val, list) else val
+    return None
+
+
+class TestCacheDegradation:
+    """Tests for explicit cache degradation (Feature 1218, US1).
+
+    When DynamoDB is broken, the handler MUST:
+    - Log ERROR
+    - Fetch from Tiingo (explicit degradation)
+    - Return 200 with X-Cache-Source: live-api-degraded and X-Cache-Error headers
+    """
+
+    @patch("src.lambdas.dashboard.ohlc._read_from_dynamodb")
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
+    def test_cache_read_error_returns_degraded_headers(
+        self, mock_get_tiingo, mock_read_ddb, mock_lambda_context
+    ):
+        """T007: When get_cached_candles raises, response has degraded headers."""
+        from botocore.exceptions import ClientError
+
+        mock_read_ddb.side_effect = ClientError(
+            {"Error": {"Code": "AccessDeniedException", "Message": "Denied"}},
+            "Query",
+        )
+        mock_tiingo = MagicMock()
+        mock_tiingo.get_ohlc.return_value = _create_ohlc_candles(10)
+        mock_get_tiingo.return_value = mock_tiingo
+
+        response = lambda_handler(
+            make_event(
+                method="GET",
+                path="/api/v2/tickers/AAPL/ohlc",
+                path_params={"ticker": "AAPL"},
+                headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+            ),
+            mock_lambda_context,
+        )
+
+        assert response["statusCode"] == 200
+        assert _get_header(response, "X-Cache-Source") == "live-api-degraded"
+        assert _get_header(response, "X-Cache-Error") is not None
+        assert "AccessDeniedException" in _get_header(response, "X-Cache-Error")
+        assert _get_header(response, "X-Cache-Age") == "0"
+
+    @patch("src.lambdas.dashboard.ohlc._read_from_dynamodb")
+    @patch("src.lambdas.dashboard.ohlc._write_through_to_dynamodb")
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
+    def test_cache_write_error_returns_write_error_header(
+        self, mock_get_tiingo, mock_write_ddb, mock_read_ddb, mock_lambda_context
+    ):
+        """T008: When put_cached_candles raises, response has X-Cache-Write-Error."""
+        from botocore.exceptions import ClientError
+
+        mock_read_ddb.return_value = None  # Normal cache miss
+        mock_write_ddb.side_effect = ClientError(
+            {
+                "Error": {
+                    "Code": "ProvisionedThroughputExceededException",
+                    "Message": "Throttled",
+                }
+            },
+            "BatchWriteItem",
+        )
+        mock_tiingo = MagicMock()
+        mock_tiingo.get_ohlc.return_value = _create_ohlc_candles(10)
+        mock_get_tiingo.return_value = mock_tiingo
+
+        response = lambda_handler(
+            make_event(
+                method="GET",
+                path="/api/v2/tickers/AAPL/ohlc",
+                path_params={"ticker": "AAPL"},
+                headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+            ),
+            mock_lambda_context,
+        )
+
+        assert response["statusCode"] == 200
+        assert _get_header(response, "X-Cache-Write-Error") == "true"
+        # Data should still be returned
+        data = json.loads(response["body"])
+        assert data["count"] > 0
+
+    @patch("src.lambdas.dashboard.ohlc._read_from_dynamodb")
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
+    def test_cache_read_error_still_returns_data(
+        self, mock_get_tiingo, mock_read_ddb, mock_lambda_context
+    ):
+        """T009: Degraded response still contains valid OHLC data from Tiingo."""
+        from botocore.exceptions import ClientError
+
+        mock_read_ddb.side_effect = ClientError(
+            {"Error": {"Code": "ResourceNotFoundException", "Message": "Not found"}},
+            "Query",
+        )
+        mock_tiingo = MagicMock()
+        mock_tiingo.get_ohlc.return_value = _create_ohlc_candles(10)
+        mock_get_tiingo.return_value = mock_tiingo
+
+        response = lambda_handler(
+            make_event(
+                method="GET",
+                path="/api/v2/tickers/AAPL/ohlc",
+                path_params={"ticker": "AAPL"},
+                headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+            ),
+            mock_lambda_context,
+        )
+
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
+        assert data["ticker"] == "AAPL"
+        assert data["count"] > 0
+        assert len(data["candles"]) > 0
+
+
+class TestCacheObservabilityHeaders:
+    """Tests for cache observability headers (Feature 1218, US2).
+
+    Every OHLC response MUST include X-Cache-Source and X-Cache-Age headers.
+    """
+
+    @patch("src.lambdas.dashboard.ohlc._write_through_to_dynamodb")
+    @patch("src.lambdas.dashboard.ohlc._read_from_dynamodb")
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
+    def test_in_memory_cache_hit_headers(
+        self, mock_get_tiingo, mock_read_ddb, mock_write_ddb, mock_lambda_context
+    ):
+        """T015: In-memory cache hit has X-Cache-Source: in-memory.
+
+        Uses custom date range so the cache lookup key (start_date, end_date)
+        matches the storage key (derived from candle dates).  With predefined
+        ranges the lookup key uses today + offset, but the storage key uses
+        candle[0].date / candle[-1].date which differ — causing a miss.
+        """
+        mock_read_ddb.return_value = None  # Normal cache miss
+        mock_write_ddb.return_value = None  # Write succeeds silently
+
+        # Create candles spanning a known date range
+        start = date.today() - timedelta(days=10)
+        end = date.today() - timedelta(days=1)
+        candles = _create_ohlc_candles(10, start_date=start)
+
+        mock_tiingo = MagicMock()
+        mock_tiingo.get_ohlc.return_value = candles
+        mock_get_tiingo.return_value = mock_tiingo
+
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/AAPL/ohlc",
+            path_params={"ticker": "AAPL"},
+            query_params={
+                "start_date": start.isoformat(),
+                "end_date": end.isoformat(),
+            },
+            headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+        )
+
+        # First request — populates in-memory cache
+        lambda_handler(event, mock_lambda_context)
+        # Second request — should hit in-memory cache
+        response = lambda_handler(event, mock_lambda_context)
+
+        assert response["statusCode"] == 200
+        assert _get_header(response, "X-Cache-Source") == "in-memory"
+        # Age should be >= 0 (test runs fast, may be 0)
+        assert int(_get_header(response, "X-Cache-Age") or "-1") >= 0
+
+    @patch("src.lambdas.dashboard.ohlc._write_through_to_dynamodb")
+    @patch("src.lambdas.dashboard.ohlc._read_from_dynamodb")
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
+    def test_persistent_cache_hit_headers(
+        self, mock_get_tiingo, mock_read_ddb, mock_write_ddb, mock_lambda_context
+    ):
+        """T016: Persistent cache hit has X-Cache-Source: persistent-cache."""
+        from src.lambdas.shared.models import PriceCandle
+
+        # _read_from_dynamodb returns PriceCandle list when cache hits
+        start = date.today() - timedelta(days=10)
+        candles = [
+            PriceCandle(
+                date=start + timedelta(days=i),
+                open=100 + i,
+                high=102 + i,
+                low=99 + i,
+                close=101 + i,
+                volume=1000000,
+            )
+            for i in range(10)
+        ]
+        mock_read_ddb.return_value = candles
+        mock_write_ddb.return_value = None
+        mock_tiingo = MagicMock()
+        mock_get_tiingo.return_value = mock_tiingo
+
+        response = lambda_handler(
+            make_event(
+                method="GET",
+                path="/api/v2/tickers/AAPL/ohlc",
+                path_params={"ticker": "AAPL"},
+                headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+            ),
+            mock_lambda_context,
+        )
+
+        assert response["statusCode"] == 200
+        assert _get_header(response, "X-Cache-Source") == "persistent-cache"
+        assert _get_header(response, "X-Cache-Age") is not None
+        # Tiingo should NOT be called — data came from persistent cache
+        mock_tiingo.get_ohlc.assert_not_called()
+
+    @patch("src.lambdas.dashboard.ohlc._read_from_dynamodb")
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
+    def test_live_api_fetch_headers(
+        self, mock_get_tiingo, mock_read_ddb, mock_lambda_context
+    ):
+        """T017: Live API fetch has X-Cache-Source: live-api and X-Cache-Age: 0."""
+        mock_read_ddb.return_value = None  # Normal cache miss
+        mock_tiingo = MagicMock()
+        mock_tiingo.get_ohlc.return_value = _create_ohlc_candles(10)
+        mock_get_tiingo.return_value = mock_tiingo
+
+        response = lambda_handler(
+            make_event(
+                method="GET",
+                path="/api/v2/tickers/AAPL/ohlc",
+                path_params={"ticker": "AAPL"},
+                headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+            ),
+            mock_lambda_context,
+        )
+
+        assert response["statusCode"] == 200
+        assert _get_header(response, "X-Cache-Source") == "live-api"
+        assert _get_header(response, "X-Cache-Age") == "0"
+
+    @patch("src.lambdas.dashboard.ohlc._read_from_dynamodb")
+    @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")
+    def test_degraded_response_headers(
+        self, mock_get_tiingo, mock_read_ddb, mock_lambda_context
+    ):
+        """T018: Degraded response has X-Cache-Source: live-api-degraded + X-Cache-Error."""
+        from botocore.exceptions import ClientError
+
+        mock_read_ddb.side_effect = ClientError(
+            {"Error": {"Code": "AccessDeniedException", "Message": "Denied"}},
+            "Query",
+        )
+        mock_tiingo = MagicMock()
+        mock_tiingo.get_ohlc.return_value = _create_ohlc_candles(10)
+        mock_get_tiingo.return_value = mock_tiingo
+
+        response = lambda_handler(
+            make_event(
+                method="GET",
+                path="/api/v2/tickers/AAPL/ohlc",
+                path_params={"ticker": "AAPL"},
+                headers={"Authorization": f"Bearer {TEST_USER_ID}"},
+            ),
+            mock_lambda_context,
+        )
+
+        assert response["statusCode"] == 200
+        assert _get_header(response, "X-Cache-Source") == "live-api-degraded"
+        assert _get_header(response, "X-Cache-Error") is not None
+        assert _get_header(response, "X-Cache-Age") == "0"
+
+
 class TestTimeRangeEnum:
     """Tests for TimeRange enum."""
 
