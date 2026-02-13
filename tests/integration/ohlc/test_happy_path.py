@@ -29,6 +29,19 @@ from tests.fixtures.mocks.mock_finnhub import MockFinnhubAdapter
 from tests.fixtures.mocks.mock_tiingo import MockTiingoAdapter
 
 
+def _get_header(response: dict, name: str) -> str | None:
+    """Extract a header value from Lambda response (handles multiValueHeaders)."""
+    mv = response.get("multiValueHeaders", {})
+    if name in mv:
+        val = mv[name]
+        return val[0] if isinstance(val, list) else val
+    h = response.get("headers", {})
+    if name in h:
+        val = h[name]
+        return val[0] if isinstance(val, list) else val
+    return None
+
+
 @pytest.fixture
 def mock_tiingo():
     """Create mock Tiingo adapter."""
@@ -80,6 +93,19 @@ class TestOHLCHappyPath:
         assert data["source"] in ("tiingo", "finnhub")
         assert data["count"] > 0
         assert len(data["candles"]) == data["count"]
+
+        # Feature 1218: Verify X-Cache-* observability headers present
+        cache_source = _get_header(response, "X-Cache-Source")
+        assert cache_source is not None, "X-Cache-Source header missing"
+        assert cache_source in (
+            "in-memory",
+            "persistent-cache",
+            "live-api",
+            "live-api-degraded",
+        )
+        cache_age = _get_header(response, "X-Cache-Age")
+        assert cache_age is not None, "X-Cache-Age header missing"
+        assert int(cache_age) >= 0
 
     # T016b: Intraday resolutions (Feature 1056)
     @pytest.mark.ohlc

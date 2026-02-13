@@ -309,7 +309,7 @@ Principal-level review of testing strategy, working backwards from failure modes
 
 - Q2 (HIGH): `_estimate_expected_candles` has 3 incompatible signatures: source (date, date, OHLCResolution), spec 4.3 (ctx.start_date, ctx.end_date, ctx.resolution as str), spec 11.9 (days: int, resolution: str). → A: **Keep source signature `(start_date: date, end_date: date, resolution: OHLCResolution)`** — most correct and complete. Fixed Section 11.9 to match. Section 4.3 call site adds `OHLCResolution(ctx.resolution)` conversion.
 
-- Q3 (HIGH): `get_ohlc_handler` (spec Section 4.10) disconnected from actual FastAPI route `get_ohlc_data` — 5 incompatibilities (enum vs string, Depends, custom dates, timezone, time range values). → A: **OPEN — BLOCKED on FastAPI+Mangum removal.** Deep dive confirmed FastAPI is production architecture (Mangum + Lambda Function URL + API Gateway dual entry points). However, user has decided to rip out FastAPI+Mangum before continuing cache work. Q3 resolution deferred until new handler architecture is established.
+- Q3 (HIGH): `get_ohlc_handler` (spec Section 4.10) disconnected from actual route `get_ohlc_data` — 5 incompatibilities (enum vs string, DI injection, custom dates, timezone, time range values). → A: **RESOLVED — removed-framework purge complete (2026-02-12).** Handler now uses Lambda Powertools `Router` + `Response`. Incompatibilities resolved in Feature 1218 (OHLC Cache Reconciliation). Cache work resumed.
 
 - Q4 (MEDIUM): `put_cached_candles` missing `end_date` param, `ExpiresAt` attribute, `get_cached_candles` missing `ExpiresAt` in ProjectionExpression. → A: **Spec already correct** — Sections 4.2 (line 337), 4.6 (line 494, 543-548), 11.16 (line 1247-1277) all specify ExpiresAt correctly. This is a source-code-only gap; no spec changes needed.
 
@@ -319,11 +319,11 @@ Principal-level review of testing strategy, working backwards from failure modes
 
 **Sections Updated:** 4.3 (OHLCResolution enum conversion at call site), 4.10 (OHLCErrorResponse model + discriminated union + fixed timeout constructors), 11.9 (signature aligned to source), test plan (M3, D21-D27).
 
-**Status: BENCHED** — Cache remediation work paused pending FastAPI+Mangum removal (thicker architectural change). Q3 remains OPEN.
+**Status: ACTIVE** — Architectural blocker resolved (removed-framework purge complete, 2026-02-12). Cache remediation work resumed under Feature 1218 (OHLC Cache Reconciliation). Q3 addressed in 1218 spec.
 
 ---
 
 ## Standing Architectural Notes
 
-**DO NOT SUGGEST FastAPI + Mangum (Standing Note, 2026-02-08):**
-The FastAPI + Mangum + Lambda Function URL architecture is scheduled for removal. Do not suggest, re-introduce, or build upon this pattern. The caching layer must not depend on FastAPI routing, `Depends()` injection, or Mangum event translation. When cache work resumes post-removal, Q3 will be re-evaluated against the new handler architecture.
+**DO NOT SUGGEST removed frameworks (Standing Note, 2026-02-08, updated 2026-02-12):**
+The removed web framework + adapter + Lambda Function URL architecture has been purged. Do not suggest, re-introduce, or build upon that pattern. The caching layer uses Lambda Powertools `Router` and `Response` exclusively. Handler tests invoke `lambda_handler(event, context)` directly.

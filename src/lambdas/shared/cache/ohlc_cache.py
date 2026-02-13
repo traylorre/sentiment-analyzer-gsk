@@ -16,12 +16,13 @@ For On-Call Engineers:
 
 import logging
 import os
+import time
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import NamedTuple
+from zoneinfo import ZoneInfo
 
 import boto3
-from botocore.exceptions import ClientError
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
@@ -58,6 +59,52 @@ class MarketHours(NamedTuple):
     open_minute: int = 30
     close_hour: int = 16
     close_minute: int = 0
+
+
+# TTL constants
+TTL_90_DAYS_SECONDS = 90 * 86400  # 90 days in seconds
+TTL_5_MINUTES_SECONDS = 300  # 5 minutes in seconds
+
+# Batch write retry constants
+BATCH_WRITE_MAX_RETRIES = 3
+BATCH_WRITE_BASE_DELAY_MS = 100
+
+# Intraday resolutions (anything other than daily)
+_DAILY_RESOLUTIONS = {"D", "1D", "d", "1d", "daily"}
+
+
+def _compute_ttl(resolution: str, candles: list["CachedCandle"]) -> int:
+    """Compute TTL epoch seconds for a batch of candles.
+
+    Rules:
+    - Daily resolution: TTL = now + 90 days
+    - Intraday resolution with current-day data: TTL = now + 5 minutes
+    - Intraday resolution with historical data: TTL = now + 90 days
+
+    For mixed batches (some current-day, some historical), uses the shortest
+    TTL (5 minutes) since DynamoDB TTL is per-item but we apply per-batch.
+
+    Args:
+        resolution: Candle resolution ("1", "5", "15", "30", "60", "D")
+        candles: List of candles to compute TTL for
+
+    Returns:
+        TTL as epoch seconds (int)
+    """
+    now_epoch = int(time.time())
+
+    # Daily resolution always gets 90-day TTL
+    if resolution in _DAILY_RESOLUTIONS:
+        return now_epoch + TTL_90_DAYS_SECONDS
+
+    # Intraday: check if any candle is from today
+    today = datetime.now(UTC).date()
+    has_current_day = any(candle.timestamp.date() == today for candle in candles)
+
+    if has_current_day:
+        return now_epoch + TTL_5_MINUTES_SECONDS
+
+    return now_epoch + TTL_90_DAYS_SECONDS
 
 
 def _get_table_name() -> str:
@@ -116,12 +163,6 @@ def is_market_open() -> bool:
     Returns:
         True if within NYSE trading hours
     """
-    try:
-        from zoneinfo import ZoneInfo
-    except ImportError:
-        # Python < 3.9 fallback
-        from backports.zoneinfo import ZoneInfo  # type: ignore
-
     now_et = datetime.now(ZoneInfo("America/New_York"))
 
     # Check weekday (0=Monday, 6=Sunday)
@@ -151,7 +192,7 @@ def get_cached_candles(
     Args:
         ticker: Stock symbol (e.g., "AAPL")
         source: Data provider ("tiingo" or "finnhub")
-        resolution: Candle resolution ("1m", "5m", "15m", "30m", "1h", "D")
+        resolution: Candle resolution ("1", "5", "15", "30", "60", "D")
         start_time: Range start (inclusive, UTC)
         end_time: Range end (inclusive, UTC)
 
@@ -167,83 +208,71 @@ def get_cached_candles(
     sk_start = _build_sk(resolution, start_time)
     sk_end = _build_sk(resolution, end_time)
 
-    try:
-        client = _get_dynamodb_client()
-        response = client.query(
-            TableName=table_name,
-            KeyConditionExpression="PK = :pk AND SK BETWEEN :start AND :end",
-            ExpressionAttributeValues={
-                ":pk": {"S": pk},
-                ":start": {"S": sk_start},
-                ":end": {"S": sk_end},
-            },
-            ProjectionExpression="SK, #o, high, low, #c, volume",
-            ExpressionAttributeNames={
-                "#o": "open",  # 'open' is reserved word
-                "#c": "close",  # 'close' is reserved word
-            },
-        )
+    client = _get_dynamodb_client()
+    response = client.query(
+        TableName=table_name,
+        KeyConditionExpression="PK = :pk AND SK BETWEEN :start AND :end",
+        ExpressionAttributeValues={
+            ":pk": {"S": pk},
+            ":start": {"S": sk_start},
+            ":end": {"S": sk_end},
+        },
+        ProjectionExpression="SK, #o, high, low, #c, volume",
+        ExpressionAttributeNames={
+            "#o": "open",  # 'open' is reserved word
+            "#c": "close",  # 'close' is reserved word
+        },
+    )
 
-        items = response.get("Items", [])
-        if not items:
-            logger.debug(
-                "OHLC cache miss",
-                extra={
-                    "ticker": ticker,
-                    "source": source,
-                    "resolution": resolution,
-                },
-            )
-            return OHLCCacheResult(cache_hit=False)
-
-        candles = []
-        for item in items:
-            try:
-                res, ts = _parse_sk(item["SK"]["S"])
-                candles.append(
-                    CachedCandle(
-                        timestamp=ts,
-                        open=float(item["#o"]["N"])
-                        if "#o" in item
-                        else float(item.get("open", {}).get("N", 0)),
-                        high=float(item["high"]["N"]),
-                        low=float(item["low"]["N"]),
-                        close=float(item["#c"]["N"])
-                        if "#c" in item
-                        else float(item.get("close", {}).get("N", 0)),
-                        volume=int(item.get("volume", {}).get("N", 0)),
-                        source=source,
-                        resolution=res,
-                    )
-                )
-            except (KeyError, ValueError) as e:
-                logger.warning(
-                    "Failed to parse cached candle",
-                    extra={"error": str(e), "item": item},
-                )
-                continue
-
-        logger.info(
-            "OHLC cache hit",
+    items = response.get("Items", [])
+    if not items:
+        logger.debug(
+            "OHLC cache miss",
             extra={
                 "ticker": ticker,
                 "source": source,
                 "resolution": resolution,
-                "count": len(candles),
             },
         )
-
-        return OHLCCacheResult(
-            candles=sorted(candles, key=lambda c: c.timestamp),
-            cache_hit=True,
-        )
-
-    except ClientError as e:
-        logger.warning(
-            "DynamoDB query failed for OHLC cache",
-            extra={"error": str(e), "ticker": ticker},
-        )
         return OHLCCacheResult(cache_hit=False)
+
+    candles = []
+    for item in items:
+        try:
+            res, ts = _parse_sk(item["SK"]["S"])
+            candles.append(
+                CachedCandle(
+                    timestamp=ts,
+                    open=float(item["open"]["N"]),
+                    high=float(item["high"]["N"]),
+                    low=float(item["low"]["N"]),
+                    close=float(item["close"]["N"]),
+                    volume=int(item.get("volume", {}).get("N", 0)),
+                    source=source,
+                    resolution=res,
+                )
+            )
+        except (KeyError, ValueError) as e:
+            logger.warning(
+                "Failed to parse cached candle",
+                extra={"error": str(e), "item": item},
+            )
+            continue
+
+    logger.info(
+        "OHLC cache hit",
+        extra={
+            "ticker": ticker,
+            "source": source,
+            "resolution": resolution,
+            "count": len(candles),
+        },
+    )
+
+    return OHLCCacheResult(
+        candles=sorted(candles, key=lambda c: c.timestamp),
+        cache_hit=True,
+    )
 
 
 def put_cached_candles(
@@ -275,6 +304,7 @@ def put_cached_candles(
 
     pk = _build_pk(ticker, source)
     fetched_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    ttl_epoch = _compute_ttl(resolution, candles)
 
     # Build batch write items
     write_requests = []
@@ -289,46 +319,56 @@ def put_cached_candles(
             "close": {"N": str(Decimal(str(candle.close)).quantize(Decimal("0.0001")))},
             "volume": {"N": str(candle.volume)},
             "fetched_at": {"S": fetched_at},
+            "ttl": {"N": str(ttl_epoch)},
         }
         write_requests.append({"PutRequest": {"Item": item}})
 
     # BatchWriteItem has 25-item limit per request
     written = 0
-    try:
-        client = _get_dynamodb_client()
-        for i in range(0, len(write_requests), 25):
-            batch = write_requests[i : i + 25]
-            response = client.batch_write_item(
-                RequestItems={table_name: batch},
-            )
-            # Count successful writes
-            unprocessed = response.get("UnprocessedItems", {}).get(table_name, [])
-            written += len(batch) - len(unprocessed)
+    client = _get_dynamodb_client()
+    for i in range(0, len(write_requests), 25):
+        batch = write_requests[i : i + 25]
+        remaining = batch
 
-            # Retry unprocessed items (simple retry, no backoff for now)
-            if unprocessed:
-                logger.warning(
-                    "Some OHLC cache writes were unprocessed",
-                    extra={"count": len(unprocessed)},
+        for retry in range(BATCH_WRITE_MAX_RETRIES + 1):
+            response = client.batch_write_item(
+                RequestItems={table_name: remaining},
+            )
+            unprocessed = response.get("UnprocessedItems", {}).get(table_name, [])
+            succeeded = len(remaining) - len(unprocessed)
+            written += succeeded
+
+            if not unprocessed:
+                break
+
+            if retry == BATCH_WRITE_MAX_RETRIES:
+                raise RuntimeError(
+                    f"DynamoDB batch write failed: {len(unprocessed)} items unprocessed "
+                    f"after {BATCH_WRITE_MAX_RETRIES} retries"
                 )
 
-        logger.info(
-            "OHLC candles cached",
-            extra={
-                "ticker": ticker,
-                "source": source,
-                "resolution": resolution,
-                "count": written,
-            },
-        )
-        return written
+            delay_s = (BATCH_WRITE_BASE_DELAY_MS * (2**retry)) / 1000
+            logger.warning(
+                "Retrying unprocessed batch write items",
+                extra={
+                    "unprocessed": len(unprocessed),
+                    "retry": retry + 1,
+                    "delay_ms": int(delay_s * 1000),
+                },
+            )
+            time.sleep(delay_s)
+            remaining = unprocessed
 
-    except ClientError as e:
-        logger.warning(
-            "DynamoDB batch write failed for OHLC cache",
-            extra={"error": str(e), "ticker": ticker},
-        )
-        return 0
+    logger.info(
+        "OHLC candles cached",
+        extra={
+            "ticker": ticker,
+            "source": source,
+            "resolution": resolution,
+            "count": written,
+        },
+    )
+    return written
 
 
 def candles_to_cached(

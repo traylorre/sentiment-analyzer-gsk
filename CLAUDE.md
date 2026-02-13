@@ -87,6 +87,8 @@ Auto-generated from all feature plans. Last updated: 2025-11-26
 - DynamoDB (existing tables unchanged), S3 (model artifacts unchanged) (001-powertools-migration)
 - Python 3.13 (existing project standard), HCL/Terraform 1.5+, YAML (GitHub Actions), Bash (validation scripts) + AWS Lambda Powertools (routing), boto3 (AWS SDK), pydantic (validation) — all already in place (1217-infra-purge)
 - N/A (no data storage changes) (1217-infra-purge)
+- Python 3.13 + aws-lambda-powertools (routing, Response), boto3 (DynamoDB client), pydantic (models), orjson (JSON serialization) (1218-ohlc-cache-reconciliation)
+- DynamoDB (`{env}-ohlc-cache`, PAY_PER_REQUEST, PK=`{ticker}#{source}`, SK=`{resolution}#{timestamp}`) (1218-ohlc-cache-reconciliation)
 
 - **Python 3.13** with aws-lambda-powertools, boto3, pydantic, httpx, orjson
 - **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, Amplify
@@ -851,6 +853,7 @@ aws cloudwatch get-metric-data --metric-data-queries '[...]' --start-time ... --
 ```
 
 ## Recent Changes
+- 1218-ohlc-cache-reconciliation: Added Python 3.13 + aws-lambda-powertools (routing, Response), boto3 (DynamoDB client), pydantic (models), orjson (JSON serialization)
 - 1217-infra-purge: Added Python 3.13 (existing project standard), HCL/Terraform 1.5+, YAML (GitHub Actions), Bash (validation scripts) + AWS Lambda Powertools (routing), boto3 (AWS SDK), pydantic (validation) — all already in place
 - 001-spec-doc-cleanup: Added N/A (Documentation-only changes) + grep, git (for atomic commits and verification)
 
