@@ -3,7 +3,7 @@
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-02-14
 **Feature**: [spec.md](../spec.md)
-**Validation Iterations**: 7 (initial draft + round 1 review + round 2 deep-dive + round 3 blind spot analysis + round 4 audit gap analysis + round 5 ADOT architecture deep-dive + round 6 blind spot fixes)
+**Validation Iterations**: 10 (initial draft + round 1 review + round 2 deep-dive + round 3 blind spot analysis + round 4 audit gap analysis + round 5 ADOT architecture deep-dive + round 6 blind spot fixes + round 7 ADOT operational lifecycle deep-dive + round 8 container-based deployment blind spot analysis + round 9 four-domain deep research)
 
 ## Content Quality
 
@@ -113,6 +113,54 @@
 | 52 | MEDIUM | Lambda execution environment destruction without SHUTDOWN event — Lambda runtime does not guarantee SHUTDOWN lifecycle event; `force_flush()` in generator `finally` block is the only reliable flush mechanism | Added edge case (environment destruction without SHUTDOWN) and assumption (generator `finally` block reliability) |
 | 53 | MEDIUM | ADOT OTLP receiver cold start race — ADOT Extension's OTLP receiver may not be ready when Lambda handler sends first spans during cold start, causing early span loss | Added edge case (ADOT cold start race) and assumption (512MB memory adequacy) |
 
+## Emergent Issues Found (Round 7 — ADOT Operational Lifecycle Deep-Dive)
+
+| # | Severity | Issue | Resolution |
+| --- | -------- | ----- | ---------- |
+| 54 | HIGH | ADOT Lambda Extension has two layer types — collector-only (~35MB) and Python SDK (~80MB); sidecar mode MUST use collector-only to avoid wasting ~45MB on unused auto-instrumentation and risk of accidental activation | Added FR-062 (collector-only layer requirement); added edge case (SDK vs collector-only layer confusion) and assumption (zero current layers) |
+| 55 | HIGH | OTel Python SDK `BatchSpanProcessor` silently catches all exporter exceptions (`except Exception`) and `force_flush()` returns `True` regardless of export outcome — no fail-fast mode available by OTel specification design | Added FR-066 (export failure detection gap documentation); added edge case (ADOT Extension crash during streaming) |
+| 56 | HIGH | `TracerProvider` created per invocation leaks daemon threads (~1MB each) causing OOM — FR-059 per-invocation requirement ambiguous between context extraction and infrastructure objects | Added FR-065 (TracerProvider singleton lifecycle clarification); added SC-027 (singleton verification); added edge case (per-invocation TracerProvider memory leak) |
+| 57 | MEDIUM | ADOT Extension layer ARN not version-pinned — unpinned layers can silently introduce breaking collector schema changes on `terraform apply` | Added FR-063 (version-pinned layer ARN requirement) |
+| 58 | MEDIUM | OTel span attributes using non-standard names become non-indexed metadata invisible in X-Ray console default views — DynamoDB and CloudWatch spans would render as generic "unknown remote" nodes | Added FR-067 (OTel semantic conventions for X-Ray mapping); added SC-028 (service map correctness verification) |
+| 59 | MEDIUM | ADOT default collector config may include unnecessary components consuming memory | Added FR-064 (collector pipeline verification and custom config option) |
+| 60 | LOW | `OTEL_PROPAGATORS` env var creates misleading visible-but-inactive configuration when `set_global_textmap()` overwrites it | Added FR-068 (propagator configuration hygiene); research confirmed `set_global_textmap()` always wins |
+
+## Round 7 Blind Spot Resolution Summary
+
+| Blind Spot | Status | Resolution |
+| ---------- | ------ | ---------- |
+| ADOT collector-only vs SDK layer | **RESOLVED** | FR-062 requires collector-only layer; edge case documents the distinction |
+| OTel export failure is silent by design | **RESOLVED** | FR-066 documents the known gap; canary is the detection mechanism |
+| TracerProvider singleton lifecycle | **RESOLVED** | FR-065 clarifies module-level singleton; FR-059 scoped to propagate.extract() only |
+| ADOT Extension layer version pinning | **RESOLVED** | FR-063 requires version-pinned ARN with per-region mapping |
+| OTel semantic conventions for X-Ray | **RESOLVED** | FR-067 specifies required attributes; SC-028 verifies service map rendering |
+| ADOT collector pipeline verification | **RESOLVED** | FR-064 requires OTLP receiver + X-Ray exporter verification |
+| OTEL_PROPAGATORS env var confusion | **RESOLVED** | FR-068 prohibits setting env var; set_global_textmap() is single source of truth |
+| Lambda Layer limit risk | **NOT A RISK** | SSE Lambda uses 0 layers; adding 1 is within 5-layer limit (documented as assumption) |
+| X-Ray daemon + ADOT memory budget | **NOT A RISK** | ~76MB combined within 512MB; 15% overhead (documented as assumption) |
+
+## Emergent Issues Found (Round 8 — Container-Based Deployment Blind Spot Analysis)
+
+| # | Severity | Issue | Resolution |
+| --- | -------- | ----- | ---------- |
+| 61 | **BLOCKER** | SSE Lambda is container-based (ECR image with `python:3.13-slim` + custom bootstrap) — Lambda container images CANNOT use Lambda Layers; FR-062 "collector-only layer" and FR-063 "version-pinned layer ARN" are **INVALID** as written | **REWRITTEN** FR-062 (container-based multi-stage Dockerfile deployment); **REWRITTEN** FR-063 (digest-pinned container image); added FR-069 (Dockerfile ADOT embedding), FR-070 (digest pinning); added SC-029 (ADOT binary in container); added edge case. Round 7 assumption about "zero Lambda layers" and "250MB deployment limit" **INVALIDATED** — SSE Lambda uses 10GB container image limit. Source: AWS Lambda Container Image docs |
+| 62 | HIGH | OTel `AwsLambdaResourceDetector` does NOT set `service.name` — defaults to `unknown_service`; X-Ray service map shows all SSE Lambda invocations under `unknown_service` node, breaking SC-028 | Added FR-071 (`OTEL_SERVICE_NAME` env var required, matching `POWERTOOLS_SERVICE_NAME`); added SC-030 (correct service map node naming); added edge case. Source: `opentelemetry-sdk-extension-aws` `AwsLambdaResourceDetector` implementation |
+| 63 | HIGH | `AwsLambdaResourceDetector` not specified for `TracerProvider` resource configuration — missing `cloud.provider`, `cloud.region`, `faas.name` resource attributes on all emitted spans | Added FR-072 (resource detector configuration); added assumption. Source: `opentelemetry-python-contrib` SDK extension |
+| 64 | MEDIUM | `BatchSpanProcessor` default `schedule_delay_millis=5000` (5 seconds) and `max_queue_size=2048` are designed for long-running servers, not Lambda — oversized configuration wastes memory and increases span-loss window on crash | Added FR-073 (Lambda-tuned BSP configuration); added edge case and assumption. Source: OTel Python SDK v1.39.1 defaults |
+| 65 | MEDIUM | Round 7 assumptions about "zero Lambda layers" and "250MB deployment limit" based on WRONG deployment model — SSE Lambda is container-based (ECR) with 10GB limit | **INVALIDATED** Round 7 assumption; corrected in spec. All 3 container-based Lambdas (SSE, Analysis, Dashboard) cannot use layers |
+
+## Round 8 Blind Spot Resolution Summary
+
+| Blind Spot | Status | Resolution |
+| ---------- | ------ | ---------- |
+| Container-based Lambda cannot use Lambda Layers | **RESOLVED (BLOCKER)** | FR-062/FR-063 REWRITTEN for container deployment; FR-069/FR-070 added; SC-029 added |
+| `service.name` defaults to `unknown_service` | **RESOLVED** | FR-071 requires `OTEL_SERVICE_NAME` env var; SC-030 verifies service map naming |
+| `AwsLambdaResourceDetector` not in TracerProvider config | **RESOLVED** | FR-072 requires resource detector in TracerProvider setup |
+| BatchSpanProcessor defaults inappropriate for Lambda | **RESOLVED** | FR-073 mandates Lambda-tuned BSP parameters |
+| Round 7 assumptions based on wrong deployment model | **RESOLVED** | Assumption INVALIDATED with correction |
+| SSE Lambda custom runtime + ADOT compatibility | **NOT A RISK** | Extensions are Lambda service-level, independent of runtime; `python:3.13-slim` + custom bootstrap fully compatible |
+| ADOT Extension lifecycle with RESPONSE_STREAM | **ALREADY ADDRESSED** | Extension remains alive during entire streaming phase; documented in Round 7 edge cases |
+
 ## Round 3 Invalidation Summary
 
 | Item | Round 2 Content | Round 3 Status | Reason |
@@ -137,21 +185,67 @@
 | Generator `finally` block reliable | **RESOLVED** | Assumption added; edge case documents SHUTDOWN event unreliability as justification |
 | ADOT OTLP receiver cold start race mitigated | **RESOLVED** | Edge case documents race condition; ADOT Extension initializes before handler per AWS lifecycle contract |
 
+## Emergent Issues Found (Round 9 — Four-Domain Deep Research)
+
+| # | Severity | Issue | Resolution |
+| --- | -------- | ----- | ---------- |
+| 66 | HIGH | ADOT Extension has KNOWN ~30% span drop rate (aws-otel-lambda#886, opentelemetry-lambda#224) — collector context canceled before HTTP exports complete. Spec's force_flush() handles SDK→Extension hop but not Extension→X-Ray backend race | Added FR-074 (two-hop flush architecture acknowledgment), FR-075 (decouple processor requirement); added SC-031; 2 edge cases, 1 assumption. Source: GitHub aws-otel-lambda#886 |
+| 67 | HIGH | FR-049 does not classify put_metric_data errors as transient vs permanent — IAM revocation (exact failure FR-051 detects) would be silently retried instead of immediately escalated | Added FR-079 (error classification with differential handling); added SC-035; 1 edge case, 1 assumption. Source: AWS CloudWatch API PutMetricData error reference |
+| 68 | MEDIUM | FR-060 does not prohibit OTel BotocoreInstrumentor().instrument() — future implementer could enable it alongside manual spans, recreating double-instrumentation | Added FR-076 (explicit BotocoreInstrumentor prohibition); added SC-033; 1 edge case |
+| 69 | MEDIUM | TracerProvider(shutdown_on_exit=True) default registers atexit handler that races with ConcurrentMultiSpanProcessor on environment recycling | Added FR-077 (shutdown_on_exit=False requirement); added SC-032; 1 edge case, 1 assumption. Source: opentelemetry-python#4461 |
+| 70 | MEDIUM | X-Ray trace propagation delay is non-deterministic; canary's single-shot query at 30s produces false negatives | Added FR-078 (retry-with-backoff for trace retrieval); added SC-034; 1 edge case, 1 assumption. Source: AWS X-Ray FAQ |
+| 71 | MEDIUM | FR-033 assumes SSE Lambda server checks Last-Event-ID — if server ignores it, client-side propagation is hollow | Added FR-081 (server-side Last-Event-ID support requirement); added SC-036; 1 edge case, 1 assumption |
+| 72 | MEDIUM | FR-048 requires reading response X-Amzn-Trace-Id but CORS ExposeHeaders doesn't include it — hard prerequisite for reconnection trace correlation | Added FR-082 (CORS ExposeHeaders requirement); added SC-037; 1 edge case |
+| 73 | MEDIUM | Spec Round 5 assumption states "default batch timeout of 200ms" — INCORRECT; actual default is 5000ms | Added FR-084 (assumption correction); corrected assumption text; fixed 4 downstream references. Source: OTel Python SDK source |
+| 74 | LOW | TracerProvider shutdown_on_exit race on Python 3.13+ | Resolved by FR-077; edge case documents the race condition |
+| 75 | LOW | SNS direct publish insufficient during simultaneous CloudWatch + SNS regional failure | Added FR-080 (SHOULD support secondary external webhook channel); documented as SHOULD, not MUST |
+| 76 | LOW | Account-level Transaction Search migration could break canary's BatchGetTraces | Added edge case documenting the risk; canary tests its own retrieval path |
+| 77 | LOW | Safari SSE frame buffering behavior differences | Added edge case; server-side padding is the workaround |
+| 78 | LOW | ReadableStream close type distinction for reconnection strategy | Added FR-083 (differential reconnection by close type); added SC-038; 1 edge case, 1 assumption |
+| 79 | INFO | SimpleSpanProcessor recommended by some sources for FaaS | Documented as considered alternative in Round 7 edge case; BSP approach retained with rationale |
+
+## Round 9 Blind Spot Resolution Summary
+
+| Blind Spot | Status | Resolution |
+| ---------- | ------ | ---------- |
+| ADOT Extension span drop race condition | **RESOLVED** | FR-074 acknowledges two-hop flush; FR-075 mandates decouple processor; canary provides aggregate detection |
+| CloudWatch error classification for canary | **RESOLVED** | FR-079 classifies errors; immediate escalation for IAM/credential errors |
+| OTel BotocoreInstrumentor not prohibited | **RESOLVED** | FR-076 explicitly prohibits BotocoreInstrumentor on SSE Lambda |
+| TracerProvider atexit shutdown race | **RESOLVED** | FR-077 requires shutdown_on_exit=False |
+| Canary trace retrieval false negatives | **RESOLVED** | FR-078 adds retry-with-backoff (30s then 60s) |
+| Server-side Last-Event-ID support | **RESOLVED** | FR-081 requires server check or X-SSE-Resume-Supported header |
+| CORS ExposeHeaders for trace correlation | **RESOLVED** | FR-082 mandates x-amzn-trace-id in ExposeHeaders |
+| BSP default timeout assumption incorrect | **RESOLVED** | FR-084 corrects assumption; 4 downstream references fixed |
+| Reconnection close type distinction | **RESOLVED** | FR-083 specifies differential backoff by close type |
+| Secondary out-of-band alerting channel | **RESOLVED** | FR-080 adds SHOULD for external webhook |
+| Transaction Search account migration | **RESOLVED** | Edge case documents risk |
+| Safari SSE buffering | **RESOLVED** | Edge case documents workaround |
+| SimpleSpanProcessor alternative | **NOT APPLICABLE** | Informational; BSP retained with rationale |
+| ADOT memory measurement ambiguity | **NOT APPLICABLE** | Low risk; recommend measuring in preprod |
+
 ## Notes
 
-- All 53 issues across six rounds addressed.
+- All 79 issues across nine rounds addressed.
 - Zero [NEEDS CLARIFICATION] markers in the spec.
 - Round 3 added 8 new FRs (FR-031 through FR-038), 4 new SCs (SC-013 through SC-016), 7 new edge cases, 5 new assumptions, and 2 new user stories (US8, US9).
 - Round 4 added 13 new FRs (FR-039 through FR-051), 6 new SCs (SC-017 through SC-022), 6 new edge cases, 4 new assumptions, and 2 new user stories (US10, US11).
 - Round 5 added 7 new FRs (FR-052 through FR-058), 3 new SCs (SC-023 through SC-025), 6 new edge cases, 4 new assumptions.
 - Round 6 added 3 new FRs (FR-059 through FR-061), 1 new SC (SC-026), 5 new edge cases, 4 new assumptions. 7 blind spots identified and resolved.
-- Two assumptions INVALIDATED (SendGrid auto-patching in Round 2, `begin_segment()` in Round 3) marked with strikethrough.
+- Round 7 added 7 new FRs (FR-062 through FR-068), 2 new SCs (SC-027 through SC-028), 7 new edge cases, 6 new assumptions. 9 blind spots analyzed, 7 resolved via new FRs, 2 confirmed as non-risks.
+- Round 8 added 5 new FRs (FR-069 through FR-073), 2 new SCs (SC-029, SC-030), 4 new edge cases, 5 new assumptions. FR-062 and FR-063 REWRITTEN. 1 Round 7 assumption INVALIDATED. 7 blind spots analyzed (5 resolved, 1 not a risk, 1 already addressed).
+- Round 9 added 11 new FRs (FR-074 through FR-084), 8 new SCs (SC-031 through SC-038), 11 new edge cases, 8 new assumptions (+ 1 corrected). 1 Round 5 assumption CORRECTED (200ms → 5000ms BSP default). 14 blind spots analyzed across 4 research domains (ADOT container deployment, OTel SDK Lambda behavior, X-Ray canary implementation, frontend SSE migration). 12 resolved via new FRs, 2 confirmed as informational/not applicable.
+- Three assumptions INVALIDATED (SendGrid auto-patching in Round 2, `begin_segment()` in Round 3, zero Lambda layers in Round 7) and 1 CORRECTED (200ms BSP default in Round 5) marked with strikethrough.
 - Three FRs REPLACED in-place (FR-025 revised, FR-026 replaced, FR-027 replaced) with Round 3 annotations.
-- Spec is now at 61 FRs, 26 SCs, 34 edge cases, 26 assumptions (2 invalidated), 11 user stories.
+- Spec is now at 84 FRs, 38 SCs, 56 edge cases, 45 assumptions (3 invalidated, 1 corrected), 11 user stories.
 - The most critical Round 3 finding is that the entire SSE streaming tracing architecture from Round 2 was built on a false assumption (`begin_segment()` works in Lambda). The corrected approach uses a Lambda Extension with an independent lifecycle.
 - The most critical Round 4 finding is the "X-Ray exclusive for TRACING, not ALARMING" scope clarification (FR-039). X-Ray traces provide diagnostic context; CloudWatch alarms provide 24/7 alerting. Both are required because X-Ray sampling means not all errors have traces, while CloudWatch Lambda metrics capture 100% of invocations.
 - Round 4 research confirmed: CloudFront is not in the architecture (Blind Spot 4 eliminated); ADOT sidecar-only mode is safe (Blind Spot 3 mitigated with constraints); X-Ray Groups are post-ingestion only (Blind Spot 2 confirmed — dual instrumentation required); out-of-band alerting is industry best practice for meta-observability (Blind Spot 6).
 - The most critical Round 5 finding is that the OTel-to-X-Ray trace context bridging (FR-052) is a BLOCKER without which the entire ADOT streaming architecture produces disconnected traces. The AwsXRayLambdaPropagator is the single required component that reads `_X_AMZN_TRACE_ID` and bridges the Lambda runtime's X-Ray context into the OTel SDK's span hierarchy.
-- Round 5 research confirmed: ADOT sidecar-only mode with `parentbased_always_on` sampler correctly honors Lambda sampling decisions (no orphaned spans); `BatchSpanProcessor` exports incrementally during streaming (200ms batch timeout); `force_flush()` handles only the final partial batch; X-Ray 64KB document limit is a real constraint requiring metadata truncation.
+- Round 5 research confirmed: ADOT sidecar-only mode with `parentbased_always_on` sampler correctly honors Lambda sampling decisions (no orphaned spans); `BatchSpanProcessor` exports incrementally during streaming (1000ms batch timeout per FR-073; original 200ms assumption CORRECTED in Round 9); `force_flush()` handles only the final partial batch; X-Ray 64KB document limit is a real constraint requiring metadata truncation.
 - The most critical Round 6 finding is the warm invocation stale trace context blind spot (FR-059). Lambda execution environments persist across invocations, but `_X_AMZN_TRACE_ID` updates per invocation. Without per-invocation context extraction, warm invocations inherit the previous request's trace ID, silently corrupting trace lineage across all warm-path requests.
 - Round 6 also resolved a significant dual-emission blind spot: Powertools `auto_patch=True` and ADOT OTel both instrument botocore, producing duplicate subsegments for every AWS SDK call on the SSE Lambda. FR-060 explicitly requires `auto_patch=False` to ensure single-source instrumentation via ADOT only.
+- The most critical Round 7 finding is that the OTel Python SDK's export failure handling is SILENT BY DESIGN — `force_flush()` returns success even when spans are lost. Combined with TracerProvider singleton lifecycle management (FR-065), these findings close the gap between the spec's architectural decisions and runtime operational reality.
+- The most critical Round 8 finding is that the SSE Lambda is container-based (ECR image), not ZIP-deployed. Lambda container images CANNOT use Lambda Layers. FR-062 "collector-only layer" and FR-063 "version-pinned layer ARN" — both added in Round 7 — were built on a false assumption about the deployment model. This mirrors the Round 3 invalidation of `begin_segment()` — a foundational implementation assumption was wrong, requiring the approach to be rewritten. The corrected approach embeds ADOT in the Docker image via multi-stage build.
+- The most critical Round 9 finding is the two-hop flush architecture (FR-074/FR-075). The ADOT Extension has a KNOWN ~30% span drop rate under worst-case timing (GitHub aws-otel-lambda#886). The spec's `force_flush()` (FR-055) reliably handles the SDK→Extension hop, but the Extension→X-Ray backend hop has a documented race condition where the collector context is canceled before HTTP exports complete. The decouple processor mitigates this but is not guaranteed. This is the first specification round where a KNOWN, UNFIXABLE limitation of a third-party component was formally documented as accepted risk with explicit detection (canary) rather than attempted workaround.
+- Round 9's second critical finding is the canary error classification (FR-079). Without classifying `put_metric_data` errors as transient vs permanent, the canary's separate IAM role (FR-051) would fail to achieve its design purpose — detecting application IAM revocation would be delayed by multiple retry cycles instead of immediately escalated. This is a logic gap where two FRs (FR-049 and FR-051) were individually correct but their interaction was underspecified.
+- Round 9 also corrected a factual error that persisted from Round 5: the BatchSpanProcessor default batch timeout was stated as 200ms but is actually 5000ms (FR-084). This caused 4 downstream references to contain incorrect timing calculations. While FR-073 correctly overrides to 1000ms (so runtime behavior was always correct), the incorrect assumption could have caused implementation confusion.
