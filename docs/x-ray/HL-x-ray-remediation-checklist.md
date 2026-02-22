@@ -132,6 +132,12 @@ This results in:
 | **(R4)** Dashboard alarm widget | Shows 6 of 30+ alarms | **ALL alarms displayed** | **#17** |
 | **(R4)** Canary CloudWatch verification | X-Ray health only | **X-Ray + CloudWatch emission health, separate IAM, out-of-band alerting** | **#11** |
 | **(R4)** SSE reconnection correlation | No trace linking | **session_id + previous_trace_id annotations** | **#15** |
+| **(R5)** OTel-X-Ray trace bridging | Not configured | **AwsXRayLambdaPropagator + AwsXRayIdGenerator + OTLP endpoint** | **#5** |
+| **(R5)** OTel span lifecycle | No force_flush() | **force_flush() in generator finally block; parentbased_always_on sampler** | **#5** |
+| **(R5)** Segment document size | No bounds checking | **Metadata truncation: 2048 char errors, no response bodies, 10-frame stacks** | **#4, #5** |
+| **(R6)** Per-Invocation OTel Context Extraction | SSE Lambda: module-level extraction | **Extract trace context inside handler, not module level (FR-059, SC-026)** | **#5** |
+| **(R6)** SSE Lambda auto_patch=False | SSE Lambda: auto_patch=True (Powertools default) | **Disable Powertools global boto3 patching to prevent dual-emission (FR-060)** | **#5** |
+| **(R6)** Alarm Threshold Calibration | All Lambdas: thresholds not calibrated | **Review and align existing alarm thresholds to 80-90% standard (FR-061)** | **#17** |
 
 ---
 
@@ -175,6 +181,10 @@ The sole exception is the X-Ray canary (task #11), which by definition must surv
 - [ ] SSE reconnection traces correlated via session_id annotation (SC-020)
 - [ ] Canary detects X-Ray AND CloudWatch metric emission failures (SC-021)
 - [ ] Dashboard alarm widget shows ALL alarms (SC-022)
+- [ ] OTel streaming-phase spans share same trace ID as Lambda X-Ray facade segment (SC-023)
+- [ ] force_flush() called before execution environment freeze — zero stale spans (SC-024)
+- [ ] All metadata payloads bounded — zero 64KB document rejections (SC-025)
+- [ ] Warm invocation trace ID correctness (SC-026)
 
 ### Operator Experience
 - [ ] Single-pane tracing: browser → API Gateway → Lambda → DynamoDB (SC-001)
@@ -215,6 +225,14 @@ The sole exception is the X-Ray canary (task #11), which by definition must surv
 | **(R4)** OTel service.name ≠ POWERTOOLS_SERVICE_NAME | Medium | Medium | Names must match for unified service map (FR-047, Task 5) |
 | **(R4)** SSE reconnection traces disconnected | Medium | Medium | Annotation-based correlation: session_id + previous_trace_id (FR-048, Task 15) |
 | **(R4)** Dashboard alarm widget shows 6 of 30+ alarms | **CONFIRMED** | **MEDIUM** | Widget must display ALL alarms (FR-044, Task 17) |
+| **(R5)** OTel spans disconnected from Lambda X-Ray trace | **CONFIRMED** | **BLOCKER** | AwsXRayLambdaPropagator reads _X_AMZN_TRACE_ID (FR-052, Task 5) |
+| **(R5)** RandomIdGenerator produces invalid X-Ray timestamps | **CONFIRMED** | **HIGH** | AwsXRayIdGenerator embeds unix epoch (FR-053, Task 5) |
+| **(R5)** Spans lost to execution environment freeze | **CONFIRMED** | **HIGH** | force_flush() in generator finally block (FR-055, Task 5) |
+| **(R5)** 64KB segment document silently rejected | Medium | HIGH | Metadata truncation guard (FR-058, Tasks 4/5) |
+| **(R5)** Orphaned OTel spans from unsampled invocations | Medium | Medium | parentbased_always_on sampler (FR-056, Task 5) |
+| **(R6)** Warm invocation stale trace context | **CONFIRMED** | **HIGH** | Module-level extraction links all warm invocations to first trace; FR-059 mandates per-invocation extraction (Task 5) |
+| **(R6)** Powertools auto-patching dual-emission | **CONFIRMED** | **HIGH** | auto_patch=True creates X-Ray + OTel duplicates during streaming; FR-060 mandates auto_patch=False (Task 5) |
+| **(R6)** Existing alarm thresholds too generous | **CONFIRMED** | **MEDIUM** | analysis_latency_high at 42% of timeout; FR-061 mandates recalibration (Task 17) |
 
 ---
 
@@ -229,6 +247,9 @@ The sole exception is the X-Ray canary (task #11), which by definition must surv
 - X-Ray SDK lambda_launcher.py: `LambdaContext.put_segment()` is no-op (source: `aws_xray_sdk/core/lambda_launcher.py:55-59`)
 - Powertools Tracer async gap: `inspect.isasyncgenfunction()` never called (source: `aws_lambda_powertools/tracing/tracer.py`)
 - EventSource limitation: WHATWG HTML Living Standard, Section 9.2
+- OTel AWS X-Ray Propagator: `opentelemetry-propagator-aws-xray` (SSE Lambda only, Task 5)
+- OTel AWS SDK Extension: `opentelemetry-sdk-extension-aws` (SSE Lambda only, Task 5)
+- OTel OTLP HTTP Exporter: `opentelemetry-exporter-otlp-proto-http` (SSE Lambda only, Task 5)
 
 ---
 
@@ -240,3 +261,5 @@ The sole exception is the X-Ray canary (task #11), which by definition must surv
 | 2026-02-14 | Round 2 updates: Added tasks 13-14; rewrote task 5 for RESPONSE_STREAM Two-Phase Architecture; updated tasks 2,4,5,6,7 for Powertools Tracer dependency; added 5 new risks; updated component coverage map; added SC-010/011/012 |
 | 2026-02-20 | **Round 3 updates:** 3 BLOCKERS invalidated Round 2 architecture. Task 5 REWRITTEN for ADOT Lambda Extension (begin_segment is no-op). Task 14 scoped to non-streaming Lambdas. Added tasks 15-16 (SSE client fetch migration, sampling/cost). Task 11 enhanced with data loss detection. Updated all SSE fix specs for ADOT references. Added FR-031 (async generator safety), FR-032-033 (fetch SSE client), FR-034-035 (sampling), FR-036 (data integrity), FR-037 (AsyncContext prohibition), FR-038 (cost guard). Total: 16 tasks, 38 FRs, 16 SCs. |
 | 2026-02-21 | **Round 4 updates:** 7 blind spots from audit gap analysis. Added task 17 (alarm coverage). Updated tasks 4, 5, 11, 15, 16 with new FRs. Task 4 now includes dual instrumentation (X-Ray + CloudWatch metrics). Task 5 adds ADOT coexistence constraints (no auto-instrumentation, matching service names). Task 11 expanded to unified meta-observability canary (X-Ray + CloudWatch emission health, separate IAM role, out-of-band alerting). Task 15 adds SSE reconnection trace correlation annotations. Task 16 adds scope clarification (FR-039: X-Ray exclusive for TRACING, not ALARMING). Added FR-039 through FR-051, SC-017 through SC-022. Total: 17 tasks, 51 FRs, 22 SCs. |
+| 2026-02-21 | **Round 5 updates:** 7 ADOT architecture blind spots found (1 BLOCKER). OTel-to-X-Ray trace context bridging requires explicit `AwsXRayLambdaPropagator` + `AwsXRayIdGenerator` + OTLP endpoint configuration — without these, streaming-phase spans are disconnected. Added `force_flush()` requirement for generator `finally` block. Added 64KB segment document size guard. Updated Task 5 dependencies. Added FR-052 through FR-058, SC-023 through SC-025. Total: 17 tasks, 58 FRs, 25 SCs. |
+| 2026-02-21 | **Round 6 updates:** Deep blind spot analysis. Identified warm invocation trace context staleness (FR-059), Powertools auto-patching dual-emission (FR-060), and existing alarm threshold gap (FR-061). Added SC-026 for warm invocation verification. 5 new edge cases, 4 new assumptions. Totals: 61 FRs, 26 SCs, 34 edge cases, 26 assumptions. |

@@ -8,6 +8,8 @@
 
 > **Round 3 Update:** SSE Streaming Lambda is excluded from this task. Its handler phase uses Powertools Tracer (covered here), but its streaming phase uses OTel SDK with ADOT Lambda Extension (covered in Task 5). The `@tracer.capture_method` decorator MUST NOT be applied to async generator functions (FR-031) — see Task 5 for the correct pattern.
 
+> **Round 6 Update:** The SSE Lambda is an EXCEPTION to the standard `auto_patch=True` configuration. It MUST use `auto_patch=False` to prevent duplicate X-Ray subsegments during streaming. See the "SSE Lambda auto_patch=False Constraint" section below for details. (FR-060)
+
 ---
 
 ## Problem
@@ -51,7 +53,7 @@ Two distinct tracing mechanisms are in use, creating an inconsistency gap:
 | Analysis | Powertools Tracer | YES | Single (Tracer auto_patch only) |
 | Notification | Powertools Tracer | YES | Single (Tracer auto_patch only) |
 | Metrics | Powertools Tracer | YES | Single (Tracer auto_patch only) |
-| SSE Streaming (handler phase) | Powertools Tracer | YES | Single (Tracer auto_patch only) |
+| SSE Streaming (handler phase) | Powertools Tracer | YES | **None — auto_patch=False** (explicit `@tracer.capture_method` only; see Round 6) |
 | SSE Streaming (streaming phase) | OTel SDK + ADOT Extension | YES (manual spans) | N/A (OTel, not X-Ray SDK) |
 
 ---
@@ -65,7 +67,7 @@ Two distinct tracing mechanisms are in use, creating an inconsistency gap:
 | `src/lambdas/analysis/handler.py` | Replace `patch_all()` + `xray_recorder.capture` with Powertools Tracer |
 | `src/lambdas/notification/handler.py` | Replace `patch_all()` + `xray_recorder.capture` with Powertools Tracer |
 | `src/lambdas/metrics/handler.py` | Add Powertools Tracer (new instrumentation, no xray_recorder) |
-| `src/lambdas/sse_streaming/handler.py` | Replace `patch_all()` + `xray_recorder.capture` with Powertools Tracer (handler phase only; streaming phase uses OTel — see Task 5) |
+| `src/lambdas/sse_streaming/handler.py` | Replace `patch_all()` + `xray_recorder.capture` with Powertools Tracer using `auto_patch=False` (handler phase only; streaming phase uses OTel — see Task 5; see Round 6) |
 | All files with `@xray_recorder.capture` | Replace 57 decorators with `@tracer.capture_method` (EXCEPT async generators in SSE Lambda — FR-031) |
 | All `requirements.txt` files | Ensure `aws-lambda-powertools[tracer]` is listed |
 
@@ -101,6 +103,41 @@ This task MUST be completed before tasks 2, 4, 5, and 13 because those tasks add
 
 ---
 
+## SSE Lambda auto_patch=False Constraint (Round 6 — FR-060)
+
+The SSE Lambda is an **EXCEPTION** to the standard Powertools configuration. While all non-streaming Lambdas use `auto_patch=True` (the default), the SSE Lambda **MUST** use `auto_patch=False`.
+
+### Why
+
+Powertools' auto-patching globally patches `botocore.client.BaseClient._make_api_call` at import time. These patches are permanent for the lifetime of the process — they persist during the streaming phase. During streaming, the OTel SDK (via ADOT Lambda Extension) creates its own spans for AWS SDK calls through manual instrumentation. When auto-patching is active, every boto3 call during the streaming phase produces **both**:
+
+1. An X-Ray subsegment from Powertools' auto-patch of `_make_api_call`
+2. An OTel span from the manual OTel instrumentation (exported to X-Ray via ADOT)
+
+This dual-emission produces **duplicate entries** in X-Ray traces — the same AWS SDK call appears twice, once as a Powertools subsegment and once as an OTel-exported span.
+
+### Standard vs SSE Configuration
+
+```python
+# Standard (all non-streaming Lambdas)
+# auto_patch=True is the default — patches boto3/requests automatically
+tracer = Tracer()
+
+# SSE Lambda ONLY — auto_patch=False
+# Handler-phase AWS SDK calls traced via explicit @tracer.capture_method
+tracer = Tracer(auto_patch=False)
+```
+
+### How Handler-Phase AWS SDK Calls Are Traced
+
+With `auto_patch=False`, the SSE Lambda does **not** get automatic subsegments for boto3 calls. Instead, handler-phase AWS SDK calls are traced via explicit `@tracer.capture_method` decorators on the functions that make those calls. This provides visibility into handler-phase boto3 activity without the global patching that causes conflicts during streaming.
+
+### Edge Case Reference
+
+This constraint addresses the edge case "auto-patching duplicate subsegments during streaming" identified in FR-060.
+
+---
+
 ## Success Criteria
 
 - [ ] All 6 Lambda functions use Powertools Tracer for handler phase (not raw xray_recorder)
@@ -122,3 +159,4 @@ This task MUST be completed before tasks 2, 4, 5, and 13 because those tasks add
 4. **Import order**: Powertools Tracer must be imported and initialized before boto3 is used, to ensure patching takes effect. This is the same constraint as `patch_all()`.
 5. **57 decorators**: The migration of 57 `@xray_recorder.capture` decorators is mechanical but needs verification. Each decorator's string argument (subsegment name) should be preserved — Powertools Tracer generates names from function names by default, but custom names may be needed for backward-compatible trace queries.
 6. **Test mocking**: Tests that mock `xray_recorder` will need to be updated to mock `Tracer` instead. This affects test files in `tests/unit/` and `tests/integration/`.
+7. **SSE Lambda auto_patch=False (Round 6 — FR-060)**: The SSE Lambda MUST initialize `Tracer(auto_patch=False)`. Auto-patching globally patches `botocore.client.BaseClient._make_api_call` at import time, and these patches persist during streaming. Combined with OTel manual instrumentation in the streaming phase, this produces duplicate X-Ray entries (one from auto-patch, one from OTel). Handler-phase AWS SDK calls are traced via explicit `@tracer.capture_method` decorators instead.

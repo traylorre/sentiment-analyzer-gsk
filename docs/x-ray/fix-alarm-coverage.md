@@ -1,7 +1,7 @@
-# Task 17: CloudWatch Alarm Coverage (Round 4)
+# Task 17: CloudWatch Alarm Coverage (Round 6)
 
 **Priority:** P1
-**Spec FRs:** FR-040, FR-041, FR-042, FR-044, FR-045
+**Spec FRs:** FR-040, FR-041, FR-042, FR-044, FR-045, FR-061
 **Status:** TODO
 **Depends on:** Task 4 (silent failure metrics — FR-043 creates the custom metrics that FR-042 alarms on)
 **Blocks:** None
@@ -98,13 +98,32 @@ Audit ALL existing and new alarms for correct `treat_missing_data` configuration
 
 **The critical distinction:** Canary alarms use `breaching` because the canary MUST emit data on every scheduled run. If no data arrives, the canary itself has failed. All other alarms use `notBreaching` because absence of error/latency data genuinely means no errors/invocations occurred.
 
+### 6. Existing Alarm Threshold Review (FR-061) — Round 6
+
+Task 17 MUST review ALL existing CloudWatch alarm thresholds in addition to adding new alarms. The audit (Section 6.1) identified `analysis_latency_high` at 25s (42% of the Analysis Lambda's 60s timeout) as too generous. New alarms added by this task use the 80-90% of timeout standard (see Section 2). Existing alarms MUST be recalibrated to match this same methodology. It would be contradictory to add new alarms at strict thresholds while leaving existing alarms at overly generous thresholds.
+
+**Required steps:**
+
+1. **Review all pre-existing alarm thresholds** — Enumerate every CloudWatch alarm that existed before this task, including `analysis_latency_high` and any others in `modules/monitoring/alarms.tf` or elsewhere.
+2. **Compare each threshold against the Lambda's configured timeout** — For each latency alarm, determine the associated Lambda's timeout value and calculate what percentage the current threshold represents.
+3. **Align to 80-90% of timeout** — Recalibrate thresholds to fall within 80-90% of the Lambda's configured timeout. For example, for a Lambda with a 60s timeout, the latency alarm threshold should be 48000-54000ms, not 25000ms. The `analysis_latency_high` alarm must move from 25s (42%) to 48-54s (80-90%).
+4. **Document each threshold change and rationale** — For every threshold that is adjusted, record the old value, new value, the Lambda timeout, and the percentage of timeout the new value represents.
+
+**Example recalibration:**
+
+| Alarm | Lambda Timeout | Old Threshold | Old % | New Threshold | New % |
+|-------|---------------|---------------|-------|---------------|-------|
+| `analysis_latency_high` | 60s | 25000ms | 42% | 51000ms | 85% |
+
+This ensures all alarms — both new and pre-existing — follow a single, consistent methodology for threshold selection.
+
 ---
 
 ## Files to Modify
 
 | File | Change |
 |------|--------|
-| `modules/monitoring/alarms.tf` | Add Lambda error alarms (2), Lambda latency alarms (4), custom metric alarms (13) |
+| `modules/monitoring/alarms.tf` | Add Lambda error alarms (2), Lambda latency alarms (4), custom metric alarms (13), recalibrate existing alarm thresholds |
 | `modules/monitoring/dashboard.tf` | Update alarm widget to show all alarms |
 | `modules/monitoring/variables.tf` | Add alarm threshold variables for configurability |
 | `modules/monitoring/outputs.tf` | Export alarm ARNs for dashboard widget |
@@ -118,6 +137,7 @@ Audit ALL existing and new alarms for correct `treat_missing_data` configuration
 3. **Custom metric alarms:** Emit a test value above threshold for each custom metric. Verify alarm fires.
 4. **Dashboard completeness:** Open CloudWatch dashboard. Verify ALL alarms are visible in the alarm widget, grouped by category.
 5. **`treat_missing_data` audit:** For each alarm, verify the `treat_missing_data` setting matches the table in Section 5. Particular attention to canary alarms (must be `breaching`).
+6. **Existing alarm threshold review:** For each pre-existing latency alarm, verify the threshold is 80-90% of the associated Lambda's timeout. Confirm `analysis_latency_high` has been recalibrated from 25s to 48-54s.
 
 ---
 
@@ -131,6 +151,8 @@ Audit ALL existing and new alarms for correct `treat_missing_data` configuration
 - [ ] All 7 new dual-instrumentation metrics from FR-043 have alarms
 - [ ] Dashboard alarm widget shows ALL alarms, not a subset (SC-022)
 - [ ] All `treat_missing_data` settings audited and corrected
+- [ ] All pre-existing alarm thresholds reviewed and recalibrated to 80-90% of Lambda timeout (SC-061)
+- [ ] `analysis_latency_high` threshold changed from 25s to 48-54s (80-90% of 60s timeout)
 - [ ] All alarms route to the operations SNS topic
 
 ---
