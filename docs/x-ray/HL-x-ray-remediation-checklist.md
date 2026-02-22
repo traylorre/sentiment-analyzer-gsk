@@ -38,6 +38,31 @@ The X-Ray tracing infrastructure is **partially implemented but fragmented**:
 - **HIGH:** X-Ray silently drops data at 2,600 segments/sec region limit — no alert on loss
 - **MEDIUM:** X-Ray SDK `AsyncContext` loses context across event loop boundaries — must use default `threading.local()`
 
+**Round 7 emergent findings (ADOT operational lifecycle deep-dive):**
+- **HIGH:** OTel Python SDK `BatchSpanProcessor` silently drops all export failures (`except Exception`) — `force_flush()` returns `True` even on failure. No fail-fast mode available by OTel specification design. Detection relies solely on canary (FR-019/FR-036).
+- **HIGH:** `TracerProvider` created per-invocation leaks daemon threads (~1MB each) — FR-059 per-invocation requirement applies ONLY to `propagate.extract()`, not infrastructure objects. Module-level singleton is mandatory.
+- **HIGH:** Two ADOT layer types: collector-only (`aws-otel-collector-*`, ~35MB) vs Python SDK (`aws-otel-python-*`, ~80MB). Sidecar mode MUST use collector-only to avoid ~45MB waste and auto-instrumentation activation risk.
+- **MEDIUM:** Layer ARN not version-pinned — unpinned layers silently introduce breaking collector changes on `terraform apply`
+- **MEDIUM:** Non-standard OTel span attributes become X-Ray metadata (non-indexed, invisible in console). Must use `db.system`, `rpc.service`, `exception.type` semantic conventions.
+- **LOW:** `OTEL_PROPAGATORS` env var creates misleading configuration when `set_global_textmap()` overwrites it
+
+**Round 8 emergent findings (container-based deployment blind spot — 1 BLOCKER):**
+- **BLOCKER:** SSE Lambda is **container-based** (ECR image with `python:3.13-slim` + custom bootstrap) — Lambda container images CANNOT use Lambda Layers. Round 7's FR-062 "collector-only layer" and FR-063 "version-pinned layer ARN" are **INVALID**. ADOT must be embedded in Docker image via multi-stage build (`COPY --from=adot /opt/extensions/ /opt/extensions/`). FR-062/FR-063 REWRITTEN, FR-069/FR-070 added.
+- **HIGH:** OTel `AwsLambdaResourceDetector` does NOT set `service.name` — defaults to `unknown_service`, breaking X-Ray service map. `OTEL_SERVICE_NAME` env var is mandatory (FR-071).
+- **HIGH:** `AwsLambdaResourceDetector` not in TracerProvider configuration — missing `cloud.provider`, `cloud.region`, `faas.name` on all spans (FR-072).
+- **MEDIUM:** `BatchSpanProcessor` defaults inappropriate for Lambda — 5s delay, 2048 queue oversized (FR-073).
+
+**Round 9 emergent findings (four-domain deep research — 2 HIGH, 7 MEDIUM):**
+- **HIGH:** ADOT Extension has KNOWN ~30% span drop rate (aws-otel-lambda#886) — two-hop flush architecture: SDK→Extension (reliable) then Extension→X-Ray (race condition). Decouple processor mitigates. FR-074/FR-075 added.
+- **HIGH:** Canary FR-049 does not classify `put_metric_data` errors — IAM revocation silently retried instead of immediately escalated. FR-079 adds error taxonomy with differential handling.
+- **MEDIUM:** `BotocoreInstrumentor` not explicitly prohibited on SSE Lambda — FR-076 prohibits it alongside FR-060's `auto_patch=False`
+- **MEDIUM:** `TracerProvider(shutdown_on_exit=True)` default causes atexit race on environment recycling — FR-077 requires `shutdown_on_exit=False`
+- **MEDIUM:** X-Ray trace propagation delay non-deterministic — FR-078 adds retry-with-backoff (30s then 60s) to canary
+- **MEDIUM:** FR-033 assumes server-side Last-Event-ID support — FR-081 requires server check or fallback header
+- **MEDIUM:** CORS ExposeHeaders missing `x-amzn-trace-id` — FR-082 mandates it for FR-048 trace correlation
+- **MEDIUM:** BSP default is 5000ms, not 200ms — FR-084 corrects Round 5 assumption; FR-073 override unaffected
+- **LOW:** Secondary out-of-band alerting channel SHOULD be supported (FR-080)
+
 **Round 4 emergent findings (7 blind spots from audit gap analysis):**
 - **HIGH:** 2 Lambda functions (SSE, Metrics) have ZERO CloudWatch error alarms — operators never alerted to failures that X-Ray traces could diagnose
 - **HIGH:** 7 custom metrics emitted without alarms (StuckItems, ConnectionAcquireFailures, EventLatencyMs, MetricsLambdaErrors, HighLatencyAlert, PollDurationMs, AnalysisErrors)
@@ -60,6 +85,15 @@ This results in:
 - **(R4)** 7 custom metrics silently emitted with no alarm — degradation invisible
 - **(R4)** CloudWatch metric emission failure creates system-wide false-green on `notBreaching` alarms
 - **(R4)** SSE reconnection produces disconnected traces with no correlation mechanism
+- **(R7)** OTel export failures are SILENT BY DESIGN — force_flush() returns success even when ADOT Extension is down; canary is sole detection mechanism
+- **(R7)** TracerProvider lifecycle mismanagement causes OOM on warm execution environments via daemon thread leak
+- **(R7)** Wrong ADOT layer type (SDK vs collector-only) wastes 45MB and risks auto-instrumentation activation
+- **(R8)** ADOT deployment via Lambda Layers is IMPOSSIBLE for container-based SSE Lambda — requires Dockerfile modification and ECR image rebuild
+- **(R8)** SSE Lambda appears as `unknown_service` in X-Ray service map without explicit `OTEL_SERVICE_NAME` environment variable
+- **(R9)** ADOT Extension→X-Ray export has known race condition; decouple processor is mitigation, not guarantee; canary provides aggregate detection
+- **(R9)** Canary treats all put_metric_data failures uniformly; IAM revocation detection delayed by retry cycles
+- **(R9)** Client-side Last-Event-ID propagation hollow without server-side support
+- **(R9)** CORS ExposeHeaders missing for trace header reading — FR-048 reconnection correlation blocked
 
 ---
 
@@ -71,17 +105,17 @@ This results in:
 | 2 | Fix Metrics Lambda X-Ray instrumentation | [fix-metrics-lambda-xray.md](./fix-metrics-lambda-xray.md) | [ ] TODO | P0 | FR-003, FR-004 |
 | 3 | Verify SNS cross-Lambda trace propagation | [fix-sns-trace-verification.md](./fix-sns-trace-verification.md) | [ ] TODO | P1 | FR-013 |
 | 4 | Fix silent failure path subsegments | [fix-silent-failure-subsegments.md](./fix-silent-failure-subsegments.md) | [ ] TODO | P1 | FR-002, FR-005, **FR-043** |
-| 5 | **Fix SSE Streaming Lambda tracing (ADOT)** | [fix-sse-subsegments.md](./fix-sse-subsegments.md) | [ ] TODO | P1 | FR-001, FR-025, FR-026, FR-027, FR-031, FR-037, **FR-046, FR-047** |
+| 5 | **Fix SSE Streaming Lambda tracing (ADOT)** | [fix-sse-subsegments.md](./fix-sse-subsegments.md) | [ ] TODO | P1 | FR-001, FR-025, FR-026, FR-027, FR-031, FR-037, FR-046, FR-047, **FR-052, FR-053, FR-054, FR-055, FR-056, FR-059, FR-060, FR-062, FR-063, FR-064, FR-065, FR-066, FR-067, FR-068, FR-069, FR-070, FR-071, FR-072, FR-073, FR-074, FR-075, FR-076, FR-077** |
 | 6 | Replace latency_logger with X-Ray annotations | [fix-sse-latency-xray.md](./fix-sse-latency-xray.md) | [ ] TODO | P2 | FR-006, FR-022 |
 | 7 | Replace cache_logger with X-Ray annotations | [fix-sse-cache-xray.md](./fix-sse-cache-xray.md) | [ ] TODO | P2 | FR-007, FR-023 |
 | 8 | Add SSE connection and polling annotations | [fix-sse-annotations.md](./fix-sse-annotations.md) | [ ] TODO | P2 | FR-008, FR-009 |
 | 9 | Consolidate correlation IDs onto X-Ray trace IDs | [fix-correlation-id-consolidation.md](./fix-correlation-id-consolidation.md) | [ ] TODO | P3 | FR-010, FR-011, FR-012, FR-024 |
-| 10 | Add frontend trace header propagation (CORS) | [fix-frontend-trace-headers.md](./fix-frontend-trace-headers.md) | [ ] TODO | P2 | FR-014, FR-015, FR-016 |
-| 11 | Implement observability canary (X-Ray + CloudWatch health) | [fix-xray-canary.md](./fix-xray-canary.md) | [ ] TODO | P3 | FR-019, FR-020, FR-021, FR-036, **FR-049, FR-050, FR-051** |
+| 10 | Add frontend trace header propagation (CORS) | [fix-frontend-trace-headers.md](./fix-frontend-trace-headers.md) | [ ] TODO | P2 | FR-014, FR-015, FR-016, **FR-082** |
+| 11 | Implement observability canary (X-Ray + CloudWatch health) | [fix-xray-canary.md](./fix-xray-canary.md) | [ ] TODO | P3 | FR-019, FR-020, FR-021, FR-036, **FR-049, FR-050, FR-051, FR-078, FR-079, FR-080** |
 | 12 | Audit downstream consumers of removed systems | [fix-downstream-consumer-audit.md](./fix-downstream-consumer-audit.md) | [ ] TODO | P3 | FR-018, edge cases |
 | 13 | Add explicit SendGrid X-Ray subsegment | [fix-sendgrid-explicit-subsegment.md](./fix-sendgrid-explicit-subsegment.md) | [ ] TODO | P1 | FR-028 |
 | 14 | Standardize on Powertools Tracer (non-streaming Lambdas) | [fix-tracer-standardization.md](./fix-tracer-standardization.md) | [ ] TODO | P0 | FR-029, FR-030 |
-| 15 | **Migrate frontend SSE to fetch()+ReadableStream** | [fix-sse-client-fetch-migration.md](./fix-sse-client-fetch-migration.md) | [ ] TODO | P2 | FR-032, FR-033, **FR-048** |
+| 15 | **Migrate frontend SSE to fetch()+ReadableStream** | [fix-sse-client-fetch-migration.md](./fix-sse-client-fetch-migration.md) | [ ] TODO | P2 | FR-032, FR-033, **FR-048, FR-081, FR-082, FR-083** |
 | 16 | **Configure sampling strategy and cost guard** | [fix-sampling-and-cost.md](./fix-sampling-and-cost.md) | [ ] TODO | P1 | FR-034, FR-035, FR-038, **FR-039** |
 | 17 | **Add CloudWatch alarm coverage** | [fix-alarm-coverage.md](./fix-alarm-coverage.md) | [ ] TODO | P1 | **FR-040, FR-041, FR-042, FR-044, FR-045** |
 
@@ -138,6 +172,24 @@ This results in:
 | **(R6)** Per-Invocation OTel Context Extraction | SSE Lambda: module-level extraction | **Extract trace context inside handler, not module level (FR-059, SC-026)** | **#5** |
 | **(R6)** SSE Lambda auto_patch=False | SSE Lambda: auto_patch=True (Powertools default) | **Disable Powertools global boto3 patching to prevent dual-emission (FR-060)** | **#5** |
 | **(R6)** Alarm Threshold Calibration | All Lambdas: thresholds not calibrated | **Review and align existing alarm thresholds to 80-90% standard (FR-061)** | **#17** |
+| **(R7)** ADOT Layer Type | Not specified | **Collector-only layer (`aws-otel-collector-*`), version-pinned ARN** | **#5** |
+| **(R7)** TracerProvider Lifecycle | Not specified | **Module-level singleton, per-invocation context extraction only** | **#5** |
+| **(R7)** OTel Export Failure Detection | Not specified | **Canary-based (FR-019/FR-036); force_flush() unreliable for detection** | **#5, #11** |
+| **(R7)** OTel Semantic Conventions | Not specified | **db.system, rpc.service, exception.type for X-Ray native rendering** | **#5** |
+| **(R7)** Propagator Configuration | Not specified | **set_global_textmap() only; no OTEL_PROPAGATORS env var** | **#5** |
+| **(R8)** ADOT Container Deployment | N/A (Lambda Layers impossible) | **Multi-stage Dockerfile: COPY from ADOT ECR image to /opt/extensions/** | **#5** |
+| **(R8)** ADOT Image Version Pinning | N/A | **Digest-pinned ADOT container image (@sha256:...) in Dockerfile** | **#5** |
+| **(R8)** OTel Service Name | Not configured (defaults to unknown_service) | **OTEL_SERVICE_NAME env var matching POWERTOOLS_SERVICE_NAME** | **#5** |
+| **(R8)** OTel Resource Detector | Not configured | **AwsLambdaResourceDetector in TracerProvider resource for cloud.*/faas.* attributes** | **#5** |
+| **(R8)** BatchSpanProcessor Config | Defaults (5s delay, 2048 queue) | **Lambda-tuned: 1s delay, 256 queue, 64 batch size** | **#5** |
+| **(R9)** Two-Hop Flush Architecture | Not documented | **FR-074 acknowledges; FR-075 mandates decouple processor; canary detects aggregate loss** | **#5, #11** |
+| **(R9)** BotocoreInstrumentor prohibition | Not prohibited | **Explicit prohibition: MUST NOT call BotocoreInstrumentor().instrument()** | **#5** |
+| **(R9)** TracerProvider shutdown_on_exit | Default True (race) | **shutdown_on_exit=False; eliminates atexit race** | **#5** |
+| **(R9)** Canary trace retrieval retry | Single-shot query | **Retry-with-backoff: 30s then 60s** | **#11** |
+| **(R9)** Canary error classification | Uniform handling | **Differential: immediate escalation for IAM errors, retry for transient** | **#11** |
+| **(R9)** Server-side Last-Event-ID | Not specified | **Server MUST check header or respond with X-SSE-Resume-Supported: false** | **#15** |
+| **(R9)** CORS ExposeHeaders for trace ID | Not included | **x-amzn-trace-id in ExposeHeaders (hard prerequisite for FR-048)** | **#10, #15** |
+| **(R9)** Reconnection close type strategy | Uniform backoff | **Graceful close: short delay; Network error: exponential backoff** | **#15** |
 
 ---
 
@@ -186,6 +238,32 @@ The sole exception is the X-Ray canary (task #11), which by definition must surv
 - [ ] All metadata payloads bounded — zero 64KB document rejections (SC-025)
 - [ ] Warm invocation trace ID correctness (SC-026)
 
+### ADOT Operational Lifecycle (Round 7)
+- [ ] ADOT collector-only layer used (not Python SDK layer) — FR-062
+- [ ] ADOT layer ARN version-pinned in Terraform — FR-063
+- [ ] TracerProvider instantiated exactly once per execution environment — SC-027
+- [ ] Streaming-phase DynamoDB/CloudWatch spans render as typed nodes in X-Ray service map — SC-028
+- [ ] No OTEL_PROPAGATORS environment variable set on SSE Lambda — FR-068
+- [ ] OTel semantic conventions used for all streaming-phase spans — FR-067
+
+### Container-Based ADOT Deployment (Round 8)
+- [ ] ADOT collector binary at `/opt/extensions/collector` in SSE Lambda container image — SC-029
+- [ ] ADOT container image digest-pinned in Dockerfile — FR-070
+- [ ] SSE Lambda appears as correct service name (not `unknown_service`) in X-Ray service map — SC-030
+- [ ] `AwsLambdaResourceDetector` configured in TracerProvider — FR-072
+- [ ] BatchSpanProcessor uses Lambda-tuned parameters — FR-073
+- [ ] `OTEL_SERVICE_NAME` env var set in Terraform, matching `POWERTOOLS_SERVICE_NAME` — FR-071
+
+### ADOT Flush Architecture & Canary Hardening (Round 9)
+- [ ] ADOT decouple processor configured for SSE Lambda — SC-031
+- [ ] BotocoreInstrumentor NOT called on SSE Lambda — SC-032
+- [ ] TracerProvider created with shutdown_on_exit=False — SC-033
+- [ ] Canary retries trace retrieval with backoff (30s then 60s) — SC-034
+- [ ] Canary classifies put_metric_data errors with differential handling — SC-035
+- [ ] Server-side Last-Event-ID support checked or fallback header sent — SC-036
+- [ ] CORS ExposeHeaders includes x-amzn-trace-id — SC-037
+- [ ] SSE reconnection uses close-type-aware backoff strategy — SC-038
+
 ### Operator Experience
 - [ ] Single-pane tracing: browser → API Gateway → Lambda → DynamoDB (SC-001)
 - [ ] Filter by error/fault to find silent failures (SC-002)
@@ -233,6 +311,26 @@ The sole exception is the X-Ray canary (task #11), which by definition must surv
 | **(R6)** Warm invocation stale trace context | **CONFIRMED** | **HIGH** | Module-level extraction links all warm invocations to first trace; FR-059 mandates per-invocation extraction (Task 5) |
 | **(R6)** Powertools auto-patching dual-emission | **CONFIRMED** | **HIGH** | auto_patch=True creates X-Ray + OTel duplicates during streaming; FR-060 mandates auto_patch=False (Task 5) |
 | **(R6)** Existing alarm thresholds too generous | **CONFIRMED** | **MEDIUM** | analysis_latency_high at 42% of timeout; FR-061 mandates recalibration (Task 17) |
+| **(R7)** OTel export failure silent by design | **CONFIRMED** | **HIGH** | `BatchSpanProcessor._export()` catches all exceptions; `force_flush()` always returns True. Canary is sole detection (FR-019/FR-036) |
+| **(R7)** TracerProvider per-invocation memory leak | **CONFIRMED** | **HIGH** | Module-level singleton mandatory (FR-065); per-invocation creates orphaned daemon threads |
+| **(R7)** ADOT SDK layer used instead of collector-only | Medium | **HIGH** | FR-062 requires collector-only layer; SDK layer wastes 45MB + auto-instrumentation risk |
+| **(R7)** ADOT layer ARN not version-pinned | Medium | **MEDIUM** | FR-063 requires pinned version; unpinned can break collector on terraform apply |
+| **(R7)** Non-standard OTel span attributes | Medium | **MEDIUM** | FR-067 requires semantic conventions; non-standard = invisible in X-Ray |
+| **(R7)** OTEL_PROPAGATORS env var confusion | Low | **LOW** | FR-068 prohibits env var; set_global_textmap() is single source of truth |
+| **(R8)** Container-based Lambda cannot use Lambda Layers | **CONFIRMED** | **BLOCKER** | ADOT embedded via multi-stage Dockerfile build (FR-069/FR-070); FR-062/FR-063 REWRITTEN |
+| **(R8)** `service.name` defaults to `unknown_service` | **CONFIRMED** | **HIGH** | `OTEL_SERVICE_NAME` env var required (FR-071); X-Ray uses this for service map node naming |
+| **(R8)** `AwsLambdaResourceDetector` missing from TracerProvider | **CONFIRMED** | **HIGH** | FR-072 requires resource detector; provides cloud.*/faas.* metadata |
+| **(R8)** BatchSpanProcessor defaults oversized for Lambda | **CONFIRMED** | **MEDIUM** | FR-073 mandates Lambda-tuned config (1s/256/64) |
+| **(R8)** SSE Lambda custom runtime + ADOT compatibility | **NOT A RISK** | N/A | Extensions are Lambda service-level; `python:3.13-slim` + custom bootstrap fully compatible |
+| **(R9)** ADOT Extension span drop race condition | **CONFIRMED (KNOWN)** | **HIGH** | Decouple processor is mitigation; canary provides aggregate detection (FR-074/FR-075) |
+| **(R9)** Canary IAM error not immediately escalated | **CONFIRMED** | **HIGH** | Error classification with differential handling (FR-079) |
+| **(R9)** BotocoreInstrumentor accidentally enabled | Medium | **MEDIUM** | Explicit prohibition in FR-076 |
+| **(R9)** TracerProvider atexit shutdown race | **CONFIRMED** | **MEDIUM** | shutdown_on_exit=False (FR-077) |
+| **(R9)** Canary false negative from propagation delay | **CONFIRMED** | **MEDIUM** | Retry-with-backoff (FR-078) |
+| **(R9)** Server ignores Last-Event-ID | Medium | **MEDIUM** | Server-side requirement or fallback header (FR-081) |
+| **(R9)** CORS blocks trace header reading | **CONFIRMED** | **MEDIUM** | ExposeHeaders mandate (FR-082) |
+| **(R9)** BSP default assumption incorrect (200ms vs 5000ms) | **CONFIRMED** | **MEDIUM** | Corrected in FR-084; runtime unaffected (FR-073 override) |
+| **(R9)** Transaction Search breaks BatchGetTraces | Low | **LOW** | Edge case documented; canary tests own retrieval path |
 
 ---
 
@@ -243,7 +341,7 @@ The sole exception is the X-Ray canary (task #11), which by definition must surv
 - Checklist: `specs/1219-xray-exclusive-tracing/checklists/requirements.md`
 - AWS X-Ray SDK: `aws-xray-sdk` (currently v2.15.0 in requirements.txt)
 - AWS Lambda Powertools: `aws-lambda-powertools` (currently v3.23.0, Dashboard Lambda only → ALL non-streaming Lambdas after Task 14)
-- ADOT Lambda Extension: `aws-otel-python-instrumentation` (SSE Lambda only, Task 5)
+- ADOT Lambda Extension: Container-based deployment via `public.ecr.aws/aws-observability/aws-otel-lambda-extension-amd64` (SSE Lambda only, Task 5)
 - X-Ray SDK lambda_launcher.py: `LambdaContext.put_segment()` is no-op (source: `aws_xray_sdk/core/lambda_launcher.py:55-59`)
 - Powertools Tracer async gap: `inspect.isasyncgenfunction()` never called (source: `aws_lambda_powertools/tracing/tracer.py`)
 - EventSource limitation: WHATWG HTML Living Standard, Section 9.2
@@ -263,3 +361,6 @@ The sole exception is the X-Ray canary (task #11), which by definition must surv
 | 2026-02-21 | **Round 4 updates:** 7 blind spots from audit gap analysis. Added task 17 (alarm coverage). Updated tasks 4, 5, 11, 15, 16 with new FRs. Task 4 now includes dual instrumentation (X-Ray + CloudWatch metrics). Task 5 adds ADOT coexistence constraints (no auto-instrumentation, matching service names). Task 11 expanded to unified meta-observability canary (X-Ray + CloudWatch emission health, separate IAM role, out-of-band alerting). Task 15 adds SSE reconnection trace correlation annotations. Task 16 adds scope clarification (FR-039: X-Ray exclusive for TRACING, not ALARMING). Added FR-039 through FR-051, SC-017 through SC-022. Total: 17 tasks, 51 FRs, 22 SCs. |
 | 2026-02-21 | **Round 5 updates:** 7 ADOT architecture blind spots found (1 BLOCKER). OTel-to-X-Ray trace context bridging requires explicit `AwsXRayLambdaPropagator` + `AwsXRayIdGenerator` + OTLP endpoint configuration — without these, streaming-phase spans are disconnected. Added `force_flush()` requirement for generator `finally` block. Added 64KB segment document size guard. Updated Task 5 dependencies. Added FR-052 through FR-058, SC-023 through SC-025. Total: 17 tasks, 58 FRs, 25 SCs. |
 | 2026-02-21 | **Round 6 updates:** Deep blind spot analysis. Identified warm invocation trace context staleness (FR-059), Powertools auto-patching dual-emission (FR-060), and existing alarm threshold gap (FR-061). Added SC-026 for warm invocation verification. 5 new edge cases, 4 new assumptions. Totals: 61 FRs, 26 SCs, 34 edge cases, 26 assumptions. |
+| 2026-02-22 | **Round 7 updates:** ADOT operational lifecycle deep-dive. 7 blind spots analyzed, 7 resolved. Added FR-062 through FR-068. Collector-only layer requirement (FR-062), version pinning (FR-063), collector pipeline verification (FR-064), TracerProvider singleton lifecycle (FR-065), export failure detection gap (FR-066), OTel semantic conventions (FR-067), propagator configuration hygiene (FR-068). Added SC-027 (singleton verification), SC-028 (service map correctness). Totals: 68 FRs, 28 SCs, 41 edge cases, 32 assumptions. |
+| 2026-02-22 | **Round 8 updates:** 1 BLOCKER — SSE Lambda is container-based (ECR image), cannot use Lambda Layers. FR-062/FR-063 REWRITTEN for container deployment. Added FR-069 (Dockerfile ADOT embedding), FR-070 (digest pinning), FR-071 (OTEL_SERVICE_NAME), FR-072 (AwsLambdaResourceDetector), FR-073 (BSP Lambda config). Added SC-029 (ADOT in container), SC-030 (service map naming). Round 7 assumption about "zero layers" INVALIDATED. Work order Task 5 FR list updated (14 missing FRs added). Totals: 73 FRs, 30 SCs, 45 edge cases, 37 assumptions. |
+| 2026-02-22 | **Round 9 updates:** Four-domain deep research (ADOT container deployment, OTel SDK Lambda behavior, X-Ray canary implementation, frontend SSE migration). 14 blind spots analyzed (12 resolved via FRs, 2 informational). Added FR-074 through FR-084. Added SC-031 through SC-038. Corrected Round 5 BSP default assumption (200ms → 5000ms). Two-hop flush architecture formally acknowledged with decouple processor requirement. Canary error classification added for differential IAM error handling. Server-side Last-Event-ID support required. CORS ExposeHeaders mandate for trace correlation. Totals: 84 FRs, 38 SCs, 56 edge cases, 45 assumptions (3 invalidated, 1 corrected). |
