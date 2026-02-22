@@ -3,7 +3,7 @@
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-02-14
 **Feature**: [spec.md](../spec.md)
-**Validation Iterations**: 5 (initial draft + round 1 review + round 2 deep-dive + round 3 blind spot analysis + round 4 audit gap analysis)
+**Validation Iterations**: 7 (initial draft + round 1 review + round 2 deep-dive + round 3 blind spot analysis + round 4 audit gap analysis + round 5 ADOT architecture deep-dive + round 6 blind spot fixes)
 
 ## Content Quality
 
@@ -91,6 +91,28 @@
 | 40 | LOW | CloudFront removed from architecture (Features 1203-1207) — Blind Spot 4 from initial gap analysis NOT applicable; documented as edge case if re-introduced | Added edge case and assumption; CloudFront treats `X-Amzn-Trace-Id` as restricted header |
 | 41 | LOW | CloudWatch metric ingestion delay (60-120s) affects canary's CloudWatch health check window | Documented in assumption; canary query window must account for delay |
 
+## Emergent Issues Found (Round 5 — ADOT Architecture Deep-Dive)
+
+| # | Severity | Issue | Resolution |
+| --- | -------- | ----- | ---------- |
+| 42 | **BLOCKER** | OTel SDK on SSE Lambda requires explicit `AwsXRayLambdaPropagator` to read `_X_AMZN_TRACE_ID` — without this, streaming-phase OTel spans carry different trace IDs than the Lambda runtime's X-Ray facade segment, creating disconnected traces (violates SC-010) | Added FR-052 (AwsXRayLambdaPropagator configuration); added SC-023 (unified trace ID verification); added edge case and assumption. Source: `opentelemetry-propagator-aws-xray` package |
+| 43 | HIGH | OTel `TracerProvider` MUST use `AwsXRayIdGenerator` — standard `RandomIdGenerator` produces garbage timestamps in X-Ray trace ID epoch field, causing X-Ray to misindex or reject traces by time window | Added FR-053 (AwsXRayIdGenerator requirement); added edge case. Source: `opentelemetry-sdk-extension-aws` package |
+| 44 | HIGH | OTel OTLP exporter endpoint (`localhost:4318`) must be explicitly configured — OTel SDK does not auto-discover the ADOT Extension's receiver | Added FR-054 (OTLP endpoint configuration) |
+| 45 | HIGH | `BatchSpanProcessor.force_flush()` MUST be called in streaming generator's `finally` block — without it, spans buffered in final batch interval are lost when execution environment freezes, or worse, appear as stale spans in next invocation's traces | Added FR-055 (force_flush requirement); added SC-024 (zero lost spans); added edge case |
+| 46 | HIGH | X-Ray segment document size limit is 64KB per `PutTraceSegments` document — large metadata payloads silently rejected with no SDK-level error | Added FR-058 (metadata size guard); added SC-025 (zero rejected documents); added edge case and assumption. Source: AWS X-Ray API Reference |
+| 47 | MEDIUM | OTel sampler must be `parentbased_always_on` to honor Lambda runtime's `Sampled=0` — using `always_on` creates orphaned spans for unsampled invocations | Added FR-056 (sampler configuration); added edge case |
+| 48 | MEDIUM | 4 specific OTel Python packages required for SSE Lambda streaming instrumentation but not enumerated anywhere in spec or requirements files | Added FR-057 (OTel package enumeration); added assumption for size impact |
+
+## Emergent Issues Found (Round 6 — Blind Spot Fixes)
+
+| # | Severity | Issue | Resolution |
+| --- | -------- | ----- | ---------- |
+| 49 | HIGH | Warm Lambda invocations reuse execution environment — `_X_AMZN_TRACE_ID` updates per invocation but OTel context extraction only runs at cold start, causing warm invocations to carry stale trace IDs from previous requests | Added FR-059 (per-invocation trace context extraction for warm invocations); added SC-026 (warm invocation trace ID correctness verification); added edge case (warm invocation stale context) and assumption (per-invocation `_X_AMZN_TRACE_ID` update) |
+| 50 | HIGH | SSE Lambda with Powertools `auto_patch=True` produces duplicate subsegments — Powertools patches botocore globally and ADOT OTel also instruments botocore, creating double-emission of every AWS SDK call | Added FR-060 (SSE Lambda `auto_patch=False` requirement); added edge case (auto-patching duplicate subsegments) and assumption (Powertools `auto_patch` global persistence) |
+| 51 | HIGH | Existing CloudWatch alarms have thresholds set during initial deployment and never recalibrated — traffic patterns changed significantly since original configuration, risking false positives and missed alerts | Added FR-061 (alarm threshold calibration for existing alarms); added edge case (existing alarm threshold inconsistency) |
+| 52 | MEDIUM | Lambda execution environment destruction without SHUTDOWN event — Lambda runtime does not guarantee SHUTDOWN lifecycle event; `force_flush()` in generator `finally` block is the only reliable flush mechanism | Added edge case (environment destruction without SHUTDOWN) and assumption (generator `finally` block reliability) |
+| 53 | MEDIUM | ADOT OTLP receiver cold start race — ADOT Extension's OTLP receiver may not be ready when Lambda handler sends first spans during cold start, causing early span loss | Added edge case (ADOT cold start race) and assumption (512MB memory adequacy) |
+
 ## Round 3 Invalidation Summary
 
 | Item | Round 2 Content | Round 3 Status | Reason |
@@ -103,15 +125,33 @@
 | SC-010 | Zero orphaned subsegments via independent segments | **REVISED** | Zero orphaned subsegments via independent lifecycle mechanism |
 | SC-012 | All Lambdas use single approach | **REVISED** | Non-streaming Lambdas consistent; SSE distinct but unified in X-Ray |
 
+## Round 6 Blind Spot Resolution Summary
+
+| Blind Spot | Status | Resolution |
+| ---------- | ------ | ---------- |
+| Per-invocation OTel context extraction | **RESOLVED** | FR-059 requires trace context extraction on every invocation, not just cold start |
+| Powertools `auto_patch=True` dual-emission | **RESOLVED** | FR-060 requires `auto_patch=False` on SSE Lambda to prevent Powertools/ADOT double-patching |
+| SSE Lambda needs `auto_patch=False` | **RESOLVED** | FR-060 explicitly sets SSE Lambda patching to ADOT-only |
+| Existing alarm thresholds not reviewed | **RESOLVED** | FR-061 requires threshold calibration audit against current traffic baselines |
+| SSE Lambda memory validated | **RESOLVED** | Assumption added confirming 512MB adequate for Lambda + ADOT + OTel packages |
+| Generator `finally` block reliable | **RESOLVED** | Assumption added; edge case documents SHUTDOWN event unreliability as justification |
+| ADOT OTLP receiver cold start race mitigated | **RESOLVED** | Edge case documents race condition; ADOT Extension initializes before handler per AWS lifecycle contract |
+
 ## Notes
 
-- All 41 issues across four rounds addressed.
+- All 53 issues across six rounds addressed.
 - Zero [NEEDS CLARIFICATION] markers in the spec.
 - Round 3 added 8 new FRs (FR-031 through FR-038), 4 new SCs (SC-013 through SC-016), 7 new edge cases, 5 new assumptions, and 2 new user stories (US8, US9).
 - Round 4 added 13 new FRs (FR-039 through FR-051), 6 new SCs (SC-017 through SC-022), 6 new edge cases, 4 new assumptions, and 2 new user stories (US10, US11).
+- Round 5 added 7 new FRs (FR-052 through FR-058), 3 new SCs (SC-023 through SC-025), 6 new edge cases, 4 new assumptions.
+- Round 6 added 3 new FRs (FR-059 through FR-061), 1 new SC (SC-026), 5 new edge cases, 4 new assumptions. 7 blind spots identified and resolved.
 - Two assumptions INVALIDATED (SendGrid auto-patching in Round 2, `begin_segment()` in Round 3) marked with strikethrough.
 - Three FRs REPLACED in-place (FR-025 revised, FR-026 replaced, FR-027 replaced) with Round 3 annotations.
-- Spec is now at 51 FRs, 22 SCs, 26 edge cases, 18 assumptions (2 invalidated), 11 user stories.
+- Spec is now at 61 FRs, 26 SCs, 34 edge cases, 26 assumptions (2 invalidated), 11 user stories.
 - The most critical Round 3 finding is that the entire SSE streaming tracing architecture from Round 2 was built on a false assumption (`begin_segment()` works in Lambda). The corrected approach uses a Lambda Extension with an independent lifecycle.
 - The most critical Round 4 finding is the "X-Ray exclusive for TRACING, not ALARMING" scope clarification (FR-039). X-Ray traces provide diagnostic context; CloudWatch alarms provide 24/7 alerting. Both are required because X-Ray sampling means not all errors have traces, while CloudWatch Lambda metrics capture 100% of invocations.
 - Round 4 research confirmed: CloudFront is not in the architecture (Blind Spot 4 eliminated); ADOT sidecar-only mode is safe (Blind Spot 3 mitigated with constraints); X-Ray Groups are post-ingestion only (Blind Spot 2 confirmed — dual instrumentation required); out-of-band alerting is industry best practice for meta-observability (Blind Spot 6).
+- The most critical Round 5 finding is that the OTel-to-X-Ray trace context bridging (FR-052) is a BLOCKER without which the entire ADOT streaming architecture produces disconnected traces. The AwsXRayLambdaPropagator is the single required component that reads `_X_AMZN_TRACE_ID` and bridges the Lambda runtime's X-Ray context into the OTel SDK's span hierarchy.
+- Round 5 research confirmed: ADOT sidecar-only mode with `parentbased_always_on` sampler correctly honors Lambda sampling decisions (no orphaned spans); `BatchSpanProcessor` exports incrementally during streaming (200ms batch timeout); `force_flush()` handles only the final partial batch; X-Ray 64KB document limit is a real constraint requiring metadata truncation.
+- The most critical Round 6 finding is the warm invocation stale trace context blind spot (FR-059). Lambda execution environments persist across invocations, but `_X_AMZN_TRACE_ID` updates per invocation. Without per-invocation context extraction, warm invocations inherit the previous request's trace ID, silently corrupting trace lineage across all warm-path requests.
+- Round 6 also resolved a significant dual-emission blind spot: Powertools `auto_patch=True` and ADOT OTel both instrument botocore, producing duplicate subsegments for every AWS SDK call on the SSE Lambda. FR-060 explicitly requires `auto_patch=False` to ensure single-source instrumentation via ADOT only.
