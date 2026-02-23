@@ -2,7 +2,12 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 // Routes that require authentication
-const protectedRoutes = ['/settings'];
+// NOTE: /settings was removed from protected routes because:
+// 1. Anonymous users have valid settings to customize (haptic, motion, notifications)
+// 2. The auth cookie mechanism is client-side only, but middleware runs server-side
+// 3. This caused a redirect loop: middleware blocks → React never loads → cookies never set
+// Protected routes should only include features truly unavailable to anonymous users
+const protectedRoutes: string[] = [];
 
 // Routes that require upgraded (non-anonymous) auth
 const upgradedRoutes = ['/alerts'];

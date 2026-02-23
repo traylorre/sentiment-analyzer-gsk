@@ -3,11 +3,14 @@
 from datetime import date as date_type
 from datetime import datetime
 from enum import Enum
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.lambdas.shared.models.volatility_metric import OHLCCandle
+
+if TYPE_CHECKING:
+    from src.lambdas.shared.cache.ohlc_cache import CachedCandle
 
 
 class TimeRange(str, Enum):
@@ -113,6 +116,42 @@ class PriceCandle(BaseModel):
             low=candle.low,
             close=candle.close,
             volume=candle.volume,
+        )
+
+    @classmethod
+    def from_cached_candle(
+        cls,
+        cached: "CachedCandle",
+        resolution: "OHLCResolution",
+    ) -> "PriceCandle":
+        """Create PriceCandle from DynamoDB cached candle.
+
+        Args:
+            cached: CachedCandle from ohlc_cache module
+            resolution: Original resolution for date formatting
+
+        Returns:
+            PriceCandle instance with appropriate date format
+
+        Note:
+            CachedCandle is defined in src.lambdas.shared.cache.ohlc_cache.
+            Using string annotation to avoid circular import at runtime.
+        """
+        # Format date based on resolution
+        if resolution == OHLCResolution.DAILY:
+            # Daily: use date only
+            date_value: date_type | datetime = cached.timestamp.date()
+        else:
+            # Intraday: use full datetime
+            date_value = cached.timestamp
+
+        return cls(
+            date=date_value,
+            open=cached.open,
+            high=cached.high,
+            low=cached.low,
+            close=cached.close,
+            volume=cached.volume,
         )
 
 

@@ -1,25 +1,16 @@
-"""CSRF middleware for FastAPI endpoints.
+"""CSRF middleware for Lambda handlers (Feature 1158-csrf-double-submit).
 
-This module provides a FastAPI dependency function that validates
-CSRF tokens on state-changing requests. It implements the double-submit
-cookie pattern where the frontend must send the token in both a cookie
-and the X-CSRF-Token header.
+Validates CSRF tokens on state-changing requests using the double-submit
+cookie pattern. The frontend reads the token from a non-httpOnly cookie
+and sends it back in the X-CSRF-Token header.
 
-Usage:
-    from shared.middleware.csrf_middleware import require_csrf
+Usage (Powertools middleware):
+    from src.lambdas.shared.middleware.csrf_middleware import require_csrf_middleware
 
-    # Apply to router for all endpoints
-    router = APIRouter(dependencies=[Depends(require_csrf)])
-
-    # Or apply to individual endpoints
-    @router.post("/endpoint", dependencies=[Depends(require_csrf)])
-    async def endpoint():
+    @router.post("/endpoint", middlewares=[require_csrf_middleware])
+    def endpoint():
         ...
-
-Feature: 1158-csrf-double-submit
 """
-
-from fastapi import HTTPException, Request
 
 from src.lambdas.shared.auth.csrf import (
     CSRF_COOKIE_NAME,
@@ -27,46 +18,55 @@ from src.lambdas.shared.auth.csrf import (
     is_csrf_exempt,
     validate_csrf_token,
 )
+from src.lambdas.shared.utils.cookie_helpers import parse_cookies
+from src.lambdas.shared.utils.event_helpers import get_header
+from src.lambdas.shared.utils.response_builder import json_response
 
 # Error code for CSRF validation failure
 CSRF_ERROR_CODE = "AUTH_019"
 
 
-async def require_csrf(request: Request) -> None:
-    """FastAPI dependency that validates CSRF tokens.
+def require_csrf_middleware(app, next_middleware):
+    """Powertools middleware that validates CSRF tokens.
 
     Extracts the CSRF token from both the cookie and the X-CSRF-Token
-    header, and validates that they match. Raises HTTPException with
-    403 status if validation fails.
+    header, and validates that they match. Returns 403 proxy response
+    on failure.
 
     Safe methods (GET, HEAD, OPTIONS, TRACE) bypass validation.
     Certain paths are exempt (refresh endpoint, OAuth callbacks).
 
     Args:
-        request: The incoming FastAPI request
+        app: Powertools resolver instance (has current_event).
+        next_middleware: Next middleware or handler in the chain.
 
-    Raises:
-        HTTPException: 403 Forbidden if CSRF validation fails
+    Returns:
+        Handler response on success, 403 error response on CSRF failure.
     """
+    event = app.current_event.raw_event
+
     # Check if request is exempt from CSRF validation
-    method = request.method
-    path = request.url.path
+    method = event.get("httpMethod", "")
+    path = event.get("path", "")
 
     if is_csrf_exempt(method, path):
-        return
+        return next_middleware(app)
 
     # Extract token from cookie
-    cookie_token = request.cookies.get(CSRF_COOKIE_NAME)
+    cookies = parse_cookies(event)
+    cookie_token = cookies.get(CSRF_COOKIE_NAME)
 
     # Extract token from header
-    header_token = request.headers.get(CSRF_HEADER_NAME)
+    header_token = get_header(event, CSRF_HEADER_NAME)
 
     # Validate tokens match
     if not validate_csrf_token(cookie_token, header_token):
-        raise HTTPException(
-            status_code=403,
-            detail={
+        return json_response(
+            403,
+            {
                 "error_code": CSRF_ERROR_CODE,
                 "message": "CSRF validation failed",
             },
         )
+
+    return next_middleware(app)

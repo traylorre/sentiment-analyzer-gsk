@@ -508,7 +508,7 @@ resource "aws_dynamodb_table" "sentiment_timeseries" {
 # Design follows AWS DynamoDB best practices [CS-001, CS-002]:
 # - Composite PK: {ticker}#{source} for partition distribution
 # - SK: {resolution}#{timestamp} for time-range queries
-# - No TTL: Historical OHLC data is permanent record
+# - TTL: Resolution-dependent expiration (daily: 90d, intraday: 5m or 90d)
 #
 # Key pattern examples:
 # - PK="AAPL#tiingo", SK="5m#2025-12-27T10:30:00Z" (5-minute candle)
@@ -540,8 +540,12 @@ resource "aws_dynamodb_table" "ohlc_cache" {
     type = "S" # String: {resolution}#{timestamp} e.g., "5m#2025-12-27T10:30:00Z"
   }
 
-  # No TTL for now - historical data is permanent
-  # TTL cleanup deferred to future work per spec 1087
+  # TTL configuration (resolution-dependent expiration)
+  # Daily: 90 days, intraday current-day: 5 minutes, intraday historical: 90 days
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
 
   # Encryption at rest (AWS-managed keys)
   server_side_encryption {

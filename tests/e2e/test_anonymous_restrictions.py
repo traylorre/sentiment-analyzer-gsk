@@ -494,7 +494,7 @@ async def test_anonymous_test_digest_may_be_restricted(
 
         if response.status_code in (401, 403):
             data = response.json()
-            # FastAPI uses "detail" for error messages, other APIs may use "error" or "message"
+            # Error responses use "detail" field for error messages
             assert (
                 "error" in data or "message" in data or "detail" in data
             ), "401/403 response should have error message"

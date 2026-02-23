@@ -369,14 +369,12 @@ export function PriceSentimentChart({
       if (isGapMarker(item)) {
         // Gap marker: add to gap info array for shading
         gapInfos.push({ index, marker: item });
-        // Add whitespace candle for gaps (lightweight-charts requires data points)
+        // Add whitespace candle for gaps - use undefined values (not NaN)
+        // lightweight-charts expects only { time } for whitespace, not NaN values
+        // See: https://tradingview.github.io/lightweight-charts/tutorials/demos/whitespace
         chartData.push({
           time: item.time as Time,
-          open: NaN,
-          high: NaN,
-          low: NaN,
-          close: NaN,
-        });
+        } as CandlestickData<Time>);
       } else {
         // Regular candle
         chartData.push({

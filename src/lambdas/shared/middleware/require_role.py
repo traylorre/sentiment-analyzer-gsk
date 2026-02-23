@@ -1,138 +1,87 @@
-"""Role-based access control decorator for FastAPI endpoints (Feature 1130).
+"""Role-based access control middleware for Lambda handlers (Feature 1130).
 
-This module provides the @require_role decorator for protecting endpoints
-based on user roles from JWT claims.
+Provides a Powertools middleware factory for protecting endpoints based on
+user roles from JWT claims.
 
-Usage:
-    from src.lambdas.shared.middleware import require_role
+Usage (Powertools middleware):
+    from src.lambdas.shared.middleware.require_role import require_role_middleware
 
-    @router.post("/admin/sessions/revoke")
-    @require_role("operator")
-    async def revoke_sessions(request: Request):
+    @router.post("/api/v2/admin/sessions/revoke",
+                 middlewares=[require_role_middleware("operator")])
+    def revoke_sessions():
         ...
 
 Security:
     - Generic error messages prevent role enumeration attacks
-    - Role validation at decoration time catches typos early
+    - Role validation at factory time catches typos early
     - Integrates with existing auth context extraction
 """
 
 from __future__ import annotations
 
-import functools
 import logging
-from collections.abc import Callable
-from typing import Any, TypeVar
-
-from fastapi import HTTPException, Request
 
 from src.lambdas.shared.auth.enums import VALID_ROLES
 from src.lambdas.shared.errors.auth_errors import InvalidRoleError
 from src.lambdas.shared.middleware.auth_middleware import extract_auth_context_typed
+from src.lambdas.shared.utils.response_builder import error_response
 
 logger = logging.getLogger(__name__)
 
-# Type variable for preserving function signatures
-F = TypeVar("F", bound=Callable[..., Any])
 
+def require_role_middleware(required_role: str):
+    """Powertools middleware factory for role-based access control.
 
-def require_role(required_role: str) -> Callable[[F], F]:
-    """Decorator factory for role-based access control.
-
-    Creates a decorator that validates the user has the specified role
-    before allowing access to the endpoint.
+    Creates a middleware function that validates the user has the specified
+    role before allowing access to the endpoint.
 
     Args:
         required_role: The role required to access the endpoint.
             Must be one of: 'anonymous', 'free', 'paid', 'operator'
 
     Returns:
-        A decorator function that wraps the endpoint handler.
+        A Powertools middleware function (app, next_middleware) -> response.
 
     Raises:
-        InvalidRoleError: At decoration time if role is not valid.
+        InvalidRoleError: At factory time if role is not valid.
             This causes app startup to fail, catching typos early.
-
-    Example:
-        @router.post("/admin/endpoint")
-        @require_role("operator")
-        async def admin_endpoint(request: Request):
-            ...
     """
-    # Validate role at decoration time (startup)
+    # Validate role at factory time (startup)
     if required_role not in VALID_ROLES:
         raise InvalidRoleError(required_role, VALID_ROLES)
 
-    def decorator(func: F) -> F:
-        @functools.wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any) -> Any:
-            # Extract request from args or kwargs
-            request: Request | None = None
+    def middleware(app, next_middleware):
+        event = app.current_event.raw_event
 
-            # Check kwargs first
-            if "request" in kwargs:
-                request = kwargs["request"]
-            else:
-                # Check positional args for Request object
-                for arg in args:
-                    if isinstance(arg, Request):
-                        request = arg
-                        break
+        # Extract auth context from raw event
+        auth_context = extract_auth_context_typed(event)
 
-            if request is None:
-                # This shouldn't happen in normal FastAPI usage
-                logger.error("require_role: No Request object found in handler args")
-                raise HTTPException(
-                    status_code=500,
-                    detail="Internal server error",
-                )
+        # Check authentication
+        if auth_context.user_id is None:
+            logger.debug(f"require_role({required_role}): No user_id, returning 401")
+            return error_response(401, "Authentication required")
 
-            # Build event dict from request for auth context extraction
-            headers_dict = dict(request.headers)
-            event = {"headers": headers_dict}
+        # Check roles claim exists
+        if auth_context.roles is None:
+            logger.debug(
+                f"require_role({required_role}): No roles claim, returning 401"
+            )
+            return error_response(401, "Invalid token structure")
 
-            # Extract auth context
-            auth_context = extract_auth_context_typed(event)
-
-            # Check authentication
-            if auth_context.user_id is None:
-                logger.debug(
-                    f"require_role({required_role}): No user_id, returning 401"
-                )
-                raise HTTPException(
-                    status_code=401,
-                    detail="Authentication required",
-                )
-
-            # Check roles claim exists
-            if auth_context.roles is None:
-                logger.debug(
-                    f"require_role({required_role}): No roles claim, returning 401"
-                )
-                raise HTTPException(
-                    status_code=401,
-                    detail="Invalid token structure",
-                )
-
-            # Check required role
-            if required_role not in auth_context.roles:
-                # SECURITY: Generic message prevents role enumeration
-                logger.debug(
-                    f"require_role({required_role}): User {auth_context.user_id[:8]}... "
-                    f"has roles {auth_context.roles}, returning 403"
-                )
-                raise HTTPException(
-                    status_code=403,
-                    detail="Access denied",
-                )
-
-            # Role check passed
+        # Check required role
+        if required_role not in auth_context.roles:
+            # SECURITY: Generic message prevents role enumeration
             logger.debug(
                 f"require_role({required_role}): User {auth_context.user_id[:8]}... "
-                f"authorized with roles {auth_context.roles}"
+                f"has roles {auth_context.roles}, returning 403"
             )
-            return await func(*args, **kwargs)
+            return error_response(403, "Access denied")
 
-        return wrapper  # type: ignore[return-value]
+        # Role check passed
+        logger.debug(
+            f"require_role({required_role}): User {auth_context.user_id[:8]}... "
+            f"authorized with roles {auth_context.roles}"
+        )
+        return next_middleware(app)
 
-    return decorator
+    return middleware

@@ -10,7 +10,7 @@ deployment issues like:
 - Environment variable issues
 
 CRITICAL DIFFERENCE from test_dashboard_preprod.py:
-- test_dashboard_preprod.py: Uses FastAPI TestClient (in-process, no Lambda)
+- test_dashboard_preprod.py: Uses direct lambda_handler invocation (in-process, no Lambda)
 - THIS FILE: Makes real HTTPS requests to deployed Lambda Function URL
 
 These tests are the LAST LINE OF DEFENSE before production deployment.
@@ -25,7 +25,7 @@ For On-Call Engineers:
 
 For Developers:
     - These tests REQUIRE the preprod environment to be deployed
-    - Tests use REAL HTTP requests (not TestClient)
+    - Tests use REAL HTTP requests (not in-process handler invocation)
     - Tests verify cold start works (tests import issues)
     - Tests cover full request/response cycle through AWS infrastructure
 """
@@ -105,10 +105,10 @@ class TestLambdaColdStart:
 
     def test_sentiment_endpoint_requires_dependencies(self, auth_headers):
         """
-        E2E: Sentiment endpoint works with all FastAPI/Pydantic dependencies.
+        E2E: Sentiment endpoint works with all handler dependencies.
 
         This test verifies:
-        - FastAPI can process requests
+        - Lambda handler can process requests
         - Pydantic validation works (uses pydantic_core)
         - DynamoDB client works
         - Response serialization works
@@ -196,7 +196,7 @@ class TestLambdaHTTPRouting:
         """
         E2E: Lambda returns 404 for non-existent endpoints.
 
-        Verifies FastAPI routing works correctly.
+        Verifies request routing works correctly.
         """
         response = requests.get(
             f"{DASHBOARD_URL}/api/nonexistent",
@@ -389,7 +389,7 @@ class TestLambdaErrorHandling:
         if response.status_code == 401:
             pytest.skip("Auth format incompatible - API v2 uses X-User-ID header")
 
-        # FastAPI returns 422 for validation errors
+        # Returns 422 for validation errors
         assert response.status_code == 422
 
     def test_malformed_json_handled_gracefully(self, auth_headers):

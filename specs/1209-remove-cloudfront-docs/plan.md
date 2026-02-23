@@ -107,7 +107,7 @@ No complexity violations - this is a straightforward documentation update.
 ### R-004: SSE Streaming Timeout Handling
 
 **Decision**: Remove CloudFront 60s timeout references. Lambda Function URLs have 15-minute timeout by default.
-**Rationale**: Lambda Web Adapter handles RESPONSE_STREAM mode with longer timeouts than CloudFront supported.
+**Rationale**: Custom runtime handles RESPONSE_STREAM mode with longer timeouts than CloudFront supported.
 **Alternatives Considered**: None - CloudFront timeout workarounds are no longer needed.
 
 ### R-005: Gap Analysis Documents Treatment

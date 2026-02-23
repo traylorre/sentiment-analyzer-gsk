@@ -1,48 +1,41 @@
 """Unit tests for global SSE stream endpoint.
 
-Tests /api/v2/stream endpoint per FR-004 and FR-014.
+Tests /api/v2/stream and /api/v2/stream/status endpoints per FR-004 and FR-014.
+
+Uses direct handler invocation for testing.
+Note: /health and /debug endpoints no longer exist and tests for them have been removed.
 """
 
+import json
 from unittest.mock import MagicMock, patch
 
-import pytest
-from fastapi.testclient import TestClient
+from src.lambdas.sse_streaming.handler import handler
+from tests.conftest import make_function_url_event, parse_streaming_response
 
 
 class TestGlobalStreamEndpoint:
-    """Tests for GET /api/v2/stream endpoint."""
+    """Tests for GET /api/v2/stream/status endpoint."""
 
-    @pytest.fixture
-    def client(self):
-        """Create test client for SSE Lambda."""
-        from src.lambdas.sse_streaming.handler import app
-
-        return TestClient(app)
-
-    def test_health_endpoint(self, client):
-        """Health endpoint should return healthy status."""
-        response = client.get("/health")
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "healthy"
-
-    def test_stream_status_endpoint(self, client):
+    def test_stream_status_endpoint(self):
         """Stream status should return connection info."""
-        response = client.get("/api/v2/stream/status")
+        event = make_function_url_event(path="/api/v2/stream/status")
+        gen = handler(event, None)
+        metadata, body = parse_streaming_response(gen)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert metadata["statusCode"] == 200
+        data = json.loads(body)
         assert "connections" in data
         assert "max_connections" in data
         assert "available" in data
         assert "uptime_seconds" in data
 
-    def test_stream_status_shows_correct_max(self, client):
+    def test_stream_status_shows_correct_max(self):
         """Stream status should show correct max connections."""
-        response = client.get("/api/v2/stream/status")
+        event = make_function_url_event(path="/api/v2/stream/status")
+        gen = handler(event, None)
+        metadata, body = parse_streaming_response(gen)
 
-        data = response.json()
+        data = json.loads(body)
         # Default is 100
         assert data["max_connections"] == 100
 
@@ -50,199 +43,248 @@ class TestGlobalStreamEndpoint:
 class TestStreamEndpointIntegration:
     """Integration tests for stream endpoint (mocked)."""
 
-    @pytest.fixture
-    def mock_polling_service(self):
-        """Mock the polling service."""
-        with patch("src.lambdas.sse_streaming.stream.PollingService") as mock:
-            instance = MagicMock()
-            mock.return_value = instance
-            yield instance
+    def test_stream_status_route_exists(self):
+        """Verify /api/v2/stream/status is handled by the handler."""
+        event = make_function_url_event(path="/api/v2/stream/status")
+        gen = handler(event, None)
+        metadata, body = parse_streaming_response(gen)
 
-    def test_stream_endpoint_exists(self):
-        """Verify stream endpoint is registered in app."""
-        from src.lambdas.sse_streaming.handler import app
+        # Should return 200, not 404
+        assert metadata["statusCode"] == 200
 
-        routes = [route.path for route in app.routes]
-        # Stream endpoint will be added in T015
-        # For now, verify base routes exist
-        assert "/health" in routes
-        assert "/api/v2/stream/status" in routes
+    def test_stream_route_exists(self):
+        """Verify /api/v2/stream is handled by the handler."""
+        # Mock connection_manager to return None so we get a deterministic 503
+        mock_mgr = MagicMock()
+        mock_mgr.acquire.return_value = None
+        mock_mgr.max_connections = 100
+
+        with patch("src.lambdas.sse_streaming.handler.connection_manager", mock_mgr):
+            with patch("src.lambdas.sse_streaming.handler.metrics_emitter"):
+                event = make_function_url_event(path="/api/v2/stream")
+                gen = handler(event, None)
+                metadata, body = parse_streaming_response(gen)
+
+                # 503 (limit reached) means the route exists and was matched
+                assert metadata["statusCode"] == 503
 
 
 class TestGlobalStreamConnectionLimit:
     """Tests for connection limit handling on global stream."""
 
-    @pytest.fixture
-    def client(self):
-        """Create test client for SSE Lambda."""
-        from src.lambdas.sse_streaming.handler import app
-
-        return TestClient(app)
-
-    def test_global_stream_returns_503_when_limit_reached(self, client):
+    def test_global_stream_returns_503_when_limit_reached(self):
         """Test that global stream returns 503 when connection limit reached."""
-        from src.lambdas.sse_streaming.handler import connection_manager
+        mock_mgr = MagicMock()
+        mock_mgr.acquire.return_value = None
+        mock_mgr.max_connections = 100
 
-        # Mock connection_manager.acquire to return None (limit reached)
-        with patch.object(connection_manager, "acquire", return_value=None):
-            response = client.get("/api/v2/stream")
+        with patch("src.lambdas.sse_streaming.handler.connection_manager", mock_mgr):
+            with patch("src.lambdas.sse_streaming.handler.metrics_emitter"):
+                event = make_function_url_event(path="/api/v2/stream")
+                gen = handler(event, None)
+                metadata, body = parse_streaming_response(gen)
 
-            assert response.status_code == 503
-            data = response.json()
-            assert "Connection limit reached" in data["detail"]
-            assert "max_connections" in data
-            assert data["retry_after"] == 30
-            assert response.headers.get("Retry-After") == "30"
+                assert metadata["statusCode"] == 503
+                data = json.loads(body)
+                assert "Connection limit reached" in data["detail"]
+                assert metadata["headers"].get("Retry-After") == "30"
 
-    def test_global_stream_emits_failure_metric_on_limit(self, client):
+    def test_global_stream_emits_failure_metric_on_limit(self):
         """Test that connection limit emits failure metric."""
-        from src.lambdas.sse_streaming.handler import (
-            connection_manager,
-            metrics_emitter,
-        )
+        mock_mgr = MagicMock()
+        mock_mgr.acquire.return_value = None
+        mock_mgr.max_connections = 100
 
-        with patch.object(connection_manager, "acquire", return_value=None):
-            with patch.object(
-                metrics_emitter, "emit_connection_acquire_failure"
-            ) as mock_emit:
-                client.get("/api/v2/stream")
+        mock_emitter = MagicMock()
 
-                mock_emit.assert_called_once()
+        with (
+            patch("src.lambdas.sse_streaming.handler.connection_manager", mock_mgr),
+            patch("src.lambdas.sse_streaming.handler.metrics_emitter", mock_emitter),
+        ):
+            event = make_function_url_event(path="/api/v2/stream")
+            gen = handler(event, None)
+            # Consume the generator to trigger the metric emission
+            list(gen)
+
+            mock_emitter.emit_connection_acquire_failure.assert_called_once()
 
 
 class TestConfigStreamConnectionLimit:
     """Tests for connection limit handling on config stream."""
 
-    @pytest.fixture
-    def client(self):
-        """Create test client for SSE Lambda."""
-        from src.lambdas.sse_streaming.handler import app
-
-        return TestClient(app)
-
-    def test_config_stream_returns_503_when_limit_reached(self, client):
+    def test_config_stream_returns_503_when_limit_reached(self):
         """Test that config stream returns 503 when connection limit reached."""
-        from src.lambdas.sse_streaming.handler import (
-            config_lookup_service,
-            connection_manager,
-        )
+        mock_lookup = MagicMock()
+        mock_lookup.validate_user_access.return_value = (True, ["AAPL"])
 
-        # Mock successful auth and config lookup, but connection limit reached
-        with patch.object(
-            config_lookup_service, "validate_user_access", return_value=(True, ["AAPL"])
+        mock_mgr = MagicMock()
+        mock_mgr.acquire.return_value = None
+        mock_mgr.max_connections = 100
+
+        with (
+            patch(
+                "src.lambdas.sse_streaming.handler.config_lookup_service", mock_lookup
+            ),
+            patch("src.lambdas.sse_streaming.handler.connection_manager", mock_mgr),
+            patch("src.lambdas.sse_streaming.handler.metrics_emitter"),
         ):
-            with patch.object(connection_manager, "acquire", return_value=None):
-                response = client.get(
-                    "/api/v2/configurations/test-config/stream",
-                    headers={"X-User-ID": "user-123"},
-                )
+            event = make_function_url_event(
+                path="/api/v2/configurations/test-config/stream",
+                headers={"X-User-ID": "user-123"},
+            )
+            gen = handler(event, None)
+            metadata, body = parse_streaming_response(gen)
 
-                assert response.status_code == 503
-                data = response.json()
-                assert "Connection limit reached" in data["detail"]
+            assert metadata["statusCode"] == 503
+            data = json.loads(body)
+            assert "Connection limit reached" in data["detail"]
 
 
 class TestGlobalExceptionHandler:
-    """Tests for global exception handler."""
+    """Tests for unhandled exception handling in the handler."""
 
-    @pytest.fixture
-    def client(self):
-        """Create test client for SSE Lambda."""
-        from src.lambdas.sse_streaming.handler import app
-
-        return TestClient(app, raise_server_exceptions=False)
-
-    def test_exception_handler_returns_500(self, client):
+    def test_exception_handler_returns_500(self):
         """Test that unhandled exceptions return 500."""
-        from src.lambdas.sse_streaming.handler import connection_manager
+        mock_mgr = MagicMock()
+        mock_mgr.get_status.side_effect = RuntimeError("Test error")
 
-        # Cause an exception in the stream status endpoint
-        with patch.object(
-            connection_manager, "get_status", side_effect=RuntimeError("Test error")
-        ):
-            response = client.get("/api/v2/stream/status")
+        with patch("src.lambdas.sse_streaming.handler.connection_manager", mock_mgr):
+            event = make_function_url_event(path="/api/v2/stream/status")
+            gen = handler(event, None)
+            metadata, body = parse_streaming_response(gen)
 
-            assert response.status_code == 500
-            data = response.json()
+            assert metadata["statusCode"] == 500
+            data = json.loads(body)
             assert data["detail"] == "Internal server error"
 
 
 class TestGlobalStreamTickersQueryParam:
     """Tests for tickers query parameter on /api/v2/stream (Phase 6 T051)."""
 
-    @pytest.fixture
-    def client(self):
-        """Create test client for SSE Lambda."""
-        from src.lambdas.sse_streaming.handler import app
-
-        return TestClient(app)
-
-    def test_stream_accepts_tickers_param(self, client):
+    def test_stream_accepts_tickers_param(self):
         """Test that stream endpoint accepts tickers query param."""
-        from src.lambdas.sse_streaming.handler import connection_manager
+        mock_mgr = MagicMock()
+        mock_mgr.acquire.return_value = None
+        mock_mgr.max_connections = 100
 
-        # Mock to verify param is parsed
-        with patch.object(connection_manager, "acquire", return_value=None):
-            response = client.get("/api/v2/stream?tickers=AAPL,MSFT,GOOGL")
-            # 503 expected since acquire returns None
-            assert response.status_code == 503
+        with patch("src.lambdas.sse_streaming.handler.connection_manager", mock_mgr):
+            with patch("src.lambdas.sse_streaming.handler.metrics_emitter"):
+                event = make_function_url_event(
+                    path="/api/v2/stream",
+                    query_params={"tickers": "AAPL,MSFT,GOOGL"},
+                )
+                gen = handler(event, None)
+                metadata, body = parse_streaming_response(gen)
 
-    def test_stream_passes_ticker_filters_to_connection_manager(self, client):
+                # 503 expected since acquire returns None
+                assert metadata["statusCode"] == 503
+
+    def test_stream_passes_ticker_filters_to_connection_manager(self):
         """Test that ticker filters are passed to connection_manager.acquire()."""
-        from src.lambdas.sse_streaming.handler import connection_manager
+        mock_mgr = MagicMock()
+        mock_mgr.acquire.return_value = None
+        mock_mgr.max_connections = 100
 
-        # Capture the kwargs passed to acquire
-        with patch.object(connection_manager, "acquire", return_value=None) as mock_acq:
-            client.get("/api/v2/stream?tickers=AAPL,MSFT")
-            mock_acq.assert_called_once()
-            kwargs = mock_acq.call_args.kwargs
-            assert kwargs.get("ticker_filters") == ["AAPL", "MSFT"]
+        with patch("src.lambdas.sse_streaming.handler.connection_manager", mock_mgr):
+            with patch("src.lambdas.sse_streaming.handler.metrics_emitter"):
+                event = make_function_url_event(
+                    path="/api/v2/stream",
+                    query_params={"tickers": "AAPL,MSFT"},
+                )
+                gen = handler(event, None)
+                list(gen)  # Consume generator
 
-    def test_stream_ticker_filters_case_insensitive(self, client):
+                mock_mgr.acquire.assert_called_once()
+                kwargs = mock_mgr.acquire.call_args.kwargs
+                assert kwargs.get("ticker_filters") == ["AAPL", "MSFT"]
+
+    def test_stream_ticker_filters_case_insensitive(self):
         """Test that ticker filters are normalized to uppercase."""
-        from src.lambdas.sse_streaming.handler import connection_manager
+        mock_mgr = MagicMock()
+        mock_mgr.acquire.return_value = None
+        mock_mgr.max_connections = 100
 
-        with patch.object(connection_manager, "acquire", return_value=None) as mock_acq:
-            client.get("/api/v2/stream?tickers=aapl,Msft,googl")
-            kwargs = mock_acq.call_args.kwargs
-            # All should be uppercase
-            assert kwargs.get("ticker_filters") == ["AAPL", "MSFT", "GOOGL"]
+        with patch("src.lambdas.sse_streaming.handler.connection_manager", mock_mgr):
+            with patch("src.lambdas.sse_streaming.handler.metrics_emitter"):
+                event = make_function_url_event(
+                    path="/api/v2/stream",
+                    query_params={"tickers": "aapl,Msft,googl"},
+                )
+                gen = handler(event, None)
+                list(gen)  # Consume generator
 
-    def test_stream_empty_tickers_param_means_all(self, client):
+                kwargs = mock_mgr.acquire.call_args.kwargs
+                # All should be uppercase
+                assert kwargs.get("ticker_filters") == ["AAPL", "MSFT", "GOOGL"]
+
+    def test_stream_empty_tickers_param_means_all(self):
         """Test that empty/missing tickers param means all tickers."""
-        from src.lambdas.sse_streaming.handler import connection_manager
+        mock_mgr = MagicMock()
+        mock_mgr.acquire.return_value = None
+        mock_mgr.max_connections = 100
 
-        with patch.object(connection_manager, "acquire", return_value=None) as mock_acq:
-            client.get("/api/v2/stream")  # No tickers param
-            kwargs = mock_acq.call_args.kwargs
-            assert kwargs.get("ticker_filters") == []  # Empty = all
+        with patch("src.lambdas.sse_streaming.handler.connection_manager", mock_mgr):
+            with patch("src.lambdas.sse_streaming.handler.metrics_emitter"):
+                event = make_function_url_event(path="/api/v2/stream")  # No tickers
+                gen = handler(event, None)
+                list(gen)  # Consume generator
 
-    def test_stream_tickers_with_resolutions(self, client):
+                kwargs = mock_mgr.acquire.call_args.kwargs
+                assert kwargs.get("ticker_filters") == []  # Empty = all
+
+    def test_stream_tickers_with_resolutions(self):
         """Test that tickers and resolutions can be used together."""
-        from src.lambdas.sse_streaming.handler import connection_manager
+        mock_mgr = MagicMock()
+        mock_mgr.acquire.return_value = None
+        mock_mgr.max_connections = 100
 
-        with patch.object(connection_manager, "acquire", return_value=None) as mock_acq:
-            client.get("/api/v2/stream?tickers=AAPL,MSFT&resolutions=1m,5m")
-            kwargs = mock_acq.call_args.kwargs
-            assert kwargs.get("ticker_filters") == ["AAPL", "MSFT"]
-            assert kwargs.get("resolution_filters") == ["1m", "5m"]
+        with patch("src.lambdas.sse_streaming.handler.connection_manager", mock_mgr):
+            with patch("src.lambdas.sse_streaming.handler.metrics_emitter"):
+                event = make_function_url_event(
+                    path="/api/v2/stream",
+                    query_params={"tickers": "AAPL,MSFT", "resolutions": "1m,5m"},
+                )
+                gen = handler(event, None)
+                list(gen)  # Consume generator
 
-    def test_stream_tickers_whitespace_handling(self, client):
+                kwargs = mock_mgr.acquire.call_args.kwargs
+                assert kwargs.get("ticker_filters") == ["AAPL", "MSFT"]
+                assert kwargs.get("resolution_filters") == ["1m", "5m"]
+
+    def test_stream_tickers_whitespace_handling(self):
         """Test that whitespace in tickers is handled correctly."""
-        from src.lambdas.sse_streaming.handler import connection_manager
+        mock_mgr = MagicMock()
+        mock_mgr.acquire.return_value = None
+        mock_mgr.max_connections = 100
 
-        with patch.object(connection_manager, "acquire", return_value=None) as mock_acq:
-            client.get("/api/v2/stream?tickers=%20AAPL%20,%20MSFT%20")
-            kwargs = mock_acq.call_args.kwargs
-            # Whitespace should be stripped
-            assert kwargs.get("ticker_filters") == ["AAPL", "MSFT"]
+        with patch("src.lambdas.sse_streaming.handler.connection_manager", mock_mgr):
+            with patch("src.lambdas.sse_streaming.handler.metrics_emitter"):
+                event = make_function_url_event(
+                    path="/api/v2/stream",
+                    query_params={"tickers": " AAPL , MSFT "},
+                )
+                gen = handler(event, None)
+                list(gen)  # Consume generator
 
-    def test_stream_tickers_empty_items_filtered(self, client):
+                kwargs = mock_mgr.acquire.call_args.kwargs
+                # Whitespace should be stripped
+                assert kwargs.get("ticker_filters") == ["AAPL", "MSFT"]
+
+    def test_stream_tickers_empty_items_filtered(self):
         """Test that empty ticker items are filtered out."""
-        from src.lambdas.sse_streaming.handler import connection_manager
+        mock_mgr = MagicMock()
+        mock_mgr.acquire.return_value = None
+        mock_mgr.max_connections = 100
 
-        with patch.object(connection_manager, "acquire", return_value=None) as mock_acq:
-            client.get("/api/v2/stream?tickers=AAPL,,MSFT,")
-            kwargs = mock_acq.call_args.kwargs
-            # Empty items should be excluded
-            assert kwargs.get("ticker_filters") == ["AAPL", "MSFT"]
+        with patch("src.lambdas.sse_streaming.handler.connection_manager", mock_mgr):
+            with patch("src.lambdas.sse_streaming.handler.metrics_emitter"):
+                event = make_function_url_event(
+                    path="/api/v2/stream",
+                    query_params={"tickers": "AAPL,,MSFT,"},
+                )
+                gen = handler(event, None)
+                list(gen)  # Consume generator
+
+                kwargs = mock_mgr.acquire.call_args.kwargs
+                # Empty items should be excluded
+                assert kwargs.get("ticker_filters") == ["AAPL", "MSFT"]

@@ -7,6 +7,7 @@ Implements real-time event streaming for the dashboard using SSE protocol.
 Endpoints:
 - GET /api/v2/stream - Global metrics stream (FR-001)
 - GET /api/v2/configurations/{config_id}/stream - Config-specific stream (FR-002)
+- GET /api/v2/stream/status - Connection status
 
 For On-Call Engineers:
     If dashboard shows "Disconnected":
@@ -18,9 +19,9 @@ For On-Call Engineers:
     See SC-001 in success criteria for connection timing requirements.
 
 For Developers:
-    - Uses sse-starlette library for SSE protocol compliance
+    - Uses Powertools Router for endpoint registration
     - ConnectionManager tracks active connections (thread-safe)
-    - Heartbeat events sent every 30 seconds to keep connections alive
+    - In BUFFERED invoke mode, returns a single SSE snapshot per invocation
     - Event IDs support reconnection via Last-Event-ID header
 
 Security Notes:
@@ -29,23 +30,23 @@ Security Notes:
     - No raw content exposed in events
 """
 
-import asyncio
 import json
 import logging
 import os
 import threading
 import uuid
-from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse
+import orjson
+from aws_lambda_powertools.event_handler import Response
+from aws_lambda_powertools.event_handler.router import Router
 from pydantic import BaseModel, Field
-from sse_starlette.sse import EventSourceResponse
 
 from src.lambdas.shared.dynamodb import get_table
 from src.lambdas.shared.logging_utils import get_safe_error_info
+from src.lambdas.shared.middleware.auth_middleware import extract_auth_context
+from src.lambdas.shared.utils.event_helpers import get_header
 
 # Structured logging
 logger = logging.getLogger(__name__)
@@ -60,7 +61,7 @@ MAX_CONNECTIONS = int(os.environ.get("SSE_MAX_CONNECTIONS", "100"))
 METRICS_INTERVAL = int(os.environ.get("SSE_METRICS_INTERVAL", "60"))  # seconds
 
 # Create router
-router = APIRouter(prefix="/api/v2", tags=["streaming"])
+router = Router()
 
 
 # =============================================================================
@@ -176,96 +177,7 @@ def _generate_event_id() -> str:
     return f"evt_{uuid.uuid4().hex[:12]}"
 
 
-async def create_event_generator(
-    heartbeat_interval: int = HEARTBEAT_INTERVAL,
-    metrics_interval: int = METRICS_INTERVAL,
-    last_event_id: str | None = None,
-    config_id: str | None = None,
-    tickers: list[str] | None = None,
-) -> AsyncGenerator[dict[str, Any]]:
-    """
-    Create an async generator that yields SSE events.
-
-    Args:
-        heartbeat_interval: Seconds between heartbeat events (FR-004)
-        metrics_interval: Seconds between metrics events
-        last_event_id: Client's last event ID for reconnection (FR-005)
-        config_id: Optional config ID for filtered events
-        tickers: Optional ticker filter for config-specific streams
-
-    Yields:
-        SSE event dicts with 'event', 'id', and 'data' keys
-    """
-    event_counter = 0
-    last_metrics_time = 0.0
-    import time
-
-    # Log reconnection if Last-Event-ID provided
-    if last_event_id:
-        logger.info(
-            "SSE reconnection with Last-Event-ID",
-            extra={"last_event_id": last_event_id},
-        )
-
-    try:
-        while True:
-            current_time = time.time()
-            event_counter += 1
-
-            # Emit metrics event at configured interval
-            if current_time - last_metrics_time >= metrics_interval:
-                last_metrics_time = current_time
-
-                # Get metrics from database
-                try:
-                    metrics_data = await _get_metrics_data()
-                    event_id = _generate_event_id()
-
-                    yield {
-                        "event": "metrics",
-                        "id": event_id,
-                        "data": json.dumps(
-                            metrics_data.model_dump(mode="json"),
-                            default=str,
-                        ),
-                    }
-                except Exception as e:
-                    logger.warning(
-                        "Failed to get metrics for SSE",
-                        extra=get_safe_error_info(e),
-                    )
-
-            # Emit heartbeat event
-            heartbeat_data = HeartbeatEventData(
-                timestamp=datetime.now(UTC),
-                connections=connection_manager.count,
-            )
-            event_id = _generate_event_id()
-
-            yield {
-                "event": "heartbeat",
-                "id": event_id,
-                "data": json.dumps(
-                    heartbeat_data.model_dump(mode="json"),
-                    default=str,
-                ),
-            }
-
-            # Wait for next heartbeat interval
-            await asyncio.sleep(heartbeat_interval)
-
-    except asyncio.CancelledError:
-        logger.info("SSE event generator cancelled")
-        raise
-    except Exception as e:
-        logger.error(
-            "SSE event generator error",
-            extra=get_safe_error_info(e),
-        )
-        raise
-
-
-async def _get_metrics_data() -> MetricsEventData:
+def _get_metrics_data() -> MetricsEventData:
     """
     Fetch current metrics from DynamoDB.
 
@@ -287,7 +199,7 @@ async def _get_metrics_data() -> MetricsEventData:
                 by_tag=metrics.get("by_tag", {}),
                 rate_last_hour=metrics.get("rate_last_hour", 0),
                 rate_last_24h=metrics.get("rate_last_24h", 0),
-                timestamp=datetime.now(UTC),
+                origin_timestamp=datetime.now(UTC),
             )
     except Exception as e:
         logger.warning(
@@ -299,58 +211,107 @@ async def _get_metrics_data() -> MetricsEventData:
     return MetricsEventData()
 
 
+def _build_sse_snapshot(last_event_id: str | None = None) -> str:
+    """Build a single SSE snapshot containing metrics + heartbeat events.
+
+    In BUFFERED invoke mode, Lambda returns a complete response per invocation.
+    This function generates a snapshot of current state as SSE-formatted text.
+
+    Args:
+        last_event_id: Client's last event ID for reconnection (FR-005)
+
+    Returns:
+        SSE-formatted text string with metrics and heartbeat events
+    """
+    events: list[str] = []
+
+    # Log reconnection if Last-Event-ID provided
+    if last_event_id:
+        logger.info(
+            "SSE reconnection with Last-Event-ID",
+            extra={"last_event_id": last_event_id},
+        )
+
+    # Emit metrics event
+    try:
+        metrics_data = _get_metrics_data()
+        event_id = _generate_event_id()
+        data = json.dumps(metrics_data.model_dump(mode="json"), default=str)
+        events.append(f"event: metrics\nid: {event_id}\ndata: {data}\n\n")
+    except Exception as e:
+        logger.warning(
+            "Failed to get metrics for SSE",
+            extra=get_safe_error_info(e),
+        )
+
+    # Emit heartbeat event
+    heartbeat_data = HeartbeatEventData(
+        origin_timestamp=datetime.now(UTC),
+        connections=connection_manager.count,
+    )
+    event_id = _generate_event_id()
+    data = json.dumps(heartbeat_data.model_dump(mode="json"), default=str)
+    events.append(f"event: heartbeat\nid: {event_id}\ndata: {data}\n\n")
+
+    return "".join(events)
+
+
 # =============================================================================
 # SSE Endpoints (FR-001, FR-002, FR-003)
 # =============================================================================
 
 
-@router.get("/stream")
-async def stream_global_metrics(
-    request: Request,
-) -> EventSourceResponse:
+@router.get("/api/v2/stream")
+def stream_global_metrics() -> Response:
     """
     Global metrics stream for dashboard real-time updates (FR-001).
 
-    Returns SSE stream with:
-    - heartbeat events every 30 seconds
-    - metrics events every 60 seconds
+    Returns SSE snapshot with:
+    - metrics event with current dashboard data
+    - heartbeat event with connection info
 
     Headers:
         Last-Event-ID: Optional - resume from specific event
 
     Returns:
-        EventSourceResponse with text/event-stream content type (FR-003)
+        Response with text/event-stream content type (FR-003)
 
     Raises:
-        HTTPException 503: Connection limit reached (FR-015)
+        503: Connection limit reached (FR-015)
     """
     # Check connection limit
     if not connection_manager.acquire():
-        raise HTTPException(
+        return Response(
             status_code=503,
-            detail="Maximum connections reached. Please try again later.",
+            content_type="application/json",
+            body=orjson.dumps(
+                {"detail": "Maximum connections reached. Please try again later."}
+            ).decode(),
         )
 
-    # Extract Last-Event-ID for reconnection (FR-005)
-    last_event_id = request.headers.get("Last-Event-ID")
+    try:
+        # Extract Last-Event-ID for reconnection (FR-005)
+        event = router.current_event.raw_event
+        last_event_id = get_header(event, "Last-Event-ID")
 
-    async def event_generator():
-        try:
-            async for event in create_event_generator(
-                last_event_id=last_event_id,
-            ):
-                yield event
-        finally:
-            connection_manager.release()
+        sse_body = _build_sse_snapshot(last_event_id=last_event_id)
 
-    return EventSourceResponse(event_generator())
+        return Response(
+            status_code=200,
+            content_type="text/event-stream",
+            body=sse_body,
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+    finally:
+        connection_manager.release()
 
 
-@router.get("/configurations/{config_id}/stream")
-async def stream_config_events(
-    config_id: str,
-    request: Request,
-) -> EventSourceResponse:
+@router.get("/api/v2/configurations/<config_id>/stream")
+def stream_config_events(config_id: str) -> Response:
     """
     Configuration-specific event stream (FR-002).
 
@@ -364,24 +325,24 @@ async def stream_config_events(
         Last-Event-ID: Optional - resume from specific event
 
     Returns:
-        EventSourceResponse with filtered events for configuration
+        Response with filtered events for configuration
 
     Raises:
-        HTTPException 401: Missing authentication (FR-007)
-        HTTPException 404: Configuration not found (FR-008)
-        HTTPException 503: Connection limit reached (FR-015)
+        401: Missing authentication (FR-007)
+        404: Configuration not found (FR-008)
+        503: Connection limit reached (FR-015)
     """
-    # Import auth helper from router_v2
-    from src.lambdas.dashboard.router_v2 import get_user_id_from_request
+    event = router.current_event.raw_event
 
     # Authenticate user (FR-006, FR-007)
-    try:
-        user_id = get_user_id_from_request(request)
-    except HTTPException as e:
-        raise HTTPException(
+    auth_context = extract_auth_context(event)
+    user_id = auth_context.get("user_id")
+    if not user_id:
+        return Response(
             status_code=401,
-            detail="Missing user identification",
-        ) from e
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Missing user identification"}).decode(),
+        )
 
     # Validate configuration exists (FR-008)
     if SENTIMENTS_TABLE:
@@ -394,38 +355,40 @@ async def stream_config_events(
             config_id=config_id,
         )
         if config is None or isinstance(config, config_service.ErrorResponse):
-            raise HTTPException(
+            return Response(
                 status_code=404,
-                detail="Configuration not found",
+                content_type="application/json",
+                body=orjson.dumps({"detail": "Configuration not found"}).decode(),
             )
-
-        # Extract tickers from configuration
-        tickers = [t.symbol for t in config.tickers]
-    else:
-        tickers = []
 
     # Check connection limit
     if not connection_manager.acquire():
-        raise HTTPException(
+        return Response(
             status_code=503,
-            detail="Maximum connections reached. Please try again later.",
+            content_type="application/json",
+            body=orjson.dumps(
+                {"detail": "Maximum connections reached. Please try again later."}
+            ).decode(),
         )
 
-    # Extract Last-Event-ID for reconnection (FR-005)
-    last_event_id = request.headers.get("Last-Event-ID")
+    try:
+        # Extract Last-Event-ID for reconnection (FR-005)
+        last_event_id = get_header(event, "Last-Event-ID")
 
-    async def event_generator():
-        try:
-            async for event in create_event_generator(
-                last_event_id=last_event_id,
-                config_id=config_id,
-                tickers=tickers,
-            ):
-                yield event
-        finally:
-            connection_manager.release()
+        sse_body = _build_sse_snapshot(last_event_id=last_event_id)
 
-    return EventSourceResponse(event_generator())
+        return Response(
+            status_code=200,
+            content_type="text/event-stream",
+            body=sse_body,
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+    finally:
+        connection_manager.release()
 
 
 # =============================================================================
@@ -433,18 +396,23 @@ async def stream_config_events(
 # =============================================================================
 
 
-@router.get("/stream/status")
-async def get_stream_status() -> JSONResponse:
+@router.get("/api/v2/stream/status")
+def get_stream_status() -> Response:
     """
     Get current SSE connection status.
 
     Returns:
         JSON with connection count and limit
     """
-    return JSONResponse(
-        {
-            "connections": connection_manager.count,
-            "max_connections": connection_manager.max_connections,
-            "available": connection_manager.max_connections - connection_manager.count,
-        }
+    return Response(
+        status_code=200,
+        content_type="application/json",
+        body=orjson.dumps(
+            {
+                "connections": connection_manager.count,
+                "max_connections": connection_manager.max_connections,
+                "available": connection_manager.max_connections
+                - connection_manager.count,
+            }
+        ).decode(),
     )

@@ -30,14 +30,33 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
   ],
-  // Only start local dev server when testing locally (not against deployed environment)
+  // Only start local servers when testing locally (not against deployed environment)
+  // For remote testing (CI), the frontend is already deployed with API configured
   ...(isRemote
     ? {}
     : {
-        webServer: {
-          command: 'npm run dev',
-          url: 'http://localhost:3000',
-          reuseExistingServer: !process.env.CI,
-        },
+        // When webServer is an array, baseURL must be explicitly set (already done above)
+        webServer: [
+          {
+            // Backend API server with mock DynamoDB
+            // Provides ticker search, session auth, and other API endpoints
+            // Uses the project's Python venv for dependencies
+            command: 'cd .. && .venv/bin/python scripts/run-local-api.py',
+            // Use API index endpoint for readiness check (returns 200 always)
+            // /health returns 503 with mock DynamoDB, but API is still functional
+            url: 'http://localhost:8000/api',
+            reuseExistingServer: !process.env.CI,
+            timeout: 30000,
+            stdout: 'pipe',
+            stderr: 'pipe',
+          },
+          {
+            // Next.js frontend dev server
+            command: 'npm run dev',
+            url: 'http://localhost:3000',
+            reuseExistingServer: !process.env.CI,
+            timeout: 60000,
+          },
+        ],
       }),
 });

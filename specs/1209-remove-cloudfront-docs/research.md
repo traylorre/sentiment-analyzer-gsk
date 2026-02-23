@@ -77,7 +77,7 @@ CloudFront was removed from the sentiment-analyzer-gsk infrastructure in Feature
 **Evidence**:
 - CloudFront had 60-second origin timeout (required keepalive workarounds)
 - Lambda Function URLs support up to 15-minute timeout by default
-- Lambda Web Adapter handles RESPONSE_STREAM mode natively
+- Custom runtime handles RESPONSE_STREAM mode natively
 - Feature 1207 removed CloudFront timeout workaround code
 
 **Decision**: Remove CloudFront 60s timeout references. Document Lambda Function URL 15-minute default.

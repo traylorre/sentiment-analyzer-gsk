@@ -8,7 +8,9 @@ import os
 from unittest.mock import patch
 
 import pytest
-from starlette.testclient import TestClient
+
+from src.lambdas.dashboard.handler import lambda_handler
+from tests.conftest import make_event
 
 
 class TestServeIndex:
@@ -21,51 +23,56 @@ class TestServeIndex:
         os.environ.setdefault("ENVIRONMENT", "test")
         yield
 
-    def test_serves_index_html(self):
+    def test_serves_index_html(self, mock_lambda_context):
         """Serves index.html as static file."""
-        from src.lambdas.dashboard.handler import app
+        response = lambda_handler(
+            make_event(method="GET", path="/"),
+            mock_lambda_context,
+        )
 
-        client = TestClient(app)
-        response = client.get("/")
+        assert response["statusCode"] == 200
 
-        assert response.status_code == 200
-
-    def test_no_api_key_injection(self):
+    def test_no_api_key_injection(self, mock_lambda_context):
         """Feature 1039: No API key injection - frontend uses session auth."""
         with patch.dict(os.environ, {"API_KEY": "test-api-key-12345"}):
-            from src.lambdas.dashboard.handler import app
+            response = lambda_handler(
+                make_event(method="GET", path="/"),
+                mock_lambda_context,
+            )
 
-            client = TestClient(app)
-            response = client.get("/")
-
-            assert response.status_code == 200
+            assert response["statusCode"] == 200
             # API key injection removed in Feature 1039
-            assert "window.DASHBOARD_API_KEY" not in response.text
-            assert "test-api-key-12345" not in response.text
+            assert "window.DASHBOARD_API_KEY" not in response["body"]
+            assert "test-api-key-12345" not in response["body"]
 
-    def test_html_structure_preserved(self):
+    def test_html_structure_preserved(self, mock_lambda_context):
         """HTML structure is preserved when serving static file."""
-        from src.lambdas.dashboard.handler import app
+        response = lambda_handler(
+            make_event(method="GET", path="/"),
+            mock_lambda_context,
+        )
 
-        client = TestClient(app)
-        response = client.get("/")
-
-        assert response.status_code == 200
+        assert response["statusCode"] == 200
+        body = response["body"]
         # Verify basic HTML structure elements exist
-        assert "<!DOCTYPE html>" in response.text
-        assert "<html" in response.text
-        assert "</html>" in response.text
-        assert "<head>" in response.text
-        assert "</head>" in response.text
-        assert "<body>" in response.text
-        assert "</body>" in response.text
+        assert "<!DOCTYPE html>" in body
+        assert "<html" in body
+        assert "</html>" in body
+        assert "<head>" in body
+        assert "</head>" in body
+        assert "<body>" in body
+        assert "</body>" in body
 
-    def test_returns_html_content_type(self):
+    def test_returns_html_content_type(self, mock_lambda_context):
         """Response has correct content type."""
-        from src.lambdas.dashboard.handler import app
+        response = lambda_handler(
+            make_event(method="GET", path="/"),
+            mock_lambda_context,
+        )
 
-        client = TestClient(app)
-        response = client.get("/")
-
-        assert response.status_code == 200
-        assert "text/html" in response.headers.get("content-type", "")
+        assert response["statusCode"] == 200
+        # Powertools puts Content-Type in multiValueHeaders
+        multi_headers = response.get("multiValueHeaders", {})
+        content_type_list = multi_headers.get("Content-Type", [])
+        content_type = content_type_list[0] if content_type_list else ""
+        assert "text/html" in content_type

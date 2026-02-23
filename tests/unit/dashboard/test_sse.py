@@ -11,19 +11,21 @@ Tests cover:
 
 import json
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
+from src.lambdas.dashboard.handler import lambda_handler
 from src.lambdas.dashboard.sse import (
     ConnectionManager,
     HeartbeatEventData,
     MetricsEventData,
     NewItemEventData,
+    _build_sse_snapshot,
     _generate_event_id,
     connection_manager,
-    create_event_generator,
 )
+from tests.conftest import make_event
 
 # =============================================================================
 # ConnectionManager Tests (FR-015, FR-016, FR-017)
@@ -209,51 +211,40 @@ class TestEventGeneration:
         ids = [_generate_event_id() for _ in range(100)]
         assert len(set(ids)) == 100
 
-    @pytest.mark.asyncio
-    async def test_create_event_generator_yields_heartbeat(self):
-        """Event generator yields heartbeat events (FR-004)."""
+    def test_build_sse_snapshot_contains_metrics_and_heartbeat(self):
+        """SSE snapshot contains metrics and heartbeat events (FR-004)."""
         with patch(
             "src.lambdas.dashboard.sse._get_metrics_data",
-            new_callable=AsyncMock,
             return_value=MetricsEventData(),
         ):
-            gen = create_event_generator(heartbeat_interval=0.1, metrics_interval=0.1)
+            snapshot = _build_sse_snapshot()
 
-            # Get first event
-            event = await gen.__anext__()
+            # Should contain both event types
+            assert "event: metrics" in snapshot
+            assert "event: heartbeat" in snapshot
 
-            # Should be either metrics or heartbeat
-            assert event["event"] in ("metrics", "heartbeat")
-            assert "id" in event
-            assert event["id"].startswith("evt_")
-            assert "data" in event
+            # Should contain event IDs
+            assert "id: evt_" in snapshot
 
-            # Parse data as JSON
-            data = json.loads(event["data"])
-            assert "origin_timestamp" in data
+            # Parse the metrics data line
+            for line in snapshot.split("\n"):
+                if line.startswith("data: ") and "origin_timestamp" in line:
+                    data = json.loads(line[6:])
+                    assert "origin_timestamp" in data
+                    break
+            else:
+                pytest.fail("No data line with origin_timestamp found")
 
-            # Cancel generator
-            await gen.aclose()
-
-    @pytest.mark.asyncio
-    async def test_create_event_generator_with_last_event_id(self):
-        """Event generator accepts Last-Event-ID for reconnection (FR-005)."""
+    def test_build_sse_snapshot_with_last_event_id(self):
+        """SSE snapshot accepts Last-Event-ID for reconnection (FR-005)."""
         with patch(
             "src.lambdas.dashboard.sse._get_metrics_data",
-            new_callable=AsyncMock,
             return_value=MetricsEventData(),
         ):
-            gen = create_event_generator(
-                heartbeat_interval=0.1,
-                metrics_interval=0.1,
-                last_event_id="evt_abc123",
-            )
-
             # Should not raise - just accept the ID
-            event = await gen.__anext__()
-            assert event is not None
-
-            await gen.aclose()
+            snapshot = _build_sse_snapshot(last_event_id="evt_abc123")
+            assert snapshot is not None
+            assert "event: metrics" in snapshot
 
 
 # =============================================================================
@@ -265,51 +256,39 @@ class TestGlobalStreamEndpoint:
     """Tests for GET /api/v2/stream endpoint."""
 
     def test_stream_endpoint_registered(self):
-        """Global stream endpoint is registered and returns EventSourceResponse (FR-003).
+        """Global stream endpoint is registered (FR-003).
 
         Note: Full SSE streaming tested in E2E tests (test_global_stream_available).
-        Unit test validates endpoint registration and route availability.
+        Unit test validates endpoint registration by calling lambda_handler.
+        The SSE streaming endpoint will return 503 if connections are at limit,
+        or attempt to stream. We verify the route resolves (not 404).
         """
-        from fastapi import FastAPI
-        from starlette.routing import Route
-
         from src.lambdas.dashboard.sse import router
 
-        app = FastAPI()
-        app.include_router(router)
+        # Verify the router has the stream route by checking its routes dict
+        route_paths = [key[0] for key in router._routes]
 
-        # Verify route is registered
-        stream_route = None
-        for route in app.routes:
-            if isinstance(route, Route) and route.path == "/api/v2/stream":
-                stream_route = route
-                break
+        assert "/api/v2/stream" in route_paths, "Stream endpoint should be registered"
 
-        assert stream_route is not None, "Stream endpoint should be registered"
-        assert "GET" in stream_route.methods, "Stream endpoint should accept GET"
-
-    @pytest.mark.asyncio
-    async def test_stream_503_when_limit_reached(self):
+    def test_stream_503_when_limit_reached(self, mock_lambda_context):
         """Global stream returns 503 when connection limit reached (FR-015)."""
-        from fastapi import FastAPI
-        from fastapi.testclient import TestClient
-
-        from src.lambdas.dashboard.sse import router
-
-        app = FastAPI()
-        app.include_router(router)
-
         # Set connection manager to limit
-
+        original_count = connection_manager._count
         connection_manager._count = connection_manager.max_connections
 
-        client = TestClient(app)
-        response = client.get("/api/v2/stream")
-        assert response.status_code == 503
-        assert "Maximum connections" in response.json()["detail"]
-
-        # Reset for other tests
-        connection_manager._count = 0
+        try:
+            response = lambda_handler(
+                make_event(
+                    method="GET",
+                    path="/api/v2/stream",
+                ),
+                mock_lambda_context,
+            )
+            assert response["statusCode"] == 503
+            assert "Maximum connections" in json.loads(response["body"])["detail"]
+        finally:
+            # Reset for other tests
+            connection_manager._count = original_count
 
 
 # =============================================================================
@@ -320,45 +299,34 @@ class TestGlobalStreamEndpoint:
 class TestConfigStreamEndpoint:
     """Tests for GET /api/v2/configurations/{config_id}/stream endpoint."""
 
-    @pytest.mark.asyncio
-    async def test_config_stream_requires_auth(self):
+    def test_config_stream_requires_auth(self, mock_lambda_context):
         """Config stream returns 401 without authentication (FR-007)."""
-        from fastapi import FastAPI, HTTPException
-        from fastapi.testclient import TestClient
-
-        from src.lambdas.dashboard.sse import router
-
-        app = FastAPI()
-        app.include_router(router)
-
         # Reset connection manager
+        original_count = connection_manager._count
         connection_manager._count = 0
 
-        with patch(
-            "src.lambdas.dashboard.router_v2.get_user_id_from_request",
-            side_effect=HTTPException(status_code=401, detail="No auth"),
-        ):
-            client = TestClient(app)
-            response = client.get("/api/v2/configurations/test-config-id/stream")
-            assert response.status_code == 401
+        try:
+            response = lambda_handler(
+                make_event(
+                    method="GET",
+                    path="/api/v2/configurations/test-config-id/stream",
+                    path_params={"config_id": "test-config-id"},
+                ),
+                mock_lambda_context,
+            )
+            assert response["statusCode"] == 401
+        finally:
+            connection_manager._count = original_count
 
-    @pytest.mark.asyncio
-    async def test_config_stream_404_invalid_config(self):
+    def test_config_stream_404_invalid_config(self, mock_lambda_context):
         """Config stream returns 404 for invalid config ID (FR-008)."""
-        from fastapi import FastAPI
-        from fastapi.testclient import TestClient
-
-        from src.lambdas.dashboard.sse import router
-
-        app = FastAPI()
-        app.include_router(router)
-
         # Reset connection manager
+        original_count = connection_manager._count
         connection_manager._count = 0
 
         with patch(
-            "src.lambdas.dashboard.router_v2.get_user_id_from_request",
-            return_value="user-123",
+            "src.lambdas.dashboard.sse.extract_auth_context",
+            return_value={"user_id": "user-123"},
         ):
             with patch(
                 "src.lambdas.dashboard.sse.SENTIMENTS_TABLE",
@@ -372,12 +340,19 @@ class TestConfigStreamEndpoint:
                         "src.lambdas.dashboard.configurations.get_configuration",
                         return_value=None,
                     ):
-                        client = TestClient(app)
-                        response = client.get(
-                            "/api/v2/configurations/invalid-config/stream",
-                            headers={"Authorization": "Bearer user-123"},
-                        )
-                        assert response.status_code == 404
+                        try:
+                            response = lambda_handler(
+                                make_event(
+                                    method="GET",
+                                    path="/api/v2/configurations/invalid-config/stream",
+                                    path_params={"config_id": "invalid-config"},
+                                    headers={"Authorization": "Bearer user-123"},
+                                ),
+                                mock_lambda_context,
+                            )
+                            assert response["statusCode"] == 404
+                        finally:
+                            connection_manager._count = original_count
 
 
 # =============================================================================
@@ -388,28 +363,26 @@ class TestConfigStreamEndpoint:
 class TestStreamStatusEndpoint:
     """Tests for GET /api/v2/stream/status endpoint."""
 
-    def test_stream_status_returns_counts(self):
+    def test_stream_status_returns_counts(self, mock_lambda_context):
         """Stream status returns connection counts."""
-        from fastapi import FastAPI
-        from fastapi.testclient import TestClient
-
-        from src.lambdas.dashboard.sse import router
-
-        app = FastAPI()
-        app.include_router(router)
-
         # Set specific count
-
+        original_count = connection_manager._count
         connection_manager._count = 5
 
-        client = TestClient(app)
-        response = client.get("/api/v2/stream/status")
+        try:
+            response = lambda_handler(
+                make_event(
+                    method="GET",
+                    path="/api/v2/stream/status",
+                ),
+                mock_lambda_context,
+            )
 
-        assert response.status_code == 200
-        data = response.json()
-        assert data["connections"] == 5
-        assert data["max_connections"] == connection_manager.max_connections
-        assert data["available"] == connection_manager.max_connections - 5
-
-        # Reset
-        connection_manager._count = 0
+            assert response["statusCode"] == 200
+            data = json.loads(response["body"])
+            assert data["connections"] == 5
+            assert data["max_connections"] == connection_manager.max_connections
+            assert data["available"] == connection_manager.max_connections - 5
+        finally:
+            # Reset
+            connection_manager._count = original_count

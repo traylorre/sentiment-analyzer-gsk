@@ -40,7 +40,7 @@ mypy==1.19.1
 boto3-stubs==1.42.14     # Type stubs for boto3
 
 # Testing Utilities
-httpx==0.28.1           # For FastAPI TestClient
+httpx==0.28.1           # Async HTTP client for financial API adapters
 freezegun==1.5.5        # Time mocking for TTL tests
 hypothesis>=6.0.0
 

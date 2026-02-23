@@ -1,4 +1,4 @@
-.PHONY: help install install-tools validate fmt fmt-check lint security sast audit-pragma test test-local test-unit test-integration test-e2e test-spec test-mutation \
+.PHONY: help install install-tools validate fmt fmt-check lint security sast audit-pragma check-banned-terms test test-local test-unit test-integration test-e2e test-spec test-mutation \
         localstack-up localstack-down localstack-wait localstack-logs localstack-status \
         tf-init tf-plan tf-apply tf-destroy tf-init-local tf-plan-local tf-apply-local tf-destroy-local \
         cost cost-diff cost-baseline clean clean-all
@@ -39,7 +39,7 @@ install-tools: ## Install CLI tools via aqua
 # Validation (Zero AWS Cost)
 # ============================================================================
 
-validate: fmt lint security sast ## Run all validation (fmt + lint + security + sast)
+validate: fmt lint security sast check-banned-terms ## Run all validation (fmt + lint + security + sast + banned terms)
 	@echo "$(GREEN)✓ All validation passed$(NC)"
 
 fmt: ## Format Python code (Ruff only - Black removed in feat(057))
@@ -83,6 +83,9 @@ audit-pragma: ## Audit pragma comments (# noqa, # nosec) for validity
 
 check-iam-patterns: ## Validate IAM ARN patterns match Terraform resource names
 	@./scripts/check-iam-patterns.sh
+
+check-banned-terms: ## Verify no legacy framework references remain
+	@bash scripts/check-banned-terms.sh
 
 # ============================================================================
 # Testing

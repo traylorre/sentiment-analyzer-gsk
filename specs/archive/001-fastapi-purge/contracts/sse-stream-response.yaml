@@ -1,0 +1,99 @@
+# SSE Streaming Lambda Response Contract
+# 5 SSE endpoints use RESPONSE_STREAM invoke mode via Lambda Function URL
+
+openapi: "3.1.0"
+info:
+  title: SSE Streaming Lambda Response
+  version: "2.0.0"
+
+components:
+  schemas:
+    StreamMetadata:
+      type: object
+      description: HTTP metadata set via HttpResponseStream.from_stream()
+      required: [statusCode, headers]
+      properties:
+        statusCode:
+          type: integer
+          enum: [200, 400, 401, 403, 404, 500]
+        headers:
+          type: object
+          required: [Content-Type, Cache-Control]
+          properties:
+            Content-Type:
+              type: string
+              const: text/event-stream
+            Cache-Control:
+              type: string
+              const: no-cache
+            Connection:
+              type: string
+              const: keep-alive
+            X-Accel-Buffering:
+              type: string
+              const: "no"
+
+    SSEEvent:
+      type: object
+      description: Individual SSE event written to response_stream
+      properties:
+        event:
+          type: string
+          description: "Event type (optional). e.g., 'sentiment_update', 'config_change'"
+        id:
+          type: string
+          description: Event ID for Last-Event-ID reconnection replay
+        data:
+          type: string
+          description: "JSON-serialized event payload (one line per data field)"
+
+    SSEEventFormat:
+      type: string
+      description: |
+        Wire format for each SSE event:
+          event: {type}\n
+          id: {id}\n
+          data: {json}\n
+          \n
+
+    HeartbeatComment:
+      type: string
+      const: ": heartbeat\n\n"
+      description: Keep-alive comment sent when no data events are available
+
+  examples:
+    sentiment_update:
+      summary: Real-time sentiment score update
+      value: |
+        event: sentiment_update
+        id: evt-001
+        data: {"ticker": "AAPL", "score": 0.82, "label": "positive", "timestamp": "2026-02-09T14:30:00Z"}
+
+    config_change:
+      summary: Configuration change notification
+      value: |
+        event: config_change
+        id: evt-002
+        data: {"config_id": "cfg-123", "field": "threshold", "old_value": 0.5, "new_value": 0.7}
+
+    heartbeat:
+      summary: Keep-alive heartbeat (SSE comment)
+      value: ": heartbeat\n\n"
+
+    connection_established:
+      summary: Initial connection confirmation
+      value: |
+        data: {"status": "connected", "stream_id": "stream-abc"}
+
+    error_event:
+      summary: Serialization error for single event (stream continues)
+      value: |
+        event: error
+        data: {"message": "Failed to serialize event", "skipped": true}
+
+    disconnection_handling:
+      description: |
+        When client disconnects, response_stream.write() raises
+        RuntimeError/BrokenPipeError/IOError. Handler catches exception,
+        releases ConnectionManager slot, and exits cleanly.
+        No error is logged for clean client disconnections.
