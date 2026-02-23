@@ -3,7 +3,7 @@
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-02-14
 **Feature**: [spec.md](../spec.md)
-**Validation Iterations**: 10 (initial draft + round 1 review + round 2 deep-dive + round 3 blind spot analysis + round 4 audit gap analysis + round 5 ADOT architecture deep-dive + round 6 blind spot fixes + round 7 ADOT operational lifecycle deep-dive + round 8 container-based deployment blind spot analysis + round 9 four-domain deep research)
+**Validation Iterations**: 11 (initial draft + round 1 review + round 2 deep-dive + round 3 blind spot analysis + round 4 audit gap analysis + round 5 ADOT architecture deep-dive + round 6 blind spot fixes + round 7 ADOT operational lifecycle deep-dive + round 8 container-based deployment blind spot analysis + round 9 four-domain deep research + round 10 canonical-source blind spot analysis)
 
 ## Content Quality
 
@@ -223,9 +223,43 @@
 | SimpleSpanProcessor alternative | **NOT APPLICABLE** | Informational; BSP retained with rationale |
 | ADOT memory measurement ambiguity | **NOT APPLICABLE** | Low risk; recommend measuring in preprod |
 
+## Emergent Issues Found (Round 10 — Canonical-Source Blind Spot Analysis)
+
+| # | Severity | Issue | Resolution |
+| --- | -------- | ----- | ---------- |
+| 80 | HIGH | Lambda streaming continues after client disconnect — Python custom runtimes have no standard disconnect detection mechanism; BrokenPipeError is the only signal; SSE Lambda continues DynamoDB polling and span creation for phantom streams | Added FR-085 (BrokenPipeError catch + `client.disconnected=true` annotation); added SC-039; 1 edge case. Source: AWS Lambda Response Streaming docs |
+| 81 | HIGH | BatchSpanProcessor `max_queue_size=512` (FR-073) insufficient — ~675 spans per 15s streaming invocation exceeds queue capacity; spans silently dropped via `queue.put_nowait()` Full exception | **AMENDED** FR-073 via FR-086 (`max_queue_size` → 1500); added FR-091 (queue overflow observability); added SC-040; 1 edge case, 1 corrected assumption. Source: OTel Python SDK BatchSpanProcessor.on_end() |
+| 82 | HIGH | X-Ray IsPartial flag not checked by canary — partial traces with missing ADOT streaming spans appear "found" to canary (FR-078) | Added FR-087 (IsPartial check with degraded reporting); added SC-041. Source: AWS X-Ray Concepts docs |
+| 83 | MEDIUM | SSE `retry:` field not emitted by server — clients use unpredictable implementation-defined reconnection defaults; fetch()+ReadableStream does NOT auto-parse retry: like EventSource | Added FR-088 (server-side retry: emission), FR-089 (client-side retry: parsing); added SC-042. Source: WHATWG HTML Living Standard §9.2 |
+| 84 | MEDIUM | Lambda Function URL streaming breaks silently in VPC environments — responses buffered instead of streamed with no error | Added assumption (VPC constraint); added SC-043. Source: AWS Lambda Response Streaming docs |
+| 85 | MEDIUM | Decouple processor auto-configuration only applies to Lambda Layer, NOT container-based custom configs — omission reverts to ~30% span drop rate | Added FR-090 (explicit decouple in custom YAML); added SC-044; 1 edge case. Source: ADOT decouple processor README |
+| 86 | MEDIUM | OTel streaming semantic conventions undefined — project's span-per-poll-cycle convention has no standard to align to | Added assumption documenting project-specific convention. Source: OTel GenAI Spans semconv |
+| 87 | MEDIUM | Python custom runtime required for response streaming — implicit in architecture but not documented as explicit constraint | Added assumption. Source: AWS Lambda Response Streaming docs |
+| 88 | MEDIUM | X-Ray new-style segment format rolling out — eliminates Invocation subsegment; customer subsegments attach to Function segment | Added assumption (format-independent OTel parenting). Source: AWS Lambda X-Ray docs |
+| 89 | LOW | AwsXRayLambdaPropagator Sampled=0 extraction bug — if Active Tracing disabled, ALL spans silently suppressed | Added edge case. Source: opentelemetry-lambda#1782 |
+| 90 | LOW | X-Ray subsegment streaming threshold (100 per segment) — auto_patch=True would count streaming-phase boto3 calls against limit | Added edge case (reinforces FR-060). Source: AWS X-Ray Troubleshooting docs |
+| 91 | LOW | X-Ray centralized sampling fallback — OTel sampler falls back to 1 trace/sec when sampling API unreachable; dev/preprod 100% sampling silently degrades | Added edge case. Source: AWS ADOT Remote Sampling docs |
+
+## Round 10 Blind Spot Resolution Summary
+
+| Blind Spot | Status | Resolution |
+| ---------- | ------ | ---------- |
+| Lambda streaming after client disconnect | **RESOLVED** | FR-085 catches BrokenPipeError, annotates spans; SC-039 verifies |
+| BSP queue size insufficient | **RESOLVED** | FR-086 amends FR-073 queue to 1500; FR-091 adds overflow observability; SC-040 verifies |
+| Canary IsPartial trace check | **RESOLVED** | FR-087 checks IsPartial flag, reports degraded; SC-041 verifies |
+| SSE retry: field not emitted | **RESOLVED** | FR-088 (server) + FR-089 (client); SC-042 verifies |
+| Function URL VPC streaming limitation | **RESOLVED** | Assumption documents no-VPC constraint; SC-043 verifies |
+| Decouple processor in custom config | **RESOLVED** | FR-090 requires explicit inclusion; SC-044 verifies |
+| OTel streaming conventions undefined | **RESOLVED** | Assumption documents project-specific convention |
+| Python custom runtime requirement | **RESOLVED** | Assumption documents requirement with source |
+| X-Ray new-style segment format | **RESOLVED** | Assumption documents format-independent parenting |
+| AwsXRayLambdaPropagator Sampled=0 bug | **RESOLVED** | Edge case documents risk if Active Tracing disabled |
+| X-Ray subsegment streaming threshold | **RESOLVED** | Edge case reinforces FR-060 (auto_patch=False) |
+| X-Ray sampling fallback behavior | **RESOLVED** | Edge case documents 1 trace/sec fallback |
+
 ## Notes
 
-- All 79 issues across nine rounds addressed.
+- All 91 issues across ten rounds addressed.
 - Zero [NEEDS CLARIFICATION] markers in the spec.
 - Round 3 added 8 new FRs (FR-031 through FR-038), 4 new SCs (SC-013 through SC-016), 7 new edge cases, 5 new assumptions, and 2 new user stories (US8, US9).
 - Round 4 added 13 new FRs (FR-039 through FR-051), 6 new SCs (SC-017 through SC-022), 6 new edge cases, 4 new assumptions, and 2 new user stories (US10, US11).
@@ -234,9 +268,10 @@
 - Round 7 added 7 new FRs (FR-062 through FR-068), 2 new SCs (SC-027 through SC-028), 7 new edge cases, 6 new assumptions. 9 blind spots analyzed, 7 resolved via new FRs, 2 confirmed as non-risks.
 - Round 8 added 5 new FRs (FR-069 through FR-073), 2 new SCs (SC-029, SC-030), 4 new edge cases, 5 new assumptions. FR-062 and FR-063 REWRITTEN. 1 Round 7 assumption INVALIDATED. 7 blind spots analyzed (5 resolved, 1 not a risk, 1 already addressed).
 - Round 9 added 11 new FRs (FR-074 through FR-084), 8 new SCs (SC-031 through SC-038), 11 new edge cases, 8 new assumptions (+ 1 corrected). 1 Round 5 assumption CORRECTED (200ms → 5000ms BSP default). 14 blind spots analyzed across 4 research domains (ADOT container deployment, OTel SDK Lambda behavior, X-Ray canary implementation, frontend SSE migration). 12 resolved via new FRs, 2 confirmed as informational/not applicable.
-- Three assumptions INVALIDATED (SendGrid auto-patching in Round 2, `begin_segment()` in Round 3, zero Lambda layers in Round 7) and 1 CORRECTED (200ms BSP default in Round 5) marked with strikethrough.
+- Round 10 added 7 new FRs (FR-085 through FR-091), 6 new SCs (SC-039 through SC-044), 7 new edge cases, 5 new assumptions (+ 1 corrected). FR-073's `max_queue_size` AMENDED from 512 to 1500 via FR-086. 12 blind spots analyzed from canonical-source deep research, all resolved.
+- Three assumptions INVALIDATED (SendGrid auto-patching in Round 2, `begin_segment()` in Round 3, zero Lambda layers in Round 7), 1 CORRECTED (200ms BSP default in Round 5), and 1 AMENDED (BSP queue size in Round 10) marked with strikethrough.
 - Three FRs REPLACED in-place (FR-025 revised, FR-026 replaced, FR-027 replaced) with Round 3 annotations.
-- Spec is now at 84 FRs, 38 SCs, 56 edge cases, 45 assumptions (3 invalidated, 1 corrected), 11 user stories.
+- Spec is now at 91 FRs, 44 SCs, 63 edge cases, 50 assumptions (3 invalidated, 2 corrected/amended), 11 user stories.
 - The most critical Round 3 finding is that the entire SSE streaming tracing architecture from Round 2 was built on a false assumption (`begin_segment()` works in Lambda). The corrected approach uses a Lambda Extension with an independent lifecycle.
 - The most critical Round 4 finding is the "X-Ray exclusive for TRACING, not ALARMING" scope clarification (FR-039). X-Ray traces provide diagnostic context; CloudWatch alarms provide 24/7 alerting. Both are required because X-Ray sampling means not all errors have traces, while CloudWatch Lambda metrics capture 100% of invocations.
 - Round 4 research confirmed: CloudFront is not in the architecture (Blind Spot 4 eliminated); ADOT sidecar-only mode is safe (Blind Spot 3 mitigated with constraints); X-Ray Groups are post-ingestion only (Blind Spot 2 confirmed — dual instrumentation required); out-of-band alerting is industry best practice for meta-observability (Blind Spot 6).
@@ -249,3 +284,6 @@
 - The most critical Round 9 finding is the two-hop flush architecture (FR-074/FR-075). The ADOT Extension has a KNOWN ~30% span drop rate under worst-case timing (GitHub aws-otel-lambda#886). The spec's `force_flush()` (FR-055) reliably handles the SDK→Extension hop, but the Extension→X-Ray backend hop has a documented race condition where the collector context is canceled before HTTP exports complete. The decouple processor mitigates this but is not guaranteed. This is the first specification round where a KNOWN, UNFIXABLE limitation of a third-party component was formally documented as accepted risk with explicit detection (canary) rather than attempted workaround.
 - Round 9's second critical finding is the canary error classification (FR-079). Without classifying `put_metric_data` errors as transient vs permanent, the canary's separate IAM role (FR-051) would fail to achieve its design purpose — detecting application IAM revocation would be delayed by multiple retry cycles instead of immediately escalated. This is a logic gap where two FRs (FR-049 and FR-051) were individually correct but their interaction was underspecified.
 - Round 9 also corrected a factual error that persisted from Round 5: the BatchSpanProcessor default batch timeout was stated as 200ms but is actually 5000ms (FR-084). This caused 4 downstream references to contain incorrect timing calculations. While FR-073 correctly overrides to 1000ms (so runtime behavior was always correct), the incorrect assumption could have caused implementation confusion.
+- The most critical Round 10 finding is the BatchSpanProcessor queue size miscalculation (FR-086). FR-073's original `max_queue_size=512` is INSUFFICIENT for the SSE Lambda's actual span throughput (~675 spans per 15-second invocation). The OTel Python SDK silently drops spans when the queue is full — no exception, no metric, only a WARNING log line. This is the third round where a runtime configuration was proven incorrect by throughput analysis (after Round 5's BSP default and Round 8's deployment model). FR-086 amends the queue to 1500 with FR-091 adding independent overflow detection.
+- Round 10's second critical finding is the Lambda streaming after client disconnect behavior (FR-085). AWS explicitly states that streaming responses continue after client disconnects, and Python custom runtimes have no standard mechanism to detect disconnect (unlike Node.js). Without explicit BrokenPipeError handling, the SSE Lambda creates spans for phantom streams that inflate success metrics and waste DynamoDB capacity.
+- Round 10's third critical finding is the canary IsPartial check gap (FR-087). The canary checks trace existence but not completeness — a trace with `IsPartial=true` may be missing all ADOT streaming-phase spans while appearing "found." This is a logic gap in the existing canary design where the verification is necessary but not sufficient.
