@@ -3,7 +3,7 @@
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-02-14
 **Feature**: [spec.md](../spec.md)
-**Validation Iterations**: 11 (initial draft + round 1 review + round 2 deep-dive + round 3 blind spot analysis + round 4 audit gap analysis + round 5 ADOT architecture deep-dive + round 6 blind spot fixes + round 7 ADOT operational lifecycle deep-dive + round 8 container-based deployment blind spot analysis + round 9 four-domain deep research + round 10 canonical-source blind spot analysis)
+**Validation Iterations**: 18 (initial draft + round 1 review + round 2 deep-dive + round 3 blind spot analysis + round 4 audit gap analysis + round 5 ADOT architecture deep-dive + round 6 blind spot fixes + round 7 ADOT operational lifecycle deep-dive + round 8 container-based deployment blind spot analysis + round 9 four-domain deep research + round 10 canonical-source blind spot analysis + round 11 bootstrap & deadline safety + round 12 deployment safety & operational lifecycle + round 13 deployment safety & migration observability + round 14 export safety & operational completeness + round 15 silent failure instrumentation & alarm calibration + round 16 alarm completeness & frontend verification gates + round 17 OTel error status & canary resilience)
 
 ## Content Quality
 
@@ -257,9 +257,210 @@
 | X-Ray subsegment streaming threshold | **RESOLVED** | Edge case reinforces FR-060 (auto_patch=False) |
 | X-Ray sampling fallback behavior | **RESOLVED** | Edge case documents 1 trace/sec fallback |
 
+### Round 10 — SSE Streaming Deep-Dive
+
+| # | Type | ID | Description | Status |
+|---|------|----|-------------|--------|
+| 85 | FR | FR-085 | BrokenPipeError catch + client.disconnected=true span annotation on disconnect | [ ] |
+| 86 | FR | FR-086 | BSP max_queue_size amended from 512 → 1500 (2x ~675 spans/invocation) | [ ] |
+| 87 | FR | FR-087 | Canary IsPartial trace check — report degraded when IsPartial=true | [ ] |
+| 88 | FR | FR-088 | SSE Lambda emits retry: 3000 field in initial SSE frame | [ ] |
+| 89 | FR | FR-089 | Frontend parses retry: field from SSE stream | [ ] |
+| 90 | FR | FR-090 | Explicit decouple processor in custom ADOT collector YAML | [ ] |
+| 91 | FR | FR-091 | BSP queue overflow structured logging + metric filter | [ ] |
+| 85 | SC | SC-039 | Client disconnect spans carry client.disconnected=true annotation | [ ] |
+| 86 | SC | SC-040 | BSP max_queue_size >= 1350, zero spans dropped in normal operation | [ ] |
+| 87 | SC | SC-041 | Canary reports IsPartial traces as degraded (not success) | [ ] |
+| 88 | SC | SC-042 | SSE emits retry: 3000 and frontend uses it for reconnection delay | [ ] |
+| 89 | SC | SC-043 | SSE Lambda deployed without VPC configuration | [ ] |
+| 90 | SC | SC-044 | Custom ADOT YAML includes [decouple, batch] pipeline | [ ] |
+
+### Round 11 — Bootstrap & Deadline Safety
+
+| # | Type | ID | Description | Status |
+|---|------|----|-------------|--------|
+| 92 | FR | FR-092 | Custom bootstrap reads Lambda-Runtime-Trace-Id and sets _X_AMZN_TRACE_ID on every invocation | [ ] |
+| 93 | FR | FR-093 | Deadline-aware proactive force_flush() when remaining time < 3000ms | [ ] |
+| 94 | FR | FR-094 | FR-035 scoped: API Gateway sampling override works; Function URL limitation acknowledged | [ ] |
+| 95 | FR | FR-095 | OPENTELEMETRY_COLLECTOR_CONFIG_FILE=/opt/collector-config/config.yaml in Terraform | [ ] |
+| 96 | FR | FR-096 | Canary 5-minute EventBridge interval, two-phase CloudWatch health check, 60s timeout | [ ] |
+| 97 | FR | FR-097 | FR-043 metrics use SentimentAnalyzer/Reliability namespace with FunctionName+FailurePath dims | [ ] |
+| 98 | FR | FR-098 | ADOT export failure CloudWatch Logs metric filter on "Exporting failed. Dropping data." | [ ] |
+| 99 | FR | FR-099 | Frontend TextDecoder({stream: true}) for UTF-8 chunk boundary safety | [ ] |
+| 91 | SC | SC-045 | Bootstrap propagates _X_AMZN_TRACE_ID on warm invocations — correct trace IDs | [ ] |
+| 92 | SC | SC-046 | Proactive flush before Lambda timeout — zero span loss on timeout | [ ] |
+| 93 | SC | SC-047 | OPENTELEMETRY_COLLECTOR_CONFIG_FILE set in Terraform env vars | [ ] |
+| 94 | SC | SC-048 | Canary runs every 5 minutes, <= 10 minute detection latency | [ ] |
+| 95 | SC | SC-049 | FR-043 metrics in unified SentimentAnalyzer/Reliability namespace | [ ] |
+| 96 | SC | SC-050 | ADOT export failure metric filter fires within 5 minutes | [ ] |
+| 97 | SC | SC-051 | Frontend TextDecoder uses stream: true — no UTF-8 corruption | [ ] |
+
+## Emergent Issues Found (Round 12 — Deployment Safety & Operational Lifecycle)
+
+| # | Severity | Issue | Resolution |
+| --- | -------- | ----- | ---------- |
+| 92 | **CRITICAL** | Post-proactive-flush generator continues creating orphaned spans — FR-093 fires at 3000ms remaining but generator behavior after flush unspecified; new spans created in remaining ~3s either orphaned or permanently lost on timeout SIGKILL | Added FR-100 (graceful stream termination after flush); added SC-052. FR-100 converts potential timeout into normal completion — ADOT Extension gets reliable normal Shutdown instead of timeout Shutdown |
+| 93 | HIGH | OTel Python core packages have no version pinning requirement — lockstep enforced by pip resolver but builds non-reproducible across dates; AWS contrib packages need floor pins | Added FR-101 (version pinning strategy); added SC-053. Core packages pinned with `==`, contrib with floor+ceiling |
+| 94 | HIGH | SSE Lambda 512MB insufficient — ADOT Extension ~50MB + OTel SDK ~30MB + runtime ~200MB = ~330MB baseline; only ~180MB headroom; cold start at 512MB is ~1200ms vs ~800ms at 1024MB | Added FR-102 (memory increase to 1024MB); added SC-054. Round 6 assumption about 512MB adequacy INVALIDATED. Source: AWS Lambda performance benchmarks |
+| 95 | HIGH | Bootstrap passes `None` for Lambda context parameter — handler cannot call `context.get_remaining_time_in_millis()` making FR-093 unimplementable | Added FR-103 (bootstrap deadline propagation); added SC-055. Hard prerequisite for FR-093. Confirmed by code inspection: bootstrap line 157 |
+| 96 | MEDIUM | Zero Lambda functions have memory utilization alarms — ADOT memory overhead (~50MB on SSE Lambda) increases OOM risk without advance warning | Added FR-104 (memory alarms at 85%); added SC-056 |
+| 97 | MEDIUM | FR-098 metric filter pattern matches only first ADOT export failure variant — misses "Exporting failed. No more retries left. Dropping data." (retries exhausted) | Added FR-105 (pattern amendment); added SC-057. Updated to substring match covering both variants |
+| 98 | MEDIUM | OTel SDK initialization failures crash Lambda with unclear error messages — operators cannot diagnose misconfiguration from CloudWatch Logs without reproducing locally | Added FR-106 (init error attribution); error logged with component/error/action before re-raise |
+| 99 | NOT A RISK | Concurrent Lambda invocations sharing ADOT Extension — each invocation gets own execution environment with own Extension process; zero cross-invocation span corruption | Documented as assumption. Source: AWS Lambda Execution Environment lifecycle |
+
+## Round 12 Blind Spot Resolution Summary
+
+| Blind Spot | Status | Resolution |
+| ---------- | ------ | ---------- |
+| Post-proactive-flush generator behavior | **RESOLVED (CRITICAL)** | FR-100 requires graceful termination; converts timeout into normal completion; SC-052 verifies |
+| OTel package version pinning | **RESOLVED** | FR-101 mandates lockstep pins for core, floor pins for contrib; SC-053 verifies |
+| SSE Lambda memory insufficiency | **RESOLVED** | FR-102 increases to 1024MB; Round 6 assumption INVALIDATED; SC-054 verifies |
+| Bootstrap deadline propagation | **RESOLVED** | FR-103 reads Lambda-Runtime-Deadline-Ms; hard prerequisite for FR-093; SC-055 verifies |
+| Lambda memory utilization monitoring | **RESOLVED** | FR-104 adds 85% alarms on all 6 Lambdas; SC-056 verifies |
+| FR-098 metric filter incompleteness | **RESOLVED** | FR-105 amends pattern to substring match; SC-057 verifies |
+| OTel init failure error attribution | **RESOLVED** | FR-106 logs structured error before re-raise; does not violate FR-018 fail-fast |
+| Concurrent invocations sharing Extension | **NOT A RISK** | Each invocation gets own execution environment; documented as assumption |
+| ADOT-OTel OTLP version compatibility | **NOT A RISK** | OTLP v1 stable since proto 1.0.0; compatible with all ADOT since v0.21.0; documented as assumption |
+
+### Round 12 — Deployment Safety & Operational Lifecycle
+
+| # | Type | ID | Description | Status |
+|---|------|----|-------------|--------|
+| 100 | FR | FR-100 | Post-proactive-flush graceful stream termination with `event: deadline` SSE event | [ ] |
+| 101 | FR | FR-101 | OTel Python core packages pinned to identical version; contrib floor-pinned | [ ] |
+| 102 | FR | FR-102 | SSE Lambda memory increased from 512MB to 1024MB | [ ] |
+| 103 | FR | FR-103 | Bootstrap reads Lambda-Runtime-Deadline-Ms and propagates deadline to handler | [ ] |
+| 104 | FR | FR-104 | All 6 Lambdas have memory utilization alarms at 85% threshold | [ ] |
+| 105 | FR | FR-105 | FR-098 metric filter pattern amended to match both ADOT failure variants | [ ] |
+| 106 | FR | FR-106 | OTel SDK initialization error attribution with structured logging | [ ] |
+| 100 | SC | SC-052 | Generator terminates after flush; ADOT gets normal Shutdown (not timeout) | [ ] |
+| 101 | SC | SC-053 | OTel core packages pinned to identical version; builds reproducible | [ ] |
+| 102 | SC | SC-054 | SSE Lambda 1024MB; cold start < 1500ms; memory < 80% under streaming | [ ] |
+| 103 | SC | SC-055 | Bootstrap provides deadline; handler computes remaining time | [ ] |
+| 104 | SC | SC-056 | All 6 Lambdas have memory utilization alarms | [ ] |
+| 105 | SC | SC-057 | Metric filter matches both ADOT export failure variants | [ ] |
+
+### Emergent Issues Found (Round 13 — Deployment Safety & Migration Observability)
+
+| # | Severity | Issue | Resolution |
+| --- | -------- | ----- | ---------- |
+| 100 | **CRITICAL** | No deployment ordering constraint for 17 tasks — upstream-to-downstream instrumentation required | FR-107 adds 6-phase deployment ordering |
+| 101 | HIGH | No OTel SDK kill switch for emergency tracing disable | FR-108 adds OTEL_SDK_DISABLED=false explicit env var |
+| 102 | HIGH | No migration dual-emit period — logging removal before X-Ray verification | FR-109 adds 2-week dual-emit with 4 verification gates |
+| 103 | HIGH | No pre-ADOT rollback container image in ECR | FR-110 requires pre-adot-baseline tagged image |
+| 104 | HIGH | X-Ray Groups missing insights_enabled=true — no CloudWatch metrics from Groups | FR-111 requires insights_enabled=true on all Groups |
+| 105 | MEDIUM | EventBridge→Lambda permission race on canary deployment | FR-112 adds explicit depends_on in Terraform |
+| 106 | MEDIUM | Canary lacks trace completeness ratio metric — detects per-trace partial but not systemic loss | FR-113 adds completeness_ratio metric with 95% threshold |
+
+## Round 13 Blind Spot Resolution Summary
+
+| Blind Spot | Source | Resolution | New FR/SC |
+|---|---|---|---|
+| Deployment ordering | AWS X-Ray best practices | 6-phase ordering with gates | FR-107, SC-058 |
+| OTel kill switch | OTel specification OTEL_SDK_DISABLED | Explicit env var on ADOT Lambdas | FR-108, SC-059 |
+| Migration dual-emit | Observability migration patterns | 2-week dual-emit with 4 gates | FR-109, SC-058 |
+| Rollback image | Container deployment patterns | pre-adot-baseline ECR image | FR-110, SC-060 |
+| X-Ray Groups insights | AWS X-Ray Groups docs | insights_enabled=true | FR-111, SC-061 |
+| EventBridge race | AWS EventBridge lifecycle | Terraform depends_on | FR-112, SC-062 |
+| Completeness ratio | Canary design patterns | Aggregate completeness metric | FR-113, SC-063 |
+
+### Emergent Issues Found (Round 14 — Export Safety & Operational Completeness)
+
+| # | Severity | Issue | Resolution |
+| --- | -------- | ----- | ---------- |
+| 107 | **CRITICAL** | `force_flush()` timeout not enforced (OTel #4568) — OTLP exporter blocks indefinitely on ADOT crash; 10s default x 6 retries x 24 batches = potential 24-minute block; FR-093's 3000ms deadline defeated | FR-114 adds `OTEL_EXPORTER_OTLP_TRACES_TIMEOUT=2` env var |
+| 108 | **CRITICAL** | BSP pops spans before export — failed exports permanently destroy spans; `force_flush()` returns `True` regardless | FR-120 annotation budget + documented assumption that return value is NOT a health signal |
+| 109 | HIGH | No SSE event-level trace correlation — Audit Section 6 flags "SSE events — Trace IDs not in payloads." HTTP headers correlate at connection level only | FR-115 adds `trace_id` field in SSE event JSON data |
+| 110 | HIGH | ADOT collector config not validated pre-deployment — no JSON Schema; malformed YAML crashes Extension silently | FR-116 adds CI validation with ADOT `validate` subcommand |
+| 111 | HIGH | FR-109 verification gates abstract — no concrete check definitions; "100 manual spot-checks" unautomated | FR-117 adds formalized executable gates with S3 audit trail |
+| 112 | HIGH | ReadableStream error taxonomy missing — 4 error types (TypeError, AbortError, TimeoutError, done:true) with different reconnection strategies; server close vs network drop indistinguishable without sentinel | FR-118 adds error classification + `event: done` sentinel |
+| 113 | MEDIUM | CORS preflight from X-Amzn-Trace-Id — not CORS-safelisted; 50-200ms latency per uncached preflight | FR-119 adds `Access-Control-Max-Age: 7200` |
+| 114 | MEDIUM | X-Ray 50-annotation limit — OTel attributes count against same limit; exceeding silently drops | FR-120 adds annotation budget allocation (max 25/50 per span) |
+| 115 | MEDIUM | treat_missing_data not classified — `notBreaching` on canary alarms defeats their purpose; error-only metrics show false-green when system dies | FR-121 adds systematic classification by alarm type |
+| 116 | MEDIUM | Rollback procedure informal — FR-110 preserves image but no trigger criteria, timeline, or verification | FR-122 adds operational procedure with 5/15-minute timelines |
+| 117 | MEDIUM | ADOT startup failures unmonitored — config errors produce distinct log patterns not captured by metric filters | FR-123 adds `ADOTCollectorStartupFailure` metric filter |
+
+### Emergent Issues Found (Round 15 — silent failure instrumentation, alarm calibration, cascading false-green)
+
+| # | Severity | Issue | Resolution |
+| --- | -------- | ----- | ---------- |
+| 118 | **CRITICAL** | 5 code paths (circuit_breaker, audit, notification, self_healing, fanout) catch exceptions, log, but emit NO metric — operators cannot detect DynamoDB persistence failures, SNS publish failures, or batch write partial failures | FR-124 adds unified SilentFailure/Count metric with FailurePath dimension + structured log fallback |
+| 119 | **CRITICAL** | put_metric_data itself can fail (throttling, regional degradation) with no backup detection — cascading false-green where treat_missing_data=notBreaching resolves alarms to OK during outage | FR-125 adds CloudWatch Logs metric filter on metric_fallback=true as out-of-band backup |
+| 120 | HIGH | Alarm thresholds miscalibrated — analysis_latency_high at 25s (42% of 60s timeout) causes cold-start false positives; error alarms use absolute counts not percentages; collision_rate_low takes 30min to detect | FR-127 percentage-based errors + FR-133 reduced evaluation periods |
+| 121 | HIGH | Ingestion and Notification Lambdas have no latency alarms — approaching-timeout degradation invisible to operators | FR-128 adds P95 latency alarms at 80% of timeout |
+| 122 | HIGH | Dashboard alarm widget shows 6 of 30+ alarms — operators get incomplete picture; no composite alarm for system health | FR-129 adds severity-tiered widgets + composite alarm |
+| 123 | HIGH | SendGrid HTTP calls traverse python_http_client → urllib.request → http.client — only httplib patch captures them; auto-patching verification needed | FR-130 adds integration test for httplib/urllib chain verification |
+| 124 | MEDIUM | Canary heartbeat must use same put_metric_data call path as production — separate health check proves nothing about emission pipeline | FR-126 adds piggybacked heartbeat metric |
+| 125 | MEDIUM | treat_missing_data=notBreaching on application alarms masks CloudWatch Metrics API degradation; INSUFFICIENT_DATA state suppressed | FR-131 mandates treat_missing_data=missing for application metric alarms |
+| 126 | MEDIUM | Work order files (fix-*.md) contain only Round 1-6 FRs — 66+ FRs from Rounds 7-14 missing from implementation guides | FR-132 adds automated work order synchronization validation |
+| 127 | MEDIUM | Collision rate alarm evaluation periods too slow — 6×5min=30min for broken dedup detection | FR-133 reduces to 2-3 periods |
+
+#### Round 15 Blind Spot Resolution Summary
+
+| Blind Spot | Source | Resolution | New FR/SC |
+| --- | --- | --- | --- |
+| Silent failure paths emit no metric | Audit Section 8 (6 silent failure modes) | Unified SilentFailure/Count metric with dimensions | FR-124, SC-074 |
+| put_metric_data failure undetectable | Audit Section 8.1 (metrics emission fails silently) | CloudWatch Logs metric filter backup path | FR-125, SC-075 |
+| Canary heartbeat separate from production | Amazon Builder's Library health check pattern | Piggybacked on same put_metric_data call | FR-126, SC-076 |
+| Error alarms use absolute counts | AWS Observability Best Practices | Percentage-based with minimum invocation guard | FR-127, SC-077 |
+| Missing Lambda latency alarms | Audit Section 6.2 (ingestion/notification gaps) | P95 at 80% of timeout per Lambda | FR-128, SC-078 |
+| Dashboard alarm widget incomplete | Audit Section 6.3 (6 of 30+ alarms) | Severity-tiered widgets + composite alarm | FR-129, SC-079 |
+| SendGrid patching uncertain | Audit Section 7.2 (UNCERTAIN marking) | Integration test for httplib/urllib chain | FR-130, SC-080 |
+| treat_missing_data masks degradation | CloudWatch alarm documentation | missing for app metrics, breaching for canary | FR-131, SC-081 |
+| Work order files stale | Manual audit of fix-*.md vs HL doc | Automated synchronization validation | FR-132, SC-082 |
+| Collision rate detection too slow | CloudWatch Alarms Best Practices | Reduced evaluation periods | FR-133, SC-083 |
+
+## Round 14 Blind Spot Resolution Summary
+
+| Blind Spot | Source | Resolution | New FR/SC |
+|---|---|---|---|
+| force_flush() timeout not enforced | OTel GitHub #4568 | OTLP exporter timeout env var | FR-114, SC-064 |
+| BSP pops spans before export | OTel BSP implementation | Annotation budget + documented assumption | FR-120, SC-070 |
+| SSE event-level trace correlation | Audit Section 6 | trace_id field in SSE event JSON | FR-115, SC-065 |
+| ADOT collector config validation | ADOT operational patterns | CI validation with ADOT validate subcommand | FR-116, SC-066 |
+| FR-109 verification gates abstract | Migration observability patterns | Executable gates with S3 audit trail | FR-117, SC-067 |
+| ReadableStream error taxonomy | WHATWG Streams Standard | Error classification + done sentinel | FR-118, SC-068 |
+| CORS preflight latency | CORS specification | Access-Control-Max-Age: 7200 | FR-119, SC-069 |
+| X-Ray 50-annotation limit | AWS X-Ray limits | Annotation budget allocation (max 25/50) | FR-120, SC-070 |
+| treat_missing_data classification | CloudWatch alarm patterns | Systematic classification by alarm type | FR-121, SC-071 |
+| Rollback procedure informal | Operational runbook patterns | Procedure with 5/15-minute timelines | FR-122, SC-072 |
+| ADOT startup failures unmonitored | ADOT Extension log patterns | ADOTCollectorStartupFailure metric filter | FR-123, SC-073 |
+
+## Emergent Issues Found (Round 17 — OTel Error Status & Canary Resilience)
+
+| # | Severity | Issue | Resolution |
+| --- | -------- | ----- | ---------- |
+| 130 | **CRITICAL** | Manual OTel spans on SSE Lambda have no requirement to call `span.set_status(StatusCode.ERROR)` — ADOT X-Ray exporter's `makeCause()` is GATED on StatusCode.ERROR; `record_exception()` alone produces invisible exceptions in X-Ray (no fault flag, no cause field, no Group filter match) | Added FR-144 (mandatory dual-call: `set_status(ERROR)` + `record_exception()`); added SC-094; 3 edge cases, 1 assumption. Source: ADOT X-Ray Exporter `cause.go` |
+| 131 | HIGH | Canary Lambda exemption from FR-018 fail-fast not formalized — HL doc states "sole exception is the canary" but no FR captures this; implementer following FR-018 makes canary crash on X-Ray failure | Added FR-145 (canary FR-018 exemption with structured error handling); added SC-095. Source: AWS Well-Architected OPS pillar |
+| 132 | HIGH | SC-064 tests only port-unreachable ADOT failure — FR-139's hung Extension (TCP accept, no response) is a distinct failure mode NOT exercised by port-unreachable test; ECONNREFUSED fails fast without needing the thread wrapper | SC-064 AMENDED to test both failure modes; no new FR needed |
+| 133 | MEDIUM | Canary Lambda is function #7 with contradictory requirements — must be instrumented (FR-029) AND resilient to X-Ray failures (FR-018 exempt); dual role needs explicit scope | Added FR-146 (canary instrumentation scope); added SC-096 |
+| 134 | MEDIUM | OTel SpanKind not specified for manual SSE Lambda spans — incorrect SpanKind causes phantom service map nodes (CLIENT) or hidden dependencies (INTERNAL); SC-028 at risk | Added edge case and assumption; no new FR (SC-028 already specifies outcome) |
+
+### Round 17 — OTel Error Status & Canary Resilience
+
+| # | Type | ID | Description | Status |
+|---|------|----|-------------|--------|
+| 144 | FR | FR-144 | Manual OTel spans MUST call both set_status(ERROR) and record_exception() on error | [ ] |
+| 145 | FR | FR-145 | Canary Lambda catches X-Ray/OTel init errors without crashing (FR-018 exemption) | [ ] |
+| 146 | FR | FR-146 | Canary Lambda instrumented per FR-029 with FR-145 error wrapping | [ ] |
+| 94 | SC | SC-094 | All SSE Lambda error spans have fault=true and populated cause in X-Ray | [ ] |
+| 95 | SC | SC-095 | Canary completes health check even when X-Ray init fails | [ ] |
+| 96 | SC | SC-096 | Canary traces visible in X-Ray when X-Ray is healthy | [ ] |
+| 64a | SC | SC-064 | AMENDED: Tests both port-unreachable AND hung-Extension failure modes | [ ] |
+
+## Round 17 Blind Spot Resolution Summary
+
+| Blind Spot | Source | Resolution | New FR/SC |
+|---|---|---|---|
+| OTel span error status invisible to X-Ray | ADOT X-Ray Exporter source | Mandatory dual-call requirement | FR-144, SC-094 |
+| Canary FR-018 exemption not formalized | HL document design principle | Formalized exemption with structured logging | FR-145, SC-095 |
+| SC-064 tests wrong failure mode | FR-139 analysis | SC-064 amended for both modes | SC-064 amended |
+| Canary dual-mode operation | Architectural analysis | Explicit instrumentation scope | FR-146, SC-096 |
+| SpanKind service map distortion | ADOT X-Ray Exporter source | Edge case + assumption (SC-028 covers outcome) | Edge case only |
+
 ## Notes
 
-- All 91 issues across ten rounds addressed.
+- All 119 issues across fifteen rounds addressed (Round 15 requirements tracking added).
 - Zero [NEEDS CLARIFICATION] markers in the spec.
 - Round 3 added 8 new FRs (FR-031 through FR-038), 4 new SCs (SC-013 through SC-016), 7 new edge cases, 5 new assumptions, and 2 new user stories (US8, US9).
 - Round 4 added 13 new FRs (FR-039 through FR-051), 6 new SCs (SC-017 through SC-022), 6 new edge cases, 4 new assumptions, and 2 new user stories (US10, US11).
@@ -269,9 +470,13 @@
 - Round 8 added 5 new FRs (FR-069 through FR-073), 2 new SCs (SC-029, SC-030), 4 new edge cases, 5 new assumptions. FR-062 and FR-063 REWRITTEN. 1 Round 7 assumption INVALIDATED. 7 blind spots analyzed (5 resolved, 1 not a risk, 1 already addressed).
 - Round 9 added 11 new FRs (FR-074 through FR-084), 8 new SCs (SC-031 through SC-038), 11 new edge cases, 8 new assumptions (+ 1 corrected). 1 Round 5 assumption CORRECTED (200ms → 5000ms BSP default). 14 blind spots analyzed across 4 research domains (ADOT container deployment, OTel SDK Lambda behavior, X-Ray canary implementation, frontend SSE migration). 12 resolved via new FRs, 2 confirmed as informational/not applicable.
 - Round 10 added 7 new FRs (FR-085 through FR-091), 6 new SCs (SC-039 through SC-044), 7 new edge cases, 5 new assumptions (+ 1 corrected). FR-073's `max_queue_size` AMENDED from 512 to 1500 via FR-086. 12 blind spots analyzed from canonical-source deep research, all resolved.
-- Three assumptions INVALIDATED (SendGrid auto-patching in Round 2, `begin_segment()` in Round 3, zero Lambda layers in Round 7), 1 CORRECTED (200ms BSP default in Round 5), and 1 AMENDED (BSP queue size in Round 10) marked with strikethrough.
+- Round 12 added 7 new FRs (FR-100 through FR-106), 6 new SCs (SC-052 through SC-057), 5 new edge cases, 7 new assumptions (+ 1 invalidated). FR-098 metric filter pattern AMENDED via FR-105. Round 6 assumption about 512MB memory adequacy INVALIDATED. 9 blind spots analyzed (7 resolved via new FRs, 2 confirmed as non-risks).
+- Round 13 updates: 1 CRITICAL + 4 HIGH + 2 MEDIUM blind spots found. 7 new FRs (FR-107–FR-113), 6 new SCs (SC-058–SC-063), 7 new edge cases, 5 new assumptions. Focus: deployment ordering, migration safety, rollback capability, X-Ray Groups configuration.
+- Round 14 updates: 2 CRITICAL + 4 HIGH + 5 MEDIUM blind spots found. 10 new FRs (FR-114–FR-123), 10 new SCs (SC-064–SC-073), ~8 new edge cases, ~7 new assumptions. Focus: export safety, SSE event correlation, ADOT operational monitoring, annotation budgets, rollback procedures.
+- **Round 15**: 2 CRITICAL + 4 HIGH + 4 MEDIUM blind spots found. 10 new FRs (FR-124-FR-133), 10 new SCs (SC-074-SC-083), ~8 new edge cases, ~7 new assumptions. Focus: silent failure path instrumentation, alarm threshold calibration, cascading false-green prevention, work order synchronization.
+- Spec is now at 133 FRs, 83 SCs, ~96 edge cases, ~76 assumptions, 11 user stories.
+- Four assumptions INVALIDATED (SendGrid auto-patching in Round 2, `begin_segment()` in Round 3, zero Lambda layers in Round 7, 512MB memory adequacy in Round 6/12), 2 CORRECTED (200ms BSP default in Round 5, BSP queue size in Round 10), 1 PARTIALLY INVALIDATED (finally block reliability in Round 11) marked with strikethrough.
 - Three FRs REPLACED in-place (FR-025 revised, FR-026 replaced, FR-027 replaced) with Round 3 annotations.
-- Spec is now at 91 FRs, 44 SCs, 63 edge cases, 50 assumptions (3 invalidated, 2 corrected/amended), 11 user stories.
 - The most critical Round 3 finding is that the entire SSE streaming tracing architecture from Round 2 was built on a false assumption (`begin_segment()` works in Lambda). The corrected approach uses a Lambda Extension with an independent lifecycle.
 - The most critical Round 4 finding is the "X-Ray exclusive for TRACING, not ALARMING" scope clarification (FR-039). X-Ray traces provide diagnostic context; CloudWatch alarms provide 24/7 alerting. Both are required because X-Ray sampling means not all errors have traces, while CloudWatch Lambda metrics capture 100% of invocations.
 - Round 4 research confirmed: CloudFront is not in the architecture (Blind Spot 4 eliminated); ADOT sidecar-only mode is safe (Blind Spot 3 mitigated with constraints); X-Ray Groups are post-ingestion only (Blind Spot 2 confirmed — dual instrumentation required); out-of-band alerting is industry best practice for meta-observability (Blind Spot 6).
@@ -287,3 +492,20 @@
 - The most critical Round 10 finding is the BatchSpanProcessor queue size miscalculation (FR-086). FR-073's original `max_queue_size=512` is INSUFFICIENT for the SSE Lambda's actual span throughput (~675 spans per 15-second invocation). The OTel Python SDK silently drops spans when the queue is full — no exception, no metric, only a WARNING log line. This is the third round where a runtime configuration was proven incorrect by throughput analysis (after Round 5's BSP default and Round 8's deployment model). FR-086 amends the queue to 1500 with FR-091 adding independent overflow detection.
 - Round 10's second critical finding is the Lambda streaming after client disconnect behavior (FR-085). AWS explicitly states that streaming responses continue after client disconnects, and Python custom runtimes have no standard mechanism to detect disconnect (unlike Node.js). Without explicit BrokenPipeError handling, the SSE Lambda creates spans for phantom streams that inflate success metrics and waste DynamoDB capacity.
 - Round 10's third critical finding is the canary IsPartial check gap (FR-087). The canary checks trace existence but not completeness — a trace with `IsPartial=true` may be missing all ADOT streaming-phase spans while appearing "found." This is a logic gap in the existing canary design where the verification is necessary but not sufficient.
+- The most critical Round 12 finding is the post-proactive-flush generator behavior (FR-100). FR-093 correctly identified the need for proactive flush but left the generator's post-flush behavior unspecified. Without FR-100, the generator continues creating spans in the final ~3 seconds — these spans are either exported in the next BSP batch (if the Lambda doesn't timeout first) or permanently lost on SIGKILL. FR-100's graceful termination is strictly better than waiting for timeout because it converts a crash (SIGKILL, timeout Shutdown) into a clean exit (normal Shutdown), giving the ADOT Extension a guaranteed 2000ms to export all received spans.
+- Round 12's second critical finding is the bootstrap context=None blind spot (FR-103). The SSE Lambda's custom bootstrap passes `None` for the Lambda context parameter, making the standard `context.get_remaining_time_in_millis()` API unavailable. FR-093's proactive flush explicitly references `Lambda-Runtime-Deadline-Ms` but the mechanism for the handler to ACCESS this value was never specified. FR-103 is a hard prerequisite for FR-093 — without it, the generator has no way to know when to flush.
+- The most critical Round 14 finding is the `force_flush()` timeout enforcement gap (FR-114). OTel issue #4568 documents that the OTLP exporter blocks indefinitely when the ADOT Extension crashes or becomes unresponsive. The default 10-second timeout is per-retry, and with 6 retries across 24 batches, a worst-case `force_flush()` call could block for up to 24 minutes — far exceeding FR-093's 3000ms deadline budget. The `OTEL_EXPORTER_OTLP_TRACES_TIMEOUT=2` env var caps per-request timeout at 2 seconds, bounding the worst case to a manageable window.
+- Round 14's second critical finding is the BSP span destruction on export failure (FR-120). The BatchSpanProcessor pops spans from its queue BEFORE attempting export — if the export fails, those spans are permanently destroyed. Combined with `force_flush()` returning `True` regardless of export outcome (documented in Round 7 FR-066), this means the return value provides zero signal about data integrity. FR-120 establishes an annotation budget (max 25 of 50 per span) and documents the explicit assumption that `force_flush()` return value is NOT a health signal, reinforcing the canary (FR-078) as the only reliable export verification mechanism.
+- Round 14 also closes a significant gap in SSE observability: event-level trace correlation (FR-115). The Round 4 audit flagged that SSE events lack trace IDs in payloads — HTTP headers correlate at connection level only, meaning individual SSE events cannot be tied to specific trace spans. FR-115 adds a `trace_id` field to SSE event JSON data, enabling per-event correlation in debugging workflows.
+- Round 15's most impactful finding is the cascading false-green pattern (issues #118-119): when CloudWatch Metrics API experiences regional degradation, put_metric_data fails silently, custom metrics stop publishing, and alarms with treat_missing_data=notBreaching resolve to OK — creating a dashboard that shows all-green while the system is failing. The defense-in-depth solution uses three layers: (1) structured log fallback with CloudWatch Logs metric filter as out-of-band backup, (2) canary heartbeat piggybacked on production put_metric_data calls with treat_missing_data=breaching, and (3) composite alarm detecting INSUFFICIENT_DATA across heartbeat alarms. This pattern is validated by AWS Well-Architected REL-06 and documented in re:Invent 2023 OPS-301 ("Building resilient observability at scale").
+- The second systemic finding is alarm threshold miscalibration (issues #120-121, #127): absolute-count error thresholds (>3/5min, >5/5min) are scale-dependent and become meaningless at high invocation volumes, while the analysis Lambda latency alarm at 25s (42% of 60s timeout) fires on healthy cold starts. The fix applies AWS Well-Architected PERF-04's 80%-of-timeout rule and converts all error alarms to percentage-based math expressions with a minimum invocation guard (>10) to prevent division artifacts at low traffic.
+- **Round 16**: 2 CRITICAL + 5 HIGH + 3 MEDIUM blind spots found. 10 new FRs (FR-134–FR-143), 10 new SCs (SC-084–SC-093), 9 new edge cases, 6 new assumptions. Focus: alarm completeness for silent failure metrics, frontend trace header verification gates, canary out-of-band channel specification, SNS trace propagation verification, API Gateway latency alarms, force_flush() hard timeout enforcement, ADOT mid-stream crash detection.
+- Spec is now at 143 FRs, 93 SCs, ~105 edge cases, ~82 assumptions, 11 user stories.
+- Six assumptions still valid but REFINED: CloudWatch RUM FetchPlugin confirmed to inject headers pre-fetch without ReadableStream interference (source: FetchPlugin.ts source inspection); SNS AWSTraceHeader propagation confirmed but rawMessageDelivery mode strips it (source: AWS SNS docs); force_flush() timeout non-enforcement confirmed with 44s worst-case calculation (source: opentelemetry-python#4568, BSP source); sequential batch export confirmed by SDK source.
+- Round 16's most critical finding is the alarm gap on FR-124's `SilentFailure/Count` metric (FR-134). FR-124 (Round 15) created a unified metric for 5 silent failure paths, and SC-019 expects CloudWatch alarms on these paths — but no FR actually creates the alarm. The metric is emitted but nobody is watching it. This is a specification-level gap where the metric FR and the alarm expectation (SC) were never connected by an alarm FR. FR-134 closes this gap. Additionally, FR-124's 5-path list conflicts with SC-004's 7-path list (FR-142 aligns them).
+- Round 16's second critical finding is the frontend trace header verification gate (FR-135). The audit documented ZERO X-Ray trace header propagation on browser fetch() calls. Research confirmed CloudWatch RUM's FetchPlugin SHOULD inject headers (pre-fetch argument mutation, no ReadableStream interference), but injection silently fails if: (a) `addXRayTraceIdHeader` not configured, (b) URL not in `isUrlAllowed()` filter, (c) CORS rejects the header. No verification gate existed to catch this — the spec assumed it worked. FR-135 adds a Playwright-based Phase 3 deployment gate.
+- Round 16 also specifies the canary's out-of-band alerting channel (FR-136) which was referenced 10+ times across 4 rounds but never defined. If the channel were a CloudWatch alarm, CloudWatch degradation would create a circular dependency — the monitoring system for "is monitoring working?" would itself be down. Cross-region SNS direct publish survives primary-region CloudWatch degradation.
+- Round 16's force_flush() hard timeout (FR-139) closes a gap where FR-114's OTEL_EXPORTER_OTLP_TRACES_TIMEOUT=2 bounds per-REQUEST timeout but NOT total force_flush() duration. With 22 batches exported sequentially (confirmed by OTel SDK source), hung Extension → 44s total block, defeating FR-093's 3000ms proactive flush window. The thread-based wrapper (2500ms join timeout) is the standard Python pattern for enforcing hard timeouts on blocking calls.
+- **Round 17**: 1 CRITICAL + 2 HIGH + 2 MEDIUM blind spots found. 3 new FRs (FR-144–FR-146), 3 new SCs (SC-094–SC-096), SC-064 amended, 4 new edge cases, 3 new assumptions. Focus: OTel manual span error status for X-Ray fault rendering (CRITICAL — `record_exception()` without `set_status(ERROR)` is invisible to X-Ray), canary FR-018 fail-fast exemption formalization, canary Lambda instrumentation scope. Research-validated claim: ADOT X-Ray exporter `makeCause()` is gated on `StatusCode.ERROR` (source: ADOT exporter `cause.go`). SC-064 amended to test hung-Extension scenario per FR-139. HL document updated to include Round 16 content that was stale since Round 15.
+- Spec is now at 146 FRs, 96 SCs, ~109 edge cases, ~85 assumptions, 11 user stories.
+- Five assumptions INVALIDATED (SendGrid auto-patching R2, begin_segment() R3, zero Lambda layers R7, 512MB memory R6/R12, force_flush return value R14), 2 CORRECTED (BSP default R5, BSP queue size R10), 1 PARTIALLY INVALIDATED (finally block reliability R11).
