@@ -3,7 +3,7 @@
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-02-14
 **Feature**: [spec.md](../spec.md)
-**Validation Iterations**: 18 (initial draft + round 1 review + round 2 deep-dive + round 3 blind spot analysis + round 4 audit gap analysis + round 5 ADOT architecture deep-dive + round 6 blind spot fixes + round 7 ADOT operational lifecycle deep-dive + round 8 container-based deployment blind spot analysis + round 9 four-domain deep research + round 10 canonical-source blind spot analysis + round 11 bootstrap & deadline safety + round 12 deployment safety & operational lifecycle + round 13 deployment safety & migration observability + round 14 export safety & operational completeness + round 15 silent failure instrumentation & alarm calibration + round 16 alarm completeness & frontend verification gates + round 17 OTel error status & canary resilience)
+**Validation Iterations**: 20 (initial draft + round 1 review + round 2 deep-dive + round 3 blind spot analysis + round 4 audit gap analysis + round 5 ADOT architecture deep-dive + round 6 blind spot fixes + round 7 ADOT operational lifecycle deep-dive + round 8 container-based deployment blind spot analysis + round 9 four-domain deep research + round 10 canonical-source blind spot analysis + round 11 bootstrap & deadline safety + round 12 deployment safety & operational lifecycle + round 13 deployment safety & migration observability + round 14 export safety & operational completeness + round 15 silent failure instrumentation & alarm calibration + round 16 alarm completeness & frontend verification gates + round 17 OTel error status & canary resilience + round 20 operational reality & process integrity)
 
 ## Content Quality
 
@@ -458,6 +458,64 @@
 | Canary dual-mode operation | Architectural analysis | Explicit instrumentation scope | FR-146, SC-096 |
 | SpanKind service map distortion | ADOT X-Ray Exporter source | Edge case + assumption (SC-028 covers outcome) | Edge case only |
 
+## Emergent Issues Found (Round 20 — Operational Reality & Process Integrity)
+
+| # | Severity | Issue | Resolution |
+| --- | -------- | ----- | ---------- |
+| 135 | **CRITICAL** | OTel Python SDK `BatchSpanProcessor` has documented deadlock bug (opentelemetry-python#3886) — worker thread holds internal lock indefinitely; `force_flush()` hangs; FR-139's thread wrapper terminates call but spans locked in BSP are permanently unrecoverable; THIRD span-loss vector distinct from Extension hang and Extension drop | Added FR-156 (BSP deadlock diagnostic differentiation); added SC-106; 2 edge cases, 1 assumption. Source: opentelemetry-python#3886 |
+| 136 | **CRITICAL** | FR-154 staleness enforcement gate never applied — HL document missing 9 FRs (FR-147-155), 9 SCs (SC-097-105), entire Round 18; no GitHub issue created as FR-154 mandates; detection-without-enforcement proven insufficient across Rounds 16-20 | Added FR-157 (retroactive enforcement with explicit deferral + GitHub issue mandate); added SC-107. Source: Observed failure — FR-132 exists since Round 15 but staleness persisted |
+| 137 | HIGH | ADOT Lambda Extension cold start latency unmeasured — AWS publishes NO official benchmarks (opentelemetry-lambda#263); community reports 200ms-2000ms+; SSE Lambda is customer-facing with no cold start budget | Added FR-158 (cold start measurement + <2000ms P95 budget); added SC-108; 1 edge case. Source: opentelemetry-lambda#263, aws-otel-lambda#228 |
+| 138 | HIGH | ADOT Extension IAM permissions not enumerated — FR-017 says "X-Ray permissions" but missing 3 of 5 required actions (GetSampling*); missing actions cause SILENT fallback to 1 trace/sec | Added FR-159 (5 IAM actions enumerated); added SC-109; 1 edge case, 1 assumption. Source: ADOT permissions docs |
+| 139 | HIGH | RESPONSE_STREAM + ADOT Extension lifecycle has NO canonical documentation — foundational assumption unverified by AWS | Added FR-160 (preprod verification gate); added SC-110; 1 edge case, 1 assumption. Source: Absence of AWS documentation |
+| 140 | HIGH | Function URL invocations sampled at 100% — no parent context + parentbased_always_on = every invocation is root span at $5/million traces | Added FR-161 (centralized sampling rule + daily anomaly alarm); added SC-111; 1 edge case, 1 assumption. Source: OTel sampler spec, X-Ray pricing |
+| 141 | MEDIUM | SC-064 conflates two distinct failure modes (port-unreachable vs hung Extension) with different code paths | SC-064 SUPERSEDED → SC-064a + SC-064b; added FR-156a (informational). Source: Spec analysis |
+| 142 | MEDIUM | treat_missing_data not classified per-alarm — FR-121/FR-131 classify by TYPE but 30+ alarms need individual mapping | Added FR-162 (exhaustive classification); added SC-112. Source: CloudWatch docs, AWS Well-Architected REL-06 |
+| 143 | MEDIUM | ADOT Extension localhost OTLP accepts unauthenticated traces — Lambda isolation limits risk but attack surface exists | Documented as edge case and assumption (accepted risk). Source: ADOT permissions docs |
+| 144 | MEDIUM | X-Ray 30-day retention with no archival — post-incident analysis beyond 30 days loses all data | Added FR-163 (manual archival procedure); added SC-113; 1 edge case. Source: X-Ray quotas |
+| 145 | MEDIUM | Work order files (fix-*.md) contain only Round 1-6 FRs — 100+ FRs unmapped | Added FR-164 (synchronization enforcement); added SC-114. Source: Observed failure |
+
+### Round 20 — Operational Reality & Process Integrity
+
+| # | Type | ID | Description | Status |
+|---|------|----|-------------|--------|
+| 156 | FR | FR-156 | BSP deadlock diagnostic differentiation in force_flush() timeout path | [ ] |
+| 157 | FR | FR-157 | FR-154 retroactive staleness enforcement with GitHub issue creation | [ ] |
+| 158 | FR | FR-158 | ADOT cold start latency budget: measured P95 < 2000ms at 1024MB | [ ] |
+| 159 | FR | FR-159 | ADOT Extension IAM: 5 X-Ray actions enumerated (Put*, GetSampling*) | [ ] |
+| 160 | FR | FR-160 | RESPONSE_STREAM + ADOT Extension lifecycle preprod verification gate | [ ] |
+| 161 | FR | FR-161 | Function URL sampling cost guard with centralized rule + daily alarm | [ ] |
+| 156a | FR | FR-156a | SC-064 split rationale (informational) | [ ] |
+| 162 | FR | FR-162 | Exhaustive treat_missing_data per-alarm classification | [ ] |
+| 163 | FR | FR-163 | X-Ray trace archival procedure for production incidents | [ ] |
+| 164 | FR | FR-164 | Work order file synchronization enforcement | [ ] |
+| 064a | SC | SC-064a | Port-unreachable ADOT failure: ECONNREFUSED, fast fail, diagnostic log | [ ] |
+| 064b | SC | SC-064b | Hung Extension failure: TCP accept, 2500ms timeout, diagnostic log | [ ] |
+| 106 | SC | SC-106 | force_flush() resilient to BSP deadlock, diagnostic differentiation | [ ] |
+| 107 | SC | SC-107 | GitHub issue "HL Document Staleness: Missing Round 18" created | [ ] |
+| 108 | SC | SC-108 | SSE Lambda cold start P95 < 2000ms measured in preprod | [ ] |
+| 109 | SC | SC-109 | ADOT IAM: all 5 xray:* actions in execution role | [ ] |
+| 110 | SC | SC-110 | Preprod: ≥95% streaming-phase spans in X-Ray across 10 invocations | [ ] |
+| 111 | SC | SC-111 | X-Ray sampling rule for Function URL + daily cost anomaly alarm | [ ] |
+| 112 | SC | SC-112 | All alarms have explicit treat_missing_data matching classification | [ ] |
+| 113 | SC | SC-113 | Operational runbook documents X-Ray trace archival procedure | [ ] |
+| 114 | SC | SC-114 | fix-*.md files enumerate all mapped FRs with zero gaps | [ ] |
+
+## Round 20 Blind Spot Resolution Summary
+
+| Blind Spot | Source | Resolution | New FR/SC |
+|---|---|---|---|
+| BSP deadlock span-loss vector | opentelemetry-python#3886 | Diagnostic differentiation in timeout path | FR-156, SC-106 |
+| HL document staleness FR-154 violation | Observed failure across Rounds 16-20 | Retroactive enforcement + GitHub issue | FR-157, SC-107 |
+| ADOT cold start unmeasured | opentelemetry-lambda#263 (no benchmarks) | Measurement gate + P95 < 2000ms budget | FR-158, SC-108 |
+| ADOT Extension IAM gap | ADOT permissions documentation | 5 IAM actions enumerated | FR-159, SC-109 |
+| RESPONSE_STREAM Extension lifecycle unverified | Absence of AWS documentation | Preprod verification gate | FR-160, SC-110 |
+| Function URL 100% sampling cost risk | OTel sampler spec + X-Ray pricing | Centralized sampling rule + daily alarm | FR-161, SC-111 |
+| SC-064 conflated failure modes | Spec analysis | Split into SC-064a + SC-064b | FR-156a, SC-064a/b |
+| treat_missing_data per-alarm gap | CloudWatch docs, Well-Architected REL-06 | Exhaustive classification | FR-162, SC-112 |
+| ADOT unauthenticated OTLP endpoint | ADOT permissions docs | Accepted risk — Lambda isolation | Edge case + assumption |
+| X-Ray 30-day retention no archival | X-Ray quotas | Manual archival procedure | FR-163, SC-113 |
+| Work order files stale since Round 7 | Observed failure since FR-132 | Synchronization enforcement | FR-164, SC-114 |
+
 ## Notes
 
 - All 119 issues across fifteen rounds addressed (Round 15 requirements tracking added).
@@ -509,3 +567,17 @@
 - **Round 17**: 1 CRITICAL + 2 HIGH + 2 MEDIUM blind spots found. 3 new FRs (FR-144–FR-146), 3 new SCs (SC-094–SC-096), SC-064 amended, 4 new edge cases, 3 new assumptions. Focus: OTel manual span error status for X-Ray fault rendering (CRITICAL — `record_exception()` without `set_status(ERROR)` is invisible to X-Ray), canary FR-018 fail-fast exemption formalization, canary Lambda instrumentation scope. Research-validated claim: ADOT X-Ray exporter `makeCause()` is gated on `StatusCode.ERROR` (source: ADOT exporter `cause.go`). SC-064 amended to test hung-Extension scenario per FR-139. HL document updated to include Round 16 content that was stale since Round 15.
 - Spec is now at 146 FRs, 96 SCs, ~109 edge cases, ~85 assumptions, 11 user stories.
 - Five assumptions INVALIDATED (SendGrid auto-patching R2, begin_segment() R3, zero Lambda layers R7, 512MB memory R6/R12, force_flush return value R14), 2 CORRECTED (BSP default R5, BSP queue size R10), 1 PARTIALLY INVALIDATED (finally block reliability R11).
+- **Round 18**: 2 CRITICAL + 3 HIGH + 4 MEDIUM blind spots found. 9 new FRs (FR-147–FR-155), 9 new SCs (SC-097–SC-105), 4 new edge cases, 3 new assumptions. Focus: cross-document consistency (FR-124 enumeration contradiction), frontend RUM initialization race condition, post-proactive-flush span orphaning, OTel error handling for caught vs uncaught exceptions, canary warm-invocation re-initialization, gate precedence clarification, scope statement formalization, staleness remediation enforcement, PII data minimization.
+- Spec is now at 155 FRs, 105 SCs, ~113 edge cases, ~88 assumptions, 11 user stories.
+- Round 18's most critical finding is the FR-124/FR-142 enumeration contradiction (FR-147). FR-124 says "five" silent failure paths but FR-142 corrected to 7 and FR-134 creates 7 alarms. An implementer following FR-124's text creates 5 metrics, leaving 2 alarm ARNs in permanent INSUFFICIENT_DATA. This is a DOCUMENTATION-ONLY fix but has OPERATIONAL impact — dangling alarms produce confusing dashboards where 2 of 7 alarms always show grey/unknown state.
+- Round 18's second critical finding is the RUM initialization race (FR-148). FR-135's Playwright deployment gate passes because Playwright controls page load order. Production users with cold caches get non-deterministic `<script>` loading — application fetch() can fire before CloudWatch RUM patches window.fetch, silently dropping the X-Amzn-Trace-Id header on the SSE connection. This is a gate-vs-runtime distinction: the deployment gate verifies the MECHANISM exists but cannot catch the TIMING race.
+- Research-validated claims: (1) OTel `start_as_current_span()` defaults `record_exception=True, set_status_on_exception=True` since v0.16b0 — but these ONLY fire for UNCAUGHT exceptions that propagate out of the `with` block; caught exceptions bypass automatic handling (source: OTel Python SDK `use_span()` implementation); (2) RUM FetchPlugin patches synchronously via shimmer but the AwsRum constructor itself loads asynchronously via CDN snippet (source: aws-rum-web FetchPlugin.ts); (3) Python module-level code executes once per process — Lambda warm invocations reuse the process (source: Python Language Reference, AWS Lambda execution model docs).
+- Three new assumptions added, zero invalidated. The distinction between caught and uncaught exception handling in OTel context managers is a nuance that affects all 7 silent failure paths — these are ALL caught exceptions by design (they must not crash the SSE generator), so automatic error handling never fires for the most important error paths.
+- Meta-observation: FR-132 (staleness tracking, Round 15) exists in a document that is itself stale — the HL document is 2 rounds behind with 13 missing risk entries and 39 missing SCs. FR-154 adds enforcement (GitHub issue creation + round-blocking) because detection-only staleness tracking demonstrably failed. This is the first FR created to fix a specification process failure rather than a system behavior gap.
+- **Round 20**: 2 CRITICAL + 4 HIGH + 5 MEDIUM blind spots found. 9 new FRs (FR-156–FR-164, plus FR-156a informational), 9 new SCs (SC-106–SC-114), SC-064 SUPERSEDED and split into SC-064a + SC-064b, 8 new edge cases, 6 new assumptions. Focus: BSP deadlock as third span-loss vector, FR-154 staleness enforcement retroactive application, ADOT cold start measurement gap, ADOT IAM permission enumeration, RESPONSE_STREAM + Extension lifecycle verification, Function URL sampling cost guard, treat_missing_data exhaustive classification, X-Ray trace archival, work order synchronization enforcement.
+- Spec is now at 164 FRs (+1 informational FR-156a), 114 SCs (+2 split SC-064a/b), ~121 edge cases, ~94 assumptions, 11 user stories.
+- Zero assumptions INVALIDATED in Round 20. One foundational assumption IDENTIFIED as UNVERIFIED: ADOT Extension lifecycle during RESPONSE_STREAM (no canonical source — FR-160 mandates preprod verification).
+- Round 20's most critical finding is the PROCESS INTEGRITY gap: FR-132 (detection, Round 15) and FR-154 (enforcement, Round 18) both exist but the HL document they govern is stale, and no GitHub issue was created as FR-154 mandates. This is the spec's first self-referential failure — a requirement about document freshness exists in a document that is itself stale. FR-157 breaks the cycle by requiring a GitHub issue as an external enforcement mechanism outside the spec itself.
+- Round 20's second critical finding is the BSP deadlock (FR-156). This is the THIRD distinct span-loss vector: (1) ADOT Extension drop race — FR-074 accepted ~30% worst-case loss; (2) ADOT Extension hang — FR-139 thread wrapper aborts at 2500ms; (3) BSP internal deadlock — opentelemetry-python#3886, same FR-139 mitigation but different span fate (locked vs lost). The spec now explicitly acknowledges three span-loss vectors with distinct failure signatures and detection mechanisms.
+- Round 20 UNIQUELY addresses category gaps deferred from previous rounds: Security (FR-159 IAM enumeration, unauthenticated OTLP edge case), Cost (FR-161 Function URL sampling guard), Performance (FR-158 cold start budget), and Operational completeness (FR-162 treat_missing_data, FR-163 archival, FR-164 work order sync). These were identified as gaps in the context carryover but never previously addressed.
+- Research methodology: Round 20 used 6 canonical source research topics (ADOT cold start, ADOT IAM, X-Ray limits, BSP SIGKILL behavior, X-Ray sampling, RESPONSE_STREAM + Extension). The ADOT cold start research produced the finding that AWS publishes NO official benchmarks — the absence of data is itself a finding that motivates FR-158's measurement mandate. The RESPONSE_STREAM research produced the finding that AWS documentation does not address Extension lifecycle during streaming — the absence of documentation is itself a finding that motivates FR-160's verification gate. Five assumptions INVALIDATED across all 20 rounds (R2, R3, R7, R6/R12, R14), 2 CORRECTED (R5, R10), 1 PARTIALLY INVALIDATED (R11), 1 UNVERIFIED (R20).
