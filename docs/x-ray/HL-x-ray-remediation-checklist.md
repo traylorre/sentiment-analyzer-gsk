@@ -200,6 +200,22 @@ This results in:
 - **(R20)** RESPONSE_STREAM + ADOT Extension lifecycle is UNVERIFIED foundational assumption — preprod gate required before production
 - **(R20)** Function URL 100% sampling creates unbounded X-Ray cost — centralized sampling rule + daily anomaly alarm required
 
+**Round 21** (2 CRITICAL, 5 HIGH, 6 MEDIUM — scalability, operational hardening, span-loss vector reclassification):
+
+- **(R21)** BSP deadlock (opentelemetry-python#3886) FIXED in SDK v1.33.0+ — project's pinned v1.39.1 uses rewritten BatchProcessor; THREE span-loss vectors reduced to TWO
+- **(R21)** SC-040 verification method INVALID — SDK v1.39.1 BSP uses deque with silent span drop (no log, no callback, no metric); verification requires span-count comparison shim
+- **(R21)** ADOT Extension non-recovery after crash documented as span-loss vector #3 — Extension NOT restarted within execution environment; 100% span loss on affected sandbox
+- **(R21)** IAM policy drift detection — no automation detects X-Ray permission removal; AWS Config/CloudTrail EventBridge rule required
+- **(R21)** Canary dead-man detection gap — double-failure (canary stops + CloudWatch degraded) has zero external detection; cross-region heartbeat required
+- **(R21)** PutTraceSegments TPS quota corrected ~2,500 (not 2,600) and IS adjustable via Service Quotas
+- **(R21)** OTLP HTTP exporter retry blocks BSP worker thread up to 10s — amplifies span loss under Extension degradation
+- **(R21)** X-Ray Groups/Sampling Rules quotas (25/region each) ARE adjustable — spec tracks count against quota
+- **(R21)** X-Ray encryption at rest documented (default AWS-managed key; optional CMK)
+- **(R21)** GetTraceSummaries 6-hour time window constraint compounds FR-163 archival procedure
+- **(R21)** Centralized sampling rules scope documented — controls Function URL/EventBridge Lambdas only; no effect on API Gateway Lambdas
+- **(R21)** Lambda Function URL invisible in X-Ray service map — no gateway-level latency breakdown
+- **(R21)** ADOT version upgrade runbook formalized — 8 verification gates for container-based upgrades
+
 ---
 
 ## Work Order
@@ -531,6 +547,20 @@ The sole exception is the X-Ray canary (task #11), which by definition must surv
 - [ ] Operational runbook documents manual X-Ray trace archival procedure with rate-limit awareness; cross-referenced from FR-122 — SC-113
 - [ ] Every FR in HL Work Order table present in corresponding fix-*.md with round annotation; FR-132 reports zero gaps — SC-114
 
+#### Round 21 (2026-03-03)
+
+- [ ] FR-156 structured log label amended to `"extension_hang"`; catalogued span-loss vectors = TWO; BSP deadlock RETIRED — SC-115
+- [ ] SC-040 verification uses span-count comparison shim (created vs exported); old "Queue is full" log method INVALID — SC-116
+- [ ] ADOT Extension crash produces `ADOTExtensionUnavailable` metric on SAME + ALL subsequent warm invocations until environment recycling — SC-117
+- [ ] IAM policy change detection for X-Ray permissions fires alarm within 15 minutes of `GetSampling*` removal — SC-118
+- [ ] Canary emits external heartbeat; double-failure (canary stopped + primary CloudWatch degraded) triggers external alert within 15 minutes — SC-119
+- [ ] PutTraceSegments TPS quota utilization monitored; alarm on `UnprocessedTraceSegments > 0` — SC-120
+- [ ] FR-163 archival runbook accounts for 6-hour GetTraceSummaries window; includes time estimation formula — SC-121
+- [ ] Terraform CI check counts X-Ray Groups + Sampling Rules against 25/region quota; warns at 80% — SC-122
+- [ ] X-Ray encryption at rest documented (default AWS-managed key active; CMK available) — SC-123
+- [ ] Centralized sampling rule scope documented: controls Function URL/EventBridge Lambdas; no effect on API Gateway Lambdas — SC-124
+- [ ] ADOT version upgrade runbook with 8 verification gates; cross-referenced from FR-070/FR-110 — SC-125
+
 ### Operator Experience
 - [ ] Single-pane tracing: browser → API Gateway → Lambda → DynamoDB (SC-001)
 - [ ] Filter by error/fault to find silent failures (SC-002)
@@ -659,6 +689,18 @@ The sole exception is the X-Ray canary (task #11), which by definition must surv
 | **(R20)** ADOT OTLP endpoint unauthenticated | Low | **LOW** | Compromised dependency could inject trace data; Lambda isolation mitigates; accepted risk. Documented in threat model. |
 | **(R20)** X-Ray 30-day retention with no archival | Medium | **MEDIUM** | Post-incident analysis beyond 30 days loses all trace data. Affects: Task 5. Resolution: FR-163 manual archival procedure with rate-limit awareness. |
 | **(R20)** Work order staleness (100+ FRs) | **CONFIRMED** | **MEDIUM** | fix-*.md files contain only Round 1-6 FRs; implementer scope blindness. Affects: ALL tasks. Resolution: FR-164 synchronization enforcement as FR-107 Phase 0 prerequisite. |
+| **(R21)** BSP deadlock span-loss vector incorrectly catalogued | ~~**CONFIRMED**~~ **RETIRED** | ~~**CRITICAL**~~ **N/A** | opentelemetry-python#3886 FIXED in SDK v1.33.0+; project uses v1.39.1. THREE vectors reduced to TWO. FR-165 amends. |
+| **(R21)** SC-040 verification method invalid on SDK v1.39.1 | **CONFIRMED** | **CRITICAL** | BSP `deque.appendleft()` silently drops spans; no log entry exists. FR-166 provides replacement verification. |
+| **(R21)** ADOT Extension non-recovery after crash | **CONFIRMED** | **HIGH** | Extension NOT restarted within execution environment; 100% span loss on affected sandbox. FR-167 documents as span-loss vector #3. |
+| **(R21)** IAM policy drift detection absent | **CONFIRMED** | **HIGH** | No automation detects X-Ray permission removal; silent 1 trace/sec degradation. FR-168 adds AWS Config/EventBridge detection. |
+| **(R21)** Canary dead-man double-failure gap | **CONFIRMED** | **HIGH** | Canary stopped + CloudWatch degraded = zero detection. FR-169 adds external heartbeat. |
+| **(R21)** PutTraceSegments TPS quota incorrect and unmonitored | **CONFIRMED** | **HIGH** | ~2,500 TPS (not 2,600); quota IS adjustable; exceeding = permanent data loss. FR-170 adds monitoring. |
+| **(R21)** OTLP exporter retry blocks BSP worker | Low | **MEDIUM** | Up to 10s BSP worker block during Extension degradation; amplifies span loss. FR-171 documents. |
+| **(R21)** X-Ray Groups/Sampling Rules quota untracked | Low | **MEDIUM** | 25/region each (adjustable); current usage <5 but no growth monitoring. FR-172 adds CI check. |
+| **(R21)** X-Ray encryption at rest undocumented | Low | **MEDIUM** | Default AWS-managed encryption active; CMK available. FR-173 documents. |
+| **(R21)** GetTraceSummaries 6-hour window compounds archival | Low | **MEDIUM** | 24-hour incident requires 4 time windows; FR-174 amends FR-163 runbook. |
+| **(R21)** Centralized sampling rule scope undocumented | Medium | **MEDIUM** | Controls Function URL/EventBridge only; API Gateway unaffected. FR-175 prevents implementer confusion. |
+| **(R21)** Function URL invisible in service map | Low | **MEDIUM** | No gateway-level latency node; operators lose breakdown. FR-176 documents limitation. |
 
 ---
 
@@ -703,3 +745,4 @@ The sole exception is the X-Ray canary (task #11), which by definition must surv
 | 2026-03-03 | **Round 18 updates:** 2 CRITICAL + 3 HIGH + 4 MEDIUM blind spots found. 9 new FRs (FR-147–FR-155), 9 new SCs (SC-097–SC-105), 4 new edge cases, 3 new assumptions. Focus: FR-124 silent failure path count correction 5→7 (FR-147, CRITICAL), CloudWatch RUM FetchPlugin initialization race on cold page loads (FR-148, CRITICAL), post-flush span creation prohibition with flush_fired flag (FR-149), OTel error handling context manager pattern for caught vs uncaught exceptions (FR-150), canary warm-invocation TracerProvider re-initialization (FR-151), FR-109/FR-117 gate precedence clarification (FR-152), FR-018 explicit scope statement for future Lambdas (FR-153), FR-132 automated staleness remediation trigger with GitHub issue + blocking gate (FR-154), trace data PII prohibition with CI review gate (FR-155). Key research: OTel `start_as_current_span()` defaults to `record_exception=True, set_status_on_exception=True` since v0.16b0 but ONLY for uncaught exceptions; Python module-level code never re-executes on warm invocations. Totals: 155 FRs, 105 SCs, ~113 edge cases, ~88 assumptions (5 invalidated, 2 corrected, 1 partially invalidated). |
 | 2026-03-03 | **Round 20 updates:** 2 CRITICAL + 4 HIGH + 5 MEDIUM blind spots found. 9 new FRs (FR-156–FR-164, +FR-156a informational), 9 new SCs (SC-106–SC-114), SC-064 SUPERSEDED by SC-064a/SC-064b split, 8 new edge cases, 6 new assumptions (1 UNVERIFIED). Focus: BSP deadlock diagnostic differentiation as THIRD span-loss vector (FR-156, CRITICAL), FR-154 retroactive staleness enforcement with GitHub issue requirement (FR-157, CRITICAL), ADOT cold start latency budget with <2000ms P95 constraint (FR-158), ADOT Extension IAM 5-action enumeration with silent fallback risk (FR-159), RESPONSE_STREAM+ADOT Extension lifecycle preprod verification gate (FR-160), Function URL sampling cost guard with centralized rule + daily anomaly alarm (FR-161), exhaustive per-alarm treat_missing_data classification (FR-162), X-Ray trace archival procedure for production incidents (FR-163), work order file synchronization enforcement as FR-107 Phase 0 prerequisite (FR-164). Key research: opentelemetry-python#3886 BSP deadlock confirmed Python 3.11+; opentelemetry-lambda#263 confirms no ADOT benchmarks; ADOT Extension RESPONSE_STREAM lifecycle has NO canonical documentation (UNVERIFIED assumption). Totals: 164 FRs (+FR-156a), 114 SCs (+SC-064a/b), ~121 edge cases, ~94 assumptions (5 invalidated, 2 corrected, 1 partially invalidated, 1 unverified), 11 user stories. |
 | 2026-03-03 | **HL Document Synchronization:** Comprehensive update to resolve FR-157 staleness enforcement. Updated: Executive Summary (+Round 18, +Round 20 blocks with 19 emergent findings + 14 summary list items), Work Order table (+FR-137/Task 3, +FR-147/FR-150/Task 4, +FR-149/FR-150/FR-156/FR-158/FR-160/FR-163/Task 5, +FR-148/Task 10, +FR-151/FR-152/Task 11, +FR-159/Task 1, +FR-161/Task 16, +FR-162/Task 17), Process FR note expanded (9 process FRs documented), Component Coverage Map (+14 Round 18/20 entries), Constraint section (+FR-153 scope statement), Success Criteria (+57 SCs: SC-058 through SC-114, SC-064a/SC-064b split, organized in 8 subsections), Risk Assessment (+21 Round 18/20 risk entries), Progress Log (+3 entries). All sections now current through Round 20. |
+| 2026-03-03 | **Round 21 updates:** 2 CRITICAL + 5 HIGH + 6 MEDIUM blind spots found. 13 new FRs (FR-165–FR-177), 11 new SCs (SC-115–SC-125), SC-064b/SC-106 amended, 12 new assumptions, 1 assumption corrected (BSP deadlock FIXED). Focus: BSP deadlock span-loss vector RETIRED — opentelemetry-python#3886 fixed in SDK v1.33.0+, project uses v1.39.1 (FR-165, CRITICAL); SC-040 verification method INVALID on v1.39.1 — deque silently drops spans with no log (FR-166, CRITICAL); ADOT Extension non-recovery after crash documented as replacement span-loss vector #3 (FR-167); IAM policy drift detection for X-Ray permissions (FR-168); canary dead-man external heartbeat for double-failure detection (FR-169); PutTraceSegments TPS quota corrected ~2,500 and IS adjustable (FR-170); OTLP exporter retry blocks BSP worker thread (FR-171); X-Ray Groups/Sampling Rules quota tracking (FR-172); X-Ray encryption at rest documentation (FR-173); GetTraceSummaries 6-hour window constraint (FR-174); centralized sampling rule scope (FR-175); Function URL service map limitation (FR-176); ADOT version upgrade runbook (FR-177). Key research: OTel Python SDK v1.39.1 `BatchProcessor` source code analysis confirmed deque-based implementation with silent drops; ADOT Extension lifecycle confirmed non-restart on crash; X-Ray Service Quotas confirmed adjustable (previously assumed non-adjustable); CloudWatch RUM confirmed X-Ray header injection. Totals: 177 FRs (+FR-156a), 125 SCs (+SC-064a/b), ~134 edge cases, ~106 assumptions (5 invalidated, 3 corrected, 1 partially invalidated, 1 unverified, 1 retired), 11 user stories. |
