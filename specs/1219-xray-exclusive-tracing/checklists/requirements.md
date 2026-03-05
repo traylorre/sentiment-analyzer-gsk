@@ -3,7 +3,7 @@
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-02-14
 **Feature**: [spec.md](../spec.md)
-**Validation Iterations**: 20 (initial draft + round 1 review + round 2 deep-dive + round 3 blind spot analysis + round 4 audit gap analysis + round 5 ADOT architecture deep-dive + round 6 blind spot fixes + round 7 ADOT operational lifecycle deep-dive + round 8 container-based deployment blind spot analysis + round 9 four-domain deep research + round 10 canonical-source blind spot analysis + round 11 bootstrap & deadline safety + round 12 deployment safety & operational lifecycle + round 13 deployment safety & migration observability + round 14 export safety & operational completeness + round 15 silent failure instrumentation & alarm calibration + round 16 alarm completeness & frontend verification gates + round 17 OTel error status & canary resilience + round 20 operational reality & process integrity)
+**Validation Iterations**: 20 (initial draft + round 1 review + round 2 deep-dive + round 3 blind spot analysis + round 4 audit gap analysis + round 5 ADOT architecture deep-dive + round 6 blind spot fixes + round 7 ADOT operational lifecycle deep-dive + round 8 container-based deployment blind spot analysis + round 9 four-domain deep research + round 10 canonical-source blind spot analysis + round 11 bootstrap & deadline safety + round 12 deployment safety & operational lifecycle + round 13 deployment safety & migration observability + round 14 export safety & operational completeness + round 15 silent failure instrumentation & alarm calibration + round 16 alarm completeness & frontend verification gates + round 17 OTel error status & canary resilience + round 20 operational reality & process integrity + round 21 span-loss vector reclassification & operational hardening + round 22 sampling graduation, operational procedures & PII prevention)
 
 ## Content Quality
 
@@ -488,6 +488,32 @@
 | 162 | FR | FR-162 | Exhaustive treat_missing_data per-alarm classification | [ ] |
 | 163 | FR | FR-163 | X-Ray trace archival procedure for production incidents | [ ] |
 | 164 | FR | FR-164 | Work order file synchronization enforcement | [ ] |
+| 165 | FR | FR-165 | BSP deadlock vector RETIRED — structured log label amended to "extension_hang" | [ ] |
+| 166 | FR | FR-166 | SC-040 verification method replaced for SDK v1.39.1 deque behavior | [ ] |
+| 167 | FR | FR-167 | ADOT Extension non-recovery documented as span-loss vector #3 | [ ] |
+| 168 | FR | FR-168 | IAM policy drift detection for X-Ray permissions | [ ] |
+| 169 | FR | FR-169 | Canary dead-man external health check for double-failure detection | [ ] |
+| 170 | FR | FR-170 | PutTraceSegments TPS corrected and monitoring added | [ ] |
+| 171 | FR | FR-171 | OTLP exporter retry-induced BSP worker block documented | [ ] |
+| 172 | FR | FR-172 | X-Ray Groups and Sampling Rules quota tracking | [ ] |
+| 173 | FR | FR-173 | X-Ray encryption-at-rest documentation | [ ] |
+| 174 | FR | FR-174 | GetTraceSummaries 6-hour time window constraint | [ ] |
+| 175 | FR | FR-175 | Centralized sampling rule scope documentation | [ ] |
+| 176 | FR | FR-176 | Lambda Function URL invisible in X-Ray service map | [ ] |
+| 177 | FR | FR-177 | ADOT version upgrade runbook with 8 verification gates | [ ] |
+| 178 | FR | FR-178 | PutTraceSegments default TPS corrected from ~2,500 to 500 | [ ] |
+| 179 | FR | FR-179 | Sampling graduation plan with 4 phases | [ ] |
+| 180 | FR | FR-180 | Kill switch activation criteria with 5 thresholds | [ ] |
+| 181 | FR | FR-181 | Lambda env var update operational hazard documentation | [ ] |
+| 182 | FR | FR-182 | Deployment version tagging and skew detection | [ ] |
+| 183 | FR | FR-183 | OTel Python ReadableSpan immutability constraint | [ ] |
+| 184 | FR | FR-184 | Span attribute allow-listing at creation time | [ ] |
+| 185 | FR | FR-185 | Canary trace annotation standard and X-Ray Group filter | [ ] |
+| 186 | FR | FR-186 | Annotation budget strategy (50/trace limit) | [ ] |
+| 187 | FR | FR-187 | ADOT resource overhead formal budget | [ ] |
+| 188 | FR | FR-188 | In-flight span loss on sandbox recycle | [ ] |
+| 189 | FR | FR-189 | Multi-account X-Ray via OAM documentation | [ ] |
+| 190 | FR | FR-190 | FR-157 GitHub issue filing (SC-107 unfulfilled) | [ ] |
 | 064a | SC | SC-064a | Port-unreachable ADOT failure: ECONNREFUSED, fast fail, diagnostic log | [ ] |
 | 064b | SC | SC-064b | Hung Extension failure: TCP accept, 2500ms timeout, diagnostic log | [ ] |
 | 106 | SC | SC-106 | force_flush() resilient to BSP deadlock, diagnostic differentiation | [ ] |
@@ -499,6 +525,26 @@
 | 112 | SC | SC-112 | All alarms have explicit treat_missing_data matching classification | [ ] |
 | 113 | SC | SC-113 | Operational runbook documents X-Ray trace archival procedure | [ ] |
 | 114 | SC | SC-114 | fix-*.md files enumerate all mapped FRs with zero gaps | [ ] |
+| 115 | SC | SC-115 | Span-loss vectors = TWO (BSP deadlock RETIRED) | [ ] |
+| 116 | SC | SC-116 | SC-040 replacement verification uses span-count comparison | [ ] |
+| 117 | SC | SC-117 | ADOT Extension crash produces ADOTExtensionUnavailable metric | [ ] |
+| 118 | SC | SC-118 | IAM policy drift alarm fires within 15 minutes of change | [ ] |
+| 119 | SC | SC-119 | Canary external heartbeat detects double-failure scenario | [ ] |
+| 120 | SC | SC-120 | PutTraceSegments quota utilization monitoring active | [ ] |
+| 121 | SC | SC-121 | FR-163 archival runbook accounts for 6-hour time window | [ ] |
+| 122 | SC | SC-122 | Terraform CI check for X-Ray quota at 80% threshold | [ ] |
+| 123 | SC | SC-123 | X-Ray encryption at rest documented | [ ] |
+| 124 | SC | SC-124 | Centralized sampling rule scope documented | [ ] |
+| 125 | SC | SC-125 | ADOT version upgrade runbook with 8 verification gates | [ ] |
+| 126 | SC | SC-126 | PutTraceSegments quota monitoring distinguishes default vs applied | [ ] |
+| 127 | SC | SC-127 | Sampling graduation document with 4 phases exists | [ ] |
+| 128 | SC | SC-128 | Kill switch activation runbook with 5 threshold conditions | [ ] |
+| 129 | SC | SC-129 | All 6 Lambdas tagged with deploy-sha, skew alarm configured | [ ] |
+| 130 | SC | SC-130 | Span attribute allow-list enforced at creation time | [ ] |
+| 131 | SC | SC-131 | Canary traces filterable via X-Ray Group | [ ] |
+| 132 | SC | SC-132 | Annotation budget ≤50/trace with per-component limits | [ ] |
+| 133 | SC | SC-133 | ADOT overhead budget documented with validation gates | [ ] |
+| 134 | SC | SC-134 | FR-157 GitHub issue exists in repository | [ ] |
 
 ## Round 20 Blind Spot Resolution Summary
 
@@ -588,3 +634,7 @@
 - Round 21 uniquely addresses OPERATIONAL HARDENING gaps: IAM drift detection (FR-168 — no AWS-native solution, requires AWS Config or CloudTrail EventBridge), canary dead-man detection (FR-169 — external heartbeat for double-failure scenario), ADOT upgrade runbook (FR-177 — 8 verification gates for container-based upgrades). These are operational concerns that would have surfaced during implementation but are cheaper to specify now.
 - Research methodology: Round 21 used 4 parallel canonical source research agents: (1) X-Ray limits/quotas — corrected PutTraceSegments TPS from 2,600 to ~2,500, confirmed Groups/Sampling Rules quotas are adjustable, confirmed 6-hour GetTraceSummaries window, confirmed encryption-at-rest defaults; (2) ADOT Extension behavior — confirmed non-restart on crash, confirmed warm invocation near-zero overhead, confirmed OTLP endpoint unauthenticated; (3) OTel SDK edge cases — confirmed BSP deadlock fix in v1.33.0, confirmed silent deque drops, confirmed force_flush() timeout non-enforcement, confirmed OTLP HTTP exporter retry blocking; (4) Lambda scalability — confirmed one Extension per sandbox, confirmed PutMetricData 500 TPS limit, confirmed RUM X-Ray header injection, confirmed Function URL invisible in service map. Total research: 40+ canonical source citations across 4 domains.
 - One assumption CORRECTED in Round 21 (BSP deadlock — was "known open issue", now "fixed in v1.33.0+"). One assumption RETIRED (BSP deadlock span-loss vector). One assumption REMAINS UNVERIFIED from Round 20 (ADOT Extension RESPONSE_STREAM lifecycle — FR-160 preprod gate still required). Zero assumptions INVALIDATED — Round 21 found corrections and documentation gaps rather than fundamental architectural misunderstandings.
+- **Round 22**: 2 CRITICAL + 4 HIGH + 7 MEDIUM blind spots found. 13 new FRs (FR-178–FR-190), 9 new SCs (SC-126–SC-134), 8 new edge cases, 8 new assumptions, 1 assumption CORRECTED (PutTraceSegments TPS default). Focus: PutTraceSegments default TPS corrected from ~2,500 to 500 — peak traffic exceeds default quota (FR-178, CRITICAL); FR-157 GitHub issue confirmed non-existent (FR-190, CRITICAL); sampling graduation plan (FR-179); kill switch activation criteria (FR-180); Lambda env var update hazard (FR-181); deployment version skew detection (FR-182); ReadableSpan immutability (FR-183 — PII SpanProcessor impossible); span attribute allow-listing (FR-184); canary trace annotation standard (FR-185); annotation budget strategy (FR-186); ADOT overhead budget (FR-187); in-flight span loss flush window (FR-188); multi-account OAM (FR-189).
+- Spec is now at 190 FRs (+1 informational FR-156a), 134 SCs (+2 split SC-064a/b), ~142 edge cases, ~114 assumptions, 11 user stories.
+- Round 22 uniquely addresses OPERATIONAL PROCEDURE gaps: sampling graduation plan (FR-179 — no existing strategy for traffic growth), kill switch activation criteria (FR-180 — FR-059 provides mechanism without operational guidance), deployment version skew detection (FR-182 — Terraform partial apply leaves mixed versions undetected). These are operational concerns that would cause production incidents if discovered during implementation rather than specification.
+- One assumption CORRECTED in Round 22 (PutTraceSegments TPS: ~2,500 documented in R21 → 500 default per AWS Service Quotas). Two assumptions UNVERIFIED: ADOT Extension collector contrib processor availability; ADOT_LAMBDA_FLUSH_TIMEOUT env var name and max value.

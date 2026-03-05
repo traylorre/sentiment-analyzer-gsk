@@ -199,6 +199,9 @@ This results in:
 - **(R20)** ADOT Extension IAM missing GetSampling* actions degrades silently to 1 trace/sec — invisible to Lambda, alarms, canary
 - **(R20)** RESPONSE_STREAM + ADOT Extension lifecycle is UNVERIFIED foundational assumption — preprod gate required before production
 - **(R20)** Function URL 100% sampling creates unbounded X-Ray cost — centralized sampling rule + daily anomaly alarm required
+- **BUT:** PutTraceSegments default TPS is 500, not ~2,500 — peak traffic may exceed quota (Round 22)
+- **BUT:** OTel Python ReadableSpan is read-only — PII redaction via SpanProcessor impossible (Round 22)
+- **BUT:** No sampling graduation plan, kill switch criteria, or deployment skew detection (Round 22)
 
 **Round 21** (2 CRITICAL, 5 HIGH, 6 MEDIUM — scalability, operational hardening, span-loss vector reclassification):
 
@@ -561,6 +564,17 @@ The sole exception is the X-Ray canary (task #11), which by definition must surv
 - [ ] Centralized sampling rule scope documented: controls Function URL/EventBridge Lambdas; no effect on API Gateway Lambdas — SC-124
 - [ ] ADOT version upgrade runbook with 8 verification gates; cross-referenced from FR-070/FR-110 — SC-125
 
+#### Round 22 (2026-03-03)
+- [ ] PutTraceSegments default TPS corrected from ~2,500 to 500 (account-specific increase noted) — SC-126
+- [ ] Sampling graduation plan with 4 phases documented — SC-127
+- [ ] Kill switch activation criteria with 5 thresholds documented — SC-128
+- [ ] Deployment version tagging + skew detection alarm on all 6 Lambdas — SC-129
+- [ ] Span attribute allow-list enforced at creation time via on_start() — SC-130
+- [ ] Canary traces filterable via X-Ray Group !annotation.synthetic — SC-131
+- [ ] Annotation budget ≤50/trace with per-component allocation — SC-132
+- [ ] ADOT overhead budget documented with validation gates — SC-133
+- [ ] FR-157 GitHub issue filed in repository — SC-134
+
 ### Operator Experience
 - [ ] Single-pane tracing: browser → API Gateway → Lambda → DynamoDB (SC-001)
 - [ ] Filter by error/fault to find silent failures (SC-002)
@@ -701,6 +715,19 @@ The sole exception is the X-Ray canary (task #11), which by definition must surv
 | **(R21)** GetTraceSummaries 6-hour window compounds archival | Low | **MEDIUM** | 24-hour incident requires 4 time windows; FR-174 amends FR-163 runbook. |
 | **(R21)** Centralized sampling rule scope undocumented | Medium | **MEDIUM** | Controls Function URL/EventBridge only; API Gateway unaffected. FR-175 prevents implementer confusion. |
 | **(R21)** Function URL invisible in service map | Low | **MEDIUM** | No gateway-level latency node; operators lose breakdown. FR-176 documents limitation. |
+| **(R22)** PutTraceSegments default TPS is 500, not ~2,500 as documented in R21 | **CORRECTED** | **CRITICAL** | Default is 500 TPS (L-AB6D2D9B); ~2,500 may be account-specific increase. Peak traffic (~520 seg/sec) EXCEEDS default. FR-178 amends. |
+| **(R22)** FR-157 GitHub issue (SC-107) does not exist | **CONFIRMED** | **CRITICAL** | Zero issues matching staleness/Round 18/SC-107/FR-157 in repository. FR-190 mandates filing. |
+| **(R22)** No sampling graduation plan for traffic growth | **CONFIRMED** | **HIGH** | 100% sampling unsustainable beyond 500 TPS default. FR-179 defines 4-phase graduation. |
+| **(R22)** Kill switch OTEL_SDK_DISABLED lacks activation criteria | **CONFIRMED** | **HIGH** | FR-059 mechanism exists but no operational guidance on WHEN. FR-180 defines 5 thresholds. |
+| **(R22)** Lambda update-function-configuration replaces ALL env vars | **CONFIRMED** | **HIGH** | Operational hazard for kill switch procedure. FR-181 documents capture-first procedure. |
+| **(R22)** OTel Python ReadableSpan immutable — PII SpanProcessor impossible | **CONFIRMED** | **HIGH** | on_end() read-only; must use on_start() for attribute allow-listing. FR-183/FR-184. |
+| **(R22)** No cross-Lambda deployment version skew detection | **CONFIRMED** | **HIGH** | Terraform partial apply leaves mixed versions undetected. FR-182 adds tagging + alarm. |
+| **(R22)** Canary traces pollute production X-Ray data | **CONFIRMED** | **MEDIUM** | No filtering mechanism. FR-185 adds synthetic annotation + X-Ray Group filter. |
+| **(R22)** Annotation budget unmanaged against 50/trace limit | **CONFIRMED** | **MEDIUM** | No tracking of annotation count across FRs. FR-186 defines budget strategy. |
+| **(R22)** ADOT overhead not formally budgeted | **CONFIRMED** | **MEDIUM** | 35-70 MB cold, 40-60 MB warm. 1024 MB sufficient. FR-187 documents budget. |
+| **(R22)** In-flight span loss — 2s default flush window | **CONFIRMED** | **MEDIUM** | ADOT_LAMBDA_FLUSH_TIMEOUT should be 10s. SIGKILL = no flush. FR-188. |
+| **(R22)** Multi-account X-Ray via OAM not addressed | Low | **MEDIUM** | Future-state. OAM supports it. No TPS double counting. FR-189 informational. |
+| **(R22)** GetTraceSummaries Sampling=true causes incomplete results | **CONFIRMED** | **MEDIUM** | No MaxResults param. Archival must use Sampling=false. Amends FR-174. |
 
 ---
 
@@ -746,3 +773,4 @@ The sole exception is the X-Ray canary (task #11), which by definition must surv
 | 2026-03-03 | **Round 20 updates:** 2 CRITICAL + 4 HIGH + 5 MEDIUM blind spots found. 9 new FRs (FR-156–FR-164, +FR-156a informational), 9 new SCs (SC-106–SC-114), SC-064 SUPERSEDED by SC-064a/SC-064b split, 8 new edge cases, 6 new assumptions (1 UNVERIFIED). Focus: BSP deadlock diagnostic differentiation as THIRD span-loss vector (FR-156, CRITICAL), FR-154 retroactive staleness enforcement with GitHub issue requirement (FR-157, CRITICAL), ADOT cold start latency budget with <2000ms P95 constraint (FR-158), ADOT Extension IAM 5-action enumeration with silent fallback risk (FR-159), RESPONSE_STREAM+ADOT Extension lifecycle preprod verification gate (FR-160), Function URL sampling cost guard with centralized rule + daily anomaly alarm (FR-161), exhaustive per-alarm treat_missing_data classification (FR-162), X-Ray trace archival procedure for production incidents (FR-163), work order file synchronization enforcement as FR-107 Phase 0 prerequisite (FR-164). Key research: opentelemetry-python#3886 BSP deadlock confirmed Python 3.11+; opentelemetry-lambda#263 confirms no ADOT benchmarks; ADOT Extension RESPONSE_STREAM lifecycle has NO canonical documentation (UNVERIFIED assumption). Totals: 164 FRs (+FR-156a), 114 SCs (+SC-064a/b), ~121 edge cases, ~94 assumptions (5 invalidated, 2 corrected, 1 partially invalidated, 1 unverified), 11 user stories. |
 | 2026-03-03 | **HL Document Synchronization:** Comprehensive update to resolve FR-157 staleness enforcement. Updated: Executive Summary (+Round 18, +Round 20 blocks with 19 emergent findings + 14 summary list items), Work Order table (+FR-137/Task 3, +FR-147/FR-150/Task 4, +FR-149/FR-150/FR-156/FR-158/FR-160/FR-163/Task 5, +FR-148/Task 10, +FR-151/FR-152/Task 11, +FR-159/Task 1, +FR-161/Task 16, +FR-162/Task 17), Process FR note expanded (9 process FRs documented), Component Coverage Map (+14 Round 18/20 entries), Constraint section (+FR-153 scope statement), Success Criteria (+57 SCs: SC-058 through SC-114, SC-064a/SC-064b split, organized in 8 subsections), Risk Assessment (+21 Round 18/20 risk entries), Progress Log (+3 entries). All sections now current through Round 20. |
 | 2026-03-03 | **Round 21 updates:** 2 CRITICAL + 5 HIGH + 6 MEDIUM blind spots found. 13 new FRs (FR-165–FR-177), 11 new SCs (SC-115–SC-125), SC-064b/SC-106 amended, 12 new assumptions, 1 assumption corrected (BSP deadlock FIXED). Focus: BSP deadlock span-loss vector RETIRED — opentelemetry-python#3886 fixed in SDK v1.33.0+, project uses v1.39.1 (FR-165, CRITICAL); SC-040 verification method INVALID on v1.39.1 — deque silently drops spans with no log (FR-166, CRITICAL); ADOT Extension non-recovery after crash documented as replacement span-loss vector #3 (FR-167); IAM policy drift detection for X-Ray permissions (FR-168); canary dead-man external heartbeat for double-failure detection (FR-169); PutTraceSegments TPS quota corrected ~2,500 and IS adjustable (FR-170); OTLP exporter retry blocks BSP worker thread (FR-171); X-Ray Groups/Sampling Rules quota tracking (FR-172); X-Ray encryption at rest documentation (FR-173); GetTraceSummaries 6-hour window constraint (FR-174); centralized sampling rule scope (FR-175); Function URL service map limitation (FR-176); ADOT version upgrade runbook (FR-177). Key research: OTel Python SDK v1.39.1 `BatchProcessor` source code analysis confirmed deque-based implementation with silent drops; ADOT Extension lifecycle confirmed non-restart on crash; X-Ray Service Quotas confirmed adjustable (previously assumed non-adjustable); CloudWatch RUM confirmed X-Ray header injection. Totals: 177 FRs (+FR-156a), 125 SCs (+SC-064a/b), ~134 edge cases, ~106 assumptions (5 invalidated, 3 corrected, 1 partially invalidated, 1 unverified, 1 retired), 11 user stories. |
+| 2026-03-03 | **Round 22 updates:** 2 CRITICAL + 4 HIGH + 7 MEDIUM blind spots found. 13 new FRs (FR-178–FR-190), 9 new SCs (SC-126–SC-134), 8 new edge cases, 8 new assumptions, 1 assumption CORRECTED (PutTraceSegments TPS: ~2,500 → 500 default). Focus: PutTraceSegments default TPS corrected to 500 (FR-178, CRITICAL — peak traffic exceeds default quota); FR-157 GitHub issue confirmed non-existent (FR-190, CRITICAL — SC-107 unfulfilled); sampling graduation plan with 4 phases (FR-179); kill switch activation criteria with 5 thresholds (FR-180); Lambda env var update hazard documented (FR-181); deployment version skew detection (FR-182); ReadableSpan immutability constraint (FR-183 — PII SpanProcessor impossible in Python SDK); span attribute allow-listing at creation (FR-184); canary trace annotation standard (FR-185); annotation budget strategy (FR-186 — 50/trace limit); ADOT overhead budget (FR-187); in-flight span loss flush window (FR-188); multi-account OAM documentation (FR-189). Key research: AWS Service Quotas confirmed PutTraceSegments default 500 TPS; OTel Python SDK ReadableSpan confirmed immutable; W3C Trace Context confirmed no synthetic flag; ADOT SHUTDOWN window 2s default. Totals: 190 FRs (+FR-156a), 134 SCs (+SC-064a/b), ~142 edge cases, ~114 assumptions (5 invalidated, 4 corrected, 1 partially invalidated, 1 retired, 2 unverified). |
