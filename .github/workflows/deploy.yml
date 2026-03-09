@@ -483,7 +483,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build and Push SSE Lambda Image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           # Build context changed to src/ to include src/lib/timeseries
           # Required for: from src.lib.timeseries import Resolution
@@ -565,7 +565,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build and Push Analysis Lambda Image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: src
           file: src/lambdas/analysis/Dockerfile
@@ -643,7 +643,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build and Push Dashboard Lambda Image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: src
           file: src/lambdas/dashboard/Dockerfile
@@ -1457,7 +1457,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build and Push SSE Lambda Image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           # Build context changed to src/ to include src/lib/timeseries
           # Required for: from src.lib.timeseries import Resolution
@@ -1531,7 +1531,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build and Push Dashboard Lambda Image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: src
           file: src/lambdas/dashboard/Dockerfile
