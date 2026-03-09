@@ -30,8 +30,8 @@ moto[all]==5.1.18
 responses==0.26.0
 
 # Code Quality
-black==26.1.0          # Code formatter
-ruff==0.14.14             # Fast linter (replaces flake8, isort)
+black==26.3.0          # Code formatter
+ruff==0.15.5             # Fast linter (replaces flake8, isort)
 pre-commit==4.5.1       # Git hooks framework
 bandit==1.9.2          # Security vulnerability scanner (local CodeQL alternative)
 
