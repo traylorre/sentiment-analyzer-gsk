@@ -218,6 +218,21 @@ This results in:
 - **(R21)** Centralized sampling rules scope documented — controls Function URL/EventBridge Lambdas only; no effect on API Gateway Lambdas
 - **(R21)** Lambda Function URL invisible in X-Ray service map — no gateway-level latency breakdown
 - **(R21)** ADOT version upgrade runbook formalized — 8 verification gates for container-based upgrades
+- **(R23)** PII allow-list bypass via set_attribute() — CRITICAL: on_start() filter only catches creation-time attributes, set_attribute() after creation bypasses filter entirely (FR-191)
+- **(R23)** SpanProcessor registration ordering — allow-list BEFORE BSP BEFORE audit, enforced by unit test (FR-192)
+- **(R23)** Annotation priority + exception budget — record_exception() consumes 3 annotation slots per exception, budget must reserve slots (FR-193)
+- **(R23)** OTel Python SDK upgrade runbook with 7 verification gates — no prior equivalent of FR-177's ADOT runbook (FR-194)
+- **(R23)** Powertools Tracer version unpinned — auto_patch/capture_method behavior could change on upgrade (FR-195)
+- **(R23)** ADOT Extension degraded state (Go recovered panic) — alive to Runtime API but exporter goroutine dead, 100% trace loss (FR-196)
+- **(R23)** Canary detection latency documentation — 5-15 min false negative window for brief outages (FR-197)
+- **(R23)** Sampling graduation per-Lambda split — API GW (parent-inherited) vs Function URL/EventBridge (centralized rules) (FR-198)
+- **(R23)** Deployment version skew tolerance — 15-minute threshold with CI post-apply check (FR-199)
+- **(R23)** Confirmed non-risks: force_flush() double-call (idempotent), ADOT partial startup race (Extensions API lifecycle prevents)
+- **(R24)** FR-200: ADOT recovered panic vector retirement (R23 recover() assumption DENIED) — CRITICAL
+- **(R24)** FR-201: ADOT exporter backend error span-loss vector #4
+- **(R24)** FR-202: Lambda platform 2s shutdown window constraint correction
+- **(R24)** FR-203: ADOT zero-processor architecture documentation
+- **(R24)** FR-204: Requirements checklist completeness (44% → 100%)
 
 ---
 
@@ -229,19 +244,19 @@ This results in:
 | 2 | Fix Metrics Lambda X-Ray instrumentation | [fix-metrics-lambda-xray.md](./fix-metrics-lambda-xray.md) | [ ] TODO | P0 | FR-003, FR-004 |
 | 3 | Verify SNS cross-Lambda trace propagation | [fix-sns-trace-verification.md](./fix-sns-trace-verification.md) | [ ] TODO | P1 | FR-013, **FR-137** |
 | 4 | Fix silent failure path subsegments | [fix-silent-failure-subsegments.md](./fix-silent-failure-subsegments.md) | [ ] TODO | P1 | FR-002, FR-005, **FR-043, FR-124, FR-125, FR-134, FR-142, FR-143, FR-147, FR-150** |
-| 5 | **Fix SSE Streaming Lambda tracing (ADOT)** | [fix-sse-subsegments.md](./fix-sse-subsegments.md) | [ ] TODO | P1 | FR-001, FR-025, FR-026, FR-027, FR-031, FR-037, FR-046, FR-047, **FR-052, FR-053, FR-054, FR-055, FR-056, FR-059, FR-060, FR-062, FR-063, FR-064, FR-065, FR-066, FR-067, FR-068, FR-069, FR-070, FR-071, FR-072, FR-073, FR-074, FR-075, FR-076, FR-077, FR-085, FR-086, FR-090, FR-091, FR-092, FR-093, FR-095, FR-100, FR-101, FR-102, FR-103, FR-105, FR-106, FR-108, FR-110, FR-114, FR-115, FR-116, FR-120, FR-122, FR-123, FR-126, FR-139, FR-140, FR-144, FR-149, FR-150, FR-156, FR-158, FR-160, FR-163** |
+| 5 | **Fix SSE Streaming Lambda tracing (ADOT)** | [fix-sse-subsegments.md](./fix-sse-subsegments.md) | [ ] TODO | P1 | FR-001, FR-025, FR-026, FR-027, FR-031, FR-037, FR-046, FR-047, **FR-052, FR-053, FR-054, FR-055, FR-056, FR-059, FR-060, FR-062, FR-063, FR-064, FR-065, FR-066, FR-067, FR-068, FR-069, FR-070, FR-071, FR-072, FR-073, FR-074, FR-075, FR-076, FR-077, FR-085, FR-086, FR-090, FR-091, FR-092, FR-093, FR-095, FR-100, FR-101, FR-102, FR-103, FR-105, FR-106, FR-108, FR-110, FR-114, FR-115, FR-116, FR-120, FR-122, FR-123, FR-126, FR-139, FR-140, FR-144, FR-149, FR-150, FR-156, FR-158, FR-160, FR-163, FR-191, FR-192, FR-193** |
 | 6 | Replace latency_logger with X-Ray annotations | [fix-sse-latency-xray.md](./fix-sse-latency-xray.md) | [ ] TODO | P2 | FR-006, FR-022 |
 | 7 | Replace cache_logger with X-Ray annotations | [fix-sse-cache-xray.md](./fix-sse-cache-xray.md) | [ ] TODO | P2 | FR-007, FR-023 |
-| 8 | Add SSE connection and polling annotations | [fix-sse-annotations.md](./fix-sse-annotations.md) | [ ] TODO | P2 | FR-008, FR-009 |
+| 8 | Add SSE connection and polling annotations | [fix-sse-annotations.md](./fix-sse-annotations.md) | [ ] TODO | P2 | FR-008, FR-009, **FR-199** |
 | 9 | Consolidate correlation IDs onto X-Ray trace IDs | [fix-correlation-id-consolidation.md](./fix-correlation-id-consolidation.md) | [ ] TODO | P3 | FR-010, FR-011, FR-012, FR-024 |
 | 10 | Add frontend trace header propagation (CORS) | [fix-frontend-trace-headers.md](./fix-frontend-trace-headers.md) | [ ] TODO | P2 | FR-014, FR-015, FR-016, **FR-082, FR-119, FR-135, FR-148** |
-| 11 | Implement observability canary (X-Ray + CloudWatch health) | [fix-xray-canary.md](./fix-xray-canary.md) | [ ] TODO | P3 | FR-019, FR-020, FR-021, FR-036, **FR-049, FR-050, FR-051, FR-078, FR-079, FR-080, FR-087, FR-096, FR-112, FR-113, FR-117, FR-126, FR-131, FR-136, FR-145, FR-146, FR-151, FR-152** |
+| 11 | Implement observability canary (X-Ray + CloudWatch health) | [fix-xray-canary.md](./fix-xray-canary.md) | [ ] TODO | P3 | FR-019, FR-020, FR-021, FR-036, **FR-049, FR-050, FR-051, FR-078, FR-079, FR-080, FR-087, FR-096, FR-112, FR-113, FR-117, FR-126, FR-131, FR-136, FR-145, FR-146, FR-151, FR-152, FR-196** |
 | 12 | Audit downstream consumers of removed systems | [fix-downstream-consumer-audit.md](./fix-downstream-consumer-audit.md) | [ ] TODO | P3 | FR-018, edge cases |
-| 13 | Add explicit SendGrid X-Ray subsegment | [fix-sendgrid-explicit-subsegment.md](./fix-sendgrid-explicit-subsegment.md) | [ ] TODO | P1 | FR-028, **FR-130** |
+| 13 | Add explicit SendGrid X-Ray subsegment | [fix-sendgrid-explicit-subsegment.md](./fix-sendgrid-explicit-subsegment.md) | [ ] TODO | P1 | FR-028, **FR-130, FR-198** |
 | 14 | Standardize on Powertools Tracer (non-streaming Lambdas) | [fix-tracer-standardization.md](./fix-tracer-standardization.md) | [ ] TODO | P0 | FR-029, FR-030 |
 | 15 | **Migrate frontend SSE to fetch()+ReadableStream** | [fix-sse-client-fetch-migration.md](./fix-sse-client-fetch-migration.md) | [ ] TODO | P2 | FR-032, FR-033, **FR-048, FR-081, FR-082, FR-083, FR-088, FR-089, FR-099, FR-118, FR-135** |
 | 16 | **Configure sampling strategy and cost guard** | [fix-sampling-and-cost.md](./fix-sampling-and-cost.md) | [ ] TODO | P1 | FR-034, FR-035, FR-038, **FR-039, FR-094, FR-111, FR-141, FR-161** |
-| 17 | **Add CloudWatch alarm coverage** | [fix-alarm-coverage.md](./fix-alarm-coverage.md) | [ ] TODO | P1 | **FR-040, FR-041, FR-042, FR-044, FR-045, FR-061, FR-097, FR-098, FR-104, FR-105, FR-121, FR-127, FR-128, FR-129, FR-133, FR-138, FR-162** |
+| 17 | **Add CloudWatch alarm coverage** | [fix-alarm-coverage.md](./fix-alarm-coverage.md) | [ ] TODO | P1 | **FR-040, FR-041, FR-042, FR-044, FR-045, FR-061, FR-097, FR-098, FR-104, FR-105, FR-121, FR-127, FR-128, FR-129, FR-133, FR-138, FR-162, FR-194, FR-195, FR-197** |
 
 **Rationale for order:**
 1. **IAM first** — Without permissions, X-Ray SDK calls fail at runtime
@@ -575,6 +590,18 @@ The sole exception is the X-Ray canary (task #11), which by definition must surv
 - [ ] ADOT overhead budget documented with validation gates — SC-133
 - [ ] FR-157 GitHub issue filed in repository — SC-134
 
+#### Round 23 (2026-03-05)
+
+- [ ] CI gate detects set_attribute() calls using non-allow-listed keys; runtime audit SpanProcessor logs violations — SC-135
+- [ ] SpanProcessor ordering enforced: allow-list BEFORE BSP BEFORE audit in TracerProvider — SC-136
+- [ ] Annotation budget reserves 3 slots per span for exception attributes (record_exception overhead) — SC-137
+- [ ] OTel Python SDK upgrade runbook with 7 verification gates; cross-referenced from FR-101 — SC-138
+- [ ] Powertools Tracer version pinned in requirements.txt with compatibility matrix — SC-139
+- [ ] Canary detects ADOT Extension degraded state (alive but not exporting) within 2 intervals — SC-140
+- [ ] Canary detection latency (5-15 min) documented in operational runbook with escalation guidance — SC-141
+- [ ] Sampling graduation plan includes per-Lambda rate configuration (API GW vs Function URL split) — SC-142
+- [ ] Deployment version skew tolerance documented; mixed-version window ≤ 15 minutes enforced by CI — SC-143
+
 ### Operator Experience
 - [ ] Single-pane tracing: browser → API Gateway → Lambda → DynamoDB (SC-001)
 - [ ] Filter by error/fault to find silent failures (SC-002)
@@ -728,6 +755,11 @@ The sole exception is the X-Ray canary (task #11), which by definition must surv
 | **(R22)** In-flight span loss — 2s default flush window | **CONFIRMED** | **MEDIUM** | ADOT_LAMBDA_FLUSH_TIMEOUT should be 10s. SIGKILL = no flush. FR-188. |
 | **(R22)** Multi-account X-Ray via OAM not addressed | Low | **MEDIUM** | Future-state. OAM supports it. No TPS double counting. FR-189 informational. |
 | **(R22)** GetTraceSummaries Sampling=true causes incomplete results | **CONFIRMED** | **MEDIUM** | No MaxResults param. Archival must use Sampling=false. Amends FR-174. |
+| **(R23)** PII allow-list bypass via set_attribute() | **CONFIRMED** | **CRITICAL** | FR-184 on_start() only filters creation-time attributes. set_attribute() after creation bypasses filter. FR-191: CI gate + runtime audit + alarm. |
+| **(R23)** ADOT Extension degraded state (recovered panic) | **CONFIRMED** | **HIGH** | Go recover() catches panics without terminating Extension. Exporter dead but Extension alive. FR-196: canary detects sustained 100% trace loss. |
+| **(R23)** Annotation budget exceeded by exception attributes | **CONFIRMED** | **HIGH** | record_exception() consumes 3 annotation slots per exception. Budget calculation omitted exception overhead. FR-193. |
+| **(R23)** OTel SDK upgrade breaks spec assumptions | **CONFIRMED** | **MEDIUM** | No SDK upgrade runbook. Security vulnerability could force upgrade changing BSP/BoundedAttributes behavior. FR-194. |
+| **(R23)** Canary false negative window | **CONFIRMED** | **MEDIUM** | 5-min interval + 2-consecutive-failure = 10-min minimum detection latency. Brief outages undetected. FR-197. |
 
 ---
 
@@ -774,3 +806,5 @@ The sole exception is the X-Ray canary (task #11), which by definition must surv
 | 2026-03-03 | **HL Document Synchronization:** Comprehensive update to resolve FR-157 staleness enforcement. Updated: Executive Summary (+Round 18, +Round 20 blocks with 19 emergent findings + 14 summary list items), Work Order table (+FR-137/Task 3, +FR-147/FR-150/Task 4, +FR-149/FR-150/FR-156/FR-158/FR-160/FR-163/Task 5, +FR-148/Task 10, +FR-151/FR-152/Task 11, +FR-159/Task 1, +FR-161/Task 16, +FR-162/Task 17), Process FR note expanded (9 process FRs documented), Component Coverage Map (+14 Round 18/20 entries), Constraint section (+FR-153 scope statement), Success Criteria (+57 SCs: SC-058 through SC-114, SC-064a/SC-064b split, organized in 8 subsections), Risk Assessment (+21 Round 18/20 risk entries), Progress Log (+3 entries). All sections now current through Round 20. |
 | 2026-03-03 | **Round 21 updates:** 2 CRITICAL + 5 HIGH + 6 MEDIUM blind spots found. 13 new FRs (FR-165–FR-177), 11 new SCs (SC-115–SC-125), SC-064b/SC-106 amended, 12 new assumptions, 1 assumption corrected (BSP deadlock FIXED). Focus: BSP deadlock span-loss vector RETIRED — opentelemetry-python#3886 fixed in SDK v1.33.0+, project uses v1.39.1 (FR-165, CRITICAL); SC-040 verification method INVALID on v1.39.1 — deque silently drops spans with no log (FR-166, CRITICAL); ADOT Extension non-recovery after crash documented as replacement span-loss vector #3 (FR-167); IAM policy drift detection for X-Ray permissions (FR-168); canary dead-man external heartbeat for double-failure detection (FR-169); PutTraceSegments TPS quota corrected ~2,500 and IS adjustable (FR-170); OTLP exporter retry blocks BSP worker thread (FR-171); X-Ray Groups/Sampling Rules quota tracking (FR-172); X-Ray encryption at rest documentation (FR-173); GetTraceSummaries 6-hour window constraint (FR-174); centralized sampling rule scope (FR-175); Function URL service map limitation (FR-176); ADOT version upgrade runbook (FR-177). Key research: OTel Python SDK v1.39.1 `BatchProcessor` source code analysis confirmed deque-based implementation with silent drops; ADOT Extension lifecycle confirmed non-restart on crash; X-Ray Service Quotas confirmed adjustable (previously assumed non-adjustable); CloudWatch RUM confirmed X-Ray header injection. Totals: 177 FRs (+FR-156a), 125 SCs (+SC-064a/b), ~134 edge cases, ~106 assumptions (5 invalidated, 3 corrected, 1 partially invalidated, 1 unverified, 1 retired), 11 user stories. |
 | 2026-03-03 | **Round 22 updates:** 2 CRITICAL + 4 HIGH + 7 MEDIUM blind spots found. 13 new FRs (FR-178–FR-190), 9 new SCs (SC-126–SC-134), 8 new edge cases, 8 new assumptions, 1 assumption CORRECTED (PutTraceSegments TPS: ~2,500 → 500 default). Focus: PutTraceSegments default TPS corrected to 500 (FR-178, CRITICAL — peak traffic exceeds default quota); FR-157 GitHub issue confirmed non-existent (FR-190, CRITICAL — SC-107 unfulfilled); sampling graduation plan with 4 phases (FR-179); kill switch activation criteria with 5 thresholds (FR-180); Lambda env var update hazard documented (FR-181); deployment version skew detection (FR-182); ReadableSpan immutability constraint (FR-183 — PII SpanProcessor impossible in Python SDK); span attribute allow-listing at creation (FR-184); canary trace annotation standard (FR-185); annotation budget strategy (FR-186 — 50/trace limit); ADOT overhead budget (FR-187); in-flight span loss flush window (FR-188); multi-account OAM documentation (FR-189). Key research: AWS Service Quotas confirmed PutTraceSegments default 500 TPS; OTel Python SDK ReadableSpan confirmed immutable; W3C Trace Context confirmed no synthetic flag; ADOT SHUTDOWN window 2s default. Totals: 190 FRs (+FR-156a), 134 SCs (+SC-064a/b), ~142 edge cases, ~114 assumptions (5 invalidated, 4 corrected, 1 partially invalidated, 1 retired, 2 unverified). |
+| 2026-03-05 | **Round 23 updates:** 1 CRITICAL + 5 HIGH + 6 MEDIUM blind spots found. 9 new FRs (FR-191–FR-199), 9 new SCs (SC-135–SC-143), 8 new edge cases, 5 new assumptions, 2 confirmed non-risks. CRITICAL: PII allow-list bypass via set_attribute() (FR-191 — on_start() filter only catches creation-time attributes). HIGH: SpanProcessor registration ordering (FR-192), annotation exception budget (FR-193), ADOT degraded state detection (FR-196), OTel SDK upgrade runbook (FR-194), sampling graduation per-Lambda split (FR-198). MEDIUM: Powertools version pinning (FR-195), canary detection latency documentation (FR-197), deployment version skew tolerance (FR-199). Confirmed non-risks: force_flush() double-call safe (BSP idempotent drain), ADOT partial startup race (Extensions API lifecycle prevents). Updated work order: Task 5 (+FR-191, FR-192, FR-193), Task 8 (+FR-199), Task 11 (+FR-196), Task 13 (+FR-198), Task 17 (+FR-194, FR-195, FR-197). Totals: 199 FRs (+FR-156a), 143 SCs (+SC-064a/b), ~150 edge cases, ~119 assumptions (5 invalidated, 4 corrected, 1 partially invalidated, 1 retired, 2 unverified), 11 user stories, 17 tasks. |
+| 2026-03-05 | **Round 24 updates:** Canonical source validation round. DENIED 2 assumptions: (1) Go `recover()` in OTel Collector pipeline goroutines — panics crash process, not recovered; (2) `ADOT_LAMBDA_FLUSH_TIMEOUT` env var does not exist. CONFIRMED 2 assumptions: (1) ADOT Extension has zero processors; (2) SendGrid HTTP tracing works via httplib patch. PARTIALLY CONFIRMED Extension lifecycle during RESPONSE_STREAM. Added 5 FRs (FR-200 through FR-204): recovered panic vector retirement (CRITICAL), exporter backend error span-loss vector (HIGH), Lambda platform 2s shutdown constraint (HIGH), ADOT zero-processor documentation (HIGH), requirements checklist completeness (MEDIUM). Added 5 SCs (SC-144 through SC-148). Retired "ADOT recovered panic" span-loss candidate, added new vector #4 (exporter backend errors). 3 confirmed non-risks (SendGrid tracing, SNS propagation, recovered panic). All 29 audit items from blind spot report confirmed FULLY ADDRESSED by existing FRs. Cumulative: 204 FRs (+FR-156a), 148 SCs (+SC-064a/b), ~155 edge cases, ~124 assumptions. |

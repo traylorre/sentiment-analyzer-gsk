@@ -514,6 +514,15 @@
 | 188 | FR | FR-188 | In-flight span loss on sandbox recycle | [ ] |
 | 189 | FR | FR-189 | Multi-account X-Ray via OAM documentation | [ ] |
 | 190 | FR | FR-190 | FR-157 GitHub issue filing (SC-107 unfulfilled) | [ ] |
+| 191 | FR | FR-191 | PII allow-list bypass prevention — CI gate for set_attribute(), runtime audit SpanProcessor, CloudWatch AllowListViolation alarm | [ ] |
+| 192 | FR | FR-192 | SpanProcessor registration ordering — allow-list BEFORE BSP BEFORE audit | [ ] |
+| 193 | FR | FR-193 | Annotation priority and exception budget — 3 reserved slots per exception, priority-ordered insertion | [ ] |
+| 194 | FR | FR-194 | OTel Python SDK upgrade runbook with 7 verification gates | [ ] |
+| 195 | FR | FR-195 | Powertools Tracer version pinning strategy | [ ] |
+| 196 | FR | FR-196 | ADOT Extension degraded state detection via canary | [ ] |
+| 197 | FR | FR-197 | Canary detection latency documentation (5-15 min window) | [ ] |
+| 198 | FR | FR-198 | Sampling graduation per-Lambda configuration (API GW vs Function URL split) | [ ] |
+| 199 | FR | FR-199 | Deployment version skew tolerance window (15-minute threshold) | [ ] |
 | 064a | SC | SC-064a | Port-unreachable ADOT failure: ECONNREFUSED, fast fail, diagnostic log | [ ] |
 | 064b | SC | SC-064b | Hung Extension failure: TCP accept, 2500ms timeout, diagnostic log | [ ] |
 | 106 | SC | SC-106 | force_flush() resilient to BSP deadlock, diagnostic differentiation | [ ] |
@@ -545,6 +554,30 @@
 | 132 | SC | SC-132 | Annotation budget ≤50/trace with per-component limits | [ ] |
 | 133 | SC | SC-133 | ADOT overhead budget documented with validation gates | [ ] |
 | 134 | SC | SC-134 | FR-157 GitHub issue exists in repository | [ ] |
+| 135 | SC | SC-135 | CI static analysis gate for set_attribute() + runtime audit SpanProcessor + AllowListViolation metric | [ ] |
+| 136 | SC | SC-136 | TracerProvider SpanProcessor registration order verified by unit test | [ ] |
+| 137 | SC | SC-137 | Annotation budget accounts for exception attributes (3 slots reserved per exception) | [ ] |
+| 138 | SC | SC-138 | OTel Python SDK upgrade runbook with 7 verification gates exists | [ ] |
+| 139 | SC | SC-139 | Powertools Tracer version pinned in requirements.txt | [ ] |
+| 140 | SC | SC-140 | Canary detects ADOT Extension degraded state (mock Extension test) | [ ] |
+| 141 | SC | SC-141 | Canary detection latency documented as 5-15 minutes with runbook | [ ] |
+| 142 | SC | SC-142 | Per-Lambda sampling configuration documents API GW vs Function URL split | [ ] |
+| 143 | SC | SC-143 | Deployment version skew tolerance window (15-min threshold, CI check) | [ ] |
+
+### Round 24: Assumption Validation & Architecture Corrections
+
+| # | Type | ID | Description | Status |
+|---|------|-----|-------------|--------|
+| 1 | FR | FR-200 | ADOT recovered panic vector retirement — amend FR-196 from recovered-panic to exporter-backend-error detection | [ ] |
+| 2 | FR | FR-201 | ADOT exporter backend error span-loss vector #4 — Extension alive, spans dropped due to X-Ray API persistent 429/500 | [ ] |
+| 3 | FR | FR-202 | Lambda platform shutdown window constraint — correct ADOT_LAMBDA_FLUSH_TIMEOUT references, 2s is SIGKILL not configurable | [ ] |
+| 4 | FR | FR-203 | ADOT zero-processor architecture — document zero processors, Python SDK sole enforcement point | [ ] |
+| 5 | FR | FR-204 | Requirements checklist completeness — backfill all FRs/SCs to 100% tracking coverage | [ ] |
+| 6 | SC | SC-144 | OTel Collector source confirms no recover(), span-loss vector catalog updated | [ ] |
+| 7 | SC | SC-145 | Canary detects ADOT exporter backend error state (mock 429 test) | [ ] |
+| 8 | SC | SC-146 | All ADOT_LAMBDA_FLUSH_TIMEOUT references removed from spec and codebase | [ ] |
+| 9 | SC | SC-147 | ADOT zero-processor confirmed, Python SDK documented as sole processing point | [ ] |
+| 10 | SC | SC-148 | Requirements checklist contains 100% of spec FRs and SCs with tracking rows | [ ] |
 
 ## Round 20 Blind Spot Resolution Summary
 
