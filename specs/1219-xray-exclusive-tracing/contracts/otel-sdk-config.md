@@ -23,7 +23,9 @@ resource = Resource.create({
 provider = TracerProvider(
     resource=resource,
     id_generator=AwsXRayIdGenerator(),  # FR-053
-    sampler=ParentBasedTraceIdRatio(1.0),  # FR-056: parentbased_always_on
+    # FR-056: parentbased_always_on (the OTel SDK default)
+    # NOTE: Do NOT use ParentBasedTraceIdRatio(1.0) — functionally equivalent
+    # today but uses wrong class and could diverge on SDK upgrade.
     shutdown_on_exit=False,  # FR-077: prevent atexit race
 )
 

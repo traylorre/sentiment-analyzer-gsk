@@ -140,6 +140,8 @@ EventBridge ──→ Canary Lambda ──→ X-Ray (GetTraceSummaries)
 | X-Ray cost | notBreaching | FR-162: No billing data = no charges = good |
 | Canary heartbeat | breaching | FR-121: Heartbeat absence IS the failure |
 | ADOT export failure | missing | Missing = no log data = investigate |
+| API Gateway + Function URL | notBreaching | FR-162: AWS-native gateway metrics |
+| Function URL sampling cost | notBreaching | FR-162: No segment data = no cost = good |
 
 ### 5. X-Ray Group
 
@@ -184,8 +186,8 @@ EventBridge ──→ Canary Lambda ──→ X-Ray (GetTraceSummaries)
 |-------|------|-------------|
 | receivers.otlp.protocols.http.endpoint | string | `0.0.0.0:4318` |
 | exporters.awsxray.region | string | `${AWS_REGION}` |
-| processors | list | `[decouple, batch]` (FR-075/FR-090) |
-| service.pipelines.traces | object | receivers → processors → exporters |
+| processors | list | None — ADOT binary has zero processors compiled in (`aws-otel-lambda#842`). FR-075/FR-090 BLOCKED |
+| service.pipelines.traces | object | receivers → exporters (no intermediate processors) |
 
 ### 8. OTel TracerProvider (Singleton)
 

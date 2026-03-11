@@ -107,7 +107,23 @@ All: `treat_missing_data = missing`
 
 Both: `treat_missing_data = breaching` (FR-121: heartbeat absence IS the failure)
 
-### Category 8: Function URL Sampling Cost (1 alarm)
+### Category 8: API Gateway + Function URL Alarms (3 alarms)
+
+FR-138: Gateway-level alarms distinct from Lambda-side alarms.
+
+| Alarm | Namespace | Metric | Statistic | Threshold | Comparison |
+|-------|-----------|--------|-----------|-----------|------------|
+| API Gateway IntegrationLatency | `AWS/ApiGateway` | `IntegrationLatency` | p99 | 80% of downstream Lambda timeout | `GreaterThanThreshold` |
+| API Gateway 5XXError | `AWS/ApiGateway` | `5XXError` | Sum | 0 | `GreaterThanThreshold` |
+| Function URL Url5xxError | `AWS/Lambda` | `Url5xxError` | Sum | 0 | `GreaterThanThreshold` |
+
+| Parameter | Value |
+|-----------|-------|
+| Period | 300s |
+| Evaluation Periods | 2 |
+| treat_missing_data | `notBreaching` (FR-162: AWS-native gateway metrics) |
+
+### Category 9: Function URL Sampling Cost (1 alarm)
 
 FR-161: Daily anomaly detection for Function URL cost amplification.
 
@@ -123,9 +139,9 @@ FR-161: Daily anomaly detection for Function URL cost amplification.
 
 | Tier | Color | Alarms |
 |------|-------|--------|
-| Critical | Red | Lambda errors, ADOT failures, canary health |
-| Warning | Orange | Latency P95, memory utilization, silent failures |
-| Info | Blue | Cost, sampling, queue overflow |
+| Critical | Red | Lambda errors, ADOT failures, canary health, API Gateway 5XXError, Function URL Url5xxError |
+| Warning | Orange | Latency P95, memory utilization, silent failures, API Gateway IntegrationLatency |
+| Info | Blue | Cost, sampling, queue overflow, Function URL sampling cost |
 
 ### Composite Alarm
 
@@ -142,7 +158,8 @@ FR-129: Top-level composite alarm combining all Critical-tier alarms.
 | X-Ray Cost | 3 |
 | ADOT Health | 3 |
 | Canary | 2 |
+| API Gateway + Function URL | 3 |
 | Function URL Cost | 1 |
-| **Total** | **34** |
+| **Total** | **37** |
 
-Plus 1 composite alarm = **35 total** (fewer than 45 originally estimated after R26 trimming).
+Plus 1 composite alarm = **38 total** (fewer than 45 originally estimated after R26 trimming).
