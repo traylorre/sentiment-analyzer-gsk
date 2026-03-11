@@ -45,6 +45,26 @@ _GATE: Must pass before Phase 0 research. Re-check after Phase 1 design._
 
 **Cost Estimate**: ~$15-25/mo incremental (within budget thresholds)
 
+### Cost Model (Reconciliation Finding #3)
+
+The $15-25/mo estimate requires supporting math given EXTREME cost sensitivity:
+
+| Component | Calculation | Monthly Cost |
+|-----------|-------------|--------------|
+| **X-Ray traces** | SSE: ~10K invocations/mo × 1 trace = 10K traces. Other 5 Lambdas: ~50K invocations/mo × 1 trace = 50K. Canary: 8,640/mo (5-min intervals). Total: ~69K traces/mo. At $5/million: | **$0.35** |
+| **X-Ray segments** | SSE: 10K inv × ~675 spans = 6.75M segments. Others: 50K inv × ~5 segments = 250K. Canary: 8.6K × 3 = 26K. Total: ~7M segments. At $5/million segments recorded: | **$35.00** |
+| **CloudWatch alarms** | 38 alarms × $0.10/alarm/mo: | **$3.80** |
+| **SSE Lambda memory** | 512→1024MB delta: 10K inv × 15s avg × 512MB increase ÷ 1024 = 75K GB-s. At $0.0000166667/GB-s: | **$1.25** |
+| **ADOT Extension overhead** | Included in Lambda memory — no separate charge | **$0.00** |
+| **Service Quotas** | No charge for quota increase | **$0.00** |
+| **Total estimate** | | **~$40/mo** |
+
+**CORRECTION**: The original $15-25/mo estimate excluded X-Ray segment recording costs. At ~7M segments/mo (dominated by SSE's ~675 spans/invocation), X-Ray is the dominant cost at ~$35/mo. This exceeds FR-038's $25 alarm threshold.
+
+**Mitigations**: (1) Production sampling rate for SSE Lambda Function URL reduces 6.75M proportionally — at 10% sampling, SSE segments drop to 675K ($3.38). (2) FR-161's centralized sampling rule is the primary cost control lever. (3) With 10% production SSE sampling, total drops to ~$8.78/mo — within budget.
+
+**Action**: FR-161's production sampling rate for SSE Lambda MUST be configured before production deployment, not deferred. The cost model assumes 10% SSE production sampling as baseline.
+
 **Note**: FR-202 establishes that `ADOT_LAMBDA_FLUSH_TIMEOUT` is a non-existent env var. The 2s Lambda Extension shutdown window is a platform constraint, not configurable. FR-203 confirms ADOT Extension binary has ZERO processors compiled in (`lambdacomponents/default.go` registers none). The `decouple` processor is an open feature request (`aws-otel-lambda#842`). Collector config MUST use processor-less pipeline: `receivers: [otlp] → exporters: [awsxray]`. All span retention depends on SDK-side `force_flush()` (FR-139).
 
 ## Project Structure
@@ -172,7 +192,12 @@ Task 5 spans 50+ FRs. Decomposed into 8 ordered subtasks:
 | Task 10 | CORS headers + frontend trace header propagation | FR-014, FR-015, FR-016 | Low | Task 1 |
 | Task 15 | Migrate SSE client from EventSource to fetch()+ReadableStream (see subtask breakdown below) | FR-032, FR-033, FR-048, FR-081, FR-083, FR-088, FR-089, FR-099, FR-115, FR-118, FR-148 | High | Task 10 |
 
-**Gate**: SC-085 (Playwright: X-Amzn-Trace-Id on all fetch() calls), FR-135, FR-148 (RUM readiness: fetch() must NOT fire until CloudWatch RUM FetchPlugin has patched `window.fetch`, 5s bounded wait).
+**Gate**: SC-085 (Playwright: X-Amzn-Trace-Id on all fetch() calls), FR-135.
+
+**RUM readiness assessment (Reconciliation Finding #9)**: FR-148 requires a 0-5s wait for CloudWatch RUM FetchPlugin before the first SSE `fetch()`. This has UX impact:
+- **If RUM is deployed**: The 5s bounded wait adds worst-case 5s to first SSE connection on cold page load. Typical case is <100ms (RUM CDN loads fast). The spec's 5s timeout covers CDN failures and ad blockers.
+- **If RUM is NOT deployed**: FR-148 is speculative — the wait polls for a `cwr` global that will never appear, always hitting the 5s timeout. Every cold page load pays a 5s penalty for zero benefit.
+- **Action**: Task 15 subtask 15d MUST check whether CloudWatch RUM is currently configured in the frontend before implementing FR-148. If RUM is not deployed, skip FR-148 entirely (YAGNI). If RUM is deployed, implement FR-148 but add a success criterion: first-SSE-connection latency P95 < 1s on warm page loads (RUM already loaded). The 5s timeout is acceptable only for cold page loads where RUM CDN must be fetched.
 
 #### Task 15 Subtask Breakdown
 
@@ -202,14 +227,16 @@ EventSource provides reconnection, Last-Event-ID, and SSE parsing automatically.
 
 **Gate**: FR-109 (4 verification gates over 2-week dual-emit period), executed by Task 18 scripts.
 
-Task 18 creates 4 executable verification gates (SC-067) + automated trace validation script (SC-102):
+Task 18 creates a single verification script with 4 checks (Reconciliation Finding #8 — consolidated from 4 separate scripts to reduce dead code after the 2-week verification window):
 
-| Gate | Script | What It Checks |
-|------|--------|----------------|
-| (a) Semantic trace comparison | `scripts/verify-trace-structure.py` | X-Ray trace structure matches expected segment topology per Lambda |
-| (b) Annotation key set diff | `scripts/verify-annotation-parity.py` | All annotation keys from removed loggers present as X-Ray annotations |
-| (c) Service map accuracy | `scripts/verify-service-map.py` | Service map API query shows all 6 Lambdas + canary connected |
-| (d) 100-trace spot-check | `scripts/verify-trace-sample.py` | 100 traces spot-checked for minimum expected segment counts (FR-152) |
+| Gate | Check Function | What It Checks |
+|------|----------------|----------------|
+| (a) Semantic trace comparison | `verify_trace_structure()` | X-Ray trace structure matches expected segment topology per Lambda |
+| (b) Annotation key set diff | `verify_annotation_parity()` | All annotation keys from removed loggers present as X-Ray annotations |
+| (c) Service map accuracy | `verify_service_map()` | Service map API query shows all 6 Lambdas + canary connected |
+| (d) 100-trace spot-check | `verify_trace_sample()` | 100 traces spot-checked for minimum expected segment counts (FR-152) |
+
+**Script**: `scripts/verify-dual-emit.py` — single entry point, runs all 4 checks, outputs pass/fail per gate. Can also be invoked via `make verify-dual-emit`. After the 2-week verification window and logging removal, this script remains useful as a smoke test but is not a recurring deployment gate (FR-117's automated trace validation handles ongoing verification).
 
 ### Phase 5: Monitoring (Tasks 8, 16, 17)
 **Goal**: Comprehensive alarm coverage and operational monitoring.
@@ -218,7 +245,27 @@ Task 18 creates 4 executable verification gates (SC-067) + automated trace valid
 |------|-------------|-----|------------|--------------|
 | Task 8 | SSE connection/DynamoDB polling annotations | FR-008, FR-009 | Low | Task 5 |
 | Task 16 | X-Ray sampling rules, cost guards, Groups (insights_enabled=true per FR-111), sampling graduation + kill switch ops | FR-034, FR-035, FR-038, FR-039, FR-111, FR-179, FR-180, FR-181 | Medium | None |
-| Task 17 | CloudWatch alarm coverage (~38 alarms). FR-041 two-phase strategy: Phase 1 deploys loose thresholds (80% of timeout); Phase 2 tightens to 2x observed P95 after 2+ weeks ADOT runtime. Includes API Gateway/Function URL alarms (FR-138) and memory utilization alarms (FR-104). | FR-040-045, FR-061, FR-104, FR-121, FR-127, FR-128, FR-131, FR-138, FR-162 | High | Task 4 |
+| Task 17 | CloudWatch alarm coverage — **Phase 1: ~18 high-signal alarms** (see alarm triage below). Phase 2 adds remaining alarms post-dual-emit. FR-041 two-phase threshold strategy. | FR-040-045, FR-061, FR-104, FR-121, FR-127, FR-128, FR-131, FR-138, FR-162 | Medium | Task 4 |
+
+**Alarm triage (Reconciliation Finding #5)**: 38 individual alarms at $3.80/mo with two-phase threshold tuning is disproportionate for initial deployment. Phased alarm rollout:
+
+**Phase 1 — Ship with instrumentation (~18 alarms, $1.80/mo)**:
+- 6× Lambda error alarms (FR-040) — one per Lambda, `Errors > 0`
+- 6× Lambda latency alarms (FR-041) — one per Lambda, 80% of timeout
+- 1× Canary heartbeat (FR-126) — `treat_missing_data=breaching`
+- 1× X-Ray cost anomaly (FR-161) — daily spend guard
+- 1× SilentFailure/Count composite (FR-134) — single alarm on `SUM(all 7 paths) > 0` instead of 7 individual alarms
+- 1× ADOT export failure metric filter (FR-098)
+- 1× API Gateway IntegrationLatency P99 (FR-138)
+- 1× SSE memory utilization (FR-104) — highest OOM risk due to ADOT
+
+**Phase 2 — After dual-emit verification (~20 additional alarms)**:
+- 7× Individual silent failure path alarms (replace composite)
+- 5× Memory utilization (remaining Lambdas)
+- 7× Custom metric alarms (FR-042: StuckItems, ConnectionAcquireFailures, etc.)
+- 1× Dashboard alarm widget update (FR-044)
+
+**Threshold tuning**: Phase 1 loose thresholds (80% of timeout) are sufficient. Phase 2 tightening to 2x P95 is a Terraform-only change — no code deployment, low risk, can be done anytime. Do not block instrumentation deployment on alarm perfectionism.
 
 **Gate**: All alarms firing correctly, dashboard completeness (SC-091).
 
@@ -228,6 +275,8 @@ Task 18 creates 4 executable verification gates (SC-067) + automated trace valid
 | Task | Description | FRs | Complexity | Dependencies |
 |------|-------------|-----|------------|--------------|
 | Task 11 | X-Ray canary Lambda (meta-observability): EventBridge 5-min schedule, SSM state persistence, cross-region SNS alerting, rollback runbook | FR-019-021, FR-036, FR-049-051, FR-096, FR-110, FR-112, FR-113, FR-122, FR-126, FR-136, FR-145, FR-146, FR-151, FR-169, FR-207 | High | Phase 2 complete |
+
+**Canary scope note (Reconciliation Finding #2)**: Task 11 references 17 FRs — scope creep from a health check into a mini-system. Implementation priority: (a) **Core canary** (FR-019, FR-020, FR-036, FR-126 — submit traces, query, alarm on failure): ship first, provides 80% of value. (b) **CloudWatch health check** (FR-049, FR-050, FR-051 — put_metric_data verification, separate IAM role, out-of-band SNS): ship second. (c) **Operational hardening** (FR-078, FR-096, FR-110, FR-112, FR-113, FR-122, FR-136, FR-145, FR-146, FR-151, FR-169, FR-207 — retry logic, SSM persistence, rollback runbook, API GW probe): defer to post-Phase 4. Do not let canary perfectionism block the 14-day accumulation clock.
 | Task 12 | Downstream consumer audit (removed systems) | FR-018 | Medium | Tasks 6, 7, 9 |
 
 **CRITICAL SEQUENCING NOTE**: Task 11 (canary) MUST deploy immediately after Phase 2 completes, NOT after Phase 5. FR-109 gate (a) requires the canary to report healthy for 14 consecutive days before Phase 4 (logging removal) can begin. While Task 11 is categorized as Phase 6 per FR-107, it must be deployed early and run in parallel with Phases 3 and 5 to accumulate the required 14-day healthy baseline.
@@ -256,7 +305,22 @@ Task 10 (CORS) ──→ Task 15 (Frontend SSE, 7 subtasks)
 | Risk | Impact | Mitigation |
 |------|--------|------------|
 | **ADOT Extension has NO processors compiled in** (decouple, batch absent — `aws-otel-lambda#842` open) | Collector config with `processors: [decouple, batch]` fails at startup; without decouple, hop 2 (Extension→X-Ray) has ~30% worst-case span drop during shutdown (`aws-otel-lambda#886`) | **PARTIALLY MITIGATED**: Removed processors from collector config (pipeline: `otlp → awsxray`). Hop 1 (SDK→Extension) covered by `force_flush()` (FR-139). Hop 2 mitigated by temporal separation: proactive flush (FR-093) drains SDK at T-3s, giving Extension ~5s to export before SIGKILL. See Superseded Requirements section for full analysis. FR-075/FR-090/SC-031/SC-044 declared BLOCKED |
-| ADOT Extension crash mid-stream (span-loss vector #2) | Span data loss for 5-15 min | FR-200 (amends FR-196): Canary detection + pre-adot-baseline rollback image (FR-110, SC-060) |
+| ADOT Extension crash mid-stream (span-loss vector #2) | Span data loss for 5-15 min per sandbox; fleet-wide if systemic | See detection/response matrix below |
+
+**ADOT Extension crash detection/response matrix (Reconciliation Finding #6)**:
+
+| Signal | Indicates | Detection Latency | Source |
+|--------|-----------|-------------------|--------|
+| `ECONNREFUSED` on localhost:4318 (per-invocation) | Extension crashed on THIS sandbox | Immediate (next span export) | OTel SDK exporter logs (FR-098 metric filter) |
+| Canary completeness_ratio < 95% | Fleet-wide degradation OR unlucky sandbox sampling | 5-15 min (1-3 canary intervals) | FR-036 canary metric |
+| Sustained ECONNREFUSED across multiple invocations | Persistent sandbox failure (Extension never restarts — Round 21 Issue #3) | Seconds (but only detectable per-sandbox) | CloudWatch Logs metric filter on ECONNREFUSED pattern |
+| completeness_ratio = 0% across 3+ intervals | Systemic ADOT failure (all sandboxes) | 15 min | FR-036 + alarm escalation |
+
+**Response graduated by severity**:
+1. **Single sandbox** (ECONNREFUSED, canary still healthy): No action — sandbox recycles in 5-15 min. Spans lost on that sandbox only.
+2. **Sustained degradation** (canary 80-95%): Investigate via CloudWatch Logs for ECONNREFUSED pattern frequency. If localized, wait for sandbox recycling.
+3. **Fleet-wide failure** (canary < 50% for 3+ intervals): Trigger rollback to `pre-adot-baseline` ECR image (FR-110). Rollback removes ALL streaming-phase tracing but restores Lambda stability. Timeline: ~2 min for image tag switch via `aws lambda update-function-code`.
+4. **X-Ray backend degradation** (canary test traces submitted but not retrievable, zero ECONNREFUSED): Not an ADOT crash — X-Ray service issue. No rollback needed. FR-161 cost alarm may also fire (429 throttling).
 | ADOT exporter backend error (span-loss vector #4) | Spans dropped silently on persistent X-Ray 429/500 | FR-201: Canary detects degraded export state; daily cost anomaly alarm (FR-161) |
 | force_flush() hangs indefinitely | Lambda timeout, span loss | FR-139: 2500ms thread wrapper + OTEL_EXPORTER_OTLP_TRACES_TIMEOUT=2000 |
 | **500 TPS X-Ray quota exceeded** | Silent data loss from day one (projected peak ~520 TPS > 500 default) | **BLOCKER**: Task 19 files Service Quotas increase request pre-production. Monitoring alarm tracks `UnprocessedTraceSegments` |
@@ -265,6 +329,29 @@ Task 10 (CORS) ──→ Task 15 (Frontend SSE, 7 subtasks)
 | OTel SDK v1.39.1 incompatibility | Build failure | FR-101: Pin all core packages to identical version |
 | Dual-emit period too short | Remove logging before X-Ray verified | FR-109: Hard 2-week minimum with 4 verification gates. Task 18 builds executable gate scripts |
 | FR-144 error status omission | X-Ray shows `fault: false` for real errors — invisible failures | Subtask 5g: mandatory dual-call pattern (`set_status` + `record_exception`). CI gate (SC-100) greps for `except` blocks missing both calls |
+| **BSP queue overflow undetectable** (Reconciliation Finding #7) | SDK v1.39.1 `deque` drops oldest span silently — no log, no callback, no metric (FR-166) | **ACCEPTED WITH MITIGATIONS**: (1) Proactive flush (FR-093) at T-3s drains queue well before capacity, preventing overflow under normal load. (2) Unit test shim (amended SC-040) verifies zero created-vs-exported discrepancy. (3) If overflow occurs in production (extreme burst), it is architecturally undetectable at runtime — canary detects aggregate trace loss but cannot attribute root cause to BSP vs. Extension. This is a known OTel SDK design limitation, not a gap we can close. |
+
+## Testing Strategy for High-Span-Volume SSE Lambda (Reconciliation Finding #10)
+
+The SSE Lambda generates ~675 spans per 15-second invocation (15 polls/sec × 3 spans/poll × 15s). This volume requires explicit testing strategy by environment:
+
+| Environment | What's Testable | What's NOT Testable | Approach |
+|-------------|-----------------|---------------------|----------|
+| **Unit (moto)** | Span creation patterns, attribute correctness, error handling dual-call (FR-144), flush_fired flag (FR-149), annotation budget (FR-193) | Actual OTLP export, ADOT Extension interaction, span retention under real timing | Use `InMemorySpanExporter` to capture all spans. Assert span names, attributes, and parent-child relationships. Do NOT assert exact span counts — assert patterns (e.g., "each poll cycle produces a dynamodb_poll span"). |
+| **Integration (LocalStack)** | DynamoDB subsegment creation, flush behavior, proactive flush timing (FR-093), created-vs-exported count match (SC-040 amended) | ADOT Extension (not available in LocalStack), real X-Ray backend indexing | Mock OTLP endpoint (simple HTTP server on :4318 that accepts protobuf and counts spans). Verify `force_flush()` delivers all buffered spans to the mock endpoint within timeout. |
+| **Preprod (real AWS)** | End-to-end span retention (SC-110 ≥95%), ADOT Extension lifecycle during RESPONSE_STREAM (FR-160), cold start latency (FR-158), X-Ray indexing delay | Nothing — this is the only environment where the full stack runs | Deploy ADOT-instrumented SSE Lambda. Run 15-second streaming sessions. Query X-Ray for span count. **This is the only valid environment for SC-110 verification.** |
+
+**Key testing principle**: Unit and integration tests verify *correctness* (right spans, right attributes, right error handling). Only preprod verifies *retention* (do spans survive the ADOT→X-Ray pipeline?). Do not attempt to mock the retention question — it depends on real Lambda lifecycle timing that cannot be simulated.
+
+## Requirement Classification (Reconciliation Finding #1)
+
+The spec's 208 FRs span two distinct categories. This classification guides implementers on which FRs define **testable behavior** vs. **implementation design decisions** that may evolve during development:
+
+**Behavioral FRs (testable, must-satisfy)**: FR-001–FR-051, FR-055–FR-056, FR-058–FR-061, FR-066–FR-068, FR-078–FR-089, FR-093, FR-097, FR-100, FR-104, FR-107, FR-109–FR-113, FR-115, FR-118, FR-121–FR-136, FR-138–FR-155, FR-158–FR-164, FR-168–FR-169, FR-178–FR-182, FR-186, FR-193, FR-205–FR-207. These define *what* the system must do and are verified by SCs.
+
+**Implementation Design Decisions (informational, may adapt)**: FR-052–FR-054, FR-057, FR-062–FR-065, FR-069–FR-077, FR-090–FR-092, FR-095, FR-099, FR-101–FR-103, FR-106, FR-108, FR-137, FR-156, FR-165–FR-167, FR-183–FR-185, FR-187–FR-192, FR-194–FR-204. These encode *how* (SDK constructor arguments, package versions, file paths, processor configs) derived from research. They are correct as written but an implementer may adapt them if the underlying technology changes, provided the behavioral FRs they support remain satisfied.
+
+**Impact**: ~75 FRs are implementation design decisions. Implementers should focus on the ~133 behavioral FRs as hard requirements and treat the ~75 design decisions as informed guidance. This does not reduce scope — it clarifies which FRs are acceptance-tested vs. which are engineering choices.
 
 ## Complexity Tracking
 
