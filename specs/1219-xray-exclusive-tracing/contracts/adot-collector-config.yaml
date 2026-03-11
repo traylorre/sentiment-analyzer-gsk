@@ -1,0 +1,34 @@
+# ADOT Lambda Extension Collector Configuration
+# FR-064, FR-075, FR-090, FR-095
+# Path: /opt/collector-config/config.yaml (in container)
+# Env: OPENTELEMETRY_COLLECTOR_CONFIG_FILE=/opt/collector-config/config.yaml
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: "0.0.0.0:4318"
+      # gRPC deliberately omitted — HTTP/protobuf only (FR-057)
+
+exporters:
+  awsxray:
+    region: "${AWS_REGION}"
+    # No index_all_attributes — only OTel semantic conventions mapped (FR-067)
+
+processors:
+  # FR-075/FR-090: Decouple processor REQUIRED
+  # Prevents span loss race between BSP flush and Extension shutdown
+  decouple: {}
+  batch:
+    timeout: 1s
+    send_batch_size: 512
+    send_batch_max_size: 1024
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [decouple, batch]
+      exporters: [awsxray]
+  # Note: ADOT Extension has ZERO span processors (FR-203)
+  # All span processing happens in Python OTel SDK
