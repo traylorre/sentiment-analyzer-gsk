@@ -126,7 +126,7 @@ class TestCacheMiss:
         """
         from botocore.exceptions import ClientError
 
-        with patch.dict(os.environ, {"OHLC_CACHE_TABLE": ""}, clear=True):
+        with patch.dict(os.environ, {"OHLC_CACHE_TABLE": ""}):
             start = datetime(2025, 12, 1, tzinfo=UTC)
             end = datetime(2025, 12, 31, tzinfo=UTC)
 
