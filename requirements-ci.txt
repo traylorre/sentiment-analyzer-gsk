@@ -79,3 +79,6 @@ tenacity==9.0.0
 
 # Stripe - Feature 1191 (mid-session tier upgrade)
 stripe==14.1.0
+
+# Fast JSON - Used by dashboard lambdas and tests/conftest.py
+orjson==3.11.5
