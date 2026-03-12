@@ -86,7 +86,7 @@ CHAOS_EXPERIMENTS_TABLE = os.environ.get("CHAOS_EXPERIMENTS_TABLE", "")
 ENVIRONMENT = os.environ["ENVIRONMENT"]
 SSE_LAMBDA_URL = os.environ.get("SSE_LAMBDA_URL", "")
 
-# Module-level init logging (FR-028: replaces FastAPI lifespan no-op)
+# Module-level init logging (FR-028)
 logger.info(
     "Dashboard Lambda starting",
     extra={
