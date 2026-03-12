@@ -145,13 +145,13 @@ Ingests financial news from external sources (Tiingo, Finnhub) and returns senti
 - **Confidence scores**: 0.0-1.0 range
 - **Real-time & batch processing**: EventBridge scheduler + Lambda processors
 - **Deduplication**: Avoids reprocessing duplicate items
-- **Live dashboard**: FastAPI + SSE for real-time sentiment streaming
+- **Live dashboard**: Lambda Powertools + SSE for real-time sentiment streaming
 
 ### Architecture
 
 - **Frontend**: AWS Amplify (Next.js SSR) with API Gateway backend
 - **Compute**: AWS Lambda (Python 3.13) - 6 functions (Ingestion, Analysis, Dashboard, SSE-Streaming, Notification, Metrics)
-- **Real-time**: SSE Lambda with Lambda Web Adapter for RESPONSE_STREAM mode
+- **Real-time**: SSE Lambda with custom Runtime API bootstrap for RESPONSE_STREAM mode
 - **Orchestration**: EventBridge, SNS, SQS
 - **Storage**: DynamoDB (on-demand capacity), S3 (static assets, ML models)
 - **Sentiment Model**: DistilBERT (fine-tuned for social media)
@@ -182,7 +182,7 @@ Ingests financial news from external sources (Tiingo, Finnhub) and returns senti
 
 ## Architecture Diagrams
 
-[![View System Diagram](https://img.shields.io/badge/View_Fullscreen-Interactive_Diagram-blue?style=for-the-badge&logo=mermaid)](https://mermaid.live/view#pako:eNqVWHtz2zYS_yoYdtxx7uhaD8tJNG2neia-2o4jKuc_qo4HImEJNQnoQNKOGvm7dxcASVBS5DM9I4PYF7CP34L45oUyYl7XOzr6xgXPuuTbzMuWLGEzr0tmXkTVw8zziZ38L1WczmOWIhU4V4onVK0HMpbKCPxw1nvf6J0ZmZSFUkRbDONO77zVtkqZyvgWvRXhn6HHXDCX9u7dYDAeG5q1PWVfs5p6_WzZP8RUrOEQjwAnHaKzaMEu6ZzFfRo-LJTMRWS52voxXGGcp2Ct_7DYs9WCKFXEChMd_cy8Z2S4j-VTuKQqs74Pc_VoozSnKU-rlQYrGnKhjZw3cFJR8eBMNhuN5-fno6OZKHWSaX8mCDxpPl8oulqS0VdYjaDxHzOvGJKAqUceYvT_NNz4TDmolcBmBqR3c_HzXJ3-OuaCipCD2DV7qosASSzzOcjYUSl0BfnGMjKkGa1JfOrl2fJGyUcO3klBUE-QckYLf5ByETOffODZx3xeyjMIhtje3SMTWV9xiBso6yX0byncyZrxIFyyKI-RsxiSCfxoo8cdknDx5qC1XrKK-f16PNK29JiMlRQZMruWLLG3Wjmc8KYtXUMC_vRXSoJgot_BA_IkYqtYrsm9ksn_s2_w8weasSe6RgM3F8S-1VcBTLdAn4yCaRmZwadJ0CU0hoy5CxWLwFUQ2_SXTOXGEROZZywlmSSXNJlH9OA6it2jSzOa8XC_P4I2MrRJPw8hLbSZC-CCLGRPkCTpci6pig7vGPIE9wr_cMkhGINQHw_kAuBOvqmZs5PAbkfkS8oUuZEy1rZ10nVJPc9s3i5gD5dcPOjX_9xOyV8ZJwsmmNIWD67ROAxXeRvYFzLORYiC9cq5EAuW4jQwl2Mroi13mq2rPjmFwq8L9qB-14ASaMQOXbFmo3Wm5drbcrDjanlYc3uMgZB-P6UrfvrYOqXAd_ovPXXz-2Dkk0EwGfsAH2m6s6MyiqC_HH9nRybP3Kz8TbH_5VyxOyWhKCPAe3A3QrSbRAHWHfy-oPXm03Uwugumk1HvqoziI4159HIEAzBKNZYgdBWv9Y2uBU3ksI88dqitpJiWCfyc8Iwlu96f6obrSOlZYqa1hlnearRaRKLb71IoJyjDY-P4TkKm08s3LluCqXoHnfXhLpMPTABvc7nDldpYkeO3kSbWXcoAAjJclB2RKypgw8oAE-DK72ydFk68C0aDyWh60IFXYA8WJhagsxzXbV4HaO86IFO54qFWTm0qn2AaQDFspdblZ5T4HODI9CTKYxZZY04f27siiQig7JLKF_Ij6cVwZKibGsQyj25pFiLWVC_a6KVcpCB1xTLFw634xlQlaU3EzpmqbAIkiXu-yAFwDy4WcQr16P81E30ln2ASaLdsXrzt03V0ZNBuYlxJxoD05PiR06IrkX9vYxP5MrlM3xhxq5mcnPy6-Tid3gQbp5sZlupdc1ngp2kKCbQBrN9VhJkUQs8Bsm5KVg8ONX3m1SFn5m0cxPo-t2as-seO3YozzRSjieYHBHF8tdVQ0FvWXmlfqzIHFYgfoFSYbYoeY3iLNlMx4m7ncIjcbB15DH99TouZGj6gF1HsiYNqaEh7vFNfLaIG0RCyccBnL6tpeYgjpFjDCxIF_r_IWGHGpoCaXb6ftMbsZCDlA2ddcPG9YunSgJoun49Ztvok4jV2HjgtQ8cOaMICgNlfrqWAHRbVUEVVo3fVWKuolgc_XN9U8QWA3abiNEz2BIws9dPvDmdx7jWOLM-8O3wFvBbFALC6w1Mt11SVVIxcYCvZlD1nH-NNPo95utwgsLp5XZwOnL0D5ta2XfDUyQZcNwi2NlqFKqR-WUEb_c7C3F1ewQdMbGHPtVQtENxQra06MqDw55yp9SHtpQ-d4i814xEh0PWOOO_sH-a1x2QcnwYhFTsWkEHno5Y2HxLpvvyq-si-kGCn2Di9ZI8b97PUvbCfp9jFfqrTgJxQY6nqduR6KVvH6J8TsKqg9vFewADM0xJKi2TwmWKYwxiwfcjuCSs-IO95HHd_eNc_f9888wFaoVS79kLAvp488QjO2K3VVz_Ej-1u8Z1d1xgbEDD6Wv3O-O2g1GduIF6nLzUHNquwPTzvt4elwrejYbvVfJ3CpDjDlHs-6zTbpcpho9Fq9l-psjqDGJ1nfVxoqfN9o9kej16nM4yEVYY77lROHL1vjs5fGZR7-wlXhuW87yyv0egPhq8MC3b10oHtoROT8bjT6rRep21hvnXLINe81x53mv3OiwodlRbufYvl_lZzLpLelSjL3S-K2q9aml9WsY-1Gjtd2kgXoONX7dMvwM0msMsOuOwDFlep6BKrevdNhTvpVVPSLsNaE7cHDAyQO28OW9bRM-H5XsJUQnnkdb-ZK0Svqy8VgVK_UUQG9zoR-GwlA2v9IhFJBjRQi3uFiBRzqQaU8vIQZ83NIcxuXxtqZfoBYu2ez6E8P_sebFUGaxF6Xbzy8L1cN7Qhp3ACT4rJFRW4ka9et-F7a_gFwb-lBHrT95TMF0uve0_jlD3_A4L29wU)
+[![View System Diagram](https://img.shields.io/badge/View_Fullscreen-Interactive_Diagram-blue?style=for-the-badge&logo=mermaid)](https://mermaid.live/view#pako:eNqVWG1z4zYO_iscddLJXpXGL3F213PtjF-zuSbZrOU2H843GVqibTUS6aOkZN11_vsBJCWRtuu9KDMORYAACIAPIH7zQhExr-udnHyLeZx3ybeZl69YymZel8y8iMqnmecTM_kHlTGdJyxDKnCuZZxSuRmIREi94IeL3sdG70KvyVgoeLTDMO70LlttI5TJPN6htyL80_Qk5samffgwGIzHmmZ0T9nX3BGvnh39x5hKG47xcHDSMTqLluyGzlnSp-HTUoqCR4arrR7NFSZFBtr6T8sDWy2JQkasVNFRz8x7RYZFIl7CFZW58X1YyGcTpTnN4qy2NFjTMOZKyWUDJyXlT9Zks9F4fX09OZnxSiaZ9mecwJMV86Wk6xUZfQVrOE3-PfPKIQmYfI5DjP5_NDc-0xjECmDTA9K7v_7nXJ7_Oo455WEMy-7Yi7sESHxVzGGNGVWLbiHfWE6GNKfOis-9Il_dS_Ecg3cyWKgmSDWjFl8JsUyYT67i_FMxr9YzCAbf3d0z43lfxhA3ENZL6V-C25OO8iBcsahIkLMckgn8KKWnHZLG_N1Rbb10ncSLzXikdKkxGUvBc2S2NRlib722OOFNabqDBPz5z4wEwUS9gwfEWcTWidiQhRTp_7Nv8PMVzdkL3aCC-2ti3lwrgOkB6JNRMK0iM_g8CbqEJpAxj6FkEbgKYpv9kstCO2IiipxlJBfkhqbziB61o9w9ujSneRwe9kfQRoY26RchpIVScw1ckIXsBZIkW80FldHxHUOe4F7hH5ocgjII9elALAHuxDtHnZkEdjMiv2dMknshEqVbJV2XuHlm8nYJe7iJ-ZN6_dfDlPyZx2TJOJNK41EbtcPQyofAvJBxwUNc6J6ca75kGU4DczU2S5TmTrN12yfncPD1mbBymuQyXi4RXOxYw7neAHqgcjO0xTUbrQslr23kBXfBQTlVMEBQNT5mWJlc5CcVIjV3Ttfx-XPr_B9EqmRSk_e_DUY-GQSTsQ8AlGV7PgkCPFfw-x1195_vgtFjMJ2MerdVlJ5pEkduhPC5ZbDJEL1iRo5TWh8cn9g-bgIYaEflkLPXOUszkioRjvw7kccLk4ygxH61NbU6l3ve_8nGKT0LOXUFr4SlNE6yo6kW5EJSBXqIseWrG8oNp6kY9pHHDJWaDM9PCj9nMW7LTSMI4VR1BtYqNUv0tJIwK1qNVosICvOPGZx7wItTHd9OSqbTm3c2W4pn6hFagKfHXDwxDrzN1R5XZlKCnL6PFNHNDQZYlaNRZkRuKYcNS42gkH6_sU1WZsNjMBpMRtOjDrwFfWAYX6rcMGNX512A-iBUU7GOQyWcmrN1Jtl_Czi1rveGN19wxZcAR7p4QiBZZJSx4yG9FQhV0phUvZAfSS-B3sZVNUhEET3QPERQrF-U0huxzGCVyXg3vgmVaeYsMXP6RDQBO_kiXhZQGY4ai4CKctR_R0VfiheYBNoDm5dvh2SdnGhYnmhXkjGUJHL6HNOyfCKk1KXtnV5lBJKzs1-3n6bT-2BrVVvNUr8rLlOYaJZB3myhFu0LQjUh1EQgq6Jp5OBQ0WdeBWkzb2tVrD1JNWeWS0ZTxQ-YZm16p4Tpba8ojzBT5huyC7tm4_U06tF9E0QplizMt2XJ06xl1asZcXNz6Gm3Ox2Y5nfn1DJ9Uo_IRdB9iUE01Mc9j7i2IjIQBRNbC2AOceryi1BBSgOOLygLyff4alDYlliyx_azkpefDYR4ilkXnLuQLFtp0FLH41Oerz_zZIMFDNp2aB0CmrIAYPSXO8Fhd2W218FW6FxXeAy2plUdKJo31ZV4W3NqJtOKI4vbhu9xlg249mLVfO_xlfBZZj3A5h5Pba4-PkIyoirgtqophxjvi3kSZ6stAqed7mU7Yu0dMNXZdsnjkjV4bhFMzYEsRSH19zXU-78xzN7lLXxJJQbWbE21geCG2jY3b74UTG6OSa98aJ2ASjL2MoGCAcRxa_8wrzwmkuQ8CCnf04AMKh_Vat0pZIfyy21r_i6_sJsp271tVRi41SHVuwUIUjW9yMhVcL1rmc2-1xptrbJk2XigKzqQDKrI1UbaizSjI0ZlAIJuAqe1WO-aucdb9VYQsG31UWw7siq4h3IbS6q7u718PMziptNhnjIdDlNtjx_m2NvsYTar5FuHD6FTNQB23uabBDP2DMyXAMV4ZaTB_mUFYEdy-ILVzGECZXXIFoSVdwuLOEm6P3zoX35sXvhQAwE8u-auyLyevcQRfH611l_9EO9huuUVjCsx0Ymi5bX6nfH7QSVPX069TV6mW2QjsD287LeHlcD3o2G71XybwLTsGqs9X3Sa7UrksNFoNftvFFl3fVrmRR8NrWR-bDTb49HbZIYRN8Jwx53aiaOPzdHlG4OyMF_3VVgu-5Z5jUZ_MHxjWPAbonJge2jFZDzutDqtt0lb6l6xCrLjvfa40-x3vivQEmkKsG-qq7_TKLEKRuoVFW74JTr4FQb4cNJ9c55959TqZLfllHjm142NXxYek8o2O6CoD3WyTkqbWJ98X591K9EcIe0qwM5y0_ZhqOx53R8bl8-453spk_DpGnndb_qe2euqm2eguNfOyGDfOQOfOdPA6t42I0nDB0qx75mRom9egVLdMOOsvl6G2d27ZSVEPUB0LoMtyuur78FWRbDhodfFezHfK1SzMYwpfP2k5eSactzIV6_b8L0N_MLCv4QAetP3pCiWK6-7oEnGXv8H4aGzKw)
 
 > Click the badge above to view the full system architecture in an interactive pan/zoom viewer.
 
@@ -224,7 +224,7 @@ graph TB
 
         subgraph APILayer["API Layer"]
             APIGW[API Gateway<br/>REST /api/*]
-            Dashboard[Dashboard Lambda<br/>FastAPI · 1024MB]
+            Dashboard[Dashboard Lambda<br/>1024MB]
             SSELambda[SSE Lambda<br/>RESPONSE_STREAM<br/>900s timeout]
             Notification[Notification Lambda<br/>Alerts + Digests]
         end
@@ -427,7 +427,7 @@ sequenceDiagram
         SSE-->>User: SSE event (heartbeat)
     end
 
-    Note over SSE,User: RESPONSE_STREAM mode<br/>Lambda Web Adapter<br/>Max 15 min connection
+    Note over SSE,User: RESPONSE_STREAM mode<br/>Custom Runtime API bootstrap<br/>Max 15 min connection
 ```
 
 ### DynamoDB Table Design
@@ -915,7 +915,7 @@ sentiment-analyzer-gsk/
 │   ├── lambdas/
 │   │   ├── ingestion/           # Ingestion Lambda
 │   │   ├── analysis/            # Analysis Lambda
-│   │   ├── dashboard/           # Dashboard Lambda (FastAPI REST)
+│   │   ├── dashboard/           # Dashboard Lambda (REST API)
 │   │   ├── sse_streaming/       # SSE Lambda (real-time streaming)
 │   │   ├── metrics/             # Metrics Lambda (stuck item monitor)
 │   │   └── shared/              # Shared Lambda utilities

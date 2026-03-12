@@ -16,11 +16,6 @@
 boto3==1.42.40
 botocore==1.42.40
 
-# Web Framework - Dashboard Lambda
-fastapi==0.127.0
-mangum==0.19.0
-uvicorn==0.40.0
-sse-starlette==3.0.4
 
 # HTTP Client - Financial API adapters (Tiingo, Finnhub)
 requests==2.32.5
@@ -84,3 +79,6 @@ tenacity==9.0.0
 
 # Stripe - Feature 1191 (mid-session tier upgrade)
 stripe==14.1.0
+
+# Fast JSON - Used by dashboard lambdas and tests/conftest.py
+orjson==3.11.5

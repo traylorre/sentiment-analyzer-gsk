@@ -368,7 +368,7 @@ from datetime import date
 from unittest.mock import patch
 import boto3
 from moto import mock_aws
-from fastapi.testclient import TestClient
+from src.lambdas.dashboard.handler import lambda_handler
 
 
 @pytest.fixture
@@ -392,13 +392,15 @@ def dynamodb_table():
 
 
 @pytest.fixture
-def test_client(dynamodb_table):
-    """Create test client with mocked DynamoDB."""
-    import os
-    os.environ["OHLC_CACHE_TABLE"] = "test-ohlc-cache"
-
-    from src.lambdas.dashboard.handler import app
-    return TestClient(app)
+def mock_lambda_context():
+    """Create mock Lambda context for handler invocation."""
+    from unittest.mock import MagicMock
+    context = MagicMock()
+    context.function_name = "test-function"
+    context.memory_limit_in_mb = 256
+    context.invoked_function_arn = "arn:aws:lambda:us-east-1:123456789012:function:test-function"
+    context.aws_request_id = "test-request-id"
+    return context
 
 
 class TestOHLCCacheFlow:

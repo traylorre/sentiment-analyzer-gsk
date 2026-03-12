@@ -20,17 +20,18 @@ import os
 import time
 from datetime import date, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+import orjson
+from aws_lambda_powertools.event_handler import Response
+from aws_lambda_powertools.event_handler.router import Router
 
-from src.lambdas.shared.adapters.finnhub import FinnhubAdapter
-from src.lambdas.shared.adapters.tiingo import TiingoAdapter
 from src.lambdas.shared.cache.ohlc_cache import (
     candles_to_cached,
     get_cached_candles,
     put_cached_candles,
 )
+from src.lambdas.shared.dependencies import get_tiingo_adapter
 from src.lambdas.shared.logging_utils import get_safe_error_info
-from src.lambdas.shared.middleware import extract_auth_context
+from src.lambdas.shared.middleware.auth_middleware import extract_auth_context
 from src.lambdas.shared.models import (
     RESOLUTION_MAX_DAYS,
     TIME_RANGE_DAYS,
@@ -39,10 +40,11 @@ from src.lambdas.shared.models import (
     PriceCandle,
     SentimentHistoryResponse,
     SentimentPoint,
-    SentimentSourceType,
     TimeRange,
 )
+from src.lambdas.shared.utils.event_helpers import get_query_params
 from src.lambdas.shared.utils.market import get_cache_expiration
+from src.lambdas.shared.utils.response_builder import error_response
 
 logger = logging.getLogger(__name__)
 
@@ -188,7 +190,7 @@ def _write_through_to_dynamodb(
 ) -> None:
     """Persist OHLC candles to DynamoDB for cross-invocation caching.
 
-    Fire-and-forget: errors are logged but don't fail the request.
+    Errors propagate to caller for explicit degradation handling.
     Historical data is immutable, so overwrites are safe.
 
     Args:
@@ -196,46 +198,42 @@ def _write_through_to_dynamodb(
         source: Data provider ("tiingo" or "finnhub")
         resolution: Candle resolution ("D", "1", "5", etc.)
         ohlc_candles: List of OHLCCandle from adapter
+
+    Raises:
+        ClientError: If DynamoDB write fails (propagated to caller)
     """
     if not ohlc_candles:
         logger.debug("No candles to cache", extra={"ticker": ticker})
         return
 
-    try:
-        # Convert adapter candles to cache format
-        cached_candles = candles_to_cached(ohlc_candles, source, resolution)
+    # Convert adapter candles to cache format
+    cached_candles = candles_to_cached(ohlc_candles, source, resolution)
 
-        if not cached_candles:
-            logger.debug(
-                "Candle conversion produced no results",
-                extra={"ticker": ticker, "input_count": len(ohlc_candles)},
-            )
-            return
+    if not cached_candles:
+        logger.debug(
+            "Candle conversion produced no results",
+            extra={"ticker": ticker, "input_count": len(ohlc_candles)},
+        )
+        return
 
-        # Write to DynamoDB (batched, max 25 per request)
-        written = put_cached_candles(
-            ticker=ticker,
-            source=source,
-            resolution=resolution,
-            candles=cached_candles,
-        )
+    # Write to DynamoDB (batched, max 25 per request)
+    written = put_cached_candles(
+        ticker=ticker,
+        source=source,
+        resolution=resolution,
+        candles=cached_candles,
+    )
 
-        logger.info(
-            "OHLC write-through complete",
-            extra={
-                "ticker": ticker,
-                "source": source,
-                "resolution": resolution,
-                "candles_written": written,
-                "candles_input": len(ohlc_candles),
-            },
-        )
-    except Exception as e:
-        # Log but don't fail - write-through is best-effort
-        logger.warning(
-            "OHLC write-through failed",
-            extra=get_safe_error_info(e),
-        )
+    logger.info(
+        "OHLC write-through complete",
+        extra={
+            "ticker": ticker,
+            "source": source,
+            "resolution": resolution,
+            "candles_written": written,
+            "candles_input": len(ohlc_candles),
+        },
+    )
 
 
 def _read_from_dynamodb(
@@ -247,10 +245,8 @@ def _read_from_dynamodb(
 ) -> list[PriceCandle] | None:
     """Query DynamoDB for cached OHLC candles.
 
-    Returns None if:
-    - No data found
-    - Query fails (graceful degradation to API)
-    - Partial data (less than 80% expected candles)
+    Returns None if no data found or partial data (less than 80% expected).
+    Raises on DynamoDB errors — caller handles explicit degradation.
 
     Args:
         ticker: Stock symbol
@@ -260,69 +256,62 @@ def _read_from_dynamodb(
         end_date: Range end
 
     Returns:
-        List of PriceCandle if cache hit, None otherwise
+        List of PriceCandle if cache hit, None if cache miss
+
+    Raises:
+        ClientError: If DynamoDB query fails (propagated to caller)
     """
-    try:
-        # Import here to avoid potential import timing issues
-        from datetime import UTC
-        from datetime import time as dt_time
+    from datetime import UTC
+    from datetime import time as dt_time
 
-        # Convert dates to datetime for cache query
-        start_time = datetime.combine(start_date, dt_time.min, tzinfo=UTC)
-        end_time = datetime.combine(end_date, dt_time.max, tzinfo=UTC)
+    # Convert dates to datetime for cache query
+    start_time = datetime.combine(start_date, dt_time.min, tzinfo=UTC)
+    end_time = datetime.combine(end_date, dt_time.max, tzinfo=UTC)
 
-        result = get_cached_candles(
-            ticker=ticker,
-            source=source,
-            resolution=resolution.value,
-            start_time=start_time,
-            end_time=end_time,
-        )
+    result = get_cached_candles(
+        ticker=ticker,
+        source=source,
+        resolution=resolution.value,
+        start_time=start_time,
+        end_time=end_time,
+    )
 
-        if not result.cache_hit or not result.candles:
-            logger.debug(
-                "DynamoDB cache miss",
-                extra={"ticker": ticker, "resolution": resolution.value},
-            )
-            return None
-
-        # Convert CachedCandle to PriceCandle
-        price_candles = [
-            PriceCandle.from_cached_candle(c, resolution) for c in result.candles
-        ]
-
-        # Validate we have reasonable coverage (80% threshold)
-        expected_candles = _estimate_expected_candles(start_date, end_date, resolution)
-        if len(price_candles) < expected_candles * 0.8:
-            # Less than 80% coverage - treat as miss, fetch fresh
-            logger.info(
-                "DynamoDB cache partial hit, fetching fresh",
-                extra={
-                    "ticker": ticker,
-                    "found": len(price_candles),
-                    "expected": expected_candles,
-                },
-            )
-            return None
-
-        logger.info(
-            "OHLC cache hit (DynamoDB)",
-            extra={
-                "ticker": ticker,
-                "source": source,
-                "resolution": resolution.value,
-                "candle_count": len(price_candles),
-            },
-        )
-        return price_candles
-
-    except Exception as e:
-        # Graceful degradation - log and fall through to API
-        logger.warning(
-            "DynamoDB cache read failed, falling back to API",
-            extra=get_safe_error_info(e),
+    if not result.cache_hit or not result.candles:
+        logger.debug(
+            "DynamoDB cache miss",
+            extra={"ticker": ticker, "resolution": resolution.value},
         )
         return None
+
+    # Convert CachedCandle to PriceCandle
+    price_candles = [
+        PriceCandle.from_cached_candle(c, resolution) for c in result.candles
+    ]
+
+    # Validate we have reasonable coverage (80% threshold)
+    expected_candles = _estimate_expected_candles(start_date, end_date, resolution)
+    if len(price_candles) < expected_candles * 0.8:
+        # Less than 80% coverage - treat as miss, fetch fresh
+        logger.info(
+            "DynamoDB cache partial hit, fetching fresh",
+            extra={
+                "ticker": ticker,
+                "found": len(price_candles),
+                "expected": expected_candles,
+            },
+        )
+        return None
+
+    logger.info(
+        "OHLC cache hit (DynamoDB)",
+        extra={
+            "ticker": ticker,
+            "source": source,
+            "resolution": resolution.value,
+            "candle_count": len(price_candles),
+        },
+    )
+    return price_candles
 
 
 def _estimate_expected_candles(
@@ -414,105 +403,65 @@ def _build_response_from_cache(
     )
 
 
+def _build_cache_headers(
+    source: str,
+    age: int,
+    error: str | None,
+    write_error: bool,
+) -> dict[str, str]:
+    """Build X-Cache-* response headers per contract (Feature 1218).
+
+    Args:
+        source: Cache source value (in-memory, persistent-cache, live-api, live-api-degraded)
+        age: Cache age in seconds (0 for live-api/degraded)
+        error: Error description string (only for degraded mode)
+        write_error: Whether a cache write failed
+
+    Returns:
+        Dict of cache headers to include in Response
+    """
+    headers: dict[str, str] = {
+        "X-Cache-Source": source,
+        "X-Cache-Age": str(age),
+    }
+    if error is not None:
+        headers["X-Cache-Error"] = error
+    if write_error:
+        headers["X-Cache-Write-Error"] = "true"
+    return headers
+
+
 # Create router
-router = APIRouter(prefix="/api/v2/tickers", tags=["price-data"])
+router = Router()
 
 
-def get_user_id_from_request(request: Request) -> str:
-    """Extract and validate user_id from request (Feature 1049).
+def _get_user_id_from_event(event: dict) -> str | Response:
+    """Extract and validate user_id from event (Feature 1049).
 
     Uses shared auth middleware for consistent auth handling.
     Supports both Bearer token and X-User-ID header.
 
     Args:
-        request: FastAPI Request object
+        event: Lambda event dict
 
     Returns:
-        Validated user_id string
-
-    Raises:
-        HTTPException 401: Missing or invalid user identification
+        Validated user_id string, or Response with 401 error
     """
-    event = {"headers": dict(request.headers)}
     auth_context = extract_auth_context(event)
 
     user_id = auth_context.get("user_id")
     if not user_id:
-        raise HTTPException(status_code=401, detail="Missing user identification")
+        return Response(
+            status_code=401,
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Missing user identification"}).decode(),
+        )
 
     return user_id
 
 
-def get_tiingo_adapter() -> TiingoAdapter:
-    """Dependency to get TiingoAdapter.
-
-    Fetches API key from Secrets Manager using TIINGO_SECRET_ARN environment variable.
-    Falls back to TIINGO_API_KEY environment variable for local development/testing.
-    """
-    # First try direct environment variable (for local dev/testing)
-    api_key = os.environ.get("TIINGO_API_KEY")
-    if not api_key:
-        # Try Secrets Manager
-        secret_arn = os.environ.get("TIINGO_SECRET_ARN")
-        if secret_arn:
-            try:
-                from src.lambdas.shared.secrets import get_api_key
-
-                api_key = get_api_key(secret_arn)
-            except Exception as e:
-                logger.warning(
-                    "Failed to retrieve Tiingo API key from Secrets Manager",
-                    extra=get_safe_error_info(e),
-                )
-    if not api_key:
-        logger.warning("Tiingo API key not configured, data source unavailable")
-        raise HTTPException(status_code=503, detail="Tiingo data source unavailable")
-    return TiingoAdapter(api_key=api_key)
-
-
-def get_finnhub_adapter() -> FinnhubAdapter:
-    """Dependency to get FinnhubAdapter.
-
-    Fetches API key from Secrets Manager using FINNHUB_SECRET_ARN environment variable.
-    Falls back to FINNHUB_API_KEY environment variable for local development/testing.
-    """
-    # First try direct environment variable (for local dev/testing)
-    api_key = os.environ.get("FINNHUB_API_KEY")
-    if not api_key:
-        # Try Secrets Manager
-        secret_arn = os.environ.get("FINNHUB_SECRET_ARN")
-        if secret_arn:
-            try:
-                from src.lambdas.shared.secrets import get_api_key
-
-                api_key = get_api_key(secret_arn)
-            except Exception as e:
-                logger.warning(
-                    "Failed to retrieve Finnhub API key from Secrets Manager",
-                    extra=get_safe_error_info(e),
-                )
-    if not api_key:
-        logger.warning("Finnhub API key not configured, data source unavailable")
-        raise HTTPException(status_code=503, detail="Finnhub data source unavailable")
-    return FinnhubAdapter(api_key=api_key)
-
-
-@router.get("/{ticker}/ohlc", response_model=OHLCResponse)
-async def get_ohlc_data(
-    ticker: str,
-    request: Request,
-    range: TimeRange = Query(TimeRange.ONE_MONTH, description="Time range for data"),
-    resolution: OHLCResolution = Query(
-        OHLCResolution.DAILY,
-        description="Candlestick resolution (1, 5, 15, 30, 60 minutes or D for daily)",
-    ),
-    start_date: date | None = Query(
-        None, description="Custom start date (overrides range)"
-    ),
-    end_date: date | None = Query(None, description="Custom end date"),
-    tiingo: TiingoAdapter = Depends(get_tiingo_adapter),
-    finnhub: FinnhubAdapter = Depends(get_finnhub_adapter),
-) -> OHLCResponse:
+@router.get("/api/v2/tickers/<ticker>/ohlc")
+def get_ohlc_data(ticker: str) -> Response:
     """Get OHLC candlestick data for a ticker.
 
     Returns historical price data for visualization.
@@ -521,29 +470,97 @@ async def get_ohlc_data(
 
     Args:
         ticker: Stock ticker symbol (e.g., AAPL, MSFT)
+
+    Query Parameters:
         range: Predefined time range (1W, 1M, 3M, 6M, 1Y)
         resolution: Candle resolution - 1/5/15/30/60 min or D (daily)
         start_date: Custom start date (overrides range if provided)
         end_date: Custom end date (defaults to today)
 
     Returns:
-        OHLCResponse with candles array
+        Response with OHLCResponse JSON
 
     Raises:
-        HTTPException 400: Invalid ticker symbol or date range
-        HTTPException 401: Missing user identification
-        HTTPException 404: No price data available
-        HTTPException 503: External data source unavailable
+        400: Invalid ticker symbol or date range
+        401: Missing user identification
+        404: No price data available
+        503: External data source unavailable
     """
-    # Feature 1049: Use standardized auth extraction (validates user, raises 401 if invalid)
-    get_user_id_from_request(request)
+    # Feature 1049: Use standardized auth extraction
+    user_id_or_error = _get_user_id_from_event(router.current_event.raw_event)
+    if isinstance(user_id_or_error, Response):
+        return user_id_or_error
+
+    # Get adapters (catch RuntimeError and return 503)
+    try:
+        tiingo = get_tiingo_adapter()
+    except RuntimeError as e:
+        logger.warning("Tiingo adapter unavailable", extra=get_safe_error_info(e))
+        return Response(
+            status_code=503,
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Tiingo data source unavailable"}).decode(),
+        )
+
+    # Extract query parameters
+    query_params = get_query_params(router.current_event.raw_event)
+
+    # Parse range parameter
+    range_str = query_params.get("range", TimeRange.ONE_MONTH.value)
+    try:
+        range_param = TimeRange(range_str)
+    except ValueError:
+        range_param = TimeRange.ONE_MONTH
+
+    # Parse resolution parameter
+    resolution_str = query_params.get("resolution", OHLCResolution.DAILY.value)
+    try:
+        resolution = OHLCResolution(resolution_str)
+    except ValueError:
+        valid_values = ", ".join(r.value for r in OHLCResolution)
+        return error_response(
+            422,
+            f"Invalid resolution '{resolution_str}'. Valid values: {valid_values}",
+        )
+
+    # Parse date parameters
+    start_date_str = query_params.get("start_date")
+    end_date_str = query_params.get("end_date")
+
+    start_date = None
+    end_date = None
+    if start_date_str:
+        try:
+            start_date = date.fromisoformat(start_date_str)
+        except ValueError:
+            return Response(
+                status_code=400,
+                content_type="application/json",
+                body=orjson.dumps(
+                    {"detail": "Invalid start_date format. Use YYYY-MM-DD."}
+                ).decode(),
+            )
+    if end_date_str:
+        try:
+            end_date = date.fromisoformat(end_date_str)
+        except ValueError:
+            return Response(
+                status_code=400,
+                content_type="application/json",
+                body=orjson.dumps(
+                    {"detail": "Invalid end_date format. Use YYYY-MM-DD."}
+                ).decode(),
+            )
 
     # Normalize ticker
     ticker = ticker.upper().strip()
     if not ticker or len(ticker) > 5 or not ticker.isalpha():
-        raise HTTPException(
+        return Response(
             status_code=400,
-            detail=f"Invalid ticker symbol: {ticker}. Must be 1-5 letters.",
+            content_type="application/json",
+            body=orjson.dumps(
+                {"detail": f"Invalid ticker symbol: {ticker}. Must be 1-5 letters."}
+            ).decode(),
         )
 
     # Calculate date range
@@ -551,16 +568,19 @@ async def get_ohlc_data(
         # Custom date range
         time_range_str = "custom"
         if start_date > end_date:
-            raise HTTPException(
+            return Response(
                 status_code=400,
-                detail="start_date must be before end_date",
+                content_type="application/json",
+                body=orjson.dumps(
+                    {"detail": "start_date must be before end_date"}
+                ).decode(),
             )
     else:
         # Use predefined range
         end_date = date.today()
-        days = TIME_RANGE_DAYS.get(range, 30)
+        days = TIME_RANGE_DAYS.get(range_param, 30)
         start_date = end_date - timedelta(days=days)
-        time_range_str = range.value
+        time_range_str = range_param.value
 
     # Apply time range limiting based on resolution (per data-model.md)
     max_days = RESOLUTION_MAX_DAYS.get(resolution, 365)
@@ -581,6 +601,14 @@ async def get_ohlc_data(
     # See: https://github.com/github/codeql/discussions/10702
     logger.info("Fetching OHLC data")
 
+    # =========================================================================
+    # Cache observability tracking (Feature 1218 / OHLC Cache Reconciliation)
+    # =========================================================================
+    cache_source = "live-api"  # Default: no cache hit
+    cache_age = 0
+    cache_error = None
+    cache_write_error = False
+
     # Feature 1076/1078: Check cache before making external API calls
     # Use time_range_str (not dates) for cache key to ensure hits on predefined ranges
     cache_key = _get_ohlc_cache_key(
@@ -598,20 +626,45 @@ async def get_ohlc_data(
             "OHLC cache hit (in-memory)",
             extra={"cache_key": safe_cache_key, "stats": get_ohlc_cache_stats()},
         )
+        # Calculate in-memory cache age
+        if cache_key in _ohlc_cache:
+            cache_age = int(time.time() - _ohlc_cache[cache_key][0])
+        cache_headers = _build_cache_headers("in-memory", cache_age, None, False)
         # Return cached OHLCResponse directly
-        return OHLCResponse(**cached_response)
+        return Response(
+            status_code=200,
+            content_type="application/json",
+            body=orjson.dumps(cached_response).decode(),
+            headers=cache_headers,
+        )
 
     # =========================================================================
     # Cache check #2: DynamoDB persistent cache (Feature 1087 / CACHE-001)
     # Survives Lambda cold starts, reduces external API calls
+    # Errors propagate for explicit degradation (Feature 1218)
     # =========================================================================
-    ddb_candles = _read_from_dynamodb(
-        ticker=ticker,
-        source="tiingo",  # Primary source
-        resolution=resolution,
-        start_date=start_date,
-        end_date=end_date,
-    )
+    ddb_candles = None
+    try:
+        ddb_candles = _read_from_dynamodb(
+            ticker=ticker,
+            source="tiingo",  # Primary source
+            resolution=resolution,
+            start_date=start_date,
+            end_date=end_date,
+        )
+    except Exception as e:
+        # Explicit degradation: log ERROR, set degradation context, continue to API
+        error_desc = f"DynamoDB {type(e).__name__}: {e}"
+        logger.error(
+            "DynamoDB cache read failed, degrading to live API",
+            extra={
+                "error": error_desc,
+                "ticker": ticker,
+                "resolution": resolution.value,
+            },
+        )
+        cache_source = "live-api-degraded"
+        cache_error = error_desc
 
     if ddb_candles:
         # Build response from DynamoDB data
@@ -626,7 +679,15 @@ async def get_ohlc_data(
         # Populate in-memory cache for subsequent requests
         _set_cached_ohlc(cache_key, response.model_dump(mode="json"))
 
-        return response
+        # Calculate persistent cache age from fetched_at (approximate)
+        # Use 0 as default since we don't have fetched_at in the response model
+        cache_headers = _build_cache_headers("persistent-cache", 0, None, False)
+        return Response(
+            status_code=200,
+            content_type="application/json",
+            body=orjson.dumps(response.model_dump(mode="json")).decode(),
+            headers=cache_headers,
+        )
 
     # Track fallback state
     resolution_fallback = False
@@ -648,12 +709,22 @@ async def get_ohlc_data(
                     PriceCandle.from_ohlc_candle(c, resolution) for c in ohlc_candles
                 ]
                 # Write-through to DynamoDB (CACHE-001)
-                _write_through_to_dynamodb(
-                    ticker=ticker,
-                    source=source,
-                    resolution=resolution.value,
-                    ohlc_candles=ohlc_candles,
-                )
+                try:
+                    _write_through_to_dynamodb(
+                        ticker=ticker,
+                        source=source,
+                        resolution=resolution.value,
+                        ohlc_candles=ohlc_candles,
+                    )
+                except Exception as write_err:
+                    logger.error(
+                        "DynamoDB cache write failed",
+                        extra={
+                            "error": str(write_err),
+                            "ticker": ticker,
+                        },
+                    )
+                    cache_write_error = True
         except Exception as e:
             logger.warning(
                 "Tiingo daily OHLC fetch failed",
@@ -670,12 +741,22 @@ async def get_ohlc_data(
                     PriceCandle.from_ohlc_candle(c, resolution) for c in ohlc_candles
                 ]
                 # Write-through to DynamoDB (CACHE-001)
-                _write_through_to_dynamodb(
-                    ticker=ticker,
-                    source=source,
-                    resolution=resolution.value,
-                    ohlc_candles=ohlc_candles,
-                )
+                try:
+                    _write_through_to_dynamodb(
+                        ticker=ticker,
+                        source=source,
+                        resolution=resolution.value,
+                        ohlc_candles=ohlc_candles,
+                    )
+                except Exception as write_err:
+                    logger.error(
+                        "DynamoDB cache write failed",
+                        extra={
+                            "error": str(write_err),
+                            "ticker": ticker,
+                        },
+                    )
+                    cache_write_error = True
         except Exception as e:
             logger.warning(
                 "Tiingo IEX intraday fetch failed",
@@ -703,12 +784,22 @@ async def get_ohlc_data(
                     for c in ohlc_candles
                 ]
                 # Write-through to DynamoDB (CACHE-001)
-                _write_through_to_dynamodb(
-                    ticker=ticker,
-                    source=source,
-                    resolution=actual_resolution.value,
-                    ohlc_candles=ohlc_candles,
-                )
+                try:
+                    _write_through_to_dynamodb(
+                        ticker=ticker,
+                        source=source,
+                        resolution=actual_resolution.value,
+                        ohlc_candles=ohlc_candles,
+                    )
+                except Exception as write_err:
+                    logger.error(
+                        "DynamoDB cache write failed",
+                        extra={
+                            "error": str(write_err),
+                            "ticker": ticker,
+                        },
+                    )
+                    cache_write_error = True
         except Exception as e:
             logger.warning(
                 "Tiingo daily fallback failed",
@@ -718,9 +809,16 @@ async def get_ohlc_data(
     # Check if we got any data
     if not candles:
         logger.warning("No OHLC data available from any source")
-        raise HTTPException(
+        cache_headers = _build_cache_headers(
+            cache_source, 0, cache_error, cache_write_error
+        )
+        return Response(
             status_code=404,
-            detail=f"No price data available for {ticker}",
+            content_type="application/json",
+            body=orjson.dumps(
+                {"detail": f"No price data available for {ticker}"}
+            ).decode(),
+            headers=cache_headers,
         )
 
     # Sort candles by date (oldest first)
@@ -777,7 +875,8 @@ async def get_ohlc_data(
         start_date_value,
         end_date_value,
     )
-    _set_cached_ohlc(actual_cache_key, response.model_dump(mode="json"))
+    response_dict = response.model_dump(mode="json")
+    _set_cached_ohlc(actual_cache_key, response_dict)
     safe_actual_cache_key = (
         str(actual_cache_key)
         .replace("\r\n", " ")
@@ -789,18 +888,21 @@ async def get_ohlc_data(
         extra={"cache_key": safe_actual_cache_key, "stats": get_ohlc_cache_stats()},
     )
 
-    return response
+    # Build cache headers for the response
+    cache_headers = _build_cache_headers(
+        cache_source, cache_age, cache_error, cache_write_error
+    )
+
+    return Response(
+        status_code=200,
+        content_type="application/json",
+        body=orjson.dumps(response_dict).decode(),
+        headers=cache_headers,
+    )
 
 
-@router.get("/{ticker}/sentiment/history", response_model=SentimentHistoryResponse)
-async def get_sentiment_history(
-    ticker: str,
-    request: Request,
-    source: SentimentSourceType = Query("aggregated", description="Sentiment source"),
-    range: TimeRange = Query(TimeRange.ONE_MONTH, description="Time range for data"),
-    start_date: date | None = Query(None, description="Custom start date"),
-    end_date: date | None = Query(None, description="Custom end date"),
-) -> SentimentHistoryResponse:
+@router.get("/api/v2/tickers/<ticker>/sentiment/history")
+def get_sentiment_history(ticker: str) -> Response:
     """Get historical sentiment data for a ticker.
 
     Returns sentiment scores over time for chart overlay.
@@ -808,40 +910,94 @@ async def get_sentiment_history(
 
     Args:
         ticker: Stock ticker symbol (e.g., AAPL, MSFT)
+
+    Query Parameters:
         source: Sentiment source (tiingo, finnhub, our_model, aggregated)
         range: Predefined time range (1W, 1M, 3M, 6M, 1Y)
         start_date: Custom start date (overrides range if provided)
         end_date: Custom end date (defaults to today)
 
     Returns:
-        SentimentHistoryResponse with history array
+        Response with SentimentHistoryResponse JSON
 
     Raises:
-        HTTPException 400: Invalid parameters
-        HTTPException 401: Missing user identification
-        HTTPException 404: No sentiment data available
+        400: Invalid parameters
+        401: Missing user identification
+        404: No sentiment data available
     """
-    # Feature 1049: Use standardized auth extraction (validates user, raises 401 if invalid)
-    get_user_id_from_request(request)
+    # Feature 1049: Use standardized auth extraction
+    user_id_or_error = _get_user_id_from_event(router.current_event.raw_event)
+    if isinstance(user_id_or_error, Response):
+        return user_id_or_error
+
+    # Extract query parameters
+    query_params = get_query_params(router.current_event.raw_event)
+
+    # Parse source parameter
+    valid_sources = ("tiingo", "finnhub", "our_model", "aggregated")
+    source_str = query_params.get("source", "aggregated")
+    source = source_str if source_str in valid_sources else "aggregated"
+
+    # Parse range parameter
+    range_str = query_params.get("range", TimeRange.ONE_MONTH.value)
+    try:
+        range_param = TimeRange(range_str)
+    except ValueError:
+        range_param = TimeRange.ONE_MONTH
+
+    # Parse date parameters
+    start_date_str = query_params.get("start_date")
+    end_date_str = query_params.get("end_date")
+
+    start_date = None
+    end_date = None
+    if start_date_str:
+        try:
+            start_date = date.fromisoformat(start_date_str)
+        except ValueError:
+            return Response(
+                status_code=400,
+                content_type="application/json",
+                body=orjson.dumps(
+                    {"detail": "Invalid start_date format. Use YYYY-MM-DD."}
+                ).decode(),
+            )
+    if end_date_str:
+        try:
+            end_date = date.fromisoformat(end_date_str)
+        except ValueError:
+            return Response(
+                status_code=400,
+                content_type="application/json",
+                body=orjson.dumps(
+                    {"detail": "Invalid end_date format. Use YYYY-MM-DD."}
+                ).decode(),
+            )
 
     # Normalize ticker
     ticker = ticker.upper().strip()
     if not ticker or len(ticker) > 5 or not ticker.isalpha():
-        raise HTTPException(
+        return Response(
             status_code=400,
-            detail=f"Invalid ticker symbol: {ticker}. Must be 1-5 letters.",
+            content_type="application/json",
+            body=orjson.dumps(
+                {"detail": f"Invalid ticker symbol: {ticker}. Must be 1-5 letters."}
+            ).decode(),
         )
 
     # Calculate date range
     if start_date and end_date:
         if start_date > end_date:
-            raise HTTPException(
+            return Response(
                 status_code=400,
-                detail="start_date must be before end_date",
+                content_type="application/json",
+                body=orjson.dumps(
+                    {"detail": "start_date must be before end_date"}
+                ).decode(),
             )
     else:
         end_date = date.today()
-        days = TIME_RANGE_DAYS.get(range, 30)
+        days = TIME_RANGE_DAYS.get(range_param, 30)
         start_date = end_date - timedelta(days=days)
 
     # Log without user-derived values to prevent log injection (CWE-117)
@@ -892,9 +1048,12 @@ async def get_sentiment_history(
         current_date += timedelta(days=1)
 
     if not history:
-        raise HTTPException(
+        return Response(
             status_code=404,
-            detail=f"No sentiment data available for {ticker}",
+            content_type="application/json",
+            body=orjson.dumps(
+                {"detail": f"No sentiment data available for {ticker}"}
+            ).decode(),
         )
 
     logger.info(
@@ -902,11 +1061,17 @@ async def get_sentiment_history(
         extra={"point_count": len(history)},
     )
 
-    return SentimentHistoryResponse(
+    response = SentimentHistoryResponse(
         ticker=ticker,
         source=source,
         history=history,
         start_date=history[0].date,
         end_date=history[-1].date,
         count=len(history),
+    )
+
+    return Response(
+        status_code=200,
+        content_type="application/json",
+        body=orjson.dumps(response.model_dump(mode="json")).decode(),
     )

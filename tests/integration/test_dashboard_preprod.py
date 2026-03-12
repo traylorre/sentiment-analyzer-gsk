@@ -2,7 +2,7 @@
 E2E Tests for Dashboard Lambda (Preprod)
 ========================================
 
-Integration tests for the dashboard FastAPI application against REAL preprod environment.
+Integration tests for the dashboard Lambda handler against REAL preprod environment.
 
 CRITICAL: These tests use REAL AWS resources (preprod environment only).
 - DynamoDB: preprod-sentiment-users table (Feature 006 - Terraform-deployed)
@@ -26,18 +26,13 @@ For Developers:
     - For v2 API tests, see tests/e2e/ directory
 """
 
+import json
 import os
 
 import pytest
-from fastapi.testclient import TestClient
 
-from src.lambdas.dashboard.handler import app
-
-
-@pytest.fixture
-def client():
-    """Create TestClient for FastAPI app."""
-    return TestClient(app)
+from src.lambdas.dashboard.handler import lambda_handler
+from tests.conftest import make_event
 
 
 @pytest.fixture
@@ -63,7 +58,7 @@ class TestDashboardE2E:
           See tests/e2e/ for v2 API coverage.
     """
 
-    def test_health_check_returns_healthy(self, client):
+    def test_health_check_returns_healthy(self, mock_lambda_context):
         """
         Integration: Health check endpoint returns healthy status.
 
@@ -72,10 +67,13 @@ class TestDashboardE2E:
         - Response contains status, table name, environment
         - DynamoDB connectivity to REAL preprod table is tested
         """
-        response = client.get("/health")
+        response = lambda_handler(
+            make_event(method="GET", path="/health"),
+            mock_lambda_context,
+        )
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
         assert data["status"] == "healthy"
         # Table name should contain 'sentiment' (could be sentiment-items or sentiment-users)
         assert "sentiment" in data["table"]
@@ -107,7 +105,9 @@ class TestSecurityIntegration:
         3. Check Lambda concurrency limits not exceeded
     """
 
-    def test_max_sse_connections_env_var_respected(self, client, auth_headers):
+    def test_max_sse_connections_env_var_respected(
+        self, mock_lambda_context, auth_headers
+    ):
         """
         Integration: MAX_SSE_CONNECTIONS_PER_IP env var is respected.
 
@@ -116,8 +116,11 @@ class TestSecurityIntegration:
         # This test verifies the endpoint exists and uses the env var
         # Can't directly test the value without accessing Lambda config
 
-        response = client.get("/health")
-        assert response.status_code == 200
+        response = lambda_handler(
+            make_event(method="GET", path="/health"),
+            mock_lambda_context,
+        )
+        assert response["statusCode"] == 200
 
         # Manual verification:
         # aws lambda get-function-configuration \

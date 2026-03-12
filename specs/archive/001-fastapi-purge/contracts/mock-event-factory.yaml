@@ -1,0 +1,187 @@
+# Mock Lambda Event Factory Contract
+# Defines the test fixture interface for constructing mock API Gateway events (FR-058)
+
+openapi: "3.1.0"
+info:
+  title: Mock Lambda Event Factory
+  version: "1.0.0"
+  description: |
+    Test fixture contract for constructing mock API Gateway Proxy Integration events.
+    Used by all test files migrating from TestClient to direct handler invocation.
+
+components:
+  schemas:
+    MockEventFactory:
+      type: object
+      description: |
+        Function signature: make_event(method, path, path_params, query_params, headers, body, cookies) -> dict
+        Returns a complete API Gateway Proxy Integration event dict.
+
+    APIGatewayProxyEvent:
+      type: object
+      required: [httpMethod, path, resource, headers, isBase64Encoded, requestContext]
+      properties:
+        httpMethod:
+          type: string
+          enum: [GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD]
+        path:
+          type: string
+          examples: ["/api/v2/sentiment", "/api/v2/tickers/AAPL/ohlc"]
+        resource:
+          type: string
+          default: "/{proxy+}"
+        pathParameters:
+          type: object
+          nullable: true
+          additionalProperties:
+            type: string
+          examples:
+            - ticker: AAPL
+            - config_id: cfg-123
+            - null
+        queryStringParameters:
+          type: object
+          nullable: true
+          additionalProperties:
+            type: string
+          examples:
+            - range: "1M"
+              resolution: "D"
+            - null
+        multiValueQueryStringParameters:
+          type: object
+          nullable: true
+          additionalProperties:
+            type: array
+            items:
+              type: string
+        headers:
+          type: object
+          description: All keys lowercase (API Gateway normalization)
+          properties:
+            content-type:
+              type: string
+              default: application/json
+            authorization:
+              type: string
+              examples: ["Bearer eyJ..."]
+            cookie:
+              type: string
+              examples: ["session_id=abc; csrf_token=xyz"]
+          additionalProperties:
+            type: string
+        body:
+          type: string
+          nullable: true
+          description: JSON string for POST/PATCH, null for GET
+        isBase64Encoded:
+          type: boolean
+          default: false
+        requestContext:
+          type: object
+          required: [requestId]
+          properties:
+            authorizer:
+              type: object
+              description: Populated when Lambda authorizer is configured
+            identity:
+              type: object
+              properties:
+                sourceIp:
+                  type: string
+                  default: "127.0.0.1"
+            requestId:
+              type: string
+              default: test-request-id
+            stage:
+              type: string
+              default: test
+
+  examples:
+    get_with_query_params:
+      summary: GET request with query parameters
+      value:
+        httpMethod: GET
+        path: /api/v2/tickers/AAPL/ohlc
+        resource: "/{proxy+}"
+        pathParameters:
+          ticker: AAPL
+        queryStringParameters:
+          range: "1M"
+          resolution: "D"
+        headers:
+          content-type: application/json
+        body: null
+        isBase64Encoded: false
+        requestContext:
+          requestId: test-req-001
+          identity:
+            sourceIp: "127.0.0.1"
+
+    post_with_json_body:
+      summary: POST request with JSON body
+      value:
+        httpMethod: POST
+        path: /api/v2/configurations
+        resource: "/{proxy+}"
+        pathParameters: null
+        queryStringParameters: null
+        headers:
+          content-type: application/json
+          authorization: "Bearer eyJhbGciOiJIUzI1NiJ9..."
+          x-csrf-token: "csrf-test-token"
+        body: '{"name": "test-config", "threshold": 0.5}'
+        isBase64Encoded: false
+        requestContext:
+          authorizer:
+            claims:
+              sub: user-123
+          requestId: test-req-002
+
+    get_with_cookies:
+      summary: GET request with cookies
+      value:
+        httpMethod: GET
+        path: /api/v2/auth/refresh
+        resource: "/{proxy+}"
+        pathParameters: null
+        queryStringParameters: null
+        headers:
+          content-type: application/json
+          cookie: "refresh_token=rt-abc123; csrf_token=csrf-xyz"
+        body: null
+        isBase64Encoded: false
+        requestContext:
+          requestId: test-req-003
+
+    url_encoded_path_param:
+      summary: GET with URL-encoded path parameter (BRK.B)
+      value:
+        httpMethod: GET
+        path: /api/v2/tickers/BRK%2EB/ohlc
+        resource: "/{proxy+}"
+        pathParameters:
+          ticker: "BRK%2EB"
+        queryStringParameters:
+          range: "1M"
+        headers:
+          content-type: application/json
+        body: null
+        isBase64Encoded: false
+        requestContext:
+          requestId: test-req-004
+
+    null_params:
+      summary: GET with null queryStringParameters (edge case FR-043)
+      value:
+        httpMethod: GET
+        path: /api/v2/sentiment
+        resource: "/{proxy+}"
+        pathParameters: null
+        queryStringParameters: null
+        headers:
+          content-type: application/json
+        body: null
+        isBase64Encoded: false
+        requestContext:
+          requestId: test-req-005

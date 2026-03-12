@@ -1,0 +1,36 @@
+# ADOT Lambda Extension Collector Configuration
+# FR-064, FR-095, FR-203
+# Path: /opt/collector-config/config.yaml (in container)
+# Env: OPENTELEMETRY_COLLECTOR_CONFIG_FILE=/opt/collector-config/config.yaml
+#
+# CRITICAL: ADOT Lambda Extension binary has ZERO processors compiled in
+# (lambdacomponents/default.go registers none). FR-075/FR-090 required
+# decouple+batch processors, but aws-otel-lambda#842 confirms decouple
+# is NOT available. Pipeline MUST be processor-less.
+#
+# Span retention relies entirely on SDK-side force_flush() (FR-139).
+# Without decouple processor, ~30% span drop risk during Extension
+# shutdown is mitigated by proactive flush at 3000ms remaining (FR-093).
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: "0.0.0.0:4318"
+      # gRPC deliberately omitted — HTTP/protobuf only (FR-057)
+
+exporters:
+  awsxray:
+    region: "${AWS_REGION}"
+    # No index_all_attributes — only OTel semantic conventions mapped (FR-067)
+
+# No processors block — decouple and batch are not compiled into the
+# ADOT Lambda Extension binary. See aws-otel-lambda#842.
+# FR-075/FR-090 are BLOCKED until the feature request is resolved.
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      # No processors — direct export to X-Ray
+      exporters: [awsxray]

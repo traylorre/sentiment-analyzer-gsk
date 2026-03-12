@@ -1,94 +1,67 @@
 """Unit tests for Feature 1159: SameSite=None cookie configuration.
 
-Verifies that auth cookies use SameSite=None for cross-origin transmission
-from Amplify frontend to Lambda Function URL backend (Feature 1207: CloudFront removed).
+Verifies that auth cookies use correct SameSite settings for cross-origin
+transmission from Amplify frontend to Lambda Function URL backend
+(Feature 1207: CloudFront removed).
 """
 
-from fastapi.responses import JSONResponse
+from src.lambdas.shared.utils.cookie_helpers import make_set_cookie
 
 
 class TestSameSiteNoneCookies:
-    """Test SameSite=None is set on auth cookies."""
+    """Test SameSite attribute is correctly set on auth cookies."""
 
-    def test_magic_link_verify_sets_samesite_none(self):
-        """Magic link verify endpoint sets SameSite=None on refresh_token cookie."""
-        # Arrange
-        response = JSONResponse(content={})
-
-        # Act - simulate the set_cookie call from router_v2.py
-        response.set_cookie(
-            key="refresh_token",
-            value="test_token",
+    def test_magic_link_verify_sets_samesite(self):
+        """Magic link verify endpoint sets SameSite on refresh_token cookie."""
+        cookie_str = make_set_cookie(
+            "refresh_token",
+            "test_token",
             httponly=True,
             secure=True,
-            samesite="none",
+            samesite="None",
             max_age=30 * 24 * 60 * 60,
             path="/api/v2/auth",
         )
+        assert "samesite=none" in cookie_str.lower()
+        assert "secure" in cookie_str.lower()
+        assert "httponly" in cookie_str.lower()
 
-        # Assert
-        set_cookie_header = response.headers.get("set-cookie", "")
-        assert "samesite=none" in set_cookie_header.lower()
-        assert "secure" in set_cookie_header.lower()
-        assert "httponly" in set_cookie_header.lower()
-
-    def test_oauth_callback_sets_samesite_none(self):
-        """OAuth callback endpoint sets SameSite=None on refresh_token cookie."""
-        # Arrange
-        response = JSONResponse(content={})
-
-        # Act - simulate the set_cookie call from router_v2.py
-        response.set_cookie(
-            key="refresh_token",
-            value="test_oauth_token",
+    def test_oauth_callback_sets_samesite(self):
+        """OAuth callback endpoint sets SameSite on refresh_token cookie."""
+        cookie_str = make_set_cookie(
+            "refresh_token",
+            "test_oauth_token",
             httponly=True,
             secure=True,
-            samesite="none",
+            samesite="None",
             max_age=30 * 24 * 60 * 60,
             path="/api/v2/auth",
         )
-
-        # Assert
-        set_cookie_header = response.headers.get("set-cookie", "")
-        assert "samesite=none" in set_cookie_header.lower()
-        assert "secure" in set_cookie_header.lower()
+        assert "samesite=none" in cookie_str.lower()
+        assert "secure" in cookie_str.lower()
 
     def test_samesite_none_requires_secure_flag(self):
         """SameSite=None without Secure flag is rejected by browsers (validation)."""
-        # Arrange
-        response = JSONResponse(content={})
-
-        # Act - set cookie with SameSite=None and Secure=True
-        response.set_cookie(
-            key="test_cookie",
-            value="test_value",
-            samesite="none",
+        cookie_str = make_set_cookie(
+            "test_cookie",
+            "test_value",
+            samesite="None",
             secure=True,  # Required with SameSite=None
         )
-
-        # Assert - verify both attributes present
-        set_cookie_header = response.headers.get("set-cookie", "")
-        assert "samesite=none" in set_cookie_header.lower()
-        assert "secure" in set_cookie_header.lower()
+        assert "samesite=none" in cookie_str.lower()
+        assert "secure" in cookie_str.lower()
 
     def test_cookie_path_restricted_to_auth_endpoints(self):
         """Refresh token cookie path is restricted to /api/v2/auth."""
-        # Arrange
-        response = JSONResponse(content={})
-
-        # Act
-        response.set_cookie(
-            key="refresh_token",
-            value="test_token",
+        cookie_str = make_set_cookie(
+            "refresh_token",
+            "test_token",
             httponly=True,
             secure=True,
-            samesite="none",
+            samesite="None",
             path="/api/v2/auth",
         )
-
-        # Assert
-        set_cookie_header = response.headers.get("set-cookie", "")
-        assert "path=/api/v2/auth" in set_cookie_header.lower()
+        assert "path=/api/v2/auth" in cookie_str.lower()
 
 
 class TestCrossOriginCookieTransmission:

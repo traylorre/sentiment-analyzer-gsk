@@ -138,7 +138,7 @@
   dashboard-lambda
   256 MB | 30s timeout
 
-  • FastAPI/Mangum
+  • Lambda Powertools
   • API Gateway trigger
   • Query DynamoDB
   ```
