@@ -608,6 +608,7 @@ def get_ohlc_data(ticker: str) -> Response:
             status_code=200,
             content_type="application/json",
             body=orjson.dumps(cached_response).decode(),
+            headers={"X-Cache-Source": "in-memory", "X-Cache-Age": "0"},
         )
 
     # =========================================================================
@@ -639,6 +640,7 @@ def get_ohlc_data(ticker: str) -> Response:
             status_code=200,
             content_type="application/json",
             body=orjson.dumps(response.model_dump(mode="json")).decode(),
+            headers={"X-Cache-Source": "persistent-cache", "X-Cache-Age": "0"},
         )
 
     # Track fallback state
@@ -810,6 +812,7 @@ def get_ohlc_data(ticker: str) -> Response:
         status_code=200,
         content_type="application/json",
         body=orjson.dumps(response_dict).decode(),
+        headers={"X-Cache-Source": "live-api", "X-Cache-Age": "0"},
     )
 
 
