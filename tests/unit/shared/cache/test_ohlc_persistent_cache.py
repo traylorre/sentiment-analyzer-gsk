@@ -126,16 +126,7 @@ class TestCacheMiss:
         """
         from botocore.exceptions import ClientError
 
-        with patch.dict(
-            os.environ,
-            {
-                "OHLC_CACHE_TABLE": "",
-                "AWS_DEFAULT_REGION": "us-east-1",
-                "AWS_ACCESS_KEY_ID": "testing",
-                "AWS_SECRET_ACCESS_KEY": "testing",
-            },
-            clear=True,
-        ):
+        with patch.dict(os.environ, {"OHLC_CACHE_TABLE": ""}):
             start = datetime(2025, 12, 1, tzinfo=UTC)
             end = datetime(2025, 12, 31, tzinfo=UTC)
 
