@@ -125,7 +125,7 @@ msft_ctx = replace(ohlc_ctx, ticker="MSFT", cache_key="ohlc:MSFT:D:1W:2026-02-08
 
 | Before | After |
 |--------|-------|
-| `_get_ohlc_data_with_write_context(ticker, resolution, time_range, response, cache_key)` | `_get_ohlc_data_with_write_context(ctx: OHLCRequestContext)` |
+| `_get_ohlc_data_with_write_context(ticker, resolution, time_range, response, cache_key)` | `_get_ohlc_data_with_write_context(ctx: OHLCRequestContext, response: Response)` |
 | `_fetch_with_lock(ticker, cache_key, source, resolution, start_date, end_date)` | `_fetch_with_lock(ctx: OHLCRequestContext)` |
 | `_read_from_dynamodb(ticker, source, resolution, start_date, end_date)` | `_read_from_dynamodb(ctx: OHLCRequestContext)` |
 | `_write_through_to_dynamodb(ticker, source, resolution, candles, end_date)` | `_write_through_to_dynamodb(ctx: OHLCRequestContext, candles: list[PriceCandle])` |
@@ -997,10 +997,11 @@ This function is called by the handler's Phase 1 (`asyncio.wait_for`). It delega
 
 ```python
 import time
-from aws_lambda_powertools.event_handler import Response
+from fastapi import Response
 
-def _get_ohlc_data_with_write_context(
+async def _get_ohlc_data_with_write_context(
     ctx: OHLCRequestContext,  # Round 24: replaces (ticker, resolution, time_range, cache_key)
+    response: Response,
 ) -> tuple[OHLCResponse, dict | None]:
     """Fetch OHLC data with cache source tracking + deferred write context.
 
@@ -1119,12 +1120,14 @@ OHLCHandlerResponse = Union[OHLCResponse, OHLCErrorResponse]
 **Implementation:**
 
 ```python
-from aws_lambda_powertools.event_handler import Response
+import asyncio
+from fastapi import Response
 
-def get_ohlc_handler(
+async def get_ohlc_handler(
     ticker: str,
     resolution: str,
     time_range: str,
+    response: Response,
 ) -> OHLCHandlerResponse:  # Round 26: was OHLCResponse — crashed on timeout paths
     """Top-level OHLC handler with two-phase architecture.
 
@@ -1221,13 +1224,14 @@ def get_ohlc_handler(
 The inner fetch function returns a tuple: `(response, pending_write_context)`. When fresh data is fetched from Tiingo, instead of awaiting write-through inline, it bundles the write arguments into a dict and returns them to the handler. The handler then awaits the write outside the timeout boundary.
 
 ```python
-def _get_ohlc_data_with_write_context(
+async def _get_ohlc_data_with_write_context(
     ctx: OHLCRequestContext,  # Round 24: frozen dataclass carries all request params
+    response: Response,
 ) -> tuple[OHLCResponse, dict | None]:
     """Fetch OHLC data, returning response + deferred write context.
 
     The write context (if any) is a dict with keys {ctx, candles} for Phase 2.
-    Caller is responsible for the write after returning the response.
+    Caller is responsible for awaiting the write OUTSIDE the timeout boundary.
     """
     # ... L1 → L2 → Lock → Tiingo flow (same as _fetch_with_lock) ...
     # On cache hit: return (response, None)  — no write needed

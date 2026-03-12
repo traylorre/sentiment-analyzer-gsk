@@ -1,6 +1,6 @@
 # SSE Streaming Lambda - Docker Image
 # Custom Python runtime for RESPONSE_STREAM mode (chunked transfer encoding)
-# Native Runtime API bootstrap for streaming responses
+# Replaces Lambda Web Adapter + Uvicorn with native Runtime API bootstrap
 #
 # Build context: src/ (allows importing from lambdas/ and lib/)
 #
