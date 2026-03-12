@@ -2,14 +2,16 @@
 
 Tests the 503 Service Unavailable response when connection limit (100) is reached.
 Per FR-008: Maximum 100 concurrent connections per Lambda instance.
+
+Uses direct handler invocation for testing.
 """
 
+import json
 from unittest.mock import MagicMock, patch
 
-from fastapi.testclient import TestClient
-
 from src.lambdas.sse_streaming.connection import ConnectionManager
-from src.lambdas.sse_streaming.handler import app
+from src.lambdas.sse_streaming.handler import handler
+from tests.conftest import make_function_url_event, parse_streaming_response
 
 
 class TestConnectionLimitEnforcement:
@@ -22,13 +24,15 @@ class TestConnectionLimitEnforcement:
         mock_manager.acquire.return_value = None  # Connection denied
         mock_manager.max_connections = 100
 
-        with patch(
-            "src.lambdas.sse_streaming.handler.connection_manager", mock_manager
+        with (
+            patch("src.lambdas.sse_streaming.handler.connection_manager", mock_manager),
+            patch("src.lambdas.sse_streaming.handler.metrics_emitter"),
         ):
-            client = TestClient(app)
-            response = client.get("/api/v2/stream")
+            event = make_function_url_event(path="/api/v2/stream")
+            gen = handler(event, None)
+            metadata, body = parse_streaming_response(gen)
 
-            assert response.status_code == 503
+            assert metadata["statusCode"] == 503
 
     def test_503_response_includes_retry_after_header(self):
         """Test that 503 response includes Retry-After header."""
@@ -36,15 +40,16 @@ class TestConnectionLimitEnforcement:
         mock_manager.acquire.return_value = None
         mock_manager.max_connections = 100
 
-        with patch(
-            "src.lambdas.sse_streaming.handler.connection_manager", mock_manager
+        with (
+            patch("src.lambdas.sse_streaming.handler.connection_manager", mock_manager),
+            patch("src.lambdas.sse_streaming.handler.metrics_emitter"),
         ):
-            client = TestClient(app)
-            response = client.get("/api/v2/stream")
+            event = make_function_url_event(path="/api/v2/stream")
+            gen = handler(event, None)
+            metadata, body = parse_streaming_response(gen)
 
-            assert response.status_code == 503
-            assert "Retry-After" in response.headers
-            assert response.headers["Retry-After"] == "30"
+            assert metadata["statusCode"] == 503
+            assert metadata["headers"].get("Retry-After") == "30"
 
     def test_503_response_body_format(self):
         """Test that 503 response body has correct format."""
@@ -52,19 +57,18 @@ class TestConnectionLimitEnforcement:
         mock_manager.acquire.return_value = None
         mock_manager.max_connections = 100
 
-        with patch(
-            "src.lambdas.sse_streaming.handler.connection_manager", mock_manager
+        with (
+            patch("src.lambdas.sse_streaming.handler.connection_manager", mock_manager),
+            patch("src.lambdas.sse_streaming.handler.metrics_emitter"),
         ):
-            client = TestClient(app)
-            response = client.get("/api/v2/stream")
+            event = make_function_url_event(path="/api/v2/stream")
+            gen = handler(event, None)
+            metadata, body = parse_streaming_response(gen)
 
-            assert response.status_code == 503
-            data = response.json()
+            assert metadata["statusCode"] == 503
+            data = json.loads(body)
             assert "detail" in data
-            assert "max_connections" in data
-            assert data["max_connections"] == 100
-            assert "retry_after" in data
-            assert data["retry_after"] == 30
+            assert "Connection limit reached" in data["detail"]
 
     def test_503_message_indicates_limit(self):
         """Test that 503 message indicates connection limit."""
@@ -72,13 +76,15 @@ class TestConnectionLimitEnforcement:
         mock_manager.acquire.return_value = None
         mock_manager.max_connections = 100
 
-        with patch(
-            "src.lambdas.sse_streaming.handler.connection_manager", mock_manager
+        with (
+            patch("src.lambdas.sse_streaming.handler.connection_manager", mock_manager),
+            patch("src.lambdas.sse_streaming.handler.metrics_emitter"),
         ):
-            client = TestClient(app)
-            response = client.get("/api/v2/stream")
+            event = make_function_url_event(path="/api/v2/stream")
+            gen = handler(event, None)
+            metadata, body = parse_streaming_response(gen)
 
-            data = response.json()
+            data = json.loads(body)
             assert (
                 "limit" in data["detail"].lower()
                 or "connection" in data["detail"].lower()
@@ -214,8 +220,9 @@ class TestMetricsOnConnectionLimit:
             patch("src.lambdas.sse_streaming.handler.connection_manager", mock_manager),
             patch("src.lambdas.sse_streaming.handler.metrics_emitter", mock_emitter),
         ):
-            client = TestClient(app)
-            response = client.get("/api/v2/stream")
+            event = make_function_url_event(path="/api/v2/stream")
+            gen = handler(event, None)
+            metadata, body = parse_streaming_response(gen)
 
-            assert response.status_code == 503
+            assert metadata["statusCode"] == 503
             mock_emitter.emit_connection_acquire_failure.assert_called_once()

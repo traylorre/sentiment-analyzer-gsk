@@ -7,7 +7,7 @@ src/
 ├── lambdas/           # AWS Lambda function handlers
 │   ├── ingestion/     # Tiingo + Finnhub financial news ingestion (EventBridge triggered)
 │   ├── analysis/      # Sentiment analysis (SNS triggered)
-│   ├── dashboard/     # FastAPI dashboard (Function URL)
+│   ├── dashboard/     # Dashboard API (Function URL)
 │   └── shared/        # Common utilities (DynamoDB, Secrets, schemas)
 ├── lib/               # Shared libraries (deduplication, metrics)
 └── dashboard/         # Static UI files (HTML/CSS/JS)

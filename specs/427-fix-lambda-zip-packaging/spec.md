@@ -13,7 +13,7 @@ As a CI/CD pipeline operator, I want the ingestion Lambda to deploy and execute 
 
 **Why this priority**: The ingestion Lambda is currently broken in preprod with `Runtime.ImportModuleError`. This is the primary blocker preventing the feature from functioning.
 
-**Independent Test**: Can be fully tested by triggering the ingestion Lambda via AWS CLI or API Gateway and verifying it returns a successful response without import errors.
+**Independent Test**: Can be fully tested by triggering the ingestion Lambda via AWS CLI (`aws lambda invoke`) or EventBridge test event and verifying it returns a successful response without import errors.
 
 **Acceptance Scenarios**:
 

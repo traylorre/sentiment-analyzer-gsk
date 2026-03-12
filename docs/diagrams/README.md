@@ -282,7 +282,7 @@ classDef externalNode fill:#e5e7eb,stroke:#6b7280,stroke-width:2px,color:#1f2937
 **Focus:** Connection lifecycle, heartbeat mechanism, polling strategy
 
 **What It Shows:**
-- ✅ Connection establishment through CloudFront → Lambda Web Adapter
+- ✅ Connection establishment through CloudFront → custom runtime bootstrap
 - ✅ Connection pool management (100 max connections)
 - ✅ DynamoDB polling (every 5 seconds)
 - ✅ Heartbeat mechanism (30s intervals to keep CloudFront alive)
@@ -292,7 +292,7 @@ classDef externalNode fill:#e5e7eb,stroke:#6b7280,stroke-width:2px,color:#1f2937
 - ✅ Error handling (503 when pool full)
 
 **Key Insights:**
-- Lambda Web Adapter enables HTTP/1.1 streaming (not possible with Mangum)
+- Custom runtime bootstrap enables HTTP/1.1 streaming
 - RESPONSE_STREAM invoke mode required for SSE
 - Heartbeats keep SSE connections alive (Lambda timeout handling)
 - Last-Event-ID enables client reconnection resumption

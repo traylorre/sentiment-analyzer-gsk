@@ -2,7 +2,7 @@
 #
 # Validates that the dashboard Lambda returns proper JSON responses
 # after the two-Lambda architecture deployment. The dashboard Lambda
-# uses BUFFERED invoke mode (via Mangum), ensuring REST API responses
+# uses BUFFERED invoke mode, ensuring REST API responses
 # are properly formatted and not streaming.
 #
 # Key validation:

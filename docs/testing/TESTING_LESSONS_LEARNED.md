@@ -279,7 +279,7 @@ When removing test-awareness from production code:
 
 ### The Anti-Pattern (What We Tried)
 
-Attempted to test Server-Sent Events (SSE) streaming endpoint using FastAPI's synchronous `TestClient`:
+Attempted to test Server-Sent Events (SSE) streaming endpoint using a synchronous test client:
 
 ```python
 # ❌ THIS HANGS INDEFINITELY
@@ -297,7 +297,7 @@ def test_sse_stream_sends_metrics_events(self, client, auth_headers):
 
 ### Why This Happens
 
-FastAPI SSE handler:
+SSE handler:
 ```python
 async def event_generator():
     while True:  # ← Infinite loop by design
@@ -305,7 +305,7 @@ async def event_generator():
         await asyncio.sleep(10)
 ```
 
-FastAPI's `TestClient` is synchronous (wraps async with `anyio`) and can't gracefully disconnect from infinite async generators.
+A synchronous test client cannot gracefully disconnect from infinite async generators.
 
 ### The Correct Approach
 
