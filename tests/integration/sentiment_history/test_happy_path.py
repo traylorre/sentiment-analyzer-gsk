@@ -16,23 +16,13 @@ For On-Call Engineers:
     3. Response model serialization is correct
 """
 
+import json
 from datetime import date, timedelta
 
 import pytest
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
-from src.lambdas.dashboard.ohlc import router
-
-
-@pytest.fixture
-def test_client():
-    """Create test client for sentiment history endpoint."""
-    app = FastAPI()
-    app.include_router(router)
-
-    with TestClient(app) as client:
-        yield client
+from src.lambdas.dashboard.handler import lambda_handler
+from tests.conftest import make_event
 
 
 @pytest.fixture
@@ -47,15 +37,18 @@ class TestSentimentHistoryHappyPath:
     # T026: Valid ticker with default parameters
     @pytest.mark.sentiment_history
     def test_sentiment_valid_ticker_default_params(
-        self, test_client, auth_headers, sentiment_validator
+        self, mock_lambda_context, auth_headers, sentiment_validator
     ):
         """Sentiment endpoint returns valid data for ticker with default params."""
-        response = test_client.get(
-            "/api/v2/tickers/AAPL/sentiment/history", headers=auth_headers
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/AAPL/sentiment/history",
+            headers=auth_headers,
         )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
 
         # Validate response structure and business rules
         sentiment_validator.assert_valid(data)
@@ -69,16 +62,19 @@ class TestSentimentHistoryHappyPath:
     # T027: Source filter - tiingo
     @pytest.mark.sentiment_history
     def test_sentiment_source_filter_tiingo(
-        self, test_client, auth_headers, sentiment_validator
+        self, mock_lambda_context, auth_headers, sentiment_validator
     ):
         """Sentiment endpoint filters by source=tiingo."""
-        response = test_client.get(
-            "/api/v2/tickers/MSFT/sentiment/history?source=tiingo",
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/MSFT/sentiment/history",
+            query_params={"source": "tiingo"},
             headers=auth_headers,
         )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
 
         sentiment_validator.assert_valid(data)
         assert data["source"] == "tiingo"
@@ -89,16 +85,19 @@ class TestSentimentHistoryHappyPath:
     # T028: Source filter - finnhub
     @pytest.mark.sentiment_history
     def test_sentiment_source_filter_finnhub(
-        self, test_client, auth_headers, sentiment_validator
+        self, mock_lambda_context, auth_headers, sentiment_validator
     ):
         """Sentiment endpoint filters by source=finnhub."""
-        response = test_client.get(
-            "/api/v2/tickers/GOOGL/sentiment/history?source=finnhub",
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/GOOGL/sentiment/history",
+            query_params={"source": "finnhub"},
             headers=auth_headers,
         )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
 
         sentiment_validator.assert_valid(data)
         assert data["source"] == "finnhub"
@@ -108,16 +107,19 @@ class TestSentimentHistoryHappyPath:
     # T029: Source filter - our_model
     @pytest.mark.sentiment_history
     def test_sentiment_source_filter_our_model(
-        self, test_client, auth_headers, sentiment_validator
+        self, mock_lambda_context, auth_headers, sentiment_validator
     ):
         """Sentiment endpoint filters by source=our_model."""
-        response = test_client.get(
-            "/api/v2/tickers/NVDA/sentiment/history?source=our_model",
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/NVDA/sentiment/history",
+            query_params={"source": "our_model"},
             headers=auth_headers,
         )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
 
         sentiment_validator.assert_valid(data)
         assert data["source"] == "our_model"
@@ -127,16 +129,19 @@ class TestSentimentHistoryHappyPath:
     # T030: Source filter - aggregated (explicit)
     @pytest.mark.sentiment_history
     def test_sentiment_source_filter_aggregated(
-        self, test_client, auth_headers, sentiment_validator
+        self, mock_lambda_context, auth_headers, sentiment_validator
     ):
         """Sentiment endpoint returns aggregated data when explicitly requested."""
-        response = test_client.get(
-            "/api/v2/tickers/TSLA/sentiment/history?source=aggregated",
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/TSLA/sentiment/history",
+            query_params={"source": "aggregated"},
             headers=auth_headers,
         )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
 
         sentiment_validator.assert_valid(data)
         assert data["source"] == "aggregated"
@@ -158,7 +163,7 @@ class TestSentimentHistoryHappyPath:
     )
     def test_sentiment_time_ranges(
         self,
-        test_client,
+        mock_lambda_context,
         auth_headers,
         sentiment_validator,
         time_range,
@@ -166,13 +171,16 @@ class TestSentimentHistoryHappyPath:
         expected_days_max,
     ):
         """Sentiment endpoint returns appropriate data for each time range."""
-        response = test_client.get(
-            f"/api/v2/tickers/AMD/sentiment/history?range={time_range}",
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/AMD/sentiment/history",
+            query_params={"range": time_range},
             headers=auth_headers,
         )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
 
         sentiment_validator.assert_valid(data)
         # Sentiment includes ALL calendar days (including weekends)
@@ -181,19 +189,22 @@ class TestSentimentHistoryHappyPath:
     # T032: Custom date range
     @pytest.mark.sentiment_history
     def test_sentiment_custom_date_range(
-        self, test_client, auth_headers, sentiment_validator
+        self, mock_lambda_context, auth_headers, sentiment_validator
     ):
         """Sentiment endpoint accepts custom start_date and end_date."""
         start = date.today() - timedelta(days=14)
         end = date.today()
 
-        response = test_client.get(
-            f"/api/v2/tickers/META/sentiment/history?start_date={start}&end_date={end}",
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/META/sentiment/history",
+            query_params={"start_date": str(start), "end_date": str(end)},
             headers=auth_headers,
         )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
 
         sentiment_validator.assert_valid(data)
         # Should have exactly 15 days of data (14 days ago through today)
@@ -202,15 +213,18 @@ class TestSentimentHistoryHappyPath:
     # T033: Lowercase ticker normalization
     @pytest.mark.sentiment_history
     def test_sentiment_lowercase_ticker_normalization(
-        self, test_client, auth_headers, sentiment_validator
+        self, mock_lambda_context, auth_headers, sentiment_validator
     ):
         """Sentiment endpoint normalizes lowercase ticker to uppercase."""
-        response = test_client.get(
-            "/api/v2/tickers/aapl/sentiment/history", headers=auth_headers
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/aapl/sentiment/history",
+            headers=auth_headers,
         )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
 
         # Ticker should be normalized to uppercase
         assert data["ticker"] == "AAPL"
@@ -218,14 +232,19 @@ class TestSentimentHistoryHappyPath:
 
     # T034: Count matches history array length
     @pytest.mark.sentiment_history
-    def test_sentiment_count_matches_history_length(self, test_client, auth_headers):
+    def test_sentiment_count_matches_history_length(
+        self, mock_lambda_context, auth_headers
+    ):
         """Sentiment response count field equals len(history)."""
-        response = test_client.get(
-            "/api/v2/tickers/AMZN/sentiment/history", headers=auth_headers
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/AMZN/sentiment/history",
+            headers=auth_headers,
         )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
 
         assert data["count"] == len(data["history"])
         assert data["count"] > 0
@@ -235,14 +254,17 @@ class TestSentimentHistoryScoreValidation:
     """Additional tests for sentiment score and label validation."""
 
     @pytest.mark.sentiment_history
-    def test_sentiment_scores_in_valid_range(self, test_client, auth_headers):
+    def test_sentiment_scores_in_valid_range(self, mock_lambda_context, auth_headers):
         """All sentiment scores are in [-1.0, 1.0] range."""
-        response = test_client.get(
-            "/api/v2/tickers/NFLX/sentiment/history", headers=auth_headers
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/NFLX/sentiment/history",
+            headers=auth_headers,
         )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
 
         for point in data["history"]:
             assert (
@@ -250,14 +272,20 @@ class TestSentimentHistoryScoreValidation:
             ), f"Score {point['score']} out of valid range [-1.0, 1.0]"
 
     @pytest.mark.sentiment_history
-    def test_sentiment_labels_consistent_with_scores(self, test_client, auth_headers):
+    def test_sentiment_labels_consistent_with_scores(
+        self, mock_lambda_context, auth_headers
+    ):
         """Sentiment labels match score thresholds."""
-        response = test_client.get(
-            "/api/v2/tickers/DIS/sentiment/history?range=1M", headers=auth_headers
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/DIS/sentiment/history",
+            query_params={"range": "1M"},
+            headers=auth_headers,
         )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
 
         for i, point in enumerate(data["history"]):
             score = point["score"]
@@ -275,14 +303,19 @@ class TestSentimentHistoryScoreValidation:
             ), f"Point {i}: score={score} should have label='{expected}', got '{label}'"
 
     @pytest.mark.sentiment_history
-    def test_sentiment_confidence_in_valid_range(self, test_client, auth_headers):
+    def test_sentiment_confidence_in_valid_range(
+        self, mock_lambda_context, auth_headers
+    ):
         """All confidence values are in [0.0, 1.0] range."""
-        response = test_client.get(
-            "/api/v2/tickers/PYPL/sentiment/history", headers=auth_headers
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/PYPL/sentiment/history",
+            headers=auth_headers,
         )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
 
         for point in data["history"]:
             if "confidence" in point and point["confidence"] is not None:
@@ -291,14 +324,18 @@ class TestSentimentHistoryScoreValidation:
                 ), f"Confidence {point['confidence']} out of valid range [0.0, 1.0]"
 
     @pytest.mark.sentiment_history
-    def test_sentiment_history_sorted_by_date(self, test_client, auth_headers):
+    def test_sentiment_history_sorted_by_date(self, mock_lambda_context, auth_headers):
         """Sentiment history is sorted by date in ascending order."""
-        response = test_client.get(
-            "/api/v2/tickers/CRM/sentiment/history?range=1M", headers=auth_headers
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/CRM/sentiment/history",
+            query_params={"range": "1M"},
+            headers=auth_headers,
         )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
 
         dates = [point["date"] for point in data["history"]]
         assert dates == sorted(dates), "History should be sorted by date ascending"
@@ -308,28 +345,38 @@ class TestSentimentHistoryDateFields:
     """Tests for start_date and end_date consistency."""
 
     @pytest.mark.sentiment_history
-    def test_sentiment_start_date_matches_first_point(self, test_client, auth_headers):
+    def test_sentiment_start_date_matches_first_point(
+        self, mock_lambda_context, auth_headers
+    ):
         """Sentiment response start_date equals first history point's date."""
-        response = test_client.get(
-            "/api/v2/tickers/INTC/sentiment/history", headers=auth_headers
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/INTC/sentiment/history",
+            headers=auth_headers,
         )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
 
         assert len(data["history"]) > 0
         first_point_date = data["history"][0]["date"]
         assert str(data["start_date"]) == str(first_point_date)
 
     @pytest.mark.sentiment_history
-    def test_sentiment_end_date_matches_last_point(self, test_client, auth_headers):
+    def test_sentiment_end_date_matches_last_point(
+        self, mock_lambda_context, auth_headers
+    ):
         """Sentiment response end_date equals last history point's date."""
-        response = test_client.get(
-            "/api/v2/tickers/IBM/sentiment/history", headers=auth_headers
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/IBM/sentiment/history",
+            headers=auth_headers,
         )
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert response.status_code == 200
-        data = response.json()
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
 
         assert len(data["history"]) > 0
         last_point_date = data["history"][-1]["date"]
@@ -340,21 +387,25 @@ class TestSentimentHistoryDeterminism:
     """Tests for deterministic behavior (same ticker = same data)."""
 
     @pytest.mark.sentiment_history
-    def test_sentiment_same_ticker_returns_same_scores(self, test_client, auth_headers):
+    def test_sentiment_same_ticker_returns_same_scores(
+        self, mock_lambda_context, auth_headers
+    ):
         """Same ticker returns same sentiment scores (deterministic)."""
         # Make two requests for the same ticker
-        response1 = test_client.get(
-            "/api/v2/tickers/ORCL/sentiment/history?range=1W", headers=auth_headers
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/ORCL/sentiment/history",
+            query_params={"range": "1W"},
+            headers=auth_headers,
         )
-        response2 = test_client.get(
-            "/api/v2/tickers/ORCL/sentiment/history?range=1W", headers=auth_headers
-        )
+        response1 = lambda_handler(event, mock_lambda_context)
+        response2 = lambda_handler(event, mock_lambda_context)
 
-        assert response1.status_code == 200
-        assert response2.status_code == 200
+        assert response1["statusCode"] == 200
+        assert response2["statusCode"] == 200
 
-        data1 = response1.json()
-        data2 = response2.json()
+        data1 = json.loads(response1["body"])
+        data2 = json.loads(response2["body"])
 
         # Scores should be identical
         scores1 = [point["score"] for point in data1["history"]]
@@ -364,21 +415,33 @@ class TestSentimentHistoryDeterminism:
 
     @pytest.mark.sentiment_history
     def test_sentiment_different_tickers_different_scores(
-        self, test_client, auth_headers
+        self, mock_lambda_context, auth_headers
     ):
         """Different tickers return different sentiment scores."""
-        response_aapl = test_client.get(
-            "/api/v2/tickers/AAPL/sentiment/history?range=1W", headers=auth_headers
+        event_aapl = make_event(
+            method="GET",
+            path="/api/v2/tickers/AAPL/sentiment/history",
+            query_params={"range": "1W"},
+            headers=auth_headers,
         )
-        response_msft = test_client.get(
-            "/api/v2/tickers/MSFT/sentiment/history?range=1W", headers=auth_headers
+        event_msft = make_event(
+            method="GET",
+            path="/api/v2/tickers/MSFT/sentiment/history",
+            query_params={"range": "1W"},
+            headers=auth_headers,
         )
+        response_aapl = lambda_handler(event_aapl, mock_lambda_context)
+        response_msft = lambda_handler(event_msft, mock_lambda_context)
 
-        assert response_aapl.status_code == 200
-        assert response_msft.status_code == 200
+        assert response_aapl["statusCode"] == 200
+        assert response_msft["statusCode"] == 200
 
-        scores_aapl = [point["score"] for point in response_aapl.json()["history"]]
-        scores_msft = [point["score"] for point in response_msft.json()["history"]]
+        scores_aapl = [
+            point["score"] for point in json.loads(response_aapl["body"])["history"]
+        ]
+        scores_msft = [
+            point["score"] for point in json.loads(response_msft["body"])["history"]
+        ]
 
         # Different tickers should have different scores
         assert (

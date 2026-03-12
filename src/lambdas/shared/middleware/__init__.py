@@ -9,7 +9,7 @@ from src.lambdas.shared.middleware.auth_middleware import (
     require_auth,
 )
 from src.lambdas.shared.middleware.csrf_middleware import (
-    require_csrf,
+    require_csrf_middleware,
 )
 from src.lambdas.shared.middleware.hcaptcha import (
     CaptchaRequired,
@@ -21,7 +21,7 @@ from src.lambdas.shared.middleware.rate_limit import (
     get_client_ip,
 )
 from src.lambdas.shared.middleware.require_role import (
-    require_role,
+    require_role_middleware,
 )
 from src.lambdas.shared.middleware.security_headers import (
     add_security_headers,
@@ -37,7 +37,7 @@ __all__ = [
     "extract_user_id",
     "require_auth",
     # Feature 1130: Role-based access control
-    "require_role",
+    "require_role_middleware",
     # hCaptcha
     "CaptchaRequired",
     "verify_captcha",
@@ -49,5 +49,5 @@ __all__ = [
     "add_security_headers",
     "get_cors_headers",
     # Feature 1158: CSRF protection
-    "require_csrf",
+    "require_csrf_middleware",
 ]

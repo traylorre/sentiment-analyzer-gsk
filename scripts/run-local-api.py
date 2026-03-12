@@ -2,8 +2,8 @@
 """
 Local development server for the Dashboard API.
 
-This script runs the FastAPI application locally with uvicorn, allowing
-frontend E2E tests to run without deploying to AWS.
+This script runs the Powertools-based Lambda handler locally using a simple
+HTTP server, allowing frontend E2E tests to run without deploying to AWS.
 
 Usage:
     python scripts/run-local-api.py
@@ -27,7 +27,9 @@ API Keys:
 import logging
 import os
 import sys
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 # Configure logging before other imports
 logging.basicConfig(
@@ -70,7 +72,6 @@ if env_vars:
             logger.info(f"  {key}: configured")
 
 # Set environment variables BEFORE importing the handler
-# These are required by the FastAPI app
 os.environ.setdefault("ENVIRONMENT", "local")
 os.environ.setdefault("USERS_TABLE", "local-users")
 os.environ.setdefault("SENTIMENTS_TABLE", "local-sentiments")
@@ -127,7 +128,6 @@ def create_mock_tables():
     )
 
     # Create OHLC cache table (CACHE-001)
-    # Matches production schema from infrastructure/terraform/modules/dynamodb/main.tf
     dynamodb.create_table(
         TableName="local-ohlc-cache",
         KeySchema=[
@@ -147,6 +147,99 @@ def create_mock_tables():
     return mock
 
 
+class _FakeLambdaContext:
+    """Minimal Lambda context for local invocation."""
+
+    function_name = "local-dashboard"
+    memory_limit_in_mb = 512
+    invoked_function_arn = (
+        "arn:aws:lambda:us-east-1:000000000000:function:local-dashboard"
+    )
+    aws_request_id = "local-request-id"
+
+
+class LambdaProxyHandler(BaseHTTPRequestHandler):
+    """HTTP handler that translates requests to Lambda events."""
+
+    def _build_event(self, method: str) -> dict:
+        parsed = urlparse(self.path)
+        content_length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(content_length).decode() if content_length else None
+
+        headers = {k.lower(): v for k, v in self.headers.items()}
+        query_params = (
+            {k: v[0] for k, v in parse_qs(parsed.query).items()}
+            if parsed.query
+            else None
+        )
+
+        return {
+            "httpMethod": method,
+            "path": parsed.path,
+            "headers": headers,
+            "queryStringParameters": query_params,
+            "body": body,
+            "isBase64Encoded": False,
+            "requestContext": {
+                "identity": {"sourceIp": "127.0.0.1"},
+                "requestId": "local-request",
+            },
+        }
+
+    def _invoke_handler(self, method: str) -> None:
+        from src.lambdas.dashboard.handler import lambda_handler
+
+        event = self._build_event(method)
+        response = lambda_handler(event, _FakeLambdaContext())
+
+        status_code = response.get("statusCode", 500)
+        body = response.get("body", "")
+        resp_headers = response.get("headers", {})
+
+        self.send_response(status_code)
+
+        # CORS headers for local development
+        self.send_header("Access-Control-Allow-Origin", "http://localhost:3000")
+        self.send_header("Access-Control-Allow-Credentials", "true")
+        self.send_header(
+            "Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS"
+        )
+        self.send_header("Access-Control-Allow-Headers", "*")
+
+        for key, value in resp_headers.items():
+            self.send_header(key, value)
+
+        # Set-Cookie from multiValueHeaders
+        for cookie in response.get("multiValueHeaders", {}).get("Set-Cookie", []):
+            self.send_header("Set-Cookie", cookie)
+
+        self.end_headers()
+        if body:
+            self.wfile.write(body.encode() if isinstance(body, str) else body)
+
+    def do_GET(self):
+        self._invoke_handler("GET")
+
+    def do_POST(self):
+        self._invoke_handler("POST")
+
+    def do_PUT(self):
+        self._invoke_handler("PUT")
+
+    def do_DELETE(self):
+        self._invoke_handler("DELETE")
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "http://localhost:3000")
+        self.send_header("Access-Control-Allow-Credentials", "true")
+        self.send_header(
+            "Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS"
+        )
+        self.send_header("Access-Control-Allow-Headers", "*")
+        self.end_headers()
+
+
 def main():
     """Run the local development server."""
     port = int(os.environ.get("PORT", "8000"))
@@ -155,44 +248,18 @@ def main():
     mock = create_mock_tables()
 
     try:
-        # Import uvicorn here to avoid issues with moto patching
-        import uvicorn
-        from fastapi.middleware.cors import CORSMiddleware
-
-        # Import the FastAPI app after moto is started
-        # This ensures DynamoDB calls use the mock
-        from src.lambdas.dashboard.handler import app
-
-        # Add CORS middleware for local development
-        # In production, CORS is handled by Lambda Function URL
-        app.add_middleware(
-            CORSMiddleware,
-            allow_origins=["http://localhost:3000"],  # Next.js dev server
-            allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
-        )
-        logger.info("Added CORS middleware for local development")
-
+        server = HTTPServer(("127.0.0.1", port), LambdaProxyHandler)
         logger.info(f"Starting local API server on http://localhost:{port}")
         logger.info("Press Ctrl+C to stop")
         logger.info("")
         logger.info(
-            "Ticker search endpoint: GET http://localhost:{port}/api/v2/tickers/search?q=AAPL"
+            f"Ticker search: GET http://localhost:{port}/api/v2/tickers/search?q=AAPL"
         )
-        logger.info("Health check: GET http://localhost:{port}/health")
         logger.info("")
-
-        # Run the server
-        uvicorn.run(
-            app,
-            host="127.0.0.1",
-            port=port,
-            log_level="info",
-            access_log=True,
-        )
+        server.serve_forever()
     except KeyboardInterrupt:
         logger.info("Shutting down...")
+        server.server_close()
     finally:
         mock.stop()
 

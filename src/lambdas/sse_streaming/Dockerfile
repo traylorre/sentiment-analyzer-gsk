@@ -1,8 +1,14 @@
 # SSE Streaming Lambda - Docker Image
-# Uses AWS Lambda Web Adapter for RESPONSE_STREAM mode
+# Custom Python runtime for RESPONSE_STREAM mode (chunked transfer encoding)
+# Native Runtime API bootstrap for streaming responses
 #
-# Build context: src/ (changed from src/lambdas to include src/lib)
-# This allows importing from shared modules and lib packages
+# Build context: src/ (allows importing from lambdas/ and lib/)
+#
+# Usage:
+#   cd src && docker build -t sse-streaming -f lambdas/sse_streaming/Dockerfile .
+#   docker run --rm sse-streaming python -c "from handler import handler; print('OK')"
+
+# Stage 1: Builder - install dependencies
 FROM python:3.13-slim AS builder
 
 WORKDIR /app
@@ -12,53 +18,44 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy and install Python dependencies from sse_streaming subdirectory
+# Copy and install Python dependencies
 COPY lambdas/sse_streaming/requirements.txt .
 RUN pip install --no-cache-dir --target /app/packages -r requirements.txt
 
-# Production image
+# Stage 2: Runtime - minimal production image
 FROM python:3.13-slim
 
 # Create non-root user for security (090-security-first-burndown)
 # UID 1000 is standard for Lambda containers
 RUN adduser --disabled-password --gecos '' --uid 1000 lambda
 
-WORKDIR /app
-
-# Copy AWS Lambda Web Adapter extension
-COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.9.1 /lambda-adapter /opt/extensions/
+WORKDIR /var/task
 
 # Copy installed packages
-COPY --from=builder /app/packages /app/packages
+COPY --from=builder /app/packages /var/task/packages
 
-# Copy application code from sse_streaming subdirectory
-COPY lambdas/sse_streaming /app
+# Copy bootstrap (custom runtime entry point for RESPONSE_STREAM)
+COPY lambdas/sse_streaming/bootstrap /var/task/bootstrap
+RUN chmod +x /var/task/bootstrap
+
+# Copy application code
+COPY lambdas/sse_streaming /var/task
 
 # Copy shared modules for logging utilities and models
-# Structure: /app/src/lambdas/shared/
-RUN mkdir -p /app/src/lambdas /app/src/lib && \
-    touch /app/src/__init__.py /app/src/lambdas/__init__.py /app/src/lib/__init__.py
-COPY lambdas/shared /app/src/lambdas/shared
+# Structure: /var/task/src/lambdas/shared/
+RUN mkdir -p /var/task/src/lambdas /var/task/src/lib && \
+    touch /var/task/src/__init__.py /var/task/src/lambdas/__init__.py /var/task/src/lib/__init__.py
+COPY lambdas/shared /var/task/src/lambdas/shared
 
 # Copy lib/timeseries for Resolution and other models
-# Required by timeseries_models.py: from src.lib.timeseries import Resolution
-COPY lib/timeseries /app/src/lib/timeseries
+COPY lib/timeseries /var/task/src/lib/timeseries
 
 # Set Python path to include packages and app directories
-# Both paths needed: /app/packages for pip dependencies, /app for src.lambdas.shared imports
-# Note: Also set via Lambda env vars in Terraform as belt-and-suspenders
-ENV PYTHONPATH=/app/packages:/app
-ENV AWS_LWA_INVOKE_MODE=RESPONSE_STREAM
-# Fix(141): Tell Lambda Web Adapter to check /health instead of default /
-# This prevents "GET / HTTP/1.1 404 Not Found" during Lambda init
-ENV AWS_LWA_READINESS_CHECK_PATH=/health
-
-# Expose port for Lambda Web Adapter
-EXPOSE 8080
+ENV PYTHONPATH=/var/task/packages:/var/task
 
 # Set ownership and switch to non-root user (090-security-first-burndown)
-RUN chown -R lambda:lambda /app
+RUN chown -R lambda:lambda /var/task
 USER lambda
 
-# Run with uvicorn
-CMD ["python", "-m", "uvicorn", "handler:app", "--host", "0.0.0.0", "--port", "8080"]
+# Custom runtime: bootstrap polls Runtime API and streams handler output
+ENTRYPOINT ["python3", "/var/task/bootstrap"]

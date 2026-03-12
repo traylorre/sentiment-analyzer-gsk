@@ -142,11 +142,11 @@ class SSEEvent(BaseModel):
         return "\n".join(lines)
 
     def to_sse_dict(self) -> dict:
-        """Format event as dictionary for EventSourceResponse.
+        """Format event as dictionary for SSE output.
 
-        EventSourceResponse from sse-starlette expects dictionaries with
-        'event', 'id', 'data', and optionally 'retry' keys. This ensures
-        proper Content-Type: text/event-stream header is set.
+        The SSE handler yields events as dictionaries with
+        'event', 'id', 'data', and optionally 'retry' keys formatted
+        as text/event-stream content.
 
         Returns:
             Dictionary with SSE event fields.
