@@ -43,14 +43,18 @@ def clear_cache():
 class TestOHLCCacheKey:
     """Tests for cache key generation.
 
-    Feature 1078: Cache keys now use time_range (e.g., "1M") for predefined ranges
-    instead of actual dates, to ensure cache hits when users switch resolutions.
+    CACHE-001: Cache keys now include end_date for all ranges (not just custom)
+    to prevent stale data when the same range is requested on different days.
+    Previously, predefined ranges used only the range name, causing the same
+    key on different days.
     """
 
     def test_generates_deterministic_key_predefined_range(self):
-        """Cache key should be deterministic for same predefined range."""
-        key1 = _get_ohlc_cache_key("AAPL", "D", "1M")
-        key2 = _get_ohlc_cache_key("AAPL", "D", "1M")
+        """Cache key should be deterministic for same predefined range and date."""
+        end = date(2024, 12, 23)
+        start = date(2024, 11, 23)
+        key1 = _get_ohlc_cache_key("AAPL", "D", "1M", start, end)
+        key2 = _get_ohlc_cache_key("AAPL", "D", "1M", start, end)
         assert key1 == key2
 
     def test_generates_deterministic_key_custom_range(self):
@@ -65,20 +69,25 @@ class TestOHLCCacheKey:
 
     def test_normalizes_ticker_to_uppercase(self):
         """Cache key should normalize ticker to uppercase."""
-        key1 = _get_ohlc_cache_key("aapl", "D", "1M")
-        key2 = _get_ohlc_cache_key("AAPL", "D", "1M")
+        end = date(2024, 12, 23)
+        start = date(2024, 11, 23)
+        key1 = _get_ohlc_cache_key("aapl", "D", "1M", start, end)
+        key2 = _get_ohlc_cache_key("AAPL", "D", "1M", start, end)
         assert key1 == key2
 
     def test_different_resolutions_different_keys(self):
         """Different resolutions should produce different cache keys."""
-        key_daily = _get_ohlc_cache_key("AAPL", "D", "1M")
-        key_5min = _get_ohlc_cache_key("AAPL", "5", "1M")
+        end = date(2024, 12, 23)
+        start = date(2024, 11, 23)
+        key_daily = _get_ohlc_cache_key("AAPL", "D", "1M", start, end)
+        key_5min = _get_ohlc_cache_key("AAPL", "5", "1M", start, end)
         assert key_daily != key_5min
 
     def test_different_time_ranges_different_keys(self):
         """Different time ranges should produce different cache keys."""
-        key_1m = _get_ohlc_cache_key("AAPL", "D", "1M")
-        key_3m = _get_ohlc_cache_key("AAPL", "D", "3M")
+        end = date(2024, 12, 23)
+        key_1m = _get_ohlc_cache_key("AAPL", "D", "1M", date(2024, 11, 23), end)
+        key_3m = _get_ohlc_cache_key("AAPL", "D", "3M", date(2024, 9, 23), end)
         assert key_1m != key_3m
 
     def test_different_custom_date_ranges_different_keys(self):
@@ -92,9 +101,12 @@ class TestOHLCCacheKey:
         assert key1 != key2
 
     def test_key_format_predefined_range(self):
-        """Cache key for predefined range should have expected format."""
-        key = _get_ohlc_cache_key("MSFT", "15", "1M")
-        assert key == "ohlc:MSFT:15:1M"
+        """Cache key for predefined range should include end_date (CACHE-001)."""
+        end = date(2024, 12, 23)
+        start = date(2024, 11, 23)
+        key = _get_ohlc_cache_key("MSFT", "15", "1M", start, end)
+        # New format includes end_date for day-anchoring
+        assert key == "ohlc:MSFT:15:1M:2024-12-23"
 
     def test_key_format_custom_range(self):
         """Cache key for custom range should include dates."""
@@ -102,6 +114,22 @@ class TestOHLCCacheKey:
             "MSFT", "15", "custom", date(2024, 3, 15), date(2024, 3, 20)
         )
         assert key == "ohlc:MSFT:15:custom:2024-03-15:2024-03-20"
+
+    def test_different_days_different_keys(self):
+        """CACHE-001: Same range on different days should produce different keys."""
+        # Monday request
+        key_monday = _get_ohlc_cache_key(
+            "AAPL", "D", "1W", date(2024, 12, 16), date(2024, 12, 23)
+        )
+        # Friday request (different end_date)
+        key_friday = _get_ohlc_cache_key(
+            "AAPL", "D", "1W", date(2024, 12, 20), date(2024, 12, 27)
+        )
+        # Keys should differ because end_date is included
+        assert key_monday != key_friday
+        # Verify the end_date is in the key
+        assert "2024-12-23" in key_monday
+        assert "2024-12-27" in key_friday
 
 
 class TestOHLCCacheGetSet:

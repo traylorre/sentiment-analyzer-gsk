@@ -42,6 +42,9 @@ export function SignOutDialog({ open, onOpenChange }: SignOutDialogProps) {
 
           {/* Dialog */}
           <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="sign-out-dialog-title"
             className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 p-4"
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -51,7 +54,7 @@ export function SignOutDialog({ open, onOpenChange }: SignOutDialogProps) {
             <div className="rounded-lg border border-border bg-background shadow-lg">
               {/* Header */}
               <div className="flex items-center justify-between p-4 border-b border-border">
-                <h2 className="text-lg font-semibold text-foreground">
+                <h2 id="sign-out-dialog-title" className="text-lg font-semibold text-foreground">
                   Sign out
                 </h2>
                 <button

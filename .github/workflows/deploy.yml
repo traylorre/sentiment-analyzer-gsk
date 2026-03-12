@@ -1352,7 +1352,7 @@ jobs:
           # Use Amplify URL for frontend E2E tests (Feature 1205)
           PREPROD_FRONTEND_URL: ${{ needs.deploy-preprod.outputs.amplify_url }}
         run: |
-          echo "Running Playwright sanity tests against preprod frontend..."
+          echo "Running Playwright E2E tests (sanity + auth) against preprod frontend..."
           echo "Frontend URL: ${PREPROD_FRONTEND_URL}"
 
           if [ -z "$PREPROD_FRONTEND_URL" ]; then
@@ -1363,10 +1363,10 @@ jobs:
 
           cd frontend
 
-          # Run sanity tests with the preprod frontend URL
+          # Run sanity and auth tests with the preprod frontend URL
           # Timeout: 5 minutes for E2E tests
           set +e
-          timeout 300 npx playwright test tests/e2e/sanity.spec.ts \
+          timeout 300 npx playwright test tests/e2e/sanity.spec.ts tests/e2e/auth.spec.ts \
             --project="Desktop Chrome" \
             --reporter=list \
             2>&1 | tee playwright-output.txt
