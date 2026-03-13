@@ -165,6 +165,7 @@ class ParallelFetcher:
                         value=1,
                         unit="Count",
                         dimensions={"FailurePath": "parallel_fetcher_aggregate"},
+                        namespace="SentimentAnalyzer/Reliability",
                     )
 
         self._end_time = time.time()

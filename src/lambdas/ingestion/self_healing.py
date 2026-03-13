@@ -446,6 +446,7 @@ def run_self_healing_check(
             value=1,
             unit="Count",
             dimensions={"FailurePath": "self_healing_fetch"},
+            namespace="SentimentAnalyzer/Reliability",
         )
 
         # Emit error metric

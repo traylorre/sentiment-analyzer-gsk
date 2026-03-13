@@ -353,6 +353,7 @@ class CircuitBreakerManager:
                 value=1,
                 unit="Count",
                 dimensions={"FailurePath": "circuit_breaker_load"},
+                namespace="SentimentAnalyzer/Reliability",
             )
             state = CircuitBreakerState.create_default(service)
 
@@ -402,6 +403,7 @@ class CircuitBreakerManager:
                 value=1,
                 unit="Count",
                 dimensions={"FailurePath": "circuit_breaker_save"},
+                namespace="SentimentAnalyzer/Reliability",
             )
             return False
 

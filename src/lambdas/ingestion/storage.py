@@ -150,6 +150,7 @@ def store_news_items(
                 value=1,
                 unit="Count",
                 dimensions={"FailurePath": "fanout_partial_write"},
+                namespace="SentimentAnalyzer/Reliability",
             )
 
         except Exception as e:
@@ -177,6 +178,7 @@ def store_news_items(
                 value=1,
                 unit="Count",
                 dimensions={"FailurePath": "fanout_partial_write"},
+                namespace="SentimentAnalyzer/Reliability",
             )
 
     logger.info(

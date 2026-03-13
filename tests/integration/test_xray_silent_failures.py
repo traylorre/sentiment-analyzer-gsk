@@ -87,20 +87,23 @@ def _find_subsegment_blocks(source: str, subsegment_name: str) -> list[str]:
         subseg.add_exception(e)
         emit_metric("SilentFailure/Count", ...)
 
-    Strategy: find every occurrence of ``in_subsegment("<name>")``, then
-    walk forward 20 lines to capture the full block body.
+    Strategy: find every occurrence of ``in_subsegment("<name>")`` in the
+    full source text (handles multi-line calls), then extract a window of
+    lines around each match.
     """
     pattern = re.compile(
         r'in_subsegment\(\s*["\']' + re.escape(subsegment_name) + r'["\']',
+        re.DOTALL,
     )
     blocks: list[str] = []
     lines = source.splitlines()
-    for lineno, line in enumerate(lines):
-        if pattern.search(line):
-            # Capture from 2 lines before (the ``try:``) to 30 lines after
-            start = max(0, lineno - 2)
-            end = min(len(lines), lineno + 30)
-            blocks.append("\n".join(lines[start:end]))
+    for match in pattern.finditer(source):
+        # Find the line number of the match start
+        lineno = source[: match.start()].count("\n")
+        # Capture from 2 lines before (the ``try:``) to 30 lines after
+        start = max(0, lineno - 2)
+        end = min(len(lines), lineno + 30)
+        blocks.append("\n".join(lines[start:end]))
     return blocks
 
 

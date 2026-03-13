@@ -150,6 +150,7 @@ class NotificationPublisher:
                 value=1,
                 unit="Count",
                 dimensions={"FailurePath": "notification_delivery"},
+                namespace="SentimentAnalyzer/Reliability",
             )
             return None
 

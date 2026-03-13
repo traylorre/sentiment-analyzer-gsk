@@ -85,6 +85,7 @@ class CollectionEventRepository:
                 value=1,
                 unit="Count",
                 dimensions={"FailurePath": "audit_trail"},
+                namespace="SentimentAnalyzer/Reliability",
             )
             return False
 
