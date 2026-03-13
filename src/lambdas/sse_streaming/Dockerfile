@@ -8,9 +8,13 @@
 #   cd src && docker build -t sse-streaming -f lambdas/sse_streaming/Dockerfile .
 #   docker run --rm sse-streaming python -c "from handler import handler; print('OK')"
 
-# Stage 0: ADOT Lambda Extension binary (FR-062, FR-069, FR-070)
-# Pin digest for reproducible builds in production
-FROM public.ecr.aws/aws-observability/aws-otel-lambda-extension-amd64:latest AS adot
+# NOTE: ADOT Lambda Extension (FR-062, FR-069, FR-070) is not included.
+# AWS does not publish a Docker image for the Lambda extension; it is only
+# available as a Lambda Layer (account 901920570463). The OTel SDK in
+# tracing.py degrades gracefully when the extension is absent — connection
+# refused errors are caught and logged, Powertools/X-Ray tracing still works.
+# TODO: Add lambda:GetLayerVersion permission to deployer IAM user, then
+#       download the layer zip in a CI pre-step and COPY extensions/ in.
 
 # Stage 1: Builder - install dependencies
 FROM python:3.13-slim AS builder
@@ -35,9 +39,6 @@ RUN adduser --disabled-password --gecos '' --uid 1000 lambda
 
 WORKDIR /var/task
 
-# Copy ADOT Lambda Extension collector binary (T031)
-COPY --from=adot /opt/extensions/ /opt/extensions/
-
 # Copy installed packages
 COPY --from=builder /app/packages /var/task/packages
 
@@ -57,14 +58,8 @@ COPY lambdas/shared /var/task/src/lambdas/shared
 # Copy lib/timeseries for Resolution and other models
 COPY lib/timeseries /var/task/src/lib/timeseries
 
-# Copy ADOT collector config (T032)
-COPY lambdas/sse_streaming/collector-config.yaml /opt/collector-config/config.yaml
-
 # Set Python path to include packages and app directories
 ENV PYTHONPATH=/var/task/packages:/var/task
-
-# ADOT Extension collector config path (T033)
-ENV OPENTELEMETRY_COLLECTOR_CONFIG_FILE=/opt/collector-config/config.yaml
 
 # Set ownership and switch to non-root user (090-security-first-burndown)
 RUN chown -R lambda:lambda /var/task
