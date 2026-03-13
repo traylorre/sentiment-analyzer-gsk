@@ -54,11 +54,9 @@ from decimal import Decimal
 from typing import Any
 
 import boto3
-from aws_xray_sdk.core import patch_all, xray_recorder
+from aws_lambda_powertools import Tracer
 
-# Patch boto3 and requests for X-Ray distributed tracing
-# Day 1 mandatory per constitution v1.1 (FR-035)
-patch_all()
+tracer = Tracer(service="sentiment-analyzer-analysis")
 
 from src.lambdas.analysis.sentiment import (
     InferenceError,
@@ -81,6 +79,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
+@tracer.capture_lambda_handler
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """
     Main Lambda handler for sentiment analysis.
@@ -295,7 +294,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         }
 
 
-@xray_recorder.capture("update_item_with_sentiment")
+@tracer.capture_method
 def _update_item_with_sentiment(
     table: Any,
     source_id: str,
@@ -433,7 +432,7 @@ def _get_dynamodb_client() -> Any:
     return _dynamodb_client
 
 
-@xray_recorder.capture("write_timeseries_fanout")
+@tracer.capture_method
 def _write_timeseries_fanout(
     tickers: list[str],
     score: float,

@@ -7,7 +7,7 @@ Feature 1010: Parallel Ingestion with Cross-Source Deduplication
 
 import time
 from datetime import UTC, datetime
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -169,8 +169,10 @@ class TestParallelTiming:
         assert len(results["tiingo"]) == 3
         assert len(results["finnhub"]) == 3
 
+    @patch("src.lambdas.ingestion.parallel_fetcher.emit_metric")
     def test_parallel_execution_with_one_source_failure(
         self,
+        mock_emit_metric,
         mock_tiingo_adapter,
         mock_finnhub_adapter,
         mock_quota_tracker,

@@ -31,6 +31,7 @@ from models import (
 )
 from polling import PollingService, get_polling_service
 from timeseries_models import PartialBucketEvent
+from tracing import get_tracer, is_enabled, safe_force_flush
 
 from src.lambdas.shared.logging_utils import sanitize_for_log
 from src.lib.timeseries import Resolution, calculate_bucket_progress, floor_to_bucket
@@ -268,6 +269,72 @@ class SSEStreamGenerator:
             data=event_data.model_dump(),
         )
 
+    def _inject_trace_id(self, sse_dict: dict) -> dict:
+        """Inject current X-Ray trace ID into SSE event data (T064, FR-115).
+
+        Adds trace_id field to the JSON data payload for frontend
+        logging correlation.
+
+        Args:
+            sse_dict: SSE event dict from to_sse_dict()
+
+        Returns:
+            SSE dict with trace_id injected into data JSON
+        """
+        trace_id = os.environ.get("_X_AMZN_TRACE_ID")
+        if trace_id:
+            import json
+
+            try:
+                data = json.loads(sse_dict["data"])
+                data["trace_id"] = trace_id
+                sse_dict["data"] = json.dumps(data, default=str)
+            except (json.JSONDecodeError, KeyError, TypeError):
+                pass
+        return sse_dict
+
+    def _trace_event_dispatch(self, event_type: str, start_time: float) -> None:
+        """Create OTel span for SSE event dispatch (T043).
+
+        Args:
+            event_type: Type of SSE event (heartbeat, metrics, etc.)
+            start_time: time.perf_counter() from before event creation
+        """
+        otel_tracer = get_tracer()
+        if not otel_tracer or not is_enabled():
+            return
+        from opentelemetry.trace import SpanKind
+
+        latency_ms = (time.perf_counter() - start_time) * 1000
+        with otel_tracer.start_as_current_span(
+            "sse_event_dispatch", kind=SpanKind.INTERNAL
+        ) as span:
+            span.set_attribute("event_type", event_type)
+            span.set_attribute("latency_ms", latency_ms)
+
+    def _check_deadline_flush(self) -> bool:
+        """Check if Lambda deadline is approaching and flush if needed (T046).
+
+        Returns:
+            True if flush was triggered (caller should stop creating spans).
+        """
+        deadline_ms_str = os.environ.get("AWS_LAMBDA_DEADLINE_MS")
+        if not deadline_ms_str:
+            return False
+        try:
+            deadline_ms = int(deadline_ms_str)
+            remaining_ms = deadline_ms - int(time.time() * 1000)
+            if remaining_ms < 3000:
+                logger.info(
+                    "Deadline approaching, triggering proactive flush",
+                    extra={"remaining_ms": remaining_ms},
+                )
+                safe_force_flush()
+                return True
+        except (ValueError, TypeError):
+            pass
+        return False
+
     def should_emit_bucket_update(self, ticker: str, resolution: Resolution) -> bool:
         """Check if bucket update should be emitted (with debounce).
 
@@ -317,38 +384,57 @@ class SSEStreamGenerator:
                 metrics_emitter.emit_events_sent(1, event.event)
 
         # Send initial heartbeat
+        dispatch_start = time.perf_counter()
         heartbeat = self._create_heartbeat()
         self._event_buffer.add(heartbeat)
         self._conn_manager.update_last_event_id(connection.connection_id, heartbeat.id)
-        yield heartbeat.to_sse_dict()
+        yield self._inject_trace_id(heartbeat.to_sse_dict())
+        self._trace_event_dispatch("heartbeat", dispatch_start)
         metrics_emitter.emit_events_sent(1, "heartbeat")
 
         # Track timing
         last_heartbeat = time.time()
+        flush_fired = False  # T046: Block span creation after flush
 
         try:
             # Main event loop
             async for metrics, changed in self._poll_service.poll_loop():
+                # T046: Check deadline before creating more spans (FR-093)
+                if not flush_fired and self._check_deadline_flush():
+                    flush_fired = True
+                    # Yield deadline event to notify client
+                    yield SSEEvent(
+                        event="deadline",
+                        data={"reason": "lambda_timeout_approaching"},
+                    ).to_sse_dict()
+                    return
+
                 current_time = time.time()
 
                 # Send metrics if changed
                 if changed:
+                    dispatch_start = time.perf_counter()
                     event = self._create_metrics_event(metrics)
                     self._event_buffer.add(event)
                     self._conn_manager.update_last_event_id(
                         connection.connection_id, event.id
                     )
-                    yield event.to_sse_dict()
+                    yield self._inject_trace_id(event.to_sse_dict())
+                    if not flush_fired:
+                        self._trace_event_dispatch("metrics", dispatch_start)
                     metrics_emitter.emit_events_sent(1, "metrics")
 
                 # Send heartbeat if interval passed
                 if current_time - last_heartbeat >= self._heartbeat_interval:
+                    dispatch_start = time.perf_counter()
                     heartbeat = self._create_heartbeat()
                     self._event_buffer.add(heartbeat)
                     self._conn_manager.update_last_event_id(
                         connection.connection_id, heartbeat.id
                     )
-                    yield heartbeat.to_sse_dict()
+                    yield self._inject_trace_id(heartbeat.to_sse_dict())
+                    if not flush_fired:
+                        self._trace_event_dispatch("heartbeat", dispatch_start)
                     metrics_emitter.emit_events_sent(1, "heartbeat")
                     last_heartbeat = current_time
 
@@ -361,7 +447,33 @@ class SSEStreamGenerator:
                 extra={"connection_id": connection.connection_id},
             )
             raise
+        except (BrokenPipeError, OSError) as e:
+            # T050: Client disconnect — NOT a server error (FR-085, SC-039)
+            otel_tracer = get_tracer()
+            if otel_tracer and is_enabled() and not flush_fired:
+                from opentelemetry.trace import StatusCode, trace
+
+                current_span = trace.get_current_span()
+                if current_span and current_span.is_recording():
+                    current_span.set_attribute("client.disconnected", True)
+                    current_span.set_status(StatusCode.OK)
+            logger.info(
+                "Client disconnected",
+                extra={
+                    "connection_id": connection.connection_id,
+                    "error": str(e),
+                },
+            )
         except Exception as e:
+            # T048: Dual-call error pattern (FR-144, FR-150)
+            otel_tracer = get_tracer()
+            if otel_tracer and is_enabled() and not flush_fired:
+                from opentelemetry.trace import StatusCode, trace
+
+                current_span = trace.get_current_span()
+                if current_span and current_span.is_recording():
+                    current_span.set_status(StatusCode.ERROR, str(e))
+                    current_span.record_exception(e)
             logger.error(
                 "Stream error",
                 extra={

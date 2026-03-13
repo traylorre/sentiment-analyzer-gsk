@@ -150,7 +150,7 @@ def create_collection_event(
     return CollectionEvent(
         event_id=event_id,
         triggered_at=datetime.now(UTC),
-        status="in_progress",
+        status="partial",
         source_used=source_used or "tiingo",  # Default to primary
         is_failover=is_failover,
     )

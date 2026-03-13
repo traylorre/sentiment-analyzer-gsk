@@ -14,12 +14,13 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from aws_xray_sdk.core import xray_recorder
+from aws_lambda_powertools import Tracer
 from pydantic import BaseModel
 
 from src.lambdas.shared.logging_utils import sanitize_for_log
 from src.lambdas.shared.models.alert_rule import ALERT_LIMITS
 
+tracer = Tracer()
 logger = logging.getLogger(__name__)
 
 
@@ -43,7 +44,7 @@ class QuotaExceededError(Exception):
         super().__init__(f"Daily quota exceeded: {used}/{limit}")
 
 
-@xray_recorder.capture("get_daily_quota")
+@tracer.capture_method
 def get_daily_quota(table: Any, user_id: str) -> QuotaStatus:
     """Get user's daily email quota status.
 
@@ -82,7 +83,7 @@ def get_daily_quota(table: Any, user_id: str) -> QuotaStatus:
     )
 
 
-@xray_recorder.capture("increment_email_quota")
+@tracer.capture_method
 def increment_email_quota(table: Any, user_id: str) -> QuotaStatus:
     """Increment user's daily email count atomically.
 
@@ -166,7 +167,7 @@ def increment_email_quota(table: Any, user_id: str) -> QuotaStatus:
         ) from None
 
 
-@xray_recorder.capture("check_quota_available")
+@tracer.capture_method
 def check_quota_available(table: Any, user_id: str, count: int = 1) -> bool:
     """Check if user has quota available for sending emails.
 
@@ -182,7 +183,7 @@ def check_quota_available(table: Any, user_id: str, count: int = 1) -> bool:
     return status.remaining >= count
 
 
-@xray_recorder.capture("get_user_total_alerts")
+@tracer.capture_method
 def get_user_total_alerts(table: Any, user_id: str) -> int:
     """Get total number of alerts across all configs for a user.
 

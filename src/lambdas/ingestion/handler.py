@@ -75,12 +75,10 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import boto3
-from aws_xray_sdk.core import patch_all, xray_recorder
+from aws_lambda_powertools import Tracer
 from botocore.config import Config
 
-# Patch boto3 and requests for X-Ray distributed tracing
-# Day 1 mandatory per constitution v1.1 (FR-035)
-patch_all()
+tracer = Tracer(service="sentiment-analyzer-ingestion")
 
 from src.lambdas.ingestion.alerting import (
     ConsecutiveFailureAlert,
@@ -162,6 +160,7 @@ _active_tickers_cache: list[str] = []
 _active_tickers_cache_timestamp: float = 0.0
 
 
+@tracer.capture_lambda_handler
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """
     Main Lambda handler for financial news ingestion.
@@ -682,7 +681,7 @@ def _create_failure_tracker(
     return tracker
 
 
-@xray_recorder.capture("get_active_tickers")
+@tracer.capture_method
 def _get_active_tickers(table: Any, force_refresh: bool = False) -> list[str]:
     """Get unique tickers from all active user configurations.
 
@@ -871,7 +870,7 @@ def _save_quota_tracker(table: Any, tracker: QuotaTracker) -> None:
         )
 
 
-@xray_recorder.capture("fetch_tiingo_articles")
+@tracer.capture_method
 def _fetch_tiingo_articles(
     adapter: TiingoAdapter,
     tickers: list[str],
@@ -904,7 +903,7 @@ def _fetch_tiingo_articles(
     return articles
 
 
-@xray_recorder.capture("fetch_finnhub_articles")
+@tracer.capture_method
 def _fetch_finnhub_articles(
     adapter: FinnhubAdapter,
     tickers: list[str],
@@ -937,7 +936,7 @@ def _fetch_finnhub_articles(
     return articles
 
 
-@xray_recorder.capture("process_financial_article")
+@tracer.capture_method
 def _process_article(
     article: NewsArticle,
     source: str,
@@ -1078,7 +1077,7 @@ def _get_sns_client(region: str) -> Any:
     )
 
 
-@xray_recorder.capture("publish_sns_batch")
+@tracer.capture_method
 def _publish_sns_batch(
     sns_client: Any,
     sns_topic_arn: str,
@@ -1218,7 +1217,7 @@ def _emit_summary_metrics(summary: dict[str, int], execution_time_ms: float) -> 
     emit_metrics_batch(metrics)
 
 
-@xray_recorder.capture("parallel_ingest")
+@tracer.capture_method
 def _parallel_ingest(
     tickers: list[str],
     tiingo_adapter: TiingoAdapter | None,

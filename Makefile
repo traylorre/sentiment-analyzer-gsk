@@ -215,6 +215,22 @@ validate-mermaid: ## Validate mermaid diagram syntax
 	@python scripts/regenerate-mermaid-url.py --validate-only docs/diagrams/architecture.mmd
 
 # ============================================================================
+# X-Ray Verification (Phase 7 gates)
+# ============================================================================
+
+verify-dual-emit: ## Run dual-emit verification gates (FR-109)
+	@python scripts/verify-dual-emit.py --environment $(ENV)
+
+verify-dual-emit-json: ## Run dual-emit verification gates (JSON output)
+	@python scripts/verify-dual-emit.py --environment $(ENV) --json
+
+check-annotation-pii: ## Check for PII in trace annotations (FR-184)
+	@bash scripts/check-annotation-pii.sh
+
+check-annotation-budget: ## Check annotation count budget (FR-193)
+	@bash scripts/check-annotation-budget.sh
+
+# ============================================================================
 # Cleanup
 # ============================================================================
 

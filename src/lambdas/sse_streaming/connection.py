@@ -29,6 +29,9 @@ class SSEConnection:
         resolution_filters: List of resolutions to subscribe to (Feature 1009)
         last_event_id: Last event ID sent to this connection
         connected_at: Connection establishment timestamp (UTC)
+        session_id: Session identifier for trace correlation (FR-008/T093)
+        previous_trace_id: Previous trace ID for reconnection correlation (FR-008/T093)
+        connection_sequence: Monotonic counter for this session (FR-008/T093)
     """
 
     connection_id: str = field(default_factory=lambda: str(uuid.uuid4()))
@@ -38,6 +41,9 @@ class SSEConnection:
     resolution_filters: list[str] = field(default_factory=list)  # Feature 1009
     last_event_id: str | None = None
     connected_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    session_id: str | None = None
+    previous_trace_id: str | None = None
+    connection_sequence: int = 0
 
     def matches_ticker(self, ticker: str) -> bool:
         """Check if this connection should receive events for a ticker.
@@ -125,6 +131,9 @@ class ConnectionManager:
         config_id: str | None = None,
         ticker_filters: list[str] | None = None,
         resolution_filters: list[str] | None = None,
+        session_id: str | None = None,
+        previous_trace_id: str | None = None,
+        connection_sequence: int = 0,
     ) -> SSEConnection | None:
         """Acquire a connection slot.
 
@@ -153,8 +162,14 @@ class ConnectionManager:
                 config_id=config_id,
                 ticker_filters=ticker_filters or [],
                 resolution_filters=resolution_filters or [],
+                session_id=session_id,
+                previous_trace_id=previous_trace_id,
+                connection_sequence=connection_sequence,
             )
             self._connections[connection.connection_id] = connection
+
+            # T093: Add OTel annotations for connection tracing (FR-008)
+            self._annotate_connection(connection)
 
             logger.info(
                 "Connection acquired",
@@ -168,6 +183,36 @@ class ConnectionManager:
             )
 
             return connection
+
+    @staticmethod
+    def _annotate_connection(connection: SSEConnection) -> None:
+        """Add OTel span annotations for connection tracing (T093, FR-008).
+
+        Annotates the current span with connection metadata for
+        trace correlation and reconnection tracking.
+        """
+        try:
+            from tracing import is_enabled
+
+            if not is_enabled():
+                return
+
+            from opentelemetry.trace import trace
+
+            current_span = trace.get_current_span()
+            if current_span and current_span.is_recording():
+                current_span.set_attribute("connection_id", connection.connection_id)
+                if connection.session_id:
+                    current_span.set_attribute("session_id", connection.session_id)
+                if connection.previous_trace_id:
+                    current_span.set_attribute(
+                        "previous_trace_id", connection.previous_trace_id
+                    )
+                current_span.set_attribute(
+                    "connection_sequence", connection.connection_sequence
+                )
+        except Exception:  # noqa: S110
+            pass  # Best-effort: don't fail connection on tracing error
 
     def release(self, connection_id: str) -> bool:
         """Release a connection slot.

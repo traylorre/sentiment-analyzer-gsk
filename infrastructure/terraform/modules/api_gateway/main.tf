@@ -148,9 +148,10 @@ resource "aws_api_gateway_method_response" "proxy_options" {
   status_code = "200"
 
   response_parameters = {
-    "method.response.header.Access-Control-Allow-Headers" = true
-    "method.response.header.Access-Control-Allow-Methods" = true
-    "method.response.header.Access-Control-Allow-Origin"  = true
+    "method.response.header.Access-Control-Allow-Headers"  = true
+    "method.response.header.Access-Control-Allow-Methods"  = true
+    "method.response.header.Access-Control-Allow-Origin"   = true
+    "method.response.header.Access-Control-Expose-Headers" = true
   }
 }
 
@@ -162,9 +163,10 @@ resource "aws_api_gateway_integration_response" "proxy_options" {
   status_code = aws_api_gateway_method_response.proxy_options.status_code
 
   response_parameters = {
-    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,Authorization,X-User-ID'"
-    "method.response.header.Access-Control-Allow-Methods" = "'GET,POST,PUT,DELETE,OPTIONS'"
-    "method.response.header.Access-Control-Allow-Origin"  = "'*'"
+    "method.response.header.Access-Control-Allow-Headers"  = "'Content-Type,Authorization,X-User-ID,X-Amzn-Trace-Id'"
+    "method.response.header.Access-Control-Allow-Methods"  = "'GET,POST,PUT,DELETE,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Origin"   = "'*'"
+    "method.response.header.Access-Control-Expose-Headers" = "'X-Amzn-Trace-Id'"
   }
 }
 
@@ -206,9 +208,10 @@ resource "aws_api_gateway_method_response" "root_options" {
   status_code = "200"
 
   response_parameters = {
-    "method.response.header.Access-Control-Allow-Headers" = true
-    "method.response.header.Access-Control-Allow-Methods" = true
-    "method.response.header.Access-Control-Allow-Origin"  = true
+    "method.response.header.Access-Control-Allow-Headers"  = true
+    "method.response.header.Access-Control-Allow-Methods"  = true
+    "method.response.header.Access-Control-Allow-Origin"   = true
+    "method.response.header.Access-Control-Expose-Headers" = true
   }
 }
 
@@ -220,9 +223,10 @@ resource "aws_api_gateway_integration_response" "root_options" {
   status_code = aws_api_gateway_method_response.root_options.status_code
 
   response_parameters = {
-    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,Authorization,X-User-ID'"
-    "method.response.header.Access-Control-Allow-Methods" = "'GET,POST,PUT,DELETE,OPTIONS'"
-    "method.response.header.Access-Control-Allow-Origin"  = "'*'"
+    "method.response.header.Access-Control-Allow-Headers"  = "'Content-Type,Authorization,X-User-ID,X-Amzn-Trace-Id'"
+    "method.response.header.Access-Control-Allow-Methods"  = "'GET,POST,PUT,DELETE,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Origin"   = "'*'"
+    "method.response.header.Access-Control-Expose-Headers" = "'X-Amzn-Trace-Id'"
   }
 }
 
