@@ -257,7 +257,7 @@ class TestIncrementGlobalQuota:
 class TestEvaluateAlertsForTicker:
     """Tests for evaluate_alerts_for_ticker function."""
 
-    @patch("src.lambdas.notification.alert_evaluator.xray_recorder")
+    @patch("src.lambdas.notification.alert_evaluator.tracer")
     @patch("src.lambdas.notification.alert_evaluator._find_alerts_by_ticker")
     @patch("src.lambdas.notification.alert_evaluator._check_email_quota")
     @patch("src.lambdas.notification.alert_evaluator._queue_notification")
@@ -268,7 +268,7 @@ class TestEvaluateAlertsForTicker:
         mock_queue,
         mock_quota,
         mock_find,
-        mock_xray,
+        mock_tracer,
         mock_table,
         sample_alert,
     ):
@@ -288,10 +288,10 @@ class TestEvaluateAlertsForTicker:
         assert result.triggered == 1
         assert result.notifications_queued == 1
 
-    @patch("src.lambdas.notification.alert_evaluator.xray_recorder")
+    @patch("src.lambdas.notification.alert_evaluator.tracer")
     @patch("src.lambdas.notification.alert_evaluator._find_alerts_by_ticker")
     def test_skips_disabled_alerts(
-        self, mock_find, mock_xray, mock_table, sample_alert
+        self, mock_find, mock_tracer, mock_table, sample_alert
     ):
         """Skips disabled alerts."""
         sample_alert.is_enabled = False
@@ -302,10 +302,10 @@ class TestEvaluateAlertsForTicker:
 
         assert result.triggered == 0
 
-    @patch("src.lambdas.notification.alert_evaluator.xray_recorder")
+    @patch("src.lambdas.notification.alert_evaluator.tracer")
     @patch("src.lambdas.notification.alert_evaluator._find_alerts_by_ticker")
     def test_skips_alerts_in_cooldown(
-        self, mock_find, mock_xray, mock_table, sample_alert
+        self, mock_find, mock_tracer, mock_table, sample_alert
     ):
         """Skips alerts in cooldown."""
         sample_alert.last_triggered_at = datetime.now(UTC) - timedelta(minutes=30)
@@ -315,11 +315,11 @@ class TestEvaluateAlertsForTicker:
 
         assert result.triggered == 0
 
-    @patch("src.lambdas.notification.alert_evaluator.xray_recorder")
+    @patch("src.lambdas.notification.alert_evaluator.tracer")
     @patch("src.lambdas.notification.alert_evaluator._find_alerts_by_ticker")
     @patch("src.lambdas.notification.alert_evaluator._check_email_quota")
     def test_respects_email_quota(
-        self, mock_quota, mock_find, mock_xray, mock_table, sample_alert
+        self, mock_quota, mock_find, mock_tracer, mock_table, sample_alert
     ):
         """Doesn't queue notification when quota exceeded."""
         mock_find.return_value = [sample_alert]
@@ -330,10 +330,10 @@ class TestEvaluateAlertsForTicker:
         assert result.triggered == 1
         assert result.notifications_queued == 0
 
-    @patch("src.lambdas.notification.alert_evaluator.xray_recorder")
+    @patch("src.lambdas.notification.alert_evaluator.tracer")
     @patch("src.lambdas.notification.alert_evaluator._find_alerts_by_ticker")
     def test_evaluates_volatility_alert(
-        self, mock_find, mock_xray, mock_table, sample_alert
+        self, mock_find, mock_tracer, mock_table, sample_alert
     ):
         """Evaluates volatility alert."""
         sample_alert.alert_type = "volatility_threshold"
@@ -345,10 +345,10 @@ class TestEvaluateAlertsForTicker:
 
         assert result.triggered == 1
 
-    @patch("src.lambdas.notification.alert_evaluator.xray_recorder")
+    @patch("src.lambdas.notification.alert_evaluator.tracer")
     @patch("src.lambdas.notification.alert_evaluator._find_alerts_by_ticker")
     def test_no_trigger_when_not_crossed(
-        self, mock_find, mock_xray, mock_table, sample_alert
+        self, mock_find, mock_tracer, mock_table, sample_alert
     ):
         """Doesn't trigger when threshold not crossed."""
         mock_find.return_value = [sample_alert]
@@ -365,8 +365,8 @@ class TestEvaluateAlertsForTicker:
 class TestGetEmailQuotaStatus:
     """Tests for get_email_quota_status function."""
 
-    @patch("src.lambdas.notification.alert_evaluator.xray_recorder")
-    def test_returns_quota_status(self, mock_xray, mock_table):
+    @patch("src.lambdas.notification.alert_evaluator.tracer")
+    def test_returns_quota_status(self, mock_tracer, mock_table):
         """Returns email quota status."""
         mock_table.get_item.return_value = {
             "Item": {
@@ -385,8 +385,8 @@ class TestGetEmailQuotaStatus:
         assert result.percent_used == 47.0
         assert result.alert_triggered is False  # < 50
 
-    @patch("src.lambdas.notification.alert_evaluator.xray_recorder")
-    def test_alert_triggered_at_threshold(self, mock_xray, mock_table):
+    @patch("src.lambdas.notification.alert_evaluator.tracer")
+    def test_alert_triggered_at_threshold(self, mock_tracer, mock_table):
         """Alert triggered when at 50% threshold."""
         mock_table.get_item.return_value = {"Item": {"count": 52}}
 
@@ -394,8 +394,8 @@ class TestGetEmailQuotaStatus:
 
         assert result.alert_triggered is True
 
-    @patch("src.lambdas.notification.alert_evaluator.xray_recorder")
-    def test_returns_defaults_no_record(self, mock_xray, mock_table):
+    @patch("src.lambdas.notification.alert_evaluator.tracer")
+    def test_returns_defaults_no_record(self, mock_tracer, mock_table):
         """Returns defaults when no quota record."""
         mock_table.get_item.return_value = {}
 

@@ -57,7 +57,6 @@ tracer = Tracer(service="sentiment-analyzer-metrics")
 
 # Configuration
 STUCK_THRESHOLD_MINUTES = 5
-METRIC_NAMESPACE = "SentimentAnalyzer"
 METRIC_NAME = "StuckItems"
 
 
@@ -121,17 +120,16 @@ def emit_stuck_items_metric(count: int, environment: str) -> None:
         environment: Environment name (dev, preprod, prod)
     """
     emit_metric(
-        metric_name=METRIC_NAME,
+        name=METRIC_NAME,
         value=count,
         unit="Count",
         dimensions={"Environment": environment},
-        namespace=METRIC_NAMESPACE,
     )
 
     log_structured(
         "info",
         "Emitted StuckItems metric",
-        metric_name=METRIC_NAME,
+        name=METRIC_NAME,
         value=count,
         environment=environment,
     )
@@ -202,11 +200,10 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         # Still try to emit a metric indicating failure
         try:
             emit_metric(
-                metric_name="MetricsLambdaErrors",
+                name="MetricsLambdaErrors",
                 value=1,
                 unit="Count",
                 dimensions={"Environment": environment},
-                namespace=METRIC_NAMESPACE,
             )
         except Exception as metric_err:
             # Log but don't fail - primary error already handled above

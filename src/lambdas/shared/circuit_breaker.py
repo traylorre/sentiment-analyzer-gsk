@@ -349,11 +349,10 @@ class CircuitBreakerManager:
                 pass  # Best-effort: don't fail if X-Ray unavailable
             # CloudWatch metric for silent failure alerting (SC-019)
             emit_metric(
-                metric_name="SilentFailure/Count",
+                name="SilentFailure/Count",
                 value=1,
                 unit="Count",
                 dimensions={"FailurePath": "circuit_breaker_load"},
-                namespace="SentimentAnalyzer/Reliability",
             )
             state = CircuitBreakerState.create_default(service)
 
@@ -399,11 +398,10 @@ class CircuitBreakerManager:
                 pass  # Best-effort: don't fail if X-Ray unavailable
             # CloudWatch metric for silent failure alerting (SC-019)
             emit_metric(
-                metric_name="SilentFailure/Count",
+                name="SilentFailure/Count",
                 value=1,
                 unit="Count",
                 dimensions={"FailurePath": "circuit_breaker_save"},
-                namespace="SentimentAnalyzer/Reliability",
             )
             return False
 

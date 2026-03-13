@@ -161,11 +161,10 @@ class ParallelFetcher:
                         pass  # Best-effort: don't fail if X-Ray unavailable
                     # CloudWatch metric for silent failure alerting (SC-019)
                     emit_metric(
-                        metric_name="SilentFailure/Count",
+                        name="SilentFailure/Count",
                         value=1,
                         unit="Count",
                         dimensions={"FailurePath": "parallel_fetcher_aggregate"},
-                        namespace="SentimentAnalyzer/Reliability",
                     )
 
         self._end_time = time.time()

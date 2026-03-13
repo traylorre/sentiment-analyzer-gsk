@@ -146,11 +146,10 @@ def store_news_items(
                 pass  # Best-effort: don't fail if X-Ray unavailable
             # CloudWatch metric for silent failure alerting (SC-019)
             emit_metric(
-                metric_name="SilentFailure/Count",
+                name="SilentFailure/Count",
                 value=1,
                 unit="Count",
                 dimensions={"FailurePath": "fanout_partial_write"},
-                namespace="SentimentAnalyzer/Reliability",
             )
 
         except Exception as e:
@@ -174,11 +173,10 @@ def store_news_items(
                 pass  # Best-effort: don't fail if X-Ray unavailable
             # CloudWatch metric for silent failure alerting (SC-019)
             emit_metric(
-                metric_name="SilentFailure/Count",
+                name="SilentFailure/Count",
                 value=1,
                 unit="Count",
                 dimensions={"FailurePath": "fanout_partial_write"},
-                namespace="SentimentAnalyzer/Reliability",
             )
 
     logger.info(
