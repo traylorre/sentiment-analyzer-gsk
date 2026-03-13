@@ -136,6 +136,15 @@ resource "aws_iam_role_policy_attachment" "ingestion_logs" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
+# Ingestion Lambda: X-Ray tracing (Feature 1219)
+# 5 actions: PutTraceSegments, PutTelemetryRecords, GetSamplingRules,
+# GetSamplingTargets, GetSamplingStatisticSummaries
+# Missing GetSampling* causes SILENT fallback to 1 trace/sec (FR-159)
+resource "aws_iam_role_policy_attachment" "ingestion_xray" {
+  role       = aws_iam_role.ingestion_lambda.name
+  policy_arn = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"
+}
+
 # Ingestion Lambda: CloudWatch Metrics
 resource "aws_iam_role_policy" "ingestion_metrics" {
   name = "${var.environment}-ingestion-metrics-policy"
@@ -236,6 +245,12 @@ resource "aws_iam_role_policy" "analysis_dynamodb" {
 resource "aws_iam_role_policy_attachment" "analysis_logs" {
   role       = aws_iam_role.analysis_lambda.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+# Analysis Lambda: X-Ray tracing (Feature 1219)
+resource "aws_iam_role_policy_attachment" "analysis_xray" {
+  role       = aws_iam_role.analysis_lambda.name
+  policy_arn = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"
 }
 
 # Analysis Lambda: CloudWatch Metrics
@@ -416,6 +431,12 @@ resource "aws_iam_role_policy" "dashboard_secrets" {
 resource "aws_iam_role_policy_attachment" "dashboard_logs" {
   role       = aws_iam_role.dashboard_lambda.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+# Dashboard Lambda: X-Ray tracing (Feature 1219)
+resource "aws_iam_role_policy_attachment" "dashboard_xray" {
+  role       = aws_iam_role.dashboard_lambda.name
+  policy_arn = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"
 }
 
 # Dashboard Lambda: CloudWatch Metrics
@@ -637,6 +658,12 @@ resource "aws_iam_role_policy" "metrics_dynamodb" {
 resource "aws_iam_role_policy_attachment" "metrics_logs" {
   role       = aws_iam_role.metrics_lambda.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+# Metrics Lambda: X-Ray tracing (Feature 1219)
+resource "aws_iam_role_policy_attachment" "metrics_xray" {
+  role       = aws_iam_role.metrics_lambda.name
+  policy_arn = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"
 }
 
 # Metrics Lambda: CloudWatch Metrics (emit stuck items metric)
@@ -890,6 +917,114 @@ resource "aws_iam_role_policy" "sse_streaming_metrics" {
             "cloudwatch:namespace" = "SentimentAnalyzer/SSE"
           }
         }
+      }
+    ]
+  })
+}
+
+# ===================================================================
+# Canary Lambda IAM Role (T086, FR-051)
+# SEPARATE from application Lambda roles
+# ===================================================================
+
+resource "aws_iam_role" "canary_lambda" {
+  count = var.enable_canary ? 1 : 0
+  name  = "${var.environment}-canary-lambda-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Environment = var.environment
+    Purpose     = "xray-canary"
+  }
+}
+
+# Canary: CloudWatch Logs (managed policy)
+resource "aws_iam_role_policy_attachment" "canary_basic_execution" {
+  count      = var.enable_canary ? 1 : 0
+  role       = aws_iam_role.canary_lambda[0].name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+# Canary: X-Ray write + read permissions (FR-051)
+resource "aws_iam_role_policy" "canary_xray" {
+  count = var.enable_canary ? 1 : 0
+  name  = "${var.environment}-canary-xray-policy"
+  role  = aws_iam_role.canary_lambda[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "xray:PutTraceSegments",
+          "xray:PutTelemetryRecords",
+          "xray:GetSamplingRules",
+          "xray:GetSamplingTargets",
+          "xray:GetSamplingStatisticSummaries",
+          "xray:GetTraceSummaries",
+          "xray:BatchGetTraces"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# Canary: CloudWatch Metrics (put + get for verification loop)
+resource "aws_iam_role_policy" "canary_cloudwatch" {
+  count = var.enable_canary ? 1 : 0
+  name  = "${var.environment}-canary-cloudwatch-policy"
+  role  = aws_iam_role.canary_lambda[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "cloudwatch:PutMetricData",
+          "cloudwatch:GetMetricData"
+        ]
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "cloudwatch:namespace" = "SentimentAnalyzer/Canary"
+          }
+        }
+      }
+    ]
+  })
+}
+
+# Canary: SSM Parameter for state persistence (T089, FR-112)
+resource "aws_iam_role_policy" "canary_ssm" {
+  count = var.enable_canary ? 1 : 0
+  name  = "${var.environment}-canary-ssm-policy"
+  role  = aws_iam_role.canary_lambda[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ssm:GetParameter",
+          "ssm:PutParameter"
+        ]
+        Resource = "arn:aws:ssm:*:*:parameter/${var.environment}/canary/*"
       }
     ]
   })

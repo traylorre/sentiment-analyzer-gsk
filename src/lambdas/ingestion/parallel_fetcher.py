@@ -12,10 +12,14 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from aws_lambda_powertools import Tracer
+
 from src.lambdas.shared.adapters.base import NewsArticle
+from src.lib.metrics import emit_metric
 from src.lib.threading_utils import ThreadSafeDict
 
 logger = logging.getLogger(__name__)
+tracer = Tracer()
 
 # Maximum workers for parallel fetching (2 sources = 2 workers minimum)
 MAX_WORKERS = 4
@@ -144,6 +148,24 @@ class ParallelFetcher:
                     logger.warning(
                         "Parallel fetch failed",
                         extra={"source": source, "error": str(e)},
+                    )
+                    # X-Ray error subsegment for silent failure visibility
+                    try:
+                        with tracer.provider.in_subsegment(
+                            "parallel_fetcher_aggregate"
+                        ) as subseg:
+                            subseg.put_annotation("error", True)
+                            subseg.put_annotation("source", source)
+                            subseg.add_exception(e)
+                    except Exception:  # noqa: S110
+                        pass  # Best-effort: don't fail if X-Ray unavailable
+                    # CloudWatch metric for silent failure alerting (SC-019)
+                    emit_metric(
+                        metric_name="SilentFailure/Count",
+                        value=1,
+                        unit="Count",
+                        dimensions={"FailurePath": "parallel_fetcher_aggregate"},
+                        namespace="SentimentAnalyzer/Reliability",
                     )
 
         self._end_time = time.time()

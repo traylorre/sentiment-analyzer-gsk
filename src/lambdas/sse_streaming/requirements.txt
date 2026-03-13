@@ -3,6 +3,15 @@ boto3>=1.35.0,<2.0.0
 pydantic>=2.9.0,<3.0.0
 email-validator>=2.1.0,<3.0.0  # Required for pydantic EmailStr in shared models
 aws-xray-sdk>=2.14.0,<3.0.0
+aws-lambda-powertools>=3.23.0,<4.0.0
+
+# OTel SDK - Streaming-phase tracing via ADOT Extension (FR-101: pinned versions)
+opentelemetry-api==1.39.1
+opentelemetry-sdk==1.39.1
+opentelemetry-exporter-otlp-proto-http==1.39.1
+opentelemetry-instrumentation-aws-lambda>=0.45b0
+opentelemetry-propagator-aws-xray>=1.0.2
+opentelemetry-sdk-extension-aws>=2.0.2
 
 # JSON serialization - Fast native datetime/dataclass handling
 orjson>=3.10.0,<4.0.0

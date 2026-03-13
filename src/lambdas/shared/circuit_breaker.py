@@ -20,9 +20,13 @@ import time
 from datetime import UTC, datetime
 from typing import Any, Literal
 
+from aws_lambda_powertools import Tracer
 from pydantic import BaseModel
 
+from src.lib.metrics import emit_metric
+
 logger = logging.getLogger(__name__)
+tracer = Tracer()
 
 # =============================================================================
 # C1 FIX: In-memory cache for circuit breaker state
@@ -336,6 +340,21 @@ class CircuitBreakerManager:
                 "Failed to load circuit breaker, using default",
                 extra={"service": service, "error": str(e)},
             )
+            # X-Ray error subsegment for silent failure visibility
+            try:
+                with tracer.provider.in_subsegment("circuit_breaker_load") as subseg:
+                    subseg.put_annotation("error", True)
+                    subseg.add_exception(e)
+            except Exception:  # noqa: S110
+                pass  # Best-effort: don't fail if X-Ray unavailable
+            # CloudWatch metric for silent failure alerting (SC-019)
+            emit_metric(
+                metric_name="SilentFailure/Count",
+                value=1,
+                unit="Count",
+                dimensions={"FailurePath": "circuit_breaker_load"},
+                namespace="SentimentAnalyzer/Reliability",
+            )
             state = CircuitBreakerState.create_default(service)
 
         # Update cache
@@ -370,6 +389,21 @@ class CircuitBreakerManager:
             logger.error(
                 "Failed to save circuit breaker",
                 extra={"service": state.service, "error": str(e)},
+            )
+            # X-Ray error subsegment for silent failure visibility
+            try:
+                with tracer.provider.in_subsegment("circuit_breaker_save") as subseg:
+                    subseg.put_annotation("error", True)
+                    subseg.add_exception(e)
+            except Exception:  # noqa: S110
+                pass  # Best-effort: don't fail if X-Ray unavailable
+            # CloudWatch metric for silent failure alerting (SC-019)
+            emit_metric(
+                metric_name="SilentFailure/Count",
+                value=1,
+                unit="Count",
+                dimensions={"FailurePath": "circuit_breaker_save"},
+                namespace="SentimentAnalyzer/Reliability",
             )
             return False
 

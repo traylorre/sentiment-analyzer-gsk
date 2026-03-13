@@ -16,7 +16,7 @@ import logging
 import os
 from typing import Any
 
-from aws_xray_sdk.core import patch_all, xray_recorder
+from aws_lambda_powertools import Tracer
 
 from src.lambdas.notification.digest_service import process_daily_digests
 from src.lambdas.notification.sendgrid_service import (
@@ -25,8 +25,7 @@ from src.lambdas.notification.sendgrid_service import (
     RateLimitExceededError,
 )
 
-# Patch boto3 and requests for X-Ray tracing
-patch_all()
+tracer = Tracer(service="sentiment-analyzer-notification")
 
 logger = logging.getLogger(__name__)
 logger.setLevel(os.environ.get("LOG_LEVEL", "INFO"))
@@ -40,6 +39,7 @@ FROM_EMAIL = os.environ.get("FROM_EMAIL", "noreply@sentiment-analyzer.com")
 DASHBOARD_URL = os.environ.get("DASHBOARD_URL", "http://localhost:3000")
 
 
+@tracer.capture_lambda_handler
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """Handle notification Lambda invocations.
 
@@ -111,7 +111,7 @@ def _get_notification_type(event: dict[str, Any]) -> str:
     return "unknown"
 
 
-@xray_recorder.capture("handle_alert_notification")
+@tracer.capture_method
 def _handle_alert_notification(event: dict[str, Any]) -> dict[str, Any]:
     """Handle alert notification when threshold is crossed.
 
@@ -162,7 +162,7 @@ def _handle_alert_notification(event: dict[str, Any]) -> dict[str, Any]:
         return _response(500, {"error": "Failed to send email"})
 
 
-@xray_recorder.capture("handle_magic_link")
+@tracer.capture_method
 def _handle_magic_link(event: dict[str, Any]) -> dict[str, Any]:
     """Handle magic link authentication email.
 
@@ -203,7 +203,7 @@ def _handle_magic_link(event: dict[str, Any]) -> dict[str, Any]:
         return _response(500, {"error": "Failed to send email"})
 
 
-@xray_recorder.capture("handle_daily_digest")
+@tracer.capture_method
 def _handle_daily_digest(event: dict[str, Any]) -> dict[str, Any]:
     """Handle daily digest email generation.
 

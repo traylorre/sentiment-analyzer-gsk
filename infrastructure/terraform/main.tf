@@ -719,7 +719,8 @@ module "sse_streaming_lambda" {
   image_uri = "${aws_ecr_repository.sse_streaming.repository_url}:latest"
 
   # Resource configuration per spec
-  memory_size          = 512
+  # Feature 1219/T051: Increased from 512 to 1024MB for ADOT Extension (~80MB overhead)
+  memory_size          = 1024
   timeout              = 900 # 15 minutes - max Lambda timeout for SSE connections
   reserved_concurrency = 25  # Increased from 10 to handle E2E test suite SSE connections
 
@@ -739,6 +740,12 @@ module "sse_streaming_lambda" {
     SSE_MAX_CONNECTIONS    = "100"
     SSE_POLL_INTERVAL      = tostring(var.sse_poll_interval)
     ENVIRONMENT            = var.environment
+    # Feature 1219/T051: OTel SDK env vars for ADOT Extension tracing
+    OTEL_SERVICE_NAME                   = "sentiment-analyzer-sse"
+    OTEL_EXPORTER_OTLP_ENDPOINT         = "http://localhost:4318"
+    OTEL_SDK_DISABLED                   = "false"
+    OTEL_EXPORTER_OTLP_TRACES_TIMEOUT   = "2"
+    OPENTELEMETRY_COLLECTOR_CONFIG_FILE = "/opt/collector-config/config.yaml"
     # Feature 1009: Time-series table for multi-resolution queries and streaming
     TIMESERIES_TABLE = module.dynamodb.timeseries_table_name
     # Feature 1054: JWT secret for auth middleware token validation
@@ -900,6 +907,17 @@ module "eventbridge" {
 }
 
 # ===================================================================
+# Module: X-Ray Groups & Sampling Rules (FR-111, FR-034)
+# ===================================================================
+
+module "xray" {
+  source = "./modules/xray"
+
+  environment = var.environment
+  tags        = local.common_tags
+}
+
+# ===================================================================
 # Module: Monitoring & Alarms (On-Call SOP)
 # ===================================================================
 
@@ -909,6 +927,28 @@ module "monitoring" {
   environment          = var.environment
   alarm_email          = var.alarm_email
   monthly_budget_limit = var.monthly_budget_limit
+}
+
+# ===================================================================
+# Module: CloudWatch Alarms -- X-Ray Phase 1 (FR-040, FR-041, FR-134)
+# ===================================================================
+
+module "cloudwatch_alarms" {
+  source = "./modules/cloudwatch-alarms"
+
+  environment = var.environment
+  tags        = local.common_tags
+
+  lambda_function_names = {
+    ingestion    = module.ingestion_lambda.function_name
+    analysis     = module.analysis_lambda.function_name
+    dashboard    = module.dashboard_lambda.function_name
+    notification = module.notification_lambda.function_name
+    metrics      = module.metrics_lambda.function_name
+    sse          = module.sse_streaming_lambda.function_name
+  }
+
+  api_gateway_name = module.api_gateway.api_name
 }
 
 # ===================================================================

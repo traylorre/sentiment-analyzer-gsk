@@ -15,16 +15,19 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal
 
+from aws_lambda_powertools import Tracer
 from botocore.exceptions import ClientError
 
 from src.lambdas.shared.adapters.base import NewsArticle
 from src.lambdas.shared.models.news_item import NewsItem
 from src.lambdas.shared.utils.dedup import generate_dedup_key
+from src.lib.metrics import emit_metric
 
 if TYPE_CHECKING:
     from src.lambdas.ingestion.notification import NotificationPublisher
 
 logger = logging.getLogger(__name__)
+tracer = Tracer()
 
 
 @dataclass
@@ -130,6 +133,25 @@ def store_news_items(
                     "headline": article.title[:50] if article.title else "N/A",
                 },
             )
+            # X-Ray error subsegment for silent failure visibility
+            try:
+                with tracer.provider.in_subsegment("fanout_partial_write") as subseg:
+                    subseg.put_annotation("error", True)
+                    subseg.put_annotation("items_failed", items_failed)
+                    subseg.put_annotation(
+                        "headline", article.title[:50] if article.title else "N/A"
+                    )
+                    subseg.add_exception(e)
+            except Exception:  # noqa: S110
+                pass  # Best-effort: don't fail if X-Ray unavailable
+            # CloudWatch metric for silent failure alerting (SC-019)
+            emit_metric(
+                metric_name="SilentFailure/Count",
+                value=1,
+                unit="Count",
+                dimensions={"FailurePath": "fanout_partial_write"},
+                namespace="SentimentAnalyzer/Reliability",
+            )
 
         except Exception as e:
             items_failed += 1
@@ -138,6 +160,25 @@ def store_news_items(
             logger.exception(
                 "Unexpected error storing news item",
                 extra={"headline": article.title[:50] if article.title else "N/A"},
+            )
+            # X-Ray error subsegment for silent failure visibility
+            try:
+                with tracer.provider.in_subsegment("fanout_partial_write") as subseg:
+                    subseg.put_annotation("error", True)
+                    subseg.put_annotation("items_failed", items_failed)
+                    subseg.put_annotation(
+                        "headline", article.title[:50] if article.title else "N/A"
+                    )
+                    subseg.add_exception(e)
+            except Exception:  # noqa: S110
+                pass  # Best-effort: don't fail if X-Ray unavailable
+            # CloudWatch metric for silent failure alerting (SC-019)
+            emit_metric(
+                metric_name="SilentFailure/Count",
+                value=1,
+                unit="Count",
+                dimensions={"FailurePath": "fanout_partial_write"},
+                namespace="SentimentAnalyzer/Reliability",
             )
 
     logger.info(

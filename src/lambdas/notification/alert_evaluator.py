@@ -22,12 +22,14 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
-from aws_xray_sdk.core import xray_recorder
+from aws_lambda_powertools import Tracer
 from pydantic import BaseModel
 
 from src.lambdas.shared.logging_utils import get_safe_error_info, sanitize_for_log
 from src.lambdas.shared.models.alert_rule import ALERT_LIMITS, AlertRule
 from src.lambdas.shared.models.status_utils import ENABLED
+
+tracer = Tracer()
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +108,7 @@ class EmailQuotaResponse(BaseModel):
 # Service functions
 
 
-@xray_recorder.capture("evaluate_alerts_for_ticker")
+@tracer.capture_method
 def evaluate_alerts_for_ticker(
     table: Any,
     ticker: str,
@@ -226,7 +228,7 @@ def evaluate_alerts_for_ticker(
         raise
 
 
-@xray_recorder.capture("get_email_quota_status")
+@tracer.capture_method
 def get_email_quota_status(table: Any) -> EmailQuotaResponse:
     """Get current email quota status.
 

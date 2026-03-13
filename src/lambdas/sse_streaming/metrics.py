@@ -12,6 +12,7 @@ from contextlib import contextmanager
 
 import boto3
 from botocore.exceptions import ClientError, NoRegionError
+from tracing import get_tracer, is_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,15 @@ class MetricsEmitter:
             unit: CloudWatch unit (Count, Milliseconds, etc.)
             dimensions: Additional dimensions beyond Environment
         """
+        # T044: OTel span for CloudWatch put_metric_data
+        otel_tracer = get_tracer()
+        span = None
+        if otel_tracer and is_enabled():
+            from opentelemetry.trace import SpanKind
+
+            span = otel_tracer.start_span("cloudwatch_put_metric", kind=SpanKind.CLIENT)
+            span.set_attribute("metric_name", metric_name)
+
         try:
             metric_dimensions = [
                 {"Name": "Environment", "Value": self._environment},
@@ -86,10 +96,20 @@ class MetricsEmitter:
                 extra={"metric": metric_name, "value": value, "unit": unit},
             )
         except (ClientError, NoRegionError) as e:
+            # T048: Dual-call error pattern (FR-144, FR-150)
+            if span:
+                from opentelemetry.trace import StatusCode
+
+                span.set_status(StatusCode.ERROR, str(e))
+                span.record_exception(e)
+
             logger.warning(
                 "Failed to emit CloudWatch metric",
                 extra={"metric": metric_name, "error": str(e)},
             )
+        finally:
+            if span:
+                span.end()
 
     def emit_connection_count(self, count: int) -> None:
         """Emit current connection count metric.
