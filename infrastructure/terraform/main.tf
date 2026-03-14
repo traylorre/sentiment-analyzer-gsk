@@ -733,7 +733,7 @@ module "sse_streaming_lambda" {
   # inherit container environment variables.
   # Feature 1043: Clear env var naming - USERS_TABLE for configs, SENTIMENTS_TABLE for sentiment data
   environment_variables = {
-    PYTHONPATH             = "/app/packages:/app"
+    PYTHONPATH             = "/var/task/packages:/var/task"
     USERS_TABLE            = module.dynamodb.feature_006_users_table_name # configs, sessions
     SENTIMENTS_TABLE       = module.dynamodb.table_name                   # sentiment items
     SSE_HEARTBEAT_INTERVAL = tostring(var.sse_heartbeat_interval)
@@ -741,11 +741,11 @@ module "sse_streaming_lambda" {
     SSE_POLL_INTERVAL      = tostring(var.sse_poll_interval)
     ENVIRONMENT            = var.environment
     # Feature 1219/T051: OTel SDK env vars for ADOT Extension tracing
-    OTEL_SERVICE_NAME                   = "sentiment-analyzer-sse"
-    OTEL_EXPORTER_OTLP_ENDPOINT         = "http://localhost:4318"
-    OTEL_SDK_DISABLED                   = "false"
-    OTEL_EXPORTER_OTLP_TRACES_TIMEOUT   = "2"
-    OPENTELEMETRY_COLLECTOR_CONFIG_FILE = "/opt/collector-config/config.yaml"
+    OTEL_SERVICE_NAME                 = "sentiment-analyzer-sse"
+    OTEL_EXPORTER_OTLP_ENDPOINT       = "http://localhost:4318"
+    OTEL_SDK_DISABLED                 = "false"
+    OTEL_EXPORTER_OTLP_TRACES_TIMEOUT = "2"
+    # OPENTELEMETRY_COLLECTOR_CONFIG_FILE removed — ADOT collector not in container (see Dockerfile TODO)
     # Feature 1009: Time-series table for multi-resolution queries and streaming
     TIMESERIES_TABLE = module.dynamodb.timeseries_table_name
     # Feature 1054: JWT secret for auth middleware token validation
