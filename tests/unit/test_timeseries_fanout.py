@@ -14,10 +14,11 @@ TDD-FANOUT-004: BatchWriteItem used (not individual PutItem)
 """
 
 from datetime import UTC, datetime
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import boto3
 import pytest
+from botocore.exceptions import ClientError
 from moto import mock_aws
 
 from src.lib.timeseries import (
@@ -319,3 +320,144 @@ class TestWriteFanout:
         assert "sources" in item
         sources = item["sources"]["L"]
         assert {"S": "tiingo"} in sources
+
+
+# 1220-xray-instrumentation-hardening: Fanout metric emission tests
+
+
+class TestFanoutMetricEmission:
+    """Verify SilentFailure/Count and ConditionalCheck/Count metrics."""
+
+    SAMPLE_SCORE = SentimentScore(
+        ticker="AAPL",
+        value=0.75,
+        source="tiingo",
+        timestamp=datetime(2024, 1, 2, 10, 30, 0, tzinfo=UTC),
+        label="positive",
+    )
+
+    def _client_error(self, code="InternalServerError"):
+        return ClientError(
+            error_response={"Error": {"Code": code, "Message": "test"}},
+            operation_name="TestOp",
+        )
+
+    @patch("src.lib.timeseries.fanout.emit_metric")
+    @patch("src.lib.timeseries.fanout.tracer")
+    def test_batch_write_emits_silent_failure(self, mock_tracer, mock_emit):
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.batch_write_item.side_effect = self._client_error()
+        mock_tracer.provider.in_subsegment.return_value.__enter__ = MagicMock()
+        mock_tracer.provider.in_subsegment.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
+        with pytest.raises(ClientError):
+            write_fanout(mock_dynamodb, "t", self.SAMPLE_SCORE)
+        mock_emit.assert_called_once_with(
+            name="SilentFailure/Count",
+            value=1,
+            unit="Count",
+            dimensions={"FailurePath": "fanout_batch_write"},
+            namespace="SentimentAnalyzer/Reliability",
+        )
+
+    @patch("src.lib.timeseries.fanout.emit_metric")
+    @patch("src.lib.timeseries.fanout.tracer")
+    def test_base_update_emits_silent_failure(self, mock_tracer, mock_emit):
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.update_item.side_effect = self._client_error()
+        mock_tracer.provider.in_subsegment.return_value.__enter__ = MagicMock()
+        mock_tracer.provider.in_subsegment.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
+        with pytest.raises(ClientError):
+            write_fanout_with_update(mock_dynamodb, "t", self.SAMPLE_SCORE)
+        mock_emit.assert_called_once_with(
+            name="SilentFailure/Count",
+            value=1,
+            unit="Count",
+            dimensions={"FailurePath": "fanout_base_update"},
+            namespace="SentimentAnalyzer/Reliability",
+        )
+
+    @patch("src.lib.timeseries.fanout.emit_metric")
+    @patch("src.lib.timeseries.fanout.tracer")
+    def test_label_update_emits_silent_failure(self, mock_tracer, mock_emit):
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.update_item.side_effect = [None, self._client_error()]
+        mock_tracer.provider.in_subsegment.return_value.__enter__ = MagicMock()
+        mock_tracer.provider.in_subsegment.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
+        with pytest.raises(ClientError):
+            write_fanout_with_update(mock_dynamodb, "t", self.SAMPLE_SCORE)
+        mock_emit.assert_called_once_with(
+            name="SilentFailure/Count",
+            value=1,
+            unit="Count",
+            dimensions={"FailurePath": "fanout_label_update"},
+            namespace="SentimentAnalyzer/Reliability",
+        )
+
+    @patch("src.lib.timeseries.fanout.emit_metric")
+    @patch("src.lib.timeseries.fanout.tracer")
+    def test_conditional_emits_contention_metric(self, mock_tracer, mock_emit):
+        mock_dynamodb = MagicMock()
+        cond_err = self._client_error("ConditionalCheckFailedException")
+        # write_fanout_with_update loops over 8 resolutions.
+        # Each resolution: base_update, label_update, cond_high, cond_low = 4 calls.
+        # We want all to succeed except conditional checks.
+        # 8 resolutions * 4 calls = 32 calls. Simplify: use side_effect function.
+        call_count = [0]
+
+        def update_side_effect(**kwargs):
+            call_count[0] += 1
+            cond_expr = kwargs.get("ConditionExpression", "")
+            if "#high <" in cond_expr or "#low >" in cond_expr:
+                raise cond_err
+            return {}
+
+        mock_dynamodb.update_item.side_effect = update_side_effect
+        write_fanout_with_update(mock_dynamodb, "t", self.SAMPLE_SCORE)
+        calls = [
+            c
+            for c in mock_emit.call_args_list
+            if c[1].get("name") == "ConditionalCheck/Count"
+        ]
+        # 8 resolutions * 2 conditional checks (high + low) = 16
+        assert len(calls) == 16
+
+    @patch("src.lib.timeseries.fanout.emit_metric")
+    @patch("src.lib.timeseries.fanout.tracer")
+    def test_conditional_unexpected_emits_silent_failure(self, mock_tracer, mock_emit):
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.update_item.side_effect = [
+            None,
+            None,
+            self._client_error("ThrottlingException"),
+        ]
+        mock_tracer.provider.in_subsegment.return_value.__enter__ = MagicMock()
+        mock_tracer.provider.in_subsegment.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
+        with pytest.raises(ClientError):
+            write_fanout_with_update(mock_dynamodb, "t", self.SAMPLE_SCORE)
+        mock_emit.assert_called_once_with(
+            name="SilentFailure/Count",
+            value=1,
+            unit="Count",
+            dimensions={"FailurePath": "fanout_conditional_unexpected"},
+            namespace="SentimentAnalyzer/Reliability",
+        )
+
+    @patch("src.lib.timeseries.fanout.emit_metric", side_effect=Exception("CW down"))
+    @patch("src.lib.timeseries.fanout.tracer")
+    def test_metric_failure_does_not_propagate(self, mock_tracer, mock_emit):
+        mock_dynamodb = MagicMock()
+        mock_dynamodb.batch_write_item.side_effect = self._client_error()
+        mock_tracer.provider.in_subsegment.return_value.__enter__ = MagicMock()
+        mock_tracer.provider.in_subsegment.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
+        with pytest.raises(ClientError):
+            write_fanout(mock_dynamodb, "t", self.SAMPLE_SCORE)

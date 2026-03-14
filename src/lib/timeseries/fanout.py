@@ -15,12 +15,15 @@ import logging
 from datetime import datetime
 from typing import Any
 
+from aws_lambda_powertools import Tracer
 from botocore.exceptions import ClientError
 
+from src.lib.metrics import emit_metric
 from src.lib.timeseries.bucket import floor_to_bucket
 from src.lib.timeseries.models import Resolution, SentimentScore
 
 logger = logging.getLogger(__name__)
+tracer = Tracer()
 
 
 def generate_fanout_items(score: SentimentScore) -> list[dict[str, Any]]:
@@ -193,6 +196,22 @@ def write_fanout(
                 "ticker": score.ticker,
             },
         )
+        try:
+            with tracer.provider.in_subsegment("fanout_batch_write") as subseg:
+                subseg.put_annotation("error", True)
+                subseg.add_exception(e)
+        except Exception:  # noqa: S110
+            pass  # Best-effort: don't fail if X-Ray unavailable
+        try:
+            emit_metric(
+                name="SilentFailure/Count",
+                value=1,
+                unit="Count",
+                dimensions={"FailurePath": "fanout_batch_write"},
+                namespace="SentimentAnalyzer/Reliability",
+            )
+        except Exception:  # noqa: S110
+            pass  # Best-effort: don't block on metric failure
         raise
 
 
@@ -287,6 +306,22 @@ def write_fanout_with_update(
                     "resolution": resolution.value,
                 },
             )
+            try:
+                with tracer.provider.in_subsegment("fanout_base_update") as subseg:
+                    subseg.put_annotation("error", True)
+                    subseg.add_exception(e)
+            except Exception:  # noqa: S110
+                pass
+            try:
+                emit_metric(
+                    name="SilentFailure/Count",
+                    value=1,
+                    unit="Count",
+                    dimensions={"FailurePath": "fanout_base_update"},
+                    namespace="SentimentAnalyzer/Reliability",
+                )
+            except Exception:  # noqa: S110
+                pass
             raise
 
         # Second update: Update label count (now that label_counts exists)
@@ -309,6 +344,22 @@ def write_fanout_with_update(
                         "label": score.label,
                     },
                 )
+                try:
+                    with tracer.provider.in_subsegment("fanout_label_update") as subseg:
+                        subseg.put_annotation("error", True)
+                        subseg.add_exception(e)
+                except Exception:  # noqa: S110
+                    pass
+                try:
+                    emit_metric(
+                        name="SilentFailure/Count",
+                        value=1,
+                        unit="Count",
+                        dimensions={"FailurePath": "fanout_label_update"},
+                        namespace="SentimentAnalyzer/Reliability",
+                    )
+                except Exception:  # noqa: S110
+                    pass
                 raise
 
         # Third update: Conditional update for high (if new value is higher)
@@ -322,10 +373,37 @@ def write_fanout_with_update(
                 ExpressionAttributeNames={"#high": "high"},
             )
         except ClientError as e:
-            if (
-                e.response.get("Error", {}).get("Code")
-                != "ConditionalCheckFailedException"
-            ):
+            error_code = e.response.get("Error", {}).get("Code")
+            if error_code == "ConditionalCheckFailedException":
+                try:
+                    emit_metric(
+                        name="ConditionalCheck/Count",
+                        value=1,
+                        unit="Count",
+                        dimensions={"FailurePath": "fanout_conditional"},
+                        namespace="SentimentAnalyzer/Reliability",
+                    )
+                except Exception:  # noqa: S110
+                    pass
+            else:
+                try:
+                    with tracer.provider.in_subsegment(
+                        "fanout_conditional_high"
+                    ) as subseg:
+                        subseg.put_annotation("error", True)
+                        subseg.add_exception(e)
+                except Exception:  # noqa: S110
+                    pass
+                try:
+                    emit_metric(
+                        name="SilentFailure/Count",
+                        value=1,
+                        unit="Count",
+                        dimensions={"FailurePath": "fanout_conditional_unexpected"},
+                        namespace="SentimentAnalyzer/Reliability",
+                    )
+                except Exception:  # noqa: S110
+                    pass
                 raise
 
         # Fourth update: Conditional update for low (if new value is lower)
@@ -339,8 +417,35 @@ def write_fanout_with_update(
                 ExpressionAttributeNames={"#low": "low"},
             )
         except ClientError as e:
-            if (
-                e.response.get("Error", {}).get("Code")
-                != "ConditionalCheckFailedException"
-            ):
+            error_code = e.response.get("Error", {}).get("Code")
+            if error_code == "ConditionalCheckFailedException":
+                try:
+                    emit_metric(
+                        name="ConditionalCheck/Count",
+                        value=1,
+                        unit="Count",
+                        dimensions={"FailurePath": "fanout_conditional"},
+                        namespace="SentimentAnalyzer/Reliability",
+                    )
+                except Exception:  # noqa: S110
+                    pass
+            else:
+                try:
+                    with tracer.provider.in_subsegment(
+                        "fanout_conditional_low"
+                    ) as subseg:
+                        subseg.put_annotation("error", True)
+                        subseg.add_exception(e)
+                except Exception:  # noqa: S110
+                    pass
+                try:
+                    emit_metric(
+                        name="SilentFailure/Count",
+                        value=1,
+                        unit="Count",
+                        dimensions={"FailurePath": "fanout_conditional_unexpected"},
+                        namespace="SentimentAnalyzer/Reliability",
+                    )
+                except Exception:  # noqa: S110
+                    pass
                 raise
