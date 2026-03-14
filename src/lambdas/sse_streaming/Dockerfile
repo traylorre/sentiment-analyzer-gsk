@@ -61,12 +61,16 @@ COPY lib/timeseries /var/task/src/lib/timeseries
 # Set Python path to include packages and app directories
 ENV PYTHONPATH=/var/task/packages:/var/task
 
-# ADOT Collector Extension: copy layer files if present (CI downloads them)
-# Must be root-owned and executable; Lambda runtime invokes extensions as root.
-# Using wildcard COPY so build succeeds even when adot-layer/ is absent (local dev).
-COPY lambdas/sse_streaming/adot-laye[r]/extensions/ /opt/extensions/
-COPY lambdas/sse_streaming/adot-laye[r]/collector-config/ /opt/collector-config/
-RUN if [ -f /opt/extensions/collector ]; then chmod +x /opt/extensions/collector; fi
+# ADOT Collector Extension (1220-xray-instrumentation-hardening FR-001).
+# CI downloads the layer to lambdas/sse_streaming/adot-layer/ before build.
+# For local dev: mkdir -p src/lambdas/sse_streaming/adot-layer/{extensions,collector-config}
+# Must remain root-owned; Lambda runtime invokes extensions as root.
+COPY lambdas/sse_streaming/adot-layer/extensions/ /opt/extensions/
+COPY lambdas/sse_streaming/adot-layer/collector-config/ /opt/collector-config/
+RUN if [ -f /opt/extensions/collector ]; then \
+      chmod +x /opt/extensions/collector && \
+      echo "ADOT Collector Extension installed"; \
+    fi
 
 # Set ownership and switch to non-root user (090-security-first-burndown)
 # NOTE: /opt/extensions/ intentionally NOT chowned - must remain root-owned

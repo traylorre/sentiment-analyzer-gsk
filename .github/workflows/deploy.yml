@@ -526,7 +526,9 @@ jobs:
           LAYER_ARN="arn:aws:lambda:${AWS_REGION_VAL}:901920570463:layer:aws-otel-collector-amd64-ver-${ADOT_COLLECTOR_VERSION}:1"
           echo "Downloading ADOT Collector Layer: ${LAYER_ARN}"
           LAYER_URL=$(aws lambda get-layer-version-by-arn --arn "$LAYER_ARN" --query 'Content.Location' --output text)
-          mkdir -p src/lambdas/sse_streaming/adot-layer
+          # Create dirs first so Docker COPY succeeds even if download fails
+          mkdir -p src/lambdas/sse_streaming/adot-layer/extensions
+          mkdir -p src/lambdas/sse_streaming/adot-layer/collector-config
           curl -sL -o /tmp/adot-layer.zip "$LAYER_URL"
           unzip -qo /tmp/adot-layer.zip -d src/lambdas/sse_streaming/adot-layer/
           ls -la src/lambdas/sse_streaming/adot-layer/extensions/ || echo "WARNING: ADOT layer extraction failed"
@@ -1514,7 +1516,9 @@ jobs:
           LAYER_ARN="arn:aws:lambda:${AWS_REGION_VAL}:901920570463:layer:aws-otel-collector-amd64-ver-${ADOT_COLLECTOR_VERSION}:1"
           echo "Downloading ADOT Collector Layer: ${LAYER_ARN}"
           LAYER_URL=$(aws lambda get-layer-version-by-arn --arn "$LAYER_ARN" --query 'Content.Location' --output text)
-          mkdir -p src/lambdas/sse_streaming/adot-layer
+          # Create dirs first so Docker COPY succeeds even if download fails
+          mkdir -p src/lambdas/sse_streaming/adot-layer/extensions
+          mkdir -p src/lambdas/sse_streaming/adot-layer/collector-config
           curl -sL -o /tmp/adot-layer.zip "$LAYER_URL"
           unzip -qo /tmp/adot-layer.zip -d src/lambdas/sse_streaming/adot-layer/
           ls -la src/lambdas/sse_streaming/adot-layer/extensions/ || echo "WARNING: ADOT layer extraction failed"
