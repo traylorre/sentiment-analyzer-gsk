@@ -436,7 +436,7 @@ module "dashboard_lambda" {
   # Feature 1159: Enable credentials for cross-origin cookie transmission
   function_url_cors = {
     allow_credentials = true
-    allow_headers     = ["content-type", "authorization", "x-api-key", "x-user-id", "x-auth-type", "x-csrf-token"]
+    allow_headers     = ["content-type", "authorization", "x-api-key", "x-user-id", "x-auth-type", "x-csrf-token", "x-amzn-trace-id"]
     allow_methods     = ["GET", "POST", "PUT", "PATCH", "DELETE"] # AWS handles OPTIONS preflight automatically
     # SECURITY: Require explicit origins - no wildcard fallback
     # For new deployments, cors_allowed_origins MUST be set in tfvars
@@ -445,7 +445,7 @@ module "dashboard_lambda" {
       var.environment != "prod" ? ["http://localhost:3000", "http://localhost:8080"] : []
     )
     # Expose rate-limit and request tracking headers to frontend
-    expose_headers = ["x-ratelimit-limit", "x-ratelimit-remaining", "x-ratelimit-reset", "x-request-id", "retry-after"]
+    expose_headers = ["x-ratelimit-limit", "x-ratelimit-remaining", "x-ratelimit-reset", "x-request-id", "retry-after", "x-amzn-trace-id"]
     max_age        = 86400
   }
 
@@ -761,12 +761,12 @@ module "sse_streaming_lambda" {
   # Feature 1159: Enable credentials for cross-origin cookie transmission
   function_url_cors = {
     allow_credentials = true
-    allow_headers     = ["content-type", "x-user-id", "last-event-id"]
+    allow_headers     = ["content-type", "x-user-id", "last-event-id", "x-amzn-trace-id"]
     allow_methods     = ["GET"]
     allow_origins = length(var.cors_allowed_origins) > 0 ? var.cors_allowed_origins : (
       var.environment != "prod" ? ["http://localhost:3000", "http://localhost:8080"] : []
     )
-    expose_headers = ["x-request-id"]
+    expose_headers = ["x-request-id", "x-amzn-trace-id"]
     max_age        = 86400
   }
 

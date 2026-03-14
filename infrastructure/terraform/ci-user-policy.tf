@@ -109,6 +109,21 @@ data "aws_iam_policy_document" "ci_deploy_core" {
     ]
   }
 
+  # ADOT Lambda Extension Layer (1220-xray-instrumentation-hardening)
+  # Cross-account read access to AWS public ADOT Collector Layer
+  # for embedding in SSE Lambda container images.
+  statement {
+    sid    = "ADOTLayerRead"
+    effect = "Allow"
+    actions = [
+      "lambda:GetLayerVersion"
+    ]
+    resources = [
+      "arn:aws:lambda:*:901920570463:layer:aws-otel-collector-*",
+      "arn:aws:lambda:*:901920570463:layer:aws-otel-collector-*:*"
+    ]
+  }
+
   # DynamoDB Table Management
   # SECURITY: Scoped to {env}-sentiment-* naming pattern (FR-002)
   statement {
