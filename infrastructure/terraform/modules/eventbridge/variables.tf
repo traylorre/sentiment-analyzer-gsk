@@ -49,3 +49,22 @@ variable "create_digest_schedule" {
   type        = bool
   default     = false
 }
+
+# X-Ray Canary (Feature 1219)
+variable "canary_lambda_arn" {
+  description = "ARN of the Canary Lambda function (optional)"
+  type        = string
+  default     = null
+}
+
+variable "canary_lambda_function_name" {
+  description = "Name of the Canary Lambda function (optional)"
+  type        = string
+  default     = null
+}
+
+variable "create_canary_schedule" {
+  description = "Whether to create the canary schedule (requires canary Lambda)"
+  type        = bool
+  default     = false
+}

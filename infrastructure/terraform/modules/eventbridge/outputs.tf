@@ -12,3 +12,8 @@ output "daily_digest_schedule_arn" {
   description = "ARN of the daily digest EventBridge rule (null if not created)"
   value       = var.create_digest_schedule ? aws_cloudwatch_event_rule.daily_digest_schedule[0].arn : null
 }
+
+output "canary_schedule_arn" {
+  description = "ARN of the X-Ray canary EventBridge rule (null if not created)"
+  value       = var.create_canary_schedule ? aws_cloudwatch_event_rule.canary_schedule[0].arn : null
+}

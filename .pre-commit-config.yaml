@@ -64,12 +64,9 @@ repos:
       - id: terraform_fmt
         args:
           - --args=-recursive
-      - id: terraform_tfsec
-        args:
-          - --args=--soft-fail
-      - id: terraform_checkov
-        args:
-          - --args=--quiet --compact -d infrastructure/terraform/
+      # tfsec and checkov removed from pre-commit-terraform hooks:
+      # - tfsec deprecated, doesn't support TF 1.5 check blocks → local trivy hook
+      # - checkov baseline needs repo-root path but hook cd's into module dirs → local hook
 
   # Security checks - detect hardcoded secrets
   # NOTE: Using local wrapper to auto-stage baseline updates (eliminates churn)
@@ -106,6 +103,23 @@ repos:
   # Local hooks for project-specific checks
   - repo: local
     hooks:
+      # Trivy IaC scan (replaces tfsec, supports TF 1.5 check blocks)
+      - id: trivy-terraform
+        name: Trivy IaC scan
+        entry: trivy config --exit-code 0 --severity HIGH,CRITICAL --tf-exclude-downloaded-modules infrastructure/terraform/
+        language: system
+        files: \.tf$
+        pass_filenames: false
+
+      # Checkov with baseline (local hook because pre-commit-terraform cd's into
+      # module dirs, breaking relative baseline paths)
+      - id: checkov-terraform
+        name: Checkov IaC scan
+        entry: bash -c 'checkov --quiet --compact --framework terraform --baseline "$(git rev-parse --show-toplevel)/.checkov.baseline" -d infrastructure/terraform/'
+        language: system
+        files: \.tf$
+        pass_filenames: false
+
       # Run pytest on push only (not on every commit)
       # NOTE: Uses .venv/bin/python3 explicitly because pre-commit runs in its own
       # subprocess and doesn't inherit an activated venv. Requires bootstrap first.

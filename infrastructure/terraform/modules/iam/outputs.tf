@@ -59,3 +59,9 @@ output "sse_streaming_lambda_role_name" {
   description = "Name of the SSE Streaming Lambda IAM role (Feature 016)"
   value       = aws_iam_role.sse_streaming_lambda.name
 }
+
+# Canary Lambda (T086, FR-051)
+output "canary_lambda_role_arn" {
+  description = "ARN of the Canary Lambda IAM role (1219-xray)"
+  value       = var.enable_canary ? aws_iam_role.canary_lambda[0].arn : null
+}

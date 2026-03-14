@@ -193,11 +193,69 @@ resource "aws_cloudwatch_dashboard" "main" {
         }
       },
 
-      # Row 5: Custom Business Metrics
+      # Row 5: X-Ray Tracing & Canary Health
       {
         type   = "metric"
         x      = 0
         y      = 21
+        width  = 8
+        height = 6
+        properties = {
+          title  = "X-Ray Canary Health"
+          region = data.aws_region.current.name
+          metrics = [
+            ["SentimentAnalyzer/Canary", "CanaryHealth", "Environment", var.environment, { stat = "Minimum", period = 300, color = "#2ca02c" }],
+            [".", "completeness_ratio", ".", ".", { stat = "Average", period = 300, color = "#1f77b4", yAxis = "right" }],
+          ]
+          view = "timeSeries"
+          yAxis = {
+            left  = { min = 0, max = 1, label = "Health (0/1)" }
+            right = { min = 0, max = 1, label = "Completeness" }
+          }
+        }
+      },
+      {
+        type   = "metric"
+        x      = 8
+        y      = 21
+        width  = 8
+        height = 6
+        properties = {
+          title  = "Silent Failure Count"
+          region = data.aws_region.current.name
+          metrics = [
+            ["SentimentAnalyzer/Reliability", "SilentFailure/Count", { stat = "Sum", period = 300, color = "#d62728" }],
+          ]
+          view  = "timeSeries"
+          yAxis = { left = { min = 0 } }
+        }
+      },
+      {
+        type   = "text"
+        x      = 16
+        y      = 21
+        width  = 8
+        height = 6
+        properties = {
+          markdown = <<-EOT
+## X-Ray Traces
+
+**[Service Map](https://console.aws.amazon.com/xray/home?region=${data.aws_region.current.name}#/service-map)**
+
+**X-Ray Groups:**
+- [Errors](https://console.aws.amazon.com/xray/home?region=${data.aws_region.current.name}#/traces?group=sentiment-errors)
+- [Live Traces](https://console.aws.amazon.com/xray/home?region=${data.aws_region.current.name}#/traces?group=sentiment-live)
+- [SSE Streaming](https://console.aws.amazon.com/xray/home?region=${data.aws_region.current.name}#/traces?group=sentiment-sse)
+- [Canary](https://console.aws.amazon.com/xray/home?region=${data.aws_region.current.name}#/traces?group=sentiment-canary)
+EOT
+        }
+      },
+
+      # Row 6: Custom Business Metrics
+      {
+        type   = "metric"
+        x      = 0
+        y      = 27
         width  = 12
         height = 6
         properties = {
@@ -213,7 +271,7 @@ resource "aws_cloudwatch_dashboard" "main" {
       {
         type   = "metric"
         x      = 12
-        y      = 21
+        y      = 27
         width  = 12
         height = 6
         properties = {
