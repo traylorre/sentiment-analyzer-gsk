@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { SSEStatus, SSEMessage, SentimentUpdatePayload } from '@/lib/api/sse';
 import { SSEConnection, type ConnectionInfo } from '@/lib/api/sse-connection';
+import { generateXRayTraceId } from '@/lib/tracing';
 import type { SSEEvent } from '@/lib/api/sse-parser';
 import { joinUrl } from '@/lib/utils/url';
 import { useRuntimeStore, useRuntimeLoaded } from '@/stores/runtime-store';
@@ -16,8 +17,8 @@ interface UseSSEOptions {
    *
    * When using the same-origin proxy (Gap 4), the token is sent
    * via HttpOnly cookie instead of URL parameter.
-   * With fetch+ReadableStream (T065), custom headers like
-   * X-Amzn-Trace-Id are injected for trace correlation (FR-032).
+   * With fetch+ReadableStream (T065), the X-Amzn-Trace-Id header
+   * is injected via generateXRayTraceId() (1220-xray FR-008).
    */
   userToken?: string;
   enabled?: boolean;
@@ -122,8 +123,16 @@ export function useSSE(options: UseSSEOptions = {}): UseSSEResult {
       url = useProxy ? '/api/sse/stream' : joinUrl(baseUrl, '/api/v2/stream');
     }
 
+    // Generate X-Ray trace ID for browser-to-Lambda trace propagation (1220 FR-008)
+    const traceHeaders: Record<string, string> = {};
+    const traceId = generateXRayTraceId();
+    if (traceId) {
+      traceHeaders['X-Amzn-Trace-Id'] = traceId;
+    }
+
     connectionRef.current = new SSEConnection({
       url,
+      headers: traceHeaders,
       onEvent: handleEvent,
       onStateChange: handleStateChange,
     });

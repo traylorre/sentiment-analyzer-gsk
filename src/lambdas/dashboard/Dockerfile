@@ -9,6 +9,10 @@
 #   cd src && docker build -t dashboard-lambda -f lambdas/dashboard/Dockerfile .
 #   docker run --rm dashboard-lambda python -c "from handler import lambda_handler; print('OK')"
 
+# ADOT Lambda Extension is NOT needed here. This Lambda uses Powertools Tracer
+# with tracing_mode=Active, which auto-exports traces to X-Ray via the Lambda
+# service without a sidecar. See specs/1220-xray-instrumentation-hardening/research.md R1.
+
 # Stage 1: Builder - install dependencies
 FROM public.ecr.aws/lambda/python:3.13 AS builder
 

@@ -8,13 +8,13 @@
 #   cd src && docker build -t sse-streaming -f lambdas/sse_streaming/Dockerfile .
 #   docker run --rm sse-streaming python -c "from handler import handler; print('OK')"
 
-# NOTE: ADOT Lambda Extension (FR-062, FR-069, FR-070) is not included.
-# AWS does not publish a Docker image for the Lambda extension; it is only
-# available as a Lambda Layer (account 901920570463). The OTel SDK in
-# tracing.py degrades gracefully when the extension is absent — connection
-# refused errors are caught and logged, Powertools/X-Ray tracing still works.
-# TODO: Add lambda:GetLayerVersion permission to deployer IAM user, then
-#       download the layer zip in a CI pre-step and COPY extensions/ in.
+# ADOT Collector Extension (1220-xray-instrumentation-hardening FR-001)
+# The ADOT Collector sidecar receives OTel spans on localhost:4318 (OTLP HTTP)
+# and exports to X-Ray. Only the Collector Layer is needed (not the Python SDK
+# Layer) because this Lambda manages its own OTel SDK (pinned in requirements.txt).
+# The layer zip is downloaded in CI (deploy.yml) to lambdas/sse_streaming/adot-layer/.
+# If the layer is absent, the COPY is skipped and tracing.py degrades gracefully
+# (ECONNREFUSED caught, Powertools/Active mode traces still export via Lambda service).
 
 # Stage 1: Builder - install dependencies
 FROM python:3.13-slim AS builder
@@ -61,7 +61,15 @@ COPY lib/timeseries /var/task/src/lib/timeseries
 # Set Python path to include packages and app directories
 ENV PYTHONPATH=/var/task/packages:/var/task
 
+# ADOT Collector Extension: copy layer files if present (CI downloads them)
+# Must be root-owned and executable; Lambda runtime invokes extensions as root.
+# Using wildcard COPY so build succeeds even when adot-layer/ is absent (local dev).
+COPY lambdas/sse_streaming/adot-laye[r]/extensions/ /opt/extensions/
+COPY lambdas/sse_streaming/adot-laye[r]/collector-config/ /opt/collector-config/
+RUN if [ -f /opt/extensions/collector ]; then chmod +x /opt/extensions/collector; fi
+
 # Set ownership and switch to non-root user (090-security-first-burndown)
+# NOTE: /opt/extensions/ intentionally NOT chowned - must remain root-owned
 RUN chown -R lambda:lambda /var/task
 USER lambda
 

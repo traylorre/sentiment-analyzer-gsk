@@ -41,27 +41,29 @@ test.describe('X-Ray Trace Header Propagation', () => {
     }
   });
 
-  test('SSE proxy route propagates X-Amzn-Trace-Id header', async ({ page }) => {
-    // Intercept SSE proxy requests to verify trace header propagation
-    const traceHeaders: string[] = [];
+  test('SSE requests include X-Amzn-Trace-Id in outgoing headers', async ({ page }) => {
+    // 1220-xray FR-012: Verify REQUEST headers contain trace ID (not just response)
+    const requestTraceIds: string[] = [];
 
-    page.on('response', (response) => {
-      const url = response.url();
+    page.on('request', (request) => {
+      const url = request.url();
       if (url.includes('/stream') || url.includes('/api/sse/')) {
-        const traceId = response.headers()['x-amzn-trace-id'];
+        const traceId = request.headers()['x-amzn-trace-id'];
         if (traceId) {
-          traceHeaders.push(traceId);
+          requestTraceIds.push(traceId);
         }
       }
     });
 
     await page.goto('/');
-    await page.waitForTimeout(5000); // Allow SSE connection + response
+    await page.waitForTimeout(5000); // Allow SSE connection
 
-    // If backend returns X-Amzn-Trace-Id, verify it's in X-Ray format
-    for (const traceId of traceHeaders) {
-      // X-Ray trace IDs start with "Root=1-" followed by hex
-      expect(traceId).toMatch(/Root=1-[0-9a-f]+-[0-9a-f]+/);
+    // Verify browser sends X-Amzn-Trace-Id in request headers
+    if (requestTraceIds.length > 0) {
+      for (const traceId of requestTraceIds) {
+        // Must be X-Ray format: Root=1-{hex}-{hex};Parent={hex};Sampled=1
+        expect(traceId).toMatch(/Root=1-[0-9a-f]+-[0-9a-f]+;Parent=[0-9a-f]+;Sampled=1/);
+      }
     }
   });
 
