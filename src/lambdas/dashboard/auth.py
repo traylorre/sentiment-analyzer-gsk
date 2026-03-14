@@ -42,7 +42,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
 import boto3
-from aws_xray_sdk.core import xray_recorder
+from aws_lambda_powertools import Tracer
 from botocore.exceptions import ClientError
 from pydantic import BaseModel, EmailStr, Field
 
@@ -81,6 +81,7 @@ from src.lambdas.shared.models.magic_link_token import MagicLinkToken
 from src.lambdas.shared.models.user import ProviderMetadata, User
 from src.lambdas.shared.models.webhook_event import WebhookEvent
 
+tracer = Tracer()
 logger = logging.getLogger(__name__)
 
 
@@ -455,7 +456,7 @@ def get_user_by_email(table: Any, email: str) -> User | None:
 # =============================================================================
 
 
-@xray_recorder.capture("get_user_by_email_gsi")
+@tracer.capture_method
 def get_user_by_email_gsi(table: Any, email: str) -> User | None:
     """Get user by email using GSI query (FR-009, T040, T076).
 
@@ -506,7 +507,7 @@ def get_user_by_email_gsi(table: Any, email: str) -> User | None:
         return None
 
 
-@xray_recorder.capture("get_user_by_provider_sub")
+@tracer.capture_method
 def get_user_by_provider_sub(
     table: Any,
     provider: Literal["google", "github"],
@@ -650,7 +651,7 @@ def can_auto_link_oauth(
     return False
 
 
-@xray_recorder.capture("create_user_with_email")
+@tracer.capture_method
 def create_user_with_email(
     table: Any,
     email: str,
@@ -749,7 +750,7 @@ def create_user_with_email(
         raise
 
 
-@xray_recorder.capture("get_or_create_user_by_email")
+@tracer.capture_method
 def get_or_create_user_by_email(
     table: Any,
     email: str,
@@ -895,7 +896,7 @@ class BulkRevocationResponse(BaseModel):
     failed_user_ids: list[str]
 
 
-@xray_recorder.capture("extend_session_expiry")
+@tracer.capture_method
 def extend_session_expiry(table: Any, user_id: str) -> User | None:
     """Extend session expiry by 30 days (FR-010, T051).
 
@@ -1046,7 +1047,7 @@ def is_token_blocklisted(table: Any, refresh_token_hash: str) -> bool:
         return True
 
 
-@xray_recorder.capture("evict_oldest_session_atomic")
+@tracer.capture_method
 def evict_oldest_session_atomic(
     table: Any,
     user_id: str,
@@ -1195,7 +1196,7 @@ def _serialize_value(value: Any) -> dict:
     return {"S": str(value)}
 
 
-@xray_recorder.capture("create_session_with_limit_enforcement")
+@tracer.capture_method
 def create_session_with_limit_enforcement(
     table: Any,
     user_id: str,
@@ -1256,7 +1257,7 @@ def create_session_with_limit_enforcement(
         raise
 
 
-@xray_recorder.capture("refresh_session")
+@tracer.capture_method
 def refresh_session(table: Any, user_id: str) -> SessionRefreshResponse | None:
     """Refresh session and return new expiry info (T056).
 
@@ -1281,7 +1282,7 @@ def refresh_session(table: Any, user_id: str) -> SessionRefreshResponse | None:
     )
 
 
-@xray_recorder.capture("revoke_user_session")
+@tracer.capture_method
 def revoke_user_session(
     table: Any,
     user_id: str,
@@ -1341,7 +1342,7 @@ def revoke_user_session(
         return False
 
 
-@xray_recorder.capture("revoke_sessions_bulk")
+@tracer.capture_method
 def revoke_sessions_bulk(
     table: Any,
     user_ids: list[str],
@@ -1585,7 +1586,7 @@ MAGIC_LINK_EXPIRY_HOURS = 1
 
 
 # T090: Magic Link Request
-@xray_recorder.capture("request_magic_link")
+@tracer.capture_method
 def request_magic_link(
     table: Any,
     request: MagicLinkRequest,
@@ -1695,7 +1696,7 @@ def _invalidate_existing_tokens(table: Any, email: str) -> None:
 
 
 # Feature 014 (T031): Atomic Token Verification
-@xray_recorder.capture("verify_and_consume_token")
+@tracer.capture_method
 def verify_and_consume_token(
     table: Any,
     token_id: str,
@@ -1823,7 +1824,7 @@ def verify_and_consume_token(
 
 
 # T091: Magic Link Verification (Feature 1129: Atomic consumption)
-@xray_recorder.capture("verify_magic_link")
+@tracer.capture_method
 def verify_magic_link(
     table: Any,
     token_id: str,
@@ -2035,7 +2036,7 @@ def get_oauth_urls(table: Any) -> OAuthURLsResponse:
 
 
 # T093: OAuth Callback
-@xray_recorder.capture("handle_oauth_callback")
+@tracer.capture_method
 def handle_oauth_callback(
     table: Any,
     code: str,
@@ -2825,7 +2826,7 @@ def check_email_conflict(
 
 
 # T098: Link Accounts
-@xray_recorder.capture("link_accounts")
+@tracer.capture_method
 def link_accounts(
     table: Any,
     current_user_id: str,
@@ -2923,7 +2924,7 @@ def get_merge_status_endpoint(
 # =============================================================================
 
 
-@xray_recorder.capture("link_email_to_oauth_user")
+@tracer.capture_method
 def link_email_to_oauth_user(
     table: Any,
     user: User,
@@ -3018,7 +3019,7 @@ def link_email_to_oauth_user(
     )
 
 
-@xray_recorder.capture("complete_email_link")
+@tracer.capture_method
 def complete_email_link(
     table: Any,
     user: User,
@@ -3205,7 +3206,7 @@ class StripeWebhookResponse(BaseModel):
     event_id: str | None = None
 
 
-@xray_recorder.capture("handle_stripe_webhook")
+@tracer.capture_method
 def handle_stripe_webhook(
     table: Any,
     dynamodb: Any,

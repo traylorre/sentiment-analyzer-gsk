@@ -510,7 +510,7 @@ jobs:
           # configured in Terraform. Docker ENV alone doesn't work because Lambda
           # Web Adapter subprocess doesn't inherit container environment reliably.
           # Feature 1043: USERS_TABLE for config queries, SENTIMENTS_TABLE for sentiment data
-          docker run --rm -e PYTHONPATH=/app/packages:/app -e USERS_TABLE=preprod-sentiment-users -e SENTIMENTS_TABLE=preprod-sentiment-items --entrypoint python "$IMAGE" -c "
+          docker run --rm -e PYTHONPATH=/var/task/packages:/var/task -e USERS_TABLE=preprod-sentiment-users -e SENTIMENTS_TABLE=preprod-sentiment-items --entrypoint python "$IMAGE" -c "
           import sys
           print('Testing imports...')
 
@@ -1476,7 +1476,7 @@ jobs:
 
           # Note: PYTHONPATH matches Lambda environment variable in Terraform
           # Feature 1043: USERS_TABLE for config queries, SENTIMENTS_TABLE for sentiment data
-          docker run --rm -e PYTHONPATH=/app/packages:/app -e USERS_TABLE=prod-sentiment-users -e SENTIMENTS_TABLE=prod-sentiment-items --entrypoint python "$IMAGE" -c "
+          docker run --rm -e PYTHONPATH=/var/task/packages:/var/task -e USERS_TABLE=prod-sentiment-users -e SENTIMENTS_TABLE=prod-sentiment-items --entrypoint python "$IMAGE" -c "
           import sys
           from handler import handler
           from config import config_lookup_service

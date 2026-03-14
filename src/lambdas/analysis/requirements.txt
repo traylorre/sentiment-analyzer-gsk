@@ -21,3 +21,6 @@ python-json-logger>=2.0.0,<3.0.0
 
 # AWS X-Ray distributed tracing (FR-035 Day 1 mandatory)
 aws-xray-sdk>=2.14.0,<3.0.0
+
+# AWS Lambda Powertools - Tracer for X-Ray instrumentation (1219)
+aws-lambda-powertools>=3.23.0,<4.0.0

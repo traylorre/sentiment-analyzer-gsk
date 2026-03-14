@@ -72,7 +72,7 @@ def sample_alert_item(user_id, config_id, alert_id):
 class TestCreateAlert:
     """Tests for create_alert function."""
 
-    @patch("src.lambdas.dashboard.alerts.xray_recorder")
+    @patch("src.lambdas.dashboard.alerts.tracer")
     def test_creates_alert_successfully(
         self, mock_xray, mock_table, user_id, config_id
     ):
@@ -97,7 +97,7 @@ class TestCreateAlert:
         assert result.is_enabled is True
         mock_table.put_item.assert_called_once()
 
-    @patch("src.lambdas.dashboard.alerts.xray_recorder")
+    @patch("src.lambdas.dashboard.alerts.tracer")
     def test_rejects_anonymous_user(self, mock_xray, mock_table, user_id, config_id):
         """Rejects anonymous users trying to create alerts."""
         request = AlertRuleCreate(
@@ -114,7 +114,7 @@ class TestCreateAlert:
         assert result.error.code == "ANONYMOUS_NOT_ALLOWED"
         mock_table.put_item.assert_not_called()
 
-    @patch("src.lambdas.dashboard.alerts.xray_recorder")
+    @patch("src.lambdas.dashboard.alerts.tracer")
     def test_rejects_max_alerts_exceeded(
         self, mock_xray, mock_table, user_id, config_id
     ):
@@ -135,7 +135,7 @@ class TestCreateAlert:
         assert result.error.code == "ALERT_LIMIT_EXCEEDED"
         mock_table.put_item.assert_not_called()
 
-    @patch("src.lambdas.dashboard.alerts.xray_recorder")
+    @patch("src.lambdas.dashboard.alerts.tracer")
     def test_rejects_invalid_sentiment_threshold(
         self, mock_xray, mock_table, user_id, config_id
     ):
@@ -155,7 +155,7 @@ class TestCreateAlert:
         assert isinstance(result, ErrorResponse)
         assert result.error.code == "INVALID_THRESHOLD"
 
-    @patch("src.lambdas.dashboard.alerts.xray_recorder")
+    @patch("src.lambdas.dashboard.alerts.tracer")
     def test_rejects_invalid_volatility_threshold(
         self, mock_xray, mock_table, user_id, config_id
     ):
@@ -175,7 +175,7 @@ class TestCreateAlert:
         assert isinstance(result, ErrorResponse)
         assert result.error.code == "INVALID_THRESHOLD"
 
-    @patch("src.lambdas.dashboard.alerts.xray_recorder")
+    @patch("src.lambdas.dashboard.alerts.tracer")
     def test_uppercases_ticker(self, mock_xray, mock_table, user_id, config_id):
         """Converts ticker to uppercase."""
         mock_table.query.return_value = {"Count": 0}
@@ -209,7 +209,7 @@ class TestListAlerts:
         )
 
     @patch("src.lambdas.dashboard.alerts.get_daily_quota")
-    @patch("src.lambdas.dashboard.alerts.xray_recorder")
+    @patch("src.lambdas.dashboard.alerts.tracer")
     def test_lists_all_alerts(
         self,
         mock_xray,
@@ -231,7 +231,7 @@ class TestListAlerts:
         assert result.alerts[0].ticker == "AAPL"
 
     @patch("src.lambdas.dashboard.alerts.get_daily_quota")
-    @patch("src.lambdas.dashboard.alerts.xray_recorder")
+    @patch("src.lambdas.dashboard.alerts.tracer")
     def test_filters_by_config_id(
         self,
         mock_xray,
@@ -259,7 +259,7 @@ class TestListAlerts:
         assert result.alerts[0].ticker == "AAPL"
 
     @patch("src.lambdas.dashboard.alerts.get_daily_quota")
-    @patch("src.lambdas.dashboard.alerts.xray_recorder")
+    @patch("src.lambdas.dashboard.alerts.tracer")
     def test_filters_by_ticker(
         self,
         mock_xray,
@@ -282,7 +282,7 @@ class TestListAlerts:
         assert result.alerts[0].ticker == "AAPL"
 
     @patch("src.lambdas.dashboard.alerts.get_daily_quota")
-    @patch("src.lambdas.dashboard.alerts.xray_recorder")
+    @patch("src.lambdas.dashboard.alerts.tracer")
     def test_filters_by_enabled(
         self,
         mock_xray,
@@ -305,7 +305,7 @@ class TestListAlerts:
         assert result.alerts[0].is_enabled is True
 
     @patch("src.lambdas.dashboard.alerts.get_daily_quota")
-    @patch("src.lambdas.dashboard.alerts.xray_recorder")
+    @patch("src.lambdas.dashboard.alerts.tracer")
     def test_returns_empty_list(
         self, mock_xray, mock_get_quota, mock_table, user_id, mock_quota
     ):
@@ -319,7 +319,7 @@ class TestListAlerts:
         assert result.total == 0
 
     @patch("src.lambdas.dashboard.alerts.get_daily_quota")
-    @patch("src.lambdas.dashboard.alerts.xray_recorder")
+    @patch("src.lambdas.dashboard.alerts.tracer")
     def test_includes_daily_email_quota(
         self,
         mock_xray,
@@ -343,7 +343,7 @@ class TestListAlerts:
 class TestGetAlert:
     """Tests for get_alert function."""
 
-    @patch("src.lambdas.dashboard.alerts.xray_recorder")
+    @patch("src.lambdas.dashboard.alerts.tracer")
     def test_gets_alert(self, mock_xray, mock_table, user_id, sample_alert_item):
         """Gets alert by ID."""
         alert_id = sample_alert_item["alert_id"]
@@ -355,7 +355,7 @@ class TestGetAlert:
         assert result.alert_id == alert_id
         assert result.ticker == "AAPL"
 
-    @patch("src.lambdas.dashboard.alerts.xray_recorder")
+    @patch("src.lambdas.dashboard.alerts.tracer")
     def test_returns_none_for_not_found(self, mock_xray, mock_table, user_id):
         """Returns None when alert not found."""
         mock_table.get_item.return_value = {}
@@ -368,7 +368,7 @@ class TestGetAlert:
 class TestUpdateAlert:
     """Tests for update_alert function."""
 
-    @patch("src.lambdas.dashboard.alerts.xray_recorder")
+    @patch("src.lambdas.dashboard.alerts.tracer")
     def test_updates_threshold_value(
         self, mock_xray, mock_table, user_id, sample_alert_item
     ):
@@ -388,7 +388,7 @@ class TestUpdateAlert:
         assert isinstance(result, AlertResponse)
         mock_table.update_item.assert_called_once()
 
-    @patch("src.lambdas.dashboard.alerts.xray_recorder")
+    @patch("src.lambdas.dashboard.alerts.tracer")
     def test_updates_enabled_status(
         self, mock_xray, mock_table, user_id, sample_alert_item
     ):
@@ -409,7 +409,7 @@ class TestUpdateAlert:
         assert result.is_enabled is False
         mock_table.update_item.assert_called_once()
 
-    @patch("src.lambdas.dashboard.alerts.xray_recorder")
+    @patch("src.lambdas.dashboard.alerts.tracer")
     def test_returns_none_for_not_found(self, mock_xray, mock_table, user_id):
         """Returns None when alert not found."""
         mock_table.get_item.return_value = {}
@@ -419,7 +419,7 @@ class TestUpdateAlert:
 
         assert result is None
 
-    @patch("src.lambdas.dashboard.alerts.xray_recorder")
+    @patch("src.lambdas.dashboard.alerts.tracer")
     def test_rejects_invalid_threshold(
         self, mock_xray, mock_table, user_id, sample_alert_item
     ):
@@ -434,7 +434,7 @@ class TestUpdateAlert:
         assert isinstance(result, ErrorResponse)
         assert result.error.code == "INVALID_THRESHOLD"
 
-    @patch("src.lambdas.dashboard.alerts.xray_recorder")
+    @patch("src.lambdas.dashboard.alerts.tracer")
     def test_returns_existing_when_nothing_to_update(
         self, mock_xray, mock_table, user_id, sample_alert_item
     ):
@@ -453,7 +453,7 @@ class TestUpdateAlert:
 class TestDeleteAlert:
     """Tests for delete_alert function."""
 
-    @patch("src.lambdas.dashboard.alerts.xray_recorder")
+    @patch("src.lambdas.dashboard.alerts.tracer")
     def test_deletes_alert(self, mock_xray, mock_table, user_id, sample_alert_item):
         """Deletes alert by ID."""
         alert_id = sample_alert_item["alert_id"]
@@ -464,7 +464,7 @@ class TestDeleteAlert:
         assert result is True
         mock_table.delete_item.assert_called_once()
 
-    @patch("src.lambdas.dashboard.alerts.xray_recorder")
+    @patch("src.lambdas.dashboard.alerts.tracer")
     def test_returns_false_for_not_found(self, mock_xray, mock_table, user_id):
         """Returns False when alert not found."""
         mock_table.get_item.return_value = {}
@@ -478,7 +478,7 @@ class TestDeleteAlert:
 class TestToggleAlert:
     """Tests for toggle_alert function."""
 
-    @patch("src.lambdas.dashboard.alerts.xray_recorder")
+    @patch("src.lambdas.dashboard.alerts.tracer")
     def test_disables_enabled_alert(
         self, mock_xray, mock_table, user_id, sample_alert_item
     ):
@@ -492,7 +492,7 @@ class TestToggleAlert:
         assert result.is_enabled is False
         assert "disabled" in result.message.lower()
 
-    @patch("src.lambdas.dashboard.alerts.xray_recorder")
+    @patch("src.lambdas.dashboard.alerts.tracer")
     def test_enables_disabled_alert(
         self, mock_xray, mock_table, user_id, sample_alert_item
     ):
@@ -507,7 +507,7 @@ class TestToggleAlert:
         assert result.is_enabled is True
         assert "enabled" in result.message.lower()
 
-    @patch("src.lambdas.dashboard.alerts.xray_recorder")
+    @patch("src.lambdas.dashboard.alerts.tracer")
     def test_returns_none_for_not_found(self, mock_xray, mock_table, user_id):
         """Returns None when alert not found."""
         mock_table.get_item.return_value = {}
@@ -597,7 +597,7 @@ class TestGetDailyEmailQuota:
 class TestAlertResponseFormatting:
     """Tests for alert response formatting."""
 
-    @patch("src.lambdas.dashboard.alerts.xray_recorder")
+    @patch("src.lambdas.dashboard.alerts.tracer")
     def test_formats_timestamps_correctly(
         self, mock_xray, mock_table, user_id, sample_alert_item
     ):
@@ -612,7 +612,7 @@ class TestAlertResponseFormatting:
         assert result.last_triggered_at.endswith("Z")
         assert "+00:00" not in result.created_at
 
-    @patch("src.lambdas.dashboard.alerts.xray_recorder")
+    @patch("src.lambdas.dashboard.alerts.tracer")
     def test_handles_null_last_triggered(
         self, mock_xray, mock_table, user_id, sample_alert_item
     ):

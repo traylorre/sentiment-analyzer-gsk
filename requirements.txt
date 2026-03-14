@@ -27,6 +27,7 @@ httpx==0.28.1  # Async HTTP client for financial APIs
 
 # Data Validation - Input/output schemas
 pydantic==2.12.5
+orjson==3.11.5  # Fast JSON serialization for API responses
 email-validator==2.3.0  # Required for Pydantic EmailStr type
 
 # Logging - Structured JSON logs for CloudWatch

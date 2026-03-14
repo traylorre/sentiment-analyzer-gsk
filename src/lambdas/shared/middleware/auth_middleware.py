@@ -17,7 +17,9 @@ from enum import Enum
 from typing import Any
 
 import jwt
-from aws_xray_sdk.core import xray_recorder
+from aws_lambda_powertools import Tracer
+
+tracer = Tracer()
 
 logger = logging.getLogger(__name__)
 
@@ -334,7 +336,7 @@ def _is_valid_uuid(value: str) -> bool:
         return False
 
 
-@xray_recorder.capture("extract_auth_context_typed")
+@tracer.capture_method
 def extract_auth_context_typed(event: dict[str, Any]) -> AuthContext:
     """Extract typed authentication context from request (Feature 1048, 1146).
 
@@ -399,7 +401,7 @@ def extract_auth_context_typed(event: dict[str, Any]) -> AuthContext:
     )
 
 
-@xray_recorder.capture("extract_auth_context")
+@tracer.capture_method
 def extract_auth_context(event: dict[str, Any]) -> dict[str, Any]:
     """Extract full authentication context from request (legacy dict format).
 

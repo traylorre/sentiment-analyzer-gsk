@@ -46,6 +46,18 @@ def _get_next_invocation():
     conn.request("GET", "/2018-06-01/runtime/invocation/next")
     response = conn.getresponse()
     invocation_id = response.getheader("Lambda-Runtime-Aws-Request-Id")
+
+    # T034: Propagate trace ID for warm invocations (FR-092)
+    # Without this, warm invocations use stale trace ID from previous invocation
+    trace_id = response.getheader("Lambda-Runtime-Trace-Id")
+    if trace_id:
+        os.environ["_X_AMZN_TRACE_ID"] = trace_id
+
+    # T035: Export deadline for proactive flush calculation (FR-103)
+    deadline_ms = response.getheader("Lambda-Runtime-Deadline-Ms")
+    if deadline_ms:
+        os.environ["AWS_LAMBDA_DEADLINE_MS"] = deadline_ms
+
     event_data = json.loads(response.read().decode("utf-8"))
     conn.close()
     return event_data, invocation_id

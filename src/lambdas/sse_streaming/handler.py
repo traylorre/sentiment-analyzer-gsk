@@ -28,15 +28,16 @@ import os
 import re
 from collections.abc import Generator
 
-from aws_xray_sdk.core import patch_all, xray_recorder
+from aws_lambda_powertools import Tracer
 
-patch_all()
+tracer = Tracer(service="sentiment-analyzer-sse", auto_patch=False)
 
 from config import config_lookup_service
 from connection import connection_manager
 from metrics import metrics_emitter
 from models import StreamStatus
 from stream import get_stream_generator
+from tracing import extract_trace_context, safe_force_flush
 
 from src.lambdas.shared.logging_utils import sanitize_for_log
 
@@ -182,7 +183,7 @@ def _error_metadata_and_body(
 # =============================================================================
 
 
-@xray_recorder.capture("stream_status")
+@tracer.capture_method
 def _handle_stream_status() -> Generator[bytes]:
     """Handle GET /api/v2/stream/status (non-streaming).
 
@@ -509,6 +510,9 @@ def handler(event: dict, context) -> Generator[bytes]:
     Yields:
         Response bytes — metadata prelude followed by body chunks
     """
+    # T041: Extract trace context per-invocation for OTel span parenting (FR-059)
+    extract_trace_context()
+
     try:
         method = event.get("requestContext", {}).get("http", {}).get("method", "GET")
         path = event.get("rawPath", event.get("path", "/"))
@@ -547,3 +551,7 @@ def handler(event: dict, context) -> Generator[bytes]:
             exc_info=True,
         )
         yield _error_metadata_and_body(500, "Internal server error")
+
+    finally:
+        # T047: Defense-in-depth flush for non-timeout exits (FR-055, FR-139)
+        safe_force_flush()

@@ -48,16 +48,19 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import boto3
+from aws_lambda_powertools import Tracer
 from boto3.dynamodb.conditions import Key
 
 from src.lib.metrics import emit_metric, log_structured
 
+tracer = Tracer(service="sentiment-analyzer-metrics")
+
 # Configuration
 STUCK_THRESHOLD_MINUTES = 5
-METRIC_NAMESPACE = "SentimentAnalyzer"
 METRIC_NAME = "StuckItems"
 
 
+@tracer.capture_method
 def get_stuck_items_count(
     table_name: str, threshold_minutes: int = STUCK_THRESHOLD_MINUTES
 ) -> int:
@@ -107,6 +110,7 @@ def get_stuck_items_count(
     return stuck_count
 
 
+@tracer.capture_method
 def emit_stuck_items_metric(count: int, environment: str) -> None:
     """
     Emit StuckItems metric to CloudWatch.
@@ -116,22 +120,22 @@ def emit_stuck_items_metric(count: int, environment: str) -> None:
         environment: Environment name (dev, preprod, prod)
     """
     emit_metric(
-        metric_name=METRIC_NAME,
+        name=METRIC_NAME,
         value=count,
         unit="Count",
         dimensions={"Environment": environment},
-        namespace=METRIC_NAMESPACE,
     )
 
     log_structured(
         "info",
         "Emitted StuckItems metric",
-        metric_name=METRIC_NAME,
+        name=METRIC_NAME,
         value=count,
         environment=environment,
     )
 
 
+@tracer.capture_lambda_handler
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """
     Lambda handler for metrics collection.
@@ -196,11 +200,10 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         # Still try to emit a metric indicating failure
         try:
             emit_metric(
-                metric_name="MetricsLambdaErrors",
+                name="MetricsLambdaErrors",
                 value=1,
                 unit="Count",
                 dimensions={"Environment": environment},
-                namespace=METRIC_NAMESPACE,
             )
         except Exception as metric_err:
             # Log but don't fail - primary error already handled above

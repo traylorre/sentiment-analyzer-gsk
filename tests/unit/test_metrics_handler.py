@@ -26,7 +26,6 @@ from moto import mock_aws
 
 from src.lambdas.metrics.handler import (
     METRIC_NAME,
-    METRIC_NAMESPACE,
     STUCK_THRESHOLD_MINUTES,
     emit_stuck_items_metric,
     get_stuck_items_count,
@@ -221,11 +220,10 @@ class TestEmitStuckItemsMetric:
             emit_stuck_items_metric(5, "test")
 
             mock_emit.assert_called_once_with(
-                metric_name=METRIC_NAME,
+                name=METRIC_NAME,
                 value=5,
                 unit="Count",
                 dimensions={"Environment": "test"},
-                namespace=METRIC_NAMESPACE,
             )
 
     @mock_aws
@@ -235,11 +233,10 @@ class TestEmitStuckItemsMetric:
             emit_stuck_items_metric(0, "prod")
 
             mock_emit.assert_called_once_with(
-                metric_name=METRIC_NAME,
+                name=METRIC_NAME,
                 value=0,
                 unit="Count",
                 dimensions={"Environment": "prod"},
-                namespace=METRIC_NAMESPACE,
             )
 
 
@@ -298,11 +295,10 @@ class TestLambdaHandler:
 
         # Should have tried to emit error metric
         mock_emit.assert_called_with(
-            metric_name="MetricsLambdaErrors",
+            name="MetricsLambdaErrors",
             value=1,
             unit="Count",
             dimensions={"Environment": "test"},
-            namespace=METRIC_NAMESPACE,
         )
 
 
@@ -312,10 +308,6 @@ class TestConstants:
     def test_stuck_threshold_default(self):
         """Test default stuck threshold is 5 minutes."""
         assert STUCK_THRESHOLD_MINUTES == 5
-
-    def test_metric_namespace(self):
-        """Test metric namespace is correct."""
-        assert METRIC_NAMESPACE == "SentimentAnalyzer"
 
     def test_metric_name(self):
         """Test metric name is correct."""

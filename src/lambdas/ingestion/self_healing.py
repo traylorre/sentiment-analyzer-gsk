@@ -51,10 +51,12 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from aws_xray_sdk.core import xray_recorder
+from aws_lambda_powertools import Tracer
 
 from src.lambdas.shared.logging_utils import get_safe_error_info, sanitize_for_log
 from src.lib.metrics import emit_metric
+
+tracer = Tracer()
 
 # Structured logging
 logger = logging.getLogger(__name__)
@@ -84,7 +86,7 @@ class SelfHealingResult:
     execution_time_ms: float = 0.0
 
 
-@xray_recorder.capture("query_stale_pending_items")
+@tracer.capture_method
 def query_stale_pending_items(
     table: Any,
     threshold_hours: int = SELF_HEALING_THRESHOLD_HOURS,
@@ -164,7 +166,7 @@ def query_stale_pending_items(
     return stale_items[:limit]  # Ensure we don't exceed limit
 
 
-@xray_recorder.capture("get_full_items")
+@tracer.capture_method
 def get_full_items(
     table: Any,
     item_keys: list[dict[str, Any]],
@@ -240,7 +242,7 @@ def get_full_items(
     return full_items
 
 
-@xray_recorder.capture("republish_items_to_sns")
+@tracer.capture_method
 def republish_items_to_sns(
     sns_client: Any,
     sns_topic_arn: str,
@@ -429,6 +431,22 @@ def run_self_healing_check(
                 **get_safe_error_info(e),
                 "execution_time_ms": round(result.execution_time_ms, 2),
             },
+        )
+
+        # X-Ray error subsegment for silent failure visibility
+        try:
+            with tracer.provider.in_subsegment("self_healing_fetch") as subseg:
+                subseg.put_annotation("error", True)
+                subseg.add_exception(e)
+        except Exception:  # noqa: S110
+            pass  # Best-effort: don't fail if X-Ray unavailable
+        # CloudWatch metric for silent failure alerting (SC-019)
+        emit_metric(
+            name="SilentFailure/Count",
+            value=1,
+            unit="Count",
+            dimensions={"FailurePath": "self_healing_fetch"},
+            namespace="SentimentAnalyzer/Reliability",
         )
 
         # Emit error metric

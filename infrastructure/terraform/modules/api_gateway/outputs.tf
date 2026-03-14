@@ -29,3 +29,8 @@ output "execution_arn" {
   description = "Execution ARN of the API Gateway (for Lambda permissions)"
   value       = aws_api_gateway_rest_api.dashboard.execution_arn
 }
+
+output "api_name" {
+  description = "Name of the API Gateway REST API"
+  value       = aws_api_gateway_rest_api.dashboard.name
+}

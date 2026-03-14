@@ -27,11 +27,6 @@ X-Ray Tracing:
     This is Day 1 mandatory per constitution v1.1.
 """
 
-# X-Ray must be imported and patched before other imports (FR-034, T017)
-from aws_xray_sdk.core import patch_all
-
-patch_all()
-
 import base64
 import os
 from pathlib import Path
