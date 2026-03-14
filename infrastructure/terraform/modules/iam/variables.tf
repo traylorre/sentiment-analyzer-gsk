@@ -101,3 +101,9 @@ variable "enable_ohlc_cache" {
   type        = bool
   default     = false
 }
+
+variable "enable_canary" {
+  description = "Whether to create canary Lambda IAM resources (T086, FR-051)"
+  type        = bool
+  default     = false
+}
