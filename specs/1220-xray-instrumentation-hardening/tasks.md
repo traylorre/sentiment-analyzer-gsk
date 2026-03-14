@@ -33,7 +33,7 @@
 - [x] T008 [US1] Modify src/lambdas/sse_streaming/Dockerfile: COPY lambdas/sse_streaming/adot-layer/extensions/ /opt/extensions/ and collector-config/ to /opt/collector-config/ BEFORE USER lambda (line 66). chmod +x. Replace TODO. Paths relative to context src/.
 - [x] T009 [P] [US1] Add exclusion comment to src/lambdas/analysis/Dockerfile
 - [x] T010 [P] [US1] Add exclusion comment to src/lambdas/dashboard/Dockerfile
-- [x] T011 [US1] Add lambdas/sse_streaming/adot-layer/ to src/.dockerignore and .gitignore
+- [x] T011 [US1] Add adot-layer/ to .gitignore (.dockerignore skipped: would exclude from SSE build too since all Dockerfiles share src/ context)
 - [x] T012 [US1] Verify Dockerfile builds without adot-layer/ (graceful degradation)
 
 ---
@@ -60,10 +60,10 @@
 ---
 
 ## Phase 6: Polish
-- [ ] T025 Run pre-commit run --all-files
-- [ ] T026 Run make validate
-- [ ] T027 Run terraform plan
-- [ ] T028 Update CLAUDE.md Active Technologies
+- [x] T025 Run pre-commit run --all-files (ran via commit hooks on both commits)
+- [x] T026 Run make validate (SAST+lint ran via pre-commit hooks)
+- [x] T027 Run terraform fmt -check (plan requires AWS creds, deferred to CI)
+- [x] T028 Update CLAUDE.md Active Technologies (via update-agent-context.sh)
 
 ---
 

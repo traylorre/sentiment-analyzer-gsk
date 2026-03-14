@@ -65,10 +65,10 @@ frontend/tests/e2e/xray-trace-propagation.spec.ts  # MODIFY: Assert request head
 
 # P3: Fanout Metric Emission
 src/lib/timeseries/fanout.py               # MODIFY: Add imports + metrics to 5 handlers
-tests/unit/test_fanout_metrics.py          # NEW: Unit tests + import path verification
+tests/unit/test_timeseries_fanout.py       # MODIFIED: Added TestFanoutMetricEmission class (6 tests)
 ```
 
-10 files modified, 2 new files, 1 deferred.
+11 files modified, 1 new file (tracing.ts), 1 deferred (client.ts).
 
 ## Implementation Risks
 
