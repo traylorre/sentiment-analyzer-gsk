@@ -759,7 +759,10 @@ data "aws_iam_policy_document" "ci_deploy_iam" {
     actions = [
       "xray:CreateSamplingRule",
       "xray:UpdateSamplingRule",
-      "xray:DeleteSamplingRule"
+      "xray:DeleteSamplingRule",
+      "xray:TagResource",
+      "xray:UntagResource",
+      "xray:ListTagsForResource"
     ]
     resources = [
       "arn:aws:xray:*:*:sampling-rule/*-sentiment-*"

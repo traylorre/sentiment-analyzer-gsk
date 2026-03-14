@@ -4,8 +4,8 @@
 # Creates X-Ray groups for trace filtering and environment-specific
 # sampling rules per contracts/xray-groups-sampling.md.
 #
-# Groups (5): sentiment-errors, production-traces, canary-traces,
-#             sentiment-sse, sse-reconnections
+# Groups (5): sentiment-errors, live-traces, canary-traces,
+#             sentiment-sse, sse-reconn
 #
 # Sampling: dev/preprod = 100%, prod = graduated (10%/5%/10%)
 
@@ -34,7 +34,7 @@ resource "aws_xray_group" "errors" {
 }
 
 resource "aws_xray_group" "production_traces" {
-  group_name        = "${var.environment}-sentiment-production-traces"
+  group_name        = "${var.environment}-sentiment-live-traces"
   filter_expression = "!annotation.synthetic"
 
   insights_configuration {
@@ -70,7 +70,7 @@ resource "aws_xray_group" "sse" {
 }
 
 resource "aws_xray_group" "sse_reconnections" {
-  group_name        = "${var.environment}-sentiment-sse-reconnections"
+  group_name        = "${var.environment}-sentiment-sse-reconn"
   filter_expression = "annotation.previous_trace_id BEGINSWITH \"1-\""
 
   insights_configuration {
