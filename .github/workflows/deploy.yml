@@ -324,6 +324,40 @@ jobs:
           rm -rf packages/notification-deps packages/notification-build
 
           # ============================================================
+          # Canary Lambda - X-Ray tracing health validation (Feature 1219)
+          # ============================================================
+          echo ""
+          echo "📦 Packaging Canary Lambda (boto3, aws-lambda-powertools, aws-xray-sdk)..."
+
+          pip install \
+            boto3==1.41.0 \
+            aws-lambda-powertools==3.7.0 \
+            aws-xray-sdk==2.14.0 \
+            -t packages/canary-deps/ \
+            --platform manylinux2014_x86_64 \
+            --implementation cp \
+            --python-version 313 \
+            --only-binary=:all: \
+            --no-cache-dir \
+            --disable-pip-version-check \
+            --quiet
+
+          # Build canary package (standalone — no shared modules needed)
+          mkdir -p packages/canary-build
+          cp -r packages/canary-deps/* packages/canary-build/
+          cp -r src/lambdas/canary/* packages/canary-build/
+          cd packages/canary-build
+          zip -r ../canary-${SHA}.zip . \
+            -x "*.pyc" "__pycache__/*" "*.pytest_cache/*" "tests/*" -q
+          cd ../..
+
+          validate_lambda_package "canary" "handler.py"
+
+          CANARY_SIZE=$(du -h packages/canary-${SHA}.zip | cut -f1)
+          echo "✅ Canary Lambda: ${CANARY_SIZE}"
+          rm -rf packages/canary-deps packages/canary-build
+
+          # ============================================================
           # Summary
           # ============================================================
           echo ""
@@ -333,6 +367,7 @@ jobs:
           echo "  Analysis:      ${ANALYSIS_SIZE}"
           echo "  Metrics:       ${METRICS_SIZE}"
           echo "  Notification:  ${NOTIFICATION_SIZE}"
+          echo "  Canary:        ${CANARY_SIZE}"
           echo ""
           ls -lh packages/*.zip
           echo ""
@@ -755,6 +790,10 @@ jobs:
 
           aws s3 cp ../../packages/notification-${SHA}.zip \
             s3://${BUCKET}/notification/lambda.zip \
+            --metadata "git-sha=${GITHUB_SHA},build-timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+          aws s3 cp ../../packages/canary-${SHA}.zip \
+            s3://${BUCKET}/canary/lambda.zip \
             --metadata "git-sha=${GITHUB_SHA},build-timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
           echo "✅ Lambda packages uploaded to S3"
@@ -1629,6 +1668,10 @@ jobs:
 
           aws s3 cp ../../packages/notification-${SHA}.zip \
             s3://${BUCKET}/notification/lambda.zip \
+            --metadata "git-sha=${GITHUB_SHA},build-timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ),validated-in=preprod"
+
+          aws s3 cp ../../packages/canary-${SHA}.zip \
+            s3://${BUCKET}/canary/lambda.zip \
             --metadata "git-sha=${GITHUB_SHA},build-timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ),validated-in=preprod"
 
           echo "✅ Lambda packages uploaded to S3"

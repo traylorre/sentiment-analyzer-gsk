@@ -108,3 +108,41 @@ resource "aws_lambda_permission" "eventbridge_invoke_digest" {
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.daily_digest_schedule[0].arn
 }
+
+# =============================================================================
+# X-Ray Canary Schedule (T087, FR-122)
+# =============================================================================
+# Triggers canary Lambda every 5 minutes to validate X-Ray tracing health.
+# Starts the 14-day healthy baseline clock required by FR-109.
+# =============================================================================
+
+resource "aws_cloudwatch_event_rule" "canary_schedule" {
+  count = var.create_canary_schedule ? 1 : 0
+
+  name                = "${var.environment}-xray-canary-schedule"
+  description         = "Trigger X-Ray canary health validation every 5 minutes"
+  schedule_expression = "rate(5 minutes)"
+
+  tags = {
+    Environment = var.environment
+    Feature     = "1219-xray-exclusive-tracing"
+  }
+}
+
+resource "aws_cloudwatch_event_target" "canary_lambda" {
+  count = var.create_canary_schedule ? 1 : 0
+
+  rule      = aws_cloudwatch_event_rule.canary_schedule[0].name
+  target_id = "CanaryLambdaTarget"
+  arn       = var.canary_lambda_arn
+}
+
+resource "aws_lambda_permission" "eventbridge_invoke_canary" {
+  count = var.create_canary_schedule ? 1 : 0
+
+  statement_id  = "AllowCanaryExecutionFromEventBridge"
+  action        = "lambda:InvokeFunction"
+  function_name = var.canary_lambda_function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.canary_schedule[0].arn
+}

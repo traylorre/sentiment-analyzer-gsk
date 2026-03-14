@@ -38,12 +38,19 @@ export async function GET(
   const upstreamUrl = `${sseUrl}/${upstreamPath}`;
 
   try {
+    // T067 (FR-032): Propagate X-Amzn-Trace-Id from incoming request to upstream
+    const traceId = request.headers.get('X-Amzn-Trace-Id');
+    const upstreamHeaders: Record<string, string> = {
+      Authorization: `Bearer ${token}`,
+      Accept: 'text/event-stream',
+    };
+    if (traceId) {
+      upstreamHeaders['X-Amzn-Trace-Id'] = traceId;
+    }
+
     // Server-to-server call (can use headers)
     const upstream = await fetch(upstreamUrl, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'text/event-stream',
-      },
+      headers: upstreamHeaders,
     });
 
     if (!upstream.ok) {
@@ -51,13 +58,20 @@ export async function GET(
     }
 
     // Stream response back to client
+    // T067: Expose upstream X-Amzn-Trace-Id so SSEConnection can read it (FR-033)
+    const responseHeaders: Record<string, string> = {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    };
+    const upstreamTraceId = upstream.headers.get('X-Amzn-Trace-Id');
+    if (upstreamTraceId) {
+      responseHeaders['X-Amzn-Trace-Id'] = upstreamTraceId;
+    }
+
     return new Response(upstream.body, {
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache, no-transform',
-        Connection: 'keep-alive',
-        'X-Accel-Buffering': 'no',
-      },
+      headers: responseHeaders,
     });
   } catch (error) {
     console.error('SSE proxy error:', error);

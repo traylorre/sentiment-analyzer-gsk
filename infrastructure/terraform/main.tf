@@ -885,6 +885,8 @@ module "iam" {
   # Feature 1087: OHLC persistent cache table
   enable_ohlc_cache    = true
   ohlc_cache_table_arn = module.dynamodb.ohlc_cache_table_arn
+  # Feature 1219: X-Ray canary (T086, FR-051)
+  enable_canary = true
 }
 
 # ===================================================================
@@ -903,7 +905,56 @@ module "eventbridge" {
   metrics_lambda_arn           = module.metrics_lambda.function_arn
   metrics_lambda_function_name = module.metrics_lambda.function_name
 
-  depends_on = [module.ingestion_lambda, module.metrics_lambda]
+  # X-Ray Canary (T087, FR-122)
+  create_canary_schedule      = true
+  canary_lambda_arn           = module.canary_lambda.function_arn
+  canary_lambda_function_name = module.canary_lambda.function_name
+
+  depends_on = [module.ingestion_lambda, module.metrics_lambda, module.canary_lambda]
+}
+
+# ===================================================================
+# Module: X-Ray Canary Lambda (T088, FR-019, FR-122)
+# ===================================================================
+
+module "canary_lambda" {
+  source = "./modules/lambda"
+
+  function_name = "${var.environment}-sentiment-canary"
+  description   = "X-Ray tracing health validation canary (5-min schedule)"
+  iam_role_arn  = module.iam.canary_lambda_role_arn
+  handler       = "handler.handler"
+  s3_bucket     = "${var.environment}-sentiment-lambda-deployments"
+  s3_key        = "canary/lambda.zip"
+
+  source_code_hash = var.lambda_package_version
+
+  memory_size          = 128
+  timeout              = 120 # Needs time for X-Ray query retries (30s+60s+90s)
+  reserved_concurrency = 1
+
+  # Canary submits traces programmatically -- PassThrough avoids double-tracing
+  tracing_mode = "PassThrough"
+
+  environment_variables = {
+    ENVIRONMENT = var.environment
+    LOG_LEVEL   = "INFO"
+  }
+
+  create_function_url = false
+
+  log_retention_days = var.environment == "prod" ? 90 : 14
+
+  create_error_alarm    = true
+  error_alarm_threshold = 3
+  alarm_actions         = [module.monitoring.alarm_topic_arn]
+
+  tags = {
+    Lambda  = "canary"
+    Feature = "1219-xray-exclusive-tracing"
+  }
+
+  depends_on = [module.iam]
 }
 
 # ===================================================================
@@ -929,6 +980,19 @@ module "monitoring" {
   environment          = var.environment
   alarm_email          = var.alarm_email
   monthly_budget_limit = var.monthly_budget_limit
+}
+
+# ===================================================================
+# X-Ray Service Quotas Increase (T006, FR-178)
+# Projected peak ~520 TPS exceeds 500 default limit
+# ===================================================================
+
+resource "aws_servicequotas_service_quota" "xray_trace_segments" {
+  count = var.environment == "prod" ? 1 : 0
+
+  service_code = "xray"
+  quota_code   = "L-E4D5B4A0" # PutTraceSegments TPS
+  value        = 1000
 }
 
 # ===================================================================

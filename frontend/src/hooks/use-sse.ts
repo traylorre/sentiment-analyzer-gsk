@@ -2,12 +2,9 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import {
-  SSEClient,
-  SSEStatus,
-  SSEMessage,
-  SentimentUpdatePayload,
-} from '@/lib/api/sse';
+import type { SSEStatus, SSEMessage, SentimentUpdatePayload } from '@/lib/api/sse';
+import { SSEConnection, type ConnectionInfo } from '@/lib/api/sse-connection';
+import type { SSEEvent } from '@/lib/api/sse-parser';
 import { joinUrl } from '@/lib/utils/url';
 import { useRuntimeStore, useRuntimeLoaded } from '@/stores/runtime-store';
 
@@ -17,9 +14,10 @@ interface UseSSEOptions {
    * User token for authenticated config-specific streams.
    * Required when configId is provided.
    *
-   * Note: EventSource API does not support custom HTTP headers,
-   * so the token must be passed as a query parameter. Use short-lived
-   * tokens for security (tokens in URLs appear in browser history and logs).
+   * When using the same-origin proxy (Gap 4), the token is sent
+   * via HttpOnly cookie instead of URL parameter.
+   * With fetch+ReadableStream (T065), custom headers like
+   * X-Amzn-Trace-Id are injected for trace correlation (FR-032).
    */
   userToken?: string;
   enabled?: boolean;
@@ -39,51 +37,67 @@ export function useSSE(options: UseSSEOptions = {}): UseSSEResult {
 
   const [status, setStatus] = useState<SSEStatus>('disconnected');
   const [lastUpdate, setLastUpdate] = useState<string | null>(null);
-  const clientRef = useRef<SSEClient | null>(null);
+  const connectionRef = useRef<SSEConnection | null>(null);
   const queryClient = useQueryClient();
 
   // Feature 1100: Get SSE URL from runtime config
   const getSseBaseUrl = useRuntimeStore((state) => state.getSseBaseUrl);
   const runtimeLoaded = useRuntimeLoaded();
 
-  const handleMessage = useCallback(
-    (message: SSEMessage) => {
-      if (message.type === 'sentiment_update') {
-        const payload = message.data as SentimentUpdatePayload;
+  // T065: Handle SSE events from fetch+ReadableStream parser
+  const handleEvent = useCallback(
+    (event: SSEEvent) => {
+      try {
+        const parsed = JSON.parse(event.data);
 
-        // Filter by configId if provided
-        if (configId && payload.configId !== configId) {
-          return;
+        // Build SSEMessage for compatibility with existing consumers
+        const message: SSEMessage = {
+          type: event.type === 'message' ? (parsed.type || 'message') : event.type,
+          data: parsed.data ?? parsed,
+          timestamp: parsed.timestamp || new Date().toISOString(),
+        };
+
+        if (message.type === 'sentiment_update') {
+          const payload = message.data as SentimentUpdatePayload;
+
+          // Filter by configId if provided
+          if (configId && payload.configId !== configId) {
+            return;
+          }
+
+          setLastUpdate(message.timestamp);
+
+          // Invalidate relevant queries to trigger re-fetch
+          queryClient.invalidateQueries({ queryKey: ['sentiment'] });
+          queryClient.invalidateQueries({ queryKey: ['metrics'] });
+
+          // Call the custom update handler
+          onUpdate?.(payload);
         }
-
-        setLastUpdate(message.timestamp);
-
-        // Invalidate relevant queries to trigger re-fetch
-        queryClient.invalidateQueries({ queryKey: ['sentiment'] });
-        queryClient.invalidateQueries({ queryKey: ['metrics'] });
-
-        // Call the custom update handler
-        onUpdate?.(payload);
+      } catch {
+        // Non-JSON events (heartbeat, comments) — ignore
       }
     },
     [configId, queryClient, onUpdate]
   );
 
-  const handleStatusChange = useCallback((newStatus: SSEStatus) => {
-    setStatus(newStatus);
-  }, []);
-
-  const handleError = useCallback((error: Error) => {
-    console.error('SSE Error:', error.message);
+  // Map ConnectionState to SSEStatus for backward compatibility
+  const handleStateChange = useCallback((info: ConnectionInfo) => {
+    const stateMap: Record<string, SSEStatus> = {
+      connected: 'connected',
+      reconnecting: 'connecting',
+      disconnected: 'disconnected',
+      error: 'error',
+    };
+    setStatus(stateMap[info.state] || 'disconnected');
   }, []);
 
   const connect = useCallback(() => {
-    if (clientRef.current) {
-      clientRef.current.disconnect();
+    if (connectionRef.current) {
+      connectionRef.current.disconnect();
     }
 
     // Feature 1100: Use SSE Lambda URL from runtime config
-    // Falls back to NEXT_PUBLIC_API_URL if runtime config not available
     const baseUrl = getSseBaseUrl();
 
     // Build URL based on whether this is a config-specific or global stream
@@ -94,7 +108,6 @@ export function useSSE(options: UseSSEOptions = {}): UseSSEResult {
     if (configId) {
       if (useProxy) {
         // Same-origin proxy: cookie sent automatically, token never in URL
-        // Security: HttpOnly cookie prevents XSS theft, no URL logging exposure
         url = `/api/sse/configurations/${configId}/stream`;
       } else {
         // Legacy: token in URL (preprod temporary mitigation with short expiry)
@@ -106,23 +119,22 @@ export function useSSE(options: UseSSEOptions = {}): UseSSEResult {
       }
     } else {
       // Global stream (no authentication required)
-      // Feature 1118: Use joinUrl to prevent double-slash issues
       url = useProxy ? '/api/sse/stream' : joinUrl(baseUrl, '/api/v2/stream');
     }
 
-    clientRef.current = new SSEClient(url, {
-      onMessage: handleMessage,
-      onStatusChange: handleStatusChange,
-      onError: handleError,
+    connectionRef.current = new SSEConnection({
+      url,
+      onEvent: handleEvent,
+      onStateChange: handleStateChange,
     });
 
-    clientRef.current.connect();
-  }, [configId, userToken, getSseBaseUrl, handleMessage, handleStatusChange, handleError]);
+    connectionRef.current.connect();
+  }, [configId, userToken, getSseBaseUrl, handleEvent, handleStateChange]);
 
   const disconnect = useCallback(() => {
-    if (clientRef.current) {
-      clientRef.current.disconnect();
-      clientRef.current = null;
+    if (connectionRef.current) {
+      connectionRef.current.disconnect();
+      connectionRef.current = null;
     }
   }, []);
 
@@ -140,7 +152,7 @@ export function useSSE(options: UseSSEOptions = {}): UseSSEResult {
 
   // Reconnect when configId or userToken changes
   useEffect(() => {
-    if (enabled && clientRef.current) {
+    if (enabled && connectionRef.current) {
       disconnect();
       connect();
     }
