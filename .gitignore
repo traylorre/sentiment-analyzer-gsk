@@ -172,6 +172,9 @@ model/
 !.vscode/settings.json
 !.vscode/extensions.json
 
+# Claude Code (session state, recovery logs)
+.claude/
+
 # PyCharm
 .idea/
 
