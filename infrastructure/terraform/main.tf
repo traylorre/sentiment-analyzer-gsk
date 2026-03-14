@@ -914,7 +914,9 @@ module "xray" {
   source = "./modules/xray"
 
   environment = var.environment
-  tags        = local.common_tags
+  tags = {
+    Feature = "1219-xray-exclusive-tracing"
+  }
 }
 
 # ===================================================================
@@ -937,7 +939,9 @@ module "cloudwatch_alarms" {
   source = "./modules/cloudwatch-alarms"
 
   environment = var.environment
-  tags        = local.common_tags
+  tags = {
+    Feature = "1219-xray-exclusive-tracing"
+  }
 
   lambda_function_names = {
     ingestion    = module.ingestion_lambda.function_name
