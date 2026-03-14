@@ -395,6 +395,7 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
     effect = "Allow"
     actions = [
       "cloudwatch:PutMetricAlarm",
+      "cloudwatch:PutCompositeAlarm",
       "cloudwatch:DeleteAlarms",
       "cloudwatch:DescribeAlarms",
       "cloudwatch:TagResource",
