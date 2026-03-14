@@ -29,22 +29,22 @@
 ---
 
 ## Phase 3: US1 - SSE ADOT (P1) MVP
-- [ ] T007 [US1] Add ADOT layer download in .github/workflows/deploy.yml BEFORE SSE build. Env var ADOT_COLLECTOR_VERSION=0-102-1. Preprod after line 518, prod after line 1491. Download to src/lambdas/sse_streaming/adot-layer/
-- [ ] T008 [US1] Modify src/lambdas/sse_streaming/Dockerfile: COPY lambdas/sse_streaming/adot-layer/extensions/ /opt/extensions/ and collector-config/ to /opt/collector-config/ BEFORE USER lambda (line 66). chmod +x. Replace TODO. Paths relative to context src/.
-- [ ] T009 [P] [US1] Add exclusion comment to src/lambdas/analysis/Dockerfile
-- [ ] T010 [P] [US1] Add exclusion comment to src/lambdas/dashboard/Dockerfile
-- [ ] T011 [US1] Add lambdas/sse_streaming/adot-layer/ to src/.dockerignore and .gitignore
-- [ ] T012 [US1] Verify Dockerfile builds without adot-layer/ (graceful degradation)
+- [x] T007 [US1] Add ADOT layer download in .github/workflows/deploy.yml BEFORE SSE build. Env var ADOT_COLLECTOR_VERSION=0-102-1. Preprod after line 518, prod after line 1491. Download to src/lambdas/sse_streaming/adot-layer/
+- [x] T008 [US1] Modify src/lambdas/sse_streaming/Dockerfile: COPY lambdas/sse_streaming/adot-layer/extensions/ /opt/extensions/ and collector-config/ to /opt/collector-config/ BEFORE USER lambda (line 66). chmod +x. Replace TODO. Paths relative to context src/.
+- [x] T009 [P] [US1] Add exclusion comment to src/lambdas/analysis/Dockerfile
+- [x] T010 [P] [US1] Add exclusion comment to src/lambdas/dashboard/Dockerfile
+- [x] T011 [US1] Add lambdas/sse_streaming/adot-layer/ to src/.dockerignore and .gitignore
+- [x] T012 [US1] Verify Dockerfile builds without adot-layer/ (graceful degradation)
 
 ---
 
 ## Phase 4: US2 - Frontend Trace (P2)
 **Note**: sse-connection.ts NO changes. client.ts deferred.
-- [ ] T013 [US2] Create frontend/src/lib/tracing.ts: generateXRayTraceId() via crypto.getRandomValues(). Import as @/lib/tracing.
-- [ ] T014 [US2] Modify frontend/src/hooks/use-sse.ts: pass trace headers to SSEConnection constructor (~line 126). Fix FR-032 comments.
-- [ ] T015 [P] [US2] Modify frontend/src/app/api/sse/[...path]/route.ts: fallback trace ID (~3 lines)
-- [ ] T016 [US2] Modify frontend/tests/e2e/xray-trace-propagation.spec.ts: assert REQUEST headers + reconnection test
-- [ ] T017 [US2] Run Playwright locally (no CORS issue). Preprod E2E needs T002/T003 deployed.
+- [x] T013 [US2] Create frontend/src/lib/tracing.ts: generateXRayTraceId() via crypto.getRandomValues(). Import as @/lib/tracing.
+- [x] T014 [US2] Modify frontend/src/hooks/use-sse.ts: pass trace headers to SSEConnection constructor (~line 126). Fix FR-032 comments.
+- [x] T015 [P] [US2] Modify frontend/src/app/api/sse/[...path]/route.ts: fallback trace ID (~3 lines)
+- [x] T016 [US2] Modify frontend/tests/e2e/xray-trace-propagation.spec.ts: assert REQUEST headers + reconnection test
+- [x] T017 [US2] Run Playwright locally (no CORS issue). Preprod E2E needs T002/T003 deployed.
 
 ---
 

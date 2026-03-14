@@ -39,14 +39,17 @@ export async function GET(
 
   try {
     // T067 (FR-032): Propagate X-Amzn-Trace-Id from incoming request to upstream
-    const traceId = request.headers.get('X-Amzn-Trace-Id');
+    // 1220 FR-011: Generate fallback if browser didn't send one
+    let traceId = request.headers.get('X-Amzn-Trace-Id');
+    if (!traceId) {
+      const ts = Math.floor(Date.now() / 1000).toString(16);
+      traceId = `Root=1-${ts}-${crypto.randomUUID().replace(/-/g, '').slice(0, 24)};Sampled=1`;
+    }
     const upstreamHeaders: Record<string, string> = {
       Authorization: `Bearer ${token}`,
       Accept: 'text/event-stream',
+      'X-Amzn-Trace-Id': traceId,
     };
-    if (traceId) {
-      upstreamHeaders['X-Amzn-Trace-Id'] = traceId;
-    }
 
     // Server-to-server call (can use headers)
     const upstream = await fetch(upstreamUrl, {

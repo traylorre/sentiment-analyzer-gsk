@@ -517,6 +517,20 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
+      - name: Download ADOT Collector Layer
+        continue-on-error: true
+        env:
+          ADOT_COLLECTOR_VERSION: "0-102-1"
+          AWS_REGION_VAL: ${{ vars.AWS_REGION }}
+        run: |
+          LAYER_ARN="arn:aws:lambda:${AWS_REGION_VAL}:901920570463:layer:aws-otel-collector-amd64-ver-${ADOT_COLLECTOR_VERSION}:1"
+          echo "Downloading ADOT Collector Layer: ${LAYER_ARN}"
+          LAYER_URL=$(aws lambda get-layer-version-by-arn --arn "$LAYER_ARN" --query 'Content.Location' --output text)
+          mkdir -p src/lambdas/sse_streaming/adot-layer
+          curl -sL -o /tmp/adot-layer.zip "$LAYER_URL"
+          unzip -qo /tmp/adot-layer.zip -d src/lambdas/sse_streaming/adot-layer/
+          ls -la src/lambdas/sse_streaming/adot-layer/extensions/ || echo "WARNING: ADOT layer extraction failed"
+
       - name: Build and Push SSE Lambda Image
         uses: docker/build-push-action@v7
         with:
@@ -1490,6 +1504,20 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
+
+      - name: Download ADOT Collector Layer
+        continue-on-error: true
+        env:
+          ADOT_COLLECTOR_VERSION: "0-102-1"
+          AWS_REGION_VAL: ${{ vars.AWS_REGION }}
+        run: |
+          LAYER_ARN="arn:aws:lambda:${AWS_REGION_VAL}:901920570463:layer:aws-otel-collector-amd64-ver-${ADOT_COLLECTOR_VERSION}:1"
+          echo "Downloading ADOT Collector Layer: ${LAYER_ARN}"
+          LAYER_URL=$(aws lambda get-layer-version-by-arn --arn "$LAYER_ARN" --query 'Content.Location' --output text)
+          mkdir -p src/lambdas/sse_streaming/adot-layer
+          curl -sL -o /tmp/adot-layer.zip "$LAYER_URL"
+          unzip -qo /tmp/adot-layer.zip -d src/lambdas/sse_streaming/adot-layer/
+          ls -la src/lambdas/sse_streaming/adot-layer/extensions/ || echo "WARNING: ADOT layer extraction failed"
 
       - name: Build and Push SSE Lambda Image
         uses: docker/build-push-action@v7

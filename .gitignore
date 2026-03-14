@@ -194,3 +194,6 @@ DEMO_URLS.local.md
 
 # Local-only context/session files (not for version control)
 CONTEXT-CARRYOVER*.md
+
+# ADOT Collector Layer (CI-generated, not committed)
+src/lambdas/sse_streaming/adot-layer/
