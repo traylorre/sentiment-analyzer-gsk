@@ -29,7 +29,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
-from aws_xray_sdk.core import xray_recorder
+from aws_lambda_powertools import Tracer
 from boto3.dynamodb.conditions import Key
 from pydantic import BaseModel
 
@@ -37,6 +37,7 @@ from src.lambdas.shared.logging_utils import get_safe_error_info, sanitize_for_l
 from src.lambdas.shared.models.notification import DigestSettings, Notification
 from src.lambdas.shared.models.status_utils import DISABLED, ENABLED
 
+tracer = Tracer()
 logger = logging.getLogger(__name__)
 
 
@@ -167,7 +168,7 @@ class ErrorResponse(BaseModel):
 # Service functions
 
 
-@xray_recorder.capture("list_notifications")
+@tracer.capture_method
 def list_notifications(
     table: Any,
     user_id: str,
@@ -242,7 +243,7 @@ def list_notifications(
         raise
 
 
-@xray_recorder.capture("get_notification")
+@tracer.capture_method
 def get_notification(
     table: Any,
     user_id: str,
@@ -287,7 +288,7 @@ def get_notification(
         raise
 
 
-@xray_recorder.capture("get_notification_preferences")
+@tracer.capture_method
 def get_notification_preferences(
     table: Any,
     user_id: str,
@@ -342,7 +343,7 @@ def get_notification_preferences(
         raise
 
 
-@xray_recorder.capture("update_notification_preferences")
+@tracer.capture_method
 def update_notification_preferences(
     table: Any,
     user_id: str,
@@ -439,7 +440,7 @@ def update_notification_preferences(
         raise
 
 
-@xray_recorder.capture("disable_all_notifications")
+@tracer.capture_method
 def disable_all_notifications(
     table: Any,
     user_id: str,
@@ -511,7 +512,7 @@ def disable_all_notifications(
         raise
 
 
-@xray_recorder.capture("unsubscribe_via_token")
+@tracer.capture_method
 def unsubscribe_via_token(
     table: Any,
     token: str,
@@ -603,7 +604,7 @@ def unsubscribe_via_token(
         raise
 
 
-@xray_recorder.capture("resubscribe")
+@tracer.capture_method
 def resubscribe(
     table: Any,
     user_id: str,
@@ -649,7 +650,7 @@ def resubscribe(
         raise
 
 
-@xray_recorder.capture("get_digest_settings")
+@tracer.capture_method
 def get_digest_settings(
     table: Any,
     user_id: str,
@@ -694,7 +695,7 @@ def get_digest_settings(
         raise
 
 
-@xray_recorder.capture("update_digest_settings")
+@tracer.capture_method
 def update_digest_settings(
     table: Any,
     user_id: str,
@@ -832,7 +833,7 @@ def update_digest_settings(
         raise
 
 
-@xray_recorder.capture("trigger_test_digest")
+@tracer.capture_method
 def trigger_test_digest(
     table: Any,
     user_id: str,

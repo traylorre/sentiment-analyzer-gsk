@@ -81,7 +81,7 @@ def sample_notification_item(user_id, notification_id, alert_id):
 class TestListNotifications:
     """Tests for list_notifications function."""
 
-    @patch("src.lambdas.dashboard.notifications.xray_recorder")
+    @patch("src.lambdas.dashboard.notifications.tracer")
     def test_lists_notifications(
         self, mock_xray, mock_table, user_id, sample_notification_item
     ):
@@ -95,7 +95,7 @@ class TestListNotifications:
         assert result.total == 1
         assert result.notifications[0].ticker == "AAPL"
 
-    @patch("src.lambdas.dashboard.notifications.xray_recorder")
+    @patch("src.lambdas.dashboard.notifications.tracer")
     def test_filters_by_status(
         self, mock_xray, mock_table, user_id, sample_notification_item
     ):
@@ -110,7 +110,7 @@ class TestListNotifications:
         assert len(result.notifications) == 1
         assert result.notifications[0].status == "sent"
 
-    @patch("src.lambdas.dashboard.notifications.xray_recorder")
+    @patch("src.lambdas.dashboard.notifications.tracer")
     def test_filters_by_alert_id(
         self, mock_xray, mock_table, user_id, sample_notification_item, alert_id
     ):
@@ -125,7 +125,7 @@ class TestListNotifications:
         assert len(result.notifications) == 1
         assert result.notifications[0].alert_id == alert_id
 
-    @patch("src.lambdas.dashboard.notifications.xray_recorder")
+    @patch("src.lambdas.dashboard.notifications.tracer")
     def test_paginates_results(
         self, mock_xray, mock_table, user_id, sample_notification_item
     ):
@@ -142,7 +142,7 @@ class TestListNotifications:
         assert result.limit == 2
         assert result.offset == 1
 
-    @patch("src.lambdas.dashboard.notifications.xray_recorder")
+    @patch("src.lambdas.dashboard.notifications.tracer")
     def test_enforces_max_limit(
         self, mock_xray, mock_table, user_id, sample_notification_item
     ):
@@ -153,7 +153,7 @@ class TestListNotifications:
 
         assert result.limit == 100
 
-    @patch("src.lambdas.dashboard.notifications.xray_recorder")
+    @patch("src.lambdas.dashboard.notifications.tracer")
     def test_returns_empty_list(self, mock_xray, mock_table, user_id):
         """Returns empty list when no notifications."""
         mock_table.query.return_value = {"Items": []}
@@ -167,7 +167,7 @@ class TestListNotifications:
 class TestGetNotification:
     """Tests for get_notification function."""
 
-    @patch("src.lambdas.dashboard.notifications.xray_recorder")
+    @patch("src.lambdas.dashboard.notifications.tracer")
     def test_gets_notification(
         self, mock_xray, mock_table, user_id, sample_notification_item, notification_id
     ):
@@ -179,7 +179,7 @@ class TestGetNotification:
         assert isinstance(result, NotificationResponse)
         assert result.notification_id == notification_id
 
-    @patch("src.lambdas.dashboard.notifications.xray_recorder")
+    @patch("src.lambdas.dashboard.notifications.tracer")
     def test_includes_email_in_detail(
         self, mock_xray, mock_table, user_id, sample_notification_item, notification_id
     ):
@@ -190,7 +190,7 @@ class TestGetNotification:
 
         assert result.email == "test@example.com"
 
-    @patch("src.lambdas.dashboard.notifications.xray_recorder")
+    @patch("src.lambdas.dashboard.notifications.tracer")
     def test_includes_tracking_info(
         self, mock_xray, mock_table, user_id, sample_notification_item, notification_id
     ):
@@ -204,7 +204,7 @@ class TestGetNotification:
         assert result.tracking is not None
         assert result.tracking.opened_at is not None
 
-    @patch("src.lambdas.dashboard.notifications.xray_recorder")
+    @patch("src.lambdas.dashboard.notifications.tracer")
     def test_returns_none_for_not_found(self, mock_xray, mock_table, user_id):
         """Returns None when notification not found."""
         mock_table.query.return_value = {"Items": []}
@@ -217,7 +217,7 @@ class TestGetNotification:
 class TestGetNotificationPreferences:
     """Tests for get_notification_preferences function."""
 
-    @patch("src.lambdas.dashboard.notifications.xray_recorder")
+    @patch("src.lambdas.dashboard.notifications.tracer")
     def test_gets_existing_preferences(self, mock_xray, mock_table, user_id):
         """Gets existing preferences."""
         mock_table.get_item.return_value = {
@@ -237,7 +237,7 @@ class TestGetNotificationPreferences:
         assert result.daily_digest_enabled is True
         assert result.digest_time == "08:00"
 
-    @patch("src.lambdas.dashboard.notifications.xray_recorder")
+    @patch("src.lambdas.dashboard.notifications.tracer")
     def test_returns_defaults_for_new_user(self, mock_xray, mock_table, user_id):
         """Returns default preferences for new user."""
         mock_table.get_item.return_value = {}
@@ -253,7 +253,7 @@ class TestGetNotificationPreferences:
 class TestUpdateNotificationPreferences:
     """Tests for update_notification_preferences function."""
 
-    @patch("src.lambdas.dashboard.notifications.xray_recorder")
+    @patch("src.lambdas.dashboard.notifications.tracer")
     def test_updates_email_enabled(self, mock_xray, mock_table, user_id):
         """Updates email notifications enabled."""
         mock_table.get_item.return_value = {}
@@ -265,7 +265,7 @@ class TestUpdateNotificationPreferences:
         assert isinstance(result, NotificationPreferencesResponse)
         mock_table.update_item.assert_called_once()
 
-    @patch("src.lambdas.dashboard.notifications.xray_recorder")
+    @patch("src.lambdas.dashboard.notifications.tracer")
     def test_updates_digest_time(self, mock_xray, mock_table, user_id):
         """Updates digest time."""
         mock_table.get_item.return_value = {}
@@ -276,7 +276,7 @@ class TestUpdateNotificationPreferences:
 
         assert isinstance(result, NotificationPreferencesResponse)
 
-    @patch("src.lambdas.dashboard.notifications.xray_recorder")
+    @patch("src.lambdas.dashboard.notifications.tracer")
     def test_rejects_invalid_time_format(self, mock_xray, mock_table, user_id):
         """Rejects invalid time format."""
         result = update_notification_preferences(mock_table, user_id, digest_time="9am")
@@ -284,7 +284,7 @@ class TestUpdateNotificationPreferences:
         assert isinstance(result, ErrorResponse)
         assert result.error.code == "INVALID_TIME"
 
-    @patch("src.lambdas.dashboard.notifications.xray_recorder")
+    @patch("src.lambdas.dashboard.notifications.tracer")
     def test_rejects_invalid_timezone(self, mock_xray, mock_table, user_id):
         """Rejects invalid timezone."""
         result = update_notification_preferences(
@@ -298,7 +298,7 @@ class TestUpdateNotificationPreferences:
 class TestDisableAllNotifications:
     """Tests for disable_all_notifications function."""
 
-    @patch("src.lambdas.dashboard.notifications.xray_recorder")
+    @patch("src.lambdas.dashboard.notifications.tracer")
     def test_disables_preferences_and_alerts(self, mock_xray, mock_table, user_id):
         """Disables preferences and all alerts."""
         mock_table.query.return_value = {
@@ -319,7 +319,7 @@ class TestDisableAllNotifications:
 class TestUnsubscribeViaToken:
     """Tests for unsubscribe_via_token function."""
 
-    @patch("src.lambdas.dashboard.notifications.xray_recorder")
+    @patch("src.lambdas.dashboard.notifications.tracer")
     def test_unsubscribes_with_valid_token(self, mock_xray, mock_table, user_id):
         """Unsubscribes with valid token."""
         secret_key = "test_secret_key"
@@ -331,7 +331,7 @@ class TestUnsubscribeViaToken:
         assert result.status == "unsubscribed"
         assert result.user_id == user_id
 
-    @patch("src.lambdas.dashboard.notifications.xray_recorder")
+    @patch("src.lambdas.dashboard.notifications.tracer")
     def test_rejects_invalid_token_format(self, mock_xray, mock_table):
         """Rejects invalid token format."""
         result = unsubscribe_via_token(mock_table, "invalid_token", "secret")
@@ -339,7 +339,7 @@ class TestUnsubscribeViaToken:
         assert isinstance(result, ErrorResponse)
         assert result.error.code == "INVALID_TOKEN"
 
-    @patch("src.lambdas.dashboard.notifications.xray_recorder")
+    @patch("src.lambdas.dashboard.notifications.tracer")
     def test_rejects_invalid_signature(self, mock_xray, mock_table, user_id):
         """Rejects token with invalid signature."""
         timestamp = datetime.now(UTC).isoformat()
@@ -350,7 +350,7 @@ class TestUnsubscribeViaToken:
         assert isinstance(result, ErrorResponse)
         assert result.error.code == "INVALID_TOKEN"
 
-    @patch("src.lambdas.dashboard.notifications.xray_recorder")
+    @patch("src.lambdas.dashboard.notifications.tracer")
     def test_rejects_expired_token(self, mock_xray, mock_table, user_id):
         """Rejects expired token (older than 24 hours)."""
         secret_key = "test_secret"
@@ -367,7 +367,7 @@ class TestUnsubscribeViaToken:
 class TestResubscribe:
     """Tests for resubscribe function."""
 
-    @patch("src.lambdas.dashboard.notifications.xray_recorder")
+    @patch("src.lambdas.dashboard.notifications.tracer")
     def test_resubscribes_user(self, mock_xray, mock_table, user_id):
         """Resubscribes user."""
         result = resubscribe(mock_table, user_id)
@@ -380,7 +380,7 @@ class TestResubscribe:
 class TestGetDigestSettings:
     """Tests for get_digest_settings function."""
 
-    @patch("src.lambdas.dashboard.notifications.xray_recorder")
+    @patch("src.lambdas.dashboard.notifications.tracer")
     def test_gets_existing_settings(self, mock_xray, mock_table, user_id):
         """Gets existing digest settings."""
         mock_table.get_item.return_value = {
@@ -402,7 +402,7 @@ class TestGetDigestSettings:
         assert result.time == "08:00"
         assert result.include_all_configs is False
 
-    @patch("src.lambdas.dashboard.notifications.xray_recorder")
+    @patch("src.lambdas.dashboard.notifications.tracer")
     def test_returns_defaults_for_new_user(self, mock_xray, mock_table, user_id):
         """Returns default settings for new user."""
         mock_table.get_item.return_value = {}
@@ -418,7 +418,7 @@ class TestGetDigestSettings:
 class TestUpdateDigestSettings:
     """Tests for update_digest_settings function."""
 
-    @patch("src.lambdas.dashboard.notifications.xray_recorder")
+    @patch("src.lambdas.dashboard.notifications.tracer")
     def test_updates_enabled(self, mock_xray, mock_table, user_id):
         """Updates enabled status."""
         mock_table.get_item.return_value = {}
@@ -428,7 +428,7 @@ class TestUpdateDigestSettings:
         assert isinstance(result, DigestSettingsResponse)
         mock_table.update_item.assert_called_once()
 
-    @patch("src.lambdas.dashboard.notifications.xray_recorder")
+    @patch("src.lambdas.dashboard.notifications.tracer")
     def test_updates_time(self, mock_xray, mock_table, user_id):
         """Updates digest time."""
         mock_table.get_item.return_value = {}
@@ -437,7 +437,7 @@ class TestUpdateDigestSettings:
 
         assert isinstance(result, DigestSettingsResponse)
 
-    @patch("src.lambdas.dashboard.notifications.xray_recorder")
+    @patch("src.lambdas.dashboard.notifications.tracer")
     def test_rejects_invalid_time(self, mock_xray, mock_table, user_id):
         """Rejects invalid time format."""
         result = update_digest_settings(mock_table, user_id, time="9:00")
@@ -445,7 +445,7 @@ class TestUpdateDigestSettings:
         assert isinstance(result, ErrorResponse)
         assert result.error.code == "INVALID_TIME"
 
-    @patch("src.lambdas.dashboard.notifications.xray_recorder")
+    @patch("src.lambdas.dashboard.notifications.tracer")
     def test_rejects_invalid_timezone(self, mock_xray, mock_table, user_id):
         """Rejects invalid timezone."""
         result = update_digest_settings(mock_table, user_id, timezone="PST")
@@ -453,7 +453,7 @@ class TestUpdateDigestSettings:
         assert isinstance(result, ErrorResponse)
         assert result.error.code == "INVALID_TIMEZONE"
 
-    @patch("src.lambdas.dashboard.notifications.xray_recorder")
+    @patch("src.lambdas.dashboard.notifications.tracer")
     def test_requires_config_ids_when_not_all(self, mock_xray, mock_table, user_id):
         """Requires config_ids when include_all_configs is false."""
         result = update_digest_settings(mock_table, user_id, include_all_configs=False)
@@ -461,7 +461,7 @@ class TestUpdateDigestSettings:
         assert isinstance(result, ErrorResponse)
         assert result.error.code == "CONFIG_IDS_REQUIRED"
 
-    @patch("src.lambdas.dashboard.notifications.xray_recorder")
+    @patch("src.lambdas.dashboard.notifications.tracer")
     def test_accepts_config_ids_with_not_all(self, mock_xray, mock_table, user_id):
         """Accepts config_ids with include_all_configs=false."""
         mock_table.get_item.return_value = {}
@@ -479,7 +479,7 @@ class TestUpdateDigestSettings:
 class TestTriggerTestDigest:
     """Tests for trigger_test_digest function."""
 
-    @patch("src.lambdas.dashboard.notifications.xray_recorder")
+    @patch("src.lambdas.dashboard.notifications.tracer")
     def test_queues_test_digest(self, mock_xray, mock_table, user_id):
         """Queues test digest."""
         result = trigger_test_digest(mock_table, user_id)

@@ -24,7 +24,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from aws_xray_sdk.core import xray_recorder
+from aws_lambda_powertools import Tracer
 from boto3.dynamodb.conditions import Key
 from pydantic import BaseModel, Field
 
@@ -37,6 +37,7 @@ from src.lambdas.shared.models.alert_rule import (
 )
 from src.lambdas.shared.models.status_utils import DISABLED, ENABLED
 
+tracer = Tracer()
 logger = logging.getLogger(__name__)
 
 
@@ -107,7 +108,7 @@ class ErrorResponse(BaseModel):
 # Service functions
 
 
-@xray_recorder.capture("create_alert")
+@tracer.capture_method
 def create_alert(
     table: Any,
     user_id: str,
@@ -193,7 +194,7 @@ def create_alert(
         raise
 
 
-@xray_recorder.capture("list_alerts")
+@tracer.capture_method
 def list_alerts(
     table: Any,
     user_id: str,
@@ -270,7 +271,7 @@ def list_alerts(
         raise
 
 
-@xray_recorder.capture("get_alert")
+@tracer.capture_method
 def get_alert(
     table: Any,
     user_id: str,
@@ -312,7 +313,7 @@ def get_alert(
         raise
 
 
-@xray_recorder.capture("update_alert")
+@tracer.capture_method
 def update_alert(
     table: Any,
     user_id: str,
@@ -409,7 +410,7 @@ def update_alert(
         raise
 
 
-@xray_recorder.capture("delete_alert")
+@tracer.capture_method
 def delete_alert(
     table: Any,
     user_id: str,
@@ -456,7 +457,7 @@ def delete_alert(
         raise
 
 
-@xray_recorder.capture("toggle_alert")
+@tracer.capture_method
 def toggle_alert(
     table: Any,
     user_id: str,

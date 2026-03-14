@@ -13,9 +13,13 @@ from datetime import datetime
 from typing import Any
 
 import boto3
+from aws_lambda_powertools import Tracer
 from botocore.exceptions import ClientError
 
+from src.lib.metrics import emit_metric
+
 logger = logging.getLogger(__name__)
+tracer = Tracer()
 
 
 @dataclass
@@ -132,6 +136,21 @@ class NotificationPublisher:
                     "topic_arn": self._topic_arn,
                     "source": notification.source,
                 },
+            )
+            # X-Ray error subsegment for silent failure visibility
+            try:
+                with tracer.provider.in_subsegment("notification_delivery") as subseg:
+                    subseg.put_annotation("error", True)
+                    subseg.add_exception(e)
+            except Exception:  # noqa: S110
+                pass  # Best-effort: don't fail if X-Ray unavailable
+            # CloudWatch metric for silent failure alerting (SC-019)
+            emit_metric(
+                name="SilentFailure/Count",
+                value=1,
+                unit="Count",
+                dimensions={"FailurePath": "notification_delivery"},
+                namespace="SentimentAnalyzer/Reliability",
             )
             return None
 

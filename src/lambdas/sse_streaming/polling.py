@@ -7,11 +7,13 @@ Per FR-015: Poll at 5-second intervals (configurable via SSE_POLL_INTERVAL).
 import asyncio
 import logging
 import os
+import time
 from datetime import UTC, datetime
 
 import boto3
 from botocore.exceptions import ClientError
 from models import MetricsEventData
+from tracing import get_tracer, is_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +143,15 @@ class PollingService:
             Tuple of (metrics, changed) where changed indicates if
             metrics are different from last poll.
         """
+        # T042: OTel span for DynamoDB poll cycle
+        otel_tracer = get_tracer()
+        span = None
+        if otel_tracer and is_enabled():
+            from opentelemetry.trace import SpanKind
+
+            span = otel_tracer.start_span("dynamodb_poll", kind=SpanKind.CLIENT)
+
+        poll_start = time.perf_counter()
         try:
             # Run DynamoDB GSI queries in executor to avoid blocking
             loop = asyncio.get_event_loop()
@@ -151,6 +162,28 @@ class PollingService:
 
             changed = self._metrics_changed(self._last_metrics, metrics)
             self._last_metrics = metrics
+
+            poll_duration_ms = (time.perf_counter() - poll_start) * 1000
+
+            # T042: Span annotations
+            if span:
+                span.set_attribute("item_count", len(items))
+                span.set_attribute("changed_count", 1 if changed else 0)
+                span.set_attribute("poll_duration_ms", poll_duration_ms)
+
+                # T094: Cache hit rate aggregate annotation (FR-009)
+                try:
+                    from src.lib.timeseries.cache import get_global_cache
+
+                    cache = get_global_cache()
+                    stats = cache.stats()
+                    total_requests = stats.get("hits", 0) + stats.get("misses", 0)
+                    if total_requests > 0:
+                        hit_rate = stats["hits"] / total_requests
+                        span.set_attribute("cache_hit_rate", round(hit_rate, 4))
+                    span.set_attribute("cache_hit", not changed)
+                except Exception:  # noqa: S110
+                    pass  # Best-effort cache metrics
 
             logger.debug(
                 "DynamoDB poll complete",
@@ -163,6 +196,13 @@ class PollingService:
             return metrics, changed
 
         except ClientError as e:
+            # T048: Dual-call error pattern (FR-144, FR-150)
+            if span:
+                from opentelemetry.trace import StatusCode
+
+                span.set_status(StatusCode.ERROR, str(e))
+                span.record_exception(e)
+
             logger.error(
                 "DynamoDB poll failed",
                 extra={"error": str(e)},
@@ -173,6 +213,10 @@ class PollingService:
                 return self._last_metrics, False
             # Return empty metrics on first poll failure
             return MetricsEventData(total=0, positive=0, neutral=0, negative=0), False
+
+        finally:
+            if span:
+                span.end()
 
     def _query_by_sentiment(self, sentiment: str) -> list[dict]:
         """Query DynamoDB table for sentiment items by sentiment type using GSI.

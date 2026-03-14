@@ -172,6 +172,7 @@ def emit_metric(
     unit: str = "Count",
     dimensions: dict[str, str] | None = None,
     region_name: str | None = None,
+    namespace: str | None = None,
 ) -> None:
     """
     Emit a custom metric to CloudWatch.
@@ -182,9 +183,11 @@ def emit_metric(
         unit: CloudWatch unit (Count, Milliseconds, etc.)
         dimensions: Optional dimensions (e.g., {"Environment": "dev"})
         region_name: AWS region
+        namespace: CloudWatch namespace override (default: "SentimentAnalyzer")
 
     On-Call Note:
-        Metrics appear in CloudWatch under namespace "SentimentAnalyzer".
+        Metrics appear in CloudWatch under namespace "SentimentAnalyzer"
+        (or custom namespace if specified).
         View with:
         aws cloudwatch get-metric-statistics \
           --namespace SentimentAnalyzer \
@@ -217,7 +220,7 @@ def emit_metric(
 
     try:
         client.put_metric_data(
-            Namespace=METRIC_NAMESPACE,
+            Namespace=namespace or METRIC_NAMESPACE,
             MetricData=[metric_data],
         )
         logger.debug(

@@ -14,12 +14,14 @@ import logging
 from functools import lru_cache
 from pathlib import Path
 
+from aws_lambda_powertools import Tracer
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 
 from src.lambdas.shared.secrets import SecretRetrievalError, get_secret
 
 logger = logging.getLogger(__name__)
+tracer = Tracer()
 
 # Template directory path
 TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -87,6 +89,7 @@ class EmailService:
             self._client = SendGridAPIClient(self.api_key)
         return self._client
 
+    @tracer.capture_method
     def send_email(
         self,
         to_email: str,
@@ -120,8 +123,13 @@ class EmailService:
         if plain_content:
             message.plain_text_content = plain_content
 
+        # X-Ray annotations for SendGrid (urllib not auto-patched by X-Ray SDK)
+        tracer.put_annotation("recipient_count", 1)
+        tracer.put_annotation("template_name", subject[:50])
+
         try:
             response = self.client.send(message)
+            tracer.put_annotation("sendgrid_status", response.status_code)
 
             # 202 = Accepted (queued for sending)
             if response.status_code == 202:

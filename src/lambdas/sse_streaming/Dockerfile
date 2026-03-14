@@ -8,6 +8,14 @@
 #   cd src && docker build -t sse-streaming -f lambdas/sse_streaming/Dockerfile .
 #   docker run --rm sse-streaming python -c "from handler import handler; print('OK')"
 
+# NOTE: ADOT Lambda Extension (FR-062, FR-069, FR-070) is not included.
+# AWS does not publish a Docker image for the Lambda extension; it is only
+# available as a Lambda Layer (account 901920570463). The OTel SDK in
+# tracing.py degrades gracefully when the extension is absent — connection
+# refused errors are caught and logged, Powertools/X-Ray tracing still works.
+# TODO: Add lambda:GetLayerVersion permission to deployer IAM user, then
+#       download the layer zip in a CI pre-step and COPY extensions/ in.
+
 # Stage 1: Builder - install dependencies
 FROM python:3.13-slim AS builder
 

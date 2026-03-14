@@ -195,10 +195,10 @@ variable "function_url_cors" {
   })
   default = {
     allow_credentials = false
-    allow_headers     = ["content-type", "authorization"]
+    allow_headers     = ["content-type", "authorization", "x-amzn-trace-id"]
     allow_methods     = ["GET", "POST", "OPTIONS"]
     allow_origins     = ["*"]
-    expose_headers    = []
+    expose_headers    = ["x-amzn-trace-id"]
     max_age           = 86400
   }
 }
