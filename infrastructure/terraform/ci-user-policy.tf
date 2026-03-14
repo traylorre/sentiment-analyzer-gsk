@@ -395,7 +395,6 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
     effect = "Allow"
     actions = [
       "cloudwatch:PutMetricAlarm",
-      "cloudwatch:PutCompositeAlarm",
       "cloudwatch:DeleteAlarms",
       "cloudwatch:DescribeAlarms",
       "cloudwatch:TagResource",
@@ -439,6 +438,18 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
     effect = "Allow"
     actions = [
       "cloudwatch:PutMetricData"
+    ]
+    resources = ["*"]
+  }
+
+  # CloudWatch Composite Alarms - require wildcard resource
+  # PutCompositeAlarm evaluates against all referenced alarm ARNs (alarm:*)
+  # so resource-level scoping is not effective for this action
+  statement {
+    sid    = "CloudWatchCompositeAlarms"
+    effect = "Allow"
+    actions = [
+      "cloudwatch:PutCompositeAlarm"
     ]
     resources = ["*"]
   }
