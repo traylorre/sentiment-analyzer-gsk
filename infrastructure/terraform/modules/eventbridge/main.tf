@@ -119,7 +119,7 @@ resource "aws_lambda_permission" "eventbridge_invoke_digest" {
 resource "aws_cloudwatch_event_rule" "canary_schedule" {
   count = var.create_canary_schedule ? 1 : 0
 
-  name                = "${var.environment}-xray-canary-schedule"
+  name                = "${var.environment}-sentiment-xray-canary"
   description         = "Trigger X-Ray canary health validation every 5 minutes"
   schedule_expression = "rate(5 minutes)"
 
