@@ -199,12 +199,19 @@ class LambdaProxyHandler(BaseHTTPRequestHandler):
         self.send_response(status_code)
 
         # CORS headers for local development
+        # NOTE: With credentials: 'include', Access-Control-Allow-Headers
+        # must be explicit (wildcard '*' is treated as literal, not wildcard).
+        # See: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Allow-Headers
         self.send_header("Access-Control-Allow-Origin", "http://localhost:3000")
         self.send_header("Access-Control-Allow-Credentials", "true")
         self.send_header(
             "Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS"
         )
-        self.send_header("Access-Control-Allow-Headers", "*")
+        self.send_header(
+            "Access-Control-Allow-Headers",
+            "Content-Type, Authorization, Accept, Cache-Control, "
+            "Last-Event-ID, X-Amzn-Trace-Id, X-User-ID",
+        )
 
         for key, value in resp_headers.items():
             self.send_header(key, value)
@@ -236,7 +243,11 @@ class LambdaProxyHandler(BaseHTTPRequestHandler):
         self.send_header(
             "Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS"
         )
-        self.send_header("Access-Control-Allow-Headers", "*")
+        self.send_header(
+            "Access-Control-Allow-Headers",
+            "Content-Type, Authorization, Accept, Cache-Control, "
+            "Last-Event-ID, X-Amzn-Trace-Id, X-User-ID",
+        )
         self.end_headers()
 
 
