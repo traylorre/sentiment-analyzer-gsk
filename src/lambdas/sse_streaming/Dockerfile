@@ -58,6 +58,9 @@ COPY lambdas/shared /var/task/src/lambdas/shared
 # Copy lib/timeseries for Resolution and other models
 COPY lib/timeseries /var/task/src/lib/timeseries
 
+# Copy lib/metrics for CloudWatch metric emission (used by fanout.py and circuit_breaker.py)
+COPY lib/metrics.py /var/task/src/lib/metrics.py
+
 # Set Python path to include packages and app directories
 ENV PYTHONPATH=/var/task/packages:/var/task
 
