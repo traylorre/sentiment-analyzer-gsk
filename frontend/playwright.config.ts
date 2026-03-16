@@ -29,6 +29,15 @@ export default defineConfig({
       name: 'Desktop Chrome',
       use: { ...devices['Desktop Chrome'] },
     },
+    // Feature 1223 US6: Cross-browser compatibility
+    {
+      name: 'firefox',
+      use: { ...devices['Desktop Firefox'] },
+    },
+    {
+      name: 'webkit',
+      use: { ...devices['Desktop Safari'] },
+    },
   ],
   // Only start local servers when testing locally (not against deployed environment)
   // For remote testing (CI), the frontend is already deployed with API configured
