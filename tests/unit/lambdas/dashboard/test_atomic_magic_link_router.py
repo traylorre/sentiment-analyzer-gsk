@@ -178,9 +178,8 @@ class TestMagicLinkRouterAtomicIntegration:
         )
         response = lambda_handler(event, mock_lambda_context)
 
-        # Check that cookie was set via multiValueHeaders
-        cookies = response.get("multiValueHeaders", {}).get("Set-Cookie", [])
-        cookie_str = "; ".join(cookies)
+        # Cookies are in headers["Set-Cookie"] (comma-separated string)
+        cookie_str = response.get("headers", {}).get("Set-Cookie", "")
         assert "refresh_token" in cookie_str
         assert "httponly" in cookie_str.lower()
 

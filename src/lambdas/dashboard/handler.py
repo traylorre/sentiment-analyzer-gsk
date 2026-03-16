@@ -13,7 +13,7 @@ For On-Call Engineers:
     See SC-05 in ON_CALL_SOP.md for dashboard-related incidents.
 
 For Developers:
-    - Uses AWS Lambda Powertools APIGatewayRestResolver for routing
+    - Uses AWS Lambda Powertools LambdaFunctionUrlResolver for routing
     - Static files served from /static/ prefix
     - CORS enabled for all origins (demo configuration)
 
@@ -35,7 +35,7 @@ from typing import Any
 import orjson
 from aws_lambda_powertools import Logger, Tracer
 from aws_lambda_powertools.event_handler import (
-    APIGatewayRestResolver,
+    LambdaFunctionUrlResolver,
     Response,
 )
 
@@ -110,7 +110,9 @@ ALLOWED_STATIC_FILES: dict[str, str] = {
 }
 
 # Create Powertools resolver (FR-001, R1)
-app = APIGatewayRestResolver()
+# LambdaFunctionUrlResolver handles Function URL v2 events (rawPath, requestContext.http.method)
+# Previously APIGatewayRestResolver only handled REST v1 events, causing 502 on Function URL
+app = LambdaFunctionUrlResolver()
 
 # Include all routers
 from src.lambdas.dashboard.router_v2 import include_routers
@@ -961,14 +963,14 @@ def delete_chaos_experiment(experiment_id: str):
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """AWS Lambda entry point.
 
-    Uses Powertools APIGatewayRestResolver for routing.
+    Uses Powertools LambdaFunctionUrlResolver for routing.
 
     Args:
-        event: Lambda event (API Gateway Proxy Integration format)
+        event: Lambda event (Lambda Function URL v2 format)
         context: Lambda context
 
     Returns:
-        HTTP response dict (API Gateway Proxy Integration format)
+        HTTP response dict (Lambda Function URL v2 format)
     """
     logger.info(
         "Dashboard Lambda invoked",
