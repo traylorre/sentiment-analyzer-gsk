@@ -46,8 +46,11 @@ def require_csrf_middleware(app, next_middleware):
     event = app.current_event.raw_event
 
     # Check if request is exempt from CSRF validation
-    method = event.get("httpMethod", "")
-    path = event.get("path", "")
+    # Support both v1 (httpMethod/path) and v2 (requestContext.http/rawPath) events
+    method = event.get("httpMethod") or (
+        event.get("requestContext", {}).get("http", {}).get("method", "")
+    )
+    path = event.get("rawPath") or event.get("path", "")
 
     if is_csrf_exempt(method, path):
         return next_middleware(app)

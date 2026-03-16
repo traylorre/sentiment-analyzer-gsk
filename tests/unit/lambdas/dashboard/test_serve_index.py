@@ -71,8 +71,6 @@ class TestServeIndex:
         )
 
         assert response["statusCode"] == 200
-        # Powertools puts Content-Type in multiValueHeaders
-        multi_headers = response.get("multiValueHeaders", {})
-        content_type_list = multi_headers.get("Content-Type", [])
-        content_type = content_type_list[0] if content_type_list else ""
+        # v2 response: Content-Type in headers (string), not multiValueHeaders
+        content_type = response.get("headers", {}).get("Content-Type", "")
         assert "text/html" in content_type

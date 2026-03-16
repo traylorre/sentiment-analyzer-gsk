@@ -125,23 +125,23 @@ def make_event(
     body: dict | str | None = None,
     cookies: str | None = None,
 ) -> dict:
-    """Construct a mock API Gateway Proxy Integration event.
+    """Construct a mock Lambda Function URL event.
 
     This is the canonical test factory for all handler tests migrated from
     TestClient to direct handler invocation. Produces events matching the
-    API Gateway Proxy Integration format.
+    Lambda Function URL v2 format (used by LambdaFunctionUrlResolver).
 
     Args:
         method: HTTP method (GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD).
         path: Request path (e.g., "/api/v2/sentiment").
         path_params: Path parameters (e.g., {"ticker": "AAPL"}).
         query_params: Query string parameters (e.g., {"range": "1M"}).
-        headers: HTTP headers (keys will be lowercased per API Gateway behavior).
+        headers: HTTP headers (keys will be lowercased per Function URL behavior).
         body: Request body. Dicts are JSON-serialized; strings are passed as-is.
         cookies: Cookie header value (e.g., "session_id=abc; csrf_token=xyz").
 
     Returns:
-        Complete API Gateway Proxy Integration event dict.
+        Complete Lambda Function URL v2 event dict.
     """
     base_headers = {"content-type": "application/json"}
     if headers:
@@ -155,23 +155,38 @@ def make_event(
     elif isinstance(body, str):
         serialized_body = body
 
+    raw_query_string = ""
+    if query_params:
+        from urllib.parse import urlencode
+
+        raw_query_string = urlencode(query_params)
+
     return {
-        "httpMethod": method,
-        "path": path,
-        "resource": "/{proxy+}",
-        "pathParameters": path_params,
-        "queryStringParameters": query_params,
-        "multiValueQueryStringParameters": (
-            {k: [v] for k, v in query_params.items()} if query_params else None
-        ),
+        "version": "2.0",
+        "rawPath": path,
+        "rawQueryString": raw_query_string,
         "headers": base_headers,
+        "queryStringParameters": query_params,
+        "pathParameters": path_params,
         "body": serialized_body,
         "isBase64Encoded": False,
         "requestContext": {
-            "authorizer": {},
-            "identity": {"sourceIp": "127.0.0.1"},
+            "accountId": "123456789012",
+            "apiId": "test-api",
+            "domainName": "test.lambda-url.us-east-1.on.aws",
+            "domainPrefix": "test",
+            "http": {
+                "method": method,
+                "path": path,
+                "protocol": "HTTP/1.1",
+                "sourceIp": "127.0.0.1",
+                "userAgent": "test",
+            },
             "requestId": "test-request-id",
-            "stage": "test",
+            "routeKey": "$default",
+            "stage": "$default",
+            "time": "01/Jan/2025:00:00:00 +0000",
+            "timeEpoch": 1735689600000,
         },
     }
 
