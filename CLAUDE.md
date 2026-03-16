@@ -673,6 +673,39 @@ git push origin --delete BRANCH_NAME  # Delete orphan first
 git push -u origin HEAD               # Then push again
 ```
 
+### CORS Wildcard + Credentials
+
+**Problem**: `Access-Control-Allow-Headers: *` silently fails when `credentials: 'include'` is used on fetch.
+
+**Why**: Per CORS spec, wildcard `*` is treated as the literal string "*" (not a wildcard) when credentials mode is enabled. The browser rejects the preflight and the fetch silently fails.
+
+**Symptom**: API calls return no data. Frontend shows "No tickers found" or empty state. No error in console (CORS failures are opaque).
+
+**Fix**: Replace `*` with explicit header list:
+```python
+self.send_header(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, Accept, Cache-Control, "
+    "Last-Event-ID, X-Amzn-Trace-Id, X-User-ID",
+)
+```
+
+**Prevention**: Never use `Access-Control-Allow-Headers: *` when `Access-Control-Allow-Credentials: true` is set.
+
+### Dockerfile Selective COPY and Transitive Dependencies
+
+**Problem**: SSE Lambda Dockerfile selectively copies `lib/timeseries/` but not `lib/metrics.py`. When `fanout.py` gained an import of `src.lib.metrics`, the smoke test failed with `ModuleNotFoundError` and blocked all deploys.
+
+**Why**: The analysis and dashboard Dockerfiles use `COPY lib /var/task/src/lib` (copy everything), but the SSE Dockerfile was selective for image size. When a new transitive dependency was added, the Dockerfile wasn't updated.
+
+**Fix**: Add explicit COPY for each dependency:
+```dockerfile
+COPY lib/timeseries /var/task/src/lib/timeseries
+COPY lib/metrics.py /var/task/src/lib/metrics.py
+```
+
+**Prevention**: When adding imports to modules that are copied into Docker images, check all Dockerfiles that include the importing module. The CI smoke test catches this, but only after a push to main triggers the deploy pipeline.
+
 ## Feature 072 Market Data Ingestion Patterns
 
 ### Deduplication Key Generation
