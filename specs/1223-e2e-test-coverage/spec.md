@@ -128,7 +128,7 @@ As a quality engineer, I need the existing Playwright test suite to run against 
 - **FR-007**: All new tests MUST use unique, isolated test data (prefixed identifiers) to prevent collision with other concurrent test runs.
 - **FR-008**: All new tests MUST clean up test data after execution, or use TTL-based data that auto-expires.
 - **FR-009**: Test suite MUST produce structured reports (JUnit XML or similar) compatible with CI artifact upload.
-- **FR-010**: OAuth flow tests MUST use mocked provider responses at the callback boundary — no real OAuth provider credentials required.
+- **FR-010**: OAuth flow tests MUST use Playwright route interception (`page.route()`) to intercept the Cognito authorize redirect and respond with a synthetic callback URL containing mock code+state. This tests the full browser redirect flow without real provider credentials.
 
 ## Success Criteria *(mandatory)*
 
@@ -142,10 +142,17 @@ As a quality engineer, I need the existing Playwright test suite to run against 
 - **SC-006**: Test skip rate remains below 15% after enabling previously skipped test groups.
 - **SC-007**: Zero false positives — new tests must be deterministic (no flaky behavior over 10 consecutive runs).
 
+## Clarifications
+
+### Session 2026-03-16
+
+- Q: OAuth mocking strategy — route interception, direct API, or hybrid? → A: Playwright route interception (`page.route()`). Tests must interact with the browser as close to a real user as possible.
+- Q: Magic link token extraction — test email service, DynamoDB query, or test endpoint? → A: DynamoDB query ($0). Future work: MailSlurp ($15/month, 10k emails) for full SendGrid delivery testing.
+
 ## Assumptions
 
 - Preprod environment is available and stable for E2E testing against real Lambda functions.
-- OAuth provider mocking will be done at the callback URL level (intercepting the redirect), not by standing up a fake OAuth server.
-- Magic link token extraction for E2E tests will use the API directly (request link → extract token from response or DynamoDB query) rather than actual email delivery.
+- OAuth provider mocking uses Playwright `page.route()` to intercept the Cognito authorize redirect in-browser and rewrite it to a synthetic callback URL. This tests the full user-visible redirect flow without real provider credentials or a fake OAuth server.
+- Magic link token extraction for E2E tests will query DynamoDB directly for the token after requesting the link, then navigate the browser to the verification URL. This tests the full verification flow at zero cost. Future work: integrate MailSlurp ($15/month) to test the real SendGrid email delivery pipeline end-to-end.
 - Cross-browser tests may need browser-specific timeout adjustments for WebKit cold starts.
 - The existing Playwright configuration (mobile Chrome, mobile Safari, desktop Chrome) will be extended, not replaced.
