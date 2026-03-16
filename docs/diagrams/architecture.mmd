@@ -29,7 +29,7 @@ flowchart TB
     subgraph Lambda["AWS Lambda Functions"]
         Ingestion["Ingestion Lambda<br/>512MB / 60s<br/>EventBridge trigger"]
         Analysis["Analysis Lambda<br/>1024MB / 30s<br/>SNS trigger"]
-        Dashboard["Dashboard Lambda<br/>512MB / 60s<br/>REST API + Auth<br/>/api/v2/* routes<br/>PKCE, CSRF, Sessions"]
+        Dashboard["Dashboard Lambda<br/>1024MB / 60s<br/>Function URL + Auth<br/>/api/v2/* routes<br/>PKCE, CSRF, Sessions"]
         SSE["SSE Lambda<br/>512MB / 60s<br/>RESPONSE_STREAM<br/>JWT validation"]
         Metrics["Metrics Lambda<br/>128MB / 30s<br/>EventBridge 1min<br/>StuckItems metric"]
         Notification["Notification Lambda<br/>256MB / 30s<br/>SNS + EventBridge<br/>SendGrid emails"]
