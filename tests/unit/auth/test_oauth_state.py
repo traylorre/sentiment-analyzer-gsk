@@ -92,7 +92,7 @@ class TestValidateOAuthState:
 
     def test_valid_state(self, mock_table):
         self._setup_valid_state(mock_table)
-        valid, error = validate_oauth_state(
+        valid, error, _cv = validate_oauth_state(
             mock_table, "state-1", "google", "https://example.com/cb"
         )
         assert valid is True
@@ -100,7 +100,7 @@ class TestValidateOAuthState:
 
     def test_state_not_found(self, mock_table):
         mock_table.get_item.return_value = {}
-        valid, error = validate_oauth_state(
+        valid, error, _cv = validate_oauth_state(
             mock_table, "missing", "google", "https://example.com/cb"
         )
         assert valid is False
@@ -116,7 +116,7 @@ class TestValidateOAuthState:
                 "used": False,
             }
         }
-        valid, _ = validate_oauth_state(
+        valid, _, _cv = validate_oauth_state(
             mock_table, "state-1", "google", "https://example.com/cb"
         )
         assert valid is False
@@ -131,21 +131,21 @@ class TestValidateOAuthState:
                 "used": True,
             }
         }
-        valid, _ = validate_oauth_state(
+        valid, _, _cv = validate_oauth_state(
             mock_table, "state-1", "google", "https://example.com/cb"
         )
         assert valid is False
 
     def test_provider_mismatch(self, mock_table):
         self._setup_valid_state(mock_table)
-        valid, _ = validate_oauth_state(
+        valid, _, _cv = validate_oauth_state(
             mock_table, "state-1", "github", "https://example.com/cb"
         )
         assert valid is False
 
     def test_redirect_uri_mismatch(self, mock_table):
         self._setup_valid_state(mock_table)
-        valid, _ = validate_oauth_state(
+        valid, _, _cv = validate_oauth_state(
             mock_table, "state-1", "google", "https://evil.com/cb"
         )
         assert valid is False
@@ -155,7 +155,7 @@ class TestValidateOAuthState:
         mock_table.update_item.side_effect = (
             mock_table.meta.client.exceptions.ConditionalCheckFailedException()
         )
-        valid, _ = validate_oauth_state(
+        valid, _, _cv = validate_oauth_state(
             mock_table, "state-1", "google", "https://example.com/cb"
         )
         assert valid is False

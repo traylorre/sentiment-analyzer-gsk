@@ -92,6 +92,8 @@ Auto-generated from all feature plans. Last updated: 2025-11-26
 - Python 3.13 (backend), TypeScript/Next.js 14 (frontend), HCL/Terraform 1.5+ (infra) + opentelemetry-sdk 1.39.1, aws-lambda-powertools 3.23.0, ADOT Collector Layer v0.102.1 (1220-xray-instrumentation-hardening)
 - N/A (observability changes only) (1220-xray-instrumentation-hardening)
 - Dockerfile (Docker multi-stage build), Python 3.13 (runtime) + Docker, aws-lambda-powertools, boto3 (1221-fix-sse-metrics-copy)
+- Python 3.13 (existing project standard) + boto3 (DynamoDB), pydantic (models), aws-lambda-powertools (routing/tracing), joserfc (JWT) (1222-auth-security-hardening)
+- DynamoDB (`{env}-sentiment-users` table with `by_provider_sub`, `by_email`, `by_cognito_sub` GSIs) (1222-auth-security-hardening)
 
 - **Python 3.13** with aws-lambda-powertools, boto3, pydantic, httpx, orjson
 - **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, Amplify
@@ -856,9 +858,9 @@ aws cloudwatch get-metric-data --metric-data-queries '[...]' --start-time ... --
 ```
 
 ## Recent Changes
+- 1222-auth-security-hardening: Added Python 3.13 (existing project standard) + boto3 (DynamoDB), pydantic (models), aws-lambda-powertools (routing/tracing), joserfc (JWT)
 - 1221-fix-sse-metrics-copy: Added Dockerfile (Docker multi-stage build), Python 3.13 (runtime) + Docker, aws-lambda-powertools, boto3
 - 1220-xray-instrumentation-hardening: Added Python 3.13 (backend), TypeScript/Next.js 14 (frontend), HCL/Terraform 1.5+ (infra) + opentelemetry-sdk 1.39.1, aws-lambda-powertools 3.23.0, ADOT Collector Layer v0.102.1
-- 1218-ohlc-cache-reconciliation: Added Python 3.13 + aws-lambda-powertools (routing, Response), boto3 (DynamoDB client), pydantic (models), orjson (JSON serialization)
 
 <!-- MANUAL ADDITIONS START -->
 

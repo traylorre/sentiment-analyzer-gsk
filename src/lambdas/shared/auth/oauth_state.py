@@ -35,6 +35,7 @@ class OAuthState:
         created_at: When state was generated
         user_id: Optional anonymous user ID to link
         used: Whether state has been consumed
+        code_verifier: PKCE code_verifier (RFC 7636)
     """
 
     state_id: str
@@ -43,6 +44,7 @@ class OAuthState:
     created_at: datetime
     user_id: str | None = None
     used: bool = False
+    code_verifier: str | None = None
 
 
 def generate_state() -> str:
@@ -71,10 +73,13 @@ def store_oauth_state(
         user_id: Optional anonymous user ID to link
 
     Returns:
-        OAuthState object representing stored state
+        OAuthState object representing stored state (includes PKCE code_verifier)
     """
     now = datetime.now(UTC)
     ttl = int((now + timedelta(seconds=OAUTH_STATE_TTL_SECONDS)).timestamp())
+
+    # Generate PKCE code_verifier (RFC 7636)
+    code_verifier = secrets.token_urlsafe(32)
 
     item = {
         "PK": f"{OAUTH_STATE_PREFIX}{state_id}",
@@ -84,6 +89,7 @@ def store_oauth_state(
         "created_at": now.isoformat(),
         "used": False,
         "ttl": ttl,
+        "code_verifier": code_verifier,
     }
     if user_id:
         item["user_id"] = user_id
@@ -109,6 +115,7 @@ def store_oauth_state(
         created_at=now,
         user_id=user_id,
         used=False,
+        code_verifier=code_verifier,
     )
 
 
@@ -137,6 +144,7 @@ def get_oauth_state(table: Table, state_id: str) -> OAuthState | None:
             created_at=datetime.fromisoformat(item["created_at"]),
             user_id=item.get("user_id"),
             used=item.get("used", False),
+            code_verifier=item.get("code_verifier"),
         )
     except Exception:
         logger.exception("Failed to get OAuth state")
@@ -148,7 +156,7 @@ def validate_oauth_state(
     state_id: str,
     provider: str,
     redirect_uri: str,
-) -> tuple[bool, str]:
+) -> tuple[bool, str, str | None]:
     """Validate OAuth state and mark as used.
 
     Performs all validation checks:
@@ -165,9 +173,9 @@ def validate_oauth_state(
         redirect_uri: The redirect_uri in callback
 
     Returns:
-        Tuple of (is_valid, error_message)
-        If valid: (True, "")
-        If invalid: (False, "Invalid OAuth state")  # Generic message always
+        Tuple of (is_valid, error_message, code_verifier)
+        If valid: (True, "", code_verifier)
+        If invalid: (False, "Invalid OAuth state", None)
     """
     generic_error = "Invalid OAuth state"
 
@@ -175,19 +183,19 @@ def validate_oauth_state(
     state = get_oauth_state(table, state_id)
     if state is None:
         logger.warning("OAuth state validation failed: state not found")
-        return False, generic_error
+        return False, generic_error, None
 
     # Check expiry
     now = datetime.now(UTC)
     expiry_time = state.created_at + timedelta(seconds=OAUTH_STATE_TTL_SECONDS)
     if now > expiry_time:
         logger.warning("OAuth state validation failed: state expired")
-        return False, generic_error
+        return False, generic_error, None
 
     # Check already used
     if state.used:
         logger.warning("OAuth state validation failed: state already used")
-        return False, generic_error
+        return False, generic_error, None
 
     # Check provider match
     if state.provider != provider:
@@ -207,7 +215,7 @@ def validate_oauth_state(
             "OAuth state validation failed: provider mismatch",
             extra={"expected": safe_expected, "received": safe_received},
         )
-        return False, generic_error
+        return False, generic_error, None
 
     # Check redirect_uri match
     if state.redirect_uri != redirect_uri:
@@ -227,7 +235,7 @@ def validate_oauth_state(
             "OAuth state validation failed: redirect_uri mismatch",
             extra={"expected": safe_expected_uri, "received": safe_received_uri},
         )
-        return False, generic_error
+        return False, generic_error, None
 
     # Mark as used with conditional update to prevent race conditions
     try:
@@ -240,7 +248,7 @@ def validate_oauth_state(
     except table.meta.client.exceptions.ConditionalCheckFailedException:
         # Race condition - another request already used this state
         logger.warning("OAuth state validation failed: concurrent use detected")
-        return False, generic_error
+        return False, generic_error, None
 
     safe_provider_validated = (
         str(provider).replace("\r\n", " ").replace("\n", " ").replace("\r", " ")[:200]
@@ -249,4 +257,4 @@ def validate_oauth_state(
         "OAuth state validated successfully",
         extra={"provider": safe_provider_validated},
     )
-    return True, ""
+    return True, "", state.code_verifier

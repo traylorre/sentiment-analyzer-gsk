@@ -2002,31 +2002,46 @@ def get_oauth_urls(table: Any) -> OAuthURLsResponse:
     google_state = generate_state()
     github_state = generate_state()
 
-    # Store state for Google
-    store_oauth_state(
+    # Store state for Google (includes PKCE code_verifier)
+    google_oauth_state = store_oauth_state(
         table=table,
         state_id=google_state,
         provider="google",
         redirect_uri=config.redirect_uri,
     )
 
-    # Store state for GitHub
-    store_oauth_state(
+    # Store state for GitHub (includes PKCE code_verifier)
+    github_oauth_state = store_oauth_state(
         table=table,
         state_id=github_state,
         provider="github",
         redirect_uri=config.redirect_uri,
     )
 
+    # Feature 1222: Derive PKCE code_challenge from code_verifier (FR-007)
+    import base64
+    import hashlib
+
+    def _derive_code_challenge(verifier: str) -> str:
+        digest = hashlib.sha256(verifier.encode("ascii")).digest()
+        return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+
+    google_challenge = _derive_code_challenge(google_oauth_state.code_verifier)
+    github_challenge = _derive_code_challenge(github_oauth_state.code_verifier)
+
     return OAuthURLsResponse(
         providers={
             "google": {
-                "authorize_url": config.get_authorize_url("Google", state=google_state),
+                "authorize_url": config.get_authorize_url(
+                    "Google", state=google_state, code_challenge=google_challenge
+                ),
                 "icon": "google",
                 "state": google_state,  # Provider-specific state
             },
             "github": {
-                "authorize_url": config.get_authorize_url("GitHub", state=github_state),
+                "authorize_url": config.get_authorize_url(
+                    "GitHub", state=github_state, code_challenge=github_challenge
+                ),
                 "icon": "github",
                 "state": github_state,  # Provider-specific state
             },
@@ -2082,7 +2097,7 @@ def handle_oauth_callback(
         )
 
     # Feature 1185: Validate OAuth state (A12-A13)
-    is_valid, error_msg = validate_oauth_state(
+    is_valid, error_msg, code_verifier = validate_oauth_state(
         table=table,
         state_id=state,
         provider=provider,
@@ -2109,7 +2124,7 @@ def handle_oauth_callback(
 
     # Exchange code for tokens
     try:
-        tokens = exchange_code_for_tokens(config, code)
+        tokens = exchange_code_for_tokens(config, code, code_verifier=code_verifier)
     except TokenError as e:
         logger.warning(
             "OAuth token exchange failed",
@@ -2399,6 +2414,40 @@ def _link_provider(
         return
 
     try:
+        # Feature 1222: Check provider uniqueness before linking (FR-010)
+        # Ensure no other user already owns this provider:sub combination
+        existing_owner = get_user_by_provider_sub(table, provider, sub)
+        if existing_owner is not None and existing_owner.user_id != user.user_id:
+            safe_provider_dup = (
+                str(provider)
+                .replace("\r\n", " ")
+                .replace("\n", " ")
+                .replace("\r", " ")[:200]
+            )
+            logger.warning(
+                "Provider sub already linked to different user",
+                extra={
+                    "provider": safe_provider_dup,
+                    "requesting_user_prefix": sanitize_for_log(user.user_id[:8]),
+                },
+            )
+            return
+        if existing_owner is not None and existing_owner.user_id == user.user_id:
+            # Idempotent re-link by same user - allow but log
+            safe_provider_relink = (
+                str(provider)
+                .replace("\r\n", " ")
+                .replace("\n", " ")
+                .replace("\r", " ")[:200]
+            )
+            logger.info(
+                "Idempotent provider re-link by same user",
+                extra={
+                    "provider": safe_provider_relink,
+                    "user_id_prefix": sanitize_for_log(user.user_id[:8]),
+                },
+            )
+
         # Build provider metadata
         now = datetime.now(UTC)
         metadata = ProviderMetadata(
@@ -2615,14 +2664,18 @@ def _mark_email_verified(
         now = datetime.now(UTC)
         verification_marked_by = f"oauth:{provider}"
 
+        # Feature 1222: Guard verification transition at data layer (FR-005)
         table.update_item(
             Key={"PK": user.pk, "SK": user.sk},
             UpdateExpression="SET verification = :verified, primary_email = :email, verification_marked_at = :marked_at, verification_marked_by = :marked_by",
+            ConditionExpression="attribute_exists(PK) AND (verification = :none OR verification = :pending OR verification = :verified)",
             ExpressionAttributeValues={
                 ":verified": "verified",
                 ":email": email,
                 ":marked_at": now.isoformat(),
                 ":marked_by": verification_marked_by,
+                ":none": "none",
+                ":pending": "pending",
             },
         )
 
@@ -2848,6 +2901,38 @@ def link_accounts(
             error="confirmation_required",
             message="Explicit confirmation is required to link accounts.",
         )
+
+    # Feature 1222: Defensive authorization checks (US2)
+    if not current_user_id:
+        logger.warning(
+            "Link accounts rejected: missing authenticated user ID",
+        )
+        return LinkAccountsResponse(
+            status="error",
+            error="authentication_required",
+            message="Authentication is required to link accounts.",
+        )
+
+    if current_user_id == request.link_to_user_id:
+        logger.warning(
+            "Link accounts rejected: self-merge attempt",
+            extra={
+                "user_id_prefix": sanitize_for_log(current_user_id[:8]),
+            },
+        )
+        return LinkAccountsResponse(
+            status="error",
+            error="self_link_not_allowed",
+            message="Cannot link an account to itself.",
+        )
+
+    logger.info(
+        "Link accounts attempt",
+        extra={
+            "current_user_prefix": sanitize_for_log(current_user_id[:8]),
+            "target_user_prefix": sanitize_for_log(request.link_to_user_id[:8]),
+        },
+    )
 
     current_user = get_user_by_id(table, current_user_id)
     target_user = get_user_by_id(table, request.link_to_user_id)
@@ -3147,13 +3232,24 @@ def complete_email_link(
 
         update_expr = "SET " + ", ".join(update_parts)
 
+        # Feature 1222: Guard verification transition at data layer (FR-005)
+        attr_values[":none"] = "none"
+        attr_values[":pending"] = "pending"
+
         table.update_item(
             Key={"PK": f"USER#{user.user_id}", "SK": "PROFILE"},
             UpdateExpression=update_expr,
+            ConditionExpression="attribute_exists(PK) AND (verification = :none OR verification = :pending OR verification = :verified)",
             ExpressionAttributeNames=attr_names,
             ExpressionAttributeValues=attr_values,
         )
 
+    except table.meta.client.exceptions.ConditionalCheckFailedException:
+        logger.warning(
+            "Email link verification rejected: invalid state transition",
+            extra={"user_id_prefix": sanitize_for_log(user.user_id[:8])},
+        )
+        raise ValueError("Invalid verification state transition") from None
     except Exception as e:
         logger.error(
             "Failed to update user with email link", extra=get_safe_error_info(e)
