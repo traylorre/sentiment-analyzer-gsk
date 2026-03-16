@@ -65,9 +65,9 @@ layer directory is absent.
 
 **Purpose**: Commit, push, create PR, and verify CI passes.
 
-- [ ] T007 Commit Dockerfile change with GPG signature
-- [ ] T008 Push branch and create PR targeting main with auto-merge enabled
-- [ ] T009 Verify CI checks pass (lint, test, security, cost, codeql)
+- [x] T007 Commit Dockerfile change with GPG signature
+- [x] T008 Push branch and create PR targeting main with auto-merge enabled (PR #722)
+- [x] T009 Verify CI checks pass (lint, test, security, cost, codeql) - ALL PASSED, PR merged
 
 ---
 
