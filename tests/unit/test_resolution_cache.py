@@ -24,18 +24,25 @@ class TestResolutionAwareCache:
     """
 
     def test_cache_ttl_matches_resolution(self) -> None:
-        """Cache TTL MUST equal resolution duration per [CS-006]."""
+        """Cache TTL MUST be within ±10% of resolution duration per [CS-006].
+
+        Feature 1224: TTL now includes ±10% jitter to prevent thundering herd.
+        """
         cache = ResolutionCache()
 
-        # 1-minute resolution has 60-second TTL
+        # 1-minute resolution has ~60-second TTL (±10% jitter)
         cache.set("AAPL", Resolution.ONE_MINUTE, data={"test": 1})
         entry = cache._entries[("AAPL", Resolution.ONE_MINUTE)]
-        assert entry.ttl_seconds == 60
+        assert (
+            54 <= entry.ttl_seconds <= 66
+        ), f"1min TTL {entry.ttl_seconds} out of jitter range"
 
-        # 1-hour resolution has 3600-second TTL
+        # 1-hour resolution has ~3600-second TTL (±10% jitter)
         cache.set("AAPL", Resolution.ONE_HOUR, data={"test": 2})
         entry = cache._entries[("AAPL", Resolution.ONE_HOUR)]
-        assert entry.ttl_seconds == 3600
+        assert (
+            3240 <= entry.ttl_seconds <= 3960
+        ), f"1hr TTL {entry.ttl_seconds} out of jitter range"
 
     @freeze_time("2025-12-21T10:35:00Z")
     def test_cache_hit_within_ttl(self) -> None:
@@ -149,7 +156,12 @@ class TestResolutionAwareCache:
 
         for res, expected_ttl in expected_ttls.items():
             entry = cache._entries[("AAPL", res)]
-            assert entry.ttl_seconds == expected_ttl, f"{res.value} TTL mismatch"
+            # Feature 1224: TTL includes ±10% jitter
+            low = expected_ttl * 0.9
+            high = expected_ttl * 1.1
+            assert (
+                low <= entry.ttl_seconds <= high
+            ), f"{res.value} TTL {entry.ttl_seconds} outside jitter range [{low}, {high}]"
 
     def test_global_scope_initialization(self) -> None:
         """Cache MUST be initializable outside Lambda handler per [CS-005]."""

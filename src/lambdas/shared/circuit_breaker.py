@@ -62,8 +62,11 @@ def _get_cached_state(service: str) -> "CircuitBreakerState | None":
     """
     with _circuit_breaker_lock:
         if service in _circuit_breaker_cache:
-            timestamp, state = _circuit_breaker_cache[service]
-            if time.time() - timestamp < CIRCUIT_BREAKER_CACHE_TTL:
+            entry = _circuit_breaker_cache[service]
+            timestamp, state = entry[0], entry[1]
+            # Feature 1224: Use jittered TTL if stored
+            effective_ttl = entry[2] if len(entry) > 2 else CIRCUIT_BREAKER_CACHE_TTL
+            if time.time() - timestamp < effective_ttl:
                 _cache_stats["hits"] += 1
                 return state
             # Expired - remove from cache
@@ -73,12 +76,18 @@ def _get_cached_state(service: str) -> "CircuitBreakerState | None":
 
 
 def _set_cached_state(service: str, state: "CircuitBreakerState") -> None:
-    """Store circuit breaker state in cache.
+    """Store circuit breaker state in cache with jittered TTL.
 
     Thread-safe: Uses _circuit_breaker_lock for synchronized access.
     """
+    from src.lib.cache_utils import jittered_ttl
+
     with _circuit_breaker_lock:
-        _circuit_breaker_cache[service] = (time.time(), state)
+        _circuit_breaker_cache[service] = (
+            time.time(),
+            state,
+            jittered_ttl(CIRCUIT_BREAKER_CACHE_TTL),
+        )
 
 
 def _invalidate_cache(service: str | None = None) -> None:

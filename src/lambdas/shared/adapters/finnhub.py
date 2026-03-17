@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 # =============================================================================
 # DFA-004 FIX: API Response Cache
+# Feature 1224: Added jitter to TTL to prevent thundering herd
 # =============================================================================
 # Cache TTL in seconds (default 30 minutes for news/sentiment, 1 hour for OHLC)
 API_CACHE_TTL_NEWS_SECONDS = int(os.environ.get("API_CACHE_TTL_NEWS_SECONDS", "1800"))
@@ -33,7 +34,8 @@ API_CACHE_TTL_SENTIMENT_SECONDS = int(
 API_CACHE_TTL_OHLC_SECONDS = int(os.environ.get("API_CACHE_TTL_OHLC_SECONDS", "3600"))
 
 # In-memory cache (survives Lambda warm invocations)
-_finnhub_cache: dict[str, tuple[float, Any]] = {}
+# Feature 1224: tuple now (timestamp, value, effective_ttl) for jittered expiry
+_finnhub_cache: dict[str, tuple[float, Any, float]] = {}
 _MAX_CACHE_ENTRIES = 100  # Prevent unbounded memory growth
 
 
@@ -49,22 +51,28 @@ def _get_cache_key(endpoint: str, params: dict) -> str:
 def _get_from_cache(key: str, ttl: int) -> Any | None:
     """Get value from cache if not expired."""
     if key in _finnhub_cache:
-        timestamp, value = _finnhub_cache[key]
-        if time.time() - timestamp < ttl:
+        entry = _finnhub_cache[key]
+        timestamp, value = entry[0], entry[1]
+        # Feature 1224: Use stored jittered TTL if available, else base TTL
+        effective_ttl = entry[2] if len(entry) > 2 else ttl
+        if time.time() - timestamp < effective_ttl:
             return value
         # Expired - remove from cache
         del _finnhub_cache[key]
     return None
 
 
-def _put_in_cache(key: str, value: Any) -> None:
-    """Put value in cache with current timestamp."""
+def _put_in_cache(key: str, value: Any, base_ttl: int = 0) -> None:
+    """Put value in cache with jittered TTL."""
+    from src.lib.cache_utils import jittered_ttl
+
     global _finnhub_cache
     # Evict oldest entries if cache is full
     if len(_finnhub_cache) >= _MAX_CACHE_ENTRIES:
         oldest_key = min(_finnhub_cache.keys(), key=lambda k: _finnhub_cache[k][0])
         del _finnhub_cache[oldest_key]
-    _finnhub_cache[key] = (time.time(), value)
+    effective_ttl = jittered_ttl(base_ttl) if base_ttl > 0 else 0
+    _finnhub_cache[key] = (time.time(), value, effective_ttl)
 
 
 def clear_cache() -> None:
@@ -199,7 +207,7 @@ class FinnhubAdapter(BaseAdapter):
                     )
                     data = self._handle_response(response)
                     # Cache the raw response
-                    _put_in_cache(cache_key, data)
+                    _put_in_cache(cache_key, data, API_CACHE_TTL_NEWS_SECONDS)
                     logger.debug(f"Finnhub news cache miss for {ticker}, cached")
                 except httpx.RequestError as e:
                     logger.error(f"Finnhub news request failed for {ticker}: {e}")
@@ -257,7 +265,7 @@ class FinnhubAdapter(BaseAdapter):
                 )
                 data = self._handle_response(response)
                 # Cache the raw response
-                _put_in_cache(cache_key, data)
+                _put_in_cache(cache_key, data, API_CACHE_TTL_SENTIMENT_SECONDS)
                 logger.debug(f"Finnhub sentiment cache miss for {ticker}, cached")
             except httpx.RequestError as e:
                 logger.error(f"Finnhub sentiment request failed: {e}")
@@ -345,7 +353,7 @@ class FinnhubAdapter(BaseAdapter):
                 )
                 data = self._handle_response(response)
                 # Cache the raw response
-                _put_in_cache(cache_key, data)
+                _put_in_cache(cache_key, data, cache_ttl)
                 logger.debug(
                     "Finnhub OHLC cache miss for %s, cached", sanitize_for_log(ticker)
                 )

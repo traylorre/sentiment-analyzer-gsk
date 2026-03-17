@@ -312,11 +312,15 @@ def _set_in_cache(secret_id: str, value: dict[str, Any]) -> None:
         secret_id: Secret identifier
         value: Parsed secret value
     """
-    ttl = int(os.environ.get("SECRETS_CACHE_TTL_SECONDS", DEFAULT_CACHE_TTL_SECONDS))
+    from src.lib.cache_utils import jittered_ttl
+
+    base_ttl = int(
+        os.environ.get("SECRETS_CACHE_TTL_SECONDS", DEFAULT_CACHE_TTL_SECONDS)
+    )
 
     _secrets_cache[secret_id] = {
         "value": value,
-        "expires_at": time.time() + ttl,
+        "expires_at": time.time() + jittered_ttl(base_ttl),
     }
 
 
