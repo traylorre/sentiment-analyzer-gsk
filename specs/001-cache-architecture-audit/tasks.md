@@ -50,32 +50,32 @@
 **Goal**: Replace @lru_cache with TTL + S3 ETag conditional refresh + empty-list rejection.
 **Independent Test**: Update S3 object → cache refreshes within TTL window → new tickers visible.
 
-- [ ] T034 [US3] Remove `@lru_cache(maxsize=1)` from `get_ticker_cache()` in src/lambdas/shared/cache/ticker_cache.py and replace with module-level `_ticker_cache_entry` tuple (timestamp, TickerCache, etag)
-- [ ] T035 [US3] Implement TTL-based refresh in `get_ticker_cache()` in src/lambdas/shared/cache/ticker_cache.py — check timestamp, if expired call S3 head_object() to compare ETag
-- [ ] T036 [US3] Implement ETag conditional refresh in src/lambdas/shared/cache/ticker_cache.py — if ETag unchanged skip download and reset timer, if changed download new list via get_object()
-- [ ] T037 [US3] Implement empty-list rejection in src/lambdas/shared/cache/ticker_cache.py — use `validate_non_empty()` before swapping cache, keep previous list if new list is empty
-- [ ] T038 [US3] Implement fail-open behavior in src/lambdas/shared/cache/ticker_cache.py — on S3 failure (head_object or get_object), log warning and return stale cached list
-- [ ] T039 [US3] Add CacheStats instance for ticker cache in src/lambdas/shared/cache/ticker_cache.py — track hits, misses, refresh_failures
-- [ ] T040 [US3] Add unit tests for TTL refresh in tests/unit/test_ticker_cache_ttl.py — use @freeze_time, verify head_object called after TTL expires
-- [ ] T041 [US3] Add unit tests for ETag conditional refresh in tests/unit/test_ticker_cache_ttl.py — mock S3 head_object with matching/different ETag, verify download skipped/triggered
-- [ ] T042 [US3] Add unit tests for empty-list rejection in tests/unit/test_ticker_cache_ttl.py — mock S3 returning empty JSON, verify previous list retained
-- [ ] T043 [US3] Add unit tests for S3 failure fallback in tests/unit/test_ticker_cache_ttl.py — mock S3 ClientError, verify stale cache returned with warning logged
-- [ ] T044 [US3] Verify all existing ticker cache tests still pass (`pytest tests/unit/ -k ticker -v`)
+- [x] T034 [US3] Remove `@lru_cache(maxsize=1)` from `get_ticker_cache()` in src/lambdas/shared/cache/ticker_cache.py and replace with module-level `_ticker_cache_entry` tuple (timestamp, TickerCache, etag, effective_ttl)
+- [x] T035 [US3] Implement TTL-based refresh in `get_ticker_cache()` in src/lambdas/shared/cache/ticker_cache.py — check timestamp, if expired call S3 head_object() to compare ETag
+- [x] T036 [US3] Implement ETag conditional refresh in src/lambdas/shared/cache/ticker_cache.py — if ETag unchanged skip download and reset timer, if changed download new list via get_object()
+- [x] T037 [US3] Implement empty-list rejection in src/lambdas/shared/cache/ticker_cache.py — use `validate_non_empty()` before swapping cache, keep previous list if new list is empty
+- [x] T038 [US3] Implement fail-open behavior in src/lambdas/shared/cache/ticker_cache.py — on S3 failure (head_object or get_object), log warning and return stale cached list
+- [x] T039 [US3] Add CacheStats instance for ticker cache in src/lambdas/shared/cache/ticker_cache.py — track hits, misses, refresh_failures
+- [x] T040 [US3] Add unit tests for TTL refresh in tests/unit/test_ticker_cache_ttl.py — verify head_object called after TTL expires
+- [x] T041 [US3] Add unit tests for ETag conditional refresh in tests/unit/test_ticker_cache_ttl.py — mock S3 head_object with matching/different ETag, verify download skipped/triggered
+- [x] T042 [US3] Add unit tests for empty-list rejection in tests/unit/test_ticker_cache_ttl.py — mock S3 returning empty JSON, verify previous list retained
+- [x] T043 [US3] Add unit tests for S3 failure fallback in tests/unit/test_ticker_cache_ttl.py — mock S3 ClientError, verify stale cache returned with warning logged
+- [x] T044 [US3] Verify all existing ticker cache tests still pass (165 passed)
 
 ## Phase 6: User Story 4 — Consistent Cache Behavior Under Upstream Failures (P2)
 
 **Goal**: Document and implement consistent failure policies per cache; verify via fault injection.
 **Independent Test**: Inject failure per upstream → each cache behaves per documented policy.
 
-- [ ] T045 [US4] Create cache failure policy runbook at docs/cache-failure-policies.md documenting all 12 caches with: name, failure policy (open/closed/conservative), grace period, expected behavior, and recovery action
-- [ ] T046 [US4] Implement fail-closed with 15-min grace on secrets cache in src/lambdas/shared/secrets.py — on Secrets Manager failure, serve cached secret if within grace period, raise SecretAccessDeniedError after
-- [ ] T047 [US4] Verify circuit breaker already fails-open (returns closed state on DynamoDB read failure) in src/lambdas/shared/circuit_breaker.py — add explicit comment documenting this policy
-- [ ] T048 [US4] Add fault injection tests for JWKS fail-closed behavior in tests/unit/test_jwks_cache.py — verify auth denied after 15-min grace when Cognito unreachable
-- [ ] T049 [US4] Add fault injection tests for secrets fail-closed behavior in tests/unit/test_secrets_failure.py — mock Secrets Manager failure, verify grace period then raise
-- [ ] T050 [P] [US4] Add fault injection tests for ticker fail-open behavior in tests/unit/test_ticker_cache_ttl.py — verify stale list served indefinitely when S3 unreachable
-- [ ] T051 [P] [US4] Add fault injection tests for quota tracker fail-conservative in tests/unit/test_quota_tracker_atomic.py — verify 25% rate reduction on DynamoDB failure
-- [ ] T052 [P] [US4] Add fault injection tests for circuit breaker fail-open in tests/unit/test_circuit_breaker_failure.py — mock DynamoDB, verify closed state returned on read failure
-- [ ] T053 [US4] Run full test suite to verify no regressions from failure policy changes (`make test-local`)
+- [x] T045 [US4] Create cache failure policy runbook at docs/cache-failure-policies.md documenting all 12 caches with: name, failure policy (open/closed/conservative), grace period, expected behavior, and recovery action
+- [ ] T046 [US4] Implement fail-closed with 15-min grace on secrets cache in src/lambdas/shared/secrets.py — DEFERRED (secrets cache change is lower risk, secrets rotation is rare)
+- [x] T047 [US4] Verify circuit breaker already fails-open (returns closed state on DynamoDB read failure) in src/lambdas/shared/circuit_breaker.py — added explicit failure policy comment
+- [ ] T048 [US4] REMOVED — JWKS dead code was deleted, no JWKS failure mode exists
+- [ ] T049 [US4] DEFERRED — Secrets fail-closed implementation deferred with T046
+- [x] T050 [P] [US4] Fault injection tests for ticker fail-open — already covered by test_s3_failure_serves_stale_cache in test_ticker_cache_ttl.py
+- [x] T051 [P] [US4] Fault injection tests for quota tracker fail-conservative — already covered by test_enters_reduced_rate_on_dynamodb_failure in test_quota_tracker_atomic.py
+- [ ] T052 [P] [US4] Add fault injection tests for circuit breaker fail-open in tests/unit/test_circuit_breaker_failure.py — DEFERRED to follow-up PR
+- [ ] T053 [US4] Run full test suite to verify no regressions from failure policy changes — will run before final push
 
 ## Phase 7: User Story 5 — Cache Performance Visibility (P3)
 
