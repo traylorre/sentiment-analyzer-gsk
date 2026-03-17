@@ -1007,9 +1007,45 @@ jobs:
       # The S3 bucket was used for static dashboard files, but Amplify handles this natively.
       # Removed: aws s3 sync to dashboard bucket, cache control headers, HTML file uploads
 
+      # Pre-warm: force a cold start via direct Lambda invoke before hitting the Function URL.
+      # "function-updated" only confirms the config is Active — the container image hasn't been
+      # pulled yet. Direct invoke triggers the ECR pull + init, so the Function URL is ready
+      # by the time the smoke test runs.
+      - name: Pre-warm Dashboard Lambda
+        timeout-minutes: 3
+        run: |
+          echo "🔥 Pre-warming Dashboard Lambda (forces container cold start)..."
+
+          PREWARM_EVENT='{"version":"2.0","requestContext":{"http":{"method":"GET","path":"/health"}},"rawPath":"/health","isBase64Encoded":false}'
+
+          for attempt in 1 2 3; do
+            echo "  Attempt $attempt..."
+            if aws lambda invoke \
+              --function-name preprod-sentiment-dashboard \
+              --payload "$PREWARM_EVENT" \
+              --cli-read-timeout 120 \
+              /tmp/prewarm-response.json 2>&1; then
+
+              STATUS_CODE=$(cat /tmp/prewarm-response.json | python3 -c "import sys,json; r=json.load(sys.stdin); print(r.get('statusCode', 'unknown'))" 2>/dev/null || echo "unknown")
+              echo "  Pre-warm response status: $STATUS_CODE"
+
+              if [ "$STATUS_CODE" = "200" ]; then
+                echo "✅ Dashboard Lambda pre-warmed successfully"
+                break
+              fi
+            fi
+
+            if [ $attempt -lt 3 ]; then
+              echo "  Retrying in 15s..."
+              sleep 15
+            fi
+          done
+
+          echo "Pre-warm complete (Lambda container is initialized)"
+
       - name: Smoke Test (Post-Deployment)
         id: smoke_test
-        timeout-minutes: 2
+        timeout-minutes: 4
         run: |
           # Use Lambda Function URL for smoke test (resolver is LambdaFunctionUrlResolver)
           DASHBOARD_URL="${{ steps.outputs.outputs.dashboard_url }}"
@@ -1022,24 +1058,27 @@ jobs:
           echo "🧪 Running post-deployment smoke test..."
           echo "Dashboard URL: $DASHBOARD_URL"
 
-          # Test 1: Health endpoint (unauthenticated, with cold start retry)
+          # Test 1: Health endpoint (unauthenticated, with Function URL propagation retry)
+          # Pre-warm step already forced the cold start via direct invoke.
+          # Retries here cover Function URL routing propagation delay.
           echo ""
           echo "Test 1: Health endpoint..."
           HEALTH_STATUS="000"
-          for attempt in 1 2 3 4 5; do
+          MAX_ATTEMPTS=10
+          for attempt in $(seq 1 $MAX_ATTEMPTS); do
             HEALTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "${DASHBOARD_URL}/health")
-            echo "  Attempt $attempt: HTTP $HEALTH_STATUS"
+            echo "  Attempt $attempt/$MAX_ATTEMPTS: HTTP $HEALTH_STATUS"
             if [ "$HEALTH_STATUS" = "200" ]; then
               break
             fi
-            if [ $attempt -lt 5 ]; then
-              echo "  Retrying in 5s (cold start after image update)..."
-              sleep 5
+            if [ $attempt -lt $MAX_ATTEMPTS ]; then
+              echo "  Retrying in 10s (Function URL propagation)..."
+              sleep 10
             fi
           done
 
           if [ "$HEALTH_STATUS" != "200" ]; then
-            echo "❌ SMOKE TEST FAILED: Health endpoint returned HTTP $HEALTH_STATUS after 5 attempts"
+            echo "❌ SMOKE TEST FAILED: Health endpoint returned HTTP $HEALTH_STATUS after $MAX_ATTEMPTS attempts"
             echo "This indicates a Lambda cold start failure or packaging issue."
             echo "Check CloudWatch logs: aws logs tail /aws/lambda/preprod-sentiment-dashboard"
             exit 1
