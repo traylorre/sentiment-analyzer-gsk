@@ -79,8 +79,19 @@ class CognitoConfig:
         """Cognito JWKS endpoint URL."""
         return f"https://cognito-idp.{self.region}.amazonaws.com/{self.user_pool_id}/.well-known/jwks.json"
 
-    def get_authorize_url(self, provider: str, state: str | None = None) -> str:
-        """Build OAuth authorize URL for a provider."""
+    def get_authorize_url(
+        self,
+        provider: str,
+        state: str | None = None,
+        code_challenge: str | None = None,
+    ) -> str:
+        """Build OAuth authorize URL for a provider.
+
+        Args:
+            provider: OAuth provider name (google, github)
+            state: CSRF state token
+            code_challenge: PKCE code_challenge (S256, base64url-encoded)
+        """
         params = {
             "client_id": self.client_id,
             "response_type": "code",
@@ -90,6 +101,9 @@ class CognitoConfig:
         }
         if state:
             params["state"] = state
+        if code_challenge:
+            params["code_challenge"] = code_challenge
+            params["code_challenge_method"] = "S256"
         return f"https://{self.domain}.auth.{self.region}.amazoncognito.com/oauth2/authorize?{urlencode(params)}"
 
 
@@ -115,6 +129,7 @@ class TokenError(Exception):
 def exchange_code_for_tokens(
     config: CognitoConfig,
     code: str,
+    code_verifier: str | None = None,
 ) -> CognitoTokens:
     """Exchange authorization code for tokens.
 
@@ -149,6 +164,10 @@ def exchange_code_for_tokens(
     # Include client_id in body if no secret
     if not config.client_secret:
         data["client_id"] = config.client_id
+
+    # PKCE: include code_verifier in token exchange (FR-009)
+    if code_verifier:
+        data["code_verifier"] = code_verifier
 
     try:
         with httpx.Client(timeout=10.0) as client:

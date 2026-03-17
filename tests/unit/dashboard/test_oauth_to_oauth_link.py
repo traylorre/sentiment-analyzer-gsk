@@ -21,7 +21,7 @@ def mock_oauth_state_validation():
     """Mock OAuth state validation to always pass for these tests."""
     with patch(
         "src.lambdas.dashboard.auth.validate_oauth_state",
-        return_value=(True, ""),
+        return_value=(True, "", "test-code-verifier"),
     ):
         yield
 

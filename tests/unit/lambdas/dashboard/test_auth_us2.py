@@ -277,7 +277,7 @@ class TestHandleOAuthCallback:
                 ),
                 patch(
                     "src.lambdas.dashboard.auth.validate_oauth_state",
-                    return_value=(True, ""),
+                    return_value=(True, "", "test-code-verifier"),
                 ),
             ):
                 # Feature 1185: Use keyword args with state and redirect_uri
@@ -342,7 +342,7 @@ class TestHandleOAuthCallback:
                 ),
                 patch(
                     "src.lambdas.dashboard.auth.validate_oauth_state",
-                    return_value=(True, ""),
+                    return_value=(True, "", "test-code-verifier"),
                 ),
             ):
                 # Feature 1185: Use keyword args with state and redirect_uri
