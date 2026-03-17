@@ -1022,13 +1022,24 @@ jobs:
           echo "🧪 Running post-deployment smoke test..."
           echo "Dashboard URL: $DASHBOARD_URL"
 
-          # Test 1: Health endpoint (unauthenticated)
+          # Test 1: Health endpoint (unauthenticated, with cold start retry)
           echo ""
           echo "Test 1: Health endpoint..."
-          HEALTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "${DASHBOARD_URL}/health")
+          HEALTH_STATUS="000"
+          for attempt in 1 2 3 4 5; do
+            HEALTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "${DASHBOARD_URL}/health")
+            echo "  Attempt $attempt: HTTP $HEALTH_STATUS"
+            if [ "$HEALTH_STATUS" = "200" ]; then
+              break
+            fi
+            if [ $attempt -lt 5 ]; then
+              echo "  Retrying in 5s (cold start after image update)..."
+              sleep 5
+            fi
+          done
 
           if [ "$HEALTH_STATUS" != "200" ]; then
-            echo "❌ SMOKE TEST FAILED: Health endpoint returned HTTP $HEALTH_STATUS"
+            echo "❌ SMOKE TEST FAILED: Health endpoint returned HTTP $HEALTH_STATUS after 5 attempts"
             echo "This indicates a Lambda cold start failure or packaging issue."
             echo "Check CloudWatch logs: aws logs tail /aws/lambda/preprod-sentiment-dashboard"
             exit 1
