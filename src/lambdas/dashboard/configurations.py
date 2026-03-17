@@ -69,8 +69,10 @@ _config_cache_stats = {"list_hits": 0, "list_misses": 0, "get_hits": 0, "get_mis
 def _get_cached_config_list(user_id: str) -> "ConfigurationListResponse | None":
     """Get user's configuration list from cache if not expired."""
     if user_id in _config_list_cache:
-        timestamp, response = _config_list_cache[user_id]
-        if time.time() - timestamp < CONFIG_CACHE_TTL:
+        entry = _config_list_cache[user_id]
+        timestamp, response = entry[0], entry[1]
+        effective_ttl = entry[2] if len(entry) > 2 else CONFIG_CACHE_TTL
+        if time.time() - timestamp < effective_ttl:
             _config_cache_stats["list_hits"] += 1
             return response
         # Expired - remove
@@ -90,15 +92,23 @@ def _set_cached_config_list(
             _config_list_cache.keys(), key=lambda k: _config_list_cache[k][0]
         )
         del _config_list_cache[oldest_key]
-    _config_list_cache[user_id] = (time.time(), response)
+    from src.lib.cache_utils import jittered_ttl
+
+    _config_list_cache[user_id] = (
+        time.time(),
+        response,
+        jittered_ttl(CONFIG_CACHE_TTL),
+    )
 
 
 def _get_cached_config(user_id: str, config_id: str) -> "ConfigurationResponse | None":
     """Get single configuration from cache if not expired."""
     key = (user_id, config_id)
     if key in _config_cache:
-        timestamp, response = _config_cache[key]
-        if time.time() - timestamp < CONFIG_CACHE_TTL:
+        entry = _config_cache[key]
+        timestamp, response = entry[0], entry[1]
+        effective_ttl = entry[2] if len(entry) > 2 else CONFIG_CACHE_TTL
+        if time.time() - timestamp < effective_ttl:
             _config_cache_stats["get_hits"] += 1
             return response
         del _config_cache[key]
@@ -110,7 +120,13 @@ def _set_cached_config(
     user_id: str, config_id: str, response: "ConfigurationResponse"
 ) -> None:
     """Store single configuration in cache."""
-    _config_cache[(user_id, config_id)] = (time.time(), response)
+    from src.lib.cache_utils import jittered_ttl
+
+    _config_cache[(user_id, config_id)] = (
+        time.time(),
+        response,
+        jittered_ttl(CONFIG_CACHE_TTL),
+    )
 
 
 def _invalidate_user_config_cache(user_id: str, config_id: str | None = None) -> None:

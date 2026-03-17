@@ -149,8 +149,10 @@ class ResolutionCache:
             # Remove first (oldest) entry
             self._entries.popitem(last=False)
 
-        # TTL equals resolution duration in seconds
-        ttl_seconds = resolution.duration_seconds
+        # Feature 1224: TTL with jitter to prevent thundering herd
+        from src.lib.cache_utils import jittered_ttl
+
+        ttl_seconds = jittered_ttl(resolution.duration_seconds)
 
         now = time.time()
         self._entries[key] = CacheEntry(

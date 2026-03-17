@@ -50,22 +50,28 @@ SENTIMENT_VALUES = ["positive", "neutral", "negative"]
 # =============================================================================
 # C7 FIX: In-memory cache for GSI query results
 # Feature 1085: Increased TTL from 60s to 300s to prevent SSE 429 rate limit errors
+# Feature 1224: Added max_entries bound (was unbounded), jitter on TTL
 # =============================================================================
 # Cache TTL in seconds (default 300s - configurable via env var)
 METRICS_CACHE_TTL = int(os.environ.get("METRICS_CACHE_TTL", "300"))
 
-# In-memory cache: {cache_key: (timestamp, result)}
-_metrics_cache: dict[str, tuple[float, Any]] = {}
+# Feature 1224: Bound the cache to prevent unbounded memory growth (FR-008)
+METRICS_CACHE_MAX_ENTRIES = int(os.environ.get("METRICS_CACHE_MAX_ENTRIES", "100"))
+
+# In-memory cache: {cache_key: (timestamp, result, effective_ttl)}
+_metrics_cache: dict[str, tuple[float, Any, float]] = {}
 
 # Cache statistics
-_metrics_cache_stats = {"hits": 0, "misses": 0}
+_metrics_cache_stats = {"hits": 0, "misses": 0, "evictions": 0}
 
 
 def _get_cached_result(cache_key: str) -> Any | None:
     """Get cached result if not expired."""
     if cache_key in _metrics_cache:
-        timestamp, result = _metrics_cache[cache_key]
-        if time.time() - timestamp < METRICS_CACHE_TTL:
+        entry = _metrics_cache[cache_key]
+        timestamp, result = entry[0], entry[1]
+        effective_ttl = entry[2] if len(entry) > 2 else METRICS_CACHE_TTL
+        if time.time() - timestamp < effective_ttl:
             _metrics_cache_stats["hits"] += 1
             return result
         # Expired - remove
@@ -75,12 +81,21 @@ def _get_cached_result(cache_key: str) -> Any | None:
 
 
 def _set_cached_result(cache_key: str, result: Any) -> None:
-    """Store result in cache."""
-    _metrics_cache[cache_key] = (time.time(), result)
+    """Store result in cache with jittered TTL and LRU eviction."""
+    from src.lib.cache_utils import jittered_ttl
+
+    # Feature 1224: LRU eviction when cache is full
+    if len(_metrics_cache) >= METRICS_CACHE_MAX_ENTRIES:
+        oldest_key = min(_metrics_cache.keys(), key=lambda k: _metrics_cache[k][0])
+        del _metrics_cache[oldest_key]
+        _metrics_cache_stats["evictions"] += 1
+
+    effective_ttl = jittered_ttl(METRICS_CACHE_TTL)
+    _metrics_cache[cache_key] = (time.time(), result, effective_ttl)
 
 
 def get_metrics_cache_stats() -> dict[str, int]:
-    """Get cache hit/miss statistics for monitoring."""
+    """Get cache hit/miss/eviction statistics for monitoring."""
     return _metrics_cache_stats.copy()
 
 
@@ -88,7 +103,7 @@ def clear_metrics_cache() -> None:
     """Clear cache and reset stats. Used in tests."""
     global _metrics_cache, _metrics_cache_stats
     _metrics_cache = {}
-    _metrics_cache_stats = {"hits": 0, "misses": 0}
+    _metrics_cache_stats = {"hits": 0, "misses": 0, "evictions": 0}
 
 
 def calculate_sentiment_distribution(items: list[dict[str, Any]]) -> dict[str, int]:
