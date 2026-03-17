@@ -985,4 +985,14 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         },
     )
 
-    return app.resolve(event, context)
+    response = app.resolve(event, context)
+
+    # Feature 1224: Flush cache metrics to CloudWatch if interval elapsed
+    try:
+        from src.lib.cache_utils import get_global_emitter
+
+        get_global_emitter().flush_to_cloudwatch()
+    except Exception:
+        logger.debug("Cache metrics flush failed", exc_info=True)
+
+    return response

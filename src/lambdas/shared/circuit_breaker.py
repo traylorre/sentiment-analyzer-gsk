@@ -23,6 +23,7 @@ from typing import Any, Literal
 from aws_lambda_powertools import Tracer
 from pydantic import BaseModel
 
+from src.lib.cache_utils import CacheStats, get_global_emitter
 from src.lib.metrics import emit_metric
 
 logger = logging.getLogger(__name__)
@@ -39,6 +40,10 @@ _circuit_breaker_cache: dict[str, tuple[float, "CircuitBreakerState"]] = {}
 
 # Cache statistics for monitoring
 _cache_stats = {"hits": 0, "misses": 0}
+
+# Feature 1224: CacheStats for CloudWatch metric emission
+_cb_cache_stats = CacheStats(name="circuit_breaker")
+get_global_emitter().register(_cb_cache_stats)
 
 # Thread-safety lock for cache access (Feature 1010)
 _circuit_breaker_lock = threading.Lock()
@@ -68,10 +73,12 @@ def _get_cached_state(service: str) -> "CircuitBreakerState | None":
             effective_ttl = entry[2] if len(entry) > 2 else CIRCUIT_BREAKER_CACHE_TTL
             if time.time() - timestamp < effective_ttl:
                 _cache_stats["hits"] += 1
+                _cb_cache_stats.record_hit()
                 return state
             # Expired - remove from cache
             del _circuit_breaker_cache[service]
         _cache_stats["misses"] += 1
+        _cb_cache_stats.record_miss()
         return None
 
 

@@ -44,6 +44,7 @@ from src.lambdas.shared.models.configuration import (
 )
 from src.lambdas.shared.models.status_utils import ACTIVE, INACTIVE
 from src.lambdas.shared.retry import dynamodb_retry
+from src.lib.cache_utils import CacheStats, get_global_emitter
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +66,10 @@ _config_cache: dict[tuple[str, str], tuple[float, "ConfigurationResponse"]] = {}
 # Cache statistics
 _config_cache_stats = {"list_hits": 0, "list_misses": 0, "get_hits": 0, "get_misses": 0}
 
+# Feature 1224: CacheStats for CloudWatch metric emission
+_config_cw_stats = CacheStats(name="config")
+get_global_emitter().register(_config_cw_stats)
+
 
 def _get_cached_config_list(user_id: str) -> "ConfigurationListResponse | None":
     """Get user's configuration list from cache if not expired."""
@@ -74,10 +79,12 @@ def _get_cached_config_list(user_id: str) -> "ConfigurationListResponse | None":
         effective_ttl = entry[2] if len(entry) > 2 else CONFIG_CACHE_TTL
         if time.time() - timestamp < effective_ttl:
             _config_cache_stats["list_hits"] += 1
+            _config_cw_stats.record_hit()
             return response
         # Expired - remove
         del _config_list_cache[user_id]
     _config_cache_stats["list_misses"] += 1
+    _config_cw_stats.record_miss()
     return None
 
 
@@ -110,9 +117,11 @@ def _get_cached_config(user_id: str, config_id: str) -> "ConfigurationResponse |
         effective_ttl = entry[2] if len(entry) > 2 else CONFIG_CACHE_TTL
         if time.time() - timestamp < effective_ttl:
             _config_cache_stats["get_hits"] += 1
+            _config_cw_stats.record_hit()
             return response
         del _config_cache[key]
     _config_cache_stats["get_misses"] += 1
+    _config_cw_stats.record_miss()
     return None
 
 
