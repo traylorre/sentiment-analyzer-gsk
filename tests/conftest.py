@@ -294,6 +294,43 @@ def reset_env_vars():
     os.environ.update(original_env)
 
 
+@pytest.fixture(autouse=True)
+def clear_all_caches():
+    """Clear all module-level caches between tests for isolation.
+
+    Feature 1224: Prevents cache state from leaking between tests.
+    Runs after each test (teardown via yield).
+    """
+    yield
+    # Import and clear each cache module's clear function.
+    # Imports are deferred to avoid import errors in test environments
+    # where not all modules may be available.
+    _safe_clear("src.lambdas.shared.quota_tracker", "clear_quota_cache")
+    _safe_clear("src.lambdas.shared.circuit_breaker", "clear_cache")
+    _safe_clear("src.lambdas.shared.cache.ticker_cache", "clear_ticker_cache")
+    _safe_clear("src.lambdas.shared.secrets", "clear_cache")
+    _safe_clear("src.lambdas.shared.adapters.tiingo", "clear_cache")
+    _safe_clear("src.lambdas.shared.adapters.finnhub", "clear_cache")
+    _safe_clear("src.lambdas.dashboard.metrics", "clear_metrics_cache")
+    _safe_clear("src.lambdas.dashboard.sentiment", "clear_sentiment_cache")
+    _safe_clear("src.lambdas.dashboard.configurations", "clear_config_cache")
+    _safe_clear("src.lib.cache_utils", "reset_global_emitter")
+
+
+def _safe_clear(module_path: str, func_name: str) -> None:
+    """Call a cache clear function if the module is already imported."""
+    import sys
+
+    mod = sys.modules.get(module_path)
+    if mod is not None:
+        fn = getattr(mod, func_name, None)
+        if fn is not None:
+            try:
+                fn()
+            except Exception:
+                pass  # Cache clearing should never fail tests
+
+
 @pytest.fixture
 def aws_credentials():
     """

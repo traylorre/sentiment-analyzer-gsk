@@ -96,6 +96,8 @@ Auto-generated from all feature plans. Last updated: 2025-11-26
 - DynamoDB (`{env}-sentiment-users` table with `by_provider_sub`, `by_email`, `by_cognito_sub` GSIs) (1222-auth-security-hardening)
 - TypeScript (Playwright tests), Python 3.13 (backend test utilities) + Playwright 1.58+, pytest-playwright, boto3 (DynamoDB token query) (1223-e2e-test-coverage)
 - DynamoDB (read-only for token extraction in tests) (1223-e2e-test-coverage)
+- Python 3.13 + boto3 (AWS SDK), pydantic (validation), functools (current caching) (001-cache-architecture-audit)
+- DynamoDB (quota ledger, circuit breaker state, OHLC persistent cache), S3 (ticker list) (001-cache-architecture-audit)
 
 - **Python 3.13** with aws-lambda-powertools, boto3, pydantic, httpx, orjson
 - **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, Amplify
@@ -893,9 +895,9 @@ aws cloudwatch get-metric-data --metric-data-queries '[...]' --start-time ... --
 ```
 
 ## Recent Changes
+- 001-cache-architecture-audit: Added Python 3.13 + boto3 (AWS SDK), pydantic (validation), functools (current caching)
 - 1223-e2e-test-coverage: Added TypeScript (Playwright tests), Python 3.13 (backend test utilities) + Playwright 1.58+, pytest-playwright, boto3 (DynamoDB token query)
 - 1222-auth-security-hardening: Added Python 3.13 (existing project standard) + boto3 (DynamoDB), pydantic (models), aws-lambda-powertools (routing/tracing), joserfc (JWT)
-- 1221-fix-sse-metrics-copy: Added Dockerfile (Docker multi-stage build), Python 3.13 (runtime) + Docker, aws-lambda-powertools, boto3
 
 <!-- MANUAL ADDITIONS START -->
 

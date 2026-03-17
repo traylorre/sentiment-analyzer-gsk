@@ -25,7 +25,6 @@ import json
 import logging
 import os
 from dataclasses import dataclass
-from functools import lru_cache
 from typing import Any
 from urllib.parse import urlencode
 
@@ -408,29 +407,6 @@ def validate_access_token(
             extra=get_safe_error_info(e),
         )
         return None
-
-
-@lru_cache(maxsize=1)
-def _get_jwks(config: CognitoConfig) -> dict:
-    """Fetch Cognito JWKS (cached).
-
-    Returns JSON Web Key Set for verifying token signatures.
-    """
-    try:
-        with httpx.Client(timeout=10.0) as client:
-            response = client.get(config.jwks_url)
-
-        if response.status_code == 200:
-            return response.json()
-
-        return {}
-
-    except httpx.HTTPError as e:
-        logger.error(
-            "Failed to fetch JWKS",
-            extra=get_safe_error_info(e),
-        )
-        return {}
 
 
 def get_user_from_token(access_token: str) -> dict[str, Any] | None:
