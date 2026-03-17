@@ -19,6 +19,7 @@ from src.lambdas.shared.adapters.base import (
     SentimentData,
 )
 from src.lambdas.shared.logging_utils import sanitize_for_log
+from src.lib.cache_utils import CacheStats, get_global_emitter
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,10 @@ logger = logging.getLogger(__name__)
 # Feature 1224: Added jitter to TTL to prevent thundering herd
 # =============================================================================
 # Cache TTL in seconds (default 30 minutes for news/sentiment, 1 hour for OHLC)
+# Feature 1224: CacheStats for CloudWatch metric emission
+_finnhub_stats = CacheStats(name="finnhub")
+get_global_emitter().register(_finnhub_stats)
+
 API_CACHE_TTL_NEWS_SECONDS = int(os.environ.get("API_CACHE_TTL_NEWS_SECONDS", "1800"))
 API_CACHE_TTL_SENTIMENT_SECONDS = int(
     os.environ.get("API_CACHE_TTL_SENTIMENT_SECONDS", "1800")
@@ -56,9 +61,11 @@ def _get_from_cache(key: str, ttl: int) -> Any | None:
         # Feature 1224: Use stored jittered TTL if available, else base TTL
         effective_ttl = entry[2] if len(entry) > 2 else ttl
         if time.time() - timestamp < effective_ttl:
+            _finnhub_stats.record_hit()
             return value
         # Expired - remove from cache
         del _finnhub_cache[key]
+    _finnhub_stats.record_miss()
     return None
 
 

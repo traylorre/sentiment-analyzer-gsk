@@ -19,6 +19,7 @@ from src.lambdas.shared.adapters.base import (
     SentimentData,
 )
 from src.lambdas.shared.logging_utils import sanitize_for_log
+from src.lib.cache_utils import CacheStats, get_global_emitter
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,10 @@ logger = logging.getLogger(__name__)
 # Cache TTL in seconds (default 30 minutes for news, 1 hour for OHLC)
 API_CACHE_TTL_NEWS_SECONDS = int(os.environ.get("API_CACHE_TTL_NEWS_SECONDS", "1800"))
 API_CACHE_TTL_OHLC_SECONDS = int(os.environ.get("API_CACHE_TTL_OHLC_SECONDS", "3600"))
+
+# Feature 1224: CacheStats for CloudWatch metric emission
+_tiingo_stats = CacheStats(name="tiingo")
+get_global_emitter().register(_tiingo_stats)
 
 # In-memory cache (survives Lambda warm invocations)
 # Feature 1224: tuple now (timestamp, value, effective_ttl) for jittered expiry
@@ -51,9 +56,11 @@ def _get_from_cache(key: str, ttl: int) -> Any | None:
         # Feature 1224: Use stored jittered TTL if available, else base TTL
         effective_ttl = entry[2] if len(entry) > 2 else ttl
         if time.time() - timestamp < effective_ttl:
+            _tiingo_stats.record_hit()
             return value
         # Expired - remove from cache
         del _tiingo_cache[key]
+    _tiingo_stats.record_miss()
     return None
 
 

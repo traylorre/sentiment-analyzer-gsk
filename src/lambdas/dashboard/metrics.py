@@ -39,6 +39,7 @@ from typing import Any
 from boto3.dynamodb.conditions import Key
 
 from src.lambdas.shared.logging_utils import get_safe_error_info, sanitize_for_log
+from src.lib.cache_utils import CacheStats, get_global_emitter
 
 # Structured logging
 logger = logging.getLogger(__name__)
@@ -64,6 +65,10 @@ _metrics_cache: dict[str, tuple[float, Any, float]] = {}
 # Cache statistics
 _metrics_cache_stats = {"hits": 0, "misses": 0, "evictions": 0}
 
+# Feature 1224: CacheStats for CloudWatch metric emission
+_metrics_cw_stats = CacheStats(name="metrics")
+get_global_emitter().register(_metrics_cw_stats)
+
 
 def _get_cached_result(cache_key: str) -> Any | None:
     """Get cached result if not expired."""
@@ -73,10 +78,12 @@ def _get_cached_result(cache_key: str) -> Any | None:
         effective_ttl = entry[2] if len(entry) > 2 else METRICS_CACHE_TTL
         if time.time() - timestamp < effective_ttl:
             _metrics_cache_stats["hits"] += 1
+            _metrics_cw_stats.record_hit()
             return result
         # Expired - remove
         del _metrics_cache[cache_key]
     _metrics_cache_stats["misses"] += 1
+    _metrics_cw_stats.record_miss()
     return None
 
 
