@@ -83,7 +83,9 @@ data "aws_iam_policy_document" "ci_deploy_core" {
       # Lambda concurrency management (required for reserved_concurrency changes)
       "lambda:PutFunctionConcurrency",
       "lambda:DeleteFunctionConcurrency",
-      "lambda:GetFunctionConcurrency"
+      "lambda:GetFunctionConcurrency",
+      # Feature 1224: Pre-warm Lambda after image update (deploy smoke test)
+      "lambda:InvokeFunction"
     ]
     resources = [
       # Pattern: {env}-sentiment-* (preprod-sentiment-ingestion, prod-sentiment-dashboard, etc.)
