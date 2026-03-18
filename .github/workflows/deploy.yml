@@ -920,26 +920,41 @@ jobs:
       # Force SSE Lambda to use the new Docker image
       # Terraform doesn't detect :latest tag changes because the image_uri is unchanged.
       # We use the immutable SHA tag pushed by build-sse-image-preprod job.
-      - name: Force SSE Lambda Image Update
+      # Feature 1224.4: Alias-based deployment for SSE Lambda
+      - name: Deploy SSE Lambda (alias-based)
+        timeout-minutes: 5
         run: |
-          echo "🔄 Forcing SSE Lambda to use new Docker image..."
-
+          FUNC_NAME="preprod-sentiment-sse-streaming"
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
           REGION="${{ vars.AWS_REGION }}"
           IMAGE_URI="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/preprod-sse-streaming-lambda:${{ github.sha }}"
 
-          echo "Image URI: ${IMAGE_URI}"
-
+          echo "🔄 Updating SSE Lambda $LATEST with new image..."
           aws lambda update-function-code \
-            --function-name preprod-sentiment-sse-streaming \
+            --function-name "$FUNC_NAME" \
             --image-uri "${IMAGE_URI}"
 
-          # Wait for update to complete
-          echo "⏳ Waiting for Lambda update to complete..."
-          aws lambda wait function-updated \
-            --function-name preprod-sentiment-sse-streaming
+          echo "⏳ Waiting for function update..."
+          aws lambda wait function-updated --function-name "$FUNC_NAME"
 
-          echo "✅ SSE Lambda updated to use new image"
+          echo "📦 Publishing immutable version..."
+          VERSION=$(aws lambda publish-version \
+            --function-name "$FUNC_NAME" \
+            --description "Deploy ${{ github.sha }}" \
+            --query 'Version' --output text)
+          echo "  Published version: $VERSION"
+
+          echo "🔀 Flipping 'live' alias to version $VERSION..."
+          aws lambda update-alias \
+            --function-name "$FUNC_NAME" \
+            --name live \
+            --function-version "$VERSION" || \
+          aws lambda create-alias \
+            --function-name "$FUNC_NAME" \
+            --name live \
+            --function-version "$VERSION"
+
+          echo "✅ SSE Lambda deployed: version $VERSION is now live"
 
       # Force Analysis Lambda to use the new Docker image
       # ADR-005 Phase 2: Container deployment for PyTorch + transformers
@@ -966,26 +981,90 @@ jobs:
 
       # Force Dashboard Lambda to use the new Docker image
       # Feature 1036: Container deployment to fix pydantic binary incompatibility
-      - name: Force Dashboard Lambda Image Update
+      # Feature 1224.4: Alias-based deployment for Dashboard Lambda.
+      # 1. Update $LATEST with new image
+      # 2. Wait for function to be ready
+      # 3. Publish immutable version
+      # 4. Pre-warm the new version via direct invoke
+      # 5. Flip "live" alias to new version (Function URL points to alias)
+      - name: Deploy Dashboard Lambda (alias-based)
+        timeout-minutes: 5
         run: |
-          echo "🔄 Forcing Dashboard Lambda to use new Docker image..."
-
+          FUNC_NAME="preprod-sentiment-dashboard"
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
           REGION="${{ vars.AWS_REGION }}"
           IMAGE_URI="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/preprod-dashboard-lambda:${{ github.sha }}"
 
+          echo "🔄 Step 1: Updating $LATEST with new image..."
           echo "Image URI: ${IMAGE_URI}"
-
           aws lambda update-function-code \
-            --function-name preprod-sentiment-dashboard \
+            --function-name "$FUNC_NAME" \
             --image-uri "${IMAGE_URI}"
 
-          # Wait for update to complete
-          echo "⏳ Waiting for Lambda update to complete..."
-          aws lambda wait function-updated \
-            --function-name preprod-sentiment-dashboard
+          echo "⏳ Step 2: Waiting for function update to complete..."
+          aws lambda wait function-updated --function-name "$FUNC_NAME"
 
-          echo "✅ Dashboard Lambda updated to use new image"
+          echo "📦 Step 3: Publishing immutable version..."
+          VERSION=$(aws lambda publish-version \
+            --function-name "$FUNC_NAME" \
+            --description "Deploy ${{ github.sha }}" \
+            --query 'Version' --output text)
+          echo "  Published version: $VERSION"
+
+          echo "🔥 Step 4: Pre-warming version $VERSION..."
+          PREWARM_EVENT='{"version":"2.0","routeKey":"$default","rawPath":"/health","rawQueryString":"","headers":{"content-type":"application/json"},"requestContext":{"accountId":"000000000000","apiId":"prewarm","domainName":"prewarm.lambda-url.us-east-1.on.aws","domainPrefix":"prewarm","http":{"method":"GET","path":"/health","protocol":"HTTP/1.1","sourceIp":"127.0.0.1","userAgent":"deploy-prewarm"},"requestId":"prewarm-health-check","routeKey":"$default","stage":"$default","time":"01/Jan/2024:00:00:00 +0000","timeEpoch":1704067200000},"isBase64Encoded":false}'
+
+          for attempt in 1 2 3; do
+            echo "  Pre-warm attempt $attempt (version $VERSION)..."
+            INVOKE_RESULT=$(aws lambda invoke \
+              --function-name "$FUNC_NAME" \
+              --qualifier "$VERSION" \
+              --payload "$PREWARM_EVENT" \
+              --cli-binary-format raw-in-base64-out \
+              --cli-read-timeout 120 \
+              /tmp/prewarm-response.json 2>&1) || true
+
+            # Check for FunctionError
+            if echo "$INVOKE_RESULT" | grep -q '"FunctionError"'; then
+              echo "  ⚠️ FunctionError detected: $INVOKE_RESULT"
+              if [ $attempt -lt 3 ]; then
+                echo "  Retrying in 15s..."
+                sleep 15
+              fi
+              continue
+            fi
+
+            STATUS_CODE=$(cat /tmp/prewarm-response.json | python3 -c "import sys,json; r=json.load(sys.stdin); print(r.get('statusCode', 'unknown'))" 2>/dev/null || echo "unknown")
+            echo "  Pre-warm response status: $STATUS_CODE"
+
+            if [ "$STATUS_CODE" = "200" ]; then
+              echo "  ✅ Version $VERSION pre-warmed successfully"
+              break
+            fi
+
+            if [ $attempt -lt 3 ]; then
+              echo "  Retrying in 15s..."
+              sleep 15
+            fi
+          done
+
+          if [ "$STATUS_CODE" != "200" ]; then
+            echo "❌ Pre-warm failed after 3 attempts — NOT flipping alias"
+            echo "Old version continues serving. Marking deploy as failed."
+            exit 1
+          fi
+
+          echo "🔀 Step 5: Flipping 'live' alias to version $VERSION..."
+          aws lambda update-alias \
+            --function-name "$FUNC_NAME" \
+            --name live \
+            --function-version "$VERSION" || \
+          aws lambda create-alias \
+            --function-name "$FUNC_NAME" \
+            --name live \
+            --function-version "$VERSION"
+
+          echo "✅ Dashboard Lambda deployed: version $VERSION is now live"
 
       - name: Get Preprod Outputs
         id: outputs
@@ -1007,42 +1086,9 @@ jobs:
       # The S3 bucket was used for static dashboard files, but Amplify handles this natively.
       # Removed: aws s3 sync to dashboard bucket, cache control headers, HTML file uploads
 
-      # Pre-warm: force a cold start via direct Lambda invoke before hitting the Function URL.
-      # "function-updated" only confirms the config is Active — the container image hasn't been
-      # pulled yet. Direct invoke triggers the ECR pull + init, so the Function URL is ready
-      # by the time the smoke test runs.
-      - name: Pre-warm Dashboard Lambda
-        timeout-minutes: 3
-        run: |
-          echo "🔥 Pre-warming Dashboard Lambda (forces container cold start)..."
-
-          PREWARM_EVENT='{"version":"2.0","routeKey":"$default","rawPath":"/health","rawQueryString":"","headers":{"content-type":"application/json"},"requestContext":{"accountId":"000000000000","apiId":"prewarm","domainName":"prewarm.lambda-url.us-east-1.on.aws","domainPrefix":"prewarm","http":{"method":"GET","path":"/health","protocol":"HTTP/1.1","sourceIp":"127.0.0.1","userAgent":"deploy-prewarm"},"requestId":"prewarm-health-check","routeKey":"$default","stage":"$default","time":"01/Jan/2024:00:00:00 +0000","timeEpoch":1704067200000},"isBase64Encoded":false}'
-
-          for attempt in 1 2 3; do
-            echo "  Attempt $attempt..."
-            if aws lambda invoke \
-              --function-name preprod-sentiment-dashboard \
-              --payload "$PREWARM_EVENT" \
-              --cli-binary-format raw-in-base64-out \
-              --cli-read-timeout 120 \
-              /tmp/prewarm-response.json 2>&1; then
-
-              STATUS_CODE=$(cat /tmp/prewarm-response.json | python3 -c "import sys,json; r=json.load(sys.stdin); print(r.get('statusCode', 'unknown'))" 2>/dev/null || echo "unknown")
-              echo "  Pre-warm response status: $STATUS_CODE"
-
-              if [ "$STATUS_CODE" = "200" ]; then
-                echo "✅ Dashboard Lambda pre-warmed successfully"
-                break
-              fi
-            fi
-
-            if [ $attempt -lt 3 ]; then
-              echo "  Retrying in 15s..."
-              sleep 15
-            fi
-          done
-
-          echo "Pre-warm complete (Lambda container is initialized)"
+      # Pre-warm is now integrated into the "Deploy Dashboard Lambda (alias-based)" step above.
+      # The alias flip happens AFTER pre-warm succeeds, so the Function URL should
+      # respond immediately — no propagation delay since the URL target (alias) didn't change.
 
       - name: Smoke Test (Post-Deployment)
         id: smoke_test
