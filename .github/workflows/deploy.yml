@@ -1105,33 +1105,39 @@ jobs:
           echo "🧪 Running post-deployment smoke test..."
           echo "Dashboard URL: $DASHBOARD_URL"
 
-          # Test 1: Health endpoint (unauthenticated, with Function URL propagation retry)
-          # Pre-warm step already forced the cold start via direct invoke.
-          # Retries here cover Function URL routing propagation delay.
+          # Test 1: Health check via direct invoke on the "live" alias.
+          # Function URLs have CloudFront propagation delay (2-5 min) that makes
+          # curl-based checks unreliable immediately after deploy. Direct invoke
+          # bypasses the URL layer and tests the Lambda function itself.
           echo ""
-          echo "Test 1: Health endpoint..."
-          HEALTH_STATUS="000"
-          MAX_ATTEMPTS=10
-          for attempt in $(seq 1 $MAX_ATTEMPTS); do
-            HEALTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "${DASHBOARD_URL}/health")
-            echo "  Attempt $attempt/$MAX_ATTEMPTS: HTTP $HEALTH_STATUS"
-            if [ "$HEALTH_STATUS" = "200" ]; then
-              break
-            fi
-            if [ $attempt -lt $MAX_ATTEMPTS ]; then
-              echo "  Retrying in 10s (Function URL propagation)..."
-              sleep 10
-            fi
-          done
+          echo "Test 1: Health endpoint (direct invoke on alias)..."
+          PREWARM_EVENT='{"version":"2.0","routeKey":"$default","rawPath":"/health","rawQueryString":"","headers":{"content-type":"application/json"},"requestContext":{"accountId":"000000000000","apiId":"smoke","domainName":"smoke.lambda-url.us-east-1.on.aws","domainPrefix":"smoke","http":{"method":"GET","path":"/health","protocol":"HTTP/1.1","sourceIp":"127.0.0.1","userAgent":"deploy-smoke-test"},"requestId":"smoke-health-check","routeKey":"$default","stage":"$default","time":"01/Jan/2024:00:00:00 +0000","timeEpoch":1704067200000},"isBase64Encoded":false}'
 
-          if [ "$HEALTH_STATUS" != "200" ]; then
-            echo "❌ SMOKE TEST FAILED: Health endpoint returned HTTP $HEALTH_STATUS after $MAX_ATTEMPTS attempts"
-            echo "This indicates a Lambda cold start failure or packaging issue."
-            echo "Check CloudWatch logs: aws logs tail /aws/lambda/preprod-sentiment-dashboard"
+          INVOKE_RESULT=$(aws lambda invoke \
+            --function-name preprod-sentiment-dashboard \
+            --qualifier live \
+            --payload "$PREWARM_EVENT" \
+            --cli-binary-format raw-in-base64-out \
+            --cli-read-timeout 30 \
+            /tmp/smoke-response.json 2>&1) || true
+
+          HEALTH_STATUS=$(cat /tmp/smoke-response.json | python3 -c "import sys,json; r=json.load(sys.stdin); print(r.get('statusCode', 'unknown'))" 2>/dev/null || echo "unknown")
+          echo "  Direct invoke status: $HEALTH_STATUS"
+
+          if echo "$INVOKE_RESULT" | grep -q '"FunctionError"'; then
+            echo "❌ SMOKE TEST FAILED: FunctionError on direct invoke"
+            echo "$INVOKE_RESULT"
+            cat /tmp/smoke-response.json
             exit 1
           fi
 
-          echo "✅ Health endpoint: HTTP 200"
+          if [ "$HEALTH_STATUS" != "200" ]; then
+            echo "❌ SMOKE TEST FAILED: Health endpoint returned $HEALTH_STATUS via direct invoke"
+            cat /tmp/smoke-response.json
+            exit 1
+          fi
+
+          echo "✅ Health endpoint: 200 via direct invoke on 'live' alias"
 
           # Test 2: Verify Lambda cold start succeeded (no ImportModuleError)
           echo ""
