@@ -100,10 +100,14 @@ resource "aws_lambda_function" "this" {
     Name = var.function_name
   })
 
-  # Note: ignore_source_code_changes variable is available but not used here
-  # because Terraform requires static lists in lifecycle blocks.
-  # For deployments that need to ignore source changes, use a separate resource
-  # or manage deployments via Lambda aliases instead.
+  # Feature 1224: Ignore image_uri changes made by CI/CD force-update step.
+  # Without this, Terraform apply reverts image_uri to :latest, then the
+  # Force Image Update step changes it to :sha — causing a double function
+  # update that breaks the Function URL routing (persistent 404).
+  # CI manages image_uri via aws lambda update-function-code.
+  lifecycle {
+    ignore_changes = [image_uri]
+  }
 }
 
 # Lambda Function URL (optional)
