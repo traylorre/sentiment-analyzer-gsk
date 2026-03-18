@@ -1016,7 +1016,7 @@ jobs:
         run: |
           echo "🔥 Pre-warming Dashboard Lambda (forces container cold start)..."
 
-          PREWARM_EVENT='{"version":"2.0","requestContext":{"http":{"method":"GET","path":"/health"}},"rawPath":"/health","isBase64Encoded":false}'
+          PREWARM_EVENT='{"version":"2.0","routeKey":"$default","rawPath":"/health","rawQueryString":"","headers":{"content-type":"application/json"},"requestContext":{"accountId":"000000000000","apiId":"prewarm","domainName":"prewarm.lambda-url.us-east-1.on.aws","domainPrefix":"prewarm","http":{"method":"GET","path":"/health","protocol":"HTTP/1.1","sourceIp":"127.0.0.1","userAgent":"deploy-prewarm"},"requestId":"prewarm-health-check","routeKey":"$default","stage":"$default","time":"01/Jan/2024:00:00:00 +0000","timeEpoch":1704067200000},"isBase64Encoded":false}'
 
           for attempt in 1 2 3; do
             echo "  Attempt $attempt..."
