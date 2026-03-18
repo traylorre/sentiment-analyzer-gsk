@@ -85,7 +85,12 @@ data "aws_iam_policy_document" "ci_deploy_core" {
       "lambda:DeleteFunctionConcurrency",
       "lambda:GetFunctionConcurrency",
       # Feature 1224: Pre-warm Lambda after image update (deploy smoke test)
-      "lambda:InvokeFunction"
+      "lambda:InvokeFunction",
+      # Feature 1224.4: Alias-based deployment (publish version, flip alias)
+      "lambda:PublishVersion",
+      "lambda:UpdateAlias",
+      "lambda:GetAlias",
+      "lambda:CreateAlias"
     ]
     resources = [
       # Pattern: {env}-sentiment-* (preprod-sentiment-ingestion, prod-sentiment-dashboard, etc.)
