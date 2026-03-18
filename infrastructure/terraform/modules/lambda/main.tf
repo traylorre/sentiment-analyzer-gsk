@@ -100,19 +100,44 @@ resource "aws_lambda_function" "this" {
     Name = var.function_name
   })
 
-  # Note: ignore_source_code_changes variable is available but not used here
-  # because Terraform requires static lists in lifecycle blocks.
-  # For deployments that need to ignore source changes, use a separate resource
-  # or manage deployments via Lambda aliases instead.
+  # Feature 1224: Ignore image_uri changes made by CI/CD force-update step.
+  # Without this, Terraform apply reverts image_uri to :latest, then the
+  # Force Image Update step changes it to :sha — causing a double function
+  # update that breaks the Function URL routing (persistent 404).
+  # CI manages image_uri via aws lambda update-function-code.
+  lifecycle {
+    ignore_changes = [image_uri]
+  }
+}
+
+# Feature 1224.4: Lambda alias for stable Function URL deployment.
+# Function URL points to alias (not $LATEST) so that update-function-code
+# doesn't trigger CloudFront re-propagation on the URL. CI publishes a new
+# version, pre-warms it, then flips the alias — zero-downtime deployment.
+resource "aws_lambda_alias" "live" {
+  count = var.create_function_url ? 1 : 0
+
+  name             = "live"
+  description      = "Active version serving Function URL traffic"
+  function_name    = aws_lambda_function.this.function_name
+  function_version = aws_lambda_function.this.version
+
+  # CI manages the alias version via aws lambda update-alias.
+  # Terraform should not revert it on every apply.
+  lifecycle {
+    ignore_changes = [function_version]
+  }
 }
 
 # Lambda Function URL (optional)
 # Creates a public HTTPS endpoint for the Lambda
 # Note: For SSE/streaming responses, set invoke_mode = "RESPONSE_STREAM"
+# Feature 1224.4: Points to alias, not $LATEST, for stable routing.
 resource "aws_lambda_function_url" "this" {
   count = var.create_function_url ? 1 : 0
 
   function_name      = aws_lambda_function.this.function_name
+  qualifier          = aws_lambda_alias.live[0].name
   authorization_type = var.function_url_auth_type
   invoke_mode        = var.function_url_invoke_mode
 
@@ -124,6 +149,18 @@ resource "aws_lambda_function_url" "this" {
     expose_headers    = var.function_url_cors.expose_headers
     max_age           = var.function_url_cors.max_age
   }
+}
+
+# Feature 1224.4: Allow Function URL to invoke via the alias
+resource "aws_lambda_permission" "function_url_alias" {
+  count = var.create_function_url ? 1 : 0
+
+  statement_id           = "FunctionURLAllowPublicAccess"
+  action                 = "lambda:InvokeFunctionUrl"
+  function_name          = aws_lambda_function.this.function_name
+  qualifier              = aws_lambda_alias.live[0].name
+  principal              = "*"
+  function_url_auth_type = var.function_url_auth_type
 }
 
 # CloudWatch Alarm for Lambda errors (optional)
