@@ -1023,6 +1023,7 @@ jobs:
             if aws lambda invoke \
               --function-name preprod-sentiment-dashboard \
               --payload "$PREWARM_EVENT" \
+              --cli-binary-format raw-in-base64-out \
               --cli-read-timeout 120 \
               /tmp/prewarm-response.json 2>&1; then
 
