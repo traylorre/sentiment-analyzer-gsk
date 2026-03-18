@@ -1007,6 +1007,10 @@ module "cloudwatch_alarms" {
     Feature = "1219-xray-exclusive-tracing"
   }
 
+  # Wire alarm notifications to SNS topic (was missing — alarms fired but nobody notified)
+  alarm_actions = [module.monitoring.alarm_topic_arn]
+  ok_actions    = [module.monitoring.alarm_topic_arn]
+
   lambda_function_names = {
     ingestion    = module.ingestion_lambda.function_name
     analysis     = module.analysis_lambda.function_name
