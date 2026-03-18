@@ -45,6 +45,7 @@ from src.lambdas.shared.models import (
 from src.lambdas.shared.utils.event_helpers import get_query_params
 from src.lambdas.shared.utils.market import get_cache_expiration
 from src.lambdas.shared.utils.response_builder import error_response
+from src.lib.cache_utils import CacheStats, get_global_emitter
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +71,10 @@ OHLC_CACHE_MAX_ENTRIES = int(os.environ.get("OHLC_CACHE_MAX_ENTRIES", "256"))
 # Cache storage: {cache_key: (timestamp, response_dict)}
 _ohlc_cache: dict[str, tuple[float, dict]] = {}
 _ohlc_cache_stats: dict[str, int] = {"hits": 0, "misses": 0, "evictions": 0}
+
+# Feature 1224: CacheStats for CloudWatch metric emission
+_ohlc_cw_stats = CacheStats(name="ohlc_response")
+get_global_emitter().register(_ohlc_cw_stats)
 
 
 def _get_ohlc_cache_key(
@@ -120,31 +125,42 @@ def _get_cached_ohlc(cache_key: str, resolution: str) -> dict | None:
         Cached response dict if valid, None if expired or missing
     """
     if cache_key in _ohlc_cache:
-        timestamp, response = _ohlc_cache[cache_key]
-        ttl = OHLC_CACHE_TTLS.get(resolution, OHLC_CACHE_DEFAULT_TTL)
-        if time.time() - timestamp < ttl:
+        entry = _ohlc_cache[cache_key]
+        timestamp, response = entry[0], entry[1]
+        # Feature 1224: Use stored jittered TTL if available
+        if len(entry) > 2:
+            effective_ttl = entry[2]
+        else:
+            effective_ttl = OHLC_CACHE_TTLS.get(resolution, OHLC_CACHE_DEFAULT_TTL)
+        if time.time() - timestamp < effective_ttl:
             _ohlc_cache_stats["hits"] += 1
+            _ohlc_cw_stats.record_hit()
             return response
         # Expired, remove it
         del _ohlc_cache[cache_key]
     _ohlc_cache_stats["misses"] += 1
+    _ohlc_cw_stats.record_miss()
     return None
 
 
-def _set_cached_ohlc(cache_key: str, response: dict) -> None:
-    """Store OHLC response in cache with LRU eviction.
+def _set_cached_ohlc(cache_key: str, response: dict, resolution: str = "D") -> None:
+    """Store OHLC response in cache with jittered TTL and LRU eviction.
 
     Args:
         cache_key: The cache key
         response: Response dict to cache
+        resolution: OHLC resolution for TTL selection
     """
+    from src.lib.cache_utils import jittered_ttl
+
     global _ohlc_cache
     if len(_ohlc_cache) >= OHLC_CACHE_MAX_ENTRIES:
         # Evict oldest entry by timestamp (LRU)
         oldest_key = min(_ohlc_cache.keys(), key=lambda k: _ohlc_cache[k][0])
         del _ohlc_cache[oldest_key]
         _ohlc_cache_stats["evictions"] += 1
-    _ohlc_cache[cache_key] = (time.time(), response)
+    base_ttl = OHLC_CACHE_TTLS.get(resolution, OHLC_CACHE_DEFAULT_TTL)
+    _ohlc_cache[cache_key] = (time.time(), response, jittered_ttl(base_ttl))
 
 
 def get_ohlc_cache_stats() -> dict[str, int]:
@@ -677,7 +693,7 @@ def get_ohlc_data(ticker: str) -> Response:
         )
 
         # Populate in-memory cache for subsequent requests
-        _set_cached_ohlc(cache_key, response.model_dump(mode="json"))
+        _set_cached_ohlc(cache_key, response.model_dump(mode="json"), resolution.value)
 
         # Calculate persistent cache age from fetched_at (approximate)
         # Use 0 as default since we don't have fetched_at in the response model
@@ -876,7 +892,7 @@ def get_ohlc_data(ticker: str) -> Response:
         end_date_value,
     )
     response_dict = response.model_dump(mode="json")
-    _set_cached_ohlc(actual_cache_key, response_dict)
+    _set_cached_ohlc(actual_cache_key, response_dict, actual_resolution.value)
     safe_actual_cache_key = (
         str(actual_cache_key)
         .replace("\r\n", " ")

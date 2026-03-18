@@ -31,6 +31,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from src.lambdas.shared.logging_utils import get_safe_error_info, sanitize_for_log
+from src.lib.cache_utils import CacheStats, get_global_emitter
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,10 @@ _sentiment_cache: dict[str, tuple[float, "SentimentResponse"]] = {}
 
 # Cache statistics
 _sentiment_cache_stats = {"hits": 0, "misses": 0}
+
+# Feature 1224: CacheStats for CloudWatch metric emission
+_sentiment_cw_stats = CacheStats(name="sentiment")
+get_global_emitter().register(_sentiment_cw_stats)
 
 
 def _get_sentiment_cache_key(config_id: str, tickers: list[str]) -> str:
@@ -69,24 +74,35 @@ def _get_sentiment_cache_key(config_id: str, tickers: list[str]) -> str:
 def _get_cached_sentiment(cache_key: str) -> "SentimentResponse | None":
     """Get sentiment response from cache if not expired."""
     if cache_key in _sentiment_cache:
-        timestamp, response = _sentiment_cache[cache_key]
-        if time.time() - timestamp < SENTIMENT_CACHE_TTL:
+        entry = _sentiment_cache[cache_key]
+        timestamp, response = entry[0], entry[1]
+        # Feature 1224: Use jittered TTL if stored
+        effective_ttl = entry[2] if len(entry) > 2 else SENTIMENT_CACHE_TTL
+        if time.time() - timestamp < effective_ttl:
             _sentiment_cache_stats["hits"] += 1
+            _sentiment_cw_stats.record_hit()
             return response
         # Expired - remove from cache
         del _sentiment_cache[cache_key]
     _sentiment_cache_stats["misses"] += 1
+    _sentiment_cw_stats.record_miss()
     return None
 
 
 def _set_cached_sentiment(cache_key: str, response: "SentimentResponse") -> None:
-    """Store sentiment response in cache."""
+    """Store sentiment response in cache with jittered TTL."""
+    from src.lib.cache_utils import jittered_ttl
+
     global _sentiment_cache
     # Evict oldest entries if cache is full
     if len(_sentiment_cache) >= SENTIMENT_CACHE_MAX_ENTRIES:
         oldest_key = min(_sentiment_cache.keys(), key=lambda k: _sentiment_cache[k][0])
         del _sentiment_cache[oldest_key]
-    _sentiment_cache[cache_key] = (time.time(), response)
+    _sentiment_cache[cache_key] = (
+        time.time(),
+        response,
+        jittered_ttl(SENTIMENT_CACHE_TTL),
+    )
 
 
 def get_sentiment_cache_stats() -> dict[str, int]:

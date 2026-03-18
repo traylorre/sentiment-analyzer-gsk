@@ -3,9 +3,15 @@
 Manages API quota across Tiingo, Finnhub, and SendGrid to prevent overages.
 
 Performance optimization (C2):
-- In-memory cache with 60s TTL reduces DynamoDB reads by ~95%
-- Batched write-through pattern for quota updates
-- Periodic sync to DynamoDB (not on every call)
+- In-memory read cache with 10s TTL reduces DynamoDB reads
+- Atomic DynamoDB counters for cross-instance write accuracy (Feature 1224)
+- Full tracker sync to DynamoDB every 60s for metadata/thresholds
+
+Feature 1224 (Cache Architecture Audit):
+- Replaced batched put_item() sync with per-call atomic update_item(ADD)
+- Cross-instance accuracy within 10% at 20 concurrent instances
+- 25% rate reduction + alert on DynamoDB disconnection
+- Flat atomic counter fields (tiingo_used, finnhub_used, sendgrid_used)
 
 Thread-safety (Feature 1010):
 - Module-level lock protects cache access during parallel ingestion
@@ -24,25 +30,32 @@ from pydantic import BaseModel
 logger = logging.getLogger(__name__)
 
 # =============================================================================
-# C2 FIX: In-memory cache for quota tracker
+# Cache and sync configuration
 # =============================================================================
-# Cache TTL in seconds (default 60s - configurable via env var)
-QUOTA_TRACKER_CACHE_TTL = int(os.environ.get("QUOTA_TRACKER_CACHE_TTL", "60"))
+# Read cache TTL (default 10s — Feature 1224: reduced from 60s for fresher reads)
+QUOTA_TRACKER_CACHE_TTL = int(os.environ.get("QUOTA_TRACKER_CACHE_TTL", "10"))
 
-# Sync interval - how often to persist to DynamoDB (default 60s)
+# Full sync interval - persist complete tracker to DynamoDB (default 60s)
 QUOTA_TRACKER_SYNC_INTERVAL = int(os.environ.get("QUOTA_TRACKER_SYNC_INTERVAL", "60"))
 
 # In-memory cache: (timestamp, QuotaTracker, last_sync_time)
 _quota_tracker_cache: tuple[float, "QuotaTracker", float] | None = None
 
 # Cache statistics for monitoring
-_quota_cache_stats = {"hits": 0, "misses": 0, "syncs": 0}
+_quota_cache_stats = {"hits": 0, "misses": 0, "syncs": 0, "atomic_writes": 0}
 
 # Thread-safety lock for cache access (Feature 1010, 1179)
 # RLock allows same thread to acquire lock multiple times (reentrant)
 # This is needed because record_call() wraps the full read-modify-write
 # cycle, but the helper functions also acquire the lock internally.
 _quota_cache_lock = threading.RLock()
+
+# Feature 1224: Reduced-rate mode when DynamoDB is unreachable
+_reduced_rate_mode = False
+_reduced_rate_since: float | None = None
+_last_disconnected_alert: float = 0.0
+REDUCED_RATE_FRACTION = 0.25  # 25% of normal rate
+DISCONNECTED_ALERT_INTERVAL = 300  # Max one alert per 5 minutes
 
 
 def _get_cached_tracker() -> "QuotaTracker | None":
@@ -99,15 +112,57 @@ def get_quota_cache_stats() -> dict[str, int]:
         return _quota_cache_stats.copy()
 
 
+def _enter_reduced_rate_mode() -> None:
+    """Enter 25% reduced-rate mode when DynamoDB is unreachable (Feature 1224).
+
+    Emits QuotaTracker/Disconnected metric (max once per 5 minutes).
+    """
+    global _reduced_rate_mode, _reduced_rate_since, _last_disconnected_alert
+    with _quota_cache_lock:
+        if not _reduced_rate_mode:
+            _reduced_rate_mode = True
+            _reduced_rate_since = time.time()
+            logger.warning("Entering reduced-rate mode (25%) — DynamoDB unreachable")
+
+        # Emit alert metric (spam-protected)
+        now = time.time()
+        if now - _last_disconnected_alert >= DISCONNECTED_ALERT_INTERVAL:
+            _last_disconnected_alert = now
+            try:
+                from src.lib.metrics import emit_metric
+
+                emit_metric("QuotaTracker/Disconnected", 1.0)
+            except Exception:
+                logger.debug("Failed to emit disconnected alert", exc_info=True)
+
+
+def _exit_reduced_rate_mode() -> None:
+    """Exit reduced-rate mode when DynamoDB becomes reachable again."""
+    global _reduced_rate_mode, _reduced_rate_since
+    with _quota_cache_lock:
+        if _reduced_rate_mode:
+            duration = time.time() - (_reduced_rate_since or 0)
+            logger.info(
+                "Exiting reduced-rate mode — DynamoDB reachable",
+                extra={"duration_seconds": round(duration, 1)},
+            )
+            _reduced_rate_mode = False
+            _reduced_rate_since = None
+
+
 def clear_quota_cache() -> None:
     """Clear cache and reset stats. Used in tests.
 
     Thread-safe: Uses _quota_cache_lock for synchronized access.
     """
     global _quota_tracker_cache, _quota_cache_stats
+    global _reduced_rate_mode, _reduced_rate_since, _last_disconnected_alert
     with _quota_cache_lock:
         _quota_tracker_cache = None
-        _quota_cache_stats = {"hits": 0, "misses": 0, "syncs": 0}
+        _quota_cache_stats = {"hits": 0, "misses": 0, "syncs": 0, "atomic_writes": 0}
+        _reduced_rate_mode = False
+        _reduced_rate_since = None
+        _last_disconnected_alert = 0.0
 
 
 class APIQuotaUsage(BaseModel):
@@ -248,10 +303,33 @@ class QuotaTracker(BaseModel):
 
     @classmethod
     def from_dynamodb_item(cls, item: dict) -> "QuotaTracker":
-        """Create QuotaTracker from DynamoDB item."""
+        """Create QuotaTracker from DynamoDB item.
+
+        Feature 1224: Prefers flat atomic counter fields (tiingo_used, etc.)
+        over nested map values. Falls back to nested values for backward
+        compatibility with items written before atomic counters were added.
+        """
         tiingo_data = item.get("tiingo", {})
         finnhub_data = item.get("finnhub", {})
         sendgrid_data = item.get("sendgrid", {})
+
+        # Feature 1224: Override nested 'used' with flat atomic counter if present
+        for service, data in [
+            ("tiingo", tiingo_data),
+            ("finnhub", finnhub_data),
+            ("sendgrid", sendgrid_data),
+        ]:
+            atomic_used = item.get(f"{service}_used")
+            if atomic_used is not None:
+                data["used"] = int(atomic_used)
+                # Recalculate remaining from the accurate atomic counter
+                limit = data.get("limit", 0)
+                data["remaining"] = max(0, limit - int(atomic_used))
+
+        # Override total_api_calls_today with atomic value if present
+        atomic_total = item.get("total_api_calls_today")
+        if atomic_total is not None:
+            item["total_api_calls_today"] = int(atomic_total)
 
         def parse_quota(data: dict, service: str, defaults: dict) -> APIQuotaUsage:
             """Parse quota data from DynamoDB item."""
@@ -345,6 +423,8 @@ class QuotaTrackerManager:
     def get_tracker(self) -> QuotaTracker:
         """Get quota tracker, using cache when available.
 
+        Feature 1224: Uses ConsistentRead for accurate atomic counter values.
+
         Returns:
             QuotaTracker (from cache, DynamoDB, or default)
         """
@@ -354,10 +434,13 @@ class QuotaTrackerManager:
             logger.debug("Quota tracker cache hit")
             return cached
 
-        # Cache miss - load from DynamoDB
+        # Cache miss - load from DynamoDB with ConsistentRead
         today = datetime.now(UTC).strftime("%Y-%m-%d")
         try:
-            response = self._table.get_item(Key={"PK": "SYSTEM#QUOTA", "SK": today})
+            response = self._table.get_item(
+                Key={"PK": "SYSTEM#QUOTA", "SK": today},
+                ConsistentRead=True,
+            )
             if "Item" in response:
                 tracker = QuotaTracker.from_dynamodb_item(response["Item"])
                 logger.debug(
@@ -368,6 +451,10 @@ class QuotaTrackerManager:
                 # Create default tracker for today
                 tracker = QuotaTracker.create_default()
                 logger.debug("Quota tracker created default", extra={"date": today})
+
+            # DynamoDB is reachable — exit reduced-rate mode if active
+            _exit_reduced_rate_mode()
+
         except Exception as e:
             logger.warning(
                 "Failed to load quota tracker, using default",
@@ -379,8 +466,55 @@ class QuotaTrackerManager:
         _set_cached_tracker(tracker, synced=True)
         return tracker
 
+    def _atomic_increment_usage(
+        self,
+        service: Literal["tiingo", "finnhub", "sendgrid"],
+        count: int = 1,
+    ) -> None:
+        """Atomically increment usage counter in DynamoDB.
+
+        Feature 1224: Uses DynamoDB ADD operation for immediate cross-instance
+        visibility. This is the write path — every API call increments the
+        shared counter atomically.
+
+        The flat fields (tiingo_used, finnhub_used, sendgrid_used) are the
+        source of truth for cross-instance quota tracking. The nested
+        structures are updated by the periodic full sync.
+
+        Args:
+            service: API service name
+            count: Number of calls to record
+        """
+        today = datetime.now(UTC).strftime("%Y-%m-%d")
+        self._table.update_item(
+            Key={"PK": "SYSTEM#QUOTA", "SK": today},
+            UpdateExpression=(
+                "ADD #used :count, #total :count "
+                "SET #updated = :now, #ttl = if_not_exists(#ttl, :ttl_val), "
+                "#entity = if_not_exists(#entity, :entity_val)"
+            ),
+            ExpressionAttributeNames={
+                "#used": f"{service}_used",
+                "#total": "total_api_calls_today",
+                "#updated": "updated_at",
+                "#ttl": "ttl",
+                "#entity": "entity_type",
+            },
+            ExpressionAttributeValues={
+                ":count": count,
+                ":now": datetime.now(UTC).isoformat(),
+                ":ttl_val": int(time.time()) + 7 * 86400,
+                ":entity_val": "QUOTA_TRACKER",
+            },
+        )
+        _quota_cache_stats["atomic_writes"] += 1
+
     def _sync_to_dynamodb(self, tracker: QuotaTracker, force: bool = False) -> bool:
-        """Sync tracker to DynamoDB if needed.
+        """Sync full tracker to DynamoDB if needed.
+
+        This writes the complete tracker (with metadata, thresholds, etc.)
+        for dashboards and monitoring. The atomic counters handle accuracy;
+        this sync handles metadata richness.
 
         Args:
             tracker: QuotaTracker to sync
@@ -411,6 +545,8 @@ class QuotaTrackerManager:
     def can_call(self, service: Literal["tiingo", "finnhub", "sendgrid"]) -> bool:
         """Check if we can make another API call to service.
 
+        Feature 1224: In reduced-rate mode, allows only 25% of quota.
+
         Args:
             service: The service to check
 
@@ -418,6 +554,13 @@ class QuotaTrackerManager:
             True if call is allowed
         """
         tracker = self.get_tracker()
+
+        if _reduced_rate_mode:
+            # In reduced-rate mode, enforce 25% of limit
+            quota = getattr(tracker, service)
+            reduced_limit = int(quota.limit * REDUCED_RATE_FRACTION)
+            return quota.used < reduced_limit
+
         return tracker.can_call(service)
 
     def record_call(
@@ -425,10 +568,14 @@ class QuotaTrackerManager:
         service: Literal["tiingo", "finnhub", "sendgrid"],
         count: int = 1,
     ) -> QuotaTracker:
-        """Record API call(s) and update cache.
+        """Record API call(s) with atomic DynamoDB increment.
 
-        Thread-safe: Uses _quota_cache_lock to protect the entire
-        read-modify-write cycle (Feature 1179 fix for race condition).
+        Feature 1224: Every call atomically increments the shared DynamoDB
+        counter for immediate cross-instance visibility. Falls back to 25%
+        rate reduction if DynamoDB is unreachable.
+
+        Thread-safe: Uses _quota_cache_lock to protect the local cache
+        read-modify-write cycle (Feature 1179).
 
         Args:
             service: The service called
@@ -437,36 +584,69 @@ class QuotaTrackerManager:
         Returns:
             Updated QuotaTracker
         """
-        # Feature 1179: Wrap read-modify-write in lock to prevent lost updates
-        # when multiple threads record calls for different services concurrently.
+        # Step 1: Atomic DynamoDB increment (immediate cross-instance visibility)
+        try:
+            self._atomic_increment_usage(service, count)
+            _exit_reduced_rate_mode()
+        except Exception as e:
+            logger.error(
+                "Atomic quota increment failed — entering reduced-rate mode",
+                extra={"service": service, "error": str(e)},
+            )
+            _enter_reduced_rate_mode()
+
+        # Step 2: Update local cache
         with _quota_cache_lock:
             tracker = self.get_tracker()
             old_is_critical = getattr(tracker, service).is_critical
 
             tracker.record_call(service, count)
-
-            # Update cache
             _set_cached_tracker(tracker, synced=False)
 
             new_is_critical = getattr(tracker, service).is_critical
-        # Lock released - sync operations below have their own thread safety
 
-        # Force sync if quota became critical
+        # Step 3: Emit threshold warning if quota became critical
         if new_is_critical and not old_is_critical:
             logger.warning(
-                "Quota critical threshold reached",
+                "Quota critical threshold reached (80%)",
                 extra={
                     "service": service,
                     "used": getattr(tracker, service).used,
                     "limit": getattr(tracker, service).limit,
                 },
             )
+            self._emit_threshold_warning(service)
             self._sync_to_dynamodb(tracker, force=True)
         else:
-            # Try periodic sync
             self._sync_to_dynamodb(tracker)
 
         return tracker
+
+    def is_reduced_rate(self) -> bool:
+        """Check if this instance is in reduced-rate mode (Feature 1224).
+
+        When DynamoDB is unreachable, instances reduce API call rate to 25%
+        to prevent quota overages.
+
+        Returns:
+            True if in reduced-rate mode
+        """
+        return _reduced_rate_mode
+
+    def _emit_threshold_warning(
+        self, service: Literal["tiingo", "finnhub", "sendgrid"]
+    ) -> None:
+        """Emit QuotaTracker/ThresholdWarning metric (Feature 1224)."""
+        try:
+            from src.lib.metrics import emit_metric
+
+            emit_metric(
+                "QuotaTracker/ThresholdWarning",
+                1.0,
+                dimensions={"Service": service},
+            )
+        except Exception:
+            logger.debug("Failed to emit threshold warning metric", exc_info=True)
 
     def get_usage_summary(self) -> dict[str, dict]:
         """Get usage summary for all services.

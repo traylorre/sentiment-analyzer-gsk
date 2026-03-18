@@ -275,8 +275,8 @@ class TestTimeseriesQueryWithCache:
             response1 = service.query("AAPL", Resolution.ONE_MINUTE)
             assert response1.cache_hit is False
 
-        # After 60 seconds (1m TTL)
-        with freeze_time("2025-12-21T10:36:01Z"):
+        # Feature 1224: TTL has ±10% jitter, max 66s. Advance well past that.
+        with freeze_time("2025-12-21T10:37:10Z"):
             response2 = service.query("AAPL", Resolution.ONE_MINUTE)
             assert response2.cache_hit is False  # TTL expired
 

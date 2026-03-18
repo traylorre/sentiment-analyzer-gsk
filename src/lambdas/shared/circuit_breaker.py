@@ -23,6 +23,7 @@ from typing import Any, Literal
 from aws_lambda_powertools import Tracer
 from pydantic import BaseModel
 
+from src.lib.cache_utils import CacheStats, get_global_emitter
 from src.lib.metrics import emit_metric
 
 logger = logging.getLogger(__name__)
@@ -39,6 +40,10 @@ _circuit_breaker_cache: dict[str, tuple[float, "CircuitBreakerState"]] = {}
 
 # Cache statistics for monitoring
 _cache_stats = {"hits": 0, "misses": 0}
+
+# Feature 1224: CacheStats for CloudWatch metric emission
+_cb_cache_stats = CacheStats(name="circuit_breaker")
+get_global_emitter().register(_cb_cache_stats)
 
 # Thread-safety lock for cache access (Feature 1010)
 _circuit_breaker_lock = threading.Lock()
@@ -62,23 +67,34 @@ def _get_cached_state(service: str) -> "CircuitBreakerState | None":
     """
     with _circuit_breaker_lock:
         if service in _circuit_breaker_cache:
-            timestamp, state = _circuit_breaker_cache[service]
-            if time.time() - timestamp < CIRCUIT_BREAKER_CACHE_TTL:
+            entry = _circuit_breaker_cache[service]
+            timestamp, state = entry[0], entry[1]
+            # Feature 1224: Use jittered TTL if stored
+            effective_ttl = entry[2] if len(entry) > 2 else CIRCUIT_BREAKER_CACHE_TTL
+            if time.time() - timestamp < effective_ttl:
                 _cache_stats["hits"] += 1
+                _cb_cache_stats.record_hit()
                 return state
             # Expired - remove from cache
             del _circuit_breaker_cache[service]
         _cache_stats["misses"] += 1
+        _cb_cache_stats.record_miss()
         return None
 
 
 def _set_cached_state(service: str, state: "CircuitBreakerState") -> None:
-    """Store circuit breaker state in cache.
+    """Store circuit breaker state in cache with jittered TTL.
 
     Thread-safe: Uses _circuit_breaker_lock for synchronized access.
     """
+    from src.lib.cache_utils import jittered_ttl
+
     with _circuit_breaker_lock:
-        _circuit_breaker_cache[service] = (time.time(), state)
+        _circuit_breaker_cache[service] = (
+            time.time(),
+            state,
+            jittered_ttl(CIRCUIT_BREAKER_CACHE_TTL),
+        )
 
 
 def _invalidate_cache(service: str | None = None) -> None:
@@ -336,8 +352,12 @@ class CircuitBreakerManager:
                     extra={"service": service},
                 )
         except Exception as e:
+            # Feature 1224 — Failure Policy: FAIL-OPEN (closed state).
+            # When DynamoDB is unreachable, assume circuit is closed (allow traffic).
+            # This prevents a DynamoDB outage from cascading into a full API shutdown.
+            # See docs/cache-failure-policies.md for the complete policy matrix.
             logger.warning(
-                "Failed to load circuit breaker, using default",
+                "Failed to load circuit breaker, using default (fail-open: closed state)",
                 extra={"service": service, "error": str(e)},
             )
             # X-Ray error subsegment for silent failure visibility

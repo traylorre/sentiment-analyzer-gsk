@@ -1,21 +1,30 @@
 """Ticker cache for US stock symbol validation and autocomplete.
 
-Loads ~8K US stock symbols from S3 at Lambda cold start.
-Provides fast symbol validation and company name search.
+Loads ~8K US stock symbols from S3 with TTL-based refresh.
+
+Feature 1224: Replaced cold-start-only @lru_cache with TTL + S3 ETag
+conditional refresh. Checks S3 ETag every TICKER_CACHE_TTL seconds
+(default 5 min) and only re-downloads if the list changed.
 """
 
 import json
 import logging
+import os
+import threading
+import time
 from datetime import UTC, datetime
-from functools import lru_cache
 from typing import Literal
 
 import boto3
 from pydantic import BaseModel, Field
 
 from src.lambdas.shared.retry import s3_retry
+from src.lib.cache_utils import CacheStats, jittered_ttl, validate_non_empty
 
 logger = logging.getLogger(__name__)
+
+# Feature 1224: TTL-based refresh interval (default 5 minutes)
+TICKER_CACHE_TTL = int(os.environ.get("TICKER_CACHE_TTL", "300"))
 
 
 class TickerInfo(BaseModel):
@@ -227,17 +236,26 @@ class TickerCache(BaseModel):
         return results
 
 
-# Global cache instance (singleton)
-_cache: TickerCache | None = None
+# =============================================================================
+# Feature 1224: TTL + ETag cache replacing @lru_cache
+# =============================================================================
+# Cache entry: (loaded_at, TickerCache, etag, effective_ttl)
+_ticker_cache_entry: tuple[float, TickerCache, str, float] | None = None
+_ticker_cache_lock = threading.Lock()
+_ticker_stats = CacheStats(name="ticker")
 
 
-@lru_cache(maxsize=1)
 def get_ticker_cache(
     bucket: str, key: str = "ticker-cache/us-symbols.json"
 ) -> TickerCache:
-    """Get the global ticker cache instance.
+    """Get the global ticker cache instance with TTL-based refresh.
 
-    Uses LRU cache to ensure only one load per Lambda instance.
+    Feature 1224: Replaced @lru_cache with TTL + S3 ETag conditional refresh.
+    On TTL expiry, checks S3 ETag via head_object(). If unchanged, resets
+    timer without re-downloading. If changed, downloads new list and validates
+    it is non-empty before replacing the cache.
+
+    On S3 failure, serves the stale cached list (fail-open).
 
     Args:
         bucket: S3 bucket name
@@ -246,18 +264,128 @@ def get_ticker_cache(
     Returns:
         TickerCache instance
     """
-    global _cache
-    if _cache is None:
-        _cache = TickerCache.load_from_s3(bucket, key)
-        logger.info(
-            f"Loaded ticker cache: {_cache.total_active} active symbols, "
-            f"version {_cache.version}"
+    global _ticker_cache_entry
+
+    with _ticker_cache_lock:
+        now = time.time()
+
+        # Check if cache exists and is within TTL
+        if _ticker_cache_entry is not None:
+            loaded_at, cache, etag, effective_ttl = _ticker_cache_entry
+            if now - loaded_at < effective_ttl:
+                _ticker_stats.record_hit()
+                return cache
+
+            # TTL expired — attempt refresh outside the lock
+            _ticker_stats.record_miss()
+        else:
+            _ticker_stats.record_miss()
+            etag = ""
+
+    # Outside lock: attempt S3 refresh
+    try:
+        refreshed = _refresh_from_s3(bucket, key, etag)
+        if refreshed is not None:
+            new_cache, new_etag = refreshed
+            with _ticker_cache_lock:
+                _ticker_cache_entry = (
+                    time.time(),
+                    new_cache,
+                    new_etag,
+                    jittered_ttl(TICKER_CACHE_TTL),
+                )
+            return new_cache
+
+        # ETag unchanged — reset timer, keep existing cache
+        with _ticker_cache_lock:
+            if _ticker_cache_entry is not None:
+                _, cache, old_etag, _ = _ticker_cache_entry
+                _ticker_cache_entry = (
+                    time.time(),
+                    cache,
+                    old_etag,
+                    jittered_ttl(TICKER_CACHE_TTL),
+                )
+                return cache
+
+    except Exception as e:
+        _ticker_stats.record_refresh_failure()
+        logger.warning(
+            "Ticker cache refresh failed, serving stale data",
+            extra={"error": str(e)},
         )
-    return _cache
+        with _ticker_cache_lock:
+            if _ticker_cache_entry is not None:
+                return _ticker_cache_entry[1]
+
+    # No cached data at all — must load fresh (cold start)
+    cache = TickerCache.load_from_s3(bucket, key)
+    s3_etag = _get_s3_etag(bucket, key)
+    with _ticker_cache_lock:
+        _ticker_cache_entry = (
+            time.time(),
+            cache,
+            s3_etag,
+            jittered_ttl(TICKER_CACHE_TTL),
+        )
+    logger.info(
+        f"Loaded ticker cache: {cache.total_active} active symbols, "
+        f"version {cache.version}"
+    )
+    return cache
+
+
+def _refresh_from_s3(
+    bucket: str, key: str, current_etag: str
+) -> tuple[TickerCache, str] | None:
+    """Check S3 for ticker list updates using ETag conditional logic.
+
+    Returns:
+        (new_cache, new_etag) if list changed, None if unchanged.
+    """
+    s3 = boto3.client("s3")
+
+    # Check ETag first (cheap HEAD request)
+    head = s3.head_object(Bucket=bucket, Key=key)
+    new_etag = head.get("ETag", "")
+
+    if new_etag == current_etag and current_etag:
+        logger.debug("Ticker cache ETag unchanged, skipping download")
+        return None
+
+    # ETag changed — download new list
+    logger.info(
+        "Ticker cache ETag changed, downloading new list",
+        extra={"old_etag": current_etag[:16], "new_etag": new_etag[:16]},
+    )
+    response = s3.get_object(Bucket=bucket, Key=key)
+    data = json.loads(response["Body"].read().decode("utf-8"))
+
+    new_cache = TickerCache._from_json(data)
+
+    # Validate non-empty before accepting (FR-005)
+    validate_non_empty(new_cache.symbols, "ticker")
+
+    return new_cache, new_etag
+
+
+def _get_s3_etag(bucket: str, key: str) -> str:
+    """Get the ETag for an S3 object (for initial load)."""
+    try:
+        s3 = boto3.client("s3")
+        head = s3.head_object(Bucket=bucket, Key=key)
+        return head.get("ETag", "")
+    except Exception:
+        return ""
 
 
 def clear_ticker_cache() -> None:
     """Clear the global ticker cache (for testing)."""
-    global _cache
-    _cache = None
-    get_ticker_cache.cache_clear()
+    global _ticker_cache_entry
+    with _ticker_cache_lock:
+        _ticker_cache_entry = None
+
+
+def get_ticker_cache_stats() -> CacheStats:
+    """Get ticker cache statistics for monitoring."""
+    return _ticker_stats

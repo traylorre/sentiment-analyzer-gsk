@@ -19,18 +19,25 @@ from src.lambdas.shared.adapters.base import (
     SentimentData,
 )
 from src.lambdas.shared.logging_utils import sanitize_for_log
+from src.lib.cache_utils import CacheStats, get_global_emitter
 
 logger = logging.getLogger(__name__)
 
 # =============================================================================
 # DFA-004 FIX: API Response Cache
+# Feature 1224: Added jitter to TTL to prevent thundering herd
 # =============================================================================
 # Cache TTL in seconds (default 30 minutes for news, 1 hour for OHLC)
 API_CACHE_TTL_NEWS_SECONDS = int(os.environ.get("API_CACHE_TTL_NEWS_SECONDS", "1800"))
 API_CACHE_TTL_OHLC_SECONDS = int(os.environ.get("API_CACHE_TTL_OHLC_SECONDS", "3600"))
 
+# Feature 1224: CacheStats for CloudWatch metric emission
+_tiingo_stats = CacheStats(name="tiingo")
+get_global_emitter().register(_tiingo_stats)
+
 # In-memory cache (survives Lambda warm invocations)
-_tiingo_cache: dict[str, tuple[float, Any]] = {}
+# Feature 1224: tuple now (timestamp, value, effective_ttl) for jittered expiry
+_tiingo_cache: dict[str, tuple[float, Any, float]] = {}
 _MAX_CACHE_ENTRIES = 100  # Prevent unbounded memory growth
 
 
@@ -44,22 +51,30 @@ def _get_cache_key(endpoint: str, params: dict) -> str:
 def _get_from_cache(key: str, ttl: int) -> Any | None:
     """Get value from cache if not expired."""
     if key in _tiingo_cache:
-        timestamp, value = _tiingo_cache[key]
-        if time.time() - timestamp < ttl:
+        entry = _tiingo_cache[key]
+        timestamp, value = entry[0], entry[1]
+        # Feature 1224: Use stored jittered TTL if available, else base TTL
+        effective_ttl = entry[2] if len(entry) > 2 else ttl
+        if time.time() - timestamp < effective_ttl:
+            _tiingo_stats.record_hit()
             return value
         # Expired - remove from cache
         del _tiingo_cache[key]
+    _tiingo_stats.record_miss()
     return None
 
 
-def _put_in_cache(key: str, value: Any) -> None:
-    """Put value in cache with current timestamp."""
+def _put_in_cache(key: str, value: Any, base_ttl: int = 0) -> None:
+    """Put value in cache with jittered TTL."""
+    from src.lib.cache_utils import jittered_ttl
+
     global _tiingo_cache
     # Evict oldest entries if cache is full
     if len(_tiingo_cache) >= _MAX_CACHE_ENTRIES:
         oldest_key = min(_tiingo_cache.keys(), key=lambda k: _tiingo_cache[k][0])
         del _tiingo_cache[oldest_key]
-    _tiingo_cache[key] = (time.time(), value)
+    effective_ttl = jittered_ttl(base_ttl) if base_ttl > 0 else 0
+    _tiingo_cache[key] = (time.time(), value, effective_ttl)
 
 
 def clear_cache() -> None:
@@ -205,7 +220,7 @@ class TiingoAdapter(BaseAdapter):
                 data = self._handle_response(response)
                 # Only cache non-empty responses - 404s return [] and should not be cached
                 if data:
-                    _put_in_cache(cache_key, data)
+                    _put_in_cache(cache_key, data, API_CACHE_TTL_NEWS_SECONDS)
                     logger.debug(f"Tiingo news cache miss for {tickers_param}, cached")
                 else:
                     logger.warning(
@@ -304,7 +319,7 @@ class TiingoAdapter(BaseAdapter):
                 # Only cache non-empty responses - 404s return [] and should not be cached
                 # This prevents "no data" errors from being cached for 1 hour
                 if data:
-                    _put_in_cache(cache_key, data)
+                    _put_in_cache(cache_key, data, API_CACHE_TTL_OHLC_SECONDS)
                     logger.debug(
                         "Tiingo OHLC cache miss for %s, cached",
                         sanitize_for_log(ticker),
@@ -409,7 +424,7 @@ class TiingoAdapter(BaseAdapter):
                 data = self._handle_response(response)
                 # Only cache non-empty responses - 404s return [] and should not be cached
                 if data:
-                    _put_in_cache(cache_key, data)
+                    _put_in_cache(cache_key, data, cache_ttl)
                     logger.debug(
                         "Tiingo IEX intraday cache miss for %s (%s), cached",
                         sanitize_for_log(ticker),

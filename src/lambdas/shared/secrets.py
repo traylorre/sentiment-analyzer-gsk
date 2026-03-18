@@ -35,6 +35,8 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
+from src.lib.cache_utils import CacheStats, get_global_emitter
+
 # Structured logging for CloudWatch
 logger = logging.getLogger(__name__)
 
@@ -55,6 +57,10 @@ RETRY_CONFIG = Config(
 # In-memory cache
 # Structure: {secret_id: {"value": <parsed_value>, "expires_at": <timestamp>}}
 _secrets_cache: dict[str, dict[str, Any]] = {}
+
+# Feature 1224: CacheStats for CloudWatch metric emission
+_secrets_cw_stats = CacheStats(name="secrets")
+get_global_emitter().register(_secrets_cw_stats)
 
 
 def _sanitize_secret_id_for_log(secret_id: str) -> str:
@@ -293,14 +299,17 @@ def _get_from_cache(secret_id: str) -> dict[str, Any] | None:
         Cached secret value or None if not cached/expired
     """
     if secret_id not in _secrets_cache:
+        _secrets_cw_stats.record_miss()
         return None
 
     entry = _secrets_cache[secret_id]
     if time.time() > entry["expires_at"]:
         # Cache expired
         del _secrets_cache[secret_id]
+        _secrets_cw_stats.record_miss()
         return None
 
+    _secrets_cw_stats.record_hit()
     return entry["value"]
 
 
@@ -312,11 +321,15 @@ def _set_in_cache(secret_id: str, value: dict[str, Any]) -> None:
         secret_id: Secret identifier
         value: Parsed secret value
     """
-    ttl = int(os.environ.get("SECRETS_CACHE_TTL_SECONDS", DEFAULT_CACHE_TTL_SECONDS))
+    from src.lib.cache_utils import jittered_ttl
+
+    base_ttl = int(
+        os.environ.get("SECRETS_CACHE_TTL_SECONDS", DEFAULT_CACHE_TTL_SECONDS)
+    )
 
     _secrets_cache[secret_id] = {
         "value": value,
-        "expires_at": time.time() + ttl,
+        "expires_at": time.time() + jittered_ttl(base_ttl),
     }
 
 
