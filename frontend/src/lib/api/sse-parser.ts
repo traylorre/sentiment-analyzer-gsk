@@ -33,7 +33,7 @@ export interface SSEEvent {
  * - BOM stripping on first chunk
  */
 export class SSEParser {
-  private decoder = new TextDecoder('utf-8', { stream: true });
+  private decoder = new TextDecoder('utf-8');
   private buffer = '';
   private eventType = '';
   private dataLines: string[] = [];
@@ -84,7 +84,7 @@ export class SSEParser {
 
   /** Reset parser state for a new connection. */
   reset(): void {
-    this.decoder = new TextDecoder('utf-8', { stream: true });
+    this.decoder = new TextDecoder('utf-8');
     this.buffer = '';
     this.eventType = '';
     this.dataLines = [];
