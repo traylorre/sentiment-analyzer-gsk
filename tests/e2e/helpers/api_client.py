@@ -2,7 +2,14 @@
 #
 # HTTP client wrapper for interacting with the preprod API during E2E tests.
 # Handles authentication, request tracing, and response validation.
+#
+# Feature 1224.4: Supports two transport modes:
+# - "http" (default): Uses httpx against Function URL (for local dev, scheduled canary)
+# - "invoke": Uses boto3 lambda.invoke() (for CI — bypasses CloudFront propagation)
+#
+# Set PREPROD_TRANSPORT=invoke in CI environment to use direct invoke mode.
 
+import json
 import logging
 import os
 from typing import Any
@@ -10,6 +17,9 @@ from typing import Any
 import httpx
 
 logger = logging.getLogger(__name__)
+
+# Transport mode: "http" (Function URL) or "invoke" (direct Lambda invoke)
+DEFAULT_TRANSPORT = os.environ.get("PREPROD_TRANSPORT", "http")
 
 
 class PreprodAPIClient:
@@ -42,6 +52,7 @@ class PreprodAPIClient:
         base_url: str | None = None,
         sse_url: str | None = None,
         timeout: float = 30.0,
+        transport: str | None = None,
     ):
         """Initialize the API client.
 
@@ -49,7 +60,12 @@ class PreprodAPIClient:
             base_url: API base URL (default: from PREPROD_API_URL env var)
             sse_url: SSE Lambda URL for streaming endpoints (default: from SSE_LAMBDA_URL env var)
             timeout: Request timeout in seconds
+            transport: "http" (Function URL) or "invoke" (direct Lambda invoke).
+                       Default: from PREPROD_TRANSPORT env var, or "http".
         """
+        self._transport_mode = transport or DEFAULT_TRANSPORT
+        self._invoke_transport = None
+
         # Normalize URLs by removing trailing slashes to prevent httpx path issues
         raw_base_url = base_url or os.environ.get(
             "PREPROD_API_URL", "https://api.preprod.sentiment-analyzer.com"
@@ -62,19 +78,27 @@ class PreprodAPIClient:
         raw_sse_url = sse_url or os.environ.get("SSE_LAMBDA_URL", "")
         self.sse_url = raw_sse_url.rstrip("/") if raw_sse_url else self.base_url
 
-        # Log URL configuration for debugging routing issues
-        if self.sse_url == self.base_url:
-            logger.warning(
-                "SSE_LAMBDA_URL not set - SSE requests will route to base_url (%s). "
-                "This may cause 404 errors if base_url uses BUFFERED invoke mode.",
-                self.base_url,
+        if self._transport_mode == "invoke":
+            from tests.e2e.helpers.lambda_invoke_transport import LambdaInvokeTransport
+
+            self._invoke_transport = LambdaInvokeTransport()
+            logger.info(
+                "API client using DIRECT INVOKE transport (bypasses Function URL)"
             )
         else:
-            logger.debug(
-                "API client initialized: base_url=%s, sse_url=%s",
-                self.base_url,
-                self.sse_url,
-            )
+            # Log URL configuration for debugging routing issues
+            if self.sse_url == self.base_url:
+                logger.warning(
+                    "SSE_LAMBDA_URL not set - SSE requests will route to base_url (%s). "
+                    "This may cause 404 errors if base_url uses BUFFERED invoke mode.",
+                    self.base_url,
+                )
+            else:
+                logger.debug(
+                    "API client initialized: base_url=%s, sse_url=%s",
+                    self.base_url,
+                    self.sse_url,
+                )
         self.timeout = timeout
         self._client: httpx.AsyncClient | None = None
         self._access_token: str | None = None
@@ -193,12 +217,35 @@ class PreprodAPIClient:
         self._last_trace_id = response.headers.get("X-Amzn-Trace-Id")
         self._last_request_id = response.headers.get("X-Request-Id")
 
+    async def _invoke_request(
+        self,
+        method: str,
+        path: str,
+        headers: dict[str, str] | None = None,
+        json_body: dict[str, Any] | None = None,
+        query_params: dict[str, Any] | None = None,
+    ) -> Any:
+        """Route request through invoke transport, returning httpx-compatible response."""
+        body = None
+        if json_body is not None:
+            body = json.dumps(json_body)
+            headers = headers or {}
+            headers["content-type"] = "application/json"
+
+        return self._invoke_transport.invoke(
+            method=method,
+            path=path,
+            headers=headers,
+            body=body,
+            query_params=query_params,
+        )
+
     async def get(
         self,
         path: str,
         params: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
-    ) -> httpx.Response:
+    ) -> Any:
         """Make a GET request.
 
         Args:
@@ -207,16 +254,19 @@ class PreprodAPIClient:
             headers: Additional headers
 
         Returns:
-            httpx.Response
+            httpx.Response or LambdaResponse (both have .status_code, .json(), .text)
         """
+        req_headers = self._build_headers(headers)
+
+        if self._invoke_transport:
+            return await self._invoke_request(
+                "GET", path, req_headers, query_params=params
+            )
+
         if not self._client:
             raise RuntimeError("Client not initialized. Use 'async with' context.")
 
-        response = await self._client.get(
-            path,
-            params=params,
-            headers=self._build_headers(headers),
-        )
+        response = await self._client.get(path, params=params, headers=req_headers)
         self._capture_response_headers(response)
         return response
 
@@ -226,26 +276,18 @@ class PreprodAPIClient:
         json: dict[str, Any] | None = None,
         data: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
-    ) -> httpx.Response:
-        """Make a POST request.
+    ) -> Any:
+        """Make a POST request."""
+        req_headers = self._build_headers(headers)
 
-        Args:
-            path: API path
-            json: JSON body
-            data: Form data
-            headers: Additional headers
+        if self._invoke_transport:
+            return await self._invoke_request("POST", path, req_headers, json_body=json)
 
-        Returns:
-            httpx.Response
-        """
         if not self._client:
             raise RuntimeError("Client not initialized. Use 'async with' context.")
 
         response = await self._client.post(
-            path,
-            json=json,
-            data=data,
-            headers=self._build_headers(headers),
+            path, json=json, data=data, headers=req_headers
         )
         self._capture_response_headers(response)
         return response
@@ -255,25 +297,17 @@ class PreprodAPIClient:
         path: str,
         json: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
-    ) -> httpx.Response:
-        """Make a PUT request.
+    ) -> Any:
+        """Make a PUT request."""
+        req_headers = self._build_headers(headers)
 
-        Args:
-            path: API path
-            json: JSON body
-            headers: Additional headers
+        if self._invoke_transport:
+            return await self._invoke_request("PUT", path, req_headers, json_body=json)
 
-        Returns:
-            httpx.Response
-        """
         if not self._client:
             raise RuntimeError("Client not initialized. Use 'async with' context.")
 
-        response = await self._client.put(
-            path,
-            json=json,
-            headers=self._build_headers(headers),
-        )
+        response = await self._client.put(path, json=json, headers=req_headers)
         self._capture_response_headers(response)
         return response
 
@@ -282,25 +316,19 @@ class PreprodAPIClient:
         path: str,
         json: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
-    ) -> httpx.Response:
-        """Make a PATCH request.
+    ) -> Any:
+        """Make a PATCH request."""
+        req_headers = self._build_headers(headers)
 
-        Args:
-            path: API path
-            json: JSON body
-            headers: Additional headers
+        if self._invoke_transport:
+            return await self._invoke_request(
+                "PATCH", path, req_headers, json_body=json
+            )
 
-        Returns:
-            httpx.Response
-        """
         if not self._client:
             raise RuntimeError("Client not initialized. Use 'async with' context.")
 
-        response = await self._client.patch(
-            path,
-            json=json,
-            headers=self._build_headers(headers),
-        )
+        response = await self._client.patch(path, json=json, headers=req_headers)
         self._capture_response_headers(response)
         return response
 
@@ -308,23 +336,17 @@ class PreprodAPIClient:
         self,
         path: str,
         headers: dict[str, str] | None = None,
-    ) -> httpx.Response:
-        """Make a DELETE request.
+    ) -> Any:
+        """Make a DELETE request."""
+        req_headers = self._build_headers(headers)
 
-        Args:
-            path: API path
-            headers: Additional headers
+        if self._invoke_transport:
+            return await self._invoke_request("DELETE", path, req_headers)
 
-        Returns:
-            httpx.Response
-        """
         if not self._client:
             raise RuntimeError("Client not initialized. Use 'async with' context.")
 
-        response = await self._client.delete(
-            path,
-            headers=self._build_headers(headers),
-        )
+        response = await self._client.delete(path, headers=req_headers)
         self._capture_response_headers(response)
         return response
 
