@@ -43,3 +43,8 @@ amplify_github_repository = "https://github.com/traylorre/sentiment-analyzer-gsk
 # Feature 1189: Environment-specific JWT audience (A16)
 # Prevents cross-environment token replay attacks
 jwt_audience = "sentiment-api-preprod"
+
+# Alarm notifications — required for operational visibility
+# SNS topic subscription sends alarm state changes to this email.
+# You must confirm the subscription via email after first deploy.
+alarm_email = "scotthazlett+sentiment-alarm@gmail.com"
