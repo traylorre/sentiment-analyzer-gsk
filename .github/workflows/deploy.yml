@@ -1480,6 +1480,13 @@ jobs:
           # Required for SSE E2E tests - routes /api/v2/stream* to SSE Lambda (RESPONSE_STREAM mode)
           # See: specs/082-fix-sse-e2e-timeouts/spec.md
           SSE_LAMBDA_URL: ${{ needs.deploy-preprod.outputs.sse_lambda_url }}
+          # Feature 1224.4: Use direct Lambda invoke in CI to bypass CloudFront propagation delay.
+          # Function URLs are backed by AWS-managed CloudFront that takes 2-5+ min to propagate.
+          # GHA runners (Azure data centers) are particularly affected by edge routing variance.
+          PREPROD_TRANSPORT: invoke
+          DASHBOARD_FUNCTION_NAME: preprod-sentiment-dashboard
+          SSE_FUNCTION_NAME: preprod-sentiment-sse-streaming
+          LAMBDA_QUALIFIER: live
           # Required for E2E Lambda invocation tests (test_e2e_lambda_invocation_preprod.py)
           DASHBOARD_FUNCTION_URL: ${{ needs.deploy-preprod.outputs.dashboard_url }}
           # Feature 1054: JWT secret for E2E test authentication (Feature 1053)
