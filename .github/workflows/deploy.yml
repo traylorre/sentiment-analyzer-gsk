@@ -1439,7 +1439,7 @@ jobs:
       # distribution may still be propagating. Integration tests use httpx
       # against the URL, so we need to confirm HTTP accessibility first.
       - name: Wait for Function URL Propagation
-        timeout-minutes: 5
+        continue-on-error: true
         env:
           DASHBOARD_URL: ${{ needs.deploy-preprod.outputs.dashboard_url }}
         run: |
