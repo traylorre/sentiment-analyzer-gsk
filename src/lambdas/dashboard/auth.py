@@ -1493,6 +1493,23 @@ class RefreshTokenResponse(BaseModel):
     message: str | None = None
 
 
+class ErrorDetail(BaseModel):
+    """Error detail for auth error responses."""
+
+    code: str
+    message: str
+    details: dict[str, Any] | None = None
+
+
+class ErrorResponse(BaseModel):
+    """Standard error response for auth service functions.
+
+    Used by router_v2.py: isinstance(result, auth_service.ErrorResponse)
+    """
+
+    error: ErrorDetail
+
+
 class SignOutResponse(BaseModel):
     """Response for POST /api/v2/auth/signout."""
 
