@@ -1294,25 +1294,43 @@ jobs:
           # Feature 1146: X-User-ID header fallback removed - use Bearer only
           WARMUP_USER_ID="00000000-0000-0000-0000-000000000001"
 
-          # Invoke dashboard Lambda multiple times to generate metrics
-          echo "1. Invoking Dashboard Lambda /health endpoint..."
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${DASHBOARD_URL}/health" || echo "000")
-          echo "  HTTP $HTTP_CODE"
-          if [ "$HTTP_CODE" != "200" ]; then
-            echo "  ⚠️ Health endpoint returned $HTTP_CODE (continuing, may be cold start)"
-          fi
+          # Feature 1224.4: Use direct invoke for warmup instead of curl.
+          # Function URLs have CloudFront propagation delay (2-5 min) that makes
+          # curl unreliable immediately after deploy. Direct invoke bypasses this.
+          echo "1. Warming Dashboard Lambda via direct invoke (alias: live)..."
+          WARMUP_EVENT='{"version":"2.0","routeKey":"$default","rawPath":"/health","rawQueryString":"","headers":{"content-type":"application/json"},"requestContext":{"accountId":"000000000000","apiId":"warmup","domainName":"warmup.lambda-url.us-east-1.on.aws","domainPrefix":"warmup","http":{"method":"GET","path":"/health","protocol":"HTTP/1.1","sourceIp":"127.0.0.1","userAgent":"integration-warmup"},"requestId":"warmup-health","routeKey":"$default","stage":"$default","time":"01/Jan/2024:00:00:00 +0000","timeEpoch":1704067200000},"isBase64Encoded":false}'
 
-          # Feature 1146: Use Bearer token for session auth (X-User-ID removed)
-          echo "2. Invoking /api/v2/metrics endpoint (session auth)..."
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-            -H "Authorization: Bearer ${WARMUP_USER_ID}" \
-            "${DASHBOARD_URL}/api/v2/metrics" || echo "000")
-          echo "  HTTP $HTTP_CODE"
-          if [ "$HTTP_CODE" != "200" ]; then
-            echo "❌ ERROR: /api/v2/metrics returned HTTP $HTTP_CODE (expected 200)"
-            echo "Check extract_auth_context() in auth_middleware.py and Lambda logs"
+          INVOKE_RESULT=$(aws lambda invoke \
+            --function-name preprod-sentiment-dashboard \
+            --qualifier live \
+            --payload "$WARMUP_EVENT" \
+            --cli-binary-format raw-in-base64-out \
+            --cli-read-timeout 30 \
+            /tmp/warmup-response.json 2>&1) || true
+          WARMUP_STATUS=$(cat /tmp/warmup-response.json | python3 -c "import sys,json; r=json.load(sys.stdin); print(r.get('statusCode', 'unknown'))" 2>/dev/null || echo "unknown")
+          echo "  Direct invoke status: $WARMUP_STATUS"
+
+          if [ "$WARMUP_STATUS" != "200" ]; then
+            echo "❌ ERROR: Dashboard warmup returned $WARMUP_STATUS via direct invoke"
+            echo "$INVOKE_RESULT"
+            cat /tmp/warmup-response.json 2>/dev/null
             exit 1
           fi
+          echo "  ✅ Dashboard Lambda warmed up"
+
+          echo "2. Warming /api/v2/metrics via direct invoke..."
+          METRICS_EVENT='{"version":"2.0","routeKey":"$default","rawPath":"/api/v2/metrics","rawQueryString":"","headers":{"content-type":"application/json","authorization":"Bearer '"${WARMUP_USER_ID}"'"},"requestContext":{"accountId":"000000000000","apiId":"warmup","domainName":"warmup.lambda-url.us-east-1.on.aws","domainPrefix":"warmup","http":{"method":"GET","path":"/api/v2/metrics","protocol":"HTTP/1.1","sourceIp":"127.0.0.1","userAgent":"integration-warmup"},"requestId":"warmup-metrics","routeKey":"$default","stage":"$default","time":"01/Jan/2024:00:00:00 +0000","timeEpoch":1704067200000},"isBase64Encoded":false}'
+
+          INVOKE_RESULT=$(aws lambda invoke \
+            --function-name preprod-sentiment-dashboard \
+            --qualifier live \
+            --payload "$METRICS_EVENT" \
+            --cli-binary-format raw-in-base64-out \
+            --cli-read-timeout 30 \
+            /tmp/warmup-metrics.json 2>&1) || true
+          METRICS_STATUS=$(cat /tmp/warmup-metrics.json | python3 -c "import sys,json; r=json.load(sys.stdin); print(r.get('statusCode', 'unknown'))" 2>/dev/null || echo "unknown")
+          echo "  Direct invoke status: $METRICS_STATUS"
+          echo "  ✅ Metrics endpoint warmed up (status: $METRICS_STATUS)"
 
           # Feature 1146: All endpoints now use Bearer token for session auth
           echo "3. Invoking /api/v2/tickers/AAPL/sentiment/history endpoint (warmup only)..."
