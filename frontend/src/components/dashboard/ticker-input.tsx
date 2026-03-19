@@ -2,11 +2,12 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, X } from 'lucide-react';
+import { Search, X, AlertTriangle } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { tickersApi, type TickerSearchResult } from '@/lib/api/tickers';
+import { emitErrorEvent, ApiClientError } from '@/lib/api/client';
 import { useHaptic } from '@/hooks/use-haptic';
 
 interface TickerInputProps {
@@ -30,7 +31,7 @@ export function TickerInput({
   const haptic = useHaptic();
 
   // Debounced search query
-  const { data: results = [], isLoading } = useQuery({
+  const { data: results = [], isLoading, isError, error, refetch } = useQuery({
     queryKey: ['ticker-search', query],
     queryFn: () => tickersApi.search(query, 5),
     enabled: query.length >= 1,
@@ -167,7 +168,30 @@ export function TickerInput({
                 <div className="inline-block w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin" />
                 <span className="sr-only">Searching...</span>
               </div>
-            ) : results.length > 0 ? (
+            ) : isError ? (() => {
+              const errorCode = error instanceof ApiClientError ? error.status : 0;
+              emitErrorEvent('search_error_displayed', { errorCode, endpoint: 'tickers/search' });
+              const is429 = error instanceof ApiClientError && error.status === 429;
+              return (
+                <div className="p-4 text-center text-amber-500" role="alert">
+                  <AlertTriangle className="inline-block h-4 w-4 mb-1" />
+                  <p className="text-sm mt-1">
+                    {is429
+                      ? 'Too many requests. Please wait a moment.'
+                      : 'Unable to search. Check your connection or try again.'}
+                  </p>
+                  {!is429 && (
+                    <button
+                      type="button"
+                      onClick={() => refetch()}
+                      className="mt-2 text-xs text-amber-400 hover:text-amber-300 underline transition-colors"
+                    >
+                      Retry
+                    </button>
+                  )}
+                </div>
+              );
+            })() : results.length > 0 ? (
               <ul className="max-h-60 overflow-auto py-1" role="presentation">
                 {results.map((ticker, index) => (
                   <motion.li

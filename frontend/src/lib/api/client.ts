@@ -30,6 +30,18 @@ export class ApiClientError extends Error {
   }
 }
 
+/**
+ * Feature 1226: Structured console event for error state transitions (FR-011).
+ * Enables Playwright test assertions via page.on('console') without DOM scraping.
+ */
+export function emitErrorEvent(event: string, details: Record<string, unknown> = {}) {
+  console.warn(JSON.stringify({
+    event,
+    timestamp: new Date().toISOString(),
+    details,
+  }));
+}
+
 interface RequestOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined>;
   /**
