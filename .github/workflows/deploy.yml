@@ -1434,6 +1434,29 @@ jobs:
 
           echo "✅ Lambda warmup complete - metrics should now be available"
 
+      # Feature 1224.4: Wait for Function URLs to be reachable via HTTP.
+      # Direct invoke works immediately but the Function URL's CloudFront
+      # distribution may still be propagating. Integration tests use httpx
+      # against the URL, so we need to confirm HTTP accessibility first.
+      - name: Wait for Function URL Propagation
+        timeout-minutes: 5
+        env:
+          DASHBOARD_URL: ${{ needs.deploy-preprod.outputs.dashboard_url }}
+        run: |
+          echo "🌐 Waiting for Function URL to be reachable via HTTP..."
+          for attempt in $(seq 1 30); do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "${DASHBOARD_URL}/health" 2>/dev/null || echo "000")
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "  ✅ Function URL reachable (attempt $attempt): HTTP $HTTP_CODE"
+              break
+            fi
+            echo "  Attempt $attempt/30: HTTP $HTTP_CODE (waiting 10s...)"
+            sleep 10
+          done
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "  ⚠️ Function URL not reachable after 5 min — integration tests may fail on URL-based calls"
+          fi
+
       - name: Run Preprod Integration Tests
         env:
           AWS_REGION: ${{ vars.AWS_REGION }}
