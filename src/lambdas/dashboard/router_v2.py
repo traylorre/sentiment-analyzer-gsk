@@ -646,8 +646,8 @@ def refresh_tokens():
     result = auth_service.refresh_access_tokens(
         refresh_token=refresh_token, table=table
     )
-    if isinstance(result, auth_service.ErrorResponse):
-        return error_response(401, result.error.message)
+    if result.error:
+        return error_response(401, result.message or result.error)
 
     response_data = result.model_dump()
 

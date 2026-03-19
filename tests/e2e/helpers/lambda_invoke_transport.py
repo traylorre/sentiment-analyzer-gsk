@@ -16,6 +16,7 @@ import logging
 import os
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import parse_qs, urlencode
 
 import boto3
 
@@ -60,16 +61,21 @@ def _build_function_url_event(
     """Build a Lambda Function URL v2 event from HTTP request parameters."""
     headers = headers or {}
     query_string = ""
+    query_string_params = None
     if query_params:
-        from urllib.parse import urlencode
-
         query_string = urlencode(query_params, doseq=True)
+        # Populate queryStringParameters for handlers that read it directly
+        query_string_params = {
+            k: v[-1] if len(v) == 1 else ",".join(v)
+            for k, v in parse_qs(query_string).items()
+        }
 
     return {
         "version": "2.0",
         "routeKey": "$default",
         "rawPath": path,
         "rawQueryString": query_string,
+        "queryStringParameters": query_string_params,
         "headers": {k.lower(): v for k, v in headers.items()},
         "requestContext": {
             "accountId": "000000000000",
@@ -97,7 +103,9 @@ def _build_function_url_event(
 def _parse_lambda_response(payload: dict) -> LambdaResponse:
     """Parse Lambda response payload into an httpx-compatible response."""
     status_code = payload.get("statusCode", 500)
-    headers = payload.get("headers", {})
+    raw_headers = payload.get("headers", {})
+    # Normalize header keys to lowercase (matching httpx.Response behavior)
+    headers = {k.lower(): v for k, v in raw_headers.items()}
 
     # Response body can be in 'body' field
     body = payload.get("body", "")
