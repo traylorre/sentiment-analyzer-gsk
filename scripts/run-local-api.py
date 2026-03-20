@@ -203,12 +203,13 @@ class LambdaProxyHandler(BaseHTTPRequestHandler):
         )
         raw_query_string = parsed.query or ""
 
+        # Lambda Function URL v2 event format (LambdaFunctionUrlResolver)
         return {
             "version": "2.0",
             "rawPath": parsed.path,
             "rawQueryString": raw_query_string,
             "headers": headers,
-            "queryStringParameters": query_params,
+            "queryStringParameters": query_params or {},
             "body": body,
             "isBase64Encoded": False,
             "requestContext": {
