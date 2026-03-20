@@ -236,7 +236,7 @@ def _record_request(
                 "action": action,
                 "rate_key": rate_key,
                 "created_at": timestamp.isoformat(),
-                "ttl": ttl,
+                "ttl_timestamp": ttl,
                 "entity_type": "RATE_LIMIT",
             }
         )

@@ -222,7 +222,7 @@ class TestFullPipeline:
                 "source_name": article["source"]["name"],
                 "tag": ["AI", "climate", "economy"][i],
                 "status": "pending",
-                "ttl": int(datetime.now(UTC).timestamp()) + 86400 * 30,
+                "ttl_timestamp": int(datetime.now(UTC).timestamp()) + 86400 * 30,
                 "content_hash": hashlib.sha256(article["url"].encode()).hexdigest()[
                     :16
                 ],
