@@ -1,24 +1,116 @@
-"""Unit tests for sentiment history endpoint.
+"""Unit tests for sentiment history endpoint (Feature 1227).
 
-Tests the GET /api/v2/tickers/{ticker}/sentiment/history endpoint.
+Tests the GET /api/v2/tickers/{ticker}/sentiment/history endpoint
+after the synthetic generator was replaced with real DynamoDB queries.
+
+Uses mocked timeseries query to isolate endpoint logic from DynamoDB.
 """
 
 import json
+from dataclasses import dataclass, field
 from datetime import date, timedelta
+from unittest.mock import patch
+
+import pytest
 
 from src.lambdas.dashboard.handler import lambda_handler
 from tests.conftest import make_event
 
 # Feature 1049: Valid UUID required for auth
-# Feature 1146: Bearer-only authentication (X-User-ID header fallback removed)
+# Feature 1146: Bearer-only authentication
 AUTH_HEADERS = {"Authorization": "Bearer 12345678-1234-5678-1234-567812345678"}
+
+
+@dataclass
+class MockBucket:
+    """Mimics SentimentBucketResponse from timeseries.py."""
+
+    ticker: str
+    resolution: str
+    timestamp: str
+    open: float
+    high: float
+    low: float
+    close: float
+    count: int
+    avg: float
+    label_counts: dict = field(default_factory=dict)
+    is_partial: bool = False
+    sources: list = field(default_factory=list)
+    progress_pct: float | None = None
+
+
+@dataclass
+class MockTimeseriesResponse:
+    """Mimics TimeseriesResponse from timeseries.py."""
+
+    ticker: str
+    resolution: str
+    buckets: list
+    partial_bucket: object = None
+    cache_hit: bool = False
+    query_time_ms: float = 1.0
+    next_cursor: str | None = None
+    has_more: bool = False
+
+
+def _make_buckets(
+    ticker: str, start_date: date, count: int, source: str = "tiingo"
+) -> list:
+    """Generate test buckets for a ticker."""
+    buckets = []
+    for i in range(count):
+        d = start_date + timedelta(days=i)
+        buckets.append(
+            MockBucket(
+                ticker=ticker,
+                resolution="24h",
+                timestamp=f"{d}T00:00:00+00:00",
+                open=0.8 + i * 0.01,
+                high=0.9 + i * 0.01,
+                low=0.7 + i * 0.01,
+                close=0.85 + i * 0.01,
+                count=1,
+                avg=round(0.85 + i * 0.01, 4),
+                sources=[f"{source}:{90000000 + i}"],
+            )
+        )
+    return buckets
+
+
+def _mock_query(buckets, ticker="AAPL"):
+    """Create a mock for query_timeseries that returns the given buckets."""
+    return MockTimeseriesResponse(
+        ticker=ticker,
+        resolution="24h",
+        buckets=buckets,
+    )
+
+
+@pytest.fixture(autouse=True)
+def _clear_caches():
+    """Clear sentiment cache between tests."""
+    from src.lambdas.shared.cache.sentiment_cache import clear_cache
+
+    clear_cache()
+    yield
+    clear_cache()
 
 
 class TestSentimentHistoryEndpoint:
     """Tests for GET /api/v2/tickers/{ticker}/sentiment/history."""
 
-    def test_returns_sentiment_history_response(self, mock_lambda_context):
+    @patch("src.lambdas.dashboard.timeseries.query_timeseries")
+    @patch(
+        "src.lambdas.shared.cache.sentiment_cache.get_cached_history", return_value=None
+    )
+    def test_returns_sentiment_history_response(
+        self, mock_cache, mock_query, mock_lambda_context
+    ):
         """Test endpoint returns properly structured response."""
+        buckets = _make_buckets("AAPL", date(2026, 3, 1), 7)
+        mock_query.return_value = _mock_query(buckets)
+
         event = make_event(
             method="GET",
             path="/api/v2/tickers/AAPL/sentiment/history",
@@ -29,17 +121,16 @@ class TestSentimentHistoryEndpoint:
         assert response["statusCode"] == 200
         data = json.loads(response["body"])
 
-        # Verify required fields
         assert data["ticker"] == "AAPL"
-        assert data["source"] == "aggregated"  # default
+        assert data["source"] == "aggregated"
         assert isinstance(data["history"], list)
-        assert len(data["history"]) > 0
+        assert len(data["history"]) == 7
         assert "start_date" in data
         assert "end_date" in data
-        assert data["count"] == len(data["history"])
+        assert data["count"] == 7
 
     def test_validates_user_id_header(self, mock_lambda_context):
-        """Test endpoint requires X-User-ID header."""
+        """Test endpoint requires auth header."""
         event = make_event(
             method="GET",
             path="/api/v2/tickers/AAPL/sentiment/history",
@@ -51,7 +142,6 @@ class TestSentimentHistoryEndpoint:
 
     def test_validates_ticker_symbol(self, mock_lambda_context):
         """Test endpoint validates ticker format."""
-        # Invalid: too long
         event = make_event(
             method="GET",
             path="/api/v2/tickers/TOOLONG/sentiment/history",
@@ -61,7 +151,6 @@ class TestSentimentHistoryEndpoint:
         assert response["statusCode"] == 400
         assert "Invalid ticker symbol" in json.loads(response["body"])["detail"]
 
-        # Invalid: contains numbers
         event = make_event(
             method="GET",
             path="/api/v2/tickers/AB12/sentiment/history",
@@ -70,8 +159,17 @@ class TestSentimentHistoryEndpoint:
         response = lambda_handler(event, mock_lambda_context)
         assert response["statusCode"] == 400
 
-    def test_normalizes_ticker_to_uppercase(self, mock_lambda_context):
+    @patch("src.lambdas.dashboard.timeseries.query_timeseries")
+    @patch(
+        "src.lambdas.shared.cache.sentiment_cache.get_cached_history", return_value=None
+    )
+    def test_normalizes_ticker_to_uppercase(
+        self, mock_cache, mock_query, mock_lambda_context
+    ):
         """Test ticker is normalized to uppercase."""
+        buckets = _make_buckets("AAPL", date(2026, 3, 1), 3)
+        mock_query.return_value = _mock_query(buckets)
+
         event = make_event(
             method="GET",
             path="/api/v2/tickers/aapl/sentiment/history",
@@ -82,72 +180,97 @@ class TestSentimentHistoryEndpoint:
         assert response["statusCode"] == 200
         assert json.loads(response["body"])["ticker"] == "AAPL"
 
-    def test_supports_source_param(self, mock_lambda_context):
-        """Test source parameter filters sentiment data."""
-        sources = ["tiingo", "finnhub", "our_model", "aggregated"]
-
-        for source in sources:
-            event = make_event(
-                method="GET",
-                path="/api/v2/tickers/AAPL/sentiment/history",
-                query_params={"source": source},
-                headers=AUTH_HEADERS,
-            )
-            response = lambda_handler(event, mock_lambda_context)
-
-            assert response["statusCode"] == 200
-            data = json.loads(response["body"])
-            assert data["source"] == source
-
-            # Verify all points have correct source
-            for point in data["history"]:
-                assert point["source"] == source
-
-    def test_supports_time_range_param(self, mock_lambda_context):
-        """Test time range parameter affects data span."""
-        # Test 1 week
-        event_1w = make_event(
-            method="GET",
-            path="/api/v2/tickers/AAPL/sentiment/history",
-            query_params={"range": "1W"},
-            headers=AUTH_HEADERS,
-        )
-        response_1w = lambda_handler(event_1w, mock_lambda_context)
-        assert response_1w["statusCode"] == 200
-        data_1w = json.loads(response_1w["body"])
-
-        # Test 1 month
-        event_1m = make_event(
-            method="GET",
-            path="/api/v2/tickers/AAPL/sentiment/history",
-            query_params={"range": "1M"},
-            headers=AUTH_HEADERS,
-        )
-        response_1m = lambda_handler(event_1m, mock_lambda_context)
-        assert response_1m["statusCode"] == 200
-        data_1m = json.loads(response_1m["body"])
-
-        # 1M should have more data points than 1W
-        assert data_1m["count"] > data_1w["count"]
-
-    def test_supports_custom_date_range(self, mock_lambda_context):
-        """Test custom start_date and end_date parameters."""
-        end_date = date.today()
-        start_date = end_date - timedelta(days=14)
+    @patch("src.lambdas.dashboard.timeseries.query_timeseries")
+    @patch(
+        "src.lambdas.shared.cache.sentiment_cache.get_cached_history", return_value=None
+    )
+    def test_source_filter_tiingo(self, mock_cache, mock_query, mock_lambda_context):
+        """Test source filter returns only matching sources."""
+        buckets = _make_buckets("AAPL", date(2026, 3, 1), 3, source="tiingo")
+        mock_query.return_value = _mock_query(buckets)
 
         event = make_event(
             method="GET",
             path="/api/v2/tickers/AAPL/sentiment/history",
-            query_params={"start_date": str(start_date), "end_date": str(end_date)},
+            query_params={"source": "tiingo"},
             headers=AUTH_HEADERS,
         )
         response = lambda_handler(event, mock_lambda_context)
 
         assert response["statusCode"] == 200
         data = json.loads(response["body"])
+        assert data["source"] == "tiingo"
+        for point in data["history"]:
+            assert point["source"] == "tiingo"
 
-        # Should have ~15 days of data
-        assert 14 <= data["count"] <= 16
+    @patch("src.lambdas.dashboard.timeseries.query_timeseries")
+    @patch(
+        "src.lambdas.shared.cache.sentiment_cache.get_cached_history", return_value=None
+    )
+    def test_source_filter_excludes_non_matching(
+        self, mock_cache, mock_query, mock_lambda_context
+    ):
+        """Test source filter excludes records from other sources."""
+        buckets = _make_buckets("AAPL", date(2026, 3, 1), 3, source="tiingo")
+        mock_query.return_value = _mock_query(buckets)
+
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/AAPL/sentiment/history",
+            query_params={"source": "finnhub"},
+            headers=AUTH_HEADERS,
+        )
+        response = lambda_handler(event, mock_lambda_context)
+
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
+        assert data["count"] == 0
+        assert data["history"] == []
+
+    @patch("src.lambdas.dashboard.timeseries.query_timeseries")
+    @patch(
+        "src.lambdas.shared.cache.sentiment_cache.get_cached_history", return_value=None
+    )
+    def test_aggregated_returns_all_sources(
+        self, mock_cache, mock_query, mock_lambda_context
+    ):
+        """Test aggregated source returns all records regardless of source."""
+        buckets = _make_buckets("AAPL", date(2026, 3, 1), 3, source="tiingo")
+        mock_query.return_value = _mock_query(buckets)
+
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/AAPL/sentiment/history",
+            query_params={"source": "aggregated"},
+            headers=AUTH_HEADERS,
+        )
+        response = lambda_handler(event, mock_lambda_context)
+
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
+        assert data["count"] == 3
+
+    @patch("src.lambdas.dashboard.timeseries.query_timeseries")
+    @patch(
+        "src.lambdas.shared.cache.sentiment_cache.get_cached_history", return_value=None
+    )
+    def test_empty_results_return_count_zero(
+        self, mock_cache, mock_query, mock_lambda_context
+    ):
+        """Test empty timeseries returns count 0 (not synthetic filler, FR-005)."""
+        mock_query.return_value = _mock_query([])
+
+        event = make_event(
+            method="GET",
+            path="/api/v2/tickers/AAPL/sentiment/history",
+            headers=AUTH_HEADERS,
+        )
+        response = lambda_handler(event, mock_lambda_context)
+
+        assert response["statusCode"] == 200
+        data = json.loads(response["body"])
+        assert data["count"] == 0
+        assert data["history"] == []
 
     def test_validates_date_range_order(self, mock_lambda_context):
         """Test start_date must be before end_date."""
@@ -165,8 +288,17 @@ class TestSentimentHistoryEndpoint:
             in json.loads(response["body"])["detail"]
         )
 
-    def test_sentiment_point_structure(self, mock_lambda_context):
-        """Test sentiment point has all required fields."""
+    @patch("src.lambdas.dashboard.timeseries.query_timeseries")
+    @patch(
+        "src.lambdas.shared.cache.sentiment_cache.get_cached_history", return_value=None
+    )
+    def test_sentiment_point_structure(
+        self, mock_cache, mock_query, mock_lambda_context
+    ):
+        """Test sentiment point has all required fields with valid ranges."""
+        buckets = _make_buckets("AAPL", date(2026, 3, 1), 1)
+        mock_query.return_value = _mock_query(buckets)
+
         event = make_event(
             method="GET",
             path="/api/v2/tickers/AAPL/sentiment/history",
@@ -178,83 +310,89 @@ class TestSentimentHistoryEndpoint:
         data = json.loads(response["body"])
         point = data["history"][0]
 
-        # Required fields
         assert "date" in point
         assert "score" in point
         assert "source" in point
-
-        # Optional fields
         assert "confidence" in point
         assert "label" in point
 
-        # Validate ranges
         assert -1.0 <= point["score"] <= 1.0
-        if point["confidence"] is not None:
-            assert 0.0 <= point["confidence"] <= 1.0
-        if point["label"] is not None:
-            assert point["label"] in ["positive", "neutral", "negative"]
+        assert 0.0 <= point["confidence"] <= 1.0
+        assert point["label"] in ["positive", "neutral", "negative"]
 
-    def test_history_sorted_by_date_ascending(self, mock_lambda_context):
-        """Test sentiment history is sorted oldest to newest."""
+    @patch("src.lambdas.dashboard.timeseries.query_timeseries")
+    @patch(
+        "src.lambdas.shared.cache.sentiment_cache.get_cached_history", return_value=None
+    )
+    def test_x_cache_source_header_present(
+        self, mock_cache, mock_query, mock_lambda_context
+    ):
+        """Test x-cache-source header is set (FR-006)."""
+        buckets = _make_buckets("AAPL", date(2026, 3, 1), 3)
+        mock_query.return_value = _mock_query(buckets)
+
         event = make_event(
             method="GET",
             path="/api/v2/tickers/AAPL/sentiment/history",
-            query_params={"range": "1M"},
             headers=AUTH_HEADERS,
         )
         response = lambda_handler(event, mock_lambda_context)
 
         assert response["statusCode"] == 200
-        history = json.loads(response["body"])["history"]
+        headers = response.get("headers", {})
+        assert "x-cache-source" in headers
+        assert headers["x-cache-source"] == "persistent-cache"
 
-        dates = [point["date"] for point in history]
-        assert dates == sorted(dates)
+    @patch("src.lambdas.dashboard.timeseries.query_timeseries")
+    @patch("src.lambdas.shared.cache.sentiment_cache.get_cached_history")
+    def test_cache_hit_returns_in_memory_header(
+        self, mock_cache_get, mock_query, mock_lambda_context
+    ):
+        """Test in-memory cache hit returns x-cache-source: in-memory."""
+        mock_cache_get.return_value = {
+            "ticker": "AAPL",
+            "source": "aggregated",
+            "history": [
+                {
+                    "date": "2026-03-01",
+                    "score": 0.85,
+                    "source": "tiingo",
+                    "confidence": 0.8,
+                    "label": "positive",
+                }
+            ],
+            "start_date": "2026-03-01",
+            "end_date": "2026-03-01",
+            "count": 1,
+        }
 
-    def test_deterministic_results_for_same_ticker(self, mock_lambda_context):
-        """Test same ticker returns consistent results (seeded random)."""
         event = make_event(
             method="GET",
             path="/api/v2/tickers/AAPL/sentiment/history",
-            query_params={"range": "1W"},
             headers=AUTH_HEADERS,
         )
-        response1 = lambda_handler(event, mock_lambda_context)
-        response2 = lambda_handler(event, mock_lambda_context)
+        response = lambda_handler(event, mock_lambda_context)
 
-        assert (
-            json.loads(response1["body"])["history"]
-            == json.loads(response2["body"])["history"]
-        )
-
-    def test_different_tickers_have_different_results(self, mock_lambda_context):
-        """Test different tickers return different sentiment values."""
-        event_aapl = make_event(
-            method="GET",
-            path="/api/v2/tickers/AAPL/sentiment/history",
-            query_params={"range": "1W"},
-            headers=AUTH_HEADERS,
-        )
-        event_msft = make_event(
-            method="GET",
-            path="/api/v2/tickers/MSFT/sentiment/history",
-            query_params={"range": "1W"},
-            headers=AUTH_HEADERS,
-        )
-        response_aapl = lambda_handler(event_aapl, mock_lambda_context)
-        response_msft = lambda_handler(event_msft, mock_lambda_context)
-
-        # Scores should differ (seeded by ticker)
-        aapl_scores = [p["score"] for p in json.loads(response_aapl["body"])["history"]]
-        msft_scores = [p["score"] for p in json.loads(response_msft["body"])["history"]]
-
-        assert aapl_scores != msft_scores
+        assert response["statusCode"] == 200
+        headers = response.get("headers", {})
+        assert headers.get("x-cache-source") == "in-memory"
+        mock_query.assert_not_called()
 
 
 class TestSentimentSourceEnum:
     """Tests for sentiment source validation."""
 
-    def test_invalid_source_falls_back_to_default(self, mock_lambda_context):
-        """Test invalid source parameter falls back to aggregated (Powertools default)."""
+    @patch("src.lambdas.dashboard.timeseries.query_timeseries")
+    @patch(
+        "src.lambdas.shared.cache.sentiment_cache.get_cached_history", return_value=None
+    )
+    def test_invalid_source_falls_back_to_default(
+        self, mock_cache, mock_query, mock_lambda_context
+    ):
+        """Test invalid source parameter falls back to aggregated."""
+        buckets = _make_buckets("AAPL", date(2026, 3, 1), 3)
+        mock_query.return_value = _mock_query(buckets)
+
         event = make_event(
             method="GET",
             path="/api/v2/tickers/AAPL/sentiment/history",
@@ -263,7 +401,6 @@ class TestSentimentSourceEnum:
         )
         response = lambda_handler(event, mock_lambda_context)
 
-        # Powertools handler falls back to default source (aggregated) for invalid enum
         assert response["statusCode"] == 200
         data = json.loads(response["body"])
-        assert data["source"] == "aggregated"  # Default fallback
+        assert data["source"] == "aggregated"
