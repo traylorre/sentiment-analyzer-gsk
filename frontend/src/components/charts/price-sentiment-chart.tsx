@@ -22,6 +22,7 @@ import { useHaptic } from '@/hooks/use-haptic';
 import type { TimeRange, OHLCResolution, ChartSentimentSource, PriceCandle, SentimentPoint, GapMarker } from '@/types/chart';
 import { RESOLUTION_LABELS } from '@/types/chart';
 import { GapShaderPrimitive } from './primitives';
+import { useApiHealthStore, selectIsUnreachable } from '@/stores/api-health-store';
 
 /**
  * Convert date value to lightweight-charts Time type.
@@ -134,6 +135,7 @@ export function PriceSentimentChart({
   const [showSentiment, setShowSentiment] = useState(true);
 
   const haptic = useHaptic();
+  const isUnreachable = useApiHealthStore(selectIsUnreachable);
 
   // T025: Persist resolution to sessionStorage when it changes
   useEffect(() => {
@@ -702,8 +704,8 @@ export function PriceSentimentChart({
         </div>
       )}
 
-      {/* Error state */}
-      {error && !isLoading && (
+      {/* Error state — suppress generic connection errors when API health banner is active */}
+      {error && !isLoading && !(isUnreachable && /connect|network|unreachable/i.test(error)) && (
         <div className="absolute inset-0 flex items-center justify-center bg-card/80 rounded-lg z-10">
           <div className="flex flex-col items-center gap-3 text-center px-4">
             <span className="text-red-500 text-sm">{error}</span>

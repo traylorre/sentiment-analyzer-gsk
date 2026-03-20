@@ -16,9 +16,9 @@ Requirements:
 import asyncio
 import uuid
 
-import httpx
 import pytest
-import pytest_asyncio
+
+from tests.e2e.helpers.api_client import PreprodAPIClient
 
 # Mark all tests in this module as preprod-only
 pytestmark = [
@@ -29,27 +29,9 @@ pytestmark = [
 
 
 @pytest.fixture
-def preprod_base_url() -> str:
-    """Get preprod API base URL from environment."""
-    import os
-
-    url = os.environ.get("PREPROD_API_URL")
-    if not url:
-        pytest.skip("PREPROD_API_URL not set - skipping preprod tests")
-    return url
-
-
-@pytest.fixture
 def test_email_domain() -> str:
     """Domain for test emails that won't actually be sent."""
     return "e2e-test.sentiment-analyzer.example.com"
-
-
-@pytest_asyncio.fixture
-async def http_client() -> httpx.AsyncClient:
-    """Async HTTP client for API calls."""
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        yield client
 
 
 class TestAnonymousSessionCreation:
@@ -58,12 +40,11 @@ class TestAnonymousSessionCreation:
     @pytest.mark.asyncio
     async def test_create_anonymous_session_returns_valid_response(
         self,
-        http_client: httpx.AsyncClient,
-        preprod_base_url: str,
+        api_client: PreprodAPIClient,
     ):
         """Anonymous session creation returns valid user_id and token."""
-        response = await http_client.post(
-            f"{preprod_base_url}/api/v2/auth/anonymous",
+        response = await api_client.post(
+            "/api/v2/auth/anonymous",
             json={},
         )
 
@@ -88,13 +69,12 @@ class TestAnonymousSessionCreation:
     @pytest.mark.asyncio
     async def test_anonymous_session_is_valid_immediately(
         self,
-        http_client: httpx.AsyncClient,
-        preprod_base_url: str,
+        api_client: PreprodAPIClient,
     ):
         """Newly created anonymous session can be validated."""
         # Create session
-        create_response = await http_client.post(
-            f"{preprod_base_url}/api/v2/auth/anonymous",
+        create_response = await api_client.post(
+            "/api/v2/auth/anonymous",
             json={},
         )
         # 201 Created is the correct status for resource creation
@@ -102,10 +82,8 @@ class TestAnonymousSessionCreation:
         session_data = create_response.json()
 
         # Validate session using /api/v2/auth/me endpoint
-        validate_response = await http_client.get(
-            f"{preprod_base_url}/api/v2/auth/me",
-            headers={"Authorization": f"Bearer {session_data['token']}"},
-        )
+        api_client.set_bearer_token(session_data["token"])
+        validate_response = await api_client.get("/api/v2/auth/me")
 
         # Anonymous tokens may return 200 with is_anonymous=true
         # or may return 401 if anonymous sessions can't call /me
@@ -126,14 +104,13 @@ class TestFullAuthFlow:
     @pytest.mark.asyncio
     async def test_anonymous_to_magic_link_flow(
         self,
-        http_client: httpx.AsyncClient,
-        preprod_base_url: str,
+        api_client: PreprodAPIClient,
         test_email_domain: str,
     ):
         """Complete flow: anonymous -> request magic link -> verify."""
         # Step 1: Create anonymous session
-        anon_response = await http_client.post(
-            f"{preprod_base_url}/api/v2/auth/anonymous",
+        anon_response = await api_client.post(
+            "/api/v2/auth/anonymous",
             json={},
         )
         # 201 Created is the correct status for resource creation
@@ -145,9 +122,9 @@ class TestFullAuthFlow:
 
         # Step 2: Request magic link (won't actually send email in test mode)
         test_email = f"test-{uuid.uuid4().hex[:8]}@{test_email_domain}"
-        magic_link_response = await http_client.post(
-            f"{preprod_base_url}/api/v2/auth/magic-link/request",
-            headers={"Authorization": f"Bearer {anon_token}"},
+        api_client.set_bearer_token(anon_token)
+        magic_link_response = await api_client.post(
+            "/api/v2/auth/magic-link/request",
             json={"email": test_email},
         )
 
@@ -164,8 +141,7 @@ class TestMagicLinkRaceCondition:
     @pytest.mark.asyncio
     async def test_concurrent_magic_link_verifications_are_safe(
         self,
-        http_client: httpx.AsyncClient,
-        preprod_base_url: str,
+        api_client: PreprodAPIClient,
     ):
         """10 concurrent token verifications don't cause data corruption."""
         # This test requires a valid magic link token, which needs email setup
@@ -179,18 +155,17 @@ class TestEmailUniquenessRaceCondition:
     @pytest.mark.asyncio
     async def test_concurrent_email_registrations_enforce_uniqueness(
         self,
-        http_client: httpx.AsyncClient,
-        preprod_base_url: str,
+        api_client: PreprodAPIClient,
         test_email_domain: str,
     ):
         """10 concurrent registrations with same email - only one succeeds."""
         test_email = f"race-{uuid.uuid4().hex[:8]}@{test_email_domain}"
 
-        async def attempt_registration(client: httpx.AsyncClient, email: str) -> dict:
+        async def attempt_registration(client: PreprodAPIClient, email: str) -> dict:
             """Attempt to create a session and request magic link."""
             # Create anonymous session
             anon = await client.post(
-                f"{preprod_base_url}/api/v2/auth/anonymous",
+                "/api/v2/auth/anonymous",
                 json={},
             )
             # 201 Created is the correct status for resource creation
@@ -200,9 +175,9 @@ class TestEmailUniquenessRaceCondition:
             token = anon.json()["token"]
 
             # Request magic link with email
+            client.set_bearer_token(token)
             result = await client.post(
-                f"{preprod_base_url}/api/v2/auth/magic-link/request",
-                headers={"Authorization": f"Bearer {token}"},
+                "/api/v2/auth/magic-link/request",
                 json={"email": email},
             )
 
@@ -212,8 +187,9 @@ class TestEmailUniquenessRaceCondition:
                 "is_404": result.status_code == 404,
             }
 
-        # Run 10 concurrent registration attempts
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        # Run 10 concurrent registration attempts using separate clients
+        results = []
+        async with PreprodAPIClient() as client:
             tasks = [attempt_registration(client, test_email) for _ in range(10)]
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -236,8 +212,7 @@ class TestMergeIdempotency:
     @pytest.mark.asyncio
     async def test_merge_is_idempotent(
         self,
-        http_client: httpx.AsyncClient,
-        preprod_base_url: str,
+        api_client: PreprodAPIClient,
     ):
         """Calling merge multiple times produces same result."""
         # This test requires an authenticated session to merge into
@@ -247,12 +222,11 @@ class TestMergeIdempotency:
     @pytest.mark.asyncio
     async def test_merge_endpoint_exists(
         self,
-        http_client: httpx.AsyncClient,
-        preprod_base_url: str,
+        api_client: PreprodAPIClient,
     ):
         """Merge endpoint is accessible (returns 401 without auth)."""
-        response = await http_client.post(
-            f"{preprod_base_url}/api/v2/auth/merge",
+        response = await api_client.post(
+            "/api/v2/auth/merge",
             json={"anonymous_user_id": str(uuid.uuid4())},
         )
 
@@ -266,13 +240,12 @@ class TestSessionRefresh:
     @pytest.mark.asyncio
     async def test_session_refresh_extends_expiry(
         self,
-        http_client: httpx.AsyncClient,
-        preprod_base_url: str,
+        api_client: PreprodAPIClient,
     ):
         """Session refresh endpoint extends session expiry."""
         # Create session
-        create_response = await http_client.post(
-            f"{preprod_base_url}/api/v2/auth/anonymous",
+        create_response = await api_client.post(
+            "/api/v2/auth/anonymous",
             json={},
         )
         # 201 Created is the correct status for resource creation
@@ -282,9 +255,9 @@ class TestSessionRefresh:
         user_id = session_data["user_id"]
 
         # Refresh session
-        refresh_response = await http_client.post(
-            f"{preprod_base_url}/api/v2/auth/session/refresh",
-            headers={"Authorization": f"Bearer {token}"},
+        api_client.set_bearer_token(token)
+        refresh_response = await api_client.post(
+            "/api/v2/auth/session/refresh",
             json={"user_id": user_id},
         )
 
@@ -302,12 +275,11 @@ class TestBulkRevocation:
     @pytest.mark.asyncio
     async def test_bulk_revocation_endpoint_requires_admin(
         self,
-        http_client: httpx.AsyncClient,
-        preprod_base_url: str,
+        api_client: PreprodAPIClient,
     ):
         """Bulk revocation endpoint requires admin auth."""
-        response = await http_client.post(
-            f"{preprod_base_url}/api/v2/admin/sessions/revoke",
+        response = await api_client.post(
+            "/api/v2/admin/sessions/revoke",
             json={
                 "user_ids": [str(uuid.uuid4())],
                 "reason": "E2E test",

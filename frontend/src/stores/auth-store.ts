@@ -10,7 +10,7 @@
 
 import { create } from 'zustand';
 import type { User, AuthTokens, AuthState, OAuthProvider } from '@/types/auth';
-import { setUserId, setAccessToken } from '@/lib/api/client';
+import { setUserId, setAccessToken, emitErrorEvent } from '@/lib/api/client';
 import { authApi } from '@/lib/api/auth';
 
 interface AuthStore extends AuthState {
@@ -18,6 +18,10 @@ interface AuthStore extends AuthState {
   isLoading: boolean;
   isInitialized: boolean;
   error: string | null;
+
+  // Auth degradation tracking (User Story 3)
+  refreshFailureCount: number;
+  sessionDegraded: boolean;
 
   // Actions
   setUser: (user: User | null) => void;
@@ -50,7 +54,7 @@ interface AuthStore extends AuthState {
   reset: () => void;
 }
 
-const initialState: AuthState & { isLoading: boolean; isInitialized: boolean; error: string | null } = {
+const initialState: AuthState & { isLoading: boolean; isInitialized: boolean; error: string | null; refreshFailureCount: number; sessionDegraded: boolean } = {
   isAuthenticated: false,
   isAnonymous: false,
   user: null,
@@ -59,6 +63,8 @@ const initialState: AuthState & { isLoading: boolean; isInitialized: boolean; er
   isLoading: false,
   isInitialized: false,
   error: null,
+  refreshFailureCount: 0,
+  sessionDegraded: false,
 };
 
 // Feature 1165: Memory-only store - no persist() middleware
@@ -253,8 +259,17 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         accessToken: data.accessToken,
         idToken: data.idToken,
       });
+      // User Story 3: Reset degradation state on successful refresh
+      set({ refreshFailureCount: 0, sessionDegraded: false });
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Unknown error');
+      // User Story 3: Track consecutive refresh failures for degradation detection
+      const count = get().refreshFailureCount + 1;
+      set({ refreshFailureCount: count });
+      if (count >= 2) {
+        set({ sessionDegraded: true });
+        emitErrorEvent('auth_degradation_warning', { failureCount: count });
+      }
       // Don't throw - let the session expire gracefully
     }
   },
@@ -279,6 +294,8 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       });
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Unknown error');
+      // FR-006: Observability for profile refresh failures
+      console.warn('[authStore] Profile refresh failed:', error instanceof Error ? error.message : 'Unknown error');
       // Don't throw - profile refresh is non-critical
     }
   },
