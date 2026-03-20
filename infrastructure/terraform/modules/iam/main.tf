@@ -184,7 +184,8 @@ resource "aws_iam_role_policy" "ingestion_feature_006_users" {
         Effect = "Allow"
         Action = [
           "dynamodb:GetItem",
-          "dynamodb:Query"
+          "dynamodb:Query",
+          "dynamodb:PutItem" # Feature 1227: Required for circuit breaker + quota tracker persistence
         ]
         Resource = [
           var.feature_006_users_table_arn,
