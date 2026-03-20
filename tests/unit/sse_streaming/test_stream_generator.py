@@ -12,6 +12,7 @@ import pytest
 
 from src.lambdas.sse_streaming.connection import SSEConnection
 from src.lambdas.sse_streaming.models import MetricsEventData, SSEEvent
+from src.lambdas.sse_streaming.polling import PollResult
 from src.lambdas.sse_streaming.stream import EventBuffer, SSEStreamGenerator
 
 
@@ -183,15 +184,17 @@ class TestGlobalStreamGeneration:
         # Create async generator that yields once then stops
         async def mock_poll_loop():
             # Yield one metrics update then break
-            yield (
-                MetricsEventData(
+            yield PollResult(
+                metrics=MetricsEventData(
                     total=10,
                     positive=5,
                     neutral=3,
                     negative=2,
                     timestamp=datetime.now(UTC),
                 ),
-                True,
+                metrics_changed=True,
+                per_ticker={},
+                timeseries_buckets={},
             )
             # Cancel after one iteration
             raise asyncio.CancelledError()

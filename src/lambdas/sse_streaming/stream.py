@@ -29,7 +29,12 @@ from models import (
     SentimentUpdateData,
     SSEEvent,
 )
-from polling import PollingService, get_polling_service
+from polling import (
+    PollingService,
+    TickerAggregate,
+    detect_ticker_changes,
+    get_polling_service,
+)
 from timeseries_models import PartialBucketEvent
 from tracing import get_tracer, is_enabled, safe_force_flush
 
@@ -95,7 +100,7 @@ class EventBuffer:
     Supports Last-Event-ID reconnection per FR-007.
     """
 
-    def __init__(self, max_size: int = 100):
+    def __init__(self, max_size: int = 500):
         """Initialize event buffer.
 
         Args:
@@ -266,7 +271,7 @@ class SSEStreamGenerator:
 
         return SSEEvent(
             event="partial_bucket",
-            data=event_data.model_dump(),
+            data=event_data,
         )
 
     def _inject_trace_id(self, sse_dict: dict) -> dict:
@@ -396,9 +401,14 @@ class SSEStreamGenerator:
         last_heartbeat = time.time()
         flush_fired = False  # T046: Block span creation after flush
 
+        # Feature 1228: Per-connection state for change detection (FR-003, FR-011)
+        local_last_per_ticker: dict[str, TickerAggregate] = {}
+        local_last_buckets: dict[str, dict] = {}
+        local_is_baseline = True
+
         try:
             # Main event loop
-            async for metrics, changed in self._poll_service.poll_loop():
+            async for poll_result in self._poll_service.poll_loop():
                 # T046: Check deadline before creating more spans (FR-093)
                 if not flush_fired and self._check_deadline_flush():
                     flush_fired = True
@@ -412,9 +422,9 @@ class SSEStreamGenerator:
                 current_time = time.time()
 
                 # Send metrics if changed
-                if changed:
+                if poll_result.metrics_changed:
                     dispatch_start = time.perf_counter()
-                    event = self._create_metrics_event(metrics)
+                    event = self._create_metrics_event(poll_result.metrics)
                     self._event_buffer.add(event)
                     self._conn_manager.update_last_event_id(
                         connection.connection_id, event.id
@@ -437,6 +447,71 @@ class SSEStreamGenerator:
                         self._trace_event_dispatch("heartbeat", dispatch_start)
                     metrics_emitter.emit_events_sent(1, "heartbeat")
                     last_heartbeat = current_time
+
+                # Feature 1228: Emit sentiment_update events (FR-001, FR-003)
+                if not local_is_baseline and poll_result.per_ticker:
+                    changed_tickers = detect_ticker_changes(
+                        poll_result.per_ticker, local_last_per_ticker
+                    )
+                    for ticker in changed_tickers:
+                        if ticker in poll_result.per_ticker:
+                            agg = poll_result.per_ticker[ticker]
+                            dispatch_start = time.perf_counter()
+                            event = self._create_sentiment_event(
+                                ticker,
+                                agg.score,
+                                agg.label,
+                                agg.confidence,
+                                "aggregate",
+                            )
+                            self._event_buffer.add(event)
+                            self._conn_manager.update_last_event_id(
+                                connection.connection_id, event.id
+                            )
+                            yield self._inject_trace_id(event.to_sse_dict())
+                            if not flush_fired:
+                                self._trace_event_dispatch(
+                                    "sentiment_update", dispatch_start
+                                )
+                            metrics_emitter.emit_events_sent(1, "sentiment_update")
+
+                # Feature 1228: Emit partial_bucket events (FR-002, FR-004a)
+                if not local_is_baseline and poll_result.timeseries_buckets:
+                    for key, bucket_data in poll_result.timeseries_buckets.items():
+                        if (
+                            key not in local_last_buckets
+                            or bucket_data != local_last_buckets.get(key)
+                        ):
+                            # Parse ticker and resolution from key
+                            parts = key.split("#", 1)
+                            if len(parts) == 2:
+                                ticker, res_str = parts
+                                try:
+                                    resolution = Resolution(res_str)
+                                except ValueError:
+                                    continue
+                                if self.should_emit_bucket_update(ticker, resolution):
+                                    dispatch_start = time.perf_counter()
+                                    event = self._create_partial_bucket_event(
+                                        ticker, resolution, bucket_data
+                                    )
+                                    self._event_buffer.add(event)
+                                    self._conn_manager.update_last_event_id(
+                                        connection.connection_id, event.id
+                                    )
+                                    yield self._inject_trace_id(event.to_sse_dict())
+                                    if not flush_fired:
+                                        self._trace_event_dispatch(
+                                            "partial_bucket", dispatch_start
+                                        )
+                                    metrics_emitter.emit_events_sent(
+                                        1, "partial_bucket"
+                                    )
+
+                # Update per-connection snapshots
+                local_last_per_ticker = dict(poll_result.per_ticker)
+                local_last_buckets = dict(poll_result.timeseries_buckets)
+                local_is_baseline = False
 
                 # Feature 1020: Periodic cache metrics logging (every 60s)
                 self._cache_logger.maybe_log(connection_count=self._conn_manager.count)
@@ -516,14 +591,17 @@ class SSEStreamGenerator:
             },
         )
 
-        # Replay buffered events if reconnecting (filtered)
+        # Replay buffered events if reconnecting (filtered) — T032: includes partial_bucket
         if last_event_id:
             for event in self._event_buffer.get_events_after(last_event_id):
-                # Only replay sentiment events for matching tickers
-                if event.event == "sentiment_update":
+                if event.event in ("sentiment_update", "partial_bucket"):
+                    ticker = None
                     if hasattr(event.data, "ticker"):
-                        if not connection.matches_ticker(event.data.ticker):
-                            continue
+                        ticker = event.data.ticker
+                    elif isinstance(event.data, dict):
+                        ticker = event.data.get("ticker")
+                    if ticker and not connection.matches_ticker(ticker):
+                        continue
                 yield event.to_sse_dict()
                 metrics_emitter.emit_events_sent(1, event.event)
 
@@ -534,19 +612,87 @@ class SSEStreamGenerator:
         yield heartbeat.to_sse_dict()
         metrics_emitter.emit_events_sent(1, "heartbeat")
 
-        try:
-            # Main event loop - for config streams we just send heartbeats
-            # Sentiment updates would come from a separate mechanism
-            while True:
-                await asyncio.sleep(self._heartbeat_interval)
+        # Feature 1228: Per-connection state for change detection (FR-003, FR-011)
+        local_last_per_ticker: dict[str, TickerAggregate] = {}
+        local_last_buckets: dict[str, dict] = {}
+        local_is_baseline = True
+        last_heartbeat = time.time()
 
-                heartbeat = self._create_heartbeat()
-                self._event_buffer.add(heartbeat)
-                self._conn_manager.update_last_event_id(
-                    connection.connection_id, heartbeat.id
-                )
-                yield heartbeat.to_sse_dict()
-                metrics_emitter.emit_events_sent(1, "heartbeat")
+        try:
+            # Main event loop — polls for sentiment + timeseries changes
+            # NOTE: Does NOT emit metrics events (config streams only get
+            # heartbeats + filtered sentiment_update + filtered partial_bucket)
+            async for poll_result in self._poll_service.poll_loop():
+                current_time = time.time()
+
+                # Send heartbeat if interval passed
+                if current_time - last_heartbeat >= self._heartbeat_interval:
+                    heartbeat = self._create_heartbeat()
+                    self._event_buffer.add(heartbeat)
+                    self._conn_manager.update_last_event_id(
+                        connection.connection_id, heartbeat.id
+                    )
+                    yield heartbeat.to_sse_dict()
+                    metrics_emitter.emit_events_sent(1, "heartbeat")
+                    last_heartbeat = current_time
+
+                # Feature 1228: Emit filtered sentiment_update events (FR-001, FR-006)
+                if not local_is_baseline and poll_result.per_ticker:
+                    changed_tickers = detect_ticker_changes(
+                        poll_result.per_ticker, local_last_per_ticker
+                    )
+                    for ticker in changed_tickers:
+                        if ticker in poll_result.per_ticker:
+                            if not connection.matches_ticker(ticker):
+                                continue
+                            agg = poll_result.per_ticker[ticker]
+                            event = self._create_sentiment_event(
+                                ticker,
+                                agg.score,
+                                agg.label,
+                                agg.confidence,
+                                "aggregate",
+                            )
+                            self._event_buffer.add(event)
+                            self._conn_manager.update_last_event_id(
+                                connection.connection_id, event.id
+                            )
+                            yield event.to_sse_dict()
+                            metrics_emitter.emit_events_sent(1, "sentiment_update")
+
+                # Feature 1228: Emit filtered partial_bucket events (FR-002, FR-006)
+                if not local_is_baseline and poll_result.timeseries_buckets:
+                    for key, bucket_data in poll_result.timeseries_buckets.items():
+                        if (
+                            key not in local_last_buckets
+                            or bucket_data != local_last_buckets.get(key)
+                        ):
+                            parts = key.split("#", 1)
+                            if len(parts) == 2:
+                                ticker, res_str = parts
+                                if not connection.matches_ticker(ticker):
+                                    continue
+                                try:
+                                    resolution = Resolution(res_str)
+                                except ValueError:
+                                    continue
+                                if self.should_emit_bucket_update(ticker, resolution):
+                                    event = self._create_partial_bucket_event(
+                                        ticker, resolution, bucket_data
+                                    )
+                                    self._event_buffer.add(event)
+                                    self._conn_manager.update_last_event_id(
+                                        connection.connection_id, event.id
+                                    )
+                                    yield event.to_sse_dict()
+                                    metrics_emitter.emit_events_sent(
+                                        1, "partial_bucket"
+                                    )
+
+                # Update per-connection snapshots
+                local_last_per_ticker = dict(poll_result.per_ticker)
+                local_last_buckets = dict(poll_result.timeseries_buckets)
+                local_is_baseline = False
 
         except asyncio.CancelledError:
             logger.info(

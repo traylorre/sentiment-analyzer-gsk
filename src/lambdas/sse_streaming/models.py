@@ -115,6 +115,8 @@ class SSEEvent(BaseModel):
                     "HeartbeatData",
                     "MetricsEventData",
                     "SentimentUpdateData",
+                    "PartialBucketEvent",
+                    "BucketUpdateEvent",
                 }
                 if isinstance(data, dict):
                     pass  # dicts are allowed, will be validated by field type

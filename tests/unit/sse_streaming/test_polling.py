@@ -23,7 +23,7 @@ class TestPollingService:
                 {
                     "pk": "SENTIMENT#item1",
                     "sk": "2025-12-02T10:00:00Z",
-                    "ticker": "AAPL",
+                    "matched_tickers": ["AAPL"],
                     "sentiment": "positive",
                     "score": Decimal("0.85"),
                     "timestamp": "2025-12-02T10:00:00Z",
@@ -31,7 +31,7 @@ class TestPollingService:
                 {
                     "pk": "SENTIMENT#item2",
                     "sk": "2025-12-02T10:01:00Z",
-                    "ticker": "MSFT",
+                    "matched_tickers": ["MSFT"],
                     "sentiment": "neutral",
                     "score": Decimal("0.05"),
                     "timestamp": "2025-12-02T10:01:00Z",
@@ -39,7 +39,7 @@ class TestPollingService:
                 {
                     "pk": "SENTIMENT#item3",
                     "sk": "2025-12-02T10:02:00Z",
-                    "ticker": "AAPL",
+                    "matched_tickers": ["AAPL"],
                     "sentiment": "negative",
                     "score": Decimal("-0.65"),
                     "timestamp": "2025-12-02T10:02:00Z",
@@ -142,7 +142,7 @@ class TestPollMethod:
             "Items": [
                 {
                     "pk": "SENTIMENT#item1",
-                    "ticker": "AAPL",
+                    "matched_tickers": ["AAPL"],
                     "sentiment": "positive",
                 },
             ]
@@ -161,12 +161,12 @@ class TestPollMethod:
         service = PollingService(table_name="test-table")
         service._table = mock_dynamodb_table
 
-        metrics, changed = await service.poll()
+        result = await service.poll()
 
-        assert metrics is not None
+        assert result.metrics is not None
         # Mock returns 1 item per query * 3 sentiment types = 3 total
-        assert metrics.total == 3
-        assert changed is True  # First poll always changed
+        assert result.metrics.total == 3
+        assert result.metrics_changed is True  # First poll always changed
 
     @pytest.mark.asyncio
     async def test_poll_second_call_returns_not_changed(self, mock_dynamodb_table):
@@ -180,9 +180,9 @@ class TestPollMethod:
         await service.poll()
 
         # Second poll - same data
-        metrics, changed = await service.poll()
+        result = await service.poll()
 
-        assert changed is False
+        assert result.metrics_changed is False
 
     @pytest.mark.asyncio
     async def test_poll_handles_dynamodb_error(self, mock_dynamodb_table):
@@ -203,10 +203,10 @@ class TestPollMethod:
         service._table = mock_dynamodb_table
 
         # Should not raise, should return empty metrics
-        metrics, changed = await service.poll()
+        result = await service.poll()
 
-        assert metrics.total == 0
-        assert changed is False
+        assert result.metrics.total == 0
+        assert result.metrics_changed is False
 
     @pytest.mark.asyncio
     async def test_poll_returns_cached_metrics_on_error(self, mock_dynamodb_table):
@@ -222,9 +222,9 @@ class TestPollMethod:
         service._table = mock_dynamodb_table
 
         # First successful poll
-        metrics1, _ = await service.poll()
+        result1 = await service.poll()
         # Mock returns 1 item per query * 3 sentiment types = 3 total
-        assert metrics1.total == 3
+        assert result1.metrics.total == 3
 
         # Second poll fails
         mock_dynamodb_table.query.side_effect = ClientError(
@@ -232,11 +232,11 @@ class TestPollMethod:
             "Query",
         )
 
-        metrics2, changed = await service.poll()
+        result2 = await service.poll()
 
         # Should return cached metrics
-        assert metrics2.total == 3
-        assert changed is False
+        assert result2.metrics.total == 3
+        assert result2.metrics_changed is False
 
 
 class TestQueryBySentiment:

@@ -8,7 +8,11 @@ import asyncio
 import logging
 import os
 import time
+from collections import Counter
+from dataclasses import dataclass
 from datetime import UTC, datetime
+from decimal import Decimal
+from typing import NamedTuple
 
 import boto3
 from botocore.exceptions import ClientError
@@ -16,6 +20,26 @@ from models import MetricsEventData
 from tracing import get_tracer, is_enabled
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class TickerAggregate:
+    """Per-ticker sentiment aggregate for change detection (FR-003)."""
+
+    ticker: str
+    score: float  # Weighted average score across items
+    label: str  # Majority sentiment label
+    confidence: float  # Average confidence across items
+    count: int  # Total articles for this ticker
+
+
+class PollResult(NamedTuple):
+    """Result of a single polling cycle."""
+
+    metrics: MetricsEventData
+    metrics_changed: bool
+    per_ticker: dict[str, TickerAggregate]
+    timeseries_buckets: dict[str, dict]
 
 
 class PollingService:
@@ -51,6 +75,7 @@ class PollingService:
             os.environ.get("SSE_POLL_INTERVAL", "5")
         )
         self._table = None  # Lazy initialization
+        self._timeseries_table_name = os.environ.get("TIMESERIES_TABLE")
         self._last_metrics: MetricsEventData | None = None
 
     @property
@@ -89,9 +114,9 @@ class PollingService:
             elif sentiment == "negative":
                 negative += 1
 
-            ticker = item.get("ticker")
-            if ticker:
-                by_tag[ticker] = by_tag.get(ticker, 0) + 1
+            for ticker in item.get("matched_tickers", []):
+                if ticker:
+                    by_tag[ticker] = by_tag.get(ticker, 0) + 1
 
         return MetricsEventData(
             total=total,
@@ -133,15 +158,151 @@ class PollingService:
 
         return False
 
-    async def poll(self) -> tuple[MetricsEventData, bool]:
-        """Poll DynamoDB and return current metrics.
+    def _compute_per_ticker_aggregates(
+        self, items: list[dict]
+    ) -> dict[str, TickerAggregate]:
+        """Compute per-ticker sentiment aggregates from DynamoDB items.
+
+        For each ticker found in items' matched_tickers lists, computes:
+        - Weighted average score (sum of scores / count)
+        - Majority sentiment label
+        - Average confidence (same as score, since items lack separate confidence)
+        - Total article count
+
+        Args:
+            items: List of DynamoDB items with score, sentiment, matched_tickers fields
+
+        Returns:
+            Dict mapping ticker symbol to TickerAggregate
+        """
+        # Accumulators per ticker
+        score_sums: dict[str, Decimal] = {}
+        label_counts: dict[str, Counter] = {}
+        counts: dict[str, int] = {}
+
+        for item in items:
+            tickers = item.get("matched_tickers", [])
+            score = item.get("score", Decimal("0"))
+            sentiment = item.get("sentiment", "neutral").lower()
+
+            # Coerce score to Decimal if needed
+            if not isinstance(score, Decimal):
+                score = Decimal(str(score))
+
+            for ticker in tickers:
+                if not ticker:
+                    continue
+                score_sums[ticker] = score_sums.get(ticker, Decimal("0")) + score
+                counts[ticker] = counts.get(ticker, 0) + 1
+                if ticker not in label_counts:
+                    label_counts[ticker] = Counter()
+                label_counts[ticker][sentiment] += 1
+
+        result: dict[str, TickerAggregate] = {}
+        for ticker in counts:
+            count = counts[ticker]
+            avg_score = float(score_sums[ticker] / count)
+            majority_label = label_counts[ticker].most_common(1)[0][0]
+            result[ticker] = TickerAggregate(
+                ticker=ticker,
+                score=avg_score,
+                label=majority_label,
+                confidence=avg_score,  # No separate confidence field in items
+                count=count,
+            )
+
+        return result
+
+    def _fetch_timeseries_buckets(self, tickers: list[str]) -> dict[str, dict]:
+        """Fetch current timeseries bucket data for all tickers and resolutions.
+
+        Uses BatchGetItem to fetch the current (in-progress) bucket for each
+        ticker x resolution combination. This enables partial_bucket event
+        emission in the SSE stream (FR-002, FR-004a).
+
+        Args:
+            tickers: List of ticker symbols to fetch buckets for
+
+        Returns:
+            Dict mapping "{ticker}#{resolution}" to bucket data dict
+            (containing open, close, high, low, count, sum).
+            Returns empty dict on failure or if TIMESERIES_TABLE is not set.
+        """
+        from src.lib.timeseries import Resolution, floor_to_bucket
+
+        if not self._timeseries_table_name:
+            return {}
+
+        if not tickers:
+            return {}
+
+        try:
+            now = datetime.now(UTC)
+
+            # Build keys for all ticker x resolution combinations
+            all_keys: list[dict] = []
+            for ticker in tickers:
+                for resolution in Resolution:
+                    pk = f"{ticker}#{resolution.value}"
+                    sk = floor_to_bucket(now, resolution).isoformat()
+                    all_keys.append(
+                        {
+                            "PK": {"S": pk},
+                            "SK": {"S": sk},
+                        }
+                    )
+
+            if not all_keys:
+                return {}
+
+            # Use low-level client for BatchGetItem
+            dynamodb_client = boto3.client("dynamodb")
+            result: dict[str, dict] = {}
+
+            # Split into batches of 100 (DynamoDB BatchGetItem limit)
+            for i in range(0, len(all_keys), 100):
+                batch_keys = all_keys[i : i + 100]
+                response = dynamodb_client.batch_get_item(
+                    RequestItems={
+                        self._timeseries_table_name: {
+                            "Keys": batch_keys,
+                        }
+                    }
+                )
+
+                # Parse response items
+                items = response.get("Responses", {}).get(
+                    self._timeseries_table_name, []
+                )
+                for item in items:
+                    pk = item.get("PK", {}).get("S", "")
+                    bucket_data: dict = {}
+                    for field in ("open", "close", "high", "low", "sum"):
+                        if field in item and "N" in item[field]:
+                            bucket_data[field] = float(item[field]["N"])
+                    if "count" in item and "N" in item["count"]:
+                        bucket_data["count"] = int(item["count"]["N"])
+                    if pk and bucket_data:
+                        result[pk] = bucket_data
+
+            return result
+
+        except ClientError as e:
+            logger.warning(
+                "Timeseries poll failed",
+                extra={"error": str(e)},
+            )
+            return {}
+
+    async def poll(self) -> PollResult:
+        """Poll DynamoDB and return current metrics with per-ticker aggregates.
 
         Uses by_sentiment GSI queries for O(result) performance.
         (502-gsi-query-optimization: Replaced scan with GSI queries)
 
         Returns:
-            Tuple of (metrics, changed) where changed indicates if
-            metrics are different from last poll.
+            PollResult with metrics, change flag, per-ticker aggregates,
+            and timeseries bucket data.
         """
         # T042: OTel span for DynamoDB poll cycle
         otel_tracer = get_tracer()
@@ -159,6 +320,13 @@ class PollingService:
 
             items = response.get("Items", [])
             metrics = self._aggregate_metrics(items)
+            per_ticker = self._compute_per_ticker_aggregates(items)
+
+            # T022: Fetch timeseries buckets for partial_bucket events
+            tickers = list(per_ticker.keys())
+            timeseries = await loop.run_in_executor(
+                None, self._fetch_timeseries_buckets, tickers
+            )
 
             changed = self._metrics_changed(self._last_metrics, metrics)
             self._last_metrics = metrics
@@ -193,7 +361,12 @@ class PollingService:
                 },
             )
 
-            return metrics, changed
+            return PollResult(
+                metrics=metrics,
+                metrics_changed=changed,
+                per_ticker=per_ticker,
+                timeseries_buckets=timeseries,
+            )
 
         except ClientError as e:
             # T048: Dual-call error pattern (FR-144, FR-150)
@@ -209,10 +382,15 @@ class PollingService:
                 exc_info=True,
             )
             # Return last known metrics if available
-            if self._last_metrics:
-                return self._last_metrics, False
-            # Return empty metrics on first poll failure
-            return MetricsEventData(total=0, positive=0, neutral=0, negative=0), False
+            fallback_metrics = self._last_metrics or MetricsEventData(
+                total=0, positive=0, neutral=0, negative=0
+            )
+            return PollResult(
+                metrics=fallback_metrics,
+                metrics_changed=False,
+                per_ticker={},
+                timeseries_buckets={},
+            )
 
         finally:
             if span:
@@ -279,6 +457,48 @@ class PollingService:
         while True:
             yield await self.poll()
             await asyncio.sleep(self._poll_interval)
+
+
+def detect_ticker_changes(
+    current: dict[str, TickerAggregate],
+    previous: dict[str, TickerAggregate],
+) -> set[str]:
+    """Detect which tickers have changed between two polling snapshots.
+
+    A ticker is considered changed if:
+    - It is new (present in current but not previous)
+    - It disappeared (present in previous but not current)
+    - Its score, label, confidence, or count changed
+
+    Args:
+        current: Current per-ticker aggregates
+        previous: Previous per-ticker aggregates
+
+    Returns:
+        Set of ticker symbols that changed
+    """
+    changed: set[str] = set()
+
+    # New or modified tickers
+    for ticker, agg in current.items():
+        if ticker not in previous:
+            changed.add(ticker)
+        else:
+            prev = previous[ticker]
+            if (
+                agg.score != prev.score
+                or agg.label != prev.label
+                or agg.confidence != prev.confidence
+                or agg.count != prev.count
+            ):
+                changed.add(ticker)
+
+    # Disappeared tickers
+    for ticker in previous:
+        if ticker not in current:
+            changed.add(ticker)
+
+    return changed
 
 
 # Global polling service instance (lazy initialization)
