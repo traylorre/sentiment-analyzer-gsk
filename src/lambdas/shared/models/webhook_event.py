@@ -45,7 +45,7 @@ class WebhookEvent(BaseModel):
         if self.subscription_id:
             item["subscription_id"] = self.subscription_id
         if self.ttl:
-            item["ttl"] = self.ttl
+            item["ttl_timestamp"] = self.ttl
         return item
 
     @classmethod
@@ -57,5 +57,5 @@ class WebhookEvent(BaseModel):
             user_id=item["user_id"],
             subscription_id=item.get("subscription_id"),
             processed_at=datetime.fromisoformat(item["processed_at"]),
-            ttl=item.get("ttl"),
+            ttl=item.get("ttl_timestamp", item.get("ttl")),
         )

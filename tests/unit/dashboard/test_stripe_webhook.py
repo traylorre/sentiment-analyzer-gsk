@@ -53,7 +53,7 @@ class TestWebhookEvent:
         assert item["event_type"] == "customer.subscription.created"
         assert item["user_id"] == "user_456"
         assert item["subscription_id"] == "sub_789"
-        assert item["ttl"] == 1234567890
+        assert item["ttl_timestamp"] == 1234567890
         assert item["entity_type"] == "webhook_event"
 
     def test_to_dynamodb_item_without_optional_fields(self):
@@ -67,7 +67,7 @@ class TestWebhookEvent:
         item = event.to_dynamodb_item()
 
         assert "subscription_id" not in item
-        assert "ttl" not in item
+        assert "ttl_timestamp" not in item
 
     def test_from_dynamodb_item(self):
         """Test parsing DynamoDB item to model."""

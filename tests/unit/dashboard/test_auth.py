@@ -76,7 +76,7 @@ class TestCreateAnonymousSession:
         assert item["SK"] == "PROFILE"
         assert item["auth_type"] == "anonymous"
         assert item["timezone"] == "Europe/London"
-        assert "ttl" in item
+        assert "ttl_timestamp" in item
 
     def test_handles_dynamodb_error(self):
         """Should raise on DynamoDB error."""

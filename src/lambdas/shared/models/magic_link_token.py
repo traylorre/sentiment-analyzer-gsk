@@ -51,7 +51,7 @@ class MagicLinkToken(BaseModel):
             "created_at": self.created_at.isoformat(),
             "expires_at": self.expires_at.isoformat(),
             "used": self.used,
-            "ttl": ttl,
+            "ttl_timestamp": ttl,
             "entity_type": "MAGIC_LINK_TOKEN",
         }
         # Feature 1166: Only include signature if present (backwards compat)

@@ -297,7 +297,7 @@ class QuotaTracker(BaseModel):
             "sendgrid": serialize_quota(self.sendgrid),
             "total_api_calls_today": self.total_api_calls_today,
             "estimated_daily_cost": str(self.estimated_daily_cost),
-            "ttl": ttl,
+            "ttl_timestamp": ttl,
             "entity_type": "QUOTA_TRACKER",
         }
 
@@ -497,7 +497,7 @@ class QuotaTrackerManager:
                 "#used": f"{service}_used",
                 "#total": "total_api_calls_today",
                 "#updated": "updated_at",
-                "#ttl": "ttl",
+                "#ttl": "ttl_timestamp",
                 "#entity": "entity_type",
             },
             ExpressionAttributeValues={

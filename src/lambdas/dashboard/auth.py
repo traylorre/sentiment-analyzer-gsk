@@ -168,8 +168,8 @@ def create_anonymous_session(
         # Store in DynamoDB
         item = user.to_dynamodb_item()
 
-        # Add TTL for automatic cleanup
-        item["ttl"] = int(expires_at.timestamp())
+        # Add TTL for automatic cleanup (must match Terraform ttl_timestamp attribute)
+        item["ttl_timestamp"] = int(expires_at.timestamp())
 
         table.put_item(Item=item)
 
@@ -370,7 +370,7 @@ def _extend_session_expiry_on_validation(table: Any, user: User) -> None:
         table.update_item(
             Key={"PK": user.pk, "SK": user.sk},
             UpdateExpression="SET session_expires_at = :expires, #ttl = :ttl",
-            ExpressionAttributeNames={"#ttl": "ttl"},
+            ExpressionAttributeNames={"#ttl": "ttl_timestamp"},
             ExpressionAttributeValues={
                 ":expires": new_expiry.isoformat(),
                 ":ttl": int(new_expiry.timestamp()) + (90 * 24 * 3600),
@@ -713,7 +713,9 @@ def create_user_with_email(
     )
 
     item = user.to_dynamodb_item()
-    item["ttl"] = int(expires_at.timestamp()) + (90 * 24 * 3600)  # 90 days for auth
+    item["ttl_timestamp"] = int(expires_at.timestamp()) + (
+        90 * 24 * 3600
+    )  # 90 days for auth
 
     try:
         # Conditional write to prevent race condition
@@ -844,7 +846,7 @@ def extend_session(table: Any, user_id: str) -> User | None:
             },
             UpdateExpression="SET session_expires_at = :expires, last_active_at = :now, #ttl = :ttl",
             ExpressionAttributeNames={
-                "#ttl": "ttl",
+                "#ttl": "ttl_timestamp",
             },
             ExpressionAttributeValues={
                 ":expires": new_expiry.isoformat(),
@@ -941,7 +943,7 @@ def extend_session_expiry(table: Any, user_id: str) -> User | None:
         table.update_item(
             Key={"PK": user.pk, "SK": user.sk},
             UpdateExpression="SET session_expires_at = :expires, last_active_at = :last_active, #ttl = :ttl",
-            ExpressionAttributeNames={"#ttl": "ttl"},
+            ExpressionAttributeNames={"#ttl": "ttl_timestamp"},
             ExpressionAttributeValues={
                 ":expires": new_expiry.isoformat(),
                 ":last_active": now.isoformat(),
@@ -1109,7 +1111,7 @@ def evict_oldest_session_atomic(
                 "Item": {
                     "PK": {"S": f"BLOCK#refresh#{refresh_token_hash}"},
                     "SK": {"S": "BLOCK"},
-                    "ttl": {"N": str(blocklist_ttl)},
+                    "ttl_timestamp": {"N": str(blocklist_ttl)},
                     "evicted_at": {"S": now.isoformat()},
                     "user_id": {"S": user_id},
                     "reason": {"S": "session_limit_eviction"},
@@ -1941,7 +1943,7 @@ def _create_authenticated_user(
     )
 
     item = user.to_dynamodb_item()
-    item["ttl"] = int(expires_at.timestamp()) + (
+    item["ttl_timestamp"] = int(expires_at.timestamp()) + (
         90 * 24 * 3600
     )  # 90 days for auth users
     table.put_item(Item=item)
@@ -3080,7 +3082,7 @@ def link_email_to_oauth_user(
         "created_at": now.isoformat(),
         "expires_at": expires_at.isoformat(),
         "used": False,
-        "ttl": int(expires_at.timestamp()) + 3600,  # 1 hour buffer
+        "ttl_timestamp": int(expires_at.timestamp()) + 3600,  # 1 hour buffer
     }
 
     try:

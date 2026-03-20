@@ -167,7 +167,7 @@ class TestQuotaTracker:
 
         assert item["PK"] == "SYSTEM#QUOTA"
         assert item["entity_type"] == "QUOTA_TRACKER"
-        assert "ttl" in item
+        assert "ttl_timestamp" in item
         assert item["tiingo"]["used"] == 10
         assert item["total_api_calls_today"] == 10
 
