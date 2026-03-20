@@ -394,7 +394,10 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
       # CloudWatch Logs Insights queries (for E2E observability tests)
       "logs:StartQuery",
       "logs:GetQueryResults",
-      "logs:StopQuery"
+      "logs:StopQuery",
+      # Feature 1227: Read log events for pipeline debugging
+      "logs:GetLogEvents",
+      "logs:FilterLogEvents"
     ]
     resources = [
       # Pattern: {env}-sentiment-* (preprod-sentiment-dashboard, prod-sentiment-ingestion, etc.)
