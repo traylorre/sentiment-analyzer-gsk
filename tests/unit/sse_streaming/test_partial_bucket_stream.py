@@ -123,11 +123,10 @@ class TestPartialBucketEvent:
             )
 
             assert event.event == "partial_bucket"
-            assert "ticker" in event.data
-            assert event.data["ticker"] == "AAPL"
-            assert event.data["resolution"] == "5m"
-            assert event.data["progress_pct"] == 45.5
-            assert event.data["is_partial"] is True
+            assert event.data.ticker == "AAPL"
+            assert event.data.resolution == Resolution.FIVE_MINUTES
+            assert event.data.progress_pct == 45.5
+            assert event.data.is_partial is True
 
     def test_create_partial_bucket_event_calculates_progress(
         self, mock_stream_generator
@@ -149,7 +148,7 @@ class TestPartialBucketEvent:
             # Verify calculate_bucket_progress was called with the floored bucket start
             mock_floor.assert_called_once()
             mock_progress.assert_called_once()
-            assert event.data["progress_pct"] == 80.0
+            assert event.data.progress_pct == 80.0
 
 
 class TestShouldEmitBucketUpdate:
