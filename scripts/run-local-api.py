@@ -173,16 +173,27 @@ class LambdaProxyHandler(BaseHTTPRequestHandler):
             else None
         )
 
+        # Lambda Function URL v2 event format (LambdaFunctionUrlResolver)
         return {
-            "httpMethod": method,
-            "path": parsed.path,
+            "version": "2.0",
+            "rawPath": parsed.path,
+            "rawQueryString": parsed.query or "",
             "headers": headers,
-            "queryStringParameters": query_params,
+            "queryStringParameters": query_params or {},
             "body": body,
             "isBase64Encoded": False,
             "requestContext": {
-                "identity": {"sourceIp": "127.0.0.1"},
+                "http": {
+                    "method": method,
+                    "path": parsed.path,
+                    "sourceIp": "127.0.0.1",
+                },
                 "requestId": "local-request",
+                "accountId": "local",
+                "apiId": "local",
+                "stage": "$default",
+                "time": "",
+                "timeEpoch": 0,
             },
         }
 
@@ -204,12 +215,18 @@ class LambdaProxyHandler(BaseHTTPRequestHandler):
         self.send_header(
             "Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS"
         )
-        self.send_header("Access-Control-Allow-Headers", "*")
+        self.send_header(
+            "Access-Control-Allow-Headers",
+            "Content-Type, Authorization, Accept, Cache-Control, "
+            "Last-Event-ID, X-Amzn-Trace-Id, X-User-ID",
+        )
 
         for key, value in resp_headers.items():
             self.send_header(key, value)
 
-        # Set-Cookie from multiValueHeaders
+        # Set-Cookie from v2 response cookies array or v1 multiValueHeaders
+        for cookie in response.get("cookies", []):
+            self.send_header("Set-Cookie", cookie)
         for cookie in response.get("multiValueHeaders", {}).get("Set-Cookie", []):
             self.send_header("Set-Cookie", cookie)
 
