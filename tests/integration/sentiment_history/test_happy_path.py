@@ -145,8 +145,10 @@ class TestSentimentHistoryHappyPath:
 
         sentiment_validator.assert_valid(data)
         assert data["source"] == "aggregated"
+        # Feature 1227: With real data, aggregated filter includes all sources.
+        # Each point retains its actual source attribution (e.g., "tiingo").
         for point in data["history"]:
-            assert point["source"] == "aggregated"
+            assert point["source"] in ("tiingo", "finnhub", "our_model", "aggregated")
 
     # T031: Time range parameterized test
     @pytest.mark.sentiment_history
