@@ -1021,26 +1021,65 @@ def get_sentiment_history(ticker: str) -> Response:
     # See: https://github.com/github/codeql/discussions/10702
     logger.info("Fetching sentiment history")
 
-    # Generate sentiment history
-    # In production, this would query DynamoDB for historical sentiment records
-    # For now, generate synthetic data based on existing sentiment values
+    # Feature 1227: Query real sentiment data from timeseries table
+    from src.lambdas.dashboard.timeseries import Resolution, query_timeseries
+    from src.lambdas.shared.cache.sentiment_cache import (
+        cache_history,
+        get_cached_history,
+    )
+
+    # Check in-memory cache first
+    cache_source = None
+    cached = get_cached_history(ticker, source, str(start_date), str(end_date))
+    if cached is not None:
+        cache_source = "in-memory"
+        logger.info(
+            "Sentiment history cache hit",
+            extra={"point_count": cached["count"]},
+        )
+        headers = {"x-cache-source": cache_source}
+        return Response(
+            status_code=200,
+            content_type="application/json",
+            headers=headers,
+            body=orjson.dumps(cached).decode(),
+        )
+
+    # Query DynamoDB timeseries table
+    try:
+        from datetime import UTC as _utc
+
+        start_dt = datetime.combine(start_date, datetime.min.time(), tzinfo=_utc)
+        end_dt = datetime.combine(end_date, datetime.max.time(), tzinfo=_utc)
+        ts_response = query_timeseries(
+            ticker, Resolution.TWENTY_FOUR_HOURS, start_dt, end_dt
+        )
+        cache_source = "persistent-cache"
+    except Exception:
+        logger.exception("Failed to query timeseries table")
+        return Response(
+            status_code=500,
+            content_type="application/json",
+            body=orjson.dumps(
+                {"detail": "Failed to retrieve sentiment history"}
+            ).decode(),
+        )
+
+    # Map timeseries buckets to SentimentPoint objects
     history: list[SentimentPoint] = []
-    current_date = start_date
+    for bucket in ts_response.buckets:
+        score = round(bucket.avg, 4)
 
-    import hashlib
-    import random
+        # Extract source provider from sources list (format: "tiingo:91120376")
+        bucket_source = "unknown"
+        if bucket.sources:
+            bucket_source = bucket.sources[0].split(":")[0]
 
-    # Use hashlib for deterministic seed (hash() is randomized by PYTHONHASHSEED)
-    ticker_hash = int(hashlib.sha256(ticker.encode()).hexdigest(), 16)
-    random.seed(ticker_hash)
+        # Apply source filter (prefix matching per adversarial analysis)
+        if source != "aggregated" and bucket_source != source:
+            continue
 
-    base_score = 0.3  # Slightly positive base
-    while current_date <= end_date:
-        # Add some variability
-        daily_variation = random.uniform(-0.3, 0.3)
-        score = max(-1.0, min(1.0, base_score + daily_variation))
-
-        # Determine label
+        # Determine label from score
         if score >= 0.33:
             label = "positive"
         elif score <= -0.33:
@@ -1048,27 +1087,38 @@ def get_sentiment_history(ticker: str) -> Response:
         else:
             label = "neutral"
 
+        # Parse date from timestamp
+        try:
+            point_date = date.fromisoformat(bucket.timestamp.split("T")[0])
+        except (ValueError, AttributeError):
+            continue
+
         history.append(
             SentimentPoint(
-                date=current_date,
-                score=round(score, 4),
-                source=source,
-                confidence=round(random.uniform(0.6, 0.95), 4),
+                date=point_date,
+                score=score,
+                source=bucket_source,
+                confidence=0.8,  # Default confidence (count is always 1 in current data)
                 label=label,
             )
         )
 
-        # Slight trend continuation
-        base_score = score * 0.8 + base_score * 0.2
-
-        current_date += timedelta(days=1)
-
+    # Build response
     if not history:
+        headers = {"x-cache-source": cache_source} if cache_source else {}
         return Response(
-            status_code=404,
+            status_code=200,
             content_type="application/json",
+            headers=headers,
             body=orjson.dumps(
-                {"detail": f"No sentiment data available for {ticker}"}
+                SentimentHistoryResponse(
+                    ticker=ticker,
+                    source=source,
+                    history=[],
+                    start_date=start_date,
+                    end_date=end_date,
+                    count=0,
+                ).model_dump(mode="json")
             ).decode(),
         )
 
@@ -1086,8 +1136,15 @@ def get_sentiment_history(ticker: str) -> Response:
         count=len(history),
     )
 
+    response_data = response.model_dump(mode="json")
+
+    # Cache the response for future requests
+    cache_history(ticker, source, str(start_date), str(end_date), response_data)
+
+    headers = {"x-cache-source": cache_source} if cache_source else {}
     return Response(
         status_code=200,
         content_type="application/json",
-        body=orjson.dumps(response.model_dump(mode="json")).decode(),
+        headers=headers,
+        body=orjson.dumps(response_data).decode(),
     )

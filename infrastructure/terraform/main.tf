@@ -313,7 +313,7 @@ module "analysis_lambda" {
   # JUSTIFICATION (FR-024): 2048MB required for ML model inference (DistilBERT)
   # torch ~700MB + transformers ~500MB + Python runtime ~300MB + inference headroom
   memory_size          = 2048
-  timeout              = 60 # Increased for cold start + S3 model download
+  timeout              = 120 # Feature 1227: 60s was insufficient for cold start model download (~250MB)
   reserved_concurrency = 5
 
   # X-Ray tracing (Feature 006 - Day 1 mandatory)

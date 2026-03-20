@@ -100,6 +100,8 @@ Auto-generated from all feature plans. Last updated: 2025-11-26
 - DynamoDB (quota ledger, circuit breaker state, OHLC persistent cache), S3 (ticker list) (001-cache-architecture-audit)
 - TypeScript ^5 / Next.js 14.2.21 / React ^18 + @tanstack/react-query ^5.90.11, zustand ^5.0.8, sonner ^2.0.7 (1226-frontend-error-visibility)
 - N/A (client-side state only, no persistence) (1226-frontend-error-visibility)
+- Python 3.13 (existing project standard) + aws_lambda_powertools 3.7.0 (missing from ingestion ZIP), boto3 (existing), pydantic (existing) (1227-real-sentiment-pipeline)
+- DynamoDB `{env}-sentiment-timeseries` table (existing, 678 records, PK=`{ticker}#{resolution}`, SK=ISO timestamp) (1227-real-sentiment-pipeline)
 
 - **Python 3.13** with aws-lambda-powertools, boto3, pydantic, httpx, orjson
 - **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, Amplify
@@ -897,9 +899,9 @@ aws cloudwatch get-metric-data --metric-data-queries '[...]' --start-time ... --
 ```
 
 ## Recent Changes
+- 1227-real-sentiment-pipeline: Added Python 3.13 (existing project standard) + aws_lambda_powertools 3.7.0 (missing from ingestion ZIP), boto3 (existing), pydantic (existing)
 - 1226-frontend-error-visibility: Added TypeScript ^5 / Next.js 14.2.21 / React ^18 + @tanstack/react-query ^5.90.11, zustand ^5.0.8, sonner ^2.0.7
 - 001-cache-architecture-audit: Added Python 3.13 + boto3 (AWS SDK), pydantic (validation), functools (current caching)
-- 1223-e2e-test-coverage: Added TypeScript (Playwright tests), Python 3.13 (backend test utilities) + Playwright 1.58+, pytest-playwright, boto3 (DynamoDB token query)
 
 <!-- MANUAL ADDITIONS START -->
 
