@@ -233,11 +233,13 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         )
 
         # Initialize circuit breakers (load from DynamoDB or create default)
-        tiingo_breaker = _get_or_create_circuit_breaker(table, "tiingo")
-        finnhub_breaker = _get_or_create_circuit_breaker(table, "finnhub")
+        # Feature 1227: Circuit breakers use PK/SK schema → must use users_table, not items table
+        tiingo_breaker = _get_or_create_circuit_breaker(users_table, "tiingo")
+        finnhub_breaker = _get_or_create_circuit_breaker(users_table, "finnhub")
 
         # Get quota tracker (load from DynamoDB or create default)
-        quota_tracker = _get_or_create_quota_tracker(table)
+        # Feature 1227: Quota tracker uses PK/SK schema → must use users_table
+        quota_tracker = _get_or_create_quota_tracker(users_table)
 
         # Get API keys from Secrets Manager
         tiingo_key = get_api_key(config["tiingo_secret_arn"])
@@ -498,9 +500,9 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
         finally:
             # Save state to DynamoDB
-            _save_circuit_breaker(table, tiingo_breaker)
-            _save_circuit_breaker(table, finnhub_breaker)
-            _save_quota_tracker(table, quota_tracker)
+            _save_circuit_breaker(users_table, tiingo_breaker)
+            _save_circuit_breaker(users_table, finnhub_breaker)
+            _save_quota_tracker(users_table, quota_tracker)
 
             # Clean up adapters
             if tiingo_adapter:

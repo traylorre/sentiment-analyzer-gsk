@@ -40,7 +40,8 @@ resource "aws_iam_role_policy" "ingestion_dynamodb" {
         Effect = "Allow"
         Action = [
           "dynamodb:PutItem",
-          "dynamodb:GetItem"
+          "dynamodb:GetItem",
+          "dynamodb:UpdateItem" # Feature 1227: Required for Feature 1010 dedup upsert
         ]
         Resource = var.dynamodb_table_arn
       },
