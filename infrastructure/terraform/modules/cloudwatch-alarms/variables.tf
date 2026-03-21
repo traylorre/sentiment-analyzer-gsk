@@ -114,6 +114,16 @@ variable "api_gateway_latency_threshold" {
 }
 
 # ===================================================================
+# Category 9: SSE Connection Count (chaos-readiness)
+# ===================================================================
+
+variable "sse_max_connections" {
+  description = "Maximum SSE connections before alarm fires (alarm at 80% of this value)"
+  type        = number
+  default     = 100
+}
+
+# ===================================================================
 # Silent Failure Alarm Toggle
 # ===================================================================
 
