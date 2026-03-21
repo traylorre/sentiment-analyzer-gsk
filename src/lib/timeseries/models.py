@@ -23,11 +23,9 @@ class Resolution(str, Enum):
 
     ONE_MINUTE = "1m"
     FIVE_MINUTES = "5m"
-    TEN_MINUTES = "10m"
+    FIFTEEN_MINUTES = "15m"
+    THIRTY_MINUTES = "30m"
     ONE_HOUR = "1h"
-    THREE_HOURS = "3h"
-    SIX_HOURS = "6h"
-    TWELVE_HOURS = "12h"
     TWENTY_FOUR_HOURS = "24h"
 
     @property
@@ -36,11 +34,9 @@ class Resolution(str, Enum):
         mapping = {
             "1m": 60,
             "5m": 300,
-            "10m": 600,
+            "15m": 900,
+            "30m": 1800,
             "1h": 3600,
-            "3h": 10800,
-            "6h": 21600,
-            "12h": 43200,
             "24h": 86400,
         }
         return mapping[self.value]
@@ -53,21 +49,17 @@ class Resolution(str, Enum):
         Canonical: [CS-013, CS-014] Resolution-dependent TTL
         - 1m: 6 hours
         - 5m: 12 hours
-        - 10m: 24 hours
+        - 15m: 24 hours
+        - 30m: 3 days
         - 1h: 7 days
-        - 3h: 14 days
-        - 6h: 30 days
-        - 12h: 60 days
         - 24h: 90 days
         """
         mapping = {
             "1m": 6 * 3600,
             "5m": 12 * 3600,
-            "10m": 24 * 3600,
+            "15m": 24 * 3600,
+            "30m": 3 * 86400,
             "1h": 7 * 86400,
-            "3h": 14 * 86400,
-            "6h": 30 * 86400,
-            "12h": 60 * 86400,
             "24h": 90 * 86400,
         }
         return mapping[self.value]

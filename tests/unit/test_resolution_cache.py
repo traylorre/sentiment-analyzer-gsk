@@ -30,14 +30,14 @@ class TestResolutionAwareCache:
         """
         cache = ResolutionCache()
 
-        # 1-minute resolution has ~60-second TTL (±10% jitter)
+        # 1-minute resolution: duration=60s, jittered ±10% = 54-66
         cache.set("AAPL", Resolution.ONE_MINUTE, data={"test": 1})
         entry = cache._entries[("AAPL", Resolution.ONE_MINUTE)]
         assert (
             54 <= entry.ttl_seconds <= 66
         ), f"1min TTL {entry.ttl_seconds} out of jitter range"
 
-        # 1-hour resolution has ~3600-second TTL (±10% jitter)
+        # 1-hour resolution: duration=3600s, jittered ±10% = 3240-3960
         cache.set("AAPL", Resolution.ONE_HOUR, data={"test": 2})
         entry = cache._entries[("AAPL", Resolution.ONE_HOUR)]
         assert (
@@ -60,7 +60,9 @@ class TestResolutionAwareCache:
         cache = ResolutionCache()
         cache.set("AAPL", Resolution.FIVE_MINUTES, data={"value": 42})
 
-        with freeze_time("2025-12-21T10:45:00Z"):  # 10 minutes later, past 5m TTL
+        with freeze_time(
+            "2025-12-22T10:35:00Z"
+        ):  # 24 hours later, past 5m TTL (43200s = 12h)
             result = cache.get("AAPL", Resolution.FIVE_MINUTES)
             assert result is None
 
@@ -138,19 +140,17 @@ class TestResolutionAwareCache:
         """Different resolutions MUST have different TTLs per [CS-013, CS-014]."""
         cache = ResolutionCache()
 
-        # Set all 8 resolutions
+        # Set all 6 resolutions
         for res in Resolution:
             cache.set("AAPL", res, data={"res": res.value})
 
-        # Check TTLs match resolution duration
+        # Check TTLs match resolution duration_seconds (cache uses duration, not ttl)
         expected_ttls = {
             Resolution.ONE_MINUTE: 60,
             Resolution.FIVE_MINUTES: 300,
-            Resolution.TEN_MINUTES: 600,
+            Resolution.FIFTEEN_MINUTES: 900,
+            Resolution.THIRTY_MINUTES: 1800,
             Resolution.ONE_HOUR: 3600,
-            Resolution.THREE_HOURS: 10800,
-            Resolution.SIX_HOURS: 21600,
-            Resolution.TWELVE_HOURS: 43200,
             Resolution.TWENTY_FOUR_HOURS: 86400,
         }
 
@@ -250,5 +250,5 @@ class TestCacheEviction:
     def test_default_max_entries(self) -> None:
         """Default max_entries MUST be reasonable for Lambda memory."""
         cache = ResolutionCache()
-        # 13 tickers * 8 resolutions = 104 entries, default should handle this
-        assert cache.max_entries >= 104
+        # 13 tickers * 6 resolutions = 78 entries, default should handle this
+        assert cache.max_entries >= 78

@@ -35,21 +35,15 @@ class TestBucketAlignment:
             ("2025-12-21T10:37:00Z", "5m", "2025-12-21T10:35:00Z"),
             ("2025-12-21T10:34:59Z", "5m", "2025-12-21T10:30:00Z"),
             ("2025-12-21T10:40:00Z", "5m", "2025-12-21T10:40:00Z"),
-            # 10-minute alignment
-            ("2025-12-21T10:45:30Z", "10m", "2025-12-21T10:40:00Z"),
-            ("2025-12-21T10:39:59Z", "10m", "2025-12-21T10:30:00Z"),
+            # 15-minute alignment
+            ("2025-12-21T10:45:30Z", "15m", "2025-12-21T10:45:00Z"),
+            ("2025-12-21T10:39:59Z", "15m", "2025-12-21T10:30:00Z"),
+            # 30-minute alignment
+            ("2025-12-21T10:45:00Z", "30m", "2025-12-21T10:30:00Z"),
+            ("2025-12-21T10:29:59Z", "30m", "2025-12-21T10:00:00Z"),
             # 1-hour alignment
             ("2025-12-21T10:45:00Z", "1h", "2025-12-21T10:00:00Z"),
             ("2025-12-21T10:00:00Z", "1h", "2025-12-21T10:00:00Z"),
-            # 3-hour alignment
-            ("2025-12-21T14:30:00Z", "3h", "2025-12-21T12:00:00Z"),
-            ("2025-12-21T11:59:59Z", "3h", "2025-12-21T09:00:00Z"),
-            # 6-hour alignment
-            ("2025-12-21T14:30:00Z", "6h", "2025-12-21T12:00:00Z"),
-            ("2025-12-21T05:59:59Z", "6h", "2025-12-21T00:00:00Z"),
-            # 12-hour alignment
-            ("2025-12-21T14:30:00Z", "12h", "2025-12-21T12:00:00Z"),
-            ("2025-12-21T11:59:59Z", "12h", "2025-12-21T00:00:00Z"),
             # 24-hour alignment
             ("2025-12-21T14:30:00Z", "24h", "2025-12-21T00:00:00Z"),
             ("2025-12-21T23:59:59Z", "24h", "2025-12-21T00:00:00Z"),
@@ -74,11 +68,9 @@ class TestBucketAlignment:
         expected = {
             "1m": 60,
             "5m": 300,
-            "10m": 600,
+            "15m": 900,
+            "30m": 1800,
             "1h": 3600,
-            "3h": 10800,
-            "6h": 21600,
-            "12h": 43200,
             "24h": 86400,
         }
         for res, seconds in expected.items():
@@ -92,8 +84,8 @@ class TestBucketAlignment:
         assert result.tzinfo == UTC
 
     def test_all_resolutions_supported(self) -> None:
-        """All 8 resolution levels MUST be supported."""
-        resolutions = ["1m", "5m", "10m", "1h", "3h", "6h", "12h", "24h"]
+        """All 6 resolution levels MUST be supported."""
+        resolutions = ["1m", "5m", "15m", "30m", "1h", "24h"]
         ts = datetime.now(UTC)
         for res in resolutions:
             result = floor_to_bucket(ts, Resolution(res))

@@ -227,11 +227,9 @@ class TimeseriesQueryService:
     DEFAULT_LIMITS = {
         Resolution.ONE_MINUTE: 60,
         Resolution.FIVE_MINUTES: 12,
-        Resolution.TEN_MINUTES: 6,
+        Resolution.FIFTEEN_MINUTES: 4,
+        Resolution.THIRTY_MINUTES: 48,
         Resolution.ONE_HOUR: 24,
-        Resolution.THREE_HOURS: 8,
-        Resolution.SIX_HOURS: 4,
-        Resolution.TWELVE_HOURS: 14,
         Resolution.TWENTY_FOUR_HOURS: 7,
     }
 

@@ -24,11 +24,9 @@ from src.lib.timeseries import Resolution
 RESOLUTION_ORDER = [
     Resolution.ONE_MINUTE,
     Resolution.FIVE_MINUTES,
-    Resolution.TEN_MINUTES,
+    Resolution.FIFTEEN_MINUTES,
+    Resolution.THIRTY_MINUTES,
     Resolution.ONE_HOUR,
-    Resolution.THREE_HOURS,
-    Resolution.SIX_HOURS,
-    Resolution.TWELVE_HOURS,
     Resolution.TWENTY_FOUR_HOURS,
 ]
 

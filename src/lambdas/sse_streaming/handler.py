@@ -40,6 +40,7 @@ from stream import get_stream_generator
 from tracing import extract_trace_context, safe_force_flush
 
 from src.lambdas.shared.logging_utils import sanitize_for_log
+from src.lib.timeseries.models import Resolution
 
 logging.basicConfig(
     level=logging.INFO,
@@ -212,7 +213,7 @@ def _handle_global_stream(event: dict) -> Generator[bytes]:
 
     # Parse resolution filters
     resolution_filters: list[str] = []
-    valid_resolutions = {"1m", "5m", "10m", "1h", "3h", "6h", "12h", "24h"}
+    valid_resolutions = {r.value for r in Resolution}
     if resolutions:
         for res in resolutions.split(","):
             res = res.strip().lower()

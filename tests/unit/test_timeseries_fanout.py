@@ -7,7 +7,7 @@ Canonical References:
 - [CS-013] AWS DynamoDB TTL: "Use TTL to automatically expire items"
 - [CS-014] AWS Architecture Blog: "Resolution-dependent retention policies"
 
-TDD-FANOUT-001: Single score produces 8 resolution items
+TDD-FANOUT-001: Single score produces 6 resolution items
 TDD-FANOUT-002: Each item has correctly aligned bucket timestamp
 TDD-FANOUT-003: TTL varies by resolution (1m=6h, 5m=12h, 1h=7d, 24h=90d)
 TDD-FANOUT-004: BatchWriteItem used (not individual PutItem)
@@ -41,8 +41,8 @@ class TestWriteFanout:
     [CS-003] "Write amplification acceptable when reads >> writes"
     """
 
-    def test_fanout_creates_8_resolution_items(self):
-        """Single sentiment score MUST produce 8 DynamoDB items (one per resolution)."""
+    def test_fanout_creates_6_resolution_items(self):
+        """Single sentiment score MUST produce 6 DynamoDB items (one per resolution)."""
         score = SentimentScore(
             ticker="AAPL",
             value=0.75,
@@ -50,9 +50,9 @@ class TestWriteFanout:
             timestamp=parse_iso("2025-12-21T10:35:47Z"),
         )
         items = generate_fanout_items(score)
-        assert len(items) == 8
+        assert len(items) == 6
         resolutions = {item["PK"]["S"].split("#")[1] for item in items}
-        assert resolutions == {"1m", "5m", "10m", "1h", "3h", "6h", "12h", "24h"}
+        assert resolutions == {"1m", "5m", "15m", "30m", "1h", "24h"}
 
     def test_fanout_bucket_timestamps_aligned(self):
         """Each resolution item MUST have correctly aligned bucket timestamp."""
@@ -200,7 +200,7 @@ class TestWriteFanout:
 
         # Verify all items written
         response = dynamodb.scan(TableName="test-timeseries")
-        assert response["Count"] == 8
+        assert response["Count"] == 6
 
     @mock_aws
     def test_fanout_update_existing_bucket(self):
@@ -266,7 +266,7 @@ class TestWriteFanout:
 
     @mock_aws
     def test_fanout_all_resolutions_have_items(self):
-        """All 8 resolutions MUST have items after write."""
+        """All 6 resolutions MUST have items after write."""
         dynamodb = boto3.client("dynamodb", region_name="us-east-1")
         dynamodb.create_table(
             TableName="test-timeseries",
@@ -404,10 +404,10 @@ class TestFanoutMetricEmission:
     def test_conditional_emits_contention_metric(self, mock_tracer, mock_emit):
         mock_dynamodb = MagicMock()
         cond_err = self._client_error("ConditionalCheckFailedException")
-        # write_fanout_with_update loops over 8 resolutions.
+        # write_fanout_with_update loops over 6 resolutions.
         # Each resolution: base_update, label_update, cond_high, cond_low = 4 calls.
         # We want all to succeed except conditional checks.
-        # 8 resolutions * 4 calls = 32 calls. Simplify: use side_effect function.
+        # 6 resolutions * 4 calls = 24 calls. Simplify: use side_effect function.
         call_count = [0]
 
         def update_side_effect(**kwargs):
@@ -424,8 +424,8 @@ class TestFanoutMetricEmission:
             for c in mock_emit.call_args_list
             if c[1].get("name") == "ConditionalCheck/Count"
         ]
-        # 8 resolutions * 2 conditional checks (high + low) = 16
-        assert len(calls) == 16
+        # 6 resolutions * 2 conditional checks (high + low) = 12
+        assert len(calls) == 12
 
     @patch("src.lib.timeseries.fanout.emit_metric")
     @patch("src.lib.timeseries.fanout.tracer")

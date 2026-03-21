@@ -21,7 +21,7 @@ vi.mock('@/hooks/use-haptic', () => ({
 
 describe('HeatMapCell', () => {
   const mockCell: HeatMapCellType = {
-    source: 'tiingo',
+    source: 'aggregated',
     score: 0.75,
     color: '#22C55E',
   };
@@ -77,7 +77,7 @@ describe('HeatMapCell', () => {
 
     const state = useChartStore.getState();
     // source value can be the source name or period name
-    expect(state.hoveredCell).toEqual({ ticker: 'AAPL', source: 'tiingo' });
+    expect(state.hoveredCell).toEqual({ ticker: 'AAPL', source: 'aggregated' });
   });
 
   it('should have proper accessibility attributes', () => {

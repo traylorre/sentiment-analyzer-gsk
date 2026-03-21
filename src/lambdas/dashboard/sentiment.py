@@ -32,6 +32,7 @@ from pydantic import BaseModel, Field
 
 from src.lambdas.shared.logging_utils import get_safe_error_info, sanitize_for_log
 from src.lib.cache_utils import CacheStats, get_global_emitter
+from src.lib.timeseries.models import Resolution
 
 logger = logging.getLogger(__name__)
 
@@ -55,12 +56,15 @@ _sentiment_cw_stats = CacheStats(name="sentiment")
 get_global_emitter().register(_sentiment_cw_stats)
 
 
-def _get_sentiment_cache_key(config_id: str, tickers: list[str]) -> str:
-    """Generate cache key from config_id and tickers.
+def _get_sentiment_cache_key(
+    config_id: str, tickers: list[str], resolution: str = "24h"
+) -> str:
+    """Generate cache key from config_id, tickers, and resolution.
 
     Args:
         config_id: Configuration ID
         tickers: List of ticker symbols
+        resolution: Resolution string (e.g., "24h", "1h")
 
     Returns:
         Cache key string
@@ -68,7 +72,7 @@ def _get_sentiment_cache_key(config_id: str, tickers: list[str]) -> str:
     tickers_hash = hashlib.md5(  # nosec B324
         ",".join(sorted(tickers)).encode()
     ).hexdigest()[:8]
-    return f"sentiment:{config_id}:{tickers_hash}"
+    return f"sentiment:{config_id}:{tickers_hash}:{resolution}"
 
 
 def _get_cached_sentiment(cache_key: str) -> "SentimentResponse | None":
@@ -249,34 +253,35 @@ REFRESH_INTERVAL_SECONDS = 300  # 5 minutes
 def get_sentiment_by_configuration(
     config_id: str,
     tickers: list[str],
-    sources: list[str] | None = None,
-    tiingo_adapter: Any | None = None,
-    finnhub_adapter: Any | None = None,
+    resolution: Resolution | None = None,
     skip_cache: bool = False,
 ) -> SentimentResponse:
     """Get sentiment data for configuration tickers.
 
+    Queries the sentiment-timeseries table via TimeseriesQueryService
+    for the latest bucket at the requested resolution per ticker.
+
     Performance optimization (C4):
     - Results cached for 5 minutes (SENTIMENT_CACHE_TTL)
-    - Cache key based on config_id + tickers hash
+    - Cache key based on config_id + tickers hash + resolution
     - Use skip_cache=True to force fresh data
 
     Args:
         config_id: Configuration ID
         tickers: List of ticker symbols
-        sources: Filter to specific sources (default: all)
-        tiingo_adapter: TiingoAdapter instance
-        finnhub_adapter: FinnhubAdapter instance
+        resolution: Time resolution for sentiment buckets (default: 24h)
         skip_cache: If True, bypass cache and fetch fresh data
 
     Returns:
         SentimentResponse with sentiment data
     """
-    if sources is None:
-        sources = ["tiingo", "finnhub", "our_model"]
+    from src.lambdas.dashboard.timeseries import query_timeseries
+
+    if resolution is None:
+        resolution = Resolution.TWENTY_FOUR_HOURS
 
     # Check cache first (C4 optimization)
-    cache_key = _get_sentiment_cache_key(config_id, tickers)
+    cache_key = _get_sentiment_cache_key(config_id, tickers, resolution.value)
     if not skip_cache:
         cached_response = _get_cached_sentiment(cache_key)
         if cached_response is not None:
@@ -287,13 +292,12 @@ def get_sentiment_by_configuration(
                     "ticker_count": len(tickers),
                 },
             )
-            # Update cache_status to indicate this is from cache
             return SentimentResponse(
                 config_id=cached_response.config_id,
                 tickers=cached_response.tickers,
                 last_updated=cached_response.last_updated,
                 next_refresh_at=cached_response.next_refresh_at,
-                cache_status="fresh",  # Still fresh within TTL
+                cache_status="fresh",
             )
 
     now = datetime.now(UTC)
@@ -304,41 +308,36 @@ def get_sentiment_by_configuration(
     for symbol in tickers:
         sentiment_data: dict[str, SourceSentiment] = {}
 
-        # Get Tiingo data (news-based sentiment)
-        if "tiingo" in sources and tiingo_adapter:
-            try:
-                tiingo_sentiment = _get_tiingo_sentiment(symbol, tiingo_adapter)
-                if tiingo_sentiment:
-                    sentiment_data["tiingo"] = tiingo_sentiment
-            except Exception as e:
-                logger.warning(
-                    "Failed to get Tiingo sentiment",
-                    extra={
-                        "symbol": sanitize_for_log(symbol),
-                        **get_safe_error_info(e),
-                    },
-                )
+        try:
+            ts_response = query_timeseries(
+                ticker=symbol,
+                resolution=resolution,
+            )
 
-        # Get Finnhub data (market sentiment)
-        if "finnhub" in sources and finnhub_adapter:
-            try:
-                finnhub_sentiment = _get_finnhub_sentiment(symbol, finnhub_adapter)
-                if finnhub_sentiment:
-                    sentiment_data["finnhub"] = finnhub_sentiment
-            except Exception as e:
-                logger.warning(
-                    "Failed to get Finnhub sentiment",
-                    extra={
-                        "symbol": sanitize_for_log(symbol),
-                        **get_safe_error_info(e),
-                    },
-                )
+            # Use the latest complete bucket or partial bucket
+            bucket = None
+            if ts_response.buckets:
+                bucket = ts_response.buckets[-1]
+            elif ts_response.partial_bucket:
+                bucket = ts_response.partial_bucket
 
-        # Get our model sentiment (aggregated)
-        if "our_model" in sources:
-            our_model_sentiment = _compute_our_model_sentiment(sentiment_data)
-            if our_model_sentiment:
-                sentiment_data["our_model"] = our_model_sentiment
+            if bucket and bucket.count > 0:
+                score = round(bucket.avg, 4)
+                sentiment_data["aggregated"] = SourceSentiment(
+                    score=score,
+                    label=_score_to_label(score),
+                    confidence=0.8,
+                    updated_at=bucket.timestamp,
+                )
+        except Exception as e:
+            logger.warning(
+                "Failed to query timeseries for sentiment",
+                extra={
+                    "symbol": sanitize_for_log(symbol),
+                    "resolution": resolution.value,
+                    **get_safe_error_info(e),
+                },
+            )
 
         ticker_sentiments.append(
             TickerSentimentData(
@@ -363,8 +362,7 @@ def get_sentiment_by_configuration(
         extra={
             "config_id": sanitize_for_log(config_id[:8] if config_id else ""),
             "ticker_count": len(tickers),
-            "sources": sources,
-            "cached": True,
+            "resolution": resolution.value,
         },
     )
 
@@ -391,8 +389,6 @@ def get_heatmap_data(
     matrix: list[HeatMapRow] = []
 
     if view == "sources":
-        sources = ["tiingo", "finnhub", "our_model"]
-
         for symbol in tickers:
             cells = []
 
@@ -404,17 +400,22 @@ def get_heatmap_data(
                         ticker_sentiment = t.sentiment
                         break
 
-            for source in sources:
-                if ticker_sentiment and source in ticker_sentiment:
-                    score = ticker_sentiment[source].score
-                else:
-                    score = 0.0  # No data
-
+            # Iterate actual sources in the sentiment data
+            if ticker_sentiment:
+                for source_key, source_data in ticker_sentiment.items():
+                    cells.append(
+                        HeatMapCell(
+                            source=source_key,
+                            score=source_data.score,
+                            color=_score_to_color(source_data.score),
+                        )
+                    )
+            else:
                 cells.append(
                     HeatMapCell(
-                        source=source,
-                        score=score,
-                        color=_score_to_color(score),
+                        source="aggregated",
+                        score=0.0,
+                        color=_score_to_color(0.0),
                     )
                 )
 
@@ -477,84 +478,6 @@ def get_heatmap_data(
 # Helper functions
 
 
-def _get_tiingo_sentiment(symbol: str, adapter: Any) -> SourceSentiment | None:
-    """Get sentiment from Tiingo (news-based)."""
-    # Tiingo doesn't provide direct sentiment scores
-    # We derive it from news article analysis
-    try:
-        news = adapter.get_news([symbol], limit=20)
-
-        if not news:
-            return None
-
-        # Simple sentiment based on news volume and recency
-        # In production, we'd analyze article content
-        positive_count = len(
-            [n for n in news if "surge" in n.title.lower() or "beat" in n.title.lower()]
-        )
-        negative_count = len(
-            [n for n in news if "drop" in n.title.lower() or "miss" in n.title.lower()]
-        )
-        total = len(news)
-
-        if total > 0:
-            score = (positive_count - negative_count) / total
-            score = max(-1.0, min(1.0, score))
-        else:
-            score = 0.0
-
-        return SourceSentiment(
-            score=round(score, 4),
-            label=_score_to_label(score),
-            confidence=0.75,  # News-based sentiment has moderate confidence
-            updated_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-        )
-    except Exception:
-        return None
-
-
-def _get_finnhub_sentiment(symbol: str, adapter: Any) -> SourceSentiment | None:
-    """Get sentiment from Finnhub (market sentiment)."""
-    try:
-        sentiment_data = adapter.get_sentiment(symbol)
-
-        if not sentiment_data:
-            return None
-
-        return SourceSentiment(
-            score=round(sentiment_data.sentiment_score, 4),
-            label=_score_to_label(sentiment_data.sentiment_score),
-            bullish_percent=round(sentiment_data.bullish_percent, 4),
-            bearish_percent=round(sentiment_data.bearish_percent, 4),
-            updated_at=sentiment_data.fetched_at.isoformat().replace("+00:00", "Z"),
-        )
-    except Exception:
-        return None
-
-
-def _compute_our_model_sentiment(
-    source_sentiments: dict[str, SourceSentiment],
-) -> SourceSentiment | None:
-    """Compute aggregated sentiment from multiple sources."""
-    if not source_sentiments:
-        return None
-
-    scores = [s.score for s in source_sentiments.values()]
-    avg_score = sum(scores) / len(scores)
-
-    # Confidence based on source agreement
-    score_std = (sum((s - avg_score) ** 2 for s in scores) / len(scores)) ** 0.5
-    confidence = max(0.5, 1.0 - score_std)
-
-    return SourceSentiment(
-        score=round(avg_score, 4),
-        label=_score_to_label(avg_score),
-        confidence=round(confidence, 4),
-        model_version="v2.1.0",
-        updated_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-    )
-
-
 def _score_to_label(score: float) -> str:
     """Convert score to label."""
     if score >= SENTIMENT_THRESHOLDS["positive"]:
@@ -589,8 +512,12 @@ def _get_period_sentiment(
     current_score = 0.0
     if sentiment_data:
         for t in sentiment_data.tickers:
-            if t.symbol == symbol and "our_model" in t.sentiment:
-                current_score = t.sentiment["our_model"].score
+            if t.symbol == symbol and t.sentiment:
+                # Use "aggregated" if available, otherwise first source
+                if "aggregated" in t.sentiment:
+                    current_score = t.sentiment["aggregated"].score
+                else:
+                    current_score = next(iter(t.sentiment.values())).score
                 break
 
     # Apply decay factor for longer periods (simulating mean reversion)
@@ -612,8 +539,12 @@ def get_ticker_sentiment_history(
     ticker: str,
     source: str | None = None,
     days: int = 7,
+    resolution: Resolution | None = None,
 ) -> SentimentResponse | ErrorResponse:
     """Get sentiment history for a specific ticker.
+
+    Queries the sentiment-timeseries table for time-series data
+    at the requested resolution over the specified day range.
 
     Args:
         table: DynamoDB table resource
@@ -622,10 +553,16 @@ def get_ticker_sentiment_history(
         ticker: Ticker symbol
         source: Filter to specific source (tiingo/finnhub)
         days: Number of days of history
+        resolution: Time resolution for buckets (default: 24h)
 
     Returns:
         SentimentResponse with time series data or ErrorResponse
     """
+    from src.lambdas.dashboard.timeseries import query_timeseries
+
+    if resolution is None:
+        resolution = Resolution.TWENTY_FOUR_HOURS
+
     # Verify configuration belongs to user
     try:
         response = table.get_item(
@@ -639,7 +576,6 @@ def get_ticker_sentiment_history(
                 )
             )
     except Exception as e:
-        # Pre-sanitize config_id to prevent log injection (CodeQL py/log-injection)
         safe_config_id = sanitize_for_log(config_id[:8] if config_id else "")
         logger.error(
             "Failed to get configuration",
@@ -649,22 +585,46 @@ def get_ticker_sentiment_history(
             error=ErrorDetails(code="DB_ERROR", message="Database error")
         )
 
-    # Return stub data for now - would query historical sentiment data
-    from datetime import timedelta
-
     now = datetime.now(UTC)
-    history = []
+    start_dt = now - timedelta(days=days)
 
-    for day_offset in range(days):
-        timestamp = now - timedelta(days=day_offset)
-        # Generate mock historical data
-        base_score = 0.5 + (0.1 * (day_offset % 3 - 1))
-        history.append(
-            {
-                "timestamp": timestamp.isoformat().replace("+00:00", "Z"),
-                "score": round(base_score, 4),
-                "source": source or "our_model",
-            }
+    # Query timeseries for this ticker
+    try:
+        ts_response = query_timeseries(
+            ticker=ticker,
+            resolution=resolution,
+            start=start_dt,
+            end=now,
+        )
+    except Exception as e:
+        logger.error(
+            "Failed to query timeseries for history",
+            extra={
+                "ticker": sanitize_for_log(ticker),
+                "resolution": resolution.value,
+                **get_safe_error_info(e),
+            },
+        )
+        return ErrorResponse(
+            error=ErrorDetails(code="DB_ERROR", message="Database error")
+        )
+
+    # Transform buckets to sentiment data, applying source filter
+    history_entries: dict[str, SourceSentiment] = {}
+    for bucket in ts_response.buckets:
+        if bucket.count == 0:
+            continue
+
+        # Apply source filter if provided
+        if source and not any(s.startswith(source) for s in bucket.sources):
+            continue
+
+        score = round(bucket.avg, 4)
+        history_entries[bucket.timestamp] = SourceSentiment(
+            score=score,
+            label=_score_to_label(score),
+            confidence=0.8,
+            updated_at=bucket.timestamp,
         )
 
     return SentimentResponse(
@@ -672,18 +632,11 @@ def get_ticker_sentiment_history(
         tickers=[
             TickerSentimentData(
                 symbol=ticker,
-                sentiment={
-                    "history": SourceSentiment(
-                        score=history[0]["score"] if history else 0.0,
-                        label=_score_to_label(history[0]["score"] if history else 0.0),
-                        confidence=0.8,
-                        updated_at=now.isoformat().replace("+00:00", "Z"),
-                    )
-                },
+                sentiment=history_entries,
             )
         ],
         last_updated=now.isoformat().replace("+00:00", "Z"),
-        next_refresh_at=(now + timedelta(seconds=300))
+        next_refresh_at=(now + timedelta(seconds=REFRESH_INTERVAL_SECONDS))
         .isoformat()
         .replace("+00:00", "Z"),
         cache_status="fresh",

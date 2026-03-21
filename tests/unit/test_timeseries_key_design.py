@@ -72,8 +72,8 @@ class TestTimeseriesKeyDesign:
             TimeseriesKey(ticker="", resolution=Resolution("5m"))
 
     def test_all_resolutions_supported_in_pk(self) -> None:
-        """All 8 resolution levels MUST be supported in PK."""
-        resolutions = ["1m", "5m", "10m", "1h", "3h", "6h", "12h", "24h"]
+        """All 6 resolution levels MUST be supported in PK."""
+        resolutions = ["1m", "5m", "15m", "30m", "1h", "24h"]
         for res in resolutions:
             key = TimeseriesKey(ticker="AAPL", resolution=Resolution(res))
             assert f"AAPL#{res}" == key.pk

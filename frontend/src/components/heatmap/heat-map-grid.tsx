@@ -20,6 +20,7 @@ const SOURCE_LABELS: Record<SentimentSource, string> = {
   tiingo: 'Tiingo',
   finnhub: 'Finnhub',
   our_model: 'Our Model',
+  aggregated: 'Aggregated',
 };
 
 const PERIOD_LABELS: Record<TimePeriod, string> = {

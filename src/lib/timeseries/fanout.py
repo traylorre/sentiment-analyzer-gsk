@@ -7,7 +7,7 @@ Canonical References:
 - [CS-013] AWS DynamoDB TTL: "Use TTL to automatically expire items"
 - [CS-014] AWS Architecture Blog: "Resolution-dependent retention policies"
 
-This module fans out a single sentiment score into 8 resolution buckets (1m/5m/10m/1h/3h/6h/12h/24h)
+This module fans out a single sentiment score into 6 resolution buckets (1m/5m/15m/30m/1h/24h)
 using BatchWriteItem for efficiency.
 """
 
