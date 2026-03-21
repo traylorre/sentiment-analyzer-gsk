@@ -287,7 +287,7 @@ resource "aws_cloudwatch_metric_alarm" "sse_connection_count" {
   alarm_name          = "${var.environment}-sse-high-connection-count"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 2
-  metric_name         = "ActiveConnections"
+  metric_name         = "ConnectionCount"
   namespace           = "SentimentAnalyzer/SSE"
   period              = 60
   statistic           = "Maximum"

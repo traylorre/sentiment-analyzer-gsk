@@ -916,6 +916,8 @@ module "eventbridge" {
   canary_lambda_arn           = module.canary_lambda.function_arn
   canary_lambda_function_name = module.canary_lambda.function_name
 
+  dlq_arn = module.sns.dlq_arn
+
   depends_on = [module.ingestion_lambda, module.metrics_lambda, module.canary_lambda]
 }
 
