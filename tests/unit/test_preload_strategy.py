@@ -24,21 +24,21 @@ from src.lib.timeseries import Resolution
 class TestAdjacentResolutionPreloading:
     """Test FR-007: Preload adjacent resolutions (±1 level).
 
-    When user selects 5m, system should preload 1m and 10m.
+    When user selects 5m, system should preload 1m and 15m.
     """
 
     def test_get_adjacent_resolutions_middle(self) -> None:
         """
         Given: User selects 5m resolution (middle of range)
         When: Calculating adjacent resolutions
-        Then: Returns [1m, 10m] as adjacent resolutions to preload
+        Then: Returns [1m, 15m] as adjacent resolutions to preload
         """
         from src.lib.timeseries.preload import get_adjacent_resolutions
 
         result = get_adjacent_resolutions(Resolution.FIVE_MINUTES)
 
         assert Resolution.ONE_MINUTE in result
-        assert Resolution.TEN_MINUTES in result
+        assert Resolution.FIFTEEN_MINUTES in result
         assert len(result) == 2
 
     def test_get_adjacent_resolutions_lowest(self) -> None:
@@ -58,26 +58,24 @@ class TestAdjacentResolutionPreloading:
         """
         Given: User selects 24h resolution (highest available)
         When: Calculating adjacent resolutions
-        Then: Returns [12h] only (no resolution above 24h)
+        Then: Returns [1h] only (no resolution above 24h)
         """
         from src.lib.timeseries.preload import get_adjacent_resolutions
 
         result = get_adjacent_resolutions(Resolution.TWENTY_FOUR_HOURS)
 
-        assert Resolution.TWELVE_HOURS in result
+        assert Resolution.ONE_HOUR in result
         assert len(result) == 1
 
     def test_resolution_order_is_defined(self) -> None:
         """Resolution enum MUST define ordering for preload logic."""
-        # Verify all 8 resolutions exist in defined order
+        # Verify all 6 resolutions exist in defined order
         ordered = [
             Resolution.ONE_MINUTE,
             Resolution.FIVE_MINUTES,
-            Resolution.TEN_MINUTES,
+            Resolution.FIFTEEN_MINUTES,
+            Resolution.THIRTY_MINUTES,
             Resolution.ONE_HOUR,
-            Resolution.THREE_HOURS,
-            Resolution.SIX_HOURS,
-            Resolution.TWELVE_HOURS,
             Resolution.TWENTY_FOUR_HOURS,
         ]
 
@@ -170,20 +168,20 @@ class TestPreloadPriority:
         """
         Given: User selects 1h resolution
         When: Getting preload priority
-        Then: 10m and 3h are prioritized over 5m and 6h
+        Then: 30m and 24h are prioritized over 15m
         """
         from src.lib.timeseries.preload import get_preload_priority
 
         priorities = get_preload_priority(Resolution.ONE_HOUR)
 
-        # First priority: adjacent resolutions (10m, 3h)
+        # First priority: adjacent resolutions (30m, 24h)
         # Second priority: adjacent time ranges
-        # Third priority: one-step-away resolutions (5m, 6h)
+        # Third priority: one-step-away resolutions (15m)
 
         assert priorities[0]["type"] == "resolution"
         assert priorities[0]["target"] in [
-            Resolution.TEN_MINUTES,
-            Resolution.THREE_HOURS,
+            Resolution.THIRTY_MINUTES,
+            Resolution.TWENTY_FOUR_HOURS,
         ]
 
     def test_time_range_preload_prioritized_by_scroll_direction(self) -> None:
@@ -242,12 +240,12 @@ class TestPreloadManager:
         call_args = [call[1] for call in mock_fetch.call_args_list]
         resolutions_fetched = [args.get("resolution") for args in call_args]
         assert Resolution.ONE_MINUTE in resolutions_fetched
-        assert Resolution.TEN_MINUTES in resolutions_fetched
+        assert Resolution.FIFTEEN_MINUTES in resolutions_fetched
 
     def test_preload_manager_debounces_requests(self, mock_fetch: Any) -> None:
         """
         Given: Rapid resolution changes
-        When: User quickly switches 5m -> 10m -> 1h
+        When: User quickly switches 5m -> 15m -> 1h
         Then: Only preloads for final resolution (debounced)
         """
         from src.lib.timeseries.preload import PreloadManager
@@ -256,7 +254,7 @@ class TestPreloadManager:
 
         # Rapid succession of changes
         manager.preload_adjacent_resolutions("AAPL", Resolution.FIVE_MINUTES)
-        manager.preload_adjacent_resolutions("AAPL", Resolution.TEN_MINUTES)
+        manager.preload_adjacent_resolutions("AAPL", Resolution.FIFTEEN_MINUTES)
         manager.preload_adjacent_resolutions("AAPL", Resolution.ONE_HOUR)
 
         # Wait for debounce
@@ -265,11 +263,11 @@ class TestPreloadManager:
         time.sleep(0.15)
 
         # Should only have preloaded for ONE_HOUR (the final resolution)
-        # 10m and 3h are adjacent to 1h
+        # 30m and 24h are adjacent to 1h
         final_calls = mock_fetch.call_args_list[-2:]  # Last 2 calls
         resolutions = [call[1].get("resolution") for call in final_calls]
-        assert Resolution.TEN_MINUTES in resolutions
-        assert Resolution.THREE_HOURS in resolutions
+        assert Resolution.THIRTY_MINUTES in resolutions
+        assert Resolution.TWENTY_FOUR_HOURS in resolutions
 
     def test_preload_manager_respects_bandwidth_budget(self, mock_fetch: Any) -> None:
         """
@@ -278,14 +276,14 @@ class TestPreloadManager:
         Then: Only preloads up to max_concurrent_preloads items per call
 
         Note: Each method respects the limit independently.
-        For 1h resolution, adjacent resolutions are 10m and 3h (2 items).
+        For 1h resolution, adjacent resolutions are 30m and 24h (2 items).
         """
         from src.lib.timeseries.preload import PreloadManager
 
         # Small budget - only 2 concurrent preloads allowed
         manager = PreloadManager(cache=True, max_concurrent_preloads=2)
 
-        # This should preload up to 2 resolutions (10m and 3h for 1h)
+        # This should preload up to 2 resolutions (30m and 24h for 1h)
         manager.preload_adjacent_resolutions("AAPL", Resolution.ONE_HOUR)
 
         # Verify only 2 preloads were made (respecting limit)
@@ -320,7 +318,7 @@ class TestClientSidePreload:
         from src.lib.timeseries.preload import should_preload
 
         # Simulate cache already has 1m data
-        cache_contents = {"AAPL#1m": True, "AAPL#10m": False}
+        cache_contents = {"AAPL#1m": True, "AAPL#15m": False}
 
         result = should_preload(
             ticker="AAPL",
@@ -332,7 +330,7 @@ class TestClientSidePreload:
 
         result = should_preload(
             ticker="AAPL",
-            resolution=Resolution.TEN_MINUTES,
+            resolution=Resolution.FIFTEEN_MINUTES,
             cache_contents=cache_contents,
         )
 

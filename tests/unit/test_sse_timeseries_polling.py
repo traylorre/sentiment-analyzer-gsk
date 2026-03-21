@@ -102,7 +102,7 @@ class TestFetchTimeseriesBuckets:
 
     @freeze_time("2026-03-20T15:32:00Z")
     def test_correct_pk_sk_for_all_resolutions(self):
-        """Should build correct PK/SK keys for all 8 resolutions."""
+        """Should build correct PK/SK keys for all 6 resolutions."""
         table_name = "test-timeseries"
 
         with patch.object(PollingService, "_get_table", return_value=MagicMock()):
@@ -124,9 +124,9 @@ class TestFetchTimeseriesBuckets:
             else call_args[0][0]
         )
 
-        # Should be called with keys for 1 ticker x 8 resolutions = 8 keys
+        # Should be called with keys for 1 ticker x 6 resolutions = 6 keys
         keys = request_items[table_name]["Keys"]
-        assert len(keys) == 8
+        assert len(keys) == 6
 
         # Verify specific PK values
         pk_values = {k["PK"]["S"] for k in keys}
@@ -212,7 +212,7 @@ class TestFetchTimeseriesBuckets:
 
     @freeze_time("2026-03-20T15:32:00Z")
     def test_multiple_tickers_creates_correct_key_count(self):
-        """Two tickers should produce 2 x 8 = 16 keys."""
+        """Two tickers should produce 2 x 6 = 12 keys."""
         table_name = "test-timeseries"
 
         with patch.object(PollingService, "_get_table", return_value=MagicMock()):
@@ -232,7 +232,7 @@ class TestFetchTimeseriesBuckets:
             else call_args[0][0]
         )
         keys = request_items[table_name]["Keys"]
-        assert len(keys) == 16
+        assert len(keys) == 12
 
     @freeze_time("2026-03-20T15:32:00Z")
     def test_batching_over_100_keys(self):
@@ -246,8 +246,8 @@ class TestFetchTimeseriesBuckets:
         mock_client = MagicMock()
         mock_client.batch_get_item.return_value = {"Responses": {table_name: []}}
 
-        # 13 tickers x 8 resolutions = 104 keys -> 2 batches
-        tickers = [f"T{i:03d}" for i in range(13)]
+        # 17 tickers x 6 resolutions = 102 keys -> 2 batches
+        tickers = [f"T{i:03d}" for i in range(17)]
         with patch("boto3.client", return_value=mock_client):
             service._fetch_timeseries_buckets(tickers)
 

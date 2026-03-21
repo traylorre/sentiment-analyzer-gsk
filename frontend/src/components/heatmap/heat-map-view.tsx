@@ -30,34 +30,30 @@ export function HeatMapView({
   // Transform tickers data into heat map format
   const heatMapData = useMemo((): HeatMapData => {
     const matrix: HeatMapRow[] = tickers.map((ticker) => {
+      // Get aggregated sentiment (or first available source)
+      const sentimentEntries = Object.entries(ticker.sentiment);
+      const primarySentiment = sentimentEntries.length > 0 ? sentimentEntries[0][1] : null;
+      const score = primarySentiment?.score ?? 0;
+
       if (heatMapView === 'sources') {
-        // Sources view: columns are data sources
-        const cells: HeatMapCell[] = [
-          {
-            source: 'tiingo' as SentimentSource,
-            score: ticker.sentiment.tiingo.score,
-            color: '', // Will be computed by cell
-          },
-          {
-            source: 'finnhub' as SentimentSource,
-            score: ticker.sentiment.finnhub.score,
-            color: '',
-          },
-          {
-            source: 'our_model' as SentimentSource,
-            score: ticker.sentiment.ourModel.score,
-            color: '',
-          },
-        ];
+        // Sources view: show all available sentiment sources
+        const cells: HeatMapCell[] = sentimentEntries.map(([source, data]) => ({
+          source: source as SentimentSource,
+          score: data.score,
+          color: '',
+        }));
+        // If no data, show a single empty cell
+        if (cells.length === 0) {
+          cells.push({ source: 'aggregated' as SentimentSource, score: 0, color: '' });
+        }
         return { ticker: ticker.symbol, cells };
       } else {
-        // Time periods view: would need historical data
-        // For now, show placeholder with mock data
+        // Time periods view: uses aggregated score with decay factors
         const cells: HeatMapCell[] = [
-          { period: 'today', score: ticker.sentiment.tiingo.score, color: '' },
-          { period: '1w', score: ticker.sentiment.tiingo.score * 0.9, color: '' },
-          { period: '1m', score: ticker.sentiment.tiingo.score * 0.8, color: '' },
-          { period: '3m', score: ticker.sentiment.tiingo.score * 0.7, color: '' },
+          { period: 'today', score, color: '' },
+          { period: '1w', score: score * 0.9, color: '' },
+          { period: '1m', score: score * 0.8, color: '' },
+          { period: '3m', score: score * 0.7, color: '' },
         ];
         return { ticker: ticker.symbol, cells };
       }
