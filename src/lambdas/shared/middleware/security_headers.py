@@ -30,8 +30,8 @@ from typing import Any
 
 # Environment
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "dev")
-# Blind spot fix: Use localhost as fallback (matches Terraform dev default, not hardcoded prod URL)
-DASHBOARD_URL = os.environ.get("DASHBOARD_URL", "http://localhost:3000")
+# Pre-chaos stability: No localhost fallback — must be set explicitly per environment
+DASHBOARD_URL = os.environ.get("DASHBOARD_URL", "")
 
 # Security headers configuration
 SECURITY_HEADERS = {

@@ -350,8 +350,8 @@ class PollingService:
                         hit_rate = stats["hits"] / total_requests
                         span.set_attribute("cache_hit_rate", round(hit_rate, 4))
                     span.set_attribute("cache_hit", not changed)
-                except Exception:  # noqa: S110
-                    pass  # Best-effort cache metrics
+                except Exception:
+                    logger.debug("Cache metrics annotation failed", exc_info=True)
 
             logger.debug(
                 "DynamoDB poll complete",

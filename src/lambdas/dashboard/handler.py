@@ -993,6 +993,6 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
         get_global_emitter().flush_to_cloudwatch()
     except Exception:
-        logger.debug("Cache metrics flush failed", exc_info=True)
+        logger.warning("Cache metrics flush failed", exc_info=True)
 
     return response

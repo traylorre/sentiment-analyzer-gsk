@@ -365,14 +365,15 @@ class CircuitBreakerManager:
             logger.warning(
                 "Failed to load circuit breaker, using default (fail-open: closed state)",
                 extra={"service": service, "error": str(e)},
+                exc_info=True,
             )
             # X-Ray error subsegment for silent failure visibility
             try:
                 with tracer.provider.in_subsegment("circuit_breaker_load") as subseg:
                     subseg.put_annotation("error", True)
                     subseg.add_exception(e)
-            except Exception:  # noqa: S110
-                pass  # Best-effort: don't fail if X-Ray unavailable
+            except Exception:
+                logger.debug("X-Ray subsegment failed", exc_info=True)
             # CloudWatch metric for silent failure alerting (SC-019)
             emit_metric(
                 name="SilentFailure/Count",
@@ -412,17 +413,19 @@ class CircuitBreakerManager:
             )
             return True
         except Exception as e:
-            logger.error(
-                "Failed to save circuit breaker",
+            logger.warning(
+                "Failed to save circuit breaker state to DynamoDB, "
+                "in-memory state preserved (fail-open)",
                 extra={"service": state.service, "error": str(e)},
+                exc_info=True,
             )
             # X-Ray error subsegment for silent failure visibility
             try:
                 with tracer.provider.in_subsegment("circuit_breaker_save") as subseg:
                     subseg.put_annotation("error", True)
                     subseg.add_exception(e)
-            except Exception:  # noqa: S110
-                pass  # Best-effort: don't fail if X-Ray unavailable
+            except Exception:
+                logger.debug("X-Ray subsegment failed", exc_info=True)
             # CloudWatch metric for silent failure alerting (SC-019)
             emit_metric(
                 name="SilentFailure/Count",

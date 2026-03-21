@@ -7,12 +7,14 @@
 # Categories:
 # 1. Lambda Errors (6)
 # 2. Lambda Latency P95 (6)
-# 3. Silent Failure composite (1)
-# 4. Canary heartbeat + completeness (2)
-# 5. API Gateway + Function URL (3)
-# 6. Composite (1)
+# 3. Lambda Throttles (6) -- chaos-readiness
+# 4. Silent Failure composite (1)
+# 5. Canary heartbeat + completeness (2)
+# 6. API Gateway + Function URL (3)
+# 7. SSE Connection Count (1) -- chaos-readiness
+# 8. Composite (1)
 #
-# Total Phase 1: ~19 alarms
+# Total Phase 1: ~26 alarms
 
 locals {
   common_tags = merge(var.tags, {
@@ -96,6 +98,34 @@ resource "aws_cloudwatch_metric_alarm" "lambda_latency" {
   threshold           = local.latency_threshold_map[each.key]
   alarm_description   = "${each.key} Lambda P95 latency exceeded ${local.latency_threshold_map[each.key]}ms"
   treat_missing_data  = "missing"
+
+  dimensions = {
+    FunctionName = local.lambda_function_name_map[each.key]
+  }
+
+  alarm_actions = var.alarm_actions
+  ok_actions    = var.ok_actions
+
+  tags = local.common_tags
+}
+
+# ===================================================================
+# Category 3: Lambda Throttle Alarms (chaos-readiness)
+# ===================================================================
+
+resource "aws_cloudwatch_metric_alarm" "lambda_throttles" {
+  for_each = toset(local.lambda_services)
+
+  alarm_name          = "${var.environment}-${each.key}-lambda-throttles"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Throttles"
+  namespace           = "AWS/Lambda"
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 0
+  alarm_description   = "Lambda ${each.key} is being throttled (reserved concurrency exceeded)"
+  treat_missing_data  = "notBreaching"
 
   dimensions = {
     FunctionName = local.lambda_function_name_map[each.key]
@@ -250,6 +280,28 @@ resource "aws_cloudwatch_metric_alarm" "fnurl_5xx" {
 }
 
 # ===================================================================
+# Category 9: SSE Connection Count Alarm (chaos-readiness)
+# ===================================================================
+
+resource "aws_cloudwatch_metric_alarm" "sse_connection_count" {
+  alarm_name          = "${var.environment}-sse-high-connection-count"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "ActiveConnections"
+  namespace           = "SentimentAnalyzer/SSE"
+  period              = 60
+  statistic           = "Maximum"
+  threshold           = var.sse_max_connections * 0.8
+  alarm_description   = "SSE active connections exceeded 80% of ${var.sse_max_connections} max"
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = var.alarm_actions
+  ok_actions    = var.ok_actions
+
+  tags = local.common_tags
+}
+
+# ===================================================================
 # Composite Alarm -- All Critical Tier (FR-129)
 # ===================================================================
 
@@ -260,6 +312,9 @@ resource "aws_cloudwatch_composite_alarm" "critical" {
   alarm_rule = join(" OR ", concat(
     [for svc in local.lambda_services :
       "ALARM(${aws_cloudwatch_metric_alarm.lambda_errors[svc].alarm_name})"
+    ],
+    [for svc in local.lambda_services :
+      "ALARM(${aws_cloudwatch_metric_alarm.lambda_throttles[svc].alarm_name})"
     ],
     [
       "ALARM(${aws_cloudwatch_metric_alarm.silent_failure_composite.alarm_name})",

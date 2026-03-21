@@ -35,8 +35,8 @@ SENDGRID_SECRET_ARN = os.environ.get("SENDGRID_SECRET_ARN", "")
 DYNAMODB_TABLE = os.environ["DATABASE_TABLE"]
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "dev")
 FROM_EMAIL = os.environ.get("FROM_EMAIL", "noreply@sentiment-analyzer.com")
-# Blind spot fix: Use localhost as fallback (matches Terraform dev default, not hardcoded prod URL)
-DASHBOARD_URL = os.environ.get("DASHBOARD_URL", "http://localhost:3000")
+# Pre-chaos stability: No localhost fallback — must be set explicitly per environment
+DASHBOARD_URL = os.environ.get("DASHBOARD_URL", "")
 
 
 @tracer.capture_lambda_handler
