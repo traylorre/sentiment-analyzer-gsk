@@ -2,6 +2,7 @@
 
 Provides thread-safe connection tracking with configurable limits.
 Per FR-008: Maximum 100 concurrent connections per Lambda instance.
+Feature 1235: Stale connection sweeping for SIGKILL leak prevention.
 """
 
 import logging
@@ -32,6 +33,7 @@ class SSEConnection:
         session_id: Session identifier for trace correlation (FR-008/T093)
         previous_trace_id: Previous trace ID for reconnection correlation (FR-008/T093)
         connection_sequence: Monotonic counter for this session (FR-008/T093)
+        last_activity: Timestamp of last heartbeat/event dispatch (Feature 1235)
     """
 
     connection_id: str = field(default_factory=lambda: str(uuid.uuid4()))
@@ -44,6 +46,7 @@ class SSEConnection:
     session_id: str | None = None
     previous_trace_id: str | None = None
     connection_sequence: int = 0
+    last_activity: float = field(default_factory=time.time)
 
     def matches_ticker(self, ticker: str) -> bool:
         """Check if this connection should receive events for a ticker.
@@ -85,6 +88,7 @@ class ConnectionManager:
     - Connection tracking by ID
     - Startup time tracking for uptime calculation
     - State validation with self-healing (Feature 1232)
+    - Stale connection sweeping (Feature 1235)
 
     Per research.md decision #4: In-memory connection tracking with thread-safe counter.
     """
@@ -127,6 +131,48 @@ class ConnectionManager:
         """Get Lambda uptime in seconds since manager creation."""
         return int(time.time() - self._start_time)
 
+    def update_activity(self, connection_id: str) -> None:
+        """Update last activity timestamp for a connection.
+
+        Called on every heartbeat/event dispatch to track liveness.
+        Feature 1235: SSE Connection Cleanup.
+
+        Args:
+            connection_id: ID of the connection to update
+        """
+        with self._lock:
+            conn = self._connections.get(connection_id)
+            if conn is not None:
+                conn.last_activity = time.time()
+
+    def sweep_stale(self, max_idle_seconds: float = 60.0) -> int:
+        """Remove connections that haven't had activity in max_idle_seconds.
+
+        Defends against leaked connections from SIGKILL'd Lambdas where
+        finally blocks don't execute and connections are never released.
+        Feature 1235: SSE Connection Cleanup.
+
+        Args:
+            max_idle_seconds: Maximum idle time (default: 2x heartbeat interval of 30s)
+
+        Returns:
+            Number of stale connections removed
+        """
+        now = time.time()
+        stale_ids: list[tuple[str, float]] = []
+        with self._lock:
+            for cid, conn in self._connections.items():
+                idle = now - conn.last_activity
+                if idle > max_idle_seconds:
+                    stale_ids.append((cid, idle))
+            for cid, idle in stale_ids:
+                self._connections.pop(cid, None)
+                logger.warning(
+                    "Removed stale SSE connection",
+                    extra={"connection_id": cid, "idle_seconds": idle},
+                )
+        return len(stale_ids)
+
     def acquire(
         self,
         user_id: str | None = None,
@@ -139,6 +185,10 @@ class ConnectionManager:
     ) -> SSEConnection | None:
         """Acquire a connection slot.
 
+        Sweeps stale connections before checking the limit, so leaked
+        connections from force-killed Lambdas don't permanently consume slots.
+        Feature 1235: SSE Connection Cleanup.
+
         Args:
             user_id: Optional user ID for authenticated streams
             config_id: Optional configuration ID for filtered streams
@@ -148,6 +198,9 @@ class ConnectionManager:
         Returns:
             SSEConnection if slot available, None if limit reached
         """
+        # Sweep stale connections before checking the limit
+        self.sweep_stale()
+
         with self._lock:
             if len(self._connections) >= self._max_connections:
                 logger.warning(

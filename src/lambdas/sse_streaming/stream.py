@@ -395,6 +395,7 @@ class SSEStreamGenerator:
         heartbeat = self._create_heartbeat()
         self._event_buffer.add(heartbeat)
         self._conn_manager.update_last_event_id(connection.connection_id, heartbeat.id)
+        self._conn_manager.update_activity(connection.connection_id)
         yield self._inject_trace_id(heartbeat.to_sse_dict())
         self._trace_event_dispatch("heartbeat", dispatch_start)
         metrics_emitter.emit_events_sent(1, "heartbeat")
@@ -444,6 +445,7 @@ class SSEStreamGenerator:
                     self._conn_manager.update_last_event_id(
                         connection.connection_id, heartbeat.id
                     )
+                    self._conn_manager.update_activity(connection.connection_id)
                     yield self._inject_trace_id(heartbeat.to_sse_dict())
                     if not flush_fired:
                         self._trace_event_dispatch("heartbeat", dispatch_start)
@@ -611,6 +613,7 @@ class SSEStreamGenerator:
         heartbeat = self._create_heartbeat()
         self._event_buffer.add(heartbeat)
         self._conn_manager.update_last_event_id(connection.connection_id, heartbeat.id)
+        self._conn_manager.update_activity(connection.connection_id)
         yield heartbeat.to_sse_dict()
         metrics_emitter.emit_events_sent(1, "heartbeat")
 
@@ -634,6 +637,7 @@ class SSEStreamGenerator:
                     self._conn_manager.update_last_event_id(
                         connection.connection_id, heartbeat.id
                     )
+                    self._conn_manager.update_activity(connection.connection_id)
                     yield heartbeat.to_sse_dict()
                     metrics_emitter.emit_events_sent(1, "heartbeat")
                     last_heartbeat = current_time
