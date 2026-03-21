@@ -31,7 +31,7 @@ export function HeatMapView({
   const heatMapData = useMemo((): HeatMapData => {
     const matrix: HeatMapRow[] = tickers.map((ticker) => {
       // Get aggregated sentiment (or first available source)
-      const sentimentEntries = Object.entries(ticker.sentiment);
+      const sentimentEntries = Object.entries(ticker.sentiment ?? {});
       const primarySentiment = sentimentEntries.length > 0 ? sentimentEntries[0][1] : null;
       const score = primarySentiment?.score ?? 0;
 
