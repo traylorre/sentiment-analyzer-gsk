@@ -17,6 +17,24 @@ resource "aws_sqs_queue" "dlq" {
   }
 }
 
+# Allow EventBridge to send failed invocations to the DLQ (chaos-readiness)
+resource "aws_sqs_queue_policy" "dlq_policy" {
+  queue_url = aws_sqs_queue.dlq.url
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "AllowEventBridgeSendMessage"
+        Effect    = "Allow"
+        Principal = { Service = "events.amazonaws.com" }
+        Action    = "sqs:SendMessage"
+        Resource  = aws_sqs_queue.dlq.arn
+      }
+    ]
+  })
+}
+
 resource "aws_sns_topic" "analysis_requests" {
   name = "${var.environment}-sentiment-analysis-requests"
 

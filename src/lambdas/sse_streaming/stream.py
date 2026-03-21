@@ -170,6 +170,7 @@ class SSEStreamGenerator:
         self._event_buffer = EventBuffer()
         self._start_time = time.time()
         self._debouncer = Debouncer(interval_ms=debounce_ms)
+        self._last_metric_emit: float = 0.0  # Dedup connection count metric
 
         # Feature 1020: Cache metrics logging for SC-008 validation
         cache = get_global_cache()
@@ -189,9 +190,13 @@ class SSEStreamGenerator:
         return self._heartbeat_interval
 
     def _create_heartbeat(self) -> SSEEvent:
-        """Create a heartbeat event and emit connection count metric."""
+        """Create a heartbeat event and emit connection count metric (deduplicated)."""
         conn_count = self._conn_manager.count
-        metrics_emitter.emit_connection_count(conn_count)
+        # Emit at most once per heartbeat interval across all connections
+        now = time.time()
+        if now - self._last_metric_emit >= self._heartbeat_interval:
+            metrics_emitter.emit_connection_count(conn_count)
+            self._last_metric_emit = now
         return SSEEvent(
             event="heartbeat",
             data=HeartbeatData(
