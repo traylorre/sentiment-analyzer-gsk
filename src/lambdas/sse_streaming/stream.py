@@ -189,12 +189,15 @@ class SSEStreamGenerator:
         return self._heartbeat_interval
 
     def _create_heartbeat(self) -> SSEEvent:
-        """Create a heartbeat event."""
+        """Create a heartbeat event and emit connection count metric."""
+        conn_count = self._conn_manager.count
+        # Emit connection count for CloudWatch alarm (chaos-readiness)
+        metrics_emitter.emit_connection_count(conn_count)
         return SSEEvent(
             event="heartbeat",
             data=HeartbeatData(
                 timestamp=datetime.now(UTC),
-                connections=self._conn_manager.count,
+                connections=conn_count,
                 uptime_seconds=int(time.time() - self._start_time),
             ),
             retry=3000,  # 3 second reconnect

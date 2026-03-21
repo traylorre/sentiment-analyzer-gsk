@@ -278,6 +278,9 @@ module "ingestion_lambda" {
     TIMESERIES_TABLE = module.dynamodb.timeseries_table_name
   }
 
+  # Dead letter queue (chaos-readiness: data loss prevention on async failure)
+  dlq_arn = module.sns.dlq_arn
+
   # Logging
   log_retention_days = var.environment == "prod" ? 90 : 30
 
@@ -552,6 +555,9 @@ module "notification_lambda" {
 
   # No Function URL needed - triggered by SNS and EventBridge
   create_function_url = false
+
+  # Dead letter queue (chaos-readiness: failed emails can be retried)
+  dlq_arn = module.sns.dlq_arn
 
   # Logging
   log_retention_days = var.environment == "prod" ? 90 : 30
@@ -909,6 +915,9 @@ module "eventbridge" {
   create_canary_schedule      = true
   canary_lambda_arn           = module.canary_lambda.function_arn
   canary_lambda_function_name = module.canary_lambda.function_name
+
+  # Chaos-readiness: DLQ for EventBridge failed invocations
+  dlq_arn = module.sns.dlq_arn
 
   depends_on = [module.ingestion_lambda, module.metrics_lambda, module.canary_lambda]
 }

@@ -196,6 +196,25 @@ resource "aws_iam_role_policy" "ingestion_feature_006_users" {
   })
 }
 
+# Ingestion Lambda: SQS Dead Letter Queue (chaos-readiness)
+resource "aws_iam_role_policy" "ingestion_dlq" {
+  name = "${var.environment}-ingestion-dlq-policy"
+  role = aws_iam_role.ingestion_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "sqs:SendMessage"
+        ]
+        Resource = var.dlq_arn
+      }
+    ]
+  })
+}
+
 # ===================================================================
 # Analysis Lambda IAM Role
 # ===================================================================
@@ -805,6 +824,25 @@ resource "aws_iam_role_policy" "notification_metrics" {
             "cloudwatch:namespace" = "SentimentAnalyzer"
           }
         }
+      }
+    ]
+  })
+}
+
+# Notification Lambda: SQS Dead Letter Queue (chaos-readiness)
+resource "aws_iam_role_policy" "notification_dlq" {
+  name = "${var.environment}-notification-dlq-policy"
+  role = aws_iam_role.notification_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "sqs:SendMessage"
+        ]
+        Resource = var.dlq_arn
       }
     ]
   })

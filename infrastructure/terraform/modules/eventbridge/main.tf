@@ -15,6 +15,19 @@ resource "aws_cloudwatch_event_target" "ingestion_lambda" {
   rule      = aws_cloudwatch_event_rule.ingestion_schedule.name
   target_id = "IngestionLambdaTarget"
   arn       = var.ingestion_lambda_arn
+
+  # Chaos-readiness: retry failed invocations and queue to DLQ
+  retry_policy {
+    maximum_event_age_in_seconds = 300 # 5 minutes (matches schedule interval)
+    maximum_retry_attempts       = 2
+  }
+
+  dynamic "dead_letter_config" {
+    for_each = var.dlq_arn != null ? [1] : []
+    content {
+      arn = var.dlq_arn
+    }
+  }
 }
 
 # Lambda permission to allow EventBridge to invoke Ingestion Lambda

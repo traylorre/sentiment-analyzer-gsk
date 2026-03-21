@@ -68,3 +68,10 @@ variable "create_canary_schedule" {
   type        = bool
   default     = false
 }
+
+# Dead Letter Queue (chaos-readiness)
+variable "dlq_arn" {
+  description = "ARN of the SQS dead letter queue for EventBridge failed invocations"
+  type        = string
+  default     = null
+}
