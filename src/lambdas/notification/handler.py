@@ -24,6 +24,7 @@ from src.lambdas.notification.sendgrid_service import (
     EmailServiceError,
     RateLimitExceededError,
 )
+from src.lib.metrics import emit_metric
 
 tracer = Tracer(service="sentiment-analyzer-notification")
 
@@ -142,6 +143,15 @@ def _handle_alert_notification(event: dict[str, Any]) -> dict[str, Any]:
         logger.warning(f"Missing required alert fields: {alert_data}")
         return _response(400, {"error": "Missing required alert fields"})
 
+    # Guard: refuse to send email with broken dashboard link
+    if not DASHBOARD_URL:
+        logger.error(
+            "DASHBOARD_URL not configured — suppressing alert email to prevent broken links",
+            extra={"email": email, "ticker": ticker},
+        )
+        emit_metric("EmailSuppressed/MissingDashboardURL", 1)
+        return _response(503, {"error": "Email service misconfigured"})
+
     # Build email content
     subject = f"Alert: {ticker} {alert_type} threshold crossed"
     html_content = _build_alert_email(ticker, alert_type, triggered_value, threshold)
@@ -179,6 +189,15 @@ def _handle_magic_link(event: dict[str, Any]) -> dict[str, Any]:
     if not all([email, token]):
         logger.warning("Missing email or token for magic link")
         return _response(400, {"error": "Missing email or token"})
+
+    # Guard: refuse to send email with broken dashboard link
+    if not DASHBOARD_URL:
+        logger.error(
+            "DASHBOARD_URL not configured — suppressing magic link email to prevent broken link",
+            extra={"email": email},
+        )
+        emit_metric("EmailSuppressed/MissingDashboardURL", 1)
+        return _response(503, {"error": "Email service misconfigured"})
 
     # Build magic link URL
     magic_link = f"{DASHBOARD_URL}/auth/verify?token={token}"
