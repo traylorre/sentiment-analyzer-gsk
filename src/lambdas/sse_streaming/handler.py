@@ -184,13 +184,45 @@ def _error_metadata_and_body(
 # =============================================================================
 
 
+def _validate_connection_state() -> None:
+    """Run state validation on the connection manager and log any issues.
+
+    Called at the start of each stream handler to detect and self-heal
+    state drift in the module-level ConnectionManager singleton across
+    warm Lambda invocations. Lightweight (dict length comparison).
+
+    Feature 1232: SSE State Validation.
+    """
+    validation = connection_manager.validate_state()
+    if not validation["valid"]:
+        logger.warning(
+            "Connection manager state drift detected (self-healed)",
+            extra={
+                "issues": validation["issues"],
+                "connection_count": validation["connection_count"],
+            },
+        )
+
+
 @tracer.capture_method
 def _handle_stream_status() -> Generator[bytes]:
     """Handle GET /api/v2/stream/status (non-streaming).
 
-    Yields a single complete response with connection pool status.
+    Yields a single complete response with connection pool status
+    and state validation result.
     """
+    validation = connection_manager.validate_state()
+    if not validation["valid"]:
+        logger.warning(
+            "Connection manager state drift detected (self-healed)",
+            extra={
+                "issues": validation["issues"],
+                "connection_count": validation["connection_count"],
+            },
+        )
+
     status = connection_manager.get_status()
+    status["state_valid"] = validation["valid"]
     logger.info("Stream status requested", extra=status)
 
     metadata = _streaming_metadata(
@@ -207,6 +239,9 @@ def _handle_global_stream(event: dict) -> Generator[bytes]:
     Streams real-time sentiment metrics to connected clients.
     Supports optional resolution and ticker filters via query params.
     """
+    # Feature 1232: Validate connection manager state on each stream connect
+    _validate_connection_state()
+
     last_event_id = _get_header(event, "Last-Event-ID")
     resolutions = _get_query_param(event, "resolutions")
     tickers = _get_query_param(event, "tickers")
@@ -318,6 +353,9 @@ def _handle_config_stream(event: dict, config_id: str) -> Generator[bytes]:
     Streams config-specific sentiment updates with authentication.
     Authentication precedence: Bearer token > X-User-ID header > user_token query param.
     """
+    # Feature 1232: Validate connection manager state on each stream connect
+    _validate_connection_state()
+
     authorization = _get_header(event, "Authorization")
     x_user_id = _get_header(event, "X-User-ID")
     user_token = _get_query_param(event, "user_token")

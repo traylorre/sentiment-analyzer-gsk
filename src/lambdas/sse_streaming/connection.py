@@ -84,6 +84,7 @@ class ConnectionManager:
     - Thread-safe acquire/release operations
     - Connection tracking by ID
     - Startup time tracking for uptime calculation
+    - State validation with self-healing (Feature 1232)
 
     Per research.md decision #4: In-memory connection tracking with thread-safe counter.
     """
@@ -96,6 +97,7 @@ class ConnectionManager:
                             Defaults to SSE_MAX_CONNECTIONS env var or 100.
         """
         self._connections: dict[str, SSEConnection] = {}
+        self._active_count: int = 0
         self._lock = threading.Lock()
         self._start_time = time.time()
 
@@ -167,6 +169,7 @@ class ConnectionManager:
                 connection_sequence=connection_sequence,
             )
             self._connections[connection.connection_id] = connection
+            self._active_count += 1
 
             # T093: Add OTel annotations for connection tracing (FR-008)
             self._annotate_connection(connection)
@@ -226,6 +229,7 @@ class ConnectionManager:
         with self._lock:
             if connection_id in self._connections:
                 del self._connections[connection_id]
+                self._active_count -= 1
                 logger.info(
                     "Connection released",
                     extra={
@@ -268,6 +272,42 @@ class ConnectionManager:
                 self._connections[connection_id].last_event_id = event_id
                 return True
             return False
+
+    def validate_state(self) -> dict:
+        """Validate internal state consistency.
+
+        Checks that the _active_count counter matches the actual number of
+        connections in the dict. A mismatch indicates state drift from warm
+        Lambda invocations (e.g., exception paths skipping release, or
+        external manipulation of _connections).
+
+        Self-heals by correcting _active_count when drift is detected.
+
+        Feature 1232: SSE State Validation.
+
+        Returns:
+            dict with:
+                valid: bool - True if no issues found
+                issues: list[str] - descriptions of any issues detected
+                connection_count: int - actual number of connections
+                active_count_matches: bool - whether _active_count matched
+        """
+        issues: list[str] = []
+        with self._lock:
+            actual_count = len(self._connections)
+            if actual_count != self._active_count:
+                issues.append(
+                    f"Count mismatch: _active_count={self._active_count}, "
+                    f"actual={actual_count}"
+                )
+                self._active_count = actual_count  # Self-heal
+
+        return {
+            "valid": len(issues) == 0,
+            "issues": issues,
+            "connection_count": actual_count,
+            "active_count_matches": actual_count == self._active_count,
+        }
 
     def get_status(self) -> dict:
         """Get connection pool status.
