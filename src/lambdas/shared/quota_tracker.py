@@ -13,6 +13,11 @@ Feature 1224 (Cache Architecture Audit):
 - 25% rate reduction + alert on DynamoDB disconnection
 - Flat atomic counter fields (tiingo_used, finnhub_used, sendgrid_used)
 
+Feature 1233 (Quota Rate Hysteresis):
+- Asymmetric thresholds prevent oscillation during DynamoDB flapping
+- 3 consecutive failures to enter reduced-rate mode
+- 5 consecutive successes to exit reduced-rate mode
+
 Thread-safety (Feature 1010):
 - Module-level lock protects cache access during parallel ingestion
 - record_call() and check_quota() are thread-safe
@@ -62,6 +67,13 @@ _reduced_rate_since: float | None = None
 _last_disconnected_alert: float = 0.0
 REDUCED_RATE_FRACTION = 0.25  # 25% of normal rate
 DISCONNECTED_ALERT_INTERVAL = 300  # Max one alert per 5 minutes
+
+# Feature 1233: Hysteresis counters for rate mode transitions
+# Asymmetric thresholds prevent oscillation during DynamoDB flapping
+QUOTA_RATE_ENTRY_THRESHOLD = int(os.environ.get("QUOTA_RATE_ENTRY_THRESHOLD", "3"))
+QUOTA_RATE_EXIT_THRESHOLD = int(os.environ.get("QUOTA_RATE_EXIT_THRESHOLD", "5"))
+_consecutive_failures = 0
+_consecutive_successes = 0
 
 
 def _get_cached_tracker() -> "QuotaTracker | None":
@@ -165,6 +177,41 @@ def _exit_reduced_rate_mode() -> None:
             _reduced_rate_since = None
 
 
+def _record_dynamo_success() -> None:
+    """Record a successful DynamoDB operation for hysteresis tracking (Feature 1233).
+
+    Resets failure counter and increments success counter. Only exits
+    reduced-rate mode after QUOTA_RATE_EXIT_THRESHOLD consecutive successes
+    to prevent oscillation during DynamoDB flapping.
+    """
+    global _consecutive_failures, _consecutive_successes
+    with _quota_cache_lock:
+        _consecutive_failures = 0
+        _consecutive_successes += 1
+        if _reduced_rate_mode and _consecutive_successes >= QUOTA_RATE_EXIT_THRESHOLD:
+            _exit_reduced_rate_mode()
+            _consecutive_successes = 0
+
+
+def _record_dynamo_failure() -> None:
+    """Record a failed DynamoDB operation for hysteresis tracking (Feature 1233).
+
+    Resets success counter and increments failure counter. Only enters
+    reduced-rate mode after QUOTA_RATE_ENTRY_THRESHOLD consecutive failures
+    to prevent oscillation during DynamoDB flapping.
+    """
+    global _consecutive_failures, _consecutive_successes
+    with _quota_cache_lock:
+        _consecutive_successes = 0
+        _consecutive_failures += 1
+        if (
+            not _reduced_rate_mode
+            and _consecutive_failures >= QUOTA_RATE_ENTRY_THRESHOLD
+        ):
+            _enter_reduced_rate_mode()
+            _consecutive_failures = 0
+
+
 def clear_quota_cache() -> None:
     """Clear cache and reset stats. Used in tests.
 
@@ -172,12 +219,15 @@ def clear_quota_cache() -> None:
     """
     global _quota_tracker_cache, _quota_cache_stats
     global _reduced_rate_mode, _reduced_rate_since, _last_disconnected_alert
+    global _consecutive_failures, _consecutive_successes
     with _quota_cache_lock:
         _quota_tracker_cache = None
         _quota_cache_stats = {"hits": 0, "misses": 0, "syncs": 0, "atomic_writes": 0}
         _reduced_rate_mode = False
         _reduced_rate_since = None
         _last_disconnected_alert = 0.0
+        _consecutive_failures = 0
+        _consecutive_successes = 0
 
 
 class APIQuotaUsage(BaseModel):
@@ -467,8 +517,8 @@ class QuotaTrackerManager:
                 tracker = QuotaTracker.create_default()
                 logger.debug("Quota tracker created default", extra={"date": today})
 
-            # DynamoDB is reachable — exit reduced-rate mode if active
-            _exit_reduced_rate_mode()
+            # DynamoDB is reachable — record success for hysteresis (Feature 1233)
+            _record_dynamo_success()
 
         except Exception as e:
             logger.warning(
@@ -589,6 +639,9 @@ class QuotaTrackerManager:
         counter for immediate cross-instance visibility. Falls back to 25%
         rate reduction if DynamoDB is unreachable.
 
+        Feature 1233: Uses hysteresis for mode transitions — 3 consecutive
+        failures to enter reduced-rate, 5 consecutive successes to exit.
+
         Thread-safe: Uses _quota_cache_lock to protect the local cache
         read-modify-write cycle (Feature 1179).
 
@@ -602,13 +655,13 @@ class QuotaTrackerManager:
         # Step 1: Atomic DynamoDB increment (immediate cross-instance visibility)
         try:
             self._atomic_increment_usage(service, count)
-            _exit_reduced_rate_mode()
+            _record_dynamo_success()
         except Exception as e:
             logger.error(
-                "Atomic quota increment failed — entering reduced-rate mode",
+                "Atomic quota increment failed — recording failure for hysteresis",
                 extra={"service": service, "error": str(e)},
             )
-            _enter_reduced_rate_mode()
+            _record_dynamo_failure()
 
         # Step 2: Update local cache
         with _quota_cache_lock:
