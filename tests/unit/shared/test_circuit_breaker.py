@@ -44,6 +44,29 @@ class TestCircuitBreakerState:
         assert cb.total_failures == 1
         assert cb.last_failure_at is not None
 
+    def test_success_resets_failure_count_in_closed_state(self):
+        """Test that success resets failure count even when circuit is closed.
+
+        Feature 1227: Previously, failures accumulated across successes
+        (4 failures + 1 success + 1 failure = tripped). Now, any success
+        resets the counter — only consecutive failures trip the breaker.
+        """
+        cb = CircuitBreakerState(service="tiingo", failure_threshold=5)
+
+        cb.record_failure()
+        cb.record_failure()
+        cb.record_failure()
+        cb.record_failure()
+        assert cb.failure_count == 4
+
+        cb.record_success()
+        assert cb.failure_count == 0  # Reset on success
+        assert cb.state == "closed"
+
+        cb.record_failure()
+        assert cb.failure_count == 1  # Starts from 0, not 5
+        assert cb.state == "closed"  # NOT tripped
+
     def test_circuit_trips_after_threshold(self):
         """Test circuit opens after reaching failure threshold."""
         cb = CircuitBreakerState(service="tiingo", failure_threshold=3)

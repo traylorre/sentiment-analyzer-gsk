@@ -174,11 +174,17 @@ class CircuitBreakerState(BaseModel):
         return "STATE"
 
     def record_success(self) -> None:
-        """Record successful API call."""
+        """Record successful API call.
+
+        Resets failure count on ANY success — a successful call proves
+        the service is reachable, so accumulated failures are stale.
+        Previously only reset on half_open→closed transition, which meant
+        4 failures + 1 success + 1 failure = tripped (non-consecutive).
+        """
         self.last_success_at = datetime.now(UTC)
+        self.failure_count = 0  # Feature 1227: Reset on any success, not just recovery
         if self.state == "half_open":
             self.state = "closed"
-            self.failure_count = 0
             self.total_recoveries += 1
 
     def record_failure(self) -> None:
