@@ -27,6 +27,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
+from src.lib.cache_utils import CacheStats, get_global_emitter, jittered_ttl
+
 logger = logging.getLogger(__name__)
 
 # =============================================================================
@@ -38,11 +40,15 @@ QUOTA_TRACKER_CACHE_TTL = int(os.environ.get("QUOTA_TRACKER_CACHE_TTL", "10"))
 # Full sync interval - persist complete tracker to DynamoDB (default 60s)
 QUOTA_TRACKER_SYNC_INTERVAL = int(os.environ.get("QUOTA_TRACKER_SYNC_INTERVAL", "60"))
 
-# In-memory cache: (timestamp, QuotaTracker, last_sync_time)
-_quota_tracker_cache: tuple[float, "QuotaTracker", float] | None = None
+# In-memory cache: (timestamp, QuotaTracker, last_sync_time, jittered_ttl)
+_quota_tracker_cache: tuple[float, "QuotaTracker", float, float] | None = None
 
 # Cache statistics for monitoring
 _quota_cache_stats = {"hits": 0, "misses": 0, "syncs": 0, "atomic_writes": 0}
+
+# Feature 1224: CacheStats for CloudWatch metric emission
+_quota_cw_stats = CacheStats(name="quota_tracker")
+get_global_emitter().register(_quota_cw_stats)
 
 # Thread-safety lock for cache access (Feature 1010, 1179)
 # RLock allows same thread to acquire lock multiple times (reentrant)
@@ -62,23 +68,27 @@ def _get_cached_tracker() -> "QuotaTracker | None":
     """Get quota tracker from cache if not expired.
 
     Thread-safe: Uses _quota_cache_lock for synchronized access.
+    Feature 1224: Uses jittered TTL and CacheStats for CloudWatch.
     """
     global _quota_tracker_cache
     with _quota_cache_lock:
         if _quota_tracker_cache is not None:
-            timestamp, tracker, _ = _quota_tracker_cache
-            if time.time() - timestamp < QUOTA_TRACKER_CACHE_TTL:
+            timestamp, tracker, _, effective_ttl = _quota_tracker_cache
+            if time.time() - timestamp < effective_ttl:
                 _quota_cache_stats["hits"] += 1
+                _quota_cw_stats.record_hit()
                 return tracker
             # Expired - don't delete, will be overwritten
         _quota_cache_stats["misses"] += 1
+        _quota_cw_stats.record_miss()
         return None
 
 
 def _set_cached_tracker(tracker: "QuotaTracker", synced: bool = False) -> None:
-    """Store quota tracker in cache.
+    """Store quota tracker in cache with jittered TTL.
 
     Thread-safe: Uses _quota_cache_lock for synchronized access.
+    Feature 1224: Uses jittered TTL to prevent thundering herd.
     """
     global _quota_tracker_cache
     with _quota_cache_lock:
@@ -88,7 +98,12 @@ def _set_cached_tracker(tracker: "QuotaTracker", synced: bool = False) -> None:
             if synced
             else (_quota_tracker_cache[2] if _quota_tracker_cache else now)
         )
-        _quota_tracker_cache = (now, tracker, last_sync)
+        _quota_tracker_cache = (
+            now,
+            tracker,
+            last_sync,
+            jittered_ttl(QUOTA_TRACKER_CACHE_TTL),
+        )
 
 
 def _needs_sync() -> bool:
@@ -99,7 +114,7 @@ def _needs_sync() -> bool:
     with _quota_cache_lock:
         if _quota_tracker_cache is None:
             return False
-        _, _, last_sync = _quota_tracker_cache
+        _, _, last_sync, _ = _quota_tracker_cache
         return time.time() - last_sync >= QUOTA_TRACKER_SYNC_INTERVAL
 
 

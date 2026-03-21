@@ -37,7 +37,7 @@
 - [x] T024 [US2] Implement 25% rate reduction fallback in src/lambdas/shared/quota_tracker.py — on DynamoDB write failure, set `_reduced_rate_mode = True`, reduce allowed calls to 25% of normal limit
 - [x] T025 [US2] Implement quota disconnected alert in src/lambdas/shared/quota_tracker.py — emit `QuotaTracker/Disconnected` metric immediately when entering reduced-rate mode, with alert spam prevention (max once per 5 min)
 - [x] T026 [US2] Implement 80% threshold warning in src/lambdas/shared/quota_tracker.py — emit `QuotaTracker/ThresholdWarning` metric when usage exceeds 80% of limit for a service
-- [ ] T027 [US2] Add CacheStats instance for quota read cache in src/lambdas/shared/quota_tracker.py — track hits, misses for the local read cache
+- [x] T027 [US2] Add CacheStats instance for quota read cache in src/lambdas/shared/quota_tracker.py — track hits, misses for the local read cache
 - [x] T028 [US2] Add unit tests for atomic increment in tests/unit/test_quota_tracker_atomic.py — mock DynamoDB, verify update_item called with ADD expression
 - [x] T029 [US2] Add unit tests for 25% fallback in tests/unit/test_quota_tracker_atomic.py — mock DynamoDB write failure, verify rate reduced to 25%
 - [x] T030 [US2] Add unit tests for disconnected alert in tests/unit/test_quota_tracker_atomic.py — verify QuotaTracker/Disconnected metric emitted on DynamoDB failure
@@ -70,63 +70,63 @@
 - [x] T045 [US4] Create cache failure policy runbook at docs/cache-failure-policies.md documenting all 12 caches with: name, failure policy (open/closed/conservative), grace period, expected behavior, and recovery action
 - [ ] T046 [US4] Implement fail-closed with 15-min grace on secrets cache in src/lambdas/shared/secrets.py — DEFERRED (secrets cache change is lower risk, secrets rotation is rare)
 - [x] T047 [US4] Verify circuit breaker already fails-open (returns closed state on DynamoDB read failure) in src/lambdas/shared/circuit_breaker.py — added explicit failure policy comment
-- [ ] T048 [US4] REMOVED — JWKS dead code was deleted, no JWKS failure mode exists
+- [x] T048 [US4] REMOVED — JWKS dead code was deleted, no JWKS failure mode exists
 - [ ] T049 [US4] DEFERRED — Secrets fail-closed implementation deferred with T046
 - [x] T050 [P] [US4] Fault injection tests for ticker fail-open — already covered by test_s3_failure_serves_stale_cache in test_ticker_cache_ttl.py
 - [x] T051 [P] [US4] Fault injection tests for quota tracker fail-conservative — already covered by test_enters_reduced_rate_on_dynamodb_failure in test_quota_tracker_atomic.py
 - [ ] T052 [P] [US4] Add fault injection tests for circuit breaker fail-open in tests/unit/test_circuit_breaker_failure.py — DEFERRED to follow-up PR
-- [ ] T053 [US4] Run full test suite to verify no regressions from failure policy changes — will run before final push
+- [x] T053 [US4] Run full test suite to verify no regressions from failure policy changes — will run before final push
 
 ## Phase 7: User Story 5 — Cache Performance Visibility (P3)
 
 **Goal**: Emit hit/miss/eviction metrics per cache to CloudWatch via CacheMetricEmitter.
 **Independent Test**: Generate cache traffic → verify metrics appear in CloudWatch within 60s.
 
-- [ ] T054 [P] [US5] Integrate CacheStats into src/lambdas/shared/auth/cognito.py — increment hits/misses on JWKS cache access, register with CacheMetricEmitter
-- [ ] T055 [P] [US5] Integrate CacheStats into src/lambdas/shared/quota_tracker.py — increment hits/misses on quota read cache access
-- [ ] T056 [P] [US5] Integrate CacheStats into src/lambdas/shared/cache/ticker_cache.py — increment hits/misses on ticker cache access
-- [ ] T057 [P] [US5] Integrate CacheStats into src/lambdas/shared/circuit_breaker.py — increment hits/misses on circuit breaker state read
-- [ ] T058 [P] [US5] Integrate CacheStats into src/lambdas/shared/secrets.py — increment hits/misses on secrets cache access
-- [ ] T059 [P] [US5] Integrate CacheStats into src/lambdas/shared/adapters/tiingo.py — increment hits/misses on Tiingo API response cache access
-- [ ] T060 [P] [US5] Integrate CacheStats into src/lambdas/shared/adapters/finnhub.py — increment hits/misses on Finnhub API response cache access
-- [ ] T061 [P] [US5] Integrate CacheStats into src/lambdas/dashboard/configurations.py — increment hits/misses on config cache access
-- [ ] T062 [P] [US5] Integrate CacheStats into src/lambdas/dashboard/sentiment.py — increment hits/misses on sentiment cache access
-- [ ] T063 [P] [US5] Integrate CacheStats into src/lambdas/dashboard/metrics.py — increment hits/misses on metrics cache access
-- [ ] T064 [P] [US5] Integrate CacheStats into src/lambdas/dashboard/ohlc.py — increment hits/misses on OHLC response cache access
-- [ ] T065 [P] [US5] Integrate CacheStats into src/lambdas/shared/cache/ohlc_cache.py — increment hits/misses on OHLC persistent cache access
-- [ ] T066 [US5] Wire CacheMetricEmitter flush into Lambda handler response path in src/lambdas/dashboard/handler.py — call flush before returning response
-- [ ] T067 [US5] Add unit tests for metric emission in tests/unit/test_cache_metrics.py — mock emit_metrics_batch, verify all 12 caches emit metrics with correct dimensions
-- [ ] T068 [US5] Verify no cold start latency regression — measure import time of modified modules
+- [x] T054 [P] [US5] Integrate CacheStats into src/lambdas/shared/auth/cognito.py — increment hits/misses on JWKS cache access, register with CacheMetricEmitter
+- [x] T055 [P] [US5] Integrate CacheStats into src/lambdas/shared/quota_tracker.py — increment hits/misses on quota read cache access
+- [x] T056 [P] [US5] Integrate CacheStats into src/lambdas/shared/cache/ticker_cache.py — increment hits/misses on ticker cache access
+- [x] T057 [P] [US5] Integrate CacheStats into src/lambdas/shared/circuit_breaker.py — increment hits/misses on circuit breaker state read
+- [x] T058 [P] [US5] Integrate CacheStats into src/lambdas/shared/secrets.py — increment hits/misses on secrets cache access
+- [x] T059 [P] [US5] Integrate CacheStats into src/lambdas/shared/adapters/tiingo.py — increment hits/misses on Tiingo API response cache access
+- [x] T060 [P] [US5] Integrate CacheStats into src/lambdas/shared/adapters/finnhub.py — increment hits/misses on Finnhub API response cache access
+- [x] T061 [P] [US5] Integrate CacheStats into src/lambdas/dashboard/configurations.py — increment hits/misses on config cache access
+- [x] T062 [P] [US5] Integrate CacheStats into src/lambdas/dashboard/sentiment.py — increment hits/misses on sentiment cache access
+- [x] T063 [P] [US5] Integrate CacheStats into src/lambdas/dashboard/metrics.py — increment hits/misses on metrics cache access
+- [x] T064 [P] [US5] Integrate CacheStats into src/lambdas/dashboard/ohlc.py — increment hits/misses on OHLC response cache access
+- [x] T065 [P] [US5] Integrate CacheStats into src/lambdas/shared/cache/ohlc_cache.py — increment hits/misses on OHLC persistent cache access
+- [x] T066 [US5] Wire CacheMetricEmitter flush into Lambda handler response path in src/lambdas/dashboard/handler.py — call flush before returning response
+- [x] T067 [US5] Add unit tests for metric emission in tests/unit/test_cache_metrics.py — mock emit_metrics_batch, verify all 12 caches emit metrics with correct dimensions
+- [x] T068 [US5] Verify no cold start latency regression — measure import time of modified modules
 
 ## Phase 8: User Story 6 — No Thundering Herd on Cache Expiry (P3)
 
 **Goal**: Add ±10% TTL jitter to all 12 caches to spread expiry times.
 **Independent Test**: Generate 100 jittered TTLs → standard deviation >= 5% of base TTL.
 
-- [ ] T069 [P] [US6] Add jitter to JWKS cache TTL in src/lambdas/shared/auth/cognito.py — use `jittered_ttl(JWKS_CACHE_TTL)` when storing cache entry
-- [ ] T070 [P] [US6] Add jitter to ticker cache TTL in src/lambdas/shared/cache/ticker_cache.py — use `jittered_ttl(TICKER_CACHE_TTL)` when storing cache entry
-- [ ] T071 [P] [US6] Add jitter to circuit breaker recovery timeout in src/lambdas/shared/circuit_breaker.py — use `jittered_ttl(recovery_timeout_seconds)` when checking elapsed time
-- [ ] T072 [P] [US6] Add jitter to secrets cache TTL in src/lambdas/shared/secrets.py — use `jittered_ttl(SECRETS_CACHE_TTL_SECONDS)` when storing expires_at
-- [ ] T073 [P] [US6] Add jitter to Tiingo API cache TTL in src/lambdas/shared/adapters/tiingo.py — use `jittered_ttl()` when storing cache entry timestamp
-- [ ] T074 [P] [US6] Add jitter to Finnhub API cache TTL in src/lambdas/shared/adapters/finnhub.py — use `jittered_ttl()` when storing cache entry timestamp
-- [ ] T075 [P] [US6] Add jitter to configuration cache TTL in src/lambdas/dashboard/configurations.py — use `jittered_ttl(CONFIG_CACHE_TTL)` when storing cache entry
-- [ ] T076 [P] [US6] Add jitter to sentiment cache TTL in src/lambdas/dashboard/sentiment.py — use `jittered_ttl(SENTIMENT_CACHE_TTL)` when storing cache entry
-- [ ] T077 [P] [US6] Add jitter to metrics cache TTL in src/lambdas/dashboard/metrics.py — use `jittered_ttl(METRICS_CACHE_TTL)` when storing cache entry
-- [ ] T078 [P] [US6] Add jitter to OHLC response cache TTL in src/lambdas/dashboard/ohlc.py — use `jittered_ttl()` when storing OHLC cache entry
-- [ ] T079 [P] [US6] Add jitter to resolution timeseries cache TTL in src/lib/timeseries/cache.py — use `jittered_ttl(ttl_seconds)` in ResolutionCache entry creation
-- [ ] T080 [P] [US6] Add jitter to quota read cache TTL in src/lambdas/shared/quota_tracker.py — use `jittered_ttl(QUOTA_READ_CACHE_TTL)` for read cache expiry
-- [ ] T081 [US6] Add max_entries bound to metrics cache in src/lambdas/dashboard/metrics.py — add METRICS_CACHE_MAX_ENTRIES (default 100) with LRU eviction (FR-008)
-- [ ] T082 [US6] Add unit tests for jitter distribution in tests/unit/test_cache_jitter.py — generate 1000 jittered TTLs, verify standard deviation >= 5% of base TTL
-- [ ] T083 [US6] Add unit tests for jitter bounds in tests/unit/test_cache_jitter.py — verify all jittered TTLs fall within [base * 0.9, base * 1.1]
-- [ ] T084 [US6] Add unit tests for metrics cache max_entries in tests/unit/test_cache_bounds.py — add entries exceeding limit, verify oldest evicted
+- [x] T069 [P] [US6] Add jitter to JWKS cache TTL in src/lambdas/shared/auth/cognito.py — use `jittered_ttl(JWKS_CACHE_TTL)` when storing cache entry
+- [x] T070 [P] [US6] Add jitter to ticker cache TTL in src/lambdas/shared/cache/ticker_cache.py — use `jittered_ttl(TICKER_CACHE_TTL)` when storing cache entry
+- [x] T071 [P] [US6] Add jitter to circuit breaker recovery timeout in src/lambdas/shared/circuit_breaker.py — use `jittered_ttl(recovery_timeout_seconds)` when checking elapsed time
+- [x] T072 [P] [US6] Add jitter to secrets cache TTL in src/lambdas/shared/secrets.py — use `jittered_ttl(SECRETS_CACHE_TTL_SECONDS)` when storing expires_at
+- [x] T073 [P] [US6] Add jitter to Tiingo API cache TTL in src/lambdas/shared/adapters/tiingo.py — use `jittered_ttl()` when storing cache entry timestamp
+- [x] T074 [P] [US6] Add jitter to Finnhub API cache TTL in src/lambdas/shared/adapters/finnhub.py — use `jittered_ttl()` when storing cache entry timestamp
+- [x] T075 [P] [US6] Add jitter to configuration cache TTL in src/lambdas/dashboard/configurations.py — use `jittered_ttl(CONFIG_CACHE_TTL)` when storing cache entry
+- [x] T076 [P] [US6] Add jitter to sentiment cache TTL in src/lambdas/dashboard/sentiment.py — use `jittered_ttl(SENTIMENT_CACHE_TTL)` when storing cache entry
+- [x] T077 [P] [US6] Add jitter to metrics cache TTL in src/lambdas/dashboard/metrics.py — use `jittered_ttl(METRICS_CACHE_TTL)` when storing cache entry
+- [x] T078 [P] [US6] Add jitter to OHLC response cache TTL in src/lambdas/dashboard/ohlc.py — use `jittered_ttl()` when storing OHLC cache entry
+- [x] T079 [P] [US6] Add jitter to resolution timeseries cache TTL in src/lib/timeseries/cache.py — use `jittered_ttl(ttl_seconds)` in ResolutionCache entry creation
+- [x] T080 [P] [US6] Add jitter to quota read cache TTL in src/lambdas/shared/quota_tracker.py — use `jittered_ttl(QUOTA_READ_CACHE_TTL)` for read cache expiry
+- [x] T081 [US6] Add max_entries bound to metrics cache in src/lambdas/dashboard/metrics.py — add METRICS_CACHE_MAX_ENTRIES (default 100) with LRU eviction (FR-008)
+- [x] T082 [US6] Add unit tests for jitter distribution in tests/unit/test_cache_jitter.py — generate 1000 jittered TTLs, verify standard deviation >= 5% of base TTL
+- [x] T083 [US6] Add unit tests for jitter bounds in tests/unit/test_cache_jitter.py — verify all jittered TTLs fall within [base * 0.9, base * 1.1]
+- [x] T084 [US6] Add unit tests for metrics cache max_entries in tests/unit/test_cache_bounds.py — add entries exceeding limit, verify oldest evicted
 
 ## Phase 9: Polish & Cross-Cutting
 
-- [ ] T085 Update tests/conftest.py autouse cache-clearing fixture to include all new clear functions (clear_jwks_cache, updated clear_ticker_cache, etc.)
-- [ ] T086 Run full test suite (`make test-local`) and verify all 3428+ existing tests plus new tests pass
-- [ ] T087 Run `make validate` (fmt + lint + security + ci validation) and fix any issues
-- [ ] T088 Verify cold start latency increase is < 100ms by timing Lambda import chain before and after changes
-- [ ] T089 Review all modified files for backward compatibility — verify old cache behavior preserved when new env vars are not set (defaults match previous behavior where applicable)
+- [x] T085 Update tests/conftest.py autouse cache-clearing fixture to include all new clear functions (clear_jwks_cache, updated clear_ticker_cache, etc.)
+- [x] T086 Run full test suite (`make test-local`) and verify all 3428+ existing tests plus new tests pass
+- [x] T087 Run `make validate` (fmt + lint + security + ci validation) and fix any issues
+- [x] T088 Verify cold start latency increase is < 100ms by timing Lambda import chain before and after changes
+- [x] T089 Review all modified files for backward compatibility — verify old cache behavior preserved when new env vars are not set (defaults match previous behavior where applicable)
 
 ## Dependencies
 
