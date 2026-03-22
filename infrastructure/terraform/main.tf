@@ -265,15 +265,14 @@ module "ingestion_lambda" {
 
   # Environment variables
   environment_variables = {
-    WATCH_TAGS              = var.watch_tags
-    DATABASE_TABLE          = module.dynamodb.table_name
-    USERS_TABLE             = module.dynamodb.feature_006_users_table_name
-    SNS_TOPIC_ARN           = module.sns.topic_arn
-    TIINGO_SECRET_ARN       = module.secrets.tiingo_secret_arn
-    FINNHUB_SECRET_ARN      = module.secrets.finnhub_secret_arn
-    ENVIRONMENT             = var.environment
-    MODEL_VERSION           = var.model_version
-    CHAOS_EXPERIMENTS_TABLE = module.dynamodb.chaos_experiments_table_name
+    WATCH_TAGS         = var.watch_tags
+    DATABASE_TABLE     = module.dynamodb.table_name
+    USERS_TABLE        = module.dynamodb.feature_006_users_table_name
+    SNS_TOPIC_ARN      = module.sns.topic_arn
+    TIINGO_SECRET_ARN  = module.secrets.tiingo_secret_arn
+    FINNHUB_SECRET_ARN = module.secrets.finnhub_secret_arn
+    ENVIRONMENT        = var.environment
+    MODEL_VERSION      = var.model_version
     # Feature 1009: Time-series fanout table for multi-resolution buckets
     TIMESERIES_TABLE = module.dynamodb.timeseries_table_name
   }
@@ -327,12 +326,11 @@ module "analysis_lambda" {
 
   # Environment variables
   environment_variables = {
-    DATABASE_TABLE          = module.dynamodb.table_name
-    MODEL_S3_BUCKET         = local.model_s3_bucket
-    MODEL_VERSION           = var.model_version
-    ENVIRONMENT             = var.environment
-    CHAOS_EXPERIMENTS_TABLE = module.dynamodb.chaos_experiments_table_name
-    TIMESERIES_TABLE        = module.dynamodb.timeseries_table_name # Feature 1009: Write fanout
+    DATABASE_TABLE   = module.dynamodb.table_name
+    MODEL_S3_BUCKET  = local.model_s3_bucket
+    MODEL_VERSION    = var.model_version
+    ENVIRONMENT      = var.environment
+    TIMESERIES_TABLE = module.dynamodb.timeseries_table_name # Feature 1009: Write fanout
   }
 
   # Dead letter queue
@@ -1060,6 +1058,17 @@ module "chaos" {
 
   # Kill switch - stops experiments if Lambda errors spike
   lambda_error_alarm_arn = module.monitoring.analysis_errors_alarm_arn
+
+  # Feature 1237: External chaos actor architecture
+  chaos_engineer_principals = [] # Add IAM user/role ARNs that should be able to assume the chaos-engineer role
+  lambda_execution_role_arns = [
+    module.iam.ingestion_lambda_role_arn,
+    module.iam.analysis_lambda_role_arn,
+  ]
+  eventbridge_rule_arns = [
+    module.eventbridge.ingestion_schedule_arn,
+  ]
+  chaos_experiments_table_arn = module.dynamodb.chaos_experiments_table_arn
 
   # Deprecated - kept for backwards compatibility
   dynamodb_table_arn       = module.dynamodb.table_arn

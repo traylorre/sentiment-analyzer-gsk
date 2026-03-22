@@ -1,29 +1,33 @@
 """
-Chaos Testing Module
-====================
+Chaos Testing Module -- External Actor Architecture
+=====================================================
 
-Manages chaos experiments for testing system resilience.
+Manages chaos experiments by degrading infrastructure through external AWS API
+calls. Lambda handlers contain zero chaos awareness; all fault injection is
+performed by modifying Lambda configuration, IAM policies, or EventBridge rules.
+
+Feature 1237: Refactored from embedded DynamoDB-flag approach to external actor.
 
 Experiment Lifecycle:
-    1. Create experiment (POST /chaos/experiments)
-    2. Start experiment (POST /chaos/experiments/{id}/start)
+    1. Create experiment (POST /chaos/experiments) -- audit log entry
+    2. Start experiment (POST /chaos/experiments/{id}/start) -- external API calls
     3. Monitor experiment (GET /chaos/experiments/{id})
-    4. Stop experiment (POST /chaos/experiments/{id}/stop)
+    4. Stop experiment (POST /chaos/experiments/{id}/stop) -- restore from SSM snapshot
     5. View history (GET /chaos/experiments)
 
-Safety Mechanisms:
-    - Environment gating (preprod only)
-    - Time limits (5-300 seconds)
-    - Blast radius controls (10-100%)
-    - CloudWatch alarm kill switches (Phase 2)
-    - Manual emergency stop
+Supported Scenarios:
+    - ingestion_failure: Set Lambda concurrency to 0 (throttles all invocations)
+    - dynamodb_throttle: Attach deny-write IAM policy to Lambda execution roles
+    - lambda_cold_start: Reduce Lambda memory to 128MB (force cold starts)
 
-Supported Scenarios (Phase 1):
-    - dynamodb_throttle: Throttle DynamoDB writes (AWS FIS - Phase 2)
-    - ingestion_failure: Simulate article ingestion unavailability (Phase 3)
-    - lambda_cold_start: Inject artificial delay (Phase 4)
+Safety Mechanisms:
+    - Environment gating (preprod/dev/test only)
+    - SSM kill switch prevents injection when triggered
+    - SSM snapshots preserve pre-chaos config for restoration
+    - Time limits (5-300 seconds)
 """
 
+import json
 import logging
 import os
 import uuid
@@ -40,15 +44,16 @@ logger = logging.getLogger(__name__)
 
 # Configuration
 CHAOS_TABLE = os.environ.get("CHAOS_EXPERIMENTS_TABLE", "")
-ENVIRONMENT = os.environ["ENVIRONMENT"]
-FIS_DYNAMODB_THROTTLE_TEMPLATE = os.environ.get("FIS_DYNAMODB_THROTTLE_TEMPLATE", "")
+ENVIRONMENT = os.environ.get("ENVIRONMENT", "dev")
 
-# Safety: Only allow chaos testing in preprod
+# Safety: Only allow chaos testing in preprod/dev/test
 ALLOWED_ENVIRONMENTS = ["preprod", "dev", "test"]
 
 # AWS clients (lazy-loaded to avoid region errors during test imports)
 _dynamodb = None
-_fis_client = None
+_lambda_client = None
+_ssm_client = None
+_iam_client = None
 
 
 def _get_dynamodb():
@@ -59,12 +64,28 @@ def _get_dynamodb():
     return _dynamodb
 
 
-def _get_fis_client():
-    """Lazy-load FIS client."""
-    global _fis_client
-    if _fis_client is None:
-        _fis_client = boto3.client("fis")
-    return _fis_client
+def _get_lambda_client():
+    """Lazy-load Lambda client."""
+    global _lambda_client
+    if _lambda_client is None:
+        _lambda_client = boto3.client("lambda")
+    return _lambda_client
+
+
+def _get_ssm_client():
+    """Lazy-load SSM client."""
+    global _ssm_client
+    if _ssm_client is None:
+        _ssm_client = boto3.client("ssm")
+    return _ssm_client
+
+
+def _get_iam_client():
+    """Lazy-load IAM client."""
+    global _iam_client
+    if _iam_client is None:
+        _iam_client = boto3.client("iam")
+    return _iam_client
 
 
 class ChaosError(Exception):
@@ -91,6 +112,11 @@ def check_environment_allowed():
             f"Chaos testing not allowed in {ENVIRONMENT} environment. "
             f"Allowed environments: {', '.join(ALLOWED_ENVIRONMENTS)}"
         )
+
+
+# ===================================================================
+# CRUD Operations (DynamoDB audit log -- unchanged)
+# ===================================================================
 
 
 def create_experiment(
@@ -379,177 +405,162 @@ def _deserialize_dynamodb_item(item: dict[str, Any]) -> dict[str, Any]:
 
 
 # ===================================================================
-# AWS FIS Integration (Phase 2)
+# External Chaos Operations (Feature 1237)
 # ===================================================================
 
 
-def start_fis_experiment(
-    experiment_id: str,
-    blast_radius: int,
-    duration_seconds: int,
-) -> str:
-    """
-    Start an AWS FIS experiment for DynamoDB throttling.
-
-    Args:
-        experiment_id: Chaos experiment UUID (for tagging)
-        blast_radius: Percentage of requests to affect (10-100)
-        duration_seconds: Duration in seconds (5-300)
-
-    Returns:
-        FIS experiment ID
-
-    Raises:
-        ChaosError: If FIS experiment fails to start
-    """
-    check_environment_allowed()
-
-    if not FIS_DYNAMODB_THROTTLE_TEMPLATE:
-        raise ChaosError("FIS_DYNAMODB_THROTTLE_TEMPLATE environment variable not set")
-
-    # Note: FIS experiment template already defines duration (PT5M).
-    # blast_radius and duration_seconds are passed as tags for tracking only.
-
+def _check_kill_switch() -> str:
+    """Check kill switch state. Returns 'disarmed', 'armed', or 'triggered'."""
     try:
-        response = _get_fis_client().start_experiment(
-            experimentTemplateId=FIS_DYNAMODB_THROTTLE_TEMPLATE,
-            tags={
-                "chaos_experiment_id": experiment_id,
-                "environment": ENVIRONMENT,
-                "blast_radius": str(blast_radius),
-            },
+        response = _get_ssm_client().get_parameter(
+            Name=f"/chaos/{ENVIRONMENT}/kill-switch"
         )
+        return response["Parameter"]["Value"]
+    except ClientError:
+        return "disarmed"
 
-        fis_experiment_id = response["experiment"]["id"]
 
-        logger.info(
-            "FIS experiment started",
-            extra={
-                "chaos_experiment_id": sanitize_for_log(experiment_id),
-                "fis_experiment_id": sanitize_for_log(fis_experiment_id),
-                "blast_radius": blast_radius,
-                "duration_seconds": duration_seconds,
-            },
+def _set_kill_switch(value: str) -> None:
+    """Set kill switch to given value."""
+    try:
+        _get_ssm_client().put_parameter(
+            Name=f"/chaos/{ENVIRONMENT}/kill-switch",
+            Value=value,
+            Type="String",
+            Overwrite=True,
         )
-
-        return fis_experiment_id
-
     except ClientError as e:
-        error_code = e.response.get("Error", {}).get("Code", "Unknown")
-        error_msg = e.response.get("Error", {}).get("Message", str(e))
-
-        logger.error(
-            "Failed to start FIS experiment",
-            extra={
-                "chaos_experiment_id": sanitize_for_log(experiment_id),
-                "error_code": sanitize_for_log(error_code),
-                "error_message": sanitize_for_log(error_msg),
-            },
-        )
-
-        raise ChaosError(
-            f"FIS experiment failed to start: {error_code} - {error_msg}"
-        ) from e
+        logger.error("Failed to set kill switch", extra={"error": str(e)})
 
 
-def stop_fis_experiment(fis_experiment_id: str) -> bool:
-    """
-    Stop a running AWS FIS experiment.
-
-    Args:
-        fis_experiment_id: FIS experiment ID
-
-    Returns:
-        True if stopped successfully
-
-    Raises:
-        ChaosError: If FIS experiment fails to stop
-    """
-    check_environment_allowed()
-
+def _snapshot_to_ssm(scenario_type: str, function_name: str) -> None:
+    """Save current Lambda config to SSM before degrading."""
     try:
-        _get_fis_client().stop_experiment(id=fis_experiment_id)
-
-        logger.info(
-            "FIS experiment stopped",
-            extra={"fis_experiment_id": sanitize_for_log(fis_experiment_id)},
+        config = _get_lambda_client().get_function_configuration(
+            FunctionName=function_name
         )
 
-        return True
+        # Get reserved concurrency
+        try:
+            conc = _get_lambda_client().get_function_concurrency(
+                FunctionName=function_name
+            )
+            reserved = conc.get("ReservedConcurrentExecutions", "NONE")
+        except ClientError:
+            reserved = "NONE"
 
-    except ClientError as e:
-        error_code = e.response.get("Error", {}).get("Code", "Unknown")
-        error_msg = e.response.get("Error", {}).get("Message", str(e))
-
-        logger.error(
-            "Failed to stop FIS experiment",
-            extra={
-                "fis_experiment_id": sanitize_for_log(fis_experiment_id),
-                "error_code": sanitize_for_log(error_code),
-                "error_message": sanitize_for_log(error_msg),
-            },
-        )
-
-        raise ChaosError(
-            f"FIS experiment failed to stop: {error_code} - {error_msg}"
-        ) from e
-
-
-def get_fis_experiment_status(fis_experiment_id: str) -> dict[str, Any]:
-    """
-    Get status of an AWS FIS experiment.
-
-    Args:
-        fis_experiment_id: FIS experiment ID
-
-    Returns:
-        FIS experiment status dict
-
-    Raises:
-        ChaosError: If failed to get status
-    """
-    try:
-        response = _get_fis_client().get_experiment(id=fis_experiment_id)
-        experiment = response["experiment"]
-
-        return {
-            "id": experiment["id"],
-            "state": experiment["state"]["status"],
-            "reason": experiment["state"].get("reason", ""),
-            "created_time": experiment["creationTime"].isoformat(),
-            "start_time": (
-                experiment.get("startTime", {}).isoformat()
-                if experiment.get("startTime")
-                else None
-            ),
-            "end_time": (
-                experiment.get("endTime", {}).isoformat()
-                if experiment.get("endTime")
-                else None
-            ),
+        snapshot = {
+            "FunctionName": config["FunctionName"],
+            "FunctionArn": config["FunctionArn"],
+            "MemorySize": config["MemorySize"],
+            "Timeout": config["Timeout"],
+            "ReservedConcurrency": str(reserved),
+            "SnapshotTimestamp": datetime.now(UTC).isoformat() + "Z",
+            "Scenario": scenario_type,
         }
 
-    except ClientError as e:
-        error_code = e.response.get("Error", {}).get("Code", "Unknown")
-        error_msg = e.response.get("Error", {}).get("Message", str(e))
-
-        logger.error(
-            "Failed to get FIS experiment status",
-            extra={
-                "fis_experiment_id": sanitize_for_log(fis_experiment_id),
-                "error_code": sanitize_for_log(error_code),
-                "error_message": sanitize_for_log(error_msg),
-            },
+        # Map scenario_type to SSM-safe key
+        ssm_key = scenario_type.replace("_", "-")
+        _get_ssm_client().put_parameter(
+            Name=f"/chaos/{ENVIRONMENT}/snapshot/{ssm_key}",
+            Value=json.dumps(snapshot),
+            Type="String",
+            Overwrite=True,
         )
 
-        raise ChaosError(
-            f"Failed to get FIS experiment status: {error_code} - {error_msg}"
-        ) from e
+        logger.info(
+            "Config snapshot saved to SSM",
+            extra={"scenario": scenario_type, "function": function_name},
+        )
+
+    except ClientError as e:
+        raise ChaosError(f"Failed to snapshot config: {e}") from e
+
+
+def _restore_from_ssm(scenario_type: str) -> dict[str, Any]:
+    """Read SSM snapshot and restore config."""
+    ssm_key = scenario_type.replace("_", "-")
+    param_name = f"/chaos/{ENVIRONMENT}/snapshot/{ssm_key}"
+
+    try:
+        response = _get_ssm_client().get_parameter(Name=param_name)
+        snapshot = json.loads(response["Parameter"]["Value"])
+    except ClientError as e:
+        raise ChaosError(f"Failed to read snapshot for {scenario_type}: {e}") from e
+
+    # Restore based on scenario
+    if scenario_type == "ingestion_failure":
+        _restore_concurrency(snapshot)
+    elif scenario_type == "dynamodb_throttle":
+        _restore_dynamodb_access()
+    elif scenario_type == "lambda_cold_start":
+        _restore_memory(snapshot)
+
+    # Delete snapshot after successful restore
+    try:
+        _get_ssm_client().delete_parameter(Name=param_name)
+    except ClientError:
+        pass
+
+    return snapshot
+
+
+def _restore_concurrency(snapshot: dict[str, Any]) -> None:
+    """Restore Lambda concurrency from snapshot."""
+    func_name = snapshot["FunctionName"]
+    concurrency = snapshot.get("ReservedConcurrency", "NONE")
+
+    if concurrency == "NONE":
+        try:
+            _get_lambda_client().delete_function_concurrency(FunctionName=func_name)
+        except ClientError:
+            pass
+    else:
+        _get_lambda_client().put_function_concurrency(
+            FunctionName=func_name,
+            ReservedConcurrentExecutions=int(concurrency),
+        )
+
+
+def _restore_dynamodb_access() -> None:
+    """Detach deny-write policy from Lambda execution roles."""
+    account_id = boto3.client("sts").get_caller_identity()["Account"]
+    policy_arn = (
+        f"arn:aws:iam::{account_id}:policy/" f"{ENVIRONMENT}-chaos-deny-dynamodb-write"
+    )
+
+    roles = [
+        f"{ENVIRONMENT}-ingestion-lambda-role",
+        f"{ENVIRONMENT}-analysis-lambda-role",
+    ]
+
+    for role in roles:
+        try:
+            _get_iam_client().detach_role_policy(RoleName=role, PolicyArn=policy_arn)
+        except ClientError:
+            pass  # Policy may not be attached
+
+
+def _restore_memory(snapshot: dict[str, Any]) -> None:
+    """Restore Lambda memory from snapshot."""
+    _get_lambda_client().update_function_configuration(
+        FunctionName=snapshot["FunctionName"],
+        MemorySize=int(snapshot["MemorySize"]),
+    )
+
+
+# ===================================================================
+# Start/Stop (External Actor Implementation)
+# ===================================================================
 
 
 def start_experiment(experiment_id: str) -> dict[str, Any]:
     """
-    Start a chaos experiment.
+    Start a chaos experiment using external AWS API calls.
+
+    Instead of setting DynamoDB flags that Lambdas check, this directly
+    degrades infrastructure: sets concurrency to 0, attaches deny policies,
+    or reduces memory. Lambda handlers are completely unaware.
 
     Args:
         experiment_id: Experiment UUID
@@ -562,6 +573,13 @@ def start_experiment(experiment_id: str) -> dict[str, Any]:
     """
     check_environment_allowed()
 
+    # Check kill switch
+    kill_switch = _check_kill_switch()
+    if kill_switch == "triggered":
+        raise ChaosError(
+            "Kill switch is triggered -- resolve before starting new experiments"
+        )
+
     # Get experiment details
     experiment = get_experiment(experiment_id)
     if not experiment:
@@ -569,48 +587,76 @@ def start_experiment(experiment_id: str) -> dict[str, Any]:
 
     if experiment["status"] != "pending":
         raise ChaosError(
-            f"Experiment must be in 'pending' status to start, got: {experiment['status']}"
+            f"Experiment must be in 'pending' status to start, "
+            f"got: {experiment['status']}"
         )
 
     scenario_type = experiment["scenario_type"]
 
     try:
-        # Route to appropriate chaos implementation
-        if scenario_type == "dynamodb_throttle":
-            # App-level throttle injection (FIS provider bug workaround)
-            delay_ms = int(experiment.get("parameters", {}).get("delay_ms", 500))
+        if scenario_type == "ingestion_failure":
+            func_name = f"{ENVIRONMENT}-sentiment-ingestion"
+            _snapshot_to_ssm(scenario_type, func_name)
+            _get_lambda_client().put_function_concurrency(
+                FunctionName=func_name,
+                ReservedConcurrentExecutions=0,
+            )
             results = {
                 "started_at": datetime.now(UTC).isoformat() + "Z",
-                "injection_method": "dynamodb_flag",
-                "delay_ms": delay_ms,
-                "note": "Lambdas will inject delay_ms before DynamoDB writes while experiment is running",
+                "injection_method": "external_api",
+                "action": "set_concurrency_0",
+                "function": func_name,
+                "note": "Lambda concurrency set to 0 -- all invocations throttled",
             }
-            update_experiment_status(experiment_id, "running", results)
 
-        elif scenario_type == "ingestion_failure":
-            # Phase 3: DynamoDB-based chaos injection
-            # Ingestion Lambda queries chaos_experiments table and skips article ingestion if active
-            # No AWS FIS needed - pure application-level fault injection
+        elif scenario_type == "dynamodb_throttle":
+            func_name = f"{ENVIRONMENT}-sentiment-ingestion"
+            _snapshot_to_ssm(scenario_type, func_name)
+            account_id = boto3.client("sts").get_caller_identity()["Account"]
+            policy_arn = (
+                f"arn:aws:iam::{account_id}:policy/"
+                f"{ENVIRONMENT}-chaos-deny-dynamodb-write"
+            )
+            roles = [
+                f"{ENVIRONMENT}-ingestion-lambda-role",
+                f"{ENVIRONMENT}-analysis-lambda-role",
+            ]
+            for role in roles:
+                _get_iam_client().attach_role_policy(
+                    RoleName=role, PolicyArn=policy_arn
+                )
             results = {
                 "started_at": datetime.now(UTC).isoformat() + "Z",
-                "injection_method": "dynamodb_flag",
-                "note": "Ingestion Lambda will skip article ingestion calls while experiment is running",
+                "injection_method": "external_api",
+                "action": "attach_deny_policy",
+                "policy": policy_arn,
+                "roles": roles,
+                "note": "Deny-write policy attached -- DynamoDB writes will fail with AccessDenied",
             }
-            update_experiment_status(experiment_id, "running", results)
 
         elif scenario_type == "lambda_cold_start":
-            # Phase 4: Lambda delay injection via DynamoDB flag
-            delay_ms = int(experiment.get("parameters", {}).get("delay_ms", 3000))
+            func_name = f"{ENVIRONMENT}-sentiment-analysis"
+            _snapshot_to_ssm(scenario_type, func_name)
+            _get_lambda_client().update_function_configuration(
+                FunctionName=func_name,
+                MemorySize=128,
+            )
             results = {
                 "started_at": datetime.now(UTC).isoformat() + "Z",
-                "injection_method": "dynamodb_flag",
-                "delay_ms": delay_ms,
-                "note": "Analysis Lambda will inject delay_ms before processing while experiment is running",
+                "injection_method": "external_api",
+                "action": "set_memory_128",
+                "function": func_name,
+                "note": "Memory set to 128MB -- cold starts will be significantly slower",
             }
-            update_experiment_status(experiment_id, "running", results)
 
         else:
             raise ValueError(f"Unknown scenario_type: {scenario_type}")
+
+        # Set kill switch to armed
+        _set_kill_switch("armed")
+
+        # Update audit log
+        update_experiment_status(experiment_id, "running", results)
 
         # Return updated experiment
         return get_experiment(experiment_id) or experiment
@@ -627,7 +673,10 @@ def start_experiment(experiment_id: str) -> dict[str, Any]:
 
 def stop_experiment(experiment_id: str) -> dict[str, Any]:
     """
-    Stop a running chaos experiment.
+    Stop a running chaos experiment by restoring from SSM snapshot.
+
+    Reads the pre-chaos configuration from SSM and restores the original
+    Lambda configuration, IAM policies, or EventBridge rules.
 
     Args:
         experiment_id: Experiment UUID
@@ -647,34 +696,29 @@ def stop_experiment(experiment_id: str) -> dict[str, Any]:
 
     if experiment["status"] != "running":
         raise ChaosError(
-            f"Experiment must be in 'running' status to stop, got: {experiment['status']}"
+            f"Experiment must be in 'running' status to stop, "
+            f"got: {experiment['status']}"
         )
 
     scenario_type = experiment["scenario_type"]
 
     try:
-        # Route to appropriate stop implementation
-        if scenario_type == "dynamodb_throttle":
-            # App-level throttle stop (FIS provider bug workaround)
-            results = experiment.get("results", {})
-            results["stopped_at"] = datetime.now(UTC).isoformat() + "Z"
-            update_experiment_status(experiment_id, "stopped", results)
+        # Restore from SSM snapshot
+        snapshot = _restore_from_ssm(scenario_type)
 
-        elif scenario_type == "ingestion_failure":
-            # Phase 3: Stop DynamoDB-based chaos injection
-            # Simply mark experiment as stopped - Ingestion Lambda checks status
-            results = experiment.get("results", {})
-            results["stopped_at"] = datetime.now(UTC).isoformat() + "Z"
-            update_experiment_status(experiment_id, "stopped", results)
+        # Set kill switch to disarmed
+        _set_kill_switch("disarmed")
 
-        elif scenario_type == "lambda_cold_start":
-            # Phase 4: Stop Lambda delay injection
-            results = experiment.get("results", {})
-            results["stopped_at"] = datetime.now(UTC).isoformat() + "Z"
-            update_experiment_status(experiment_id, "stopped", results)
-
-        else:
-            raise ValueError(f"Unknown scenario_type: {scenario_type}")
+        # Update audit log
+        results = experiment.get("results", {})
+        results["stopped_at"] = datetime.now(UTC).isoformat() + "Z"
+        results["restore_method"] = "ssm_snapshot"
+        results["restored_config"] = {
+            "MemorySize": snapshot.get("MemorySize"),
+            "Timeout": snapshot.get("Timeout"),
+            "ReservedConcurrency": snapshot.get("ReservedConcurrency"),
+        }
+        update_experiment_status(experiment_id, "stopped", results)
 
         # Return updated experiment
         return get_experiment(experiment_id) or experiment

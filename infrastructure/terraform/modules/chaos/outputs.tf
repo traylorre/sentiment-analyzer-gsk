@@ -26,6 +26,25 @@ output "fis_log_group_name" {
 }
 
 # ============================================================================
+# External Chaos Actor Outputs (Feature 1237)
+# ============================================================================
+
+output "chaos_engineer_role_arn" {
+  description = "ARN of the chaos-engineer IAM role"
+  value       = var.environment != "prod" ? aws_iam_role.chaos_engineer[0].arn : ""
+}
+
+output "kill_switch_parameter_name" {
+  description = "Name of the SSM parameter for the chaos kill switch"
+  value       = var.environment != "prod" ? aws_ssm_parameter.chaos_kill_switch[0].name : ""
+}
+
+output "deny_dynamodb_write_policy_arn" {
+  description = "ARN of the pre-created deny-DynamoDB-write policy"
+  value       = var.environment != "prod" ? aws_iam_policy.chaos_deny_dynamodb_write[0].arn : ""
+}
+
+# ============================================================================
 # Deprecated Outputs (kept for backwards compatibility)
 # ============================================================================
 

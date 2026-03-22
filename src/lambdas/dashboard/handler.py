@@ -50,7 +50,6 @@ from src.lambdas.dashboard.chaos import (
     create_experiment,
     delete_experiment,
     get_experiment,
-    get_fis_experiment_status,
     list_experiments,
     start_experiment,
     stop_experiment,
@@ -804,7 +803,7 @@ def list_chaos_experiments():
 
 @app.get("/chaos/experiments/<experiment_id>")
 def get_chaos_experiment(experiment_id: str):
-    """Get chaos experiment by ID with enriched FIS status."""
+    """Get chaos experiment by ID."""
     event = app.current_event.raw_event
     user_id = _get_authenticated_user_id_from_event(event)
     if user_id is None:
@@ -821,27 +820,6 @@ def get_chaos_experiment(experiment_id: str):
             content_type="application/json",
             body=orjson.dumps({"detail": "Experiment not found"}).decode(),
         )
-
-    # Enrich with FIS status if applicable
-    if (
-        experiment.get("status") == "running"
-        and experiment.get("scenario_type") == "dynamodb_throttle"
-        and experiment.get("results", {}).get("fis_experiment_id")
-    ):
-        try:
-            fis_experiment_id = experiment["results"]["fis_experiment_id"]
-            fis_status = get_fis_experiment_status(fis_experiment_id)
-            experiment["fis_status"] = fis_status
-        except Exception as e:
-            logger.warning(
-                "Failed to fetch FIS experiment status",
-                extra={
-                    "experiment_id": sanitize_for_log(experiment_id),
-                    "fis_experiment_id": sanitize_for_log(fis_experiment_id),
-                    "error": sanitize_for_log(str(e)),
-                },
-            )
-            experiment["fis_status"] = {"error": "Failed to fetch FIS status"}
 
     return Response(
         status_code=200,

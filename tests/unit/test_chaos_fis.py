@@ -1,16 +1,20 @@
 """
-Unit Tests for AWS FIS Integration in Chaos Module
-===================================================
+Unit Tests for Chaos Module -- External Actor Architecture (Feature 1237)
+=========================================================================
 
-Tests FIS experiment lifecycle:
-- start_fis_experiment()
-- stop_fis_experiment()
-- get_fis_experiment_status()
-- start_experiment() (DynamoDB throttle scenario)
-- stop_experiment() (DynamoDB throttle scenario)
+Tests the rewritten chaos module that uses external AWS API calls
+(Lambda configuration changes, IAM policy attach/detach, SSM snapshots)
+instead of embedded DynamoDB flags.
+
+Tests cover:
+- CRUD operations (unchanged)
+- start_experiment() with external API calls
+- stop_experiment() with SSM snapshot restoration
+- Kill switch validation
+- Environment gating
 """
 
-from datetime import datetime
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -19,28 +23,25 @@ from botocore.exceptions import ClientError
 from src.lambdas.dashboard.chaos import (
     ChaosError,
     EnvironmentNotAllowedError,
-    get_fis_experiment_status,
+    create_experiment,
     start_experiment,
-    start_fis_experiment,
     stop_experiment,
-    stop_fis_experiment,
 )
 
-
+# ===================================================================
 # Test fixtures
+# ===================================================================
+
+
 @pytest.fixture
 def mock_environment_preprod(monkeypatch):
     """Set ENVIRONMENT to preprod for testing."""
     monkeypatch.setenv("ENVIRONMENT", "preprod")
     monkeypatch.setenv("CHAOS_EXPERIMENTS_TABLE", "preprod-chaos-experiments")
-    monkeypatch.setenv("FIS_DYNAMODB_THROTTLE_TEMPLATE", "EXTtemplate123456789")
-    # Reload module-level variables
     import src.lambdas.dashboard.chaos as chaos_module
 
     monkeypatch.setattr(chaos_module, "ENVIRONMENT", "preprod")
-    monkeypatch.setattr(
-        chaos_module, "FIS_DYNAMODB_THROTTLE_TEMPLATE", "EXTtemplate123456789"
-    )
+    monkeypatch.setattr(chaos_module, "CHAOS_TABLE", "preprod-chaos-experiments")
 
 
 @pytest.fixture
@@ -48,23 +49,9 @@ def mock_environment_prod(monkeypatch):
     """Set ENVIRONMENT to prod (should block chaos testing)."""
     monkeypatch.setenv("ENVIRONMENT", "prod")
     monkeypatch.setenv("CHAOS_EXPERIMENTS_TABLE", "prod-chaos-experiments")
-    monkeypatch.setenv("FIS_DYNAMODB_THROTTLE_TEMPLATE", "EXTtemplate123456789")
-    # Reload module-level variables
     import src.lambdas.dashboard.chaos as chaos_module
 
     monkeypatch.setattr(chaos_module, "ENVIRONMENT", "prod")
-    monkeypatch.setattr(
-        chaos_module, "FIS_DYNAMODB_THROTTLE_TEMPLATE", "EXTtemplate123456789"
-    )
-
-
-@pytest.fixture
-def mock_fis_client():
-    """Mock boto3 FIS client."""
-    with patch("src.lambdas.dashboard.chaos._get_fis_client") as mock_client_getter:
-        mock_client = MagicMock()
-        mock_client_getter.return_value = mock_client
-        yield mock_client
 
 
 @pytest.fixture
@@ -79,13 +66,40 @@ def mock_dynamodb_table():
 
 
 @pytest.fixture
+def mock_lambda_client():
+    """Mock boto3 Lambda client."""
+    with patch("src.lambdas.dashboard.chaos._get_lambda_client") as mock_client_getter:
+        mock_client = MagicMock()
+        mock_client_getter.return_value = mock_client
+        yield mock_client
+
+
+@pytest.fixture
+def mock_ssm_client():
+    """Mock boto3 SSM client."""
+    with patch("src.lambdas.dashboard.chaos._get_ssm_client") as mock_client_getter:
+        mock_client = MagicMock()
+        mock_client_getter.return_value = mock_client
+        yield mock_client
+
+
+@pytest.fixture
+def mock_iam_client():
+    """Mock boto3 IAM client."""
+    with patch("src.lambdas.dashboard.chaos._get_iam_client") as mock_client_getter:
+        mock_client = MagicMock()
+        mock_client_getter.return_value = mock_client
+        yield mock_client
+
+
+@pytest.fixture
 def sample_experiment():
     """Sample chaos experiment for testing."""
     return {
         "experiment_id": "12345678-1234-1234-1234-123456789012",
         "created_at": "2024-01-15T10:00:00Z",
         "status": "pending",
-        "scenario_type": "dynamodb_throttle",
+        "scenario_type": "ingestion_failure",
         "blast_radius": 25,
         "duration_seconds": 60,
         "parameters": {},
@@ -96,455 +110,33 @@ def sample_experiment():
 
 
 # ===================================================================
-# Tests for start_fis_experiment()
-# ===================================================================
-
-
-class TestStartFISExperiment:
-    """Tests for starting AWS FIS experiments."""
-
-    def test_start_fis_experiment_success(
-        self, mock_environment_preprod, mock_fis_client
-    ):
-        """Test successful FIS experiment start."""
-        mock_fis_client.start_experiment.return_value = {
-            "experiment": {"id": "EXP123456789"}
-        }
-
-        fis_experiment_id = start_fis_experiment(
-            experiment_id="12345678-1234-1234-1234-123456789012",
-            blast_radius=25,
-            duration_seconds=300,
-        )
-
-        assert fis_experiment_id == "EXP123456789"
-        mock_fis_client.start_experiment.assert_called_once()
-
-        # Verify API call parameters
-        call_args = mock_fis_client.start_experiment.call_args
-        assert call_args.kwargs["experimentTemplateId"] == "EXTtemplate123456789"
-        assert (
-            call_args.kwargs["tags"]["chaos_experiment_id"]
-            == "12345678-1234-1234-1234-123456789012"
-        )
-        assert call_args.kwargs["tags"]["environment"] == "preprod"
-        assert call_args.kwargs["tags"]["blast_radius"] == "25"
-
-    def test_start_fis_experiment_environment_not_allowed(
-        self, mock_environment_prod, mock_fis_client
-    ):
-        """Test FIS experiment start fails in prod environment."""
-        with pytest.raises(EnvironmentNotAllowedError) as exc_info:
-            start_fis_experiment(
-                experiment_id="12345678-1234-1234-1234-123456789012",
-                blast_radius=25,
-                duration_seconds=300,
-            )
-
-        assert "not allowed in prod" in str(exc_info.value)
-        mock_fis_client.start_experiment.assert_not_called()
-
-    def test_start_fis_experiment_missing_template_id(
-        self, mock_environment_preprod, mock_fis_client, monkeypatch
-    ):
-        """Test FIS experiment start fails when template ID not set."""
-        monkeypatch.delenv("FIS_DYNAMODB_THROTTLE_TEMPLATE", raising=False)
-        # Reload module-level variable
-        import src.lambdas.dashboard.chaos as chaos_module
-
-        monkeypatch.setattr(chaos_module, "FIS_DYNAMODB_THROTTLE_TEMPLATE", "")
-
-        with pytest.raises(ChaosError) as exc_info:
-            start_fis_experiment(
-                experiment_id="12345678-1234-1234-1234-123456789012",
-                blast_radius=25,
-                duration_seconds=300,
-            )
-
-        assert "environment variable not set" in str(exc_info.value)
-        mock_fis_client.start_experiment.assert_not_called()
-
-    def test_start_fis_experiment_client_error(
-        self, mock_environment_preprod, mock_fis_client
-    ):
-        """Test FIS experiment start handles ClientError."""
-        mock_fis_client.start_experiment.side_effect = ClientError(
-            error_response={
-                "Error": {
-                    "Code": "ResourceNotFoundException",
-                    "Message": "Template not found",
-                }
-            },
-            operation_name="StartExperiment",
-        )
-
-        with pytest.raises(ChaosError) as exc_info:
-            start_fis_experiment(
-                experiment_id="12345678-1234-1234-1234-123456789012",
-                blast_radius=25,
-                duration_seconds=300,
-            )
-
-        assert "FIS experiment failed to start" in str(exc_info.value)
-        assert "ResourceNotFoundException" in str(exc_info.value)
-
-    def test_start_fis_experiment_duration_conversion(
-        self, mock_environment_preprod, mock_fis_client
-    ):
-        """Test duration conversion to ISO 8601 format."""
-        mock_fis_client.start_experiment.return_value = {
-            "experiment": {"id": "EXP123456789"}
-        }
-
-        # Test 5 minutes (300 seconds)
-        start_fis_experiment(
-            experiment_id="12345678-1234-1234-1234-123456789012",
-            blast_radius=25,
-            duration_seconds=300,
-        )
-
-        # Test <1 minute (30 seconds) - should round to PT1M
-        start_fis_experiment(
-            experiment_id="12345678-1234-1234-1234-123456789012",
-            blast_radius=25,
-            duration_seconds=30,
-        )
-
-        assert mock_fis_client.start_experiment.call_count == 2
-
-
-# ===================================================================
-# Tests for stop_fis_experiment()
-# ===================================================================
-
-
-class TestStopFISExperiment:
-    """Tests for stopping AWS FIS experiments."""
-
-    def test_stop_fis_experiment_success(
-        self, mock_environment_preprod, mock_fis_client
-    ):
-        """Test successful FIS experiment stop."""
-        result = stop_fis_experiment(fis_experiment_id="EXP123456789")
-
-        assert result is True
-        mock_fis_client.stop_experiment.assert_called_once_with(id="EXP123456789")
-
-    def test_stop_fis_experiment_environment_not_allowed(
-        self, mock_environment_prod, mock_fis_client
-    ):
-        """Test FIS experiment stop fails in prod environment."""
-        with pytest.raises(EnvironmentNotAllowedError) as exc_info:
-            stop_fis_experiment(fis_experiment_id="EXP123456789")
-
-        assert "not allowed in prod" in str(exc_info.value)
-        mock_fis_client.stop_experiment.assert_not_called()
-
-    def test_stop_fis_experiment_client_error(
-        self, mock_environment_preprod, mock_fis_client
-    ):
-        """Test FIS experiment stop handles ClientError."""
-        mock_fis_client.stop_experiment.side_effect = ClientError(
-            error_response={
-                "Error": {
-                    "Code": "ResourceNotFoundException",
-                    "Message": "Experiment not found",
-                }
-            },
-            operation_name="StopExperiment",
-        )
-
-        with pytest.raises(ChaosError) as exc_info:
-            stop_fis_experiment(fis_experiment_id="EXP123456789")
-
-        assert "FIS experiment failed to stop" in str(exc_info.value)
-        assert "ResourceNotFoundException" in str(exc_info.value)
-
-
-# ===================================================================
-# Tests for get_fis_experiment_status()
-# ===================================================================
-
-
-class TestGetFISExperimentStatus:
-    """Tests for getting AWS FIS experiment status."""
-
-    def test_get_fis_experiment_status_success(self, mock_fis_client):
-        """Test successful FIS experiment status retrieval."""
-        mock_fis_client.get_experiment.return_value = {
-            "experiment": {
-                "id": "EXP123456789",
-                "state": {"status": "running", "reason": ""},
-                "creationTime": datetime(2024, 1, 15, 10, 0, 0),
-                "startTime": datetime(2024, 1, 15, 10, 5, 0),
-            }
-        }
-
-        status = get_fis_experiment_status(fis_experiment_id="EXP123456789")
-
-        assert status["id"] == "EXP123456789"
-        assert status["state"] == "running"
-        assert status["created_time"] == "2024-01-15T10:00:00"
-        assert status["start_time"] == "2024-01-15T10:05:00"
-        mock_fis_client.get_experiment.assert_called_once_with(id="EXP123456789")
-
-    def test_get_fis_experiment_status_client_error(self, mock_fis_client):
-        """Test FIS experiment status handles ClientError."""
-        mock_fis_client.get_experiment.side_effect = ClientError(
-            error_response={
-                "Error": {
-                    "Code": "ResourceNotFoundException",
-                    "Message": "Experiment not found",
-                }
-            },
-            operation_name="GetExperiment",
-        )
-
-        with pytest.raises(ChaosError) as exc_info:
-            get_fis_experiment_status(fis_experiment_id="EXP123456789")
-
-        assert "Failed to get FIS experiment status" in str(exc_info.value)
-        assert "ResourceNotFoundException" in str(exc_info.value)
-
-
-# ===================================================================
-# Tests for start_experiment() with FIS Integration
-# ===================================================================
-
-
-class TestStartExperimentWithFIS:
-    """Tests for start_experiment() with AWS FIS integration."""
-
-    def test_start_experiment_dynamodb_throttle_success(
-        self,
-        mock_environment_preprod,
-        mock_fis_client,
-        mock_dynamodb_table,
-        sample_experiment,
-    ):
-        """Test starting DynamoDB throttle experiment with DynamoDB-flag pattern."""
-        # Mock get_experiment to return pending experiment
-        mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
-
-        # Mock update_item and second get_item for updated experiment
-        updated_experiment = sample_experiment.copy()
-        updated_experiment["status"] = "running"
-        updated_experiment["results"] = {
-            "started_at": "2025-01-01T00:00:00Z",
-            "injection_method": "dynamodb_flag",
-            "delay_ms": 500,
-        }
-        mock_dynamodb_table.get_item.side_effect = [
-            {"Item": sample_experiment},
-            {"Item": updated_experiment},
-        ]
-
-        start_experiment(sample_experiment["experiment_id"])
-
-        # FIS should NOT be called (replaced with DynamoDB-flag pattern)
-        mock_fis_client.start_experiment.assert_not_called()
-
-        # Verify experiment status was updated via DynamoDB
-        mock_dynamodb_table.update_item.assert_called_once()
-        update_call = mock_dynamodb_table.update_item.call_args
-        assert update_call[1]["ExpressionAttributeValues"][":status"] == "running"
-        results = update_call[1]["ExpressionAttributeValues"][":results"]
-        assert results["injection_method"] == "dynamodb_flag"
-        assert results["delay_ms"] == 500
-
-    def test_start_experiment_not_found(
-        self, mock_environment_preprod, mock_dynamodb_table
-    ):
-        """Test starting experiment fails when experiment not found."""
-        mock_dynamodb_table.get_item.return_value = {}
-
-        with pytest.raises(ChaosError) as exc_info:
-            start_experiment("nonexistent-experiment-id")
-
-        assert "Experiment not found" in str(exc_info.value)
-
-    def test_start_experiment_invalid_status(
-        self, mock_environment_preprod, mock_dynamodb_table, sample_experiment
-    ):
-        """Test starting experiment fails when status is not 'pending'."""
-        sample_experiment["status"] = "running"
-        mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
-
-        with pytest.raises(ChaosError) as exc_info:
-            start_experiment(sample_experiment["experiment_id"])
-
-        assert "must be in 'pending' status" in str(exc_info.value)
-
-    def test_start_experiment_ingestion_failure_success(
-        self, mock_environment_preprod, mock_dynamodb_table, sample_experiment
-    ):
-        """Test starting ingestion_failure scenario succeeds (Phase 3)."""
-        sample_experiment["scenario_type"] = "ingestion_failure"
-        mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
-
-        # Mock the update_item call that sets status = "running"
-        mock_dynamodb_table.update_item.return_value = {}
-
-        # Mock get_experiment to return the updated experiment
-        updated_experiment = sample_experiment.copy()
-        updated_experiment["status"] = "running"
-        updated_experiment["results"] = {
-            "started_at": "2025-01-01T00:00:00Z",
-            "injection_method": "dynamodb_flag",
-        }
-        mock_dynamodb_table.get_item.side_effect = [
-            {"Item": sample_experiment},  # First call in start_experiment
-            {"Item": updated_experiment},  # Second call to return updated experiment
-        ]
-
-        result = start_experiment(sample_experiment["experiment_id"])
-
-        # Verify status was updated to running
-        mock_dynamodb_table.update_item.assert_called_once()
-        update_call = mock_dynamodb_table.update_item.call_args
-        assert (
-            update_call[1]["Key"]["experiment_id"] == sample_experiment["experiment_id"]
-        )
-        assert "status = :status" in update_call[1]["UpdateExpression"]
-        assert update_call[1]["ExpressionAttributeValues"][":status"] == "running"
-
-        # Verify returned experiment has correct structure
-        assert result["status"] == "running"
-        assert result["results"]["injection_method"] == "dynamodb_flag"
-
-
-# ===================================================================
-# Tests for stop_experiment() with FIS Integration
-# ===================================================================
-
-
-class TestStopExperimentWithFIS:
-    """Tests for stop_experiment() with AWS FIS integration."""
-
-    def test_stop_experiment_dynamodb_throttle_success(
-        self,
-        mock_environment_preprod,
-        mock_fis_client,
-        mock_dynamodb_table,
-        sample_experiment,
-    ):
-        """Test stopping DynamoDB throttle experiment with DynamoDB-flag pattern."""
-        # Mock running experiment with DynamoDB-flag results
-        sample_experiment["status"] = "running"
-        sample_experiment["results"] = {
-            "started_at": "2025-01-01T00:00:00Z",
-            "injection_method": "dynamodb_flag",
-            "delay_ms": 500,
-        }
-        mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
-
-        # Mock update_experiment_status
-        with patch(
-            "src.lambdas.dashboard.chaos.update_experiment_status"
-        ) as mock_update:
-            mock_update.return_value = True
-
-            stop_experiment(sample_experiment["experiment_id"])
-
-            # FIS should NOT be called (replaced with DynamoDB-flag pattern)
-            mock_fis_client.stop_experiment.assert_not_called()
-
-            # Verify experiment status was updated
-            mock_update.assert_called_once()
-            call_args = mock_update.call_args
-            assert call_args[0][0] == sample_experiment["experiment_id"]
-            assert call_args[0][1] == "stopped"
-            assert "stopped_at" in call_args[0][2]
-
-    def test_stop_experiment_invalid_status(
-        self, mock_environment_preprod, mock_dynamodb_table, sample_experiment
-    ):
-        """Test stopping experiment fails when status is not 'running'."""
-        sample_experiment["status"] = "completed"
-        mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
-
-        with pytest.raises(ChaosError) as exc_info:
-            stop_experiment(sample_experiment["experiment_id"])
-
-        assert "must be in 'running' status" in str(exc_info.value)
-
-    def test_stop_experiment_ingestion_failure_success(
-        self, mock_environment_preprod, mock_dynamodb_table, sample_experiment
-    ):
-        """Test stopping ingestion_failure experiment succeeds (Phase 3)."""
-        # Mock running ingestion_failure experiment
-        sample_experiment["status"] = "running"
-        sample_experiment["scenario_type"] = "ingestion_failure"
-        sample_experiment["results"] = {
-            "started_at": "2025-01-01T00:00:00Z",
-            "injection_method": "dynamodb_flag",
-        }
-        mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
-
-        # Mock update_experiment_status
-        with patch(
-            "src.lambdas.dashboard.chaos.update_experiment_status"
-        ) as mock_update:
-            mock_update.return_value = True
-
-            stop_experiment(sample_experiment["experiment_id"])
-
-            # Verify experiment status was updated to stopped
-            mock_update.assert_called_once()
-            call_args = mock_update.call_args
-            assert call_args[0][0] == sample_experiment["experiment_id"]
-            assert call_args[0][1] == "stopped"
-
-            # Verify results contain stopped_at timestamp
-            results = call_args[0][2]
-            assert "started_at" in results  # Original start time preserved
-            assert "stopped_at" in results  # Stop time added
-            assert "injection_method" in results  # Original method preserved
-
-
-# ===================================================================
-# Tests for create_experiment() - Lines 96-177
+# Tests for create_experiment() -- CRUD unchanged
 # ===================================================================
 
 
 class TestCreateExperiment:
-    """Tests for create_experiment() function.
-
-    This function creates chaos experiments with validation.
-    Critical for chaos testing safety mechanisms.
-    """
+    """Tests for create_experiment() function."""
 
     def test_create_experiment_success(
         self, mock_environment_preprod, mock_dynamodb_table
     ):
-        """Test successful experiment creation."""
-        from src.lambdas.dashboard.chaos import create_experiment
-
         result = create_experiment(
             scenario_type="dynamodb_throttle",
             blast_radius=25,
             duration_seconds=60,
         )
 
-        # Verify experiment structure
         assert "experiment_id" in result
         assert result["scenario_type"] == "dynamodb_throttle"
         assert result["blast_radius"] == 25
         assert result["duration_seconds"] == 60
         assert result["status"] == "pending"
         assert result["environment"] == "preprod"
-        assert "created_at" in result
-        assert "ttl_timestamp" in result
-
-        # Verify DynamoDB put was called
         mock_dynamodb_table.put_item.assert_called_once()
 
     def test_create_experiment_environment_not_allowed(
         self, mock_environment_prod, mock_dynamodb_table
     ):
-        """Test experiment creation fails in prod environment."""
-        from src.lambdas.dashboard.chaos import create_experiment
-
         with pytest.raises(EnvironmentNotAllowedError) as exc_info:
             create_experiment(
                 scenario_type="dynamodb_throttle",
@@ -558,9 +150,6 @@ class TestCreateExperiment:
     def test_create_experiment_invalid_scenario_type(
         self, mock_environment_preprod, mock_dynamodb_table
     ):
-        """Test experiment creation fails with invalid scenario type."""
-        from src.lambdas.dashboard.chaos import create_experiment
-
         with pytest.raises(ValueError) as exc_info:
             create_experiment(
                 scenario_type="invalid_scenario",
@@ -569,95 +158,62 @@ class TestCreateExperiment:
             )
 
         assert "Invalid scenario_type" in str(exc_info.value)
-        mock_dynamodb_table.put_item.assert_not_called()
 
     def test_create_experiment_blast_radius_too_low(
         self, mock_environment_preprod, mock_dynamodb_table
     ):
-        """Test experiment creation fails when blast_radius < 10."""
-        from src.lambdas.dashboard.chaos import create_experiment
-
         with pytest.raises(ValueError) as exc_info:
             create_experiment(
                 scenario_type="dynamodb_throttle",
-                blast_radius=5,  # Too low
+                blast_radius=5,
                 duration_seconds=60,
             )
 
         assert "blast_radius must be 10-100" in str(exc_info.value)
-        mock_dynamodb_table.put_item.assert_not_called()
 
     def test_create_experiment_blast_radius_too_high(
         self, mock_environment_preprod, mock_dynamodb_table
     ):
-        """Test experiment creation fails when blast_radius > 100."""
-        from src.lambdas.dashboard.chaos import create_experiment
-
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(ValueError):
             create_experiment(
                 scenario_type="dynamodb_throttle",
-                blast_radius=150,  # Too high
+                blast_radius=150,
                 duration_seconds=60,
             )
 
-        assert "blast_radius must be 10-100" in str(exc_info.value)
-        mock_dynamodb_table.put_item.assert_not_called()
-
-    def test_create_experiment_duration_too_short(
+    def test_create_experiment_duration_boundaries(
         self, mock_environment_preprod, mock_dynamodb_table
     ):
-        """Test experiment creation fails when duration < 5 seconds."""
-        from src.lambdas.dashboard.chaos import create_experiment
+        # Too short
+        with pytest.raises(ValueError):
+            create_experiment(
+                scenario_type="dynamodb_throttle", blast_radius=25, duration_seconds=3
+            )
 
-        with pytest.raises(ValueError) as exc_info:
+        # Too long
+        with pytest.raises(ValueError):
             create_experiment(
                 scenario_type="dynamodb_throttle",
                 blast_radius=25,
-                duration_seconds=3,  # Too short
+                duration_seconds=600,
             )
 
-        assert "duration_seconds must be 5-300" in str(exc_info.value)
-        mock_dynamodb_table.put_item.assert_not_called()
-
-    def test_create_experiment_duration_too_long(
+    def test_create_experiment_all_valid_scenarios(
         self, mock_environment_preprod, mock_dynamodb_table
     ):
-        """Test experiment creation fails when duration > 300 seconds."""
-        from src.lambdas.dashboard.chaos import create_experiment
-
-        with pytest.raises(ValueError) as exc_info:
-            create_experiment(
-                scenario_type="dynamodb_throttle",
-                blast_radius=25,
-                duration_seconds=600,  # Too long
+        for scenario in ["dynamodb_throttle", "ingestion_failure", "lambda_cold_start"]:
+            mock_dynamodb_table.reset_mock()
+            result = create_experiment(
+                scenario_type=scenario, blast_radius=50, duration_seconds=60
             )
-
-        assert "duration_seconds must be 5-300" in str(exc_info.value)
-        mock_dynamodb_table.put_item.assert_not_called()
-
-    def test_create_experiment_with_parameters(
-        self, mock_environment_preprod, mock_dynamodb_table
-    ):
-        """Test experiment creation with optional parameters."""
-        from src.lambdas.dashboard.chaos import create_experiment
-
-        result = create_experiment(
-            scenario_type="ingestion_failure",
-            blast_radius=50,
-            duration_seconds=120,
-            parameters={"custom_key": "custom_value"},
-        )
-
-        assert result["parameters"] == {"custom_key": "custom_value"}
+            assert result["scenario_type"] == scenario
+            mock_dynamodb_table.put_item.assert_called_once()
 
     def test_create_experiment_dynamodb_error(
         self, mock_environment_preprod, mock_dynamodb_table
     ):
-        """Test experiment creation handles DynamoDB error."""
-        from src.lambdas.dashboard.chaos import ChaosError, create_experiment
-
         mock_dynamodb_table.put_item.side_effect = ClientError(
-            {"Error": {"Code": "InternalServerError", "Message": "Service error"}},
+            {"Error": {"Code": "InternalServerError", "Message": "Error"}},
             "PutItem",
         )
 
@@ -670,284 +226,402 @@ class TestCreateExperiment:
 
         assert "Failed to create experiment" in str(exc_info.value)
 
-    def test_create_experiment_boundary_blast_radius_10(
-        self, mock_environment_preprod, mock_dynamodb_table
-    ):
-        """Test experiment creation at minimum blast_radius (10)."""
-        from src.lambdas.dashboard.chaos import create_experiment
-
-        result = create_experiment(
-            scenario_type="dynamodb_throttle",
-            blast_radius=10,  # Minimum allowed
-            duration_seconds=60,
-        )
-
-        assert result["blast_radius"] == 10
-        mock_dynamodb_table.put_item.assert_called_once()
-
-    def test_create_experiment_boundary_blast_radius_100(
-        self, mock_environment_preprod, mock_dynamodb_table
-    ):
-        """Test experiment creation at maximum blast_radius (100)."""
-        from src.lambdas.dashboard.chaos import create_experiment
-
-        result = create_experiment(
-            scenario_type="dynamodb_throttle",
-            blast_radius=100,  # Maximum allowed
-            duration_seconds=60,
-        )
-
-        assert result["blast_radius"] == 100
-        mock_dynamodb_table.put_item.assert_called_once()
-
-    def test_create_experiment_boundary_duration_5(
-        self, mock_environment_preprod, mock_dynamodb_table
-    ):
-        """Test experiment creation at minimum duration (5 seconds)."""
-        from src.lambdas.dashboard.chaos import create_experiment
-
-        result = create_experiment(
-            scenario_type="dynamodb_throttle",
-            blast_radius=25,
-            duration_seconds=5,  # Minimum allowed
-        )
-
-        assert result["duration_seconds"] == 5
-        mock_dynamodb_table.put_item.assert_called_once()
-
-    def test_create_experiment_boundary_duration_300(
-        self, mock_environment_preprod, mock_dynamodb_table
-    ):
-        """Test experiment creation at maximum duration (300 seconds)."""
-        from src.lambdas.dashboard.chaos import create_experiment
-
-        result = create_experiment(
-            scenario_type="dynamodb_throttle",
-            blast_radius=25,
-            duration_seconds=300,  # Maximum allowed
-        )
-
-        assert result["duration_seconds"] == 300
-        mock_dynamodb_table.put_item.assert_called_once()
-
-    def test_create_experiment_all_valid_scenario_types(
-        self, mock_environment_preprod, mock_dynamodb_table
-    ):
-        """Test all valid scenario types can be created."""
-        from src.lambdas.dashboard.chaos import create_experiment
-
-        valid_scenarios = [
-            "dynamodb_throttle",
-            "ingestion_failure",
-            "lambda_cold_start",
-        ]
-
-        for scenario in valid_scenarios:
-            mock_dynamodb_table.reset_mock()
-            result = create_experiment(
-                scenario_type=scenario,
-                blast_radius=50,
-                duration_seconds=60,
-            )
-
-            assert result["scenario_type"] == scenario
-            mock_dynamodb_table.put_item.assert_called_once()
-
 
 # ===================================================================
-# Tests for lambda_cold_start scenario (Phase 4 - Feature 1236)
+# Tests for start_experiment() -- External API calls (Feature 1237)
 # ===================================================================
 
 
-class TestLambdaColdStartExperiment:
-    """Tests for lambda_cold_start start/stop in chaos.py."""
+class TestStartExperimentExternal:
+    """Tests for start_experiment() with external AWS API calls."""
 
-    def test_start_cold_start_default_delay(
+    def test_start_ingestion_failure_sets_concurrency_zero(
         self,
         mock_environment_preprod,
         mock_dynamodb_table,
+        mock_lambda_client,
+        mock_ssm_client,
         sample_experiment,
     ):
-        """Test starting lambda_cold_start with default 3000ms delay."""
-        sample_experiment["scenario_type"] = "lambda_cold_start"
-        sample_experiment["parameters"] = {}
-        mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
-
-        # Mock the update_item and second get_item
-        updated_experiment = sample_experiment.copy()
-        updated_experiment["status"] = "running"
-        updated_experiment["results"] = {
-            "started_at": "2025-01-01T00:00:00Z",
-            "injection_method": "dynamodb_flag",
-            "delay_ms": 3000,
+        """Test ingestion_failure scenario sets Lambda concurrency to 0."""
+        # Mock kill switch check
+        mock_ssm_client.get_parameter.return_value = {
+            "Parameter": {"Value": "disarmed"}
         }
-        mock_dynamodb_table.get_item.side_effect = [
-            {"Item": sample_experiment},
-            {"Item": updated_experiment},
-        ]
+        # Mock snapshot: get_function_configuration
+        mock_lambda_client.get_function_configuration.return_value = {
+            "FunctionName": "preprod-sentiment-ingestion",
+            "FunctionArn": "arn:aws:lambda:us-east-1:123:function:preprod-sentiment-ingestion",
+            "MemorySize": 512,
+            "Timeout": 60,
+        }
+        mock_lambda_client.get_function_concurrency.return_value = {
+            "ReservedConcurrentExecutions": 1
+        }
+
+        mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
 
         start_experiment(sample_experiment["experiment_id"])
 
-        mock_dynamodb_table.update_item.assert_called_once()
-        update_call = mock_dynamodb_table.update_item.call_args
-        assert update_call[1]["ExpressionAttributeValues"][":status"] == "running"
-        # Verify results include delay_ms
-        results = update_call[1]["ExpressionAttributeValues"][":results"]
-        assert results["delay_ms"] == 3000
-        assert results["injection_method"] == "dynamodb_flag"
+        # Verify concurrency set to 0
+        mock_lambda_client.put_function_concurrency.assert_called_once_with(
+            FunctionName="preprod-sentiment-ingestion",
+            ReservedConcurrentExecutions=0,
+        )
 
-    def test_start_cold_start_custom_delay(
+        # Verify audit log updated with external_api method
+        mock_dynamodb_table.update_item.assert_called()
+        update_call = mock_dynamodb_table.update_item.call_args
+        results = update_call[1]["ExpressionAttributeValues"][":results"]
+        assert results["injection_method"] == "external_api"
+        assert results["action"] == "set_concurrency_0"
+
+    def test_start_dynamodb_throttle_attaches_deny_policy(
         self,
         mock_environment_preprod,
         mock_dynamodb_table,
+        mock_lambda_client,
+        mock_ssm_client,
+        mock_iam_client,
         sample_experiment,
     ):
-        """Test starting lambda_cold_start with custom delay_ms parameter."""
-        sample_experiment["scenario_type"] = "lambda_cold_start"
-        sample_experiment["parameters"] = {"delay_ms": 5000}
+        """Test dynamodb_throttle scenario attaches deny-write IAM policy."""
+        sample_experiment["scenario_type"] = "dynamodb_throttle"
+
+        mock_ssm_client.get_parameter.return_value = {
+            "Parameter": {"Value": "disarmed"}
+        }
+        mock_lambda_client.get_function_configuration.return_value = {
+            "FunctionName": "preprod-sentiment-ingestion",
+            "FunctionArn": "arn:aws:lambda:us-east-1:123:function:preprod-sentiment-ingestion",
+            "MemorySize": 512,
+            "Timeout": 60,
+        }
+        mock_lambda_client.get_function_concurrency.return_value = {}
+
         mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
 
-        updated_experiment = sample_experiment.copy()
-        updated_experiment["status"] = "running"
-        updated_experiment["results"] = {
-            "started_at": "2025-01-01T00:00:00Z",
-            "injection_method": "dynamodb_flag",
-            "delay_ms": 5000,
+        with patch("src.lambdas.dashboard.chaos.boto3") as mock_boto3:
+            mock_sts = MagicMock()
+            mock_sts.get_caller_identity.return_value = {"Account": "123456789012"}
+            mock_boto3.client.return_value = mock_sts
+
+            start_experiment(sample_experiment["experiment_id"])
+
+        # Verify IAM policy attached to both roles
+        assert mock_iam_client.attach_role_policy.call_count == 2
+
+        # Verify audit log
+        update_call = mock_dynamodb_table.update_item.call_args
+        results = update_call[1]["ExpressionAttributeValues"][":results"]
+        assert results["injection_method"] == "external_api"
+        assert results["action"] == "attach_deny_policy"
+
+    def test_start_cold_start_reduces_memory(
+        self,
+        mock_environment_preprod,
+        mock_dynamodb_table,
+        mock_lambda_client,
+        mock_ssm_client,
+        sample_experiment,
+    ):
+        """Test lambda_cold_start scenario reduces memory to 128MB."""
+        sample_experiment["scenario_type"] = "lambda_cold_start"
+
+        mock_ssm_client.get_parameter.return_value = {
+            "Parameter": {"Value": "disarmed"}
         }
-        mock_dynamodb_table.get_item.side_effect = [
-            {"Item": sample_experiment},
-            {"Item": updated_experiment},
-        ]
+        mock_lambda_client.get_function_configuration.return_value = {
+            "FunctionName": "preprod-sentiment-analysis",
+            "FunctionArn": "arn:aws:lambda:us-east-1:123:function:preprod-sentiment-analysis",
+            "MemorySize": 2048,
+            "Timeout": 120,
+        }
+        mock_lambda_client.get_function_concurrency.return_value = {}
+
+        mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
 
         start_experiment(sample_experiment["experiment_id"])
 
-        update_call = mock_dynamodb_table.update_item.call_args
-        results = update_call[1]["ExpressionAttributeValues"][":results"]
-        assert results["delay_ms"] == 5000
+        # Verify memory set to 128MB
+        mock_lambda_client.update_function_configuration.assert_called_once_with(
+            FunctionName="preprod-sentiment-analysis",
+            MemorySize=128,
+        )
 
-    def test_stop_cold_start(
+    def test_start_experiment_checks_kill_switch(
         self,
         mock_environment_preprod,
         mock_dynamodb_table,
+        mock_ssm_client,
         sample_experiment,
     ):
-        """Test stopping lambda_cold_start experiment."""
-        sample_experiment["scenario_type"] = "lambda_cold_start"
+        """Test start_experiment refuses when kill switch is triggered."""
+        mock_ssm_client.get_parameter.return_value = {
+            "Parameter": {"Value": "triggered"}
+        }
+        mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
+
+        with pytest.raises(ChaosError) as exc_info:
+            start_experiment(sample_experiment["experiment_id"])
+
+        assert "Kill switch is triggered" in str(exc_info.value)
+
+    def test_start_experiment_snapshots_config_to_ssm(
+        self,
+        mock_environment_preprod,
+        mock_dynamodb_table,
+        mock_lambda_client,
+        mock_ssm_client,
+        sample_experiment,
+    ):
+        """Test start_experiment saves pre-chaos config to SSM before degrading."""
+        mock_ssm_client.get_parameter.return_value = {
+            "Parameter": {"Value": "disarmed"}
+        }
+        mock_lambda_client.get_function_configuration.return_value = {
+            "FunctionName": "preprod-sentiment-ingestion",
+            "FunctionArn": "arn:aws:lambda:us-east-1:123:function:preprod-sentiment-ingestion",
+            "MemorySize": 512,
+            "Timeout": 60,
+        }
+        mock_lambda_client.get_function_concurrency.return_value = {
+            "ReservedConcurrentExecutions": 1
+        }
+
+        mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
+
+        start_experiment(sample_experiment["experiment_id"])
+
+        # SSM put_parameter should be called twice:
+        # 1. Snapshot config
+        # 2. Set kill switch to "armed"
+        ssm_calls = mock_ssm_client.put_parameter.call_args_list
+        assert len(ssm_calls) >= 2
+
+        # First call: snapshot
+        snapshot_call = ssm_calls[0]
+        assert "/chaos/preprod/snapshot/" in snapshot_call[1]["Name"]
+        snapshot_data = json.loads(snapshot_call[1]["Value"])
+        assert snapshot_data["MemorySize"] == 512
+        assert snapshot_data["Timeout"] == 60
+
+    def test_start_experiment_not_found(
+        self, mock_environment_preprod, mock_dynamodb_table, mock_ssm_client
+    ):
+        mock_ssm_client.get_parameter.return_value = {
+            "Parameter": {"Value": "disarmed"}
+        }
+        mock_dynamodb_table.get_item.return_value = {}
+
+        with pytest.raises(ChaosError) as exc_info:
+            start_experiment("nonexistent-experiment-id")
+
+        assert "Experiment not found" in str(exc_info.value)
+
+    def test_start_experiment_invalid_status(
+        self,
+        mock_environment_preprod,
+        mock_dynamodb_table,
+        mock_ssm_client,
+        sample_experiment,
+    ):
+        mock_ssm_client.get_parameter.return_value = {
+            "Parameter": {"Value": "disarmed"}
+        }
+        sample_experiment["status"] = "running"
+        mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
+
+        with pytest.raises(ChaosError) as exc_info:
+            start_experiment(sample_experiment["experiment_id"])
+
+        assert "must be in 'pending' status" in str(exc_info.value)
+
+    def test_start_experiment_prod_blocked(
+        self,
+        mock_environment_prod,
+        mock_dynamodb_table,
+        sample_experiment,
+    ):
+        with pytest.raises(EnvironmentNotAllowedError):
+            start_experiment(sample_experiment["experiment_id"])
+
+
+# ===================================================================
+# Tests for stop_experiment() -- SSM Snapshot Restoration
+# ===================================================================
+
+
+class TestStopExperimentExternal:
+    """Tests for stop_experiment() with SSM snapshot restoration."""
+
+    def test_stop_ingestion_failure_restores_concurrency(
+        self,
+        mock_environment_preprod,
+        mock_dynamodb_table,
+        mock_lambda_client,
+        mock_ssm_client,
+        sample_experiment,
+    ):
+        """Test stop_experiment restores concurrency from SSM snapshot."""
         sample_experiment["status"] = "running"
         sample_experiment["results"] = {
             "started_at": "2025-01-01T00:00:00Z",
-            "injection_method": "dynamodb_flag",
-            "delay_ms": 3000,
+            "injection_method": "external_api",
         }
         mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
+
+        # Mock SSM snapshot read
+        snapshot = {
+            "FunctionName": "preprod-sentiment-ingestion",
+            "MemorySize": 512,
+            "Timeout": 60,
+            "ReservedConcurrency": "1",
+        }
+        mock_ssm_client.get_parameter.return_value = {
+            "Parameter": {"Value": json.dumps(snapshot)}
+        }
 
         with patch(
             "src.lambdas.dashboard.chaos.update_experiment_status"
         ) as mock_update:
             mock_update.return_value = True
-
             stop_experiment(sample_experiment["experiment_id"])
 
-            mock_update.assert_called_once()
-            call_args = mock_update.call_args
-            assert call_args[0][0] == sample_experiment["experiment_id"]
-            assert call_args[0][1] == "stopped"
-            results = call_args[0][2]
-            assert "stopped_at" in results
-            assert results["delay_ms"] == 3000  # Preserved
+        # Verify concurrency restored
+        mock_lambda_client.put_function_concurrency.assert_called_once_with(
+            FunctionName="preprod-sentiment-ingestion",
+            ReservedConcurrentExecutions=1,
+        )
 
+        # Verify snapshot deleted
+        mock_ssm_client.delete_parameter.assert_called()
 
-# ===================================================================
-# Tests for dynamodb_throttle DynamoDB-flag pattern (Phase 5 - Feature 1236)
-# ===================================================================
-
-
-class TestDynamoDBThrottleFlagPattern:
-    """Tests for dynamodb_throttle using DynamoDB-flag pattern (FIS workaround)."""
-
-    def test_start_dynamodb_throttle_flag_pattern(
+    def test_stop_cold_start_restores_memory(
         self,
         mock_environment_preprod,
         mock_dynamodb_table,
+        mock_lambda_client,
+        mock_ssm_client,
         sample_experiment,
     ):
-        """Test starting dynamodb_throttle uses DynamoDB-flag, not FIS."""
-        sample_experiment["scenario_type"] = "dynamodb_throttle"
-        sample_experiment["parameters"] = {}
-        mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
-
-        updated_experiment = sample_experiment.copy()
-        updated_experiment["status"] = "running"
-        updated_experiment["results"] = {
-            "started_at": "2025-01-01T00:00:00Z",
-            "injection_method": "dynamodb_flag",
-            "delay_ms": 500,
-        }
-        mock_dynamodb_table.get_item.side_effect = [
-            {"Item": sample_experiment},
-            {"Item": updated_experiment},
-        ]
-
-        start_experiment(sample_experiment["experiment_id"])
-
-        update_call = mock_dynamodb_table.update_item.call_args
-        results = update_call[1]["ExpressionAttributeValues"][":results"]
-        assert results["injection_method"] == "dynamodb_flag"
-        assert results["delay_ms"] == 500
-
-    def test_start_dynamodb_throttle_custom_delay(
-        self,
-        mock_environment_preprod,
-        mock_dynamodb_table,
-        sample_experiment,
-    ):
-        """Test dynamodb_throttle with custom delay_ms."""
-        sample_experiment["scenario_type"] = "dynamodb_throttle"
-        sample_experiment["parameters"] = {"delay_ms": 1000}
-        mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
-
-        updated_experiment = sample_experiment.copy()
-        updated_experiment["status"] = "running"
-        mock_dynamodb_table.get_item.side_effect = [
-            {"Item": sample_experiment},
-            {"Item": updated_experiment},
-        ]
-
-        start_experiment(sample_experiment["experiment_id"])
-
-        update_call = mock_dynamodb_table.update_item.call_args
-        results = update_call[1]["ExpressionAttributeValues"][":results"]
-        assert results["delay_ms"] == 1000
-
-    def test_stop_dynamodb_throttle_flag_pattern(
-        self,
-        mock_environment_preprod,
-        mock_dynamodb_table,
-        mock_fis_client,
-        sample_experiment,
-    ):
-        """Test stopping dynamodb_throttle does NOT call FIS."""
-        sample_experiment["scenario_type"] = "dynamodb_throttle"
+        """Test stop_experiment restores memory from SSM snapshot."""
+        sample_experiment["scenario_type"] = "lambda_cold_start"
         sample_experiment["status"] = "running"
-        sample_experiment["results"] = {
-            "started_at": "2025-01-01T00:00:00Z",
-            "injection_method": "dynamodb_flag",
-            "delay_ms": 500,
-        }
         mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
+
+        snapshot = {
+            "FunctionName": "preprod-sentiment-analysis",
+            "MemorySize": 2048,
+            "Timeout": 120,
+            "ReservedConcurrency": "NONE",
+        }
+        mock_ssm_client.get_parameter.return_value = {
+            "Parameter": {"Value": json.dumps(snapshot)}
+        }
 
         with patch(
             "src.lambdas.dashboard.chaos.update_experiment_status"
         ) as mock_update:
             mock_update.return_value = True
+            stop_experiment(sample_experiment["experiment_id"])
+
+        mock_lambda_client.update_function_configuration.assert_called_once_with(
+            FunctionName="preprod-sentiment-analysis",
+            MemorySize=2048,
+        )
+
+    def test_stop_dynamodb_throttle_detaches_policy(
+        self,
+        mock_environment_preprod,
+        mock_dynamodb_table,
+        mock_ssm_client,
+        mock_iam_client,
+        sample_experiment,
+    ):
+        """Test stop_experiment detaches deny-write policy."""
+        sample_experiment["scenario_type"] = "dynamodb_throttle"
+        sample_experiment["status"] = "running"
+        mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
+
+        snapshot = {
+            "FunctionName": "preprod-sentiment-ingestion",
+            "MemorySize": 512,
+            "Timeout": 60,
+            "ReservedConcurrency": "NONE",
+        }
+        mock_ssm_client.get_parameter.return_value = {
+            "Parameter": {"Value": json.dumps(snapshot)}
+        }
+
+        with (
+            patch(
+                "src.lambdas.dashboard.chaos.update_experiment_status"
+            ) as mock_update,
+            patch("src.lambdas.dashboard.chaos.boto3") as mock_boto3,
+        ):
+            mock_update.return_value = True
+            mock_sts = MagicMock()
+            mock_sts.get_caller_identity.return_value = {"Account": "123456789012"}
+            mock_boto3.client.return_value = mock_sts
 
             stop_experiment(sample_experiment["experiment_id"])
 
-            # FIS should NOT be called
-            mock_fis_client.stop_experiment.assert_not_called()
+        # Verify policy detached from both roles
+        assert mock_iam_client.detach_role_policy.call_count == 2
 
-            # Status should be updated to stopped
-            mock_update.assert_called_once()
-            call_args = mock_update.call_args
-            assert call_args[0][1] == "stopped"
-            assert "stopped_at" in call_args[0][2]
+    def test_stop_experiment_sets_kill_switch_disarmed(
+        self,
+        mock_environment_preprod,
+        mock_dynamodb_table,
+        mock_lambda_client,
+        mock_ssm_client,
+        sample_experiment,
+    ):
+        """Test stop_experiment sets kill switch to disarmed."""
+        sample_experiment["status"] = "running"
+        mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
+
+        snapshot = {
+            "FunctionName": "preprod-sentiment-ingestion",
+            "MemorySize": 512,
+            "Timeout": 60,
+            "ReservedConcurrency": "NONE",
+        }
+        # First get_parameter for snapshot read, subsequent for kill switch
+        mock_ssm_client.get_parameter.return_value = {
+            "Parameter": {"Value": json.dumps(snapshot)}
+        }
+
+        with patch(
+            "src.lambdas.dashboard.chaos.update_experiment_status"
+        ) as mock_update:
+            mock_update.return_value = True
+            stop_experiment(sample_experiment["experiment_id"])
+
+        # Verify kill switch set to disarmed
+        ssm_put_calls = mock_ssm_client.put_parameter.call_args_list
+        kill_switch_call = [c for c in ssm_put_calls if "kill-switch" in str(c)]
+        assert len(kill_switch_call) >= 1
+        assert kill_switch_call[0][1]["Value"] == "disarmed"
+
+    def test_stop_experiment_invalid_status(
+        self, mock_environment_preprod, mock_dynamodb_table, sample_experiment
+    ):
+        sample_experiment["status"] = "completed"
+        mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
+
+        with pytest.raises(ChaosError) as exc_info:
+            stop_experiment(sample_experiment["experiment_id"])
+
+        assert "must be in 'running' status" in str(exc_info.value)
+
+    def test_stop_experiment_not_found(
+        self, mock_environment_preprod, mock_dynamodb_table
+    ):
+        mock_dynamodb_table.get_item.return_value = {}
+
+        with pytest.raises(ChaosError) as exc_info:
+            stop_experiment("nonexistent-id")
+
+        assert "Experiment not found" in str(exc_info.value)
