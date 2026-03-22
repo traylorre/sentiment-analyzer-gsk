@@ -125,7 +125,7 @@ resource "aws_cloudwatch_log_group" "fis_experiments" {
 # Scripts manage the value at runtime; Terraform only creates the parameter.
 # checkov:skip=CKV2_AWS_34:Kill switch is a non-secret state flag (disarmed/armed/triggered), encryption unnecessary
 resource "aws_ssm_parameter" "chaos_kill_switch" {
-  count = var.environment != "prod" ? 1 : 0
+  count = var.enable_chaos_testing && var.environment != "prod" ? 1 : 0
   name  = "/chaos/${var.environment}/kill-switch"
   type  = "String"
   value = "disarmed"
@@ -145,7 +145,7 @@ resource "aws_ssm_parameter" "chaos_kill_switch" {
 # Pre-created deny-write policy for DynamoDB throttle chaos scenario.
 # This policy is always present but only attached to roles during chaos injection.
 resource "aws_iam_policy" "chaos_deny_dynamodb_write" {
-  count = var.environment != "prod" ? 1 : 0
+  count = var.enable_chaos_testing && var.environment != "prod" ? 1 : 0
   name  = "${var.environment}-chaos-deny-dynamodb-write"
 
   policy = jsonencode({
@@ -176,7 +176,7 @@ resource "aws_iam_policy" "chaos_deny_dynamodb_write" {
 # Chaos-engineer IAM role: least-privilege for external chaos operations.
 # Requires MFA and limited to 1-hour sessions.
 resource "aws_iam_role" "chaos_engineer" {
-  count = var.environment != "prod" ? 1 : 0
+  count = var.enable_chaos_testing && var.environment != "prod" ? 1 : 0
   name  = "${var.environment}-chaos-engineer"
 
   assume_role_policy = jsonencode({
