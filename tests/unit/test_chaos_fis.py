@@ -322,33 +322,35 @@ class TestStartExperimentWithFIS:
         mock_dynamodb_table,
         sample_experiment,
     ):
-        """Test starting DynamoDB throttle experiment with FIS."""
+        """Test starting DynamoDB throttle experiment with DynamoDB-flag pattern."""
         # Mock get_experiment to return pending experiment
         mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
 
-        # Mock FIS start
-        mock_fis_client.start_experiment.return_value = {
-            "experiment": {"id": "EXP123456789"}
+        # Mock update_item and second get_item for updated experiment
+        updated_experiment = sample_experiment.copy()
+        updated_experiment["status"] = "running"
+        updated_experiment["results"] = {
+            "started_at": "2025-01-01T00:00:00Z",
+            "injection_method": "dynamodb_flag",
+            "delay_ms": 500,
         }
+        mock_dynamodb_table.get_item.side_effect = [
+            {"Item": sample_experiment},
+            {"Item": updated_experiment},
+        ]
 
-        # Mock update_experiment_status
-        with patch(
-            "src.lambdas.dashboard.chaos.update_experiment_status"
-        ) as mock_update:
-            mock_update.return_value = True
+        start_experiment(sample_experiment["experiment_id"])
 
-            start_experiment(sample_experiment["experiment_id"])
+        # FIS should NOT be called (replaced with DynamoDB-flag pattern)
+        mock_fis_client.start_experiment.assert_not_called()
 
-            # Verify FIS experiment was started
-            mock_fis_client.start_experiment.assert_called_once()
-
-            # Verify experiment status was updated
-            mock_update.assert_called_once()
-            call_args = mock_update.call_args
-            assert call_args[0][0] == sample_experiment["experiment_id"]
-            assert call_args[0][1] == "running"
-            assert "fis_experiment_id" in call_args[0][2]
-            assert call_args[0][2]["fis_experiment_id"] == "EXP123456789"
+        # Verify experiment status was updated via DynamoDB
+        mock_dynamodb_table.update_item.assert_called_once()
+        update_call = mock_dynamodb_table.update_item.call_args
+        assert update_call[1]["ExpressionAttributeValues"][":status"] == "running"
+        results = update_call[1]["ExpressionAttributeValues"][":results"]
+        assert results["injection_method"] == "dynamodb_flag"
+        assert results["delay_ms"] == 500
 
     def test_start_experiment_not_found(
         self, mock_environment_preprod, mock_dynamodb_table
@@ -426,10 +428,14 @@ class TestStopExperimentWithFIS:
         mock_dynamodb_table,
         sample_experiment,
     ):
-        """Test stopping DynamoDB throttle experiment with FIS."""
-        # Mock running experiment with FIS experiment ID
+        """Test stopping DynamoDB throttle experiment with DynamoDB-flag pattern."""
+        # Mock running experiment with DynamoDB-flag results
         sample_experiment["status"] = "running"
-        sample_experiment["results"] = {"fis_experiment_id": "EXP123456789"}
+        sample_experiment["results"] = {
+            "started_at": "2025-01-01T00:00:00Z",
+            "injection_method": "dynamodb_flag",
+            "delay_ms": 500,
+        }
         mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
 
         # Mock update_experiment_status
@@ -440,8 +446,8 @@ class TestStopExperimentWithFIS:
 
             stop_experiment(sample_experiment["experiment_id"])
 
-            # Verify FIS experiment was stopped
-            mock_fis_client.stop_experiment.assert_called_once_with(id="EXP123456789")
+            # FIS should NOT be called (replaced with DynamoDB-flag pattern)
+            mock_fis_client.stop_experiment.assert_not_called()
 
             # Verify experiment status was updated
             mock_update.assert_called_once()
@@ -449,19 +455,6 @@ class TestStopExperimentWithFIS:
             assert call_args[0][0] == sample_experiment["experiment_id"]
             assert call_args[0][1] == "stopped"
             assert "stopped_at" in call_args[0][2]
-
-    def test_stop_experiment_missing_fis_id(
-        self, mock_environment_preprod, mock_dynamodb_table, sample_experiment
-    ):
-        """Test stopping experiment fails when FIS experiment ID missing."""
-        sample_experiment["status"] = "running"
-        sample_experiment["results"] = {}  # No FIS experiment ID
-        mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
-
-        with pytest.raises(ChaosError) as exc_info:
-            stop_experiment(sample_experiment["experiment_id"])
-
-        assert "FIS experiment ID not found" in str(exc_info.value)
 
     def test_stop_experiment_invalid_status(
         self, mock_environment_preprod, mock_dynamodb_table, sample_experiment
@@ -759,3 +752,202 @@ class TestCreateExperiment:
 
             assert result["scenario_type"] == scenario
             mock_dynamodb_table.put_item.assert_called_once()
+
+
+# ===================================================================
+# Tests for lambda_cold_start scenario (Phase 4 - Feature 1236)
+# ===================================================================
+
+
+class TestLambdaColdStartExperiment:
+    """Tests for lambda_cold_start start/stop in chaos.py."""
+
+    def test_start_cold_start_default_delay(
+        self,
+        mock_environment_preprod,
+        mock_dynamodb_table,
+        sample_experiment,
+    ):
+        """Test starting lambda_cold_start with default 3000ms delay."""
+        sample_experiment["scenario_type"] = "lambda_cold_start"
+        sample_experiment["parameters"] = {}
+        mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
+
+        # Mock the update_item and second get_item
+        updated_experiment = sample_experiment.copy()
+        updated_experiment["status"] = "running"
+        updated_experiment["results"] = {
+            "started_at": "2025-01-01T00:00:00Z",
+            "injection_method": "dynamodb_flag",
+            "delay_ms": 3000,
+        }
+        mock_dynamodb_table.get_item.side_effect = [
+            {"Item": sample_experiment},
+            {"Item": updated_experiment},
+        ]
+
+        start_experiment(sample_experiment["experiment_id"])
+
+        mock_dynamodb_table.update_item.assert_called_once()
+        update_call = mock_dynamodb_table.update_item.call_args
+        assert update_call[1]["ExpressionAttributeValues"][":status"] == "running"
+        # Verify results include delay_ms
+        results = update_call[1]["ExpressionAttributeValues"][":results"]
+        assert results["delay_ms"] == 3000
+        assert results["injection_method"] == "dynamodb_flag"
+
+    def test_start_cold_start_custom_delay(
+        self,
+        mock_environment_preprod,
+        mock_dynamodb_table,
+        sample_experiment,
+    ):
+        """Test starting lambda_cold_start with custom delay_ms parameter."""
+        sample_experiment["scenario_type"] = "lambda_cold_start"
+        sample_experiment["parameters"] = {"delay_ms": 5000}
+        mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
+
+        updated_experiment = sample_experiment.copy()
+        updated_experiment["status"] = "running"
+        updated_experiment["results"] = {
+            "started_at": "2025-01-01T00:00:00Z",
+            "injection_method": "dynamodb_flag",
+            "delay_ms": 5000,
+        }
+        mock_dynamodb_table.get_item.side_effect = [
+            {"Item": sample_experiment},
+            {"Item": updated_experiment},
+        ]
+
+        start_experiment(sample_experiment["experiment_id"])
+
+        update_call = mock_dynamodb_table.update_item.call_args
+        results = update_call[1]["ExpressionAttributeValues"][":results"]
+        assert results["delay_ms"] == 5000
+
+    def test_stop_cold_start(
+        self,
+        mock_environment_preprod,
+        mock_dynamodb_table,
+        sample_experiment,
+    ):
+        """Test stopping lambda_cold_start experiment."""
+        sample_experiment["scenario_type"] = "lambda_cold_start"
+        sample_experiment["status"] = "running"
+        sample_experiment["results"] = {
+            "started_at": "2025-01-01T00:00:00Z",
+            "injection_method": "dynamodb_flag",
+            "delay_ms": 3000,
+        }
+        mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
+
+        with patch(
+            "src.lambdas.dashboard.chaos.update_experiment_status"
+        ) as mock_update:
+            mock_update.return_value = True
+
+            stop_experiment(sample_experiment["experiment_id"])
+
+            mock_update.assert_called_once()
+            call_args = mock_update.call_args
+            assert call_args[0][0] == sample_experiment["experiment_id"]
+            assert call_args[0][1] == "stopped"
+            results = call_args[0][2]
+            assert "stopped_at" in results
+            assert results["delay_ms"] == 3000  # Preserved
+
+
+# ===================================================================
+# Tests for dynamodb_throttle DynamoDB-flag pattern (Phase 5 - Feature 1236)
+# ===================================================================
+
+
+class TestDynamoDBThrottleFlagPattern:
+    """Tests for dynamodb_throttle using DynamoDB-flag pattern (FIS workaround)."""
+
+    def test_start_dynamodb_throttle_flag_pattern(
+        self,
+        mock_environment_preprod,
+        mock_dynamodb_table,
+        sample_experiment,
+    ):
+        """Test starting dynamodb_throttle uses DynamoDB-flag, not FIS."""
+        sample_experiment["scenario_type"] = "dynamodb_throttle"
+        sample_experiment["parameters"] = {}
+        mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
+
+        updated_experiment = sample_experiment.copy()
+        updated_experiment["status"] = "running"
+        updated_experiment["results"] = {
+            "started_at": "2025-01-01T00:00:00Z",
+            "injection_method": "dynamodb_flag",
+            "delay_ms": 500,
+        }
+        mock_dynamodb_table.get_item.side_effect = [
+            {"Item": sample_experiment},
+            {"Item": updated_experiment},
+        ]
+
+        start_experiment(sample_experiment["experiment_id"])
+
+        update_call = mock_dynamodb_table.update_item.call_args
+        results = update_call[1]["ExpressionAttributeValues"][":results"]
+        assert results["injection_method"] == "dynamodb_flag"
+        assert results["delay_ms"] == 500
+
+    def test_start_dynamodb_throttle_custom_delay(
+        self,
+        mock_environment_preprod,
+        mock_dynamodb_table,
+        sample_experiment,
+    ):
+        """Test dynamodb_throttle with custom delay_ms."""
+        sample_experiment["scenario_type"] = "dynamodb_throttle"
+        sample_experiment["parameters"] = {"delay_ms": 1000}
+        mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
+
+        updated_experiment = sample_experiment.copy()
+        updated_experiment["status"] = "running"
+        mock_dynamodb_table.get_item.side_effect = [
+            {"Item": sample_experiment},
+            {"Item": updated_experiment},
+        ]
+
+        start_experiment(sample_experiment["experiment_id"])
+
+        update_call = mock_dynamodb_table.update_item.call_args
+        results = update_call[1]["ExpressionAttributeValues"][":results"]
+        assert results["delay_ms"] == 1000
+
+    def test_stop_dynamodb_throttle_flag_pattern(
+        self,
+        mock_environment_preprod,
+        mock_dynamodb_table,
+        mock_fis_client,
+        sample_experiment,
+    ):
+        """Test stopping dynamodb_throttle does NOT call FIS."""
+        sample_experiment["scenario_type"] = "dynamodb_throttle"
+        sample_experiment["status"] = "running"
+        sample_experiment["results"] = {
+            "started_at": "2025-01-01T00:00:00Z",
+            "injection_method": "dynamodb_flag",
+            "delay_ms": 500,
+        }
+        mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
+
+        with patch(
+            "src.lambdas.dashboard.chaos.update_experiment_status"
+        ) as mock_update:
+            mock_update.return_value = True
+
+            stop_experiment(sample_experiment["experiment_id"])
+
+            # FIS should NOT be called
+            mock_fis_client.stop_experiment.assert_not_called()
+
+            # Status should be updated to stopped
+            mock_update.assert_called_once()
+            call_args = mock_update.call_args
+            assert call_args[0][1] == "stopped"
+            assert "stopped_at" in call_args[0][2]

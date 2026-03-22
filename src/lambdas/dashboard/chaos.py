@@ -573,21 +573,17 @@ def start_experiment(experiment_id: str) -> dict[str, Any]:
         )
 
     scenario_type = experiment["scenario_type"]
-    blast_radius = experiment["blast_radius"]
-    duration_seconds = experiment["duration_seconds"]
 
     try:
         # Route to appropriate chaos implementation
         if scenario_type == "dynamodb_throttle":
-            # AWS FIS integration (Phase 2)
-            fis_experiment_id = start_fis_experiment(
-                experiment_id, blast_radius, duration_seconds
-            )
-
-            # Update experiment with FIS experiment ID
+            # App-level throttle injection (FIS provider bug workaround)
+            delay_ms = int(experiment.get("parameters", {}).get("delay_ms", 500))
             results = {
-                "fis_experiment_id": fis_experiment_id,
                 "started_at": datetime.now(UTC).isoformat() + "Z",
+                "injection_method": "dynamodb_flag",
+                "delay_ms": delay_ms,
+                "note": "Lambdas will inject delay_ms before DynamoDB writes while experiment is running",
             }
             update_experiment_status(experiment_id, "running", results)
 
@@ -603,8 +599,15 @@ def start_experiment(experiment_id: str) -> dict[str, Any]:
             update_experiment_status(experiment_id, "running", results)
 
         elif scenario_type == "lambda_cold_start":
-            # Phase 4: Lambda delay injection
-            raise ChaosError("lambda_cold_start scenario not yet implemented (Phase 4)")
+            # Phase 4: Lambda delay injection via DynamoDB flag
+            delay_ms = int(experiment.get("parameters", {}).get("delay_ms", 3000))
+            results = {
+                "started_at": datetime.now(UTC).isoformat() + "Z",
+                "injection_method": "dynamodb_flag",
+                "delay_ms": delay_ms,
+                "note": "Analysis Lambda will inject delay_ms before processing while experiment is running",
+            }
+            update_experiment_status(experiment_id, "running", results)
 
         else:
             raise ValueError(f"Unknown scenario_type: {scenario_type}")
@@ -652,14 +655,7 @@ def stop_experiment(experiment_id: str) -> dict[str, Any]:
     try:
         # Route to appropriate stop implementation
         if scenario_type == "dynamodb_throttle":
-            # AWS FIS integration (Phase 2)
-            fis_experiment_id = experiment.get("results", {}).get("fis_experiment_id")
-            if not fis_experiment_id:
-                raise ChaosError("FIS experiment ID not found in experiment results")
-
-            stop_fis_experiment(fis_experiment_id)
-
-            # Update experiment status
+            # App-level throttle stop (FIS provider bug workaround)
             results = experiment.get("results", {})
             results["stopped_at"] = datetime.now(UTC).isoformat() + "Z"
             update_experiment_status(experiment_id, "stopped", results)
@@ -673,7 +669,9 @@ def stop_experiment(experiment_id: str) -> dict[str, Any]:
 
         elif scenario_type == "lambda_cold_start":
             # Phase 4: Stop Lambda delay injection
-            raise ChaosError("lambda_cold_start scenario not yet implemented (Phase 4)")
+            results = experiment.get("results", {})
+            results["stopped_at"] = datetime.now(UTC).isoformat() + "Z"
+            update_experiment_status(experiment_id, "stopped", results)
 
         else:
             raise ValueError(f"Unknown scenario_type: {scenario_type}")
