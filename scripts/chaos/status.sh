@@ -37,6 +37,32 @@ KILL_SWITCH=$(aws ssm get-parameter \
 echo "Kill Switch: $KILL_SWITCH"
 echo ""
 
+# Baseline health check (Feature 1238)
+echo "Dependency Health:"
+echo "-----------------"
+
+# DynamoDB
+DDB_STATUS="healthy"
+aws dynamodb describe-table --table-name "${ENVIRONMENT}-users" --no-cli-pager >/dev/null 2>&1 || DDB_STATUS="degraded"
+echo "  DynamoDB:   $DDB_STATUS"
+
+# SSM
+SSM_STATUS="healthy"
+aws ssm get-parameter --name "/chaos/${ENVIRONMENT}/kill-switch" --no-cli-pager >/dev/null 2>&1 || SSM_STATUS="degraded"
+echo "  SSM:        $SSM_STATUS"
+
+# CloudWatch
+CW_STATUS="healthy"
+aws cloudwatch describe-alarms --alarm-names "${ENVIRONMENT}-critical-composite" --max-records 1 --no-cli-pager >/dev/null 2>&1 || CW_STATUS="degraded"
+echo "  CloudWatch: $CW_STATUS"
+
+# Lambda
+LAM_STATUS="healthy"
+aws lambda get-function --function-name "${ENVIRONMENT}-sentiment-ingestion" --no-cli-pager >/dev/null 2>&1 || LAM_STATUS="degraded"
+echo "  Lambda:     $LAM_STATUS"
+
+echo ""
+
 # Active snapshots (indicates active chaos scenarios)
 SNAPSHOTS=$(list_snapshots "$ENVIRONMENT")
 SNAPSHOT_COUNT=$(echo "$SNAPSHOTS" | python3 -c "import json,sys; data=json.load(sys.stdin); print(len(data))")

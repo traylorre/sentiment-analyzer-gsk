@@ -87,9 +87,15 @@ fi
 
 info "Chaos injection: scenario=$SCENARIO env=$ENVIRONMENT target=$TARGET"
 
-# Check kill switch
-KILL_SWITCH=$(check_kill_switch "$ENVIRONMENT")
-info "Kill switch state: $KILL_SWITCH"
+# Check gate state (Feature 1238: dual-mode observability)
+GATE=$(check_kill_switch "$ENVIRONMENT")
+info "Gate state: $GATE"
+
+# Override dry_run if gate is disarmed
+if [[ "$GATE" != "armed" && "$DRY_RUN" != "true" ]]; then
+    DRY_RUN=true
+    warn "Gate is $GATE -- running in DRY-RUN mode (no infrastructure changes)"
+fi
 
 # ============================================================================
 # Scenario implementations
@@ -216,7 +222,7 @@ inject_api_timeout() {
 # Execute
 # ============================================================================
 
-# Set kill switch to armed
+# Set kill switch to armed (only if not dry-run)
 if [[ "$DRY_RUN" != "true" ]]; then
     set_kill_switch "$ENVIRONMENT" "armed"
 fi
@@ -232,11 +238,12 @@ esac
 
 # Log experiment to DynamoDB audit table
 if [[ "$DRY_RUN" != "true" ]]; then
-    EXPERIMENT_ID=$(log_experiment "$ENVIRONMENT" "$SCENARIO" "running" "target=$TARGET,duration=$DURATION")
+    EXPERIMENT_ID=$(log_experiment "$ENVIRONMENT" "$SCENARIO" "running" "target=$TARGET,duration=$DURATION,dry_run=false,gate=$GATE")
     info "Experiment logged: $EXPERIMENT_ID"
     info "Auto-restore in ${DURATION}s. Run 'scripts/chaos/restore.sh $ENVIRONMENT' to restore manually."
 else
-    info "[DRY-RUN] Would log experiment to DynamoDB"
+    EXPERIMENT_ID=$(log_experiment "$ENVIRONMENT" "$SCENARIO" "running" "target=$TARGET,duration=$DURATION,dry_run=true,gate=$GATE" 2>/dev/null || echo "dry-run-no-id")
+    info "[DRY-RUN] Experiment logged (dry_run=true): $EXPERIMENT_ID"
 fi
 
-info "Chaos injection complete: $SCENARIO on $ENVIRONMENT"
+info "Chaos injection complete: $SCENARIO on $ENVIRONMENT (gate=$GATE, dry_run=$DRY_RUN)"

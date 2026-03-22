@@ -449,6 +449,147 @@ def _enforce_kill_switch():
         )
 
 
+def _check_gate() -> str:
+    """Check chaos gate state from SSM.
+
+    Returns:
+        "armed" - gate open, proceed with real infrastructure changes
+        "disarmed" - gate closed, record signals but skip infrastructure changes (dry-run)
+
+    Raises:
+        ChaosError: if gate is "triggered" (emergency stop) or SSM unreachable (fail-closed)
+    """
+    ssm = _get_ssm_client()
+    try:
+        param = ssm.get_parameter(Name=f"/chaos/{ENVIRONMENT}/kill-switch")
+        value = param["Parameter"]["Value"]
+        if value == "triggered":
+            raise ChaosError("Kill switch triggered — all chaos operations blocked")
+        return value  # "armed" or "disarmed"
+    except ChaosError:
+        raise
+    except ssm.exceptions.ParameterNotFound:
+        return "disarmed"  # Default safe state
+    except Exception as e:
+        raise ChaosError(
+            f"Cannot verify chaos gate (SSM unavailable) — blocking for safety: {e}"
+        ) from e
+
+
+def _capture_baseline(env: str) -> dict[str, Any]:
+    """Capture current system health metrics as baseline.
+
+    Checks key dependencies to detect concurrent issues.
+    Returns dict with health status of each dependency.
+    """
+    baseline: dict[str, Any] = {
+        "captured_at": datetime.now(UTC).isoformat() + "Z",
+        "dependencies": {},
+    }
+
+    # Check DynamoDB health
+    try:
+        dynamodb = boto3.client("dynamodb")
+        dynamodb.describe_table(TableName=f"{env}-users")
+        baseline["dependencies"]["dynamodb"] = {
+            "status": "healthy",
+            "latency_ms": 0,
+        }
+    except Exception as e:
+        baseline["dependencies"]["dynamodb"] = {
+            "status": "degraded",
+            "error": str(e),
+        }
+
+    # Check SSM health
+    try:
+        ssm = _get_ssm_client()
+        ssm.get_parameter(Name=f"/chaos/{env}/kill-switch")
+        baseline["dependencies"]["ssm"] = {"status": "healthy"}
+    except Exception as e:
+        baseline["dependencies"]["ssm"] = {
+            "status": "degraded",
+            "error": str(e),
+        }
+
+    # Check CloudWatch health (can we read metrics?)
+    try:
+        cw = boto3.client("cloudwatch")
+        cw.describe_alarms(AlarmNames=[f"{env}-critical-composite"], MaxRecords=1)
+        baseline["dependencies"]["cloudwatch"] = {"status": "healthy"}
+    except Exception as e:
+        baseline["dependencies"]["cloudwatch"] = {
+            "status": "degraded",
+            "error": str(e),
+        }
+
+    # Check Lambda health (can we read configs?)
+    try:
+        lam = _get_lambda_client()
+        lam.get_function(FunctionName=f"{env}-sentiment-ingestion")
+        baseline["dependencies"]["lambda"] = {"status": "healthy"}
+    except Exception as e:
+        baseline["dependencies"]["lambda"] = {
+            "status": "degraded",
+            "error": str(e),
+        }
+
+    # Flag if ANY dependency is degraded
+    degraded = [
+        k for k, v in baseline["dependencies"].items() if v["status"] != "healthy"
+    ]
+    baseline["all_healthy"] = len(degraded) == 0
+    baseline["degraded_services"] = degraded
+
+    if degraded:
+        baseline["warning"] = (
+            f"CONCURRENT ISSUE DETECTED: {', '.join(degraded)} degraded BEFORE "
+            "chaos injection. Results may be unreliable — cannot distinguish "
+            "chaos-induced failures from pre-existing ones."
+        )
+
+    return baseline
+
+
+def _capture_post_chaos_health(env: str, baseline: dict[str, Any]) -> dict[str, Any]:
+    """Capture post-chaos health and compare with baseline.
+
+    Detects:
+    - Recovery: things that were degraded and recovered
+    - New issues: things healthy at baseline but degraded now
+    - Persistent: things degraded both before and after (concurrent issue, not chaos-related)
+    """
+    current = _capture_baseline(env)
+    comparison: dict[str, Any] = {
+        "captured_at": current["captured_at"],
+        "recovered": [],
+        "new_issues": [],
+        "persistent_issues": [],
+        "all_healthy": current["all_healthy"],
+    }
+
+    baseline_degraded = set(baseline.get("degraded_services", []))
+    current_degraded = set(current.get("degraded_services", []))
+
+    comparison["recovered"] = list(baseline_degraded - current_degraded)
+    comparison["new_issues"] = list(current_degraded - baseline_degraded)
+    comparison["persistent_issues"] = list(baseline_degraded & current_degraded)
+
+    if comparison["persistent_issues"]:
+        comparison["warning"] = (
+            f"PERSISTENT ISSUES: {', '.join(comparison['persistent_issues'])} were degraded "
+            "before AND after chaos. These are NOT chaos-related — investigate independently."
+        )
+
+    if comparison["new_issues"]:
+        comparison["warning"] = (
+            f"NEW ISSUES POST-CHAOS: {', '.join(comparison['new_issues'])} became degraded "
+            "during chaos. May be chaos-induced OR coincidental outage."
+        )
+
+    return comparison
+
+
 def _set_kill_switch(value: str) -> None:
     """Set kill switch to given value."""
     try:
@@ -610,6 +751,11 @@ def start_experiment(experiment_id: str) -> dict[str, Any]:
     degrades infrastructure: sets concurrency to 0, attaches deny policies,
     or reduces memory. Lambda handlers are completely unaware.
 
+    Gate pattern (Feature 1238):
+        - "armed": proceed with real infrastructure changes
+        - "disarmed": record signals but skip infrastructure changes (dry-run)
+        - "triggered": raise ChaosError (emergency stop)
+
     Args:
         experiment_id: Experiment UUID
 
@@ -621,8 +767,9 @@ def start_experiment(experiment_id: str) -> dict[str, Any]:
     """
     check_environment_allowed()
 
-    # Check kill switch (fail-closed: blocks if SSM unreachable)
-    _enforce_kill_switch()
+    # Check gate state (fail-closed: blocks if SSM unreachable or triggered)
+    gate = _check_gate()
+    dry_run = gate != "armed"
 
     # Get experiment details
     experiment = get_experiment(experiment_id)
@@ -638,27 +785,36 @@ def start_experiment(experiment_id: str) -> dict[str, Any]:
     scenario_type = experiment["scenario_type"]
 
     try:
+        # Capture baseline health BEFORE any chaos injection
+        baseline = _capture_baseline(ENVIRONMENT)
+        if baseline.get("degraded_services"):
+            logger.warning(
+                "Pre-chaos dependency degradation detected",
+                extra={"degraded": baseline["degraded_services"]},
+            )
+
         if scenario_type == "ingestion_failure":
             # Ingestion Lambda is EventBridge-triggered (scheduled), NOT Function URL.
             # Setting concurrency=0 works correctly for EventBridge-triggered Lambdas:
             # EventBridge will receive throttle errors and route to DLQ.
             func_name = f"{ENVIRONMENT}-sentiment-ingestion"
-            _snapshot_to_ssm(scenario_type, func_name)
-            _get_lambda_client().put_function_concurrency(
-                FunctionName=func_name,
-                ReservedConcurrentExecutions=0,
-            )
+            if not dry_run:
+                _snapshot_to_ssm(scenario_type, func_name)
+                _get_lambda_client().put_function_concurrency(
+                    FunctionName=func_name,
+                    ReservedConcurrentExecutions=0,
+                )
             results = {
                 "started_at": datetime.now(UTC).isoformat() + "Z",
-                "injection_method": "external_api",
-                "action": "set_concurrency_0",
-                "function": func_name,
-                "note": "Lambda concurrency set to 0 -- all invocations throttled",
+                "injection_method": "concurrency_zero",
+                "function_name": func_name,
+                "dry_run": dry_run,
+                "gate_state": gate,
+                "baseline": baseline,
             }
 
         elif scenario_type == "dynamodb_throttle":
             func_name = f"{ENVIRONMENT}-sentiment-ingestion"
-            _snapshot_to_ssm(scenario_type, func_name)
             account_id = boto3.client("sts").get_caller_identity()["Account"]
             policy_arn = (
                 f"arn:aws:iam::{account_id}:policy/"
@@ -668,89 +824,88 @@ def start_experiment(experiment_id: str) -> dict[str, Any]:
                 f"{ENVIRONMENT}-ingestion-lambda-role",
                 f"{ENVIRONMENT}-analysis-lambda-role",
             ]
-            for role in roles:
-                _get_iam_client().attach_role_policy(
-                    RoleName=role, PolicyArn=policy_arn
-                )
-            # IAM policy propagation takes up to 60 seconds. Sleep briefly to
-            # increase probability of consistent behavior on first invocation.
-            time.sleep(5)
+            if not dry_run:
+                _snapshot_to_ssm(scenario_type, func_name)
+                for role in roles:
+                    _get_iam_client().attach_role_policy(
+                        RoleName=role, PolicyArn=policy_arn
+                    )
+                # IAM policy propagation takes up to 60 seconds. Sleep briefly to
+                # increase probability of consistent behavior on first invocation.
+                time.sleep(5)
             results = {
                 "started_at": datetime.now(UTC).isoformat() + "Z",
-                "injection_method": "external_api",
-                "action": "attach_deny_policy",
+                "injection_method": "attach_deny_policy",
                 "policy": policy_arn,
                 "roles": roles,
-                "note": "Deny-write policy attached -- DynamoDB writes will fail with AccessDenied",
+                "dry_run": dry_run,
+                "gate_state": gate,
+                "baseline": baseline,
             }
 
         elif scenario_type == "lambda_cold_start":
             func_name = f"{ENVIRONMENT}-sentiment-analysis"
-            _snapshot_to_ssm(scenario_type, func_name)
-            _get_lambda_client().update_function_configuration(
-                FunctionName=func_name,
-                MemorySize=128,
-            )
+            if not dry_run:
+                _snapshot_to_ssm(scenario_type, func_name)
+                _get_lambda_client().update_function_configuration(
+                    FunctionName=func_name,
+                    MemorySize=128,
+                )
             results = {
                 "started_at": datetime.now(UTC).isoformat() + "Z",
-                "injection_method": "external_api",
-                "action": "set_memory_128",
-                "function": func_name,
-                "note": "Memory set to 128MB -- cold starts will be significantly slower",
+                "injection_method": "set_memory_128",
+                "function_name": func_name,
+                "dry_run": dry_run,
+                "gate_state": gate,
+                "baseline": baseline,
             }
 
         elif scenario_type == "trigger_failure":
             rule_name = f"{ENVIRONMENT}-sentiment-ingestion-schedule"
-            # Snapshot current state
-            events_client = boto3.client("events")
-            rule = events_client.describe_rule(Name=rule_name)
-            results = {
-                "snapshot": {
-                    "rule_name": rule_name,
-                    "state": rule.get("State", "ENABLED"),
-                }
-            }
-            # Disable rule
-            events_client.disable_rule(Name=rule_name)
-            results["started_at"] = datetime.now(UTC).isoformat() + "Z"
-            results["injection_method"] = "eventbridge_disable"
-            results["rule_name"] = rule_name
-            # Also snapshot the ingestion Lambda config for SSM
             func_name = f"{ENVIRONMENT}-sentiment-ingestion"
-            _snapshot_to_ssm(scenario_type, func_name)
+            if not dry_run:
+                # Snapshot current state and disable rule
+                events_client = boto3.client("events")
+                events_client.describe_rule(Name=rule_name)  # Verify rule exists
+                events_client.disable_rule(Name=rule_name)
+                _snapshot_to_ssm(scenario_type, func_name)
+            results = {
+                "started_at": datetime.now(UTC).isoformat() + "Z",
+                "injection_method": "eventbridge_disable",
+                "rule_name": rule_name,
+                "dry_run": dry_run,
+                "gate_state": gate,
+                "baseline": baseline,
+            }
 
         elif scenario_type == "api_timeout":
             func_name = (
                 f"{ENVIRONMENT}-sentiment-"
                 f"{experiment.get('parameters', {}).get('target', 'ingestion')}"
             )
-            lambda_client = _get_lambda_client()
-            # Snapshot current timeout
-            config = lambda_client.get_function_configuration(FunctionName=func_name)
-            original_timeout = config["Timeout"]
-            results = {
-                "snapshot": {"function_name": func_name, "timeout": original_timeout}
-            }
-            # Set timeout to specified value (default 1 second)
-            # NOTE: Timeout reduction only affects NEW invocations. In-flight requests
-            # continue until their original timeout. For immediate effect, combine with
-            # ingestion_failure (concurrency=0) to stop new invocations.
             timeout = int(experiment.get("parameters", {}).get("timeout", 1))
-            lambda_client.update_function_configuration(
-                FunctionName=func_name, Timeout=timeout
-            )
-            # Also save to SSM for standard restore path
-            _snapshot_to_ssm(scenario_type, func_name)
-            results["started_at"] = datetime.now(UTC).isoformat() + "Z"
-            results["injection_method"] = "timeout_reduction"
-            results["function_name"] = func_name
-            results["timeout"] = timeout
+            if not dry_run:
+                lambda_client = _get_lambda_client()
+                _snapshot_to_ssm(scenario_type, func_name)
+                lambda_client.update_function_configuration(
+                    FunctionName=func_name, Timeout=timeout
+                )
+            results = {
+                "started_at": datetime.now(UTC).isoformat() + "Z",
+                "injection_method": "timeout_reduction",
+                "function_name": func_name,
+                "timeout": timeout,
+                "dry_run": dry_run,
+                "gate_state": gate,
+                "baseline": baseline,
+            }
 
         else:
             raise ValueError(f"Unknown scenario_type: {scenario_type}")
 
-        # Set kill switch to armed
-        _set_kill_switch("armed")
+        # Set kill switch to armed (only if not dry-run)
+        if not dry_run:
+            _set_kill_switch("armed")
 
         # Update audit log
         update_experiment_status(experiment_id, "running", results)
@@ -774,6 +929,10 @@ def stop_experiment(experiment_id: str) -> dict[str, Any]:
 
     Reads the pre-chaos configuration from SSM and restores the original
     Lambda configuration, IAM policies, or EventBridge rules.
+
+    Post-chaos health comparison (Feature 1238):
+        Captures current health and compares with baseline to detect
+        recovery, new issues, and persistent (pre-existing) problems.
 
     Args:
         experiment_id: Experiment UUID
@@ -801,23 +960,33 @@ def stop_experiment(experiment_id: str) -> dict[str, Any]:
         )
 
     scenario_type = experiment["scenario_type"]
+    was_dry_run = experiment.get("results", {}).get("dry_run", False)
 
     try:
-        # Restore from SSM snapshot
-        snapshot = _restore_from_ssm(scenario_type)
+        # Only restore from SSM if this was NOT a dry-run
+        snapshot = {}
+        if not was_dry_run:
+            snapshot = _restore_from_ssm(scenario_type)
 
         # Set kill switch to disarmed
         _set_kill_switch("disarmed")
 
-        # Update audit log
+        # Update audit log with post-chaos health comparison
         results = experiment.get("results", {})
         results["stopped_at"] = datetime.now(UTC).isoformat() + "Z"
-        results["restore_method"] = "ssm_snapshot"
+        results["restore_method"] = (
+            "ssm_snapshot" if not was_dry_run else "dry_run_no_restore"
+        )
         results["restored_config"] = {
             "MemorySize": snapshot.get("MemorySize"),
             "Timeout": snapshot.get("Timeout"),
             "ReservedConcurrency": snapshot.get("ReservedConcurrency"),
         }
+
+        # Capture post-chaos health and compare with baseline
+        baseline = results.get("baseline", {})
+        results["post_chaos_health"] = _capture_post_chaos_health(ENVIRONMENT, baseline)
+
         update_experiment_status(experiment_id, "stopped", results)
 
         # Return updated experiment
@@ -831,3 +1000,63 @@ def stop_experiment(experiment_id: str) -> dict[str, Any]:
             {"error": str(e), "failed_at": datetime.now(UTC).isoformat() + "Z"},
         )
         raise
+
+
+def get_experiment_report(experiment_id: str) -> dict[str, Any]:
+    """Generate a comprehensive chaos experiment report.
+
+    Returns structured report with:
+    - Experiment metadata (scenario, duration, dry_run)
+    - Baseline health (pre-chaos)
+    - Post-chaos health comparison
+    - Verdict (clean / compromised / inconclusive)
+    """
+    experiment = get_experiment(experiment_id)
+    if not experiment:
+        raise ChaosError(f"Experiment not found: {experiment_id}")
+
+    results = experiment.get("results", {})
+    baseline = results.get("baseline", {})
+    post_chaos = results.get("post_chaos_health", {})
+
+    report: dict[str, Any] = {
+        "experiment_id": experiment_id,
+        "scenario": experiment["scenario_type"],
+        "status": experiment["status"],
+        "dry_run": results.get("dry_run", False),
+        "duration_seconds": experiment.get("duration_seconds", 0),
+        "started_at": results.get("started_at"),
+        "stopped_at": results.get("stopped_at"),
+        "baseline": baseline,
+        "post_chaos": post_chaos,
+    }
+
+    # Determine verdict
+    if baseline.get("degraded_services"):
+        report["verdict"] = "COMPROMISED"
+        report["verdict_reason"] = (
+            f"Pre-existing degradation in {baseline['degraded_services']} — "
+            "results unreliable, cannot isolate chaos effects"
+        )
+    elif post_chaos.get("persistent_issues"):
+        report["verdict"] = "COMPROMISED"
+        report["verdict_reason"] = (
+            f"Persistent issues in {post_chaos['persistent_issues']} — "
+            "pre-existing problem, not chaos-related"
+        )
+    elif results.get("dry_run"):
+        report["verdict"] = "DRY_RUN_CLEAN"
+        report["verdict_reason"] = (
+            "Gate was disarmed — framework signaling verified, no infrastructure changes"
+        )
+    elif post_chaos.get("all_healthy"):
+        report["verdict"] = "CLEAN"
+        report["verdict_reason"] = "System recovered to healthy state after chaos"
+    elif post_chaos.get("new_issues"):
+        report["verdict"] = "RECOVERY_INCOMPLETE"
+        report["verdict_reason"] = f"New issues after chaos: {post_chaos['new_issues']}"
+    else:
+        report["verdict"] = "INCONCLUSIVE"
+        report["verdict_reason"] = "Insufficient data for verdict"
+
+    return report
