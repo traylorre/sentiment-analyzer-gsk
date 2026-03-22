@@ -132,7 +132,15 @@ restore_scenario() {
 
     snapshot_json=$(get_snapshot "$ENVIRONMENT" "$scenario_name")
     if [[ -z "$snapshot_json" ]]; then
-        warn "No snapshot found for $scenario_name -- skipping"
+        warn "WARNING: No snapshot found for $scenario_name in $ENVIRONMENT — cannot restore"
+        warn "Manual intervention may be required"
+        return
+    fi
+
+    # Validate snapshot is valid JSON before attempting restore
+    if ! echo "$snapshot_json" | python3 -c "import json,sys; json.load(sys.stdin)" 2>/dev/null; then
+        warn "WARNING: Corrupted snapshot for $scenario_name in $ENVIRONMENT — cannot parse JSON"
+        warn "Manual intervention required. Raw snapshot: $snapshot_json"
         return
     fi
 

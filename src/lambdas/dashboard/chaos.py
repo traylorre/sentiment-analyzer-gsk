@@ -19,6 +19,8 @@ Supported Scenarios:
     - ingestion_failure: Set Lambda concurrency to 0 (throttles all invocations)
     - dynamodb_throttle: Attach deny-write IAM policy to Lambda execution roles
     - lambda_cold_start: Reduce Lambda memory to 128MB (force cold starts)
+    - trigger_failure: Disable EventBridge ingestion schedule rule
+    - api_timeout: Reduce Lambda timeout to 1s (or custom value)
 
 Safety Mechanisms:
     - Environment gating (preprod/dev/test only)
@@ -30,6 +32,7 @@ Safety Mechanisms:
 import json
 import logging
 import os
+import time
 import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -145,7 +148,13 @@ def create_experiment(
     check_environment_allowed()
 
     # Validate parameters
-    valid_scenarios = ["dynamodb_throttle", "ingestion_failure", "lambda_cold_start"]
+    valid_scenarios = [
+        "dynamodb_throttle",
+        "ingestion_failure",
+        "lambda_cold_start",
+        "trigger_failure",
+        "api_timeout",
+    ]
     if scenario_type not in valid_scenarios:
         raise ValueError(
             f"Invalid scenario_type: {scenario_type}. "
@@ -410,14 +419,34 @@ def _deserialize_dynamodb_item(item: dict[str, Any]) -> dict[str, Any]:
 
 
 def _check_kill_switch() -> str:
-    """Check kill switch state. Returns 'disarmed', 'armed', or 'triggered'."""
+    """
+    Check kill switch state. Returns 'disarmed', 'armed', or 'triggered'.
+
+    FAIL-CLOSED: If SSM is unreachable, raises ChaosError to block injection.
+    This prevents chaos operations when we cannot verify safety state.
+    """
+    ssm = _get_ssm_client()
     try:
-        response = _get_ssm_client().get_parameter(
-            Name=f"/chaos/{ENVIRONMENT}/kill-switch"
-        )
+        response = ssm.get_parameter(Name=f"/chaos/{ENVIRONMENT}/kill-switch")
         return response["Parameter"]["Value"]
-    except ClientError:
-        return "disarmed"
+    except ssm.exceptions.ParameterNotFound:
+        return "disarmed"  # No kill switch parameter = first-time setup, proceed
+    except Exception as e:
+        # FAIL-CLOSED: if SSM is down, block injection
+        raise ChaosError(
+            "Cannot verify kill switch (SSM unavailable) — blocking injection "
+            f"for safety: {e}"
+        ) from e
+
+
+def _enforce_kill_switch():
+    """Check SSM kill switch. Raises ChaosError if triggered or unverifiable."""
+    kill_switch = _check_kill_switch()
+    if kill_switch == "triggered":
+        raise ChaosError(
+            "Kill switch is triggered — all chaos operations blocked. "
+            "Resolve before starting new experiments."
+        )
 
 
 def _set_kill_switch(value: str) -> None:
@@ -495,6 +524,10 @@ def _restore_from_ssm(scenario_type: str) -> dict[str, Any]:
         _restore_dynamodb_access()
     elif scenario_type == "lambda_cold_start":
         _restore_memory(snapshot)
+    elif scenario_type == "trigger_failure":
+        _restore_eventbridge_rule()
+    elif scenario_type == "api_timeout":
+        _restore_timeout(snapshot)
 
     # Delete snapshot after successful restore
     try:
@@ -526,7 +559,7 @@ def _restore_dynamodb_access() -> None:
     """Detach deny-write policy from Lambda execution roles."""
     account_id = boto3.client("sts").get_caller_identity()["Account"]
     policy_arn = (
-        f"arn:aws:iam::{account_id}:policy/" f"{ENVIRONMENT}-chaos-deny-dynamodb-write"
+        f"arn:aws:iam::{account_id}:policy/{ENVIRONMENT}-chaos-deny-dynamodb-write"
     )
 
     roles = [
@@ -546,6 +579,21 @@ def _restore_memory(snapshot: dict[str, Any]) -> None:
     _get_lambda_client().update_function_configuration(
         FunctionName=snapshot["FunctionName"],
         MemorySize=int(snapshot["MemorySize"]),
+    )
+
+
+def _restore_eventbridge_rule() -> None:
+    """Re-enable EventBridge ingestion schedule rule."""
+    rule_name = f"{ENVIRONMENT}-sentiment-ingestion-schedule"
+    events_client = boto3.client("events")
+    events_client.enable_rule(Name=rule_name)
+
+
+def _restore_timeout(snapshot: dict[str, Any]) -> None:
+    """Restore Lambda timeout from snapshot."""
+    _get_lambda_client().update_function_configuration(
+        FunctionName=snapshot["FunctionName"],
+        Timeout=int(snapshot["Timeout"]),
     )
 
 
@@ -573,12 +621,8 @@ def start_experiment(experiment_id: str) -> dict[str, Any]:
     """
     check_environment_allowed()
 
-    # Check kill switch
-    kill_switch = _check_kill_switch()
-    if kill_switch == "triggered":
-        raise ChaosError(
-            "Kill switch is triggered -- resolve before starting new experiments"
-        )
+    # Check kill switch (fail-closed: blocks if SSM unreachable)
+    _enforce_kill_switch()
 
     # Get experiment details
     experiment = get_experiment(experiment_id)
@@ -595,6 +639,9 @@ def start_experiment(experiment_id: str) -> dict[str, Any]:
 
     try:
         if scenario_type == "ingestion_failure":
+            # Ingestion Lambda is EventBridge-triggered (scheduled), NOT Function URL.
+            # Setting concurrency=0 works correctly for EventBridge-triggered Lambdas:
+            # EventBridge will receive throttle errors and route to DLQ.
             func_name = f"{ENVIRONMENT}-sentiment-ingestion"
             _snapshot_to_ssm(scenario_type, func_name)
             _get_lambda_client().put_function_concurrency(
@@ -625,6 +672,9 @@ def start_experiment(experiment_id: str) -> dict[str, Any]:
                 _get_iam_client().attach_role_policy(
                     RoleName=role, PolicyArn=policy_arn
                 )
+            # IAM policy propagation takes up to 60 seconds. Sleep briefly to
+            # increase probability of consistent behavior on first invocation.
+            time.sleep(5)
             results = {
                 "started_at": datetime.now(UTC).isoformat() + "Z",
                 "injection_method": "external_api",
@@ -648,6 +698,53 @@ def start_experiment(experiment_id: str) -> dict[str, Any]:
                 "function": func_name,
                 "note": "Memory set to 128MB -- cold starts will be significantly slower",
             }
+
+        elif scenario_type == "trigger_failure":
+            rule_name = f"{ENVIRONMENT}-sentiment-ingestion-schedule"
+            # Snapshot current state
+            events_client = boto3.client("events")
+            rule = events_client.describe_rule(Name=rule_name)
+            results = {
+                "snapshot": {
+                    "rule_name": rule_name,
+                    "state": rule.get("State", "ENABLED"),
+                }
+            }
+            # Disable rule
+            events_client.disable_rule(Name=rule_name)
+            results["started_at"] = datetime.now(UTC).isoformat() + "Z"
+            results["injection_method"] = "eventbridge_disable"
+            results["rule_name"] = rule_name
+            # Also snapshot the ingestion Lambda config for SSM
+            func_name = f"{ENVIRONMENT}-sentiment-ingestion"
+            _snapshot_to_ssm(scenario_type, func_name)
+
+        elif scenario_type == "api_timeout":
+            func_name = (
+                f"{ENVIRONMENT}-sentiment-"
+                f"{experiment.get('parameters', {}).get('target', 'ingestion')}"
+            )
+            lambda_client = _get_lambda_client()
+            # Snapshot current timeout
+            config = lambda_client.get_function_configuration(FunctionName=func_name)
+            original_timeout = config["Timeout"]
+            results = {
+                "snapshot": {"function_name": func_name, "timeout": original_timeout}
+            }
+            # Set timeout to specified value (default 1 second)
+            # NOTE: Timeout reduction only affects NEW invocations. In-flight requests
+            # continue until their original timeout. For immediate effect, combine with
+            # ingestion_failure (concurrency=0) to stop new invocations.
+            timeout = int(experiment.get("parameters", {}).get("timeout", 1))
+            lambda_client.update_function_configuration(
+                FunctionName=func_name, Timeout=timeout
+            )
+            # Also save to SSM for standard restore path
+            _snapshot_to_ssm(scenario_type, func_name)
+            results["started_at"] = datetime.now(UTC).isoformat() + "Z"
+            results["injection_method"] = "timeout_reduction"
+            results["function_name"] = func_name
+            results["timeout"] = timeout
 
         else:
             raise ValueError(f"Unknown scenario_type: {scenario_type}")
@@ -688,6 +785,9 @@ def stop_experiment(experiment_id: str) -> dict[str, Any]:
         ChaosError: If experiment fails to stop
     """
     check_environment_allowed()
+
+    # Re-check kill switch at stop time (fail-closed: blocks if SSM unreachable)
+    _enforce_kill_switch()
 
     # Get experiment details
     experiment = get_experiment(experiment_id)

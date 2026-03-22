@@ -17,7 +17,6 @@
 # Options:
 #   --target <service>  Target Lambda service name (default: ingestion)
 #   --dry-run           Show commands without executing
-#   --force-prod        Allow injection in prod (requires MFA)
 #   --duration <sec>    Auto-restore after N seconds (default: 300)
 
 set -euo pipefail
@@ -34,7 +33,6 @@ SCENARIO=""
 ENVIRONMENT=""
 TARGET="ingestion"
 DRY_RUN=false
-FORCE_PROD=false
 DURATION=300
 
 usage() {
@@ -50,8 +48,10 @@ usage() {
     echo "Options:"
     echo "  --target <service>  Lambda service (default: ingestion)"
     echo "  --dry-run           Show commands without executing"
-    echo "  --force-prod        Allow prod injection"
     echo "  --duration <sec>    Auto-restore after N seconds (default: 300)"
+    echo ""
+    echo "NOTE: Production chaos is NOT supported via this script."
+    echo "      Production chaos requires a separate approval workflow."
     exit 1
 }
 
@@ -66,14 +66,15 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --target) TARGET="$2"; shift 2 ;;
         --dry-run) DRY_RUN=true; shift ;;
-        --force-prod) FORCE_PROD=true; shift ;;
         --duration) DURATION="$2"; shift 2 ;;
         *) die "Unknown option: $1" ;;
     esac
 done
 
 # Validate
-validate_environment "$ENVIRONMENT" "$FORCE_PROD"
+# Production chaos is NEVER allowed via this script (Issue #28).
+# Production chaos requires a separate approval workflow.
+validate_environment "$ENVIRONMENT" "false"
 
 VALID_SCENARIOS="ingestion-failure dynamodb-throttle cold-start trigger-failure api-timeout"
 if ! echo "$VALID_SCENARIOS" | grep -qw "$SCENARIO"; then
@@ -95,6 +96,9 @@ info "Kill switch state: $KILL_SWITCH"
 # ============================================================================
 
 inject_ingestion_failure() {
+    # Ingestion Lambda is EventBridge-triggered (scheduled), NOT Function URL.
+    # Setting concurrency=0 works correctly for EventBridge-triggered Lambdas:
+    # EventBridge will receive throttle errors and route to DLQ.
     local func_name
     func_name=$(get_function_name "$ENVIRONMENT" "ingestion")
 
@@ -137,6 +141,11 @@ inject_dynamodb_throttle() {
             --no-cli-pager 2>/dev/null || warn "Policy may already be attached to $role"
         info "Attached deny-write policy to $role"
     done
+
+    # IAM policy propagation takes up to 60 seconds. Sleep briefly to
+    # increase probability of consistent behavior on first invocation.
+    info "Waiting 5s for IAM policy propagation..."
+    sleep 5
 
     info "DynamoDB writes will fail with AccessDenied for ingestion and analysis Lambdas"
 }
@@ -182,6 +191,9 @@ inject_trigger_failure() {
 }
 
 inject_api_timeout() {
+    # NOTE: Timeout reduction only affects NEW invocations. In-flight requests
+    # continue until their original timeout. For immediate effect, combine with
+    # ingestion_failure (concurrency=0) to stop new invocations.
     local func_name
     func_name=$(get_function_name "$ENVIRONMENT" "$TARGET")
 
@@ -197,7 +209,7 @@ inject_api_timeout() {
         --timeout 1 \
         --no-cli-pager >/dev/null
 
-    info "Set timeout to 1s on $func_name -- all invocations will timeout"
+    info "Set timeout to 1s on $func_name -- NEW invocations will timeout (in-flight unaffected)"
 }
 
 # ============================================================================
