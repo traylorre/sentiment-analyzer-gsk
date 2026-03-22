@@ -1,0 +1,172 @@
+# Chaos Plan: Cold Start Resilience
+# ===================================
+# Tests the sentiment analyzer's resilience to Lambda performance degradation.
+# Covers: forced cold starts (memory reduction) and timeout scenarios.
+#
+# Execution: Follow docs/chaos-testing/gameday-runbook.md
+# Pre-flight: Complete docs/chaos-testing/preflight-checklist.md first
+# Prerequisite: ingestion-resilience plan executed first (establishes baseline)
+
+name: cold-start-resilience
+version: "1.0"
+description: >
+  Validate that the sentiment analyzer handles Lambda performance degradation
+  gracefully. Reducing memory forces cold starts and degrades execution speed.
+  Reducing timeout forces invocations to time out. Verify that downstream
+  consumers (SSE, dashboard) handle slow or failed analysis gracefully.
+
+environment: preprod
+estimated_duration_minutes: 45
+observation_period_seconds: 300
+
+gate_requirement: armed
+
+roles:
+  operator: "Primary -- executes plan steps, monitors metrics"
+  buddy: "Secondary -- monitors alarms, ready to pull andon cord"
+
+scenarios:
+  - id: scenario-1-cold-start
+    type: lambda_cold_start
+    description: >
+      Reduce analysis Lambda memory from its configured value to 128MB.
+      This forces cold starts on every invocation (container recycled due to
+      config change) and degrades execution speed. Validates that the system
+      handles increased latency without data loss.
+    injection_method: set_memory_128
+    target_function: "{env}-sentiment-analysis"
+    duration_seconds: 180
+    blast_radius: 100
+    parameters: {}
+
+    expected_behavior:
+      - "Analysis Lambda cold starts on next invocation (config change triggers new container)"
+      - "Lambda duration increases significantly (reduced memory = slower execution)"
+      - "p99 latency spikes visible in CloudWatch"
+      - "If execution exceeds timeout, invocations fail and messages return to SQS"
+      - "SSE clients may experience delayed updates"
+      - "Dashboard metrics may show stale data during degradation"
+
+    observation_metrics:
+      - namespace: "AWS/Lambda"
+        metric: "Duration"
+        dimensions:
+          FunctionName: "{env}-sentiment-analysis"
+        expected: "Increases significantly (2-5x normal)"
+        statistic: "p99"
+
+      - namespace: "AWS/Lambda"
+        metric: "ColdStarts"
+        dimensions:
+          FunctionName: "{env}-sentiment-analysis"
+        expected: "At least 1 cold start after config change"
+
+      - namespace: "AWS/Lambda"
+        metric: "Errors"
+        dimensions:
+          FunctionName: "{env}-sentiment-analysis"
+        expected: "May increase if duration exceeds timeout"
+
+      - namespace: "AWS/Lambda"
+        metric: "ConcurrentExecutions"
+        dimensions:
+          FunctionName: "{env}-sentiment-analysis"
+        expected: "May increase due to slower processing"
+
+    recovery_criteria:
+      - "After memory restored, next invocation uses original memory allocation"
+      - "Lambda duration returns to baseline within 2 invocations"
+      - "No messages permanently lost (SQS redelivers timed-out messages)"
+
+  - id: scenario-2-api-timeout
+    type: api_timeout
+    description: >
+      Set the ingestion Lambda timeout to 1 second. All invocations that take
+      longer than 1 second will be killed by the Lambda runtime. Validates
+      that the system handles forced timeouts gracefully.
+    injection_method: timeout_reduction
+    target_function: "{env}-sentiment-ingestion"
+    duration_seconds: 60
+    blast_radius: 100
+    parameters:
+      target: ingestion
+      timeout: 1
+
+    expected_behavior:
+      - "All ingestion Lambda invocations time out (normal execution >> 1 second)"
+      - "Lambda Timeout errors appear in CloudWatch"
+      - "EventBridge retries according to retry policy"
+      - "No partial writes to DynamoDB (timeout kills before completion)"
+      - "CloudWatch alarm fires for ingestion errors"
+
+    observation_metrics:
+      - namespace: "AWS/Lambda"
+        metric: "Duration"
+        dimensions:
+          FunctionName: "{env}-sentiment-ingestion"
+        expected: "Capped at 1000ms (timeout kills execution)"
+
+      - namespace: "AWS/Lambda"
+        metric: "Errors"
+        dimensions:
+          FunctionName: "{env}-sentiment-ingestion"
+        expected: "Every invocation errors"
+
+      - namespace: "SentimentAnalyzer"
+        metric: "ArticlesFetched"
+        expected: "Drops to 0 (no successful completions)"
+
+    recovery_criteria:
+      - "After timeout restored, next invocation completes normally"
+      - "ArticlesFetched returns to non-zero within 10 minutes"
+      - "No data corruption from partial executions"
+
+assertions:
+  - id: assert-1-latency-spike
+    description: "Analysis Lambda p99 duration increases during memory reduction"
+    scenario: scenario-1-cold-start
+    metric: "AWS/Lambda:Duration:FunctionName={env}-sentiment-analysis"
+    condition: "greater_than"
+    threshold: 5000  # ms -- expect significant increase
+    statistic: "p99"
+    evaluation_window_seconds: 180
+
+  - id: assert-2-cold-start-detected
+    description: "At least one cold start occurs after memory change"
+    scenario: scenario-1-cold-start
+    metric: "AWS/Lambda:InitDuration:FunctionName={env}-sentiment-analysis"
+    condition: "at_least_one_datapoint"
+    evaluation_window_seconds: 180
+
+  - id: assert-3-recovery-latency
+    description: "Analysis Lambda duration returns to normal after memory restore"
+    scenario: scenario-1-cold-start
+    metric: "AWS/Lambda:Duration:FunctionName={env}-sentiment-analysis"
+    condition: "recovers_within"
+    threshold: 300  # seconds
+
+  - id: assert-4-timeout-errors
+    description: "All ingestion invocations error during timeout reduction"
+    scenario: scenario-2-api-timeout
+    metric: "AWS/Lambda:Errors:FunctionName={env}-sentiment-ingestion"
+    condition: "greater_than_zero"
+    evaluation_window_seconds: 60
+
+  - id: assert-5-recovery-timeout
+    description: "Ingestion Lambda succeeds after timeout restore"
+    scenario: scenario-2-api-timeout
+    metric: "SentimentAnalyzer:ArticlesFetched"
+    condition: "recovers_within"
+    threshold: 600  # seconds -- may take 2 ingestion cycles
+
+post_mortem:
+  required_attendees:
+    - operator
+    - buddy
+  questions:
+    - "How much did memory reduction affect execution duration?"
+    - "Did any invocations succeed despite reduced memory?"
+    - "Were there partial writes during timeout scenarios?"
+    - "Did SSE clients detect the degradation?"
+    - "What is the minimum viable memory for the analysis Lambda?"
+    - "Should we add a duration alarm threshold?"

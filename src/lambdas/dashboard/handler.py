@@ -160,6 +160,25 @@ def _get_authenticated_user_id_from_event(event: dict) -> str | None:
     return auth_context.user_id
 
 
+def _get_chaos_user_id_from_event(event: dict) -> str | None:
+    """Extract user_id for chaos endpoints.
+
+    In non-production environments (local/dev/test), anonymous auth is accepted
+    for chaos operations. Production safety is enforced by chaos.py's
+    check_environment_allowed() which blocks all chaos operations in prod.
+    """
+    env = os.environ.get("ENVIRONMENT", "")
+    auth_context = extract_auth_context_typed(event)
+    if auth_context.user_id is None:
+        return None
+    # Allow anonymous in non-prod for local dev and testing
+    if auth_context.auth_type == AuthType.ANONYMOUS and env in ("local", "dev", "test"):
+        return auth_context.user_id
+    if auth_context.auth_type == AuthType.ANONYMOUS:
+        return None
+    return auth_context.user_id
+
+
 @app.get("/")
 def serve_index():
     """Serve the main dashboard HTML page."""
@@ -725,7 +744,7 @@ def get_articles_v2():
 def create_chaos_experiment():
     """Create a new chaos experiment."""
     event = app.current_event.raw_event
-    user_id = _get_authenticated_user_id_from_event(event)
+    user_id = _get_chaos_user_id_from_event(event)
     if user_id is None:
         return Response(
             status_code=401,
@@ -776,7 +795,7 @@ def create_chaos_experiment():
 def list_chaos_experiments():
     """List chaos experiments with optional status filter."""
     event = app.current_event.raw_event
-    user_id = _get_authenticated_user_id_from_event(event)
+    user_id = _get_chaos_user_id_from_event(event)
     if user_id is None:
         return Response(
             status_code=401,
@@ -807,7 +826,7 @@ def list_chaos_experiments():
 def get_chaos_experiment(experiment_id: str):
     """Get chaos experiment by ID."""
     event = app.current_event.raw_event
-    user_id = _get_authenticated_user_id_from_event(event)
+    user_id = _get_chaos_user_id_from_event(event)
     if user_id is None:
         return Response(
             status_code=401,
@@ -834,7 +853,7 @@ def get_chaos_experiment(experiment_id: str):
 def start_chaos_experiment(experiment_id: str):
     """Start a chaos experiment."""
     event = app.current_event.raw_event
-    user_id = _get_authenticated_user_id_from_event(event)
+    user_id = _get_chaos_user_id_from_event(event)
     if user_id is None:
         return Response(
             status_code=401,
@@ -874,7 +893,7 @@ def start_chaos_experiment(experiment_id: str):
 def stop_chaos_experiment(experiment_id: str):
     """Stop a running chaos experiment."""
     event = app.current_event.raw_event
-    user_id = _get_authenticated_user_id_from_event(event)
+    user_id = _get_chaos_user_id_from_event(event)
     if user_id is None:
         return Response(
             status_code=401,
@@ -914,7 +933,7 @@ def stop_chaos_experiment(experiment_id: str):
 def get_chaos_experiment_report(experiment_id: str):
     """Get a comprehensive report for a chaos experiment."""
     event = app.current_event.raw_event
-    user_id = _get_authenticated_user_id_from_event(event)
+    user_id = _get_chaos_user_id_from_event(event)
     if user_id is None:
         return Response(
             status_code=401,
@@ -948,7 +967,7 @@ def get_chaos_experiment_report(experiment_id: str):
 def delete_chaos_experiment(experiment_id: str):
     """Delete a chaos experiment."""
     event = app.current_event.raw_event
-    user_id = _get_authenticated_user_id_from_event(event)
+    user_id = _get_chaos_user_id_from_event(event)
     if user_id is None:
         return Response(
             status_code=401,

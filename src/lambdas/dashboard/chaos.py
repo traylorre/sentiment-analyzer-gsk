@@ -50,7 +50,7 @@ CHAOS_TABLE = os.environ.get("CHAOS_EXPERIMENTS_TABLE", "")
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "dev")
 
 # Safety: Only allow chaos testing in preprod/dev/test
-ALLOWED_ENVIRONMENTS = ["preprod", "dev", "test"]
+ALLOWED_ENVIRONMENTS = ["preprod", "dev", "test", "local"]
 
 # AWS clients (lazy-loaded to avoid region errors during test imports)
 _dynamodb = None
