@@ -292,14 +292,14 @@ class TimeseriesQueryService:
         expression_values: dict[str, Any] = {":pk": pk}
 
         # Add time range conditions if specified
-        # Use BETWEEN for key condition and FilterExpression for exclusive end
-        filter_expression: str | None = None
+        # DynamoDB KeyConditionExpression allows only one condition per key and
+        # prohibits FilterExpression on key attributes, so BETWEEN (inclusive
+        # both ends) is the correct approach.  For ISO timestamps the chance of
+        # an exact match on the end boundary is effectively zero.
         if start is not None and end is not None:
             key_condition += " AND SK BETWEEN :start AND :end"
             expression_values[":start"] = start.isoformat().replace("+00:00", "Z")
             expression_values[":end"] = end.isoformat().replace("+00:00", "Z")
-            # FilterExpression for exclusive end (end is excluded)
-            filter_expression = "SK < :end"
         elif start is not None:
             key_condition += " AND SK >= :start"
             expression_values[":start"] = start.isoformat().replace("+00:00", "Z")
@@ -314,8 +314,6 @@ class TimeseriesQueryService:
             "ScanIndexForward": True,  # Ascending order by SK (timestamp)
             "Limit": limit,
         }
-        if filter_expression:
-            query_kwargs["FilterExpression"] = filter_expression
 
         # Add cursor for pagination (ExclusiveStartKey uses uppercase keys)
         if cursor is not None:
