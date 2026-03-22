@@ -82,9 +82,9 @@ class TestCacheExpiration:
         # Entry exists initially
         assert cache.get("AAPL", Resolution.ONE_MINUTE) is not None
 
-        # Manually expire by adjusting created_at
+        # Manually expire by adjusting created_at (past max jitter: 60s * 1.1 = 66s)
         entry = cache._entries[("AAPL", Resolution.ONE_MINUTE)]
-        entry.created_at = time.time() - 61  # 61 seconds ago
+        entry.created_at = time.time() - 70  # 70 seconds ago (beyond jitter range)
 
         # Now should be expired
         assert cache.get("AAPL", Resolution.ONE_MINUTE) is None

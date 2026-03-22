@@ -239,12 +239,19 @@ export function CompactHeatMapGrid({
           </span>
           <div className="flex-1 flex gap-1">
             {row.cells.map((cell, index) => (
-              <div
-                key={index}
-                className="flex-1 h-6 rounded"
-                style={{ backgroundColor: interpolateSentimentColor(cell.score) }}
-                onClick={() => onCellClick?.(row.ticker, cell)}
-              />
+              cell ? (
+                <div
+                  key={index}
+                  className="flex-1 h-6 rounded"
+                  style={{ backgroundColor: interpolateSentimentColor(cell.score) }}
+                  onClick={() => onCellClick?.(row.ticker, cell)}
+                />
+              ) : (
+                <div
+                  key={index}
+                  className="flex-1 h-6 rounded bg-muted/30"
+                />
+              )
             ))}
           </div>
         </div>

@@ -236,6 +236,41 @@ class TestSentimentOverview:
 
     @freeze_time("2024-01-02T10:00:00Z")
     @patch("src.lambdas.dashboard.timeseries.query_timeseries")
+    def test_overview_partial_ticker_failure(self, mock_query):
+        """One ticker's query_timeseries raises an exception; verify that
+        ticker gets sentiment={} while others still get real data (Feature 1231)."""
+
+        def _side_effect(ticker, resolution=None, **kwargs):
+            if ticker == "FAIL":
+                raise Exception("DynamoDB throttle for FAIL")
+            return _make_timeseries_response(ticker, buckets=[_make_bucket(avg=0.45)])
+
+        mock_query.side_effect = _side_effect
+
+        response = get_sentiment_by_configuration(
+            config_id="cfg-partial",
+            tickers=["AAPL", "FAIL", "MSFT"],
+            skip_cache=True,
+        )
+
+        assert isinstance(response, SentimentResponse)
+        assert len(response.tickers) == 3
+
+        aapl = next(t for t in response.tickers if t.symbol == "AAPL")
+        fail = next(t for t in response.tickers if t.symbol == "FAIL")
+        msft = next(t for t in response.tickers if t.symbol == "MSFT")
+
+        # Successful tickers have real sentiment data
+        assert "aggregated" in aapl.sentiment
+        assert aapl.sentiment["aggregated"].score == 0.45
+        assert "aggregated" in msft.sentiment
+        assert msft.sentiment["aggregated"].score == 0.45
+
+        # Failed ticker has empty sentiment (not crash)
+        assert fail.sentiment == {}
+
+    @freeze_time("2024-01-02T10:00:00Z")
+    @patch("src.lambdas.dashboard.timeseries.query_timeseries")
     def test_overview_db_error(self, mock_query):
         """Mock query_timeseries to raise exception; verify empty sentiment
         (not crash)."""
