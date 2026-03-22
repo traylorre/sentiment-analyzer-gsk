@@ -211,7 +211,7 @@ resource "aws_iam_role" "chaos_engineer" {
 }
 
 resource "aws_iam_role_policy" "chaos_engineer_permissions" {
-  count = var.environment != "prod" ? 1 : 0
+  count = var.enable_chaos_testing && var.environment != "prod" ? 1 : 0
   name  = "${var.environment}-chaos-engineer-permissions"
   role  = aws_iam_role.chaos_engineer[0].id
 
