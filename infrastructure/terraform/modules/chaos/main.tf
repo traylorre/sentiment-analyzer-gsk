@@ -1,3 +1,10 @@
+# ============================================================================
+# LEGACY: AWS FIS Support (DISABLED)
+# Status: Blocked by Terraform AWS provider bug #41208
+# Decision: Using external actor architecture (Feature 1237) instead
+# Action: Delete this section when FIS support is no longer planned
+# ============================================================================
+#
 # AWS Fault Injection Service (FIS) for Chaos Testing
 # =====================================================
 #
