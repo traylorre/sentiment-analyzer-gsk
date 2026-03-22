@@ -558,6 +558,16 @@ resource "aws_iam_role_policy" "dashboard_chaos" {
           "cloudwatch:GetMetricData"
         ]
         Resource = "*"
+      },
+      {
+        Sid    = "EventBridgeChaosControl"
+        Effect = "Allow"
+        Action = [
+          "events:DescribeRule",
+          "events:DisableRule",
+          "events:EnableRule"
+        ]
+        Resource = "arn:aws:events:*:*:rule/${var.environment}-*"
       }
     ]
   })

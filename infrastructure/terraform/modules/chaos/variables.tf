@@ -49,19 +49,3 @@ variable "chaos_experiments_table_arn" {
   type        = string
   default     = ""
 }
-
-# ============================================================================
-# Deprecated Variables (kept for backwards compatibility during migration)
-# ============================================================================
-
-variable "dynamodb_table_arn" {
-  description = "DEPRECATED: DynamoDB ARN - FIS doesn't support DynamoDB API fault injection"
-  type        = string
-  default     = ""
-}
-
-variable "write_throttle_alarm_arn" {
-  description = "DEPRECATED: Was used for DynamoDB throttle alarm"
-  type        = string
-  default     = ""
-}

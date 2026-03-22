@@ -1071,12 +1071,14 @@ module "chaos" {
   ]
   chaos_experiments_table_arn = module.dynamodb.chaos_experiments_table_arn
 
-  # Deprecated - kept for backwards compatibility
-  dynamodb_table_arn       = module.dynamodb.table_arn
-  write_throttle_alarm_arn = module.dynamodb.cloudwatch_alarm_write_throttles_arn
-
   depends_on = [module.ingestion_lambda, module.analysis_lambda, module.dashboard_lambda, module.metrics_lambda, module.notification_lambda, module.sse_streaming_lambda, module.monitoring]
 }
+
+# TODO (TD-2): Deploy chaos_restore Lambda
+# Code: src/lambdas/chaos_restore/handler.py (complete, tested)
+# Needs: Lambda module, IAM role (SSM + Lambda + IAM + EventBridge), SNS subscription
+# Blocked by: enable_chaos_testing = false (deployer permissions)
+# Track: docs/reference/TECH_DEBT_REGISTRY.md
 
 # ===================================================================
 # Module: AWS Amplify Frontend (Feature 1105)
