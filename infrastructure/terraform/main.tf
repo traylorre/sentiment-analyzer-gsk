@@ -1041,10 +1041,11 @@ module "chaos" {
   source = "./modules/chaos"
 
   environment = var.environment
-  # DISABLED: Terraform AWS provider doesn't support Lambda FIS target key "Functions" yet
-  # See: https://github.com/hashicorp/terraform-provider-aws/issues/41208
-  # Re-enable when provider version supports aws:lambda:invocation-add-delay targets
-  enable_chaos_testing = false # var.environment == "preprod"
+  # DISABLED: Deployer IAM user lacks ssm:PutParameter, iam:CreatePolicy, iam:CreateRole
+  # These permissions are needed for chaos infrastructure (kill switch, deny policy, engineer role)
+  # Also: Terraform AWS provider doesn't support Lambda FIS targets (#41208)
+  # Re-enable after granting deployer permissions or using TFC with admin role
+  enable_chaos_testing = false
 
   # Lambda targets for chaos experiments
   lambda_arns = [
