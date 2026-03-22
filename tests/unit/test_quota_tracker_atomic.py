@@ -1,6 +1,8 @@
 """Unit tests for Feature 1224: Quota tracker atomic DynamoDB counters.
 
 Tests atomic increment, 25% fallback, disconnected alert, and threshold warning.
+Updated for Feature 1233: Hysteresis requires 3 consecutive failures to enter
+reduced-rate mode and 5 consecutive successes to exit.
 """
 
 import threading
@@ -102,7 +104,7 @@ class TestReducedRateFallback:
 
     @freeze_time("2024-01-02 10:00:00")
     def test_enters_reduced_rate_on_dynamodb_failure(self):
-        """DynamoDB write failure triggers 25% rate mode."""
+        """DynamoDB write failure triggers 25% rate mode after 3 consecutive failures (Feature 1233)."""
         table = _make_mock_table()
         dynamo_error = ClientError(
             {"Error": {"Code": "ServiceUnavailable", "Message": "down"}},
@@ -119,6 +121,9 @@ class TestReducedRateFallback:
         _set_cached_tracker(tracker)
 
         manager = QuotaTrackerManager(table)
+        # Feature 1233: Need 3 consecutive failures to enter reduced-rate mode
+        manager.record_call("tiingo")
+        manager.record_call("tiingo")
         manager.record_call("tiingo")
 
         assert manager.is_reduced_rate() is True
@@ -152,7 +157,7 @@ class TestReducedRateFallback:
 
     @freeze_time("2024-01-02 10:00:00")
     def test_exits_reduced_rate_on_successful_write(self):
-        """Successful DynamoDB write exits reduced-rate mode."""
+        """Successful DynamoDB writes exit reduced-rate mode after 5 consecutive successes (Feature 1233)."""
         table = _make_mock_table()
         manager = QuotaTrackerManager(table)
 
@@ -167,8 +172,9 @@ class TestReducedRateFallback:
         _enter_reduced_rate_mode()
         assert manager.is_reduced_rate()
 
-        # Successful record_call exits reduced-rate mode
-        manager.record_call("tiingo")
+        # Feature 1233: Need 5 consecutive successes to exit reduced-rate mode
+        for _ in range(5):
+            manager.record_call("tiingo")
         assert manager.is_reduced_rate() is False
 
 
@@ -178,14 +184,25 @@ class TestDisconnectedAlert:
     @freeze_time("2024-01-02 10:00:00")
     @patch("src.lib.metrics.emit_metric")
     def test_emits_disconnected_metric_on_failure(self, mock_emit):
-        """QuotaTracker/Disconnected metric emitted on DynamoDB failure."""
+        """QuotaTracker/Disconnected metric emitted after 3 consecutive failures (Feature 1233)."""
         table = _make_mock_table()
-        table.update_item.side_effect = ClientError(
+        dynamo_error = ClientError(
             {"Error": {"Code": "ServiceUnavailable", "Message": "down"}},
             "UpdateItem",
         )
+        table.update_item.side_effect = dynamo_error
+
+        # Pre-load cache so get_tracker doesn't hit DynamoDB and record a success
+        from src.lambdas.shared.quota_tracker import _set_cached_tracker
+
+        tracker = QuotaTracker.create_default()
+        _set_cached_tracker(tracker)
+
         manager = QuotaTrackerManager(table)
 
+        # Feature 1233: Need 3 consecutive failures to enter reduced-rate mode and emit metric
+        manager.record_call("tiingo")
+        manager.record_call("tiingo")
         manager.record_call("tiingo")
 
         mock_emit.assert_called_with("QuotaTracker/Disconnected", 1.0)
@@ -193,19 +210,30 @@ class TestDisconnectedAlert:
     @freeze_time("2024-01-02 10:00:00")
     @patch("src.lib.metrics.emit_metric")
     def test_alert_spam_protection(self, mock_emit):
-        """Disconnected alert emitted at most once per 5 minutes."""
+        """Disconnected alert emitted at most once per 5 minutes (Feature 1233: after hysteresis)."""
         table = _make_mock_table()
         table.update_item.side_effect = ClientError(
             {"Error": {"Code": "ServiceUnavailable", "Message": "down"}},
             "UpdateItem",
         )
+
+        # Pre-load cache so get_tracker doesn't hit DynamoDB and record a success
+        from src.lambdas.shared.quota_tracker import _set_cached_tracker
+
+        tracker = QuotaTracker.create_default()
+        _set_cached_tracker(tracker)
+
         manager = QuotaTrackerManager(table)
 
-        # First call emits alert
+        # Feature 1233: 3 consecutive failures to enter reduced-rate mode and emit first alert
+        manager.record_call("tiingo")
+        manager.record_call("tiingo")
         manager.record_call("tiingo")
         assert mock_emit.call_count == 1
 
-        # Second call within 5 minutes — no new alert
+        # Additional failures within 5 minutes — no new alert (spam protection)
+        manager.record_call("tiingo")
+        manager.record_call("tiingo")
         manager.record_call("tiingo")
         assert mock_emit.call_count == 1  # Still 1
 
