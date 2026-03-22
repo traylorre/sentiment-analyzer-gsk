@@ -1,0 +1,174 @@
+# Chaos Plan: Ingestion Resilience
+# =================================
+# Tests the sentiment analyzer's resilience to ingestion pipeline failures.
+# Covers: ingestion Lambda throttling and DynamoDB write denial.
+#
+# Execution: Follow docs/chaos-testing/gameday-runbook.md
+# Pre-flight: Complete docs/chaos-testing/preflight-checklist.md first
+
+name: ingestion-resilience
+version: "1.0"
+description: >
+  Validate that the sentiment analyzer ingestion pipeline degrades gracefully
+  when the ingestion Lambda is throttled and when DynamoDB writes are denied.
+  Verify alarm triggering, DLQ routing, and full recovery after fault removal.
+
+environment: preprod
+estimated_duration_minutes: 60
+observation_period_seconds: 300
+
+# Gate requirement: SSM /chaos/{env}/kill-switch must be "armed"
+gate_requirement: armed
+
+roles:
+  operator: "Primary -- executes plan steps, monitors metrics"
+  buddy: "Secondary -- monitors alarms, ready to pull andon cord"
+
+scenarios:
+  - id: scenario-1-ingestion-failure
+    type: ingestion_failure
+    description: >
+      Set reserved concurrency to 0 on the ingestion Lambda, causing all
+      EventBridge-triggered invocations to be throttled. Validates that
+      the system detects the failure via CloudWatch alarms and that
+      recovery is automatic when concurrency is restored.
+    injection_method: concurrency_zero
+    target_function: "{env}-sentiment-ingestion"
+    duration_seconds: 120
+    blast_radius: 100
+    parameters: {}
+
+    expected_behavior:
+      - "Ingestion Lambda invocations return Throttle errors"
+      - "EventBridge routes throttled invocations to DLQ (if configured)"
+      - "CloudWatch ingestion error alarm transitions to ALARM"
+      - "Ingestion success metric (ArticlesFetched) drops to 0"
+      - "No downstream impact on analysis or dashboard Lambdas"
+
+    observation_metrics:
+      - namespace: "AWS/Lambda"
+        metric: "Throttles"
+        dimensions:
+          FunctionName: "{env}-sentiment-ingestion"
+        expected: "Increases to match invocation rate"
+
+      - namespace: "AWS/Lambda"
+        metric: "Errors"
+        dimensions:
+          FunctionName: "{env}-sentiment-ingestion"
+        expected: "Increases (throttle counted as error)"
+
+      - namespace: "AWS/Lambda"
+        metric: "Invocations"
+        dimensions:
+          FunctionName: "{env}-sentiment-ingestion"
+        expected: "Drops to 0 (throttled before execution)"
+
+      - namespace: "SentimentAnalyzer"
+        metric: "ArticlesFetched"
+        expected: "Drops to 0"
+
+    recovery_criteria:
+      - "After restore, next EventBridge-triggered invocation succeeds"
+      - "ArticlesFetched returns to non-zero within 10 minutes"
+      - "CloudWatch alarm transitions back to OK within 5 minutes"
+
+  - id: scenario-2-dynamodb-throttle
+    type: dynamodb_throttle
+    description: >
+      Attach a deny-write IAM policy to ingestion and analysis Lambda
+      execution roles. DynamoDB writes fail with AccessDenied errors.
+      Validates error handling, DLQ routing, and recovery after policy removal.
+    injection_method: attach_deny_policy
+    target_roles:
+      - "{env}-ingestion-lambda-role"
+      - "{env}-analysis-lambda-role"
+    duration_seconds: 120
+    blast_radius: 100
+    parameters: {}
+
+    expected_behavior:
+      - "DynamoDB PutItem/UpdateItem calls fail with AccessDeniedException"
+      - "Lambda error rate increases for both ingestion and analysis"
+      - "Messages may route to SQS DLQ after retry exhaustion"
+      - "CloudWatch error alarms fire for affected Lambdas"
+      - "Dashboard read operations are NOT affected (deny-write only)"
+
+    observation_metrics:
+      - namespace: "AWS/Lambda"
+        metric: "Errors"
+        dimensions:
+          FunctionName: "{env}-sentiment-ingestion"
+        expected: "Increases significantly"
+
+      - namespace: "AWS/Lambda"
+        metric: "Errors"
+        dimensions:
+          FunctionName: "{env}-sentiment-analysis"
+        expected: "Increases significantly"
+
+      - namespace: "AWS/DynamoDB"
+        metric: "SystemErrors"
+        dimensions:
+          TableName: "{env}-sentiment-items"
+        expected: "May increase (AccessDenied counted differently)"
+
+    recovery_criteria:
+      - "After deny policy detached, writes resume on next invocation"
+      - "Lambda error rate returns to 0 within 5 minutes"
+      - "DLQ messages (if any) are reprocessable"
+
+assertions:
+  - id: assert-1-throttle-detected
+    description: "Ingestion Lambda invocations are throttled during scenario 1"
+    scenario: scenario-1-ingestion-failure
+    metric: "AWS/Lambda:Throttles:FunctionName={env}-sentiment-ingestion"
+    condition: "greater_than_zero"
+    evaluation_window_seconds: 120
+
+  - id: assert-2-alarm-fires
+    description: "CloudWatch ingestion error alarm transitions to ALARM during scenario 1"
+    scenario: scenario-1-ingestion-failure
+    metric: "CloudWatch:AlarmState:{env}-ingestion-lambda-errors"
+    condition: "transitions_to"
+    threshold: "ALARM"
+
+  - id: assert-3-recovery-ingestion
+    description: "Ingestion resumes within 5 minutes after scenario 1 restore"
+    scenario: scenario-1-ingestion-failure
+    metric: "SentimentAnalyzer:ArticlesFetched"
+    condition: "recovers_within"
+    threshold: 300  # seconds
+
+  - id: assert-4-write-errors
+    description: "DynamoDB write errors occur during scenario 2"
+    scenario: scenario-2-dynamodb-throttle
+    metric: "AWS/Lambda:Errors:FunctionName={env}-sentiment-ingestion"
+    condition: "greater_than_zero"
+    evaluation_window_seconds: 120
+
+  - id: assert-5-recovery-writes
+    description: "DynamoDB writes succeed within 5 minutes after scenario 2 restore"
+    scenario: scenario-2-dynamodb-throttle
+    metric: "AWS/Lambda:Errors:FunctionName={env}-sentiment-ingestion"
+    condition: "returns_to_zero_within"
+    threshold: 300  # seconds
+
+  - id: assert-6-no-data-loss
+    description: "No permanent data loss -- DLQ messages are reprocessable"
+    scenario: scenario-2-dynamodb-throttle
+    metric: "manual_verification"
+    condition: "operator_confirms"
+    note: "Check DLQ depth after recovery. If > 0, trigger redrive."
+
+post_mortem:
+  required_attendees:
+    - operator
+    - buddy
+  questions:
+    - "Did alarms fire within the expected timeframe?"
+    - "Was recovery automatic or did it require manual intervention?"
+    - "Were there any unexpected side effects?"
+    - "What was the actual recovery time vs. expected?"
+    - "Should any alarm thresholds be adjusted?"
+    - "Are there any gaps in observability?"
