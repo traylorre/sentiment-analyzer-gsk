@@ -43,14 +43,16 @@ debug() {
 
 validate_environment() {
     local env="$1"
+    # force_prod parameter kept for backward compatibility but always blocked
+    # Production chaos requires a separate approval workflow (Issue #28)
     local force_prod="${2:-false}"
 
-    if [[ "$env" == "prod" && "$force_prod" != "true" ]]; then
-        die "Chaos experiments cannot run in production. Use --force-prod with MFA to override."
+    if [[ "$env" == "prod" ]]; then
+        die "Chaos experiments CANNOT run in production via this script. Production chaos requires a separate approval workflow."
     fi
 
-    if [[ ! "$env" =~ ^(dev|preprod|test|prod)$ ]]; then
-        die "Invalid environment: $env. Must be one of: dev, preprod, test, prod"
+    if [[ ! "$env" =~ ^(dev|preprod|test)$ ]]; then
+        die "Invalid environment: $env. Must be one of: dev, preprod, test"
     fi
 }
 
@@ -63,10 +65,22 @@ check_kill_switch() {
     local param_name="/chaos/${env}/kill-switch"
 
     local value
+    local exit_code=0
     value=$(aws ssm get-parameter \
         --name "$param_name" \
         --query "Parameter.Value" \
-        --output text 2>/dev/null || echo "disarmed")
+        --output text 2>/dev/null) || exit_code=$?
+
+    if [[ $exit_code -ne 0 ]]; then
+        # Check if this is a ParameterNotFound (first-time setup) vs SSM outage
+        if aws ssm get-parameter --name "$param_name" 2>&1 | grep -q "ParameterNotFound"; then
+            # No kill switch parameter = first-time setup, proceed
+            echo "disarmed"
+            return
+        fi
+        # FAIL-CLOSED: SSM is unreachable, block injection for safety
+        die "Cannot verify kill switch (SSM unavailable) -- blocking injection for safety"
+    fi
 
     if [[ "$value" == "triggered" ]]; then
         die "Kill switch is triggered -- resolve before injecting new chaos. Run: scripts/chaos/restore.sh $env"

@@ -201,7 +201,13 @@ class TestCreateExperiment:
     def test_create_experiment_all_valid_scenarios(
         self, mock_environment_preprod, mock_dynamodb_table
     ):
-        for scenario in ["dynamodb_throttle", "ingestion_failure", "lambda_cold_start"]:
+        for scenario in [
+            "dynamodb_throttle",
+            "ingestion_failure",
+            "lambda_cold_start",
+            "trigger_failure",
+            "api_timeout",
+        ]:
             mock_dynamodb_table.reset_mock()
             result = create_experiment(
                 scenario_type=scenario, blast_radius=50, duration_seconds=60
@@ -301,12 +307,18 @@ class TestStartExperimentExternal:
 
         mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
 
-        with patch("src.lambdas.dashboard.chaos.boto3") as mock_boto3:
+        with (
+            patch("src.lambdas.dashboard.chaos.boto3") as mock_boto3,
+            patch("src.lambdas.dashboard.chaos.time") as mock_time,
+        ):
             mock_sts = MagicMock()
             mock_sts.get_caller_identity.return_value = {"Account": "123456789012"}
             mock_boto3.client.return_value = mock_sts
 
             start_experiment(sample_experiment["experiment_id"])
+
+        # Verify IAM propagation delay
+        mock_time.sleep.assert_called_once_with(5)
 
         # Verify IAM policy attached to both roles
         assert mock_iam_client.attach_role_policy.call_count == 2
@@ -606,8 +618,15 @@ class TestStopExperimentExternal:
         assert kill_switch_call[0][1]["Value"] == "disarmed"
 
     def test_stop_experiment_invalid_status(
-        self, mock_environment_preprod, mock_dynamodb_table, sample_experiment
+        self,
+        mock_environment_preprod,
+        mock_dynamodb_table,
+        mock_ssm_client,
+        sample_experiment,
     ):
+        mock_ssm_client.get_parameter.return_value = {
+            "Parameter": {"Value": "disarmed"}
+        }
         sample_experiment["status"] = "completed"
         mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
 
@@ -617,8 +636,11 @@ class TestStopExperimentExternal:
         assert "must be in 'running' status" in str(exc_info.value)
 
     def test_stop_experiment_not_found(
-        self, mock_environment_preprod, mock_dynamodb_table
+        self, mock_environment_preprod, mock_dynamodb_table, mock_ssm_client
     ):
+        mock_ssm_client.get_parameter.return_value = {
+            "Parameter": {"Value": "disarmed"}
+        }
         mock_dynamodb_table.get_item.return_value = {}
 
         with pytest.raises(ChaosError) as exc_info:
