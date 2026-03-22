@@ -75,7 +75,7 @@ if env_vars:
 os.environ.setdefault("ENVIRONMENT", "local")
 os.environ.setdefault("USERS_TABLE", "local-users")
 os.environ.setdefault("SENTIMENTS_TABLE", "local-sentiments")
-os.environ.setdefault("CHAOS_EXPERIMENTS_TABLE", "local-chaos")
+os.environ.setdefault("CHAOS_EXPERIMENTS_TABLE", "local-chaos-experiments")
 os.environ.setdefault("OHLC_CACHE_TABLE", "local-ohlc-cache")  # CACHE-001
 os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
 os.environ.setdefault("AWS_REGION", "us-east-1")
@@ -141,8 +141,33 @@ def create_mock_tables():
         BillingMode="PAY_PER_REQUEST",
     )
 
+    # Create chaos-experiments table for chaos testing
+    dynamodb.create_table(
+        TableName="local-chaos-experiments",
+        KeySchema=[
+            {"AttributeName": "experiment_id", "KeyType": "HASH"},
+        ],
+        AttributeDefinitions=[
+            {"AttributeName": "experiment_id", "AttributeType": "S"},
+            {"AttributeName": "status", "AttributeType": "S"},
+            {"AttributeName": "created_at", "AttributeType": "S"},
+        ],
+        GlobalSecondaryIndexes=[
+            {
+                "IndexName": "by_status",
+                "KeySchema": [
+                    {"AttributeName": "status", "KeyType": "HASH"},
+                    {"AttributeName": "created_at", "KeyType": "RANGE"},
+                ],
+                "Projection": {"ProjectionType": "ALL"},
+            },
+        ],
+        BillingMode="PAY_PER_REQUEST",
+    )
+
     logger.info(
-        "Created mock DynamoDB tables: local-users, local-sentiments, local-ohlc-cache"
+        "Created mock DynamoDB tables: local-users, local-sentiments, "
+        "local-ohlc-cache, local-chaos-experiments"
     )
     return mock
 

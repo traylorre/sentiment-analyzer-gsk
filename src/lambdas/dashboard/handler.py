@@ -20,7 +20,8 @@ For Developers:
 Auth (Feature 1039):
     - All /api/* endpoints use session-based auth via Bearer token
     - Public endpoints (metrics, sentiment, trends, articles) accept anonymous sessions
-    - Chaos endpoints require authenticated (non-anonymous) sessions
+    - Chaos endpoints require authenticated (non-anonymous) sessions in preprod+
+    - Chaos endpoints accept anonymous sessions in local/dev/test (environment gating provides safety)
 
 X-Ray Tracing:
     X-Ray is enabled for distributed tracing across all Lambda invocations.
@@ -109,6 +110,13 @@ ALLOWED_STATIC_FILES: dict[str, str] = {
     "favicon.ico": "image/x-icon",
 }
 
+# Whitelist of allowed vendor files (self-hosted third-party libraries)
+ALLOWED_VENDOR_FILES: dict[str, str] = {
+    "htmx.min.js": "application/javascript",
+    "alpine.min.js": "application/javascript",
+    "chart.min.js": "application/javascript",
+}
+
 # Create Powertools resolver (FR-001, R1)
 # LambdaFunctionUrlResolver handles Function URL v2 events (rawPath, requestContext.http.method)
 # Previously APIGatewayRestResolver only handled REST v1 events, causing 502 on Function URL
@@ -155,6 +163,29 @@ def _get_authenticated_user_id_from_event(event: dict) -> str | None:
     auth_context = extract_auth_context_typed(event)
     if auth_context.user_id is None:
         return None
+    if auth_context.auth_type == AuthType.ANONYMOUS:
+        return None
+    return auth_context.user_id
+
+
+def _get_chaos_user_id_from_event(event: dict) -> str | None:
+    """Extract user_id for chaos endpoints, relaxing auth in non-prod environments.
+
+    In local/dev/test environments, anonymous sessions are accepted since
+    environment gating in chaos.py already prevents production access.
+    In preprod+, authenticated (non-anonymous) JWT sessions are required.
+
+    Returns:
+        user_id string or None if not authenticated.
+    """
+    auth_context = extract_auth_context_typed(event)
+    if auth_context.user_id is None:
+        return None
+    # In non-production environments, accept anonymous auth for chaos endpoints
+    # Environment gating in chaos.py provides the safety boundary
+    if ENVIRONMENT in ("local", "dev", "test"):
+        return auth_context.user_id
+    # In preprod+, require authenticated (non-anonymous) sessions
     if auth_context.auth_type == AuthType.ANONYMOUS:
         return None
     return auth_context.user_id
@@ -253,6 +284,39 @@ def serve_static(filename: str):
             headers={"isBase64Encoded": "true"},
         )
 
+    return Response(
+        status_code=200,
+        content_type=media_type,
+        body=content.decode("utf-8"),
+    )
+
+
+@app.get("/static/vendor/<filename>")
+def serve_vendor_static(filename: str):
+    """Serve self-hosted third-party vendor files (htmx, alpine, chart.js)."""
+    if filename not in ALLOWED_VENDOR_FILES:
+        logger.warning(
+            "Vendor file request for non-whitelisted file",
+            extra={"requested": sanitize_for_log(filename)},
+        )
+        return Response(
+            status_code=404,
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Vendor file not found"}).decode(),
+        )
+
+    media_type = ALLOWED_VENDOR_FILES[filename]
+    # Security: Use hardcoded path lookup to prevent path injection
+    safe_path = STATIC_DIR / "vendor" / filename
+
+    if not safe_path.exists():
+        return Response(
+            status_code=404,
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Vendor file not found"}).decode(),
+        )
+
+    content = safe_path.read_bytes()
     return Response(
         status_code=200,
         content_type=media_type,
@@ -725,7 +789,7 @@ def get_articles_v2():
 def create_chaos_experiment():
     """Create a new chaos experiment."""
     event = app.current_event.raw_event
-    user_id = _get_authenticated_user_id_from_event(event)
+    user_id = _get_chaos_user_id_from_event(event)
     if user_id is None:
         return Response(
             status_code=401,
@@ -776,7 +840,7 @@ def create_chaos_experiment():
 def list_chaos_experiments():
     """List chaos experiments with optional status filter."""
     event = app.current_event.raw_event
-    user_id = _get_authenticated_user_id_from_event(event)
+    user_id = _get_chaos_user_id_from_event(event)
     if user_id is None:
         return Response(
             status_code=401,
@@ -807,7 +871,7 @@ def list_chaos_experiments():
 def get_chaos_experiment(experiment_id: str):
     """Get chaos experiment by ID."""
     event = app.current_event.raw_event
-    user_id = _get_authenticated_user_id_from_event(event)
+    user_id = _get_chaos_user_id_from_event(event)
     if user_id is None:
         return Response(
             status_code=401,
@@ -834,7 +898,7 @@ def get_chaos_experiment(experiment_id: str):
 def start_chaos_experiment(experiment_id: str):
     """Start a chaos experiment."""
     event = app.current_event.raw_event
-    user_id = _get_authenticated_user_id_from_event(event)
+    user_id = _get_chaos_user_id_from_event(event)
     if user_id is None:
         return Response(
             status_code=401,
@@ -874,7 +938,7 @@ def start_chaos_experiment(experiment_id: str):
 def stop_chaos_experiment(experiment_id: str):
     """Stop a running chaos experiment."""
     event = app.current_event.raw_event
-    user_id = _get_authenticated_user_id_from_event(event)
+    user_id = _get_chaos_user_id_from_event(event)
     if user_id is None:
         return Response(
             status_code=401,
@@ -914,7 +978,7 @@ def stop_chaos_experiment(experiment_id: str):
 def get_chaos_experiment_report(experiment_id: str):
     """Get a comprehensive report for a chaos experiment."""
     event = app.current_event.raw_event
-    user_id = _get_authenticated_user_id_from_event(event)
+    user_id = _get_chaos_user_id_from_event(event)
     if user_id is None:
         return Response(
             status_code=401,
@@ -948,7 +1012,7 @@ def get_chaos_experiment_report(experiment_id: str):
 def delete_chaos_experiment(experiment_id: str):
     """Delete a chaos experiment."""
     event = app.current_event.raw_event
-    user_id = _get_authenticated_user_id_from_event(event)
+    user_id = _get_chaos_user_id_from_event(event)
     if user_id is None:
         return Response(
             status_code=401,
