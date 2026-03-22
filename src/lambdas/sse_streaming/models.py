@@ -30,6 +30,10 @@ class HeartbeatData(BaseModel):
     )
     connections: int = Field(description="Active connection count")
     uptime_seconds: int = Field(description="Lambda uptime in seconds")
+    state_valid: bool = Field(
+        default=True,
+        description="Whether connection manager state is consistent (Feature 1232)",
+    )
 
     @property
     def server_timestamp(self) -> datetime:
@@ -170,3 +174,7 @@ class StreamStatus(BaseModel):
     max_connections: int = Field(description="Maximum allowed connections")
     available: int = Field(description="Available connection slots")
     uptime_seconds: int = Field(description="Lambda uptime in seconds")
+    state_valid: bool = Field(
+        default=True,
+        description="Whether connection manager state is consistent (Feature 1232)",
+    )
