@@ -172,9 +172,12 @@ class TestTimeseriesQueryService:
             end=datetime(2025, 12, 21, 10, 45, tzinfo=UTC),
         )
 
-        assert len(response.buckets) == 2
+        # BETWEEN is inclusive on both ends (DynamoDB prohibits FilterExpression
+        # on key attributes, so exclusive-end via filter is not possible)
+        assert len(response.buckets) == 3
         assert response.buckets[0].timestamp == "2025-12-21T10:35:00Z"
         assert response.buckets[1].timestamp == "2025-12-21T10:40:00Z"
+        assert response.buckets[2].timestamp == "2025-12-21T10:45:00Z"
 
     @mock_aws
     @freeze_time("2025-12-21T10:42:00Z")
