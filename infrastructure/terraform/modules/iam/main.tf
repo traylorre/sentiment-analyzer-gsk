@@ -484,7 +484,7 @@ resource "aws_iam_role_policy" "dashboard_metrics" {
   })
 }
 
-# Dashboard Lambda: Chaos Testing (FIS + Chaos Experiments DynamoDB)
+# Dashboard Lambda: Chaos Testing (External Actor Architecture - Feature 1237)
 # Only in preprod/dev environments
 resource "aws_iam_role_policy" "dashboard_chaos" {
   count = var.environment != "prod" ? 1 : 0
@@ -495,16 +495,7 @@ resource "aws_iam_role_policy" "dashboard_chaos" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect = "Allow"
-        Action = [
-          "fis:StartExperiment",
-          "fis:StopExperiment",
-          "fis:GetExperiment",
-          "fis:ListExperiments"
-        ]
-        Resource = "*"
-      },
-      {
+        Sid    = "ChaosExperimentsDynamoDB"
         Effect = "Allow"
         Action = [
           "dynamodb:GetItem",
@@ -520,6 +511,47 @@ resource "aws_iam_role_policy" "dashboard_chaos" {
         ]
       },
       {
+        Sid    = "LambdaConfigForChaos"
+        Effect = "Allow"
+        Action = [
+          "lambda:UpdateFunctionConfiguration",
+          "lambda:PutFunctionConcurrency",
+          "lambda:DeleteFunctionConcurrency",
+          "lambda:GetFunctionConfiguration",
+          "lambda:GetFunctionConcurrency"
+        ]
+        Resource = "arn:aws:lambda:*:*:function:${var.environment}-sentiment-*"
+      },
+      {
+        Sid    = "SSMChaosParameters"
+        Effect = "Allow"
+        Action = [
+          "ssm:PutParameter",
+          "ssm:GetParameter",
+          "ssm:GetParametersByPath",
+          "ssm:DeleteParameter"
+        ]
+        Resource = "arn:aws:ssm:*:*:parameter/chaos/${var.environment}/*"
+      },
+      {
+        Sid    = "IAMPolicyForDynamoDBThrottle"
+        Effect = "Allow"
+        Action = [
+          "iam:AttachRolePolicy",
+          "iam:DetachRolePolicy"
+        ]
+        Resource = "arn:aws:iam::*:role/${var.environment}-*-lambda-role"
+      },
+      {
+        Sid    = "STSForAccountId"
+        Effect = "Allow"
+        Action = [
+          "sts:GetCallerIdentity"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "CloudWatchMetrics"
         Effect = "Allow"
         Action = [
           "cloudwatch:GetMetricStatistics",

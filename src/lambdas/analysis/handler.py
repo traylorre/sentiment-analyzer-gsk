@@ -65,11 +65,6 @@ from src.lambdas.analysis.sentiment import (
     get_model_load_time_ms,
     load_model,
 )
-from src.lambdas.shared.chaos_injection import (
-    auto_stop_expired,
-    get_chaos_delay_ms,
-    is_chaos_active,
-)
 from src.lambdas.shared.dynamodb import get_table
 from src.lib.metrics import (
     emit_metric,
@@ -116,38 +111,6 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     start_time = time.perf_counter()
     request_id = getattr(context, "aws_request_id", "unknown")
-
-    # Phase 4 Chaos Injection: Simulate cold start delay
-    delay_ms = get_chaos_delay_ms("lambda_cold_start")
-    if delay_ms > 0:
-        time.sleep(delay_ms / 1000.0)  # Convert ms to seconds
-        emit_metric(
-            "ChaosInjectionActive",
-            1,
-            dimensions={"Scenario": "lambda_cold_start"},
-        )
-        log_structured(
-            "WARNING",
-            f"Chaos experiment active: injected {delay_ms}ms delay",
-            scenario="lambda_cold_start",
-            delay_ms=delay_ms,
-            lambda_function="analysis",
-        )
-
-    # Feature 1236: DynamoDB throttle chaos check (before DynamoDB writes)
-    if is_chaos_active("dynamodb_throttle"):
-        throttle_delay = get_chaos_delay_ms("dynamodb_throttle")
-        if throttle_delay > 0:
-            time.sleep(throttle_delay / 1000.0)
-            emit_metric(
-                "ChaosInjectionActive",
-                1,
-                dimensions={"Scenario": "dynamodb_throttle"},
-            )
-
-    # Feature 1236: Auto-stop expired chaos experiments
-    auto_stop_expired("lambda_cold_start")
-    auto_stop_expired("dynamodb_throttle")
 
     try:
         # Parse SNS message
