@@ -250,10 +250,8 @@ class TestStartExperimentExternal:
         sample_experiment,
     ):
         """Test ingestion_failure scenario sets Lambda concurrency to 0."""
-        # Mock kill switch check
-        mock_ssm_client.get_parameter.return_value = {
-            "Parameter": {"Value": "disarmed"}
-        }
+        # Gate must be "armed" for real API calls (Feature 1238)
+        mock_ssm_client.get_parameter.return_value = {"Parameter": {"Value": "armed"}}
         # Mock snapshot: get_function_configuration
         mock_lambda_client.get_function_configuration.return_value = {
             "FunctionName": "preprod-sentiment-ingestion",
@@ -264,10 +262,26 @@ class TestStartExperimentExternal:
         mock_lambda_client.get_function_concurrency.return_value = {
             "ReservedConcurrentExecutions": 1
         }
+        mock_lambda_client.get_function.return_value = {}
 
         mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
 
-        start_experiment(sample_experiment["experiment_id"])
+        with patch("src.lambdas.dashboard.chaos.boto3") as mock_boto3:
+            mock_ddb_client = MagicMock()
+            mock_ddb_client.describe_table.return_value = {}
+            mock_cw_client = MagicMock()
+            mock_cw_client.describe_alarms.return_value = {}
+
+            def client_factory(service_name, **kwargs):
+                if service_name == "dynamodb":
+                    return mock_ddb_client
+                if service_name == "cloudwatch":
+                    return mock_cw_client
+                return MagicMock()
+
+            mock_boto3.client.side_effect = client_factory
+
+            start_experiment(sample_experiment["experiment_id"])
 
         # Verify concurrency set to 0
         mock_lambda_client.put_function_concurrency.assert_called_once_with(
@@ -275,12 +289,12 @@ class TestStartExperimentExternal:
             ReservedConcurrentExecutions=0,
         )
 
-        # Verify audit log updated with external_api method
+        # Verify audit log updated with concurrency_zero method (Feature 1238)
         mock_dynamodb_table.update_item.assert_called()
         update_call = mock_dynamodb_table.update_item.call_args
         results = update_call[1]["ExpressionAttributeValues"][":results"]
-        assert results["injection_method"] == "external_api"
-        assert results["action"] == "set_concurrency_0"
+        assert results["injection_method"] == "concurrency_zero"
+        assert results["dry_run"] is False
 
     def test_start_dynamodb_throttle_attaches_deny_policy(
         self,
@@ -294,9 +308,8 @@ class TestStartExperimentExternal:
         """Test dynamodb_throttle scenario attaches deny-write IAM policy."""
         sample_experiment["scenario_type"] = "dynamodb_throttle"
 
-        mock_ssm_client.get_parameter.return_value = {
-            "Parameter": {"Value": "disarmed"}
-        }
+        # Gate must be "armed" for real API calls (Feature 1238)
+        mock_ssm_client.get_parameter.return_value = {"Parameter": {"Value": "armed"}}
         mock_lambda_client.get_function_configuration.return_value = {
             "FunctionName": "preprod-sentiment-ingestion",
             "FunctionArn": "arn:aws:lambda:us-east-1:123:function:preprod-sentiment-ingestion",
@@ -304,6 +317,7 @@ class TestStartExperimentExternal:
             "Timeout": 60,
         }
         mock_lambda_client.get_function_concurrency.return_value = {}
+        mock_lambda_client.get_function.return_value = {}
 
         mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
 
@@ -313,7 +327,21 @@ class TestStartExperimentExternal:
         ):
             mock_sts = MagicMock()
             mock_sts.get_caller_identity.return_value = {"Account": "123456789012"}
-            mock_boto3.client.return_value = mock_sts
+            mock_ddb_client = MagicMock()
+            mock_ddb_client.describe_table.return_value = {}
+            mock_cw_client = MagicMock()
+            mock_cw_client.describe_alarms.return_value = {}
+
+            def client_factory(service_name, **kwargs):
+                if service_name == "sts":
+                    return mock_sts
+                if service_name == "dynamodb":
+                    return mock_ddb_client
+                if service_name == "cloudwatch":
+                    return mock_cw_client
+                return MagicMock()
+
+            mock_boto3.client.side_effect = client_factory
 
             start_experiment(sample_experiment["experiment_id"])
 
@@ -323,11 +351,11 @@ class TestStartExperimentExternal:
         # Verify IAM policy attached to both roles
         assert mock_iam_client.attach_role_policy.call_count == 2
 
-        # Verify audit log
+        # Verify audit log (Feature 1238: method names updated)
         update_call = mock_dynamodb_table.update_item.call_args
         results = update_call[1]["ExpressionAttributeValues"][":results"]
-        assert results["injection_method"] == "external_api"
-        assert results["action"] == "attach_deny_policy"
+        assert results["injection_method"] == "attach_deny_policy"
+        assert results["dry_run"] is False
 
     def test_start_cold_start_reduces_memory(
         self,
@@ -340,9 +368,8 @@ class TestStartExperimentExternal:
         """Test lambda_cold_start scenario reduces memory to 128MB."""
         sample_experiment["scenario_type"] = "lambda_cold_start"
 
-        mock_ssm_client.get_parameter.return_value = {
-            "Parameter": {"Value": "disarmed"}
-        }
+        # Gate must be "armed" for real API calls (Feature 1238)
+        mock_ssm_client.get_parameter.return_value = {"Parameter": {"Value": "armed"}}
         mock_lambda_client.get_function_configuration.return_value = {
             "FunctionName": "preprod-sentiment-analysis",
             "FunctionArn": "arn:aws:lambda:us-east-1:123:function:preprod-sentiment-analysis",
@@ -350,10 +377,26 @@ class TestStartExperimentExternal:
             "Timeout": 120,
         }
         mock_lambda_client.get_function_concurrency.return_value = {}
+        mock_lambda_client.get_function.return_value = {}
 
         mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
 
-        start_experiment(sample_experiment["experiment_id"])
+        with patch("src.lambdas.dashboard.chaos.boto3") as mock_boto3:
+            mock_ddb_client = MagicMock()
+            mock_ddb_client.describe_table.return_value = {}
+            mock_cw_client = MagicMock()
+            mock_cw_client.describe_alarms.return_value = {}
+
+            def client_factory(service_name, **kwargs):
+                if service_name == "dynamodb":
+                    return mock_ddb_client
+                if service_name == "cloudwatch":
+                    return mock_cw_client
+                return MagicMock()
+
+            mock_boto3.client.side_effect = client_factory
+
+            start_experiment(sample_experiment["experiment_id"])
 
         # Verify memory set to 128MB
         mock_lambda_client.update_function_configuration.assert_called_once_with(
@@ -377,7 +420,7 @@ class TestStartExperimentExternal:
         with pytest.raises(ChaosError) as exc_info:
             start_experiment(sample_experiment["experiment_id"])
 
-        assert "Kill switch is triggered" in str(exc_info.value)
+        assert "Kill switch triggered" in str(exc_info.value)
 
     def test_start_experiment_snapshots_config_to_ssm(
         self,
@@ -388,9 +431,8 @@ class TestStartExperimentExternal:
         sample_experiment,
     ):
         """Test start_experiment saves pre-chaos config to SSM before degrading."""
-        mock_ssm_client.get_parameter.return_value = {
-            "Parameter": {"Value": "disarmed"}
-        }
+        # Gate must be "armed" for real API calls (Feature 1238)
+        mock_ssm_client.get_parameter.return_value = {"Parameter": {"Value": "armed"}}
         mock_lambda_client.get_function_configuration.return_value = {
             "FunctionName": "preprod-sentiment-ingestion",
             "FunctionArn": "arn:aws:lambda:us-east-1:123:function:preprod-sentiment-ingestion",
@@ -400,10 +442,26 @@ class TestStartExperimentExternal:
         mock_lambda_client.get_function_concurrency.return_value = {
             "ReservedConcurrentExecutions": 1
         }
+        mock_lambda_client.get_function.return_value = {}
 
         mock_dynamodb_table.get_item.return_value = {"Item": sample_experiment}
 
-        start_experiment(sample_experiment["experiment_id"])
+        with patch("src.lambdas.dashboard.chaos.boto3") as mock_boto3:
+            mock_ddb_client = MagicMock()
+            mock_ddb_client.describe_table.return_value = {}
+            mock_cw_client = MagicMock()
+            mock_cw_client.describe_alarms.return_value = {}
+
+            def client_factory(service_name, **kwargs):
+                if service_name == "dynamodb":
+                    return mock_ddb_client
+                if service_name == "cloudwatch":
+                    return mock_cw_client
+                return MagicMock()
+
+            mock_boto3.client.side_effect = client_factory
+
+            start_experiment(sample_experiment["experiment_id"])
 
         # SSM put_parameter should be called twice:
         # 1. Snapshot config

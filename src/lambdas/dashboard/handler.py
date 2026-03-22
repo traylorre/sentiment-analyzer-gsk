@@ -50,6 +50,7 @@ from src.lambdas.dashboard.chaos import (
     create_experiment,
     delete_experiment,
     get_experiment,
+    get_experiment_report,
     list_experiments,
     start_experiment,
     stop_experiment,
@@ -342,6 +343,7 @@ def api_index():
                         "GET /chaos/experiments/{id}": "Get experiment",
                         "POST /chaos/experiments/{id}/start": "Start experiment",
                         "POST /chaos/experiments/{id}/stop": "Stop experiment",
+                        "GET /chaos/experiments/{id}/report": "Get experiment report",
                         "DELETE /chaos/experiments/{id}": "Delete experiment",
                     },
                 },
@@ -903,6 +905,40 @@ def stop_chaos_experiment(experiment_id: str):
     except EnvironmentNotAllowedError as e:
         return Response(
             status_code=403,
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
+        )
+
+
+@app.get("/chaos/experiments/<experiment_id>/report")
+def get_chaos_experiment_report(experiment_id: str):
+    """Get a comprehensive report for a chaos experiment."""
+    event = app.current_event.raw_event
+    user_id = _get_authenticated_user_id_from_event(event)
+    if user_id is None:
+        return Response(
+            status_code=401,
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Authentication required"}).decode(),
+        )
+
+    try:
+        report = get_experiment_report(experiment_id)
+        return Response(
+            status_code=200,
+            content_type="application/json",
+            body=orjson.dumps(report).decode(),
+        )
+    except ChaosError as e:
+        logger.error(
+            "Chaos experiment report failed",
+            extra={
+                "experiment_id": sanitize_for_log(experiment_id),
+                "error": sanitize_for_log(str(e)),
+            },
+        )
+        return Response(
+            status_code=404,
             content_type="application/json",
             body=orjson.dumps({"detail": str(e)}).decode(),
         )
