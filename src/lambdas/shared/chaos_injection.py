@@ -15,15 +15,21 @@ Phase 4: Lambda Cold Start Delays
 Allows any Lambda to inject configurable delays at handler entry to simulate
 cold start performance degradation.
 
+Phase 5: Auto-Stop Expired Experiments
+---------------------------------------
+Automatically stops experiments that have exceeded their duration_seconds,
+preventing runaway chaos experiments.
+
 Safety Design:
 --------------
 - Fail-safe: Returns False/0 on any errors (never blocks normal operation)
 - Environment-aware: Only checks chaos state in preprod/dev/test
-- Read-only: Only queries DynamoDB, never modifies state
+- Auto-stop: Expired experiments are cleaned up automatically
 """
 
 import logging
 import os
+from datetime import UTC, datetime
 from typing import Any
 
 import boto3
@@ -202,3 +208,110 @@ def get_chaos_delay_ms(scenario_type: str) -> int:
             extra={"scenario_type": scenario_type, "error": str(e)},
         )
         return 0
+
+
+def auto_stop_expired(scenario_type: str) -> bool:
+    """
+    Auto-stop experiments that have exceeded their duration_seconds.
+
+    Returns True if an experiment was auto-stopped.
+    Fails safe: returns False on any error.
+
+    Args:
+        scenario_type: Type of chaos scenario (e.g., "ingestion_failure", "lambda_cold_start")
+
+    Returns:
+        True if an experiment was auto-stopped, False otherwise
+
+    Safety:
+        - Returns False if not in preprod/dev/test environment
+        - Returns False if chaos table not configured
+        - Returns False on any errors (fail-safe)
+        - Only modifies expired experiments (completed status)
+    """
+    # Read environment variables at call time for testability
+    environment = os.environ.get("ENVIRONMENT", "dev")
+    chaos_table = os.environ.get("CHAOS_EXPERIMENTS_TABLE", "")
+
+    # Production safety: Never auto-stop in prod
+    if environment not in ["preprod", "dev", "test"]:
+        return False
+
+    # If chaos table not configured, no chaos testing available
+    if not chaos_table:
+        return False
+
+    try:
+        table = _get_dynamodb().Table(chaos_table)
+
+        # Query by_status GSI for running experiments of this type
+        response = table.query(
+            IndexName="by_status",
+            KeyConditionExpression="status = :status",
+            FilterExpression="scenario_type = :scenario_type",
+            ExpressionAttributeValues={
+                ":status": "running",
+                ":scenario_type": scenario_type,
+            },
+            Limit=5,
+        )
+
+        now = datetime.now(UTC)
+        for item in response.get("Items", []):
+            results = item.get("results", {})
+            started_at_str = results.get("started_at", "")
+            duration = int(item.get("duration_seconds", 300))
+
+            if started_at_str:
+                # Handle multiple timestamp formats:
+                # - "2025-01-01T00:00:00Z" (trailing Z only)
+                # - "2025-01-01T00:00:00+00:00Z" (offset + trailing Z)
+                # - "2025-01-01T00:00:00+00:00" (offset only)
+                ts = started_at_str.rstrip("Z")
+                if not ts.endswith("+00:00") and "+" not in ts[-6:]:
+                    ts += "+00:00"
+                started_at = datetime.fromisoformat(ts)
+                if (now - started_at).total_seconds() > duration:
+                    exp_id = item["experiment_id"]
+
+                    # Update to completed with auto-stop metadata
+                    results["stopped_at"] = now.isoformat() + "Z"
+                    results["auto_stopped"] = True
+                    table.update_item(
+                        Key={"experiment_id": exp_id},
+                        UpdateExpression="SET #s = :completed, results = :results, updated_at = :now",
+                        ExpressionAttributeNames={"#s": "status"},
+                        ExpressionAttributeValues={
+                            ":completed": "completed",
+                            ":results": results,
+                            ":now": now.isoformat() + "Z",
+                        },
+                    )
+
+                    logger.info(
+                        "Auto-stopped expired chaos experiment",
+                        extra={
+                            "experiment_id": exp_id,
+                            "scenario": scenario_type,
+                            "duration_seconds": duration,
+                        },
+                    )
+                    return True
+
+        return False
+
+    except ClientError as e:
+        # Fail-safe: On DynamoDB errors, skip auto-stop
+        logger.debug(
+            "Auto-stop check failed (safe)",
+            extra={"scenario_type": scenario_type, "error": str(e)},
+        )
+        return False
+
+    except Exception as e:
+        # Fail-safe: On any unexpected errors, skip auto-stop
+        logger.debug(
+            "Auto-stop check failed (safe)",
+            extra={"scenario_type": scenario_type, "error": str(e)},
+        )
+        return False

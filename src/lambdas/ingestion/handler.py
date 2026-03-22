@@ -100,6 +100,11 @@ from src.lambdas.shared.adapters.base import (
 )
 from src.lambdas.shared.adapters.finnhub import FinnhubAdapter
 from src.lambdas.shared.adapters.tiingo import TiingoAdapter
+from src.lambdas.shared.chaos_injection import (
+    auto_stop_expired,
+    get_chaos_delay_ms,
+    is_chaos_active,
+)
 from src.lambdas.shared.circuit_breaker import CircuitBreakerState
 from src.lambdas.shared.dynamodb import get_table
 from src.lambdas.shared.failure_tracker import ConsecutiveFailureTracker
@@ -185,6 +190,22 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             ),
         }
 
+    # Feature 1236: Chaos injection gate - ingestion_failure
+    if is_chaos_active("ingestion_failure"):
+        logger.warning(
+            "Chaos: skipping ingestion",
+            extra={"scenario": "ingestion_failure", "experiment_active": True},
+        )
+        emit_metric(
+            "ChaosInjectionActive", 1, dimensions={"Scenario": "ingestion_failure"}
+        )
+        return {
+            "statusCode": 200,
+            "body": json.dumps(
+                {"status": "chaos_active", "scenario": "ingestion_failure"}
+            ),
+        }
+
     start_time = time.perf_counter()
     request_id = getattr(context, "aws_request_id", "unknown")
 
@@ -195,6 +216,21 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             "event_source": event.get("source", "unknown"),
         },
     )
+
+    # Feature 1236: Auto-stop expired chaos experiments
+    auto_stop_expired("ingestion_failure")
+    auto_stop_expired("dynamodb_throttle")
+
+    # Feature 1236: DynamoDB throttle chaos check (before DynamoDB writes)
+    if is_chaos_active("dynamodb_throttle"):
+        throttle_delay = get_chaos_delay_ms("dynamodb_throttle")
+        if throttle_delay > 0:
+            time.sleep(throttle_delay / 1000.0)
+            emit_metric(
+                "ChaosInjectionActive",
+                1,
+                dimensions={"Scenario": "dynamodb_throttle"},
+            )
 
     # Initialize counters
     summary = {
