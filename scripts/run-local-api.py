@@ -75,7 +75,7 @@ if env_vars:
 os.environ.setdefault("ENVIRONMENT", "local")
 os.environ.setdefault("USERS_TABLE", "local-users")
 os.environ.setdefault("SENTIMENTS_TABLE", "local-sentiments")
-os.environ.setdefault("CHAOS_EXPERIMENTS_TABLE", "local-chaos")
+os.environ.setdefault("CHAOS_EXPERIMENTS_TABLE", "local-chaos-experiments")
 os.environ.setdefault("OHLC_CACHE_TABLE", "local-ohlc-cache")  # CACHE-001
 os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
 os.environ.setdefault("AWS_REGION", "us-east-1")
@@ -141,8 +141,32 @@ def create_mock_tables():
         BillingMode="PAY_PER_REQUEST",
     )
 
+    # Create chaos experiments table
+    dynamodb.create_table(
+        TableName="local-chaos-experiments",
+        KeySchema=[
+            {"AttributeName": "experiment_id", "KeyType": "HASH"},
+        ],
+        AttributeDefinitions=[
+            {"AttributeName": "experiment_id", "AttributeType": "S"},
+            {"AttributeName": "status", "AttributeType": "S"},
+            {"AttributeName": "created_at", "AttributeType": "S"},
+        ],
+        GlobalSecondaryIndexes=[
+            {
+                "IndexName": "by_status",
+                "KeySchema": [
+                    {"AttributeName": "status", "KeyType": "HASH"},
+                    {"AttributeName": "created_at", "KeyType": "RANGE"},
+                ],
+                "Projection": {"ProjectionType": "ALL"},
+            },
+        ],
+        BillingMode="PAY_PER_REQUEST",
+    )
+
     logger.info(
-        "Created mock DynamoDB tables: local-users, local-sentiments, local-ohlc-cache"
+        "Created mock DynamoDB tables: local-users, local-sentiments, local-ohlc-cache, local-chaos-experiments"
     )
     return mock
 
@@ -162,6 +186,11 @@ class LambdaProxyHandler(BaseHTTPRequestHandler):
     """HTTP handler that translates requests to Lambda events."""
 
     def _build_event(self, method: str) -> dict:
+        """Build a Lambda Function URL v2 event from the HTTP request.
+
+        The dashboard handler uses LambdaFunctionUrlResolver which expects
+        v2 event format with requestContext.http.method and rawPath.
+        """
         parsed = urlparse(self.path)
         content_length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(content_length).decode() if content_length else None
@@ -172,17 +201,31 @@ class LambdaProxyHandler(BaseHTTPRequestHandler):
             if parsed.query
             else None
         )
+        raw_query_string = parsed.query or ""
 
         return {
-            "httpMethod": method,
-            "path": parsed.path,
+            "version": "2.0",
+            "rawPath": parsed.path,
+            "rawQueryString": raw_query_string,
             "headers": headers,
             "queryStringParameters": query_params,
             "body": body,
             "isBase64Encoded": False,
             "requestContext": {
-                "identity": {"sourceIp": "127.0.0.1"},
+                "accountId": "000000000000",
+                "apiId": "local",
+                "domainName": "localhost:8000",
+                "domainPrefix": "localhost",
+                "http": {
+                    "method": method,
+                    "path": parsed.path,
+                    "protocol": "HTTP/1.1",
+                    "sourceIp": "127.0.0.1",
+                    "userAgent": headers.get("user-agent", "local-dev"),
+                },
                 "requestId": "local-request",
+                "routeKey": "$default",
+                "stage": "$default",
             },
         }
 
@@ -204,13 +247,19 @@ class LambdaProxyHandler(BaseHTTPRequestHandler):
         self.send_header(
             "Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS"
         )
-        self.send_header("Access-Control-Allow-Headers", "*")
+        self.send_header(
+            "Access-Control-Allow-Headers",
+            "Content-Type, Authorization, Accept, Cache-Control, "
+            "Last-Event-ID, X-Amzn-Trace-Id, X-User-ID",
+        )
 
         for key, value in resp_headers.items():
             self.send_header(key, value)
 
-        # Set-Cookie from multiValueHeaders
+        # Set-Cookie from multiValueHeaders (v1) or cookies (v2)
         for cookie in response.get("multiValueHeaders", {}).get("Set-Cookie", []):
+            self.send_header("Set-Cookie", cookie)
+        for cookie in response.get("cookies", []):
             self.send_header("Set-Cookie", cookie)
 
         self.end_headers()
@@ -236,7 +285,11 @@ class LambdaProxyHandler(BaseHTTPRequestHandler):
         self.send_header(
             "Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS"
         )
-        self.send_header("Access-Control-Allow-Headers", "*")
+        self.send_header(
+            "Access-Control-Allow-Headers",
+            "Content-Type, Authorization, Accept, Cache-Control, "
+            "Last-Event-ID, X-Amzn-Trace-Id, X-User-ID",
+        )
         self.end_headers()
 
 

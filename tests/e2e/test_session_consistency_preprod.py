@@ -1,3 +1,4 @@
+# Target: Admin Dashboard (Lambda HTMX)
 """E2E tests for Feature 014 Session Consistency (preprod).
 
 These tests run against the preprod environment and validate:

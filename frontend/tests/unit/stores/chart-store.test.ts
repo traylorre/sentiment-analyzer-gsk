@@ -99,16 +99,16 @@ describe('Chart Store', () => {
     it('should set hovered cell', () => {
       const { setHoveredCell } = useChartStore.getState();
 
-      setHoveredCell({ ticker: 'AAPL', source: 'tiingo' });
+      setHoveredCell({ ticker: 'AAPL', source: 'aggregated' });
 
       const state = useChartStore.getState();
-      expect(state.hoveredCell).toEqual({ ticker: 'AAPL', source: 'tiingo' });
+      expect(state.hoveredCell).toEqual({ ticker: 'AAPL', source: 'aggregated' });
     });
 
     it('should clear hovered cell', () => {
       const { setHoveredCell } = useChartStore.getState();
 
-      setHoveredCell({ ticker: 'AAPL', source: 'tiingo' });
+      setHoveredCell({ ticker: 'AAPL', source: 'aggregated' });
       setHoveredCell(null);
 
       expect(useChartStore.getState().hoveredCell).toBeNull();

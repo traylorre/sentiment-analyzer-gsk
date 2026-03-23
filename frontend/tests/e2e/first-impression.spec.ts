@@ -1,3 +1,4 @@
+// Target: Customer Dashboard (Next.js/Amplify)
 import { test, expect } from '@playwright/test';
 
 test.describe('First Impression Flow', () => {

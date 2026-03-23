@@ -78,35 +78,23 @@ const CONFIG = {
             durationSeconds: 300,
             ttlSeconds: 43200  // 12 hours
         },
-        '10m': {
-            key: '10m',
-            displayName: '10 min',
-            durationSeconds: 600,
+        '15m': {
+            key: '15m',
+            displayName: '15 min',
+            durationSeconds: 900,
             ttlSeconds: 86400  // 24 hours
+        },
+        '30m': {
+            key: '30m',
+            displayName: '30 min',
+            durationSeconds: 1800,
+            ttlSeconds: 259200  // 3 days
         },
         '1h': {
             key: '1h',
             displayName: '1 hour',
             durationSeconds: 3600,
             ttlSeconds: 604800  // 7 days
-        },
-        '3h': {
-            key: '3h',
-            displayName: '3 hours',
-            durationSeconds: 10800,
-            ttlSeconds: 1209600  // 14 days
-        },
-        '6h': {
-            key: '6h',
-            displayName: '6 hours',
-            durationSeconds: 21600,
-            ttlSeconds: 2592000  // 30 days
-        },
-        '12h': {
-            key: '12h',
-            displayName: '12 hours',
-            durationSeconds: 43200,
-            ttlSeconds: 5184000  // 60 days
         },
         '24h': {
             key: '24h',
@@ -117,7 +105,7 @@ const CONFIG = {
     },
 
     // Resolution display order for UI selectors
-    RESOLUTION_ORDER: ['1m', '5m', '10m', '1h', '3h', '6h', '12h', '24h'],
+    RESOLUTION_ORDER: ['1m', '5m', '15m', '30m', '1h', '24h'],
 
     // Default resolution (Feature 1009 FR-002)
     DEFAULT_RESOLUTION: '5m',
@@ -194,13 +182,9 @@ const CONFIG = {
     UNIFIED_RESOLUTIONS: [
         { key: '1m', label: '1m', ohlc: '1', sentiment: '1m', exact: true },
         { key: '5m', label: '5m', ohlc: '5', sentiment: '5m', exact: true },
-        { key: '10m', label: '10m', ohlc: '15', sentiment: '10m', exact: false },
-        { key: '15m', label: '15m', ohlc: '15', sentiment: '10m', exact: false },
-        { key: '30m', label: '30m', ohlc: '30', sentiment: '1h', exact: false },
+        { key: '15m', label: '15m', ohlc: '15', sentiment: '15m', exact: true },
+        { key: '30m', label: '30m', ohlc: '30', sentiment: '30m', exact: true },
         { key: '1h', label: '1h', ohlc: '60', sentiment: '1h', exact: true },
-        { key: '3h', label: '3h', ohlc: '60', sentiment: '3h', exact: false },
-        { key: '6h', label: '6h', ohlc: 'D', sentiment: '6h', exact: false },
-        { key: '12h', label: '12h', ohlc: 'D', sentiment: '12h', exact: false },
         { key: 'D', label: 'Day', ohlc: 'D', sentiment: '24h', exact: true }
     ],
 

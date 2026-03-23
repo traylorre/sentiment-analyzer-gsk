@@ -82,16 +82,21 @@ class TestExactResolutionsConfig:
                 pattern, content, re.DOTALL
             ), f"Resolution {res} should have exact: true in config.js"
 
-    def test_config_has_hybrid_resolutions_marked(self) -> None:
-        """Verify config.js has exact:false for hybrid resolutions."""
+    def test_config_has_no_hybrid_resolutions(self) -> None:
+        """Verify config.js has no hybrid resolutions (all exact: true).
+
+        After the Resolution enum was reduced to 6 values with 1:1 OHLC/sentiment
+        alignment, all resolutions are exact matches. No hybrid/approximate
+        resolutions should remain.
+        """
         repo_root = get_repo_root()
         config_path = repo_root / "src" / "dashboard" / "config.js"
         content = config_path.read_text()
 
-        # Verify at least some exact:false resolutions exist
+        # Verify no exact:false resolutions exist (all are 1:1 aligned now)
         pattern = r"exact:\s*false"
         matches = re.findall(pattern, content)
-        assert len(matches) >= 4, (
-            "Expected at least 4 hybrid resolutions with exact: false. "
-            "Found: {len(matches)}"
+        assert len(matches) == 0, (
+            f"Expected 0 hybrid resolutions with exact: false after 1:1 alignment. "
+            f"Found: {len(matches)}"
         )

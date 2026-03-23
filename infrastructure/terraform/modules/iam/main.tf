@@ -40,7 +40,8 @@ resource "aws_iam_role_policy" "ingestion_dynamodb" {
         Effect = "Allow"
         Action = [
           "dynamodb:PutItem",
-          "dynamodb:GetItem"
+          "dynamodb:GetItem",
+          "dynamodb:UpdateItem" # Feature 1227: Required for Feature 1010 dedup upsert
         ]
         Resource = var.dynamodb_table_arn
       },
@@ -183,12 +184,32 @@ resource "aws_iam_role_policy" "ingestion_feature_006_users" {
         Effect = "Allow"
         Action = [
           "dynamodb:GetItem",
-          "dynamodb:Query"
+          "dynamodb:Query",
+          "dynamodb:PutItem" # Feature 1227: Required for circuit breaker + quota tracker persistence
         ]
         Resource = [
           var.feature_006_users_table_arn,
           "${var.feature_006_users_table_arn}/index/by_entity_status"
         ]
+      }
+    ]
+  })
+}
+
+# Ingestion Lambda: SQS Dead Letter Queue (chaos-readiness)
+resource "aws_iam_role_policy" "ingestion_dlq" {
+  name = "${var.environment}-ingestion-dlq-policy"
+  role = aws_iam_role.ingestion_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "sqs:SendMessage"
+        ]
+        Resource = var.dlq_arn
       }
     ]
   })
@@ -463,7 +484,7 @@ resource "aws_iam_role_policy" "dashboard_metrics" {
   })
 }
 
-# Dashboard Lambda: Chaos Testing (FIS + Chaos Experiments DynamoDB)
+# Dashboard Lambda: Chaos Testing (External Actor Architecture - Feature 1237)
 # Only in preprod/dev environments
 resource "aws_iam_role_policy" "dashboard_chaos" {
   count = var.environment != "prod" ? 1 : 0
@@ -474,16 +495,7 @@ resource "aws_iam_role_policy" "dashboard_chaos" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect = "Allow"
-        Action = [
-          "fis:StartExperiment",
-          "fis:StopExperiment",
-          "fis:GetExperiment",
-          "fis:ListExperiments"
-        ]
-        Resource = "*"
-      },
-      {
+        Sid    = "ChaosExperimentsDynamoDB"
         Effect = "Allow"
         Action = [
           "dynamodb:GetItem",
@@ -499,12 +511,63 @@ resource "aws_iam_role_policy" "dashboard_chaos" {
         ]
       },
       {
+        Sid    = "LambdaConfigForChaos"
+        Effect = "Allow"
+        Action = [
+          "lambda:UpdateFunctionConfiguration",
+          "lambda:PutFunctionConcurrency",
+          "lambda:DeleteFunctionConcurrency",
+          "lambda:GetFunctionConfiguration",
+          "lambda:GetFunctionConcurrency"
+        ]
+        Resource = "arn:aws:lambda:*:*:function:${var.environment}-sentiment-*"
+      },
+      {
+        Sid    = "SSMChaosParameters"
+        Effect = "Allow"
+        Action = [
+          "ssm:PutParameter",
+          "ssm:GetParameter",
+          "ssm:GetParametersByPath",
+          "ssm:DeleteParameter"
+        ]
+        Resource = "arn:aws:ssm:*:*:parameter/chaos/${var.environment}/*"
+      },
+      {
+        Sid    = "IAMPolicyForDynamoDBThrottle"
+        Effect = "Allow"
+        Action = [
+          "iam:AttachRolePolicy",
+          "iam:DetachRolePolicy"
+        ]
+        Resource = "arn:aws:iam::*:role/${var.environment}-*-lambda-role"
+      },
+      {
+        Sid    = "STSForAccountId"
+        Effect = "Allow"
+        Action = [
+          "sts:GetCallerIdentity"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "CloudWatchMetrics"
         Effect = "Allow"
         Action = [
           "cloudwatch:GetMetricStatistics",
           "cloudwatch:GetMetricData"
         ]
         Resource = "*"
+      },
+      {
+        Sid    = "EventBridgeChaosControl"
+        Effect = "Allow"
+        Action = [
+          "events:DescribeRule",
+          "events:DisableRule",
+          "events:EnableRule"
+        ]
+        Resource = "arn:aws:events:*:*:rule/${var.environment}-*"
       }
     ]
   })
@@ -803,6 +866,25 @@ resource "aws_iam_role_policy" "notification_metrics" {
             "cloudwatch:namespace" = "SentimentAnalyzer"
           }
         }
+      }
+    ]
+  })
+}
+
+# Notification Lambda: SQS Dead Letter Queue (chaos-readiness)
+resource "aws_iam_role_policy" "notification_dlq" {
+  name = "${var.environment}-notification-dlq-policy"
+  role = aws_iam_role.notification_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "sqs:SendMessage"
+        ]
+        Resource = var.dlq_arn
       }
     ]
   })

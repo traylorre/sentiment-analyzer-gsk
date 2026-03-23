@@ -1,0 +1,152 @@
+openapi: "3.0.3"
+info:
+  title: Sentiment Overview & History API
+  version: "2.0"
+  description: |
+    Endpoints for querying sentiment data per configuration.
+    Both endpoints query the sentiment-timeseries DynamoDB table
+    via TimeseriesQueryService.
+
+paths:
+  /api/v2/configurations/{config_id}/sentiment:
+    get:
+      summary: Get sentiment overview for configuration tickers
+      description: |
+        Returns aggregated sentiment data for each ticker in the
+        configuration at the requested resolution. Uses the latest
+        timeseries bucket(s) for each ticker.
+      parameters:
+        - name: config_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: resolution
+          in: query
+          required: false
+          description: "Time bucket resolution (default: 24h)"
+          schema:
+            type: string
+            enum: ["1m", "5m", "15m", "30m", "1h", "24h"]
+            default: "24h"
+      responses:
+        "200":
+          description: Sentiment data for all tickers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SentimentResponse"
+        "404":
+          description: Configuration not found
+        "401":
+          description: Unauthorized
+
+  /api/v2/configurations/{config_id}/sentiment/{ticker}/history:
+    get:
+      summary: Get sentiment history for a specific ticker
+      description: |
+        Returns time-series sentiment data for a single ticker
+        within a configuration over the requested time window.
+      parameters:
+        - name: config_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: ticker
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[A-Z]{1,5}$"
+        - name: days
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 30
+            default: 7
+        - name: resolution
+          in: query
+          required: false
+          description: "Time bucket resolution (default: 24h)"
+          schema:
+            type: string
+            enum: ["1m", "5m", "15m", "30m", "1h", "24h"]
+            default: "24h"
+        - name: source
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: ["tiingo", "finnhub"]
+      responses:
+        "200":
+          description: Sentiment history for ticker
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SentimentResponse"
+        "400":
+          description: Invalid parameters
+        "404":
+          description: Configuration or ticker not found
+
+components:
+  schemas:
+    SourceSentiment:
+      type: object
+      required: [score, label, updated_at]
+      properties:
+        score:
+          type: number
+          minimum: -1.0
+          maximum: 1.0
+        label:
+          type: string
+          enum: ["positive", "negative", "neutral"]
+        confidence:
+          type: number
+          nullable: true
+        bullish_percent:
+          type: number
+          nullable: true
+        bearish_percent:
+          type: number
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+
+    TickerSentimentData:
+      type: object
+      required: [symbol, sentiment]
+      properties:
+        symbol:
+          type: string
+        sentiment:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/SourceSentiment"
+          description: "Keys are source names (tiingo, finnhub, aggregated)"
+
+    SentimentResponse:
+      type: object
+      required: [config_id, tickers, last_updated, next_refresh_at, cache_status]
+      properties:
+        config_id:
+          type: string
+        tickers:
+          type: array
+          items:
+            $ref: "#/components/schemas/TickerSentimentData"
+        last_updated:
+          type: string
+          format: date-time
+        next_refresh_at:
+          type: string
+          format: date-time
+        cache_status:
+          type: string
+          enum: ["fresh", "stale", "refreshing"]

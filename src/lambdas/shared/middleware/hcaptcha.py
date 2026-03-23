@@ -257,7 +257,7 @@ def record_action_for_rate_limit(
                 "action": action,
                 "client_ip": client_ip,
                 "created_at": now.isoformat(),
-                "ttl": ttl,
+                "ttl_timestamp": ttl,
                 "entity_type": "RATE_LIMIT_RECORD",
             }
         )

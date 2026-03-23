@@ -1,3 +1,4 @@
+# Target: Admin Dashboard (Lambda HTMX)
 """E2E tests for cache hit rate validation.
 
 Feature: 1020-validate-cache-hit-rate
@@ -239,7 +240,7 @@ class TestCacheHitRate:
             List of cache metric samples collected
         """
         start_time = asyncio.get_event_loop().time()
-        resolutions = ["1m", "5m", "10m", "1h", "5m", "1m"]  # Switch pattern
+        resolutions = ["1m", "5m", "15m", "1h", "5m", "1m"]  # Switch pattern
         resolution_index = 0
 
         while asyncio.get_event_loop().time() - start_time < duration_seconds:

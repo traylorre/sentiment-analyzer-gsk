@@ -23,6 +23,7 @@ from typing import Any, Literal
 from aws_lambda_powertools import Tracer
 from pydantic import BaseModel
 
+from src.lambdas.shared.logging_utils import get_safe_error_info
 from src.lib.cache_utils import CacheStats, get_global_emitter
 from src.lib.metrics import emit_metric
 
@@ -55,6 +56,11 @@ _service_locks: dict[str, threading.Lock] = {
     "finnhub": threading.Lock(),
     "sendgrid": threading.Lock(),
 }
+
+# Feature 1234: Cold start detection for observability
+# Module-level flag -- True on first invocation, False after first get_state() call.
+# Survives Lambda warm invocations (module stays loaded), resets on cold start.
+_is_cold_start: bool = True
 
 
 def _get_cached_state(service: str) -> "CircuitBreakerState | None":
@@ -130,6 +136,16 @@ def clear_cache() -> None:
         _cache_stats = {"hits": 0, "misses": 0}
 
 
+def reset_cold_start() -> None:
+    """Reset cold start flag to True. Used in tests.
+
+    Feature 1234: Allows tests to simulate a fresh Lambda cold start
+    by resetting the module-level _is_cold_start flag.
+    """
+    global _is_cold_start
+    _is_cold_start = True
+
+
 class CircuitBreakerState(BaseModel):
     """Per-API circuit breaker state.
 
@@ -174,11 +190,17 @@ class CircuitBreakerState(BaseModel):
         return "STATE"
 
     def record_success(self) -> None:
-        """Record successful API call."""
+        """Record successful API call.
+
+        Resets failure count on ANY success -- a successful call proves
+        the service is reachable, so accumulated failures are stale.
+        Previously only reset on half_open->closed transition, which meant
+        4 failures + 1 success + 1 failure = tripped (non-consecutive).
+        """
         self.last_success_at = datetime.now(UTC)
+        self.failure_count = 0  # Feature 1227: Reset on any success, not just recovery
         if self.state == "half_open":
             self.state = "closed"
-            self.failure_count = 0
             self.total_recoveries += 1
 
     def record_failure(self) -> None:
@@ -318,18 +340,30 @@ class CircuitBreakerManager:
     ) -> CircuitBreakerState:
         """Get circuit breaker state, using cache when available.
 
+        Feature 1234: All paths emit structured logs with state_source,
+        cold_start, and service fields for chaos testing observability.
+
         Args:
             service: Service name
 
         Returns:
             CircuitBreakerState (from cache, DynamoDB, or default)
         """
+        global _is_cold_start
+        is_cold = _is_cold_start
+        _is_cold_start = False
+
         # Check cache first
         cached = _get_cached_state(service)
         if cached is not None:
             logger.debug(
-                "Circuit breaker cache hit",
-                extra={"service": service, "state": cached.state},
+                "Circuit breaker state loaded",
+                extra={
+                    "state_source": "cache",
+                    "cold_start": is_cold,
+                    "service": service,
+                    "state": cached.state,
+                },
             )
             return cached
 
@@ -340,39 +374,59 @@ class CircuitBreakerManager:
             )
             if "Item" in response:
                 state = CircuitBreakerState.from_dynamodb_item(response["Item"])
-                logger.debug(
-                    "Circuit breaker loaded from DynamoDB",
-                    extra={"service": service, "state": state.state},
+                logger.info(
+                    "Circuit breaker state loaded",
+                    extra={
+                        "state_source": "dynamodb",
+                        "cold_start": is_cold,
+                        "service": service,
+                        "state": state.state,
+                    },
                 )
             else:
                 # Create default state
                 state = CircuitBreakerState.create_default(service)
-                logger.debug(
-                    "Circuit breaker created default",
-                    extra={"service": service},
+                logger.info(
+                    "Circuit breaker state loaded",
+                    extra={
+                        "state_source": "dynamodb",
+                        "cold_start": is_cold,
+                        "service": service,
+                        "state": state.state,
+                    },
                 )
         except Exception as e:
-            # Feature 1224 — Failure Policy: FAIL-OPEN (closed state).
+            # Feature 1224 -- Failure Policy: FAIL-OPEN (closed state).
             # When DynamoDB is unreachable, assume circuit is closed (allow traffic).
             # This prevents a DynamoDB outage from cascading into a full API shutdown.
             # See docs/cache-failure-policies.md for the complete policy matrix.
             logger.warning(
-                "Failed to load circuit breaker, using default (fail-open: closed state)",
-                extra={"service": service, "error": str(e)},
+                "Circuit breaker state load failed, defaulting to closed (fail-open)",
+                extra={
+                    "state_source": "default_fail_open",
+                    "cold_start": is_cold,
+                    "service": service,
+                    "state": "closed",
+                    **get_safe_error_info(e),
+                },
+                exc_info=True,
             )
             # X-Ray error subsegment for silent failure visibility
             try:
                 with tracer.provider.in_subsegment("circuit_breaker_load") as subseg:
                     subseg.put_annotation("error", True)
                     subseg.add_exception(e)
-            except Exception:  # noqa: S110
-                pass  # Best-effort: don't fail if X-Ray unavailable
+            except Exception:
+                logger.debug("X-Ray subsegment failed", exc_info=True)
             # CloudWatch metric for silent failure alerting (SC-019)
             emit_metric(
                 name="SilentFailure/Count",
                 value=1,
                 unit="Count",
-                dimensions={"FailurePath": "circuit_breaker_load"},
+                dimensions={
+                    "FailurePath": "circuit_breaker_load",
+                    "ColdStart": str(is_cold).lower(),
+                },
                 namespace="SentimentAnalyzer/Reliability",
             )
             state = CircuitBreakerState.create_default(service)
@@ -406,17 +460,19 @@ class CircuitBreakerManager:
             )
             return True
         except Exception as e:
-            logger.error(
-                "Failed to save circuit breaker",
+            logger.warning(
+                "Failed to save circuit breaker state to DynamoDB, "
+                "in-memory state preserved (fail-open)",
                 extra={"service": state.service, "error": str(e)},
+                exc_info=True,
             )
             # X-Ray error subsegment for silent failure visibility
             try:
                 with tracer.provider.in_subsegment("circuit_breaker_save") as subseg:
                     subseg.put_annotation("error", True)
                     subseg.add_exception(e)
-            except Exception:  # noqa: S110
-                pass  # Best-effort: don't fail if X-Ray unavailable
+            except Exception:
+                logger.debug("X-Ray subsegment failed", exc_info=True)
             # CloudWatch metric for silent failure alerting (SC-019)
             emit_metric(
                 name="SilentFailure/Count",
@@ -445,7 +501,7 @@ class CircuitBreakerManager:
             old_state = state.state
             state.record_success()
 
-            # Only persist if state changed (half_open → closed)
+            # Only persist if state changed (half_open -> closed)
             if old_state != state.state:
                 self.save_state(state)
                 logger.info(

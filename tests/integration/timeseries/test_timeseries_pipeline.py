@@ -1,13 +1,13 @@
 """Integration tests for timeseries pipeline.
 
 Tests the complete data flow from sentiment score ingestion through
-write fanout to all 8 resolution buckets, query operations with time
+write fanout to all 6 resolution buckets, query operations with time
 ordering, partial bucket detection, and OHLC aggregation accuracy.
 
 Canonical References:
 - [CS-001] AWS DynamoDB Best Practices: Write fanout, key design, TTL
 - [CS-002] AWS Blog: Choosing the Right DynamoDB Partition Key
-- FR-003: Verify write fanout produces exactly 8 items
+- FR-003: Verify write fanout produces exactly 6 items
 - FR-004: Verify partition key format {ticker}#{resolution}
 - FR-005: Verify sort key contains aligned bucket timestamp
 - FR-006: Verify query results in ascending timestamp order
@@ -35,35 +35,35 @@ class TestWriteFanout:
     Validate write fanout creates all resolution items.
 
     User Story 1 (P1): Verify single sentiment score correctly produces
-    8 DynamoDB items (one per resolution level).
+    6 DynamoDB items (one per resolution level).
 
     Independent Test: pytest tests/integration/timeseries/test_timeseries_pipeline.py::TestWriteFanout -v
     """
 
-    def test_fanout_creates_8_resolution_items(
+    def test_fanout_creates_6_resolution_items(
         self, dynamodb_client, timeseries_table, sample_score
     ):
         """
-        Verify exactly 8 items exist after single score ingestion.
+        Verify exactly 6 items exist after single score ingestion.
 
-        FR-003: Test suite MUST verify write fanout produces exactly 8 items
+        FR-003: Test suite MUST verify write fanout produces exactly 6 items
         (one per resolution) for each ingested score.
 
         Acceptance: Given empty table, when single score ingested,
-        then exactly 8 items exist (1m, 5m, 10m, 1h, 3h, 6h, 12h, 24h).
+        then exactly 6 items exist (1m, 5m, 15m, 30m, 1h, 24h).
         """
         # Act: Write fanout
         write_fanout(dynamodb_client, timeseries_table, sample_score)
 
-        # Assert: Exactly 8 items
+        # Assert: Exactly 6 items
         response = dynamodb_client.scan(TableName=timeseries_table)
         items = response.get("Items", [])
 
-        assert len(items) == 8, f"Expected 8 items, got {len(items)}"
+        assert len(items) == 6, f"Expected 6 items, got {len(items)}"
 
         # Verify all resolutions present
         resolutions = {item["PK"]["S"].split("#")[1] for item in items}
-        expected_resolutions = {"1m", "5m", "10m", "1h", "3h", "6h", "12h", "24h"}
+        expected_resolutions = {"1m", "5m", "15m", "30m", "1h", "24h"}
         assert resolutions == expected_resolutions
 
     def test_partition_key_format(
@@ -88,11 +88,9 @@ class TestWriteFanout:
         expected_pks = {
             "AAPL#1m",
             "AAPL#5m",
-            "AAPL#10m",
+            "AAPL#15m",
+            "AAPL#30m",
             "AAPL#1h",
-            "AAPL#3h",
-            "AAPL#6h",
-            "AAPL#12h",
             "AAPL#24h",
         }
 
@@ -112,9 +110,10 @@ class TestWriteFanout:
         then each resolution's bucket timestamp is correctly aligned:
         - 1m: 10:35:00
         - 5m: 10:35:00
-        - 10m: 10:30:00
+        - 15m: 10:30:00
+        - 30m: 10:30:00
         - 1h: 10:00:00
-        - etc.
+        - 24h: 00:00:00
         """
         # Act
         write_fanout(dynamodb_client, timeseries_table, sample_score)
@@ -130,11 +129,9 @@ class TestWriteFanout:
         expected = {
             "AAPL#1m": "2024-01-02T10:35:00+00:00",
             "AAPL#5m": "2024-01-02T10:35:00+00:00",
-            "AAPL#10m": "2024-01-02T10:30:00+00:00",
+            "AAPL#15m": "2024-01-02T10:30:00+00:00",
+            "AAPL#30m": "2024-01-02T10:30:00+00:00",
             "AAPL#1h": "2024-01-02T10:00:00+00:00",
-            "AAPL#3h": "2024-01-02T09:00:00+00:00",
-            "AAPL#6h": "2024-01-02T06:00:00+00:00",
-            "AAPL#12h": "2024-01-02T00:00:00+00:00",
             "AAPL#24h": "2024-01-02T00:00:00+00:00",
         }
 

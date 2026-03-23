@@ -355,6 +355,23 @@ class CloudDatabase(ComponentResource):
 **Effort**: 4-6 weeks
 **Risk**: High (complete infrastructure rewrite)
 
+### TD-022: chaos_restore Lambda Not Deployed via Terraform
+**Status**: Blocked - Waiting for deployer IAM permissions
+**Location**: `src/lambdas/chaos_restore/handler.py` (code complete), `infrastructure/terraform/main.tf` (TODO comment)
+**Issue**: The chaos_restore Lambda code exists and is tested, but has no Terraform module for deployment.
+
+**Current State**:
+- Handler code: `src/lambdas/chaos_restore/handler.py` (complete)
+- Needs: Lambda module, IAM role (SSM + Lambda + IAM + EventBridge permissions), SNS subscription
+- Blocked by: `enable_chaos_testing = false` in main.tf (deployer lacks required IAM permissions)
+
+**Resolution**: Create Terraform module when chaos testing is enabled. Requires ECR image build pipeline.
+
+**Effort**: 2-3 hours once chaos testing is unblocked
+**Risk**: None (feature disabled, code exists but is not deployed)
+
+---
+
 ### TD-021: Lambda FIS Chaos Testing Blocked by Terraform Provider
 **Status**: Blocked - Waiting for upstream fix
 **Location**: `infrastructure/terraform/main.tf:442-445`, `modules/chaos/main.tf`

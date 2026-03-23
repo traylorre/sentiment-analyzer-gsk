@@ -45,13 +45,21 @@ function CallbackContent() {
     if (hasProcessed) return;
     setHasProcessed(true);
 
-    // Handle OAuth provider denial (user clicked "Deny" or error occurred)
+    // Feature 1245: Handle OAuth provider errors with user-friendly messages (FR-010)
     if (errorParam) {
+      // Clear stale OAuth state to prevent re-triggering failed flow
+      sessionStorage.removeItem('oauth_provider');
+      sessionStorage.removeItem('oauth_state');
+
       setStatus('error');
+      const errorMessages: Record<string, string> = {
+        access_denied: 'Sign-in was cancelled. You can try again or continue as guest.',
+        unauthorized_client: 'This sign-in method is not configured. Please try email sign-in.',
+        server_error: 'Something went wrong with sign-in. Please try again.',
+        invalid_request: 'The sign-in request was invalid. Please try again.',
+      };
       setErrorMessage(
-        errorDescription
-          ? `Authentication failed: ${errorDescription}`
-          : 'Authentication was cancelled'
+        errorMessages[errorParam] || 'Sign-in failed. Please try again or use email sign-in.'
       );
       return;
     }
@@ -218,9 +226,18 @@ function CallbackContent() {
         {errorMessage || authError || 'An error occurred during authentication.'}
       </p>
 
-      <Button onClick={() => router.push('/auth/signin')} className="mt-4">
-        Try again
-      </Button>
+      <div className="mt-4 flex flex-col items-center gap-2">
+        <Button onClick={() => router.push('/auth/signin')}>
+          Try again
+        </Button>
+        {/* Feature 1245: Continue as guest option on all error states */}
+        <a
+          href="/"
+          className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          Continue as guest
+        </a>
+      </div>
     </motion.div>
   );
 }

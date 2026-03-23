@@ -1,3 +1,4 @@
+# Target: Admin Dashboard (Lambda HTMX)
 # E2E Tests: Notification Delivery Pipeline (User Story 6)
 #
 # Tests notification creation, delivery, and tracking:

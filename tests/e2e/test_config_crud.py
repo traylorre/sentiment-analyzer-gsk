@@ -1,3 +1,4 @@
+# Target: Admin Dashboard (Lambda HTMX)
 # E2E Tests: Configuration CRUD (User Story 3)
 #
 # Tests configuration create, read, update, delete operations:

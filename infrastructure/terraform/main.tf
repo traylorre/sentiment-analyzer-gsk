@@ -265,18 +265,20 @@ module "ingestion_lambda" {
 
   # Environment variables
   environment_variables = {
-    WATCH_TAGS              = var.watch_tags
-    DATABASE_TABLE          = module.dynamodb.table_name
-    USERS_TABLE             = module.dynamodb.feature_006_users_table_name
-    SNS_TOPIC_ARN           = module.sns.topic_arn
-    TIINGO_SECRET_ARN       = module.secrets.tiingo_secret_arn
-    FINNHUB_SECRET_ARN      = module.secrets.finnhub_secret_arn
-    ENVIRONMENT             = var.environment
-    MODEL_VERSION           = var.model_version
-    CHAOS_EXPERIMENTS_TABLE = module.dynamodb.chaos_experiments_table_name
+    WATCH_TAGS         = var.watch_tags
+    DATABASE_TABLE     = module.dynamodb.table_name
+    USERS_TABLE        = module.dynamodb.feature_006_users_table_name
+    SNS_TOPIC_ARN      = module.sns.topic_arn
+    TIINGO_SECRET_ARN  = module.secrets.tiingo_secret_arn
+    FINNHUB_SECRET_ARN = module.secrets.finnhub_secret_arn
+    ENVIRONMENT        = var.environment
+    MODEL_VERSION      = var.model_version
     # Feature 1009: Time-series fanout table for multi-resolution buckets
     TIMESERIES_TABLE = module.dynamodb.timeseries_table_name
   }
+
+  # Dead letter queue (chaos-readiness: data loss prevention on async failure)
+  dlq_arn = module.sns.dlq_arn
 
   # Logging
   log_retention_days = var.environment == "prod" ? 90 : 30
@@ -324,12 +326,11 @@ module "analysis_lambda" {
 
   # Environment variables
   environment_variables = {
-    DATABASE_TABLE          = module.dynamodb.table_name
-    MODEL_S3_BUCKET         = local.model_s3_bucket
-    MODEL_VERSION           = var.model_version
-    ENVIRONMENT             = var.environment
-    CHAOS_EXPERIMENTS_TABLE = module.dynamodb.chaos_experiments_table_name
-    TIMESERIES_TABLE        = module.dynamodb.timeseries_table_name # Feature 1009: Write fanout
+    DATABASE_TABLE   = module.dynamodb.table_name
+    MODEL_S3_BUCKET  = local.model_s3_bucket
+    MODEL_VERSION    = var.model_version
+    ENVIRONMENT      = var.environment
+    TIMESERIES_TABLE = module.dynamodb.timeseries_table_name # Feature 1009: Write fanout
   }
 
   # Dead letter queue
@@ -397,7 +398,10 @@ module "dashboard_lambda" {
     # Blind spot fix: Add missing Cognito OAuth env vars (cognito.py expects these)
     COGNITO_DOMAIN = module.cognito.domain
     # COGNITO_CLIENT_SECRET not set - module has generate_secret=false, code handles None
-    COGNITO_REDIRECT_URI    = length(var.cognito_callback_urls) > 0 ? var.cognito_callback_urls[0] : ""
+    COGNITO_REDIRECT_URI = length(var.cognito_callback_urls) > 0 ? var.cognito_callback_urls[0] : ""
+    # Feature 1245: Dynamic OAuth provider detection + redirect URI selection
+    ENABLED_OAUTH_PROVIDERS = join(",", compact([var.google_oauth_client_id != "" ? "google" : "", var.github_oauth_client_id != "" ? "github" : ""]))
+    FRONTEND_URL            = var.frontend_url
     TICKER_CACHE_BUCKET     = aws_s3_bucket.ticker_cache.id
     SSE_POLL_INTERVAL       = tostring(var.sse_poll_interval)
     ENVIRONMENT             = var.environment
@@ -552,6 +556,9 @@ module "notification_lambda" {
 
   # No Function URL needed - triggered by SNS and EventBridge
   create_function_url = false
+
+  # Dead letter queue (chaos-readiness: failed emails can be retried)
+  dlq_arn = module.sns.dlq_arn
 
   # Logging
   log_retention_days = var.environment == "prod" ? 90 : 30
@@ -910,6 +917,8 @@ module "eventbridge" {
   canary_lambda_arn           = module.canary_lambda.function_arn
   canary_lambda_function_name = module.canary_lambda.function_name
 
+  dlq_arn = module.sns.dlq_arn
+
   depends_on = [module.ingestion_lambda, module.metrics_lambda, module.canary_lambda]
 }
 
@@ -1035,10 +1044,11 @@ module "chaos" {
   source = "./modules/chaos"
 
   environment = var.environment
-  # DISABLED: Terraform AWS provider doesn't support Lambda FIS target key "Functions" yet
-  # See: https://github.com/hashicorp/terraform-provider-aws/issues/41208
-  # Re-enable when provider version supports aws:lambda:invocation-add-delay targets
-  enable_chaos_testing = false # var.environment == "preprod"
+  # DISABLED: Deployer IAM user lacks ssm:PutParameter, iam:CreatePolicy, iam:CreateRole
+  # These permissions are needed for chaos infrastructure (kill switch, deny policy, engineer role)
+  # Also: Terraform AWS provider doesn't support Lambda FIS targets (#41208)
+  # Re-enable after granting deployer permissions or using TFC with admin role
+  enable_chaos_testing = false
 
   # Lambda targets for chaos experiments
   lambda_arns = [
@@ -1053,12 +1063,25 @@ module "chaos" {
   # Kill switch - stops experiments if Lambda errors spike
   lambda_error_alarm_arn = module.monitoring.analysis_errors_alarm_arn
 
-  # Deprecated - kept for backwards compatibility
-  dynamodb_table_arn       = module.dynamodb.table_arn
-  write_throttle_alarm_arn = module.dynamodb.cloudwatch_alarm_write_throttles_arn
+  # Feature 1237: External chaos actor architecture
+  chaos_engineer_principals = [] # Add IAM user/role ARNs that should be able to assume the chaos-engineer role
+  lambda_execution_role_arns = [
+    module.iam.ingestion_lambda_role_arn,
+    module.iam.analysis_lambda_role_arn,
+  ]
+  eventbridge_rule_arns = [
+    module.eventbridge.ingestion_schedule_arn,
+  ]
+  chaos_experiments_table_arn = module.dynamodb.chaos_experiments_table_arn
 
   depends_on = [module.ingestion_lambda, module.analysis_lambda, module.dashboard_lambda, module.metrics_lambda, module.notification_lambda, module.sse_streaming_lambda, module.monitoring]
 }
+
+# TODO (TD-2): Deploy chaos_restore Lambda
+# Code: src/lambdas/chaos_restore/handler.py (complete, tested)
+# Needs: Lambda module, IAM role (SSM + Lambda + IAM + EventBridge), SNS subscription
+# Blocked by: enable_chaos_testing = false (deployer permissions)
+# Track: docs/reference/TECH_DEBT_REGISTRY.md
 
 # ===================================================================
 # Module: AWS Amplify Frontend (Feature 1105)

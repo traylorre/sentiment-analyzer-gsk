@@ -1,12 +1,45 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { LayoutDashboard } from 'lucide-react';
 import { MagicLinkForm } from '@/components/auth/magic-link-form';
 import { OAuthButtons, AuthDivider } from '@/components/auth/oauth-buttons';
 import { Card } from '@/components/ui/card';
+import { authApi } from '@/lib/api/auth';
 
 export default function SignInPage() {
+  // Feature 1245: Dynamically discover available OAuth providers
+  const [availableProviders, setAvailableProviders] = useState<string[]>();
+  const [providersLoaded, setProvidersLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchProviders() {
+      try {
+        const data = await authApi.getOAuthUrls();
+        if (!cancelled) {
+          setAvailableProviders(Object.keys(data.providers));
+        }
+      } catch {
+        // Graceful degradation (FR-009): if API unreachable, show email only
+        if (!cancelled) {
+          setAvailableProviders([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setProvidersLoaded(true);
+        }
+      }
+    }
+
+    fetchProviders();
+    return () => { cancelled = true; };
+  }, []);
+
+  const hasOAuthProviders = availableProviders && availableProviders.length > 0;
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
       <motion.div
@@ -32,13 +65,15 @@ export default function SignInPage() {
             </p>
           </div>
 
-          {/* OAuth buttons */}
-          <OAuthButtons />
+          {/* Feature 1245: OAuth buttons — only shown for configured providers */}
+          {hasOAuthProviders && (
+            <>
+              <OAuthButtons availableProviders={availableProviders} />
+              <AuthDivider />
+            </>
+          )}
 
-          {/* Divider */}
-          <AuthDivider />
-
-          {/* Magic link form */}
+          {/* Magic link form — always rendered immediately (FR-009) */}
           <MagicLinkForm />
         </Card>
 

@@ -39,8 +39,19 @@ install-tools: ## Install CLI tools via aqua
 # Validation (Zero AWS Cost)
 # ============================================================================
 
-validate: fmt lint security sast check-banned-terms ## Run all validation (fmt + lint + security + sast + banned terms)
+validate: fmt lint security sast check-banned-terms check-test-target-headers ## Run all validation (fmt + lint + security + sast + banned terms + test headers)
 	@echo "$(GREEN)✓ All validation passed$(NC)"
+
+check-test-target-headers: ## Verify all Playwright test files have Target: dashboard headers
+	@echo "Checking test target headers..."
+	@MISSING=$$(cd $(CURDIR) && grep -rL "Target:.*Dashboard" frontend/tests/e2e/*.spec.ts tests/e2e/test_*.py 2>/dev/null); \
+	if [ -n "$$MISSING" ]; then \
+		echo "$(RED)✗ Files missing Target: header:$(NC)"; \
+		echo "$$MISSING"; \
+		echo "Add '// Target: Customer Dashboard (Next.js/Amplify)' or '# Target: Admin Dashboard (Lambda HTMX)' as the first line"; \
+		exit 1; \
+	fi
+	@echo "$(GREEN)✓ All Playwright test files have target headers$(NC)"
 
 fmt: ## Format Python code (Ruff only - Black removed in feat(057))
 	ruff format src tests

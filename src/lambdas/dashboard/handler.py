@@ -50,7 +50,7 @@ from src.lambdas.dashboard.chaos import (
     create_experiment,
     delete_experiment,
     get_experiment,
-    get_fis_experiment_status,
+    get_experiment_report,
     list_experiments,
     start_experiment,
     stop_experiment,
@@ -155,6 +155,25 @@ def _get_authenticated_user_id_from_event(event: dict) -> str | None:
     auth_context = extract_auth_context_typed(event)
     if auth_context.user_id is None:
         return None
+    if auth_context.auth_type == AuthType.ANONYMOUS:
+        return None
+    return auth_context.user_id
+
+
+def _get_chaos_user_id_from_event(event: dict) -> str | None:
+    """Extract user_id for chaos endpoints.
+
+    In non-production environments (local/dev/test), anonymous auth is accepted
+    for chaos operations. Production safety is enforced by chaos.py's
+    check_environment_allowed() which blocks all chaos operations in prod.
+    """
+    env = os.environ.get("ENVIRONMENT", "")
+    auth_context = extract_auth_context_typed(event)
+    if auth_context.user_id is None:
+        return None
+    # Allow anonymous in non-prod for local dev and testing
+    if auth_context.auth_type == AuthType.ANONYMOUS and env in ("local", "dev", "test"):
+        return auth_context.user_id
     if auth_context.auth_type == AuthType.ANONYMOUS:
         return None
     return auth_context.user_id
@@ -343,6 +362,7 @@ def api_index():
                         "GET /chaos/experiments/{id}": "Get experiment",
                         "POST /chaos/experiments/{id}/start": "Start experiment",
                         "POST /chaos/experiments/{id}/stop": "Stop experiment",
+                        "GET /chaos/experiments/{id}/report": "Get experiment report",
                         "DELETE /chaos/experiments/{id}": "Delete experiment",
                     },
                 },
@@ -724,7 +744,7 @@ def get_articles_v2():
 def create_chaos_experiment():
     """Create a new chaos experiment."""
     event = app.current_event.raw_event
-    user_id = _get_authenticated_user_id_from_event(event)
+    user_id = _get_chaos_user_id_from_event(event)
     if user_id is None:
         return Response(
             status_code=401,
@@ -775,7 +795,7 @@ def create_chaos_experiment():
 def list_chaos_experiments():
     """List chaos experiments with optional status filter."""
     event = app.current_event.raw_event
-    user_id = _get_authenticated_user_id_from_event(event)
+    user_id = _get_chaos_user_id_from_event(event)
     if user_id is None:
         return Response(
             status_code=401,
@@ -804,9 +824,9 @@ def list_chaos_experiments():
 
 @app.get("/chaos/experiments/<experiment_id>")
 def get_chaos_experiment(experiment_id: str):
-    """Get chaos experiment by ID with enriched FIS status."""
+    """Get chaos experiment by ID."""
     event = app.current_event.raw_event
-    user_id = _get_authenticated_user_id_from_event(event)
+    user_id = _get_chaos_user_id_from_event(event)
     if user_id is None:
         return Response(
             status_code=401,
@@ -822,27 +842,6 @@ def get_chaos_experiment(experiment_id: str):
             body=orjson.dumps({"detail": "Experiment not found"}).decode(),
         )
 
-    # Enrich with FIS status if applicable
-    if (
-        experiment.get("status") == "running"
-        and experiment.get("scenario_type") == "dynamodb_throttle"
-        and experiment.get("results", {}).get("fis_experiment_id")
-    ):
-        try:
-            fis_experiment_id = experiment["results"]["fis_experiment_id"]
-            fis_status = get_fis_experiment_status(fis_experiment_id)
-            experiment["fis_status"] = fis_status
-        except Exception as e:
-            logger.warning(
-                "Failed to fetch FIS experiment status",
-                extra={
-                    "experiment_id": sanitize_for_log(experiment_id),
-                    "fis_experiment_id": sanitize_for_log(fis_experiment_id),
-                    "error": sanitize_for_log(str(e)),
-                },
-            )
-            experiment["fis_status"] = {"error": "Failed to fetch FIS status"}
-
     return Response(
         status_code=200,
         content_type="application/json",
@@ -854,7 +853,7 @@ def get_chaos_experiment(experiment_id: str):
 def start_chaos_experiment(experiment_id: str):
     """Start a chaos experiment."""
     event = app.current_event.raw_event
-    user_id = _get_authenticated_user_id_from_event(event)
+    user_id = _get_chaos_user_id_from_event(event)
     if user_id is None:
         return Response(
             status_code=401,
@@ -894,7 +893,7 @@ def start_chaos_experiment(experiment_id: str):
 def stop_chaos_experiment(experiment_id: str):
     """Stop a running chaos experiment."""
     event = app.current_event.raw_event
-    user_id = _get_authenticated_user_id_from_event(event)
+    user_id = _get_chaos_user_id_from_event(event)
     if user_id is None:
         return Response(
             status_code=401,
@@ -930,11 +929,45 @@ def stop_chaos_experiment(experiment_id: str):
         )
 
 
+@app.get("/chaos/experiments/<experiment_id>/report")
+def get_chaos_experiment_report(experiment_id: str):
+    """Get a comprehensive report for a chaos experiment."""
+    event = app.current_event.raw_event
+    user_id = _get_chaos_user_id_from_event(event)
+    if user_id is None:
+        return Response(
+            status_code=401,
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Authentication required"}).decode(),
+        )
+
+    try:
+        report = get_experiment_report(experiment_id)
+        return Response(
+            status_code=200,
+            content_type="application/json",
+            body=orjson.dumps(report).decode(),
+        )
+    except ChaosError as e:
+        logger.error(
+            "Chaos experiment report failed",
+            extra={
+                "experiment_id": sanitize_for_log(experiment_id),
+                "error": sanitize_for_log(str(e)),
+            },
+        )
+        return Response(
+            status_code=404,
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
+        )
+
+
 @app.delete("/chaos/experiments/<experiment_id>")
 def delete_chaos_experiment(experiment_id: str):
     """Delete a chaos experiment."""
     event = app.current_event.raw_event
-    user_id = _get_authenticated_user_id_from_event(event)
+    user_id = _get_chaos_user_id_from_event(event)
     if user_id is None:
         return Response(
             status_code=401,
@@ -993,6 +1026,6 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
         get_global_emitter().flush_to_cloudwatch()
     except Exception:
-        logger.debug("Cache metrics flush failed", exc_info=True)
+        logger.warning("Cache metrics flush failed", exc_info=True)
 
     return response

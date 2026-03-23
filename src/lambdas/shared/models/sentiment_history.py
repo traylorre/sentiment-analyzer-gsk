@@ -5,7 +5,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-SentimentSourceType = Literal["tiingo", "finnhub", "our_model", "aggregated"]
+SentimentSourceType = Literal[
+    "tiingo", "finnhub", "our_model", "aggregated", "dedup", "unknown"
+]
 
 
 class SentimentPoint(BaseModel):

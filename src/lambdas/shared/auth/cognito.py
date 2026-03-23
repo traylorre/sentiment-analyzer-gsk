@@ -83,6 +83,7 @@ class CognitoConfig:
         provider: str,
         state: str | None = None,
         code_challenge: str | None = None,
+        redirect_uri_override: str | None = None,
     ) -> str:
         """Build OAuth authorize URL for a provider.
 
@@ -90,12 +91,13 @@ class CognitoConfig:
             provider: OAuth provider name (google, github)
             state: CSRF state token
             code_challenge: PKCE code_challenge (S256, base64url-encoded)
+            redirect_uri_override: Feature 1245 — dynamic redirect URI per request origin
         """
         params = {
             "client_id": self.client_id,
             "response_type": "code",
             "scope": "openid email profile",
-            "redirect_uri": self.redirect_uri,
+            "redirect_uri": redirect_uri_override or self.redirect_uri,
             "identity_provider": provider.capitalize(),
         }
         if state:

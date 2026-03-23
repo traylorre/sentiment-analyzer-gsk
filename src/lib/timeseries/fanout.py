@@ -7,7 +7,7 @@ Canonical References:
 - [CS-013] AWS DynamoDB TTL: "Use TTL to automatically expire items"
 - [CS-014] AWS Architecture Blog: "Resolution-dependent retention policies"
 
-This module fans out a single sentiment score into 8 resolution buckets (1m/5m/10m/1h/3h/6h/12h/24h)
+This module fans out a single sentiment score into 6 resolution buckets (1m/5m/15m/30m/1h/24h)
 using BatchWriteItem for efficiency.
 """
 
@@ -200,8 +200,8 @@ def write_fanout(
             with tracer.provider.in_subsegment("fanout_batch_write") as subseg:
                 subseg.put_annotation("error", True)
                 subseg.add_exception(e)
-        except Exception:  # noqa: S110
-            pass  # Best-effort: don't fail if X-Ray unavailable
+        except Exception:
+            logger.debug("X-Ray subsegment failed", exc_info=True)
         try:
             emit_metric(
                 name="SilentFailure/Count",
@@ -210,8 +210,8 @@ def write_fanout(
                 dimensions={"FailurePath": "fanout_batch_write"},
                 namespace="SentimentAnalyzer/Reliability",
             )
-        except Exception:  # noqa: S110
-            pass  # Best-effort: don't block on metric failure
+        except Exception:
+            logger.debug("Metric emission failed", exc_info=True)
         raise
 
 
@@ -310,8 +310,8 @@ def write_fanout_with_update(
                 with tracer.provider.in_subsegment("fanout_base_update") as subseg:
                     subseg.put_annotation("error", True)
                     subseg.add_exception(e)
-            except Exception:  # noqa: S110
-                pass
+            except Exception:
+                logger.debug("X-Ray subsegment failed", exc_info=True)
             try:
                 emit_metric(
                     name="SilentFailure/Count",
@@ -320,8 +320,8 @@ def write_fanout_with_update(
                     dimensions={"FailurePath": "fanout_base_update"},
                     namespace="SentimentAnalyzer/Reliability",
                 )
-            except Exception:  # noqa: S110
-                pass
+            except Exception:
+                logger.debug("Metric emission failed", exc_info=True)
             raise
 
         # Second update: Update label count (now that label_counts exists)
@@ -348,8 +348,8 @@ def write_fanout_with_update(
                     with tracer.provider.in_subsegment("fanout_label_update") as subseg:
                         subseg.put_annotation("error", True)
                         subseg.add_exception(e)
-                except Exception:  # noqa: S110
-                    pass
+                except Exception:
+                    logger.debug("X-Ray subsegment failed", exc_info=True)
                 try:
                     emit_metric(
                         name="SilentFailure/Count",
@@ -358,8 +358,8 @@ def write_fanout_with_update(
                         dimensions={"FailurePath": "fanout_label_update"},
                         namespace="SentimentAnalyzer/Reliability",
                     )
-                except Exception:  # noqa: S110
-                    pass
+                except Exception:
+                    logger.debug("Metric emission failed", exc_info=True)
                 raise
 
         # Third update: Conditional update for high (if new value is higher)
@@ -383,8 +383,8 @@ def write_fanout_with_update(
                         dimensions={"FailurePath": "fanout_conditional"},
                         namespace="SentimentAnalyzer/Reliability",
                     )
-                except Exception:  # noqa: S110
-                    pass
+                except Exception:
+                    logger.debug("Metric emission failed", exc_info=True)
             else:
                 try:
                     with tracer.provider.in_subsegment(
@@ -392,8 +392,8 @@ def write_fanout_with_update(
                     ) as subseg:
                         subseg.put_annotation("error", True)
                         subseg.add_exception(e)
-                except Exception:  # noqa: S110
-                    pass
+                except Exception:
+                    logger.debug("X-Ray subsegment failed", exc_info=True)
                 try:
                     emit_metric(
                         name="SilentFailure/Count",
@@ -402,8 +402,8 @@ def write_fanout_with_update(
                         dimensions={"FailurePath": "fanout_conditional_unexpected"},
                         namespace="SentimentAnalyzer/Reliability",
                     )
-                except Exception:  # noqa: S110
-                    pass
+                except Exception:
+                    logger.debug("Metric emission failed", exc_info=True)
                 raise
 
         # Fourth update: Conditional update for low (if new value is lower)
@@ -427,8 +427,8 @@ def write_fanout_with_update(
                         dimensions={"FailurePath": "fanout_conditional"},
                         namespace="SentimentAnalyzer/Reliability",
                     )
-                except Exception:  # noqa: S110
-                    pass
+                except Exception:
+                    logger.debug("Metric emission failed", exc_info=True)
             else:
                 try:
                     with tracer.provider.in_subsegment(
@@ -436,8 +436,8 @@ def write_fanout_with_update(
                     ) as subseg:
                         subseg.put_annotation("error", True)
                         subseg.add_exception(e)
-                except Exception:  # noqa: S110
-                    pass
+                except Exception:
+                    logger.debug("X-Ray subsegment failed", exc_info=True)
                 try:
                     emit_metric(
                         name="SilentFailure/Count",
@@ -446,6 +446,6 @@ def write_fanout_with_update(
                         dimensions={"FailurePath": "fanout_conditional_unexpected"},
                         namespace="SentimentAnalyzer/Reliability",
                     )
-                except Exception:  # noqa: S110
-                    pass
+                except Exception:
+                    logger.debug("Metric emission failed", exc_info=True)
                 raise

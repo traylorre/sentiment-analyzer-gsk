@@ -1,3 +1,4 @@
+// Target: Customer Dashboard (Next.js/Amplify)
 /**
  * X-Ray Trace Propagation E2E Test (T068, SC-085)
  *

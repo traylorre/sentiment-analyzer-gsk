@@ -178,10 +178,8 @@ class TestSSEResolutionFilter:
 
         # These should be blocked
         for res in [
-            Resolution.TEN_MINUTES,
-            Resolution.THREE_HOURS,
-            Resolution.SIX_HOURS,
-            Resolution.TWELVE_HOURS,
+            Resolution.FIFTEEN_MINUTES,
+            Resolution.THIRTY_MINUTES,
             Resolution.TWENTY_FOUR_HOURS,
         ]:
             event = BucketUpdateEvent(ticker="AAPL", resolution=res, bucket={})

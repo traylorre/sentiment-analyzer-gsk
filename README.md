@@ -411,9 +411,9 @@ sequenceDiagram
     S3-->>Ana: model weights
     Ana->>Ana: Inference (<100ms warm)
     Ana->>Items: UpdateItem (status=analyzed)
-    Ana->>TS: Fanout to 8 resolutions
+    Ana->>TS: Fanout to 6 resolutions
 
-    Note over Items,TS: Write fanout: 1 article → 8 timeseries buckets<br/>(1m, 5m, 10m, 1h, 3h, 6h, 12h, 24h)
+    Note over Items,TS: Write fanout: 1 article → 6 timeseries buckets<br/>(1m, 5m, 15m, 30m, 1h, 24h)
 
     User->>SSE: EventSource connect
 

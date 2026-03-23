@@ -1501,8 +1501,12 @@ jobs:
           # Increased from 480s due to Dashboard Lambda container deployment cold starts
           # See: specs/1041-increase-integ-test-timeout/spec.md
           set +e  # Don't exit on error
+          # Feature 1246: -p no:playwright prevents pytest-playwright from creating
+          # an event loop that conflicts with pytest-asyncio's auto-management.
+          # Playwright tests run separately via npx in the frontend test suite.
           timeout 720 pytest tests/ \
             -m "preprod" \
+            -p no:playwright \
             -v \
             --tb=short \
             --junitxml=preprod-test-results.xml

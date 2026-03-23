@@ -9,11 +9,7 @@ export interface SentimentScore {
 
 export interface TickerSentiment {
   symbol: string;
-  sentiment: {
-    tiingo: SentimentScore;
-    finnhub: SentimentScore;
-    ourModel: SentimentScore;
-  };
+  sentiment: Record<string, SentimentScore>;
 }
 
 export interface SentimentData {
@@ -27,7 +23,7 @@ export interface SentimentData {
 export interface SentimentTimeSeries {
   timestamp: string;
   score: number;
-  source: 'tiingo' | 'finnhub' | 'our_model';
+  source: 'tiingo' | 'finnhub' | 'our_model' | 'aggregated';
   articleCount?: number;
 }
 
@@ -37,4 +33,4 @@ export interface ATRData {
   ticker: string;
 }
 
-export type SentimentSource = 'tiingo' | 'finnhub' | 'our_model';
+export type SentimentSource = 'tiingo' | 'finnhub' | 'our_model' | 'aggregated';

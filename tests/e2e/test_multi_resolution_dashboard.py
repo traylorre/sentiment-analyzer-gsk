@@ -1,3 +1,4 @@
+# Target: Admin Dashboard (Lambda HTMX)
 """E2E Tests: Multi-Resolution Dashboard (Feature 1009 - Phase 8)
 
 Tests complete user journey for the multi-resolution sentiment dashboard:
@@ -61,8 +62,8 @@ DASHBOARD_URL = os.environ.get(
     os.environ.get("SSE_LAMBDA_URL", "http://localhost:8000"),
 )
 
-# All 8 supported resolutions per FR-002
-RESOLUTIONS = ["1m", "5m", "10m", "1h", "3h", "6h", "12h", "24h"]
+# All 6 supported resolutions per FR-002
+RESOLUTIONS = ["1m", "5m", "15m", "30m", "1h", "24h"]
 
 
 @pytest.fixture
@@ -250,12 +251,12 @@ class TestResolutionSwitching:
             switch_time < 1000
         ), f"Resolution switch took {switch_time:.0f}ms, expected < 1000ms"
 
-    def test_all_8_resolutions_available(self, timeseries_ready_page: Page) -> None:
-        """FR-002: System supports 8 resolution levels.
+    def test_all_6_resolutions_available(self, timeseries_ready_page: Page) -> None:
+        """FR-002: System supports 6 resolution levels.
 
         Given: User switches to any resolution
         When: Data loads
-        Then: All 8 resolutions (1m, 5m, 10m, 1h, 3h, 6h, 12h, 24h) are available
+        Then: All 6 resolutions (1m, 5m, 15m, 30m, 1h, 24h) are available
         """
         page = timeseries_ready_page
 
@@ -286,7 +287,7 @@ class TestResolutionSwitching:
             }
         """)
 
-        # Should have all 8 resolutions available
+        # Should have all 6 resolutions available
         for res in RESOLUTIONS:
             assert (
                 res in available_resolutions

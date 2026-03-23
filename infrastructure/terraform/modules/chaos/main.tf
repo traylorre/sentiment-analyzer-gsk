@@ -1,3 +1,10 @@
+# ============================================================================
+# LEGACY: AWS FIS Support (DISABLED)
+# Status: Blocked by Terraform AWS provider bug #41208
+# Decision: Using external actor architecture (Feature 1237) instead
+# Action: Delete this section when FIS support is no longer planned
+# ============================================================================
+#
 # AWS Fault Injection Service (FIS) for Chaos Testing
 # =====================================================
 #
@@ -115,6 +122,168 @@ resource "aws_cloudwatch_log_group" "fis_experiments" {
     Purpose     = "chaos-testing"
     ManagedBy   = "Terraform"
   }
+}
+
+# ============================================================================
+# External Chaos Actor Architecture (Feature 1237)
+# ============================================================================
+
+# SSM Parameter: Kill switch for chaos experiments
+# Scripts manage the value at runtime; Terraform only creates the parameter.
+# checkov:skip=CKV2_AWS_34:Kill switch is a non-secret state flag (disarmed/armed/triggered), encryption unnecessary
+resource "aws_ssm_parameter" "chaos_kill_switch" {
+  count = var.enable_chaos_testing && var.environment != "prod" ? 1 : 0
+  name  = "/chaos/${var.environment}/kill-switch"
+  type  = "String"
+  value = "disarmed"
+
+  lifecycle {
+    ignore_changes = [value] # Scripts manage the value at runtime
+  }
+
+  tags = {
+    Name        = "${var.environment}-chaos-kill-switch"
+    Environment = var.environment
+    Purpose     = "chaos-testing"
+    ManagedBy   = "Terraform"
+  }
+}
+
+# Pre-created deny-write policy for DynamoDB throttle chaos scenario.
+# This policy is always present but only attached to roles during chaos injection.
+resource "aws_iam_policy" "chaos_deny_dynamodb_write" {
+  count = var.enable_chaos_testing && var.environment != "prod" ? 1 : 0
+  name  = "${var.environment}-chaos-deny-dynamodb-write"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "DenyDynamoDBWrites"
+        Effect = "Deny"
+        Action = [
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:BatchWriteItem"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+
+  tags = {
+    Name        = "${var.environment}-chaos-deny-dynamodb-write"
+    Environment = var.environment
+    Purpose     = "chaos-testing"
+    ManagedBy   = "Terraform"
+  }
+}
+
+# Chaos-engineer IAM role: least-privilege for external chaos operations.
+# Requires MFA and limited to 1-hour sessions.
+resource "aws_iam_role" "chaos_engineer" {
+  count = var.enable_chaos_testing && var.environment != "prod" ? 1 : 0
+  name  = "${var.environment}-chaos-engineer"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect    = "Allow"
+        Principal = { AWS = var.chaos_engineer_principals }
+        Action    = "sts:AssumeRole"
+        Condition = {
+          Bool = { "aws:MultiFactorAuthPresent" = "true" }
+        }
+      }
+    ]
+  })
+
+  max_session_duration = 3600 # 1 hour
+
+  tags = {
+    Name        = "${var.environment}-chaos-engineer"
+    Environment = var.environment
+    Purpose     = "chaos-testing"
+    ManagedBy   = "Terraform"
+  }
+}
+
+resource "aws_iam_role_policy" "chaos_engineer_permissions" {
+  count = var.enable_chaos_testing && var.environment != "prod" ? 1 : 0
+  name  = "${var.environment}-chaos-engineer-permissions"
+  role  = aws_iam_role.chaos_engineer[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "LambdaConfigChanges"
+        Effect = "Allow"
+        Action = [
+          "lambda:UpdateFunctionConfiguration",
+          "lambda:PutFunctionConcurrency",
+          "lambda:DeleteFunctionConcurrency",
+          "lambda:GetFunctionConfiguration",
+          "lambda:GetFunctionConcurrency"
+        ]
+        Resource = var.lambda_arns
+      },
+      {
+        Sid    = "IAMPolicyAttachDetach"
+        Effect = "Allow"
+        Action = [
+          "iam:AttachRolePolicy",
+          "iam:DetachRolePolicy"
+        ]
+        Resource = var.lambda_execution_role_arns
+        Condition = {
+          ArnEquals = {
+            "iam:PolicyARN" = aws_iam_policy.chaos_deny_dynamodb_write[0].arn
+          }
+        }
+      },
+      {
+        Sid    = "EventBridgeRuleControl"
+        Effect = "Allow"
+        Action = [
+          "events:DisableRule",
+          "events:EnableRule"
+        ]
+        Resource = var.eventbridge_rule_arns
+      },
+      {
+        Sid    = "SSMChaosParameters"
+        Effect = "Allow"
+        Action = [
+          "ssm:PutParameter",
+          "ssm:GetParameter",
+          "ssm:GetParametersByPath",
+          "ssm:DeleteParameter"
+        ]
+        Resource = "arn:aws:ssm:*:*:parameter/chaos/${var.environment}/*"
+      },
+      {
+        Sid    = "ChaosExperimentsAuditLog"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:PutItem",
+          "dynamodb:Query",
+          "dynamodb:Scan"
+        ]
+        Resource = var.chaos_experiments_table_arn
+      },
+      {
+        Sid    = "STSGetCallerIdentity"
+        Effect = "Allow"
+        Action = [
+          "sts:GetCallerIdentity"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
 }
 
 # ============================================================================

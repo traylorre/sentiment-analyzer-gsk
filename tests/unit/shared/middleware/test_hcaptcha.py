@@ -206,7 +206,7 @@ class TestRecordActionForRateLimit:
         assert item["PK"] == "RATE#1.2.3.4"
         assert item["action"] == "config_create"
         assert item["entity_type"] == "RATE_LIMIT_RECORD"
-        assert "ttl" in item
+        assert "ttl_timestamp" in item
 
     def test_handles_error_gracefully(self, mock_table):
         """Handles errors gracefully."""

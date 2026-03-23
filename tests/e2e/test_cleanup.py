@@ -1,3 +1,4 @@
+# Target: Admin Dashboard (Lambda HTMX)
 # E2E Tests: Manual Cleanup Utilities
 #
 # This module provides manual cleanup utilities for test data.

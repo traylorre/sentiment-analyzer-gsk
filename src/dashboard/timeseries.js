@@ -21,11 +21,9 @@
 const RESOLUTIONS = [
     { key: '1m', label: '1 Min', duration: 60 },
     { key: '5m', label: '5 Min', duration: 300 },
-    { key: '10m', label: '10 Min', duration: 600 },
+    { key: '15m', label: '15 Min', duration: 900 },
+    { key: '30m', label: '30 Min', duration: 1800 },
     { key: '1h', label: '1 Hour', duration: 3600 },
-    { key: '3h', label: '3 Hour', duration: 10800 },
-    { key: '6h', label: '6 Hour', duration: 21600 },
-    { key: '12h', label: '12 Hour', duration: 43200 },
     { key: '24h', label: '24 Hour', duration: 86400 }
 ];
 
@@ -536,9 +534,9 @@ class TimeseriesManager {
             const ts = b.bucket_timestamp || b.SK;
             const date = new Date(ts);
             // Format based on resolution
-            if (['1m', '5m', '10m'].includes(this.currentResolution)) {
+            if (['1m', '5m', '15m', '30m'].includes(this.currentResolution)) {
                 return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-            } else if (['1h', '3h', '6h'].includes(this.currentResolution)) {
+            } else if (['1h'].includes(this.currentResolution)) {
                 return date.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit' });
             } else {
                 return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
@@ -998,7 +996,7 @@ class MultiTickerManager {
         const labels = buckets.map(b => {
             const ts = b.bucket_timestamp || b.SK;
             const date = new Date(ts);
-            if (['1m', '5m', '10m'].includes(this.currentResolution)) {
+            if (['1m', '5m', '15m', '30m'].includes(this.currentResolution)) {
                 return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
             } else {
                 return date.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit' });
@@ -1226,7 +1224,7 @@ const multiTickerManager = new MultiTickerManager();
 /**
  * Set sentiment timeseries resolution (Feature 1064: unified resolution selector)
  * Called from unified-resolution.js to update sentiment chart resolution
- * @param {string} resolution - Sentiment resolution value ('1m', '5m', '10m', '1h', etc.)
+ * @param {string} resolution - Sentiment resolution value ('1m', '5m', '15m', '30m', '1h', '24h')
  * @param {boolean} isFallback - True if this is a fallback from a different unified resolution
  */
 async function setSentimentResolution(resolution, isFallback = false) {

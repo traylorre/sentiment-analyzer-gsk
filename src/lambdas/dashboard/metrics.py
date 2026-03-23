@@ -563,7 +563,7 @@ def sanitize_item_for_response(item: dict[str, Any]) -> dict[str, Any]:
         We flatten these for backward compatibility.
     """
     # Fields to exclude from API responses
-    hidden_fields = {"ttl", "content_hash"}
+    hidden_fields = {"ttl", "ttl_timestamp", "content_hash"}
 
     sanitized = {}
     for key, value in item.items():

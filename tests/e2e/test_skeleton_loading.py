@@ -1,3 +1,4 @@
+# Target: Admin Dashboard (Lambda HTMX)
 """
 Feature 1021: Skeleton Loading UI E2E Tests
 ============================================

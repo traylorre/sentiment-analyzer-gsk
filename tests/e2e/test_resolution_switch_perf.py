@@ -1,3 +1,4 @@
+# Target: Admin Dashboard (Lambda HTMX)
 """Performance test for resolution switching latency.
 
 Validates SC-002 from specs/1009-realtime-multi-resolution: Resolution switching
@@ -5,7 +6,7 @@ must complete within 100ms (p95 target).
 
 This test:
 1. Navigates to preprod dashboard
-2. Warms cache by loading all 8 resolutions
+2. Warms cache by loading all 6 resolutions
 3. Executes 100+ resolution switches
 4. Captures timing via window.lastSwitchMetrics
 5. Calculates p95 and asserts < 100ms
@@ -51,8 +52,8 @@ P95_THRESHOLD_MS = 100
 SWITCH_COUNT = 105  # 100+ switches for statistical significance
 WARMUP_SWITCHES = 5  # Discard first N switches (browser warmup)
 
-# All 8 resolutions from timeseries.js
-RESOLUTIONS = ["1m", "5m", "10m", "1h", "3h", "6h", "12h", "24h"]
+# All 6 resolutions from timeseries.js
+RESOLUTIONS = ["1m", "5m", "15m", "30m", "1h", "24h"]
 
 
 @dataclass
@@ -353,7 +354,7 @@ class TestResolutionSwitchPerformance:
         )
 
     def test_all_resolutions_switchable(self, dashboard_page: Page) -> None:
-        """Validate all 8 resolutions can be switched to.
+        """Validate all 6 resolutions can be switched to.
 
         Ensures complete coverage of resolution transitions.
         """

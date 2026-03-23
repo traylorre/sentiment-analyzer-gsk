@@ -88,7 +88,7 @@ def store_oauth_state(
         "redirect_uri": redirect_uri,
         "created_at": now.isoformat(),
         "used": False,
-        "ttl": ttl,
+        "ttl_timestamp": ttl,
         "code_verifier": code_verifier,
     }
     if user_id:

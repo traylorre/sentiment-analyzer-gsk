@@ -184,6 +184,12 @@
                         "CKV_AWS_158",
                         "CKV_AWS_338"
                     ]
+                },
+                {
+                    "resource": "module.chaos.aws_ssm_parameter.chaos_kill_switch",
+                    "check_ids": [
+                        "CKV2_AWS_34"
+                    ]
                 }
             ]
         },

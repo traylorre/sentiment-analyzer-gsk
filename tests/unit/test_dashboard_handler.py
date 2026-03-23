@@ -1902,41 +1902,6 @@ class TestChaosEndpointErrors:
         response = lambda_handler(event, mock_lambda_context)
         assert response["statusCode"] == 500
 
-    def test_get_chaos_experiment_fis_error(
-        self, mock_lambda_context, auth_headers, monkeypatch, caplog
-    ):
-        """Test FIS status fetch error handling (lines 975-989)."""
-
-        mock_experiment = {
-            "experiment_id": "test-123",
-            "status": "running",
-            "fis_experiment_id": "fis-123",
-        }
-
-        def mock_get_exp(*args):
-            return mock_experiment
-
-        def mock_fis_status(*args):
-            raise Exception("FIS API unavailable")
-
-        monkeypatch.setattr(
-            "src.lambdas.dashboard.handler.get_experiment",
-            mock_get_exp,
-        )
-        monkeypatch.setattr(
-            "src.lambdas.dashboard.handler.get_fis_experiment_status",
-            mock_fis_status,
-        )
-
-        event = make_event(
-            method="GET",
-            path="/chaos/experiments/test-123",
-            headers=auth_headers,
-        )
-        response = lambda_handler(event, mock_lambda_context)
-        # Should still return the experiment, just without FIS status
-        assert response["statusCode"] == 200
-
     def test_chaos_start_environment_not_allowed_returns_500_due_to_catch_order(
         self, mock_lambda_context, auth_headers, monkeypatch
     ):

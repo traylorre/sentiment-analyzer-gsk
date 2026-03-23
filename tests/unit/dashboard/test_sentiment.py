@@ -1,7 +1,6 @@
 """Unit tests for sentiment endpoints (T056-T057)."""
 
-from datetime import UTC, datetime
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -15,6 +14,7 @@ from src.lambdas.dashboard.sentiment import (
     get_heatmap_data,
     get_sentiment_by_configuration,
 )
+from src.lib.timeseries.models import Resolution
 
 
 @pytest.fixture(autouse=True)
@@ -67,86 +67,81 @@ class TestGetSentimentByConfiguration:
         assert response.next_refresh_at is not None
         assert response.next_refresh_at.endswith("Z")
 
-    def test_filters_by_sources(self):
-        """Should filter by specified sources."""
-        response = get_sentiment_by_configuration(
+    @patch("src.lambdas.dashboard.timeseries.query_timeseries")
+    def test_queries_timeseries_for_each_ticker(self, mock_query):
+        """Should call query_timeseries once per ticker."""
+        mock_bucket = MagicMock(avg=0.5, count=3, timestamp="2025-01-01T00:00:00Z")
+        mock_response = MagicMock()
+        mock_response.buckets = [mock_bucket]
+        mock_response.partial_bucket = None
+        mock_query.return_value = mock_response
+
+        get_sentiment_by_configuration(
             config_id="test-config",
-            tickers=["AAPL"],
-            sources=["our_model"],
+            tickers=["AAPL", "MSFT"],
+            skip_cache=True,
         )
 
-        # our_model is computed from other sources, so may be empty
-        assert response.config_id == "test-config"
+        assert mock_query.call_count == 2
 
-    def test_gets_tiingo_sentiment_when_adapter_provided(self):
-        """Should get Tiingo sentiment when adapter provided."""
-        mock_adapter = MagicMock()
-        mock_adapter.get_news.return_value = [
-            MagicMock(title="AAPL beats earnings expectations"),
-            MagicMock(title="Apple stock surge"),
-        ]
+    @patch("src.lambdas.dashboard.timeseries.query_timeseries")
+    def test_passes_resolution_to_timeseries(self, mock_query):
+        """Should pass resolution parameter to query_timeseries."""
+        mock_response = MagicMock()
+        mock_response.buckets = []
+        mock_response.partial_bucket = None
+        mock_query.return_value = mock_response
 
         get_sentiment_by_configuration(
             config_id="test-config",
             tickers=["AAPL"],
-            tiingo_adapter=mock_adapter,
+            resolution=Resolution.ONE_HOUR,
+            skip_cache=True,
         )
 
-        # Should have called get_news
-        mock_adapter.get_news.assert_called()
-
-    def test_gets_finnhub_sentiment_when_adapter_provided(self):
-        """Should get Finnhub sentiment when adapter provided."""
-        mock_adapter = MagicMock()
-        mock_sentiment = MagicMock()
-        mock_sentiment.sentiment_score = 0.5
-        mock_sentiment.bullish_percent = 60.0
-        mock_sentiment.bearish_percent = 40.0
-        mock_sentiment.fetched_at = datetime.now(UTC)
-        mock_adapter.get_sentiment.return_value = mock_sentiment
-
-        get_sentiment_by_configuration(
-            config_id="test-config",
-            tickers=["AAPL"],
-            finnhub_adapter=mock_adapter,
+        mock_query.assert_called_once_with(
+            ticker="AAPL",
+            resolution=Resolution.ONE_HOUR,
         )
 
-        mock_adapter.get_sentiment.assert_called_with("AAPL")
-
-    def test_handles_adapter_errors_gracefully(self):
-        """Should handle adapter errors gracefully."""
-        mock_adapter = MagicMock()
-        mock_adapter.get_news.side_effect = Exception("API error")
+    @patch("src.lambdas.dashboard.timeseries.query_timeseries")
+    def test_handles_timeseries_errors_gracefully(self, mock_query):
+        """Should handle query_timeseries errors without crashing."""
+        mock_query.side_effect = Exception("DynamoDB timeout")
 
         # Should not raise
         response = get_sentiment_by_configuration(
             config_id="test-config",
             tickers=["AAPL"],
-            tiingo_adapter=mock_adapter,
+            skip_cache=True,
         )
 
         assert isinstance(response, SentimentResponse)
+        assert len(response.tickers) == 1
+        assert len(response.tickers[0].sentiment) == 0
 
-    def test_computes_our_model_sentiment(self):
-        """Should compute our_model sentiment from other sources."""
-        mock_finnhub = MagicMock()
-        mock_sentiment = MagicMock()
-        mock_sentiment.sentiment_score = 0.7
-        mock_sentiment.bullish_percent = 70.0
-        mock_sentiment.bearish_percent = 30.0
-        mock_sentiment.fetched_at = datetime.now(UTC)
-        mock_finnhub.get_sentiment.return_value = mock_sentiment
+    @patch("src.lambdas.dashboard.timeseries.query_timeseries")
+    def test_maps_bucket_to_aggregated_sentiment(self, mock_query):
+        """Should map timeseries bucket to 'aggregated' SourceSentiment."""
+        mock_bucket = MagicMock(avg=0.7, count=10, timestamp="2025-01-01T00:00:00Z")
+        mock_response = MagicMock()
+        mock_response.buckets = [mock_bucket]
+        mock_response.partial_bucket = None
+        mock_query.return_value = mock_response
 
         response = get_sentiment_by_configuration(
             config_id="test-config",
             tickers=["AAPL"],
-            finnhub_adapter=mock_finnhub,
+            skip_cache=True,
         )
 
-        # Should have our_model in the result
         ticker_data = response.tickers[0]
-        if "finnhub" in ticker_data.sentiment:
-            assert "our_model" in ticker_data.sentiment
+        assert "aggregated" in ticker_data.sentiment
+        source = ticker_data.sentiment["aggregated"]
+        assert source.score == round(0.7, 4)
+        assert source.label == "positive"
+        assert source.confidence == 0.8
+        assert source.updated_at == "2025-01-01T00:00:00Z"
 
 
 class TestGetHeatmapData:
@@ -162,7 +157,7 @@ class TestGetHeatmapData:
         assert isinstance(response, HeatMapResponse)
 
     def test_sources_view_includes_all_sources(self):
-        """Should include all sources in sources view."""
+        """Should include available sources in sources view (aggregated when no data)."""
         response = get_heatmap_data(
             config_id="test-config",
             tickers=["AAPL"],
@@ -171,7 +166,9 @@ class TestGetHeatmapData:
 
         assert response.view == "sources"
         assert len(response.matrix) == 1
-        assert len(response.matrix[0].cells) == 3  # tiingo, finnhub, our_model
+        # No sentiment_data passed → falls back to single "aggregated" cell
+        assert len(response.matrix[0].cells) == 1
+        assert response.matrix[0].cells[0].source == "aggregated"
 
     def test_timeperiods_view_includes_all_periods(self):
         """Should include all periods in timeperiods view."""

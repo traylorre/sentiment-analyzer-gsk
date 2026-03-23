@@ -48,8 +48,8 @@ class TestResolutionConfig:
         return resolutions
 
     def test_all_resolutions_defined(self, parsed_resolutions: dict) -> None:
-        """Verify all 8 resolutions are defined in config.js."""
-        expected_keys = {"1m", "5m", "10m", "1h", "3h", "6h", "12h", "24h"}
+        """Verify all 6 resolutions are defined in config.js."""
+        expected_keys = {"1m", "5m", "15m", "30m", "1h", "24h"}
         assert set(parsed_resolutions.keys()) == expected_keys
 
     def test_ttl_matches_python_model(self, parsed_resolutions: dict) -> None:
@@ -81,9 +81,7 @@ class TestResolutionConfig:
 
     def test_resolution_order_defined(self, config_js_content: str) -> None:
         """Verify RESOLUTION_ORDER array is defined with correct order."""
-        expected = (
-            "RESOLUTION_ORDER: ['1m', '5m', '10m', '1h', '3h', '6h', '12h', '24h']"
-        )
+        expected = "RESOLUTION_ORDER: ['1m', '5m', '15m', '30m', '1h', '24h']"
         assert expected in config_js_content
 
     def test_resolutions_are_frozen(self, config_js_content: str) -> None:
@@ -99,11 +97,9 @@ class TestResolutionConfig:
         expected_names = {
             "1m": "1 min",
             "5m": "5 min",
-            "10m": "10 min",
+            "15m": "15 min",
+            "30m": "30 min",
             "1h": "1 hour",
-            "3h": "3 hours",
-            "6h": "6 hours",
-            "12h": "12 hours",
             "24h": "24 hours",
         }
         for key, expected_name in expected_names.items():

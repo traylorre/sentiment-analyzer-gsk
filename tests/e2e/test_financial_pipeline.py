@@ -1,3 +1,4 @@
+# Target: Admin Dashboard (Lambda HTMX)
 """
 Financial News Pipeline E2E Tests with Synthetic Data
 ======================================================

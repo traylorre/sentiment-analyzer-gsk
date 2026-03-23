@@ -542,7 +542,10 @@ def get_oauth_urls():
     Feature 1185: Generates OAuth state for CSRF protection.
     """
     table = get_users_table()
-    result = auth_service.get_oauth_urls(table)
+    # Feature 1245: Pass Origin header for dynamic redirect URI selection
+    event = auth_router.current_event.raw_event
+    origin = event.get("headers", {}).get("origin", "")
+    result = auth_service.get_oauth_urls(table, origin=origin)
     return json_response(200, result.model_dump(), _get_no_cache_headers())
 
 
@@ -1144,12 +1147,25 @@ def delete_configuration(config_id: str):
 @config_router.get("/api/v2/configurations/<config_id>/sentiment")
 def get_sentiment(config_id: str):
     """Get sentiment data for configuration (T056)."""
+    from src.lib.timeseries.models import Resolution
+
     event = config_router.current_event.raw_event
     table = get_users_table()
 
     user_id, err = _require_user_id(event)
     if err:
         return err
+
+    # Parse optional resolution parameter
+    query_params = get_query_params(event)
+    resolution_str = query_params.get("resolution", "24h")
+    try:
+        resolution = Resolution(resolution_str)
+    except ValueError:
+        return error_response(
+            400,
+            f"Invalid resolution: {resolution_str}. Valid: {', '.join(r.value for r in Resolution)}",
+        )
 
     config_data, err = _get_config_with_tickers(table, user_id, config_id)
     if err:
@@ -1159,6 +1175,7 @@ def get_sentiment(config_id: str):
     result = sentiment_service.get_sentiment_by_configuration(
         config_id=config_id,
         tickers=tickers,
+        resolution=resolution,
     )
     return json_response(200, result.model_dump())
 
@@ -1278,6 +1295,8 @@ def get_premarket(config_id: str):
 @config_router.get("/api/v2/configurations/<config_id>/sentiment/<ticker>/history")
 def get_ticker_sentiment_history(config_id: str, ticker: str):
     """Get sentiment history for a specific ticker within a configuration."""
+    from src.lib.timeseries.models import Resolution
+
     event = config_router.current_event.raw_event
     table = get_users_table()
 
@@ -1298,6 +1317,16 @@ def get_ticker_sentiment_history(config_id: str, ticker: str):
     except ValueError:
         return error_response(400, "days must be an integer")
 
+    # Parse optional resolution parameter
+    resolution_str = query_params.get("resolution", "24h")
+    try:
+        resolution = Resolution(resolution_str)
+    except ValueError:
+        return error_response(
+            400,
+            f"Invalid resolution: {resolution_str}. Valid: {', '.join(r.value for r in Resolution)}",
+        )
+
     result = sentiment_service.get_ticker_sentiment_history(
         table=table,
         user_id=user_id,
@@ -1305,6 +1334,7 @@ def get_ticker_sentiment_history(config_id: str, ticker: str):
         ticker=ticker,
         source=source,
         days=days,
+        resolution=resolution,
     )
     if isinstance(result, sentiment_service.ErrorResponse):
         return error_response(404, result.error.message)
@@ -1548,7 +1578,7 @@ def get_timeseries(ticker: str):
     except ValueError:
         return error_response(
             400,
-            f"Invalid resolution: {resolution}. Valid: 1m, 5m, 10m, 1h, 3h, 6h, 12h, 24h",
+            f"Invalid resolution: {resolution}. Valid: {', '.join(r.value for r in Resolution)}",
         )
 
     # Parse time range
@@ -1618,7 +1648,7 @@ def get_timeseries_batch():
     except ValueError:
         return error_response(
             400,
-            f"Invalid resolution: {resolution}. Valid: 1m, 5m, 10m, 1h, 3h, 6h, 12h, 24h",
+            f"Invalid resolution: {resolution}. Valid: {', '.join(r.value for r in Resolution)}",
         )
 
     ticker_list = [t.strip().upper() for t in tickers_str.split(",") if t.strip()]

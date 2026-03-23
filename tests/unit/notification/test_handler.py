@@ -132,6 +132,7 @@ class TestBuildMagicLinkEmail:
         assert "Sign In" in html
 
 
+@patch("src.lambdas.notification.handler.DASHBOARD_URL", "https://app.example.com")
 class TestLambdaHandlerAlert:
     """Test Lambda handler alert notifications."""
 
@@ -230,6 +231,7 @@ class TestLambdaHandlerAlert:
         assert result["statusCode"] == 500
 
 
+@patch("src.lambdas.notification.handler.DASHBOARD_URL", "https://app.example.com")
 class TestLambdaHandlerMagicLink:
     """Test Lambda handler magic link notifications."""
 
@@ -311,6 +313,7 @@ class TestLambdaHandlerDigest:
         mock_process_digests.assert_called_once()
 
 
+@patch("src.lambdas.notification.handler.DASHBOARD_URL", "https://app.example.com")
 class TestLambdaHandlerErrors:
     """Test Lambda handler error handling."""
 

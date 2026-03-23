@@ -1,3 +1,4 @@
+# Target: Admin Dashboard (Lambda HTMX)
 # E2E Tests: Failure Injection (User Story 4)
 #
 # Tests error handling paths through failure injection:

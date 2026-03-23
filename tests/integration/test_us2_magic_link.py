@@ -446,7 +446,7 @@ def _store_magic_link_token(
         "used": False,
         "invalidated": False,
         "entity_type": "MAGIC_LINK_TOKEN",
-        "ttl": int(expires_at.timestamp()) + 86400,  # TTL 1 day after expiry
+        "ttl_timestamp": int(expires_at.timestamp()) + 86400,  # TTL 1 day after expiry
     }
 
     if anonymous_user_id:
