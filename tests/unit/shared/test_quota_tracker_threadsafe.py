@@ -150,9 +150,11 @@ class TestQuotaTrackerThreadSafety:
             t.join()
 
         stats = get_quota_cache_stats()
-        # First read is a miss, rest are hits
-        assert stats["misses"] == 1
-        assert stats["hits"] == (num_threads * reads_per_thread) - 1
+        # Under concurrency, multiple threads may miss the cache before the
+        # first read populates it. Use >= instead of == to avoid flaky failures
+        # under CPU contention (same pattern as circuit_breaker_threadsafe).
+        assert stats["misses"] >= 1
+        assert stats["hits"] + stats["misses"] == num_threads * reads_per_thread
 
     def test_record_call_with_high_contention(self, mock_table):
         """Many threads hitting same service simultaneously."""
