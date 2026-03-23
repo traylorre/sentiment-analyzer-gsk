@@ -137,6 +137,12 @@ variable "github_oauth_client_secret" {
   sensitive   = true
 }
 
+variable "frontend_url" {
+  description = "Customer dashboard URL (e.g., https://main.d29tlmksqcx494.amplifyapp.com). Used for OAuth callback redirect URI selection."
+  type        = string
+  default     = ""
+}
+
 # Feature 1203: CloudFront variables removed - Amplify serves frontend directly
 
 # ===================================================================

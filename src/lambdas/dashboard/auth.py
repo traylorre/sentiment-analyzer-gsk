@@ -2002,40 +2002,55 @@ def _mask_email(email: str | None) -> str | None:
 
 
 # T092: OAuth URLs
-def get_oauth_urls(table: Any) -> OAuthURLsResponse:
+def _resolve_redirect_uri(origin: str) -> str:
+    """Resolve the OAuth redirect URI based on request origin.
+
+    Feature 1245: Dynamically selects redirect URI so local dev against
+    deployed API works without configuration changes.
+
+    Security: Only allows origins in the explicit allowlist to prevent
+    open redirect attacks.
+    """
+    frontend_url = os.environ.get("FRONTEND_URL", "").rstrip("/")
+    allowed_origins = {"http://localhost:3000"}
+    if frontend_url:
+        allowed_origins.add(frontend_url)
+
+    # Match origin against allowlist (scheme+host only)
+    origin_clean = origin.rstrip("/") if origin else ""
+    if origin_clean in allowed_origins:
+        return f"{origin_clean}/auth/callback"
+
+    # Fallback: deployed URL if set, otherwise localhost
+    if frontend_url:
+        return f"{frontend_url}/auth/callback"
+    return "http://localhost:3000/auth/callback"
+
+
+def get_oauth_urls(table: Any, origin: str = "") -> OAuthURLsResponse:
     """Get OAuth authorization URLs for supported providers.
 
     Feature 1185: Generates and stores OAuth state for CSRF protection.
-    Each provider gets its own state to prevent provider confusion attacks.
-    State is included in authorize URLs and must be validated on callback.
+    Feature 1245: Only returns configured providers. Uses dynamic redirect URI.
 
     Args:
         table: DynamoDB Table resource for storing state
+        origin: Request Origin header for redirect URI selection
 
     Returns:
         OAuthURLsResponse with provider URLs and state
     """
     config = CognitoConfig.from_env()
 
-    # Feature 1185: Generate separate state per provider for A13 validation
-    google_state = generate_state()
-    github_state = generate_state()
+    # Feature 1245: Only generate URLs for enabled providers
+    enabled_str = os.environ.get("ENABLED_OAUTH_PROVIDERS", "")
+    enabled_providers = {p.strip().lower() for p in enabled_str.split(",") if p.strip()}
 
-    # Store state for Google (includes PKCE code_verifier)
-    google_oauth_state = store_oauth_state(
-        table=table,
-        state_id=google_state,
-        provider="google",
-        redirect_uri=config.redirect_uri,
-    )
+    if not enabled_providers:
+        return OAuthURLsResponse(providers={}, state="")
 
-    # Store state for GitHub (includes PKCE code_verifier)
-    github_oauth_state = store_oauth_state(
-        table=table,
-        state_id=github_state,
-        provider="github",
-        redirect_uri=config.redirect_uri,
-    )
+    # Feature 1245: Resolve redirect URI from request origin
+    redirect_uri = _resolve_redirect_uri(origin)
 
     # Feature 1222: Derive PKCE code_challenge from code_verifier (FR-007)
     import base64
@@ -2045,27 +2060,56 @@ def get_oauth_urls(table: Any) -> OAuthURLsResponse:
         digest = hashlib.sha256(verifier.encode("ascii")).digest()
         return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
 
-    google_challenge = _derive_code_challenge(google_oauth_state.code_verifier)
-    github_challenge = _derive_code_challenge(github_oauth_state.code_verifier)
+    providers: dict[str, Any] = {}
+    first_state = ""
+
+    if "google" in enabled_providers:
+        google_state = generate_state()
+        google_oauth_state = store_oauth_state(
+            table=table,
+            state_id=google_state,
+            provider="google",
+            redirect_uri=redirect_uri,
+        )
+        google_challenge = _derive_code_challenge(google_oauth_state.code_verifier)
+        providers["google"] = {
+            "authorize_url": config.get_authorize_url(
+                "Google",
+                state=google_state,
+                code_challenge=google_challenge,
+                redirect_uri_override=redirect_uri,
+            ),
+            "icon": "google",
+            "state": google_state,
+        }
+        if not first_state:
+            first_state = google_state
+
+    if "github" in enabled_providers:
+        github_state = generate_state()
+        github_oauth_state = store_oauth_state(
+            table=table,
+            state_id=github_state,
+            provider="github",
+            redirect_uri=redirect_uri,
+        )
+        github_challenge = _derive_code_challenge(github_oauth_state.code_verifier)
+        providers["github"] = {
+            "authorize_url": config.get_authorize_url(
+                "GitHub",
+                state=github_state,
+                code_challenge=github_challenge,
+                redirect_uri_override=redirect_uri,
+            ),
+            "icon": "github",
+            "state": github_state,
+        }
+        if not first_state:
+            first_state = github_state
 
     return OAuthURLsResponse(
-        providers={
-            "google": {
-                "authorize_url": config.get_authorize_url(
-                    "Google", state=google_state, code_challenge=google_challenge
-                ),
-                "icon": "google",
-                "state": google_state,  # Provider-specific state
-            },
-            "github": {
-                "authorize_url": config.get_authorize_url(
-                    "GitHub", state=github_state, code_challenge=github_challenge
-                ),
-                "icon": "github",
-                "state": github_state,  # Provider-specific state
-            },
-        },
-        state=google_state,  # Default for backward compatibility
+        providers=providers,
+        state=first_state,  # Backward compatibility
     )
 
 

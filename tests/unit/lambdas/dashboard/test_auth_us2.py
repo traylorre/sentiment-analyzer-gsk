@@ -224,6 +224,7 @@ class TestGetOAuthUrls:
                 "COGNITO_DOMAIN": "myapp",
                 "AWS_REGION": "us-east-1",
                 "COGNITO_REDIRECT_URI": "https://app.example.com/callback",
+                "ENABLED_OAUTH_PROVIDERS": "google,github",
             },
         ):
             response = get_oauth_urls(table)

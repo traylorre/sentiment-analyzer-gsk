@@ -398,7 +398,10 @@ module "dashboard_lambda" {
     # Blind spot fix: Add missing Cognito OAuth env vars (cognito.py expects these)
     COGNITO_DOMAIN = module.cognito.domain
     # COGNITO_CLIENT_SECRET not set - module has generate_secret=false, code handles None
-    COGNITO_REDIRECT_URI    = length(var.cognito_callback_urls) > 0 ? var.cognito_callback_urls[0] : ""
+    COGNITO_REDIRECT_URI = length(var.cognito_callback_urls) > 0 ? var.cognito_callback_urls[0] : ""
+    # Feature 1245: Dynamic OAuth provider detection + redirect URI selection
+    ENABLED_OAUTH_PROVIDERS = join(",", compact([var.google_oauth_client_id != "" ? "google" : "", var.github_oauth_client_id != "" ? "github" : ""]))
+    FRONTEND_URL            = var.frontend_url
     TICKER_CACHE_BUCKET     = aws_s3_bucket.ticker_cache.id
     SSE_POLL_INTERVAL       = tostring(var.sse_poll_interval)
     ENVIRONMENT             = var.environment

@@ -95,13 +95,27 @@ export function OAuthButton({ provider, className, disabled }: OAuthButtonProps)
 interface OAuthButtonsProps {
   className?: string;
   disabled?: boolean;
+  availableProviders?: string[];
 }
 
-export function OAuthButtons({ className, disabled }: OAuthButtonsProps) {
+export function OAuthButtons({ className, disabled, availableProviders }: OAuthButtonsProps) {
+  if (!availableProviders || availableProviders.length === 0) {
+    return null;
+  }
+
+  const providers: OAuthProvider[] = (['google', 'github'] as const).filter(
+    (p) => availableProviders.includes(p),
+  );
+
+  if (providers.length === 0) {
+    return null;
+  }
+
   return (
     <div className={cn('space-y-3', className)}>
-      <OAuthButton provider="google" disabled={disabled} />
-      <OAuthButton provider="github" disabled={disabled} />
+      {providers.map((provider) => (
+        <OAuthButton key={provider} provider={provider} disabled={disabled} />
+      ))}
     </div>
   );
 }
