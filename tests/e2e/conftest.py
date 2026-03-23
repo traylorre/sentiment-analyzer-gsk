@@ -12,10 +12,9 @@ Cache Management:
     Caches affected: circuit_breaker, quota_tracker, configurations, sentiment, metrics
 """
 
-import asyncio
 import os
 import uuid
-from collections.abc import AsyncGenerator, Generator, Iterator
+from collections.abc import AsyncGenerator, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -186,18 +185,11 @@ class FailureInjectionConfig:
 DEFAULT_TEST_SEED = 42
 
 
-# Session-scoped event loop for async fixtures
-@pytest.fixture(scope="session")
-def event_loop() -> Iterator[asyncio.AbstractEventLoop]:
-    """Create a session-scoped event loop for async fixtures.
-
-    This is required for session-scoped async fixtures to work properly
-    with pytest-asyncio. Without this, async fixtures would fail with
-    ScopeMismatch errors.
-    """
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
+# Feature 1246: Removed manual event_loop() fixture.
+# It was added for session-scoped async cleanup_test_data (PR #163),
+# but that fixture was later converted to sync. The manual loop
+# conflicts with asyncio_mode="auto" + asyncio_default_fixture_loop_scope="function"
+# in pyproject.toml, causing RuntimeError in CI Python 3.13.12.
 
 
 @dataclass
@@ -559,9 +551,7 @@ def test_jwt_secret() -> str:
 
 
 @pytest_asyncio.fixture
-async def authenticated_api_client(
-    test_jwt_secret: str,
-) -> AsyncGenerator[PreprodAPIClient]:
+async def authenticated_api_client() -> AsyncGenerator[PreprodAPIClient]:
     """API client with JWT authentication for tests requiring authenticated access.
 
     This fixture creates a client with a valid JWT bearer token, allowing tests
@@ -577,7 +567,11 @@ async def authenticated_api_client(
     async with PreprodAPIClient() as client:
         # Generate unique user ID for this test
         user_id = str(uuid.uuid4())
-        token = create_test_jwt(user_id=user_id, secret=test_jwt_secret)
+        # Feature 1246: Read secret inline to avoid cross-scope dependency
+        # (was session-scoped test_jwt_secret, but async function-scoped fixtures
+        # cannot reliably depend on session-scoped fixtures with function loop scope)
+        secret = os.environ.get("PREPROD_TEST_JWT_SECRET", _DEFAULT_TEST_JWT_SECRET)
+        token = create_test_jwt(user_id=user_id, secret=secret)
         client.set_bearer_token(token)
         # Store user_id for tests that need to reference it
         client._authenticated_user_id = user_id  # type: ignore[attr-defined]
