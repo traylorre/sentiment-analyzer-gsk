@@ -1369,12 +1369,14 @@ jobs:
           # SSE Lambda uses Docker image with custom runtime, needs warmup
           # Fix(141): Add retry with backoff to handle cold start delays (10-20s for Docker Lambdas)
           echo ""
-          echo "4. Invoking SSE Lambda /health endpoint (with retry)..."
+          # Fix: SSE Lambda has no /health endpoint — use /api/v2/stream/status instead.
+          # The /health endpoint only exists on the Dashboard Lambda, not SSE.
+          echo "4. Warming up SSE Lambda via /api/v2/stream/status (with retry)..."
           for i in 1 2 3 4 5; do
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 --max-time 30 "${SSE_LAMBDA_URL}/health" || echo "000")
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 --max-time 30 "${SSE_LAMBDA_URL}/api/v2/stream/status" || echo "000")
             echo "  Attempt $i: HTTP $HTTP_CODE"
             if [ "$HTTP_CODE" = "200" ]; then
-              echo "  ✅ SSE Lambda /health responded successfully"
+              echo "  ✅ SSE Lambda warmup responded successfully"
               break
             fi
             if [ $i -lt 5 ]; then
@@ -1382,7 +1384,7 @@ jobs:
               echo "  Retrying in ${SLEEP_TIME}s..."
               sleep $SLEEP_TIME
             else
-              echo "  ⚠️ SSE Lambda /health did not return 200 after 5 attempts (continuing anyway)"
+              echo "  ⚠️ SSE Lambda did not return 200 after 5 attempts (continuing anyway)"
             fi
           done
 
