@@ -55,32 +55,21 @@ async def test_oauth_urls_returned(api_client: PreprodAPIClient) -> None:
     # Response may have providers nested under "providers" key
     providers = data.get("providers", data)
 
-    assert "google" in providers, "Response missing 'google' OAuth URL"
-    assert "github" in providers, "Response missing 'github' OAuth URL"
+    # Feature 1245: providers dict may be empty if no OAuth credentials configured.
+    assert isinstance(providers, dict), "providers must be a dict"
 
-    # Providers may be objects with authorize_url or strings
-    google_provider = providers["google"]
-    github_provider = providers["github"]
-
-    if isinstance(google_provider, dict):
-        assert (
-            "authorize_url" in google_provider
-        ), "google provider missing authorize_url"
-        assert (
-            len(google_provider["authorize_url"]) > 0
-        ), "google authorize_url is empty"
-    else:
-        assert isinstance(google_provider, str) and len(google_provider) > 0
-
-    if isinstance(github_provider, dict):
-        assert (
-            "authorize_url" in github_provider
-        ), "github provider missing authorize_url"
-        assert (
-            len(github_provider["authorize_url"]) > 0
-        ), "github authorize_url is empty"
-    else:
-        assert isinstance(github_provider, str) and len(github_provider) > 0
+    for provider_name in ("google", "github"):
+        if provider_name in providers:
+            provider = providers[provider_name]
+            if isinstance(provider, dict):
+                assert (
+                    "authorize_url" in provider
+                ), f"{provider_name} provider missing authorize_url"
+                assert (
+                    len(provider["authorize_url"]) > 0
+                ), f"{provider_name} authorize_url is empty"
+            else:
+                assert isinstance(provider, str) and len(provider) > 0
 
 
 @pytest.mark.asyncio
@@ -96,6 +85,13 @@ async def test_oauth_url_structure_google(api_client: PreprodAPIClient) -> None:
 
     data = response.json()
     providers = data.get("providers", data)
+
+    # Feature 1245: Google may not be configured — skip if absent
+    if "google" not in providers:
+        pytest.skip(
+            "Google OAuth not configured in this environment (ENABLED_OAUTH_PROVIDERS)"
+        )
+
     google_provider = providers["google"]
 
     # Extract URL from provider (may be object or string)
@@ -139,6 +135,13 @@ async def test_oauth_url_structure_github(api_client: PreprodAPIClient) -> None:
 
     data = response.json()
     providers = data.get("providers", data)
+
+    # Feature 1245: GitHub may not be configured — skip if absent
+    if "github" not in providers:
+        pytest.skip(
+            "GitHub OAuth not configured in this environment (ENABLED_OAUTH_PROVIDERS)"
+        )
+
     github_provider = providers["github"]
 
     # Extract URL from provider (may be object or string)
