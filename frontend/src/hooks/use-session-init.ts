@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { useAuthStore } from '@/stores/auth-store';
+import { SESSION_INIT_TIMEOUT_MS } from '@/lib/constants';
 
 /**
  * Hook for automatic session initialization on app load.
@@ -49,13 +50,27 @@ export function useSessionInit() {
 
     initAttempted.current = true;
 
+    // Clear stale OAuth sessionStorage keys from previous auth attempts
+    sessionStorage.removeItem('oauth_provider');
+    sessionStorage.removeItem('oauth_state');
+
     const initializeSession = async () => {
       try {
         // TODO: In future, call /refresh endpoint here to restore session from httpOnly cookie
-        // For now, create anonymous session
-        await signInAnonymous();
+        // For now, create anonymous session with timeout protection
+        await Promise.race([
+          signInAnonymous(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('timeout')), SESSION_INIT_TIMEOUT_MS)
+          ),
+        ]);
         setInitialized(true);
       } catch (err) {
+        if (err instanceof Error && err.message === 'timeout') {
+          setError('Session initialization timed out. Please refresh.');
+          setInitialized(true);
+          return;
+        }
         const message = err instanceof Error ? err.message : 'Failed to initialize session';
         setError(message);
         // Still mark as initialized to prevent retry loops

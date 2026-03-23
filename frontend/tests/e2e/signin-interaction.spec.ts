@@ -59,3 +59,51 @@ test.describe('Sign-In Interaction', () => {
     await expect(menuItem).not.toBeVisible({ timeout: 3_000 });
   });
 });
+
+test.describe('OAuth Flow Regression (Feature 1245)', () => {
+  test.setTimeout(15_000);
+
+  test('sign-in page shows only email when no OAuth configured', async ({ page }) => {
+    await page.route('**/api/v2/auth/oauth/urls', route =>
+      route.fulfill({
+        status: 200,
+        body: JSON.stringify({ providers: {}, state: '' }),
+        contentType: 'application/json',
+      })
+    );
+
+    await page.goto('/auth/signin');
+
+    // No OAuth provider buttons should be visible
+    await expect(page.getByRole('button', { name: /google/i })).not.toBeVisible();
+    await expect(page.getByRole('button', { name: /github/i })).not.toBeVisible();
+
+    // Magic link email form should still be present
+    await expect(page.getByPlaceholder(/email/i)).toBeVisible();
+  });
+
+  test('magic link form loads immediately without waiting for provider check', async ({ page }) => {
+    await page.goto('/auth/signin');
+
+    // Email input should be visible within 2 seconds (before providers resolve)
+    await expect(page.getByPlaceholder(/email/i)).toBeVisible({ timeout: 2_000 });
+  });
+
+  test('session recovers after failed OAuth redirect', async ({ page }) => {
+    await page.goto('/auth/callback?error=access_denied');
+
+    // Should show cancellation message
+    await expect(page.getByText(/cancelled/i)).toBeVisible();
+
+    // Should offer a way to continue as guest
+    const recoveryLink = page.getByRole('link', { name: /guest|continue/i });
+    await expect(recoveryLink).toBeVisible();
+  });
+
+  test('OAuth callback error shows user-friendly message', async ({ page }) => {
+    await page.goto('/auth/callback?error=server_error');
+
+    // Should show a friendly error message
+    await expect(page.getByText(/something went wrong/i)).toBeVisible();
+  });
+});

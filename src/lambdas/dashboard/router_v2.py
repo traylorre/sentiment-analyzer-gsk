@@ -542,7 +542,10 @@ def get_oauth_urls():
     Feature 1185: Generates OAuth state for CSRF protection.
     """
     table = get_users_table()
-    result = auth_service.get_oauth_urls(table)
+    # Feature 1245: Pass Origin header for dynamic redirect URI selection
+    event = auth_router.current_event.raw_event
+    origin = event.get("headers", {}).get("origin", "")
+    result = auth_service.get_oauth_urls(table, origin=origin)
     return json_response(200, result.model_dump(), _get_no_cache_headers())
 
 
