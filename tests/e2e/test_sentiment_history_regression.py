@@ -1,3 +1,4 @@
+# Target: Admin Dashboard (Lambda HTMX)
 # E2E Tests: Sentiment History Regression (PRs #782, #783)
 #
 # Regression tests for the sentiment history 500 bug:

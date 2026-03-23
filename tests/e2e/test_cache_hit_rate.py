@@ -1,3 +1,4 @@
+# Target: Admin Dashboard (Lambda HTMX)
 """E2E tests for cache hit rate validation.
 
 Feature: 1020-validate-cache-hit-rate

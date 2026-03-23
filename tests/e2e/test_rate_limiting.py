@@ -1,3 +1,4 @@
+# Target: Admin Dashboard (Lambda HTMX)
 # E2E Tests: Rate Limiting Enforcement (User Story 7)
 #
 # Tests rate limiting behavior:

@@ -1,3 +1,4 @@
+# Target: Admin Dashboard (Lambda HTMX)
 """Performance test for resolution switching latency.
 
 Validates SC-002 from specs/1009-realtime-multi-resolution: Resolution switching

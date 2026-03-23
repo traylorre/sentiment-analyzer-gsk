@@ -1,3 +1,4 @@
+// Target: Customer Dashboard (Next.js/Amplify)
 /**
  * E2E tests for session lifecycle (Feature 1223, US4).
  *

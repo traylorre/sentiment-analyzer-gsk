@@ -1,3 +1,4 @@
+// Target: Customer Dashboard (Next.js/Amplify)
 import { test, expect, type ConsoleMessage } from '@playwright/test';
 
 /**

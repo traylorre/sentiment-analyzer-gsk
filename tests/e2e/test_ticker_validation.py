@@ -1,3 +1,4 @@
+# Target: Admin Dashboard (Lambda HTMX)
 # E2E Tests: Ticker Validation (User Story 9)
 #
 # Tests ticker validation and search:

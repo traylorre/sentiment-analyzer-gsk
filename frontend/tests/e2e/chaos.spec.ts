@@ -1,3 +1,4 @@
+// Target: Customer Dashboard (Next.js/Amplify)
 import { test, expect } from '@playwright/test';
 
 // Chaos tests run against the API directly since the chaos dashboard

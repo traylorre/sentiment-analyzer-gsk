@@ -1,3 +1,4 @@
+# Target: Admin Dashboard (Lambda HTMX)
 """E2E Tests: SSE Auto-Reconnection (User Story 5 - Phase 7)
 
 Tests SSE connection resilience and reconnection behavior:

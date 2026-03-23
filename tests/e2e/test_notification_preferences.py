@@ -1,3 +1,4 @@
+# Target: Admin Dashboard (Lambda HTMX)
 # E2E Tests: Notification Preferences API (Issue #124)
 #
 # Tests the notification preferences API:

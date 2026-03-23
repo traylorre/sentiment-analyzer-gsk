@@ -1,3 +1,4 @@
+# Target: Admin Dashboard (Lambda HTMX)
 # E2E Tests: Magic Link Authentication (User Story 1)
 #
 # Tests magic link authentication flows:
