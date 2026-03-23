@@ -24,7 +24,8 @@ except ImportError:
     PLAYWRIGHT_AVAILABLE = False
     Page = None  # Type hint placeholder
 
-pytestmark = [pytest.mark.e2e, pytest.mark.preprod]
+# Note: No file-level pytestmark — API tests use class-level markers,
+# visual tests use @pytest.mark.visual (excluded from -m preprod CI runs)
 
 # Tickers known to have real sentiment data in preprod
 TICKERS_WITH_DATA = ["AAPL", "MSFT", "GOOGL", "TSLA", "AMZN"]
@@ -47,6 +48,8 @@ PREPROD_API_URL = os.environ.get(
 # =========================================================================
 
 
+@pytest.mark.e2e
+@pytest.mark.preprod
 class TestSentimentHistoryAPI:
     """Verify /api/v2/tickers/{ticker}/sentiment/history returns valid data.
 
@@ -175,6 +178,10 @@ class TestSentimentHistoryAPI:
     not PLAYWRIGHT_AVAILABLE,
     reason="pytest-playwright not installed (pip install pytest-playwright)",
 )
+# Feature 1246: NOT marked preprod — these visual tests use the Playwright 'page'
+# fixture which is disabled in CI integration tests (-p no:playwright) to prevent
+# event loop conflicts. Run these locally or in a dedicated Playwright test stage.
+@pytest.mark.visual
 class TestSentimentChartVisual:
     """Verify sentiment data is visually rendered on the dashboard.
 
