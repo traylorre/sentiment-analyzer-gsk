@@ -1,3 +1,4 @@
+# Target: Admin Dashboard (Lambda HTMX)
 """E2E tests for live update latency validation.
 
 Feature 1019: Validate Live Update Latency

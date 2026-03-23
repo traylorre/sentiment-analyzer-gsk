@@ -1,3 +1,4 @@
+# Target: Admin Dashboard (Lambda HTMX)
 # E2E Tests: Circuit Breaker Behavior (User Story 8)
 #
 # Tests circuit breaker state transitions:

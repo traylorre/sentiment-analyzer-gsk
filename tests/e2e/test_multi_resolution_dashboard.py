@@ -1,3 +1,4 @@
+# Target: Admin Dashboard (Lambda HTMX)
 """E2E Tests: Multi-Resolution Dashboard (Feature 1009 - Phase 8)
 
 Tests complete user journey for the multi-resolution sentiment dashboard:

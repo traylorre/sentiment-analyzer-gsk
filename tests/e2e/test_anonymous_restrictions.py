@@ -1,3 +1,4 @@
+# Target: Admin Dashboard (Lambda HTMX)
 # E2E Tests: Anonymous User Restrictions (403 Forbidden Scenarios)
 #
 # Tests operations that anonymous users are NOT allowed to perform.

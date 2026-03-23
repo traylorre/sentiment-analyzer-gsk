@@ -1,3 +1,4 @@
+# Target: Admin Dashboard (Lambda HTMX)
 # E2E Tests: Observability (User Story 11)
 #
 # Tests CloudWatch and X-Ray observability:

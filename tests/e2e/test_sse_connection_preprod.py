@@ -1,3 +1,4 @@
+# Target: Admin Dashboard (Lambda HTMX)
 # E2E Tests: SSE Connection Health (Preprod)
 #
 # Validates that SSE Lambda is running correctly and dashboard can connect.

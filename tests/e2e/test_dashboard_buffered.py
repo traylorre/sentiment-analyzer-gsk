@@ -1,3 +1,4 @@
+# Target: Admin Dashboard (Lambda HTMX)
 # E2E Tests: Dashboard BUFFERED Response Mode (Feature 016)
 #
 # Validates that the dashboard Lambda returns proper JSON responses

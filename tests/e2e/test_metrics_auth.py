@@ -1,3 +1,4 @@
+# Target: Admin Dashboard (Lambda HTMX)
 """E2E tests for /api/v2/metrics endpoint authentication.
 
 Feature 1059: E2E Test for /api/v2/metrics Auth Scenarios

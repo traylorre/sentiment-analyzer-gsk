@@ -1,3 +1,4 @@
+// Target: Customer Dashboard (Next.js/Amplify)
 /**
  * E2E tests for magic link authentication flow (Feature 1223, US2).
  *

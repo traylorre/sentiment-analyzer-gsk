@@ -1,3 +1,4 @@
+# Target: Admin Dashboard (Lambda HTMX)
 # E2E Tests: Sentiment and Volatility Data (User Story 4)
 #
 # Tests sentiment and volatility data endpoints:

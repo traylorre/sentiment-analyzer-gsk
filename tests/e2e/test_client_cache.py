@@ -1,3 +1,4 @@
+# Target: Admin Dashboard (Lambda HTMX)
 """E2E Tests: Client-Side IndexedDB Cache (User Story 5 - Phase 7)
 
 Tests client-side caching functionality for connectivity resilience:

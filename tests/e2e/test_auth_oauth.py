@@ -1,3 +1,4 @@
+# Target: Admin Dashboard (Lambda HTMX)
 # E2E Tests: OAuth Authentication (User Story 2)
 #
 # Tests OAuth authentication flows:

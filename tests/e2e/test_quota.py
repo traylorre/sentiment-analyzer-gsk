@@ -1,3 +1,4 @@
+# Target: Admin Dashboard (Lambda HTMX)
 # E2E Tests: Alert Email Quota Tracking (Issue #125)
 #
 # Tests the alert email quota API:

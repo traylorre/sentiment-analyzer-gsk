@@ -1,3 +1,4 @@
+# Target: Admin Dashboard (Lambda HTMX)
 # E2E Tests: Alert Rule Lifecycle (User Story 5)
 #
 # Tests alert rule CRUD and management:

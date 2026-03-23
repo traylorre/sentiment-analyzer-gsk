@@ -1,3 +1,4 @@
+# Target: Admin Dashboard (Lambda HTMX)
 # E2E Tests: Anonymous Session (User Story 1)
 #
 # Tests anonymous user flows:

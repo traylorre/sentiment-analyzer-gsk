@@ -2,6 +2,35 @@
 
 Auto-generated from all feature plans. Last updated: 2025-11-26
 
+## CRITICAL: Two Dashboards — Know Which One You're Touching
+
+This repo has TWO completely separate dashboards. Confusing them has caused 4 separate incidents. **STOP and verify which one you mean before writing code, tests, or fixes.**
+
+| | Customer Dashboard (what users see) | Admin/Debug Dashboard (internal) |
+|---|---|---|
+| **Tech** | Next.js 14 + React 18 + TypeScript | Vanilla JS + HTMX + Chart.js |
+| **Source** | `frontend/` | `src/dashboard/` |
+| **URL** | `https://main.d29tlmksqcx494.amplifyapp.com/` | Lambda Function URL (direct) |
+| **Hosted on** | AWS Amplify | Lambda Function URL response |
+| **Auth** | "Guest" button → anonymous session | None (direct Lambda access) |
+| **API routes** | `/api/v2/configurations/{id}/sentiment` | `/api/v2/tickers/{ticker}/sentiment/history` |
+| **Data hook** | `useSentiment(configId)` in React | `fetch()` in vanilla JS |
+| **Env var** | `PREPROD_FRONTEND_URL` | `DASHBOARD_URL` |
+| **Test suite** | `frontend/tests/e2e/*.spec.ts` | `tests/e2e/test_*.py` |
+| **Test runner** | `cd frontend && npx playwright test` | `pytest tests/e2e/` |
+| **Header comment** | `// Target: Customer Dashboard (Next.js/Amplify)` | `# Target: Admin Dashboard (Lambda HTMX)` |
+
+### Rules
+
+1. **"Dashboard" always means the customer dashboard** unless explicitly qualified as "admin dashboard" or "HTMX dashboard".
+2. **E2E/Playwright tests MUST target the Amplify URL** for customer-facing features. Testing the Lambda Function URL tests an internal tool, NOT what users see.
+3. **When fixing a bug visible to users**, verify the fix on `https://main.d29tlmksqcx494.amplifyapp.com/`, not on the Lambda Function URL.
+4. **The two dashboards use different API routes.** A fix to one endpoint may not fix the other. Always check which route the customer dashboard calls.
+
+### Why This Keeps Happening
+
+The Lambda is named `dashboard Lambda`, the handler is `src/lambdas/dashboard/`, and it serves `src/dashboard/index.html`. When following code paths, you naturally land on the HTMX dashboard. The Next.js app is in a completely separate `frontend/` directory. All existing Playwright tests already target `DASHBOARD_URL` → Lambda. The pattern is self-reinforcing. **Break the pattern by checking this table.**
+
 ## Active Technologies
 - TypeScript 5.x, Node.js 20 LTS (007-sentiment-dashboard-frontend)
 - Python 3.13 + pytest, pytest-asyncio, httpx, boto3, moto (for local unit tests only), aws-xray-sdk (008-e2e-validation-suite)
@@ -102,6 +131,7 @@ Auto-generated from all feature plans. Last updated: 2025-11-26
 - N/A (client-side state only, no persistence) (1226-frontend-error-visibility)
 - Python 3.13 (existing project standard) + aws_lambda_powertools 3.7.0 (missing from ingestion ZIP), boto3 (existing), pydantic (existing) (1227-real-sentiment-pipeline)
 - DynamoDB `{env}-sentiment-timeseries` table (existing, 678 records, PK=`{ticker}#{resolution}`, SK=ISO timestamp) (1227-real-sentiment-pipeline)
+- TypeScript 5.x (frontend), Python 3.13 (backend test relabeling) + Next.js 14, React 18, Radix UI (existing: dialog, tooltip, switch; add: dropdown-menu), Playwright 1.57, TradingView Lightweight Charts (1244-customer-e2e-coverage)
 
 - **Python 3.13** with aws-lambda-powertools, boto3, pydantic, httpx, orjson
 - **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, Amplify
@@ -899,9 +929,9 @@ aws cloudwatch get-metric-data --metric-data-queries '[...]' --start-time ... --
 ```
 
 ## Recent Changes
+- 1244-customer-e2e-coverage: Added TypeScript 5.x (frontend), Python 3.13 (backend test relabeling) + Next.js 14, React 18, Radix UI (existing: dialog, tooltip, switch; add: dropdown-menu), Playwright 1.57, TradingView Lightweight Charts
 - 1227-real-sentiment-pipeline: Added Python 3.13 (existing project standard) + aws_lambda_powertools 3.7.0 (missing from ingestion ZIP), boto3 (existing), pydantic (existing)
 - 1226-frontend-error-visibility: Added TypeScript ^5 / Next.js 14.2.21 / React ^18 + @tanstack/react-query ^5.90.11, zustand ^5.0.8, sonner ^2.0.7
-- 001-cache-architecture-audit: Added Python 3.13 + boto3 (AWS SDK), pydantic (validation), functools (current caching)
 
 <!-- MANUAL ADDITIONS START -->
 

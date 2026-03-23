@@ -1,3 +1,4 @@
+# Target: Admin Dashboard (Lambda HTMX)
 # E2E Tests: SSE Streaming (User Story 10)
 #
 # Tests Server-Sent Events functionality:

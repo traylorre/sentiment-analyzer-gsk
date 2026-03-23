@@ -1,3 +1,4 @@
+// Target: Customer Dashboard (Next.js/Amplify)
 /**
  * E2E tests for OAuth login flow (Feature 1223, US1).
  *

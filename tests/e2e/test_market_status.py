@@ -1,3 +1,4 @@
+# Target: Admin Dashboard (Lambda HTMX)
 # E2E Tests: Market Status (User Story 12)
 #
 # Tests market status functionality:
