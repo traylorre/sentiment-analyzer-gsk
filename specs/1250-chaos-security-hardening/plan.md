@@ -33,7 +33,7 @@ Harden chaos testing API against unauthenticated access, enforce experiment dura
 
 - **`_get_chaos_user_id_from_event()`** (line 163): Remove anonymous exception. Always return None for ANONYMOUS auth type.
 - **All 7 chaos route handlers** (lines 743-990): Add `_is_dev_environment()` check as FIRST line of each handler. Return 404 before any auth check.
-- **New internal route** `POST /internal/chaos/auto-restore`: Handle EventBridge Scheduler callback for auto-restore. Route to `stop_experiment()` with `auto_stopped=True`.
+- **`lambda_handler()`** entry point: Add raw event check BEFORE Powertools routing. If `event.get("action") == "chaos-auto-restore"`, handle auto-restore directly (bypasses HTTP routing). This is required because EventBridge Scheduler invokes Lambda directly — it does NOT send HTTP-formatted events that Powertools can route.
 
 ### 2. `src/lambdas/dashboard/chaos.py` (~80 lines added)
 
@@ -47,6 +47,8 @@ Harden chaos testing API against unauthenticated access, enforce experiment dura
 ### 3. `infrastructure/terraform/modules/chaos/main.tf` (~30 lines added)
 
 - **EventBridge Scheduler IAM role**: `{env}-chaos-scheduler-role` with `lambda:InvokeFunction` on Dashboard Lambda.
+- **Dashboard Lambda IAM policy addition**: `scheduler:CreateSchedule`, `scheduler:DeleteSchedule`, `scheduler:GetSchedule` scoped to `arn:aws:scheduler:*:*:schedule/default/chaos-auto-restore-*`.
+- **Dashboard Lambda env vars**: Add `SCHEDULER_ROLE_ARN` and `DASHBOARD_LAMBDA_ARN` for auto-restore scheduling.
 - **CloudWatch alarm**: `{env}-chaos-iam-policy-attachment` on metric `ChaosIAMPolicyAttachment`.
 
 ### 4. Test Files (~300 lines new)
@@ -83,9 +85,9 @@ tests/e2e/test_chaos_lockdown_preprod.py
 
 1. **EventBridge Scheduler (not Rules)**: Scheduler supports `at()` one-time triggers with `ActionAfterCompletion=DELETE` for self-cleanup. Rules only support cron/rate.
 
-2. **DynamoDB conditional writes for rate limiting and locking**: Atomic, strongly consistent, no new infrastructure. Uses `PK=RATELIMIT#chaos#{user_id}` and `PK=CHAOSLOCK#{scenario_type}` patterns in the existing chaos table.
+2. **DynamoDB conditional writes for rate limiting and locking**: Atomic, strongly consistent, no new infrastructure. Uses synthetic `experiment_id` values (`RATELIMIT#chaos#{user_id}` and `CHAOSLOCK#{scenario_type}`) in the existing chaos table (which uses `experiment_id` as hash key, `created_at` as range key).
 
-3. **Reuse Dashboard Lambda for auto-restore**: The Lambda already has all required IAM permissions. A special internal route (`/internal/chaos/auto-restore`) handles the callback.
+3. **Reuse Dashboard Lambda for auto-restore**: The Lambda already has all required IAM permissions. Auto-restore is handled in `lambda_handler()` BEFORE Powertools routing via raw event check (`event.get("action") == "chaos-auto-restore"`), because EventBridge Scheduler invokes Lambda directly — not via HTTP.
 
 4. **404 before auth (defense in depth)**: Environment check is the FIRST thing in each chaos handler — before even extracting the user_id. Attackers learn nothing about whether chaos endpoints exist in prod/preprod.
 
