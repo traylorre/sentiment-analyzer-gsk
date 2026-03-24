@@ -313,19 +313,20 @@ Users with anonymous sessions (UUID Bearer tokens from `/api/v2/auth/anonymous`)
 - **`prevent_destroy` on authorizer**: Accidental deletion of the Cognito authorizer breaks all protected endpoints. Add lifecycle protection.
 - **`/api/v2/notifications/unsubscribe`**: This endpoint uses a query-param token (not Bearer), must be public. It was not in the original public endpoint list — added after audit.
 - **`/api/v2/auth/check-email`**: Currently public (CSRF only). This is an email enumeration vector. Classify as protected (Cognito JWT required) to reduce attack surface.
+- **Intermediate resources that are also endpoints**: Creating `/api/v2/notifications` as an intermediate (parent of `/unsubscribe`) would break `GET /api/v2/notifications` — API Gateway returns 403 when a resource exists but has no matching method (does NOT fall back to `{proxy+}`). Fix: add `ANY` method with appropriate auth on intermediates that serve double duty. Same applies to `/api/v2/auth/magic-link` (parent of `/{proxy+}` for verify, but also handles POST directly).
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
 - **FR-001**: API Gateway MUST enable Cognito JWT authorization on the `{proxy+}` catch-all route by setting `enable_cognito_auth = true` and providing `cognito_user_pool_arn`.
-- **FR-002**: The following 13 endpoint groups MUST remain unauthenticated at API Gateway level. Implementation uses explicit API Gateway resources with `authorization = "NONE"` and `ANY` method that override the `{proxy+}` catch-all.
+- **FR-002**: The following 11 public resource groups (covering 13+ individual endpoints) MUST remain unauthenticated at API Gateway level. Implementation uses explicit API Gateway resources with `authorization = "NONE"` and `ANY` method that override the `{proxy+}` catch-all.
 
-  **Implementation**: REST API resources are hierarchical — explicit paths take priority over `{proxy+}`. Intermediate resources (`/api`, `/api/v2`, `/api/v2/auth`) are parent nodes without methods. Leaf resources use `ANY` method with `NONE` auth + `OPTIONS` method with MOCK integration for CORS.
+  **Implementation**: REST API resources are hierarchical — explicit paths take priority over `{proxy+}`. Intermediate resources (`/api`, `/api/v2`, `/api/v2/auth`) are parent nodes without methods — **EXCEPT** when an intermediate is also an endpoint path (see FR-012).
 
   Public resource groups (each gets `ANY` + `OPTIONS`):
   - `/api/v2/auth/anonymous` — session creation (pre-auth)
-  - `/api/v2/auth/magic-link/{proxy+}` — magic link request + verify (pre-auth)
+  - `/api/v2/auth/magic-link` + `/api/v2/auth/magic-link/{proxy+}` — magic link request (POST on parent) + verify (GET on child). **The parent resource IS an endpoint** — it needs its own `ANY` method with `NONE` auth.
   - `/api/v2/auth/oauth/{proxy+}` — OAuth URLs + callback (pre-auth)
   - `/api/v2/auth/refresh` — token refresh (uses httpOnly cookie, not JWT)
   - `/api/v2/auth/validate` — session validation (pre-auth check)
@@ -345,6 +346,9 @@ Users with anonymous sessions (UUID Bearer tokens from `/api/v2/auth/anonymous`)
 - **FR-009**: The Cognito authorizer MUST validate JWT signature and expiry only (`authorization_scopes` not set). Setting scopes would reject all tokens because the client's `allowed_oauth_scopes` doesn't include custom resource server scopes.
 - **FR-010**: The Amplify `NEXT_PUBLIC_API_URL` MUST include the stage prefix `/v1`. Frontend routes like `/api/v2/configurations` become `https://...amazonaws.com/v1/api/v2/configurations`.
 - **FR-011**: `/api/v2/auth/check-email` MUST be classified as protected (Cognito JWT required) — it currently accepts unauthenticated requests and is an email enumeration vector.
+- **FR-012**: Intermediate resources that are ALSO endpoint paths MUST have their own methods. Without methods, API Gateway returns 403 `Missing Authentication Token` instead of routing to `{proxy+}` — breaking the endpoint for all users. Affected paths:
+  - `/api/v2/notifications` — MUST have `ANY` method with `authorization = "COGNITO_USER_POOLS"` + Lambda proxy integration (it serves `GET /api/v2/notifications` to list notifications, which is a protected endpoint)
+  - `/api/v2/auth/magic-link` — MUST have `ANY` method with `authorization = "NONE"` + Lambda proxy integration (it serves `POST /api/v2/auth/magic-link` to send magic link, which is a public endpoint)
 
 ### Key Entities
 
