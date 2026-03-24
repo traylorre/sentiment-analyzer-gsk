@@ -1,78 +1,59 @@
 # Quickstart: Feature 1253 — API Gateway Cognito Auth
 
-## Prerequisites
+## Implementation Phases
 
-- Terraform 1.5+ installed
-- AWS credentials configured for the target environment
-- Cognito User Pool deployed (`module.cognito` exists)
-- API Gateway deployed (`module.api_gateway` exists)
+### Phase 1: API Gateway Module (modules/api_gateway/)
+1. Add `public_routes` variable to `variables.tf`
+2. Create intermediate resources via `for_each` (including FR-012 endpoints)
+3. Create leaf/proxy resources with `ANY` + `OPTIONS` methods
+4. Add CORS to 401/403 Gateway Responses
+5. Add ACCESS_DENIED gateway response (doesn't exist yet)
+6. `terraform plan` — expect ~85 new resources, 2 modified
 
-## Implementation Order
+### Phase 2: Wire in main.tf
+7. Set `enable_cognito_auth = true`
+8. Set `cognito_user_pool_arn = module.cognito.user_pool_arn`
+9. Pass `public_routes` list with all 11+2 route configs
+10. `terraform plan` — verify same count
 
-### Phase 1: API Gateway Module Changes
-
-1. **Add `public_routes` variable** to `modules/api_gateway/variables.tf`
-2. **Create intermediate + leaf resources** using `for_each` in `modules/api_gateway/main.tf`
-3. **Add CORS to Gateway Responses** (401 UNAUTHORIZED, MISSING_AUTH_TOKEN, 403 ACCESS_DENIED)
-4. **Verify with `terraform plan`** — expect ~77 new resources, 2 modified
-
-### Phase 2: Wire Module in main.tf
-
-5. **Add `enable_cognito_auth = true`** to `module "api_gateway"` block
-6. **Add `cognito_user_pool_arn = module.cognito.user_pool_arn`**
-7. **Add `public_routes` list** with all 10 route groups
-8. **Verify with `terraform plan`** — should show same resource count
-
-### Phase 3: Amplify URL Switch
-
-9. **Add `api_gateway_url` variable** to `modules/amplify/variables.tf`
-10. **Change `NEXT_PUBLIC_API_URL`** from `var.dashboard_lambda_url` to `var.api_gateway_url`
-11. **Pass `module.api_gateway.api_endpoint`** from main.tf to Amplify module
+### Phase 3: Amplify URL Switch (modules/amplify/)
+11. Add `api_gateway_url` variable
+12. Change `NEXT_PUBLIC_API_URL` from Lambda URL to API Gateway URL
+13. Wire `module.api_gateway.api_endpoint` in main.tf
+14. Add `module.api_gateway` to Amplify's `depends_on`
 
 ### Phase 4: Deploy Pipeline
-
-12. **Add API Gateway smoke test** to `deploy.yml`
-13. **Keep Lambda Function URL smoke test** as secondary (until Feature 1256)
+15. Add API Gateway health check to deploy.yml smoke tests
+16. Keep Lambda direct-invoke as secondary
 
 ### Phase 5: Tests
-
-14. **Unit tests**: Terraform plan validation, auth behavior assertions
-15. **E2E tests**: Protected endpoint 401, public endpoint 200, CORS on 401
+17. Unit tests: Terraform plan validation, mock auth responses
+18. E2E tests: Protected endpoint 401, public endpoint 200, CORS on 401, OPTIONS 200
 
 ## Verification
 
 ```bash
-# After terraform apply:
-
-# 1. Protected endpoint without token → 401
-curl -s -o /dev/null -w "%{http_code}" https://{api_gw_url}/v1/api/v2/configurations
+# Protected endpoint → 401
+curl -s -o /dev/null -w "%{http_code}" https://{gw}/v1/api/v2/configurations
 # Expected: 401
 
-# 2. Public endpoint without token → 200
-curl -s -o /dev/null -w "%{http_code}" https://{api_gw_url}/v1/health
+# Public endpoint → 200
+curl -s -o /dev/null -w "%{http_code}" https://{gw}/v1/health
 # Expected: 200
 
-# 3. 401 response has CORS headers
-curl -s -D- https://{api_gw_url}/v1/api/v2/configurations 2>&1 | grep -i 'access-control'
-# Expected: Access-Control-Allow-Origin, Access-Control-Allow-Credentials
+# 401 has CORS headers
+curl -sD- https://{gw}/v1/api/v2/configurations 2>&1 | grep -i access-control
+# Expected: Allow-Origin, Allow-Credentials
 
-# 4. Amplify env var points to API Gateway
-# Check in Amplify console or via Terraform output
+# FR-012: /notifications still works with JWT
+curl -s -H "Authorization: Bearer {jwt}" https://{gw}/v1/api/v2/notifications
+# Expected: 200
+
+# FR-012: /auth/magic-link still works without JWT
+curl -s -X POST https://{gw}/v1/api/v2/auth/magic-link -d '{"email":"test@test.com"}'
+# Expected: 200
 ```
 
 ## Rollback
 
-Set `enable_cognito_auth = false` in main.tf and run `terraform apply`. This:
-- Removes the Cognito authorizer (conditional `count = 0`)
-- Reverts `{proxy+}` to `authorization = "NONE"`
-- Public route overrides remain harmless (they just have `NONE` auth like everything else)
-- Amplify URL change requires separate revert (change back to `dashboard_lambda_url`)
-
-## Risk Mitigations
-
-| Risk | Mitigation |
-|------|------------|
-| Partial deployment breaks /health | FR-007: Atomic deployment (single terraform apply) |
-| 401 not visible to frontend | FR-008: CORS on Gateway Responses |
-| All tokens rejected | FR-009: No scope validation (signature + expiry only) |
-| Stage prefix missing | FR-010: Amplify URL includes `/v1` |
+Set `enable_cognito_auth = false` + revert Amplify URL. Single `terraform apply`. Public overrides become harmless (NONE auth like everything else).

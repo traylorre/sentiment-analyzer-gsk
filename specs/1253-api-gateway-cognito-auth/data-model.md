@@ -4,76 +4,59 @@
 
 ## Terraform Resource Model
 
-This feature is infrastructure-only. The "data model" is the Terraform resource graph.
+Infrastructure-only feature. The "data model" is the Terraform resource graph.
 
-### New Resources
+### Resource Categories
 
-#### Cognito Authorizer (1 resource)
+#### 1. Cognito Authorizer (existing, activated)
 
-| Resource | Type | Key Attributes |
-|----------|------|---------------|
-| `aws_api_gateway_authorizer.cognito[0]` | COGNITO_USER_POOLS | `provider_arns = [var.cognito_user_pool_arn]`, `identity_source = "method.request.header.Authorization"` |
+Activated by `enable_cognito_auth = true`. Already exists in module code.
 
-*Already exists in module — activated by `enable_cognito_auth = true`.*
+#### 2. Gateway Responses (3 resources, CORS headers added)
 
-#### Gateway Responses (2 resources, updated)
+| Response Type | Status | CORS Headers |
+|---------------|--------|-------------|
+| UNAUTHORIZED | 401 | Origin, Headers, Credentials, Methods |
+| MISSING_AUTHENTICATION_TOKEN | 401 | Origin, Headers, Credentials, Methods |
+| ACCESS_DENIED | 403 | Origin, Headers, Credentials, Methods |
 
-| Resource | Response Type | CORS Headers Required |
-|----------|--------------|----------------------|
-| `aws_api_gateway_gateway_response.unauthorized[0]` | UNAUTHORIZED | Origin, Headers, Credentials, Methods |
-| `aws_api_gateway_gateway_response.missing_auth_token[0]` | MISSING_AUTHENTICATION_TOKEN | Origin, Headers, Credentials, Methods |
+#### 3. Pure Intermediates (no methods — parent nodes only)
 
-#### Intermediate Resources (no methods)
+`/api`, `/api/v2`, `/api/v2/auth`, `/api/v2/auth/oauth`, `/api/v2/tickers`, `/api/v2/market`, `/api/v2/timeseries`
 
-| Resource Key | Path | Purpose |
-|-------------|------|---------|
-| `api` | `/api` | Parent node |
-| `api_v2` | `/api/v2` | Parent node |
-| `api_v2_auth` | `/api/v2/auth` | Parent node |
-| `api_v2_auth_magic-link` | `/api/v2/auth/magic-link` | Parent for {proxy+} |
-| `api_v2_auth_oauth` | `/api/v2/auth/oauth` | Parent for {proxy+} |
-| `api_v2_tickers` | `/api/v2/tickers` | Parent for {proxy+} |
-| `api_v2_market` | `/api/v2/market` | Parent for {proxy+} |
-| `api_v2_timeseries` | `/api/v2/timeseries` | Parent for {proxy+} |
+#### 4. FR-012 Intermediates (have methods — are also endpoints)
 
-#### Leaf Resources (with ANY + OPTIONS methods)
+| Resource | Auth | Method | Reason |
+|----------|------|--------|--------|
+| `/api/v2/notifications` | COGNITO_USER_POOLS | ANY + OPTIONS | Lists user notifications |
+| `/api/v2/auth/magic-link` | NONE | ANY + OPTIONS | Sends magic link email |
 
-| Route Group | Leaf Resource | Has {proxy+} Child |
-|-------------|--------------|-------------------|
-| Auth: anonymous | `/api/v2/auth/anonymous` | No |
-| Auth: magic-link | `/api/v2/auth/magic-link/{proxy+}` | Yes |
-| Auth: oauth | `/api/v2/auth/oauth/{proxy+}` | Yes |
-| Auth: refresh | `/api/v2/auth/refresh` | No |
-| Auth: validate | `/api/v2/auth/validate` | No |
-| Data: tickers | `/api/v2/tickers/{proxy+}` | Yes |
-| Data: market | `/api/v2/market/{proxy+}` | Yes |
-| Data: timeseries | `/api/v2/timeseries/{proxy+}` | Yes |
-| Infra: health | `/health` | No |
-| Infra: runtime | `/api/v2/runtime` | No |
+Each gets: method + integration + OPTIONS + MOCK + method_response + integration_response = 6 resources.
 
-#### Per-Leaf Resource Set (×10)
+#### 5. Public Leaf/Proxy Resources (11 groups)
 
-Each leaf resource creates:
-1. `aws_api_gateway_method` (ANY, authorization = "NONE")
-2. `aws_api_gateway_integration` (ANY → Lambda AWS_PROXY)
-3. `aws_api_gateway_method` (OPTIONS, authorization = "NONE")
-4. `aws_api_gateway_integration` (OPTIONS → MOCK)
-5. `aws_api_gateway_method_response` (OPTIONS → 200)
-6. `aws_api_gateway_integration_response` (OPTIONS → CORS headers)
+| Group | Resource Path | Has {proxy+} |
+|-------|--------------|-------------|
+| anonymous | `/api/v2/auth/anonymous` | No |
+| magic-link child | `/api/v2/auth/magic-link/{proxy+}` | Yes |
+| oauth | `/api/v2/auth/oauth/{proxy+}` | Yes |
+| refresh | `/api/v2/auth/refresh` | No |
+| validate | `/api/v2/auth/validate` | No |
+| tickers | `/api/v2/tickers/{proxy+}` | Yes |
+| market | `/api/v2/market/{proxy+}` | Yes |
+| timeseries | `/api/v2/timeseries/{proxy+}` | Yes |
+| unsubscribe | `/api/v2/notifications/unsubscribe` | No |
+| health | `/health` | No |
+| runtime | `/api/v2/runtime` | No |
 
-### State Transitions
-
-No application-level state transitions. The only state change is Terraform:
-- `enable_cognito_auth`: `false` → `true`
-- `{proxy+}` catch-all authorization: `"NONE"` → `"COGNITO_USER_POOLS"`
-- Amplify `NEXT_PUBLIC_API_URL`: Lambda Function URL → API Gateway URL
+Each gets: resource + ANY method + integration + OPTIONS + MOCK + method_response + integration_response = 7 resources (6 for groups that reuse parent's resource).
 
 ### Validation Rules
 
 | Rule | Enforcement |
 |------|-------------|
-| Public routes must have NONE authorization | Terraform variable structure enforces this |
-| Protected routes must have COGNITO_USER_POOLS | Conditional on `enable_cognito_auth` flag |
-| CORS headers on 401/403 | Gateway Response templates include explicit header list |
-| Stage prefix in API URL | Amplify env var includes `/v1` suffix |
+| Public routes: authorization = "NONE" | `public_routes` variable structure |
+| Protected routes: authorization = "COGNITO_USER_POOLS" | Conditional on `enable_cognito_auth` |
+| CORS headers use explicit list, not wildcard | Hardcoded in Gateway Response templates |
 | Atomic deployment | All resources in same module, single apply |
+| FR-012 intermediates have methods | `is_endpoint = true` in route config |
