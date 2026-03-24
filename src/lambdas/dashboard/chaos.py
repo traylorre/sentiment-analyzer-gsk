@@ -48,6 +48,8 @@ logger = logging.getLogger(__name__)
 # Configuration
 CHAOS_TABLE = os.environ.get("CHAOS_EXPERIMENTS_TABLE", "")
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "dev")
+SCHEDULER_ROLE_ARN = os.environ.get("SCHEDULER_ROLE_ARN", "")
+DASHBOARD_LAMBDA_ARN = os.environ.get("DASHBOARD_LAMBDA_ARN", "")
 
 # Safety: Only allow chaos testing in preprod/dev/test
 ALLOWED_ENVIRONMENTS = ["preprod", "dev", "test", "local"]
@@ -103,6 +105,12 @@ class EnvironmentNotAllowedError(ChaosError):
     pass
 
 
+class RateLimitError(ChaosError):
+    """Raised when user exceeds chaos experiment creation rate limit."""
+
+    pass
+
+
 def check_environment_allowed():
     """
     Verify chaos testing is allowed in current environment.
@@ -118,6 +126,166 @@ def check_environment_allowed():
 
 
 # ===================================================================
+# Feature 1250: Rate limiting, scenario locking, IAM metrics
+# ===================================================================
+
+
+def _check_rate_limit(user_id: str) -> None:
+    """Check if user has exceeded chaos experiment creation rate (1 per 60s).
+
+    Uses DynamoDB conditional write with synthetic experiment_id prefix.
+    Raises RateLimitError if rate limit exceeded.
+    """
+    table = _get_dynamodb().Table(CHAOS_TABLE)
+    now_epoch = int(datetime.now(UTC).timestamp())
+    now_iso = datetime.now(UTC).isoformat() + "Z"
+
+    try:
+        table.put_item(
+            Item={
+                "experiment_id": f"RATELIMIT#chaos#{user_id}",
+                "created_at": now_iso,
+                "last_created_epoch": now_epoch,
+                "ttl_timestamp": now_epoch + 120,
+            },
+            ConditionExpression=(
+                "attribute_not_exists(experiment_id) OR last_created_epoch < :cutoff"
+            ),
+            ExpressionAttributeValues={":cutoff": now_epoch - 60},
+        )
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+            raise RateLimitError(
+                "Rate limit exceeded: max 1 experiment per 60 seconds"
+            ) from e
+        raise ChaosError(f"Rate limit check failed: {e}") from e
+
+
+def _acquire_scenario_lock(scenario_type: str, experiment_id: str) -> None:
+    """Acquire exclusive lock for a scenario type (one running experiment at a time).
+
+    Raises ChaosError if another experiment of same type is already running.
+    Lock has TTL=600s safety net in case stop fails to release.
+    """
+    table = _get_dynamodb().Table(CHAOS_TABLE)
+    now_epoch = int(datetime.now(UTC).timestamp())
+
+    try:
+        table.put_item(
+            Item={
+                "experiment_id": f"CHAOSLOCK#{scenario_type}",
+                "created_at": "ACTIVE",
+                "locked_experiment_id": experiment_id,
+                "started_at": datetime.now(UTC).isoformat() + "Z",
+                "ttl_timestamp": now_epoch + 600,
+            },
+            ConditionExpression="attribute_not_exists(experiment_id)",
+        )
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+            raise ChaosError(
+                f"Experiment already running for scenario {scenario_type}. "
+                "Stop the existing experiment before starting a new one."
+            ) from e
+        raise ChaosError(f"Scenario lock acquisition failed: {e}") from e
+
+
+def _release_scenario_lock(scenario_type: str) -> None:
+    """Release exclusive lock for a scenario type. Idempotent — silently succeeds if lock doesn't exist."""
+    try:
+        table = _get_dynamodb().Table(CHAOS_TABLE)
+        table.delete_item(
+            Key={"experiment_id": f"CHAOSLOCK#{scenario_type}", "created_at": "ACTIVE"}
+        )
+    except ClientError:
+        pass  # Lock may already be released or expired via TTL
+
+
+def _emit_iam_metric(value: int) -> None:
+    """Emit CloudWatch metric for IAM policy attachment events (Feature 1250 FR-006)."""
+    try:
+        cw = boto3.client("cloudwatch")
+        cw.put_metric_data(
+            Namespace="SentimentAnalyzer",
+            MetricData=[
+                {
+                    "MetricName": "ChaosIAMPolicyAttachment",
+                    "Value": value,
+                    "Unit": "Count",
+                    "Timestamp": datetime.now(UTC),
+                }
+            ],
+        )
+    except Exception as e:
+        logger.warning("Failed to emit IAM metric", extra={"error": str(e)})
+
+
+def _schedule_auto_restore(experiment_id: str, duration_seconds: int) -> str:
+    """Schedule EventBridge Scheduler auto-restore for experiment timeout.
+
+    Returns the schedule name for later deletion.
+    Raises ChaosError if scheduling fails.
+    """
+    if not SCHEDULER_ROLE_ARN or not DASHBOARD_LAMBDA_ARN:
+        logger.warning(
+            "Auto-restore scheduling skipped: SCHEDULER_ROLE_ARN or DASHBOARD_LAMBDA_ARN not set"
+        )
+        return ""
+
+    scheduler = boto3.client("scheduler")
+    restore_time = datetime.now(UTC) + timedelta(seconds=duration_seconds)
+    schedule_name = f"chaos-auto-restore-{experiment_id}"
+
+    try:
+        scheduler.create_schedule(
+            Name=schedule_name,
+            ScheduleExpression=f"at({restore_time.strftime('%Y-%m-%dT%H:%M:%S')})",
+            FlexibleTimeWindow={"Mode": "OFF"},
+            Target={
+                "Arn": DASHBOARD_LAMBDA_ARN,
+                "RoleArn": SCHEDULER_ROLE_ARN,
+                "Input": json.dumps(
+                    {"action": "chaos-auto-restore", "experiment_id": experiment_id}
+                ),
+                "RetryPolicy": {
+                    "MaximumEventAgeInSeconds": 300,
+                    "MaximumRetryAttempts": 3,
+                },
+            },
+            ActionAfterCompletion="DELETE",
+        )
+        logger.info(
+            "Auto-restore scheduled",
+            extra={
+                "experiment_id": experiment_id,
+                "schedule_name": schedule_name,
+                "restore_at": restore_time.isoformat(),
+            },
+        )
+        return schedule_name
+    except Exception as e:
+        raise ChaosError(f"Failed to schedule auto-restore: {e}") from e
+
+
+def _delete_auto_restore_schedule(experiment_id: str) -> None:
+    """Delete scheduled auto-restore rule. Idempotent."""
+    if not SCHEDULER_ROLE_ARN:
+        return
+    schedule_name = f"chaos-auto-restore-{experiment_id}"
+    try:
+        scheduler = boto3.client("scheduler")
+        scheduler.delete_schedule(Name=schedule_name)
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "ResourceNotFoundException":
+            pass  # Already deleted or fired (ActionAfterCompletion=DELETE)
+        else:
+            logger.warning(
+                "Failed to delete auto-restore schedule",
+                extra={"schedule_name": schedule_name, "error": str(e)},
+            )
+
+
+# ===================================================================
 # CRUD Operations (DynamoDB audit log -- unchanged)
 # ===================================================================
 
@@ -127,25 +295,32 @@ def create_experiment(
     blast_radius: int,
     duration_seconds: int,
     parameters: dict[str, Any] | None = None,
+    user_id: str | None = None,
 ) -> dict[str, Any]:
     """
     Create a new chaos experiment.
 
     Args:
-        scenario_type: Type of chaos scenario (dynamodb_throttle|ingestion_failure|lambda_cold_start)
+        scenario_type: Type of chaos scenario
         blast_radius: Percentage of requests to affect (10-100)
         duration_seconds: Duration in seconds (5-300)
         parameters: Optional scenario-specific parameters
+        user_id: Authenticated user ID for rate limiting (Feature 1250)
 
     Returns:
         Created experiment dict
 
     Raises:
         EnvironmentNotAllowedError: If environment not allowed
+        RateLimitError: If user exceeded rate limit (1 per 60s)
         ValueError: If parameters invalid
         ChaosError: If creation fails
     """
     check_environment_allowed()
+
+    # Feature 1250: Rate limit — 1 experiment per user per 60 seconds
+    if user_id:
+        _check_rate_limit(user_id)
 
     # Validate parameters
     valid_scenarios = [
@@ -767,12 +942,17 @@ def start_experiment(experiment_id: str) -> dict[str, Any]:
     """
     check_environment_allowed()
 
+    # Feature 1250: Acquire scenario lock (one running experiment per type)
+    experiment = get_experiment(experiment_id)
+    if not experiment:
+        raise ChaosError(f"Experiment not found: {experiment_id}")
+    _acquire_scenario_lock(experiment["scenario_type"], experiment_id)
+
     # Check gate state (fail-closed: blocks if SSM unreachable or triggered)
     gate = _check_gate()
     dry_run = gate != "armed"
 
-    # Get experiment details
-    experiment = get_experiment(experiment_id)
+    # Get experiment details (already fetched above)
     if not experiment:
         raise ChaosError(f"Experiment not found: {experiment_id}")
 
@@ -833,6 +1013,8 @@ def start_experiment(experiment_id: str) -> dict[str, Any]:
                 # IAM policy propagation takes up to 60 seconds. Sleep briefly to
                 # increase probability of consistent behavior on first invocation.
                 time.sleep(5)
+                # Feature 1250 FR-006: Emit metric for IAM policy attachment
+                _emit_iam_metric(1)
             results = {
                 "started_at": datetime.now(UTC).isoformat() + "Z",
                 "injection_method": "attach_deny_policy",
@@ -907,6 +1089,31 @@ def start_experiment(experiment_id: str) -> dict[str, Any]:
         if not dry_run:
             _set_kill_switch("armed")
 
+        # Feature 1250: Schedule auto-restore BEFORE updating status to running.
+        # If scheduling fails, immediately restore and mark failed.
+        auto_restore_rule = ""
+        if not dry_run:
+            try:
+                auto_restore_rule = _schedule_auto_restore(
+                    experiment_id, experiment["duration_seconds"]
+                )
+            except ChaosError:
+                logger.error(
+                    "Auto-restore scheduling failed, restoring immediately",
+                    extra={"experiment_id": experiment_id},
+                )
+                _release_scenario_lock(scenario_type)
+                _restore_from_ssm(scenario_type)
+                _set_kill_switch("disarmed")
+                update_experiment_status(
+                    experiment_id,
+                    "failed",
+                    {"error": "Auto-restore scheduling failed", "auto_restored": True},
+                )
+                return get_experiment(experiment_id) or experiment
+
+        results["auto_restore_rule_name"] = auto_restore_rule
+
         # Update audit log
         update_experiment_status(experiment_id, "running", results)
 
@@ -923,19 +1130,20 @@ def start_experiment(experiment_id: str) -> dict[str, Any]:
         raise
 
 
-def stop_experiment(experiment_id: str) -> dict[str, Any]:
+def stop_experiment(experiment_id: str, auto_stopped: bool = False) -> dict[str, Any]:
     """
     Stop a running chaos experiment by restoring from SSM snapshot.
 
-    Reads the pre-chaos configuration from SSM and restores the original
-    Lambda configuration, IAM policies, or EventBridge rules.
-
-    Post-chaos health comparison (Feature 1238):
-        Captures current health and compares with baseline to detect
-        recovery, new issues, and persistent (pre-existing) problems.
+    Feature 1250 additions:
+        - Handles already-stopped gracefully (no-op)
+        - Deletes scheduled auto-restore rule
+        - Releases scenario lock
+        - Supports auto_stopped status for EventBridge Scheduler callback
+        - Emits IAM detach metric for dynamodb_throttle
 
     Args:
         experiment_id: Experiment UUID
+        auto_stopped: If True, set status to 'auto-stopped' (from scheduler callback)
 
     Returns:
         Updated experiment dict
@@ -953,6 +1161,14 @@ def stop_experiment(experiment_id: str) -> dict[str, Any]:
     if not experiment:
         raise ChaosError(f"Experiment not found: {experiment_id}")
 
+    # Feature 1250: Handle already-stopped gracefully (no-op for auto-restore race)
+    if experiment["status"] in ("stopped", "auto-stopped"):
+        logger.info(
+            "Experiment already stopped, returning as-is",
+            extra={"experiment_id": experiment_id, "status": experiment["status"]},
+        )
+        return experiment
+
     if experiment["status"] != "running":
         raise ChaosError(
             f"Experiment must be in 'running' status to stop, "
@@ -961,15 +1177,26 @@ def stop_experiment(experiment_id: str) -> dict[str, Any]:
 
     scenario_type = experiment["scenario_type"]
     was_dry_run = experiment.get("results", {}).get("dry_run", False)
+    final_status = "auto-stopped" if auto_stopped else "stopped"
 
     try:
+        # Feature 1250: Delete scheduled auto-restore (idempotent)
+        _delete_auto_restore_schedule(experiment_id)
+
         # Only restore from SSM if this was NOT a dry-run
         snapshot = {}
         if not was_dry_run:
             snapshot = _restore_from_ssm(scenario_type)
 
+            # Feature 1250 FR-006: Emit detach metric for dynamodb_throttle
+            if scenario_type == "dynamodb_throttle":
+                _emit_iam_metric(0)
+
         # Set kill switch to disarmed
         _set_kill_switch("disarmed")
+
+        # Feature 1250: Release scenario lock (idempotent)
+        _release_scenario_lock(scenario_type)
 
         # Update audit log with post-chaos health comparison
         results = experiment.get("results", {})
@@ -987,13 +1214,14 @@ def stop_experiment(experiment_id: str) -> dict[str, Any]:
         baseline = results.get("baseline", {})
         results["post_chaos_health"] = _capture_post_chaos_health(ENVIRONMENT, baseline)
 
-        update_experiment_status(experiment_id, "stopped", results)
+        update_experiment_status(experiment_id, final_status, results)
 
         # Return updated experiment
         return get_experiment(experiment_id) or experiment
 
     except Exception as e:
         # Mark experiment as failed
+        _release_scenario_lock(scenario_type)
         update_experiment_status(
             experiment_id,
             "failed",
