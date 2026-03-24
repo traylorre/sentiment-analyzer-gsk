@@ -449,6 +449,17 @@
                     ]
                 }
             ]
+        },
+        {
+            "file": "/modules/waf/main.tf",
+            "findings": [
+                {
+                    "resource": "module.waf.aws_wafv2_web_acl.main",
+                    "check_ids": [
+                        "CKV2_AWS_31"
+                    ]
+                }
+            ]
         }
     ]
 }
