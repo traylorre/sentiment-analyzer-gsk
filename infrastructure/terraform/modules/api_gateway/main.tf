@@ -56,6 +56,10 @@ resource "aws_api_gateway_authorizer" "cognito" {
   type            = "COGNITO_USER_POOLS"
   provider_arns   = [var.cognito_user_pool_arn]
   identity_source = "method.request.header.Authorization"
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # Gateway Response: UNAUTHORIZED (FR-013)
@@ -66,8 +70,13 @@ resource "aws_api_gateway_gateway_response" "unauthorized" {
   response_type = "UNAUTHORIZED"
   status_code   = "401"
 
+  # FR-008: CORS headers on 401 so browser exposes error to JavaScript
   response_parameters = {
-    "gatewayresponse.header.WWW-Authenticate" = "'Bearer realm=\"sentiment-analyzer\"'"
+    "gatewayresponse.header.WWW-Authenticate"                 = "'Bearer realm=\"sentiment-analyzer\"'"
+    "gatewayresponse.header.Access-Control-Allow-Origin"      = "method.request.header.origin"
+    "gatewayresponse.header.Access-Control-Allow-Headers"     = "'Content-Type,Authorization,Accept,Cache-Control,Last-Event-ID,X-Amzn-Trace-Id,X-User-ID'"
+    "gatewayresponse.header.Access-Control-Allow-Methods"     = "'GET,POST,PUT,DELETE,PATCH,OPTIONS'"
+    "gatewayresponse.header.Access-Control-Allow-Credentials" = "'true'"
   }
 
   response_templates = {
@@ -78,7 +87,7 @@ resource "aws_api_gateway_gateway_response" "unauthorized" {
   }
 }
 
-# Gateway Response: MISSING_AUTHENTICATION_TOKEN (FR-013)
+# Gateway Response: MISSING_AUTHENTICATION_TOKEN (FR-008)
 resource "aws_api_gateway_gateway_response" "missing_auth_token" {
   count = var.enable_cognito_auth ? 1 : 0
 
@@ -86,8 +95,13 @@ resource "aws_api_gateway_gateway_response" "missing_auth_token" {
   response_type = "MISSING_AUTHENTICATION_TOKEN"
   status_code   = "401"
 
+  # FR-008: CORS headers on 401
   response_parameters = {
-    "gatewayresponse.header.WWW-Authenticate" = "'Bearer realm=\"sentiment-analyzer\"'"
+    "gatewayresponse.header.WWW-Authenticate"                 = "'Bearer realm=\"sentiment-analyzer\"'"
+    "gatewayresponse.header.Access-Control-Allow-Origin"      = "method.request.header.origin"
+    "gatewayresponse.header.Access-Control-Allow-Headers"     = "'Content-Type,Authorization,Accept,Cache-Control,Last-Event-ID,X-Amzn-Trace-Id,X-User-ID'"
+    "gatewayresponse.header.Access-Control-Allow-Methods"     = "'GET,POST,PUT,DELETE,PATCH,OPTIONS'"
+    "gatewayresponse.header.Access-Control-Allow-Credentials" = "'true'"
   }
 
   response_templates = {
@@ -97,6 +111,400 @@ resource "aws_api_gateway_gateway_response" "missing_auth_token" {
     })
   }
 }
+
+# Gateway Response: ACCESS_DENIED (FR-008)
+resource "aws_api_gateway_gateway_response" "access_denied" {
+  count = var.enable_cognito_auth ? 1 : 0
+
+  rest_api_id   = aws_api_gateway_rest_api.dashboard.id
+  response_type = "ACCESS_DENIED"
+  status_code   = "403"
+
+  # FR-008: CORS headers on 403
+  response_parameters = {
+    "gatewayresponse.header.Access-Control-Allow-Origin"      = "method.request.header.origin"
+    "gatewayresponse.header.Access-Control-Allow-Headers"     = "'Content-Type,Authorization,Accept,Cache-Control,Last-Event-ID,X-Amzn-Trace-Id,X-User-ID'"
+    "gatewayresponse.header.Access-Control-Allow-Methods"     = "'GET,POST,PUT,DELETE,PATCH,OPTIONS'"
+    "gatewayresponse.header.Access-Control-Allow-Credentials" = "'true'"
+  }
+
+  response_templates = {
+    "application/json" = jsonencode({
+      message = "Access denied"
+      code    = "ACCESS_DENIED"
+    })
+  }
+}
+
+# ===================================================================
+# Public Route Resources (Feature 1253)
+# ===================================================================
+# FR-002: 11 public resource groups covering 13+ endpoints
+# FR-005: Each gets OPTIONS method with MOCK CORS integration
+# FR-007: All created atomically with Cognito enablement
+# FR-012: Intermediates that are also endpoints get their own methods
+
+locals {
+  # Build ALL unique path segments needed (intermediates + FR-012 + leaf parents)
+  _all_paths = distinct(flatten([
+    for route in var.public_routes : [
+      for i in range(length(route.path_parts) - (route.has_proxy ? 0 : 1)) :
+      join("/", slice(route.path_parts, 0, i + 1))
+    ]
+  ]))
+
+  # Unified map of ALL path resources (eliminates cycle between intermediate/FR-012)
+  # Each path becomes a single aws_api_gateway_resource.path_resource entry
+  path_resource_map = {
+    for path in local._all_paths :
+    path => {
+      parent_path = length(split("/", path)) > 1 ? join("/", slice(split("/", path), 0, length(split("/", path)) - 1)) : ""
+      path_part   = element(split("/", path), length(split("/", path)) - 1)
+    }
+  }
+
+  # FR-012: which path resources are also endpoints (need methods)
+  fr012_endpoints = {
+    for route in var.public_routes :
+    join("/", route.path_parts) => {
+      auth      = route.endpoint_auth
+      has_proxy = route.has_proxy
+    }
+    if route.is_endpoint
+  }
+
+  # Leaf resources: final path segment, no {proxy+} child, not FR-012
+  leaf_resources = {
+    for route in var.public_routes :
+    join("/", route.path_parts) => {
+      parent_key = length(route.path_parts) > 1 ? join("/", slice(route.path_parts, 0, length(route.path_parts) - 1)) : ""
+      path_part  = route.path_parts[length(route.path_parts) - 1]
+    }
+    if !route.has_proxy && !route.is_endpoint
+  }
+
+  # Proxy child resources: {proxy+} under route path (non-FR-012)
+  proxy_resources = {
+    for route in var.public_routes :
+    join("/", route.path_parts) => { parent_key = join("/", route.path_parts) }
+    if route.has_proxy && !route.is_endpoint
+  }
+
+  # FR-012 proxy children: routes that are both endpoints AND have proxy children
+  fr012_proxy_resources = {
+    for route in var.public_routes :
+    join("/", route.path_parts) => { parent_key = join("/", route.path_parts) }
+    if route.has_proxy && route.is_endpoint
+  }
+
+  # CORS headers for OPTIONS responses (FR-005, FR-008)
+  cors_headers = {
+    "method.response.header.Access-Control-Allow-Headers"     = "'Content-Type,Authorization,Accept,Cache-Control,Last-Event-ID,X-Amzn-Trace-Id,X-User-ID'"
+    "method.response.header.Access-Control-Allow-Methods"     = "'GET,POST,PUT,DELETE,PATCH,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Origin"      = "'*'"
+    "method.response.header.Access-Control-Allow-Credentials" = "'true'"
+  }
+
+  # Deployment trigger IDs
+  public_route_resource_ids = concat(
+    [for k, v in aws_api_gateway_resource.path_resource : v.id],
+    [for k, v in aws_api_gateway_resource.public_leaf : v.id],
+    [for k, v in aws_api_gateway_resource.public_proxy : v.id],
+    [for k, v in aws_api_gateway_resource.fr012_proxy : v.id],
+    [for k, v in aws_api_gateway_method.public_leaf_any : v.id],
+    [for k, v in aws_api_gateway_method.public_proxy_any : v.id],
+    [for k, v in aws_api_gateway_method.fr012_any : v.id],
+    [for k, v in aws_api_gateway_method.fr012_proxy_any : v.id],
+  )
+}
+
+# --- Unified Path Resources (intermediates + FR-012, single block eliminates cycle) ---
+resource "aws_api_gateway_resource" "path_resource" {
+  for_each = local.path_resource_map
+
+  rest_api_id = aws_api_gateway_rest_api.dashboard.id
+  parent_id = (
+    each.value.parent_path == ""
+    ? aws_api_gateway_rest_api.dashboard.root_resource_id
+    : aws_api_gateway_resource.path_resource[each.value.parent_path].id
+  )
+  path_part = each.value.path_part
+}
+
+# --- FR-012: Methods on intermediates that are also endpoints ---
+resource "aws_api_gateway_method" "fr012_any" {
+  for_each = local.fr012_endpoints
+
+  rest_api_id   = aws_api_gateway_rest_api.dashboard.id
+  resource_id   = aws_api_gateway_resource.path_resource[each.key].id
+  http_method   = "ANY"
+  authorization = each.value.auth == "COGNITO_USER_POOLS" && var.enable_cognito_auth ? "COGNITO_USER_POOLS" : "NONE"
+  authorizer_id = each.value.auth == "COGNITO_USER_POOLS" && var.enable_cognito_auth ? aws_api_gateway_authorizer.cognito[0].id : null
+}
+
+resource "aws_api_gateway_integration" "fr012_lambda" {
+  for_each = local.fr012_endpoints
+
+  rest_api_id             = aws_api_gateway_rest_api.dashboard.id
+  resource_id             = aws_api_gateway_resource.path_resource[each.key].id
+  http_method             = aws_api_gateway_method.fr012_any[each.key].http_method
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = var.lambda_invoke_arn
+}
+
+resource "aws_api_gateway_method" "fr012_options" {
+  for_each = local.fr012_endpoints
+
+  rest_api_id   = aws_api_gateway_rest_api.dashboard.id
+  resource_id   = aws_api_gateway_resource.path_resource[each.key].id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "fr012_options" {
+  for_each = local.fr012_endpoints
+
+  rest_api_id       = aws_api_gateway_rest_api.dashboard.id
+  resource_id       = aws_api_gateway_resource.path_resource[each.key].id
+  http_method       = aws_api_gateway_method.fr012_options[each.key].http_method
+  type              = "MOCK"
+  request_templates = { "application/json" = jsonencode({ statusCode = 200 }) }
+}
+
+resource "aws_api_gateway_method_response" "fr012_options" {
+  for_each = local.fr012_endpoints
+
+  rest_api_id         = aws_api_gateway_rest_api.dashboard.id
+  resource_id         = aws_api_gateway_resource.path_resource[each.key].id
+  http_method         = aws_api_gateway_method.fr012_options[each.key].http_method
+  status_code         = "200"
+  response_parameters = { for k, _ in local.cors_headers : k => true }
+}
+
+resource "aws_api_gateway_integration_response" "fr012_options" {
+  for_each = local.fr012_endpoints
+
+  rest_api_id         = aws_api_gateway_rest_api.dashboard.id
+  resource_id         = aws_api_gateway_resource.path_resource[each.key].id
+  http_method         = aws_api_gateway_method.fr012_options[each.key].http_method
+  status_code         = aws_api_gateway_method_response.fr012_options[each.key].status_code
+  response_parameters = local.cors_headers
+}
+
+# FR-012: {proxy+} children under FR-012 endpoints
+resource "aws_api_gateway_resource" "fr012_proxy" {
+  for_each = local.fr012_proxy_resources
+
+  rest_api_id = aws_api_gateway_rest_api.dashboard.id
+  parent_id   = aws_api_gateway_resource.path_resource[each.value.parent_key].id
+  path_part   = "{proxy+}"
+}
+
+resource "aws_api_gateway_method" "fr012_proxy_any" {
+  for_each = local.fr012_proxy_resources
+
+  rest_api_id        = aws_api_gateway_rest_api.dashboard.id
+  resource_id        = aws_api_gateway_resource.fr012_proxy[each.key].id
+  http_method        = "ANY"
+  authorization      = "NONE"
+  request_parameters = { "method.request.path.proxy" = true }
+}
+
+resource "aws_api_gateway_integration" "fr012_proxy_lambda" {
+  for_each = local.fr012_proxy_resources
+
+  rest_api_id             = aws_api_gateway_rest_api.dashboard.id
+  resource_id             = aws_api_gateway_resource.fr012_proxy[each.key].id
+  http_method             = aws_api_gateway_method.fr012_proxy_any[each.key].http_method
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = var.lambda_invoke_arn
+}
+
+resource "aws_api_gateway_method" "fr012_proxy_options" {
+  for_each = local.fr012_proxy_resources
+
+  rest_api_id   = aws_api_gateway_rest_api.dashboard.id
+  resource_id   = aws_api_gateway_resource.fr012_proxy[each.key].id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "fr012_proxy_options" {
+  for_each = local.fr012_proxy_resources
+
+  rest_api_id       = aws_api_gateway_rest_api.dashboard.id
+  resource_id       = aws_api_gateway_resource.fr012_proxy[each.key].id
+  http_method       = aws_api_gateway_method.fr012_proxy_options[each.key].http_method
+  type              = "MOCK"
+  request_templates = { "application/json" = jsonencode({ statusCode = 200 }) }
+}
+
+resource "aws_api_gateway_method_response" "fr012_proxy_options" {
+  for_each = local.fr012_proxy_resources
+
+  rest_api_id         = aws_api_gateway_rest_api.dashboard.id
+  resource_id         = aws_api_gateway_resource.fr012_proxy[each.key].id
+  http_method         = aws_api_gateway_method.fr012_proxy_options[each.key].http_method
+  status_code         = "200"
+  response_parameters = { for k, _ in local.cors_headers : k => true }
+}
+
+resource "aws_api_gateway_integration_response" "fr012_proxy_options" {
+  for_each = local.fr012_proxy_resources
+
+  rest_api_id         = aws_api_gateway_rest_api.dashboard.id
+  resource_id         = aws_api_gateway_resource.fr012_proxy[each.key].id
+  http_method         = aws_api_gateway_method.fr012_proxy_options[each.key].http_method
+  status_code         = aws_api_gateway_method_response.fr012_proxy_options[each.key].status_code
+  response_parameters = local.cors_headers
+}
+
+# --- Leaf Resources (final path segment, no {proxy+} child) ---
+resource "aws_api_gateway_resource" "public_leaf" {
+  for_each = local.leaf_resources
+
+  rest_api_id = aws_api_gateway_rest_api.dashboard.id
+  parent_id = (
+    each.value.parent_key == ""
+    ? aws_api_gateway_rest_api.dashboard.root_resource_id
+    : aws_api_gateway_resource.path_resource[each.value.parent_key].id
+  )
+  path_part = each.value.path_part
+}
+
+resource "aws_api_gateway_method" "public_leaf_any" {
+  for_each = local.leaf_resources
+
+  rest_api_id   = aws_api_gateway_rest_api.dashboard.id
+  resource_id   = aws_api_gateway_resource.public_leaf[each.key].id
+  http_method   = "ANY"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "public_leaf_lambda" {
+  for_each = local.leaf_resources
+
+  rest_api_id             = aws_api_gateway_rest_api.dashboard.id
+  resource_id             = aws_api_gateway_resource.public_leaf[each.key].id
+  http_method             = aws_api_gateway_method.public_leaf_any[each.key].http_method
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = var.lambda_invoke_arn
+}
+
+resource "aws_api_gateway_method" "public_leaf_options" {
+  for_each = local.leaf_resources
+
+  rest_api_id   = aws_api_gateway_rest_api.dashboard.id
+  resource_id   = aws_api_gateway_resource.public_leaf[each.key].id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "public_leaf_options" {
+  for_each = local.leaf_resources
+
+  rest_api_id       = aws_api_gateway_rest_api.dashboard.id
+  resource_id       = aws_api_gateway_resource.public_leaf[each.key].id
+  http_method       = aws_api_gateway_method.public_leaf_options[each.key].http_method
+  type              = "MOCK"
+  request_templates = { "application/json" = jsonencode({ statusCode = 200 }) }
+}
+
+resource "aws_api_gateway_method_response" "public_leaf_options" {
+  for_each = local.leaf_resources
+
+  rest_api_id         = aws_api_gateway_rest_api.dashboard.id
+  resource_id         = aws_api_gateway_resource.public_leaf[each.key].id
+  http_method         = aws_api_gateway_method.public_leaf_options[each.key].http_method
+  status_code         = "200"
+  response_parameters = { for k, _ in local.cors_headers : k => true }
+}
+
+resource "aws_api_gateway_integration_response" "public_leaf_options" {
+  for_each = local.leaf_resources
+
+  rest_api_id         = aws_api_gateway_rest_api.dashboard.id
+  resource_id         = aws_api_gateway_resource.public_leaf[each.key].id
+  http_method         = aws_api_gateway_method.public_leaf_options[each.key].http_method
+  status_code         = aws_api_gateway_method_response.public_leaf_options[each.key].status_code
+  response_parameters = local.cors_headers
+}
+
+# --- Proxy Resources ({proxy+} under intermediate parent) ---
+resource "aws_api_gateway_resource" "public_proxy" {
+  for_each = local.proxy_resources
+
+  rest_api_id = aws_api_gateway_rest_api.dashboard.id
+  parent_id   = aws_api_gateway_resource.path_resource[each.value.parent_key].id
+  path_part   = "{proxy+}"
+}
+
+resource "aws_api_gateway_method" "public_proxy_any" {
+  for_each = local.proxy_resources
+
+  rest_api_id        = aws_api_gateway_rest_api.dashboard.id
+  resource_id        = aws_api_gateway_resource.public_proxy[each.key].id
+  http_method        = "ANY"
+  authorization      = "NONE"
+  request_parameters = { "method.request.path.proxy" = true }
+}
+
+resource "aws_api_gateway_integration" "public_proxy_lambda" {
+  for_each = local.proxy_resources
+
+  rest_api_id             = aws_api_gateway_rest_api.dashboard.id
+  resource_id             = aws_api_gateway_resource.public_proxy[each.key].id
+  http_method             = aws_api_gateway_method.public_proxy_any[each.key].http_method
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = var.lambda_invoke_arn
+}
+
+resource "aws_api_gateway_method" "public_proxy_options" {
+  for_each = local.proxy_resources
+
+  rest_api_id   = aws_api_gateway_rest_api.dashboard.id
+  resource_id   = aws_api_gateway_resource.public_proxy[each.key].id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "public_proxy_options" {
+  for_each = local.proxy_resources
+
+  rest_api_id       = aws_api_gateway_rest_api.dashboard.id
+  resource_id       = aws_api_gateway_resource.public_proxy[each.key].id
+  http_method       = aws_api_gateway_method.public_proxy_options[each.key].http_method
+  type              = "MOCK"
+  request_templates = { "application/json" = jsonencode({ statusCode = 200 }) }
+}
+
+resource "aws_api_gateway_method_response" "public_proxy_options" {
+  for_each = local.proxy_resources
+
+  rest_api_id         = aws_api_gateway_rest_api.dashboard.id
+  resource_id         = aws_api_gateway_resource.public_proxy[each.key].id
+  http_method         = aws_api_gateway_method.public_proxy_options[each.key].http_method
+  status_code         = "200"
+  response_parameters = { for k, _ in local.cors_headers : k => true }
+}
+
+resource "aws_api_gateway_integration_response" "public_proxy_options" {
+  for_each = local.proxy_resources
+
+  rest_api_id         = aws_api_gateway_rest_api.dashboard.id
+  resource_id         = aws_api_gateway_resource.public_proxy[each.key].id
+  http_method         = aws_api_gateway_method.public_proxy_options[each.key].http_method
+  status_code         = aws_api_gateway_method_response.public_proxy_options[each.key].status_code
+  response_parameters = local.cors_headers
+}
+
+# ===================================================================
+# End Public Route Resources
+# ===================================================================
 
 # API Gateway Resource (proxy all requests to Lambda)
 resource "aws_api_gateway_resource" "proxy" {
@@ -268,18 +676,21 @@ resource "aws_api_gateway_deployment" "dashboard" {
   rest_api_id = aws_api_gateway_rest_api.dashboard.id
 
   triggers = {
-    # Redeploy when configuration changes
-    redeployment = sha1(jsonencode([
-      aws_api_gateway_resource.proxy.id,
-      aws_api_gateway_method.proxy.id,
-      aws_api_gateway_method.proxy_options.id,
-      aws_api_gateway_method.root.id,
-      aws_api_gateway_method.root_options.id,
-      aws_api_gateway_integration.lambda_proxy.id,
-      aws_api_gateway_integration.lambda_root.id,
-      aws_api_gateway_integration.proxy_options.id,
-      aws_api_gateway_integration.root_options.id,
-    ]))
+    # Redeploy when configuration changes (includes Feature 1253 public routes)
+    redeployment = sha1(jsonencode(concat(
+      [
+        aws_api_gateway_resource.proxy.id,
+        aws_api_gateway_method.proxy.id,
+        aws_api_gateway_method.proxy_options.id,
+        aws_api_gateway_method.root.id,
+        aws_api_gateway_method.root_options.id,
+        aws_api_gateway_integration.lambda_proxy.id,
+        aws_api_gateway_integration.lambda_root.id,
+        aws_api_gateway_integration.proxy_options.id,
+        aws_api_gateway_integration.root_options.id,
+      ],
+      local.public_route_resource_ids,
+    )))
   }
 
   lifecycle {

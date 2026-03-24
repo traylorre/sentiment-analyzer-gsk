@@ -112,3 +112,20 @@ variable "enable_cognito_auth" {
   type        = bool
   default     = false
 }
+
+# ===================================================================
+# Public Route Configuration (Feature 1253)
+# ===================================================================
+# Routes that bypass Cognito authorization at API Gateway level.
+# Each entry creates explicit resources that override the {proxy+} catch-all.
+
+variable "public_routes" {
+  description = "Routes that bypass Cognito authorization. Each creates API Gateway resources with authorization=NONE."
+  type = list(object({
+    path_parts    = list(string) # Path segments, e.g., ["api", "v2", "auth", "anonymous"]
+    has_proxy     = bool         # true = create {proxy+} child under this path
+    is_endpoint   = bool         # true = this intermediate also serves as an endpoint (FR-012)
+    endpoint_auth = string       # Auth for FR-012 endpoints: "NONE" or "COGNITO_USER_POOLS"
+  }))
+  default = []
+}

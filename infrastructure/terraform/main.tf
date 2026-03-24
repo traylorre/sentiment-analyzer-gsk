@@ -805,6 +805,31 @@ module "api_gateway" {
   lambda_invoke_arn    = module.dashboard_lambda.invoke_arn
   stage_name           = "v1"
 
+  # Feature 1253: Enable Cognito JWT authorization (FR-001)
+  enable_cognito_auth   = true
+  cognito_user_pool_arn = module.cognito.user_pool_arn
+
+  # Feature 1253: Public routes that bypass Cognito auth (FR-002)
+  public_routes = [
+    # Auth flow endpoints (pre-auth — user doesn't have JWT yet)
+    { path_parts = ["api", "v2", "auth", "anonymous"], has_proxy = false, is_endpoint = false, endpoint_auth = "NONE" },
+    { path_parts = ["api", "v2", "auth", "magic-link"], has_proxy = true, is_endpoint = true, endpoint_auth = "NONE" }, # FR-012: POST magic-link + {proxy+} for verify
+    { path_parts = ["api", "v2", "auth", "oauth"], has_proxy = true, is_endpoint = false, endpoint_auth = "NONE" },
+    { path_parts = ["api", "v2", "auth", "refresh"], has_proxy = false, is_endpoint = false, endpoint_auth = "NONE" },
+    { path_parts = ["api", "v2", "auth", "validate"], has_proxy = false, is_endpoint = false, endpoint_auth = "NONE" },
+    # Public data endpoints (anonymous users need these)
+    { path_parts = ["api", "v2", "tickers"], has_proxy = true, is_endpoint = false, endpoint_auth = "NONE" },
+    { path_parts = ["api", "v2", "market"], has_proxy = true, is_endpoint = false, endpoint_auth = "NONE" },
+    { path_parts = ["api", "v2", "timeseries"], has_proxy = true, is_endpoint = false, endpoint_auth = "NONE" },
+    # Infrastructure endpoints
+    { path_parts = ["health"], has_proxy = false, is_endpoint = false, endpoint_auth = "NONE" },
+    { path_parts = ["api", "v2", "runtime"], has_proxy = false, is_endpoint = false, endpoint_auth = "NONE" },
+    # Email unsubscribe (query-param token, not Bearer)
+    { path_parts = ["api", "v2", "notifications", "unsubscribe"], has_proxy = false, is_endpoint = false, endpoint_auth = "NONE" },
+    # FR-012: /notifications is an intermediate AND an endpoint (GET lists notifications)
+    { path_parts = ["api", "v2", "notifications"], has_proxy = false, is_endpoint = true, endpoint_auth = "COGNITO_USER_POOLS" },
+  ]
+
   # Rate limiting configuration (P0-1 mitigation: prevent budget exhaustion)
   rate_limit  = 100 # Requests per second (steady state)
   burst_limit = 200 # Concurrent requests (burst)
@@ -822,10 +847,10 @@ module "api_gateway" {
 
   tags = {
     Component = "api-gateway"
-    Security  = "rate-limiting"
+    Security  = "cognito-auth"
   }
 
-  depends_on = [module.dashboard_lambda]
+  depends_on = [module.dashboard_lambda, module.cognito]
 }
 
 # ===================================================================
@@ -1105,7 +1130,9 @@ module "amplify_frontend" {
   github_token_secret_name = "${var.environment}/amplify/github-token"
 
   # Backend integration
-  # Feature 1114: Use Lambda Function URL (has CORS) instead of API Gateway
+  # Feature 1253: Route through API Gateway (Cognito auth + rate limiting + CORS)
+  # Supersedes Feature 1114 (Lambda Function URL) — API Gateway now has CORS on errors
+  api_gateway_url      = module.api_gateway.api_endpoint
   dashboard_lambda_url = module.dashboard_lambda.function_url
   sse_lambda_url       = module.sse_streaming_lambda.function_url
   cognito_user_pool_id = module.cognito.user_pool_id
@@ -1115,7 +1142,8 @@ module "amplify_frontend" {
   depends_on = [
     module.dashboard_lambda,
     module.sse_streaming_lambda,
-    module.cognito
+    module.cognito,
+    module.api_gateway,
   ]
 }
 
