@@ -1,0 +1,107 @@
+# API Gateway Route Contracts — Feature 1253
+# Expected behavior per route after Cognito auth enablement
+
+public_routes:
+  - path: "/health"
+    auth: NONE
+    expected:
+      no_token: "200 healthy"
+      cognito_jwt: "200 healthy"
+      uuid_token: "200 healthy"
+
+  - path: "/api/v2/auth/anonymous"
+    auth: NONE
+    expected:
+      POST_no_token: "201 session"
+
+  - path: "/api/v2/auth/magic-link"
+    auth: NONE
+    note: "FR-012 intermediate-as-endpoint"
+    expected:
+      POST_no_token: "200 magic link sent"
+
+  - path: "/api/v2/auth/magic-link/{proxy+}"
+    auth: NONE
+    expected:
+      GET_verify_no_token: "200 redirect"
+
+  - path: "/api/v2/auth/oauth/{proxy+}"
+    auth: NONE
+    expected:
+      GET_urls_no_token: "200 provider list"
+      POST_callback_no_token: "200 OAuth flow"
+
+  - path: "/api/v2/auth/refresh"
+    auth: NONE
+    expected:
+      POST_with_cookie: "200 new tokens"
+
+  - path: "/api/v2/auth/validate"
+    auth: NONE
+    expected:
+      GET_with_session_token: "200 valid"
+
+  - path: "/api/v2/tickers/{proxy+}"
+    auth: NONE
+    expected:
+      GET_search_uuid_token: "200 results"
+
+  - path: "/api/v2/market/{proxy+}"
+    auth: NONE
+    expected:
+      GET_status_uuid_token: "200 market data"
+
+  - path: "/api/v2/timeseries/{proxy+}"
+    auth: NONE
+    expected:
+      GET_uuid_token: "200 timeseries"
+
+  - path: "/api/v2/notifications/unsubscribe"
+    auth: NONE
+    expected:
+      GET_query_token: "200 unsubscribed"
+
+  - path: "/api/v2/runtime"
+    auth: NONE
+    expected:
+      GET_no_token: "200 config"
+
+fr012_intermediates:
+  - path: "/api/v2/notifications"
+    auth: COGNITO_USER_POOLS
+    note: "Intermediate AND endpoint — FR-012"
+    expected:
+      GET_no_token: "401 Unauthorized + CORS"
+      GET_cognito_jwt: "200 notification list"
+
+  - path: "/api/v2/auth/magic-link"
+    auth: NONE
+    note: "Intermediate AND endpoint — FR-012"
+    expected:
+      POST_no_token: "200 magic link sent"
+
+protected_catch_all:
+  - path: "/{proxy+}"
+    auth: COGNITO_USER_POOLS
+    expected:
+      no_token: "401 + CORS headers"
+      expired_jwt: "401 + CORS headers"
+      uuid_token: "401 + CORS headers"
+      valid_jwt: "200 Lambda response"
+
+gateway_responses:
+  - type: UNAUTHORIZED
+    status: 401
+    cors_headers:
+      Access-Control-Allow-Origin: "request Origin"
+      Access-Control-Allow-Headers: "Content-Type, Authorization, Accept, Cache-Control, Last-Event-ID, X-Amzn-Trace-Id, X-User-ID"
+      Access-Control-Allow-Methods: "GET,POST,PUT,DELETE,PATCH,OPTIONS"
+      Access-Control-Allow-Credentials: "true"
+
+  - type: MISSING_AUTHENTICATION_TOKEN
+    status: 401
+    cors_headers_ref: "same as UNAUTHORIZED"
+
+  - type: ACCESS_DENIED
+    status: 403
+    cors_headers_ref: "same as UNAUTHORIZED"

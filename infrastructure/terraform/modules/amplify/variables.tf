@@ -12,7 +12,7 @@ variable "github_repository" {
 }
 
 variable "api_gateway_url" {
-  description = "API Gateway endpoint URL for backend API calls (deprecated - use dashboard_lambda_url)"
+  description = "API Gateway endpoint URL for backend API calls (Feature 1253: primary API endpoint with Cognito auth)"
   type        = string
   default     = ""
 }

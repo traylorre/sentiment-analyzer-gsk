@@ -127,10 +127,35 @@
             "file": "/modules/api_gateway/main.tf",
             "findings": [
                 {
-                    "resource": "module.api_gateway.aws_api_gateway_method.proxy",
+                    "resource": "module.api_gateway.aws_api_gateway_method.fr012_any",
                     "check_ids": [
                         "CKV2_AWS_53",
                         "CKV_AWS_59"
+                    ]
+                },
+                {
+                    "resource": "module.api_gateway.aws_api_gateway_method.fr012_options",
+                    "check_ids": [
+                        "CKV2_AWS_53"
+                    ]
+                },
+                {
+                    "resource": "module.api_gateway.aws_api_gateway_method.fr012_proxy_any",
+                    "check_ids": [
+                        "CKV2_AWS_53",
+                        "CKV_AWS_59"
+                    ]
+                },
+                {
+                    "resource": "module.api_gateway.aws_api_gateway_method.fr012_proxy_options",
+                    "check_ids": [
+                        "CKV2_AWS_53"
+                    ]
+                },
+                {
+                    "resource": "module.api_gateway.aws_api_gateway_method.proxy",
+                    "check_ids": [
+                        "CKV2_AWS_53"
                     ]
                 },
                 {
@@ -140,10 +165,35 @@
                     ]
                 },
                 {
-                    "resource": "module.api_gateway.aws_api_gateway_method.root",
+                    "resource": "module.api_gateway.aws_api_gateway_method.public_leaf_any",
                     "check_ids": [
                         "CKV2_AWS_53",
                         "CKV_AWS_59"
+                    ]
+                },
+                {
+                    "resource": "module.api_gateway.aws_api_gateway_method.public_leaf_options",
+                    "check_ids": [
+                        "CKV2_AWS_53"
+                    ]
+                },
+                {
+                    "resource": "module.api_gateway.aws_api_gateway_method.public_proxy_any",
+                    "check_ids": [
+                        "CKV2_AWS_53",
+                        "CKV_AWS_59"
+                    ]
+                },
+                {
+                    "resource": "module.api_gateway.aws_api_gateway_method.public_proxy_options",
+                    "check_ids": [
+                        "CKV2_AWS_53"
+                    ]
+                },
+                {
+                    "resource": "module.api_gateway.aws_api_gateway_method.root",
+                    "check_ids": [
+                        "CKV2_AWS_53"
                     ]
                 },
                 {
@@ -183,6 +233,12 @@
                     "check_ids": [
                         "CKV_AWS_158",
                         "CKV_AWS_338"
+                    ]
+                },
+                {
+                    "resource": "module.chaos.aws_ssm_parameter.chaos_kill_switch",
+                    "check_ids": [
+                        "CKV2_AWS_34"
                     ]
                 }
             ]

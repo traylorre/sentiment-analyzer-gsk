@@ -55,9 +55,11 @@ resource "aws_amplify_app" "frontend" {
   EOT
 
   # Environment variables for Next.js
-  # Feature 1114: Use Lambda Function URL (has CORS) instead of API Gateway (no CORS on proxy)
+  # Feature 1253: Route through API Gateway (Cognito auth + rate limiting + CORS on errors)
+  # Previously Feature 1114 used Lambda Function URL because API Gateway lacked CORS.
+  # Feature 1253 adds CORS to API Gateway 401/403 responses, making it viable.
   environment_variables = {
-    NEXT_PUBLIC_API_URL              = var.dashboard_lambda_url
+    NEXT_PUBLIC_API_URL              = var.api_gateway_url != "" ? var.api_gateway_url : var.dashboard_lambda_url
     NEXT_PUBLIC_SSE_URL              = var.sse_lambda_url
     NEXT_PUBLIC_COGNITO_USER_POOL_ID = var.cognito_user_pool_id
     NEXT_PUBLIC_COGNITO_CLIENT_ID    = var.cognito_client_id
