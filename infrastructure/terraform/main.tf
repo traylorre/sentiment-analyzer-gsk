@@ -887,6 +887,67 @@ module "waf" {
 }
 
 # ===================================================================
+# Module: CloudFront for SSE Streaming (Feature 1255)
+# ===================================================================
+# Routes SSE traffic through CloudFront edge with WAF + Shield Standard.
+# No caching, 180s origin timeout, PriceClass_100.
+
+module "cloudfront_sse" {
+  source = "./modules/cloudfront_sse"
+
+  environment = var.environment
+  origin_url  = module.sse_streaming_lambda.function_url
+
+  # FR-005: WAF WebACL (CLOUDFRONT scope)
+  waf_web_acl_arn = module.waf_cloudfront.web_acl_arn
+
+  # FR-003: 180s origin timeout for streaming
+  origin_read_timeout = 180
+
+  # FR-009: PriceClass_100 (US/Canada/Europe)
+  price_class = "PriceClass_100"
+
+  tags = {
+    Component = "cloudfront-sse"
+    Security  = "ddos-protection"
+    Feature   = "1255"
+  }
+
+  depends_on = [module.sse_streaming_lambda, module.waf_cloudfront]
+}
+
+# ===================================================================
+# Module: WAF v2 for CloudFront SSE (Feature 1255 — CLOUDFRONT scope)
+# ===================================================================
+# Separate WAF WebACL for CloudFront (CLOUDFRONT scope).
+# Independent from the API Gateway WAF (REGIONAL scope, Feature 1254).
+
+module "waf_cloudfront" {
+  source = "./modules/waf"
+
+  environment  = var.environment
+  scope        = "CLOUDFRONT"
+  resource_arn = "" # CloudFront WAF uses web_acl_id on distribution, not association
+
+  # Same rate limiting as API Gateway WAF
+  rate_limit = 2000
+
+  # Bot Control in COUNT mode
+  enable_bot_control = true
+  bot_control_action = "COUNT"
+
+  # Alerting
+  alarm_actions              = [module.monitoring.alarm_topic_arn]
+  blocked_requests_threshold = 500
+
+  tags = {
+    Component = "waf-cloudfront"
+    Security  = "ddos-protection"
+    Feature   = "1255"
+  }
+}
+
+# ===================================================================
 # Module: SNS Topic (for Analysis Triggers)
 # ===================================================================
 
@@ -1168,6 +1229,8 @@ module "amplify_frontend" {
   api_gateway_url      = module.api_gateway.api_endpoint
   dashboard_lambda_url = module.dashboard_lambda.function_url
   sse_lambda_url       = module.sse_streaming_lambda.function_url
+  # Feature 1255: Route SSE through CloudFront (WAF + Shield Standard)
+  sse_cloudfront_url   = module.cloudfront_sse.distribution_url
   cognito_user_pool_id = module.cognito.user_pool_id
   cognito_client_id    = module.cognito.client_id
   cognito_domain       = module.cognito.domain
@@ -1177,6 +1240,7 @@ module "amplify_frontend" {
     module.sse_streaming_lambda,
     module.cognito,
     module.api_gateway,
+    module.cloudfront_sse,
   ]
 }
 

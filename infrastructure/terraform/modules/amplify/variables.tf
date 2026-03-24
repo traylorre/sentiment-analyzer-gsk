@@ -23,8 +23,14 @@ variable "dashboard_lambda_url" {
 }
 
 variable "sse_lambda_url" {
-  description = "SSE Lambda Function URL for real-time streaming"
+  description = "SSE Lambda Function URL for real-time streaming (fallback if CloudFront not available)"
   type        = string
+}
+
+variable "sse_cloudfront_url" {
+  description = "CloudFront URL for SSE streaming (Feature 1255: primary SSE endpoint with WAF + Shield)"
+  type        = string
+  default     = ""
 }
 
 variable "cognito_user_pool_id" {

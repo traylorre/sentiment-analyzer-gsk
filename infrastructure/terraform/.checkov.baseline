@@ -244,6 +244,25 @@
             ]
         },
         {
+            "file": "/modules/cloudfront_sse/main.tf",
+            "findings": [
+                {
+                    "resource": "module.cloudfront_sse.aws_cloudfront_distribution.sse",
+                    "check_ids": [
+                        "CKV2_AWS_32",
+                        "CKV2_AWS_42",
+                        "CKV2_AWS_47",
+                        "CKV_AWS_174",
+                        "CKV_AWS_305",
+                        "CKV_AWS_310",
+                        "CKV_AWS_374",
+                        "CKV_AWS_68",
+                        "CKV_AWS_86"
+                    ]
+                }
+            ]
+        },
+        {
             "file": "/modules/cloudwatch-rum/main.tf",
             "findings": [
                 {
@@ -455,6 +474,12 @@
             "findings": [
                 {
                     "resource": "module.waf.aws_wafv2_web_acl.main",
+                    "check_ids": [
+                        "CKV2_AWS_31"
+                    ]
+                },
+                {
+                    "resource": "module.waf_cloudfront.aws_wafv2_web_acl.main",
                     "check_ids": [
                         "CKV2_AWS_31"
                     ]
