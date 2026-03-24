@@ -19,8 +19,8 @@
 
 **Purpose**: Prepare the API Gateway module to accept public route configurations
 
-- [ ] T001 Add `public_routes` variable to `infrastructure/terraform/modules/api_gateway/variables.tf` with `path_parts`, `has_proxy`, `is_endpoint`, `endpoint_auth` fields
-- [ ] T002 Add `api_gateway_url` variable to `infrastructure/terraform/modules/amplify/variables.tf`
+- [x] T001 Add `public_routes` variable to `infrastructure/terraform/modules/api_gateway/variables.tf` with `path_parts`, `has_proxy`, `is_endpoint`, `endpoint_auth` fields
+- [x] T002 Add `api_gateway_url` variable to `infrastructure/terraform/modules/amplify/variables.tf`
 
 ---
 
@@ -30,11 +30,11 @@
 
 **CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T003 Create `locals` block in `infrastructure/terraform/modules/api_gateway/main.tf` that computes intermediate resources, leaf resources, and FR-012 endpoint resources from `public_routes` variable
-- [ ] T004 [P] Create intermediate API Gateway resources (`/api`, `/api/v2`, `/api/v2/auth`, `/api/v2/auth/oauth`, `/api/v2/tickers`, `/api/v2/market`, `/api/v2/timeseries`) via `for_each` in `infrastructure/terraform/modules/api_gateway/main.tf` — parent nodes only, no methods
-- [ ] T005 [P] Create FR-012 intermediate-as-endpoint resources (`/api/v2/notifications` with COGNITO auth, `/api/v2/auth/magic-link` with NONE auth) with `ANY` method + Lambda proxy integration + `OPTIONS` method + MOCK integration in `infrastructure/terraform/modules/api_gateway/main.tf`
-- [ ] T006 Wire `enable_cognito_auth = true` and `cognito_user_pool_arn = module.cognito.user_pool_arn` in API Gateway module call in `infrastructure/terraform/main.tf` (lines ~800-830)
-- [ ] T007 Wire `public_routes` list with all 11 route group configs (plus 2 FR-012 entries) in API Gateway module call in `infrastructure/terraform/main.tf`
+- [x] T003 Create `locals` block in `infrastructure/terraform/modules/api_gateway/main.tf` that computes intermediate resources, leaf resources, and FR-012 endpoint resources from `public_routes` variable
+- [x] T004 [P] Create intermediate API Gateway resources (`/api`, `/api/v2`, `/api/v2/auth`, `/api/v2/auth/oauth`, `/api/v2/tickers`, `/api/v2/market`, `/api/v2/timeseries`) via `for_each` in `infrastructure/terraform/modules/api_gateway/main.tf` — parent nodes only, no methods
+- [x] T005 [P] Create FR-012 intermediate-as-endpoint resources (`/api/v2/notifications` with COGNITO auth, `/api/v2/auth/magic-link` with NONE auth) with `ANY` method + Lambda proxy integration + `OPTIONS` method + MOCK integration in `infrastructure/terraform/modules/api_gateway/main.tf`
+- [x] T006 Wire `enable_cognito_auth = true` and `cognito_user_pool_arn = module.cognito.user_pool_arn` in API Gateway module call in `infrastructure/terraform/main.tf` (lines ~800-830)
+- [x] T007 Wire `public_routes` list with all 11 route group configs (plus 2 FR-012 entries) in API Gateway module call in `infrastructure/terraform/main.tf`
 
 **Checkpoint**: `terraform plan` should show intermediate resources + authorizer activation. No public leaf resources yet.
 
@@ -53,8 +53,8 @@
 
 ### Implementation for User Story 1
 
-- [ ] T010 [US1] Verify existing Cognito authorizer resource in `infrastructure/terraform/modules/api_gateway/main.tf` activates correctly when `enable_cognito_auth = true` — check `{proxy+}` method switches from `NONE` to `COGNITO_USER_POOLS`
-- [ ] T011 [US1] Verify root method also switches auth when `enable_cognito_auth = true` in `infrastructure/terraform/modules/api_gateway/main.tf`
+- [x] T010 [US1] Verify existing Cognito authorizer resource in `infrastructure/terraform/modules/api_gateway/main.tf` activates correctly when `enable_cognito_auth = true` — check `{proxy+}` method switches from `NONE` to `COGNITO_USER_POOLS`
+- [x] T011 [US1] Verify root method also switches auth when `enable_cognito_auth = true` in `infrastructure/terraform/modules/api_gateway/main.tf`
 - [ ] T012 [US1] Run `terraform plan` and verify `{proxy+}` ANY method shows `authorization = "COGNITO_USER_POOLS"`, authorizer ID is set
 
 **Checkpoint**: Protected endpoints return 401 for invalid tokens. Orphaned endpoints also protected (they fall through to `{proxy+}`). Public endpoints currently broken (no overrides yet).
@@ -73,9 +73,9 @@
 
 ### Implementation for User Story 2
 
-- [ ] T014 [P] [US2] Create leaf public resources for auth endpoints (`/anonymous`, `/refresh`, `/validate`) with `ANY` + `NONE` + Lambda integration + `OPTIONS` + MOCK in `infrastructure/terraform/modules/api_gateway/main.tf`
-- [ ] T015 [P] [US2] Create `{proxy+}` public resources for grouped endpoints (`/auth/magic-link/{proxy+}`, `/auth/oauth/{proxy+}`, `/tickers/{proxy+}`, `/market/{proxy+}`, `/timeseries/{proxy+}`) with `ANY` + `NONE` + Lambda integration + `OPTIONS` + MOCK in `infrastructure/terraform/modules/api_gateway/main.tf`
-- [ ] T016 [P] [US2] Create leaf public resources for infrastructure endpoints (`/health`, `/api/v2/runtime`, `/api/v2/notifications/unsubscribe`) with `ANY` + `NONE` + Lambda integration + `OPTIONS` + MOCK in `infrastructure/terraform/modules/api_gateway/main.tf`
+- [x] T014 [P] [US2] Create leaf public resources for auth endpoints (`/anonymous`, `/refresh`, `/validate`) with `ANY` + `NONE` + Lambda integration + `OPTIONS` + MOCK in `infrastructure/terraform/modules/api_gateway/main.tf`
+- [x] T015 [P] [US2] Create `{proxy+}` public resources for grouped endpoints (`/auth/magic-link/{proxy+}`, `/auth/oauth/{proxy+}`, `/tickers/{proxy+}`, `/market/{proxy+}`, `/timeseries/{proxy+}`) with `ANY` + `NONE` + Lambda integration + `OPTIONS` + MOCK in `infrastructure/terraform/modules/api_gateway/main.tf`
+- [x] T016 [P] [US2] Create leaf public resources for infrastructure endpoints (`/health`, `/api/v2/runtime`, `/api/v2/notifications/unsubscribe`) with `ANY` + `NONE` + Lambda integration + `OPTIONS` + MOCK in `infrastructure/terraform/modules/api_gateway/main.tf`
 - [ ] T017 [US2] Run `terraform plan` and verify ~85 new resources, all public routes show `authorization = "NONE"`, all protected routes show `authorization = "COGNITO_USER_POOLS"`
 - [ ] T018 [US2] Verify FR-012: `/api/v2/notifications` has `ANY` + `COGNITO_USER_POOLS` and `/api/v2/auth/magic-link` has `ANY` + `NONE` in plan output
 
@@ -91,9 +91,9 @@
 
 ### Implementation for User Story 3
 
-- [ ] T019 [US3] Change `NEXT_PUBLIC_API_URL` from `var.dashboard_lambda_url` to `var.api_gateway_url` in `infrastructure/terraform/modules/amplify/main.tf` (line ~42) — update the Feature 1114 comment
-- [ ] T020 [US3] Pass `api_gateway_url = module.api_gateway.api_endpoint` to `module.amplify_frontend` in `infrastructure/terraform/main.tf` (lines ~1097-1120)
-- [ ] T021 [US3] Add `module.api_gateway` to Amplify's `depends_on` list in `infrastructure/terraform/main.tf`
+- [x] T019 [US3] Change `NEXT_PUBLIC_API_URL` from `var.dashboard_lambda_url` to `var.api_gateway_url` in `infrastructure/terraform/modules/amplify/main.tf` (line ~42) — update the Feature 1114 comment
+- [x] T020 [US3] Pass `api_gateway_url = module.api_gateway.api_endpoint` to `module.amplify_frontend` in `infrastructure/terraform/main.tf` (lines ~1097-1120)
+- [x] T021 [US3] Add `module.api_gateway` to Amplify's `depends_on` list in `infrastructure/terraform/main.tf`
 - [ ] T022 [US3] Verify `terraform plan` shows Amplify env var change from Lambda URL to API Gateway URL
 
 **Checkpoint**: Frontend will route through API Gateway after next deploy. Rate limiting and Cognito auth active on all traffic.
@@ -112,10 +112,10 @@
 
 ### Implementation for User Story 4
 
-- [ ] T024 [US4] Update `aws_api_gateway_gateway_response.unauthorized` in `infrastructure/terraform/modules/api_gateway/main.tf` — add CORS headers to `response_parameters`: `Access-Control-Allow-Origin` (from `method.request.header.origin`), `Access-Control-Allow-Headers` (explicit list), `Access-Control-Allow-Credentials` (`'true'`), `Access-Control-Allow-Methods`
-- [ ] T025 [P] [US4] Update `aws_api_gateway_gateway_response.missing_auth_token` in `infrastructure/terraform/modules/api_gateway/main.tf` — same CORS headers as unauthorized
-- [ ] T026 [P] [US4] Create `aws_api_gateway_gateway_response.access_denied` (403) in `infrastructure/terraform/modules/api_gateway/main.tf` — with CORS headers (doesn't exist yet)
-- [ ] T027 [US4] Verify CORS headers use explicit list NOT wildcard: `"Content-Type, Authorization, Accept, Cache-Control, Last-Event-ID, X-Amzn-Trace-Id, X-User-ID"`
+- [x] T024 [US4] Update `aws_api_gateway_gateway_response.unauthorized` in `infrastructure/terraform/modules/api_gateway/main.tf` — add CORS headers to `response_parameters`: `Access-Control-Allow-Origin` (from `method.request.header.origin`), `Access-Control-Allow-Headers` (explicit list), `Access-Control-Allow-Credentials` (`'true'`), `Access-Control-Allow-Methods`
+- [x] T025 [P] [US4] Update `aws_api_gateway_gateway_response.missing_auth_token` in `infrastructure/terraform/modules/api_gateway/main.tf` — same CORS headers as unauthorized
+- [x] T026 [P] [US4] Create `aws_api_gateway_gateway_response.access_denied` (403) in `infrastructure/terraform/modules/api_gateway/main.tf` — with CORS headers (doesn't exist yet)
+- [x] T027 [US4] Verify CORS headers use explicit list NOT wildcard: `"Content-Type, Authorization, Accept, Cache-Control, Last-Event-ID, X-Amzn-Trace-Id, X-User-ID"`
 
 **Checkpoint**: Frontend can detect 401/403 via JavaScript. Auth error → redirect to sign-in flow works.
 
@@ -151,7 +151,7 @@
 
 ## Phase 9: Polish & Cross-Cutting Concerns
 
-- [ ] T033 [P] Add `lifecycle { prevent_destroy = true }` to Cognito authorizer resource in `infrastructure/terraform/modules/api_gateway/main.tf`
+- [x] T033 [P] Add `lifecycle { prevent_destroy = true }` to Cognito authorizer resource in `infrastructure/terraform/modules/api_gateway/main.tf`
 - [ ] T034 [P] Run `terraform plan` full validation — verify resource count, no unexpected changes
 - [ ] T035 [P] Run existing Playwright E2E test suite to verify zero functional regression
 - [ ] T036 Run `terraform apply` and execute quickstart.md verification commands
