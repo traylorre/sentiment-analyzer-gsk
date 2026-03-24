@@ -406,6 +406,9 @@ module "dashboard_lambda" {
     SSE_POLL_INTERVAL       = tostring(var.sse_poll_interval)
     ENVIRONMENT             = var.environment
     CHAOS_EXPERIMENTS_TABLE = module.dynamodb.chaos_experiments_table_name
+    # Feature 1250: Auto-restore scheduling
+    SCHEDULER_ROLE_ARN   = try(module.chaos.chaos_scheduler_role_arn, "")
+    DASHBOARD_LAMBDA_ARN = module.dashboard_lambda.function_arn
     # CORS: Pass explicit origins from tfvars (no wildcard fallback)
     # Feature 1203: Amplify domain should be in cors_allowed_origins
     CORS_ORIGINS = join(",", var.cors_allowed_origins)
