@@ -42,23 +42,25 @@ scheduler.create_schedule(
 - In-memory rate limit (functools.lru_cache): Rejected — Lambda is stateless, memory doesn't persist across invocations.
 - Redis/ElastiCache: Rejected — overkill, adds infrastructure dependency.
 
+**Critical schema note**: The chaos experiments table uses `experiment_id` (hash) + `created_at` (range) — NOT PK/SK. Rate limit and lock items reuse this table with synthetic `experiment_id` values prefixed with `RATELIMIT#` or `CHAOSLOCK#`.
+
 **Implementation pattern**:
 ```python
 table.put_item(
     Item={
-        "PK": f"RATELIMIT#chaos#{user_id}",
-        "SK": "LATEST",
-        "created_at": current_timestamp,
+        "experiment_id": f"RATELIMIT#chaos#{user_id}",
+        "created_at": current_iso_timestamp,
+        "last_created_epoch": current_timestamp,
         "ttl": current_timestamp + 120,  # Auto-cleanup after 2 minutes
     },
-    ConditionExpression="attribute_not_exists(PK) OR created_at < :cutoff",
+    ConditionExpression="attribute_not_exists(experiment_id) OR last_created_epoch < :cutoff",
     ExpressionAttributeValues={":cutoff": current_timestamp - 60},
 )
 ```
 
-If the condition fails (item exists AND created_at >= cutoff), a `ConditionalCheckFailedException` is raised → 429.
+If the condition fails (item exists AND last_created_epoch >= cutoff), a `ConditionalCheckFailedException` is raised → 429.
 
-**Key insight**: Uses the SAME chaos experiments table (PK pattern `RATELIMIT#chaos#...`) — no new table or GSI needed.
+**Key insight**: Uses the SAME chaos experiments table with synthetic `experiment_id` values. No new table or GSI needed. TTL auto-cleans stale rate limit records.
 
 ## R3: Concurrent Experiment Prevention
 
@@ -66,46 +68,57 @@ If the condition fails (item exists AND created_at >= cutoff), a `ConditionalChe
 
 **Rationale**: Same atomic conditional write pattern as rate limiting. Before starting an experiment, write a lock item that only succeeds if no lock exists for that scenario_type.
 
-**Implementation pattern**:
+**Implementation pattern** (using experiment_id/created_at keys):
 ```python
 # Acquire lock before starting
 table.put_item(
     Item={
-        "PK": f"CHAOSLOCK#{scenario_type}",
-        "SK": "ACTIVE",
-        "experiment_id": experiment_id,
-        "started_at": timestamp,
-        "ttl": timestamp + 600,  # Safety: auto-expire in 10 minutes
+        "experiment_id": f"CHAOSLOCK#{scenario_type}",
+        "created_at": "ACTIVE",
+        "locked_experiment_id": experiment_id,
+        "started_at": timestamp_iso,
+        "ttl": timestamp_epoch + 600,  # Safety: auto-expire in 10 minutes
     },
-    ConditionExpression="attribute_not_exists(PK)",
+    ConditionExpression="attribute_not_exists(experiment_id)",
 )
 # If ConditionalCheckFailedException → 409 Conflict
 
 # Release lock when stopping
-table.delete_item(Key={"PK": f"CHAOSLOCK#{scenario_type}", "SK": "ACTIVE"})
+table.delete_item(Key={"experiment_id": f"CHAOSLOCK#{scenario_type}", "created_at": "ACTIVE"})
 ```
 
 **Key insight**: TTL on lock item is a safety net — if stop fails to release the lock, it auto-expires.
 
 ## R4: Auto-Restore Lambda Target
 
-**Decision**: Reuse the Dashboard Lambda as the auto-restore target, with a special event format.
+**Decision**: Reuse the Dashboard Lambda as the auto-restore target, with raw event handling BEFORE Powertools routing.
 
-**Rationale**: The Dashboard Lambda already has all the IAM permissions needed to restore chaos (Lambda config, IAM policy detach, EventBridge enable, SSM read/delete). Creating a dedicated restore Lambda would duplicate 100% of this code.
+**Rationale**: The Dashboard Lambda already has all the IAM permissions needed to restore chaos. Creating a dedicated restore Lambda would duplicate 100% of this code.
 
-**Event format for auto-restore**:
+**Critical architecture note**: EventBridge Scheduler invokes Lambda directly via `lambda:InvokeFunction` — it does NOT send an HTTP-formatted event. The Powertools `LambdaFunctionUrlResolver` expects `rawPath` and `requestContext.http.method`, which Scheduler does NOT provide. Therefore, the auto-restore event MUST be handled in `lambda_handler()` BEFORE Powertools routing.
+
+**Event format for auto-restore** (raw Lambda invocation, NOT HTTP):
 ```json
 {
-    "rawPath": "/internal/chaos/auto-restore",
-    "requestContext": {"http": {"method": "POST"}},
-    "body": "{\"experiment_id\": \"abc-123\"}",
-    "headers": {"x-chaos-auto-restore": "true"}
+    "action": "chaos-auto-restore",
+    "experiment_id": "abc-123"
 }
 ```
 
-The handler routes this to `stop_experiment()` with status `auto-stopped` instead of `stopped`.
+**Implementation in lambda_handler()**:
+```python
+def lambda_handler(event, context):
+    # Handle EventBridge Scheduler auto-restore BEFORE Powertools routing
+    if event.get("action") == "chaos-auto-restore":
+        experiment_id = event.get("experiment_id")
+        return _handle_auto_restore(experiment_id)
+
+    # Normal Powertools HTTP routing
+    return app.resolve(event, context)
+```
 
 **Alternative considered**: Dedicated restore Lambda — rejected because it would need identical IAM permissions and duplicate the entire chaos.py restore logic.
+**Alternative considered**: Wrapping event in Function URL format — rejected because it's fragile and Powertools might validate event structure.
 
 ## R5: EventBridge Scheduler IAM Role
 
