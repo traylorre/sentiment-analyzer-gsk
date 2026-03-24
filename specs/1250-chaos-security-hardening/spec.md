@@ -130,7 +130,7 @@ When the chaos system attaches or detaches IAM policies (the `dynamodb_throttle`
 
 ### Functional Requirements
 
-- **FR-001**: The `_get_chaos_user_id_from_event()` function MUST reject anonymous sessions (AuthType.ANONYMOUS) in ALL environments, including local/dev/test. Remove the environment-conditional anonymous exception at handler.py line 175.
+- **FR-001**: The `_get_chaos_user_id_from_event()` function MUST reject anonymous sessions (AuthType.ANONYMOUS) in ALL environments, including local/dev/test. Remove the conditional block at handler.py lines 174-176 that allows anonymous auth in non-prod.
 - **FR-002**: All seven chaos API route handlers MUST check environment FIRST (before auth). Return HTTP 404 when the environment is NOT `local`, `dev`, or `test`. Use the `_is_dev_environment()` helper. The 404 MUST be returned before `_get_chaos_user_id_from_event()` is called — no information leakage.
 - **FR-003**: When `start_experiment()` successfully injects chaos, the system MUST schedule an automatic restore via EventBridge Scheduler (NOT EventBridge Rules — Scheduler supports `at()` one-time expressions). The schedule MUST be created BEFORE updating experiment status to `running`. If scheduling fails, the experiment MUST be immediately restored and marked `failed`.
 - **FR-004**: Manual `/stop` MUST delete the scheduled restore rule. If the auto-restore fires for an experiment already in `stopped` or `auto-stopped` status, it MUST silently exit (no-op) without error.
@@ -154,7 +154,7 @@ When the chaos system attaches or detaches IAM policies (the `dynamodb_throttle`
 - **SC-004**: A second experiment creation within 60 seconds by the same user returns 429.
 - **SC-005**: The `dynamodb_throttle` scenario triggers a CloudWatch alarm for IAM policy attachment.
 - **SC-006**: No concurrent experiments of the same scenario type can reach `running` status (409 returned).
-- **SC-007**: Existing chaos unit tests (tests/unit/test_chaos_injection.py, tests/unit/test_chaos_fis.py) continue to pass with zero regressions.
+- **SC-007**: Existing chaos unit tests (tests/unit/test_chaos_fis.py) continue to pass with zero regressions.
 - **SC-008**: If auto-restore scheduling fails after chaos injection, infrastructure is immediately restored and experiment marked `failed`.
 
 ## Assumptions
