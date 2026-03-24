@@ -35,6 +35,12 @@ variable "origin_keepalive_timeout" {
   default     = 60
 }
 
+variable "lambda_function_arn" {
+  description = "SSE Lambda function ARN (for OAC permission — Feature 1256)"
+  type        = string
+  default     = ""
+}
+
 variable "tags" {
   description = "Tags to apply to all resources"
   type        = map(string)

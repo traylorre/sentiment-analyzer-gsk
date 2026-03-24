@@ -51,6 +51,19 @@ resource "aws_cloudfront_origin_request_policy" "sse_headers" {
 }
 
 # ===================================================================
+# Origin Access Control for Lambda (Feature 1256 — FR-003, FR-004)
+# ===================================================================
+# Signs requests to Lambda Function URL with SigV4.
+# Required when Lambda Function URL has authorization_type = AWS_IAM.
+resource "aws_cloudfront_origin_access_control" "lambda_oac" {
+  name                              = "${var.environment}-sse-lambda-oac"
+  description                       = "OAC for SSE Lambda Function URL (Feature 1256)"
+  origin_access_control_origin_type = "lambda"
+  signing_behavior                  = "always"
+  signing_protocol                  = "sigv4"
+}
+
+# ===================================================================
 # CloudFront Distribution (FR-001, FR-002, FR-003, FR-009)
 # ===================================================================
 resource "aws_cloudfront_distribution" "sse" {
@@ -64,10 +77,12 @@ resource "aws_cloudfront_distribution" "sse" {
   # FR-005: WAF WebACL association (CLOUDFRONT scope)
   web_acl_id = var.waf_web_acl_arn != "" ? var.waf_web_acl_arn : null
 
-  # SSE Lambda Function URL origin
+  # SSE Lambda Function URL origin with OAC (Feature 1256)
+  # OAC signs requests with SigV4 for authorization_type=AWS_IAM
   origin {
-    domain_name = local.origin_domain
-    origin_id   = local.origin_id
+    domain_name              = local.origin_domain
+    origin_id                = local.origin_id
+    origin_access_control_id = aws_cloudfront_origin_access_control.lambda_oac.id
 
     custom_origin_config {
       http_port                = 80
@@ -111,4 +126,20 @@ resource "aws_cloudfront_distribution" "sse" {
     Component = "cloudfront-sse"
     Feature   = "1255"
   })
+}
+
+# ===================================================================
+# Lambda Permission for CloudFront OAC (Feature 1256 — FR-004)
+# ===================================================================
+# Allows CloudFront to invoke SSE Lambda via Function URL using OAC SigV4.
+resource "aws_lambda_permission" "cloudfront_oac" {
+  count = var.lambda_function_arn != "" ? 1 : 0
+
+  statement_id  = "AllowCloudFrontOACInvoke"
+  action        = "lambda:InvokeFunctionUrl"
+  function_name = var.lambda_function_arn
+  principal     = "cloudfront.amazonaws.com"
+  source_arn    = aws_cloudfront_distribution.sse.arn
+
+  function_url_auth_type = "AWS_IAM"
 }
