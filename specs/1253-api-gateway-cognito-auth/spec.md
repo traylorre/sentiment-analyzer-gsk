@@ -362,7 +362,7 @@ Users with anonymous sessions (UUID Bearer tokens from `/api/v2/auth/anonymous`)
 ### Measurable Outcomes
 
 - **SC-001**: Requests to protected endpoints without a valid Cognito JWT return 401 from API Gateway (verifiable: Lambda invocation count does NOT increase).
-- **SC-002**: All 13 public endpoint groups return 200/201 through API Gateway without a Cognito JWT.
+- **SC-002**: All 11 public resource groups (covering 13+ individual endpoints) return 200/201 through API Gateway without a Cognito JWT.
 - **SC-003**: Frontend Amplify deployment uses API Gateway URL (with `/v1` prefix) as `NEXT_PUBLIC_API_URL`.
 - **SC-004**: Deploy smoke tests pass using API Gateway URL.
 - **SC-005**: Existing Playwright E2E tests pass through API Gateway path (zero functional regression).
