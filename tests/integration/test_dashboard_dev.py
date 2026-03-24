@@ -21,12 +21,30 @@ For Developers:
 
 import json
 import os
+from unittest.mock import MagicMock, patch
 
 import pytest
 from moto import mock_aws
 
 from src.lambdas.dashboard.handler import lambda_handler
 from tests.conftest import make_event
+
+
+@pytest.fixture(autouse=True)
+def _mock_session_validation():
+    """Feature 1249: Mock session validation for integration tests.
+
+    After session validation was wired into _get_user_id_from_event(),
+    tests need valid sessions in DynamoDB. Mocking is simpler since
+    session validation itself is tested separately in test_admin_lockdown.py.
+    """
+    mock_result = MagicMock()
+    mock_result.valid = True
+    with patch(
+        "src.lambdas.dashboard.auth.validate_session",
+        return_value=mock_result,
+    ):
+        yield
 
 
 @pytest.fixture

@@ -21,7 +21,7 @@ import json
 import os
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import boto3
 import jwt
@@ -193,6 +193,24 @@ def jwt_env():
     with patch.dict(
         os.environ,
         {"JWT_SECRET": TEST_JWT_SECRET, "JWT_AUDIENCE": "sentiment-analyzer-api"},
+    ):
+        yield
+
+
+@pytest.fixture(autouse=True)
+def _mock_session_validation():
+    """Feature 1249: Mock session validation for all handler tests.
+
+    After session validation was wired into _get_user_id_from_event(),
+    tests need valid sessions in DynamoDB. Mocking is simpler since
+    these are unit tests — session validation itself is tested separately.
+    Patches at source (auth module) since handler uses deferred import.
+    """
+    mock_result = MagicMock()
+    mock_result.valid = True
+    with patch(
+        "src.lambdas.dashboard.auth.validate_session",
+        return_value=mock_result,
     ):
         yield
 
