@@ -57,6 +57,7 @@ from src.lambdas.dashboard.chaos import (
 )
 from src.lambdas.dashboard.metrics import sanitize_item_for_response
 from src.lambdas.shared.dynamodb import get_table, parse_dynamodb_item
+from src.lambdas.shared.errors.session_errors import SessionRevokedException
 from src.lambdas.shared.logging_utils import (
     get_safe_error_info,
     get_safe_error_message_for_user,
@@ -89,6 +90,19 @@ logger.info(
         "table": SENTIMENTS_TABLE,
     },
 )
+
+_DEV_ENVIRONMENTS = {"local", "dev", "test"}
+
+
+def _is_dev_environment() -> bool:
+    """Check if current environment allows admin dashboard access.
+
+    Fail-closed: returns True ONLY for explicitly allowed dev environments.
+    Uses module-level ENVIRONMENT constant (set at import time from os.environ).
+    Unset, empty, unknown, 'preprod', 'prod' all return False.
+    """
+    return ENVIRONMENT.lower() in _DEV_ENVIRONMENTS
+
 
 # Path to static dashboard files
 _handler_dir = Path(__file__).parent
@@ -127,22 +141,34 @@ logger.info("API v2 routers included")
 
 
 def _get_user_id_from_event(event: dict, validate_session: bool = True) -> str:
-    """Extract user_id from event headers.
+    """Extract user_id from event headers and optionally validate session.
 
     Args:
         event: API Gateway event dict.
-        validate_session: Whether to validate session (unused currently).
+        validate_session: When True, checks DynamoDB session is active/not revoked.
 
     Returns:
-        user_id string.
-
-    Raises:
-        ValueError: If no valid user ID found.
+        user_id string, or "" if missing/invalid/expired.
     """
+    from src.lambdas.dashboard import auth as auth_service
+
     auth_context = extract_auth_context(event)
     user_id = auth_context.get("user_id")
     if not user_id:
         return ""
+    if validate_session:
+        try:
+            table = get_table(USERS_TABLE)
+            validation = auth_service.validate_session(
+                table=table, anonymous_id=user_id
+            )
+            if not validation.valid:
+                return ""
+        except SessionRevokedException:
+            return ""
+        except Exception:
+            logger.warning("Session validation failed", exc_info=True)
+            return ""
     return user_id
 
 
@@ -179,9 +205,18 @@ def _get_chaos_user_id_from_event(event: dict) -> str | None:
     return auth_context.user_id
 
 
+_NOT_FOUND_RESPONSE = Response(
+    status_code=404,
+    content_type="application/json",
+    body=orjson.dumps({"detail": "Not found"}).decode(),
+)
+
+
 @app.get("/")
 def serve_index():
-    """Serve the main dashboard HTML page."""
+    """Serve the main dashboard HTML page (locked down in prod/preprod)."""
+    if not _is_dev_environment():
+        return _NOT_FOUND_RESPONSE
     index_path = STATIC_DIR / "index.html"
     if not index_path.exists():
         logger.error("index.html not found", extra={"path": str(index_path)})
@@ -200,7 +235,9 @@ def serve_index():
 
 @app.get("/favicon.ico")
 def serve_favicon():
-    """Serve the favicon.ico file (Feature 1096)."""
+    """Serve the favicon.ico file (locked down in prod/preprod)."""
+    if not _is_dev_environment():
+        return _NOT_FOUND_RESPONSE
     favicon_path = STATIC_DIR / "favicon.ico"
     if not favicon_path.exists():
         return Response(
@@ -219,7 +256,9 @@ def serve_favicon():
 
 @app.get("/chaos")
 def serve_chaos():
-    """Serve the chaos testing UI page."""
+    """Serve the chaos testing UI page (locked down in prod/preprod)."""
+    if not _is_dev_environment():
+        return _NOT_FOUND_RESPONSE
     chaos_path = STATIC_DIR / "chaos.html"
     if not chaos_path.exists():
         logger.error("chaos.html not found", extra={"path": str(chaos_path)})
@@ -238,7 +277,9 @@ def serve_chaos():
 
 @app.get("/static/<filename>")
 def serve_static(filename: str):
-    """Serve static dashboard files (CSS, JS) from whitelist."""
+    """Serve static dashboard files (locked down in prod/preprod)."""
+    if not _is_dev_environment():
+        return _NOT_FOUND_RESPONSE
     if filename not in ALLOWED_STATIC_FILES:
         logger.warning(
             "Static file request for non-whitelisted file",
@@ -281,7 +322,9 @@ def serve_static(filename: str):
 
 @app.get("/api")
 def api_index():
-    """API index listing all available endpoints."""
+    """API index listing all available endpoints (locked down in prod/preprod)."""
+    if not _is_dev_environment():
+        return _NOT_FOUND_RESPONSE
     return Response(
         status_code=200,
         content_type="application/json",
@@ -373,52 +416,72 @@ def api_index():
 
 @app.get("/health")
 def health_check():
-    """Health check endpoint with DynamoDB connectivity test."""
+    """Health check endpoint with DynamoDB connectivity test.
+
+    In non-dev environments, returns only {"status":"healthy"} to prevent
+    information leakage (table names, environment). Deploy smoke tests
+    only check valid JSON + "status" key presence (verified: deploy.yml:1167, 2033).
+    """
     try:
         table = get_table(SENTIMENTS_TABLE)
         _ = table.table_status
 
+        if _is_dev_environment():
+            body = {
+                "status": "healthy",
+                "table": SENTIMENTS_TABLE,
+                "environment": ENVIRONMENT,
+            }
+        else:
+            body = {"status": "healthy"}
+
         return Response(
             status_code=200,
             content_type="application/json",
-            body=orjson.dumps(
-                {
-                    "status": "healthy",
-                    "table": SENTIMENTS_TABLE,
-                    "environment": ENVIRONMENT,
-                }
-            ).decode(),
+            body=orjson.dumps(body).decode(),
         )
     except Exception as e:
         logger.error(
             "Health check failed",
             extra={"table": SENTIMENTS_TABLE, **get_safe_error_info(e)},
         )
+        if _is_dev_environment():
+            err_body = {
+                "status": "unhealthy",
+                "error": get_safe_error_message_for_user(e),
+                "table": SENTIMENTS_TABLE,
+            }
+        else:
+            err_body = {"status": "unhealthy"}
+
         return Response(
             status_code=503,
             content_type="application/json",
-            body=orjson.dumps(
-                {
-                    "status": "unhealthy",
-                    "error": get_safe_error_message_for_user(e),
-                    "table": SENTIMENTS_TABLE,
-                }
-            ).decode(),
+            body=orjson.dumps(err_body).decode(),
         )
 
 
 @app.get("/api/v2/runtime")
 def get_runtime_config():
-    """Get runtime configuration for the frontend (Feature 1097)."""
+    """Get runtime configuration for the frontend (Feature 1097).
+
+    In non-dev environments, returns generic values to prevent leaking
+    the SSE Lambda Function URL and real environment name.
+    """
+    if _is_dev_environment():
+        body = {
+            "sse_url": SSE_LAMBDA_URL or None,
+            "environment": ENVIRONMENT,
+        }
+    else:
+        body = {
+            "sse_url": None,
+            "environment": "production",
+        }
     return Response(
         status_code=200,
         content_type="application/json",
-        body=orjson.dumps(
-            {
-                "sse_url": SSE_LAMBDA_URL or None,
-                "environment": ENVIRONMENT,
-            }
-        ).decode(),
+        body=orjson.dumps(body).decode(),
     )
 
 
@@ -428,7 +491,7 @@ def get_metrics_v2():
     from src.lambdas.dashboard.metrics import aggregate_dashboard_metrics
 
     event = app.current_event.raw_event
-    _user_id = _get_user_id_from_event(event, validate_session=False)
+    _user_id = _get_user_id_from_event(event)
     if not _user_id:
         return Response(
             status_code=401,
@@ -480,7 +543,7 @@ def get_sentiment_v2():
     from datetime import UTC, datetime, timedelta
 
     event = app.current_event.raw_event
-    _user_id = _get_user_id_from_event(event, validate_session=False)
+    _user_id = _get_user_id_from_event(event)
     if not _user_id:
         return Response(
             status_code=401,
@@ -544,7 +607,7 @@ def get_sentiment_v2():
 def get_trends_v2():
     """Get trend data for sparkline visualizations."""
     event = app.current_event.raw_event
-    _user_id = _get_user_id_from_event(event, validate_session=False)
+    _user_id = _get_user_id_from_event(event)
     if not _user_id:
         return Response(
             status_code=401,
@@ -653,7 +716,7 @@ def get_trends_v2():
 def get_articles_v2():
     """Get recent articles for specified tags."""
     event = app.current_event.raw_event
-    _user_id = _get_user_id_from_event(event, validate_session=False)
+    _user_id = _get_user_id_from_event(event)
     if not _user_id:
         return Response(
             status_code=401,

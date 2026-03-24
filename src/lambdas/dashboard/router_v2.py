@@ -715,6 +715,8 @@ def refresh_session():
     event = auth_router.current_event.raw_event
     table = get_users_table()
 
+    # Feature 1249: Intentionally skip session validation — an expiring session
+    # must still be refreshable. CSRF middleware provides its own validation layer.
     user_id, err = _require_user_id(event, table=table, validate_session=False)
     if err:
         return err
@@ -1260,7 +1262,19 @@ def get_correlation(config_id: str):
 
 @config_router.get("/api/v2/configurations/<config_id>/refresh/status")
 def get_refresh_status(config_id: str):
-    """Get refresh status (T060)."""
+    """Get refresh status (T060). Auth + ownership added by Feature 1249."""
+    event = config_router.current_event.raw_event
+    table = get_users_table()
+
+    user_id, err = _require_user_id(event, table=table)
+    if err:
+        return err
+
+    # Ownership check: verify config belongs to this user
+    config_data, err = _get_config_with_tickers(table, user_id, config_id)
+    if err:
+        return err
+
     result = market_service.get_refresh_status(config_id=config_id)
     return json_response(200, result.model_dump())
 
