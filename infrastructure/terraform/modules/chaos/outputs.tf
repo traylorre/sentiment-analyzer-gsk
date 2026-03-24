@@ -45,6 +45,15 @@ output "deny_dynamodb_write_policy_arn" {
 }
 
 # ============================================================================
+# Feature 1250: Auto-Restore Scheduler Outputs
+# ============================================================================
+
+output "chaos_scheduler_role_arn" {
+  description = "ARN of the EventBridge Scheduler role for auto-restore"
+  value       = var.enable_chaos_testing && var.environment != "prod" ? try(aws_iam_role.chaos_scheduler[0].arn, "") : ""
+}
+
+# ============================================================================
 # Deprecated Outputs (kept for backwards compatibility)
 # ============================================================================
 

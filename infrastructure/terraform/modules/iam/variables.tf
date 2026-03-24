@@ -42,6 +42,12 @@ variable "chaos_reports_table_arn" {
   default     = ""
 }
 
+variable "chaos_scheduler_role_arn" {
+  description = "ARN of the EventBridge Scheduler role for chaos auto-restore (Feature 1250)"
+  type        = string
+  default     = ""
+}
+
 variable "ticker_cache_bucket_arn" {
   description = "ARN of the S3 bucket containing ticker cache data (Feature 006)"
   type        = string

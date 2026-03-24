@@ -287,6 +287,74 @@ resource "aws_iam_role_policy" "chaos_engineer_permissions" {
 }
 
 # ============================================================================
+# Feature 1250: EventBridge Scheduler Role for Auto-Restore
+# ============================================================================
+
+resource "aws_iam_role" "chaos_scheduler" {
+  count = var.enable_chaos_testing && var.environment != "prod" ? 1 : 0
+  name  = "${var.environment}-chaos-scheduler-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "scheduler.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+
+  tags = {
+    Name        = "${var.environment}-chaos-scheduler-role"
+    Environment = var.environment
+    Purpose     = "chaos-auto-restore"
+    ManagedBy   = "Terraform"
+  }
+}
+
+resource "aws_iam_role_policy" "chaos_scheduler_invoke" {
+  count = var.enable_chaos_testing && var.environment != "prod" ? 1 : 0
+  name  = "${var.environment}-chaos-scheduler-invoke"
+  role  = aws_iam_role.chaos_scheduler[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid      = "InvokeDashboardLambda"
+      Effect   = "Allow"
+      Action   = "lambda:InvokeFunction"
+      Resource = var.dashboard_lambda_arn
+    }]
+  })
+}
+
+# ============================================================================
+# Feature 1250: CloudWatch Alarm for IAM Policy Attachment
+# ============================================================================
+
+resource "aws_cloudwatch_metric_alarm" "chaos_iam_attachment" {
+  count               = var.enable_chaos_testing && var.environment != "prod" ? 1 : 0
+  alarm_name          = "${var.environment}-chaos-iam-policy-attachment"
+  alarm_description   = "Alert when chaos testing attaches IAM deny-write policies"
+  namespace           = "SentimentAnalyzer"
+  metric_name         = "ChaosIAMPolicyAttachment"
+  statistic           = "Maximum"
+  period              = 60
+  evaluation_periods  = 1
+  threshold           = 0
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = var.alerting_topic_arn != "" ? [var.alerting_topic_arn] : []
+
+  tags = {
+    Name        = "${var.environment}-chaos-iam-attachment-alarm"
+    Environment = var.environment
+    Purpose     = "chaos-security-monitoring"
+    ManagedBy   = "Terraform"
+  }
+}
+
+# ============================================================================
 # FIS Experiment Templates - DISABLED
 # ============================================================================
 #

@@ -570,6 +570,38 @@ resource "aws_iam_role_policy" "dashboard_chaos" {
           "events:EnableRule"
         ]
         Resource = "arn:aws:events:*:*:rule/${var.environment}-*"
+      },
+      {
+        Sid    = "SchedulerAutoRestore"
+        Effect = "Allow"
+        Action = [
+          "scheduler:CreateSchedule",
+          "scheduler:DeleteSchedule",
+          "scheduler:GetSchedule"
+        ]
+        Resource = "arn:aws:scheduler:*:*:schedule/default/chaos-auto-restore-*"
+      },
+      {
+        Sid      = "SchedulerPassRole"
+        Effect   = "Allow"
+        Action   = ["iam:PassRole"]
+        Resource = var.chaos_scheduler_role_arn != "" ? var.chaos_scheduler_role_arn : "arn:aws:iam::000000000000:role/placeholder"
+        Condition = {
+          StringEquals = {
+            "iam:PassedToService" = "scheduler.amazonaws.com"
+          }
+        }
+      },
+      {
+        Sid      = "ChaosMetricsEmit"
+        Effect   = "Allow"
+        Action   = ["cloudwatch:PutMetricData"]
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "cloudwatch:namespace" = "SentimentAnalyzer"
+          }
+        }
       }
     ]
   })
