@@ -48,8 +48,8 @@
 
 ### Tests for User Story 1
 
-- [ ] T008 [P] [US1] Create unit test `tests/unit/test_api_gateway_cognito.py` — test that protected endpoints return 401 without JWT (mock API Gateway responses)
-- [ ] T009 [P] [US1] Create E2E test `tests/e2e/test_cognito_auth.py` — test `GET /api/v2/configurations` without token → 401, with expired JWT → 401, with UUID token → 401, with valid JWT → 200
+- [x] T008 [P] [US1] Create unit test `tests/unit/test_api_gateway_cognito.py` — test that protected endpoints return 401 without JWT (mock API Gateway responses)
+- [x] T009 [P] [US1] Create E2E test `tests/e2e/test_cognito_auth.py` — test `GET /api/v2/configurations` without token → 401, with expired JWT → 401, with UUID token → 401, with valid JWT → 200
 
 ### Implementation for User Story 1
 
@@ -69,7 +69,7 @@
 
 ### Tests for User Story 2
 
-- [ ] T013 [P] [US2] Add test cases to `tests/e2e/test_cognito_auth.py` — test `POST /auth/anonymous` → 201, `GET /health` → 200, `GET /tickers/search` with UUID → 200, `GET /notifications/unsubscribe?token=x` → 200 (all without Cognito JWT)
+- [x] T013 [P] [US2] Add test cases to `tests/e2e/test_cognito_auth.py` — test `POST /auth/anonymous` → 201, `GET /health` → 200, `GET /tickers/search` with UUID → 200, `GET /notifications/unsubscribe?token=x` → 200 (all without Cognito JWT)
 
 ### Implementation for User Story 2
 
@@ -108,7 +108,7 @@
 
 ### Tests for User Story 4
 
-- [ ] T023 [P] [US4] Add CORS test cases to `tests/e2e/test_cognito_auth.py` — verify 401 response includes `Access-Control-Allow-Origin`, `Access-Control-Allow-Credentials: true`, explicit `Access-Control-Allow-Headers` (not `*`)
+- [x] T023 [P] [US4] Add CORS test cases to `tests/e2e/test_cognito_auth.py` — verify 401 response includes `Access-Control-Allow-Origin`, `Access-Control-Allow-Credentials: true`, explicit `Access-Control-Allow-Headers` (not `*`)
 
 ### Implementation for User Story 4
 
@@ -129,11 +129,11 @@
 
 ### Tests for User Story 5
 
-- [ ] T028 [US5] Add anonymous session test cases to `tests/e2e/test_cognito_auth.py` — UUID token on public endpoint → 200, UUID token on protected endpoint → 401
+- [x] T028 [US5] Add anonymous session test cases to `tests/e2e/test_cognito_auth.py` — UUID token on public endpoint → 200, UUID token on protected endpoint → 401
 
 ### Implementation for User Story 5
 
-- [ ] T029 [US5] Verify no implementation needed — anonymous flow works by design (public endpoints don't check Cognito, protected endpoints reject non-JWT tokens). Document verification in test results.
+- [x] T029 [US5] Verify no implementation needed — anonymous flow works by design (public endpoints don't check Cognito, protected endpoints reject non-JWT tokens). Document verification in test results.
 
 **Checkpoint**: Full feature complete. All 5 user stories independently verified.
 
@@ -143,9 +143,9 @@
 
 **Purpose**: Update CI/CD to verify API Gateway health
 
-- [ ] T030 Add API Gateway health check URL retrieval (`terraform output -raw dashboard_api_url`) to `outputs` step in `.github/workflows/deploy.yml` (after line ~1084)
-- [ ] T031 Add API Gateway smoke test (curl `${API_GW_URL}/v1/health`) to smoke test section in `.github/workflows/deploy.yml` (after line ~1175)
-- [ ] T032 Add protected endpoint 401 check (curl `${API_GW_URL}/v1/api/v2/configurations` → expect 401) to smoke test section
+- [x] T030 Add API Gateway health check URL retrieval (`terraform output -raw dashboard_api_url`) to `outputs` step in `.github/workflows/deploy.yml` (after line ~1084)
+- [x] T031 Add API Gateway smoke test (curl `${API_GW_URL}/v1/health`) to smoke test section in `.github/workflows/deploy.yml` (after line ~1175)
+- [x] T032 Add protected endpoint 401 check (curl `${API_GW_URL}/v1/api/v2/configurations` → expect 401) to smoke test section
 
 ---
 

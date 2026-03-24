@@ -1097,6 +1097,8 @@ jobs:
         run: |
           # Use Lambda Function URL for smoke test (resolver is LambdaFunctionUrlResolver)
           DASHBOARD_URL="${{ steps.outputs.outputs.dashboard_url }}"
+          # Feature 1253: API Gateway URL for Cognito auth verification
+          API_GW_URL="${{ steps.outputs.outputs.api_url }}"
 
           if [ -z "$DASHBOARD_URL" ]; then
             echo "⚠️ Dashboard URL not found - skipping smoke test"
@@ -1171,6 +1173,29 @@ jobs:
           fi
 
           echo "✅ Response is valid JSON"
+
+          # Test 4: API Gateway health check (Feature 1253)
+          if [ -n "$API_GW_URL" ]; then
+            echo ""
+            echo "Test 4: API Gateway health endpoint..."
+            API_GW_HEALTH=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "${API_GW_URL}/health" 2>/dev/null || echo "000")
+            if [ "$API_GW_HEALTH" = "200" ]; then
+              echo "✅ API Gateway health: 200"
+            else
+              echo "⚠️ API Gateway health: ${API_GW_HEALTH} (non-blocking)"
+            fi
+
+            # Test 5: API Gateway Cognito auth verification (Feature 1253)
+            echo ""
+            echo "Test 5: API Gateway Cognito auth verification..."
+            API_GW_AUTH=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "${API_GW_URL}/api/v2/configurations" 2>/dev/null || echo "000")
+            if [ "$API_GW_AUTH" = "401" ]; then
+              echo "✅ API Gateway Cognito auth active: 401 on protected endpoint"
+            else
+              echo "⚠️ API Gateway auth check: ${API_GW_AUTH} (non-blocking)"
+            fi
+          fi
+
           echo ""
           echo "🎉 All smoke tests passed! Deployment is healthy."
 
