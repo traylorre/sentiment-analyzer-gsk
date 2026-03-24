@@ -132,7 +132,11 @@ Bot traffic is identified. Known malicious bots are blocked. Unknown bots are la
 
 ### User Story 5 — WAF Metrics and Alerting (Priority: P2)
 
-Blocked requests are counted in metrics. Spikes trigger alerts.
+Blocked requests are counted in metrics. Spikes trigger alerts so the operations team can investigate potential attacks.
+
+**Why this priority**: Without visibility, WAF is a black box. Alerting enables incident response.
+
+**Independent Test**: Trigger WAF blocks, verify metrics appear in CloudWatch dashboard and alarm fires.
 
 **Acceptance Scenarios**:
 
@@ -164,9 +168,10 @@ Blocked requests are counted in metrics. Spikes trigger alerts.
 - **FR-005**: Bot detection MUST be enabled using AWS managed rules, initially in COUNT mode.
 - **FR-006**: WAF blocked responses SHOULD include CORS headers where possible. If WAF custom response bodies support CORS, configure them. If not, document the limitation.
 - **FR-007**: WAF metrics MUST be published to CloudWatch. An alarm MUST fire when >500 blocks in 5 minutes.
-- **FR-008**: Rule evaluation order MUST be: (1) IP allowlist (future), (2) Managed rules (SQLi, XSS, known bad inputs), (3) Bot detection, (4) Rate-based rule.
+- **FR-008**: Rule evaluation order MUST be: (0) OPTIONS ALLOW (bypass rate counting — FR-010), (1) IP allowlist (future), (2) Managed rules (SQLi, XSS, known bad inputs), (3) Bot detection, (4) Rate-based rule.
 - **FR-009**: WAF MUST be a separate module for reuse with CloudFront in Feature 1255.
-- **FR-010**: The WAF rate-based rule MUST NOT count OPTIONS preflight requests.
+- **FR-010**: The WAF rate-based rule MUST NOT count OPTIONS preflight requests. Implementation: add a rule with higher priority than the rate-based rule that ALLOWs all OPTIONS requests — allowed requests are not evaluated by subsequent rules, so they bypass the rate counter.
+- **FR-011**: The WAF WebACL MUST be associated with the API Gateway **stage ARN** (format: `arn:aws:apigateway:{region}::/restapis/{id}/stages/{stage}`), not the REST API ARN directly.
 
 ### Key Entities
 
