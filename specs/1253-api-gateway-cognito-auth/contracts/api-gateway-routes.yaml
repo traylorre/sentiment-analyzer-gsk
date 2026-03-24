@@ -1,0 +1,127 @@
+# API Gateway Route Contracts — Feature 1253
+# Defines the expected behavior of each route group after Cognito auth enablement
+
+public_routes:
+  - path: "/health"
+    method: ANY
+    authorization: NONE
+    integration: "AWS_PROXY (Lambda)"
+    expected_response:
+      without_token: "200 healthy"
+      with_valid_jwt: "200 healthy"
+    cors: true
+
+  - path: "/api/v2/auth/anonymous"
+    method: ANY
+    authorization: NONE
+    integration: "AWS_PROXY (Lambda)"
+    expected_response:
+      POST_without_token: "201 session token"
+    cors: true
+
+  - path: "/api/v2/auth/magic-link/{proxy+}"
+    method: ANY
+    authorization: NONE
+    integration: "AWS_PROXY (Lambda)"
+    expected_response:
+      POST_magic_link_without_token: "200 or 201"
+      GET_magic_link_verify_without_token: "200 redirects"
+    cors: true
+
+  - path: "/api/v2/auth/oauth/{proxy+}"
+    method: ANY
+    authorization: NONE
+    integration: "AWS_PROXY (Lambda)"
+    expected_response:
+      GET_oauth_urls_without_token: "200 provider URLs"
+      POST_oauth_callback_without_token: "200 processes OAuth"
+    cors: true
+
+  - path: "/api/v2/auth/refresh"
+    method: ANY
+    authorization: NONE
+    integration: "AWS_PROXY (Lambda)"
+    expected_response:
+      POST_without_token: "200 new tokens"
+    cors: true
+
+  - path: "/api/v2/auth/validate"
+    method: ANY
+    authorization: NONE
+    integration: "AWS_PROXY (Lambda)"
+    expected_response:
+      GET_with_session_token: "200 session valid"
+    cors: true
+
+  - path: "/api/v2/tickers/{proxy+}"
+    method: ANY
+    authorization: NONE
+    integration: "AWS_PROXY (Lambda)"
+    expected_response:
+      GET_search_without_token: "200 ticker results"
+    cors: true
+
+  - path: "/api/v2/market/{proxy+}"
+    method: ANY
+    authorization: NONE
+    integration: "AWS_PROXY (Lambda)"
+    expected_response:
+      GET_status_without_token: "200 market status"
+    cors: true
+
+  - path: "/api/v2/timeseries/{proxy+}"
+    method: ANY
+    authorization: NONE
+    integration: "AWS_PROXY (Lambda)"
+    expected_response:
+      GET_without_token: "200 public data"
+    cors: true
+
+  - path: "/api/v2/runtime"
+    method: ANY
+    authorization: NONE
+    integration: "AWS_PROXY (Lambda)"
+    expected_response:
+      GET_without_token: "200 SSE URL config"
+    cors: true
+
+protected_routes:
+  - path: "/{proxy+}"
+    method: ANY
+    authorization: COGNITO_USER_POOLS
+    authorizer: "cognito-authorizer (JWT signature + expiry only, no scopes)"
+    integration: "AWS_PROXY (Lambda)"
+    expected_response:
+      without_token: "401 Unauthorized + CORS headers"
+      with_expired_jwt: "401 Unauthorized + CORS headers"
+      with_uuid_token: "401 UUID is not a valid JWT"
+      with_valid_jwt: "200 Lambda processes request"
+    cors: "true (on both success and error responses)"
+
+gateway_responses:
+  - type: UNAUTHORIZED
+    status_code: 401
+    headers:
+      WWW-Authenticate: "Bearer realm=sentiment-analyzer"
+      Access-Control-Allow-Origin: "from request Origin header"
+      Access-Control-Allow-Headers: "Content-Type, Authorization, Accept, Cache-Control, Last-Event-ID, X-Amzn-Trace-Id, X-User-ID"
+      Access-Control-Allow-Methods: "GET,POST,PUT,DELETE,PATCH,OPTIONS"
+      Access-Control-Allow-Credentials: "true"
+
+  - type: MISSING_AUTHENTICATION_TOKEN
+    status_code: 401
+    headers_ref: "same as UNAUTHORIZED"
+
+  - type: ACCESS_DENIED
+    status_code: 403
+    headers_ref: "same as UNAUTHORIZED"
+
+options_method:
+  description: "Every public and protected resource gets an OPTIONS method"
+  authorization: NONE
+  integration: MOCK
+  response_headers:
+    Access-Control-Allow-Origin: "from request Origin header"
+    Access-Control-Allow-Headers: "Content-Type, Authorization, Accept, Cache-Control, Last-Event-ID, X-Amzn-Trace-Id, X-User-ID"
+    Access-Control-Allow-Methods: "GET,POST,PUT,DELETE,PATCH,OPTIONS"
+    Access-Control-Allow-Credentials: "true"
