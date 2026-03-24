@@ -142,6 +142,8 @@ SSE streams are real-time and MUST NOT be cached by CloudFront. The status endpo
 - **FR-008**: The `/api/v2/runtime` endpoint response MUST return the CloudFront URL as `sse_url`.
 - **FR-009**: CloudFront MUST use PriceClass_100 (US/Canada/Europe) to minimize cost.
 - **FR-010**: Shield Standard DDoS protection MUST be active (automatic with CloudFront, no additional configuration).
+- **FR-011**: The SSE Lambda's environment variable for its own URL (used by `/api/v2/runtime` response) MUST be updated in Terraform to point to the CloudFront URL instead of the Lambda Function URL. No Python code changes — the runtime endpoint reads from env vars.
+- **FR-012**: The CLOUDFRONT-scope WAF WebACL MUST be created in us-east-1 (AWS requirement for CloudFront WAFs). The current Terraform workspace is us-east-1, so no provider alias needed.
 
 ### Key Entities
 
