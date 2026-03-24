@@ -17,7 +17,7 @@ Enable Cognito JWT authorization on the API Gateway `{proxy+}` catch-all route w
 **Project Type**: Web application (Terraform IaC + Next.js frontend)
 **Performance Goals**: Zero compute cost for invalid tokens; <50ms added latency for Cognito JWT validation (authorizer caches 300s)
 **Constraints**: Must be atomic deployment (no partial state where public endpoints require auth); must not break existing Playwright E2E tests
-**Scale/Scope**: ~77 new Terraform resources (10 public route groups × 7 resources each + gateway response updates + authorizer enablement)
+**Scale/Scope**: ~78 new Terraform resources (10 public route groups × 6 resources each + 8 intermediate resources + 3 gateway responses + authorizer enablement)
 
 ## Constitution Check
 

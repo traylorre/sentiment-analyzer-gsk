@@ -8,11 +8,12 @@
 
 **Rationale**: In AWS API Gateway REST APIs, the routing engine resolves the most specific resource path first. A request to `/api/v2/auth/anonymous` matches an explicit `/api/v2/auth/anonymous` resource before falling through to `/{proxy+}`. This is standard REST API behavior documented in the AWS API Gateway developer guide.
 
-**Key findings**:
-- Explicit `/api/v2/tickers/{proxy+}` works alongside top-level `/{proxy+}` — the more specific path wins
-- Intermediate resources (`/api`, `/api/v2`, `/api/v2/auth`) can exist without methods — they serve as parent nodes only
-- `ANY` method does NOT include `OPTIONS` in API Gateway REST API — OPTIONS requires a separate method definition for CORS preflight handling
+**Key findings** (confirmed by AWS docs research):
+- Explicit `/api/v2/tickers/{proxy+}` works alongside top-level `/{proxy+}` — the more specific path wins. Note: `{proxy+}` cannot have child resources, but `/api/v2/tickers/{proxy+}` is a child of `/api/v2/tickers` (non-proxy), which is valid
+- Intermediate resources (`/api`, `/api/v2`, `/api/v2/auth`) can exist without methods — they serve as parent nodes only. Requests to method-less intermediates return 403 Missing Authentication Token (acceptable)
+- `ANY` method routes OPTIONS at the routing level but a separate `OPTIONS` method with MOCK integration is recommended for proper CORS preflight handling (faster, cheaper, no Lambda invocation)
 - Each public resource override needs: (1) `ANY` method with `authorization = "NONE"`, (2) `OPTIONS` method with MOCK integration for CORS, (3) Lambda proxy integration on the `ANY` method
+- AWS reference: "A proxy resource can only be a child of a non-proxy resource" — this means `{proxy+}` can't have children, not that multiple `{proxy+}` resources at different tree levels conflict
 
 **Alternatives considered**:
 - HTTP API (v2) instead of REST API: Would simplify routing (uses `$default` instead of `{proxy+}`) but requires rewriting the entire API Gateway module — out of scope per spec
@@ -97,3 +98,40 @@ Scope enforcement can be added in the future by:
 | **Total new resources** | **~77** | |
 
 This is a significant Terraform change. All resources must be created in a single `terraform apply` to avoid partial deployment (FR-007).
+
+## R7: Smoke Test URL Configuration (from codebase exploration)
+
+**Decision**: Add API Gateway health check alongside existing Lambda direct-invoke smoke test.
+
+**Rationale**: The deploy.yml smoke test (lines 1073-1175) uses:
+- `terraform output -raw dashboard_function_url` for the Lambda Function URL
+- Direct Lambda invoke via `aws lambda invoke` on the "live" alias (bypasses CloudFront propagation delay)
+- Curl to `${DASHBOARD_URL}/health` for JSON validation
+
+After Feature 1253, add a parallel check via API Gateway URL (`terraform output -raw dashboard_api_url`). Keep the Lambda direct-invoke test as a baseline.
+
+## R8: Frontend 401 Handling (from codebase exploration)
+
+**Decision**: No frontend changes required for Feature 1253.
+
+**Rationale**: `client.ts` (lines 85-177) wraps all non-200 responses in `ApiClientError` and throws. The `use-auth.ts` hook (lines 72-129) handles session expiry with automatic token refresh 5 minutes before expiry. On complete auth failure, it signs out and redirects. The existing error handling chain will correctly surface API Gateway 401 responses, provided CORS headers are present (FR-008).
+
+## R9: Amplify Module Wiring (from codebase exploration)
+
+**Decision**: Change `NEXT_PUBLIC_API_URL` from `var.dashboard_lambda_url` to `var.api_gateway_url` in the Amplify module.
+
+**Current state** (modules/amplify/main.tf:42):
+```
+NEXT_PUBLIC_API_URL = var.dashboard_lambda_url
+```
+Comment: "Feature 1114: Use Lambda Function URL (has CORS) instead of API Gateway (no CORS on proxy)"
+
+**After Feature 1253**: API Gateway will have proper CORS on all responses including errors, making it viable.
+
+**Wiring**:
+1. `main.tf`: Pass `api_gateway_url = module.api_gateway.api_endpoint` to `module.amplify_frontend`
+2. `modules/amplify/variables.tf`: Add `variable "api_gateway_url" { type = string }`
+3. `modules/amplify/main.tf`: Change `NEXT_PUBLIC_API_URL = var.api_gateway_url`
+4. `depends_on`: Add `module.api_gateway` to the Amplify module's dependency chain
+
+The `terraform_data.cognito_callback_patch` (main.tf:1128-1150) does NOT need changes — it patches Cognito callback URLs based on the Amplify production URL, not the API URL.
