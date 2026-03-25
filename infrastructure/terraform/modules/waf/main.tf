@@ -219,8 +219,12 @@ resource "aws_wafv2_web_acl" "main" {
 # ===================================================================
 # WAF Association (FR-001, FR-011)
 # ===================================================================
-# Associates WebACL with the target resource (API Gateway stage or CloudFront).
+# Associates WebACL with the target resource.
+# NOTE: For CLOUDFRONT scope, the association is done via web_acl_id on the
+# CloudFront distribution resource itself, not via aws_wafv2_web_acl_association.
+# This association resource is only created for REGIONAL scope (API Gateway).
 resource "aws_wafv2_web_acl_association" "main" {
+  count        = var.scope == "REGIONAL" && var.resource_arn != "" ? 1 : 0
   resource_arn = var.resource_arn
   web_acl_arn  = aws_wafv2_web_acl.main.arn
 }
