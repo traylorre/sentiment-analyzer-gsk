@@ -745,6 +745,19 @@ resource "aws_api_gateway_deployment" "dashboard" {
     aws_api_gateway_integration.lambda_root,
     aws_api_gateway_integration_response.proxy_options,
     aws_api_gateway_integration_response.root_options,
+    # Feature 1253: Public route integrations must exist before deployment
+    aws_api_gateway_integration.fr012_lambda,
+    aws_api_gateway_integration.fr012_options,
+    aws_api_gateway_integration.fr012_proxy_lambda,
+    aws_api_gateway_integration.fr012_proxy_options,
+    aws_api_gateway_integration.public_leaf_lambda,
+    aws_api_gateway_integration.public_leaf_options,
+    aws_api_gateway_integration.public_proxy_lambda,
+    aws_api_gateway_integration.public_proxy_options,
+    aws_api_gateway_integration_response.fr012_options,
+    aws_api_gateway_integration_response.fr012_proxy_options,
+    aws_api_gateway_integration_response.public_leaf_options,
+    aws_api_gateway_integration_response.public_proxy_options,
   ]
 }
 

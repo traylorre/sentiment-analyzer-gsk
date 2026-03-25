@@ -386,6 +386,8 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
       "logs:DeleteRetentionPolicy",
       "logs:TagLogGroup",
       "logs:UntagLogGroup",
+      "logs:TagResource",
+      "logs:UntagResource",
       "logs:ListTagsLogGroup",
       "logs:ListTagsForResource",
       "logs:PutMetricFilter",
