@@ -413,6 +413,56 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
     ]
   }
 
+  # WAF v2 (Feature 1254/1255)
+  # SECURITY: Scoped to {env}-sentiment-* WebACLs
+  statement {
+    sid    = "WAFv2"
+    effect = "Allow"
+    actions = [
+      "wafv2:CreateWebACL",
+      "wafv2:DeleteWebACL",
+      "wafv2:GetWebACL",
+      "wafv2:ListWebACLs",
+      "wafv2:UpdateWebACL",
+      "wafv2:AssociateWebACL",
+      "wafv2:DisassociateWebACL",
+      "wafv2:GetWebACLForResource",
+      "wafv2:ListResourcesForWebACL",
+      "wafv2:ListTagsForResource",
+      "wafv2:TagResource",
+      "wafv2:UntagResource",
+    ]
+    resources = ["*"] # WAFv2 doesn't support resource-level ARNs for most actions
+  }
+
+  # CloudFront (Feature 1255)
+  statement {
+    sid    = "CloudFront"
+    effect = "Allow"
+    actions = [
+      "cloudfront:CreateDistribution",
+      "cloudfront:UpdateDistribution",
+      "cloudfront:DeleteDistribution",
+      "cloudfront:GetDistribution",
+      "cloudfront:ListDistributions",
+      "cloudfront:TagResource",
+      "cloudfront:UntagResource",
+      "cloudfront:ListTagsForResource",
+      "cloudfront:CreateOriginAccessControl",
+      "cloudfront:DeleteOriginAccessControl",
+      "cloudfront:GetOriginAccessControl",
+      "cloudfront:UpdateOriginAccessControl",
+      "cloudfront:ListOriginAccessControls",
+      "cloudfront:CreateOriginRequestPolicy",
+      "cloudfront:DeleteOriginRequestPolicy",
+      "cloudfront:GetOriginRequestPolicy",
+      "cloudfront:UpdateOriginRequestPolicy",
+      "cloudfront:GetCachePolicy",
+      "cloudfront:ListCachePolicies",
+    ]
+    resources = ["*"] # CloudFront doesn't support resource-level ARNs
+  }
+
   # CloudWatch Alarms and Dashboards
   # SECURITY: Scoped to {env}-sentiment-* alarms (FR-008)
   # Note: CloudWatch alarms don't support resource-level ARNs for all actions
