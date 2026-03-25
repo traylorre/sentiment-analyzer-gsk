@@ -433,7 +433,7 @@ module "dashboard_lambda" {
   # Lambda Function URL handles ALL CORS - no app-level CORS headers needed
   # This prevents duplicate Access-Control-Allow-Origin headers
   create_function_url    = true
-  function_url_auth_type = "NONE"
+  function_url_auth_type = "AWS_IAM" # Feature 1256: Restrict to API Gateway only (was NONE)
   # BUFFERED mode for Powertools REST API (per research.md decision #2)
   # SSE streaming is handled by separate sse_streaming Lambda with RESPONSE_STREAM
   function_url_invoke_mode = "BUFFERED"
@@ -763,7 +763,7 @@ module "sse_streaming_lambda" {
 
   # Function URL with RESPONSE_STREAM for true SSE streaming
   create_function_url      = true
-  function_url_auth_type   = "NONE"
+  function_url_auth_type   = "AWS_IAM" # Feature 1256: Restrict to CloudFront OAC only (was NONE)
   function_url_invoke_mode = "RESPONSE_STREAM"
   # Feature 1159: Enable credentials for cross-origin cookie transmission
   function_url_cors = {
@@ -898,6 +898,9 @@ module "cloudfront_sse" {
   environment = var.environment
   origin_url  = module.sse_streaming_lambda.function_url
 
+  # Feature 1256: Lambda ARN for OAC permission (CloudFront → Lambda via SigV4)
+  lambda_function_arn = module.sse_streaming_lambda.function_arn
+
   # FR-005: WAF WebACL (CLOUDFRONT scope)
   waf_web_acl_arn = module.waf_cloudfront.web_acl_arn
 
@@ -910,7 +913,7 @@ module "cloudfront_sse" {
   tags = {
     Component = "cloudfront-sse"
     Security  = "ddos-protection"
-    Feature   = "1255"
+    Feature   = "1255-1256"
   }
 
   depends_on = [module.sse_streaming_lambda, module.waf_cloudfront]

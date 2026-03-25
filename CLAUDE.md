@@ -934,9 +934,9 @@ aws cloudwatch get-metric-data --metric-data-queries '[...]' --start-time ... --
 ```
 
 ## Recent Changes
+- 1256-restrict-function-urls: Added HCL (Terraform 1.5+, AWS Provider ~> 5.0)
 - 1255-cloudfront-sse-waf: Added HCL (Terraform 1.5+, AWS Provider ~> 5.0) + AWS CloudFront, AWS WAF v2, existing SSE Lambda
 - 1254-api-gateway-waf: Added HCL (Terraform 1.5+, AWS Provider ~> 5.0) + AWS WAF v2, AWS API Gateway (existing)
-- 1253-api-gateway-cognito-auth: Added HCL (Terraform 1.5+, AWS Provider ~> 5.0) + AWS API Gateway (REST API), AWS Cognito, AWS Amplify, AWS Lambda
 
 <!-- MANUAL ADDITIONS START -->
 
