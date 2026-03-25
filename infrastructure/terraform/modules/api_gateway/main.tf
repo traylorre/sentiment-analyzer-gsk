@@ -800,6 +800,12 @@ resource "aws_cloudwatch_log_group" "api_gateway" {
   tags = merge(var.tags, {
     Name = "${var.environment}-api-gateway-logs"
   })
+
+  # Deployer has logs:TagLogGroup (legacy) but not logs:TagResource (new AWS API).
+  # Ignore tag changes until admin applies IAM update in ci-user-policy.tf.
+  lifecycle {
+    ignore_changes = [tags, tags_all]
+  }
 }
 
 # API Gateway Usage Plan (Rate Limiting)
