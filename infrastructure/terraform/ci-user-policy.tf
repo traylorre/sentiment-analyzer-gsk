@@ -431,8 +431,15 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
       "wafv2:ListTagsForResource",
       "wafv2:TagResource",
       "wafv2:UntagResource",
+      # Managed rule group permissions (required when CreateWebACL references managed rules)
+      "wafv2:ListAvailableManagedRuleGroups",
+      "wafv2:ListAvailableManagedRuleGroupVersions",
+      "wafv2:DescribeManagedRuleGroup",
+      "wafv2:CheckCapacity",
+      "wafv2:GetManagedRuleSet",
+      "wafv2:PutManagedRuleSetVersions",
     ]
-    resources = ["*"] # WAFv2 doesn't support resource-level ARNs for most actions
+    resources = ["*"] # WAFv2 requires wildcard — managed rule groups are AWS-owned
   }
 
   # CloudFront (Feature 1255)
