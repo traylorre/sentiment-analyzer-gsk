@@ -854,6 +854,39 @@ module "api_gateway" {
 }
 
 # ===================================================================
+# Module: WAF v2 (Feature 1254 — Per-IP Rate Limiting + Managed Rules)
+# ===================================================================
+# Adds WAF perimeter before API Gateway: per-IP throttling, SQLi, XSS, bots.
+# Separate module for reuse with CloudFront in Feature 1255 (FR-009).
+
+module "waf" {
+  source = "./modules/waf"
+
+  environment  = var.environment
+  scope        = "REGIONAL"
+  resource_arn = module.api_gateway.stage_arn
+
+  # FR-002: Per-IP rate limit (2000 requests per 5-minute window)
+  rate_limit = 2000
+
+  # FR-005: Bot Control starts in COUNT mode (switch to BLOCK after monitoring)
+  enable_bot_control = true
+  bot_control_action = "COUNT"
+
+  # FR-007: Alert when >500 blocks in 5 minutes
+  alarm_actions              = [module.monitoring.alarm_topic_arn]
+  blocked_requests_threshold = 500
+
+  tags = {
+    Component = "waf"
+    Security  = "ddos-protection"
+    Feature   = "1254"
+  }
+
+  depends_on = [module.api_gateway]
+}
+
+# ===================================================================
 # Module: SNS Topic (for Analysis Triggers)
 # ===================================================================
 

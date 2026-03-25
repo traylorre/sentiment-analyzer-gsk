@@ -135,6 +135,7 @@ The Lambda is named `dashboard Lambda`, the handler is `src/lambdas/dashboard/`,
 - HCL (Terraform 1.5+, AWS Provider ~> 5.0), TypeScript (Next.js frontend) + AWS API Gateway (REST API), AWS Cognito, AWS Amplify, AWS Lambda (1253-api-gateway-cognito-auth)
 - N/A (infrastructure-only changes) (1253-api-gateway-cognito-auth)
 - HCL (Terraform 1.5+, AWS Provider ~> 5.0) + AWS API Gateway (REST API), AWS Cognito, AWS Amplify, AWS Lambda (1253-api-gateway-cognito-auth)
+- HCL (Terraform 1.5+, AWS Provider ~> 5.0) + AWS WAF v2, AWS API Gateway (existing) (1254-api-gateway-waf)
 
 - **Python 3.13** with aws-lambda-powertools, boto3, pydantic, httpx, orjson
 - **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, Amplify
@@ -932,9 +933,9 @@ aws cloudwatch get-metric-data --metric-data-queries '[...]' --start-time ... --
 ```
 
 ## Recent Changes
+- 1254-api-gateway-waf: Added HCL (Terraform 1.5+, AWS Provider ~> 5.0) + AWS WAF v2, AWS API Gateway (existing)
 - 1253-api-gateway-cognito-auth: Added HCL (Terraform 1.5+, AWS Provider ~> 5.0) + AWS API Gateway (REST API), AWS Cognito, AWS Amplify, AWS Lambda
 - 1253-api-gateway-cognito-auth: Added HCL (Terraform 1.5+, AWS Provider ~> 5.0), TypeScript (Next.js frontend) + AWS API Gateway (REST API), AWS Cognito, AWS Amplify, AWS Lambda
-- 1244-customer-e2e-coverage: Added TypeScript 5.x (frontend), Python 3.13 (backend test relabeling) + Next.js 14, React 18, Radix UI (existing: dialog, tooltip, switch; add: dropdown-menu), Playwright 1.57, TradingView Lightweight Charts
 
 <!-- MANUAL ADDITIONS START -->
 
