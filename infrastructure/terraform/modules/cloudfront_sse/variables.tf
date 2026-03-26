@@ -24,9 +24,9 @@ variable "price_class" {
 }
 
 variable "origin_read_timeout" {
-  description = "Origin read timeout in seconds (FR-003: max 180s for streaming)"
+  description = "Origin read timeout in seconds (FR-003: 60s default, 180s requires quota increase)"
   type        = number
-  default     = 180
+  default     = 60
 }
 
 variable "origin_keepalive_timeout" {
