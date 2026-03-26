@@ -253,7 +253,8 @@ data "aws_iam_policy_document" "ci_deploy_core" {
       "apigateway:DELETE",
       "apigateway:PATCH",
       "apigateway:TagResource",
-      "apigateway:UntagResource"
+      "apigateway:UntagResource",
+      "apigateway:SetWebACL"
     ]
     resources = [
       "arn:aws:apigateway:*::/restapis",

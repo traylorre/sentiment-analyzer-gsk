@@ -20,12 +20,12 @@ locals {
 # ===================================================================
 # Origin Request Policy (FR-004)
 # ===================================================================
-# Forward auth and trace headers to Lambda origin.
-# SSE connections need Authorization, Last-Event-ID (reconnection),
-# and trace headers for observability.
+# Forward trace headers to Lambda origin.
+# SSE connections need Last-Event-ID (reconnection) and trace headers
+# for observability. Auth is handled by OAC SigV4 (not client headers).
 resource "aws_cloudfront_origin_request_policy" "sse_headers" {
   name    = "${var.environment}-sse-origin-request-policy"
-  comment = "Forward auth and trace headers for SSE streaming (Feature 1255)"
+  comment = "Forward trace headers for SSE streaming (Feature 1255)"
 
   cookies_config {
     cookie_behavior = "all" # Forward all cookies (refresh token in httpOnly cookie)
@@ -35,7 +35,6 @@ resource "aws_cloudfront_origin_request_policy" "sse_headers" {
     header_behavior = "whitelist"
     headers {
       items = [
-        "Authorization",
         "Origin",
         "Last-Event-ID",
         "X-User-ID",
