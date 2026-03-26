@@ -14,7 +14,7 @@
 # Custom response body for BLOCK actions (FR-006: CORS headers on WAF 403)
 resource "aws_wafv2_web_acl" "main" {
   name        = "${var.environment}-sentiment-waf"
-  description = "WAF for sentiment analyzer — rate limiting, SQLi, XSS, bots (Feature 1254)"
+  description = "WAF for sentiment analyzer - rate limiting, SQLi, XSS, bots - Feature 1254"
   scope       = var.scope
 
   default_action {
