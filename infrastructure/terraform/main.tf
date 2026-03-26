@@ -904,8 +904,8 @@ module "cloudfront_sse" {
   # FR-005: WAF WebACL (CLOUDFRONT scope)
   waf_web_acl_arn = module.waf_cloudfront.web_acl_arn
 
-  # FR-003: 180s origin timeout for streaming
-  origin_read_timeout = 180
+  # FR-003: 60s default max (180s requires AWS quota increase)
+  origin_read_timeout = 60
 
   # FR-009: PriceClass_100 (US/Canada/Europe)
   price_class = "PriceClass_100"
