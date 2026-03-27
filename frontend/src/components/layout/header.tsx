@@ -5,6 +5,7 @@ import { Activity } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ConnectionStatus } from '@/components/dashboard/connection-status';
 import { RefreshTimer } from '@/components/dashboard/refresh-countdown';
+import { DataFreshnessIndicator } from '@/components/dashboard/data-freshness-indicator';
 import { UserMenu } from '@/components/auth/user-menu';
 import type { SSEStatus } from '@/lib/api/sse';
 
@@ -12,6 +13,7 @@ interface HeaderProps {
   title?: string;
   connectionStatus?: SSEStatus;
   onRefresh?: () => void | Promise<void>;
+  lastUpdated?: string | null;
   className?: string;
 }
 
@@ -19,6 +21,7 @@ export function Header({
   title = 'Sentiment',
   connectionStatus = 'connected',
   onRefresh,
+  lastUpdated = null,
   className,
 }: HeaderProps) {
   return (
@@ -46,6 +49,9 @@ export function Header({
 
         {/* Status and actions */}
         <div className="flex items-center gap-3">
+          {/* Data freshness indicator */}
+          <DataFreshnessIndicator lastUpdated={lastUpdated} />
+
           {/* Refresh countdown */}
           <RefreshTimer onRefresh={onRefresh} />
 
