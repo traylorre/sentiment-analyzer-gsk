@@ -36,6 +36,22 @@ test.describe('Chaos: Scenario Customer Outcomes', () => {
     // Apply ingestion failure: SSE/articles return empty new-items
     const restore = await simulateChaosScenario(page, 'ingestion_failure');
 
+    // Also intercept sentiment API with aged timestamp to simulate stale data
+    const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+    await page.route('**/api/v2/configurations/*/sentiment', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          config_id: 'test',
+          tickers: [],
+          last_updated: fifteenMinutesAgo,
+          next_refresh_at: new Date().toISOString(),
+          cache_status: 'stale',
+        }),
+      }),
+    );
+
     // Wait for chaos to take effect
     await page.waitForTimeout(2000);
 
@@ -44,6 +60,14 @@ test.describe('Chaos: Scenario Customer Outcomes', () => {
     expect(textDuring).toBeTruthy();
     expect(textDuring!.length).toBeGreaterThan(10);
 
+    // Stale data indicator should be visible and in warning/stale state (Feature 1266)
+    const freshnessIndicator = page.locator('[data-testid="data-freshness-indicator"]');
+    if (await freshnessIndicator.isVisible({ timeout: 3000 }).catch(() => false)) {
+      const freshnessState = await freshnessIndicator.getAttribute('data-freshness-state');
+      expect(['stale', 'critical']).toContain(freshnessState);
+    }
+
+    await page.unroute('**/api/v2/configurations/*/sentiment');
     await restore();
   });
 
@@ -120,6 +144,22 @@ test.describe('Chaos: Scenario Customer Outcomes', () => {
     // Apply trigger failure: same as ingestion (no new items via SSE)
     const restore = await simulateChaosScenario(page, 'trigger_failure');
 
+    // Intercept sentiment API with aged timestamp
+    const twentyMinutesAgo = new Date(Date.now() - 20 * 60 * 1000).toISOString();
+    await page.route('**/api/v2/configurations/*/sentiment', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          config_id: 'test',
+          tickers: [],
+          last_updated: twentyMinutesAgo,
+          next_refresh_at: new Date().toISOString(),
+          cache_status: 'stale',
+        }),
+      }),
+    );
+
     await page.waitForTimeout(2000);
 
     // Dashboard still has rendered content
@@ -127,6 +167,14 @@ test.describe('Chaos: Scenario Customer Outcomes', () => {
     expect(textDuring).toBeTruthy();
     expect(textDuring!.length).toBeGreaterThan(10);
 
+    // Stale data indicator should be visible and in critical state (20min > 4x 5min) (Feature 1266)
+    const freshnessIndicator = page.locator('[data-testid="data-freshness-indicator"]');
+    if (await freshnessIndicator.isVisible({ timeout: 3000 }).catch(() => false)) {
+      const freshnessState = await freshnessIndicator.getAttribute('data-freshness-state');
+      expect(freshnessState).toBe('critical');
+    }
+
+    await page.unroute('**/api/v2/configurations/*/sentiment');
     await restore();
   });
 
