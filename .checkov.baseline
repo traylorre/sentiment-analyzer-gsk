@@ -244,6 +244,25 @@
             ]
         },
         {
+            "file": "/modules/cloudfront_sse/main.tf",
+            "findings": [
+                {
+                    "resource": "module.cloudfront_sse.aws_cloudfront_distribution.sse",
+                    "check_ids": [
+                        "CKV2_AWS_32",
+                        "CKV2_AWS_42",
+                        "CKV2_AWS_47",
+                        "CKV_AWS_174",
+                        "CKV_AWS_305",
+                        "CKV_AWS_310",
+                        "CKV_AWS_374",
+                        "CKV_AWS_68",
+                        "CKV_AWS_86"
+                    ]
+                }
+            ]
+        },
+        {
             "file": "/modules/cloudwatch-rum/main.tf",
             "findings": [
                 {
@@ -301,7 +320,7 @@
                     ]
                 },
                 {
-                    "resource": "module.canary_lambda.aws_lambda_permission.function_url_alias",
+                    "resource": "module.canary_lambda.aws_lambda_permission.function_url_alias[0]",
                     "check_ids": [
                         "CKV_AWS_301"
                     ]
@@ -317,12 +336,6 @@
                     "check_ids": [
                         "CKV_AWS_173",
                         "CKV_AWS_272"
-                    ]
-                },
-                {
-                    "resource": "module.dashboard_lambda.aws_lambda_permission.function_url_alias",
-                    "check_ids": [
-                        "CKV_AWS_301"
                     ]
                 },
                 {
@@ -358,7 +371,7 @@
                     ]
                 },
                 {
-                    "resource": "module.metrics_lambda.aws_lambda_permission.function_url_alias",
+                    "resource": "module.metrics_lambda.aws_lambda_permission.function_url_alias[0]",
                     "check_ids": [
                         "CKV_AWS_301"
                     ]
@@ -383,7 +396,7 @@
                     ]
                 },
                 {
-                    "resource": "module.notification_lambda.aws_lambda_permission.function_url_alias",
+                    "resource": "module.notification_lambda.aws_lambda_permission.function_url_alias[0]",
                     "check_ids": [
                         "CKV_AWS_301"
                     ]
@@ -399,12 +412,6 @@
                     "check_ids": [
                         "CKV_AWS_173",
                         "CKV_AWS_272"
-                    ]
-                },
-                {
-                    "resource": "module.sse_streaming_lambda.aws_lambda_permission.function_url_alias",
-                    "check_ids": [
-                        "CKV_AWS_301"
                     ]
                 }
             ]
@@ -446,6 +453,23 @@
                     "resource": "module.secrets.aws_secretsmanager_secret_rotation.tiingo[0]",
                     "check_ids": [
                         "CKV_AWS_304"
+                    ]
+                }
+            ]
+        },
+        {
+            "file": "/modules/waf/main.tf",
+            "findings": [
+                {
+                    "resource": "module.waf.aws_wafv2_web_acl.main",
+                    "check_ids": [
+                        "CKV2_AWS_31"
+                    ]
+                },
+                {
+                    "resource": "module.waf_cloudfront.aws_wafv2_web_acl.main",
+                    "check_ids": [
+                        "CKV2_AWS_31"
                     ]
                 }
             ]

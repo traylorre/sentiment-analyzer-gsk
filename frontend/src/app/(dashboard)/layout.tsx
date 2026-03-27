@@ -4,6 +4,8 @@ import { Header } from '@/components/layout/header';
 import { MobileNav } from '@/components/navigation/mobile-nav';
 import { DesktopNav, DesktopHeader } from '@/components/navigation/desktop-nav';
 import { ViewIndicator } from '@/components/navigation/swipe-view';
+import { ErrorBoundary } from '@/components/ui/error-boundary';
+import { ErrorTrigger } from '@/components/ui/error-trigger';
 
 export default function DashboardLayout({
   children,
@@ -27,7 +29,11 @@ export default function DashboardLayout({
 
         {/* Content */}
         <main className="container mx-auto px-4 py-6 pb-24 md:pb-6">
-          {children}
+          <ErrorBoundary>
+            <ErrorTrigger>
+              {children}
+            </ErrorTrigger>
+          </ErrorBoundary>
         </main>
 
         {/* Mobile view indicator (swipe hints) */}
