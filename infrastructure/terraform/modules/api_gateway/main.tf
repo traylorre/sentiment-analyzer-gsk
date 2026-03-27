@@ -146,6 +146,7 @@ resource "aws_api_gateway_gateway_response" "access_denied" {
 
 locals {
   # Build ALL unique path segments needed (intermediates + FR-012 + leaf parents)
+  # Split by depth to avoid Terraform self-referencing for_each cycle.
   _all_paths = distinct(flatten([
     for route in var.public_routes : [
       for i in range(length(route.path_parts) - (route.has_proxy ? 0 : 1)) :
@@ -153,15 +154,22 @@ locals {
     ]
   ]))
 
-  # Unified map of ALL path resources (eliminates cycle between intermediate/FR-012)
-  # Each path becomes a single aws_api_gateway_resource.path_resource entry
-  path_resource_map = {
+  # Stratify paths by depth (number of segments) to create separate resource blocks
+  # per level. This avoids the Terraform cycle caused by for_each self-reference.
+  _path_info = {
     for path in local._all_paths :
     path => {
+      depth       = length(split("/", path))
       parent_path = length(split("/", path)) > 1 ? join("/", slice(split("/", path), 0, length(split("/", path)) - 1)) : ""
       path_part   = element(split("/", path), length(split("/", path)) - 1)
     }
   }
+
+  path_depth1 = { for k, v in local._path_info : k => v if v.depth == 1 }
+  path_depth2 = { for k, v in local._path_info : k => v if v.depth == 2 }
+  path_depth3 = { for k, v in local._path_info : k => v if v.depth == 3 }
+  path_depth4 = { for k, v in local._path_info : k => v if v.depth == 4 }
+  path_depth5 = { for k, v in local._path_info : k => v if v.depth == 5 }
 
   # FR-012: which path resources are also endpoints (need methods)
   fr012_endpoints = {
@@ -205,9 +213,19 @@ locals {
     "method.response.header.Access-Control-Allow-Credentials" = "'true'"
   }
 
+  # Merged lookup: resolve a path key to its resource ID across all depth levels
+  # Used by leaf, proxy, and FR-012 resources to find their parent
+  _all_path_ids = merge(
+    { for k, v in aws_api_gateway_resource.path_d1 : k => v.id },
+    { for k, v in aws_api_gateway_resource.path_d2 : k => v.id },
+    { for k, v in aws_api_gateway_resource.path_d3 : k => v.id },
+    { for k, v in aws_api_gateway_resource.path_d4 : k => v.id },
+    { for k, v in aws_api_gateway_resource.path_d5 : k => v.id },
+  )
+
   # Deployment trigger IDs
   public_route_resource_ids = concat(
-    [for k, v in aws_api_gateway_resource.path_resource : v.id],
+    values(local._all_path_ids),
     [for k, v in aws_api_gateway_resource.public_leaf : v.id],
     [for k, v in aws_api_gateway_resource.public_proxy : v.id],
     [for k, v in aws_api_gateway_resource.fr012_proxy : v.id],
@@ -218,17 +236,42 @@ locals {
   )
 }
 
-# --- Unified Path Resources (intermediates + FR-012, single block eliminates cycle) ---
-resource "aws_api_gateway_resource" "path_resource" {
-  for_each = local.path_resource_map
+# --- Depth-Stratified Path Resources (avoids for_each self-reference cycle) ---
+# Each depth level references the previous level for parent_id lookup.
 
+resource "aws_api_gateway_resource" "path_d1" {
+  for_each    = local.path_depth1
   rest_api_id = aws_api_gateway_rest_api.dashboard.id
-  parent_id = (
-    each.value.parent_path == ""
-    ? aws_api_gateway_rest_api.dashboard.root_resource_id
-    : aws_api_gateway_resource.path_resource[each.value.parent_path].id
-  )
-  path_part = each.value.path_part
+  parent_id   = aws_api_gateway_rest_api.dashboard.root_resource_id
+  path_part   = each.value.path_part
+}
+
+resource "aws_api_gateway_resource" "path_d2" {
+  for_each    = local.path_depth2
+  rest_api_id = aws_api_gateway_rest_api.dashboard.id
+  parent_id   = aws_api_gateway_resource.path_d1[each.value.parent_path].id
+  path_part   = each.value.path_part
+}
+
+resource "aws_api_gateway_resource" "path_d3" {
+  for_each    = local.path_depth3
+  rest_api_id = aws_api_gateway_rest_api.dashboard.id
+  parent_id   = aws_api_gateway_resource.path_d2[each.value.parent_path].id
+  path_part   = each.value.path_part
+}
+
+resource "aws_api_gateway_resource" "path_d4" {
+  for_each    = local.path_depth4
+  rest_api_id = aws_api_gateway_rest_api.dashboard.id
+  parent_id   = aws_api_gateway_resource.path_d3[each.value.parent_path].id
+  path_part   = each.value.path_part
+}
+
+resource "aws_api_gateway_resource" "path_d5" {
+  for_each    = local.path_depth5
+  rest_api_id = aws_api_gateway_rest_api.dashboard.id
+  parent_id   = aws_api_gateway_resource.path_d4[each.value.parent_path].id
+  path_part   = each.value.path_part
 }
 
 # --- FR-012: Methods on intermediates that are also endpoints ---
@@ -236,7 +279,7 @@ resource "aws_api_gateway_method" "fr012_any" {
   for_each = local.fr012_endpoints
 
   rest_api_id   = aws_api_gateway_rest_api.dashboard.id
-  resource_id   = aws_api_gateway_resource.path_resource[each.key].id
+  resource_id   = local._all_path_ids[each.key]
   http_method   = "ANY"
   authorization = each.value.auth == "COGNITO_USER_POOLS" && var.enable_cognito_auth ? "COGNITO_USER_POOLS" : "NONE"
   authorizer_id = each.value.auth == "COGNITO_USER_POOLS" && var.enable_cognito_auth ? aws_api_gateway_authorizer.cognito[0].id : null
@@ -246,7 +289,7 @@ resource "aws_api_gateway_integration" "fr012_lambda" {
   for_each = local.fr012_endpoints
 
   rest_api_id             = aws_api_gateway_rest_api.dashboard.id
-  resource_id             = aws_api_gateway_resource.path_resource[each.key].id
+  resource_id             = local._all_path_ids[each.key]
   http_method             = aws_api_gateway_method.fr012_any[each.key].http_method
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
@@ -257,7 +300,7 @@ resource "aws_api_gateway_method" "fr012_options" {
   for_each = local.fr012_endpoints
 
   rest_api_id   = aws_api_gateway_rest_api.dashboard.id
-  resource_id   = aws_api_gateway_resource.path_resource[each.key].id
+  resource_id   = local._all_path_ids[each.key]
   http_method   = "OPTIONS"
   authorization = "NONE"
 }
@@ -266,7 +309,7 @@ resource "aws_api_gateway_integration" "fr012_options" {
   for_each = local.fr012_endpoints
 
   rest_api_id       = aws_api_gateway_rest_api.dashboard.id
-  resource_id       = aws_api_gateway_resource.path_resource[each.key].id
+  resource_id       = local._all_path_ids[each.key]
   http_method       = aws_api_gateway_method.fr012_options[each.key].http_method
   type              = "MOCK"
   request_templates = { "application/json" = jsonencode({ statusCode = 200 }) }
@@ -276,7 +319,7 @@ resource "aws_api_gateway_method_response" "fr012_options" {
   for_each = local.fr012_endpoints
 
   rest_api_id         = aws_api_gateway_rest_api.dashboard.id
-  resource_id         = aws_api_gateway_resource.path_resource[each.key].id
+  resource_id         = local._all_path_ids[each.key]
   http_method         = aws_api_gateway_method.fr012_options[each.key].http_method
   status_code         = "200"
   response_parameters = { for k, _ in local.cors_headers : k => true }
@@ -286,7 +329,7 @@ resource "aws_api_gateway_integration_response" "fr012_options" {
   for_each = local.fr012_endpoints
 
   rest_api_id         = aws_api_gateway_rest_api.dashboard.id
-  resource_id         = aws_api_gateway_resource.path_resource[each.key].id
+  resource_id         = local._all_path_ids[each.key]
   http_method         = aws_api_gateway_method.fr012_options[each.key].http_method
   status_code         = aws_api_gateway_method_response.fr012_options[each.key].status_code
   response_parameters = local.cors_headers
@@ -297,7 +340,7 @@ resource "aws_api_gateway_resource" "fr012_proxy" {
   for_each = local.fr012_proxy_resources
 
   rest_api_id = aws_api_gateway_rest_api.dashboard.id
-  parent_id   = aws_api_gateway_resource.path_resource[each.value.parent_key].id
+  parent_id   = local._all_path_ids[each.value.parent_key]
   path_part   = "{proxy+}"
 }
 
@@ -369,7 +412,7 @@ resource "aws_api_gateway_resource" "public_leaf" {
   parent_id = (
     each.value.parent_key == ""
     ? aws_api_gateway_rest_api.dashboard.root_resource_id
-    : aws_api_gateway_resource.path_resource[each.value.parent_key].id
+    : local._all_path_ids[each.value.parent_key]
   )
   path_part = each.value.path_part
 }
@@ -438,7 +481,7 @@ resource "aws_api_gateway_resource" "public_proxy" {
   for_each = local.proxy_resources
 
   rest_api_id = aws_api_gateway_rest_api.dashboard.id
-  parent_id   = aws_api_gateway_resource.path_resource[each.value.parent_key].id
+  parent_id   = local._all_path_ids[each.value.parent_key]
   path_part   = "{proxy+}"
 }
 
@@ -702,6 +745,19 @@ resource "aws_api_gateway_deployment" "dashboard" {
     aws_api_gateway_integration.lambda_root,
     aws_api_gateway_integration_response.proxy_options,
     aws_api_gateway_integration_response.root_options,
+    # Feature 1253: Public route integrations must exist before deployment
+    aws_api_gateway_integration.fr012_lambda,
+    aws_api_gateway_integration.fr012_options,
+    aws_api_gateway_integration.fr012_proxy_lambda,
+    aws_api_gateway_integration.fr012_proxy_options,
+    aws_api_gateway_integration.public_leaf_lambda,
+    aws_api_gateway_integration.public_leaf_options,
+    aws_api_gateway_integration.public_proxy_lambda,
+    aws_api_gateway_integration.public_proxy_options,
+    aws_api_gateway_integration_response.fr012_options,
+    aws_api_gateway_integration_response.fr012_proxy_options,
+    aws_api_gateway_integration_response.public_leaf_options,
+    aws_api_gateway_integration_response.public_proxy_options,
   ]
 }
 
@@ -744,6 +800,12 @@ resource "aws_cloudwatch_log_group" "api_gateway" {
   tags = merge(var.tags, {
     Name = "${var.environment}-api-gateway-logs"
   })
+
+  # Deployer has logs:TagLogGroup (legacy) but not logs:TagResource (new AWS API).
+  # Ignore tag changes until admin applies IAM update in ci-user-policy.tf.
+  lifecycle {
+    ignore_changes = [tags, tags_all]
+  }
 }
 
 # API Gateway Usage Plan (Rate Limiting)

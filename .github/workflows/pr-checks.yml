@@ -278,3 +278,48 @@ jobs:
             --pull-request ${{ github.event.pull_request.number }} \
             --behavior update
         continue-on-error: true
+
+  # ========================================================================
+  # JOB: Playwright Chaos Tests (Feature 1265)
+  # ========================================================================
+  playwright-chaos:
+    name: Playwright Chaos Tests
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: cd frontend && npm ci
+
+      - name: Install Playwright Chromium
+        run: cd frontend && npx playwright install chromium --with-deps
+
+      - name: Run chaos E2E tests
+        run: |
+          cd frontend
+          timeout 300 npx playwright test tests/e2e/chaos-*.spec.ts \
+            --project="Desktop Chrome" \
+            --reporter=list
+
+    timeout-minutes: 5

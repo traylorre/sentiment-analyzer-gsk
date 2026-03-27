@@ -15,7 +15,7 @@ import os
 import httpx
 import pytest
 
-from tests.conftest import SkipInfo
+from tests.e2e.conftest import SkipInfo
 
 skip = SkipInfo(
     condition=os.getenv("AWS_ENV") != "preprod",

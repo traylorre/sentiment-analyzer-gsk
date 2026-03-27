@@ -34,3 +34,8 @@ output "api_name" {
   description = "Name of the API Gateway REST API"
   value       = aws_api_gateway_rest_api.dashboard.name
 }
+
+output "stage_arn" {
+  description = "ARN of the API Gateway stage (for WAF v2 association — Feature 1254)"
+  value       = aws_api_gateway_stage.dashboard.arn
+}
