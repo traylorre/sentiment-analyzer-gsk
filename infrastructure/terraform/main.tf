@@ -433,7 +433,7 @@ module "dashboard_lambda" {
   # Lambda Function URL handles ALL CORS - no app-level CORS headers needed
   # This prevents duplicate Access-Control-Allow-Origin headers
   create_function_url    = true
-  function_url_auth_type = "NONE"
+  function_url_auth_type = "AWS_IAM" # Feature 1256: Restrict to API Gateway only (was NONE)
   # BUFFERED mode for Powertools REST API (per research.md decision #2)
   # SSE streaming is handled by separate sse_streaming Lambda with RESPONSE_STREAM
   function_url_invoke_mode = "BUFFERED"
@@ -763,7 +763,7 @@ module "sse_streaming_lambda" {
 
   # Function URL with RESPONSE_STREAM for true SSE streaming
   create_function_url      = true
-  function_url_auth_type   = "NONE"
+  function_url_auth_type   = "AWS_IAM" # Feature 1256: Restrict to CloudFront OAC only (was NONE)
   function_url_invoke_mode = "RESPONSE_STREAM"
   # Feature 1159: Enable credentials for cross-origin cookie transmission
   function_url_cors = {
@@ -851,6 +851,103 @@ module "api_gateway" {
   }
 
   depends_on = [module.dashboard_lambda, module.cognito]
+}
+
+# ===================================================================
+# Module: WAF v2 (Feature 1254 — Per-IP Rate Limiting + Managed Rules)
+# ===================================================================
+# Adds WAF perimeter before API Gateway: per-IP throttling, SQLi, XSS, bots.
+# Separate module for reuse with CloudFront in Feature 1255 (FR-009).
+
+module "waf" {
+  source = "./modules/waf"
+
+  environment  = var.environment
+  scope        = "REGIONAL"
+  resource_arn = module.api_gateway.stage_arn
+
+  # FR-002: Per-IP rate limit (2000 requests per 5-minute window)
+  rate_limit = 2000
+
+  # FR-005: Bot Control starts in COUNT mode (switch to BLOCK after monitoring)
+  enable_bot_control = true
+  bot_control_action = "COUNT"
+
+  # FR-007: Alert when >500 blocks in 5 minutes
+  alarm_actions              = [module.monitoring.alarm_topic_arn]
+  blocked_requests_threshold = 500
+
+  tags = {
+    Component = "waf"
+    Security  = "ddos-protection"
+    Feature   = "1254"
+  }
+
+  depends_on = [module.api_gateway]
+}
+
+# ===================================================================
+# Module: CloudFront for SSE Streaming (Feature 1255)
+# ===================================================================
+# Routes SSE traffic through CloudFront edge with WAF + Shield Standard.
+# No caching, 180s origin timeout, PriceClass_100.
+
+module "cloudfront_sse" {
+  source = "./modules/cloudfront_sse"
+
+  environment = var.environment
+  origin_url  = module.sse_streaming_lambda.function_url
+
+  # Feature 1256: Lambda ARN for OAC permission (CloudFront → Lambda via SigV4)
+  lambda_function_arn = module.sse_streaming_lambda.function_arn
+
+  # FR-005: WAF WebACL (CLOUDFRONT scope)
+  waf_web_acl_arn = module.waf_cloudfront.web_acl_arn
+
+  # FR-003: 60s default max (180s requires AWS quota increase)
+  origin_read_timeout = 60
+
+  # FR-009: PriceClass_100 (US/Canada/Europe)
+  price_class = "PriceClass_100"
+
+  tags = {
+    Component = "cloudfront-sse"
+    Security  = "ddos-protection"
+    Feature   = "1255-1256"
+  }
+
+  depends_on = [module.sse_streaming_lambda, module.waf_cloudfront]
+}
+
+# ===================================================================
+# Module: WAF v2 for CloudFront SSE (Feature 1255 — CLOUDFRONT scope)
+# ===================================================================
+# Separate WAF WebACL for CloudFront (CLOUDFRONT scope).
+# Independent from the API Gateway WAF (REGIONAL scope, Feature 1254).
+
+module "waf_cloudfront" {
+  source = "./modules/waf"
+
+  environment  = var.environment
+  scope        = "CLOUDFRONT"
+  resource_arn = "" # CloudFront WAF uses web_acl_id on distribution, not association
+
+  # Same rate limiting as API Gateway WAF
+  rate_limit = 2000
+
+  # Bot Control in COUNT mode
+  enable_bot_control = true
+  bot_control_action = "COUNT"
+
+  # Alerting
+  alarm_actions              = [module.monitoring.alarm_topic_arn]
+  blocked_requests_threshold = 500
+
+  tags = {
+    Component = "waf-cloudfront"
+    Security  = "ddos-protection"
+    Feature   = "1255"
+  }
 }
 
 # ===================================================================
@@ -1135,6 +1232,8 @@ module "amplify_frontend" {
   api_gateway_url      = module.api_gateway.api_endpoint
   dashboard_lambda_url = module.dashboard_lambda.function_url
   sse_lambda_url       = module.sse_streaming_lambda.function_url
+  # Feature 1255: Route SSE through CloudFront (WAF + Shield Standard)
+  sse_cloudfront_url   = module.cloudfront_sse.distribution_url
   cognito_user_pool_id = module.cognito.user_pool_id
   cognito_client_id    = module.cognito.client_id
   cognito_domain       = module.cognito.domain
@@ -1144,6 +1243,7 @@ module "amplify_frontend" {
     module.sse_streaming_lambda,
     module.cognito,
     module.api_gateway,
+    module.cloudfront_sse,
   ]
 }
 

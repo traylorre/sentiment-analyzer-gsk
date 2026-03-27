@@ -152,15 +152,18 @@ resource "aws_lambda_function_url" "this" {
 }
 
 # Feature 1224.4: Allow Function URL to invoke via the alias
+# Function URL public access permission — only created when auth_type = NONE.
+# When auth_type = AWS_IAM, callers (API Gateway, CloudFront OAC) use their own
+# explicit aws_lambda_permission resources instead.
 resource "aws_lambda_permission" "function_url_alias" {
-  count = var.create_function_url ? 1 : 0
+  count = var.create_function_url && var.function_url_auth_type == "NONE" ? 1 : 0
 
   statement_id           = "FunctionURLAllowPublicAccess"
   action                 = "lambda:InvokeFunctionUrl"
   function_name          = aws_lambda_function.this.function_name
   qualifier              = aws_lambda_alias.live[0].name
   principal              = "*"
-  function_url_auth_type = var.function_url_auth_type
+  function_url_auth_type = "NONE"
 }
 
 # CloudWatch Alarm for Lambda errors (optional)

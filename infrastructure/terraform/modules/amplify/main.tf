@@ -59,8 +59,9 @@ resource "aws_amplify_app" "frontend" {
   # Previously Feature 1114 used Lambda Function URL because API Gateway lacked CORS.
   # Feature 1253 adds CORS to API Gateway 401/403 responses, making it viable.
   environment_variables = {
-    NEXT_PUBLIC_API_URL              = var.api_gateway_url != "" ? var.api_gateway_url : var.dashboard_lambda_url
-    NEXT_PUBLIC_SSE_URL              = var.sse_lambda_url
+    NEXT_PUBLIC_API_URL = var.api_gateway_url != "" ? var.api_gateway_url : var.dashboard_lambda_url
+    # Feature 1255: Route SSE through CloudFront (WAF + Shield Standard)
+    NEXT_PUBLIC_SSE_URL              = var.sse_cloudfront_url != "" ? var.sse_cloudfront_url : var.sse_lambda_url
     NEXT_PUBLIC_COGNITO_USER_POOL_ID = var.cognito_user_pool_id
     NEXT_PUBLIC_COGNITO_CLIENT_ID    = var.cognito_client_id
     NEXT_PUBLIC_COGNITO_DOMAIN       = var.cognito_domain

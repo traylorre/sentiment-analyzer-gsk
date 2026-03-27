@@ -253,7 +253,8 @@ data "aws_iam_policy_document" "ci_deploy_core" {
       "apigateway:DELETE",
       "apigateway:PATCH",
       "apigateway:TagResource",
-      "apigateway:UntagResource"
+      "apigateway:UntagResource",
+      "apigateway:SetWebACL"
     ]
     resources = [
       "arn:aws:apigateway:*::/restapis",
@@ -411,6 +412,63 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
       "arn:aws:logs:*:*:log-group:/aws/fis/*-chaos-*",
       "arn:aws:logs:*:*:log-group:/aws/fis/*-chaos-*:*"
     ]
+  }
+
+  # WAF v2 (Feature 1254/1255)
+  # SECURITY: Scoped to {env}-sentiment-* WebACLs
+  statement {
+    sid    = "WAFv2"
+    effect = "Allow"
+    actions = [
+      "wafv2:CreateWebACL",
+      "wafv2:DeleteWebACL",
+      "wafv2:GetWebACL",
+      "wafv2:ListWebACLs",
+      "wafv2:UpdateWebACL",
+      "wafv2:AssociateWebACL",
+      "wafv2:DisassociateWebACL",
+      "wafv2:GetWebACLForResource",
+      "wafv2:ListResourcesForWebACL",
+      "wafv2:ListTagsForResource",
+      "wafv2:TagResource",
+      "wafv2:UntagResource",
+      # Managed rule group permissions (required when CreateWebACL references managed rules)
+      "wafv2:ListAvailableManagedRuleGroups",
+      "wafv2:ListAvailableManagedRuleGroupVersions",
+      "wafv2:DescribeManagedRuleGroup",
+      "wafv2:CheckCapacity",
+      "wafv2:GetManagedRuleSet",
+      "wafv2:PutManagedRuleSetVersions",
+    ]
+    resources = ["*"] # WAFv2 requires wildcard — managed rule groups are AWS-owned
+  }
+
+  # CloudFront (Feature 1255)
+  statement {
+    sid    = "CloudFront"
+    effect = "Allow"
+    actions = [
+      "cloudfront:CreateDistribution",
+      "cloudfront:UpdateDistribution",
+      "cloudfront:DeleteDistribution",
+      "cloudfront:GetDistribution",
+      "cloudfront:ListDistributions",
+      "cloudfront:TagResource",
+      "cloudfront:UntagResource",
+      "cloudfront:ListTagsForResource",
+      "cloudfront:CreateOriginAccessControl",
+      "cloudfront:DeleteOriginAccessControl",
+      "cloudfront:GetOriginAccessControl",
+      "cloudfront:UpdateOriginAccessControl",
+      "cloudfront:ListOriginAccessControls",
+      "cloudfront:CreateOriginRequestPolicy",
+      "cloudfront:DeleteOriginRequestPolicy",
+      "cloudfront:GetOriginRequestPolicy",
+      "cloudfront:UpdateOriginRequestPolicy",
+      "cloudfront:GetCachePolicy",
+      "cloudfront:ListCachePolicies",
+    ]
+    resources = ["*"] # CloudFront doesn't support resource-level ARNs
   }
 
   # CloudWatch Alarms and Dashboards
