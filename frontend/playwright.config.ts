@@ -52,7 +52,9 @@ export default defineConfig({
             // Backend API server with mock DynamoDB
             // Provides ticker search, session auth, and other API endpoints
             // Uses the project's Python venv for dependencies
-            command: 'cd .. && .venv/bin/python scripts/run-local-api.py',
+            command: process.env.CI
+              ? 'cd .. && python scripts/run-local-api.py'
+              : 'cd .. && .venv/bin/python scripts/run-local-api.py',
             // Use API index endpoint for readiness check (returns 200 always)
             // /health returns 503 with mock DynamoDB, but API is still functional
             url: 'http://localhost:8000/api',
