@@ -657,6 +657,236 @@ def get_trends(
     return trends
 
 
+# ===================================================================
+# Safety Controls & Metrics (Features 1244, 1245, 1246)
+# ===================================================================
+
+
+def get_system_health() -> dict[str, Any]:
+    """Capture current system health for pre-flight check (Feature 1244).
+
+    Thin wrapper around _capture_baseline() to expose as public API.
+    """
+    check_environment_allowed()
+    return _capture_baseline(ENVIRONMENT)
+
+
+def get_gate_state() -> str:
+    """Return current gate state: 'armed', 'disarmed', or 'triggered' (Feature 1245).
+
+    Unlike _check_gate() which raises on 'triggered', this returns it as a value.
+    """
+    check_environment_allowed()
+    ssm = _get_ssm_client()
+    try:
+        param = ssm.get_parameter(Name=f"/chaos/{ENVIRONMENT}/kill-switch")
+        return param["Parameter"]["Value"]
+    except ssm.exceptions.ParameterNotFound:
+        return "disarmed"
+    except ClientError as e:
+        raise ChaosError(f"Cannot read gate state: {e}") from e
+
+
+def set_gate_state(new_state: str) -> dict[str, str]:
+    """Set gate to 'armed' or 'disarmed' (Feature 1245).
+
+    Returns dict with new state and previous state.
+    Prevents arming when gate is triggered.
+    """
+    check_environment_allowed()
+    if new_state not in ("armed", "disarmed"):
+        raise ValueError(
+            f"Invalid gate state: {new_state}. Must be 'armed' or 'disarmed'."
+        )
+    current = get_gate_state()
+    if current == "triggered" and new_state == "armed":
+        raise ChaosError(
+            "Gate is triggered — cannot arm. Disarm first or use andon cord reset."
+        )
+    _set_kill_switch(new_state)
+    return {"state": new_state, "previous": current}
+
+
+def pull_andon_cord() -> dict[str, Any]:
+    """Emergency stop: trigger kill switch and restore all chaos configs (Feature 1246).
+
+    Sequence: kill switch → discover snapshots → restore each → disarm if all clean.
+    Best-effort: continues on individual restore failures.
+    """
+    check_environment_allowed()
+    result: dict[str, Any] = {
+        "kill_switch_set": False,
+        "experiments_found": 0,
+        "restored": 0,
+        "failed": 0,
+        "errors": [],
+        "timestamp": datetime.now(UTC).isoformat() + "Z",
+    }
+
+    # Step 1: Kill switch FIRST (most critical)
+    try:
+        _set_kill_switch("triggered")
+        result["kill_switch_set"] = True
+    except Exception as e:
+        result["errors"].append(f"CRITICAL: Kill switch failed: {e}")
+
+    # Step 2: Discover active snapshots
+    try:
+        ssm = _get_ssm_client()
+        response = ssm.get_parameters_by_path(
+            Path=f"/chaos/{ENVIRONMENT}/snapshot/",
+            Recursive=False,
+        )
+        snapshots = response.get("Parameters", [])
+        result["experiments_found"] = len(snapshots)
+    except Exception as e:
+        result["errors"].append(f"Cannot list snapshots: {e}")
+        return result
+
+    # Step 3: Restore each snapshot (best-effort)
+    for param in snapshots:
+        scenario_key = param["Name"].split("/")[-1]
+        scenario_type = scenario_key.replace("-", "_")
+        try:
+            _restore_from_ssm(scenario_type)
+            result["restored"] += 1
+        except Exception as e:
+            result["failed"] += 1
+            result["errors"].append(f"Restore {scenario_type} failed: {e}")
+
+    # Step 4: Disarm if all restores succeeded
+    if result["kill_switch_set"] and result["failed"] == 0:
+        try:
+            _set_kill_switch("disarmed")
+        except Exception:
+            logger.exception("Failed to disarm after andon cord")
+
+    return result
+
+
+def get_metrics(
+    start_time: datetime,
+    end_time: datetime,
+    period: int = 60,
+) -> tuple[int, dict[str, Any]]:
+    """Fetch CloudWatch metrics for the chaos dashboard (Feature 1247).
+
+    Returns (status_code, data) tuple. Status is 200/403/429/500.
+    """
+    check_environment_allowed()
+
+    from src.lambdas.dashboard.metrics_config import METRIC_GROUPS
+
+    # Build MetricDataQueries
+    queries = []
+    query_map = {}  # Maps query ID back to (group_idx, query_idx)
+
+    for g_idx, group in enumerate(METRIC_GROUPS):
+        for q_idx, q in enumerate(group["queries"]):
+            query_id = f"m{g_idx}q{q_idx}"
+
+            # Substitute {environment} in dimension values
+            dimensions = []
+            for dim_name, dim_value in q["dimensions"].items():
+                dimensions.append(
+                    {
+                        "Name": dim_name,
+                        "Value": dim_value.replace("{environment}", ENVIRONMENT),
+                    }
+                )
+
+            stat_key = (
+                "Stat"
+                if q["stat"] in ("Sum", "Average", "Minimum", "Maximum", "SampleCount")
+                else "ExtendedStatistics"
+            )
+
+            query_def = {
+                "Id": query_id,
+                "MetricStat": {
+                    "Metric": {
+                        "Namespace": q["namespace"],
+                        "MetricName": q["metric_name"],
+                        "Dimensions": dimensions,
+                    },
+                    "Period": period,
+                    "Stat": q["stat"] if stat_key == "Stat" else "Average",
+                },
+                "ReturnData": True,
+            }
+
+            # Handle extended statistics (p95, p99, etc.)
+            if stat_key == "ExtendedStatistics":
+                query_def["MetricStat"]["Stat"] = "Average"  # Fallback
+                # For p95, use the statistics-based approach
+                if q["stat"].startswith("p"):
+                    query_def["MetricStat"]["Stat"] = q["stat"]
+
+            queries.append(query_def)
+            query_map[query_id] = (g_idx, q_idx)
+
+    # Call CloudWatch
+    try:
+        cw = boto3.client("cloudwatch")
+        response = cw.get_metric_data(
+            MetricDataQueries=queries,
+            StartTime=start_time,
+            EndTime=end_time,
+        )
+    except ClientError as e:
+        code = e.response.get("Error", {}).get("Code", "")
+        if code == "AccessDeniedException":
+            return (
+                403,
+                {
+                    "error": "metrics_unavailable",
+                    "message": "CloudWatch metrics not available in this environment",
+                },
+            )
+        if code == "Throttling":
+            return (429, {"error": "throttled", "retry_after": 5})
+        return (500, {"error": "metrics_error", "message": str(e)})
+    except Exception as e:
+        return (500, {"error": "metrics_error", "message": str(e)})
+
+    # Parse response into groups
+    groups = []
+    for g_idx, group in enumerate(METRIC_GROUPS):
+        series = []
+        for q_idx, q in enumerate(group["queries"]):
+            query_id = f"m{g_idx}q{q_idx}"
+
+            # Find matching result
+            timestamps = []
+            values = []
+            for result in response.get("MetricDataResults", []):
+                if result["Id"] == query_id:
+                    timestamps = [t.isoformat() for t in result.get("Timestamps", [])]
+                    values = [float(v) for v in result.get("Values", [])]
+                    # CloudWatch returns newest-first, reverse for chronological
+                    timestamps.reverse()
+                    values.reverse()
+                    break
+
+            series.append(
+                {
+                    "label": q["label"],
+                    "color": q["color"],
+                    "timestamps": timestamps,
+                    "values": values,
+                }
+            )
+
+        groups.append(
+            {
+                "title": group["title"],
+                "series": series,
+            }
+        )
+
+    return (200, {"groups": groups})
+
+
 def check_environment_allowed():
     """
     Verify chaos testing is allowed in current environment.

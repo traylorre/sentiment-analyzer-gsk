@@ -29,6 +29,7 @@ X-Ray Tracing:
 
 import base64
 import os
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -54,11 +55,16 @@ from src.lambdas.dashboard.chaos import (
     generate_plan_report,
     get_experiment,
     get_experiment_report,
+    get_gate_state,
+    get_metrics,
     get_report,
+    get_system_health,
     get_trends,
     list_experiments,
     list_reports,
     persist_report,
+    pull_andon_cord,
+    set_gate_state,
     start_experiment,
     stop_experiment,
 )
@@ -1334,6 +1340,209 @@ def delete_chaos_report(report_id: str):
         content_type="application/json",
         body="",
     )
+
+
+# --- Safety Controls & Metrics (Features 1244, 1245, 1246) ---
+
+
+@app.get("/chaos/health")
+def get_chaos_health():
+    """Pre-flight health check (Feature 1244)."""
+    event = app.current_event.raw_event
+    user_id = _get_chaos_user_id_from_event(event)
+    if user_id is None:
+        return Response(
+            status_code=401,
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Authentication required"}).decode(),
+        )
+    try:
+        health = get_system_health()
+        return Response(
+            status_code=200,
+            content_type="application/json",
+            body=orjson.dumps(health, default=str).decode(),
+        )
+    except EnvironmentNotAllowedError as e:
+        return Response(
+            status_code=403,
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
+        )
+    except ChaosError as e:
+        return Response(
+            status_code=500,
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
+        )
+
+
+@app.get("/chaos/gate")
+def get_chaos_gate():
+    """Get current gate state (Feature 1245)."""
+    event = app.current_event.raw_event
+    user_id = _get_chaos_user_id_from_event(event)
+    if user_id is None:
+        return Response(
+            status_code=401,
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Authentication required"}).decode(),
+        )
+    try:
+        state = get_gate_state()
+        return Response(
+            status_code=200,
+            content_type="application/json",
+            body=orjson.dumps({"state": state}).decode(),
+        )
+    except EnvironmentNotAllowedError as e:
+        return Response(
+            status_code=403,
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
+        )
+    except ChaosError as e:
+        return Response(
+            status_code=500,
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
+        )
+
+
+@app.put("/chaos/gate")
+def set_chaos_gate():
+    """Set gate state to armed or disarmed (Feature 1245)."""
+    event = app.current_event.raw_event
+    user_id = _get_chaos_user_id_from_event(event)
+    if user_id is None:
+        return Response(
+            status_code=401,
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Authentication required"}).decode(),
+        )
+    try:
+        body = app.current_event.json_body
+        new_state = body.get("state")
+        if new_state not in ("armed", "disarmed"):
+            return Response(
+                status_code=400,
+                content_type="application/json",
+                body=orjson.dumps(
+                    {"detail": "state must be 'armed' or 'disarmed'"}
+                ).decode(),
+            )
+        result = set_gate_state(new_state)
+        return Response(
+            status_code=200,
+            content_type="application/json",
+            body=orjson.dumps(result).decode(),
+        )
+    except EnvironmentNotAllowedError as e:
+        return Response(
+            status_code=403,
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
+        )
+    except ChaosError as e:
+        return Response(
+            status_code=409,
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
+        )
+    except ValueError as e:
+        return Response(
+            status_code=400,
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
+        )
+
+
+@app.post("/chaos/andon-cord")
+def pull_chaos_andon_cord():
+    """Emergency stop -- pull the andon cord (Feature 1246)."""
+    event = app.current_event.raw_event
+    user_id = _get_chaos_user_id_from_event(event)
+    if user_id is None:
+        return Response(
+            status_code=401,
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Authentication required"}).decode(),
+        )
+    try:
+        result = pull_andon_cord()
+        status = 200 if result["kill_switch_set"] else 500
+        return Response(
+            status_code=status,
+            content_type="application/json",
+            body=orjson.dumps(result, default=str).decode(),
+        )
+    except EnvironmentNotAllowedError as e:
+        return Response(
+            status_code=403,
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
+        )
+    except Exception as e:
+        return Response(
+            status_code=500,
+            content_type="application/json",
+            body=orjson.dumps({"detail": f"Andon cord failed: {e}"}).decode(),
+        )
+
+
+@app.get("/chaos/metrics")
+def get_chaos_metrics():
+    """Real-time CloudWatch metrics for chaos dashboard (Feature 1247)."""
+    event = app.current_event.raw_event
+    user_id = _get_chaos_user_id_from_event(event)
+    if user_id is None:
+        return Response(
+            status_code=401,
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Authentication required"}).decode(),
+        )
+    try:
+        params = app.current_event.query_string_parameters or {}
+
+        # Parse time parameters
+        now = datetime.now(UTC)
+        if "start_time" in params:
+            start_time = datetime.fromisoformat(params["start_time"])
+        else:
+            start_time = now - timedelta(minutes=30)
+
+        if "end_time" in params:
+            end_time = datetime.fromisoformat(params["end_time"])
+        else:
+            end_time = now
+
+        period = int(params.get("period", "60"))
+        period = max(60, min(3600, period))  # Clamp between 60s and 1hr
+
+        status_code, data = get_metrics(start_time, end_time, period)
+
+        headers = {}
+        if status_code == 429:
+            headers["Retry-After"] = str(data.get("retry_after", 5))
+
+        return Response(
+            status_code=status_code,
+            content_type="application/json",
+            body=orjson.dumps(data, default=str).decode(),
+            headers=headers,
+        )
+    except EnvironmentNotAllowedError as e:
+        return Response(
+            status_code=403,
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
+        )
+    except Exception as e:
+        return Response(
+            status_code=500,
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
+        )
 
 
 # Lambda handler entry point
