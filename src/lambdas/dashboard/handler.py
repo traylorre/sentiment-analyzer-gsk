@@ -127,7 +127,6 @@ _NOT_FOUND_RESPONSE = Response(
 )
 
 
-
 # Path to static dashboard files
 _handler_dir = Path(__file__).parent
 if _handler_dir.name == "task" or str(_handler_dir) == "/var/task":
