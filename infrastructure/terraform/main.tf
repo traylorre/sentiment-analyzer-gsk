@@ -1169,11 +1169,10 @@ module "chaos" {
   source = "./modules/chaos"
 
   environment = var.environment
-  # DISABLED: Deployer IAM user lacks ssm:PutParameter, iam:CreatePolicy, iam:CreateRole
-  # These permissions are needed for chaos infrastructure (kill switch, deny policy, engineer role)
-  # Also: Terraform AWS provider doesn't support Lambda FIS targets (#41208)
-  # Re-enable after granting deployer permissions or using TFC with admin role
-  enable_chaos_testing = false
+  # Feature 1243: Enabled for first chaos gameday
+  # Requires deployer to have ssm:PutParameter, iam:CreatePolicy, iam:CreateRole
+  # Note: Lambda FIS targets still blocked by provider bug (#41208) but external actor works
+  enable_chaos_testing = var.environment != "prod"
 
   # Lambda targets for chaos experiments
   lambda_arns = [
