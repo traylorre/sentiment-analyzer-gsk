@@ -36,10 +36,12 @@ import time
 import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from enum import IntEnum
 from typing import Any
 
 import boto3
 from botocore.exceptions import ClientError
+from pydantic import BaseModel, Field
 
 from src.lambdas.shared.logging_utils import get_safe_error_info, sanitize_for_log
 
@@ -47,6 +49,7 @@ logger = logging.getLogger(__name__)
 
 # Configuration
 CHAOS_TABLE = os.environ.get("CHAOS_EXPERIMENTS_TABLE", "")
+CHAOS_REPORTS_TABLE = os.environ.get("CHAOS_REPORTS_TABLE", "")
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "dev")
 
 # Safety: Only allow chaos testing in preprod/dev/test
@@ -101,6 +104,557 @@ class EnvironmentNotAllowedError(ChaosError):
     """Raised when attempting chaos testing in disallowed environment."""
 
     pass
+
+
+class Verdict(IntEnum):
+    """Chaos experiment verdict with severity ordering.
+
+    Supports worst-case aggregation via max():
+        max(Verdict.CLEAN, Verdict.RECOVERY_INCOMPLETE) == Verdict.RECOVERY_INCOMPLETE
+    """
+
+    CLEAN = 0
+    DRY_RUN_CLEAN = 1
+    INCONCLUSIVE = 2
+    RECOVERY_INCOMPLETE = 3
+    COMPROMISED = 4
+
+
+class Report(BaseModel):
+    """Persisted chaos experiment or plan report (Feature 1240)."""
+
+    report_id: str
+    experiment_id: str | None = None
+    report_type: str = Field(pattern=r"^(experiment|plan)$")
+    scenario_type: str
+    verdict: str
+    verdict_reason: str = ""
+    environment: str
+    created_at: str
+    started_at: str | None = None
+    stopped_at: str | None = None
+    duration_seconds: int = 0
+    dry_run: bool = False
+    blast_radius: int | None = None
+    baseline: dict = Field(default_factory=dict)
+    post_chaos: dict = Field(default_factory=dict)
+    recovery_observed: bool | None = None
+    recovery_time_seconds: int | None = None
+    configuration: dict = Field(default_factory=dict)
+    # Plan report fields
+    plan_name: str | None = None
+    scenario_reports: list[dict] = Field(default_factory=list)
+    assertion_results: list[dict] = Field(default_factory=list)
+
+
+# ===================================================================
+# Report Persistence (Feature 1240)
+# ===================================================================
+
+
+def _to_dynamodb_item(data: dict) -> dict:
+    """Convert a dict to DynamoDB-safe format.
+
+    Replaces float with Decimal and removes None values (DynamoDB rejects them).
+    """
+    cleaned = {}
+    for key, value in data.items():
+        if value is None:
+            continue
+        if isinstance(value, float):
+            cleaned[key] = Decimal(str(value))
+        elif isinstance(value, dict):
+            nested = _to_dynamodb_item(value)
+            if nested:
+                cleaned[key] = nested
+        elif isinstance(value, list):
+            cleaned[key] = [
+                _to_dynamodb_item(v) if isinstance(v, dict) else v for v in value
+            ]
+        else:
+            cleaned[key] = value
+    return cleaned
+
+
+def _from_dynamodb_item(item: dict) -> dict:
+    """Convert DynamoDB item back to standard Python types (Decimal -> int/float)."""
+    cleaned = {}
+    for key, value in item.items():
+        if isinstance(value, Decimal):
+            cleaned[key] = int(value) if value == int(value) else float(value)
+        elif isinstance(value, dict):
+            cleaned[key] = _from_dynamodb_item(value)
+        elif isinstance(value, list):
+            cleaned[key] = [
+                _from_dynamodb_item(v)
+                if isinstance(v, dict)
+                else (
+                    int(v)
+                    if isinstance(v, Decimal) and v == int(v)
+                    else float(v)
+                    if isinstance(v, Decimal)
+                    else v
+                )
+                for v in value
+            ]
+        else:
+            cleaned[key] = value
+    return cleaned
+
+
+def persist_report(report_data: dict[str, Any]) -> dict[str, Any]:
+    """Persist a chaos report to DynamoDB.
+
+    Generates a ULID for report_id if not present. All experiment data
+    is copied at persistence time (self-contained, survives experiment TTL).
+
+    Args:
+        report_data: Report fields to persist
+
+    Returns:
+        The persisted report dict with report_id
+    """
+    if not CHAOS_REPORTS_TABLE:
+        logger.warning("CHAOS_REPORTS_TABLE not configured, skipping persistence")
+        return report_data
+
+    report_id = report_data.get("report_id") or str(uuid.uuid4())
+    report_data["report_id"] = report_id
+    report_data.setdefault("created_at", datetime.now(UTC).isoformat() + "Z")
+    report_data.setdefault("environment", ENVIRONMENT)
+    report_data.setdefault("report_type", "experiment")
+
+    # Validate via pydantic
+    report = Report(**report_data)
+
+    # Convert to DynamoDB-safe format (no floats, handle None)
+    item = _to_dynamodb_item(report.model_dump())
+
+    try:
+        table = _get_dynamodb().Table(CHAOS_REPORTS_TABLE)
+        table.put_item(Item=item)
+        logger.info(
+            "Persisted report %s for experiment %s",
+            report_id,
+            report_data.get("experiment_id"),
+        )
+    except ClientError:
+        logger.exception("Failed to persist report %s", report_id)
+        # Return the report data anyway — caller has it, just not persisted
+
+    return report_data
+
+
+def get_report(report_id: str) -> dict[str, Any] | None:
+    """Fetch a single report by ID.
+
+    Args:
+        report_id: The ULID of the report
+
+    Returns:
+        Report dict or None if not found
+    """
+    if not CHAOS_REPORTS_TABLE:
+        return None
+
+    try:
+        table = _get_dynamodb().Table(CHAOS_REPORTS_TABLE)
+        response = table.get_item(Key={"report_id": report_id})
+        item = response.get("Item")
+        if item:
+            return _from_dynamodb_item(item)
+        return None
+    except ClientError:
+        logger.exception("Failed to fetch report %s", report_id)
+        return None
+
+
+def list_reports(
+    scenario_type: str | None = None,
+    verdict: str | None = None,
+    report_type: str | None = None,
+    from_date: str | None = None,
+    to_date: str | None = None,
+    limit: int = 20,
+    cursor: str | None = None,
+) -> dict[str, Any]:
+    """List reports with optional filters and cursor-based pagination.
+
+    Uses GSI for scenario_type or verdict filters (single filter).
+    Falls back to scan for unfiltered or combined filters.
+
+    Args:
+        scenario_type: Filter by scenario type
+        verdict: Filter by verdict
+        report_type: Filter by report type (experiment/plan)
+        from_date: ISO8601 start date filter
+        to_date: ISO8601 end date filter
+        limit: Page size (default 20, max 100)
+        cursor: Base64-encoded LastEvaluatedKey for pagination
+
+    Returns:
+        {"reports": [...], "next_cursor": "..." or None}
+    """
+    import base64
+
+    from boto3.dynamodb.conditions import Key
+
+    if not CHAOS_REPORTS_TABLE:
+        return {"reports": [], "next_cursor": None}
+
+    limit = min(max(1, limit), 100)
+    table = _get_dynamodb().Table(CHAOS_REPORTS_TABLE)
+
+    kwargs: dict[str, Any] = {"Limit": limit}
+
+    if cursor:
+        try:
+            kwargs["ExclusiveStartKey"] = json.loads(base64.b64decode(cursor).decode())
+        except Exception:
+            logger.debug("Invalid pagination cursor, starting from beginning")
+
+    try:
+        # Use GSI for single-field filters
+        if scenario_type and not verdict:
+            kwargs["IndexName"] = "scenario-created-index"
+            kwargs["KeyConditionExpression"] = Key("scenario_type").eq(scenario_type)
+            if from_date and to_date:
+                kwargs["KeyConditionExpression"] &= Key("created_at").between(
+                    from_date, to_date
+                )
+            elif from_date:
+                kwargs["KeyConditionExpression"] &= Key("created_at").gte(from_date)
+            elif to_date:
+                kwargs["KeyConditionExpression"] &= Key("created_at").lte(to_date)
+            kwargs["ScanIndexForward"] = False  # newest first
+            response = table.query(**kwargs)
+        elif verdict and not scenario_type:
+            kwargs["IndexName"] = "verdict-created-index"
+            kwargs["KeyConditionExpression"] = Key("verdict").eq(verdict)
+            if from_date and to_date:
+                kwargs["KeyConditionExpression"] &= Key("created_at").between(
+                    from_date, to_date
+                )
+            elif from_date:
+                kwargs["KeyConditionExpression"] &= Key("created_at").gte(from_date)
+            elif to_date:
+                kwargs["KeyConditionExpression"] &= Key("created_at").lte(to_date)
+            kwargs["ScanIndexForward"] = False
+            response = table.query(**kwargs)
+        else:
+            # Scan with filter expressions for combined or no filters
+            filter_parts = []
+            attr_names = {}
+            attr_values = {}
+
+            if scenario_type:
+                filter_parts.append("#st = :st")
+                attr_names["#st"] = "scenario_type"
+                attr_values[":st"] = scenario_type
+            if verdict:
+                filter_parts.append("#v = :v")
+                attr_names["#v"] = "verdict"
+                attr_values[":v"] = verdict
+            if report_type:
+                filter_parts.append("#rt = :rt")
+                attr_names["#rt"] = "report_type"
+                attr_values[":rt"] = report_type
+            if from_date:
+                filter_parts.append("#ca >= :fd")
+                attr_names["#ca"] = "created_at"
+                attr_values[":fd"] = from_date
+            if to_date:
+                if "#ca" not in attr_names:
+                    attr_names["#ca"] = "created_at"
+                filter_parts.append("#ca <= :td")
+                attr_values[":td"] = to_date
+
+            if filter_parts:
+                kwargs["FilterExpression"] = " AND ".join(filter_parts)
+                kwargs["ExpressionAttributeNames"] = attr_names
+                kwargs["ExpressionAttributeValues"] = attr_values
+
+            response = table.scan(**kwargs)
+
+        reports = [_from_dynamodb_item(item) for item in response.get("Items", [])]
+
+        # Sort by created_at descending for scan results
+        reports.sort(key=lambda r: r.get("created_at", ""), reverse=True)
+
+        next_cursor = None
+        if "LastEvaluatedKey" in response:
+            next_cursor = base64.b64encode(
+                json.dumps(response["LastEvaluatedKey"], default=str).encode()
+            ).decode()
+
+        return {"reports": reports, "next_cursor": next_cursor}
+
+    except ClientError:
+        logger.exception("Failed to list reports")
+        return {"reports": [], "next_cursor": None}
+
+
+def delete_report(report_id: str) -> bool:
+    """Delete a report by ID.
+
+    Returns:
+        True if deleted, False if not found
+    """
+    if not CHAOS_REPORTS_TABLE:
+        return False
+
+    try:
+        table = _get_dynamodb().Table(CHAOS_REPORTS_TABLE)
+        response = table.delete_item(
+            Key={"report_id": report_id},
+            ReturnValues="ALL_OLD",
+        )
+        return bool(response.get("Attributes"))
+    except ClientError:
+        logger.exception("Failed to delete report %s", report_id)
+        return False
+
+
+# ===================================================================
+# Plan Reports & Comparison (Feature 1240 Phase 3)
+# ===================================================================
+
+
+def generate_plan_report(
+    plan_name: str,
+    experiment_ids: list[str],
+) -> dict[str, Any]:
+    """Generate and persist a plan-level report aggregating experiment reports.
+
+    Fetches each experiment's persisted report, aggregates verdicts using
+    worst-case (max Verdict), and stores as a plan report.
+
+    Args:
+        plan_name: Name of the chaos plan (e.g., "ingestion-resilience")
+        experiment_ids: List of experiment IDs to aggregate
+
+    Returns:
+        Persisted plan report dict
+
+    Raises:
+        ChaosError: If no experiment reports found
+    """
+    scenario_reports = []
+    verdicts = []
+    total_duration = 0
+    assertion_results: list[dict[str, Any]] = []
+
+    for exp_id in experiment_ids:
+        # Try persisted report first, fall back to ephemeral
+        report = None
+        # Search for persisted report by experiment_id
+        result = list_reports(limit=1)
+        for r in result.get("reports", []):
+            if r.get("experiment_id") == exp_id:
+                report = r
+                break
+
+        if not report:
+            try:
+                ephemeral = get_experiment_report(exp_id)
+                if "scenario" in ephemeral and "scenario_type" not in ephemeral:
+                    ephemeral["scenario_type"] = ephemeral.pop("scenario")
+                report = ephemeral
+            except ChaosError:
+                scenario_reports.append(
+                    {
+                        "experiment_id": exp_id,
+                        "status": "NOT_EXECUTED",
+                        "verdict": "INCONCLUSIVE",
+                    }
+                )
+                verdicts.append(Verdict.INCONCLUSIVE)
+                continue
+
+        verdict_str = report.get("verdict", "INCONCLUSIVE")
+        try:
+            verdict_enum = Verdict[verdict_str]
+        except KeyError:
+            verdict_enum = Verdict.INCONCLUSIVE
+        verdicts.append(verdict_enum)
+
+        total_duration += report.get("duration_seconds", 0)
+        scenario_reports.append(
+            {
+                "experiment_id": exp_id,
+                "scenario_type": report.get("scenario_type", "unknown"),
+                "verdict": verdict_str,
+                "verdict_reason": report.get("verdict_reason", ""),
+                "duration_seconds": report.get("duration_seconds", 0),
+                "recovery_observed": report.get("recovery_observed"),
+                "recovery_time_seconds": report.get("recovery_time_seconds"),
+            }
+        )
+
+    if not verdicts:
+        raise ChaosError(f"No experiment reports found for plan '{plan_name}'")
+
+    overall_verdict = max(verdicts)
+
+    plan_report = {
+        "report_type": "plan",
+        "plan_name": plan_name,
+        "scenario_type": plan_name,  # Plan name serves as scenario_type for GSI
+        "verdict": overall_verdict.name,
+        "verdict_reason": f"Worst-case aggregation of {len(scenario_reports)} scenarios",
+        "duration_seconds": total_duration,
+        "scenario_reports": scenario_reports,
+        "assertion_results": assertion_results,
+        "environment": ENVIRONMENT,
+    }
+
+    return persist_report(plan_report)
+
+
+def compare_reports(
+    report_id: str,
+    baseline_id: str | None = None,
+) -> dict[str, Any]:
+    """Compare a report against a baseline for the same scenario.
+
+    If no baseline_id provided, uses the most recent previous report
+    for the same scenario_type.
+
+    Args:
+        report_id: Current report to compare
+        baseline_id: Optional baseline report ID
+
+    Returns:
+        Comparison dict with changes highlighted
+
+    Raises:
+        ChaosError: If reports not found or different scenario types
+    """
+    current = get_report(report_id)
+    if not current:
+        raise ChaosError(f"Report not found: {report_id}")
+
+    if baseline_id:
+        baseline = get_report(baseline_id)
+        if not baseline:
+            raise ChaosError(f"Baseline report not found: {baseline_id}")
+    else:
+        # Find most recent previous report for same scenario
+        result = list_reports(
+            scenario_type=current.get("scenario_type"),
+            limit=2,
+        )
+        candidates = [
+            r for r in result.get("reports", []) if r.get("report_id") != report_id
+        ]
+        if not candidates:
+            return {
+                "current": current,
+                "baseline": None,
+                "is_first_baseline": True,
+                "message": "First baseline — no prior report for comparison",
+            }
+        baseline = candidates[0]
+
+    # Validate same scenario type
+    if current.get("scenario_type") != baseline.get("scenario_type"):
+        raise ChaosError(
+            f"Cannot compare different scenarios: "
+            f"{current.get('scenario_type')} vs {baseline.get('scenario_type')}"
+        )
+
+    # Build comparison
+    current_verdict = current.get("verdict", "INCONCLUSIVE")
+    baseline_verdict = baseline.get("verdict", "INCONCLUSIVE")
+
+    try:
+        current_v = Verdict[current_verdict]
+        baseline_v = Verdict[baseline_verdict]
+        if current_v < baseline_v:
+            verdict_direction = "improved"
+        elif current_v > baseline_v:
+            verdict_direction = "regressed"
+        else:
+            verdict_direction = "unchanged"
+    except KeyError:
+        verdict_direction = "unknown"
+
+    # Compare dependency health
+    health_changes = []
+    current_post = current.get("post_chaos", {})
+    baseline_post = baseline.get("post_chaos", {})
+
+    for dep in ["dynamodb", "ssm", "cloudwatch", "lambda"]:
+        curr_healthy = dep not in (current_post.get("new_issues") or [])
+        base_healthy = dep not in (baseline_post.get("new_issues") or [])
+
+        if curr_healthy and not base_healthy:
+            direction = "improved"
+        elif not curr_healthy and base_healthy:
+            direction = "regressed"
+        else:
+            direction = "unchanged"
+
+        health_changes.append(
+            {
+                "dependency": dep,
+                "current_healthy": curr_healthy,
+                "baseline_healthy": base_healthy,
+                "direction": direction,
+            }
+        )
+
+    return {
+        "current": current,
+        "baseline": baseline,
+        "is_first_baseline": False,
+        "verdict_change": {
+            "current": current_verdict,
+            "baseline": baseline_verdict,
+            "direction": verdict_direction,
+        },
+        "recovery_change": {
+            "current_observed": current.get("recovery_observed"),
+            "baseline_observed": baseline.get("recovery_observed"),
+            "current_time": current.get("recovery_time_seconds"),
+            "baseline_time": baseline.get("recovery_time_seconds"),
+        },
+        "health_changes": health_changes,
+    }
+
+
+def get_trends(
+    scenario_type: str,
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+    """Get recovery trend data for a scenario type.
+
+    Returns chronologically ordered data points for charting.
+
+    Args:
+        scenario_type: The scenario to get trends for
+        limit: Number of recent reports to include
+
+    Returns:
+        List of {report_id, created_at, verdict, recovery_observed, recovery_time_seconds}
+    """
+    result = list_reports(scenario_type=scenario_type, limit=min(limit, 100))
+
+    trends = []
+    for report in result.get("reports", []):
+        trends.append(
+            {
+                "report_id": report.get("report_id"),
+                "created_at": report.get("created_at"),
+                "verdict": report.get("verdict"),
+                "recovery_observed": report.get("recovery_observed"),
+                "recovery_time_seconds": report.get("recovery_time_seconds"),
+            }
+        )
+
+    # Reverse to chronological order (list_reports returns newest first)
+    trends.reverse()
+    return trends
 
 
 def check_environment_allowed():
@@ -989,6 +1543,27 @@ def stop_experiment(experiment_id: str) -> dict[str, Any]:
 
         update_experiment_status(experiment_id, "stopped", results)
 
+        # Feature 1240: Auto-persist report for permanent storage
+        try:
+            ephemeral_report = get_experiment_report(experiment_id)
+            # Map ephemeral report keys to Report model fields
+            if (
+                "scenario" in ephemeral_report
+                and "scenario_type" not in ephemeral_report
+            ):
+                ephemeral_report["scenario_type"] = ephemeral_report.pop("scenario")
+            ephemeral_report["recovery_observed"] = results.get(
+                "post_chaos_health", {}
+            ).get("all_healthy", False)
+            ephemeral_report["recovery_time_seconds"] = (
+                0 if ephemeral_report["recovery_observed"] else None
+            )
+            persist_report(ephemeral_report)
+        except Exception:
+            logger.exception(
+                "Failed to auto-persist report for experiment %s", experiment_id
+            )
+
         # Return updated experiment
         return get_experiment(experiment_id) or experiment
 
@@ -999,6 +1574,14 @@ def stop_experiment(experiment_id: str) -> dict[str, Any]:
             "failed",
             {"error": str(e), "failed_at": datetime.now(UTC).isoformat() + "Z"},
         )
+        # Feature 1240: Persist partial report even for failed experiments
+        try:
+            failed_report = get_experiment_report(experiment_id)
+            if "scenario" in failed_report and "scenario_type" not in failed_report:
+                failed_report["scenario_type"] = failed_report.pop("scenario")
+            persist_report(failed_report)
+        except Exception:
+            logger.exception("Failed to persist failure report for %s", experiment_id)
         raise
 
 

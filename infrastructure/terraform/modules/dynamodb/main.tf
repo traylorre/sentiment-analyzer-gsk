@@ -433,6 +433,76 @@ resource "aws_dynamodb_table" "chaos_experiments" {
 }
 
 # ===================================================================
+# DynamoDB Table: Chaos Reports (Feature 1240)
+# Persists experiment and plan reports beyond 7-day experiment TTL.
+# Created unconditionally (not gated by enable_chaos_testing).
+# On-demand billing: $0 when empty.
+# ===================================================================
+
+resource "aws_dynamodb_table" "chaos_reports" {
+  name         = "${var.environment}-chaos-reports"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "report_id"
+
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  attribute {
+    name = "report_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "scenario_type"
+    type = "S"
+  }
+
+  attribute {
+    name = "verdict"
+    type = "S"
+  }
+
+  attribute {
+    name = "created_at"
+    type = "S"
+  }
+
+  # GSI: scenario-created-index - Query reports by scenario type
+  global_secondary_index {
+    name            = "scenario-created-index"
+    hash_key        = "scenario_type"
+    range_key       = "created_at"
+    projection_type = "ALL"
+  }
+
+  # GSI: verdict-created-index - Query reports by verdict
+  global_secondary_index {
+    name            = "verdict-created-index"
+    hash_key        = "verdict"
+    range_key       = "created_at"
+    projection_type = "ALL"
+  }
+
+  server_side_encryption {
+    enabled     = true
+    kms_key_arn = null
+  }
+
+  tags = {
+    Name        = "${var.environment}-chaos-reports"
+    Environment = var.environment
+    Feature     = "chaos-testing"
+    ManagedBy   = "Terraform"
+    CostCenter  = "demo"
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+# ===================================================================
 # DynamoDB Table: Feature 1009 - Sentiment Time-Series
 # ===================================================================
 #

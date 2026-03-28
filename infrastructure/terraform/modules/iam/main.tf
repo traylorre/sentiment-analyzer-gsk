@@ -507,7 +507,9 @@ resource "aws_iam_role_policy" "dashboard_chaos" {
         ]
         Resource = [
           var.chaos_experiments_table_arn,
-          "${var.chaos_experiments_table_arn}/index/*"
+          "${var.chaos_experiments_table_arn}/index/*",
+          var.chaos_reports_table_arn,
+          "${var.chaos_reports_table_arn}/index/*"
         ]
       },
       {
