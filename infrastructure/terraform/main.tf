@@ -46,6 +46,36 @@ check "cors_production_validation" {
   }
 }
 
+# Feature 1269: Hard-fail guard for production CORS origins
+# Unlike the check block above (which only warns), this FAILS terraform plan.
+resource "terraform_data" "cors_production_guard" {
+  lifecycle {
+    precondition {
+      condition     = var.environment != "prod" || length(var.cors_allowed_origins) > 0
+      error_message = <<-EOT
+        FATAL: cors_allowed_origins cannot be empty when environment='prod'.
+        Both dashboard and SSE Lambda Function URLs use this value for CORS allow_origins.
+        An empty list means ALL cross-origin requests are blocked — the frontend will not work.
+
+        Fix: Set cors_allowed_origins in prod.tfvars:
+          cors_allowed_origins = ["https://your-domain.amplifyapp.com"]
+
+        Get your Amplify URL: terraform output amplify_production_url
+      EOT
+    }
+  }
+}
+
+# Feature 1269: Warn if prod origins contain non-HTTPS URLs
+check "cors_production_https_only" {
+  assert {
+    condition = var.environment != "prod" || alltrue([
+      for origin in var.cors_allowed_origins : startswith(origin, "https://")
+    ])
+    error_message = "WARNING: Production cors_allowed_origins should use HTTPS only. HTTP origins found."
+  }
+}
+
 # ===================================================================
 # ===================================================================
 # Module: KMS (FR-018 to FR-022)
@@ -809,6 +839,9 @@ module "api_gateway" {
   lambda_function_name = module.dashboard_lambda.function_name
   lambda_invoke_arn    = module.dashboard_lambda.invoke_arn
   stage_name           = "v1"
+
+  # Feature 1267: Pass CORS allowed origins for documentation/validation
+  cors_allowed_origins = var.cors_allowed_origins
 
   # Feature 1253: Enable Cognito JWT authorization (FR-001)
   enable_cognito_auth   = true
