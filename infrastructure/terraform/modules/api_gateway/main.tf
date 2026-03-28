@@ -205,12 +205,15 @@ locals {
     if route.has_proxy && route.is_endpoint
   }
 
-  # CORS headers for OPTIONS responses (FR-005, FR-008)
+  # CORS headers for OPTIONS responses (FR-005, FR-008, Feature 1267)
+  # Origin echoing: echoes the request Origin header instead of wildcard '*'
+  # This is required because credentials: 'include' + wildcard = silent failure
   cors_headers = {
     "method.response.header.Access-Control-Allow-Headers"     = "'Content-Type,Authorization,Accept,Cache-Control,Last-Event-ID,X-Amzn-Trace-Id,X-User-ID'"
     "method.response.header.Access-Control-Allow-Methods"     = "'GET,POST,PUT,DELETE,PATCH,OPTIONS'"
-    "method.response.header.Access-Control-Allow-Origin"      = "'*'"
+    "method.response.header.Access-Control-Allow-Origin"      = "method.request.header.Origin"
     "method.response.header.Access-Control-Allow-Credentials" = "'true'"
+    "method.response.header.Vary"                             = "'Origin'"
   }
 
   # Merged lookup: resolve a path key to its resource ID across all depth levels
@@ -599,14 +602,16 @@ resource "aws_api_gateway_method_response" "proxy_options" {
   status_code = "200"
 
   response_parameters = {
-    "method.response.header.Access-Control-Allow-Headers"  = true
-    "method.response.header.Access-Control-Allow-Methods"  = true
-    "method.response.header.Access-Control-Allow-Origin"   = true
-    "method.response.header.Access-Control-Expose-Headers" = true
+    "method.response.header.Access-Control-Allow-Credentials" = true
+    "method.response.header.Access-Control-Allow-Headers"     = true
+    "method.response.header.Access-Control-Allow-Methods"     = true
+    "method.response.header.Access-Control-Allow-Origin"      = true
+    "method.response.header.Access-Control-Expose-Headers"    = true
+    "method.response.header.Vary"                             = true
   }
 }
 
-# Integration response for OPTIONS
+# Integration response for OPTIONS (Feature 1267: origin echoing + credentials + vary)
 resource "aws_api_gateway_integration_response" "proxy_options" {
   rest_api_id = aws_api_gateway_rest_api.dashboard.id
   resource_id = aws_api_gateway_resource.proxy.id
@@ -614,10 +619,12 @@ resource "aws_api_gateway_integration_response" "proxy_options" {
   status_code = aws_api_gateway_method_response.proxy_options.status_code
 
   response_parameters = {
-    "method.response.header.Access-Control-Allow-Headers"  = "'Content-Type,Authorization,X-User-ID,X-Amzn-Trace-Id'"
-    "method.response.header.Access-Control-Allow-Methods"  = "'GET,POST,PUT,DELETE,OPTIONS'"
-    "method.response.header.Access-Control-Allow-Origin"   = "'*'"
-    "method.response.header.Access-Control-Expose-Headers" = "'X-Amzn-Trace-Id'"
+    "method.response.header.Access-Control-Allow-Credentials" = "'true'"
+    "method.response.header.Access-Control-Allow-Headers"     = "'Content-Type,Authorization,X-User-ID,X-Amzn-Trace-Id'"
+    "method.response.header.Access-Control-Allow-Methods"     = "'GET,POST,PUT,DELETE,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Origin"      = "method.request.header.Origin"
+    "method.response.header.Access-Control-Expose-Headers"    = "'X-Amzn-Trace-Id'"
+    "method.response.header.Vary"                             = "'Origin'"
   }
 }
 
@@ -651,7 +658,7 @@ resource "aws_api_gateway_integration" "root_options" {
   }
 }
 
-# Method response for root OPTIONS
+# Method response for root OPTIONS (Feature 1267: added Credentials + Vary)
 resource "aws_api_gateway_method_response" "root_options" {
   rest_api_id = aws_api_gateway_rest_api.dashboard.id
   resource_id = aws_api_gateway_rest_api.dashboard.root_resource_id
@@ -659,14 +666,16 @@ resource "aws_api_gateway_method_response" "root_options" {
   status_code = "200"
 
   response_parameters = {
-    "method.response.header.Access-Control-Allow-Headers"  = true
-    "method.response.header.Access-Control-Allow-Methods"  = true
-    "method.response.header.Access-Control-Allow-Origin"   = true
-    "method.response.header.Access-Control-Expose-Headers" = true
+    "method.response.header.Access-Control-Allow-Credentials" = true
+    "method.response.header.Access-Control-Allow-Headers"     = true
+    "method.response.header.Access-Control-Allow-Methods"     = true
+    "method.response.header.Access-Control-Allow-Origin"      = true
+    "method.response.header.Access-Control-Expose-Headers"    = true
+    "method.response.header.Vary"                             = true
   }
 }
 
-# Integration response for root OPTIONS
+# Integration response for root OPTIONS (Feature 1267: origin echoing + credentials + vary)
 resource "aws_api_gateway_integration_response" "root_options" {
   rest_api_id = aws_api_gateway_rest_api.dashboard.id
   resource_id = aws_api_gateway_rest_api.dashboard.root_resource_id
@@ -674,10 +683,12 @@ resource "aws_api_gateway_integration_response" "root_options" {
   status_code = aws_api_gateway_method_response.root_options.status_code
 
   response_parameters = {
-    "method.response.header.Access-Control-Allow-Headers"  = "'Content-Type,Authorization,X-User-ID,X-Amzn-Trace-Id'"
-    "method.response.header.Access-Control-Allow-Methods"  = "'GET,POST,PUT,DELETE,OPTIONS'"
-    "method.response.header.Access-Control-Allow-Origin"   = "'*'"
-    "method.response.header.Access-Control-Expose-Headers" = "'X-Amzn-Trace-Id'"
+    "method.response.header.Access-Control-Allow-Credentials" = "'true'"
+    "method.response.header.Access-Control-Allow-Headers"     = "'Content-Type,Authorization,X-User-ID,X-Amzn-Trace-Id'"
+    "method.response.header.Access-Control-Allow-Methods"     = "'GET,POST,PUT,DELETE,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Origin"      = "method.request.header.Origin"
+    "method.response.header.Access-Control-Expose-Headers"    = "'X-Amzn-Trace-Id'"
+    "method.response.header.Vary"                             = "'Origin'"
   }
 }
 

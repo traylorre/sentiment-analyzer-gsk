@@ -129,3 +129,18 @@ variable "public_routes" {
   }))
   default = []
 }
+
+# ===================================================================
+# CORS Configuration (Feature 1267)
+# ===================================================================
+
+variable "cors_allowed_origins" {
+  description = "Allowed origins for CORS. Used for documentation and future validation. Actual enforcement is at Lambda middleware layer."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = length(var.cors_allowed_origins) == 0 || !contains(var.cors_allowed_origins, "*")
+    error_message = "Wildcard '*' is not allowed in cors_allowed_origins. Use specific domain names."
+  }
+}
