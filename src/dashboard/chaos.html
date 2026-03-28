@@ -20,6 +20,11 @@
           integrity="sha384-hlhTcK8D1Pj0594UWVQ6V40KGnB4Y8+Pf6mov3DVLV2lr0PqHuq/x1lVg/hZn7jt"
           crossorigin="anonymous">
 
+    <!-- Chart.js for trend visualization (Feature 1242) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"
+            integrity="sha384-9PbbfCKQuXJivsLfp3WU/bLHytShhNBABgVFng+6ejqz5GGq1NslPVFovF47xbCu"
+            crossorigin="anonymous"></script>
+
     <style>
         .pulse-dot {
             animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
@@ -64,222 +69,737 @@
             </div>
         </div>
 
-        <!-- Scenario Library -->
-        <section class="mb-8">
-            <h2 class="text-2xl font-bold mb-4">Chaos Scenarios</h2>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <!-- DynamoDB Throttle -->
-                <div class="card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow cursor-pointer"
-                     @click="selectScenario('dynamodb_throttle')">
-                    <div class="card-body">
-                        <h3 class="card-title text-error">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
-                            </svg>
-                            DynamoDB Throttle
-                        </h3>
-                        <p class="text-sm opacity-75">Inject write throttling to test backpressure handling</p>
-                        <div class="card-actions justify-end mt-2">
-                            <div class="badge badge-outline">Phase 2</div>
-                            <div class="badge badge-error badge-outline">AWS FIS</div>
-                        </div>
-                    </div>
-                </div>
+        <!-- View Navigation (Feature 1242) -->
+        <div class="tabs tabs-boxed mb-6">
+            <a class="tab" :class="{'tab-active': currentView === 'experiments' || currentView === 'experiment-detail'}" @click="currentView = 'experiments'">Experiments</a>
+            <a class="tab" :class="{'tab-active': currentView === 'reports' || currentView === 'detail' || currentView === 'diff' || currentView === 'trends'}" @click="switchToReports()">Reports</a>
+        </div>
 
-                <!-- Ingestion Failure -->
-                <div class="card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow cursor-pointer"
-                     @click="selectScenario('ingestion_failure')">
-                    <div class="card-body">
-                        <h3 class="card-title text-warning">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            Ingestion Failure
-                        </h3>
-                        <p class="text-sm opacity-75">Simulate external API unavailability</p>
-                        <div class="card-actions justify-end mt-2">
-                            <div class="badge badge-outline">Phase 3</div>
-                            <div class="badge badge-warning badge-outline">Custom</div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Lambda Cold Start -->
-                <div class="card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow cursor-pointer"
-                     @click="selectScenario('lambda_cold_start')">
-                    <div class="card-body">
-                        <h3 class="card-title text-info">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            Lambda Delay
-                        </h3>
-                        <p class="text-sm opacity-75">Inject artificial latency to test timeout handling</p>
-                        <div class="card-actions justify-end mt-2">
-                            <div class="badge badge-outline">Phase 4</div>
-                            <div class="badge badge-info badge-outline">Injection</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- Start Experiment Form -->
-        <section class="mb-8" x-show="selectedScenario" x-transition>
-            <div class="card bg-base-100 shadow-xl">
-                <div class="card-body">
-                    <h2 class="card-title">Start Chaos Experiment</h2>
-
-                    <form @submit.prevent="startExperiment">
-                        <!-- Scenario Display -->
-                        <div class="form-control mb-4">
-                            <label class="label">
-                                <span class="label-text font-bold">Scenario</span>
-                            </label>
-                            <div class="badge badge-lg" x-text="scenarioNames[selectedScenario]"></div>
-                        </div>
-
-                        <!-- Blast Radius Slider -->
-                        <div class="form-control mb-4">
-                            <label class="label">
-                                <span class="label-text font-bold">Blast Radius</span>
-                                <span class="label-text-alt" x-text="blastRadius + '%'"></span>
-                            </label>
-                            <input type="range" min="10" max="100" x-model="blastRadius" class="range range-error" step="10">
-                            <div class="w-full flex justify-between text-xs px-2 mt-2">
-                                <span>10%</span>
-                                <span>25%</span>
-                                <span>50%</span>
-                                <span>75%</span>
-                                <span>100%</span>
-                            </div>
-                            <p class="text-sm opacity-75 mt-2">Percentage of requests affected by the fault injection</p>
-                        </div>
-
-                        <!-- Duration Input -->
-                        <div class="form-control mb-4">
-                            <label class="label">
-                                <span class="label-text font-bold">Duration (seconds)</span>
-                            </label>
-                            <input type="number" min="5" max="300" x-model="duration" class="input input-bordered w-full" placeholder="60">
-                            <label class="label">
-                                <span class="label-text-alt">Min: 5s, Max: 300s (5 minutes)</span>
-                            </label>
-                        </div>
-
-                        <!-- Action Buttons -->
-                        <div class="card-actions justify-end">
-                            <button type="button" class="btn btn-ghost" @click="selectedScenario = null">Cancel</button>
-                            <button type="submit" class="btn btn-error" :disabled="loading">
-                                <span x-show="!loading">Start Experiment</span>
-                                <span x-show="loading" class="loading loading-spinner"></span>
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </section>
-
-        <!-- Active Experiments -->
-        <section class="mb-8" x-show="activeExperiments.length > 0">
-            <h2 class="text-2xl font-bold mb-4">Active Experiments</h2>
-            <div class="space-y-4">
-                <template x-for="exp in activeExperiments" :key="exp.experiment_id">
-                    <div class="card bg-base-100 shadow-xl">
+        <!-- ============================================ -->
+        <!-- Experiments Views (existing + experiment-detail) -->
+        <!-- ============================================ -->
+        <div x-show="currentView === 'experiments'" x-transition>
+            <!-- Scenario Library -->
+            <section class="mb-8">
+                <h2 class="text-2xl font-bold mb-4">Chaos Scenarios</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <!-- DynamoDB Throttle -->
+                    <div class="card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow cursor-pointer"
+                         @click="selectScenario('dynamodb_throttle')">
                         <div class="card-body">
-                            <div class="flex justify-between items-start">
-                                <div class="flex-1">
-                                    <h3 class="card-title" x-text="scenarioNames[exp.scenario_type]"></h3>
-                                    <p class="text-sm opacity-75">
-                                        Started: <span x-text="formatTime(exp.created_at)"></span>
-                                    </p>
-                                    <div class="flex gap-2 mt-2">
-                                        <div class="badge badge-error">
-                                            <span x-text="exp.blast_radius + '% blast radius'"></span>
-                                        </div>
-                                        <div class="badge badge-outline">
-                                            <span x-text="exp.duration_seconds + 's duration'"></span>
-                                        </div>
-                                    </div>
-                                    <!-- FIS status display removed (Feature 1237: external actor architecture) -->
-                                </div>
-                                <div class="flex flex-col items-end gap-2">
-                                    <div class="badge badge-success gap-2">
-                                        <span class="w-2 h-2 bg-white rounded-full pulse-dot"></span>
-                                        <span x-text="exp.status"></span>
-                                    </div>
-                                    <button class="btn btn-sm btn-error"
-                                            @click="stopExperiment(exp.experiment_id)"
-                                            :disabled="stoppingExperimentId === exp.experiment_id">
-                                        <span x-show="stoppingExperimentId !== exp.experiment_id">Stop</span>
-                                        <span x-show="stoppingExperimentId === exp.experiment_id" class="loading loading-spinner loading-xs"></span>
-                                    </button>
-                                </div>
+                            <h3 class="card-title text-error">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+                                </svg>
+                                DynamoDB Throttle
+                            </h3>
+                            <p class="text-sm opacity-75">Inject write throttling to test backpressure handling</p>
+                            <div class="card-actions justify-end mt-2">
+                                <div class="badge badge-outline">Phase 2</div>
+                                <div class="badge badge-error badge-outline">AWS FIS</div>
                             </div>
                         </div>
                     </div>
-                </template>
-            </div>
-        </section>
 
-        <!-- Experiment History -->
-        <section>
-            <h2 class="text-2xl font-bold mb-4">Experiment History</h2>
+                    <!-- Ingestion Failure -->
+                    <div class="card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow cursor-pointer"
+                         @click="selectScenario('ingestion_failure')">
+                        <div class="card-body">
+                            <h3 class="card-title text-warning">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                Ingestion Failure
+                            </h3>
+                            <p class="text-sm opacity-75">Simulate external API unavailability</p>
+                            <div class="card-actions justify-end mt-2">
+                                <div class="badge badge-outline">Phase 3</div>
+                                <div class="badge badge-warning badge-outline">Custom</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Lambda Cold Start -->
+                    <div class="card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow cursor-pointer"
+                         @click="selectScenario('lambda_cold_start')">
+                        <div class="card-body">
+                            <h3 class="card-title text-info">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                Lambda Delay
+                            </h3>
+                            <p class="text-sm opacity-75">Inject artificial latency to test timeout handling</p>
+                            <div class="card-actions justify-end mt-2">
+                                <div class="badge badge-outline">Phase 4</div>
+                                <div class="badge badge-info badge-outline">Injection</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Start Experiment Form -->
+            <section class="mb-8" x-show="selectedScenario" x-transition>
+                <div class="card bg-base-100 shadow-xl">
+                    <div class="card-body">
+                        <h2 class="card-title">Start Chaos Experiment</h2>
+
+                        <form @submit.prevent="startExperiment">
+                            <!-- Scenario Display -->
+                            <div class="form-control mb-4">
+                                <label class="label">
+                                    <span class="label-text font-bold">Scenario</span>
+                                </label>
+                                <div class="badge badge-lg" x-text="scenarioNames[selectedScenario]"></div>
+                            </div>
+
+                            <!-- Blast Radius Slider -->
+                            <div class="form-control mb-4">
+                                <label class="label">
+                                    <span class="label-text font-bold">Blast Radius</span>
+                                    <span class="label-text-alt" x-text="blastRadius + '%'"></span>
+                                </label>
+                                <input type="range" min="10" max="100" x-model="blastRadius" class="range range-error" step="10">
+                                <div class="w-full flex justify-between text-xs px-2 mt-2">
+                                    <span>10%</span>
+                                    <span>25%</span>
+                                    <span>50%</span>
+                                    <span>75%</span>
+                                    <span>100%</span>
+                                </div>
+                                <p class="text-sm opacity-75 mt-2">Percentage of requests affected by the fault injection</p>
+                            </div>
+
+                            <!-- Duration Input -->
+                            <div class="form-control mb-4">
+                                <label class="label">
+                                    <span class="label-text font-bold">Duration (seconds)</span>
+                                </label>
+                                <input type="number" min="5" max="300" x-model="duration" class="input input-bordered w-full" placeholder="60">
+                                <label class="label">
+                                    <span class="label-text-alt">Min: 5s, Max: 300s (5 minutes)</span>
+                                </label>
+                            </div>
+
+                            <!-- Action Buttons -->
+                            <div class="card-actions justify-end">
+                                <button type="button" class="btn btn-ghost" @click="selectedScenario = null">Cancel</button>
+                                <button type="submit" class="btn btn-error" :disabled="loading">
+                                    <span x-show="!loading">Start Experiment</span>
+                                    <span x-show="loading" class="loading loading-spinner"></span>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Active Experiments -->
+            <section class="mb-8" x-show="activeExperiments.length > 0">
+                <h2 class="text-2xl font-bold mb-4">Active Experiments</h2>
+                <div class="space-y-4">
+                    <template x-for="exp in activeExperiments" :key="exp.experiment_id">
+                        <div class="card bg-base-100 shadow-xl">
+                            <div class="card-body">
+                                <div class="flex justify-between items-start">
+                                    <div class="flex-1">
+                                        <h3 class="card-title" x-text="scenarioNames[exp.scenario_type]"></h3>
+                                        <p class="text-sm opacity-75">
+                                            Started: <span x-text="formatTime(exp.created_at)"></span>
+                                        </p>
+                                        <div class="flex gap-2 mt-2">
+                                            <div class="badge badge-error">
+                                                <span x-text="exp.blast_radius + '% blast radius'"></span>
+                                            </div>
+                                            <div class="badge badge-outline">
+                                                <span x-text="exp.duration_seconds + 's duration'"></span>
+                                            </div>
+                                        </div>
+                                        <!-- FIS status display removed (Feature 1237: external actor architecture) -->
+                                    </div>
+                                    <div class="flex flex-col items-end gap-2">
+                                        <div class="badge badge-success gap-2">
+                                            <span class="w-2 h-2 bg-white rounded-full pulse-dot"></span>
+                                            <span x-text="exp.status"></span>
+                                        </div>
+                                        <button class="btn btn-sm btn-error"
+                                                @click="stopExperiment(exp.experiment_id)"
+                                                :disabled="stoppingExperimentId === exp.experiment_id">
+                                            <span x-show="stoppingExperimentId !== exp.experiment_id">Stop</span>
+                                            <span x-show="stoppingExperimentId === exp.experiment_id" class="loading loading-spinner loading-xs"></span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </section>
+
+            <!-- Experiment History -->
+            <section>
+                <h2 class="text-2xl font-bold mb-4">Experiment History</h2>
+                <div class="overflow-x-auto">
+                    <table class="table table-zebra w-full">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Scenario</th>
+                                <th>Status</th>
+                                <th>Blast Radius</th>
+                                <th>Duration</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Loading skeleton -->
+                            <template x-if="loadingExperiments">
+                                <tr>
+                                    <td colspan="6" class="text-center py-8">
+                                        <span class="loading loading-spinner loading-lg"></span>
+                                        <p class="mt-2 opacity-75">Loading experiments...</p>
+                                    </td>
+                                </tr>
+                            </template>
+
+                            <!-- Experiment list -->
+                            <template x-if="!loadingExperiments">
+                                <template>
+                                    <template x-for="exp in historyExperiments" :key="exp.experiment_id">
+                                        <tr>
+                                            <td x-text="formatTime(exp.created_at)"></td>
+                                            <td x-text="scenarioNames[exp.scenario_type]"></td>
+                                            <td>
+                                                <div class="badge" :class="{
+                                                    'badge-success': exp.status === 'completed',
+                                                    'badge-error': exp.status === 'failed',
+                                                    'badge-warning': exp.status === 'stopped'
+                                                }" x-text="exp.status"></div>
+                                            </td>
+                                            <td x-text="exp.blast_radius + '%'"></td>
+                                            <td x-text="exp.duration_seconds + 's'"></td>
+                                            <td>
+                                                <button class="btn btn-ghost btn-xs" @click="viewExperiment(exp.experiment_id)">
+                                                    Details
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                    <tr x-show="historyExperiments.length === 0">
+                                        <td colspan="6" class="text-center opacity-75">No experiments yet. Start your first chaos test above!</td>
+                                    </tr>
+                                </template>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+
+        <!-- ============================================ -->
+        <!-- Experiment Detail View (Feature 1242) -->
+        <!-- ============================================ -->
+        <div x-show="currentView === 'experiment-detail'" x-transition>
+            <button class="btn btn-ghost btn-sm mb-4" @click="currentView = 'experiments'">
+                &larr; Back to Experiments
+            </button>
+            <template x-if="currentExperiment">
+                <div class="card bg-base-100 shadow-xl">
+                    <div class="card-body">
+                        <h2 class="card-title" x-text="scenarioNames[currentExperiment.scenario_type]"></h2>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 my-4">
+                            <div>
+                                <span class="text-sm opacity-75">Status</span>
+                                <div class="badge mt-1" :class="{
+                                    'badge-success': currentExperiment.status === 'completed' || currentExperiment.status === 'stopped',
+                                    'badge-error': currentExperiment.status === 'failed',
+                                    'badge-warning': currentExperiment.status === 'running'
+                                }" x-text="currentExperiment.status"></div>
+                            </div>
+                            <div>
+                                <span class="text-sm opacity-75">Blast Radius</span>
+                                <div class="font-bold" x-text="currentExperiment.blast_radius + '%'"></div>
+                            </div>
+                            <div>
+                                <span class="text-sm opacity-75">Duration</span>
+                                <div class="font-bold" x-text="currentExperiment.duration_seconds + 's'"></div>
+                            </div>
+                            <div>
+                                <span class="text-sm opacity-75">Created</span>
+                                <div class="font-bold text-sm" x-text="formatTime(currentExperiment.created_at)"></div>
+                            </div>
+                        </div>
+                        <!-- Experiment Report (ephemeral) -->
+                        <template x-if="currentExperiment.report">
+                            <div class="mt-4">
+                                <h3 class="font-bold mb-2">Experiment Report</h3>
+                                <div class="badge badge-lg" :class="getVerdictClass(currentExperiment.report.verdict)" x-text="getVerdictLabel(currentExperiment.report.verdict)"></div>
+                                <p class="text-sm mt-2 opacity-75" x-text="currentExperiment.report.verdict_reason"></p>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </template>
+        </div>
+
+        <!-- ============================================ -->
+        <!-- Report List View (Feature 1242) -->
+        <!-- ============================================ -->
+        <div x-show="currentView === 'reports'" x-transition>
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                <h2 class="text-2xl font-bold">Chaos Reports</h2>
+                <div class="flex flex-wrap gap-2">
+                    <!-- Scenario Filter -->
+                    <select class="select select-bordered select-sm" x-model="reportFilters.scenario_type" @change="applyReportFilters()">
+                        <option value="">All Scenarios</option>
+                        <option value="dynamodb_throttle">DynamoDB Throttle</option>
+                        <option value="ingestion_failure">Ingestion Failure</option>
+                        <option value="lambda_cold_start">Lambda Cold Start</option>
+                    </select>
+                    <!-- Verdict Filter -->
+                    <select class="select select-bordered select-sm" x-model="reportFilters.verdict" @change="applyReportFilters()">
+                        <option value="">All Verdicts</option>
+                        <option value="CLEAN">Clean</option>
+                        <option value="COMPROMISED">Compromised</option>
+                        <option value="DRY_RUN_CLEAN">Dry Run Clean</option>
+                        <option value="RECOVERY_INCOMPLETE">Recovery Incomplete</option>
+                        <option value="INCONCLUSIVE">Inconclusive</option>
+                    </select>
+                    <!-- Clear Filters -->
+                    <button class="btn btn-ghost btn-sm"
+                            x-show="reportFilters.scenario_type || reportFilters.verdict"
+                            @click="clearReportFilters()">
+                        Clear
+                    </button>
+                </div>
+            </div>
+
+            <!-- Compare Button -->
+            <div class="mb-4" x-show="diffSelection.length > 0">
+                <button class="btn btn-primary btn-sm" :disabled="diffSelection.length !== 2" @click="compareReports()">
+                    Compare (<span x-text="diffSelection.length"></span>/2 selected)
+                </button>
+                <button class="btn btn-ghost btn-sm" @click="diffSelection = []">Clear Selection</button>
+            </div>
+
+            <!-- Report Table -->
             <div class="overflow-x-auto">
                 <table class="table table-zebra w-full">
                     <thead>
                         <tr>
+                            <th class="w-10">
+                                <span class="text-xs opacity-50">Diff</span>
+                            </th>
                             <th>Time</th>
                             <th>Scenario</th>
-                            <th>Status</th>
-                            <th>Blast Radius</th>
-                            <th>Duration</th>
+                            <th>Verdict</th>
+                            <th>Dry Run</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         <!-- Loading skeleton -->
-                        <template x-if="loadingExperiments">
+                        <template x-if="loadingReports">
                             <tr>
                                 <td colspan="6" class="text-center py-8">
                                     <span class="loading loading-spinner loading-lg"></span>
-                                    <p class="mt-2 opacity-75">Loading experiments...</p>
+                                    <p class="mt-2 opacity-75">Loading reports...</p>
                                 </td>
                             </tr>
                         </template>
 
-                        <!-- Experiment list -->
-                        <template x-if="!loadingExperiments">
+                        <!-- Report rows -->
+                        <template x-if="!loadingReports">
                             <template>
-                                <template x-for="exp in historyExperiments" :key="exp.experiment_id">
+                                <template x-for="report in reports" :key="report.report_id">
                                     <tr>
-                                        <td x-text="formatTime(exp.created_at)"></td>
-                                        <td x-text="scenarioNames[exp.scenario_type]"></td>
                                         <td>
-                                            <div class="badge" :class="{
-                                                'badge-success': exp.status === 'completed',
-                                                'badge-error': exp.status === 'failed',
-                                                'badge-warning': exp.status === 'stopped'
-                                            }" x-text="exp.status"></div>
+                                            <input type="checkbox"
+                                                   class="checkbox checkbox-sm"
+                                                   :checked="diffSelection.includes(report.report_id)"
+                                                   :disabled="diffSelection.length >= 2 && !diffSelection.includes(report.report_id)"
+                                                   @change="toggleDiffSelection(report.report_id)">
                                         </td>
-                                        <td x-text="exp.blast_radius + '%'"></td>
-                                        <td x-text="exp.duration_seconds + 's'"></td>
+                                        <td class="text-sm" x-text="formatTime(report.created_at)"></td>
+                                        <td x-text="scenarioNames[report.scenario_type] || report.scenario_type"></td>
                                         <td>
-                                            <button class="btn btn-ghost btn-xs" @click="viewExperiment(exp.experiment_id)">
-                                                Details
-                                            </button>
+                                            <div class="badge" :class="getVerdictClass(report.verdict)" x-text="getVerdictLabel(report.verdict)"></div>
+                                        </td>
+                                        <td>
+                                            <span x-show="report.dry_run" class="badge badge-info badge-sm">DRY RUN</span>
+                                        </td>
+                                        <td>
+                                            <div class="flex gap-1">
+                                                <button class="btn btn-ghost btn-xs" @click="viewReport(report.report_id)">
+                                                    View
+                                                </button>
+                                                <button class="btn btn-ghost btn-xs" @click="loadTrends(report.scenario_type)">
+                                                    Trends
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 </template>
-                                <tr x-show="historyExperiments.length === 0">
-                                    <td colspan="6" class="text-center opacity-75">No experiments yet. Start your first chaos test above!</td>
+                                <!-- Empty state -->
+                                <tr x-show="reports.length === 0">
+                                    <td colspan="6" class="text-center py-8 opacity-75">
+                                        No reports found. Reports are generated after chaos experiments complete.
+                                    </td>
                                 </tr>
                             </template>
                         </template>
                     </tbody>
                 </table>
             </div>
-        </section>
+
+            <!-- Load More -->
+            <div class="flex justify-center mt-4" x-show="reportCursor">
+                <button class="btn btn-outline btn-sm" @click="loadReports(true)" :disabled="loadingReports">
+                    <span x-show="!loadingReports">Load More</span>
+                    <span x-show="loadingReports" class="loading loading-spinner loading-xs"></span>
+                </button>
+            </div>
+        </div>
+
+        <!-- ============================================ -->
+        <!-- Report Detail View (Feature 1242) -->
+        <!-- ============================================ -->
+        <div x-show="currentView === 'detail'" x-transition>
+            <button class="btn btn-ghost btn-sm mb-4" @click="currentView = 'reports'">
+                &larr; Back to Reports
+            </button>
+
+            <template x-if="currentReport">
+                <div class="space-y-6">
+                    <!-- Header Card -->
+                    <div class="card bg-base-100 shadow-xl">
+                        <div class="card-body">
+                            <div class="flex flex-col sm:flex-row justify-between items-start gap-4">
+                                <div>
+                                    <h2 class="card-title" x-text="scenarioNames[currentReport.scenario_type] || currentReport.scenario_type"></h2>
+                                    <p class="text-sm opacity-75 mt-1" x-text="formatTime(currentReport.created_at)"></p>
+                                </div>
+                                <div class="flex flex-col items-end gap-2">
+                                    <div class="badge badge-lg" :class="getVerdictClass(currentReport.verdict)" x-text="getVerdictLabel(currentReport.verdict)"></div>
+                                    <span x-show="currentReport.dry_run" class="badge badge-info">DRY RUN</span>
+                                </div>
+                            </div>
+                            <!-- Verdict Reason -->
+                            <div class="mt-4 p-4 bg-base-200 rounded-lg" x-show="currentReport.verdict_reason">
+                                <p class="text-sm font-medium opacity-75">Verdict Reason</p>
+                                <p class="mt-1" x-text="currentReport.verdict_reason"></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Dry Run Banner -->
+                    <div class="alert alert-info" x-show="currentReport.dry_run">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current flex-shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>This was a dry run -- no actual fault was injected. Health snapshots reflect normal operation.</span>
+                    </div>
+
+                    <!-- Configuration Section -->
+                    <div class="card bg-base-100 shadow-xl">
+                        <div class="card-body">
+                            <div class="flex justify-between items-center cursor-pointer" @click="toggleSection('config')">
+                                <h3 class="font-bold text-lg">Configuration</h3>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 transition-transform" :class="{'rotate-180': expandedSections.config}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </div>
+                            <div x-show="expandedSections.config" x-transition class="mt-4">
+                                <template x-if="currentReport.config">
+                                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                        <div>
+                                            <span class="text-sm opacity-75">Blast Radius</span>
+                                            <div class="font-bold" x-text="(currentReport.config.blast_radius || '-') + '%'"></div>
+                                        </div>
+                                        <div>
+                                            <span class="text-sm opacity-75">Duration</span>
+                                            <div class="font-bold" x-text="(currentReport.config.duration_seconds || '-') + 's'"></div>
+                                        </div>
+                                        <div>
+                                            <span class="text-sm opacity-75">Experiment ID</span>
+                                            <div class="font-mono text-xs break-all" x-text="currentReport.experiment_id || '-'"></div>
+                                        </div>
+                                        <div>
+                                            <span class="text-sm opacity-75">Environment</span>
+                                            <div class="font-bold" x-text="currentReport.config.environment || '-'"></div>
+                                        </div>
+                                    </div>
+                                </template>
+                                <template x-if="!currentReport.config">
+                                    <p class="text-sm opacity-50">No configuration data available.</p>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Baseline Health Section -->
+                    <div class="card bg-base-100 shadow-xl">
+                        <div class="card-body">
+                            <div class="flex justify-between items-center cursor-pointer" @click="toggleSection('baseline')">
+                                <h3 class="font-bold text-lg">Baseline Health (Pre-Chaos)</h3>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 transition-transform" :class="{'rotate-180': expandedSections.baseline}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </div>
+                            <div x-show="expandedSections.baseline" x-transition class="mt-4">
+                                <template x-if="currentReport.baseline_health">
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                                        <template x-for="(dep, name) in currentReport.baseline_health.dependencies || {}" :key="name">
+                                            <div class="card card-compact bg-base-200">
+                                                <div class="card-body">
+                                                    <div class="flex justify-between items-center">
+                                                        <span class="font-medium" x-text="name"></span>
+                                                        <div class="badge" :class="dep.status === 'healthy' ? 'badge-success' : 'badge-error'" x-text="dep.status"></div>
+                                                    </div>
+                                                    <div class="text-sm opacity-75" x-show="dep.latency_ms">
+                                                        Latency: <span x-text="dep.latency_ms + 'ms'"></span>
+                                                    </div>
+                                                    <div class="text-sm opacity-75" x-show="dep.error_rate !== undefined">
+                                                        Error rate: <span x-text="(dep.error_rate * 100).toFixed(1) + '%'"></span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </template>
+                                <template x-if="!currentReport.baseline_health">
+                                    <p class="text-sm opacity-50">No baseline health data available.</p>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Post-Chaos Health Section -->
+                    <div class="card bg-base-100 shadow-xl">
+                        <div class="card-body">
+                            <div class="flex justify-between items-center cursor-pointer" @click="toggleSection('postChaos')">
+                                <h3 class="font-bold text-lg">Post-Chaos Health</h3>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 transition-transform" :class="{'rotate-180': expandedSections.postChaos}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </div>
+                            <div x-show="expandedSections.postChaos" x-transition class="mt-4">
+                                <template x-if="currentReport.post_chaos_health">
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                                        <template x-for="(dep, name) in currentReport.post_chaos_health.dependencies || {}" :key="name">
+                                            <div class="card card-compact bg-base-200">
+                                                <div class="card-body">
+                                                    <div class="flex justify-between items-center">
+                                                        <span class="font-medium" x-text="name"></span>
+                                                        <div class="badge" :class="dep.status === 'healthy' ? 'badge-success' : 'badge-error'" x-text="dep.status"></div>
+                                                    </div>
+                                                    <div class="text-sm opacity-75" x-show="dep.latency_ms">
+                                                        Latency: <span x-text="dep.latency_ms + 'ms'"></span>
+                                                    </div>
+                                                    <div class="text-sm opacity-75" x-show="dep.error_rate !== undefined">
+                                                        Error rate: <span x-text="(dep.error_rate * 100).toFixed(1) + '%'"></span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </template>
+                                <template x-if="!currentReport.post_chaos_health">
+                                    <p class="text-sm opacity-50">No post-chaos health data available.</p>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Plan Report Section -->
+                    <div class="card bg-base-100 shadow-xl" x-show="currentReport.plan_report">
+                        <div class="card-body">
+                            <h3 class="font-bold text-lg mb-4">Plan Report</h3>
+                            <template x-if="currentReport.plan_report">
+                                <div class="space-y-3">
+                                    <template x-for="(scenario, idx) in currentReport.plan_report.scenarios || []" :key="idx">
+                                        <div class="flex items-start gap-3 p-3 bg-base-200 rounded-lg">
+                                            <div class="badge badge-sm mt-1" :class="getVerdictClass(scenario.verdict)" x-text="getVerdictLabel(scenario.verdict)"></div>
+                                            <div class="flex-1">
+                                                <p class="font-medium" x-text="scenarioNames[scenario.scenario_type] || scenario.scenario_type"></p>
+                                                <p class="text-sm opacity-75" x-text="scenario.summary || ''"></p>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="flex gap-2">
+                        <button class="btn btn-outline btn-sm" @click="loadTrends(currentReport.scenario_type)">
+                            View Trends
+                        </button>
+                    </div>
+                </div>
+            </template>
+        </div>
+
+        <!-- ============================================ -->
+        <!-- Diff View (Feature 1242) -->
+        <!-- ============================================ -->
+        <div x-show="currentView === 'diff'" x-transition>
+            <button class="btn btn-ghost btn-sm mb-4" @click="currentView = 'reports'">
+                &larr; Back to Reports
+            </button>
+
+            <template x-if="comparisonResult">
+                <div class="space-y-6">
+                    <h2 class="text-2xl font-bold">Report Comparison</h2>
+
+                    <!-- Verdict Comparison -->
+                    <div class="card bg-base-100 shadow-xl">
+                        <div class="card-body">
+                            <h3 class="font-bold text-lg mb-4">Verdict</h3>
+                            <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+                                <div class="text-center">
+                                    <p class="text-sm opacity-75 mb-1">Baseline</p>
+                                    <div class="badge badge-lg" :class="getVerdictClass(comparisonResult.baseline.verdict)" x-text="getVerdictLabel(comparisonResult.baseline.verdict)"></div>
+                                    <p class="text-xs opacity-50 mt-1" x-text="formatTime(comparisonResult.baseline.created_at)"></p>
+                                </div>
+                                <div class="text-2xl opacity-50">&rarr;</div>
+                                <div class="text-center">
+                                    <p class="text-sm opacity-75 mb-1">Current</p>
+                                    <div class="badge badge-lg" :class="getVerdictClass(comparisonResult.current.verdict)" x-text="getVerdictLabel(comparisonResult.current.verdict)"></div>
+                                    <p class="text-xs opacity-50 mt-1" x-text="formatTime(comparisonResult.current.created_at)"></p>
+                                </div>
+                            </div>
+                            <!-- Direction indicator -->
+                            <div class="text-center mt-4" x-show="comparisonResult.direction">
+                                <div class="badge badge-lg" :class="getDiffClass(comparisonResult.direction)" x-text="comparisonResult.direction"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Side-by-Side Health Comparison -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Baseline Health -->
+                        <div class="card bg-base-100 shadow-xl">
+                            <div class="card-body">
+                                <h3 class="font-bold">Baseline Report Health</h3>
+                                <p class="text-xs opacity-50 mb-3" x-text="formatTime(comparisonResult.baseline.created_at)"></p>
+                                <template x-if="comparisonResult.baseline.post_chaos_health">
+                                    <div class="space-y-2">
+                                        <template x-for="(dep, name) in comparisonResult.baseline.post_chaos_health.dependencies || {}" :key="'baseline-' + name">
+                                            <div class="flex justify-between items-center p-2 bg-base-200 rounded">
+                                                <span class="text-sm font-medium" x-text="name"></span>
+                                                <div class="badge badge-sm" :class="dep.status === 'healthy' ? 'badge-success' : 'badge-error'" x-text="dep.status"></div>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </template>
+                                <template x-if="!comparisonResult.baseline.post_chaos_health">
+                                    <p class="text-sm opacity-50">No health data.</p>
+                                </template>
+                            </div>
+                        </div>
+
+                        <!-- Current Health -->
+                        <div class="card bg-base-100 shadow-xl">
+                            <div class="card-body">
+                                <h3 class="font-bold">Current Report Health</h3>
+                                <p class="text-xs opacity-50 mb-3" x-text="formatTime(comparisonResult.current.created_at)"></p>
+                                <template x-if="comparisonResult.current.post_chaos_health">
+                                    <div class="space-y-2">
+                                        <template x-for="(dep, name) in comparisonResult.current.post_chaos_health.dependencies || {}" :key="'current-' + name">
+                                            <div class="flex justify-between items-center p-2 bg-base-200 rounded">
+                                                <span class="text-sm font-medium" x-text="name"></span>
+                                                <div class="badge badge-sm" :class="dep.status === 'healthy' ? 'badge-success' : 'badge-error'" x-text="dep.status"></div>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </template>
+                                <template x-if="!comparisonResult.current.post_chaos_health">
+                                    <p class="text-sm opacity-50">No health data.</p>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Dependency Changes Summary -->
+                    <div class="card bg-base-100 shadow-xl" x-show="comparisonResult.changes && comparisonResult.changes.length > 0">
+                        <div class="card-body">
+                            <h3 class="font-bold text-lg mb-4">Dependency Changes</h3>
+                            <div class="space-y-2">
+                                <template x-for="change in comparisonResult.changes || []" :key="change.dependency">
+                                    <div class="flex justify-between items-center p-3 rounded-lg" :class="getDiffClass(change.direction)">
+                                        <span class="font-medium" x-text="change.dependency"></span>
+                                        <div class="flex items-center gap-2">
+                                            <div class="badge badge-sm" :class="change.from_status === 'healthy' ? 'badge-success' : 'badge-error'" x-text="change.from_status"></div>
+                                            <span>&rarr;</span>
+                                            <div class="badge badge-sm" :class="change.to_status === 'healthy' ? 'badge-success' : 'badge-error'" x-text="change.to_status"></div>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </template>
+        </div>
+
+        <!-- ============================================ -->
+        <!-- Trends View (Feature 1242) -->
+        <!-- ============================================ -->
+        <div x-show="currentView === 'trends'" x-transition>
+            <button class="btn btn-ghost btn-sm mb-4" @click="currentView = 'reports'">
+                &larr; Back to Reports
+            </button>
+
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                        <h2 class="card-title">Verdict Trends</h2>
+                        <div class="flex gap-2">
+                            <!-- Scenario Selector -->
+                            <select class="select select-bordered select-sm" x-model="trendScenario" @change="loadTrends()">
+                                <option value="">Select Scenario</option>
+                                <option value="dynamodb_throttle">DynamoDB Throttle</option>
+                                <option value="ingestion_failure">Ingestion Failure</option>
+                                <option value="lambda_cold_start">Lambda Cold Start</option>
+                            </select>
+                            <!-- N-selector -->
+                            <select class="select select-bordered select-sm" x-model="trendLimit" @change="loadTrends()">
+                                <option value="10">Last 10</option>
+                                <option value="20">Last 20</option>
+                                <option value="50">Last 50</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Chart Canvas -->
+                    <div x-show="trendData.length >= 3">
+                        <canvas id="trendCanvas" class="w-full" style="max-height: 400px;"></canvas>
+                    </div>
+
+                    <!-- Insufficient Data Message -->
+                    <div x-show="trendData.length > 0 && trendData.length < 3" class="text-center py-12">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto opacity-25 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        </svg>
+                        <p class="text-lg opacity-50">Insufficient data for trend visualization</p>
+                        <p class="text-sm opacity-25">At least 3 reports are needed. Currently: <span x-text="trendData.length"></span></p>
+                    </div>
+
+                    <!-- No Data at All -->
+                    <div x-show="trendData.length === 0 && trendScenario" class="text-center py-12">
+                        <p class="text-lg opacity-50">No trend data available for this scenario.</p>
+                    </div>
+
+                    <!-- No Scenario Selected -->
+                    <div x-show="!trendScenario" class="text-center py-12">
+                        <p class="text-lg opacity-50">Select a scenario to view trends.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Alpine.js App Logic -->
@@ -295,6 +815,24 @@
                 stoppingExperimentId: null,
                 experiments: [],
                 toast: { show: false, message: '', type: 'success' },
+
+                // Feature 1242: Report viewer state
+                currentView: 'experiments',
+                currentExperiment: null,
+                reports: [],
+                reportFilters: { scenario_type: '', verdict: '' },
+                reportCursor: null,
+                loadingReports: false,
+                selectedReportId: null,
+                currentReport: null,
+                comparisonResult: null,
+                diffSelection: [],
+                reportCache: new Map(),
+                trendData: [],
+                trendScenario: '',
+                trendLimit: 20,
+                trendChart: null,
+                expandedSections: { config: false, baseline: false, postChaos: false, verdict: true },
 
                 // Computed
                 get activeExperiments() {
@@ -450,9 +988,32 @@
                     }
                 },
 
-                viewExperiment(experimentId) {
-                    // TODO: Implement experiment details modal
-                    alert('Experiment details coming in Phase 2! ID: ' + experimentId);
+                async viewExperiment(experimentId) {
+                    try {
+                        const response = await fetch(`/chaos/experiments/${experimentId}`, {
+                            headers: { 'X-API-Key': this.getApiKey() }
+                        });
+                        if (response.ok) {
+                            const exp = await response.json();
+                            // Get report if available
+                            let report = null;
+                            try {
+                                const reportResponse = await fetch(`/chaos/experiments/${experimentId}/report`, {
+                                    headers: { 'X-API-Key': this.getApiKey() }
+                                });
+                                if (reportResponse.ok) {
+                                    report = await reportResponse.json();
+                                }
+                            } catch (reportErr) {
+                                // Report may not exist yet -- that is fine
+                                console.debug('No report for experiment:', reportErr);
+                            }
+                            this.currentExperiment = { ...exp, report };
+                            this.currentView = 'experiment-detail';
+                        }
+                    } catch (error) {
+                        this.showToast('Failed to load experiment details', 'error');
+                    }
                 },
 
                 formatTime(isoString) {
@@ -462,6 +1023,184 @@
                 getApiKey() {
                     // API key is injected by config.js
                     return window.API_KEY || '';
+                },
+
+                // Feature 1242: Report viewer methods
+                switchToReports() {
+                    this.currentView = 'reports';
+                    if (this.reports.length === 0) this.loadReports();
+                },
+
+                async loadReports(append = false) {
+                    this.loadingReports = true;
+                    try {
+                        let url = '/chaos/reports?limit=20';
+                        if (this.reportFilters.scenario_type) url += '&scenario_type=' + encodeURIComponent(this.reportFilters.scenario_type);
+                        if (this.reportFilters.verdict) url += '&verdict=' + encodeURIComponent(this.reportFilters.verdict);
+                        if (append && this.reportCursor) url += '&cursor=' + encodeURIComponent(this.reportCursor);
+
+                        const response = await fetch(url, {
+                            headers: { 'X-API-Key': this.getApiKey() }
+                        });
+                        if (response.ok) {
+                            const data = await response.json();
+                            if (append) {
+                                this.reports = [...this.reports, ...data.reports];
+                            } else {
+                                this.reports = data.reports;
+                            }
+                            this.reportCursor = data.next_cursor;
+                        }
+                    } catch (error) {
+                        console.error('Failed to load reports:', error);
+                    } finally {
+                        this.loadingReports = false;
+                    }
+                },
+
+                applyReportFilters() {
+                    this.reportCursor = null;
+                    this.loadReports();
+                },
+
+                clearReportFilters() {
+                    this.reportFilters = { scenario_type: '', verdict: '' };
+                    this.reportCursor = null;
+                    this.loadReports();
+                },
+
+                async viewReport(reportId) {
+                    if (this.reportCache.has(reportId)) {
+                        this.currentReport = this.reportCache.get(reportId);
+                        this.currentView = 'detail';
+                        return;
+                    }
+                    try {
+                        const response = await fetch(`/chaos/reports/${reportId}`, {
+                            headers: { 'X-API-Key': this.getApiKey() }
+                        });
+                        if (response.ok) {
+                            const report = await response.json();
+                            this.reportCache.set(reportId, report);
+                            this.currentReport = report;
+                            this.currentView = 'detail';
+                        }
+                    } catch (error) {
+                        this.showToast('Failed to load report', 'error');
+                    }
+                },
+
+                toggleSection(section) {
+                    this.expandedSections[section] = !this.expandedSections[section];
+                },
+
+                toggleDiffSelection(reportId) {
+                    const idx = this.diffSelection.indexOf(reportId);
+                    if (idx >= 0) {
+                        this.diffSelection.splice(idx, 1);
+                    } else if (this.diffSelection.length < 2) {
+                        this.diffSelection.push(reportId);
+                    }
+                },
+
+                async compareReports() {
+                    if (this.diffSelection.length !== 2) return;
+                    try {
+                        const [current, baseline] = this.diffSelection;
+                        const response = await fetch(`/chaos/reports/${current}/compare?baseline_id=${baseline}`, {
+                            headers: { 'X-API-Key': this.getApiKey() }
+                        });
+                        if (response.ok) {
+                            this.comparisonResult = await response.json();
+                            this.currentView = 'diff';
+                        } else {
+                            const err = await response.json();
+                            this.showToast(err.detail || 'Comparison failed', 'error');
+                        }
+                    } catch (error) {
+                        this.showToast('Failed to compare reports', 'error');
+                    }
+                },
+
+                async loadTrends(scenario) {
+                    this.trendScenario = scenario || this.trendScenario;
+                    if (!this.trendScenario) return;
+                    try {
+                        const response = await fetch(`/chaos/reports/trends/${encodeURIComponent(this.trendScenario)}?limit=${this.trendLimit}`, {
+                            headers: { 'X-API-Key': this.getApiKey() }
+                        });
+                        if (response.ok) {
+                            this.trendData = await response.json();
+                            this.currentView = 'trends';
+                            this.$nextTick(() => this.renderTrendChart());
+                        }
+                    } catch (error) {
+                        this.showToast('Failed to load trends', 'error');
+                    }
+                },
+
+                renderTrendChart() {
+                    const canvas = document.getElementById('trendCanvas');
+                    if (!canvas || this.trendData.length < 3) return;
+
+                    if (this.trendChart) this.trendChart.destroy();
+
+                    const labels = this.trendData.map(d => new Date(d.created_at).toLocaleDateString());
+                    const verdictColors = {
+                        CLEAN: '#36d399',
+                        DRY_RUN_CLEAN: '#3abff8',
+                        INCONCLUSIVE: '#a6adbb',
+                        RECOVERY_INCOMPLETE: '#fbbd23',
+                        COMPROMISED: '#f87272'
+                    };
+
+                    const datasets = Object.keys(verdictColors).map(verdict => ({
+                        label: verdict.replace(/_/g, ' '),
+                        data: this.trendData.map(d => d.verdict === verdict ? 1 : 0),
+                        backgroundColor: verdictColors[verdict],
+                        borderWidth: 0,
+                    }));
+
+                    this.trendChart = new Chart(canvas, {
+                        type: 'bar',
+                        data: { labels, datasets },
+                        options: {
+                            responsive: true,
+                            scales: {
+                                x: { stacked: true },
+                                y: { stacked: true, max: 1, ticks: { display: false } }
+                            },
+                            plugins: {
+                                tooltip: {
+                                    callbacks: {
+                                        title: (items) => this.trendData[items[0].dataIndex]?.created_at || '',
+                                        label: (item) => item.dataset.label
+                                    }
+                                }
+                            }
+                        }
+                    });
+                },
+
+                getVerdictClass(verdict) {
+                    const map = {
+                        CLEAN: 'badge-success',
+                        DRY_RUN_CLEAN: 'badge-info',
+                        INCONCLUSIVE: 'badge-ghost',
+                        RECOVERY_INCOMPLETE: 'badge-warning',
+                        COMPROMISED: 'badge-error'
+                    };
+                    return map[verdict] || 'badge-ghost';
+                },
+
+                getVerdictLabel(verdict) {
+                    return (verdict || 'UNKNOWN').replace(/_/g, ' ');
+                },
+
+                getDiffClass(direction) {
+                    if (direction === 'improved') return 'bg-success/20 text-success';
+                    if (direction === 'regressed') return 'bg-error/20 text-error';
+                    return '';
                 }
             }
         }
