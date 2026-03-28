@@ -29,6 +29,7 @@ X-Ray Tracing:
 
 import base64
 import os
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -55,6 +56,7 @@ from src.lambdas.dashboard.chaos import (
     get_experiment,
     get_experiment_report,
     get_gate_state,
+    get_metrics,
     get_report,
     get_system_health,
     get_trends,
@@ -1485,6 +1487,61 @@ def pull_chaos_andon_cord():
             status_code=500,
             content_type="application/json",
             body=orjson.dumps({"detail": f"Andon cord failed: {e}"}).decode(),
+        )
+
+
+@app.get("/chaos/metrics")
+def get_chaos_metrics():
+    """Real-time CloudWatch metrics for chaos dashboard (Feature 1247)."""
+    event = app.current_event.raw_event
+    user_id = _get_chaos_user_id_from_event(event)
+    if user_id is None:
+        return Response(
+            status_code=401,
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Authentication required"}).decode(),
+        )
+    try:
+        params = app.current_event.query_string_parameters or {}
+
+        # Parse time parameters
+        now = datetime.now(UTC)
+        if "start_time" in params:
+            start_time = datetime.fromisoformat(params["start_time"])
+        else:
+            start_time = now - timedelta(minutes=30)
+
+        if "end_time" in params:
+            end_time = datetime.fromisoformat(params["end_time"])
+        else:
+            end_time = now
+
+        period = int(params.get("period", "60"))
+        period = max(60, min(3600, period))  # Clamp between 60s and 1hr
+
+        status_code, data = get_metrics(start_time, end_time, period)
+
+        headers = {}
+        if status_code == 429:
+            headers["Retry-After"] = str(data.get("retry_after", 5))
+
+        return Response(
+            status_code=status_code,
+            content_type="application/json",
+            body=orjson.dumps(data, default=str).decode(),
+            headers=headers,
+        )
+    except EnvironmentNotAllowedError as e:
+        return Response(
+            status_code=403,
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
+        )
+    except Exception as e:
+        return Response(
+            status_code=500,
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
         )
 
 

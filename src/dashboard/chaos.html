@@ -71,7 +71,7 @@
 
         <!-- View Navigation (Feature 1242) -->
         <div class="tabs tabs-boxed mb-6">
-            <a class="tab" :class="{'tab-active': currentView === 'experiments' || currentView === 'experiment-detail'}" @click="currentView = 'experiments'">Experiments</a>
+            <a class="tab" :class="{'tab-active': currentView === 'experiments' || currentView === 'experiment-detail'}" @click="currentView = 'experiments'; if (metricsData) { $nextTick(() => renderMetricCharts()); }">Experiments</a>
             <a class="tab" :class="{'tab-active': currentView === 'reports' || currentView === 'detail' || currentView === 'diff' || currentView === 'trends'}" @click="switchToReports()">Reports</a>
         </div>
 
@@ -356,6 +356,58 @@
                             </template>
                         </tbody>
                     </table>
+                </div>
+            </section>
+
+            <!-- Real-Time Metrics Panel (Feature 1247) -->
+            <section class="mt-8">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-2xl font-bold">System Metrics</h2>
+                    <div class="flex items-center gap-2">
+                        <span x-show="metricsLastFetched" class="text-xs opacity-50" x-text="'Updated ' + (metricsLastFetched ? new Date(metricsLastFetched).toLocaleTimeString() : '')"></span>
+                        <button class="btn btn-ghost btn-xs" @click="loadMetrics()" :disabled="metricsLoading">
+                            <span x-show="!metricsLoading">Refresh</span>
+                            <span x-show="metricsLoading" class="loading loading-spinner loading-xs"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Loading skeleton -->
+                <div x-show="metricsLoading && !metricsData" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <template x-for="i in 4" :key="i">
+                        <div class="card bg-base-100 shadow-sm">
+                            <div class="card-body p-4">
+                                <div class="h-4 w-32 bg-base-300 rounded animate-pulse mb-2"></div>
+                                <div class="h-48 bg-base-300 rounded animate-pulse"></div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- Error states -->
+                <div x-show="metricsError?.type === 'unavailable'" class="alert alert-info">
+                    <span>Metrics not available in this environment. CloudWatch access is non-prod only.</span>
+                </div>
+                <div x-show="metricsError?.type === 'throttled'" class="alert alert-warning">
+                    <span>Rate limited. Retrying in <span x-text="metricsError?.retryAfter || 5"></span>s...</span>
+                </div>
+                <div x-show="metricsError?.type === 'error'" class="alert alert-error">
+                    <span x-text="metricsError?.message"></span>
+                    <button class="btn btn-ghost btn-xs" @click="loadMetrics()">Retry</button>
+                </div>
+
+                <!-- Charts grid -->
+                <div x-show="metricsData && !metricsError" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <template x-for="(group, idx) in (metricsData?.groups || [])" :key="idx">
+                        <div class="card bg-base-100 shadow-sm">
+                            <div class="card-body p-4">
+                                <h3 class="text-sm font-bold opacity-75" x-text="group.title"></h3>
+                                <div class="h-48">
+                                    <canvas :id="'metrics-chart-' + idx"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
                 </div>
             </section>
         </div>
@@ -911,6 +963,14 @@
                 andonResult: null,
                 showAndonModal: false,
 
+                // Feature 1247: Metrics panel state
+                metricsData: null,
+                metricsLoading: false,
+                metricsError: null,
+                metricsRefreshTimer: null,
+                metricChartInstances: {},
+                metricsLastFetched: null,
+
                 // Computed
                 get activeExperiments() {
                     return this.experiments.filter(e => e.status === 'running' || e.status === 'pending');
@@ -934,6 +994,11 @@
                     // Feature 1245: Fetch gate state and refresh every 30s
                     this.fetchGateState();
                     setInterval(() => this.fetchGateState(), 30000);
+                    // Feature 1247: Load metrics and auto-refresh if experiments active
+                    this.loadMetrics();
+                    if (this.activeExperiments.length > 0) {
+                        this.startMetricsAutoRefresh();
+                    }
                 },
 
                 // Methods
@@ -1060,6 +1125,12 @@
                             }
 
                             this.experiments = experiments;
+                            // Feature 1247: Start/stop metrics auto-refresh based on active experiments
+                            if (this.activeExperiments.length > 0 && !this.metricsRefreshTimer) {
+                                this.startMetricsAutoRefresh();
+                            } else if (this.activeExperiments.length === 0 && this.metricsRefreshTimer) {
+                                this.stopMetricsAutoRefresh();
+                            }
                         }
                     } catch (error) {
                         console.error('Failed to load experiments:', error);
@@ -1107,6 +1178,9 @@
 
                 // Feature 1242: Report viewer methods
                 switchToReports() {
+                    // Feature 1247: Clean up metrics when leaving experiments view
+                    this.destroyMetricCharts();
+                    this.stopMetricsAutoRefresh();
                     this.currentView = 'reports';
                     if (this.reports.length === 0) this.loadReports();
                 },
@@ -1372,6 +1446,94 @@
                     if (direction === 'improved') return 'bg-success/20 text-success';
                     if (direction === 'regressed') return 'bg-error/20 text-error';
                     return '';
+                },
+
+                // Feature 1247: Metrics panel methods
+                async loadMetrics() {
+                    this.metricsLoading = true;
+                    this.metricsError = null;
+                    try {
+                        const response = await fetch('/chaos/metrics', {
+                            headers: { 'X-API-Key': this.getApiKey() }
+                        });
+                        const data = await response.json();
+                        if (response.ok) {
+                            this.metricsData = data;
+                            this.metricsLastFetched = new Date();
+                            this.$nextTick(() => this.renderMetricCharts());
+                        } else if (response.status === 403) {
+                            this.metricsError = { type: 'unavailable', message: data.message || data.error || 'Metrics unavailable' };
+                        } else if (response.status === 429) {
+                            this.metricsError = { type: 'throttled', message: 'Rate limited', retryAfter: data.retry_after || 5 };
+                        } else {
+                            this.metricsError = { type: 'error', message: data.detail || 'Failed to load metrics' };
+                        }
+                    } catch (error) {
+                        this.metricsError = { type: 'error', message: 'Network error loading metrics' };
+                    } finally {
+                        this.metricsLoading = false;
+                    }
+                },
+
+                destroyMetricCharts() {
+                    Object.values(this.metricChartInstances).forEach(chart => chart.destroy());
+                    this.metricChartInstances = {};
+                },
+
+                renderMetricCharts() {
+                    this.destroyMetricCharts();
+                    if (!this.metricsData?.groups) return;
+
+                    this.metricsData.groups.forEach((group, idx) => {
+                        const canvas = document.getElementById('metrics-chart-' + idx);
+                        if (!canvas) return;
+
+                        const labels = group.series[0]?.timestamps?.map(t => {
+                            const d = new Date(t);
+                            return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+                        }) || [];
+
+                        const datasets = group.series.map(s => ({
+                            label: s.label,
+                            data: s.values,
+                            borderColor: s.color,
+                            backgroundColor: s.color + '20',
+                            tension: 0.1,
+                            spanGaps: false,
+                            pointRadius: 0,
+                            borderWidth: 2,
+                            fill: true,
+                        }));
+
+                        this.metricChartInstances['metrics-chart-' + idx] = new Chart(canvas, {
+                            type: 'line',
+                            data: { labels, datasets },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                scales: {
+                                    x: { display: true, ticks: { maxTicksLimit: 6, font: { size: 10 } } },
+                                    y: { beginAtZero: true, ticks: { font: { size: 10 } } }
+                                },
+                                plugins: {
+                                    legend: { display: group.series.length > 1, position: 'top', labels: { boxWidth: 12, font: { size: 11 } } },
+                                    tooltip: { mode: 'index', intersect: false }
+                                },
+                                interaction: { mode: 'nearest', axis: 'x', intersect: false }
+                            }
+                        });
+                    });
+                },
+
+                startMetricsAutoRefresh() {
+                    if (this.metricsRefreshTimer) return;
+                    this.metricsRefreshTimer = setInterval(() => this.loadMetrics(), 30000);
+                },
+
+                stopMetricsAutoRefresh() {
+                    if (!this.metricsRefreshTimer) return;
+                    clearInterval(this.metricsRefreshTimer);
+                    this.metricsRefreshTimer = null;
                 }
             }
         }

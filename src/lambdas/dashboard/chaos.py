@@ -764,6 +764,129 @@ def pull_andon_cord() -> dict[str, Any]:
     return result
 
 
+def get_metrics(
+    start_time: datetime,
+    end_time: datetime,
+    period: int = 60,
+) -> tuple[int, dict[str, Any]]:
+    """Fetch CloudWatch metrics for the chaos dashboard (Feature 1247).
+
+    Returns (status_code, data) tuple. Status is 200/403/429/500.
+    """
+    check_environment_allowed()
+
+    from src.lambdas.dashboard.metrics_config import METRIC_GROUPS
+
+    # Build MetricDataQueries
+    queries = []
+    query_map = {}  # Maps query ID back to (group_idx, query_idx)
+
+    for g_idx, group in enumerate(METRIC_GROUPS):
+        for q_idx, q in enumerate(group["queries"]):
+            query_id = f"m{g_idx}q{q_idx}"
+
+            # Substitute {environment} in dimension values
+            dimensions = []
+            for dim_name, dim_value in q["dimensions"].items():
+                dimensions.append(
+                    {
+                        "Name": dim_name,
+                        "Value": dim_value.replace("{environment}", ENVIRONMENT),
+                    }
+                )
+
+            stat_key = (
+                "Stat"
+                if q["stat"] in ("Sum", "Average", "Minimum", "Maximum", "SampleCount")
+                else "ExtendedStatistics"
+            )
+
+            query_def = {
+                "Id": query_id,
+                "MetricStat": {
+                    "Metric": {
+                        "Namespace": q["namespace"],
+                        "MetricName": q["metric_name"],
+                        "Dimensions": dimensions,
+                    },
+                    "Period": period,
+                    "Stat": q["stat"] if stat_key == "Stat" else "Average",
+                },
+                "ReturnData": True,
+            }
+
+            # Handle extended statistics (p95, p99, etc.)
+            if stat_key == "ExtendedStatistics":
+                query_def["MetricStat"]["Stat"] = "Average"  # Fallback
+                # For p95, use the statistics-based approach
+                if q["stat"].startswith("p"):
+                    query_def["MetricStat"]["Stat"] = q["stat"]
+
+            queries.append(query_def)
+            query_map[query_id] = (g_idx, q_idx)
+
+    # Call CloudWatch
+    try:
+        cw = boto3.client("cloudwatch")
+        response = cw.get_metric_data(
+            MetricDataQueries=queries,
+            StartTime=start_time,
+            EndTime=end_time,
+        )
+    except ClientError as e:
+        code = e.response.get("Error", {}).get("Code", "")
+        if code == "AccessDeniedException":
+            return (
+                403,
+                {
+                    "error": "metrics_unavailable",
+                    "message": "CloudWatch metrics not available in this environment",
+                },
+            )
+        if code == "Throttling":
+            return (429, {"error": "throttled", "retry_after": 5})
+        return (500, {"error": "metrics_error", "message": str(e)})
+    except Exception as e:
+        return (500, {"error": "metrics_error", "message": str(e)})
+
+    # Parse response into groups
+    groups = []
+    for g_idx, group in enumerate(METRIC_GROUPS):
+        series = []
+        for q_idx, q in enumerate(group["queries"]):
+            query_id = f"m{g_idx}q{q_idx}"
+
+            # Find matching result
+            timestamps = []
+            values = []
+            for result in response.get("MetricDataResults", []):
+                if result["Id"] == query_id:
+                    timestamps = [t.isoformat() for t in result.get("Timestamps", [])]
+                    values = [float(v) for v in result.get("Values", [])]
+                    # CloudWatch returns newest-first, reverse for chronological
+                    timestamps.reverse()
+                    values.reverse()
+                    break
+
+            series.append(
+                {
+                    "label": q["label"],
+                    "color": q["color"],
+                    "timestamps": timestamps,
+                    "values": values,
+                }
+            )
+
+        groups.append(
+            {
+                "title": group["title"],
+                "series": series,
+            }
+        )
+
+    return (200, {"groups": groups})
+
+
 def check_environment_allowed():
     """
     Verify chaos testing is allowed in current environment.
