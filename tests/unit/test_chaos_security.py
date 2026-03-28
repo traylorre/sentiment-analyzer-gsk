@@ -21,11 +21,14 @@ os.environ.setdefault("CHAOS_EXPERIMENTS_TABLE", "test-chaos-experiments")
 from tests.conftest import make_event
 
 
-def _reload_handler_with_env(env_value: str):
-    """Reload handler module with a specific ENVIRONMENT value."""
+def _reload_handler_with_env(env_value: str, cors_origins: str = ""):
+    """Reload handler module with a specific ENVIRONMENT value and optional CORS_ORIGINS."""
     import importlib
 
-    with patch.dict(os.environ, {"ENVIRONMENT": env_value}):
+    env_overrides = {"ENVIRONMENT": env_value}
+    if cors_origins:
+        env_overrides["CORS_ORIGINS"] = cors_origins
+    with patch.dict(os.environ, env_overrides):
         import src.lambdas.dashboard.handler as handler_module
 
         importlib.reload(handler_module)
@@ -125,6 +128,50 @@ class TestChaosEnvironmentGating:
         event = make_event(method="POST", path="/chaos/experiments/fake-id/start")
         response = handler.lambda_handler(event, mock_lambda_context)
         assert response["statusCode"] == 404
+
+    def test_chaos_route_404_has_cors_for_valid_origin(self, mock_lambda_context):
+        """Env-gated 404 includes CORS headers when Origin is in allowed list."""
+        test_origin = "https://test.example.com"
+        handler = _reload_handler_with_env("preprod", cors_origins=test_origin)
+        event = make_event(
+            method="GET",
+            path="/chaos/experiments",
+            headers={"origin": test_origin},
+        )
+        response = handler.lambda_handler(event, mock_lambda_context)
+        assert response["statusCode"] == 404
+        headers = response.get("headers", {})
+        assert headers.get("Access-Control-Allow-Origin") == test_origin
+        assert headers.get("Access-Control-Allow-Credentials") == "true"
+        assert headers.get("Vary") == "Origin"
+
+    def test_chaos_route_404_no_cors_for_unknown_origin(self, mock_lambda_context):
+        """Env-gated 404 omits CORS origin for unknown Origin header."""
+        handler = _reload_handler_with_env(
+            "preprod", cors_origins="https://allowed.example.com"
+        )
+        event = make_event(
+            method="GET",
+            path="/chaos/experiments",
+            headers={"origin": "https://evil.example.com"},
+        )
+        response = handler.lambda_handler(event, mock_lambda_context)
+        assert response["statusCode"] == 404
+        headers = response.get("headers", {})
+        assert "Access-Control-Allow-Origin" not in headers
+        assert headers.get("Vary") == "Origin"
+
+    def test_chaos_route_404_no_cors_for_missing_origin(self, mock_lambda_context):
+        """Env-gated 404 omits CORS origin when no Origin header sent."""
+        handler = _reload_handler_with_env(
+            "preprod", cors_origins="https://allowed.example.com"
+        )
+        event = make_event(method="GET", path="/chaos/experiments")
+        response = handler.lambda_handler(event, mock_lambda_context)
+        assert response["statusCode"] == 404
+        headers = response.get("headers", {})
+        assert "Access-Control-Allow-Origin" not in headers
+        assert headers.get("Vary") == "Origin"
 
 
 # ===================================================================

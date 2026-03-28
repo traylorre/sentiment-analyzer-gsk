@@ -586,9 +586,13 @@ class TestSecurityMitigations:
         """
         P0-5: Test CORS is delegated to Lambda Function URL.
 
-        CORS is now handled at the infrastructure level (Lambda Function URL
+        CORS is handled at the infrastructure level (Lambda Function URL
         configuration in Terraform), NOT at the application level. This prevents
         duplicate CORS headers which browsers reject.
+
+        Exception: Feature 1268 adds CORS headers to env-gated 404 responses
+        specifically, because neither Lambda Function URL (AWS_IAM auth) nor
+        API Gateway (AWS_PROXY pass-through) adds CORS to Lambda-returned responses.
 
         See: infrastructure/terraform/main.tf for CORS configuration.
         """
@@ -613,6 +617,10 @@ class TestSecurityMitigations:
 
         CORS middleware was removed to prevent duplicate CORS headers.
         Lambda Function URL handles CORS exclusively.
+
+        Exception: Feature 1268 adds CORS headers to env-gated 404 responses
+        specifically, because neither Lambda Function URL (AWS_IAM auth) nor
+        API Gateway (AWS_PROXY pass-through) adds CORS to Lambda-returned responses.
 
         With Powertools APIGatewayRestResolver, CORS is configured via
         the CORSConfig parameter, not middleware. Verify no CORS config
