@@ -4,7 +4,7 @@ Unit Tests for Chaos Reports (Feature 1240)
 
 Tests cover:
 - Verdict IntEnum ordering and aggregation (T-023)
-- Report persistence with ULID generation (T-024)
+- Report persistence with UUID generation (T-024)
 - Plan report aggregation with worst-case verdicts (T-025)
 - Baseline comparison logic (T-026)
 """
@@ -137,48 +137,40 @@ class TestVerdict:
 
 
 class TestPersistReport:
-    def test_persist_generates_ulid(
+    def test_persist_generates_uuid(
         self, mock_environment, mock_reports_table, sample_report
     ):
-        """persist_report generates a ULID if no report_id provided."""
-        mock_ulid_module = MagicMock()
-        mock_ulid_module.new.return_value = "01HV1234567890ABCDEFGHJK"
-        with patch.dict("sys.modules", {"ulid": mock_ulid_module}):
+        """persist_report generates a UUID if no report_id provided."""
+        with patch("src.lambdas.dashboard.chaos.uuid") as mock_uuid:
+            mock_uuid.uuid4.return_value = "test-uuid-id"
             result = persist_report(sample_report)
-            assert result["report_id"] == "01HV1234567890ABCDEFGHJK"
-            mock_ulid_module.new.assert_called_once()
+            assert result["report_id"] == "test-uuid-id"
+            mock_uuid.uuid4.assert_called_once()
 
     def test_persist_uses_existing_report_id(
         self, mock_environment, mock_reports_table, sample_report
     ):
         """persist_report keeps existing report_id when provided."""
         sample_report["report_id"] = "my-custom-id"
-        mock_ulid = MagicMock()
-        with patch.dict("sys.modules", {"ulid": mock_ulid}):
-            result = persist_report(sample_report)
-            assert result["report_id"] == "my-custom-id"
-            mock_ulid.new.assert_not_called()
+        result = persist_report(sample_report)
+        assert result["report_id"] == "my-custom-id"
 
     def test_persist_calls_put_item(
         self, mock_environment, mock_reports_table, sample_report
     ):
         """persist_report writes to DynamoDB."""
         sample_report["report_id"] = "test-report-id"
-        mock_ulid = MagicMock()
-        with patch.dict("sys.modules", {"ulid": mock_ulid}):
-            result = persist_report(sample_report)
-            mock_reports_table.put_item.assert_called_once()
-            assert result["report_id"] == "test-report-id"
+        result = persist_report(sample_report)
+        mock_reports_table.put_item.assert_called_once()
+        assert result["report_id"] == "test-report-id"
 
     def test_persist_no_ttl(self, mock_environment, mock_reports_table, sample_report):
         """Persisted reports have no TTL attribute."""
         sample_report["report_id"] = "test-report-id"
-        mock_ulid = MagicMock()
-        with patch.dict("sys.modules", {"ulid": mock_ulid}):
-            persist_report(sample_report)
-            call_kwargs = mock_reports_table.put_item.call_args
-            item = call_kwargs.kwargs["Item"]
-            assert "ttl_timestamp" not in item
+        persist_report(sample_report)
+        call_kwargs = mock_reports_table.put_item.call_args
+        item = call_kwargs.kwargs["Item"]
+        assert "ttl_timestamp" not in item
 
     def test_persist_survives_dynamodb_failure(
         self, mock_environment, mock_reports_table, sample_report
@@ -189,10 +181,8 @@ class TestPersistReport:
             "PutItem",
         )
         sample_report["report_id"] = "test-report-id"
-        mock_ulid = MagicMock()
-        with patch.dict("sys.modules", {"ulid": mock_ulid}):
-            result = persist_report(sample_report)
-            assert result["report_id"] == "test-report-id"
+        result = persist_report(sample_report)
+        assert result["report_id"] == "test-report-id"
 
     def test_persist_skips_when_table_not_configured(self, monkeypatch, sample_report):
         """persist_report returns data without writing when table is empty."""
@@ -209,12 +199,10 @@ class TestPersistReport:
             "scenario_type": "ingestion_failure",
             "verdict": "CLEAN",
         }
-        mock_ulid = MagicMock()
-        with patch.dict("sys.modules", {"ulid": mock_ulid}):
-            result = persist_report(report_data)
-            assert "created_at" in result
-            assert result["environment"] == "preprod"
-            assert result["report_type"] == "experiment"
+        result = persist_report(report_data)
+        assert "created_at" in result
+        assert result["environment"] == "preprod"
+        assert result["report_type"] == "experiment"
 
 
 class TestGetReport:
@@ -394,9 +382,8 @@ class TestPlanReport:
                     "status": "stopped",
                 },
             ]
-            mock_ulid = MagicMock()
-            mock_ulid.new.return_value = "plan-report-id"
-            with patch.dict("sys.modules", {"ulid": mock_ulid}):
+            with patch("src.lambdas.dashboard.chaos.uuid") as mock_uuid:
+                mock_uuid.uuid4.return_value = "plan-report-id"
                 result = generate_plan_report(
                     "ingestion-resilience", ["exp-1", "exp-2"]
                 )
@@ -424,9 +411,8 @@ class TestPlanReport:
                     "status": "stopped",
                 },
             ]
-            mock_ulid = MagicMock()
-            mock_ulid.new.return_value = "plan-report-id"
-            with patch.dict("sys.modules", {"ulid": mock_ulid}):
+            with patch("src.lambdas.dashboard.chaos.uuid") as mock_uuid:
+                mock_uuid.uuid4.return_value = "plan-report-id"
                 result = generate_plan_report("test-plan", ["exp-1", "exp-2"])
                 assert result["verdict"] == "RECOVERY_INCOMPLETE"
 
@@ -442,9 +428,8 @@ class TestPlanReport:
         mock_reports_table.scan.return_value = {"Items": []}
         with patch("src.lambdas.dashboard.chaos.get_experiment_report") as mock_get_exp:
             mock_get_exp.side_effect = ChaosError("Not found")
-            mock_ulid = MagicMock()
-            mock_ulid.new.return_value = "plan-report-id"
-            with patch.dict("sys.modules", {"ulid": mock_ulid}):
+            with patch("src.lambdas.dashboard.chaos.uuid") as mock_uuid:
+                mock_uuid.uuid4.return_value = "plan-report-id"
                 result = generate_plan_report("test-plan", ["exp-1"])
                 assert result["verdict"] == "INCONCLUSIVE"
 
@@ -468,9 +453,8 @@ class TestPlanReport:
                     "status": "stopped",
                 },
             ]
-            mock_ulid = MagicMock()
-            mock_ulid.new.return_value = "plan-report-id"
-            with patch.dict("sys.modules", {"ulid": mock_ulid}):
+            with patch("src.lambdas.dashboard.chaos.uuid") as mock_uuid:
+                mock_uuid.uuid4.return_value = "plan-report-id"
                 result = generate_plan_report("test-plan", ["exp-1", "exp-2"])
                 assert result["duration_seconds"] == 150
 

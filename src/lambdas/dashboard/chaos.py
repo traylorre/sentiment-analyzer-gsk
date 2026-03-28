@@ -218,9 +218,7 @@ def persist_report(report_data: dict[str, Any]) -> dict[str, Any]:
         logger.warning("CHAOS_REPORTS_TABLE not configured, skipping persistence")
         return report_data
 
-    import ulid as ulid_mod
-
-    report_id = report_data.get("report_id") or str(ulid_mod.new())
+    report_id = report_data.get("report_id") or str(uuid.uuid4())
     report_data["report_id"] = report_id
     report_data.setdefault("created_at", datetime.now(UTC).isoformat() + "Z")
     report_data.setdefault("environment", ENVIRONMENT)
