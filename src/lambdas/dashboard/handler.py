@@ -15,7 +15,10 @@ For On-Call Engineers:
 For Developers:
     - Uses AWS Lambda Powertools LambdaFunctionUrlResolver for routing
     - Static files served from /static/ prefix
-    - CORS enabled for all origins (demo configuration)
+    - CORS handled at infrastructure level (Lambda Function URL config)
+    - Exception: env-gated 404 responses include application-level CORS
+      headers (Feature 1268) because neither API Gateway nor Function URL
+      adds CORS to Lambda-returned responses
 
 Auth (Feature 1039):
     - All /api/* endpoints use session-based auth via Bearer token
@@ -96,6 +99,14 @@ CHAOS_EXPERIMENTS_TABLE = os.environ.get("CHAOS_EXPERIMENTS_TABLE", "")
 ENVIRONMENT = os.environ["ENVIRONMENT"]
 SSE_LAMBDA_URL = os.environ.get("SSE_LAMBDA_URL", "")
 
+# Feature 1268: Allowed CORS origins for env-gated responses
+# Parsed from comma-separated CORS_ORIGINS env var (set by Terraform from var.cors_allowed_origins)
+_CORS_ALLOWED_ORIGINS: set[str] = {
+    origin.strip()
+    for origin in os.environ.get("CORS_ORIGINS", "").split(",")
+    if origin.strip()
+}
+
 # Module-level init logging (FR-028)
 logger.info(
     "Dashboard Lambda starting",
@@ -120,11 +131,16 @@ def _is_dev_environment() -> bool:
     return ENVIRONMENT.lower() in _DEV_ENVIRONMENTS
 
 
-_NOT_FOUND_RESPONSE = Response(
-    status_code=404,
-    content_type="application/json",
-    body=orjson.dumps({"detail": "Not found"}).decode(),
-)
+def _get_request_origin() -> str | None:
+    """Extract Origin header from current Powertools request.
+
+    Returns None if Origin header is missing or if called outside
+    a request context (defensive).
+    """
+    try:
+        return app.current_event.headers.get("origin")
+    except Exception:
+        return None
 
 
 # Path to static dashboard files
@@ -223,18 +239,58 @@ def _get_chaos_user_id_from_event(event: dict) -> str | None:
     return auth_context.user_id
 
 
-_NOT_FOUND_RESPONSE = Response(
-    status_code=404,
-    content_type="application/json",
-    body=orjson.dumps({"detail": "Not found"}).decode(),
-)
+def _make_not_found_response(origin: str | None = None) -> Response:
+    """Create 404 response with conditional CORS headers for env-gated routes.
+
+    Feature 1268: When the requesting origin is in the allowed CORS origins
+    list, includes Access-Control-Allow-Origin and related headers so browsers
+    can read the response body. Without these headers, browsers block the
+    response entirely (opaque CORS failure).
+
+    This is intentionally application-level CORS for a specific case:
+    env-gated routes return 404 BEFORE the normal pipeline processes the
+    request, and neither API Gateway (AWS_PROXY pass-through) nor Lambda
+    Function URL (AWS_IAM auth only) adds CORS headers to Lambda-returned
+    responses.
+
+    Args:
+        origin: The Origin header from the request, or None.
+
+    Returns:
+        Response with 404 status, JSON body, and conditional CORS headers.
+    """
+    headers: dict[str, str] = {"Vary": "Origin"}
+
+    if origin and origin in _CORS_ALLOWED_ORIGINS:
+        headers.update(
+            {
+                "Access-Control-Allow-Origin": origin,
+                "Access-Control-Allow-Credentials": "true",
+                "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,PATCH,OPTIONS",
+                "Access-Control-Allow-Headers": (
+                    "Content-Type,Authorization,Accept,Cache-Control,"
+                    "Last-Event-ID,X-Amzn-Trace-Id,X-User-ID"
+                ),
+            }
+        )
+        logger.debug(
+            "Env-gated 404 with CORS",
+            extra={"origin": origin},
+        )
+
+    return Response(
+        status_code=404,
+        content_type="application/json",
+        body=orjson.dumps({"detail": "Not found"}).decode(),
+        headers=headers,
+    )
 
 
 @app.get("/")
 def serve_index():
     """Serve the main dashboard HTML page (locked down in prod/preprod)."""
     if not _is_dev_environment():
-        return _NOT_FOUND_RESPONSE
+        return _make_not_found_response(_get_request_origin())
     index_path = STATIC_DIR / "index.html"
     if not index_path.exists():
         logger.error("index.html not found", extra={"path": str(index_path)})
@@ -255,7 +311,7 @@ def serve_index():
 def serve_favicon():
     """Serve the favicon.ico file (locked down in prod/preprod)."""
     if not _is_dev_environment():
-        return _NOT_FOUND_RESPONSE
+        return _make_not_found_response(_get_request_origin())
     favicon_path = STATIC_DIR / "favicon.ico"
     if not favicon_path.exists():
         return Response(
@@ -276,7 +332,7 @@ def serve_favicon():
 def serve_chaos():
     """Serve the chaos testing UI page (locked down in prod/preprod)."""
     if not _is_dev_environment():
-        return _NOT_FOUND_RESPONSE
+        return _make_not_found_response(_get_request_origin())
     chaos_path = STATIC_DIR / "chaos.html"
     if not chaos_path.exists():
         logger.error("chaos.html not found", extra={"path": str(chaos_path)})
@@ -297,7 +353,7 @@ def serve_chaos():
 def serve_static(filename: str):
     """Serve static dashboard files (locked down in prod/preprod)."""
     if not _is_dev_environment():
-        return _NOT_FOUND_RESPONSE
+        return _make_not_found_response(_get_request_origin())
     if filename not in ALLOWED_STATIC_FILES:
         logger.warning(
             "Static file request for non-whitelisted file",
@@ -342,7 +398,7 @@ def serve_static(filename: str):
 def api_index():
     """API index listing all available endpoints (locked down in prod/preprod)."""
     if not _is_dev_environment():
-        return _NOT_FOUND_RESPONSE
+        return _make_not_found_response(_get_request_origin())
     return Response(
         status_code=200,
         content_type="application/json",
@@ -825,7 +881,7 @@ def get_articles_v2():
 def create_chaos_experiment():
     """Create a new chaos experiment (locked down in prod/preprod)."""
     if not _is_dev_environment():
-        return _NOT_FOUND_RESPONSE
+        return _make_not_found_response(_get_request_origin())
     event = app.current_event.raw_event
     user_id = _get_chaos_user_id_from_event(event)
     if user_id is None:
@@ -888,7 +944,7 @@ def create_chaos_experiment():
 def list_chaos_experiments():
     """List chaos experiments (locked down in prod/preprod)."""
     if not _is_dev_environment():
-        return _NOT_FOUND_RESPONSE
+        return _make_not_found_response(_get_request_origin())
     event = app.current_event.raw_event
     user_id = _get_chaos_user_id_from_event(event)
     if user_id is None:
@@ -921,7 +977,7 @@ def list_chaos_experiments():
 def get_chaos_experiment(experiment_id: str):
     """Get chaos experiment by ID (locked down in prod/preprod)."""
     if not _is_dev_environment():
-        return _NOT_FOUND_RESPONSE
+        return _make_not_found_response(_get_request_origin())
     event = app.current_event.raw_event
     user_id = _get_chaos_user_id_from_event(event)
     if user_id is None:
@@ -950,7 +1006,7 @@ def get_chaos_experiment(experiment_id: str):
 def start_chaos_experiment(experiment_id: str):
     """Start a chaos experiment (locked down in prod/preprod)."""
     if not _is_dev_environment():
-        return _NOT_FOUND_RESPONSE
+        return _make_not_found_response(_get_request_origin())
     event = app.current_event.raw_event
     user_id = _get_chaos_user_id_from_event(event)
     if user_id is None:
@@ -999,7 +1055,7 @@ def start_chaos_experiment(experiment_id: str):
 def stop_chaos_experiment(experiment_id: str):
     """Stop a running chaos experiment (locked down in prod/preprod)."""
     if not _is_dev_environment():
-        return _NOT_FOUND_RESPONSE
+        return _make_not_found_response(_get_request_origin())
     event = app.current_event.raw_event
     user_id = _get_chaos_user_id_from_event(event)
     if user_id is None:
@@ -1041,7 +1097,7 @@ def stop_chaos_experiment(experiment_id: str):
 def get_chaos_experiment_report(experiment_id: str):
     """Get chaos experiment report (locked down in prod/preprod)."""
     if not _is_dev_environment():
-        return _NOT_FOUND_RESPONSE
+        return _make_not_found_response(_get_request_origin())
     event = app.current_event.raw_event
     user_id = _get_chaos_user_id_from_event(event)
     if user_id is None:
@@ -1077,7 +1133,7 @@ def get_chaos_experiment_report(experiment_id: str):
 def delete_chaos_experiment(experiment_id: str):
     """Delete a chaos experiment (locked down in prod/preprod)."""
     if not _is_dev_environment():
-        return _NOT_FOUND_RESPONSE
+        return _make_not_found_response(_get_request_origin())
     event = app.current_event.raw_event
     user_id = _get_chaos_user_id_from_event(event)
     if user_id is None:
