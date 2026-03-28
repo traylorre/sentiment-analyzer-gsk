@@ -49,3 +49,16 @@ variable "chaos_experiments_table_arn" {
   type        = string
   default     = ""
 }
+
+# Feature 1250: Auto-restore scheduling
+variable "dashboard_lambda_arn" {
+  description = "ARN of the Dashboard Lambda for auto-restore scheduling target"
+  type        = string
+  default     = ""
+}
+
+variable "alerting_topic_arn" {
+  description = "ARN of SNS topic for CloudWatch alarm notifications"
+  type        = string
+  default     = ""
+}

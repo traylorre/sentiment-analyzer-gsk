@@ -408,6 +408,9 @@ module "dashboard_lambda" {
     CHAOS_EXPERIMENTS_TABLE = module.dynamodb.chaos_experiments_table_name
     # Feature 1240: Chaos Reports persistence table (unconditional, $0 when empty)
     CHAOS_REPORTS_TABLE = module.dynamodb.chaos_reports_table_name
+    # Feature 1250: Auto-restore scheduling
+    SCHEDULER_ROLE_ARN   = try(module.chaos.chaos_scheduler_role_arn, "")
+    DASHBOARD_LAMBDA_ARN = module.dashboard_lambda.function_arn
     # CORS: Pass explicit origins from tfvars (no wildcard fallback)
     # Feature 1203: Amplify domain should be in cors_allowed_origins
     CORS_ORIGINS = join(",", var.cors_allowed_origins)

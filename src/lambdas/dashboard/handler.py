@@ -48,6 +48,7 @@ from src.lambdas.dashboard.api_v2 import (
 from src.lambdas.dashboard.chaos import (
     ChaosError,
     EnvironmentNotAllowedError,
+    RateLimitError,
     compare_reports,
     create_experiment,
     delete_experiment,
@@ -104,6 +105,8 @@ logger.info(
     },
 )
 
+# Feature 1250: Environment gating for chaos endpoints (defense in depth).
+# Fail-closed: only local/dev/test serve chaos. Prod/preprod/unknown → 404.
 _DEV_ENVIRONMENTS = {"local", "dev", "test"}
 
 
@@ -115,6 +118,13 @@ def _is_dev_environment() -> bool:
     Unset, empty, unknown, 'preprod', 'prod' all return False.
     """
     return ENVIRONMENT.lower() in _DEV_ENVIRONMENTS
+
+
+_NOT_FOUND_RESPONSE = Response(
+    status_code=404,
+    content_type="application/json",
+    body=orjson.dumps({"detail": "Not found"}).decode(),
+)
 
 
 # Path to static dashboard files
@@ -200,19 +210,14 @@ def _get_authenticated_user_id_from_event(event: dict) -> str | None:
 
 
 def _get_chaos_user_id_from_event(event: dict) -> str | None:
-    """Extract user_id for chaos endpoints.
+    """Extract authenticated (non-anonymous) user_id for chaos endpoints.
 
-    In non-production environments (local/dev/test), anonymous auth is accepted
-    for chaos operations. Production safety is enforced by chaos.py's
-    check_environment_allowed() which blocks all chaos operations in prod.
+    Feature 1250: Anonymous sessions are rejected in ALL environments.
+    Only JWT-authenticated users can execute chaos operations.
     """
-    env = os.environ.get("ENVIRONMENT", "")
     auth_context = extract_auth_context_typed(event)
     if auth_context.user_id is None:
         return None
-    # Allow anonymous in non-prod for local dev and testing
-    if auth_context.auth_type == AuthType.ANONYMOUS and env in ("local", "dev", "test"):
-        return auth_context.user_id
     if auth_context.auth_type == AuthType.ANONYMOUS:
         return None
     return auth_context.user_id
@@ -818,7 +823,9 @@ def get_articles_v2():
 
 @app.post("/chaos/experiments")
 def create_chaos_experiment():
-    """Create a new chaos experiment."""
+    """Create a new chaos experiment (locked down in prod/preprod)."""
+    if not _is_dev_environment():
+        return _NOT_FOUND_RESPONSE
     event = app.current_event.raw_event
     user_id = _get_chaos_user_id_from_event(event)
     if user_id is None:
@@ -836,12 +843,22 @@ def create_chaos_experiment():
             blast_radius=body["blast_radius"],
             duration_seconds=body["duration_seconds"],
             parameters=body.get("parameters"),
+            user_id=user_id,
         )
 
         return Response(
             status_code=201,
             content_type="application/json",
             body=orjson.dumps(experiment).decode(),
+        )
+    except RateLimitError:
+        return Response(
+            status_code=429,
+            content_type="application/json",
+            body=orjson.dumps(
+                {"detail": "Rate limit exceeded. Max 1 experiment per 60 seconds."}
+            ).decode(),
+            headers={"Retry-After": "60"},
         )
     except EnvironmentNotAllowedError as e:
         logger.warning(
@@ -869,7 +886,9 @@ def create_chaos_experiment():
 
 @app.get("/chaos/experiments")
 def list_chaos_experiments():
-    """List chaos experiments with optional status filter."""
+    """List chaos experiments (locked down in prod/preprod)."""
+    if not _is_dev_environment():
+        return _NOT_FOUND_RESPONSE
     event = app.current_event.raw_event
     user_id = _get_chaos_user_id_from_event(event)
     if user_id is None:
@@ -900,7 +919,9 @@ def list_chaos_experiments():
 
 @app.get("/chaos/experiments/<experiment_id>")
 def get_chaos_experiment(experiment_id: str):
-    """Get chaos experiment by ID."""
+    """Get chaos experiment by ID (locked down in prod/preprod)."""
+    if not _is_dev_environment():
+        return _NOT_FOUND_RESPONSE
     event = app.current_event.raw_event
     user_id = _get_chaos_user_id_from_event(event)
     if user_id is None:
@@ -927,7 +948,9 @@ def get_chaos_experiment(experiment_id: str):
 
 @app.post("/chaos/experiments/<experiment_id>/start")
 def start_chaos_experiment(experiment_id: str):
-    """Start a chaos experiment."""
+    """Start a chaos experiment (locked down in prod/preprod)."""
+    if not _is_dev_environment():
+        return _NOT_FOUND_RESPONSE
     event = app.current_event.raw_event
     user_id = _get_chaos_user_id_from_event(event)
     if user_id is None:
@@ -945,17 +968,24 @@ def start_chaos_experiment(experiment_id: str):
             body=orjson.dumps(updated_experiment).decode(),
         )
     except ChaosError as e:
+        error_msg = str(e)
+        if "already running" in error_msg.lower():
+            return Response(
+                status_code=409,
+                content_type="application/json",
+                body=orjson.dumps({"detail": error_msg}).decode(),
+            )
         logger.error(
             "Chaos experiment start failed",
             extra={
                 "experiment_id": sanitize_for_log(experiment_id),
-                "error": sanitize_for_log(str(e)),
+                "error": sanitize_for_log(error_msg),
             },
         )
         return Response(
             status_code=500,
             content_type="application/json",
-            body=orjson.dumps({"detail": str(e)}).decode(),
+            body=orjson.dumps({"detail": error_msg}).decode(),
         )
     except EnvironmentNotAllowedError as e:
         return Response(
@@ -967,7 +997,9 @@ def start_chaos_experiment(experiment_id: str):
 
 @app.post("/chaos/experiments/<experiment_id>/stop")
 def stop_chaos_experiment(experiment_id: str):
-    """Stop a running chaos experiment."""
+    """Stop a running chaos experiment (locked down in prod/preprod)."""
+    if not _is_dev_environment():
+        return _NOT_FOUND_RESPONSE
     event = app.current_event.raw_event
     user_id = _get_chaos_user_id_from_event(event)
     if user_id is None:
@@ -1007,7 +1039,9 @@ def stop_chaos_experiment(experiment_id: str):
 
 @app.get("/chaos/experiments/<experiment_id>/report")
 def get_chaos_experiment_report(experiment_id: str):
-    """Get a comprehensive report for a chaos experiment."""
+    """Get chaos experiment report (locked down in prod/preprod)."""
+    if not _is_dev_environment():
+        return _NOT_FOUND_RESPONSE
     event = app.current_event.raw_event
     user_id = _get_chaos_user_id_from_event(event)
     if user_id is None:
@@ -1041,7 +1075,9 @@ def get_chaos_experiment_report(experiment_id: str):
 
 @app.delete("/chaos/experiments/<experiment_id>")
 def delete_chaos_experiment(experiment_id: str):
-    """Delete a chaos experiment."""
+    """Delete a chaos experiment (locked down in prod/preprod)."""
+    if not _is_dev_environment():
+        return _NOT_FOUND_RESPONSE
     event = app.current_event.raw_event
     user_id = _get_chaos_user_id_from_event(event)
     if user_id is None:
@@ -1545,6 +1581,47 @@ def get_chaos_metrics():
         )
 
 
+def _handle_auto_restore(experiment_id: str) -> dict[str, Any]:
+    """Handle EventBridge Scheduler auto-restore callback (Feature 1250).
+
+    Called directly from lambda_handler for raw (non-HTTP) events.
+    Returns a dict (not a Powertools Response).
+    """
+    from src.lambdas.dashboard.chaos import get_experiment, stop_experiment
+
+    if not experiment_id:
+        logger.warning("Auto-restore called without experiment_id")
+        return {"statusCode": 400, "body": '{"status":"missing_experiment_id"}'}
+
+    experiment = get_experiment(experiment_id)
+    if not experiment or experiment.get("status") != "running":
+        logger.info(
+            "Auto-restore no-op: experiment not running",
+            extra={
+                "experiment_id": experiment_id,
+                "status": experiment.get("status") if experiment else "not_found",
+            },
+        )
+        return {"statusCode": 200, "body": '{"status":"no-op"}'}
+
+    try:
+        stop_experiment(experiment_id, auto_stopped=True)
+        logger.info(
+            "Auto-restore completed",
+            extra={"experiment_id": experiment_id},
+        )
+        return {
+            "statusCode": 200,
+            "body": f'{{"status":"restored","experiment_id":"{experiment_id}"}}',
+        }
+    except Exception as e:
+        logger.error(
+            "Auto-restore failed",
+            extra={"experiment_id": experiment_id, "error": str(e)},
+        )
+        return {"statusCode": 500, "body": f'{{"status":"error","detail":"{e}"}}'}
+
+
 # Lambda handler entry point
 @logger.inject_lambda_context
 @tracer.capture_lambda_handler
@@ -1572,6 +1649,12 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             ),
         },
     )
+
+    # Feature 1250: Handle EventBridge Scheduler auto-restore callback.
+    # Scheduler invokes Lambda directly with raw JSON (not HTTP), so this
+    # MUST be checked before Powertools routing which expects HTTP events.
+    if event.get("action") == "chaos-auto-restore":
+        return _handle_auto_restore(event.get("experiment_id", ""))
 
     response = app.resolve(event, context)
 
