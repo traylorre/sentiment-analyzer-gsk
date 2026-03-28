@@ -17,7 +17,7 @@ export interface SentimentData {
   tickers: TickerSentiment[];
   lastUpdated: string;
   nextRefreshAt: string;
-  cacheStatus: 'fresh' | 'stale' | 'error';
+  cacheStatus: 'fresh' | 'stale' | 'refreshing' | 'error';
 }
 
 export interface SentimentTimeSeries {

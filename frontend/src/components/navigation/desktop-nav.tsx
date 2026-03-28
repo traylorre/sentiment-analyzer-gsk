@@ -6,6 +6,7 @@ import { useViewStore, type ViewType } from '@/stores/view-store';
 import { useHaptic } from '@/hooks/use-haptic';
 import { cn } from '@/lib/utils';
 import { UserMenu } from '@/components/auth/user-menu';
+import { DataFreshnessIndicator } from '@/components/dashboard/data-freshness-indicator';
 
 interface NavItem {
   view: ViewType;
@@ -108,10 +109,11 @@ interface DesktopHeaderProps {
   title?: string;
   subtitle?: string;
   actions?: React.ReactNode;
+  lastUpdated?: string | null;
   className?: string;
 }
 
-export function DesktopHeader({ title, subtitle, actions, className }: DesktopHeaderProps) {
+export function DesktopHeader({ title, subtitle, actions, lastUpdated = null, className }: DesktopHeaderProps) {
   const { currentView } = useViewStore();
 
   const viewTitles: Record<ViewType, string> = {
@@ -135,7 +137,10 @@ export function DesktopHeader({ title, subtitle, actions, className }: DesktopHe
         <h1 className="text-xl font-semibold text-foreground">{displayTitle}</h1>
         {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
       </div>
-      {actions && <div className="flex items-center gap-3">{actions}</div>}
+      <div className="flex items-center gap-3">
+        <DataFreshnessIndicator lastUpdated={lastUpdated} />
+        {actions}
+      </div>
     </header>
   );
 }

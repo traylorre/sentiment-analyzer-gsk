@@ -1,4 +1,5 @@
 import { api } from './client';
+import { snakeToCamel } from './transform';
 import type { SentimentData, SentimentTimeSeries, SentimentSource } from '@/types/sentiment';
 
 export interface SentimentHistoryParams {
@@ -11,7 +12,8 @@ export const sentimentApi = {
    * Get current sentiment data for a configuration
    */
   get: (configId: string) =>
-    api.get<SentimentData>(`/api/v2/configurations/${configId}/sentiment`),
+    api.get(`/api/v2/configurations/${configId}/sentiment`)
+      .then((data) => snakeToCamel(data) as SentimentData),
 
   /**
    * Get sentiment time series history for a specific ticker
