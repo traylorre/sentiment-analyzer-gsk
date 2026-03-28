@@ -47,11 +47,18 @@ from src.lambdas.dashboard.api_v2 import (
 from src.lambdas.dashboard.chaos import (
     ChaosError,
     EnvironmentNotAllowedError,
+    compare_reports,
     create_experiment,
     delete_experiment,
+    delete_report,
+    generate_plan_report,
     get_experiment,
     get_experiment_report,
+    get_report,
+    get_trends,
     list_experiments,
+    list_reports,
+    persist_report,
     start_experiment,
     stop_experiment,
 )
@@ -1050,6 +1057,282 @@ def delete_chaos_experiment(experiment_id: str):
         status_code=200,
         content_type="application/json",
         body=orjson.dumps({"message": "Experiment deleted successfully"}).decode(),
+    )
+
+
+# --- Chaos Reports (Feature 1240) ---
+
+
+@app.post("/chaos/reports")
+def create_chaos_report():
+    """Persist an experiment report (Feature 1240)."""
+    event = app.current_event.raw_event
+    user_id = _get_chaos_user_id_from_event(event)
+    if user_id is None:
+        return Response(
+            status_code=401,
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Authentication required"}).decode(),
+        )
+
+    try:
+        body = app.current_event.json_body
+        experiment_id = body.get("experiment_id")
+        if not experiment_id:
+            return Response(
+                status_code=400,
+                content_type="application/json",
+                body=orjson.dumps({"detail": "experiment_id required"}).decode(),
+            )
+
+        # Check for duplicate report
+        existing = list_reports(limit=100)
+        for r in existing.get("reports", []):
+            if (
+                r.get("experiment_id") == experiment_id
+                and r.get("report_type") == "experiment"
+            ):
+                return Response(
+                    status_code=409,
+                    content_type="application/json",
+                    body=orjson.dumps(
+                        {
+                            "detail": f"Report already exists for experiment {experiment_id}"
+                        }
+                    ).decode(),
+                )
+
+        report_data = get_experiment_report(experiment_id)
+        # Map ephemeral report keys
+        if "scenario" in report_data and "scenario_type" not in report_data:
+            report_data["scenario_type"] = report_data.pop("scenario")
+
+        result = persist_report(report_data)
+        return Response(
+            status_code=201,
+            content_type="application/json",
+            body=orjson.dumps(result, default=str).decode(),
+        )
+    except ChaosError as e:
+        return Response(
+            status_code=404,
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
+        )
+    except Exception as e:
+        return Response(
+            status_code=500,
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
+        )
+
+
+@app.post("/chaos/reports/plan")
+def create_chaos_plan_report():
+    """Generate plan-level report (Feature 1240)."""
+    event = app.current_event.raw_event
+    user_id = _get_chaos_user_id_from_event(event)
+    if user_id is None:
+        return Response(
+            status_code=401,
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Authentication required"}).decode(),
+        )
+
+    try:
+        body = app.current_event.json_body
+        plan_name = body.get("plan_name")
+        experiment_ids = body.get("experiment_ids", [])
+
+        if not plan_name or not experiment_ids:
+            return Response(
+                status_code=400,
+                content_type="application/json",
+                body=orjson.dumps(
+                    {"detail": "plan_name and experiment_ids required"}
+                ).decode(),
+            )
+
+        result = generate_plan_report(plan_name, experiment_ids)
+        return Response(
+            status_code=201,
+            content_type="application/json",
+            body=orjson.dumps(result, default=str).decode(),
+        )
+    except ChaosError as e:
+        return Response(
+            status_code=400,
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
+        )
+    except Exception as e:
+        return Response(
+            status_code=500,
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
+        )
+
+
+@app.get("/chaos/reports")
+def list_chaos_reports():
+    """List reports with optional filters (Feature 1240)."""
+    event = app.current_event.raw_event
+    user_id = _get_chaos_user_id_from_event(event)
+    if user_id is None:
+        return Response(
+            status_code=401,
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Authentication required"}).decode(),
+        )
+
+    try:
+        params = app.current_event.query_string_parameters or {}
+        result = list_reports(
+            scenario_type=params.get("scenario_type"),
+            verdict=params.get("verdict"),
+            report_type=params.get("report_type"),
+            from_date=params.get("from_date"),
+            to_date=params.get("to_date"),
+            limit=int(params.get("limit", "20")),
+            cursor=params.get("cursor"),
+        )
+        return Response(
+            status_code=200,
+            content_type="application/json",
+            body=orjson.dumps(result, default=str).decode(),
+        )
+    except Exception as e:
+        return Response(
+            status_code=500,
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
+        )
+
+
+@app.get("/chaos/reports/trends/<scenario_type>")
+def get_chaos_report_trends(scenario_type: str):
+    """Get trend data for scenario type (Feature 1240)."""
+    event = app.current_event.raw_event
+    user_id = _get_chaos_user_id_from_event(event)
+    if user_id is None:
+        return Response(
+            status_code=401,
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Authentication required"}).decode(),
+        )
+
+    try:
+        params = app.current_event.query_string_parameters or {}
+        limit = int(params.get("limit", "20"))
+        result = get_trends(scenario_type, limit)
+        return Response(
+            status_code=200,
+            content_type="application/json",
+            body=orjson.dumps(result, default=str).decode(),
+        )
+    except Exception as e:
+        return Response(
+            status_code=500,
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
+        )
+
+
+@app.get("/chaos/reports/<report_id>")
+def get_chaos_report(report_id: str):
+    """Get single report by ID (Feature 1240)."""
+    event = app.current_event.raw_event
+    user_id = _get_chaos_user_id_from_event(event)
+    if user_id is None:
+        return Response(
+            status_code=401,
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Authentication required"}).decode(),
+        )
+
+    report = get_report(report_id)
+    if not report:
+        return Response(
+            status_code=404,
+            content_type="application/json",
+            body=orjson.dumps({"detail": f"Report not found: {report_id}"}).decode(),
+        )
+
+    return Response(
+        status_code=200,
+        content_type="application/json",
+        body=orjson.dumps(report, default=str).decode(),
+    )
+
+
+@app.get("/chaos/reports/<report_id>/compare")
+def compare_chaos_reports(report_id: str):
+    """Compare report against baseline (Feature 1240)."""
+    event = app.current_event.raw_event
+    user_id = _get_chaos_user_id_from_event(event)
+    if user_id is None:
+        return Response(
+            status_code=401,
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Authentication required"}).decode(),
+        )
+
+    try:
+        params = app.current_event.query_string_parameters or {}
+        baseline_id = params.get("baseline_id")
+
+        result = compare_reports(report_id, baseline_id)
+
+        if result.get("is_first_baseline"):
+            return Response(
+                status_code=422,
+                content_type="application/json",
+                body=orjson.dumps(result, default=str).decode(),
+            )
+
+        return Response(
+            status_code=200,
+            content_type="application/json",
+            body=orjson.dumps(result, default=str).decode(),
+        )
+    except ChaosError as e:
+        return Response(
+            status_code=400,
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
+        )
+    except Exception as e:
+        return Response(
+            status_code=500,
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
+        )
+
+
+@app.delete("/chaos/reports/<report_id>")
+def delete_chaos_report(report_id: str):
+    """Delete report by ID (Feature 1240)."""
+    event = app.current_event.raw_event
+    user_id = _get_chaos_user_id_from_event(event)
+    if user_id is None:
+        return Response(
+            status_code=401,
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Authentication required"}).decode(),
+        )
+
+    deleted = delete_report(report_id)
+    if not deleted:
+        return Response(
+            status_code=404,
+            content_type="application/json",
+            body=orjson.dumps({"detail": f"Report not found: {report_id}"}).decode(),
+        )
+
+    return Response(
+        status_code=204,
+        content_type="application/json",
+        body="",
     )
 
 

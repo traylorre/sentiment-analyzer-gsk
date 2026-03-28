@@ -406,6 +406,8 @@ module "dashboard_lambda" {
     SSE_POLL_INTERVAL       = tostring(var.sse_poll_interval)
     ENVIRONMENT             = var.environment
     CHAOS_EXPERIMENTS_TABLE = module.dynamodb.chaos_experiments_table_name
+    # Feature 1240: Chaos Reports persistence table (unconditional, $0 when empty)
+    CHAOS_REPORTS_TABLE = module.dynamodb.chaos_reports_table_name
     # CORS: Pass explicit origins from tfvars (no wildcard fallback)
     # Feature 1203: Amplify domain should be in cors_allowed_origins
     CORS_ORIGINS = join(",", var.cors_allowed_origins)
@@ -1001,6 +1003,7 @@ module "iam" {
   dlq_arn                      = module.sns.dlq_arn
   model_s3_bucket_arn          = "arn:aws:s3:::${local.model_s3_bucket}"
   chaos_experiments_table_arn  = module.dynamodb.chaos_experiments_table_arn
+  chaos_reports_table_arn      = module.dynamodb.chaos_reports_table_arn
   ticker_cache_bucket_arn      = aws_s3_bucket.ticker_cache.arn
   sendgrid_secret_arn          = module.secrets.sendgrid_secret_arn
   tiingo_secret_arn            = module.secrets.tiingo_secret_arn

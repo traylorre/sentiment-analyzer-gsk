@@ -36,6 +36,12 @@ variable "chaos_experiments_table_arn" {
   default     = ""
 }
 
+variable "chaos_reports_table_arn" {
+  description = "ARN of the chaos reports DynamoDB table (Feature 1240)"
+  type        = string
+  default     = ""
+}
+
 variable "ticker_cache_bucket_arn" {
   description = "ARN of the S3 bucket containing ticker cache data (Feature 006)"
   type        = string
