@@ -318,18 +318,26 @@ def list_reports(
         if scenario_type and not verdict:
             kwargs["IndexName"] = "scenario-created-index"
             kwargs["KeyConditionExpression"] = Key("scenario_type").eq(scenario_type)
-            if from_date:
+            if from_date and to_date:
+                kwargs["KeyConditionExpression"] &= Key("created_at").between(
+                    from_date, to_date
+                )
+            elif from_date:
                 kwargs["KeyConditionExpression"] &= Key("created_at").gte(from_date)
-            if to_date:
+            elif to_date:
                 kwargs["KeyConditionExpression"] &= Key("created_at").lte(to_date)
             kwargs["ScanIndexForward"] = False  # newest first
             response = table.query(**kwargs)
         elif verdict and not scenario_type:
             kwargs["IndexName"] = "verdict-created-index"
             kwargs["KeyConditionExpression"] = Key("verdict").eq(verdict)
-            if from_date:
+            if from_date and to_date:
+                kwargs["KeyConditionExpression"] &= Key("created_at").between(
+                    from_date, to_date
+                )
+            elif from_date:
                 kwargs["KeyConditionExpression"] &= Key("created_at").gte(from_date)
-            if to_date:
+            elif to_date:
                 kwargs["KeyConditionExpression"] &= Key("created_at").lte(to_date)
             kwargs["ScanIndexForward"] = False
             response = table.query(**kwargs)
@@ -401,7 +409,7 @@ def delete_report(report_id: str) -> bool:
             Key={"report_id": report_id},
             ReturnValues="ALL_OLD",
         )
-        return "Attributes" in response
+        return bool(response.get("Attributes"))
     except ClientError:
         logger.exception("Failed to delete report %s", report_id)
         return False
