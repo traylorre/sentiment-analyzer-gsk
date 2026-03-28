@@ -22,7 +22,7 @@ requests==2.32.5
 httpx==0.28.1
 
 # Data Validation - Input/output schemas
-pydantic==2.12.5
+pydantic==2.12.4  # pinned: moto[all]==5.1.22 requires pydantic<=2.12.4
 email-validator==2.3.0
 
 # Logging - Structured JSON logs for CloudWatch
