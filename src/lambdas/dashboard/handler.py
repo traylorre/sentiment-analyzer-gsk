@@ -54,11 +54,15 @@ from src.lambdas.dashboard.chaos import (
     generate_plan_report,
     get_experiment,
     get_experiment_report,
+    get_gate_state,
     get_report,
+    get_system_health,
     get_trends,
     list_experiments,
     list_reports,
     persist_report,
+    pull_andon_cord,
+    set_gate_state,
     start_experiment,
     stop_experiment,
 )
@@ -1334,6 +1338,154 @@ def delete_chaos_report(report_id: str):
         content_type="application/json",
         body="",
     )
+
+
+# --- Safety Controls & Metrics (Features 1244, 1245, 1246) ---
+
+
+@app.get("/chaos/health")
+def get_chaos_health():
+    """Pre-flight health check (Feature 1244)."""
+    event = app.current_event.raw_event
+    user_id = _get_chaos_user_id_from_event(event)
+    if user_id is None:
+        return Response(
+            status_code=401,
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Authentication required"}).decode(),
+        )
+    try:
+        health = get_system_health()
+        return Response(
+            status_code=200,
+            content_type="application/json",
+            body=orjson.dumps(health, default=str).decode(),
+        )
+    except EnvironmentNotAllowedError as e:
+        return Response(
+            status_code=403,
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
+        )
+    except ChaosError as e:
+        return Response(
+            status_code=500,
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
+        )
+
+
+@app.get("/chaos/gate")
+def get_chaos_gate():
+    """Get current gate state (Feature 1245)."""
+    event = app.current_event.raw_event
+    user_id = _get_chaos_user_id_from_event(event)
+    if user_id is None:
+        return Response(
+            status_code=401,
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Authentication required"}).decode(),
+        )
+    try:
+        state = get_gate_state()
+        return Response(
+            status_code=200,
+            content_type="application/json",
+            body=orjson.dumps({"state": state}).decode(),
+        )
+    except EnvironmentNotAllowedError as e:
+        return Response(
+            status_code=403,
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
+        )
+    except ChaosError as e:
+        return Response(
+            status_code=500,
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
+        )
+
+
+@app.put("/chaos/gate")
+def set_chaos_gate():
+    """Set gate state to armed or disarmed (Feature 1245)."""
+    event = app.current_event.raw_event
+    user_id = _get_chaos_user_id_from_event(event)
+    if user_id is None:
+        return Response(
+            status_code=401,
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Authentication required"}).decode(),
+        )
+    try:
+        body = app.current_event.json_body
+        new_state = body.get("state")
+        if new_state not in ("armed", "disarmed"):
+            return Response(
+                status_code=400,
+                content_type="application/json",
+                body=orjson.dumps(
+                    {"detail": "state must be 'armed' or 'disarmed'"}
+                ).decode(),
+            )
+        result = set_gate_state(new_state)
+        return Response(
+            status_code=200,
+            content_type="application/json",
+            body=orjson.dumps(result).decode(),
+        )
+    except EnvironmentNotAllowedError as e:
+        return Response(
+            status_code=403,
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
+        )
+    except ChaosError as e:
+        return Response(
+            status_code=409,
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
+        )
+    except ValueError as e:
+        return Response(
+            status_code=400,
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
+        )
+
+
+@app.post("/chaos/andon-cord")
+def pull_chaos_andon_cord():
+    """Emergency stop -- pull the andon cord (Feature 1246)."""
+    event = app.current_event.raw_event
+    user_id = _get_chaos_user_id_from_event(event)
+    if user_id is None:
+        return Response(
+            status_code=401,
+            content_type="application/json",
+            body=orjson.dumps({"detail": "Authentication required"}).decode(),
+        )
+    try:
+        result = pull_andon_cord()
+        status = 200 if result["kill_switch_set"] else 500
+        return Response(
+            status_code=status,
+            content_type="application/json",
+            body=orjson.dumps(result, default=str).decode(),
+        )
+    except EnvironmentNotAllowedError as e:
+        return Response(
+            status_code=403,
+            content_type="application/json",
+            body=orjson.dumps({"detail": str(e)}).decode(),
+        )
+    except Exception as e:
+        return Response(
+            status_code=500,
+            content_type="application/json",
+            body=orjson.dumps({"detail": f"Andon cord failed: {e}"}).decode(),
+        )
 
 
 # Lambda handler entry point

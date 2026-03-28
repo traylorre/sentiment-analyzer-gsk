@@ -75,6 +75,69 @@
             <a class="tab" :class="{'tab-active': currentView === 'reports' || currentView === 'detail' || currentView === 'diff' || currentView === 'trends'}" @click="switchToReports()">Reports</a>
         </div>
 
+        <!-- Safety Controls Bar (Features 1244, 1245, 1246) -->
+        <div class="flex flex-wrap gap-4 mb-6 items-center">
+            <!-- Gate Toggle (Feature 1245) -->
+            <div class="card bg-base-100 shadow-sm compact">
+                <div class="card-body flex-row items-center gap-3 py-2 px-4">
+                    <span class="font-bold text-sm">Chaos Gate</span>
+                    <input type="checkbox" class="toggle"
+                           :class="{
+                               'toggle-warning': gateState === 'armed',
+                               'toggle-error': gateState === 'triggered'
+                           }"
+                           :checked="gateState === 'armed'"
+                           :disabled="gateState === 'triggered' || gateLoading"
+                           @change="toggleGate()">
+                    <span class="badge badge-sm"
+                          :class="{
+                              'badge-warning': gateState === 'armed',
+                              'badge-ghost': gateState === 'disarmed',
+                              'badge-error pulse-dot': gateState === 'triggered'
+                          }"
+                          x-text="gateState || 'loading...'"></span>
+                </div>
+            </div>
+
+            <!-- Health Check Button (Feature 1244) -->
+            <button class="btn btn-sm btn-outline btn-info gap-2"
+                    :disabled="healthLoading || healthCooldown"
+                    @click="fetchHealth()">
+                <span x-show="!healthLoading">Pre-Flight Check</span>
+                <span x-show="healthLoading" class="loading loading-spinner loading-xs"></span>
+            </button>
+
+            <!-- Emergency Stop Button (Feature 1246) -->
+            <button class="btn btn-sm btn-error gap-2 ml-auto"
+                    :disabled="andonLoading"
+                    @click="showAndonModal = true">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <span x-show="!andonLoading">EMERGENCY STOP</span>
+                <span x-show="andonLoading" class="loading loading-spinner loading-xs"></span>
+            </button>
+        </div>
+
+        <!-- Health Check Results (Feature 1244) -->
+        <div x-show="healthCheck" x-transition class="mb-6">
+            <div class="alert" :class="healthCheck?.all_healthy ? 'alert-success' : 'alert-error'">
+                <span x-text="healthCheck?.all_healthy ? 'All systems healthy' : (healthCheck?.degraded_services?.length || 0) + ' service(s) degraded'"></span>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2">
+                <template x-for="[name, info] in Object.entries(healthCheck?.dependencies || {})" :key="name">
+                    <div class="card bg-base-100 shadow-sm compact">
+                        <div class="card-body py-2 px-3">
+                            <div class="flex items-center justify-between">
+                                <span class="font-mono text-sm" x-text="name"></span>
+                                <span class="badge badge-sm" :class="getHealthStatusClass(info.status)" x-text="info.status"></span>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+
         <!-- ============================================ -->
         <!-- Experiments Views (existing + experiment-detail) -->
         <!-- ============================================ -->
@@ -834,6 +897,20 @@
                 trendChart: null,
                 expandedSections: { config: false, baseline: false, postChaos: false, verdict: true },
 
+                // Feature 1244: Health check state
+                healthCheck: null,
+                healthLoading: false,
+                healthCooldown: false,
+
+                // Feature 1245: Gate toggle state
+                gateState: null,
+                gateLoading: false,
+
+                // Feature 1246: Andon cord state
+                andonLoading: false,
+                andonResult: null,
+                showAndonModal: false,
+
                 // Computed
                 get activeExperiments() {
                     return this.experiments.filter(e => e.status === 'running' || e.status === 'pending');
@@ -854,6 +931,9 @@
                     await this.loadExperiments();
                     // Auto-refresh every 10 seconds
                     setInterval(() => this.loadExperiments(), 10000);
+                    // Feature 1245: Fetch gate state and refresh every 30s
+                    this.fetchGateState();
+                    setInterval(() => this.fetchGateState(), 30000);
                 },
 
                 // Methods
@@ -1197,6 +1277,97 @@
                     return (verdict || 'UNKNOWN').replace(/_/g, ' ');
                 },
 
+                // Feature 1244: Health check
+                async fetchHealth() {
+                    if (this.healthCooldown) return;
+                    this.healthLoading = true;
+                    try {
+                        const response = await fetch('/chaos/health', {
+                            headers: { 'X-API-Key': this.getApiKey() },
+                            signal: AbortSignal.timeout(15000)
+                        });
+                        if (response.ok) {
+                            this.healthCheck = await response.json();
+                        } else {
+                            this.showToast('Health check failed', 'error');
+                        }
+                    } catch (error) {
+                        this.showToast('Health check timeout', 'error');
+                    } finally {
+                        this.healthLoading = false;
+                        this.healthCooldown = true;
+                        setTimeout(() => { this.healthCooldown = false; }, 3000);
+                    }
+                },
+
+                // Feature 1245: Gate toggle
+                async fetchGateState() {
+                    try {
+                        const response = await fetch('/chaos/gate', {
+                            headers: { 'X-API-Key': this.getApiKey() }
+                        });
+                        if (response.ok) {
+                            const data = await response.json();
+                            this.gateState = data.state;
+                        }
+                    } catch (error) {
+                        console.error('Failed to fetch gate state:', error);
+                    }
+                },
+
+                async toggleGate() {
+                    const newState = this.gateState === 'armed' ? 'disarmed' : 'armed';
+                    if (newState === 'armed' && !confirm('Arm chaos gate? Experiments will inject real faults.')) return;
+                    this.gateLoading = true;
+                    try {
+                        const response = await fetch('/chaos/gate', {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json', 'X-API-Key': this.getApiKey() },
+                            body: JSON.stringify({ state: newState })
+                        });
+                        if (response.ok) {
+                            const result = await response.json();
+                            this.gateState = result.state;
+                            this.showToast(`Gate ${result.state}`, 'success');
+                        } else {
+                            const err = await response.json();
+                            this.showToast(err.detail || 'Failed to toggle gate', 'error');
+                        }
+                    } catch (error) {
+                        this.showToast('Failed to toggle gate', 'error');
+                    } finally {
+                        this.gateLoading = false;
+                    }
+                },
+
+                // Feature 1246: Andon cord
+                async pullAndonCord() {
+                    this.showAndonModal = false;
+                    this.andonLoading = true;
+                    try {
+                        const response = await fetch('/chaos/andon-cord', {
+                            method: 'POST',
+                            headers: { 'X-API-Key': this.getApiKey() }
+                        });
+                        if (response.ok) {
+                            this.andonResult = await response.json();
+                            this.showToast('Andon cord pulled — system restoring', 'warning');
+                            await this.fetchGateState();
+                            await this.loadExperiments();
+                        } else {
+                            this.showToast('Andon cord failed! Use CLI: scripts/chaos/andon-cord.sh', 'error');
+                        }
+                    } catch (error) {
+                        this.showToast('Andon cord failed! Use CLI fallback.', 'error');
+                    } finally {
+                        this.andonLoading = false;
+                    }
+                },
+
+                getHealthStatusClass(status) {
+                    return status === 'healthy' ? 'badge-success' : 'badge-error';
+                },
+
                 getDiffClass(direction) {
                     if (direction === 'improved') return 'bg-success/20 text-success';
                     if (direction === 'regressed') return 'bg-error/20 text-error';
@@ -1223,6 +1394,57 @@
                  'alert-info': toast.type === 'info'
              }">
             <span x-text="toast.message"></span>
+        </div>
+    </div>
+
+    <!-- Andon Cord Confirmation Modal (Feature 1246) -->
+    <dialog class="modal" :class="{'modal-open': showAndonModal}">
+        <div class="modal-box">
+            <h3 class="font-bold text-lg text-error">Pull Andon Cord?</h3>
+            <p class="py-4">This will immediately:</p>
+            <ol class="list-decimal list-inside space-y-1 text-sm">
+                <li>Set kill switch to <strong>TRIGGERED</strong></li>
+                <li>Restore ALL chaos-injected configurations</li>
+                <li>Block all new experiment injection</li>
+            </ol>
+            <div class="modal-action">
+                <button class="btn btn-ghost" @click="showAndonModal = false">Cancel</button>
+                <button class="btn btn-error" @click="pullAndonCord()">PULL CORD</button>
+            </div>
+        </div>
+        <form method="dialog" class="modal-backdrop">
+            <button @click="showAndonModal = false">close</button>
+        </form>
+    </dialog>
+
+    <!-- Andon Cord Result (Feature 1246) -->
+    <div x-show="andonResult" x-transition
+         class="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 md:w-96 z-40">
+        <div class="card bg-base-100 shadow-xl border-2" :class="andonResult?.failed > 0 ? 'border-error' : 'border-success'">
+            <div class="card-body py-3">
+                <div class="flex justify-between items-center">
+                    <h4 class="font-bold">Andon Cord Result</h4>
+                    <button class="btn btn-ghost btn-xs" @click="andonResult = null">&#x2715;</button>
+                </div>
+                <div class="grid grid-cols-2 gap-1 text-sm">
+                    <span>Kill Switch:</span>
+                    <span class="badge badge-sm" :class="andonResult?.kill_switch_set ? 'badge-success' : 'badge-error'" x-text="andonResult?.kill_switch_set ? 'Set' : 'FAILED'"></span>
+                    <span>Snapshots Found:</span>
+                    <span x-text="andonResult?.experiments_found"></span>
+                    <span>Restored:</span>
+                    <span x-text="andonResult?.restored"></span>
+                    <span>Failed:</span>
+                    <span :class="andonResult?.failed > 0 ? 'text-error font-bold' : ''" x-text="andonResult?.failed"></span>
+                </div>
+                <template x-if="andonResult?.errors?.length > 0">
+                    <div class="mt-2">
+                        <p class="text-xs text-error font-bold">Errors:</p>
+                        <template x-for="err in andonResult.errors" :key="err">
+                            <p class="text-xs text-error" x-text="err"></p>
+                        </template>
+                    </div>
+                </template>
+            </div>
         </div>
     </div>
 </body>
