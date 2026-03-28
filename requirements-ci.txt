@@ -35,7 +35,7 @@ aws-xray-sdk==2.15.0
 sendgrid==6.12.5
 
 # AWS Lambda Powertools - Enhanced observability
-aws-lambda-powertools==3.23.0
+aws-lambda-powertools==3.25.0
 
 # =============================================================================
 # Testing Dependencies (from requirements-dev.txt)
@@ -47,7 +47,7 @@ pytest-cov==7.1.0
 pytest-asyncio==1.3.0
 
 # AWS Mocking - Critical for unit tests
-moto[all]==5.1.18
+moto[all]==5.1.22
 
 # HTTP Mocking - For NewsAPI adapter tests
 responses==0.26.0
@@ -56,29 +56,29 @@ responses==0.26.0
 black==26.3.1
 ruff==0.15.7
 pre-commit==4.5.1
-bandit==1.9.2
+bandit==1.9.4
 
 # Type Checking
 mypy==1.19.1
-boto3-stubs==1.42.14
+boto3-stubs==1.42.68
 
 # Testing Utilities
 freezegun==1.5.5
 
 # Property-Based Testing (tests/property/ requires this)
-hypothesis==6.148.7
+hypothesis==6.151.9
 
 # Terraform HCL Parsing - For resource_naming validator tests
 python-hcl2==7.3.1
 
 # JWT Authentication - For auth_middleware (Feature 075)
-PyJWT==2.10.1
+PyJWT==2.12.1
 
 # Retry Library - Feature 1032 (config API stability)
-tenacity==9.0.0
+tenacity==9.1.4
 
 # Stripe - Feature 1191 (mid-session tier upgrade)
-stripe==14.1.0
+stripe==14.4.1
 
 # Fast JSON - Used by dashboard lambdas and tests/conftest.py
-orjson==3.11.5
+orjson==3.11.7
