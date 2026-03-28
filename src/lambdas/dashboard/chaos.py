@@ -214,11 +214,11 @@ def persist_report(report_data: dict[str, Any]) -> dict[str, Any]:
     Returns:
         The persisted report dict with report_id
     """
-    import ulid as ulid_mod
-
     if not CHAOS_REPORTS_TABLE:
         logger.warning("CHAOS_REPORTS_TABLE not configured, skipping persistence")
         return report_data
+
+    import ulid as ulid_mod
 
     report_id = report_data.get("report_id") or str(ulid_mod.new())
     report_data["report_id"] = report_id
