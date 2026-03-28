@@ -91,6 +91,12 @@ class TestChaosAuthentication:
 class TestChaosEnvironmentGating:
     """Tests for chaos route 404 in non-dev environments (FR-002)."""
 
+    @pytest.fixture(autouse=True)
+    def restore_handler_env(self):
+        """Restore handler to test environment after reload-based tests."""
+        yield
+        _reload_handler_with_env("test")
+
     @pytest.fixture
     def mock_lambda_context(self):
         ctx = MagicMock()
