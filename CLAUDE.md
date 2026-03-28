@@ -937,6 +937,9 @@ aws cloudwatch get-metric-data --metric-data-queries '[...]' --start-time ... --
 - 1256-restrict-function-urls: Added HCL (Terraform 1.5+, AWS Provider ~> 5.0)
 - 1255-cloudfront-sse-waf: Added HCL (Terraform 1.5+, AWS Provider ~> 5.0) + AWS CloudFront, AWS WAF v2, existing SSE Lambda
 - 1254-api-gateway-waf: Added HCL (Terraform 1.5+, AWS Provider ~> 5.0) + AWS WAF v2, AWS API Gateway (existing)
+- 1227-real-sentiment-pipeline: Added Python 3.13 (existing project standard) + aws_lambda_powertools 3.7.0 (missing from ingestion ZIP), boto3 (existing), pydantic (existing)
+- 1226-frontend-error-visibility: Added TypeScript ^5 / Next.js 14.2.21 / React ^18 + @tanstack/react-query ^5.90.11, zustand ^5.0.8, sonner ^2.0.7
+- 001-cache-architecture-audit: Added Python 3.13 + boto3 (AWS SDK), pydantic (validation), functools (current caching)
 
 <!-- MANUAL ADDITIONS START -->
 

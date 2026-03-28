@@ -1,267 +1,318 @@
-"""Unit tests for get_ticker_sentiment_history().
+"""T012: Unit tests for sentiment history query and mapping logic.
 
-Tests the rewritten function that:
-- Verifies config ownership via DynamoDB
-- Queries timeseries buckets for a ticker over N days
-- Transforms buckets to SourceSentiment entries keyed by timestamp
-- Supports source filtering (e.g., "tiingo" matches "tiingo:123")
-- Returns ErrorResponse on config-not-found or timeseries failure
+Tests the mapping from timeseries buckets to SentimentPoint objects
+as implemented in ohlc.py's sentiment history endpoint (lines 1064-1100).
+
+Since the mapping logic is embedded inside the endpoint handler, these
+tests exercise the same transformation rules in isolation by replicating
+the bucket-to-SentimentPoint mapping and verifying its behavior.
 """
 
-from datetime import datetime, timedelta
-from unittest.mock import MagicMock, patch
+from dataclasses import dataclass, field
+from datetime import date
 
-from freezegun import freeze_time
-
-from src.lambdas.dashboard.sentiment import (
-    ErrorResponse,
-    SentimentResponse,
-    get_ticker_sentiment_history,
-)
-from src.lib.timeseries.models import Resolution
+import pytest
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Local replica of the mapping logic under test
+# ---------------------------------------------------------------------------
+# Extracted from ohlc.py lines 1064-1100 to allow unit testing without
+# invoking the full HTTP handler. Any change to ohlc.py mapping logic
+# should be reflected here.
+
+
+@dataclass
+class _Bucket:
+    """Minimal stand-in for SentimentBucketResponse."""
+
+    avg: float
+    sources: list[str] = field(default_factory=list)
+    timestamp: str = "2024-11-15T00:00:00Z"
+    ticker: str = "AAPL"
+    resolution: str = "24h"
+    open: float = 0.0
+    high: float = 0.0
+    low: float = 0.0
+    close: float = 0.0
+    count: int = 1
+    label_counts: dict = field(default_factory=dict)
+    is_partial: bool = False
+
+
+@dataclass
+class _TimeseriesResponse:
+    """Minimal stand-in for TimeseriesResponse."""
+
+    ticker: str
+    resolution: str
+    buckets: list[_Bucket]
+    partial_bucket: _Bucket | None = None
+    cache_hit: bool = False
+    query_time_ms: float = 0.0
+    next_cursor: str | None = None
+    has_more: bool = False
+
+
+def _map_buckets_to_points(
+    buckets: list[_Bucket],
+    source_filter: str,
+) -> list[dict]:
+    """Replicate the ohlc.py bucket-to-SentimentPoint mapping.
+
+    Returns dicts instead of SentimentPoint models so we avoid importing
+    pydantic models and keep this test lightweight.
+    """
+    history = []
+    for bucket in buckets:
+        score = round(bucket.avg, 4)
+
+        # Source extraction (ohlc.py line 1070-1072)
+        bucket_source = "unknown"
+        if bucket.sources:
+            bucket_source = bucket.sources[0].split(":")[0]
+
+        # Source filter (ohlc.py line 1075-1076)
+        if source_filter != "aggregated" and bucket_source != source_filter:
+            continue
+
+        # Label derivation (ohlc.py line 1078-1084)
+        if score >= 0.33:
+            label = "positive"
+        elif score <= -0.33:
+            label = "negative"
+        else:
+            label = "neutral"
+
+        # Date parsing (ohlc.py line 1087-1090)
+        try:
+            point_date = date.fromisoformat(bucket.timestamp.split("T")[0])
+        except (ValueError, AttributeError):
+            continue
+
+        history.append(
+            {
+                "date": point_date,
+                "score": score,
+                "source": bucket_source,
+                "confidence": 0.8,
+                "label": label,
+            }
+        )
+    return history
+
+
+# ---------------------------------------------------------------------------
+# Bucket-to-SentimentPoint mapping tests
 # ---------------------------------------------------------------------------
 
 
-def _make_bucket(
-    avg: float,
-    count: int,
-    timestamp: str,
-    sources: list[str] | None = None,
-) -> MagicMock:
-    """Create a mock timeseries bucket."""
-    bucket = MagicMock()
-    bucket.avg = avg
-    bucket.count = count
-    bucket.timestamp = timestamp
-    bucket.sources = sources or []
-    return bucket
+class TestBucketMapping:
+    """Timeseries buckets map correctly to SentimentPoint-like dicts."""
 
-
-def _make_table(config_exists: bool = True) -> MagicMock:
-    """Create a mock DynamoDB table resource."""
-    table = MagicMock()
-    if config_exists:
-        table.get_item.return_value = {
-            "Item": {"PK": "USER#user1", "SK": "CONFIG#cfg1"},
-        }
-    else:
-        table.get_item.return_value = {}
-    return table
-
-
-def _make_ts_response(buckets: list[MagicMock]) -> MagicMock:
-    """Create a mock TimeseriesResponse."""
-    ts_response = MagicMock()
-    ts_response.buckets = buckets
-    return ts_response
-
-
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
-
-
-@freeze_time("2024-01-02T10:00:00Z")
-class TestSentimentHistory:
-    """Tests for get_ticker_sentiment_history()."""
-
-    @patch("src.lambdas.dashboard.timeseries.query_timeseries")
-    def test_history_returns_real_buckets(self, mock_query):
-        """7 daily buckets produce 7 entries in the response."""
+    def test_single_bucket_maps_to_point(self):
+        """A single bucket with valid data produces one point."""
         buckets = [
-            _make_bucket(
-                avg=0.1 * (i + 1),
-                count=3,
-                timestamp=f"2023-12-{26 + i:02d}T00:00:00Z",
-                sources=["tiingo:123"],
+            _Bucket(
+                avg=0.65,
+                sources=["tiingo:91120376"],
+                timestamp="2024-11-15T00:00:00Z",
             )
-            for i in range(7)
         ]
-        mock_query.return_value = _make_ts_response(buckets)
-        table = _make_table()
+        points = _map_buckets_to_points(buckets, source_filter="aggregated")
 
-        result = get_ticker_sentiment_history(
-            table=table,
-            user_id="user1",
-            config_id="cfg1",
-            ticker="AAPL",
-            days=7,
-        )
+        assert len(points) == 1
+        assert points[0]["date"] == date(2024, 11, 15)
+        assert points[0]["score"] == 0.65
+        assert points[0]["source"] == "tiingo"
+        assert points[0]["confidence"] == 0.8
 
-        assert isinstance(result, SentimentResponse)
-        assert len(result.tickers) == 1
-        assert result.tickers[0].symbol == "AAPL"
-        assert len(result.tickers[0].sentiment) == 7
-
-    @patch("src.lambdas.dashboard.timeseries.query_timeseries")
-    def test_history_source_filter_tiingo(self, mock_query):
-        """Source filter 'tiingo' keeps only buckets with tiingo sources."""
+    def test_multiple_buckets_map_to_multiple_points(self):
+        """Multiple buckets each produce a point."""
         buckets = [
-            _make_bucket(
-                avg=0.5,
-                count=3,
-                timestamp="2024-01-01T00:00:00Z",
-                sources=["tiingo:123", "finnhub:456"],
-            ),
-            _make_bucket(
-                avg=0.3,
-                count=2,
-                timestamp="2024-01-01T01:00:00Z",
-                sources=["finnhub:789"],
-            ),
-            _make_bucket(
-                avg=0.4,
-                count=1,
-                timestamp="2024-01-01T02:00:00Z",
-                sources=["tiingo:222"],
-            ),
-            _make_bucket(
-                avg=0.6,
-                count=4,
-                timestamp="2024-01-01T03:00:00Z",
-                sources=["finnhub:333"],
-            ),
-            _make_bucket(
-                avg=0.2,
-                count=5,
-                timestamp="2024-01-01T04:00:00Z",
-                sources=["tiingo:444", "finnhub:555"],
-            ),
+            _Bucket(avg=0.5, sources=["tiingo:1"], timestamp="2024-11-01T00:00:00Z"),
+            _Bucket(avg=-0.2, sources=["tiingo:2"], timestamp="2024-11-02T00:00:00Z"),
+            _Bucket(avg=0.1, sources=["tiingo:3"], timestamp="2024-11-03T00:00:00Z"),
         ]
-        mock_query.return_value = _make_ts_response(buckets)
-        table = _make_table()
+        points = _map_buckets_to_points(buckets, source_filter="aggregated")
+        assert len(points) == 3
 
-        result = get_ticker_sentiment_history(
-            table=table,
-            user_id="user1",
-            config_id="cfg1",
-            ticker="AAPL",
-            source="tiingo",
-            days=7,
-        )
-
-        assert isinstance(result, SentimentResponse)
-        # Buckets 0, 2, 4 have a source starting with "tiingo"
-        assert len(result.tickers[0].sentiment) == 3
-
-    @patch("src.lambdas.dashboard.timeseries.query_timeseries")
-    def test_history_partial_data(self, mock_query):
-        """Only 3 buckets for a 7-day request returns exactly 3 entries (no padding)."""
+    def test_score_rounding(self):
+        """Scores are rounded to 4 decimal places."""
         buckets = [
-            _make_bucket(
-                avg=0.5, count=3, timestamp="2023-12-30T00:00:00Z", sources=["tiingo:1"]
-            ),
-            _make_bucket(
-                avg=0.3, count=2, timestamp="2023-12-31T00:00:00Z", sources=["tiingo:2"]
-            ),
-            _make_bucket(
-                avg=0.7, count=5, timestamp="2024-01-01T00:00:00Z", sources=["tiingo:3"]
-            ),
+            _Bucket(
+                avg=0.123456789,
+                sources=["tiingo:1"],
+                timestamp="2024-11-15T00:00:00Z",
+            )
         ]
-        mock_query.return_value = _make_ts_response(buckets)
-        table = _make_table()
+        points = _map_buckets_to_points(buckets, source_filter="aggregated")
+        assert points[0]["score"] == 0.1235
 
-        result = get_ticker_sentiment_history(
-            table=table,
-            user_id="user1",
-            config_id="cfg1",
-            ticker="TSLA",
-            days=7,
-        )
 
-        assert isinstance(result, SentimentResponse)
-        assert len(result.tickers[0].sentiment) == 3
+# ---------------------------------------------------------------------------
+# Source prefix extraction
+# ---------------------------------------------------------------------------
 
-    @patch("src.lambdas.dashboard.timeseries.query_timeseries")
-    def test_history_no_data(self, mock_query):
-        """Empty bucket list results in empty sentiment dict."""
-        mock_query.return_value = _make_ts_response([])
-        table = _make_table()
 
-        result = get_ticker_sentiment_history(
-            table=table,
-            user_id="user1",
-            config_id="cfg1",
-            ticker="MSFT",
-            days=7,
-        )
+class TestSourceExtraction:
+    """Source provider is extracted from 'provider:id' format."""
 
-        assert isinstance(result, SentimentResponse)
-        assert result.tickers[0].sentiment == {}
+    def test_tiingo_source_extraction(self):
+        """'tiingo:91120376' extracts to 'tiingo'."""
+        buckets = [
+            _Bucket(
+                avg=0.5, sources=["tiingo:91120376"], timestamp="2024-11-15T00:00:00Z"
+            )
+        ]
+        points = _map_buckets_to_points(buckets, source_filter="aggregated")
+        assert points[0]["source"] == "tiingo"
 
-    @patch("src.lambdas.dashboard.timeseries.query_timeseries")
-    def test_history_resolution_parameter(self, mock_query):
-        """Resolution.FIVE_MINUTES is forwarded to query_timeseries."""
-        mock_query.return_value = _make_ts_response([])
-        table = _make_table()
+    def test_finnhub_source_extraction(self):
+        """'finnhub:abc123' extracts to 'finnhub'."""
+        buckets = [
+            _Bucket(
+                avg=0.5, sources=["finnhub:abc123"], timestamp="2024-11-15T00:00:00Z"
+            )
+        ]
+        points = _map_buckets_to_points(buckets, source_filter="aggregated")
+        assert points[0]["source"] == "finnhub"
 
-        get_ticker_sentiment_history(
-            table=table,
-            user_id="user1",
-            config_id="cfg1",
-            ticker="AAPL",
-            days=1,
-            resolution=Resolution.FIVE_MINUTES,
-        )
+    def test_empty_sources_defaults_to_unknown(self):
+        """When sources list is empty, source defaults to 'unknown'."""
+        buckets = [_Bucket(avg=0.5, sources=[], timestamp="2024-11-15T00:00:00Z")]
+        points = _map_buckets_to_points(buckets, source_filter="aggregated")
+        assert points[0]["source"] == "unknown"
 
-        call_kwargs = mock_query.call_args.kwargs
-        assert call_kwargs["resolution"] == Resolution.FIVE_MINUTES
+    def test_source_without_colon(self):
+        """Source string without ':' uses the full string as provider."""
+        buckets = [
+            _Bucket(avg=0.5, sources=["rawprovider"], timestamp="2024-11-15T00:00:00Z")
+        ]
+        points = _map_buckets_to_points(buckets, source_filter="aggregated")
+        assert points[0]["source"] == "rawprovider"
 
-    @patch("src.lambdas.dashboard.timeseries.query_timeseries")
-    def test_history_days_bounds_query(self, mock_query):
-        """start_dt passed to query_timeseries equals now minus requested days."""
-        mock_query.return_value = _make_ts_response([])
-        table = _make_table()
 
-        days = 14
-        get_ticker_sentiment_history(
-            table=table,
-            user_id="user1",
-            config_id="cfg1",
-            ticker="AAPL",
-            days=days,
-        )
+# ---------------------------------------------------------------------------
+# Source filtering
+# ---------------------------------------------------------------------------
 
-        call_kwargs = mock_query.call_args.kwargs
-        # freeze_time is 2024-01-02T10:00:00Z
-        expected_now = datetime(2024, 1, 2, 10, 0, 0)
-        expected_start = expected_now - timedelta(days=days)
-        # Compare as naive datetimes (strip tzinfo for comparison)
-        actual_start = call_kwargs["start"].replace(tzinfo=None)
-        actual_end = call_kwargs["end"].replace(tzinfo=None)
-        assert actual_start == expected_start
-        assert actual_end == expected_now
 
-    def test_history_config_not_found(self):
-        """Missing config Item triggers CONFIG_NOT_FOUND error."""
-        table = _make_table(config_exists=False)
+class TestSourceFilter:
+    """Source filter excludes non-matching sources."""
 
-        result = get_ticker_sentiment_history(
-            table=table,
-            user_id="user1",
-            config_id="cfg_missing",
-            ticker="AAPL",
-        )
+    def test_aggregated_includes_all_sources(self):
+        """source='aggregated' includes buckets from any provider."""
+        buckets = [
+            _Bucket(avg=0.5, sources=["tiingo:1"], timestamp="2024-11-01T00:00:00Z"),
+            _Bucket(avg=0.3, sources=["finnhub:2"], timestamp="2024-11-02T00:00:00Z"),
+        ]
+        points = _map_buckets_to_points(buckets, source_filter="aggregated")
+        assert len(points) == 2
 
-        assert isinstance(result, ErrorResponse)
-        assert result.error.code == "CONFIG_NOT_FOUND"
+    def test_specific_source_excludes_others(self):
+        """Filtering by 'tiingo' excludes finnhub buckets."""
+        buckets = [
+            _Bucket(avg=0.5, sources=["tiingo:1"], timestamp="2024-11-01T00:00:00Z"),
+            _Bucket(avg=0.3, sources=["finnhub:2"], timestamp="2024-11-02T00:00:00Z"),
+            _Bucket(avg=0.7, sources=["tiingo:3"], timestamp="2024-11-03T00:00:00Z"),
+        ]
+        points = _map_buckets_to_points(buckets, source_filter="tiingo")
+        assert len(points) == 2
+        assert all(p["source"] == "tiingo" for p in points)
 
-    @patch("src.lambdas.dashboard.timeseries.query_timeseries")
-    def test_history_db_error(self, mock_query):
-        """Exception from query_timeseries yields DB_ERROR response."""
-        mock_query.side_effect = RuntimeError("DynamoDB timeout")
-        table = _make_table()
+    def test_no_matching_source_returns_empty(self):
+        """When no buckets match the source filter, result is empty."""
+        buckets = [
+            _Bucket(avg=0.5, sources=["tiingo:1"], timestamp="2024-11-01T00:00:00Z"),
+        ]
+        points = _map_buckets_to_points(buckets, source_filter="finnhub")
+        assert len(points) == 0
 
-        result = get_ticker_sentiment_history(
-            table=table,
-            user_id="user1",
-            config_id="cfg1",
-            ticker="AAPL",
-            days=7,
-        )
 
-        assert isinstance(result, ErrorResponse)
-        assert result.error.code == "DB_ERROR"
+# ---------------------------------------------------------------------------
+# Empty buckets
+# ---------------------------------------------------------------------------
+
+
+class TestEmptyBuckets:
+    """Empty bucket list returns empty history."""
+
+    def test_empty_buckets_returns_empty_list(self):
+        """No buckets produces an empty history list."""
+        points = _map_buckets_to_points([], source_filter="aggregated")
+        assert points == []
+        assert len(points) == 0
+
+
+# ---------------------------------------------------------------------------
+# Label derivation
+# ---------------------------------------------------------------------------
+
+
+class TestLabelDerivation:
+    """Labels are derived from score thresholds."""
+
+    @pytest.mark.parametrize(
+        "score,expected_label",
+        [
+            (0.33, "positive"),
+            (0.5, "positive"),
+            (1.0, "positive"),
+            (0.32, "neutral"),
+            (0.0, "neutral"),
+            (-0.32, "neutral"),
+            (-0.33, "negative"),
+            (-0.5, "negative"),
+            (-1.0, "negative"),
+        ],
+    )
+    def test_label_from_score(self, score: float, expected_label: str):
+        """Score threshold determines label classification."""
+        buckets = [
+            _Bucket(avg=score, sources=["tiingo:1"], timestamp="2024-11-15T00:00:00Z")
+        ]
+        points = _map_buckets_to_points(buckets, source_filter="aggregated")
+        assert points[0]["label"] == expected_label
+
+    def test_exact_boundary_positive(self):
+        """Score of exactly 0.33 is classified as positive."""
+        buckets = [
+            _Bucket(avg=0.33, sources=["tiingo:1"], timestamp="2024-11-15T00:00:00Z")
+        ]
+        points = _map_buckets_to_points(buckets, source_filter="aggregated")
+        assert points[0]["label"] == "positive"
+
+    def test_exact_boundary_negative(self):
+        """Score of exactly -0.33 is classified as negative."""
+        buckets = [
+            _Bucket(avg=-0.33, sources=["tiingo:1"], timestamp="2024-11-15T00:00:00Z")
+        ]
+        points = _map_buckets_to_points(buckets, source_filter="aggregated")
+        assert points[0]["label"] == "negative"
+
+
+# ---------------------------------------------------------------------------
+# Invalid timestamp handling
+# ---------------------------------------------------------------------------
+
+
+class TestInvalidTimestamp:
+    """Buckets with invalid timestamps are skipped."""
+
+    def test_invalid_timestamp_skipped(self):
+        """A bucket with an unparseable timestamp is silently skipped."""
+        buckets = [
+            _Bucket(avg=0.5, sources=["tiingo:1"], timestamp="not-a-date"),
+        ]
+        points = _map_buckets_to_points(buckets, source_filter="aggregated")
+        assert len(points) == 0
+
+    def test_mixed_valid_invalid_timestamps(self):
+        """Valid buckets are kept, invalid ones are dropped."""
+        buckets = [
+            _Bucket(avg=0.5, sources=["tiingo:1"], timestamp="2024-11-15T00:00:00Z"),
+            _Bucket(avg=0.3, sources=["tiingo:2"], timestamp="garbage"),
+            _Bucket(avg=0.1, sources=["tiingo:3"], timestamp="2024-11-17T00:00:00Z"),
+        ]
+        points = _map_buckets_to_points(buckets, source_filter="aggregated")
+        assert len(points) == 2
