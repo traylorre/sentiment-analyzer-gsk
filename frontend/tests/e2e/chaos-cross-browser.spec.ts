@@ -5,6 +5,7 @@ import {
   triggerHealthBanner,
   getBannerLocator,
 } from './helpers/chaos-helpers';
+import { mockTickerDataApis } from './helpers/mock-api-data';
 
 /**
  * Chaos: Cross-Browser Validation (Feature 1265, US5)
@@ -32,21 +33,23 @@ test.describe('Chaos: Cross-Browser Validation', () => {
 
   // T042: Cached data persists across browsers
   test('cached data persists during API outage', async ({ page }) => {
-    // Load actual data first — the beforeEach only navigates.
-    // Tests assert "previously loaded data" persists, so data must exist.
+    // Feature 1276: Mock data APIs for instant loading (was ~17s with real APIs)
+    await mockTickerDataApis(page);
+
+    // Load data — the beforeEach only navigates, so we must search + select here.
     const searchInput = page.getByPlaceholder(/search tickers/i);
     await searchInput.fill('AAPL');
     const suggestion = page.getByRole('option', { name: /AAPL/i });
-    await expect(suggestion).toBeVisible({ timeout: 10000 });
+    await expect(suggestion).toBeVisible({ timeout: 5000 });
     await suggestion.click();
-    // Wait for chart data to render
+    // Wait for chart data to render (instant with mocks, 5s safety margin)
     const chartContainer = page.locator(
       '[role="img"][aria-label*="Price and sentiment chart"]',
     );
     await expect(chartContainer).toHaveAttribute(
       'aria-label',
       /[1-9]\d* price candles/,
-      { timeout: 15000 },
+      { timeout: 5000 },
     );
 
     const mainContent = page.locator('main');
