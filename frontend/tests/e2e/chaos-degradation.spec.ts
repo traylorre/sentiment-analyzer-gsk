@@ -39,7 +39,7 @@ test.describe('Chaos: API Degradation', () => {
     await expect(banner).toBeVisible();
 
     // Verify accessibility attributes
-    await expect(banner).toHaveAttribute('aria-live', 'assertive');
+    await expect(banner).toHaveAttribute('aria-live', 'assertive', { timeout: 3000 });
 
     // Verify console telemetry event
     const bannerEvent = consoleMessages.find((m) =>

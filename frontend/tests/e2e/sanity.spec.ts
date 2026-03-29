@@ -137,7 +137,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
         await expect(button).toBeVisible();
         await button.click();
         // The expect below will wait for button state to update
-        await expect(button).toHaveAttribute('aria-pressed', 'true');
+        await expect(button).toHaveAttribute('aria-pressed', 'true', { timeout: 3000 });
 
         // Verify chart still has data
         await expect(chartContainer).toHaveAttribute(
@@ -173,24 +173,24 @@ test.describe('Critical User Path - Sanity Tests', () => {
         name: 'Toggle price candles',
       });
       await expect(priceToggle).toBeVisible();
-      await expect(priceToggle).toHaveAttribute('aria-pressed', 'true');
+      await expect(priceToggle).toHaveAttribute('aria-pressed', 'true', { timeout: 3000 });
       await priceToggle.click();
-      await expect(priceToggle).toHaveAttribute('aria-pressed', 'false');
+      await expect(priceToggle).toHaveAttribute('aria-pressed', 'false', { timeout: 3000 });
 
       // Toggle sentiment line off
       const sentimentToggle = page.getByRole('button', {
         name: 'Toggle sentiment line',
       });
       await expect(sentimentToggle).toBeVisible();
-      await expect(sentimentToggle).toHaveAttribute('aria-pressed', 'true');
+      await expect(sentimentToggle).toHaveAttribute('aria-pressed', 'true', { timeout: 3000 });
       await sentimentToggle.click();
-      await expect(sentimentToggle).toHaveAttribute('aria-pressed', 'false');
+      await expect(sentimentToggle).toHaveAttribute('aria-pressed', 'false', { timeout: 3000 });
 
       // Toggle both back on
       await priceToggle.click();
-      await expect(priceToggle).toHaveAttribute('aria-pressed', 'true');
+      await expect(priceToggle).toHaveAttribute('aria-pressed', 'true', { timeout: 3000 });
       await sentimentToggle.click();
-      await expect(sentimentToggle).toHaveAttribute('aria-pressed', 'true');
+      await expect(sentimentToggle).toHaveAttribute('aria-pressed', 'true', { timeout: 3000 });
     });
   });
 
@@ -532,7 +532,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
 
       // Verify sentiment toggle is pressed (active)
       const sentimentToggle = page.getByRole('button', { name: 'Toggle sentiment line' });
-      await expect(sentimentToggle).toHaveAttribute('aria-pressed', 'true');
+      await expect(sentimentToggle).toHaveAttribute('aria-pressed', 'true', { timeout: 3000 });
 
       // Extract sentiment count
       const ariaLabel = await chartContainer.getAttribute('aria-label');
@@ -545,11 +545,11 @@ test.describe('Critical User Path - Sanity Tests', () => {
 
       // Toggle sentiment off
       await sentimentToggle.click();
-      await expect(sentimentToggle).toHaveAttribute('aria-pressed', 'false');
+      await expect(sentimentToggle).toHaveAttribute('aria-pressed', 'false', { timeout: 3000 });
 
       // Toggle back on
       await sentimentToggle.click();
-      await expect(sentimentToggle).toHaveAttribute('aria-pressed', 'true');
+      await expect(sentimentToggle).toHaveAttribute('aria-pressed', 'true', { timeout: 3000 });
 
       // Aria-label should still show sentiment data (data persists across toggle)
       await expect(chartContainer).toHaveAttribute(
@@ -600,14 +600,14 @@ test.describe('Critical User Path - Sanity Tests', () => {
       await expect(oneYearButton).toBeVisible();
       await oneYearButton.click();
       // The expect below will wait for button state to update
-      await expect(oneYearButton).toHaveAttribute('aria-pressed', 'true');
+      await expect(oneYearButton).toHaveAttribute('aria-pressed', 'true', { timeout: 3000 });
 
       // Step 3: Set Day resolution
       const dayResButton = page.getByRole('button', { name: 'Day resolution' });
       await expect(dayResButton).toBeVisible();
       await dayResButton.click();
       // The expect below will wait for button state to update
-      await expect(dayResButton).toHaveAttribute('aria-pressed', 'true');
+      await expect(dayResButton).toHaveAttribute('aria-pressed', 'true', { timeout: 3000 });
 
       // Step 4: Now switch to AAPL ticker
       await searchInput.clear();
@@ -629,8 +629,8 @@ test.describe('Critical User Path - Sanity Tests', () => {
       const oneYearButtonAfterSwitch = page.getByRole('button', { name: '1Y time range' });
       const dayResButtonAfterSwitch = page.getByRole('button', { name: 'Day resolution' });
 
-      await expect(oneYearButtonAfterSwitch).toHaveAttribute('aria-pressed', 'true');
-      await expect(dayResButtonAfterSwitch).toHaveAttribute('aria-pressed', 'true');
+      await expect(oneYearButtonAfterSwitch).toHaveAttribute('aria-pressed', 'true', { timeout: 3000 });
+      await expect(dayResButtonAfterSwitch).toHaveAttribute('aria-pressed', 'true', { timeout: 3000 });
     });
 
     /**

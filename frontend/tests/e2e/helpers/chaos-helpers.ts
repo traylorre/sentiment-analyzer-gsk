@@ -233,15 +233,17 @@ export async function triggerHealthBanner(page: Page): Promise<void> {
 
   const searchInput = page.getByPlaceholder(/search tickers/i);
 
-  // 3 search interactions to accumulate failures
+  // 3 search interactions to accumulate failures.
+  // Wait for the 503 response after each search to confirm the failure was recorded,
+  // rather than using a blind waitForTimeout.
   await searchInput.fill('AAPL');
-  await page.waitForTimeout(1500);
+  await page.waitForResponse((resp) => resp.status() === 503);
   await searchInput.fill('');
   await searchInput.fill('GOOG');
-  await page.waitForTimeout(1500);
+  await page.waitForResponse((resp) => resp.status() === 503);
   await searchInput.fill('');
   await searchInput.fill('MSFT');
-  await page.waitForTimeout(1500);
+  await page.waitForResponse((resp) => resp.status() === 503);
 
   // Wait for banner to appear
   const banner = getBannerLocator(page);

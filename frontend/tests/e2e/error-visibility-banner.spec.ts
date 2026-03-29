@@ -219,7 +219,7 @@ test.describe('API Health Banner Visibility', () => {
     await expect(banner).toBeVisible({ timeout: 5000 });
 
     // Verify role="alert" with aria-live="assertive" for screen readers
-    await expect(banner).toHaveAttribute('aria-live', 'assertive');
+    await expect(banner).toHaveAttribute('aria-live', 'assertive', { timeout: 3000 });
 
     // Verify dismiss button has accessible label
     const dismissButton = page.getByRole('button', {

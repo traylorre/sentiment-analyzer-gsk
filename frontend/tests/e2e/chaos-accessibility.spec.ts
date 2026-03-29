@@ -2,6 +2,7 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { triggerHealthBanner, getBannerLocator } from './helpers/chaos-helpers';
+import { waitForAccessibilityTree } from './helpers/a11y-helpers';
 
 /**
  * Chaos: Accessibility During Degraded States (Feature 1265, US4/FR-010/SC-005)
@@ -28,6 +29,12 @@ test.describe('Chaos: Accessibility During Degradation', () => {
 
     const banner = getBannerLocator(page);
     await expect(banner).toBeVisible();
+
+    // Wait for accessibility tree to stabilize (ARIA attributes are computed async)
+    await waitForAccessibilityTree(page, {
+      selector: '[role="alert"]',
+      attributes: ['aria-live'],
+    });
 
     // Run axe-core scan for WCAG 2.1 AA
     const results = await new AxeBuilder({ page })
@@ -66,6 +73,12 @@ test.describe('Chaos: Accessibility During Degradation', () => {
       page.getByText(/something went wrong/i),
     ).toBeVisible({ timeout: 5000 });
 
+    // Wait for error boundary to fully render with accessible buttons
+    await waitForAccessibilityTree(page, {
+      selector: 'button',
+      attributes: ['type'],
+    });
+
     // Run axe-core scan
     const results = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
@@ -100,6 +113,12 @@ test.describe('Chaos: Accessibility During Degradation', () => {
     await expect(
       page.getByText(/something went wrong/i),
     ).toBeVisible({ timeout: 5000 });
+
+    // Wait for error boundary buttons to be fully accessible
+    await waitForAccessibilityTree(page, {
+      selector: 'button',
+      attributes: ['type'],
+    });
 
     // Verify buttons exist and have accessible names
     const tryAgainButton = page.getByRole('button', { name: /try again/i });
