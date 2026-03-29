@@ -135,6 +135,21 @@ const MOCK_SENTIMENT_RESPONSE = {
  * @returns A cleanup function that removes all mock routes
  */
 export async function mockTickerDataApis(page: Page): Promise<() => Promise<void>> {
+  // Mock anonymous auth — useChartData requires hasAccessToken=true
+  await page.route('**/api/v2/auth/anonymous', async (route) => {
+    await route.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        access_token: 'mock-test-token',
+        token_type: 'bearer',
+        auth_type: 'anonymous',
+        user_id: 'anon-test-user',
+        session_expires_in_seconds: 3600,
+      }),
+    });
+  });
+
   // Mock ticker search — match any search query
   await page.route('**/api/v2/tickers/search**', (route) =>
     route.fulfill({
@@ -163,6 +178,7 @@ export async function mockTickerDataApis(page: Page): Promise<() => Promise<void
   );
 
   return async () => {
+    await page.unroute('**/api/v2/auth/anonymous');
     await page.unroute('**/api/v2/tickers/search**');
     await page.unroute('**/api/v2/tickers/*/ohlc**');
     await page.unroute('**/api/v2/tickers/*/sentiment/history**');

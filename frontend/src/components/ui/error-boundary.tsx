@@ -78,10 +78,10 @@ export function ErrorFallback({
   onGoHome,
 }: ErrorFallbackProps) {
   return (
-    <div className="min-h-[400px] flex items-center justify-center p-4">
+    <div role="alert" className="min-h-[400px] flex items-center justify-center p-4">
       <Card className="max-w-md w-full p-6 text-center">
         <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mx-auto mb-4">
-          <AlertTriangle className="w-8 h-8 text-red-500" />
+          <AlertTriangle className="w-8 h-8 text-red-500" aria-hidden="true" />
         </div>
 
         <h2 className="text-xl font-semibold text-foreground mb-2">
@@ -102,20 +102,20 @@ export function ErrorFallback({
 
         <div className="flex flex-col sm:flex-row gap-2">
           {onReset && (
-            <Button variant="outline" onClick={onReset} className="flex-1 gap-2">
-              <RefreshCw className="w-4 h-4" />
+            <Button type="button" variant="outline" onClick={onReset} className="flex-1 gap-2">
+              <RefreshCw className="w-4 h-4" aria-hidden="true" />
               Try Again
             </Button>
           )}
           {onReload && (
-            <Button variant="outline" onClick={onReload} className="flex-1 gap-2">
-              <RefreshCw className="w-4 h-4" />
+            <Button type="button" variant="outline" onClick={onReload} className="flex-1 gap-2">
+              <RefreshCw className="w-4 h-4" aria-hidden="true" />
               Reload Page
             </Button>
           )}
           {onGoHome && (
-            <Button onClick={onGoHome} className="flex-1 gap-2">
-              <Home className="w-4 h-4" />
+            <Button type="button" onClick={onGoHome} className="flex-1 gap-2">
+              <Home className="w-4 h-4" aria-hidden="true" />
               Go Home
             </Button>
           )}
