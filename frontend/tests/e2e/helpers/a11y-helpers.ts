@@ -5,7 +5,7 @@ interface A11yWaitOptions {
   selector: string;
   /** ARIA attributes that must have non-empty values */
   attributes?: string[];
-  /** Maximum wait time in ms (default: 5000) */
+  /** Maximum wait time in ms (default: 2000) */
   timeout?: number;
 }
 
@@ -25,7 +25,7 @@ export async function waitForAccessibilityTree(
   page: Page,
   options: A11yWaitOptions
 ): Promise<void> {
-  const { selector, attributes = [], timeout = 5000 } = options;
+  const { selector, attributes = [], timeout = 2000 } = options;
 
   await page.waitForFunction(
     ({ sel, attrs }) => {

@@ -45,8 +45,12 @@ async function cleanupStaleTestData() {
       }
     }
   } catch (error) {
-    // Non-fatal — cleanup is best-effort
-    console.log(`[global-setup] Cleanup skipped: ${error}`);
+    // Non-fatal — cleanup is best-effort.
+    // TypeError: fetch failed = API server not reachable yet (expected during startup)
+    const message = error instanceof TypeError
+      ? 'API not reachable yet (server may still be starting)'
+      : String(error);
+    console.log(`[global-setup] Cleanup skipped: ${message}`);
   }
 }
 

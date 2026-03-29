@@ -16,9 +16,13 @@ import { waitForAccessibilityTree } from './helpers/a11y-helpers';
  * focus management). Manual screen reader testing is out of scope.
  */
 test.describe('Chaos: Accessibility During Degradation', () => {
+  // a11y tests stack triggerHealthBanner + waitForAccessibilityTree + AxeBuilder.analyze
+  // which legitimately takes longer than standard E2E tests due to axe-core scanning overhead
+  test.setTimeout(30_000);
+
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await page.waitForTimeout(2000);
+    await page.waitForLoadState('networkidle');
   });
 
   // T025: Health banner has zero critical a11y violations
@@ -36,8 +40,10 @@ test.describe('Chaos: Accessibility During Degradation', () => {
       attributes: ['aria-live'],
     });
 
-    // Run axe-core scan for WCAG 2.1 AA
+    // Run axe-core scan for WCAG 2.1 AA — scoped to the banner element
+    // to reduce scan time from ~2-3s (full page) to ~0.5-1s (component only)
     const results = await new AxeBuilder({ page })
+      .include('[role="alert"]')
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
       .analyze();
 

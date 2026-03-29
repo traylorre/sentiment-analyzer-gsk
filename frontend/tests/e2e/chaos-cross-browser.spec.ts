@@ -32,12 +32,30 @@ test.describe('Chaos: Cross-Browser Validation', () => {
 
   // T042: Cached data persists across browsers
   test('cached data persists during API outage', async ({ page }) => {
+    // Load actual data first — the beforeEach only navigates.
+    // Tests assert "previously loaded data" persists, so data must exist.
+    const searchInput = page.getByPlaceholder(/search tickers/i);
+    await searchInput.fill('AAPL');
+    const suggestion = page.getByRole('option', { name: /AAPL/i });
+    await expect(suggestion).toBeVisible({ timeout: 10000 });
+    await suggestion.click();
+    // Wait for chart data to render
+    const chartContainer = page.locator(
+      '[role="img"][aria-label*="Price and sentiment chart"]',
+    );
+    await expect(chartContainer).toHaveAttribute(
+      'aria-label',
+      /[1-9]\d* price candles/,
+      { timeout: 15000 },
+    );
+
     const mainContent = page.locator('main');
     const textBefore = await mainContent.textContent();
     expect(textBefore).toBeTruthy();
 
     await blockAllApi(page, 503);
-    await page.waitForTimeout(2000);
+    // Brief settle for in-flight React Query refetch requests to hit the route block
+    await page.waitForTimeout(500);
 
     const textDuring = await mainContent.textContent();
     expect(textDuring).toBeTruthy();
@@ -60,11 +78,15 @@ test.describe('Chaos: Cross-Browser Validation', () => {
       route.abort('connectionreset'),
     );
 
-    // Wait for at least 2 reconnection attempts
-    await page.waitForTimeout(5000);
-
-    // Should have multiple SSE requests (reconnection behavior works)
-    expect(sseRequests.length).toBeGreaterThanOrEqual(2);
+    // Wait for at least 2 reconnection attempts (poll instead of blind wait
+    // to avoid racing against exponential backoff timing — see Feature 1274)
+    await expect
+      .poll(() => sseRequests.length, {
+        message: 'Expected 2+ SSE reconnection attempts',
+        timeout: 15000,
+        intervals: [500],
+      })
+      .toBeGreaterThanOrEqual(2);
 
     if (sseRequests.length >= 2) {
       // Intervals should be > 0 (backoff is working, within 2x tolerance)

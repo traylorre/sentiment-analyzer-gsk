@@ -11,9 +11,23 @@ import { blockAllApi } from './helpers/chaos-helpers';
  */
 test.describe('Chaos: Cached Data Resilience', () => {
   test.beforeEach(async ({ page }) => {
-    // Navigate and wait for initial data to render
+    // Navigate and load actual data — tests assert "previously loaded data"
+    // persists during API outages, so data must exist before chaos injection.
     await page.goto('/');
-    await page.waitForTimeout(3000);
+    const searchInput = page.getByPlaceholder(/search tickers/i);
+    await searchInput.fill('AAPL');
+    const suggestion = page.getByRole('option', { name: /AAPL/i });
+    await expect(suggestion).toBeVisible({ timeout: 10000 });
+    await suggestion.click();
+    // Wait for chart data to fully render (proven pattern from sanity.spec.ts)
+    const chartContainer = page.locator(
+      '[role="img"][aria-label*="Price and sentiment chart"]',
+    );
+    await expect(chartContainer).toHaveAttribute(
+      'aria-label',
+      /[1-9]\d* price candles/,
+      { timeout: 15000 },
+    );
   });
 
   // T013: Previously loaded data remains visible during API outage
@@ -33,8 +47,8 @@ test.describe('Chaos: Cached Data Resilience', () => {
     // Now block all API calls — simulate complete outage
     await blockAllApi(page, 503);
 
-    // Wait for any pending requests to fail
-    await page.waitForTimeout(2000);
+    // Brief settle for in-flight React Query refetch requests to hit the route block
+    await page.waitForTimeout(500);
 
     // Dashboard should still have rendered content — NOT empty/blank
     const childCountDuringChaos = await mainContent.locator('> *').count();
@@ -56,8 +70,8 @@ test.describe('Chaos: Cached Data Resilience', () => {
     // Block with timeout error
     await page.route('**/api/**', (route) => route.abort('timedout'));
 
-    // Wait for timeout errors to propagate
-    await page.waitForTimeout(2000);
+    // Brief settle for in-flight React Query refetch requests to hit the route block
+    await page.waitForTimeout(500);
 
     // Dashboard should still have content
     const textDuring = await mainContent.textContent();
