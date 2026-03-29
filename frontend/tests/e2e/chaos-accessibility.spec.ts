@@ -62,12 +62,12 @@ test.describe('Chaos: Accessibility During Degradation', () => {
   test('error boundary fallback has zero critical accessibility violations', async ({
     page,
   }) => {
-    // Force error boundary
-    await page.evaluate(() => {
+    // Force error boundary — must use addInitScript so the flag survives navigation.
+    // page.evaluate() sets it on the CURRENT page; goto() loads a NEW page without it.
+    await page.addInitScript(() => {
       (window as any).__TEST_FORCE_ERROR = true;
     });
     await page.goto('/');
-    await page.waitForTimeout(1000);
 
     await expect(
       page.getByText(/something went wrong/i),
@@ -103,12 +103,11 @@ test.describe('Chaos: Accessibility During Degradation', () => {
   test('error boundary buttons are keyboard-focusable with accessible labels', async ({
     page,
   }) => {
-    // Force error boundary
-    await page.evaluate(() => {
+    // Force error boundary — addInitScript survives navigation
+    await page.addInitScript(() => {
       (window as any).__TEST_FORCE_ERROR = true;
     });
     await page.goto('/');
-    await page.waitForTimeout(1000);
 
     await expect(
       page.getByText(/something went wrong/i),

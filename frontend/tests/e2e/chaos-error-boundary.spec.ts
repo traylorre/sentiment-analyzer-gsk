@@ -23,12 +23,13 @@ test.describe('Chaos: Error Boundary', () => {
    * Sets the global flag, then triggers a re-render by navigating.
    */
   async function forceErrorBoundary(page: import('@playwright/test').Page) {
-    await page.evaluate(() => {
+    // Must use addInitScript — page.evaluate() sets the flag on the current page,
+    // but goto() loads a NEW page where the flag doesn't exist.
+    // addInitScript runs before any page JS, so the flag is set when ErrorTrigger renders.
+    await page.addInitScript(() => {
       (window as any).__TEST_FORCE_ERROR = true;
     });
-    // Trigger re-render — navigate to dashboard which re-mounts ErrorTrigger
     await page.goto('/');
-    await page.waitForTimeout(1000);
   }
 
   // T022: Error boundary fallback renders with recovery actions
@@ -64,14 +65,11 @@ test.describe('Chaos: Error Boundary', () => {
     const banner = getBannerLocator(page);
     await expect(banner).toBeVisible();
 
-    // Now force error boundary on top of degradation
-    await page.evaluate(() => {
+    // Now force error boundary on top of degradation — addInitScript survives navigation
+    await page.addInitScript(() => {
       (window as any).__TEST_FORCE_ERROR = true;
     });
-
-    // Navigate to trigger re-render within the error boundary scope
     await page.goto('/');
-    await page.waitForTimeout(1000);
 
     // Error boundary fallback should now be visible
     await expect(
