@@ -1,6 +1,7 @@
 // Target: Customer Dashboard (Next.js/Amplify)
 import { test, expect } from '@playwright/test';
 import { blockAllApi } from './helpers/chaos-helpers';
+import { mockTickerDataApis } from './helpers/mock-api-data';
 
 /**
  * Chaos: Cached Data Resilience (Feature 1265, US1/FR-015)
@@ -11,22 +12,26 @@ import { blockAllApi } from './helpers/chaos-helpers';
  */
 test.describe('Chaos: Cached Data Resilience', () => {
   test.beforeEach(async ({ page }) => {
-    // Navigate and load actual data — tests assert "previously loaded data"
-    // persists during API outages, so data must exist before chaos injection.
+    // Feature 1276: Mock search/OHLC/sentiment APIs with pre-canned data.
+    // Chaos tests verify cache resilience, not data fetching. Mocking
+    // eliminates Tiingo/Finnhub latency that caused 17s timeouts.
+    await mockTickerDataApis(page);
+
+    // Navigate and load data — mocked APIs respond instantly
     await page.goto('/');
     const searchInput = page.getByPlaceholder(/search tickers/i);
     await searchInput.fill('AAPL');
     const suggestion = page.getByRole('option', { name: /AAPL/i });
-    await expect(suggestion).toBeVisible({ timeout: 10000 });
+    await expect(suggestion).toBeVisible({ timeout: 5000 });
     await suggestion.click();
-    // Wait for chart data to fully render (proven pattern from sanity.spec.ts)
+    // Wait for chart data to render (instant with mocks, 5s safety margin)
     const chartContainer = page.locator(
       '[role="img"][aria-label*="Price and sentiment chart"]',
     );
     await expect(chartContainer).toHaveAttribute(
       'aria-label',
       /[1-9]\d* price candles/,
-      { timeout: 15000 },
+      { timeout: 5000 },
     );
   });
 
