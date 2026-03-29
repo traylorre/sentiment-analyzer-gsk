@@ -1,4 +1,5 @@
 import { Page } from '@playwright/test';
+import type { AxeResults } from '@axe-core/playwright';
 
 interface A11yWaitOptions {
   /** CSS selector for the element to check */
@@ -40,4 +41,39 @@ export async function waitForAccessibilityTree(
     { sel: selector, attrs: attributes },
     { timeout, polling: 50 }
   );
+}
+
+/**
+ * Assert axe-core results have no critical/serious violations.
+ * Logs moderate/minor as warnings without failing.
+ *
+ * Replaces the inline filter-and-assert pattern used in chaos-accessibility.spec.ts
+ * with a reusable helper.
+ */
+export function assertNoA11yViolations(
+  results: AxeResults,
+  failOn: string[] = ['critical', 'serious'],
+): void {
+  const failing = results.violations.filter((v) =>
+    failOn.includes(v.impact ?? ''),
+  );
+
+  const warnings = results.violations.filter(
+    (v) => !failOn.includes(v.impact ?? ''),
+  );
+  for (const v of warnings) {
+    console.warn(
+      `[a11y warning] ${v.impact}: ${v.id} — ${v.description}`,
+    );
+  }
+
+  if (failing.length > 0) {
+    const details = failing.map(
+      (v) =>
+        `[${v.impact}] ${v.id}: ${v.description} (${v.nodes.length} instances)`,
+    );
+    throw new Error(
+      `${failing.length} accessibility violation(s):\n${details.join('\n')}`,
+    );
+  }
 }
