@@ -57,7 +57,7 @@
         </div>
     </div>
 
-    <div class="container mx-auto p-4 max-w-7xl">
+    <div class="container mx-auto p-4 max-w-7xl" data-testid="chaos-dashboard-content">
         <!-- Alert Banner -->
         <div class="alert alert-warning shadow-lg mb-6">
             <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current flex-shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
@@ -319,7 +319,7 @@
                             <!-- Loading skeleton -->
                             <template x-if="loadingExperiments">
                                 <tr>
-                                    <td colspan="6" class="text-center py-8">
+                                    <td colspan="8" class="text-center py-8">
                                         <span class="loading loading-spinner loading-lg"></span>
                                         <p class="mt-2 opacity-75">Loading experiments...</p>
                                     </td>
@@ -350,7 +350,7 @@
                                         </tr>
                                     </template>
                                     <tr x-show="historyExperiments.length === 0">
-                                        <td colspan="6" class="text-center opacity-75">No experiments yet. Start your first chaos test above!</td>
+                                        <td colspan="8" class="text-center opacity-75">No experiments yet. Start your first chaos test above!</td>
                                     </tr>
                                 </template>
                             </template>
@@ -498,6 +498,13 @@
                 <button class="btn btn-ghost btn-sm" @click="diffSelection = []">Clear Selection</button>
             </div>
 
+            <!-- Report Error Banner (FR-018) -->
+            <div x-show="reportError" class="alert alert-error shadow-lg mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current flex-shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <span x-text="reportError"></span>
+                <button class="btn btn-ghost btn-sm" @click="reportError = null; loadReports()">Retry</button>
+            </div>
+
             <!-- Report Table -->
             <div class="overflow-x-auto">
                 <table class="table table-zebra w-full">
@@ -508,7 +515,9 @@
                             </th>
                             <th>Time</th>
                             <th>Scenario</th>
+                            <th>Environment</th>
                             <th>Verdict</th>
+                            <th>Duration</th>
                             <th>Dry Run</th>
                             <th>Actions</th>
                         </tr>
@@ -517,7 +526,7 @@
                         <!-- Loading skeleton -->
                         <template x-if="loadingReports">
                             <tr>
-                                <td colspan="6" class="text-center py-8">
+                                <td colspan="8" class="text-center py-8">
                                     <span class="loading loading-spinner loading-lg"></span>
                                     <p class="mt-2 opacity-75">Loading reports...</p>
                                 </td>
@@ -538,9 +547,11 @@
                                         </td>
                                         <td class="text-sm" x-text="formatTime(report.created_at)"></td>
                                         <td x-text="scenarioNames[report.scenario_type] || report.scenario_type"></td>
+                                        <td class="text-sm" x-text="report.environment || '—'"></td>
                                         <td>
                                             <div class="badge" :class="getVerdictClass(report.verdict)" x-text="getVerdictLabel(report.verdict)"></div>
                                         </td>
+                                        <td class="text-sm" x-text="report.duration_seconds != null ? report.duration_seconds + 's' : '—'"></td>
                                         <td>
                                             <span x-show="report.dry_run" class="badge badge-info badge-sm">DRY RUN</span>
                                         </td>
@@ -558,7 +569,7 @@
                                 </template>
                                 <!-- Empty state -->
                                 <tr x-show="reports.length === 0">
-                                    <td colspan="6" class="text-center py-8 opacity-75">
+                                    <td colspan="8" class="text-center py-8 opacity-75">
                                         No reports found. Reports are generated after chaos experiments complete.
                                     </td>
                                 </tr>
@@ -938,6 +949,7 @@
                 reportFilters: { scenario_type: '', verdict: '' },
                 reportCursor: null,
                 loadingReports: false,
+                reportError: null,
                 selectedReportId: null,
                 currentReport: null,
                 comparisonResult: null,
@@ -1187,6 +1199,7 @@
 
                 async loadReports(append = false) {
                     this.loadingReports = true;
+                    this.reportError = null;
                     try {
                         let url = '/chaos/reports?limit=20';
                         if (this.reportFilters.scenario_type) url += '&scenario_type=' + encodeURIComponent(this.reportFilters.scenario_type);
@@ -1204,9 +1217,12 @@
                                 this.reports = data.reports;
                             }
                             this.reportCursor = data.next_cursor;
+                        } else {
+                            this.reportError = `Failed to load reports (HTTP ${response.status})`;
                         }
                     } catch (error) {
                         console.error('Failed to load reports:', error);
+                        this.reportError = 'Failed to load reports — check network connection';
                     } finally {
                         this.loadingReports = false;
                     }
@@ -1235,6 +1251,11 @@
                         });
                         if (response.ok) {
                             const report = await response.json();
+                            // FR-017: LRU eviction at 100 entries
+                            if (this.reportCache.size >= 100) {
+                                const oldestKey = this.reportCache.keys().next().value;
+                                this.reportCache.delete(oldestKey);
+                            }
                             this.reportCache.set(reportId, report);
                             this.currentReport = report;
                             this.currentView = 'detail';
