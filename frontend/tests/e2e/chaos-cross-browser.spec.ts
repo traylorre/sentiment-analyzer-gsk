@@ -27,7 +27,7 @@ test.describe('Chaos: Cross-Browser Validation', () => {
     await triggerHealthBanner(page);
     const banner = getBannerLocator(page);
     await expect(banner).toBeVisible();
-    await expect(banner).toHaveAttribute('aria-live', 'assertive');
+    await expect(banner).toHaveAttribute('aria-live', 'assertive', { timeout: 3000 });
   });
 
   // T042: Cached data persists across browsers
