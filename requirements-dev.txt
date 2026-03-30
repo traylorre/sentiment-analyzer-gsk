@@ -17,7 +17,7 @@
 -r requirements.txt
 
 # Override: moto[all]==5.1.22 requires pydantic<=2.12.4, but requirements.txt pins 2.12.5
-pydantic==2.12.4
+pydantic==2.12.5
 
 # Testing Framework
 pytest==9.0.2           # Compatible with pytest-asyncio 1.3.0
@@ -40,7 +40,7 @@ bandit==1.9.4          # Security vulnerability scanner (local CodeQL alternativ
 
 # Type Checking (optional but recommended)
 mypy==1.19.1
-boto3-stubs==1.42.68     # Type stubs for boto3
+boto3-stubs==1.42.78     # Type stubs for boto3
 
 # Testing Utilities
 httpx==0.28.1           # Async HTTP client for financial API adapters

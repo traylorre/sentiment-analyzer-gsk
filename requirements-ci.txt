@@ -18,15 +18,15 @@ botocore==1.42.73
 
 
 # HTTP Client - Financial API adapters (Tiingo, Finnhub)
-requests==2.32.5
+requests==2.33.1
 httpx==0.28.1
 
 # Data Validation - Input/output schemas
-pydantic==2.12.4  # pinned: moto[all]==5.1.22 requires pydantic<=2.12.4
+pydantic==2.12.5  # pinned: moto[all]==5.1.22 requires pydantic<=2.12.4
 email-validator==2.3.0
 
 # Logging - Structured JSON logs for CloudWatch
-python-json-logger==4.0.0
+python-json-logger==4.1.0
 
 # AWS X-Ray - Distributed tracing (Feature 006)
 aws-xray-sdk==2.15.0
@@ -35,7 +35,7 @@ aws-xray-sdk==2.15.0
 sendgrid==6.12.5
 
 # AWS Lambda Powertools - Enhanced observability
-aws-lambda-powertools==3.25.0
+aws-lambda-powertools==3.26.0
 
 # =============================================================================
 # Testing Dependencies (from requirements-dev.txt)
@@ -60,13 +60,13 @@ bandit==1.9.4
 
 # Type Checking
 mypy==1.19.1
-boto3-stubs==1.42.68
+boto3-stubs==1.42.78
 
 # Testing Utilities
 freezegun==1.5.5
 
 # Property-Based Testing (tests/property/ requires this)
-hypothesis==6.151.9
+hypothesis==6.151.10
 
 # Terraform HCL Parsing - For resource_naming validator tests
 python-hcl2==7.3.1
