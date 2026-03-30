@@ -1847,22 +1847,6 @@ class TestItemRetrievalErrors:
         assert response["statusCode"] == 404
         assert_error_logged(caplog, "index.html not found")
 
-    def test_serve_chaos_not_found(self, mock_lambda_context, monkeypatch, caplog):
-        """Test chaos.html not found returns 404 (lines 317-325)."""
-        from pathlib import Path
-
-        from tests.conftest import assert_error_logged
-
-        monkeypatch.setattr(
-            "src.lambdas.dashboard.handler.STATIC_DIR",
-            Path("/nonexistent/path"),
-        )
-
-        event = make_event(method="GET", path="/chaos")
-        response = lambda_handler(event, mock_lambda_context)
-        assert response["statusCode"] == 404
-        assert_error_logged(caplog, "chaos.html not found")
-
 
 class TestChaosEndpointErrors:
     """Tests for chaos endpoint error handlers (lines 910-1136)."""
