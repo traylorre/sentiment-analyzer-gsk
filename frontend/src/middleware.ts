@@ -12,6 +12,11 @@ const protectedRoutes: string[] = [];
 // Routes that require upgraded (non-anonymous) auth
 const upgradedRoutes = ['/alerts'];
 
+// Routes that require authenticated (non-anonymous) access
+// Role-based authorization (operator check) is enforced client-side in the admin layout
+// because the JWT does not contain a role claim — only the /api/v2/auth/me endpoint returns it
+const adminRoutes = ['/admin'];
+
 // Routes that should redirect to dashboard if already authenticated
 const authRoutes = ['/auth/signin'];
 
@@ -36,6 +41,15 @@ export function middleware(request: NextRequest) {
     pathname.startsWith(route)
   );
   const isAuthRoute = authRoutes.some((route) => pathname.startsWith(route));
+  const isAdminRoute = adminRoutes.some((route) => pathname.startsWith(route));
+
+  // Redirect to sign in if accessing admin route without upgraded auth
+  // (operator role check happens client-side in admin layout)
+  if (isAdminRoute && !hasUpgradedAuth) {
+    const signInUrl = new URL('/auth/signin', request.url);
+    signInUrl.searchParams.set('redirect', pathname);
+    return NextResponse.redirect(signInUrl);
+  }
 
   // Redirect to sign in if accessing protected route without auth
   if (isProtectedRoute && !isAuthenticated) {
