@@ -31,7 +31,7 @@ function generateCandles(count: number): Array<{
   high: number;
   low: number;
   close: number;
-  volume: number;
+  volume: number | null;
 }> {
   const candles = [];
   const baseDate = new Date('2026-03-01');
@@ -55,22 +55,28 @@ function generateCandles(count: number): Array<{
       high: Math.round(high * 100) / 100,
       low: Math.round(low * 100) / 100,
       close: Math.round(close * 100) / 100,
-      volume: Math.floor(50_000_000 + Math.random() * 30_000_000),
+      // FR-009: At least one candle has null volume to exercise null-handling
+      volume: i === 0 ? null : Math.floor(50_000_000 + Math.random() * 30_000_000),
     });
   }
   return candles;
 }
 
-/** Generate N sentiment points matching candle dates */
+/** Generate N sentiment points matching candle dates.
+ * FR-008: Uses multiple source values for realistic coverage.
+ * FR-009: First entry has null confidence and label to exercise null-handling.
+ * Includes negative scores to exercise full [-1.0, 1.0] range.
+ */
 function generateSentimentPoints(
   count: number,
 ): Array<{
   date: string;
   score: number;
-  source: string;
-  confidence: number;
-  label: string;
+  source: 'tiingo' | 'finnhub' | 'our_model' | 'aggregated';
+  confidence: number | null;
+  label: 'positive' | 'neutral' | 'negative' | null;
 }> {
+  const sources = ['aggregated', 'our_model', 'tiingo', 'finnhub'] as const;
   const points = [];
   const baseDate = new Date('2026-03-01');
 
@@ -79,13 +85,25 @@ function generateSentimentPoints(
     date.setDate(baseDate.getDate() + i);
     if (date.getDay() === 0 || date.getDay() === 6) continue;
 
-    const score = 0.3 + Math.random() * 0.5; // 0.3 to 0.8
+    // Include negative scores for range coverage (FR-007)
+    const score = i === 1 ? -0.85 : 0.3 + Math.random() * 0.5;
+    const roundedScore = Math.round(score * 1000) / 1000;
+
+    // FR-009: First entry has null confidence and label
+    const isNullVariant = i === 0;
+
     points.push({
       date: date.toISOString().split('T')[0],
-      score: Math.round(score * 1000) / 1000,
-      source: 'aggregated',
-      confidence: 0.85,
-      label: score > 0.6 ? 'positive' : score > 0.4 ? 'neutral' : 'negative',
+      score: roundedScore,
+      source: sources[i % sources.length],
+      confidence: isNullVariant ? null : 0.85,
+      label: isNullVariant
+        ? null
+        : roundedScore > 0.6
+          ? 'positive'
+          : roundedScore > 0.4
+            ? 'neutral'
+            : 'negative',
     });
   }
   return points;
@@ -120,6 +138,31 @@ const MOCK_SENTIMENT_RESPONSE = {
   count: SENTIMENT_POINTS.length,
 };
 
+/** FR-012: Empty-array OHLC response variant for edge case testing */
+export const MOCK_EMPTY_OHLC_RESPONSE = {
+  ticker: 'AAPL',
+  candles: [],
+  time_range: '1M',
+  start_date: '2026-03-01',
+  end_date: '2026-03-28',
+  count: 0,
+  source: 'tiingo' as const,
+  cache_expires_at: new Date(Date.now() + 3600_000).toISOString(),
+  resolution: 'D',
+  resolution_fallback: false,
+  fallback_message: null,
+};
+
+/** FR-012: Empty-array sentiment response variant for edge case testing */
+export const MOCK_EMPTY_SENTIMENT_RESPONSE = {
+  ticker: 'AAPL',
+  source: 'aggregated' as const,
+  history: [],
+  start_date: '2026-03-01',
+  end_date: '2026-03-28',
+  count: 0,
+};
+
 // ─── Route Interception ─────────────────────────────────────────────────────
 
 /**
@@ -135,6 +178,21 @@ const MOCK_SENTIMENT_RESPONSE = {
  * @returns A cleanup function that removes all mock routes
  */
 export async function mockTickerDataApis(page: Page): Promise<() => Promise<void>> {
+  // Mock anonymous auth — useChartData requires hasAccessToken=true
+  await page.route('**/api/v2/auth/anonymous', async (route) => {
+    await route.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        access_token: 'mock-test-token',
+        token_type: 'bearer',
+        auth_type: 'anonymous',
+        user_id: 'anon-test-user',
+        session_expires_in_seconds: 3600,
+      }),
+    });
+  });
+
   // Mock ticker search — match any search query
   await page.route('**/api/v2/tickers/search**', (route) =>
     route.fulfill({
@@ -163,6 +221,7 @@ export async function mockTickerDataApis(page: Page): Promise<() => Promise<void
   );
 
   return async () => {
+    await page.unroute('**/api/v2/auth/anonymous');
     await page.unroute('**/api/v2/tickers/search**');
     await page.unroute('**/api/v2/tickers/*/ohlc**');
     await page.unroute('**/api/v2/tickers/*/sentiment/history**');

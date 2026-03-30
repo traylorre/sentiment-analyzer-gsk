@@ -66,7 +66,12 @@ test.describe('Chaos: Cross-Browser Validation', () => {
   });
 
   // T043: SSE reconnection on WebKit
-  test('SSE reconnection issues new fetch after connection drop', async ({
+  // FIXME(1280): SSE reconnection requires a streaming server that doesn't exist
+  // in the Playwright test environment. The mock API (run-local-api.py) doesn't
+  // implement SSE endpoints. This test needs SSE mock infrastructure to be viable.
+  // Tracked for future: add SSE mock to run-local-api.py or use page.route() to
+  // simulate EventSource streams.
+  test.fixme('SSE reconnection issues new fetch after connection drop', async ({
     page,
   }) => {
     const sseRequests: number[] = [];
