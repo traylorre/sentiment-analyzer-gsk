@@ -700,40 +700,6 @@ class TestSecurityMitigations:
         assert "Missing user identification" in body["detail"]
 
 
-class TestChaosUIEndpoint:
-    """Tests for /chaos endpoint (chaos testing UI)."""
-
-    def test_chaos_page_returns_html(self, mock_lambda_context):
-        """Test chaos testing page returns HTML."""
-        event = make_event(method="GET", path="/chaos")
-        response = lambda_handler(event, mock_lambda_context)
-        assert response["statusCode"] == 200
-        content_type = response.get("headers", {}).get("Content-Type", "")
-        assert "text/html" in content_type
-
-    def test_chaos_page_no_auth_required(self, mock_lambda_context):
-        """Test chaos page doesn't require authentication."""
-        # Chaos UI should be accessible without auth (API endpoints require auth)
-        event = make_event(method="GET", path="/chaos")
-        response = lambda_handler(event, mock_lambda_context)
-        assert response["statusCode"] == 200
-
-    def test_chaos_page_contains_expected_elements(self, mock_lambda_context):
-        """Test chaos page contains expected UI elements."""
-        event = make_event(method="GET", path="/chaos")
-        response = lambda_handler(event, mock_lambda_context)
-        assert response["statusCode"] == 200
-
-        content = response["body"]
-        # Check for key UI elements
-        assert "Chaos Testing" in content
-        assert "DynamoDB Throttle" in content
-        assert "Ingestion Failure" in content
-        assert "Lambda" in content or "Cold Start" in content
-        assert "Blast Radius" in content
-        assert "Duration" in content
-
-
 class TestAPIv2SentimentEndpoint:
     """Tests for the /api/v2/sentiment endpoint."""
 

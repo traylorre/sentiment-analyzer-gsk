@@ -328,27 +328,6 @@ def serve_favicon():
     )
 
 
-@app.get("/chaos")
-def serve_chaos():
-    """Serve the chaos testing UI page (locked down in prod/preprod)."""
-    if not _is_dev_environment():
-        return _make_not_found_response(_get_request_origin())
-    chaos_path = STATIC_DIR / "chaos.html"
-    if not chaos_path.exists():
-        logger.error("chaos.html not found", extra={"path": str(chaos_path)})
-        return Response(
-            status_code=404,
-            content_type="application/json",
-            body=orjson.dumps({"detail": "Chaos testing page not found"}).decode(),
-        )
-    content = chaos_path.read_bytes()
-    return Response(
-        status_code=200,
-        content_type="text/html",
-        body=content.decode("utf-8"),
-    )
-
-
 @app.get("/static/<filename>")
 def serve_static(filename: str):
     """Serve static dashboard files (locked down in prod/preprod)."""
