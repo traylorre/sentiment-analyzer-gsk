@@ -441,8 +441,10 @@ module "dashboard_lambda" {
     # Feature 1250: Auto-restore scheduling
     # Feature 1290: Placeholder — actual value set by terraform_data.dashboard_lambda_env_wiring
     # to break circular dependency: dashboard_lambda → chaos → notification_lambda → amplify → api_gateway → dashboard_lambda
-    SCHEDULER_ROLE_ARN   = ""
-    DASHBOARD_LAMBDA_ARN = module.dashboard_lambda.function_arn
+    SCHEDULER_ROLE_ARN = ""
+    # Feature 1290: Self-reference removed to break Terraform internal cycle.
+    # Lambda gets its own ARN at runtime from execution context.
+    # DASHBOARD_LAMBDA_ARN = module.dashboard_lambda.function_arn  # REMOVED
     # CORS: Pass explicit origins from tfvars (no wildcard fallback)
     # Feature 1203: Amplify domain should be in cors_allowed_origins
     CORS_ORIGINS = join(",", var.cors_allowed_origins)
