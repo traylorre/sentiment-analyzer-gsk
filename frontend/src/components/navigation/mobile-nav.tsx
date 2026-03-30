@@ -1,9 +1,12 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { LayoutDashboard, Settings2, Bell, Cog } from 'lucide-react';
+import { LayoutDashboard, Settings2, Bell, Cog, ShieldCheck } from 'lucide-react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useViewStore, type ViewType } from '@/stores/view-store';
 import { useHaptic } from '@/hooks/use-haptic';
+import { useIsOperator } from '@/hooks/use-operator';
 import { cn } from '@/lib/utils';
 
 interface NavItem {
@@ -26,6 +29,8 @@ interface MobileNavProps {
 export function MobileNav({ className }: MobileNavProps) {
   const { currentView, setView } = useViewStore();
   const haptic = useHaptic();
+  const isOperator = useIsOperator();
+  const pathname = usePathname();
 
   const handleNavClick = (view: ViewType) => {
     if (view === currentView) return;
@@ -119,6 +124,42 @@ export function MobileNav({ className }: MobileNavProps) {
             </button>
           );
         })}
+
+        {/* Admin link — operator only */}
+        {isOperator && (
+          <Link
+            href="/admin/chaos"
+            data-testid="admin-nav-link-mobile"
+            className={cn(
+              'relative flex flex-col items-center justify-center',
+              'w-16 h-full',
+              'transition-colors duration-200',
+              'focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background'
+            )}
+            aria-label={`Admin${pathname?.startsWith('/admin') ? ', selected' : ''}`}
+          >
+            {pathname?.startsWith('/admin') && (
+              <motion.div
+                className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-1 rounded-b-full bg-accent"
+                transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+              />
+            )}
+            <ShieldCheck
+              className={cn(
+                'w-5 h-5 transition-colors duration-200',
+                pathname?.startsWith('/admin') ? 'text-accent' : 'text-muted-foreground'
+              )}
+            />
+            <span
+              className={cn(
+                'text-xs mt-1 transition-colors duration-200',
+                pathname?.startsWith('/admin') ? 'text-accent font-medium' : 'text-muted-foreground'
+              )}
+            >
+              Admin
+            </span>
+          </Link>
+        )}
       </div>
     </nav>
   );

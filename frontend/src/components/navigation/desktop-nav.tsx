@@ -1,9 +1,12 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { LayoutDashboard, Settings2, Bell, Cog } from 'lucide-react';
+import { LayoutDashboard, Settings2, Bell, Cog, ShieldCheck } from 'lucide-react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useViewStore, type ViewType } from '@/stores/view-store';
 import { useHaptic } from '@/hooks/use-haptic';
+import { useIsOperator } from '@/hooks/use-operator';
 import { cn } from '@/lib/utils';
 import { UserMenu } from '@/components/auth/user-menu';
 import { DataFreshnessIndicator } from '@/components/dashboard/data-freshness-indicator';
@@ -28,6 +31,8 @@ interface DesktopNavProps {
 export function DesktopNav({ className }: DesktopNavProps) {
   const { currentView, setView } = useViewStore();
   const haptic = useHaptic();
+  const isOperator = useIsOperator();
+  const pathname = usePathname();
 
   const handleNavClick = (view: ViewType) => {
     if (view === currentView) return;
@@ -95,6 +100,26 @@ export function DesktopNav({ className }: DesktopNavProps) {
           );
         })}
       </nav>
+
+      {/* Admin section — operator only */}
+      {isOperator && (
+        <div className="px-3 py-2 border-t border-border">
+          <Link
+            href="/admin/chaos"
+            data-testid="admin-nav-link"
+            className={cn(
+              'relative w-full flex items-center gap-3 px-3 py-2.5 rounded-lg',
+              'text-left transition-colors duration-200',
+              pathname?.startsWith('/admin')
+                ? 'text-accent bg-accent/10'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+            )}
+          >
+            <ShieldCheck className="w-5 h-5" />
+            <span className="font-medium">Admin</span>
+          </Link>
+        </div>
+      )}
 
       {/* User section */}
       <div className="px-3 py-4 border-t border-border">
