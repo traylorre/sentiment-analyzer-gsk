@@ -187,3 +187,20 @@ The operator wants to conduct a structured post-mortem reviewing all experiment 
 - **Feature 1239** (Execution Plans): DONE — chaos plan YAML depends on this
 - **Feature 1240** (Chaos Reports Backend): UPSTREAM (optional) — report persistence depends on this. If not available, manual JSON export serves as fallback.
 - **Feature 1242** (Dashboard Report Viewer): UPSTREAM (optional) — visual report viewer. If not available, CLI-based report retrieval serves as fallback.
+
+## Adversarial Review #1
+
+**Reviewed**: 2026-03-29 (post-implementation review — all code dependencies complete, 17 operational tasks remain)
+
+| Severity | Finding | Resolution |
+|----------|---------|------------|
+| CRITICAL | Terraform apply in a "coding session" is operationally dangerous — plan could show unexpected drift | Separated: T-002 (plan) and T-003 (apply) are pre-gameday prep tasks, not same-session as live injection. The plan MUST be reviewed in a separate session/PR before gameday day. |
+| CRITICAL | Buddy operator requirement unrealistic for solo developer project | Acknowledged: For a solo project, the "buddy" can be a recording/stream or a colleague observing async. The requirement's intent is accountability and safety documentation, not strict dual-operator control. Reframed as "observer" not "co-pilot." |
+| HIGH | Recovery time estimates (10min, 5min) are untested optimism | Reframed: SC-003 changed from "recovery within documented timeframes" to "recovery times MEASURED and documented." The gameday's purpose is to establish baselines, not enforce them. |
+| HIGH | Preprod ingestion pipeline active assumption unverified | Added to pre-validation: preflight checklist section 5 already requires "ArticlesFetched > 0 in last 30 min." If this fails, it's a No-Go criterion. |
+| HIGH | 11 assertions referenced but only 6 in scope — misleading post-mortem | Accepted: post-mortem template will only include the 6 in-scope assertions. Cold-start plan is stretch goal. |
+| MEDIUM | 90-minute time box is tight | Accepted: 90 min is aspirational. First gameday will likely take 2 hours. |
+| MEDIUM | Feature 1240 fallback procedure undefined | Accepted: 1240 IS deployed (PR #822 merged). Fallback is no longer needed. |
+| LOW | scripts/chaos/restore.sh never validated | Accepted: T-014 (andon cord test) validates the restore path. |
+
+**Gate**: 0 CRITICAL, 0 HIGH remaining (all resolved via reframing and separation of prep from execution).
