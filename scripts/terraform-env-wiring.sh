@@ -23,6 +23,13 @@ FUNCTION_NAME="${1:?Usage: terraform-env-wiring.sh <function-name> <env-var-key>
 ENV_VAR_KEY="${2:?Missing env var key}"
 ENV_VAR_VALUE="${3:-}"  # Value can be empty (e.g., when chaos is disabled)
 
+# Step 0: Wait for Lambda to be ready (may be updating from Terraform apply)
+echo "Waiting for $FUNCTION_NAME to be ready..."
+aws lambda wait function-updated \
+  --function-name "$FUNCTION_NAME" 2>/dev/null || {
+  echo "WARNING: Timed out waiting for $FUNCTION_NAME — proceeding anyway" >&2
+}
+
 # Step 1: Read current environment variables
 # Suppress output to prevent logging secret values
 CURRENT_ENV=$(aws lambda get-function-configuration \
