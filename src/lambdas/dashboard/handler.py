@@ -74,6 +74,7 @@ from src.lambdas.dashboard.chaos import (
 )
 from src.lambdas.dashboard.metrics import sanitize_item_for_response
 from src.lambdas.shared.dynamodb import get_table, parse_dynamodb_item
+from src.lambdas.shared.env_validation import validate_critical_env_vars
 from src.lambdas.shared.errors.session_errors import SessionRevokedException
 from src.lambdas.shared.logging_utils import (
     get_safe_error_info,
@@ -86,6 +87,9 @@ from src.lambdas.shared.middleware.auth_middleware import (
     extract_auth_context_typed,
 )
 from src.lambdas.shared.utils.event_helpers import get_query_params
+
+# Feature 1290: Validate cross-module env vars at cold start (degraded, not fatal)
+validate_critical_env_vars(["SCHEDULER_ROLE_ARN"])
 
 # Structured logging (FR-028: module-level logging replaces lifespan)
 logger = Logger(service="dashboard")

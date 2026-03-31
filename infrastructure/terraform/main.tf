@@ -439,8 +439,12 @@ module "dashboard_lambda" {
     # Feature 1240: Chaos Reports persistence table (unconditional, $0 when empty)
     CHAOS_REPORTS_TABLE = module.dynamodb.chaos_reports_table_name
     # Feature 1250: Auto-restore scheduling
-    SCHEDULER_ROLE_ARN   = try(module.chaos.chaos_scheduler_role_arn, "")
-    DASHBOARD_LAMBDA_ARN = module.dashboard_lambda.function_arn
+    # Feature 1290: Placeholder — actual value set by terraform_data.dashboard_lambda_env_wiring
+    # to break circular dependency: dashboard_lambda → chaos → notification_lambda → amplify → api_gateway → dashboard_lambda
+    SCHEDULER_ROLE_ARN = ""
+    # Feature 1290: Self-reference removed to break Terraform internal cycle.
+    # Lambda gets its own ARN at runtime from execution context.
+    # DASHBOARD_LAMBDA_ARN = module.dashboard_lambda.function_arn  # REMOVED
     # CORS: Pass explicit origins from tfvars (no wildcard fallback)
     # Feature 1203: Amplify domain should be in cors_allowed_origins
     CORS_ORIGINS = join(",", var.cors_allowed_origins)
@@ -585,7 +589,9 @@ module "notification_lambda" {
     SENDGRID_SECRET_ARN = module.secrets.sendgrid_secret_arn
     FROM_EMAIL          = var.notification_from_email
     # Feature 1203: Use Amplify URL for dashboard (CloudFront removed)
-    DASHBOARD_URL = var.enable_amplify ? module.amplify_frontend[0].production_url : "http://localhost:3000"
+    # Feature 1290: Placeholder — actual value set by terraform_data.notification_lambda_env_wiring
+    # to break circular dependency: notification_lambda → amplify → api_gateway → dashboard_lambda → chaos → notification_lambda
+    DASHBOARD_URL = var.frontend_url
     ENVIRONMENT   = var.environment
   }
 
@@ -608,7 +614,9 @@ module "notification_lambda" {
     Feature = "006-user-config-dashboard"
   }
 
-  depends_on = [module.iam, module.amplify_frontend]
+  # Feature 1290: module.amplify_frontend removed from depends_on to break cycle
+  # (DASHBOARD_URL no longer references amplify output — wired post-creation)
+  depends_on = [module.iam]
 }
 
 # ===================================================================
@@ -1223,6 +1231,9 @@ module "chaos" {
   # Kill switch - stops experiments if Lambda errors spike
   lambda_error_alarm_arn = module.monitoring.analysis_errors_alarm_arn
 
+  # Feature 1250: Dashboard Lambda ARN for auto-restore scheduler invoke policy
+  dashboard_lambda_arn = module.dashboard_lambda.function_arn
+
   # Feature 1237: External chaos actor architecture
   chaos_engineer_principals = [] # Add IAM user/role ARNs that should be able to assume the chaos-engineer role
   lambda_execution_role_arns = [
@@ -1313,6 +1324,49 @@ resource "terraform_data" "cognito_callback_patch" {
   }
 
   depends_on = [module.amplify_frontend, module.cognito]
+}
+
+# ===================================================================
+# Feature 1290: Lambda Environment Variable Wiring (breaks circular dependency)
+# ===================================================================
+# Pattern: Split Definition/Wiring — see docs/terraform-patterns.md
+#
+# The 5-module cycle (amplify → api_gateway → dashboard_lambda → chaos →
+# notification_lambda → amplify) is broken by removing cross-module env var
+# references from Lambda module blocks and wiring them post-creation here.
+#
+# These terraform_data resources run AFTER all modules exist, reading current
+# env vars, merging the cross-module value, and writing back. The merge script
+# preserves all existing env vars — it does NOT replace the entire environment.
+
+# Wire SCHEDULER_ROLE_ARN into dashboard_lambda (was: try(module.chaos.chaos_scheduler_role_arn, ""))
+resource "terraform_data" "dashboard_lambda_env_wiring" {
+  triggers_replace = {
+    scheduler_role_arn = try(module.chaos.chaos_scheduler_role_arn, "")
+  }
+
+  provisioner "local-exec" {
+    command     = "${path.root}/../../scripts/terraform-env-wiring.sh '${module.dashboard_lambda.function_name}' 'SCHEDULER_ROLE_ARN' '${try(module.chaos.chaos_scheduler_role_arn, "")}'"
+    interpreter = ["bash", "-c"]
+  }
+
+  depends_on = [module.dashboard_lambda, module.chaos]
+}
+
+# Wire DASHBOARD_URL into notification_lambda (was: module.amplify_frontend[0].production_url)
+resource "terraform_data" "notification_lambda_env_wiring" {
+  count = var.enable_amplify ? 1 : 0
+
+  triggers_replace = {
+    dashboard_url = module.amplify_frontend[0].production_url
+  }
+
+  provisioner "local-exec" {
+    command     = "${path.root}/../../scripts/terraform-env-wiring.sh '${module.notification_lambda.function_name}' 'DASHBOARD_URL' '${module.amplify_frontend[0].production_url}'"
+    interpreter = ["bash", "-c"]
+  }
+
+  depends_on = [module.notification_lambda, module.amplify_frontend]
 }
 
 # ===================================================================

@@ -183,7 +183,8 @@ resource "aws_iam_policy" "chaos_deny_dynamodb_write" {
 # Chaos-engineer IAM role: least-privilege for external chaos operations.
 # Requires MFA and limited to 1-hour sessions.
 resource "aws_iam_role" "chaos_engineer" {
-  count = var.enable_chaos_testing && var.environment != "prod" ? 1 : 0
+  # Only create when principals are specified — empty trust policy is invalid
+  count = var.enable_chaos_testing && var.environment != "prod" && length(var.chaos_engineer_principals) > 0 ? 1 : 0
   name  = "${var.environment}-chaos-engineer"
 
   assume_role_policy = jsonencode({
@@ -211,7 +212,7 @@ resource "aws_iam_role" "chaos_engineer" {
 }
 
 resource "aws_iam_role_policy" "chaos_engineer_permissions" {
-  count = var.enable_chaos_testing && var.environment != "prod" ? 1 : 0
+  count = var.enable_chaos_testing && var.environment != "prod" && length(var.chaos_engineer_principals) > 0 ? 1 : 0
   name  = "${var.environment}-chaos-engineer-permissions"
   role  = aws_iam_role.chaos_engineer[0].id
 
@@ -312,7 +313,7 @@ resource "aws_iam_role" "chaos_scheduler" {
 }
 
 resource "aws_iam_role_policy" "chaos_scheduler_invoke" {
-  count = var.enable_chaos_testing && var.environment != "prod" ? 1 : 0
+  count = var.enable_chaos_testing && var.environment != "prod" && var.dashboard_lambda_arn != "" ? 1 : 0
   name  = "${var.environment}-chaos-scheduler-invoke"
   role  = aws_iam_role.chaos_scheduler[0].id
 

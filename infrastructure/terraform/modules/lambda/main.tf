@@ -105,8 +105,12 @@ resource "aws_lambda_function" "this" {
   # Force Image Update step changes it to :sha — causing a double function
   # update that breaks the Function URL routing (persistent 404).
   # CI manages image_uri via aws lambda update-function-code.
+  # Feature 1290: environment added to break circular dependency cycle.
+  # Cross-module env vars (SCHEDULER_ROLE_ARN, DASHBOARD_URL) are managed
+  # by terraform_data wiring resources, not by this module block.
+  # See docs/terraform-patterns.md for the split definition/wiring pattern.
   lifecycle {
-    ignore_changes = [image_uri]
+    ignore_changes = [image_uri, environment]
   }
 }
 
