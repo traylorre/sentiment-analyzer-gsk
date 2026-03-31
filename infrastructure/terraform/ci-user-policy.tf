@@ -732,7 +732,9 @@ data "aws_iam_policy_document" "ci_deploy_iam" {
       "iam:ListPolicyVersions",
       "iam:CreatePolicyVersion",
       "iam:DeletePolicyVersion",
-      "iam:SetDefaultPolicyVersion"
+      "iam:SetDefaultPolicyVersion",
+      "iam:TagPolicy", # Required when creating policies with tags
+      "iam:UntagPolicy"
     ]
     resources = [
       "arn:aws:iam::*:policy/*-sentiment-*",
@@ -844,7 +846,6 @@ data "aws_iam_policy_document" "ci_deploy_iam" {
       "ssm:GetParameter",
       "ssm:GetParameters",
       "ssm:DeleteParameter",
-      "ssm:DescribeParameters",
       "ssm:AddTagsToResource",
       "ssm:RemoveTagsFromResource",
       "ssm:ListTagsForResource"
@@ -852,6 +853,16 @@ data "aws_iam_policy_document" "ci_deploy_iam" {
     resources = [
       "arn:aws:ssm:*:*:parameter/chaos/*"
     ]
+  }
+
+  # SSM DescribeParameters requires wildcard resource (list operation)
+  statement {
+    sid    = "SSMDescribe"
+    effect = "Allow"
+    actions = [
+      "ssm:DescribeParameters"
+    ]
+    resources = ["*"]
   }
 
   # X-Ray Tracing

@@ -1231,6 +1231,9 @@ module "chaos" {
   # Kill switch - stops experiments if Lambda errors spike
   lambda_error_alarm_arn = module.monitoring.analysis_errors_alarm_arn
 
+  # Feature 1250: Dashboard Lambda ARN for auto-restore scheduler invoke policy
+  dashboard_lambda_arn = module.dashboard_lambda.function_arn
+
   # Feature 1237: External chaos actor architecture
   chaos_engineer_principals = [] # Add IAM user/role ARNs that should be able to assume the chaos-engineer role
   lambda_execution_role_arns = [
