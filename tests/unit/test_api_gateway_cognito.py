@@ -273,24 +273,32 @@ class TestCORSNoWildcard:
         ), f"Found wildcard Access-Control-Allow-Origin in: {wildcards}"
 
     def test_cors_uses_origin_echoing(self) -> None:
-        """T012: All Allow-Origin integration response values use origin echoing.
+        """T012: Gateway response Allow-Origin values use origin echoing.
 
-        The pattern method.request.header.Origin echoes the requesting
-        origin back, which is the correct approach for credentialed CORS
-        with MOCK integrations (API Gateway cannot do conditional logic).
+        Gateway responses (401/403/404) support method.request.header.origin
+        which echoes the requesting origin back. MOCK integration responses
+        do NOT support this — they use a static first origin from
+        cors_allowed_origins (Feature 1290: MOCK integrations reject
+        method.request.header.Origin in response_parameters).
         """
         origin_values = _collect_cors_origin_values(self.hcl_data)
         assert len(origin_values) > 0, "Expected to find Allow-Origin values in HCL"
 
+        # Acceptable origin values:
+        # - method.request.header.origin (gateway responses — echoing)
+        # - method.request.header.Origin (gateway responses — echoing)
+        # - '${local.cors_origin}' (MOCK integration responses — static first origin)
+        acceptable = {
+            "method.request.header.origin",
+            "method.request.header.Origin",
+            "'${local.cors_origin}'",
+        }
         non_echoing = [
-            (name, val)
-            for name, val in origin_values
-            if val.lower()
-            not in ("method.request.header.origin", "method.request.header.Origin")
+            (name, val) for name, val in origin_values if val not in acceptable
         ]
         assert non_echoing == [], (
-            f"Expected all Allow-Origin values to use origin echoing, "
-            f"but found: {non_echoing}"
+            f"Expected all Allow-Origin values to use origin echoing or "
+            f"static cors_origin, but found: {non_echoing}"
         )
 
     def test_cors_credentials_present_on_all_options(self) -> None:
@@ -373,20 +381,25 @@ class TestCORSNoWildcard:
         assert wrong_value == [], f"Vary header not 'Origin' in: {wrong_value}"
 
     def test_all_cors_origin_values_consistent(self) -> None:
-        """T023: Every Allow-Origin value across all response types is consistent.
+        """T023: Every Allow-Origin value is either origin echoing or static cors_origin.
 
-        All gateway responses, integration responses, and cors_headers local
-        must use method.request.header.Origin (no wildcards, no static values).
+        Gateway responses use method.request.header.origin (echoing).
+        MOCK integration responses use '${local.cors_origin}' (static first origin).
+        Feature 1290: MOCK integrations reject method.request.header.Origin in
+        response_parameters — use static value instead.
         """
         origin_values = _collect_cors_origin_values(self.hcl_data)
         assert len(origin_values) > 0, "Expected to find Allow-Origin values"
 
+        acceptable = {
+            "method.request.header.origin",
+            "method.request.header.Origin",
+            "'${local.cors_origin}'",
+        }
         inconsistent = [
-            (name, val)
-            for name, val in origin_values
-            if val.lower() != "method.request.header.origin"
+            (name, val) for name, val in origin_values if val not in acceptable
         ]
         assert inconsistent == [], (
             f"Inconsistent Allow-Origin values found (expected "
-            f"method.request.header.Origin): {inconsistent}"
+            f"origin echoing or static cors_origin): {inconsistent}"
         )
