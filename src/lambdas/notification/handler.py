@@ -24,12 +24,16 @@ from src.lambdas.notification.sendgrid_service import (
     EmailServiceError,
     RateLimitExceededError,
 )
+from src.lambdas.shared.env_validation import validate_critical_env_vars
 from src.lib.metrics import emit_metric
 
 tracer = Tracer(service="sentiment-analyzer-notification")
 
 logger = logging.getLogger(__name__)
 logger.setLevel(os.environ.get("LOG_LEVEL", "INFO"))
+
+# Feature 1290: Validate cross-module env vars at cold start (degraded, not fatal)
+validate_critical_env_vars(["DASHBOARD_URL"])
 
 # Environment variables
 SENDGRID_SECRET_ARN = os.environ.get("SENDGRID_SECRET_ARN", "")

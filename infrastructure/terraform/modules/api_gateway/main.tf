@@ -205,13 +205,17 @@ locals {
     if route.has_proxy && route.is_endpoint
   }
 
-  # CORS headers for OPTIONS responses (FR-005, FR-008, Feature 1267)
-  # Origin echoing: echoes the request Origin header instead of wildcard '*'
-  # This is required because credentials: 'include' + wildcard = silent failure
+  # CORS headers for OPTIONS MOCK integration responses (FR-005, FR-008, Feature 1267)
+  # NOTE: MOCK integrations do NOT support method.request.header.X in response_parameters.
+  # Use the primary allowed origin as a static value. The actual request (non-preflight)
+  # goes through Lambda Function URL which handles multi-origin CORS correctly.
+  # Gateway responses (401/403/404) use method.request.header.origin which IS supported.
+  cors_origin = length(var.cors_allowed_origins) > 0 ? var.cors_allowed_origins[0] : "*"
+
   cors_headers = {
     "method.response.header.Access-Control-Allow-Headers"     = "'Content-Type,Authorization,Accept,Cache-Control,Last-Event-ID,X-Amzn-Trace-Id,X-User-ID'"
     "method.response.header.Access-Control-Allow-Methods"     = "'GET,POST,PUT,DELETE,PATCH,OPTIONS'"
-    "method.response.header.Access-Control-Allow-Origin"      = "method.request.header.Origin"
+    "method.response.header.Access-Control-Allow-Origin"      = "'${local.cors_origin}'"
     "method.response.header.Access-Control-Allow-Credentials" = "'true'"
     "method.response.header.Vary"                             = "'Origin'"
   }
@@ -622,7 +626,7 @@ resource "aws_api_gateway_integration_response" "proxy_options" {
     "method.response.header.Access-Control-Allow-Credentials" = "'true'"
     "method.response.header.Access-Control-Allow-Headers"     = "'Content-Type,Authorization,X-User-ID,X-Amzn-Trace-Id'"
     "method.response.header.Access-Control-Allow-Methods"     = "'GET,POST,PUT,DELETE,OPTIONS'"
-    "method.response.header.Access-Control-Allow-Origin"      = "method.request.header.Origin"
+    "method.response.header.Access-Control-Allow-Origin"      = "'${local.cors_origin}'"
     "method.response.header.Access-Control-Expose-Headers"    = "'X-Amzn-Trace-Id'"
     "method.response.header.Vary"                             = "'Origin'"
   }
@@ -686,7 +690,7 @@ resource "aws_api_gateway_integration_response" "root_options" {
     "method.response.header.Access-Control-Allow-Credentials" = "'true'"
     "method.response.header.Access-Control-Allow-Headers"     = "'Content-Type,Authorization,X-User-ID,X-Amzn-Trace-Id'"
     "method.response.header.Access-Control-Allow-Methods"     = "'GET,POST,PUT,DELETE,OPTIONS'"
-    "method.response.header.Access-Control-Allow-Origin"      = "method.request.header.Origin"
+    "method.response.header.Access-Control-Allow-Origin"      = "'${local.cors_origin}'"
     "method.response.header.Access-Control-Expose-Headers"    = "'X-Amzn-Trace-Id'"
     "method.response.header.Vary"                             = "'Origin'"
   }

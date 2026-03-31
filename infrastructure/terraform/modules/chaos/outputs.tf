@@ -31,7 +31,7 @@ output "fis_log_group_name" {
 
 output "chaos_engineer_role_arn" {
   description = "ARN of the chaos-engineer IAM role"
-  value       = var.enable_chaos_testing && var.environment != "prod" ? aws_iam_role.chaos_engineer[0].arn : ""
+  value       = var.enable_chaos_testing && var.environment != "prod" && length(aws_iam_role.chaos_engineer) > 0 ? aws_iam_role.chaos_engineer[0].arn : ""
 }
 
 output "kill_switch_parameter_name" {

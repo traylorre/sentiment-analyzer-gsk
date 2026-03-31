@@ -259,8 +259,8 @@ class TestAutoRestoreScheduling:
                 "arn:aws:iam::123:role/test",
             ),
             patch(
-                "src.lambdas.dashboard.chaos.DASHBOARD_LAMBDA_ARN",
-                "arn:aws:lambda:us-east-1:123:function:test",
+                "src.lambdas.dashboard.chaos._get_dashboard_lambda_arn",
+                return_value="arn:aws:lambda:us-east-1:123:function:test",
             ),
         ):
             result = _schedule_auto_restore("exp-123", 30)
@@ -282,7 +282,10 @@ class TestAutoRestoreScheduling:
                 "src.lambdas.dashboard.chaos.boto3.client", return_value=mock_scheduler
             ),
             patch("src.lambdas.dashboard.chaos.SCHEDULER_ROLE_ARN", "arn:test"),
-            patch("src.lambdas.dashboard.chaos.DASHBOARD_LAMBDA_ARN", "arn:test"),
+            patch(
+                "src.lambdas.dashboard.chaos._get_dashboard_lambda_arn",
+                return_value="arn:test",
+            ),
         ):
             with pytest.raises(ChaosError, match="Failed to schedule auto-restore"):
                 _schedule_auto_restore("exp-fail", 30)
