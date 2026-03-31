@@ -14,7 +14,6 @@
 #
 # Security:
 #   - No temp files created (uses pipes and process substitution)
-#   - Command output suppressed (env vars contain secret ARN values)
 #   - See docs/terraform-patterns.md for pattern documentation
 
 set -euo pipefail
@@ -30,8 +29,7 @@ aws lambda wait function-updated \
   echo "WARNING: Timed out waiting for $FUNCTION_NAME — proceeding anyway" >&2
 }
 
-# Step 1: Read current environment variables
-# Suppress output to prevent logging secret values
+# Step 1: Read current environment variables as JSON
 CURRENT_ENV=$(aws lambda get-function-configuration \
   --function-name "$FUNCTION_NAME" \
   --query 'Environment.Variables' \
@@ -53,14 +51,20 @@ MERGED_ENV=$(echo "$CURRENT_ENV" | jq --arg key "$ENV_VAR_KEY" --arg val "$ENV_V
   exit 1
 }
 
-# Step 3: Write back the merged environment
-# Note: error output shown for debugging; env var VALUES are in the merged JSON
-# but the error message itself is safe to log
+# Step 3: Write back the merged environment using --cli-input-json
+# NOTE: --environment "Variables={...}" expects KEY=VALUE shorthand, NOT JSON.
+# Using --cli-input-json passes proper JSON and avoids parsing issues.
+CLI_INPUT=$(jq -n --arg fn "$FUNCTION_NAME" --argjson env "$MERGED_ENV" \
+  '{"FunctionName": $fn, "Environment": {"Variables": $env}}')
+
 aws lambda update-function-configuration \
-  --function-name "$FUNCTION_NAME" \
-  --environment "Variables=$MERGED_ENV" \
-  --output json > /dev/null || {
+  --cli-input-json "$CLI_INPUT" \
+  --output json > /dev/null 2>&1 || {
   echo "ERROR: Failed to update env vars for $FUNCTION_NAME" >&2
+  # Show the error without the full env var dump
+  aws lambda update-function-configuration \
+    --cli-input-json "$CLI_INPUT" \
+    --output json 2>&1 | grep -i "error" || true
   exit 1
 }
 
