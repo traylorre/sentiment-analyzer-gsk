@@ -54,11 +54,12 @@ MERGED_ENV=$(echo "$CURRENT_ENV" | jq --arg key "$ENV_VAR_KEY" --arg val "$ENV_V
 }
 
 # Step 3: Write back the merged environment
-# Output suppressed — contains all env vars including secrets
+# Note: error output shown for debugging; env var VALUES are in the merged JSON
+# but the error message itself is safe to log
 aws lambda update-function-configuration \
   --function-name "$FUNCTION_NAME" \
   --environment "Variables=$MERGED_ENV" \
-  --output json > /dev/null 2>&1 || {
+  --output json > /dev/null || {
   echo "ERROR: Failed to update env vars for $FUNCTION_NAME" >&2
   exit 1
 }
