@@ -10,15 +10,27 @@
 # - Reconnection with Last-Event-ID
 # - Authentication requirements
 
+import os
+
 import pytest
 
 from tests.e2e.helpers.api_client import PreprodAPIClient
+
+# Feature 1291: SSE HTTP streaming tests cannot work with IAM-auth Function URLs
+# in invoke mode. Lambda invoke returns full response, defeating SSE streaming.
+# These tests are covered by Playwright E2E (chaos-sse-lifecycle.spec.ts).
+_SKIP_SSE_HTTP = os.environ.get("PREPROD_TRANSPORT") == "invoke"
+_SKIP_REASON = (
+    "SSE HTTP streaming not available with IAM-auth Function URLs in invoke mode. "
+    "SSE behavior is tested via Playwright E2E instead."
+)
 from tests.fixtures.synthetic.config_generator import SyntheticConfiguration
 
 pytestmark = [pytest.mark.e2e, pytest.mark.preprod, pytest.mark.us10]
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(_SKIP_SSE_HTTP, reason=_SKIP_REASON)
 async def test_global_stream_available(
     api_client: PreprodAPIClient,
 ) -> None:
@@ -93,6 +105,7 @@ async def create_session_and_config(
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(_SKIP_SSE_HTTP, reason=_SKIP_REASON)
 async def test_sse_connection_established(
     api_client: PreprodAPIClient,
     synthetic_config: SyntheticConfiguration,
@@ -129,6 +142,7 @@ async def test_sse_connection_established(
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(_SKIP_SSE_HTTP, reason=_SKIP_REASON)
 async def test_sse_receives_sentiment_update(
     api_client: PreprodAPIClient,
     synthetic_config: SyntheticConfiguration,
@@ -160,6 +174,7 @@ async def test_sse_receives_sentiment_update(
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(_SKIP_SSE_HTTP, reason=_SKIP_REASON)
 async def test_sse_receives_refresh_event(
     api_client: PreprodAPIClient,
     synthetic_config: SyntheticConfiguration,
@@ -189,6 +204,7 @@ async def test_sse_receives_refresh_event(
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(_SKIP_SSE_HTTP, reason=_SKIP_REASON)
 async def test_sse_reconnection_with_last_event_id(
     api_client: PreprodAPIClient,
     synthetic_config: SyntheticConfiguration,

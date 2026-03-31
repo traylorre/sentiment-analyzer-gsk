@@ -697,7 +697,8 @@ data "aws_iam_policy_document" "ci_deploy_iam" {
       "arn:aws:iam::*:role/*-backup-role",
       "arn:aws:iam::*:role/*-cognito-*",
       "arn:aws:iam::*:role/*-rum-*",
-      "arn:aws:iam::*:role/*-amplify-*" # Feature 1105: Amplify service role
+      "arn:aws:iam::*:role/*-amplify-*", # Feature 1105: Amplify service role
+      "arn:aws:iam::*:role/*-chaos-*"    # Feature 1290: Chaos engineer + scheduler roles
     ]
   }
 
@@ -731,10 +732,13 @@ data "aws_iam_policy_document" "ci_deploy_iam" {
       "iam:ListPolicyVersions",
       "iam:CreatePolicyVersion",
       "iam:DeletePolicyVersion",
-      "iam:SetDefaultPolicyVersion"
+      "iam:SetDefaultPolicyVersion",
+      "iam:TagPolicy", # Required when creating policies with tags
+      "iam:UntagPolicy"
     ]
     resources = [
       "arn:aws:iam::*:policy/*-sentiment-*",
+      "arn:aws:iam::*:policy/*-chaos-*", # Feature 1290: Chaos deny-dynamodb-write policy
       "arn:aws:iam::*:policy/CIDeploy*"
     ]
   }
@@ -762,7 +766,8 @@ data "aws_iam_policy_document" "ci_deploy_iam" {
       "arn:aws:iam::*:role/*-backup-role",
       "arn:aws:iam::*:role/*-cognito-*",
       "arn:aws:iam::*:role/*-rum-*",
-      "arn:aws:iam::*:role/*-amplify-*" # Feature 1105: Amplify service role
+      "arn:aws:iam::*:role/*-amplify-*", # Feature 1105: Amplify service role
+      "arn:aws:iam::*:role/*-chaos-*"    # Feature 1290: Chaos engineer + scheduler roles
     ]
   }
 
@@ -826,6 +831,36 @@ data "aws_iam_policy_document" "ci_deploy_iam" {
       "fis:ListTargetResourceTypes",
       "fis:ListExperimentTemplates",
       "fis:ListExperiments"
+    ]
+    resources = ["*"]
+  }
+
+  # SSM Parameter Store (Chaos Module)
+  # SECURITY: Scoped to /chaos/* path prefix (Feature 1290)
+  # Used by chaos kill-switch and gate state
+  statement {
+    sid    = "SSMChaos"
+    effect = "Allow"
+    actions = [
+      "ssm:PutParameter",
+      "ssm:GetParameter",
+      "ssm:GetParameters",
+      "ssm:DeleteParameter",
+      "ssm:AddTagsToResource",
+      "ssm:RemoveTagsFromResource",
+      "ssm:ListTagsForResource"
+    ]
+    resources = [
+      "arn:aws:ssm:*:*:parameter/chaos/*"
+    ]
+  }
+
+  # SSM DescribeParameters requires wildcard resource (list operation)
+  statement {
+    sid    = "SSMDescribe"
+    effect = "Allow"
+    actions = [
+      "ssm:DescribeParameters"
     ]
     resources = ["*"]
   }

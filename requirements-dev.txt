@@ -16,8 +16,7 @@
 # Include production dependencies
 -r requirements.txt
 
-# Override: moto[all]==5.1.22 requires pydantic<=2.12.4, but requirements.txt pins 2.12.5
-pydantic==2.12.4
+# Note: pydantic version is pinned in requirements.txt (2.12.4) to match moto[all]==5.1.22 constraint
 
 # Testing Framework
 pytest==9.0.2           # Compatible with pytest-asyncio 1.3.0

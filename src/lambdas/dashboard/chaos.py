@@ -52,7 +52,28 @@ CHAOS_TABLE = os.environ.get("CHAOS_EXPERIMENTS_TABLE", "")
 CHAOS_REPORTS_TABLE = os.environ.get("CHAOS_REPORTS_TABLE", "")
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "dev")
 SCHEDULER_ROLE_ARN = os.environ.get("SCHEDULER_ROLE_ARN", "")
-DASHBOARD_LAMBDA_ARN = os.environ.get("DASHBOARD_LAMBDA_ARN", "")
+# Feature 1290: DASHBOARD_LAMBDA_ARN removed from Terraform env vars (self-reference
+# created Terraform internal cycle). Constructed at runtime from Lambda context.
+_FUNCTION_NAME = os.environ.get("AWS_LAMBDA_FUNCTION_NAME", "")
+_AWS_REGION = os.environ.get(
+    "AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
+)
+# Get account ID lazily (only when needed for auto-restore scheduling)
+_ACCOUNT_ID: str = ""
+
+
+def _get_dashboard_lambda_arn() -> str:
+    """Construct this Lambda's ARN from runtime context."""
+    global _ACCOUNT_ID
+    if not _FUNCTION_NAME:
+        return ""
+    if not _ACCOUNT_ID:
+        try:
+            _ACCOUNT_ID = boto3.client("sts").get_caller_identity()["Account"]
+        except Exception:
+            return ""
+    return f"arn:aws:lambda:{_AWS_REGION}:{_ACCOUNT_ID}:function:{_FUNCTION_NAME}"
+
 
 # Safety: Only allow chaos testing in preprod/dev/test
 ALLOWED_ENVIRONMENTS = ["preprod", "dev", "test", "local"]
@@ -1010,9 +1031,10 @@ def _schedule_auto_restore(experiment_id: str, duration_seconds: int) -> str:
     Returns the schedule name for later deletion.
     Raises ChaosError if scheduling fails.
     """
-    if not SCHEDULER_ROLE_ARN or not DASHBOARD_LAMBDA_ARN:
+    dashboard_arn = _get_dashboard_lambda_arn()
+    if not SCHEDULER_ROLE_ARN or not dashboard_arn:
         logger.warning(
-            "Auto-restore scheduling skipped: SCHEDULER_ROLE_ARN or DASHBOARD_LAMBDA_ARN not set"
+            "Auto-restore scheduling skipped: SCHEDULER_ROLE_ARN or Lambda ARN not available"
         )
         return ""
 
@@ -1026,7 +1048,7 @@ def _schedule_auto_restore(experiment_id: str, duration_seconds: int) -> str:
             ScheduleExpression=f"at({restore_time.strftime('%Y-%m-%dT%H:%M:%S')})",
             FlexibleTimeWindow={"Mode": "OFF"},
             Target={
-                "Arn": DASHBOARD_LAMBDA_ARN,
+                "Arn": dashboard_arn,
                 "RoleArn": SCHEDULER_ROLE_ARN,
                 "Input": json.dumps(
                     {"action": "chaos-auto-restore", "experiment_id": experiment_id}
