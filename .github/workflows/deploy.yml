@@ -1505,6 +1505,8 @@ jobs:
           PREPROD_DASHBOARD_API_KEY: ${{ secrets.DASHBOARD_API_KEY }}
           # Required for E2E tests (tests/e2e/helpers/api_client.py uses PREPROD_API_URL)
           PREPROD_API_URL: ${{ needs.deploy-preprod.outputs.dashboard_url }}
+          # Feature 1291: API Gateway URL for tests that need real HTTP (CORS validation)
+          PREPROD_API_GATEWAY_URL: ${{ needs.deploy-preprod.outputs.api_url }}
           # Required for SSE E2E tests - routes /api/v2/stream* to SSE Lambda (RESPONSE_STREAM mode)
           # See: specs/082-fix-sse-e2e-timeouts/spec.md
           SSE_LAMBDA_URL: ${{ needs.deploy-preprod.outputs.sse_lambda_url }}
