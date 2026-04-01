@@ -75,9 +75,9 @@ class TestDashboardE2E:
         assert response["statusCode"] == 200
         data = json.loads(response["body"])
         assert data["status"] == "healthy"
-        # Table name should contain 'sentiment' (could be sentiment-items or sentiment-users)
-        assert "sentiment" in data["table"]
-        assert data["environment"] in ["dev", "test", "preprod"]
+        # Feature 1249: Health endpoint strips sensitive fields (table, environment)
+        # in non-dev environments. Only 'status' is guaranteed.
+        assert "status" in data
 
 
 class TestSecurityIntegration:
