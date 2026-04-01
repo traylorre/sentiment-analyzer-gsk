@@ -473,43 +473,43 @@ cd infrastructure/scripts
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#e8f4fd', 'primaryTextColor': '#1a365d', 'primaryBorderColor': '#3182ce', 'lineColor': '#4a5568'}}}%%
 flowchart TD
-    NotResponding[Dashboard Not<br/>Responding] --> CheckURL{Function URL<br/>accessible?}
-    CheckURL -->|No| CheckLambda[Check Lambda<br/>Function URL config]
-    CheckURL -->|Yes| TestEndpoint[Test /health endpoint]
+    NotResponding[Dashboard Not<br/>Responding] --> CheckAPIGW{API Gateway<br/>accessible?}
+    CheckAPIGW -->|No| CheckDeploy[Check API Gateway<br/>deployment status]
+    CheckAPIGW -->|Yes| TestHealth[Test /health endpoint]
 
-    CheckLambda --> URLExists{Function URL<br/>exists?}
-    URLExists -->|No| CreateURL[Create Function URL<br/>in Terraform]
-    URLExists -->|Yes| CheckAuth[Verify auth_type=NONE]
+    CheckDeploy --> GWExists{API Gateway<br/>deployed?}
+    GWExists -->|No| RunApply[Run terraform apply<br/>for API Gateway module]
+    GWExists -->|Yes| CheckPerm[Verify Lambda permission<br/>qualifier = live]
 
-    TestEndpoint --> HealthOK{/health returns<br/>200 OK?}
-    HealthOK -->|No| CheckDeps[Check Lambda<br/>dependencies]
-    HealthOK -->|Yes| TestAPI[Test /api/metrics]
+    TestHealth --> HealthOK{/health returns<br/>200 OK?}
+    HealthOK -->|No| CheckLambda[Check Lambda<br/>health + logs]
+    HealthOK -->|Yes| TestAPI[Test /api/v2/metrics]
 
-    CheckDeps --> ImportError{Import errors<br/>in logs?}
+    CheckLambda --> ImportError{Import errors<br/>in logs?}
     ImportError -->|Yes| RebuildPackage[Rebuild Lambda<br/>package with deps]
-    ImportError -->|No| CheckCode[Review handler code]
+    ImportError -->|No| CheckResolver[Verify APIGatewayRestResolver<br/>in handler.py]
 
-    TestAPI --> MetricsOK{/api/metrics<br/>returns data?}
-    MetricsOK -->|No| CheckAPIKey[Verify API key]
-    MetricsOK -->|Yes| TestSSE[Test /api/items SSE]
+    TestAPI --> MetricsOK{/api/v2/metrics<br/>returns data?}
+    MetricsOK -->|No| CheckAuth[Verify Cognito auth<br/>+ Bearer token]
+    MetricsOK -->|Yes| TestSSE[Test SSE via CloudFront]
 
-    CheckAPIKey --> KeyValid{API key in<br/>Secrets Manager?}
-    KeyValid -->|No| CreateAPIKey[Create API key<br/>in Secrets Manager]
-    KeyValid -->|Yes| CheckEnvVar[Check DASHBOARD_API_KEY_SECRET_ARN<br/>env var]
+    CheckAuth --> AuthValid{Cognito authorizer<br/>configured?}
+    AuthValid -->|No| FixCognito[Check Cognito User Pool<br/>+ authorizer config]
+    AuthValid -->|Yes| CheckWAF[Check WAF rules<br/>not blocking]
 
     TestSSE --> SSEWorks{SSE stream<br/>working?}
-    SSEWorks -->|No| CheckDDB[Verify DynamoDB<br/>access]
+    SSEWorks -->|No| CheckCF[Verify CloudFront<br/>OAC + SSE Lambda]
     SSEWorks -->|Yes| CheckFrontend[Check frontend<br/>JavaScript]
 
-    CreateURL --> Redeploy[Redeploy with<br/>Terraform]
-    CheckAuth --> Redeploy
+    RunApply --> Redeploy[Redeploy with<br/>Terraform]
+    CheckPerm --> Redeploy
     RebuildPackage --> Redeploy
-    CreateAPIKey --> Redeploy
-    CheckEnvVar --> Redeploy
-    CheckDDB --> Redeploy
+    CheckResolver --> Redeploy
+    FixCognito --> Redeploy
+    CheckWAF --> Redeploy
+    CheckCF --> Redeploy
 
     Redeploy --> Verify{Issue<br/>resolved?}
-    CheckCode --> Verify
     CheckFrontend --> Verify
     Verify -->|Yes| Complete[Dashboard Working]
     Verify -->|No| Escalate[Escalate to<br/>Engineering]
@@ -520,28 +520,28 @@ flowchart TD
     classDef successNode fill:#bbf7d0,stroke:#16a34a,stroke-width:2px,color:#14532d
 
     class NotResponding errorNode
-    class CheckURL,URLExists,HealthOK,ImportError,MetricsOK,KeyValid,SSEWorks,Verify decisionNode
-    class CheckLambda,TestEndpoint,CheckDeps,TestAPI,CheckAPIKey,CreateAPIKey,CheckEnvVar,TestSSE,CheckDDB,CheckFrontend,CreateURL,CheckAuth,RebuildPackage,Redeploy,CheckCode,Escalate actionNode
+    class CheckAPIGW,GWExists,HealthOK,ImportError,MetricsOK,AuthValid,SSEWorks,Verify decisionNode
+    class CheckDeploy,TestHealth,CheckLambda,TestAPI,CheckAuth,FixCognito,CheckWAF,TestSSE,CheckCF,CheckFrontend,RunApply,CheckPerm,RebuildPackage,CheckResolver,Redeploy,Escalate actionNode
     class Complete successNode
 ```
 
 **Quick Fix:**
 ```bash
-# Get dashboard URL
-terraform output dashboard_function_url
+# Get API Gateway URL
+URL=$(terraform output -raw dashboard_api_url)
 
-# Test health endpoint
-URL=$(terraform output -raw dashboard_function_url)
+# Test health endpoint (no auth required)
 curl -i "$URL/health"
 
-# Test metrics endpoint (requires API key)
-API_KEY=$(aws secretsmanager get-secret-value \
-  --secret-id preprod/sentiment-analyzer/dashboard-api-key \
-  --query SecretString --output text | jq -r .api_key)
-curl -H "Authorization: $API_KEY" "$URL/api/metrics"
+# Test authenticated endpoint (requires Cognito JWT)
+# Get a test JWT first, then:
+curl -H "Authorization: Bearer $JWT" "$URL/api/v2/metrics"
 
 # Check Lambda logs
 aws logs tail /aws/lambda/preprod-sentiment-dashboard --follow
+
+# Check API Gateway logs
+aws logs tail /aws/lambda/preprod-sentiment-dashboard-api --follow
 ```
 
 ---

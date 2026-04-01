@@ -23,9 +23,9 @@ def lambda_response(draw, status_codes=None):
 
     return {
         "statusCode": draw(st.sampled_from(status_codes)),
-        "headers": {
-            "Content-Type": "application/json",
-            "X-Request-ID": draw(st.uuids().map(str)),
+        "multiValueHeaders": {
+            "Content-Type": ["application/json"],
+            "X-Request-ID": [draw(st.uuids().map(str))],
         },
         "body": draw(st.text(min_size=0, max_size=1000)),
     }

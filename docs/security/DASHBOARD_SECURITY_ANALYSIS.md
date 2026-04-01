@@ -14,7 +14,9 @@ The sentiment analyzer dashboard has **7 critical security vulnerabilities** tha
 
 ---
 
-## Architecture Overview
+## Previous Architecture (Pre-Feature 1253 -- DEPRECATED)
+
+> **DEPRECATED**: This section shows the architecture before Feature 1253 (API Gateway), 1255 (CloudFront SSE), 1256 (IAM auth), and 1300 (Function URL removal). See Current Architecture below.
 
 ```mermaid
 %%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
@@ -31,12 +33,42 @@ graph TB
     class DynamoDB,Secrets resourceNode
 ```
 
-**Current Authentication Flow**:
+**Previous Authentication Flow**:
 1. Client sends `GET /api/metrics` with `Authorization: Bearer <key>`
 2. Lambda Function URL accepts request (no AWS-level auth)
 3. `verify_api_key()` compares against static env var
 4. If valid, query DynamoDB (~6 queries per request)
 5. Return metrics JSON
+
+---
+
+## Current Architecture (Post-Features 1253/1255/1256/1300)
+
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
+graph TB
+    Internet[Internet Users] --> Amplify[Amplify Frontend<br/>Next.js SSR]
+    Amplify -->|API calls| APIGW[API Gateway REST<br/>Cognito Auth + WAF<br/>Rate Limiting]
+    APIGW -->|lambda:InvokeFunction| Dashboard[Dashboard Lambda<br/>APIGatewayRestResolver]
+    Dashboard --> DynamoDB[DynamoDB<br/>On-Demand Pricing]
+    Dashboard --> Secrets[Secrets Manager<br/>API Key Storage]
+    Amplify -->|SSE streaming| CF[CloudFront<br/>WAF + Shield<br/>OAC SigV4]
+    CF -->|lambda:InvokeFunctionUrl| SSE[SSE Lambda<br/>Function URL<br/>RESPONSE_STREAM]
+    SSE --> DynamoDB
+
+    classDef secureNode fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px,color:#1e3a1e
+    classDef resourceNode fill:#7ec8e3,stroke:#3a7ca5,stroke-width:2px,color:#1a3a4a
+
+    class Amplify,APIGW,CF,Dashboard,SSE secureNode
+    class DynamoDB,Secrets resourceNode
+```
+
+**Current Authentication Flow**:
+1. Client loads frontend from Amplify (Next.js SSR)
+2. API calls go through API Gateway with Cognito JWT validation
+3. API Gateway invokes Dashboard Lambda via `lambda:InvokeFunction` (v1 events)
+4. SSE streaming goes through CloudFront with OAC SigV4 signing
+5. Dashboard Lambda Function URL has been removed (Feature 1300)
 
 ---
 
@@ -317,7 +349,7 @@ T+60s:  All dashboard functionality unavailable
 
 ## Recommended Architecture
 
-> **Note**: This diagram shows a *proposed future architecture*. CloudFront is **not currently deployed** (removed in Feature 1203). The current architecture uses AWS Amplify for frontend hosting and Lambda Function URLs for API access. The recommendations below are options for future security enhancements.
+> **Note**: These recommendations have been IMPLEMENTED as of Features 1253 (API Gateway), 1254 (WAF), 1255 (CloudFront SSE). The architecture shown below is the current production architecture.
 
 ```mermaid
 %%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%

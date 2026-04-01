@@ -17,6 +17,7 @@ from src.lambdas.shared.middleware.security_headers import (
     get_preflight_response,
     sanitize_error_response,
 )
+from tests.conftest import get_response_header
 
 
 class TestGetCorsHeaders:
@@ -142,14 +143,14 @@ class TestGetPreflightResponse:
         """Does NOT have CORS headers - Lambda Function URL handles preflight."""
         response = get_preflight_response()
         # CORS headers are NOT added - Lambda URL handles OPTIONS preflight
-        assert "Access-Control-Allow-Origin" not in response["headers"]
-        assert "Access-Control-Allow-Methods" not in response["headers"]
+        assert get_response_header(response, "Access-Control-Allow-Origin") == ""
+        assert get_response_header(response, "Access-Control-Allow-Methods") == ""
 
     def test_has_security_headers(self):
         """Has security headers."""
         response = get_preflight_response()
-        assert "Strict-Transport-Security" in response["headers"]
-        assert "X-Content-Type-Options" in response["headers"]
+        assert get_response_header(response, "Strict-Transport-Security") != ""
+        assert get_response_header(response, "X-Content-Type-Options") != ""
 
     def test_empty_body(self):
         """Has empty body."""
@@ -159,7 +160,7 @@ class TestGetPreflightResponse:
     def test_content_length_zero(self):
         """Has Content-Length: 0."""
         response = get_preflight_response()
-        assert response["headers"]["Content-Length"] == "0"
+        assert get_response_header(response, "Content-Length") == "0"
 
 
 class TestSanitizeErrorResponse:

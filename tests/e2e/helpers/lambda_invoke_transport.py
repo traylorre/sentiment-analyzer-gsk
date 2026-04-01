@@ -1,14 +1,15 @@
 """Lambda direct invoke transport for E2E tests.
 
-Replaces HTTP calls to Function URLs with boto3 lambda.invoke(),
-bypassing CloudFront propagation delays that cause 404s in CI.
+Replaces HTTP calls to API Gateway with boto3 lambda.invoke(),
+bypassing network latency while preserving production event format.
 
 Usage:
     client = PreprodAPIClient(transport="invoke")
 
-The transport constructs Function URL v2 events from HTTP request
-parameters, invokes the Lambda via boto3, and returns an
-httpx-compatible response object.
+Feature 1297: The transport constructs API Gateway REST v1 events from
+HTTP request parameters, invokes the Lambda via boto3, and returns an
+httpx-compatible response object. This matches the production path
+(API Gateway → lambda:InvokeFunction → v1 events).
 """
 
 import json
@@ -51,52 +52,62 @@ class LambdaResponse:
             raise Exception(f"HTTP {self.status_code}: {self.text[:200]}")
 
 
-def _build_function_url_event(
+def _build_apigw_rest_event(
     method: str,
     path: str,
     headers: dict[str, str] | None = None,
     body: str | None = None,
     query_params: dict[str, Any] | None = None,
 ) -> dict:
-    """Build a Lambda Function URL v2 event from HTTP request parameters."""
+    """Build an API Gateway REST v1 proxy event from HTTP request parameters.
+
+    Feature 1297: Matches the production event format (API Gateway REST → Lambda).
+    Previously built Function URL v2 events which bypassed security layers.
+    """
     headers = headers or {}
-    query_string = ""
+    lowered_headers = {k.lower(): v for k, v in headers.items()}
     query_string_params = None
     if query_params:
         query_string = urlencode(query_params, doseq=True)
-        # Populate queryStringParameters for handlers that read it directly
         query_string_params = {
             k: v[-1] if len(v) == 1 else ",".join(v)
             for k, v in parse_qs(query_string).items()
         }
 
+    path_params = {"proxy": path.lstrip("/")} if path != "/" else None
+
     return {
-        "version": "2.0",
-        "routeKey": "$default",
-        "rawPath": path,
-        "rawQueryString": query_string,
+        "resource": "/{proxy+}" if path != "/" else "/",
+        "path": path,
+        "httpMethod": method.upper(),
+        "headers": lowered_headers,
+        "multiValueHeaders": {k: [v] for k, v in lowered_headers.items()},
         "queryStringParameters": query_string_params,
-        "headers": {k.lower(): v for k, v in headers.items()},
+        "multiValueQueryStringParameters": (
+            {k: [v] for k, v in query_string_params.items()}
+            if query_string_params
+            else None
+        ),
+        "pathParameters": path_params,
+        "stageVariables": None,
+        "body": body,
+        "isBase64Encoded": False,
         "requestContext": {
             "accountId": "000000000000",
             "apiId": "e2e-test",
-            "domainName": "e2e-test.lambda-url.us-east-1.on.aws",
-            "domainPrefix": "e2e-test",
-            "http": {
-                "method": method.upper(),
-                "path": path,
-                "protocol": "HTTP/1.1",
+            "resourceId": "e2e-test",
+            "resourcePath": "/{proxy+}" if path != "/" else "/",
+            "httpMethod": method.upper(),
+            "path": f"/v1{path}",
+            "stage": "v1",
+            "requestId": f"e2e-{method.lower()}-{path.replace('/', '-')}",
+            "identity": {
                 "sourceIp": "127.0.0.1",
                 "userAgent": "e2e-test-client",
             },
-            "requestId": f"e2e-{method.lower()}-{path.replace('/', '-')}",
-            "routeKey": "$default",
-            "stage": "$default",
             "time": "01/Jan/2024:00:00:00 +0000",
             "timeEpoch": 1704067200000,
         },
-        "body": body,
-        "isBase64Encoded": False,
     }
 
 
@@ -155,7 +166,7 @@ class LambdaInvokeTransport:
         query_params: dict[str, Any] | None = None,
     ) -> LambdaResponse:
         """Invoke Lambda and return an httpx-compatible response."""
-        event = _build_function_url_event(method, path, headers, body, query_params)
+        event = _build_apigw_rest_event(method, path, headers, body, query_params)
 
         response = self._client.invoke(
             FunctionName=self.function_name,

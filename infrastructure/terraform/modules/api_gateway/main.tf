@@ -723,7 +723,10 @@ resource "aws_lambda_permission" "api_gateway" {
   statement_id  = "AllowExecutionFromAPIGateway"
   action        = "lambda:InvokeFunction"
   function_name = var.lambda_function_name
-  principal     = "apigateway.amazonaws.com"
+  # Feature 1295: Must match the Lambda alias used by CI/CD (Feature 1224.4)
+  # Without this, API Gateway gets 403 invoking the alias → returns 502 to client
+  qualifier = "live"
+  principal = "apigateway.amazonaws.com"
 
   # Allow invocation from any stage
   source_arn = "${aws_api_gateway_rest_api.dashboard.execution_arn}/*/*"
