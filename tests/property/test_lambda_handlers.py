@@ -16,9 +16,9 @@ class TestLambdaResponseStructure:
     @settings(max_examples=100, deadline=None)
     @given(response=lambda_response())
     def test_response_has_required_fields(self, response):
-        """Lambda responses must have statusCode, headers, and body."""
+        """Lambda responses must have statusCode, multiValueHeaders, and body."""
         assert "statusCode" in response
-        assert "headers" in response
+        assert "multiValueHeaders" in response
         assert "body" in response
 
     @settings(max_examples=100, deadline=None)
@@ -30,14 +30,14 @@ class TestLambdaResponseStructure:
     @settings(max_examples=100, deadline=None)
     @given(response=lambda_response())
     def test_headers_is_dict(self, response):
-        """Headers must be a dictionary."""
-        assert isinstance(response["headers"], dict)
+        """multiValueHeaders must be a dictionary."""
+        assert isinstance(response["multiValueHeaders"], dict)
 
     @settings(max_examples=100, deadline=None)
     @given(response=lambda_response(status_codes=[200, 201]))
     def test_success_response_has_content_type(self, response):
         """Success responses must have Content-Type header."""
-        assert "Content-Type" in response["headers"]
+        assert "Content-Type" in response["multiValueHeaders"]
 
     @settings(max_examples=100, deadline=None)
     @given(response=lambda_response())

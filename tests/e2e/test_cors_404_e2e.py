@@ -1,27 +1,21 @@
 """E2E: Verify CORS headers on error responses via API Gateway (Feature 1268).
 
-Feature 1291: Updated to route through API Gateway instead of Lambda Function URL.
-Lambda Function URLs use AWS_IAM auth (Feature 1256) which rejects unauthenticated
-HTTP requests with 403 before reaching application code. Production traffic flows
-through API Gateway, so these tests now match the production architecture.
+Feature 1296: Uses public route /api/v2/tickers/{proxy+} to bypass Cognito
+authorizer. No auth header needed — public routes have endpoint_auth=NONE.
+Lambda returns 404 for nonexistent ticker paths with CORS headers.
 
 Requires deployed preprod environment with:
-- API Gateway endpoint (PREPROD_API_GATEWAY_URL)
-- JWT secret for authenticated requests (PREPROD_TEST_JWT_SECRET)
+- API Gateway endpoint (PREPROD_API_GATEWAY_URL or PREPROD_API_URL)
 - CORS origins configured in Terraform (cors_allowed_origins)
 """
 
 import os
-import uuid
 
 import httpx
 import pytest
 
-from tests.e2e.conftest import create_test_jwt
-
-PREPROD_API_GATEWAY_URL = os.environ.get("PREPROD_API_GATEWAY_URL", "")
-PREPROD_TEST_JWT_SECRET = os.environ.get(
-    "PREPROD_TEST_JWT_SECRET", "test-jwt-secret-for-e2e-only-not-production"
+PREPROD_API_URL = os.environ.get(
+    "PREPROD_API_GATEWAY_URL", os.environ.get("PREPROD_API_URL", "")
 )
 # Preprod CORS origin — must match what's in Terraform cors_allowed_origins
 PREPROD_CORS_ORIGIN = os.environ.get(
@@ -29,61 +23,50 @@ PREPROD_CORS_ORIGIN = os.environ.get(
     "https://main.d29tlmksqcx494.amplifyapp.com",
 )
 
+# Public route with {proxy+} — bypasses Cognito authorizer
+# /api/v2/tickers has has_proxy=true, endpoint_auth="NONE" in main.tf
+NONEXISTENT_PUBLIC_PATH = "/api/v2/tickers/nonexistent-cors-test"
+
 
 @pytest.mark.preprod
 class TestEnvGated404CorsE2E:
     """E2E: Verify CORS headers on 404 responses through API Gateway.
 
-    Tests authenticated requests to nonexistent routes, verifying that
-    Lambda's application-level CORS headers are preserved through API Gateway.
+    Uses a public route (no Cognito auth) to reach Lambda, which returns
+    404 with application-level CORS headers for nonexistent paths.
     """
 
     @pytest.fixture(autouse=True)
     def skip_if_no_url(self):
-        if not PREPROD_API_GATEWAY_URL:
-            pytest.skip("PREPROD_API_GATEWAY_URL not set")
-
-    def _make_auth_headers(self, origin: str) -> dict[str, str]:
-        """Create headers with JWT auth and Origin for CORS testing."""
-        token = create_test_jwt(
-            user_id=str(uuid.uuid4()),
-            secret=PREPROD_TEST_JWT_SECRET,
-        )
-        return {
-            "Authorization": f"Bearer {token}",
-            "Origin": origin,
-        }
+        if not PREPROD_API_URL:
+            pytest.skip("PREPROD_API_URL / PREPROD_API_GATEWAY_URL not set")
 
     def test_404_response_has_cors_headers(self):
-        """Hit nonexistent route via API Gateway, verify CORS headers present on 404."""
-        headers = self._make_auth_headers(PREPROD_CORS_ORIGIN)
+        """Hit nonexistent public route, verify CORS headers present on 404."""
         response = httpx.get(
-            f"{PREPROD_API_GATEWAY_URL}/api/v2/nonexistent-cors-test-route",
-            headers=headers,
+            f"{PREPROD_API_URL}{NONEXISTENT_PUBLIC_PATH}",
+            headers={"Origin": PREPROD_CORS_ORIGIN},
             timeout=10,
         )
         assert (
             response.status_code == 404
         ), f"Expected 404 for nonexistent route, got {response.status_code}"
-        # Verify Lambda-level CORS headers are preserved through API Gateway
         assert (
             response.headers.get("access-control-allow-origin") is not None
         ), "Missing Access-Control-Allow-Origin on 404 response"
         assert response.headers.get("access-control-allow-credentials") == "true"
 
     def test_404_response_no_cors_for_unknown_origin(self):
-        """Hit nonexistent route with unknown origin, verify no CORS allow-origin."""
+        """Hit nonexistent public route with unknown origin, verify no allow-origin."""
         bad_origin = "https://evil.attacker.example.com"
-        headers = self._make_auth_headers(bad_origin)
         response = httpx.get(
-            f"{PREPROD_API_GATEWAY_URL}/api/v2/nonexistent-cors-test-route",
-            headers=headers,
+            f"{PREPROD_API_URL}{NONEXISTENT_PUBLIC_PATH}",
+            headers={"Origin": bad_origin},
             timeout=10,
         )
         assert (
             response.status_code == 404
         ), f"Expected 404 for nonexistent route, got {response.status_code}"
-        # CORS origin header should NOT be present for unknown origins
         allow_origin = response.headers.get("access-control-allow-origin", "")
         assert (
             allow_origin != bad_origin

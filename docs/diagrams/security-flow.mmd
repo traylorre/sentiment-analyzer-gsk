@@ -1,7 +1,8 @@
 graph TB
-    subgraph Zone0[" ZONE 0: EDGE - Lambda Function URL + Amplify "]
+    subgraph Zone0[" ZONE 0: EDGE - API Gateway + WAF + Amplify "]
         Amplify[Amplify Frontend<br/>✓ Managed TLS<br/>✓ Next.js SSR<br/>✓ Global CDN]
-        LambdaURL[Lambda Function URL<br/>✓ IAM auth support<br/>✓ TLS 1.2+ only<br/>✓ CORS configured<br/>✓ 15-min timeout]
+        APIGatewayEdge[API Gateway REST<br/>✓ Cognito auth<br/>✓ WAF rate limiting<br/>✓ Usage plan throttling<br/>✓ CORS on error responses]
+        CloudFrontSSE[CloudFront SSE<br/>✓ WAF + Shield Standard<br/>✓ OAC SigV4 signing<br/>✓ Cache disabled (streaming)]
         BrowserReq[Browser Request<br/>⚠ XSS payloads<br/>⚠ CSRF attempts<br/>⚠ Token theft]
     end
 
@@ -47,15 +48,15 @@ graph TB
         S3Static[S3 Static Assets<br/>✓ OAC access only<br/>✓ No public access<br/>✓ Versioning enabled]
         SendGrid[SendGrid<br/>Email delivery<br/>Rate limited<br/>Template validation]
         EventBridge[EventBridge<br/>✓ 5min ingestion schedule<br/>✓ 1min metrics schedule<br/>✓ Notification triggers]
-        APIGateway[API Gateway<br/>✓ Dashboard routing<br/>✓ Request validation<br/>✓ Rate limiting<br/>✓ WAF integration]
     end
 
-    %% Edge Flow (Lambda Function URL + Amplify)
+    %% Edge Flow (API Gateway + WAF + Amplify)
     BrowserReq -->|HTTPS| Amplify
     Amplify -->|Static assets| S3Static
-    BrowserReq -->|API calls| LambdaURL
-    LambdaURL -->|/api/v2/stream*| SSEReq
-    BrowserReq -->|/api/*| APIGateway
+    BrowserReq -->|API calls| APIGatewayEdge
+    BrowserReq -->|/api/v2/stream*| CloudFrontSSE
+    CloudFrontSSE -->|OAC SigV4| SSEL
+    APIGatewayEdge -->|Invoke| DashboardL
 
     %% Data Flow - Ingestion
     EventBridge -->|5min schedule| IngestionL
@@ -66,7 +67,6 @@ graph TB
     IngestionL ==>|PutItem raw data| DDBWrite
 
     %% Dashboard Flow
-    APIGateway -->|Route requests| DashboardL
     DashboardReq -->|JSON Body<br/>TAINTED| DashboardL
     OAuthResp -->|Code + State| OAuthV
     MagicLinkReq -->|"/auth/verify/<token>"| MagicLinkV
@@ -122,10 +122,10 @@ graph TB
     classDef protected fill:#E8F5E9,stroke:#66BB6A,stroke-width:3px
     classDef infrastructure fill:#E3F2FD,stroke:#42A5F5,stroke-width:2px
 
-    class Amplify,LambdaURL,BrowserReq edge
+    class Amplify,APIGatewayEdge,CloudFrontSSE,BrowserReq edge
     class TiingoAPI,FinnhubAPI,DashboardReq,OAuthResp,SSEReq,NotifyReq untrusted
     class IngestionL,DashboardL,OAuthV,SSEL,MagicLinkV,CSRFValidation,TokenStorage,NotifyL validation
     class MagicLinkReq,CSRFAttempt untrusted
     class Queue,AnalysisL,MetricsL,DLQ processing
     class DDBWrite,DDBRead,SecGuard protected
-    class SecretsM,CW,S3Arch,S3Static,SendGrid,EventBridge,APIGateway infrastructure
+    class SecretsM,CW,S3Arch,S3Static,SendGrid,EventBridge infrastructure

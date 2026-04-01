@@ -14,23 +14,21 @@ variable "github_repository" {
 variable "api_gateway_url" {
   description = "API Gateway endpoint URL for backend API calls (Feature 1253: primary API endpoint with Cognito auth)"
   type        = string
-  default     = ""
-}
 
-variable "dashboard_lambda_url" {
-  description = "Dashboard Lambda Function URL for backend API calls (has CORS configured)"
-  type        = string
-}
-
-variable "sse_lambda_url" {
-  description = "SSE Lambda Function URL for real-time streaming (fallback if CloudFront not available)"
-  type        = string
+  validation {
+    condition     = var.api_gateway_url != ""
+    error_message = "api_gateway_url is required. The Function URL fallback was removed in Feature 1297 because Function URLs are IAM-protected (Feature 1256) and would silently return 403 to the frontend."
+  }
 }
 
 variable "sse_cloudfront_url" {
   description = "CloudFront URL for SSE streaming (Feature 1255: primary SSE endpoint with WAF + Shield)"
   type        = string
-  default     = ""
+
+  validation {
+    condition     = var.sse_cloudfront_url != ""
+    error_message = "sse_cloudfront_url is required. The SSE Function URL fallback was removed in Feature 1297 because Function URLs are IAM-protected (Feature 1256) and would silently return 403 to the frontend."
+  }
 }
 
 variable "cognito_user_pool_id" {

@@ -218,7 +218,8 @@ class PreprodEnvValidator:
         """Validate URL format for Lambda function URLs."""
         errors = []
 
-        url_vars = ["PREPROD_DASHBOARD_URL", "SSE_LAMBDA_URL", "DASHBOARD_FUNCTION_URL"]
+        # Feature 1300: DASHBOARD_FUNCTION_URL removed (Function URL disabled)
+        url_vars = ["PREPROD_DASHBOARD_URL", "SSE_LAMBDA_URL"]
 
         for var in url_vars:
             url = os.environ.get(var)
