@@ -35,7 +35,6 @@ def clean_env():
         "DATABASE_TABLE",
         "PREPROD_DASHBOARD_URL",
         "SSE_LAMBDA_URL",
-        "DASHBOARD_FUNCTION_URL",
         "API_KEY",
     ]
     for var in env_vars:

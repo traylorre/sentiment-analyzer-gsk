@@ -466,31 +466,12 @@ module "dashboard_lambda" {
     SSE_LAMBDA_URL = module.sse_streaming_lambda.function_url
   }
 
-  # Function URL with CORS
-  # SECURITY: No wildcard fallback - require explicit origins
-  # The Lambda Function URL CORS is for browser preflight checks
-  # Lambda Function URL handles ALL CORS - no app-level CORS headers needed
-  # This prevents duplicate Access-Control-Allow-Origin headers
-  create_function_url    = true
-  function_url_auth_type = "AWS_IAM" # Feature 1256: Restrict to API Gateway only (was NONE)
-  # BUFFERED mode for Powertools REST API (per research.md decision #2)
-  # SSE streaming is handled by separate sse_streaming Lambda with RESPONSE_STREAM
-  function_url_invoke_mode = "BUFFERED"
-  # Feature 1159: Enable credentials for cross-origin cookie transmission
-  function_url_cors = {
-    allow_credentials = true
-    allow_headers     = ["content-type", "authorization", "x-api-key", "x-user-id", "x-auth-type", "x-csrf-token", "x-amzn-trace-id"]
-    allow_methods     = ["GET", "POST", "PUT", "PATCH", "DELETE"] # AWS handles OPTIONS preflight automatically
-    # SECURITY: Require explicit origins - no wildcard fallback
-    # For new deployments, cors_allowed_origins MUST be set in tfvars
-    allow_origins = length(var.cors_allowed_origins) > 0 ? var.cors_allowed_origins : (
-      # Only allow localhost in non-prod if no origins specified (for local development)
-      var.environment != "prod" ? ["http://localhost:3000", "http://localhost:8080"] : []
-    )
-    # Expose rate-limit and request tracking headers to frontend
-    expose_headers = ["x-ratelimit-limit", "x-ratelimit-remaining", "x-ratelimit-reset", "x-request-id", "retry-after", "x-amzn-trace-id"]
-    max_age        = 86400
-  }
+  # Feature 1300: Function URL disabled — Dashboard Lambda is accessed exclusively
+  # via API Gateway REST (lambda:InvokeFunction). Function URL was zombie infrastructure
+  # since Feature 1253 (API Gateway added) and Feature 1256 (IAM auth, returns 403).
+  # SSE Lambda retains its Function URL for CloudFront RESPONSE_STREAM access.
+  create_function_url    = false
+  function_url_auth_type = "AWS_IAM" # Satisfy Checkov CKV_AWS_258 (resource has count=0 but static analysis reads default)
 
   # Logging
   log_retention_days = var.environment == "prod" ? 90 : 30
@@ -1439,10 +1420,8 @@ output "dashboard_lambda_arn" {
   value       = module.dashboard_lambda.function_arn
 }
 
-output "dashboard_function_url" {
-  description = "URL of the Dashboard Lambda Function URL (legacy, use API Gateway URL)"
-  value       = module.dashboard_lambda.function_url
-}
+# Feature 1300: dashboard_function_url output removed — Function URL disabled.
+# Use dashboard_api_url (API Gateway) instead.
 
 output "dashboard_api_url" {
   description = "URL of the Dashboard API Gateway (recommended for production)"
