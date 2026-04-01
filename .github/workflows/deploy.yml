@@ -756,6 +756,7 @@ jobs:
 
     outputs:
       dashboard_url: ${{ steps.outputs.outputs.dashboard_url }}
+      api_url: ${{ steps.outputs.outputs.api_url }}
       sns_topic_arn: ${{ steps.outputs.outputs.sns_topic_arn }}
       sse_lambda_url: ${{ steps.outputs.outputs.sse_lambda_url }}
       amplify_url: ${{ steps.outputs.outputs.amplify_url }}
