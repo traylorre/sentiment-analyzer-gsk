@@ -1517,7 +1517,9 @@ jobs:
           DASHBOARD_FUNCTION_NAME: preprod-sentiment-dashboard
           SSE_FUNCTION_NAME: preprod-sentiment-sse-streaming
           LAMBDA_QUALIFIER: live
-          # Required for E2E Lambda invocation tests (test_e2e_lambda_invocation_preprod.py)
+          # Feature 1294: Enable test_function_url_restricted.py (validates Feature 1256)
+          AWS_ENV: preprod
+          # Function URL for restriction validation tests (expects 403)
           DASHBOARD_FUNCTION_URL: ${{ needs.deploy-preprod.outputs.dashboard_url }}
           # Feature 1054: JWT secret for E2E test authentication (Feature 1053)
           # Must match jwt_secret in Terraform preprod configuration
