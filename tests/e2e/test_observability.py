@@ -21,7 +21,7 @@ pytestmark = [pytest.mark.e2e, pytest.mark.preprod, pytest.mark.us11]
 
 # Log group name follows Terraform naming: {env}-sentiment-dashboard
 # Environment is set by CI workflow (ENVIRONMENT=preprod)
-ENVIRONMENT = os.environ.get("ENVIRONMENT", "preprod")
+ENVIRONMENT = os.environ["ENVIRONMENT"]
 DASHBOARD_LOG_GROUP = f"/aws/lambda/{ENVIRONMENT}-sentiment-dashboard"
 
 
