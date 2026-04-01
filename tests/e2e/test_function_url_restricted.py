@@ -1,10 +1,12 @@
 """E2E tests for Lambda Function URL restriction (Feature 1256).
 
-Tests verify that direct access to Lambda Function URLs returns 403,
-while API Gateway and CloudFront paths continue to work.
+Tests verify that direct access to the SSE Lambda Function URL returns 403
+(auth_type=AWS_IAM), while API Gateway and CloudFront paths continue to work.
+
+Feature 1300: Dashboard Function URL removed — only SSE Function URL tests remain.
+Dashboard Lambda is accessed exclusively via API Gateway (lambda:InvokeFunction).
 
 Requires:
-- DASHBOARD_FUNCTION_URL: Direct Lambda Function URL for Dashboard
 - SSE_FUNCTION_URL: Direct Lambda Function URL for SSE
 - PREPROD_API_URL: API Gateway URL (should work)
 - SSE_CLOUDFRONT_URL: CloudFront URL (should work)
@@ -26,24 +28,12 @@ skip = SkipInfo(
 
 @pytest.mark.skipif(skip.condition, reason=skip.reason)
 @pytest.mark.preprod
-class TestDirectFunctionURLBlocked:
-    """US1: Direct Function URL access returns 403."""
-
-    @pytest.mark.asyncio
-    async def test_dashboard_function_url_returns_403(self) -> None:
-        """SC-001: Direct curl to Dashboard Function URL → 403."""
-        url = os.environ.get("DASHBOARD_FUNCTION_URL", "")
-        if not url:
-            pytest.skip("DASHBOARD_FUNCTION_URL not set")
-        async with httpx.AsyncClient() as client:
-            response = await client.get(f"{url}/health")
-        assert (
-            response.status_code == 403
-        ), f"Expected 403 (auth_type=AWS_IAM), got {response.status_code}"
+class TestDirectSSEFunctionURLBlocked:
+    """Direct SSE Function URL access returns 403 (auth_type=AWS_IAM)."""
 
     @pytest.mark.asyncio
     async def test_sse_function_url_returns_403(self) -> None:
-        """SC-002: Direct curl to SSE Function URL → 403."""
+        """SC-002: Direct curl to SSE Function URL -> 403."""
         url = os.environ.get("SSE_FUNCTION_URL", "")
         if not url:
             pytest.skip("SSE_FUNCTION_URL not set")
@@ -53,24 +43,11 @@ class TestDirectFunctionURLBlocked:
             response.status_code == 403
         ), f"Expected 403 (auth_type=AWS_IAM), got {response.status_code}"
 
-    @pytest.mark.asyncio
-    async def test_bearer_token_on_function_url_still_403(self) -> None:
-        """Scenario 3: Bearer token on Function URL still 403 (needs SigV4)."""
-        url = os.environ.get("DASHBOARD_FUNCTION_URL", "")
-        if not url:
-            pytest.skip("DASHBOARD_FUNCTION_URL not set")
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{url}/health",
-                headers={"Authorization": "Bearer fake-token"},
-            )
-        assert response.status_code == 403
-
 
 @pytest.mark.skipif(skip.condition, reason=skip.reason)
 @pytest.mark.preprod
 class TestProtectedPathsStillWork:
-    """US2+US3: API Gateway and CloudFront paths still work."""
+    """API Gateway and CloudFront paths still work."""
 
     @pytest.mark.asyncio
     async def test_api_gateway_health_works(self) -> None:
