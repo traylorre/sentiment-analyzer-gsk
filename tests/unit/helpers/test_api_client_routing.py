@@ -22,19 +22,17 @@ from tests.e2e.helpers.api_client import PreprodAPIClient
 class TestPreprodAPIClientInit:
     """Tests for PreprodAPIClient initialization and URL configuration."""
 
-    def test_init_with_default_urls(self):
-        """Verify default URL behavior when no env vars set."""
+    def test_init_with_no_urls_is_empty(self):
+        """Verify empty URL when no env vars set (Feature 1302: no hardcoded fallbacks)."""
         with patch.dict(os.environ, {}, clear=True):
-            # Remove relevant env vars
             os.environ.pop("PREPROD_API_URL", None)
             os.environ.pop("SSE_LAMBDA_URL", None)
 
             client = PreprodAPIClient()
 
-            # base_url falls back to default
-            assert client.base_url == "https://api.preprod.sentiment-analyzer.com"
-            # sse_url falls back to base_url when SSE_LAMBDA_URL not set
-            assert client.sse_url == client.base_url
+            # No hardcoded fallback — URL is empty when env var missing
+            assert client.base_url == ""
+            assert client.sse_url == ""
 
     def test_init_with_base_url_only(self):
         """Verify SSE URL falls back to base URL when not provided."""

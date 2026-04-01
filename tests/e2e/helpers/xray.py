@@ -42,7 +42,7 @@ def get_xray_client():
     """Get X-Ray client."""
     return boto3.client(
         "xray",
-        region_name=os.environ.get("AWS_REGION", "us-east-1"),
+        region_name=os.environ["AWS_REGION"],
     )
 
 

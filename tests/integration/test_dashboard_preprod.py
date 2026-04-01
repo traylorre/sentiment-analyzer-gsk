@@ -42,7 +42,7 @@ def auth_headers():
 
     Uses API_KEY from environment (set by CI or local config).
     """
-    api_key = os.environ.get("API_KEY", "test-api-key-12345")
+    api_key = os.environ["API_KEY"]
     return {"Authorization": f"Bearer {api_key}"}
 
 
