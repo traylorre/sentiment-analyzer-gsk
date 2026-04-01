@@ -18,7 +18,7 @@ os.environ.setdefault("USERS_TABLE", "test-sentiment-users")
 os.environ.setdefault("ENVIRONMENT", "test")
 os.environ.setdefault("CHAOS_EXPERIMENTS_TABLE", "test-chaos-experiments")
 
-from tests.conftest import make_event
+from tests.conftest import get_response_header, make_event
 
 
 def _reload_handler_with_env(env_value: str, cors_origins: str = ""):
@@ -140,10 +140,13 @@ class TestChaosEnvironmentGating:
         )
         response = handler.lambda_handler(event, mock_lambda_context)
         assert response["statusCode"] == 404
-        headers = response.get("headers", {})
-        assert headers.get("Access-Control-Allow-Origin") == test_origin
-        assert headers.get("Access-Control-Allow-Credentials") == "true"
-        assert headers.get("Vary") == "Origin"
+        assert (
+            get_response_header(response, "Access-Control-Allow-Origin") == test_origin
+        )
+        assert (
+            get_response_header(response, "Access-Control-Allow-Credentials") == "true"
+        )
+        assert get_response_header(response, "Vary") == "Origin"
 
     def test_chaos_route_404_no_cors_for_unknown_origin(self, mock_lambda_context):
         """Env-gated 404 omits CORS origin for unknown Origin header."""
@@ -157,9 +160,8 @@ class TestChaosEnvironmentGating:
         )
         response = handler.lambda_handler(event, mock_lambda_context)
         assert response["statusCode"] == 404
-        headers = response.get("headers", {})
-        assert "Access-Control-Allow-Origin" not in headers
-        assert headers.get("Vary") == "Origin"
+        assert get_response_header(response, "Access-Control-Allow-Origin") == ""
+        assert get_response_header(response, "Vary") == "Origin"
 
     def test_chaos_route_404_no_cors_for_missing_origin(self, mock_lambda_context):
         """Env-gated 404 omits CORS origin when no Origin header sent."""
@@ -169,9 +171,8 @@ class TestChaosEnvironmentGating:
         event = make_event(method="GET", path="/chaos/experiments")
         response = handler.lambda_handler(event, mock_lambda_context)
         assert response["statusCode"] == 404
-        headers = response.get("headers", {})
-        assert "Access-Control-Allow-Origin" not in headers
-        assert headers.get("Vary") == "Origin"
+        assert get_response_header(response, "Access-Control-Allow-Origin") == ""
+        assert get_response_header(response, "Vary") == "Origin"
 
 
 # ===================================================================

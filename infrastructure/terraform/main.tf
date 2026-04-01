@@ -1275,13 +1275,8 @@ module "amplify_frontend" {
   # GitHub token from Secrets Manager (Feature 1106)
   github_token_secret_name = "${var.environment}/amplify/github-token"
 
-  # Backend integration
-  # Feature 1253: Route through API Gateway (Cognito auth + rate limiting + CORS)
-  # Supersedes Feature 1114 (Lambda Function URL) — API Gateway now has CORS on errors
+  # Backend integration (Feature 1297: removed Function URL fallbacks — IAM-protected, would 403)
   api_gateway_url      = module.api_gateway.api_endpoint
-  dashboard_lambda_url = module.dashboard_lambda.function_url
-  sse_lambda_url       = module.sse_streaming_lambda.function_url
-  # Feature 1255: Route SSE through CloudFront (WAF + Shield Standard)
   sse_cloudfront_url   = module.cloudfront_sse.distribution_url
   cognito_user_pool_id = module.cognito.user_pool_id
   cognito_client_id    = module.cognito.client_id

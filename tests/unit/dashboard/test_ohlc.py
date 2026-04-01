@@ -9,7 +9,7 @@ import pytest
 from src.lambdas.dashboard.handler import lambda_handler
 from src.lambdas.shared.adapters.base import OHLCCandle
 from src.lambdas.shared.models import RESOLUTION_MAX_DAYS, OHLCResolution, TimeRange
-from tests.conftest import make_event
+from tests.conftest import get_response_header, make_event
 
 
 @pytest.fixture(autouse=True)
@@ -261,17 +261,13 @@ class TestOHLCEndpoint:
 
 
 def _get_header(response: dict, name: str) -> str | None:
-    """Extract a header value from Lambda response (handles multiValueHeaders)."""
-    # Lambda Powertools may use multiValueHeaders (lists) or headers (strings)
-    mv = response.get("multiValueHeaders", {})
-    if name in mv:
-        val = mv[name]
-        return val[0] if isinstance(val, list) else val
-    h = response.get("headers", {})
-    if name in h:
-        val = h[name]
-        return val[0] if isinstance(val, list) else val
-    return None
+    """Extract a header value from Lambda response (handles multiValueHeaders).
+
+    Note: Delegates to get_response_header from conftest. Kept as thin wrapper
+    to preserve None return semantics for existing assertions.
+    """
+    val = get_response_header(response, name)
+    return val if val != "" else None
 
 
 class TestCacheDegradation:
