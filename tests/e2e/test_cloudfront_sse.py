@@ -29,7 +29,10 @@ class TestSSEViaCloudFront:
 
     @pytest.fixture
     def sse_url(self) -> str:
-        return os.environ.get("SSE_CLOUDFRONT_URL", "").rstrip("/")
+        url = os.environ.get("SSE_CLOUDFRONT_URL", "").rstrip("/")
+        if not url:
+            pytest.skip("SSE_CLOUDFRONT_URL not set — CloudFront not yet deployed")
+        return url
 
     @pytest.mark.asyncio
     async def test_stream_status_via_cloudfront(self, sse_url: str) -> None:
@@ -59,7 +62,10 @@ class TestWAFProtectsSSE:
 
     @pytest.fixture
     def sse_url(self) -> str:
-        return os.environ.get("SSE_CLOUDFRONT_URL", "").rstrip("/")
+        url = os.environ.get("SSE_CLOUDFRONT_URL", "").rstrip("/")
+        if not url:
+            pytest.skip("SSE_CLOUDFRONT_URL not set — CloudFront not yet deployed")
+        return url
 
     @pytest.mark.asyncio
     async def test_sqli_on_sse_blocked(self, sse_url: str) -> None:

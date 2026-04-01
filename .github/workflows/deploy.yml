@@ -1503,12 +1503,12 @@ jobs:
           # Required for canary tests (test_canary_preprod.py)
           PREPROD_DASHBOARD_URL: ${{ needs.deploy-preprod.outputs.dashboard_url }}
           PREPROD_DASHBOARD_API_KEY: ${{ secrets.DASHBOARD_API_KEY }}
-          # Required for E2E tests — PreprodAPIClient reads this but uses invoke transport
-          # (PREPROD_TRANSPORT=invoke), so the URL is only used as a fallback.
-          # Points to Function URL because API Gateway output may be empty on first deploys.
-          PREPROD_API_URL: ${{ needs.deploy-preprod.outputs.dashboard_url }}
-          # API Gateway URL for tests that need real HTTP (CORS, Cognito auth, WAF)
-          # May be empty if API Gateway hasn't been fully deployed yet
+          # Required for E2E tests — points to API Gateway (production architecture)
+          # PreprodAPIClient uses invoke transport (PREPROD_TRANSPORT=invoke) for
+          # application tests. Tests that need real HTTP (CORS, Cognito auth, WAF)
+          # use this URL directly. API Gateway URL populated after first successful deploy.
+          PREPROD_API_URL: ${{ needs.deploy-preprod.outputs.api_url }}
+          # Alias for backward compat
           PREPROD_API_GATEWAY_URL: ${{ needs.deploy-preprod.outputs.api_url }}
           # Required for SSE E2E tests - routes /api/v2/stream* to SSE Lambda (RESPONSE_STREAM mode)
           # See: specs/082-fix-sse-e2e-timeouts/spec.md
