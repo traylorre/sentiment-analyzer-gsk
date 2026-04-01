@@ -55,13 +55,13 @@ resource "aws_amplify_app" "frontend" {
   EOT
 
   # Environment variables for Next.js
-  # Feature 1253: Route through API Gateway (Cognito auth + rate limiting + CORS on errors)
-  # Previously Feature 1114 used Lambda Function URL because API Gateway lacked CORS.
-  # Feature 1253 adds CORS to API Gateway 401/403 responses, making it viable.
+  # Feature 1253: API Gateway is the sole API endpoint (Cognito auth + rate limiting + WAF)
+  # Feature 1255: CloudFront is the sole SSE endpoint (WAF + Shield Standard)
+  # Feature 1297: Removed Function URL fallbacks — they are IAM-protected (Feature 1256)
+  # and would silently return 403 to the frontend.
   environment_variables = {
-    NEXT_PUBLIC_API_URL = var.api_gateway_url != "" ? var.api_gateway_url : var.dashboard_lambda_url
-    # Feature 1255: Route SSE through CloudFront (WAF + Shield Standard)
-    NEXT_PUBLIC_SSE_URL              = var.sse_cloudfront_url != "" ? var.sse_cloudfront_url : var.sse_lambda_url
+    NEXT_PUBLIC_API_URL              = var.api_gateway_url
+    NEXT_PUBLIC_SSE_URL              = var.sse_cloudfront_url
     NEXT_PUBLIC_COGNITO_USER_POOL_ID = var.cognito_user_pool_id
     NEXT_PUBLIC_COGNITO_CLIENT_ID    = var.cognito_client_id
     NEXT_PUBLIC_COGNITO_DOMAIN       = var.cognito_domain

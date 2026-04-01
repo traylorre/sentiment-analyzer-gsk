@@ -14,7 +14,7 @@ from unittest.mock import patch
 import pytest
 
 from src.lambdas.dashboard.handler import lambda_handler
-from tests.conftest import make_event
+from tests.conftest import get_response_header, make_event
 
 # Feature 1049: Valid UUID required for auth
 # Feature 1146: Bearer-only authentication
@@ -339,9 +339,7 @@ class TestSentimentHistoryEndpoint:
         response = lambda_handler(event, mock_lambda_context)
 
         assert response["statusCode"] == 200
-        headers = response.get("headers", {})
-        assert "x-cache-source" in headers
-        assert headers["x-cache-source"] == "persistent-cache"
+        assert get_response_header(response, "x-cache-source") == "persistent-cache"
 
     @patch("src.lambdas.dashboard.timeseries.query_timeseries")
     @patch("src.lambdas.shared.cache.sentiment_cache.get_cached_history")
@@ -374,8 +372,7 @@ class TestSentimentHistoryEndpoint:
         response = lambda_handler(event, mock_lambda_context)
 
         assert response["statusCode"] == 200
-        headers = response.get("headers", {})
-        assert headers.get("x-cache-source") == "in-memory"
+        assert get_response_header(response, "x-cache-source") == "in-memory"
         mock_query.assert_not_called()
 
 

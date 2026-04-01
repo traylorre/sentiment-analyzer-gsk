@@ -29,7 +29,7 @@ import pytest
 from moto import mock_aws
 
 from src.lambdas.dashboard.handler import lambda_handler
-from tests.conftest import make_event
+from tests.conftest import get_response_header, make_event
 
 # Set default env vars for tests (only if not already set by CI)
 # IMPORTANT: Use setdefault to avoid overwriting CI-provided preprod values
@@ -384,8 +384,7 @@ class TestStaticFiles:
         assert (
             response["statusCode"] == 200
         ), f"Expected 200 for index.html, got {response['statusCode']}"
-        # v2 response: Content-Type in headers (string), not multiValueHeaders
-        content_type = response.get("headers", {}).get("Content-Type", "")
+        content_type = get_response_header(response, "Content-Type")
         assert "text/html" in content_type
 
     def test_static_css_served(self, mock_lambda_context):
@@ -395,7 +394,7 @@ class TestStaticFiles:
         assert (
             response["statusCode"] == 200
         ), f"Expected 200 for styles.css, got {response['statusCode']}"
-        content_type = response.get("headers", {}).get("Content-Type", "")
+        content_type = get_response_header(response, "Content-Type")
         assert "text/css" in content_type
 
     def test_static_js_served(self, mock_lambda_context):
@@ -405,7 +404,7 @@ class TestStaticFiles:
         assert (
             response["statusCode"] == 200
         ), f"Expected 200 for app.js, got {response['statusCode']}"
-        content_type = response.get("headers", {}).get("Content-Type", "")
+        content_type = get_response_header(response, "Content-Type")
         assert "javascript" in content_type
 
     def test_path_traversal_blocked(self, mock_lambda_context):

@@ -125,23 +125,22 @@ def make_event(
     body: dict | str | None = None,
     cookies: str | None = None,
 ) -> dict:
-    """Construct a mock Lambda Function URL event.
+    """Construct a mock API Gateway REST proxy integration event (v1).
 
-    This is the canonical test factory for all handler tests migrated from
-    TestClient to direct handler invocation. Produces events matching the
-    Lambda Function URL v2 format (used by LambdaFunctionUrlResolver).
+    Feature 1297: Switched from Function URL v2 to API Gateway REST v1 format
+    to match the Dashboard Lambda's production path (API Gateway → lambda:InvokeFunction).
 
     Args:
         method: HTTP method (GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD).
-        path: Request path (e.g., "/api/v2/sentiment").
+        path: Request path (e.g., "/api/v2/sentiment"). No stage prefix.
         path_params: Path parameters (e.g., {"ticker": "AAPL"}).
         query_params: Query string parameters (e.g., {"range": "1M"}).
-        headers: HTTP headers (keys will be lowercased per Function URL behavior).
+        headers: HTTP headers (keys lowercased to match HTTP/2 normalization).
         body: Request body. Dicts are JSON-serialized; strings are passed as-is.
         cookies: Cookie header value (e.g., "session_id=abc; csrf_token=xyz").
 
     Returns:
-        Complete Lambda Function URL v2 event dict.
+        Complete API Gateway REST v1 proxy event dict.
     """
     base_headers = {"content-type": "application/json"}
     if headers:
@@ -155,40 +154,69 @@ def make_event(
     elif isinstance(body, str):
         serialized_body = body
 
-    raw_query_string = ""
-    if query_params:
-        from urllib.parse import urlencode
-
-        raw_query_string = urlencode(query_params)
+    # Build pathParameters: always include proxy capture + explicit params
+    merged_path_params = {"proxy": path.lstrip("/")} if path != "/" else {}
+    if path_params:
+        merged_path_params.update(path_params)
 
     return {
-        "version": "2.0",
-        "rawPath": path,
-        "rawQueryString": raw_query_string,
+        "resource": "/{proxy+}" if path != "/" else "/",
+        "path": path,
+        "httpMethod": method,
         "headers": base_headers,
+        "multiValueHeaders": {k: [v] for k, v in base_headers.items()},
         "queryStringParameters": query_params,
-        "pathParameters": path_params,
+        "multiValueQueryStringParameters": (
+            {k: [v] for k, v in query_params.items()} if query_params else None
+        ),
+        "pathParameters": merged_path_params or None,
+        "stageVariables": None,
         "body": serialized_body,
         "isBase64Encoded": False,
         "requestContext": {
             "accountId": "123456789012",
             "apiId": "test-api",
-            "domainName": "test.lambda-url.us-east-1.on.aws",
-            "domainPrefix": "test",
-            "http": {
-                "method": method,
-                "path": path,
-                "protocol": "HTTP/1.1",
+            "resourceId": "test",
+            "resourcePath": "/{proxy+}" if path != "/" else "/",
+            "httpMethod": method,
+            "path": f"/v1{path}",
+            "stage": "v1",
+            "requestId": "test-request-id",
+            "identity": {
                 "sourceIp": "127.0.0.1",
                 "userAgent": "test",
             },
-            "requestId": "test-request-id",
-            "routeKey": "$default",
-            "stage": "$default",
             "time": "01/Jan/2025:00:00:00 +0000",
             "timeEpoch": 1735689600000,
         },
     }
+
+
+def get_response_header(response: dict, name: str, default: str = "") -> str:
+    """Extract a header value from a Lambda handler response.
+
+    Feature 1297: APIGatewayRestResolver returns multiValueHeaders (v1 format)
+    instead of headers (v2 format). This helper handles both.
+
+    Args:
+        response: Lambda handler response dict.
+        name: Header name (case-insensitive).
+        default: Value if header not found.
+
+    Returns:
+        Header value string.
+    """
+    # v1 format: multiValueHeaders = {"Content-Type": ["text/html"]}
+    mv_headers = response.get("multiValueHeaders") or {}
+    for k, v in mv_headers.items():
+        if k.lower() == name.lower():
+            return v[0] if isinstance(v, list) and v else str(v)
+    # v2 format fallback: headers = {"content-type": "text/html"}
+    headers = response.get("headers") or {}
+    for k, v in headers.items():
+        if k.lower() == name.lower():
+            return str(v)
+    return default
 
 
 @pytest.fixture

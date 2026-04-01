@@ -6,19 +6,20 @@ Powertools-based Lambda handler serving the sentiment analyzer dashboard API v2.
 
 For On-Call Engineers:
     If dashboard is not accessible:
-    1. Check Lambda Function URL is configured correctly
-    2. Verify CORS is enabled in Lambda response
+    1. Check API Gateway is deployed and healthy
+    2. Verify CORS is enabled in API Gateway gateway responses
     3. Verify DynamoDB table exists and Lambda has permissions
 
     See SC-05 in ON_CALL_SOP.md for dashboard-related incidents.
 
 For Developers:
-    - Uses AWS Lambda Powertools LambdaFunctionUrlResolver for routing
+    - Uses AWS Lambda Powertools APIGatewayRestResolver for routing
+    - Expects API Gateway REST v1 event format (httpMethod, path, requestContext.identity)
     - Static files served from /static/ prefix
-    - CORS handled at infrastructure level (Lambda Function URL config)
+    - CORS handled at infrastructure level (API Gateway gateway responses)
     - Exception: env-gated 404 responses include application-level CORS
-      headers (Feature 1268) because neither API Gateway nor Function URL
-      adds CORS to Lambda-returned responses
+      headers (Feature 1268) because API Gateway does not add CORS to
+      Lambda-returned responses
 
 Auth (Feature 1039):
     - All /api/* endpoints use session-based auth via Bearer token
@@ -39,7 +40,7 @@ from typing import Any
 import orjson
 from aws_lambda_powertools import Logger, Tracer
 from aws_lambda_powertools.event_handler import (
-    LambdaFunctionUrlResolver,
+    APIGatewayRestResolver,
     Response,
 )
 
@@ -140,9 +141,13 @@ def _get_request_origin() -> str | None:
 
     Returns None if Origin header is missing or if called outside
     a request context (defensive).
+
+    Feature 1297: Case-insensitive lookup because API Gateway REST v1
+    may preserve original header case for HTTP/1.1 clients.
     """
     try:
-        return app.current_event.headers.get("origin")
+        headers = app.current_event.headers or {}
+        return next((v for k, v in headers.items() if k.lower() == "origin"), None)
     except Exception:
         return None
 
@@ -167,9 +172,10 @@ ALLOWED_STATIC_FILES: dict[str, str] = {
 }
 
 # Create Powertools resolver (FR-001, R1)
-# LambdaFunctionUrlResolver handles Function URL v2 events (rawPath, requestContext.http.method)
-# Previously APIGatewayRestResolver only handled REST v1 events, causing 502 on Function URL
-app = LambdaFunctionUrlResolver()
+# APIGatewayRestResolver handles API Gateway REST v1 events (path, httpMethod)
+# Feature 1297: Switched from LambdaFunctionUrlResolver (v2) to match production path
+# Production: Amplify → API Gateway REST → lambda:InvokeFunction → v1 events
+app = APIGatewayRestResolver()
 
 # Include all routers
 from src.lambdas.dashboard.router_v2 import include_routers
@@ -1667,25 +1673,20 @@ def _handle_auto_restore(experiment_id: str) -> dict[str, Any]:
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """AWS Lambda entry point.
 
-    Uses Powertools LambdaFunctionUrlResolver for routing.
+    Uses Powertools APIGatewayRestResolver for routing.
 
     Args:
-        event: Lambda event (Lambda Function URL v2 format)
+        event: Lambda event (API Gateway REST v1 proxy format)
         context: Lambda context
 
     Returns:
-        HTTP response dict (Lambda Function URL v2 format)
+        HTTP response dict (API Gateway REST v1 proxy format)
     """
     logger.info(
         "Dashboard Lambda invoked",
         extra={
-            "path": event.get("rawPath", event.get("path", "unknown")),
-            "method": event.get(
-                "httpMethod",
-                event.get("requestContext", {})
-                .get("http", {})
-                .get("method", "unknown"),
-            ),
+            "path": event.get("path", "unknown"),
+            "method": event.get("httpMethod", "unknown"),
         },
     )
 
@@ -1694,6 +1695,20 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # MUST be checked before Powertools routing which expects HTTP events.
     if event.get("action") == "chaos-auto-restore":
         return _handle_auto_restore(event.get("experiment_id", ""))
+
+    # Feature 1297: Reject Function URL v2 events. Dashboard Lambda's production
+    # path is API Gateway REST (v1 events). v2 events only arrive from paths that
+    # bypass security (Function URL is IAM-protected, direct invoke bypasses WAF/Cognito).
+    if event.get("version") == "2.0":
+        logger.warning(
+            "Rejected Function URL v2 event — Dashboard expects API Gateway REST v1",
+            extra={"event_version": "2.0"},
+        )
+        return {
+            "statusCode": 400,
+            "body": '{"error":"Dashboard Lambda expects API Gateway REST v1 events"}',
+            "headers": {"content-type": "application/json"},
+        }
 
     response = app.resolve(event, context)
 

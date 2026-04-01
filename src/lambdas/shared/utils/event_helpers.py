@@ -13,9 +13,9 @@ References:
 def get_header(event: dict, name: str, default: str | None = None) -> str | None:
     """Get a header value with case-insensitive lookup.
 
-    API Gateway normalizes all headers to lowercase in the event dict.
-    This utility ensures consistent access regardless of how callers
-    specify the header name.
+    Feature 1297: Normalizes header dict keys to lowercase before lookup.
+    API Gateway REST v1 may preserve original header case for HTTP/1.1
+    clients, so we cannot rely on keys already being lowercase.
 
     Args:
         event: API Gateway Proxy Integration event dict.
@@ -26,7 +26,8 @@ def get_header(event: dict, name: str, default: str | None = None) -> str | None
         Header value or default.
     """
     headers = event.get("headers") or {}
-    return headers.get(name.lower(), default)
+    normalized = {k.lower(): v for k, v in headers.items()}
+    return normalized.get(name.lower(), default)
 
 
 def get_query_params(event: dict) -> dict[str, str]:
