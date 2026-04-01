@@ -33,6 +33,16 @@ pytestmark = [pytest.mark.e2e, pytest.mark.preprod]
 # SSE routes only exist on the SSE Lambda, not the Dashboard Lambda
 SSE_LAMBDA_URL = os.environ.get("SSE_LAMBDA_URL", "")
 
+# Feature 1293: SSE HTTP streaming tests cannot work with IAM-auth Function URLs
+# in invoke mode. Lambda invoke returns complete response, defeating SSE streaming.
+# SSE behavior is tested via Playwright E2E (chaos-sse-lifecycle.spec.ts).
+_SKIP_SSE_HTTP = os.environ.get("PREPROD_TRANSPORT") == "invoke"
+_SKIP_REASON = (
+    "SSE HTTP streaming requires keep-alive connection, incompatible with invoke "
+    "transport (Feature 1256: Function URL AWS_IAM auth). "
+    "Covered by Playwright E2E: chaos-sse-lifecycle.spec.ts, chaos-sse-recovery.spec.ts"
+)
+
 
 @pytest.fixture
 def sse_lambda_url() -> str:
@@ -55,6 +65,7 @@ class TestSSEConnectionHealth:
     """
 
     @pytest.mark.asyncio
+    @pytest.mark.skipif(_SKIP_SSE_HTTP, reason=_SKIP_REASON)
     async def test_sse_lambda_no_runtime_error(self, sse_lambda_url: str) -> None:
         """T128a: Verify SSE Lambda starts without Runtime.ExitError.
 
@@ -103,6 +114,7 @@ class TestSSEConnectionHealth:
         raise last_error  # Re-raise after all retries
 
     @pytest.mark.asyncio
+    @pytest.mark.skipif(_SKIP_SSE_HTTP, reason=_SKIP_REASON)
     async def test_sse_stream_returns_200(self, sse_lambda_url: str) -> None:
         """T128b: Verify SSE stream returns HTTP 200.
 
@@ -136,6 +148,7 @@ class TestSSEConnectionHealth:
         raise last_error
 
     @pytest.mark.asyncio
+    @pytest.mark.skipif(_SKIP_SSE_HTTP, reason=_SKIP_REASON)
     async def test_sse_content_type_is_event_stream(self, sse_lambda_url: str) -> None:
         """T128c: Verify SSE Content-Type for EventSource compatibility.
 
@@ -171,6 +184,7 @@ class TestSSEConnectionHealth:
         raise last_error
 
     @pytest.mark.asyncio
+    @pytest.mark.skipif(_SKIP_SSE_HTTP, reason=_SKIP_REASON)
     async def test_sse_receives_heartbeat_event(self, sse_lambda_url: str) -> None:
         """T128d: Verify SSE stream sends heartbeat events.
 
@@ -221,6 +235,7 @@ class TestDashboardConnectionIndicator:
     """
 
     @pytest.mark.asyncio
+    @pytest.mark.skipif(_SKIP_SSE_HTTP, reason=_SKIP_REASON)
     async def test_dashboard_sse_connection_flow(self, sse_lambda_url: str) -> None:
         """T128e: Simulate browser EventSource connection flow.
 
