@@ -752,10 +752,9 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: preprod
-      url: ${{ steps.outputs.outputs.dashboard_url }}
+      url: ${{ steps.outputs.outputs.api_url }}
 
     outputs:
-      dashboard_url: ${{ steps.outputs.outputs.dashboard_url }}
       api_url: ${{ steps.outputs.outputs.api_url }}
       sns_topic_arn: ${{ steps.outputs.outputs.sns_topic_arn }}
       sse_lambda_url: ${{ steps.outputs.outputs.sse_lambda_url }}
@@ -1071,14 +1070,12 @@ jobs:
       - name: Get Preprod Outputs
         id: outputs
         run: |
-          DASHBOARD_URL=$(terraform output -raw dashboard_function_url 2>/dev/null || echo "")
           API_URL=$(terraform output -raw dashboard_api_url 2>/dev/null || echo "")
           SNS_TOPIC_ARN=$(terraform output -raw sns_topic_arn 2>/dev/null || echo "")
           SSE_LAMBDA_URL=$(terraform output -raw sse_lambda_function_url 2>/dev/null || echo "")
           # Feature 1205: dashboard_s3_bucket removed - Amplify now serves the frontend directly
           AMPLIFY_URL=$(terraform output -raw amplify_production_url 2>/dev/null || echo "")
 
-          echo "dashboard_url=${DASHBOARD_URL}" >> $GITHUB_OUTPUT
           echo "api_url=${API_URL}" >> $GITHUB_OUTPUT
           echo "sns_topic_arn=${SNS_TOPIC_ARN}" >> $GITHUB_OUTPUT
           echo "sse_lambda_url=${SSE_LAMBDA_URL}" >> $GITHUB_OUTPUT
@@ -1096,18 +1093,16 @@ jobs:
         id: smoke_test
         timeout-minutes: 4
         run: |
-          # Use Lambda Function URL for smoke test (resolver is LambdaFunctionUrlResolver)
-          DASHBOARD_URL="${{ steps.outputs.outputs.dashboard_url }}"
           # Feature 1253: API Gateway URL for Cognito auth verification
           API_GW_URL="${{ steps.outputs.outputs.api_url }}"
 
-          if [ -z "$DASHBOARD_URL" ]; then
-            echo "⚠️ Dashboard URL not found - skipping smoke test"
+          if [ -z "$API_GW_URL" ]; then
+            echo "⚠️ API Gateway URL not found - skipping smoke test"
             exit 0
           fi
 
           echo "🧪 Running post-deployment smoke test..."
-          echo "Dashboard URL: $DASHBOARD_URL"
+          echo "API Gateway URL: $API_GW_URL"
 
           # Test 1: Health check via direct invoke on the "live" alias.
           # Function URLs have CloudFront propagation delay (2-5 min) that makes
@@ -1165,7 +1160,7 @@ jobs:
           # Test 3: Verify response body is valid JSON
           echo ""
           echo "Test 3: Validating response format..."
-          HEALTH_RESPONSE=$(curl -s --max-time 30 "${DASHBOARD_URL}/health")
+          HEALTH_RESPONSE=$(curl -s --max-time 30 "${API_GW_URL}/health")
 
           if ! echo "$HEALTH_RESPONSE" | jq . >/dev/null 2>&1; then
             echo "❌ SMOKE TEST FAILED: Health endpoint returned invalid JSON"
@@ -1205,7 +1200,7 @@ jobs:
         run: |
           ENV="preprod"
           BUCKET="preprod-sentiment-lambda-deployments"
-          DASHBOARD_URL="${{ steps.outputs.outputs.dashboard_url }}"
+          API_URL="${{ steps.outputs.outputs.api_url }}"
           TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           SHA="${GITHUB_SHA:0:7}"
 
@@ -1216,10 +1211,10 @@ jobs:
 
           # Update metadata for this environment
           jq --arg env "$ENV" \
-             --arg url "$DASHBOARD_URL" \
+             --arg url "$API_URL" \
              --arg ts "$TIMESTAMP" \
              --arg sha "$SHA" \
-             '.[$env] = {"dashboard_url": $url, "last_deployed": $ts, "git_sha": $sha}' \
+             '.[$env] = {"api_url": $url, "last_deployed": $ts, "git_sha": $sha}' \
              /tmp/metadata.json > /tmp/metadata-new.json
 
           # Upload to S3
@@ -1234,7 +1229,7 @@ jobs:
           echo "📝 Recording deployment metadata..."
           echo "Git SHA: ${{ github.sha }}"
           echo "Deployed at: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          echo "Dashboard URL: ${{ steps.outputs.outputs.dashboard_url }}"
+          echo "API URL: ${{ steps.outputs.outputs.api_url }}"
           echo "Smoke test result: ${{ steps.smoke_test.outcome }}"
 
   # ========================================================================
@@ -1308,7 +1303,6 @@ jobs:
 
       - name: Warm Up Lambdas for Metrics (TD-001)
         env:
-          DASHBOARD_URL: ${{ needs.deploy-preprod.outputs.dashboard_url }}
           SSE_LAMBDA_URL: ${{ needs.deploy-preprod.outputs.sse_lambda_url }}
         run: |
           echo "🔥 Warming up Lambdas to generate CloudWatch metrics..."
@@ -1358,13 +1352,6 @@ jobs:
           METRICS_STATUS=$(cat /tmp/warmup-metrics.json | python3 -c "import sys,json; r=json.load(sys.stdin); print(r.get('statusCode', 'unknown'))" 2>/dev/null || echo "unknown")
           echo "  Direct invoke status: $METRICS_STATUS"
           echo "  ✅ Metrics endpoint warmed up (status: $METRICS_STATUS)"
-
-          # Feature 1146: All endpoints now use Bearer token for session auth
-          echo "3. Invoking /api/v2/tickers/AAPL/sentiment/history endpoint (warmup only)..."
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-            -H "Authorization: Bearer ${WARMUP_USER_ID}" \
-            "${DASHBOARD_URL}/api/v2/tickers/AAPL/sentiment/history" || echo "000")
-          echo "  HTTP $HTTP_CODE (non-critical warmup, any response is acceptable)"
 
           # Warm up SSE Lambda (Feature 140: SSE tests were failing due to cold start)
           # SSE Lambda uses Docker image with custom runtime, needs warmup
@@ -1463,29 +1450,6 @@ jobs:
 
           echo "✅ Lambda warmup complete - metrics should now be available"
 
-      # Feature 1224.4: Wait for Function URLs to be reachable via HTTP.
-      # Direct invoke works immediately but the Function URL's CloudFront
-      # distribution may still be propagating. Integration tests use httpx
-      # against the URL, so we need to confirm HTTP accessibility first.
-      - name: Wait for Function URL Propagation
-        continue-on-error: true
-        env:
-          DASHBOARD_URL: ${{ needs.deploy-preprod.outputs.dashboard_url }}
-        run: |
-          echo "🌐 Waiting for Function URL to be reachable via HTTP..."
-          for attempt in $(seq 1 30); do
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "${DASHBOARD_URL}/health" 2>/dev/null || echo "000")
-            if [ "$HTTP_CODE" = "200" ]; then
-              echo "  ✅ Function URL reachable (attempt $attempt): HTTP $HTTP_CODE"
-              break
-            fi
-            echo "  Attempt $attempt/30: HTTP $HTTP_CODE (waiting 10s...)"
-            sleep 10
-          done
-          if [ "$HTTP_CODE" != "200" ]; then
-            echo "  ⚠️ Function URL not reachable after 5 min — integration tests may fail on URL-based calls"
-          fi
-
       - name: Run Preprod Integration Tests
         env:
           AWS_REGION: ${{ vars.AWS_REGION }}
@@ -1502,7 +1466,7 @@ jobs:
           WATCH_TAGS: AI,climate,economy
           MODEL_VERSION: v${{ needs.build.outputs.artifact-sha }}
           # Required for canary tests (test_canary_preprod.py)
-          PREPROD_DASHBOARD_URL: ${{ needs.deploy-preprod.outputs.dashboard_url }}
+          PREPROD_DASHBOARD_URL: ${{ needs.deploy-preprod.outputs.api_url }}
           PREPROD_DASHBOARD_API_KEY: ${{ secrets.DASHBOARD_API_KEY }}
           # Required for E2E tests — points to API Gateway (production architecture)
           # PreprodAPIClient uses invoke transport (PREPROD_TRANSPORT=invoke) for
@@ -1523,8 +1487,6 @@ jobs:
           LAMBDA_QUALIFIER: live
           # Feature 1294: Enable test_function_url_restricted.py (validates Feature 1256)
           AWS_ENV: preprod
-          # Function URL for restriction validation tests (expects 403)
-          DASHBOARD_FUNCTION_URL: ${{ needs.deploy-preprod.outputs.dashboard_url }}
           # Feature 1054: JWT secret for E2E test authentication (Feature 1053)
           # Must match jwt_secret in Terraform preprod configuration
           PREPROD_TEST_JWT_SECRET: ${{ secrets.PREPROD_JWT_SECRET }}
@@ -1837,10 +1799,10 @@ jobs:
     # - Human → production (requires approval)
     environment:
       name: ${{ github.actor == 'dependabot[bot]' && 'production-auto' || 'production' }}
-      url: ${{ steps.outputs.outputs.dashboard_url }}
+      url: ${{ steps.outputs.outputs.api_url }}
 
     outputs:
-      dashboard_url: ${{ steps.outputs.outputs.dashboard_url }}
+      api_url: ${{ steps.outputs.outputs.api_url }}
 
     defaults:
       run:
@@ -1995,11 +1957,8 @@ jobs:
       - name: Get Production Outputs
         id: outputs
         run: |
-          DASHBOARD_URL=$(terraform output -raw dashboard_function_url 2>/dev/null || echo "")
           API_URL=$(terraform output -raw dashboard_api_url 2>/dev/null || echo "")
-          echo "dashboard_url=${DASHBOARD_URL}" >> $GITHUB_OUTPUT
           echo "api_url=${API_URL}" >> $GITHUB_OUTPUT
-          echo "Production Dashboard URL: ${DASHBOARD_URL}"
           echo "Production API URL: ${API_URL}"
 
       - name: Update Deployment Metadata (Production)
@@ -2007,7 +1966,7 @@ jobs:
         run: |
           ENV="prod"
           BUCKET="prod-sentiment-lambda-deployments"
-          DASHBOARD_URL="${{ steps.outputs.outputs.dashboard_url }}"
+          API_URL="${{ steps.outputs.outputs.api_url }}"
           TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           SHA="${GITHUB_SHA:0:7}"
 
@@ -2018,10 +1977,10 @@ jobs:
 
           # Update metadata for this environment
           jq --arg env "$ENV" \
-             --arg url "$DASHBOARD_URL" \
+             --arg url "$API_URL" \
              --arg ts "$TIMESTAMP" \
              --arg sha "$SHA" \
-             '.[$env] = {"dashboard_url": $url, "last_deployed": $ts, "git_sha": $sha}' \
+             '.[$env] = {"api_url": $url, "last_deployed": $ts, "git_sha": $sha}' \
              /tmp/metadata.json > /tmp/metadata-new.json
 
           # Upload to S3
@@ -2097,4 +2056,4 @@ jobs:
           echo "- Production: SKIPPED (temporarily disabled)"
           echo ""
           echo "Artifact SHA: ${{ needs.build.outputs.artifact-sha }}"
-          echo "Preprod Dashboard: ${{ needs.deploy-preprod.outputs.dashboard_url }}"
+          echo "Preprod API URL: ${{ needs.deploy-preprod.outputs.api_url }}"

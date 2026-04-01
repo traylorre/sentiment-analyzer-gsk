@@ -28,6 +28,7 @@ from src.lambdas.shared.errors import (
     unauthorized_error,
     validation_error,
 )
+from tests.conftest import get_response_header
 
 
 class TestErrorCode:
@@ -64,8 +65,8 @@ class TestErrorResponse:
         )
 
         assert response["statusCode"] == 400
-        assert response["headers"]["Content-Type"] == "application/json"
-        assert response["headers"]["X-Request-Id"] == "req-123"
+        assert get_response_header(response, "Content-Type") == "application/json"
+        assert get_response_header(response, "X-Request-Id") == "req-123"
 
         body = json.loads(response["body"])
         assert body["error"] == "Bad request"
@@ -228,7 +229,7 @@ class TestRateLimitError:
         """Test rate limit with Retry-After header."""
         response = rate_limit_error("req-123", retry_after=3600)
 
-        assert response["headers"]["Retry-After"] == "3600"
+        assert get_response_header(response, "Retry-After") == "3600"
         body = json.loads(response["body"])
         assert body["details"]["retry_after_seconds"] == 3600
 

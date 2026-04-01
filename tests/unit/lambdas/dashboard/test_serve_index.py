@@ -10,7 +10,7 @@ from unittest.mock import patch
 import pytest
 
 from src.lambdas.dashboard.handler import lambda_handler
-from tests.conftest import make_event
+from tests.conftest import get_response_header, make_event
 
 
 class TestServeIndex:
@@ -71,6 +71,5 @@ class TestServeIndex:
         )
 
         assert response["statusCode"] == 200
-        # v2 response: Content-Type in headers (string), not multiValueHeaders
-        content_type = response.get("headers", {}).get("Content-Type", "")
+        content_type = get_response_header(response, "Content-Type")
         assert "text/html" in content_type

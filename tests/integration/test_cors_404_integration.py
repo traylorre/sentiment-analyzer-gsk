@@ -21,7 +21,7 @@ os.environ.setdefault("USERS_TABLE", "test-sentiment-users")
 os.environ.setdefault("ENVIRONMENT", "test")
 os.environ.setdefault("CHAOS_EXPERIMENTS_TABLE", "test-chaos-experiments")
 
-from tests.conftest import make_event
+from tests.conftest import get_response_header, make_event
 
 
 def _reload_handler(env: str, cors_origins: str = ""):
@@ -76,10 +76,13 @@ class TestEnvGated404CorsIntegration:
         )
         response = handler.lambda_handler(event, mock_lambda_context)
         assert response["statusCode"] == 404
-        headers = response.get("headers", {})
-        assert headers.get("Access-Control-Allow-Origin") == test_origin
-        assert headers.get("Access-Control-Allow-Credentials") == "true"
-        assert headers.get("Vary") == "Origin"
+        assert (
+            get_response_header(response, "Access-Control-Allow-Origin") == test_origin
+        )
+        assert (
+            get_response_header(response, "Access-Control-Allow-Credentials") == "true"
+        )
+        assert get_response_header(response, "Vary") == "Origin"
         body = json.loads(response["body"])
         assert body["detail"] == "Not found"
 
@@ -94,8 +97,9 @@ class TestEnvGated404CorsIntegration:
         )
         response = handler.lambda_handler(event, mock_lambda_context)
         assert response["statusCode"] == 404
-        headers = response.get("headers", {})
-        assert headers.get("Access-Control-Allow-Origin") == test_origin
+        assert (
+            get_response_header(response, "Access-Control-Allow-Origin") == test_origin
+        )
 
     def test_static_file_404_cors_through_handler(self, mock_lambda_context):
         """Static file route returns 404 with CORS in non-dev."""
@@ -108,8 +112,9 @@ class TestEnvGated404CorsIntegration:
         )
         response = handler.lambda_handler(event, mock_lambda_context)
         assert response["statusCode"] == 404
-        headers = response.get("headers", {})
-        assert headers.get("Access-Control-Allow-Origin") == test_origin
+        assert (
+            get_response_header(response, "Access-Control-Allow-Origin") == test_origin
+        )
 
     def test_no_cors_when_origins_env_empty(self, mock_lambda_context):
         """No CORS headers when CORS_ORIGINS env var is empty."""
@@ -121,6 +126,5 @@ class TestEnvGated404CorsIntegration:
         )
         response = handler.lambda_handler(event, mock_lambda_context)
         assert response["statusCode"] == 404
-        headers = response.get("headers", {})
-        assert "Access-Control-Allow-Origin" not in headers
-        assert headers.get("Vary") == "Origin"
+        assert get_response_header(response, "Access-Control-Allow-Origin") == ""
+        assert get_response_header(response, "Vary") == "Origin"

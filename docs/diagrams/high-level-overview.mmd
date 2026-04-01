@@ -1,7 +1,7 @@
 %% High-Level System Overview - Terraform-Accurate
-%% Last updated: 2026-01-18
+%% Last updated: 2026-04-01
 %% Canonical source: infrastructure/terraform/
-%% Feature 1208: CloudFront removed - Amplify serves frontend directly
+%% Feature 1301: Updated for API Gateway (1253), CloudFront SSE (1255), Function URL removal (1300)
 
 graph LR
     %% External Sources
@@ -43,13 +43,17 @@ graph LR
     %% Frontend (Feature 1208: Amplify serves frontend directly)
     Amplify[Amplify<br/>Next.js SSR<br/>Primary Frontend]
 
+    %% CDN / Edge
+    CloudFront[CloudFront<br/>WAF + Shield<br/>SSE Streaming]
+
     %% Monitoring
     CloudWatch["CloudWatch<br/>Logs · Alarms · RUM"]
 
     %% User Request Flow (Feature 1208: Direct to Amplify/API) - thick lines for primary paths
     Browser ==>|HTTPS| Amplify
     Browser ==>|/api/*| APIGateway
-    Browser ==>|/api/v2/stream*| SSE
+    Browser ==>|/api/v2/stream*| CloudFront
+    CloudFront ==>|OAC SigV4| SSE
     Browser -.->|OAuth redirect| Cognito
 
     %% Auth flows (v3.0 federation)
@@ -125,5 +129,5 @@ graph LR
     class EventBridge,APIGateway,SNS,DLQ messaging
     class Items,Users,Timeseries,OHLC,OAuthStates,MagicTokens,Sessions,S3Model database
     class CloudWatch support
-    class Amplify cdn
+    class Amplify,CloudFront cdn
     class Cognito,Secrets auth

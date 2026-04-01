@@ -17,7 +17,7 @@ from src.lambdas.shared.errors.session_errors import (
     TokenAlreadyUsedError,
     TokenExpiredError,
 )
-from tests.conftest import make_event
+from tests.conftest import get_response_header, make_event
 
 
 @pytest.mark.unit
@@ -179,7 +179,7 @@ class TestMagicLinkRouterAtomicIntegration:
         response = lambda_handler(event, mock_lambda_context)
 
         # Cookies are in headers["Set-Cookie"] (comma-separated string)
-        cookie_str = response.get("headers", {}).get("Set-Cookie", "")
+        cookie_str = get_response_header(response, "Set-Cookie")
         assert "refresh_token" in cookie_str
         assert "httponly" in cookie_str.lower()
 
