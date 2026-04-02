@@ -115,14 +115,17 @@ resource "aws_lambda_function" "this" {
 }
 
 # Feature 1224.4: Lambda alias for stable Function URL deployment.
-# Function URL points to alias (not $LATEST) so that update-function-code
-# doesn't trigger CloudFront re-propagation on the URL. CI publishes a new
-# version, pre-warms it, then flips the alias — zero-downtime deployment.
+# Lambda alias for zero-downtime deployment. CI publishes a new version,
+# pre-warms it, then flips the alias. API Gateway and Function URL both
+# invoke via this alias.
+#
+# Feature 1300: Decoupled from create_function_url — the alias is needed by
+# API Gateway (qualifier = "live") regardless of whether a Function URL exists.
+# Previously gated on create_function_url, which destroyed the alias when
+# Dashboard Lambda disabled its Function URL, breaking API Gateway invocation.
 resource "aws_lambda_alias" "live" {
-  count = var.create_function_url ? 1 : 0
-
   name             = "live"
-  description      = "Active version serving Function URL traffic"
+  description      = "Active version for API Gateway and Function URL traffic"
   function_name    = aws_lambda_function.this.function_name
   function_version = aws_lambda_function.this.version
 
@@ -141,7 +144,7 @@ resource "aws_lambda_function_url" "this" {
   count = var.create_function_url ? 1 : 0
 
   function_name      = aws_lambda_function.this.function_name
-  qualifier          = aws_lambda_alias.live[0].name
+  qualifier          = aws_lambda_alias.live.name
   authorization_type = var.function_url_auth_type
   invoke_mode        = var.function_url_invoke_mode
 
@@ -165,7 +168,7 @@ resource "aws_lambda_permission" "function_url_alias" {
   statement_id           = "FunctionURLAllowPublicAccess"
   action                 = "lambda:InvokeFunctionUrl"
   function_name          = aws_lambda_function.this.function_name
-  qualifier              = aws_lambda_alias.live[0].name
+  qualifier              = aws_lambda_alias.live.name
   principal              = "*"
   function_url_auth_type = "NONE"
 }
