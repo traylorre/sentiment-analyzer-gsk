@@ -17,9 +17,12 @@ export function generateRunId(): string {
   return `E2E_${date}_${rand}`;
 }
 
-/** Dashboard Function URL from environment. */
+/** Dashboard URL from environment (Amplify frontend or local dev server). */
 export function getDashboardUrl(): string {
-  return process.env.DASHBOARD_FUNCTION_URL || process.env.PREPROD_FRONTEND_URL || 'http://localhost:3000';
+  // PREPROD_FRONTEND_URL: set in CI deploy pipeline (Amplify URL)
+  // localhost:3000: Playwright config starts local Next.js dev server
+  // Feature 1300: DASHBOARD_FUNCTION_URL removed (Function URL deleted)
+  return process.env.PREPROD_FRONTEND_URL || 'http://localhost:3000';
 }
 
 /**
