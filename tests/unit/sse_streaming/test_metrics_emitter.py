@@ -5,17 +5,19 @@ Tests MetricsEmitter for emitting connection and event metrics per FR-017.
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from src.lambdas.sse_streaming.metrics import MetricsEmitter
 
 
 class TestMetricsEmitter:
     """Tests for MetricsEmitter class."""
 
-    def test_default_environment(self):
-        """Should use default environment if not specified."""
+    def test_missing_environment_crashes(self):
+        """Should crash if ENVIRONMENT not set and no parameter (Feature 1304)."""
         with patch.dict("os.environ", {}, clear=True):
-            emitter = MetricsEmitter()
-            assert emitter._environment == "dev"
+            with pytest.raises(KeyError, match="ENVIRONMENT"):
+                MetricsEmitter()
 
     def test_custom_environment(self):
         """Should use custom environment if provided."""
