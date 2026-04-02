@@ -24,7 +24,6 @@ For On-Call Engineers:
 import asyncio
 import json
 import logging
-import os
 import re
 from collections.abc import Generator
 
@@ -47,8 +46,6 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
-
-ENVIRONMENT = os.environ.get("ENVIRONMENT", "dev")
 
 # Null byte separator for Lambda Function URL streaming protocol
 # 8 null bytes separate HTTP metadata prelude from response body

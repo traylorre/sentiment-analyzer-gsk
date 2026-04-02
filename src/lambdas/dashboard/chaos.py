@@ -50,7 +50,7 @@ logger = logging.getLogger(__name__)
 # Configuration
 CHAOS_TABLE = os.environ.get("CHAOS_EXPERIMENTS_TABLE", "")
 CHAOS_REPORTS_TABLE = os.environ.get("CHAOS_REPORTS_TABLE", "")
-ENVIRONMENT = os.environ.get("ENVIRONMENT", "dev")
+ENVIRONMENT = os.environ["ENVIRONMENT"]
 SCHEDULER_ROLE_ARN = os.environ.get("SCHEDULER_ROLE_ARN", "")
 # Feature 1290: DASHBOARD_LAMBDA_ARN removed from Terraform env vars (self-reference
 # created Terraform internal cycle). Constructed at runtime from Lambda context.

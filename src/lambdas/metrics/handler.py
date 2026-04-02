@@ -160,7 +160,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     # Get configuration from environment (no fallback - fail fast if missing)
     table_name = os.environ["DATABASE_TABLE"]
-    environment = os.environ.get("ENVIRONMENT", "dev")
+    environment = os.environ["ENVIRONMENT"]
 
     try:
         # Query for stuck items

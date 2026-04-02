@@ -111,7 +111,7 @@ def _get_table_name() -> str:
     """Get DynamoDB table name from environment."""
     table_name = os.environ.get(OHLC_CACHE_TABLE_ENV, "")
     if not table_name:
-        environment = os.environ.get("ENVIRONMENT", "preprod")
+        environment = os.environ["ENVIRONMENT"]
         table_name = f"{environment}-ohlc-cache"
     return table_name
 

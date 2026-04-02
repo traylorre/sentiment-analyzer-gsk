@@ -38,7 +38,6 @@ validate_critical_env_vars(["DASHBOARD_URL"])
 # Environment variables
 SENDGRID_SECRET_ARN = os.environ.get("SENDGRID_SECRET_ARN", "")
 DYNAMODB_TABLE = os.environ["DATABASE_TABLE"]
-ENVIRONMENT = os.environ.get("ENVIRONMENT", "dev")
 FROM_EMAIL = os.environ.get("FROM_EMAIL", "noreply@sentiment-analyzer.com")
 # Pre-chaos stability: No localhost fallback — must be set explicitly per environment
 DASHBOARD_URL = os.environ.get("DASHBOARD_URL", "")
