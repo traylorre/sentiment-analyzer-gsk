@@ -59,7 +59,7 @@ pytestmark = [
 # Dashboard URL - defaults to preprod SSE Lambda Function URL
 DASHBOARD_URL = os.environ.get(
     "DASHBOARD_URL",
-    os.environ.get("SSE_LAMBDA_URL", "http://localhost:8000"),
+    os.environ.get("SSE_LAMBDA_URL", ""),
 )
 
 # All 6 supported resolutions per FR-002
@@ -69,6 +69,8 @@ RESOLUTIONS = ["1m", "5m", "15m", "30m", "1h", "24h"]
 @pytest.fixture
 def dashboard_page(page: Page) -> Page:
     """Navigate to dashboard and wait for initial load."""
+    if not DASHBOARD_URL:
+        pytest.skip("DASHBOARD_URL/SSE_LAMBDA_URL not set")
     page.goto(DASHBOARD_URL)
     # Wait for dashboard to initialize
     page.wait_for_selector("#status-indicator", timeout=10000)

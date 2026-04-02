@@ -22,21 +22,21 @@ import pytest
 @pytest.fixture(scope="module")
 def cloudwatch_client():
     """Create CloudWatch client for preprod region."""
-    region = os.environ.get("AWS_REGION", "us-east-1")
+    region = os.environ["AWS_REGION"]
     return boto3.client("cloudwatch", region_name=region)
 
 
 @pytest.fixture(scope="module")
 def logs_client():
     """Create CloudWatch Logs client for preprod region."""
-    region = os.environ.get("AWS_REGION", "us-east-1")
+    region = os.environ["AWS_REGION"]
     return boto3.client("logs", region_name=region)
 
 
 @pytest.fixture(scope="module")
 def environment():
     """Get current environment."""
-    return os.environ.get("ENVIRONMENT", "preprod")
+    return os.environ["ENVIRONMENT"]
 
 
 class TestLambdaMetricsExist:

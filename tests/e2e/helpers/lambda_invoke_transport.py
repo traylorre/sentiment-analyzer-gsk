@@ -154,7 +154,7 @@ class LambdaInvokeTransport:
         self.function_name = function_name
         self.qualifier = qualifier
         self._client = boto3.client(
-            "lambda", region_name=region or os.environ.get("AWS_REGION", "us-east-1")
+            "lambda", region_name=region or os.environ["AWS_REGION"]
         )
 
     def invoke(
