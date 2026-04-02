@@ -29,7 +29,7 @@ import os
 from typing import Any
 
 # Environment
-ENVIRONMENT = os.environ.get("ENVIRONMENT", "dev")
+ENVIRONMENT = os.environ["ENVIRONMENT"]
 # Pre-chaos stability: No localhost fallback — must be set explicitly per environment
 DASHBOARD_URL = os.environ.get("DASHBOARD_URL", "")
 

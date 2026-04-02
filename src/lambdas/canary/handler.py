@@ -86,9 +86,7 @@ def _submit_test_trace(xray_client) -> str:
     # Add synthetic annotation to current trace
     tracer.put_annotation(key="synthetic", value=True)
     tracer.put_annotation(key="canary_version", value="1.0")
-    tracer.put_annotation(
-        key="environment", value=os.environ.get("ENVIRONMENT", "unknown")
-    )
+    tracer.put_annotation(key="environment", value=os.environ["ENVIRONMENT"])
 
     logger.info("Submitted synthetic trace", extra={"trace_id": trace_id})
     return trace_id
@@ -188,7 +186,7 @@ def _emit_metrics(
                     "Dimensions": [
                         {
                             "Name": "Environment",
-                            "Value": os.environ.get("ENVIRONMENT", "unknown"),
+                            "Value": os.environ["ENVIRONMENT"],
                         },
                     ],
                 },
@@ -200,7 +198,7 @@ def _emit_metrics(
                     "Dimensions": [
                         {
                             "Name": "Environment",
-                            "Value": os.environ.get("ENVIRONMENT", "unknown"),
+                            "Value": os.environ["ENVIRONMENT"],
                         },
                     ],
                 },

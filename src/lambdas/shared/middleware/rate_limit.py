@@ -14,7 +14,6 @@ Security Notes:
 """
 
 import logging
-import os
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -38,9 +37,6 @@ DEFAULT_RATE_LIMITS = {
     # Default fallback
     "default": {"limit": 100, "window_seconds": 60},  # 100 per minute
 }
-
-# Environment
-ENVIRONMENT = os.environ.get("ENVIRONMENT", "dev")
 
 
 class RateLimitExceeded(Exception):
