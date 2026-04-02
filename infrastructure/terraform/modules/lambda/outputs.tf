@@ -16,6 +16,11 @@ output "invoke_arn" {
   value       = aws_lambda_function.this.invoke_arn
 }
 
+output "alias_invoke_arn" {
+  description = "Invoke ARN for the live alias (use for API Gateway integrations)"
+  value       = aws_lambda_alias.live.invoke_arn
+}
+
 output "qualified_arn" {
   description = "Qualified ARN (includes version) of the Lambda function"
   value       = aws_lambda_function.this.qualified_arn

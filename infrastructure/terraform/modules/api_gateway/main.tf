@@ -740,6 +740,7 @@ resource "aws_api_gateway_deployment" "dashboard" {
     # Redeploy when configuration changes (includes Feature 1253 public routes)
     redeployment = sha1(jsonencode(concat(
       [
+        var.lambda_invoke_arn, # Feature 1305: Force redeploy on integration URI change
         aws_api_gateway_resource.proxy.id,
         aws_api_gateway_method.proxy.id,
         aws_api_gateway_method.proxy_options.id,
