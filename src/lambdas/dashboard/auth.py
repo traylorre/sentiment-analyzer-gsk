@@ -2011,7 +2011,7 @@ def _resolve_redirect_uri(origin: str) -> str:
     Security: Only allows origins in the explicit allowlist to prevent
     open redirect attacks.
     """
-    frontend_url = os.environ.get("FRONTEND_URL", "").rstrip("/")
+    frontend_url = os.environ["FRONTEND_URL"].rstrip("/")
     allowed_origins = {"http://localhost:3000"}
     if frontend_url:
         allowed_origins.add(frontend_url)

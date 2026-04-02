@@ -716,7 +716,8 @@ jobs:
           # Run Python import check inside the container
           # Note: Must pass env vars that modules expect at import time (chaos.py, handler.py)
           # Feature 1043: USERS_TABLE and SENTIMENTS_TABLE are required at import time
-          docker run --rm -e ENVIRONMENT=preprod -e USERS_TABLE=preprod-sentiment-users -e SENTIMENTS_TABLE=preprod-sentiment-items --entrypoint python "$IMAGE" -c "
+          # Feature 1307: SSE_LAMBDA_URL is now fail-fast (os.environ["SSE_LAMBDA_URL"])
+          docker run --rm -e ENVIRONMENT=preprod -e USERS_TABLE=preprod-sentiment-users -e SENTIMENTS_TABLE=preprod-sentiment-items -e SSE_LAMBDA_URL=https://smoke-test --entrypoint python "$IMAGE" -c "
           import sys
           print('Testing imports...')
 
@@ -1771,7 +1772,8 @@ jobs:
 
           # Note: Must pass env vars that modules expect at import time (chaos.py, handler.py)
           # Feature 1043: USERS_TABLE and SENTIMENTS_TABLE are required at import time
-          docker run --rm -e ENVIRONMENT=prod -e USERS_TABLE=prod-sentiment-users -e SENTIMENTS_TABLE=prod-sentiment-items --entrypoint python "$IMAGE" -c "
+          # Feature 1307: SSE_LAMBDA_URL is now fail-fast (os.environ["SSE_LAMBDA_URL"])
+          docker run --rm -e ENVIRONMENT=prod -e USERS_TABLE=prod-sentiment-users -e SENTIMENTS_TABLE=prod-sentiment-items -e SSE_LAMBDA_URL=https://smoke-test --entrypoint python "$IMAGE" -c "
           import sys
           from handler import lambda_handler
           import pydantic

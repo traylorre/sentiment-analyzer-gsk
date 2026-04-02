@@ -826,7 +826,7 @@ module "api_gateway" {
 
   environment          = var.environment
   lambda_function_name = module.dashboard_lambda.function_name
-  lambda_invoke_arn    = module.dashboard_lambda.invoke_arn
+  lambda_invoke_arn    = module.dashboard_lambda.alias_invoke_arn
   stage_name           = "v1"
 
   # Feature 1267: Pass CORS allowed origins for documentation/validation

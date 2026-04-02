@@ -11,7 +11,7 @@ For On-Call Engineers:
     Alerts are only triggered if the threshold is crossed and user has email quota.
 
 Security Notes:
-    - Internal endpoints require X-Internal-Auth header
+    - Internal endpoints are restricted to dev/test environments
     - Email quota is tracked per user per day (max 10)
     - Alert cooldown prevents duplicate triggers
 """
@@ -35,7 +35,6 @@ logger = logging.getLogger(__name__)
 
 # Environment variables
 DYNAMODB_TABLE = os.environ["DATABASE_TABLE"]
-INTERNAL_API_KEY = os.environ.get("INTERNAL_API_KEY", "")
 
 
 # Request/Response schemas
@@ -288,17 +287,18 @@ def get_email_quota_status(table: Any) -> EmailQuotaResponse:
 def verify_internal_auth(auth_header: str | None) -> bool:
     """Verify internal API authentication.
 
+    Internal endpoints are only accessible in dev/test environments.
+    Production internal calls use IAM-authenticated Lambda invocations,
+    not HTTP API keys.
+
     Args:
-        auth_header: X-Internal-Auth header value
+        auth_header: X-Internal-Auth header value (unused, kept for
+            interface stability)
 
     Returns:
-        True if authenticated, False otherwise
+        True if environment allows internal access, False otherwise
     """
-    if not INTERNAL_API_KEY:
-        # Allow in dev/test if not configured
-        return os.environ["ENVIRONMENT"] in ("dev", "test")
-
-    return auth_header == INTERNAL_API_KEY
+    return os.environ["ENVIRONMENT"] in ("dev", "test")
 
 
 # Helper functions

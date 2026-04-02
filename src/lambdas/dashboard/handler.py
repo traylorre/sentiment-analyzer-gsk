@@ -102,7 +102,7 @@ USERS_TABLE = os.environ["USERS_TABLE"]
 SENTIMENTS_TABLE = os.environ["SENTIMENTS_TABLE"]
 CHAOS_EXPERIMENTS_TABLE = os.environ.get("CHAOS_EXPERIMENTS_TABLE", "")
 ENVIRONMENT = os.environ["ENVIRONMENT"]
-SSE_LAMBDA_URL = os.environ.get("SSE_LAMBDA_URL", "")
+SSE_LAMBDA_URL = os.environ["SSE_LAMBDA_URL"]
 
 # Feature 1268: Allowed CORS origins for env-gated responses
 # Parsed from comma-separated CORS_ORIGINS env var (set by Terraform from var.cors_allowed_origins)
@@ -111,6 +111,12 @@ _CORS_ALLOWED_ORIGINS: set[str] = {
     for origin in os.environ.get("CORS_ORIGINS", "").split(",")
     if origin.strip()
 }
+# Feature 1307: Warn when CORS_ORIGINS is empty for operational visibility
+if not _CORS_ALLOWED_ORIGINS:
+    logger.warning(
+        "CORS_ORIGINS is empty — cross-origin requests will use Lambda URL CORS config only",
+        extra={"environment": ENVIRONMENT},
+    )
 
 # Module-level init logging (FR-028)
 logger.info(
