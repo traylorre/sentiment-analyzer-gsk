@@ -1,5 +1,6 @@
 %% Comprehensive Dataflow Diagram - All 5 Core Flows
-%% Last updated: 2026-01-05
+%% Last updated: 2026-04-02
+%% Feature 1305: Added API Gateway to Flow 3 (was missing after Function URL removal)
 %% For interview deep-dives: explains WHERE data goes and WHY
 
 flowchart TB
@@ -16,8 +17,9 @@ flowchart TB
         SSEClient[SSE Client<br/>EventSource]
     end
 
-    subgraph Edge["Frontend Layer"]
+    subgraph Edge["Edge Layer"]
         Amplify[Amplify SSR<br/>Next.js]
+        APIGW[API Gateway<br/>REST /api/*<br/>Cognito + WAF]
     end
 
     subgraph Auth["Authentication Boundary"]
@@ -116,7 +118,8 @@ flowchart TB
     %% FLOW 3: DASHBOARD DATA RETRIEVAL (User-facing API)
     %% ═══════════════════════════════════════════════════════════════════════
 
-    UI ==>|HTTPS| Dashboard
+    UI ==>|/api/*| APIGW
+    APIGW ==>|Invoke :live| Dashboard
     Dashboard -->|Validate JWT| Secrets
     Dashboard ==>|Query by_tag GSI| Items
     Dashboard -->|User configs| Users
@@ -160,7 +163,7 @@ flowchart TB
 
     class Tiingo,Finnhub,SendGrid,OAuthProviders external
     class UI,AuthStore,SSEClient browser
-    class Amplify edge
+    class Amplify,APIGW edge
     class Cognito,Secrets auth
     class Ingestion,Analysis,Dashboard,SSE,Notification,Metrics compute
     class SNS,DLQ,EB messaging
