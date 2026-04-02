@@ -296,7 +296,7 @@ def verify_internal_auth(auth_header: str | None) -> bool:
     """
     if not INTERNAL_API_KEY:
         # Allow in dev/test if not configured
-        return os.environ.get("ENVIRONMENT", "dev") in ("dev", "test")
+        return os.environ["ENVIRONMENT"] in ("dev", "test")
 
     return auth_header == INTERNAL_API_KEY
 

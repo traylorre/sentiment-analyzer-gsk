@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 HCAPTCHA_VERIFY_URL = "https://hcaptcha.com/siteverify"
 
 # Environment variables
-ENVIRONMENT = os.environ.get("ENVIRONMENT", "dev")
+ENVIRONMENT = os.environ["ENVIRONMENT"]
 
 
 class CaptchaRequired(Exception):
