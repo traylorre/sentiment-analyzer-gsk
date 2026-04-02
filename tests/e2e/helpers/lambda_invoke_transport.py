@@ -112,11 +112,29 @@ def _build_apigw_rest_event(
 
 
 def _parse_lambda_response(payload: dict) -> LambdaResponse:
-    """Parse Lambda response payload into an httpx-compatible response."""
+    """Parse Lambda response payload into an httpx-compatible response.
+
+    Handles both API Gateway REST v1 (multiValueHeaders) and v2 (headers)
+    response formats. multiValueHeaders takes precedence when present.
+    For multi-value headers, the first value is used (matching httpx behavior).
+    """
     status_code = payload.get("statusCode", 500)
-    raw_headers = payload.get("headers", {})
-    # Normalize header keys to lowercase (matching httpx.Response behavior)
-    headers = {k.lower(): v for k, v in raw_headers.items()}
+
+    # Try multiValueHeaders first (v1 format from APIGatewayRestResolver)
+    headers: dict[str, str] = {}
+    mv_headers = payload.get("multiValueHeaders") or {}
+    if mv_headers:
+        for k, v in mv_headers.items():
+            if isinstance(v, list):
+                non_none = [str(x) for x in v if x is not None]
+                if non_none:
+                    headers[k.lower()] = non_none[0]
+            elif v is not None:
+                headers[k.lower()] = str(v)
+    else:
+        # Fallback to headers (v2 format)
+        raw_headers = payload.get("headers") or {}
+        headers = {k.lower(): str(v) for k, v in raw_headers.items() if v is not None}
 
     # Response body can be in 'body' field
     body = payload.get("body", "")

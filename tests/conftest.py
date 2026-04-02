@@ -109,6 +109,36 @@ if "TIINGO_API_KEY" not in os.environ:
     os.environ["TIINGO_API_KEY"] = "test-tiingo-key"
 if "FINNHUB_API_KEY" not in os.environ:
     os.environ["FINNHUB_API_KEY"] = "test-finnhub-key"
+# Feature 1307: Fail-fast env vars need defaults for test imports
+# These are read at module level (cold start), so must be set before import
+if "SENDGRID_SECRET_ARN" not in os.environ:
+    os.environ["SENDGRID_SECRET_ARN"] = (
+        "arn:aws:secretsmanager:us-east-1:123456789:secret:test-sendgrid"
+    )
+if "DASHBOARD_URL" not in os.environ:
+    os.environ["DASHBOARD_URL"] = "https://test.example.com"
+if "SSE_LAMBDA_URL" not in os.environ:
+    os.environ["SSE_LAMBDA_URL"] = "https://sse.test.example.com/"
+if "FRONTEND_URL" not in os.environ:
+    os.environ["FRONTEND_URL"] = "https://test.example.com"
+if "SNS_TOPIC_ARN" not in os.environ:
+    os.environ["SNS_TOPIC_ARN"] = "arn:aws:sns:us-east-1:123456789:test-topic"
+if "TIINGO_SECRET_ARN" not in os.environ:
+    os.environ["TIINGO_SECRET_ARN"] = (
+        "arn:aws:secretsmanager:us-east-1:123456789:secret:test-tiingo"
+    )
+if "FINNHUB_SECRET_ARN" not in os.environ:
+    os.environ["FINNHUB_SECRET_ARN"] = (
+        "arn:aws:secretsmanager:us-east-1:123456789:secret:test-finnhub"
+    )
+if "COGNITO_USER_POOL_ID" not in os.environ:
+    os.environ["COGNITO_USER_POOL_ID"] = "us-east-1_TestPool"
+if "COGNITO_CLIENT_ID" not in os.environ:
+    os.environ["COGNITO_CLIENT_ID"] = "test-client-id"
+if "COGNITO_DOMAIN" not in os.environ:
+    os.environ["COGNITO_DOMAIN"] = "test-domain"
+if "COGNITO_REDIRECT_URI" not in os.environ:
+    os.environ["COGNITO_REDIRECT_URI"] = "https://test.example.com/callback"
 
 
 # =============================================================================

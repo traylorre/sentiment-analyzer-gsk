@@ -16,23 +16,22 @@ See: specs/082-fix-sse-e2e-timeouts/spec.md
 import os
 from unittest.mock import patch
 
+import pytest
+
 from tests.e2e.helpers.api_client import PreprodAPIClient
 
 
 class TestPreprodAPIClientInit:
     """Tests for PreprodAPIClient initialization and URL configuration."""
 
-    def test_init_with_no_urls_is_empty(self):
-        """Verify empty URL when no env vars set (Feature 1302: no hardcoded fallbacks)."""
+    def test_init_with_no_urls_raises_in_http_mode(self):
+        """Feature 1309: Empty URL raises ValueError in HTTP transport mode."""
         with patch.dict(os.environ, {}, clear=True):
             os.environ.pop("PREPROD_API_URL", None)
             os.environ.pop("SSE_LAMBDA_URL", None)
 
-            client = PreprodAPIClient()
-
-            # No hardcoded fallback — URL is empty when env var missing
-            assert client.base_url == ""
-            assert client.sse_url == ""
+            with pytest.raises(ValueError, match="base_url is required"):
+                PreprodAPIClient()
 
     def test_init_with_base_url_only(self):
         """Verify SSE URL falls back to base URL when not provided."""

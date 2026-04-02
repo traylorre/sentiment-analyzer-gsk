@@ -590,12 +590,12 @@ def _get_config() -> dict[str, str]:
     return {
         "dynamodb_table": os.environ["DATABASE_TABLE"],
         "users_table": os.environ.get("USERS_TABLE", os.environ["DATABASE_TABLE"]),
-        "sns_topic_arn": os.environ.get("SNS_TOPIC_ARN", ""),
+        "sns_topic_arn": os.environ["SNS_TOPIC_ARN"],
         "alert_topic_arn": os.environ.get(
             "ALERT_TOPIC_ARN", ""
         ),  # US4: Operational alerts
-        "tiingo_secret_arn": os.environ.get("TIINGO_SECRET_ARN", ""),
-        "finnhub_secret_arn": os.environ.get("FINNHUB_SECRET_ARN", ""),
+        "tiingo_secret_arn": os.environ["TIINGO_SECRET_ARN"],
+        "finnhub_secret_arn": os.environ["FINNHUB_SECRET_ARN"],
         "model_version": os.environ.get("MODEL_VERSION", "v1.0.0"),
         "aws_region": aws_region,
     }

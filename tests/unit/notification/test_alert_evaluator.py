@@ -1,5 +1,6 @@
 """Unit tests for alert evaluator (T145-T147)."""
 
+import os
 import uuid
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
@@ -406,29 +407,53 @@ class TestGetEmailQuotaStatus:
 
 
 class TestVerifyInternalAuth:
-    """Tests for verify_internal_auth function."""
+    """Tests for verify_internal_auth function.
 
-    @patch("src.lambdas.notification.alert_evaluator.INTERNAL_API_KEY", "secret123")
-    def test_valid_auth(self):
-        """Returns True for valid auth."""
-        assert verify_internal_auth("secret123") is True
+    After Feature 1310, auth is purely environment-gated.
+    INTERNAL_API_KEY was removed (never provisioned in Terraform).
+    """
 
-    @patch("src.lambdas.notification.alert_evaluator.INTERNAL_API_KEY", "secret123")
-    def test_invalid_auth(self):
-        """Returns False for invalid auth."""
-        assert verify_internal_auth("wrong") is False
-
-    @patch("src.lambdas.notification.alert_evaluator.INTERNAL_API_KEY", "")
     @patch.dict("os.environ", {"ENVIRONMENT": "dev"})
-    def test_allows_dev_without_key(self):
-        """Allows dev environment without key."""
+    def test_allows_dev(self):
+        """Allows dev environment."""
         assert verify_internal_auth(None) is True
 
-    @patch("src.lambdas.notification.alert_evaluator.INTERNAL_API_KEY", "")
-    @patch.dict("os.environ", {"ENVIRONMENT": "prod"})
-    def test_rejects_prod_without_key(self):
-        """Rejects prod environment without key."""
+    @patch.dict("os.environ", {"ENVIRONMENT": "test"})
+    def test_allows_test(self):
+        """Allows test environment."""
+        assert verify_internal_auth(None) is True
+
+    @patch.dict("os.environ", {"ENVIRONMENT": "preprod"})
+    def test_rejects_preprod(self):
+        """Rejects preprod environment."""
         assert verify_internal_auth(None) is False
+
+    @patch.dict("os.environ", {"ENVIRONMENT": "prod"})
+    def test_rejects_prod(self):
+        """Rejects prod environment."""
+        assert verify_internal_auth(None) is False
+
+    @patch.dict("os.environ", {"ENVIRONMENT": "dev"})
+    def test_ignores_auth_header(self):
+        """Auth header is ignored -- environment gates only."""
+        assert verify_internal_auth("any-value") is True
+        assert verify_internal_auth("") is True
+        assert verify_internal_auth(None) is True
+
+    @patch.dict("os.environ", {"ENVIRONMENT": "prod"})
+    def test_rejects_prod_even_with_header(self):
+        """Prod rejects regardless of auth header value."""
+        assert verify_internal_auth("secret123") is False
+        assert verify_internal_auth("") is False
+        assert verify_internal_auth(None) is False
+
+    def test_missing_environment_raises(self):
+        """Missing ENVIRONMENT var raises KeyError (fail-fast)."""
+        env_copy = os.environ.copy()
+        env_copy.pop("ENVIRONMENT", None)
+        with patch.dict("os.environ", env_copy, clear=True):
+            with pytest.raises(KeyError, match="ENVIRONMENT"):
+                verify_internal_auth(None)
 
 
 class TestRequestResponseSchemas:
