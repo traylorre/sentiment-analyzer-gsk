@@ -515,7 +515,7 @@ Post-Phase 0 security hardening with httpOnly cookies:
 sequenceDiagram
     participant Browser
     participant Frontend as Next.js Frontend<br/>(Amplify)
-    participant Dashboard as Dashboard Lambda<br/>(Function URL)
+    participant Dashboard as Dashboard Lambda<br/>(API Gateway REST)
     participant Cognito as Cognito User Pool
     participant Users as sentiment-users
 
@@ -919,7 +919,7 @@ sentiment-analyzer-gsk/
 │   ├── lambdas/
 │   │   ├── ingestion/           # Ingestion Lambda
 │   │   ├── analysis/            # Analysis Lambda
-│   │   ├── dashboard/           # Dashboard Lambda (Function URL)
+│   │   ├── dashboard/           # Dashboard Lambda (API Gateway REST)
 │   │   ├── sse_streaming/       # SSE Lambda (real-time streaming)
 │   │   ├── metrics/             # Metrics Lambda (stuck item monitor)
 │   │   └── shared/              # Shared Lambda utilities
