@@ -26,7 +26,7 @@ def get_dynamodb_resource():
     """Get DynamoDB resource."""
     return boto3.resource(
         "dynamodb",
-        region_name=os.environ.get("AWS_REGION", "us-east-1"),
+        region_name=os.environ["AWS_REGION"],
     )
 
 
@@ -40,7 +40,7 @@ def get_dynamodb_table(table_name: str | None = None):
         DynamoDB Table resource
     """
     dynamodb = get_dynamodb_resource()
-    name = table_name or os.environ.get("DYNAMODB_TABLE", "sentiment-analyzer-preprod")
+    name = table_name or os.environ["DYNAMODB_TABLE"]
     return dynamodb.Table(name)
 
 

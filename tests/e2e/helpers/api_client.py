@@ -67,9 +67,7 @@ class PreprodAPIClient:
         self._invoke_transport = None
 
         # Normalize URLs by removing trailing slashes to prevent httpx path issues
-        raw_base_url = base_url or os.environ.get(
-            "PREPROD_API_URL", "https://api.preprod.sentiment-analyzer.com"
-        )
+        raw_base_url = base_url or os.environ.get("PREPROD_API_URL", "")
         self.base_url = raw_base_url.rstrip("/")
 
         # SSE Lambda URL for streaming endpoints

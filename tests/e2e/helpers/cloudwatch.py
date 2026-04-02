@@ -35,7 +35,7 @@ def get_logs_client():
     """Get CloudWatch Logs client."""
     return boto3.client(
         "logs",
-        region_name=os.environ.get("AWS_REGION", "us-east-1"),
+        region_name=os.environ["AWS_REGION"],
     )
 
 
@@ -43,7 +43,7 @@ def get_cloudwatch_client():
     """Get CloudWatch metrics client."""
     return boto3.client(
         "cloudwatch",
-        region_name=os.environ.get("AWS_REGION", "us-east-1"),
+        region_name=os.environ["AWS_REGION"],
     )
 
 

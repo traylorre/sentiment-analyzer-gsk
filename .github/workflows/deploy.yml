@@ -1013,7 +1013,8 @@ jobs:
           echo "  Published version: $VERSION"
 
           echo "🔥 Step 4: Pre-warming version $VERSION..."
-          PREWARM_EVENT='{"version":"2.0","routeKey":"$default","rawPath":"/health","rawQueryString":"","headers":{"content-type":"application/json"},"requestContext":{"accountId":"000000000000","apiId":"prewarm","domainName":"prewarm.lambda-url.us-east-1.on.aws","domainPrefix":"prewarm","http":{"method":"GET","path":"/health","protocol":"HTTP/1.1","sourceIp":"127.0.0.1","userAgent":"deploy-prewarm"},"requestId":"prewarm-health-check","routeKey":"$default","stage":"$default","time":"01/Jan/2024:00:00:00 +0000","timeEpoch":1704067200000},"isBase64Encoded":false}'
+          # Feature 1297: Pre-warm event uses API Gateway REST v1 format (matches production path)
+          PREWARM_EVENT='{"resource":"/health","path":"/health","httpMethod":"GET","headers":{"content-type":"application/json"},"multiValueHeaders":{"content-type":["application/json"]},"queryStringParameters":null,"multiValueQueryStringParameters":null,"pathParameters":{"proxy":"health"},"stageVariables":null,"requestContext":{"accountId":"000000000000","apiId":"prewarm","resourceId":"prewarm","resourcePath":"/health","httpMethod":"GET","path":"/v1/health","stage":"v1","requestId":"prewarm-health-check","identity":{"sourceIp":"127.0.0.1","userAgent":"deploy-prewarm"}},"body":null,"isBase64Encoded":false}'
 
           for attempt in 1 2 3; do
             echo "  Pre-warm attempt $attempt (version $VERSION)..."
@@ -1110,7 +1111,8 @@ jobs:
           # bypasses the URL layer and tests the Lambda function itself.
           echo ""
           echo "Test 1: Health endpoint (direct invoke on alias)..."
-          PREWARM_EVENT='{"version":"2.0","routeKey":"$default","rawPath":"/health","rawQueryString":"","headers":{"content-type":"application/json"},"requestContext":{"accountId":"000000000000","apiId":"smoke","domainName":"smoke.lambda-url.us-east-1.on.aws","domainPrefix":"smoke","http":{"method":"GET","path":"/health","protocol":"HTTP/1.1","sourceIp":"127.0.0.1","userAgent":"deploy-smoke-test"},"requestId":"smoke-health-check","routeKey":"$default","stage":"$default","time":"01/Jan/2024:00:00:00 +0000","timeEpoch":1704067200000},"isBase64Encoded":false}'
+          # Feature 1297: Smoke test uses API Gateway REST v1 format
+          PREWARM_EVENT='{"resource":"/health","path":"/health","httpMethod":"GET","headers":{"content-type":"application/json"},"multiValueHeaders":{"content-type":["application/json"]},"queryStringParameters":null,"multiValueQueryStringParameters":null,"pathParameters":{"proxy":"health"},"stageVariables":null,"requestContext":{"accountId":"000000000000","apiId":"smoke","resourceId":"smoke","resourcePath":"/health","httpMethod":"GET","path":"/v1/health","stage":"v1","requestId":"smoke-health-check","identity":{"sourceIp":"127.0.0.1","userAgent":"deploy-smoke-test"}},"body":null,"isBase64Encoded":false}'
 
           INVOKE_RESULT=$(aws lambda invoke \
             --function-name preprod-sentiment-dashboard \
@@ -1319,7 +1321,8 @@ jobs:
           # Function URLs have CloudFront propagation delay (2-5 min) that makes
           # curl unreliable immediately after deploy. Direct invoke bypasses this.
           echo "1. Warming Dashboard Lambda via direct invoke (alias: live)..."
-          WARMUP_EVENT='{"version":"2.0","routeKey":"$default","rawPath":"/health","rawQueryString":"","headers":{"content-type":"application/json"},"requestContext":{"accountId":"000000000000","apiId":"warmup","domainName":"warmup.lambda-url.us-east-1.on.aws","domainPrefix":"warmup","http":{"method":"GET","path":"/health","protocol":"HTTP/1.1","sourceIp":"127.0.0.1","userAgent":"integration-warmup"},"requestId":"warmup-health","routeKey":"$default","stage":"$default","time":"01/Jan/2024:00:00:00 +0000","timeEpoch":1704067200000},"isBase64Encoded":false}'
+          # Feature 1297: Warmup uses API Gateway REST v1 format
+          WARMUP_EVENT='{"resource":"/health","path":"/health","httpMethod":"GET","headers":{"content-type":"application/json"},"multiValueHeaders":{"content-type":["application/json"]},"queryStringParameters":null,"multiValueQueryStringParameters":null,"pathParameters":{"proxy":"health"},"stageVariables":null,"requestContext":{"accountId":"000000000000","apiId":"warmup","resourceId":"warmup","resourcePath":"/health","httpMethod":"GET","path":"/v1/health","stage":"v1","requestId":"warmup-health","identity":{"sourceIp":"127.0.0.1","userAgent":"integration-warmup"}},"body":null,"isBase64Encoded":false}'
 
           INVOKE_RESULT=$(aws lambda invoke \
             --function-name preprod-sentiment-dashboard \
@@ -1340,7 +1343,8 @@ jobs:
           echo "  ✅ Dashboard Lambda warmed up"
 
           echo "2. Warming /api/v2/metrics via direct invoke..."
-          METRICS_EVENT='{"version":"2.0","routeKey":"$default","rawPath":"/api/v2/metrics","rawQueryString":"","headers":{"content-type":"application/json","authorization":"Bearer '"${WARMUP_USER_ID}"'"},"requestContext":{"accountId":"000000000000","apiId":"warmup","domainName":"warmup.lambda-url.us-east-1.on.aws","domainPrefix":"warmup","http":{"method":"GET","path":"/api/v2/metrics","protocol":"HTTP/1.1","sourceIp":"127.0.0.1","userAgent":"integration-warmup"},"requestId":"warmup-metrics","routeKey":"$default","stage":"$default","time":"01/Jan/2024:00:00:00 +0000","timeEpoch":1704067200000},"isBase64Encoded":false}'
+          # Feature 1297: Metrics warmup uses API Gateway REST v1 format
+          METRICS_EVENT='{"resource":"/{proxy+}","path":"/api/v2/metrics","httpMethod":"GET","headers":{"content-type":"application/json","authorization":"Bearer '"${WARMUP_USER_ID}"'"},"multiValueHeaders":{"content-type":["application/json"],"authorization":["Bearer '"${WARMUP_USER_ID}"'"]},"queryStringParameters":null,"multiValueQueryStringParameters":null,"pathParameters":{"proxy":"api/v2/metrics"},"stageVariables":null,"requestContext":{"accountId":"000000000000","apiId":"warmup","resourceId":"warmup","resourcePath":"/{proxy+}","httpMethod":"GET","path":"/v1/api/v2/metrics","stage":"v1","requestId":"warmup-metrics","identity":{"sourceIp":"127.0.0.1","userAgent":"integration-warmup"}},"body":null,"isBase64Encoded":false}'
 
           INVOKE_RESULT=$(aws lambda invoke \
             --function-name preprod-sentiment-dashboard \

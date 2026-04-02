@@ -93,7 +93,7 @@ def dynamodb_table():
 
     Returns the actual Terraform-deployed table.
     """
-    table_name = os.environ.get("DYNAMODB_TABLE", "dev-sentiment-items")
+    table_name = os.environ["DYNAMODB_TABLE"]
     dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
     return dynamodb.Table(table_name)
 
