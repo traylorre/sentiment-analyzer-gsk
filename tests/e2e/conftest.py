@@ -657,9 +657,9 @@ def dynamodb_table():
     """
     dynamodb = boto3.resource(
         "dynamodb",
-        region_name=os.environ.get("AWS_REGION", "us-east-1"),
+        region_name=os.environ["AWS_REGION"],
     )
-    table_name = os.environ.get("DYNAMODB_TABLE", "sentiment-analyzer-preprod")
+    table_name = os.environ["DYNAMODB_TABLE"]
     return dynamodb.Table(table_name)
 
 
@@ -673,7 +673,7 @@ def cloudwatch_logs_client():
     """
     return boto3.client(
         "logs",
-        region_name=os.environ.get("AWS_REGION", "us-east-1"),
+        region_name=os.environ["AWS_REGION"],
     )
 
 
@@ -687,7 +687,7 @@ def cloudwatch_client():
     """
     return boto3.client(
         "cloudwatch",
-        region_name=os.environ.get("AWS_REGION", "us-east-1"),
+        region_name=os.environ["AWS_REGION"],
     )
 
 

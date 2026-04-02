@@ -33,7 +33,7 @@ TICKERS_WITH_DATA = ["AAPL", "MSFT", "GOOGL", "TSLA", "AMZN"]
 # Dashboard URL
 DASHBOARD_URL = os.environ.get(
     "DASHBOARD_URL",
-    os.environ.get("SSE_LAMBDA_URL", "http://localhost:8000"),
+    os.environ.get("SSE_LAMBDA_URL", ""),
 )
 
 # Preprod API URL (for direct API tests)
@@ -193,6 +193,8 @@ class TestSentimentChartVisual:
     @pytest.fixture
     def dashboard_page(self, page: Page) -> Page:
         """Navigate to dashboard and wait for data to load."""
+        if not DASHBOARD_URL:
+            pytest.skip("DASHBOARD_URL/SSE_LAMBDA_URL not set")
         page.goto(DASHBOARD_URL)
         # Wait for dashboard to initialize (status indicator appears)
         page.wait_for_selector("#status-indicator", timeout=15000)
