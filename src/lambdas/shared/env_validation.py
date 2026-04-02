@@ -22,6 +22,9 @@ def validate_critical_env_vars(var_names: list[str]) -> list[str]:
     Emits structured warning log for each missing var with metric dimension
     for CloudWatch metric filter extraction.
     """
+    # Justified exception: this function validates whether ENVIRONMENT is set.
+    # It cannot require the variable it's checking. "unknown" is a safe sentinel
+    # for logging which environment has missing vars.
     environment = os.environ.get("ENVIRONMENT", "unknown")
     function_name = os.environ.get("AWS_LAMBDA_FUNCTION_NAME", "unknown")
     missing = []

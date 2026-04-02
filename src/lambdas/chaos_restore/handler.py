@@ -31,7 +31,7 @@ from botocore.exceptions import ClientError
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-ENVIRONMENT = os.environ.get("ENVIRONMENT", "dev")
+ENVIRONMENT = os.environ["ENVIRONMENT"]
 AWS_REGION = os.environ.get("CLOUD_REGION") or os.environ.get("AWS_REGION", "us-east-1")
 
 # Lazy-loaded clients

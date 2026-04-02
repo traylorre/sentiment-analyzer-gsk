@@ -37,7 +37,7 @@ class MetricsEmitter:
             environment: Environment name (dev/preprod/prod).
                         Defaults to ENVIRONMENT env var.
         """
-        self._environment = environment or os.environ.get("ENVIRONMENT", "dev")
+        self._environment = environment or os.environ["ENVIRONMENT"]
         self._cloudwatch = None
 
     @property
