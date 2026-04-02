@@ -43,6 +43,7 @@ import boto3
 from botocore.exceptions import ClientError
 from pydantic import BaseModel, Field
 
+from src.lambdas.shared.env_validation import validate_critical_env_vars
 from src.lambdas.shared.logging_utils import get_safe_error_info, sanitize_for_log
 
 logger = logging.getLogger(__name__)
@@ -55,6 +56,8 @@ SCHEDULER_ROLE_ARN = os.environ.get("SCHEDULER_ROLE_ARN", "")
 # Feature 1290: DASHBOARD_LAMBDA_ARN removed from Terraform env vars (self-reference
 # created Terraform internal cycle). Constructed at runtime from Lambda context.
 _FUNCTION_NAME = os.environ.get("AWS_LAMBDA_FUNCTION_NAME", "")
+# Feature 1307: Log when chaos env vars are missing (observability, not fatal)
+validate_critical_env_vars(["CHAOS_EXPERIMENTS_TABLE", "CHAOS_REPORTS_TABLE"])
 _AWS_REGION = os.environ.get(
     "AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
 )

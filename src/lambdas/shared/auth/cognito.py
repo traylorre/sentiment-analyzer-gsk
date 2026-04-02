@@ -51,12 +51,12 @@ class CognitoConfig:
     def from_env(cls) -> "CognitoConfig":
         """Create config from environment variables."""
         return cls(
-            user_pool_id=os.environ.get("COGNITO_USER_POOL_ID", ""),
-            client_id=os.environ.get("COGNITO_CLIENT_ID", ""),
+            user_pool_id=os.environ["COGNITO_USER_POOL_ID"],
+            client_id=os.environ["COGNITO_CLIENT_ID"],
             client_secret=os.environ.get("COGNITO_CLIENT_SECRET"),
-            domain=os.environ.get("COGNITO_DOMAIN", ""),
+            domain=os.environ["COGNITO_DOMAIN"],
             region=os.environ.get("AWS_REGION", "us-east-1"),
-            redirect_uri=os.environ.get("COGNITO_REDIRECT_URI", ""),
+            redirect_uri=os.environ["COGNITO_REDIRECT_URI"],
         )
 
     @property

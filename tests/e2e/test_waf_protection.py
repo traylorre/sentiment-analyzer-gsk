@@ -29,7 +29,10 @@ class TestSQLInjectionBlocked:
 
     @pytest.fixture
     def api_url(self) -> str:
-        return os.environ.get("PREPROD_API_URL", "").rstrip("/")
+        url = os.environ.get("PREPROD_API_URL", "").rstrip("/")
+        if not url:
+            pytest.skip("PREPROD_API_URL not set")
+        return url
 
     @pytest.mark.asyncio
     async def test_sqli_in_query_param_blocked(self, api_url: str) -> None:
@@ -74,7 +77,10 @@ class TestXSSBlocked:
 
     @pytest.fixture
     def api_url(self) -> str:
-        return os.environ.get("PREPROD_API_URL", "").rstrip("/")
+        url = os.environ.get("PREPROD_API_URL", "").rstrip("/")
+        if not url:
+            pytest.skip("PREPROD_API_URL not set")
+        return url
 
     @pytest.mark.asyncio
     async def test_xss_script_tag_blocked(self, api_url: str) -> None:
@@ -105,7 +111,10 @@ class TestOptionsExempt:
 
     @pytest.fixture
     def api_url(self) -> str:
-        return os.environ.get("PREPROD_API_URL", "").rstrip("/")
+        url = os.environ.get("PREPROD_API_URL", "").rstrip("/")
+        if not url:
+            pytest.skip("PREPROD_API_URL not set")
+        return url
 
     @pytest.mark.asyncio
     async def test_options_request_allowed(self, api_url: str) -> None:
@@ -128,7 +137,10 @@ class TestNormalTrafficPasses:
 
     @pytest.fixture
     def api_url(self) -> str:
-        return os.environ.get("PREPROD_API_URL", "").rstrip("/")
+        url = os.environ.get("PREPROD_API_URL", "").rstrip("/")
+        if not url:
+            pytest.skip("PREPROD_API_URL not set")
+        return url
 
     @pytest.mark.asyncio
     async def test_health_check_passes_waf(self, api_url: str) -> None:

@@ -69,6 +69,11 @@ class PreprodAPIClient:
         # Normalize URLs by removing trailing slashes to prevent httpx path issues
         raw_base_url = base_url or os.environ.get("PREPROD_API_URL", "")
         self.base_url = raw_base_url.rstrip("/")
+        if self._transport_mode == "http" and not self.base_url:
+            raise ValueError(
+                "base_url is required for HTTP transport mode. "
+                "Set PREPROD_API_URL environment variable or pass base_url explicitly."
+            )
 
         # SSE Lambda URL for streaming endpoints
         # IMPORTANT: If SSE_LAMBDA_URL is not set, SSE requests will route to base_url

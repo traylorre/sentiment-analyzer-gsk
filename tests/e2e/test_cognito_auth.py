@@ -31,7 +31,10 @@ class TestProtectedEndpoints:
 
     @pytest.fixture
     def api_url(self) -> str:
-        return os.environ.get("PREPROD_API_URL", "").rstrip("/")
+        url = os.environ.get("PREPROD_API_URL", "").rstrip("/")
+        if not url:
+            pytest.skip("PREPROD_API_URL not set")
+        return url
 
     @pytest.mark.asyncio
     async def test_configurations_without_token_returns_401(self, api_url: str) -> None:
@@ -76,7 +79,10 @@ class TestPublicEndpoints:
 
     @pytest.fixture
     def api_url(self) -> str:
-        return os.environ.get("PREPROD_API_URL", "").rstrip("/")
+        url = os.environ.get("PREPROD_API_URL", "").rstrip("/")
+        if not url:
+            pytest.skip("PREPROD_API_URL not set")
+        return url
 
     @pytest.mark.asyncio
     async def test_health_without_token_returns_200(self, api_url: str) -> None:
@@ -124,7 +130,10 @@ class TestCORSOnErrorResponses:
 
     @pytest.fixture
     def api_url(self) -> str:
-        return os.environ.get("PREPROD_API_URL", "").rstrip("/")
+        url = os.environ.get("PREPROD_API_URL", "").rstrip("/")
+        if not url:
+            pytest.skip("PREPROD_API_URL not set")
+        return url
 
     @pytest.mark.asyncio
     async def test_401_includes_cors_allow_origin(self, api_url: str) -> None:
@@ -185,7 +194,10 @@ class TestAnonymousSessions:
 
     @pytest.fixture
     def api_url(self) -> str:
-        return os.environ.get("PREPROD_API_URL", "").rstrip("/")
+        url = os.environ.get("PREPROD_API_URL", "").rstrip("/")
+        if not url:
+            pytest.skip("PREPROD_API_URL not set")
+        return url
 
     @pytest.mark.asyncio
     async def test_uuid_token_on_public_endpoint_works(self, api_url: str) -> None:
