@@ -20,6 +20,8 @@ For Developers:
     - Exception: env-gated 404 responses include application-level CORS
       headers (Feature 1268) because API Gateway does not add CORS to
       Lambda-returned responses
+    - Catch-all @app.not_found handler (Feature 1311) ensures unmatched
+      routes also return CORS headers instead of Powertools' bare 404
 
 Auth (Feature 1039):
     - All /api/* endpoints use session-based auth via Bearer token
@@ -300,6 +302,23 @@ def _make_not_found_response(origin: str | None = None) -> Response:
         body=orjson.dumps({"detail": "Not found"}).decode(),
         headers=headers,
     )
+
+
+# Feature 1311: Catch-all not-found handler with CORS headers.
+# Powertools' default 404 has no CORS headers, causing opaque browser failures.
+# The /{proxy+} API Gateway route forwards ALL requests to this Lambda, so
+# unmatched routes DO reach here — Powertools generates the bare 404, not API GW.
+@app.not_found
+def handle_not_found(exc: Exception) -> Response:
+    """Return 404 with conditional CORS headers for any unmatched route."""
+    logger.debug(
+        "Unmatched route — returning 404 with CORS",
+        extra={
+            "path": app.current_event.path,
+            "method": app.current_event.http_method,
+        },
+    )
+    return _make_not_found_response(_get_request_origin())
 
 
 @app.get("/")
