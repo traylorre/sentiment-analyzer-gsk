@@ -419,11 +419,17 @@ export function PriceSentimentChart({
   // Fit content when data changes to show full selected time range
   // Removed VISIBLE_CANDLES logic - user expects to see full selected range
   // (The old logic limited intraday to ~40 candles, showing only 5-6 days for 1h resolution)
+  // Feature 1316: Defer fitContent by one frame so lightweight-charts processes setData first
   useEffect(() => {
     if (!chartRef.current || (!priceData.length && !sentimentData.length)) return;
 
     // Show all data for the selected time range
-    chartRef.current.timeScale().fitContent();
+    // requestAnimationFrame defers until after the browser paints, giving
+    // lightweight-charts one frame to process the setData() from preceding useEffects
+    const frameId = requestAnimationFrame(() => {
+      chartRef.current?.timeScale().fitContent();
+    });
+    return () => cancelAnimationFrame(frameId);
   }, [priceData, sentimentData, resolution, timeRange]);
 
   // Update series visibility
