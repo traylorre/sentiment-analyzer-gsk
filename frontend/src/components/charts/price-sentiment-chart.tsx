@@ -423,11 +423,22 @@ export function PriceSentimentChart({
   useEffect(() => {
     if (!chartRef.current || (!priceData.length && !sentimentData.length)) return;
 
+    // Debug: log data range and fitContent execution (Feature 1316 investigation)
+    console.log('[fitContent] priceData.length:', priceData.length,
+      'first:', priceData[0]?.date, 'last:', priceData[priceData.length - 1]?.date,
+      'timeRange:', timeRange, 'resolution:', resolution);
+
     // Show all data for the selected time range
     // requestAnimationFrame defers until after the browser paints, giving
     // lightweight-charts one frame to process the setData() from preceding useEffects
     const frameId = requestAnimationFrame(() => {
-      chartRef.current?.timeScale().fitContent();
+      if (!chartRef.current) return;
+      chartRef.current.timeScale().fitContent();
+      // Debug: log visible range after fitContent
+      const visibleRange = chartRef.current.timeScale().getVisibleLogicalRange();
+      const visibleTimeRange = chartRef.current.timeScale().getVisibleRange();
+      console.log('[fitContent] after fitContent - visibleLogicalRange:', visibleRange,
+        'visibleTimeRange:', visibleTimeRange);
     });
     return () => cancelAnimationFrame(frameId);
   }, [priceData, sentimentData, resolution, timeRange]);
