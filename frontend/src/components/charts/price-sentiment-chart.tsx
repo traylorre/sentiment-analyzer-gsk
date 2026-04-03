@@ -391,6 +391,15 @@ export function PriceSentimentChart({
 
     candleSeriesRef.current.setData(chartData);
 
+    // Feature 1316: fitContent immediately after setData in the SAME useEffect.
+    // A separate useEffect + rAF caused a race condition: the first render's rAF
+    // (with partial sentiment data) would set a narrow viewport, and the second
+    // render's rAF was cancelled by React's cleanup before it could expand it.
+    // Sibling charts (atr-chart, sentiment-chart) already use this pattern.
+    if (chartRef.current) {
+      chartRef.current.timeScale().fitContent();
+    }
+
     // Update gap shader with gap positions
     if (gapShaderRef.current) {
       gapShaderRef.current.updateGaps(gapInfos);
@@ -414,34 +423,16 @@ export function PriceSentimentChart({
     }));
 
     sentimentSeriesRef.current.setData(chartData);
+
+    // Feature 1316: fitContent after sentiment data too (may arrive after price data)
+    if (chartRef.current) {
+      chartRef.current.timeScale().fitContent();
+    }
   }, [sentimentData, resolution]);
 
-  // Fit content when data changes to show full selected time range
-  // Removed VISIBLE_CANDLES logic - user expects to see full selected range
-  // (The old logic limited intraday to ~40 candles, showing only 5-6 days for 1h resolution)
-  // Feature 1316: Defer fitContent by one frame so lightweight-charts processes setData first
-  useEffect(() => {
-    if (!chartRef.current || (!priceData.length && !sentimentData.length)) return;
-
-    // Debug: log data range and fitContent execution (Feature 1316 investigation)
-    console.log('[fitContent] priceData.length:', priceData.length,
-      'first:', priceData[0]?.date, 'last:', priceData[priceData.length - 1]?.date,
-      'timeRange:', timeRange, 'resolution:', resolution);
-
-    // Show all data for the selected time range
-    // requestAnimationFrame defers until after the browser paints, giving
-    // lightweight-charts one frame to process the setData() from preceding useEffects
-    const frameId = requestAnimationFrame(() => {
-      if (!chartRef.current) return;
-      chartRef.current.timeScale().fitContent();
-      // Debug: log visible range after fitContent
-      const visibleRange = chartRef.current.timeScale().getVisibleLogicalRange();
-      const visibleTimeRange = chartRef.current.timeScale().getVisibleRange();
-      console.log('[fitContent] after fitContent - visibleLogicalRange:', visibleRange,
-        'visibleTimeRange:', visibleTimeRange);
-    });
-    return () => cancelAnimationFrame(frameId);
-  }, [priceData, sentimentData, resolution, timeRange]);
+  // Note: fitContent() is now called inside the setData useEffect above (Feature 1316).
+  // A separate useEffect + rAF had a race condition where React's cleanup cancelled
+  // the rAF before it could fire with the full dataset.
 
   // Update series visibility
   useEffect(() => {
