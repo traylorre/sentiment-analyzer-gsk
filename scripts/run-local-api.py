@@ -27,7 +27,9 @@ API Keys:
 import logging
 import os
 import sys
-from http.server import BaseHTTPRequestHandler, HTTPServer
+import threading
+import uuid
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -172,6 +174,14 @@ def create_mock_tables():
     return mock
 
 
+# Serializes lambda_handler() invocation across threads.
+# Powertools APIGatewayRestResolver stores request state on a module-level
+# app.current_event singleton — concurrent execution clobbers auth tokens,
+# request bodies, and CORS origins. ThreadingHTTPServer accepts connections
+# concurrently (no TCP backlog) while this lock serializes handler execution.
+_handler_lock = threading.Lock()
+
+
 class _FakeLambdaContext:
     """Minimal Lambda context for local invocation."""
 
@@ -180,54 +190,68 @@ class _FakeLambdaContext:
     invoked_function_arn = (
         "arn:aws:lambda:us-east-1:000000000000:function:local-dashboard"
     )
-    aws_request_id = "local-request-id"
+
+    def __init__(self):
+        self.aws_request_id = str(uuid.uuid4())
 
 
 class LambdaProxyHandler(BaseHTTPRequestHandler):
     """HTTP handler that translates requests to Lambda events."""
 
     def _build_event(self, method: str) -> dict:
-        """Build a Lambda Function URL v2 event from the HTTP request.
+        """Build an API Gateway REST v1 proxy event from the HTTP request.
 
-        The dashboard handler uses LambdaFunctionUrlResolver which expects
-        v2 event format with requestContext.http.method and rawPath.
+        The dashboard handler uses APIGatewayRestResolver (Powertools) which
+        expects v1 event format with top-level httpMethod and path fields.
+        Format matches the canonical make_event() fixture in tests/conftest.py.
         """
         parsed = urlparse(self.path)
         content_length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(content_length).decode() if content_length else None
 
         headers = {k.lower(): v for k, v in self.headers.items()}
-        query_params = (
-            {k: v[0] for k, v in parse_qs(parsed.query).items()}
-            if parsed.query
-            else None
-        )
-        raw_query_string = parsed.query or ""
 
-        # Lambda Function URL v2 event format (LambdaFunctionUrlResolver)
+        # API Gateway REST v1: queryStringParameters uses last value,
+        # multiValueQueryStringParameters preserves all values
+        if parsed.query:
+            multi_qs = parse_qs(parsed.query, keep_blank_values=True)
+            single_qs = {k: v[-1] for k, v in multi_qs.items()}
+        else:
+            single_qs = None
+            multi_qs = None
+
+        # pathParameters: greedy proxy capture (/{proxy+})
+        proxy_path = parsed.path.lstrip("/")
+        path_params = {"proxy": proxy_path} if proxy_path else None
+
+        # API Gateway REST v1 proxy event format
         return {
-            "version": "2.0",
-            "rawPath": parsed.path,
-            "rawQueryString": raw_query_string,
+            "resource": "/{proxy+}" if proxy_path else "/",
+            "path": parsed.path,
+            "httpMethod": method,
             "headers": headers,
-            "queryStringParameters": query_params or {},
+            "multiValueHeaders": {k: [v] for k, v in headers.items()},
+            "queryStringParameters": single_qs,
+            "multiValueQueryStringParameters": multi_qs,
+            "pathParameters": path_params,
+            "stageVariables": None,
             "body": body,
             "isBase64Encoded": False,
             "requestContext": {
                 "accountId": "000000000000",
                 "apiId": "local",
-                "domainName": "localhost:8000",
-                "domainPrefix": "localhost",
-                "http": {
-                    "method": method,
-                    "path": parsed.path,
-                    "protocol": "HTTP/1.1",
+                "resourceId": "local",
+                "resourcePath": "/{proxy+}" if proxy_path else "/",
+                "httpMethod": method,
+                "path": f"/v1{parsed.path}",
+                "stage": "v1",
+                "requestId": "local-request",
+                "identity": {
                     "sourceIp": "127.0.0.1",
                     "userAgent": headers.get("user-agent", "local-dev"),
                 },
-                "requestId": "local-request",
-                "routeKey": "$default",
-                "stage": "$default",
+                "time": "",
+                "timeEpoch": 0,
             },
         }
 
@@ -235,7 +259,10 @@ class LambdaProxyHandler(BaseHTTPRequestHandler):
         from src.lambdas.dashboard.handler import lambda_handler
 
         event = self._build_event(method)
-        response = lambda_handler(event, _FakeLambdaContext())
+        context = _FakeLambdaContext()
+
+        with _handler_lock:
+            response = lambda_handler(event, context)
 
         status_code = response.get("statusCode", 500)
         body = response.get("body", "")
@@ -303,7 +330,8 @@ def main():
     mock = create_mock_tables()
 
     try:
-        server = HTTPServer(("127.0.0.1", port), LambdaProxyHandler)
+        server = ThreadingHTTPServer(("127.0.0.1", port), LambdaProxyHandler)
+        server.daemon_threads = True
         logger.info(f"Starting local API server on http://localhost:{port}")
         logger.info("Press Ctrl+C to stop")
         logger.info("")
