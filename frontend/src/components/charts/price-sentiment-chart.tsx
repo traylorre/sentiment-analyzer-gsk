@@ -20,7 +20,7 @@ import { formatSentimentScore, formatChartDate, fillGaps, isGapMarker } from '@/
 import { useChartData } from '@/hooks/use-chart-data';
 import { useHaptic } from '@/hooks/use-haptic';
 import type { TimeRange, OHLCResolution, ChartSentimentSource, PriceCandle, SentimentPoint, GapMarker } from '@/types/chart';
-import { RESOLUTION_LABELS } from '@/types/chart';
+import { RESOLUTION_LABELS, getNextTimeRange, shouldUpgradeTimeRange } from '@/types/chart';
 import { GapShaderPrimitive } from './primitives';
 import { useApiHealthStore, selectIsUnreachable } from '@/stores/api-health-store';
 
@@ -106,6 +106,12 @@ export function PriceSentimentChart({
   const sentimentSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const gapShaderRef = useRef<GapShaderPrimitive | null>(null);
 
+  // 1318: Refs for zoom-out auto-upgrade subscription callback
+  const dataLengthRef = useRef(0);
+  const timeRangeRef = useRef<TimeRange>(initialTimeRange);
+  const upgradeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const justFitContentRef = useRef(false);
+
   const [isReady, setIsReady] = useState(false);
   const [tooltip, setTooltip] = useState<TooltipData | null>(null);
   // T026: Read initial timeRange from sessionStorage (persist across ticker switches)
@@ -149,6 +155,7 @@ export function PriceSentimentChart({
     if (typeof window !== 'undefined') {
       sessionStorage.setItem('ohlc_preferred_time_range', timeRange);
     }
+    timeRangeRef.current = timeRange;
   }, [timeRange]);
 
   // Fetch chart data with resolution support (T020)
@@ -334,6 +341,27 @@ export function PriceSentimentChart({
       });
     }
 
+    // 1318: Subscribe to visible logical range changes for zoom-out auto-upgrade
+    const handleVisibleRangeChange = (logicalRange: { from: number; to: number } | null) => {
+      if (!logicalRange) return;
+      if (justFitContentRef.current) return;
+      const dataLen = dataLengthRef.current;
+      if (dataLen === 0) return;
+      if (upgradeTimeoutRef.current) return;
+
+      if (shouldUpgradeTimeRange(logicalRange, dataLen)) {
+        upgradeTimeoutRef.current = setTimeout(() => {
+          upgradeTimeoutRef.current = null;
+          const next = getNextTimeRange(timeRangeRef.current);
+          if (next) setTimeRange(next);
+        }, 500);
+      }
+    };
+
+    if (interactive) {
+      chart.timeScale().subscribeVisibleLogicalRangeChange(handleVisibleRangeChange);
+    }
+
     // Handle resize
     const handleResize = () => {
       if (containerRef.current && chartRef.current) {
@@ -347,6 +375,14 @@ export function PriceSentimentChart({
     setIsReady(true);
 
     return () => {
+      // 1318: Clean up zoom-out auto-upgrade
+      if (interactive) {
+        chart.timeScale().unsubscribeVisibleLogicalRangeChange(handleVisibleRangeChange);
+      }
+      if (upgradeTimeoutRef.current) {
+        clearTimeout(upgradeTimeoutRef.current);
+        upgradeTimeoutRef.current = null;
+      }
       window.removeEventListener('resize', handleResize);
       chart.remove();
       chartRef.current = null;
@@ -397,8 +433,13 @@ export function PriceSentimentChart({
     // render's rAF was cancelled by React's cleanup before it could expand it.
     // Sibling charts (atr-chart, sentiment-chart) already use this pattern.
     if (chartRef.current) {
+      justFitContentRef.current = true;
       chartRef.current.timeScale().fitContent();
+      setTimeout(() => { justFitContentRef.current = false; }, 100);
     }
+
+    // 1318: Track data length for zoom-out auto-upgrade threshold calculation
+    dataLengthRef.current = chartData.length;
 
     // Update gap shader with gap positions
     if (gapShaderRef.current) {
@@ -426,7 +467,9 @@ export function PriceSentimentChart({
 
     // Feature 1316: fitContent after sentiment data too (may arrive after price data)
     if (chartRef.current) {
+      justFitContentRef.current = true;
       chartRef.current.timeScale().fitContent();
+      setTimeout(() => { justFitContentRef.current = false; }, 100);
     }
   }, [sentimentData, resolution]);
 
