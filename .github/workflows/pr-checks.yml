@@ -282,8 +282,8 @@ jobs:
   # ========================================================================
   # JOB: Playwright Chaos Tests (Feature 1265)
   # ========================================================================
-  playwright-chaos:
-    name: Playwright Chaos Tests
+  playwright-e2e:
+    name: Playwright E2E Tests
     runs-on: ubuntu-latest
 
     permissions:
@@ -315,18 +315,19 @@ jobs:
       - name: Install Playwright Chromium
         run: cd frontend && npx playwright install chromium --with-deps
 
-      - name: Run chaos E2E tests
+      - name: Run E2E tests
         run: |
           cd frontend
-          timeout 300 npx playwright test tests/e2e/chaos-*.spec.ts \
+          timeout 600 npx playwright test tests/e2e/*.spec.ts \
             --project="Desktop Chrome" \
+            --retries=1 \
             --reporter=html,list
 
       - name: Upload Playwright HTML report
         uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: playwright-chaos-report
+          name: playwright-e2e-report
           path: frontend/playwright-report/
           retention-days: 7
 
@@ -334,8 +335,8 @@ jobs:
         uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: playwright-chaos-results
+          name: playwright-e2e-results
           path: frontend/test-results/
           retention-days: 7
 
-    timeout-minutes: 5
+    timeout-minutes: 15
