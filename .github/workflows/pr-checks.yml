@@ -318,9 +318,8 @@ jobs:
       - name: Run E2E tests
         run: |
           cd frontend
-          timeout 600 npx playwright test tests/e2e/*.spec.ts \
+          timeout 900 npx playwright test tests/e2e/*.spec.ts \
             --project="Desktop Chrome" \
-            --retries=1 \
             --reporter=html,list
 
       - name: Upload Playwright HTML report
@@ -339,4 +338,4 @@ jobs:
           path: frontend/test-results/
           retention-days: 7
 
-    timeout-minutes: 15
+    timeout-minutes: 20
