@@ -2,6 +2,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { PriceSentimentChart } from '@/components/charts/price-sentiment-chart';
 
+// 1318: Track visible range callbacks for zoom-out auto-upgrade tests
+let visibleRangeCallbacks: Array<(range: { from: number; to: number } | null) => void> = [];
+
 // Mock lightweight-charts
 vi.mock('lightweight-charts', () => ({
   createChart: vi.fn(() => ({
@@ -18,6 +21,10 @@ vi.mock('lightweight-charts', () => ({
     timeScale: vi.fn(() => ({
       fitContent: vi.fn(),
       setVisibleLogicalRange: vi.fn(),
+      subscribeVisibleLogicalRangeChange: vi.fn((cb: (range: { from: number; to: number } | null) => void) => {
+        visibleRangeCallbacks.push(cb);
+      }),
+      unsubscribeVisibleLogicalRangeChange: vi.fn(),
     })),
     subscribeCrosshairMove: vi.fn(),
     remove: vi.fn(),
@@ -91,6 +98,7 @@ describe('PriceSentimentChart', () => {
     sessionStorageData = {};
     useChartDataCalls = [];
     mockChartDataOverride = null;
+    visibleRangeCallbacks = [];
   });
 
   afterEach(() => {
@@ -332,6 +340,100 @@ describe('PriceSentimentChart', () => {
       render(<PriceSentimentChart ticker="AAPL" />);
 
       expect(screen.getByText(/Intraday data unavailable/i)).toBeInTheDocument();
+    });
+  });
+
+  describe('1318: Zoom-out auto-upgrade', () => {
+    it('should subscribe to visible logical range changes on mount (interactive)', () => {
+      render(<PriceSentimentChart ticker="AAPL" interactive={true} />);
+
+      // When interactive, the subscription callback should have been registered
+      expect(visibleRangeCallbacks.length).toBeGreaterThan(0);
+    });
+
+    it('should NOT subscribe when not interactive', () => {
+      render(<PriceSentimentChart ticker="AAPL" interactive={false} />);
+
+      // Non-interactive mode should not register any callbacks
+      expect(visibleRangeCallbacks.length).toBe(0);
+    });
+
+    it('should upgrade from 1M to 3M when zoomed out past data bounds', async () => {
+      // Start with 1M time range
+      sessionStorageData['ohlc_preferred_time_range'] = '1M';
+
+      render(<PriceSentimentChart ticker="AAPL" interactive={true} />);
+
+      // Wait for justFitContentRef to reset (100ms setTimeout in fitContent guard)
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      // Simulate zooming out past data bounds
+      // With 2 data points, 30% threshold = 0.6
+      // logicalRange { from: -5, to: 10 } => left overshoot = 5, right overshoot = max(0, 10-1) = 9, total = 14 > 0.6
+      if (visibleRangeCallbacks.length > 0) {
+        visibleRangeCallbacks[0]({ from: -5, to: 10 });
+      }
+
+      // The debounce is 500ms, wait for it
+      await waitFor(() => {
+        expect(mockSessionStorage.setItem).toHaveBeenCalledWith(
+          'ohlc_preferred_time_range',
+          '3M'
+        );
+      }, { timeout: 2000 });
+    });
+
+    it('should not upgrade when visible range is within data bounds', async () => {
+      sessionStorageData['ohlc_preferred_time_range'] = '1M';
+
+      render(<PriceSentimentChart ticker="AAPL" interactive={true} />);
+
+      // Range within data bounds - no overshoot
+      if (visibleRangeCallbacks.length > 0) {
+        visibleRangeCallbacks[0]({ from: 0, to: 1 });
+      }
+
+      // Wait a bit and verify no upgrade happened
+      await new Promise((resolve) => setTimeout(resolve, 600));
+
+      // Should still be 1M, not upgraded
+      const setItemCalls = mockSessionStorage.setItem.mock.calls.filter(
+        (call: [string, string]) => call[0] === 'ohlc_preferred_time_range'
+      );
+      const lastTimeRangeSet = setItemCalls[setItemCalls.length - 1]?.[1];
+      expect(lastTimeRangeSet).toBe('1M');
+    });
+
+    it('should not upgrade past 1Y (max range)', async () => {
+      sessionStorageData['ohlc_preferred_time_range'] = '1Y';
+
+      render(<PriceSentimentChart ticker="AAPL" interactive={true} />);
+
+      // Simulate zoom out past bounds while at 1Y
+      if (visibleRangeCallbacks.length > 0) {
+        visibleRangeCallbacks[0]({ from: -10, to: 20 });
+      }
+
+      // Wait for debounce
+      await new Promise((resolve) => setTimeout(resolve, 600));
+
+      // Should still be 1Y - no upgrade possible
+      const setItemCalls = mockSessionStorage.setItem.mock.calls.filter(
+        (call: [string, string]) => call[0] === 'ohlc_preferred_time_range'
+      );
+      const lastTimeRangeSet = setItemCalls[setItemCalls.length - 1]?.[1];
+      expect(lastTimeRangeSet).toBe('1Y');
+    });
+
+    it('should handle null logical range without crashing', () => {
+      render(<PriceSentimentChart ticker="AAPL" interactive={true} />);
+
+      // Simulate null range (chart destroying)
+      if (visibleRangeCallbacks.length > 0) {
+        expect(() => {
+          visibleRangeCallbacks[0](null);
+        }).not.toThrow();
+      }
     });
   });
 });
