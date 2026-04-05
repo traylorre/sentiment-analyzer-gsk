@@ -5,10 +5,11 @@
 #
 # Rule evaluation order (FR-008):
 #   Priority 0: OPTIONS ALLOW (bypass rate counter — FR-010)
-#   Priority 1: AWSManagedRulesCommonRuleSet (SQLi, XSS — FR-003, FR-004)
-#   Priority 2: AWSManagedRulesKnownBadInputsRuleSet (Log4j, CVEs)
-#   Priority 3: AWSManagedRulesBotControlRuleSet (COUNT → BLOCK — FR-005)
-#   Priority 4: Per-IP rate-based (2000/5min — FR-002)
+#   Priority 1: AWSManagedRulesCommonRuleSet (XSS — FR-004)
+#   Priority 2: AWSManagedRulesSQLiRuleSet (SQLi — FR-003)
+#   Priority 3: AWSManagedRulesKnownBadInputsRuleSet (Log4j, CVEs)
+#   Priority 4: AWSManagedRulesBotControlRuleSet (COUNT → BLOCK — FR-005)
+#   Priority 5: Per-IP rate-based (2000/5min — FR-002)
 #   Default: ALLOW
 
 # Custom response body for BLOCK actions (FR-006: CORS headers on WAF 403)
@@ -63,9 +64,9 @@ resource "aws_wafv2_web_acl" "main" {
   }
 
   # ===================================================================
-  # Rule 1 (Priority 1): AWS Managed Common Rules — FR-003, FR-004
+  # Rule 1 (Priority 1): AWS Managed Common Rules — FR-004
   # ===================================================================
-  # Includes SQL injection, XSS, size constraints, and known bad patterns.
+  # Includes XSS, size constraints, and known bad patterns.
   rule {
     name     = "aws-managed-common-rules"
     priority = 1
@@ -89,12 +90,39 @@ resource "aws_wafv2_web_acl" "main" {
   }
 
   # ===================================================================
-  # Rule 2 (Priority 2): AWS Known Bad Inputs
+  # Rule 2 (Priority 2): AWS SQL Injection Rules — FR-003
+  # ===================================================================
+  # Dedicated SQL injection detection for query params, body, cookies, URI.
+  # Feature 1312: CommonRuleSet does NOT include SQLi rules.
+  rule {
+    name     = "aws-managed-sqli-rules"
+    priority = 2
+
+    override_action {
+      none {}
+    }
+
+    statement {
+      managed_rule_group_statement {
+        name        = "AWSManagedRulesSQLiRuleSet"
+        vendor_name = "AWS"
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "${var.environment}-waf-sqli-rules"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  # ===================================================================
+  # Rule 3 (Priority 3): AWS Known Bad Inputs
   # ===================================================================
   # Log4j, Java deserialization, known CVE patterns.
   rule {
     name     = "aws-managed-known-bad-inputs"
-    priority = 2
+    priority = 3
 
     override_action {
       none {}
@@ -115,14 +143,14 @@ resource "aws_wafv2_web_acl" "main" {
   }
 
   # ===================================================================
-  # Rule 3 (Priority 3): AWS Bot Control — FR-005
+  # Rule 4 (Priority 4): AWS Bot Control — FR-005
   # ===================================================================
   # Starts in COUNT mode for monitoring. Switch to BLOCK after verification.
   dynamic "rule" {
     for_each = var.enable_bot_control ? [1] : []
     content {
       name     = "aws-managed-bot-control"
-      priority = 3
+      priority = 4
 
       override_action {
         dynamic "none" {
@@ -157,12 +185,12 @@ resource "aws_wafv2_web_acl" "main" {
   }
 
   # ===================================================================
-  # Rule 4 (Priority 4): Per-IP Rate Limiting — FR-002
+  # Rule 5 (Priority 5): Per-IP Rate Limiting — FR-002
   # ===================================================================
   # Blocks IPs exceeding threshold in 5-minute sliding window.
   rule {
     name     = "per-ip-rate-limit"
-    priority = 4
+    priority = 5
 
     action {
       block {

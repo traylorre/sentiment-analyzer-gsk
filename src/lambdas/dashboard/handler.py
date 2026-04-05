@@ -7,7 +7,7 @@ Powertools-based Lambda handler serving the sentiment analyzer dashboard API v2.
 For On-Call Engineers:
     If dashboard is not accessible:
     1. Check API Gateway is deployed and healthy
-    2. Verify CORS is enabled in API Gateway gateway responses
+    2. Verify CORS_ORIGINS env var includes the requesting domain
     3. Verify DynamoDB table exists and Lambda has permissions
 
     See SC-05 in ON_CALL_SOP.md for dashboard-related incidents.
@@ -16,10 +16,14 @@ For Developers:
     - Uses AWS Lambda Powertools APIGatewayRestResolver for routing
     - Expects API Gateway REST v1 event format (httpMethod, path, requestContext.identity)
     - Static files served from /static/ prefix
-    - CORS handled at infrastructure level (API Gateway gateway responses)
-    - Exception: env-gated 404 responses include application-level CORS
-      headers (Feature 1268) because API Gateway does not add CORS to
-      Lambda-returned responses
+    - CORS handled at Lambda application level via response post-processing
+      in lambda_handler() (Feature 1314). Supports multi-origin via
+      _CORS_ALLOWED_ORIGINS parsed from CORS_ORIGINS env var. Powertools
+      CorsConfig only supports single origin, so post-processing is required.
+    - API Gateway gateway responses handle CORS only for preflight (OPTIONS)
+      and gateway errors (401/403/5xx) — these never reach Lambda.
+    - Catch-all @app.not_found handler (Feature 1311) sets CORS headers on
+      404 responses; the post-processor is idempotent and skips these.
 
 Auth (Feature 1039):
     - All /api/* endpoints use session-based auth via Bearer token
@@ -255,6 +259,14 @@ def _get_chaos_user_id_from_event(event: dict) -> str | None:
     return auth_context.user_id
 
 
+# CORS header constants (shared between _make_not_found_response and _inject_cors_headers)
+_CORS_ALLOW_METHODS = "GET,POST,PUT,DELETE,PATCH,OPTIONS"
+_CORS_ALLOW_HEADERS = (
+    "Content-Type,Authorization,Accept,Cache-Control,"
+    "Last-Event-ID,X-Amzn-Trace-Id,X-User-ID"
+)
+
+
 def _make_not_found_response(origin: str | None = None) -> Response:
     """Create 404 response with conditional CORS headers for env-gated routes.
 
@@ -282,11 +294,8 @@ def _make_not_found_response(origin: str | None = None) -> Response:
             {
                 "Access-Control-Allow-Origin": origin,
                 "Access-Control-Allow-Credentials": "true",
-                "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,PATCH,OPTIONS",
-                "Access-Control-Allow-Headers": (
-                    "Content-Type,Authorization,Accept,Cache-Control,"
-                    "Last-Event-ID,X-Amzn-Trace-Id,X-User-ID"
-                ),
+                "Access-Control-Allow-Methods": _CORS_ALLOW_METHODS,
+                "Access-Control-Allow-Headers": _CORS_ALLOW_HEADERS,
             }
         )
         logger.debug(
@@ -300,6 +309,76 @@ def _make_not_found_response(origin: str | None = None) -> Response:
         body=orjson.dumps({"detail": "Not found"}).decode(),
         headers=headers,
     )
+
+
+def _inject_cors_headers(response: dict, event: dict) -> dict:
+    """Add CORS headers to response if request origin is allowed.
+
+    Feature 1314: Post-processes all responses from app.resolve() to add
+    multi-origin CORS headers. Powertools CorsConfig only supports a single
+    allow_origin string, but this application needs multi-origin support
+    (Amplify production + localhost for dev).
+
+    Idempotent: skips injection if Access-Control-Allow-Origin is already
+    present (e.g., from _make_not_found_response via @app.not_found).
+
+    Args:
+        response: API Gateway REST v1 proxy response dict from app.resolve().
+        event: Raw Lambda event dict (for Origin header extraction).
+
+    Returns:
+        The response dict with CORS headers added (mutated in place).
+    """
+    # Extract Origin from raw event headers (case-insensitive).
+    # Cannot use app.current_event here — we're outside the Powertools
+    # request context after resolve() has returned.
+    event_headers = event.get("headers") or {}
+    origin = next(
+        (v for k, v in event_headers.items() if k.lower() == "origin"),
+        None,
+    )
+
+    # Ensure multiValueHeaders exists (v1 proxy format)
+    mv_headers = response.setdefault("multiValueHeaders", {})
+
+    # Idempotency: if ACAO already set (e.g., by @app.not_found → _make_not_found_response),
+    # skip injection to avoid duplicating or overwriting existing CORS headers.
+    for key in mv_headers:
+        if key.lower() == "access-control-allow-origin":
+            return response
+
+    # Also check singular headers dict (belt-and-suspenders)
+    for key in response.get("headers") or {}:
+        if key.lower() == "access-control-allow-origin":
+            return response
+
+    # Always add Vary: Origin for cache correctness (CDN/proxy must vary on Origin)
+    mv_headers["Vary"] = ["Origin"]
+
+    if origin and origin in _CORS_ALLOWED_ORIGINS:
+        mv_headers["Access-Control-Allow-Origin"] = [origin]
+        mv_headers["Access-Control-Allow-Credentials"] = ["true"]
+        mv_headers["Access-Control-Allow-Methods"] = [_CORS_ALLOW_METHODS]
+        mv_headers["Access-Control-Allow-Headers"] = [_CORS_ALLOW_HEADERS]
+
+    return response
+
+
+# Feature 1311: Catch-all not-found handler with CORS headers.
+# Powertools' default 404 has no CORS headers, causing opaque browser failures.
+# The /{proxy+} API Gateway route forwards ALL requests to this Lambda, so
+# unmatched routes DO reach here — Powertools generates the bare 404, not API GW.
+@app.not_found
+def handle_not_found(exc: Exception) -> Response:
+    """Return 404 with conditional CORS headers for any unmatched route."""
+    logger.debug(
+        "Unmatched route — returning 404 with CORS",
+        extra={
+            "path": app.current_event.path,
+            "method": app.current_event.http_method,
+        },
+    )
+    return _make_not_found_response(_get_request_origin())
 
 
 @app.get("/")
@@ -1717,6 +1796,13 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         }
 
     response = app.resolve(event, context)
+
+    # Feature 1314: Add CORS headers to all responses.
+    # Powertools CorsConfig only supports single origin; we need multi-origin.
+    # Post-processes using _CORS_ALLOWED_ORIGINS (same set used by
+    # _make_not_found_response for 404s). Idempotent — won't overwrite
+    # headers already set by @app.not_found handler.
+    response = _inject_cors_headers(response, event)
 
     # Feature 1224: Flush cache metrics to CloudWatch if interval elapsed
     try:

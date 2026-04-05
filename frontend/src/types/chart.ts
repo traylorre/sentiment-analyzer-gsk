@@ -40,6 +40,36 @@ export const RESOLUTION_LABELS: Record<OHLCResolution, string> = {
   'D': 'Day',
 };
 
+/** Ordered time ranges for zoom-out auto-upgrade */
+export const TIME_RANGE_ORDER: TimeRange[] = ['1W', '1M', '3M', '6M', '1Y'];
+
+/**
+ * Return the next wider time range, or null if already at max (1Y).
+ */
+export function getNextTimeRange(current: TimeRange): TimeRange | null {
+  const idx = TIME_RANGE_ORDER.indexOf(current);
+  if (idx === -1 || idx >= TIME_RANGE_ORDER.length - 1) return null;
+  return TIME_RANGE_ORDER[idx + 1];
+}
+
+/**
+ * Determine whether the chart's visible logical range has zoomed out
+ * far enough past the loaded data to warrant fetching a wider time range.
+ *
+ * Returns true when the total blank space (left overshoot + right overshoot)
+ * exceeds 30% of the loaded data width.
+ */
+export function shouldUpgradeTimeRange(
+  logicalRange: { from: number; to: number },
+  dataLength: number,
+): boolean {
+  if (dataLength === 0) return false;
+  const leftOvershoot = Math.max(0, -logicalRange.from);
+  const rightOvershoot = Math.max(0, logicalRange.to - (dataLength - 1));
+  const totalOvershoot = leftOvershoot + rightOvershoot;
+  return totalOvershoot > dataLength * 0.3;
+}
+
 /** Single day's OHLC price data */
 export interface PriceCandle {
   date: string;
