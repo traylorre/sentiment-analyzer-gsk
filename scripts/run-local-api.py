@@ -89,6 +89,16 @@ os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "testing")
 os.environ.setdefault("AWS_XRAY_SDK_ENABLED", "false")
 os.environ.setdefault("SSE_LAMBDA_URL", "http://localhost:8000/api/v2/stream")
 
+# OAuth / Cognito config for local development (Feature 1323)
+# Enables OAuth button rendering on /auth/signin. Buttons link to fake Cognito
+# domain — clicking them won't complete a real OAuth flow, but the UI renders.
+os.environ.setdefault("ENABLED_OAUTH_PROVIDERS", "google,github")
+os.environ.setdefault("COGNITO_USER_POOL_ID", "us-east-1_localdev")
+os.environ.setdefault("COGNITO_CLIENT_ID", "local-client-id")
+os.environ.setdefault("COGNITO_DOMAIN", "local-auth")
+os.environ.setdefault("COGNITO_REDIRECT_URI", "http://localhost:3000/auth/callback")
+os.environ.setdefault("FRONTEND_URL", "http://localhost:3000")
+
 
 def create_mock_tables():
     """Create mock DynamoDB tables using moto."""
