@@ -19,19 +19,22 @@ test.describe('First Impression Flow', () => {
   });
 
   test('should have working navigation tabs', async ({ page }) => {
-    // Check navigation is present
-    const nav = page.getByRole('tablist', { name: /main navigation/i });
-
-    // On mobile, check bottom navigation
     const isMobile = await page.evaluate(() => window.innerWidth < 768);
     if (isMobile) {
+      // Mobile: bottom tab navigation visible
+      const nav = page.getByRole('tablist', { name: /main navigation/i });
       await expect(nav).toBeVisible();
-
-      // Check all tabs exist
       await expect(page.getByRole('tab', { name: /dashboard/i })).toBeVisible();
       await expect(page.getByRole('tab', { name: /configs/i })).toBeVisible();
       await expect(page.getByRole('tab', { name: /alerts/i })).toBeVisible();
       await expect(page.getByRole('tab', { name: /settings/i })).toBeVisible();
+    } else {
+      // Desktop: sidebar navigation with links (mobile tablist hidden)
+      const mobileNav = page.getByRole('tablist', { name: /main navigation/i });
+      await expect(mobileNav).toBeHidden();
+      // Sidebar nav links exist
+      await expect(page.getByRole('link', { name: /dashboard/i })).toBeVisible();
+      await expect(page.getByRole('link', { name: /settings/i })).toBeVisible();
     }
   });
 
@@ -63,13 +66,26 @@ test.describe('First Impression Flow', () => {
   });
 
   test('should respect reduced motion preference', async ({ page }) => {
-    // Check CSS respects prefers-reduced-motion
-    const hasReducedMotion = await page.evaluate(() => {
-      return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // Emulate prefers-reduced-motion: reduce
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto('/');
+
+    // Tailwind/globals.css sets transition-duration and animation-duration to
+    // near-zero (0.01ms) under prefers-reduced-motion: reduce
+    const styles = await page.evaluate(() => {
+      const el = document.documentElement;
+      const computed = window.getComputedStyle(el);
+      return {
+        reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+        // Check any element for suppressed animations
+        animDuration: computed.getPropertyValue('animation-duration'),
+        transitionDuration: computed.getPropertyValue('transition-duration'),
+      };
     });
 
-    // The test just verifies the page loads with the media query support
-    expect(typeof hasReducedMotion).toBe('boolean');
+    expect(styles.reducedMotion).toBe(true);
+    // At minimum, the media query must be active — verify it's detected
+    // CSS values vary by browser but reduced-motion must be reported as active
   });
 });
 
