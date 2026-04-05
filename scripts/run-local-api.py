@@ -85,6 +85,7 @@ os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "testing")
 
 # Disable X-Ray tracing for local development
 os.environ.setdefault("AWS_XRAY_SDK_ENABLED", "false")
+os.environ.setdefault("SSE_LAMBDA_URL", "http://localhost:8000/api/v2/stream")
 
 
 def create_mock_tables():
