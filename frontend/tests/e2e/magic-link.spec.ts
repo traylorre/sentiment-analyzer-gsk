@@ -9,9 +9,8 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Magic Link Authentication (US2)', () => {
-  const testEmail = `e2e-magiclink-${Date.now()}@test.example.com`;
-
   test('requesting magic link shows confirmation message', async ({ page }) => {
+    const testEmail = `e2e-${test.info().testId}@test.example.com`;
     await page.goto('/auth/signin');
 
     const emailInput = page.getByLabel(/email address/i);
@@ -27,6 +26,7 @@ test.describe('Magic Link Authentication (US2)', () => {
   });
 
   test('valid magic link token authenticates user', async ({ page }) => {
+    const testEmail = `e2e-${test.info().testId}@test.example.com`;
     // Step 1: Request magic link via the UI
     await page.goto('/auth/signin');
     const emailInput = page.getByLabel(/email address/i);

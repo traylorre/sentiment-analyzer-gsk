@@ -85,7 +85,7 @@ test.describe('Dialog Dismissal (Feature 1247)', () => {
 
   test('delete dialog: cancel preserves item', async ({ page }) => {
     // Create a config first
-    const configName = `e2e-delete-test-${Date.now()}`;
+    const configName = `e2e-${test.info().testId}`;
     await createTestConfig(page, configName);
 
     // Navigate to configs and find the config
@@ -119,7 +119,7 @@ test.describe('Dialog Dismissal (Feature 1247)', () => {
 
   test('delete dialog: escape closes', async ({ page }) => {
     // Create a config first
-    const configName = `e2e-escape-test-${Date.now()}`;
+    const configName = `e2e-${test.info().testId}`;
     await createTestConfig(page, configName);
 
     // Navigate to configs and find the config
