@@ -15,10 +15,11 @@ Usage:
 import os
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import AsyncGenerator, Callable
 
 import boto3
 import pytest
+import pytest_asyncio
 from botocore.config import Config
 
 # Import cache clearing functions for test isolation
@@ -29,6 +30,7 @@ from src.lambdas.shared.circuit_breaker import (
     clear_cache as clear_circuit_breaker_cache,
 )
 from src.lambdas.shared.quota_tracker import clear_quota_cache
+from tests.e2e.helpers.api_client import PreprodAPIClient
 
 # =============================================================================
 # LocalStack Configuration
@@ -195,3 +197,23 @@ def clear_all_caches():
     clear_config_cache()
     clear_sentiment_cache()
     clear_metrics_cache()
+
+
+# =============================================================================
+# Preprod API Client (Feature 1313 - canary fixture scope fix)
+# =============================================================================
+# Mirrors the fixture in tests/e2e/conftest.py:463-471.
+# Needed because test_canary_preprod.py lives in tests/integration/ but
+# requires the api_client fixture, which pytest can only resolve from
+# conftest.py files in the same directory or above — not from sibling dirs.
+
+
+@pytest_asyncio.fixture
+async def api_client() -> AsyncGenerator[PreprodAPIClient]:
+    """Preprod API client for making HTTP requests.
+
+    Function-scoped due to pytest-asyncio's asyncio_default_fixture_loop_scope=function.
+    httpx.AsyncClient is lightweight, so per-test creation is acceptable.
+    """
+    async with PreprodAPIClient() as client:
+        yield client

@@ -20,7 +20,7 @@ import { formatSentimentScore, formatChartDate, fillGaps, isGapMarker } from '@/
 import { useChartData } from '@/hooks/use-chart-data';
 import { useHaptic } from '@/hooks/use-haptic';
 import type { TimeRange, OHLCResolution, ChartSentimentSource, PriceCandle, SentimentPoint, GapMarker } from '@/types/chart';
-import { RESOLUTION_LABELS } from '@/types/chart';
+import { RESOLUTION_LABELS, getNextTimeRange, shouldUpgradeTimeRange } from '@/types/chart';
 import { GapShaderPrimitive } from './primitives';
 import { useApiHealthStore, selectIsUnreachable } from '@/stores/api-health-store';
 
@@ -106,6 +106,12 @@ export function PriceSentimentChart({
   const sentimentSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const gapShaderRef = useRef<GapShaderPrimitive | null>(null);
 
+  // 1318: Refs for zoom-out auto-upgrade subscription callback
+  const dataLengthRef = useRef(0);
+  const timeRangeRef = useRef<TimeRange>(initialTimeRange);
+  const upgradeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const justFitContentRef = useRef(false);
+
   const [isReady, setIsReady] = useState(false);
   const [tooltip, setTooltip] = useState<TooltipData | null>(null);
   // T026: Read initial timeRange from sessionStorage (persist across ticker switches)
@@ -149,6 +155,7 @@ export function PriceSentimentChart({
     if (typeof window !== 'undefined') {
       sessionStorage.setItem('ohlc_preferred_time_range', timeRange);
     }
+    timeRangeRef.current = timeRange;
   }, [timeRange]);
 
   // Fetch chart data with resolution support (T020)
@@ -334,6 +341,27 @@ export function PriceSentimentChart({
       });
     }
 
+    // 1318: Subscribe to visible logical range changes for zoom-out auto-upgrade
+    const handleVisibleRangeChange = (logicalRange: { from: number; to: number } | null) => {
+      if (!logicalRange) return;
+      if (justFitContentRef.current) return;
+      const dataLen = dataLengthRef.current;
+      if (dataLen === 0) return;
+      if (upgradeTimeoutRef.current) return;
+
+      if (shouldUpgradeTimeRange(logicalRange, dataLen)) {
+        upgradeTimeoutRef.current = setTimeout(() => {
+          upgradeTimeoutRef.current = null;
+          const next = getNextTimeRange(timeRangeRef.current);
+          if (next) setTimeRange(next);
+        }, 500);
+      }
+    };
+
+    if (interactive) {
+      chart.timeScale().subscribeVisibleLogicalRangeChange(handleVisibleRangeChange);
+    }
+
     // Handle resize
     const handleResize = () => {
       if (containerRef.current && chartRef.current) {
@@ -347,6 +375,14 @@ export function PriceSentimentChart({
     setIsReady(true);
 
     return () => {
+      // 1318: Clean up zoom-out auto-upgrade
+      if (interactive) {
+        chart.timeScale().unsubscribeVisibleLogicalRangeChange(handleVisibleRangeChange);
+      }
+      if (upgradeTimeoutRef.current) {
+        clearTimeout(upgradeTimeoutRef.current);
+        upgradeTimeoutRef.current = null;
+      }
       window.removeEventListener('resize', handleResize);
       chart.remove();
       chartRef.current = null;
@@ -391,6 +427,20 @@ export function PriceSentimentChart({
 
     candleSeriesRef.current.setData(chartData);
 
+    // Feature 1316: fitContent immediately after setData in the SAME useEffect.
+    // A separate useEffect + rAF caused a race condition: the first render's rAF
+    // (with partial sentiment data) would set a narrow viewport, and the second
+    // render's rAF was cancelled by React's cleanup before it could expand it.
+    // Sibling charts (atr-chart, sentiment-chart) already use this pattern.
+    if (chartRef.current) {
+      justFitContentRef.current = true;
+      chartRef.current.timeScale().fitContent();
+      setTimeout(() => { justFitContentRef.current = false; }, 100);
+    }
+
+    // 1318: Track data length for zoom-out auto-upgrade threshold calculation
+    dataLengthRef.current = chartData.length;
+
     // Update gap shader with gap positions
     if (gapShaderRef.current) {
       gapShaderRef.current.updateGaps(gapInfos);
@@ -414,17 +464,18 @@ export function PriceSentimentChart({
     }));
 
     sentimentSeriesRef.current.setData(chartData);
+
+    // Feature 1316: fitContent after sentiment data too (may arrive after price data)
+    if (chartRef.current) {
+      justFitContentRef.current = true;
+      chartRef.current.timeScale().fitContent();
+      setTimeout(() => { justFitContentRef.current = false; }, 100);
+    }
   }, [sentimentData, resolution]);
 
-  // Fit content when data changes to show full selected time range
-  // Removed VISIBLE_CANDLES logic - user expects to see full selected range
-  // (The old logic limited intraday to ~40 candles, showing only 5-6 days for 1h resolution)
-  useEffect(() => {
-    if (!chartRef.current || (!priceData.length && !sentimentData.length)) return;
-
-    // Show all data for the selected time range
-    chartRef.current.timeScale().fitContent();
-  }, [priceData, sentimentData, resolution, timeRange]);
+  // Note: fitContent() is now called inside the setData useEffect above (Feature 1316).
+  // A separate useEffect + rAF had a race condition where React's cleanup cancelled
+  // the rAF before it could fire with the full dataset.
 
   // Update series visibility
   useEffect(() => {
