@@ -10,7 +10,11 @@ import { test, expect } from '@playwright/test';
 test.describe('Sign-In Interaction', () => {
   test.setTimeout(30_000);
 
-  test('Guest button opens user menu on desktop', async ({ page }) => {
+  test('Guest button opens user menu on desktop', async ({ page, isMobile }) => {
+    if (isMobile) {
+      test.skip(true, 'Guest text hidden on mobile — see mobile-specific test below');
+      return;
+    }
     await page.goto('/');
 
     // Wait for auth initialization (skeleton → button)
@@ -31,7 +35,8 @@ test.describe('Sign-In Interaction', () => {
     await page.goto('/');
 
     // On mobile, the "Guest" text is hidden (sm:inline). Use data-testid.
-    const trigger = page.locator('[data-testid="user-menu-trigger"]');
+    // Scope to header (mobile) since desktop sidebar aside is hidden at this viewport.
+    const trigger = page.locator('header [data-testid="user-menu-trigger"]');
     await expect(trigger).toBeVisible({ timeout: 10_000 });
 
     await trigger.click();
@@ -41,7 +46,11 @@ test.describe('Sign-In Interaction', () => {
     await expect(menuItem).toBeVisible({ timeout: 5_000 });
   });
 
-  test('menu closes on Escape key', async ({ page }) => {
+  test('menu closes on Escape key', async ({ page, isMobile }) => {
+    if (isMobile) {
+      test.skip(true, 'Guest text hidden on mobile');
+      return;
+    }
     await page.goto('/');
 
     const guestButton = page.getByRole('button', { name: /guest/i });
@@ -79,7 +88,7 @@ test.describe('OAuth Flow Regression (Feature 1245)', () => {
     await expect(page.getByRole('button', { name: /github/i })).not.toBeVisible();
 
     // Magic link email form should still be present
-    await expect(page.getByPlaceholder(/email/i)).toBeVisible();
+    await expect(page.getByPlaceholder(/you@example/i)).toBeVisible();
   });
 
   test('magic link form loads immediately without waiting for provider check', async ({ page }) => {

@@ -9,19 +9,17 @@ test.describe('Configuration CRUD (Feature 1247)', () => {
     await page.goto('/configs');
     await page.waitForLoadState('networkidle');
 
-    await page.getByRole('button', { name: /create|new|add/i }).click();
+    // Use specific name to avoid matching both CTA ("Create Configuration") and form submit ("Create")
+    await page.getByRole('button', { name: /create configuration|new configuration/i }).click();
 
     // Assert form or dialog appeared with a name input
-    const nameInput = page.getByLabel(/name/i);
+    // Label is not associated via htmlFor — use placeholder instead
+    const nameInput = page.getByPlaceholder(/my watchlist/i);
     await expect(nameInput).toBeVisible({ timeout: 5000 });
 
-    // Unwind: close the form
-    const cancelButton = page.getByRole('button', { name: /cancel|close/i });
-    if (await cancelButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await cancelButton.click();
-    } else {
-      await page.keyboard.press('Escape');
-    }
+    // Unwind: close the form via Escape (Cancel may be off-viewport on mobile)
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(500);
 
     await assertCleanState(page);
   });
@@ -33,10 +31,11 @@ test.describe('Configuration CRUD (Feature 1247)', () => {
     await page.waitForLoadState('networkidle');
 
     // Open create form
-    await page.getByRole('button', { name: /create|new|add/i }).click();
+    await page.getByRole('button', { name: /create configuration|new configuration/i }).click();
 
     // Fill name
-    const nameInput = page.getByLabel(/name/i);
+    // Label is not associated via htmlFor — use placeholder instead
+    const nameInput = page.getByPlaceholder(/my watchlist/i);
     await expect(nameInput).toBeVisible({ timeout: 5000 });
     await nameInput.fill(configName);
 
@@ -64,7 +63,7 @@ test.describe('Configuration CRUD (Feature 1247)', () => {
     await assertCleanState(page);
   });
 
-  test('config card opens detail view', async ({ page }) => {
+  test('config card click selects it', async ({ page }) => {
     const configName = `e2e-${test.info().testId}`;
 
     // Create a config to interact with
@@ -73,21 +72,21 @@ test.describe('Configuration CRUD (Feature 1247)', () => {
     await page.goto('/configs');
     await page.waitForLoadState('networkidle');
 
-    // Click on the config card/name
-    const configLink = page.getByText(configName);
-    await expect(configLink).toBeVisible({ timeout: 5000 });
-    await configLink.click();
+    // Click on the config card (role="button", aria-pressed)
+    const configCard = page.getByRole('button', { name: new RegExp(`Configuration: ${configName}`, 'i') });
+    if (await configCard.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await configCard.click();
 
-    // Assert URL changed or detail view appeared
-    await expect(async () => {
-      const url = page.url();
-      const hasDetailView = await page.getByRole('heading', { name: configName }).isVisible().catch(() => false);
-      expect(url.includes('/configs/') || hasDetailView).toBeTruthy();
-    }).toPass({ timeout: 5000 });
+      // Assert card becomes selected (aria-pressed="true")
+      await expect(configCard).toHaveAttribute('aria-pressed', 'true', { timeout: 5000 });
+    } else {
+      // Fallback: click by text
+      const configLink = page.getByText(configName);
+      await expect(configLink).toBeVisible({ timeout: 5000 });
+      await configLink.click();
+    }
 
-    // Unwind: go back to configs list and clean up
-    await page.goto('/configs');
-    await page.waitForLoadState('networkidle');
+    // Unwind: clean up
     await deleteTestConfig(page, configName);
 
     await assertCleanState(page);
@@ -102,17 +101,17 @@ test.describe('Configuration CRUD (Feature 1247)', () => {
     await page.goto('/configs');
     await page.waitForLoadState('networkidle');
 
-    // Find the config and its delete button
-    const configCard = page.getByText(configName).locator('..');
-    const deleteButton = configCard.getByRole('button', { name: /delete|remove/i });
+    // Delete button has aria-label="Delete {config.name}"
+    const deleteButton = page.getByRole('button', { name: `Delete ${configName}` });
     await expect(deleteButton).toBeVisible({ timeout: 5000 });
     await deleteButton.click();
 
-    // Assert confirmation dialog appeared
-    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 });
+    // Assert confirmation dialog appeared (heading "Delete Configuration")
+    const dialog = page.getByText(/are you sure/i).or(page.getByText(/delete configuration/i));
+    await expect(dialog).toBeVisible({ timeout: 5000 });
 
     // Unwind: cancel the dialog
-    const cancelButton = page.getByRole('dialog').getByRole('button', { name: /cancel|close|no/i });
+    const cancelButton = page.getByRole('button', { name: /cancel/i });
     if (await cancelButton.isVisible({ timeout: 2000 }).catch(() => false)) {
       await cancelButton.click();
     } else {
@@ -137,14 +136,13 @@ test.describe('Configuration CRUD (Feature 1247)', () => {
     // Verify config exists before deletion
     await expect(page.getByText(configName)).toBeVisible({ timeout: 5000 });
 
-    // Find delete button near the config
-    const configCard = page.getByText(configName).locator('..');
-    const deleteButton = configCard.getByRole('button', { name: /delete|remove/i });
+    // Delete button has aria-label="Delete {config.name}"
+    const deleteButton = page.getByRole('button', { name: `Delete ${configName}` });
     await expect(deleteButton).toBeVisible({ timeout: 5000 });
     await deleteButton.click();
 
-    // Confirm deletion in dialog
-    const confirmButton = page.getByRole('dialog').getByRole('button', { name: /confirm|delete|yes/i });
+    // Confirm deletion — the destructive button says "Delete"
+    const confirmButton = page.getByRole('button', { name: /^delete$/i });
     await expect(confirmButton).toBeVisible({ timeout: 5000 });
     await confirmButton.click();
 

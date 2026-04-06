@@ -7,7 +7,7 @@
  * - OAuth route interception for mocked login flows
  */
 
-import { type Page } from '@playwright/test';
+import { type Page, type BrowserContext } from '@playwright/test';
 
 /** Generate unique test run ID for data isolation. */
 export function generateRunId(): string {
@@ -42,6 +42,34 @@ export async function createAnonymousSession(baseUrl: string): Promise<{
     throw new Error(`Anonymous session creation failed: HTTP ${response.status}`);
   }
   return response.json();
+}
+
+/**
+ * Set up session cookies to bypass Next.js middleware auth checks.
+ * Creates an anonymous session via the API, then sets browser cookies
+ * so the middleware treats the user as authenticated (non-anonymous).
+ *
+ * Use this for tests that navigate to protected routes like /alerts.
+ */
+export async function setupAuthSession(context: BrowserContext): Promise<void> {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  const session = await createAnonymousSession(apiUrl);
+
+  // Set cookies that the Next.js middleware checks for route protection
+  await context.addCookies([
+    {
+      name: 'sentiment-access-token',
+      value: session.user_id,
+      domain: 'localhost',
+      path: '/',
+    },
+    {
+      name: 'sentiment-is-anonymous',
+      value: 'false', // Pretend non-anonymous to pass upgraded route check
+      domain: 'localhost',
+      path: '/',
+    },
+  ]);
 }
 
 /**

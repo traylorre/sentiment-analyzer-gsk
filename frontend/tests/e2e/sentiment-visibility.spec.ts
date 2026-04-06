@@ -70,8 +70,8 @@ test.describe('Sentiment Data Visibility', () => {
     const chart = page.getByRole('img', { name: /price and sentiment/i });
     await chart.waitFor({ timeout: 15000 });
 
-    // Click 1M time range button
-    await page.getByRole('button', { name: /^1M$/i }).click();
+    // Click 1M time range button (aria-label is "1M time range")
+    await page.getByRole('button', { name: /1M time range/i }).click();
 
     // Wait for chart to update
     await page.waitForTimeout(2000);
