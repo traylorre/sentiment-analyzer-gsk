@@ -52,7 +52,9 @@ export async function createAnonymousSession(baseUrl: string): Promise<{
  * Use this for tests that navigate to protected routes like /alerts.
  */
 export async function setupAuthSession(context: BrowserContext): Promise<void> {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  // Use 127.0.0.1 (not localhost) to avoid IPv6 ::1 resolution in Node 18+
+  // which causes ECONNREFUSED when Python server binds to IPv4 only
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
   const session = await createAnonymousSession(apiUrl);
 
   // Set cookies that the Next.js middleware checks for route protection
