@@ -2,20 +2,26 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { waitForAccessibilityTree } from './helpers/a11y-helpers';
+import { forceErrorBoundary } from './helpers/chaos-helpers';
 
 /**
- * Chaos: Accessibility During Degraded States (Feature 1265, US4/FR-010/SC-005)
+ * Chaos: Accessibility Scanning During Degraded States (Feature 1265, US4/FR-010/SC-005)
  *
- * Validates that degraded UI states maintain accessibility:
- * - Error boundary fallback passes WCAG audit
- * - Error boundary buttons are keyboard-focusable
+ * PURPOSE: Automated WCAG compliance scanning of the error boundary fallback UI.
+ * Uses axe-core to detect structural a11y violations (missing labels, broken ARIA,
+ * focus management issues).
  *
- * T025 (health banner a11y) was DELETED: triggerHealthBanner fires consecutive
- * API failures that trigger the error boundary BEFORE the health banner appears,
- * making it test the wrong thing. Redundant with T026/T027 below.
+ * SCOPE: axe-core automated scanning ONLY. Does NOT test:
+ * - Keyboard navigation (covered by T024 in chaos-error-boundary.spec.ts)
+ * - Screen reader announcements (requires manual testing)
+ * - Color contrast (disabled — dark theme error boundary has known contrast issues)
  *
- * Scope: Automated structural checks only (ARIA attributes, keyboard navigation,
- * focus management). Manual screen reader testing is out of scope.
+ * T025 (health banner a11y) DELETED: triggerHealthBanner fires consecutive API failures
+ * that trigger the error boundary BEFORE the banner appears.
+ *
+ * T027 (keyboard focusability) MOVED to chaos-error-boundary.spec.ts T024 to consolidate
+ * error boundary tests in one file. That test covers the same 3 buttons (Try Again,
+ * Reload Page, Go Home) with .focus() + .toBeFocused() assertions.
  */
 test.describe('Chaos: Accessibility During Degradation', () => {
   // a11y tests stack waitForAccessibilityTree + AxeBuilder.analyze
@@ -26,29 +32,27 @@ test.describe('Chaos: Accessibility During Degradation', () => {
   test('error boundary fallback has zero critical accessibility violations', async ({
     page,
   }) => {
-    // Force error boundary — must use addInitScript so the flag survives navigation.
-    // page.evaluate() sets it on the CURRENT page; goto() loads a NEW page without it.
-    await page.addInitScript(() => {
-      (window as any).__TEST_FORCE_ERROR = true;
-    });
-    await page.goto('/');
+    await forceErrorBoundary(page);
 
-    await expect(
-      page.getByText(/something went wrong/i),
-    ).toBeVisible({ timeout: 5000 });
-
-    // Wait for error boundary to fully render with accessible buttons
-    // Increase timeout from default 2000ms — error boundary renders after
-    // ErrorTrigger's useEffect → setState → re-render → throw → catch cycle
+    // Wait for error boundary to fully render with accessible buttons.
+    // Timeout increased from default 2000ms — error boundary renders after
+    // ErrorTrigger's useEffect → setState → re-render → throw → catch cycle.
     await waitForAccessibilityTree(page, {
       selector: 'button[type="button"]',
       attributes: ['type'],
       timeout: 10000,
     });
 
-    // Run axe-core scan — exclude color-contrast which is a known issue in dark theme
-    // error boundary (tracked separately). Testing structural a11y here, not theme colors.
+    // Run axe-core scan SCOPED to the error boundary container (role="alert").
+    // Per Playwright a11y docs: AxeBuilder.include() constrains the scan to a
+    // specific part of the page, preventing false positives from unrelated components.
+    //
+    // color-contrast is disabled because the error boundary uses red-on-dark-bg
+    // color scheme that has known WCAG AA contrast ratio issues in dark theme.
+    // This is tracked separately and is a DESIGN decision (red error state on dark bg),
+    // not a structural a11y bug.
     const results = await new AxeBuilder({ page })
+      .include('[role="alert"]')
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
       .disableRules(['color-contrast'])
       .analyze();
@@ -66,49 +70,5 @@ test.describe('Chaos: Accessibility During Degradation', () => {
     }
 
     expect(critical).toEqual([]);
-  });
-
-  // T027: Error boundary buttons are keyboard-focusable
-  test('error boundary buttons are keyboard-focusable with accessible labels', async ({
-    page,
-  }) => {
-    // Force error boundary — addInitScript survives navigation
-    await page.addInitScript(() => {
-      (window as any).__TEST_FORCE_ERROR = true;
-    });
-    await page.goto('/');
-
-    await expect(
-      page.getByText(/something went wrong/i),
-    ).toBeVisible({ timeout: 5000 });
-
-    // Wait for error boundary buttons to be fully accessible
-    // Increase timeout — error boundary renders after useEffect cycle
-    await waitForAccessibilityTree(page, {
-      selector: 'button[type="button"]',
-      attributes: ['type'],
-      timeout: 10000,
-    });
-
-    // Verify buttons exist and have accessible names
-    const tryAgainButton = page.getByRole('button', { name: /try again/i });
-    const reloadButton = page.getByRole('button', { name: /reload page/i });
-    const goHomeButton = page.getByRole('link', { name: /go home/i }).or(
-      page.getByRole('button', { name: /go home/i }),
-    );
-
-    await expect(tryAgainButton).toBeVisible();
-    await expect(reloadButton).toBeVisible();
-    await expect(goHomeButton).toBeVisible();
-
-    // Verify keyboard focusability by tabbing and checking focus
-    await tryAgainButton.focus();
-    await expect(tryAgainButton).toBeFocused();
-
-    await reloadButton.focus();
-    await expect(reloadButton).toBeFocused();
-
-    await goHomeButton.focus();
-    await expect(goHomeButton).toBeFocused();
   });
 });
