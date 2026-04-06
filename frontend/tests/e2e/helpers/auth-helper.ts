@@ -25,23 +25,65 @@ export function getDashboardUrl(): string {
   return process.env.PREPROD_FRONTEND_URL || 'http://localhost:3000';
 }
 
+/** Promise-based sleep for retry backoff. */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 /**
  * Create an anonymous session via the API.
  * Returns the session response with user_id, token, etc.
+ *
+ * Retries up to 3 times with exponential backoff (1s, 2s) on network errors
+ * (ECONNREFUSED, ETIMEDOUT). This handles the case where parallel Playwright
+ * workers overwhelm the single-threaded Python API server's connection queue.
+ *
+ * HTTP errors (4xx/5xx) are NOT retried — if the server responded, the
+ * connection worked and retrying won't help.
  */
 export async function createAnonymousSession(baseUrl: string): Promise<{
   user_id: string;
   auth_type: string;
   session_expires_at: string;
 }> {
-  const response = await fetch(`${baseUrl}/api/v2/auth/anonymous`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-  });
-  if (response.status !== 201) {
-    throw new Error(`Anonymous session creation failed: HTTP ${response.status}`);
+  const MAX_ATTEMPTS = 3;
+  const BASE_DELAY_MS = 1000;
+  let lastError: Error | undefined;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const response = await fetch(`${baseUrl}/api/v2/auth/anonymous`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (response.status !== 201) {
+        // Server responded — no point retrying
+        throw new Error(`Anonymous session creation failed: HTTP ${response.status}`);
+      }
+      return response.json();
+    } catch (error) {
+      if (error instanceof TypeError) {
+        // Network-level failure (ECONNREFUSED, ETIMEDOUT, DNS)
+        lastError = error;
+        if (attempt < MAX_ATTEMPTS) {
+          const delayMs = BASE_DELAY_MS * Math.pow(2, attempt - 1);
+          console.warn(
+            `[auth-helper] createAnonymousSession attempt ${attempt}/${MAX_ATTEMPTS} failed: ${error.message}. Retrying in ${delayMs}ms...`,
+          );
+          await sleep(delayMs);
+          continue;
+        }
+      } else {
+        // HTTP error or unknown — throw immediately
+        throw error;
+      }
+    }
   }
-  return response.json();
+
+  // All attempts exhausted with network errors
+  throw new Error(
+    `Anonymous session creation failed after ${MAX_ATTEMPTS} attempts: ${lastError?.message}`,
+  );
 }
 
 /**

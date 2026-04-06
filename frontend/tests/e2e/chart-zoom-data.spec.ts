@@ -1,5 +1,6 @@
 // Target: Customer Dashboard (Next.js/Amplify)
 import { test, expect } from '@playwright/test';
+import { waitForAuth } from './helpers/auth-helper';
 
 /**
  * Chart Zoom Data Visibility (Feature 1316)
@@ -7,31 +8,9 @@ import { test, expect } from '@playwright/test';
  * Validates that selecting 1Y time range + Day resolution shows the full year
  * of trading data (~200-252 candles), not just the rightmost ~60 candles.
  *
- * Root cause: fitContent() fired synchronously after setData() in a separate
- * useEffect, before lightweight-charts processed the data internally.
- * Fix: Wrap fitContent() in requestAnimationFrame to defer by one paint frame.
- *
- * This test catches the regression by asserting the candle count reported in
- * the chart's aria-label is >= 200 for a 1Y daily view.
+ * Uses real API data (not mocks) to test actual zoom/fitContent behavior.
  */
 test.describe('Chart Zoom Data Visibility', () => {
-  test.beforeEach(async ({ page }) => {
-    // Mock anonymous auth so the dashboard loads without real backend
-    await page.route('**/api/v2/auth/anonymous', async (route) => {
-      await route.fulfill({
-        status: 201,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          token: 'mock-test-token',
-          auth_type: 'anonymous',
-          user_id: 'anon-test-user',
-          created_at: new Date().toISOString(),
-          session_expires_at: new Date(Date.now() + 86400000).toISOString(),
-          storage_hint: 'session',
-        }),
-      });
-    });
-  });
 
   test('1Y + Day resolution should show >= 200 candles (full year)', async ({
     page,
@@ -40,13 +19,14 @@ test.describe('Chart Zoom Data Visibility', () => {
     await page.setViewportSize({ width: 1280, height: 800 });
 
     await page.goto('/');
+    await waitForAuth(page);
 
-    // Search for AMZN ticker
+    // Search for AAPL ticker
     const searchInput = page.getByPlaceholder(/search tickers/i);
-    await searchInput.fill('AMZN');
+    await searchInput.fill('AAPL');
 
-    // Wait for and click the AMZN suggestion
-    const suggestion = page.getByRole('option', { name: /AMZN/i });
+    // Wait for and click the AAPL suggestion
+    const suggestion = page.getByRole('option', { name: /AAPL/i });
     await expect(suggestion).toBeVisible({ timeout: 10000 });
     await suggestion.click();
 
@@ -95,12 +75,13 @@ test.describe('Chart Zoom Data Visibility', () => {
   }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto('/');
+    await waitForAuth(page);
 
-    // Search for AMZN ticker
+    // Search for AAPL ticker
     const searchInput = page.getByPlaceholder(/search tickers/i);
-    await searchInput.fill('AMZN');
+    await searchInput.fill('AAPL');
 
-    const suggestion = page.getByRole('option', { name: /AMZN/i });
+    const suggestion = page.getByRole('option', { name: /AAPL/i });
     await expect(suggestion).toBeVisible({ timeout: 10000 });
     await suggestion.click();
 
@@ -173,12 +154,13 @@ test.describe('Chart Zoom Data Visibility', () => {
     await page.setViewportSize({ width: 1280, height: 800 });
 
     await page.goto('/');
+    await waitForAuth(page);
 
-    // Search for AMZN ticker
+    // Search for AAPL ticker
     const searchInput = page.getByPlaceholder(/search tickers/i);
-    await searchInput.fill('AMZN');
+    await searchInput.fill('AAPL');
 
-    const suggestion = page.getByRole('option', { name: /AMZN/i });
+    const suggestion = page.getByRole('option', { name: /AAPL/i });
     await expect(suggestion).toBeVisible({ timeout: 10000 });
     await suggestion.click();
 

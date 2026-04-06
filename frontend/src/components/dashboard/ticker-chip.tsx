@@ -91,6 +91,7 @@ export function TickerChip({
         <motion.button
           type="button"
           onClick={handleRemove}
+          aria-label={`Remove ${symbol}`}
           className="ml-1 p-0.5 rounded-full hover:bg-destructive/20 hover:text-destructive transition-colors"
           whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.9 }}

@@ -34,8 +34,13 @@ export async function assertCleanState(page: Page) {
 /**
  * Create a test configuration via the UI.
  * Uses e2e- prefix for cleanup identification.
+ *
+ * Throws descriptive errors on failure instead of silently timing out.
+ * All errors include the helper name, config name, and the step that failed.
  */
 export async function createTestConfig(page: Page, name: string): Promise<void> {
+  const tag = `createTestConfig('${name}')`;
+
   // Mock anonymous auth to avoid race conditions during page load
   await mockAnonymousAuth(page);
 
@@ -59,38 +64,96 @@ export async function createTestConfig(page: Page, name: string): Promise<void> 
     { timeout: 10000 }
   ).catch(() => {});
 
-  // Click CTA to open form. Multiple possible button texts:
-  // - Empty state: "Create Configuration" (with Plus icon)
-  // - List header: "New" (with Plus icon)
+  // Step 1: Click CTA to open form
   const cta = page.getByRole('button', { name: /create configuration/i })
     .or(page.getByRole('button', { name: /^new$/i }));
-  await expect(cta.first()).toBeVisible({ timeout: 5000 });
-  await cta.first().click();
-
-  // Fill configuration name (label is not htmlFor-associated, use placeholder)
-  const nameInput = page.getByPlaceholder(/my watchlist/i);
-  await expect(nameInput).toBeVisible({ timeout: 5000 });
-  await nameInput.fill(name);
-
-  // Add a ticker (search API is mocked, no retry needed)
-  const tickerInput = page.getByPlaceholder(/search for a ticker/i)
-    .or(page.getByPlaceholder(/add ticker|search/i));
-  if (await tickerInput.first().isVisible({ timeout: 5000 }).catch(() => false)) {
-    await tickerInput.first().fill('AAPL');
-    const option = page.getByRole('option', { name: /AAPL/i });
-    await expect(option).toBeVisible({ timeout: 5000 });
-    await option.click();
+  try {
+    await expect(cta.first()).toBeVisible({ timeout: 5000 });
+    await cta.first().click();
+  } catch (e) {
+    throw new Error(`${tag}: form open failed -- CTA button ('Create Configuration' or 'New') not visible after 5s`);
   }
 
-  // Submit — use the form submit button (exact "Create"), not the CTA
-  // Button is disabled until name + at least one ticker are provided
+  // Step 2: Fill configuration name
+  const nameInput = page.getByPlaceholder(/my watchlist/i);
+  try {
+    await expect(nameInput).toBeVisible({ timeout: 5000 });
+    await nameInput.fill(name);
+  } catch (e) {
+    throw new Error(`${tag}: name input not found (tried placeholder 'my watchlist')`);
+  }
+
+  // Step 3: Add a ticker (search API is mocked, no retry needed)
+  // Do NOT silently skip -- if ticker input is missing, the submit button stays disabled
+  const tickerInput = page.getByPlaceholder(/search for a ticker/i)
+    .or(page.getByPlaceholder(/add ticker|search/i));
+  try {
+    await expect(tickerInput.first()).toBeVisible({ timeout: 5000 });
+  } catch (e) {
+    throw new Error(`${tag}: ticker input not found (tried placeholders: 'search for a ticker', 'add ticker|search')`);
+  }
+
+  await tickerInput.first().fill('AAPL');
+  const option = page.getByRole('option', { name: /AAPL/i });
+  try {
+    await expect(option).toBeVisible({ timeout: 5000 });
+    await option.click();
+  } catch (e) {
+    throw new Error(`${tag}: ticker AAPL option not visible after filling search -- mock may not have intercepted the request`);
+  }
+
+  // Verify ticker was actually selected (submit button should become enabled)
   const submitButton = page.getByRole('button', { name: 'Create', exact: true });
-  await expect(submitButton).toBeEnabled({ timeout: 10000 });
+  try {
+    await expect(submitButton).toBeEnabled({ timeout: 10000 });
+  } catch (e) {
+    throw new Error(
+      `${tag}: submit button still disabled after ticker selection -- ticker AAPL click may not have registered. ` +
+      `This can happen under parallel load (workers=4, fullyParallel=true).`
+    );
+  }
+
+  // Step 4: Submit
   await submitButton.click();
-  await page.waitForTimeout(1000);
+
+  // Wait for API response -- cap at 5s to prevent hang from auto-refetch (TanStack Query)
+  await Promise.race([
+    page.waitForLoadState('networkidle'),
+    page.waitForTimeout(5000),
+  ]);
+
+  // Step 5: Verify config was actually created
+  // Check multiple signals: success toast, then config name in page
+  let verified = false;
+
+  // Signal 1: Success toast (Sonner)
+  const successToast = page.locator('[data-sonner-toaster] [data-type="success"]');
+  if (await successToast.isVisible({ timeout: 2000 }).catch(() => false)) {
+    verified = true;
+  }
+
+  // Signal 2: Config name appears in the page (most reliable -- persists after toast dismiss)
+  if (!verified) {
+    try {
+      await expect(page.getByText(name)).toBeVisible({ timeout: 3000 });
+      verified = true;
+    } catch {
+      // Fall through to failure
+    }
+  }
+
+  if (!verified) {
+    throw new Error(
+      `${tag}: creation verification failed -- no success toast and config name '${name}' not found in page after submit`
+    );
+  }
 
   // Clean up route mocks so they don't interfere with subsequent navigation
-  await page.unroute('**/api/v2/tickers/search**');
+  try {
+    await page.unroute('**/api/v2/tickers/search**');
+  } catch {
+    // Route cleanup is best-effort -- may fail if route was never registered
+  }
 }
 
 /**

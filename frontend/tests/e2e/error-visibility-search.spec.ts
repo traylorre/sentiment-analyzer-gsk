@@ -138,10 +138,11 @@ test.describe('Ticker Search Error Visibility', () => {
     await page.waitForLoadState('networkidle');
 
     const searchInput = page.getByPlaceholder(/search tickers/i);
-    await searchInput.fill('AAPL');
 
-    // Wait for debounced search to complete (FR-008: waitForResponse, not waitForTimeout)
-    await page.waitForResponse('**/api/v2/tickers/search**');
+    // Set up waitForResponse BEFORE the action that triggers the request (race condition fix)
+    const searchResponsePromise = page.waitForResponse('**/api/v2/tickers/search**');
+    await searchInput.fill('AAPL');
+    await searchResponsePromise;
 
     // Verify error shown
     await expect(

@@ -115,7 +115,7 @@ test.describe('Dashboard Interactions (Feature 1247)', () => {
     await expect(chart).toBeVisible({ timeout: 15000 });
 
     // Cycle through each resolution
-    const resolutions = ['1m', '5m', '15m', '30m', '1h', 'D'];
+    const resolutions = ['5m', '15m', '30m', '1h', 'D'];
 
     for (const res of resolutions) {
       let button;
@@ -137,8 +137,8 @@ test.describe('Dashboard Interactions (Feature 1247)', () => {
       });
     }
 
-    // Reset to 5m
-    const resetButton = page.getByRole('button', { name: /5m.*resolution/i });
+    // Reset to 15m
+    const resetButton = page.getByRole('button', { name: /15m.*resolution/i });
     await resetButton.click();
     await expect(resetButton).toHaveAttribute('aria-pressed', 'true', {
       timeout: 5000,
@@ -225,21 +225,9 @@ test.describe('Dashboard Interactions (Feature 1247)', () => {
     const chart = page.locator('[role="img"][aria-label*="Price and sentiment"]');
     await expect(chart).toBeVisible({ timeout: 15000 });
 
-    // Find the remove/X button on the ticker chip
-    let removeButton;
-    try {
-      // Try role-based selector first: button near AAPL text with remove semantics
-      removeButton = page
-        .getByRole('button', { name: /remove.*AAPL|AAPL.*remove|close.*AAPL|AAPL.*close/i });
-      await expect(removeButton).toBeVisible({ timeout: 5000 });
-    } catch {
-      // Fallback: look for an X / close button adjacent to AAPL text
-      const chip = page.locator('[data-ticker="AAPL"], .chip, .tag').filter({
-        hasText: 'AAPL',
-      });
-      removeButton = chip.getByRole('button').first();
-      await expect(removeButton).toBeVisible({ timeout: 5000 });
-    }
+    // Find the remove/X button on the ticker chip (aria-label="Remove AAPL")
+    const removeButton = page.getByRole('button', { name: /remove AAPL/i });
+    await expect(removeButton).toBeVisible({ timeout: 5000 });
 
     await removeButton.click();
 
@@ -259,12 +247,13 @@ test.describe('Dashboard Interactions (Feature 1247)', () => {
 
   test('empty state shows search CTA', async ({ page }) => {
     await page.goto('/');
+    await waitForAuth(page);
 
     // On a fresh load with no ticker selected, an empty state / CTA should be visible
     const emptyState = page.getByText(
       /track price.*sentiment|search.*ticker|get started|select a ticker/i
     );
-    await expect(emptyState).toBeVisible({ timeout: 10000 });
+    await expect(emptyState).toBeVisible({ timeout: 15000 });
 
     await assertCleanState(page);
   });

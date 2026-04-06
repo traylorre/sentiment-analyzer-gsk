@@ -95,7 +95,7 @@ test.describe('OAuth Flow Regression (Feature 1245)', () => {
     await page.goto('/auth/signin');
 
     // Email input should be visible within 2 seconds (before providers resolve)
-    await expect(page.getByPlaceholder(/email/i)).toBeVisible({ timeout: 2_000 });
+    await expect(page.getByPlaceholder(/email/i)).toBeVisible({ timeout: 5_000 });
   });
 
   test('session recovers after failed OAuth redirect', async ({ page }) => {

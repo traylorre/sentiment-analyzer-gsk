@@ -170,8 +170,9 @@ test.describe('Dialog Dismissal (Feature 1247)', () => {
     const menuItem = page.getByRole('menuitem');
     await expect(menuItem.first()).toBeVisible();
 
-    // Click outside (on the body/empty area)
-    await page.locator('body').click({ position: { x: 10, y: 10 } });
+    // Click outside (on the main content area, avoiding skip-link at top-left)
+    const viewport = page.viewportSize()!;
+    await page.mouse.click(viewport.width / 2, viewport.height / 2);
 
     // Assert menu is closed
     await expect(menuItem.first()).toBeHidden();

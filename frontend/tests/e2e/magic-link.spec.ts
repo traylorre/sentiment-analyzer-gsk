@@ -7,9 +7,16 @@
  */
 
 import { test, expect } from '@playwright/test';
+import { mockAnonymousAuth } from './helpers/auth-helper';
 
 test.describe('Magic Link Authentication (US2)', () => {
   const testEmail = `e2e-magiclink-${Date.now()}@test.example.com`;
+
+  // Mock anonymous auth so session init completes instantly
+  // (prevents ECONNREFUSED under parallel load)
+  test.beforeEach(async ({ page }) => {
+    await mockAnonymousAuth(page);
+  });
 
   test('requesting magic link shows confirmation message', async ({ page }) => {
     // Mock the magic link request API so the form submission succeeds

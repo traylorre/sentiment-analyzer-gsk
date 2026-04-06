@@ -61,13 +61,13 @@ test.describe('Auth Menu Navigation (Feature 1247)', () => {
     await expect(settingsItem).toBeVisible();
     await settingsItem.click();
 
-    // Assert URL contains /settings
-    await expect(page).toHaveURL(/\/settings/);
+    // Assert Settings content visible (hard navigation completed)
+    await page.waitForLoadState('networkidle');
+    await expect(page.getByText(/customize your dashboard/i)).toBeVisible({ timeout: 10000 });
 
-    // Unwind: click Dashboard tab to go back
-    const dashboardTab = page.getByRole('tab', { name: /dashboard/i });
-    await dashboardTab.click();
-    await expect(page).toHaveURL(/\/$/);
+    // Unwind: navigate back to root
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
 
     await assertCleanState(page);
   });
