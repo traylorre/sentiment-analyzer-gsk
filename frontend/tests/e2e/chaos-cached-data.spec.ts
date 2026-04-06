@@ -11,11 +11,13 @@ import { mockTickerDataApis } from './helpers/mock-api-data';
  * existing rendered content must persist.
  */
 test.describe('Chaos: Cached Data Resilience', () => {
+  let cleanupMocks: (() => Promise<void>) | undefined;
+
   test.beforeEach(async ({ page }) => {
     // Feature 1276: Mock search/OHLC/sentiment APIs with pre-canned data.
     // Chaos tests verify cache resilience, not data fetching. Mocking
     // eliminates Tiingo/Finnhub latency that caused 17s timeouts.
-    await mockTickerDataApis(page);
+    cleanupMocks = await mockTickerDataApis(page);
 
     // Navigate and load data — mocked APIs respond instantly
     await page.goto('/');
@@ -33,6 +35,17 @@ test.describe('Chaos: Cached Data Resilience', () => {
       /[1-9]\d* price candles/,
       { timeout: 5000 },
     );
+  });
+
+  test.afterEach(async () => {
+    if (cleanupMocks) {
+      try {
+        await cleanupMocks();
+      } catch {
+        // Cleanup may fail if page already closed — don't re-throw
+      }
+      cleanupMocks = undefined;
+    }
   });
 
   // T013: Previously loaded data remains visible during API outage
@@ -63,6 +76,16 @@ test.describe('Chaos: Cached Data Resilience', () => {
     const textDuring = await mainContent.textContent();
     expect(textDuring).toBeTruthy();
     expect(textDuring!.length).toBeGreaterThan(10);
+
+    // Verify content identity — same data, not just "some content"
+    const fragment = textBefore!.substring(0, 20);
+    expect(textDuring).toContain(fragment);
+
+    // Verify chart persists through outage
+    const chartContainer = page.locator(
+      '[role="img"][aria-label*="Price and sentiment chart"]',
+    );
+    await expect(chartContainer).toBeVisible({ timeout: 3000 });
   });
 
   // T014: Cached data survives API timeout
@@ -83,16 +106,19 @@ test.describe('Chaos: Cached Data Resilience', () => {
     expect(textDuring).toBeTruthy();
     expect(textDuring!.length).toBeGreaterThan(10);
 
+    // Verify content identity — same data, not just "some content"
+    const fragment = textBefore!.substring(0, 20);
+    expect(textDuring).toContain(fragment);
+
     // Content should still be interactive (clicking doesn't crash)
     const clickableElements = mainContent.locator(
       'button, a, [role="button"]',
     );
     const clickableCount = await clickableElements.count();
     if (clickableCount > 0) {
-      // Click the first interactive element — should not throw
-      await clickableElements.first().click({ timeout: 3000 }).catch(() => {
-        // Click may fail if element navigates — that's OK, no crash is the test
-      });
+      // Assert element is still interactive during outage
+      await expect(clickableElements.first()).toBeVisible({ timeout: 3000 });
+      await clickableElements.first().click({ timeout: 3000 });
     }
   });
 });
