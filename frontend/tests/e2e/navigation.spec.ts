@@ -84,20 +84,20 @@ test.describe('Alerts Page', () => {
   test('should display alerts page', async ({ page }) => {
     await page.goto('/alerts');
 
-    // Should show alerts content — the mobile header has h1 "Alerts" or empty state
+    // Should show alert-specific content — empty state text.
+    // Note: h1 is "Dashboard" from the layout, NOT "Alerts".
     await expect(
-      page.getByText(/no alerts configured/i)
-        .or(page.locator('h1, h2').filter({ hasText: /alerts/i }).first())
+      page.getByText(/no alerts configured/i).first()
     ).toBeVisible({ timeout: 10000 });
   });
 
   test('should show alert quota information', async ({ page }) => {
     await page.goto('/alerts');
 
-    // Should show alerts page content — heading or empty state
+    // Should show alert-specific content — empty state text.
+    // Note: h1 is "Dashboard" from the layout, NOT "Alerts".
     await expect(
-      page.getByText(/no alerts configured/i)
-        .or(page.locator('h1').filter({ hasText: /alerts/i }))
+      page.getByText(/no alerts configured/i).first()
     ).toBeVisible({ timeout: 10000 });
   });
 });

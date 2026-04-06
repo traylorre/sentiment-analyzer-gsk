@@ -29,7 +29,7 @@ test.describe('Ticker Search Error Visibility', () => {
     );
 
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Type in search
     const searchInput = page.getByPlaceholder(/search tickers/i);
@@ -74,7 +74,7 @@ test.describe('Ticker Search Error Visibility', () => {
     );
 
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const searchInput = page.getByPlaceholder(/search tickers/i);
     await searchInput.fill('AAPL');
@@ -99,7 +99,7 @@ test.describe('Ticker Search Error Visibility', () => {
     );
 
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const searchInput = page.getByPlaceholder(/search tickers/i);
     await searchInput.fill('AAPL');
@@ -115,12 +115,11 @@ test.describe('Ticker Search Error Visibility', () => {
   });
 
   test('retry button triggers a new search', async ({ page }) => {
-    let requestCount = 0;
+    let retryClicked = false;
 
-    // First request fails, subsequent requests succeed
+    // First few requests fail (covering React Query retries), then succeed after manual retry
     await page.route('**/api/v2/tickers/search**', (route) => {
-      requestCount++;
-      if (requestCount <= 1) {
+      if (!retryClicked) {
         return route.fulfill({ status: 500, body: 'error' });
       }
       return route.fulfill({
@@ -135,7 +134,7 @@ test.describe('Ticker Search Error Visibility', () => {
     });
 
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const searchInput = page.getByPlaceholder(/search tickers/i);
 
@@ -144,14 +143,19 @@ test.describe('Ticker Search Error Visibility', () => {
     await searchInput.fill('AAPL');
     await searchResponsePromise;
 
-    // Verify error shown
+    // Verify error shown (React Query may retry — wait for error state to propagate)
     await expect(
       page.getByText(/unable to search/i)
-    ).toBeVisible({ timeout: 5000 });
+    ).toBeVisible({ timeout: 10000 });
+
+    // Switch mock to success mode before clicking retry
+    retryClicked = true;
 
     // Click retry and wait for the new search response
+    // Use JS click because the empty state overlay div intercepts pointer events
+    const retryButton = page.getByRole('button', { name: /retry/i });
     const retryResponsePromise = page.waitForResponse('**/api/v2/tickers/search**');
-    await page.getByRole('button', { name: /retry/i }).click();
+    await retryButton.evaluate((el) => (el as HTMLButtonElement).click());
     await retryResponsePromise;
 
     // After retry, should show results (not error)
@@ -167,7 +171,7 @@ test.describe('Ticker Search Error Visibility', () => {
     );
 
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const searchInput = page.getByPlaceholder(/search tickers/i);
     await searchInput.fill('AAPL');
@@ -209,7 +213,7 @@ test.describe('Ticker Search Error Visibility', () => {
     );
 
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const searchInput = page.getByPlaceholder(/search tickers/i);
     await searchInput.fill('AAPL');

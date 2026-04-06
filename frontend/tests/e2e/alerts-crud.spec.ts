@@ -16,23 +16,23 @@ test.describe('Alert Management CRUD (US3)', () => {
     // /alerts requires upgraded auth — set up session cookies
     await setupAuthSession(context);
     await page.goto('/alerts');
-    await page.waitForLoadState('networkidle');
+    // Avoid networkidle — TanStack Query keeps network busy with background refetches
+    await page.waitForLoadState('domcontentloaded');
   });
 
   test('alerts page shows heading or empty state', async ({ page }) => {
-    // The page should show either the alerts list heading or the empty state
+    // The page should show alerts content — empty state text.
+    // Note: h1 is "Dashboard" from the layout, NOT "Alerts".
     await expect(
-      page.getByRole('heading', { name: /alert/i })
-        .or(page.getByText(/no alerts configured/i))
+      page.getByText(/no alerts configured/i).first()
     ).toBeVisible({ timeout: 10000 });
   });
 
   test('alert quota information is displayed', async ({ page }) => {
-    // The alerts page should have either the empty state or alert content
-    // Use the mobile h1 heading "Alerts" or empty state text
+    // The alerts page should have either the empty state or alert-specific content.
+    // Note: h1 is "Dashboard" from the layout, NOT "Alerts".
     await expect(
-      page.locator('h1').filter({ hasText: /alerts/i })
-        .or(page.getByText(/no alerts configured/i))
+      page.getByText(/no alerts configured/i).first()
     ).toBeVisible({ timeout: 10000 });
   });
 

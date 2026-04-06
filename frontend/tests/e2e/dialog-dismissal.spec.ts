@@ -13,7 +13,7 @@ test.describe('Dialog Dismissal (Feature 1247)', () => {
 
   test('sign-out dialog: cancel closes', async ({ page }) => {
     await page.goto('/settings');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await page.waitForFunction(
       () => !document.querySelector('[class*="animate-pulse"]'),
       { timeout: 10000 }
@@ -40,7 +40,7 @@ test.describe('Dialog Dismissal (Feature 1247)', () => {
 
   test('sign-out dialog: escape closes', async ({ page }) => {
     await page.goto('/settings');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await page.waitForFunction(
       () => !document.querySelector('[class*="animate-pulse"]'),
       { timeout: 10000 }
@@ -71,7 +71,7 @@ test.describe('Dialog Dismissal (Feature 1247)', () => {
 
   test('sign-out dialog: confirm signs out', async ({ page }) => {
     await page.goto('/settings');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await page.waitForFunction(
       () => !document.querySelector('[class*="animate-pulse"]'),
       { timeout: 10000 }
@@ -105,16 +105,16 @@ test.describe('Dialog Dismissal (Feature 1247)', () => {
 
     // Navigate to configs and find the config
     await page.goto('/configs');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
-    await expect(page.getByText(configName)).toBeVisible();
+    await expect(page.getByText(configName).first()).toBeVisible();
 
     // Click delete — aria-label="Delete {config.name}"
     await page.getByRole('button', { name: `Delete ${configName}` }).click();
 
-    // Dialog should appear
+    // Dialog should appear — both heading and body text match, use .first()
     const dialog = page.getByText(/are you sure/i).or(page.getByText(/delete configuration/i));
-    await expect(dialog).toBeVisible();
+    await expect(dialog.first()).toBeVisible();
 
     // Click Cancel
     const cancelButton = page.getByRole('button', { name: /cancel/i });
@@ -122,7 +122,7 @@ test.describe('Dialog Dismissal (Feature 1247)', () => {
     await cancelButton.click();
 
     // Assert config still exists
-    await expect(page.getByText(configName)).toBeVisible();
+    await expect(page.getByText(configName).first()).toBeVisible();
 
     await assertCleanState(page);
   });
@@ -134,16 +134,16 @@ test.describe('Dialog Dismissal (Feature 1247)', () => {
 
     // Navigate to configs and find the config
     await page.goto('/configs');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
-    await expect(page.getByText(configName)).toBeVisible();
+    await expect(page.getByText(configName).first()).toBeVisible();
 
     // Click delete — aria-label="Delete {config.name}"
     await page.getByRole('button', { name: `Delete ${configName}` }).click();
 
-    // Dialog should appear
+    // Dialog should appear — both heading and body text match, use .first()
     const dialog = page.getByText(/are you sure/i).or(page.getByText(/delete configuration/i));
-    await expect(dialog).toBeVisible();
+    await expect(dialog.first()).toBeVisible();
 
     // Press Escape
     await page.keyboard.press('Escape');
@@ -156,15 +156,17 @@ test.describe('Dialog Dismissal (Feature 1247)', () => {
 
   test('user menu: outside click closes', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
-    // Open user menu — aside on desktop, header on mobile
-    const desktopTrigger = page.locator('aside [data-testid="user-menu-trigger"]');
-    const mobileTrigger = page.locator('header [data-testid="user-menu-trigger"]');
-    const menuTrigger = await desktopTrigger.isVisible().catch(() => false)
-      ? desktopTrigger : mobileTrigger;
-    await expect(menuTrigger).toBeVisible();
-    await menuTrigger.click();
+    // Open user menu — use data-testid directly, let Playwright find whichever is visible.
+    // On desktop the aside trigger is visible; on mobile the header trigger is.
+    // Use .first() since both exist in DOM but only one is CSS-visible at a time.
+    const menuTrigger = page.locator('[data-testid="user-menu-trigger"]').first();
+    await expect(menuTrigger).toBeVisible({ timeout: 5000 });
+    // Scroll into view first (trigger may be at bottom of fixed sidebar), then click.
+    // Must use regular click (not evaluate) because Radix DropdownMenu uses pointer events.
+    await menuTrigger.scrollIntoViewIfNeeded();
+    await menuTrigger.click({ force: true });
 
     // Assert menu is open (menu items visible)
     const menuItem = page.getByRole('menuitem');
@@ -182,7 +184,7 @@ test.describe('Dialog Dismissal (Feature 1247)', () => {
 
   test('toast dismiss button', async ({ page }) => {
     await page.goto('/settings');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await page.waitForFunction(
       () => !document.querySelector('[class*="animate-pulse"]'),
       { timeout: 10000 }

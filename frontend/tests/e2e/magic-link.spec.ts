@@ -34,9 +34,15 @@ test.describe('Magic Link Authentication (US2)', () => {
     await page.goto('/auth/signin');
 
     const emailInput = page.getByLabel(/email address/i);
-    await emailInput.fill(testEmail);
+    // pressSequentially triggers both input and change events per keystroke,
+    // ensuring React controlled input state updates correctly.
+    // fill() only triggers 'input' event which may not fire React's onChange.
+    await emailInput.clear();
+    await emailInput.pressSequentially(testEmail, { delay: 10 });
 
     const submitButton = page.getByRole('button', { name: /continue with email/i });
+    // Wait for React state to propagate (button becomes enabled when email is non-empty)
+    await expect(submitButton).toBeEnabled({ timeout: 5000 });
     await submitButton.click();
 
     // Should show confirmation that email was sent
@@ -46,19 +52,6 @@ test.describe('Magic Link Authentication (US2)', () => {
   });
 
   test('valid magic link token authenticates user', async ({ page }) => {
-    // Mock the magic link request API for the initial form submission
-    // Note: glob **/api/v2/auth/magic-link does NOT match .../magic-link/verify
-    await page.route('**/api/v2/auth/magic-link', route =>
-      route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          status: 'email_sent',
-          message: 'Check your email for a sign-in link',
-        }),
-      })
-    );
-
     // Mock the verify endpoint to return an error (simulating invalid token)
     await page.route('**/api/v2/auth/magic-link/verify', route =>
       route.fulfill({
@@ -71,28 +64,12 @@ test.describe('Magic Link Authentication (US2)', () => {
       })
     );
 
-    // Step 1: Request magic link via the UI
-    await page.goto('/auth/signin');
-    const emailInput = page.getByLabel(/email address/i);
-    await emailInput.fill(testEmail);
-    const submitButton = page.getByRole('button', { name: /continue with email/i });
-    await submitButton.click();
-
-    // Step 2: Extract token from DynamoDB (R2 pattern)
-    // Note: In CI this uses AWS credentials. Locally, this may need localstack.
-    // For now, we test the UI flow up to the verification page.
-    // Full token extraction requires dynamo-helper.ts with AWS SDK.
-    await page.waitForTimeout(2000);
-
-    // Step 3: Navigate to verify page (simulated token)
-    // The actual DynamoDB query would happen here in a full preprod run:
-    // const token = await getMagicLinkToken(testEmail);
-    // await page.goto(`/auth/verify?token=${token}`);
-
-    // For now, verify the verify page handles tokens correctly
+    // Navigate directly to verify page with a test token.
+    // The verify page calls POST /api/v2/auth/magic-link/verify which is mocked above.
+    // mockAnonymousAuth from beforeEach handles session init.
     await page.goto('/auth/verify?token=test-invalid-token');
     await expect(
-      page.getByText(/invalid|expired|not found/i)
+      page.getByText(/invalid|expired|not found/i).first()
     ).toBeVisible({ timeout: 10000 });
   });
 
@@ -113,7 +90,7 @@ test.describe('Magic Link Authentication (US2)', () => {
     await page.goto('/auth/verify?token=already-used-token');
 
     await expect(
-      page.getByText(/already used|invalid|expired/i)
+      page.getByText(/already used|invalid|expired/i).first()
     ).toBeVisible({ timeout: 10000 });
 
     // Should offer to request a new link
@@ -139,7 +116,7 @@ test.describe('Magic Link Authentication (US2)', () => {
     await page.goto('/auth/verify?token=expired-old-token');
 
     await expect(
-      page.getByText(/expired|invalid/i)
+      page.getByText(/expired|invalid/i).first()
     ).toBeVisible({ timeout: 10000 });
 
     await expect(

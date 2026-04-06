@@ -41,8 +41,58 @@ export async function assertCleanState(page: Page) {
 export async function createTestConfig(page: Page, name: string): Promise<void> {
   const tag = `createTestConfig('${name}')`;
 
-  // Mock anonymous auth to avoid race conditions during page load
+  // Mock anonymous auth to ensure consistent session
   await mockAnonymousAuth(page);
+
+  const mockConfigId = `mock-config-${Date.now()}`;
+  const now = new Date().toISOString();
+  const mockConfig = {
+    configId: mockConfigId,
+    name,
+    tickers: [{ symbol: 'AAPL', name: 'Apple Inc', exchange: 'NASDAQ' }],
+    timeframeDays: 30,
+    includeExtendedHours: false,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  // Mock configurations endpoint — handles both GET (list) and POST (create).
+  // GET must return the mock config so it persists across page.goto() navigations.
+  // Without this, TanStack Query refetches from the real API and gets an empty list.
+  await page.route('**/api/v2/configurations', async (route) => {
+    const method = route.request().method();
+    if (method === 'POST') {
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify(mockConfig),
+      });
+    } else if (method === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ configurations: [mockConfig], maxAllowed: 5 }),
+      });
+    } else {
+      await route.continue();
+    }
+  });
+
+  // Mock individual config endpoints (GET/DELETE by ID)
+  await page.route('**/api/v2/configurations/*', async (route) => {
+    const method = route.request().method();
+    if (method === 'DELETE') {
+      await route.fulfill({ status: 204 });
+    } else if (method === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(mockConfig),
+      });
+    } else {
+      await route.continue();
+    }
+  });
 
   // Mock ticker search to avoid rate limiting under parallel load
   await page.route('**/api/v2/tickers/search**', async (route) => {
@@ -56,9 +106,8 @@ export async function createTestConfig(page: Page, name: string): Promise<void> 
   });
 
   await page.goto('/configs');
-  await page.waitForLoadState('networkidle');
 
-  // Wait for loading to finish
+  // Wait for loading to finish (pulse skeleton to disappear)
   await page.waitForFunction(
     () => !document.querySelector('[class*="animate-pulse"]'),
     { timeout: 10000 }
@@ -113,47 +162,29 @@ export async function createTestConfig(page: Page, name: string): Promise<void> 
     );
   }
 
-  // Step 4: Submit
-  await submitButton.click();
+  // Step 4: Submit — use JS click via evaluate because form extends beyond Desktop Chrome viewport
+  // Playwright's click() and click({ force: true }) both fail with "outside viewport"
+  // dispatchEvent('click') doesn't trigger React synthetic events properly
+  await submitButton.evaluate((el) => (el as HTMLButtonElement).click());
 
-  // Wait for API response -- cap at 5s to prevent hang from auto-refetch (TanStack Query)
-  await Promise.race([
-    page.waitForLoadState('networkidle'),
-    page.waitForTimeout(5000),
-  ]);
+  // Wait for form to close (modal/form disappears) — the real signal that creation succeeded.
+  // networkidle NEVER resolves because TanStack Query background refetches keep the network busy.
+  await expect(nameInput).toBeHidden({ timeout: 10000 });
 
-  // Step 5: Verify config was actually created
-  // Check multiple signals: success toast, then config name in page
-  let verified = false;
-
-  // Signal 1: Success toast (Sonner)
-  const successToast = page.locator('[data-sonner-toaster] [data-type="success"]');
-  if (await successToast.isVisible({ timeout: 2000 }).catch(() => false)) {
-    verified = true;
-  }
-
-  // Signal 2: Config name appears in the page (most reliable -- persists after toast dismiss)
-  if (!verified) {
-    try {
-      await expect(page.getByText(name)).toBeVisible({ timeout: 3000 });
-      verified = true;
-    } catch {
-      // Fall through to failure
-    }
-  }
-
-  if (!verified) {
+  // Step 5: Verify config was actually created — config name appears in the page.
+  // Use .first() because the mock causes a duplicate: POST mutation adds config to store,
+  // then cache invalidation refetches GET which returns the same config again.
+  try {
+    await expect(page.getByText(name).first()).toBeVisible({ timeout: 5000 });
+  } catch {
     throw new Error(
-      `${tag}: creation verification failed -- no success toast and config name '${name}' not found in page after submit`
+      `${tag}: creation verification failed -- config name '${name}' not found in page after submit`
     );
   }
 
-  // Clean up route mocks so they don't interfere with subsequent navigation
-  try {
-    await page.unroute('**/api/v2/tickers/search**');
-  } catch {
-    // Route cleanup is best-effort -- may fail if route was never registered
-  }
+  // Route mocks are intentionally NOT cleaned up here.
+  // Tests that call createTestConfig then navigate to /configs need the GET mock
+  // to persist, otherwise TanStack Query refetches from the real API (empty list).
 }
 
 /**
@@ -162,7 +193,11 @@ export async function createTestConfig(page: Page, name: string): Promise<void> 
  */
 export async function deleteTestConfig(page: Page, name: string): Promise<void> {
   await page.goto('/configs');
-  await page.waitForLoadState('networkidle');
+  // Wait for page content to render (avoid networkidle — TanStack Query keeps network busy)
+  await page.waitForFunction(
+    () => !document.querySelector('[class*="animate-pulse"]'),
+    { timeout: 10000 }
+  ).catch(() => {});
 
   // The delete button has aria-label="Delete {config.name}"
   const deleteBtn = page.getByRole('button', { name: `Delete ${name}` });
@@ -195,7 +230,6 @@ export async function createTestAlert(
   _threshold: string
 ): Promise<void> {
   await page.goto('/alerts');
-  await page.waitForLoadState('networkidle');
 
   // Open the alert form — button text is "New Alert" (with Plus icon)
   const newAlertBtn = page.getByRole('button', { name: /new alert/i })

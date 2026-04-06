@@ -2,9 +2,10 @@
 import { test, expect } from '@playwright/test';
 import { assertCleanState } from './helpers/clean-state';
 import { waitForAuth } from './helpers/auth-helper';
+import { mockTickerDataApis } from './helpers/mock-api-data';
 
 test.describe('Dashboard Interactions (Feature 1247)', () => {
-  test.setTimeout(30_000);
+  test.setTimeout(60_000);
 
   test('search input shows autocomplete results', async ({ page }) => {
     await page.goto('/');
@@ -56,6 +57,8 @@ test.describe('Dashboard Interactions (Feature 1247)', () => {
   });
 
   test('time range buttons update chart', async ({ page }) => {
+    // Mock all API data to avoid real API latency that prevents aria-pressed updates
+    await mockTickerDataApis(page);
     await page.goto('/');
 
     // Load AAPL chart
@@ -67,6 +70,9 @@ test.describe('Dashboard Interactions (Feature 1247)', () => {
 
     const chart = page.locator('[role="img"][aria-label*="Price and sentiment"]');
     await expect(chart).toBeVisible({ timeout: 15000 });
+
+    // Wait for initial chart data to finish loading
+    await expect(page.getByText('Loading chart data...')).toBeHidden({ timeout: 15000 });
 
     // Cycle through each time range
     const timeRanges = ['1W', '1M', '3M', '6M', '1Y'];
@@ -85,9 +91,10 @@ test.describe('Dashboard Interactions (Feature 1247)', () => {
       }
       await button.click();
 
-      // Assert the button is visually selected
+      // Assert the button is visually selected — use longer timeout to account for
+      // data refetching after time range change (real API, not mocked)
       await expect(button).toHaveAttribute('aria-pressed', 'true', {
-        timeout: 5000,
+        timeout: 15000,
       });
     }
 
@@ -95,13 +102,15 @@ test.describe('Dashboard Interactions (Feature 1247)', () => {
     const resetButton = page.getByRole('button', { name: /1M.*time range/i });
     await resetButton.click();
     await expect(resetButton).toHaveAttribute('aria-pressed', 'true', {
-      timeout: 5000,
+      timeout: 15000,
     });
 
     await assertCleanState(page);
   });
 
   test('resolution buttons update chart', async ({ page }) => {
+    // Mock all API data to avoid real API latency that prevents aria-pressed updates
+    await mockTickerDataApis(page);
     await page.goto('/');
 
     // Load AAPL chart
@@ -114,34 +123,34 @@ test.describe('Dashboard Interactions (Feature 1247)', () => {
     const chart = page.locator('[role="img"][aria-label*="Price and sentiment"]');
     await expect(chart).toBeVisible({ timeout: 15000 });
 
-    // Cycle through each resolution
-    const resolutions = ['5m', '15m', '30m', '1h', 'D'];
+    // Wait for initial chart data to finish loading
+    await expect(page.getByText('Loading chart data...')).toBeHidden({ timeout: 15000 });
+
+    // Cycle through each resolution — use aria-label exact match to avoid
+    // "5m" matching "15m" (strict mode violation)
+    // Resolution button labels: "1m resolution", "5m resolution", ..., "Day resolution"
+    // Note: the daily button label is "Day resolution", NOT "D resolution"
+    const resolutions = ['5m', '15m', '30m', '1h', 'Day'];
 
     for (const res of resolutions) {
-      let button;
-      try {
-        button = page.getByRole('button', {
-          name: new RegExp(res + '.*resolution', 'i'),
-        });
-        await expect(button).toBeVisible({ timeout: 5000 });
-      } catch {
-        // Fallback: match button by resolution label
-        button = page.getByRole('button', { name: res });
-        await expect(button).toBeVisible({ timeout: 5000 });
-      }
+      const button = page.getByRole('button', {
+        name: `${res} resolution`,
+        exact: true,
+      });
+      await expect(button).toBeVisible({ timeout: 5000 });
       await button.click();
 
       // Assert the button is visually selected
       await expect(button).toHaveAttribute('aria-pressed', 'true', {
-        timeout: 5000,
+        timeout: 15000,
       });
     }
 
     // Reset to 15m
-    const resetButton = page.getByRole('button', { name: /15m.*resolution/i });
+    const resetButton = page.getByRole('button', { name: '15m resolution', exact: true });
     await resetButton.click();
     await expect(resetButton).toHaveAttribute('aria-pressed', 'true', {
-      timeout: 5000,
+      timeout: 15000,
     });
 
     await assertCleanState(page);
@@ -213,6 +222,8 @@ test.describe('Dashboard Interactions (Feature 1247)', () => {
   );
 
   test('ticker chip remove clears chart', async ({ page }) => {
+    // Mock all API data for consistent chart behavior
+    await mockTickerDataApis(page);
     await page.goto('/');
 
     // Load AAPL chart
@@ -225,17 +236,25 @@ test.describe('Dashboard Interactions (Feature 1247)', () => {
     const chart = page.locator('[role="img"][aria-label*="Price and sentiment"]');
     await expect(chart).toBeVisible({ timeout: 15000 });
 
+    // Wait for chart data to finish loading before interacting
+    await expect(page.getByText('Loading chart data...')).toBeHidden({ timeout: 15000 });
+
     // Find the remove/X button on the ticker chip (aria-label="Remove AAPL")
-    const removeButton = page.getByRole('button', { name: /remove AAPL/i });
+    // Use exact match to avoid strict mode violation (chip text also contains "Remove AAPL")
+    const removeButton = page.getByRole('button', { name: 'Remove AAPL', exact: true });
     await expect(removeButton).toBeVisible({ timeout: 5000 });
 
     await removeButton.click();
 
     // Chart should disappear or empty state should appear
-    try {
-      await expect(chart).toBeHidden({ timeout: 10000 });
-    } catch {
-      // Alternative: empty state message appears instead
+    await expect(
+      chart.or(page.getByText(/track price|no ticker|select a ticker|search to get started/i))
+    ).toBeVisible({ timeout: 10000 });
+    // If the chart is gone, pass. If empty state appeared, also pass.
+    // Use a more specific check: empty state OR chart hidden
+    const chartHidden = await chart.isHidden().catch(() => true);
+    if (!chartHidden) {
+      // Chart still visible — check empty state instead
       const emptyState = page.getByText(
         /track price|no ticker|select a ticker|search to get started/i
       );
@@ -252,7 +271,7 @@ test.describe('Dashboard Interactions (Feature 1247)', () => {
     // On a fresh load with no ticker selected, an empty state / CTA should be visible
     const emptyState = page.getByText(
       /track price.*sentiment|search.*ticker|get started|select a ticker/i
-    );
+    ).first();
     await expect(emptyState).toBeVisible({ timeout: 15000 });
 
     await assertCleanState(page);

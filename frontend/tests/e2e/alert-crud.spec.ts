@@ -26,7 +26,7 @@ test.describe('Alert CRUD (Feature 1247)', () => {
 
   test('new alert button opens form', async ({ page }) => {
     await page.goto('/alerts');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Click "New Alert" button (in list header or empty state "Create Alert")
     const newAlertBtn = page.getByRole('button', { name: /new alert/i })
@@ -48,7 +48,7 @@ test.describe('Alert CRUD (Feature 1247)', () => {
 
   test('alert form cancel returns to list', async ({ page }) => {
     await page.goto('/alerts');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Open create form
     const newAlertBtn = page.getByRole('button', { name: /new alert/i })
@@ -60,8 +60,14 @@ test.describe('Alert CRUD (Feature 1247)', () => {
     const configSelect = page.locator('select');
     await expect(configSelect).toBeVisible({ timeout: 5000 });
 
-    // Cancel via Escape (Cancel button may be off-screen on mobile viewports)
-    await page.keyboard.press('Escape');
+    // Cancel via Cancel button — use JS click because form extends beyond viewport
+    const cancelBtn = page.getByRole('button', { name: /cancel/i });
+    if (await cancelBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await cancelBtn.evaluate((el) => (el as HTMLButtonElement).click());
+    } else {
+      // Fall back to Escape if Cancel button not visible
+      await page.keyboard.press('Escape');
+    }
 
     // Assert form is gone — select should be hidden
     await expect(configSelect).toBeHidden({ timeout: 5000 });
@@ -74,7 +80,7 @@ test.describe('Alert CRUD (Feature 1247)', () => {
     await createTestConfig(page, `e2e-alert-cfg-${Date.now()}`);
 
     await page.goto('/alerts');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Open form
     const newAlertBtn = page.getByRole('button', { name: /new alert/i })
@@ -82,10 +88,21 @@ test.describe('Alert CRUD (Feature 1247)', () => {
     await expect(newAlertBtn.first()).toBeVisible({ timeout: 5000 });
     await newAlertBtn.first().click();
 
-    // Select a configuration
+    // Select a configuration — wait for options to load from GET /api/v2/configurations mock
     const configSelect = page.locator('select');
     await expect(configSelect).toBeVisible({ timeout: 5000 });
 
+    // Wait for config options to populate (TanStack Query async fetch).
+    // Note: <option> elements inside native <select> are NOT DOM-visible,
+    // so use waitForFunction to count options instead of toBeVisible.
+    await page.waitForFunction(
+      (sel: string) => {
+        const select = document.querySelector(sel) as HTMLSelectElement | null;
+        return select && Array.from(select.options).filter(o => o.value !== '').length > 0;
+      },
+      'select',
+      { timeout: 10000 }
+    );
     const options = configSelect.locator('option:not([value=""])');
     const optionCount = await options.count();
     if (optionCount > 0) {
@@ -101,14 +118,15 @@ test.describe('Alert CRUD (Feature 1247)', () => {
       await expect(tickerButtons.first().or(noTickersMsg)).toBeVisible({ timeout: 5000 });
     }
 
-    // Unwind: cancel
-    await page.getByRole('button', { name: /cancel/i }).click();
+    // Unwind: cancel — button may be below viewport, use JS click
+    const cancelBtn = page.getByRole('button', { name: /cancel/i });
+    await cancelBtn.evaluate((el) => (el as HTMLButtonElement).click());
     await assertCleanState(page);
   });
 
   test('alert toggle switch changes state', async ({ page }) => {
     await page.goto('/alerts');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Find a toggle switch on an existing alert card
     const toggleSwitch = page.getByRole('switch').first();
@@ -140,7 +158,7 @@ test.describe('Alert CRUD (Feature 1247)', () => {
 
   test('alert delete button opens confirmation', async ({ page }) => {
     await page.goto('/alerts');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Find a delete button on an existing alert card (aria-label="Delete {ticker} alert")
     const deleteButton = page.getByRole('button', { name: /delete.*alert/i }).first();
