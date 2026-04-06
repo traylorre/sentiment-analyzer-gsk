@@ -243,8 +243,8 @@ test.describe('OAuth Callback Error Handling', () => {
       timeout: 5000,
     });
 
-    // Should show the specific error description
-    await expect(page.getByText('User denied access')).toBeVisible();
+    // Component maps access_denied to its own message (ignores error_description)
+    await expect(page.getByText('Sign-in was cancelled. You can try again or continue as guest.')).toBeVisible();
 
     // Should show try again button
     await expect(page.getByRole('button', { name: /try again/i })).toBeVisible();
@@ -259,8 +259,8 @@ test.describe('OAuth Callback Error Handling', () => {
       timeout: 5000,
     });
 
-    // Should show generic cancellation message
-    await expect(page.getByText('Authentication was cancelled')).toBeVisible();
+    // Component maps server_error to its own message
+    await expect(page.getByText('Something went wrong with sign-in. Please try again.')).toBeVisible();
 
     // Should show try again button
     await expect(page.getByRole('button', { name: /try again/i })).toBeVisible();

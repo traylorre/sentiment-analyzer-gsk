@@ -1,6 +1,7 @@
 // Target: Customer Dashboard (Next.js/Amplify)
 import { test, expect } from '@playwright/test';
 import { mockTickerDataApis } from './helpers/mock-api-data';
+import { mockAnonymousAuth } from './helpers/auth-helper';
 
 /**
  * Ticker Search Gap Tests: No-results, keyboard nav, multi-ticker (Feature 1282)
@@ -10,20 +11,8 @@ import { mockTickerDataApis } from './helpers/mock-api-data';
  */
 test.describe('Ticker Search Gaps', () => {
   test.beforeEach(async ({ page }) => {
-    // Mock anonymous auth
-    await page.route('**/api/v2/auth/anonymous', async (route) => {
-      await route.fulfill({
-        status: 201,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          access_token: 'mock-test-token',
-          token_type: 'bearer',
-          auth_type: 'anonymous',
-          user_id: 'anon-test-user',
-          session_expires_in_seconds: 3600,
-        }),
-      });
-    });
+    // Mock anonymous auth (must be before page.goto)
+    await mockAnonymousAuth(page);
 
     await page.goto('/');
     await page.waitForLoadState('networkidle');

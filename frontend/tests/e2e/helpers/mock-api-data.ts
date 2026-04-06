@@ -179,16 +179,18 @@ export const MOCK_EMPTY_SENTIMENT_RESPONSE = {
  */
 export async function mockTickerDataApis(page: Page): Promise<() => Promise<void>> {
   // Mock anonymous auth — useChartData requires hasAccessToken=true
+  // Response shape must match AnonymousSessionResponse (src/types/auth.ts)
   await page.route('**/api/v2/auth/anonymous', async (route) => {
     await route.fulfill({
       status: 201,
       contentType: 'application/json',
       body: JSON.stringify({
-        access_token: 'mock-test-token',
-        token_type: 'bearer',
+        token: 'mock-test-token',
         auth_type: 'anonymous',
         user_id: 'anon-test-user',
-        session_expires_in_seconds: 3600,
+        created_at: new Date().toISOString(),
+        session_expires_at: new Date(Date.now() + 3600_000).toISOString(),
+        storage_hint: 'localStorage',
       }),
     });
   });

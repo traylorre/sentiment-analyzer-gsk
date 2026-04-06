@@ -1,12 +1,14 @@
 // Target: Customer Dashboard (Next.js/Amplify)
 import { test, expect } from '@playwright/test';
 import { assertCleanState } from './helpers/clean-state';
+import { waitForAuth } from './helpers/auth-helper';
 
 test.describe('Dashboard Interactions (Feature 1247)', () => {
   test.setTimeout(30_000);
 
   test('search input shows autocomplete results', async ({ page }) => {
     await page.goto('/');
+    await waitForAuth(page);
 
     const searchInput = page.getByPlaceholder(/search tickers/i);
     await expect(searchInput).toBeVisible();
@@ -29,6 +31,7 @@ test.describe('Dashboard Interactions (Feature 1247)', () => {
 
   test('clicking search result loads chart', async ({ page }) => {
     await page.goto('/');
+    await waitForAuth(page);
 
     const searchInput = page.getByPlaceholder(/search tickers/i);
     await searchInput.fill('AAPL');

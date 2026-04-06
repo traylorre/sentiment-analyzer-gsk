@@ -9,9 +9,43 @@
 import { test, expect } from '@playwright/test';
 import { mockOAuthRedirect } from './helpers/auth-helper';
 
+/**
+ * Mock the /api/v2/auth/oauth/urls endpoint so the signin page
+ * discovers providers and renders OAuth buttons.
+ * Also provides the authorize_url used by signInWithOAuth().
+ */
+async function mockOAuthUrls(page: import('@playwright/test').Page) {
+  await page.route('**/api/v2/auth/oauth/urls', route =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        providers: {
+          google: {
+            authorize_url:
+              'https://cognito.example.com/oauth2/authorize?identity_provider=Google&client_id=test&response_type=code&scope=openid+email+profile&code_challenge=mock-challenge&code_challenge_method=S256&state=mock-state-google&redirect_uri=http://localhost:3000/auth/callback',
+            icon: 'google',
+            state: 'mock-state-google',
+          },
+          github: {
+            authorize_url:
+              'https://cognito.example.com/oauth2/authorize?identity_provider=GitHub&client_id=test&response_type=code&scope=openid+email+profile&code_challenge=mock-challenge&code_challenge_method=S256&state=mock-state-github&redirect_uri=http://localhost:3000/auth/callback',
+            icon: 'github',
+            state: 'mock-state-github',
+          },
+        },
+        state: 'mock-state-legacy',
+      }),
+    })
+  );
+}
+
 test.describe('OAuth Login Flow (US1)', () => {
   test('Google OAuth redirect contains state and code_challenge', async ({ page }) => {
     let capturedUrl: URL | null = null;
+
+    // Mock OAuth URLs so signin page shows provider buttons
+    await mockOAuthUrls(page);
 
     // Capture the OAuth redirect URL before intercepting
     await page.route('**/oauth2/authorize**', async (route) => {
@@ -37,6 +71,37 @@ test.describe('OAuth Login Flow (US1)', () => {
   });
 
   test('successful OAuth callback creates session and loads dashboard', async ({ page }) => {
+    // Mock OAuth URLs so signin page shows provider buttons
+    await mockOAuthUrls(page);
+
+    // Mock the OAuth callback endpoint (code → token exchange)
+    await page.route('**/api/v2/auth/oauth/callback', route =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'success',
+          email_masked: 't***@example.com',
+          auth_type: 'google',
+          tokens: {
+            id_token: 'mock-id-token',
+            access_token: 'mock-access-token',
+            expires_in: 3600,
+          },
+          merged_anonymous_data: false,
+          is_new_user: false,
+          conflict: false,
+          existing_provider: null,
+          message: null,
+          error: null,
+          role: 'user',
+          verification: 'verified',
+          linked_providers: ['google'],
+          last_provider_used: 'google',
+        }),
+      })
+    );
+
     // Setup route interception for successful OAuth
     await mockOAuthRedirect(page, '/auth/callback', { code: 'valid-test-code' });
 
@@ -54,6 +119,9 @@ test.describe('OAuth Login Flow (US1)', () => {
   });
 
   test('OAuth callback with provider denial shows friendly error', async ({ page }) => {
+    // Mock OAuth URLs so signin page shows provider buttons
+    await mockOAuthUrls(page);
+
     await mockOAuthRedirect(page, '/auth/callback', {
       error: 'access_denied',
       errorDescription: 'User cancelled the login',
@@ -65,8 +133,8 @@ test.describe('OAuth Login Flow (US1)', () => {
 
     // Should show error page with friendly message
     await expect(page.getByText(/cancelled|denied|error/i)).toBeVisible({ timeout: 10000 });
-    // Should have a "Try again" or "Back to sign in" link
-    await expect(page.getByRole('link', { name: /try again|sign in|back/i })).toBeVisible();
+    // Should have a "Try again" button (Button component renders as <button>)
+    await expect(page.getByRole('button', { name: /try again/i })).toBeVisible();
   });
 
   test('OAuth callback with stale state is rejected', async ({ page }) => {
@@ -81,6 +149,9 @@ test.describe('OAuth Login Flow (US1)', () => {
 
   test('GitHub OAuth flow works with same pattern', async ({ page }) => {
     let capturedUrl: URL | null = null;
+
+    // Mock OAuth URLs so signin page shows provider buttons
+    await mockOAuthUrls(page);
 
     await page.route('**/oauth2/authorize**', async (route) => {
       capturedUrl = new URL(route.request().url());

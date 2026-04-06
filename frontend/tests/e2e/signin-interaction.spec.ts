@@ -101,12 +101,14 @@ test.describe('OAuth Flow Regression (Feature 1245)', () => {
   test('session recovers after failed OAuth redirect', async ({ page }) => {
     await page.goto('/auth/callback?error=access_denied');
 
-    // Should show cancellation message
-    await expect(page.getByText(/cancelled/i)).toBeVisible();
+    // Should show cancellation message (component maps access_denied → "Sign-in was cancelled...")
+    await expect(page.getByText(/cancelled/i)).toBeVisible({ timeout: 5000 });
 
-    // Should offer a way to continue as guest
-    const recoveryLink = page.getByRole('link', { name: /guest|continue/i });
-    await expect(recoveryLink).toBeVisible();
+    // Recovery: "Try again" button and "Continue as guest" link are both rendered
+    // The <a href="/"> with text "Continue as guest" has role=link
+    await expect(
+      page.getByRole('link', { name: /continue as guest/i })
+    ).toBeVisible({ timeout: 5000 });
   });
 
   test('OAuth callback error shows user-friendly message', async ({ page }) => {

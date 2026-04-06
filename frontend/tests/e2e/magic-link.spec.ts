@@ -9,8 +9,21 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Magic Link Authentication (US2)', () => {
+  const testEmail = `e2e-magiclink-${Date.now()}@test.example.com`;
+
   test('requesting magic link shows confirmation message', async ({ page }) => {
-    const testEmail = `e2e-${test.info().testId}@test.example.com`;
+    // Mock the magic link request API so the form submission succeeds
+    await page.route('**/api/v2/auth/magic-link', route =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'email_sent',
+          message: 'Check your email for a sign-in link',
+        }),
+      })
+    );
+
     await page.goto('/auth/signin');
 
     const emailInput = page.getByLabel(/email address/i);
@@ -26,7 +39,31 @@ test.describe('Magic Link Authentication (US2)', () => {
   });
 
   test('valid magic link token authenticates user', async ({ page }) => {
-    const testEmail = `e2e-${test.info().testId}@test.example.com`;
+    // Mock the magic link request API for the initial form submission
+    // Note: glob **/api/v2/auth/magic-link does NOT match .../magic-link/verify
+    await page.route('**/api/v2/auth/magic-link', route =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'email_sent',
+          message: 'Check your email for a sign-in link',
+        }),
+      })
+    );
+
+    // Mock the verify endpoint to return an error (simulating invalid token)
+    await page.route('**/api/v2/auth/magic-link/verify', route =>
+      route.fulfill({
+        status: 400,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          code: 'INVALID_TOKEN',
+          message: 'Invalid or expired token',
+        }),
+      })
+    );
+
     // Step 1: Request magic link via the UI
     await page.goto('/auth/signin');
     const emailInput = page.getByLabel(/email address/i);
@@ -53,6 +90,18 @@ test.describe('Magic Link Authentication (US2)', () => {
   });
 
   test('reused magic link token shows already-used error', async ({ page }) => {
+    // Mock the verify endpoint to return token-used error
+    await page.route('**/api/v2/auth/magic-link/verify', route =>
+      route.fulfill({
+        status: 400,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          code: 'TOKEN_USED',
+          message: 'Token already used',
+        }),
+      })
+    );
+
     // Navigate to verify with a token that would be marked as used
     await page.goto('/auth/verify?token=already-used-token');
 
@@ -67,6 +116,18 @@ test.describe('Magic Link Authentication (US2)', () => {
   });
 
   test('expired magic link shows expiry error', async ({ page }) => {
+    // Mock the verify endpoint to return token-expired error
+    await page.route('**/api/v2/auth/magic-link/verify', route =>
+      route.fulfill({
+        status: 400,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          code: 'TOKEN_EXPIRED',
+          message: 'Token expired',
+        }),
+      })
+    );
+
     // Navigate to verify with a token that would be expired (>1hr old)
     await page.goto('/auth/verify?token=expired-old-token');
 

@@ -22,11 +22,12 @@ test.describe('Chart Zoom Data Visibility', () => {
         status: 201,
         contentType: 'application/json',
         body: JSON.stringify({
-          access_token: 'mock-test-token',
-          token_type: 'bearer',
+          token: 'mock-test-token',
           auth_type: 'anonymous',
           user_id: 'anon-test-user',
-          session_expires_in_seconds: 3600,
+          created_at: new Date().toISOString(),
+          session_expires_at: new Date(Date.now() + 86400000).toISOString(),
+          storage_hint: 'session',
         }),
       });
     });

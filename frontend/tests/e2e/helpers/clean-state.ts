@@ -2,6 +2,7 @@
 // Feature 1247: Shared helpers for clickable element test coverage
 
 import { type Page, expect } from '@playwright/test';
+import { mockAnonymousAuth } from './auth-helper';
 
 /**
  * Assert the UI is in a clean state after an interaction unwind.
@@ -35,6 +36,20 @@ export async function assertCleanState(page: Page) {
  * Uses e2e- prefix for cleanup identification.
  */
 export async function createTestConfig(page: Page, name: string): Promise<void> {
+  // Mock anonymous auth to avoid race conditions during page load
+  await mockAnonymousAuth(page);
+
+  // Mock ticker search to avoid rate limiting under parallel load
+  await page.route('**/api/v2/tickers/search**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        results: [{ symbol: 'AAPL', name: 'Apple Inc', exchange: 'NASDAQ' }],
+      }),
+    });
+  });
+
   await page.goto('/configs');
   await page.waitForLoadState('networkidle');
 
@@ -57,25 +72,14 @@ export async function createTestConfig(page: Page, name: string): Promise<void> 
   await expect(nameInput).toBeVisible({ timeout: 5000 });
   await nameInput.fill(name);
 
-  // Add a ticker — the search has debounce and may be rate-limited (429)
+  // Add a ticker (search API is mocked, no retry needed)
   const tickerInput = page.getByPlaceholder(/search for a ticker/i)
     .or(page.getByPlaceholder(/add ticker|search/i));
   if (await tickerInput.first().isVisible({ timeout: 5000 }).catch(() => false)) {
-    // Retry ticker search up to 3 times (handles 429 rate limiting)
-    let tickerAdded = false;
-    for (let attempt = 0; attempt < 3 && !tickerAdded; attempt++) {
-      if (attempt > 0) {
-        await page.waitForTimeout(2000); // Back off before retry
-        await tickerInput.first().clear();
-      }
-      await tickerInput.first().fill('AAPL');
-      const option = page.getByRole('option', { name: /AAPL/i });
-      if (await option.isVisible({ timeout: 8000 }).catch(() => false)) {
-        await option.click();
-        tickerAdded = true;
-        await page.waitForTimeout(500);
-      }
-    }
+    await tickerInput.first().fill('AAPL');
+    const option = page.getByRole('option', { name: /AAPL/i });
+    await expect(option).toBeVisible({ timeout: 5000 });
+    await option.click();
   }
 
   // Submit — use the form submit button (exact "Create"), not the CTA
@@ -84,6 +88,9 @@ export async function createTestConfig(page: Page, name: string): Promise<void> 
   await expect(submitButton).toBeEnabled({ timeout: 10000 });
   await submitButton.click();
   await page.waitForTimeout(1000);
+
+  // Clean up route mocks so they don't interfere with subsequent navigation
+  await page.unroute('**/api/v2/tickers/search**');
 }
 
 /**

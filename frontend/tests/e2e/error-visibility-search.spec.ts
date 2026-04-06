@@ -1,5 +1,6 @@
 // Target: Customer Dashboard (Next.js/Amplify)
 import { test, expect, type ConsoleMessage } from '@playwright/test';
+import { mockAnonymousAuth } from './helpers/auth-helper';
 
 /**
  * T009: Ticker Search Error Visibility
@@ -11,6 +12,11 @@ import { test, expect, type ConsoleMessage } from '@playwright/test';
  * Uses page.route() to intercept API calls and simulate failures.
  */
 test.describe('Ticker Search Error Visibility', () => {
+  test.beforeEach(async ({ page }) => {
+    // Mock anonymous auth to ensure page loads correctly (must be before page.goto)
+    await mockAnonymousAuth(page);
+  });
+
   test('shows error state when API returns 500', async ({ page }) => {
     const consoleMessages: string[] = [];
     page.on('console', (msg: ConsoleMessage) => {
@@ -133,16 +139,19 @@ test.describe('Ticker Search Error Visibility', () => {
 
     const searchInput = page.getByPlaceholder(/search tickers/i);
     await searchInput.fill('AAPL');
-    await page.waitForTimeout(1500);
+
+    // Wait for debounced search to complete (FR-008: waitForResponse, not waitForTimeout)
+    await page.waitForResponse('**/api/v2/tickers/search**');
 
     // Verify error shown
     await expect(
       page.getByText(/unable to search/i)
     ).toBeVisible({ timeout: 5000 });
 
-    // Click retry
+    // Click retry and wait for the new search response
+    const retryResponsePromise = page.waitForResponse('**/api/v2/tickers/search**');
     await page.getByRole('button', { name: /retry/i }).click();
-    await page.waitForTimeout(1500);
+    await retryResponsePromise;
 
     // After retry, should show results (not error)
     await expect(page.getByRole('option', { name: /AAPL/i })).toBeVisible({

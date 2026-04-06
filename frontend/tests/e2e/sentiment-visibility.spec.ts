@@ -1,5 +1,6 @@
 // Target: Customer Dashboard (Next.js/Amplify)
 import { test, expect } from '@playwright/test';
+import { waitForAuth } from './helpers/auth-helper';
 
 test.describe('Sentiment Data Visibility', () => {
   test.setTimeout(30000);
@@ -48,6 +49,7 @@ test.describe('Sentiment Data Visibility', () => {
 
   test('AAPL chart displays sentiment data points', async ({ page }) => {
     await page.goto('/');
+    await waitForAuth(page);
 
     await searchAndSelectTicker(page, 'AAPL');
 
@@ -63,6 +65,7 @@ test.describe('Sentiment Data Visibility', () => {
 
   test('chart updates on time range change', async ({ page }) => {
     await page.goto('/');
+    await waitForAuth(page);
 
     await searchAndSelectTicker(page, 'AAPL');
 
