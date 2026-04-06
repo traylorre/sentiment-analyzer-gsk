@@ -1,5 +1,6 @@
 // Target: Customer Dashboard (Next.js/Amplify)
 import { test, expect } from '@playwright/test';
+import { waitForAuth } from './helpers/auth-helper';
 
 test.describe('Sentiment Data Visibility', () => {
   test.setTimeout(30000);
@@ -48,6 +49,7 @@ test.describe('Sentiment Data Visibility', () => {
 
   test('AAPL chart displays sentiment data points', async ({ page }) => {
     await page.goto('/');
+    await waitForAuth(page);
 
     await searchAndSelectTicker(page, 'AAPL');
 
@@ -63,6 +65,7 @@ test.describe('Sentiment Data Visibility', () => {
 
   test('chart updates on time range change', async ({ page }) => {
     await page.goto('/');
+    await waitForAuth(page);
 
     await searchAndSelectTicker(page, 'AAPL');
 
@@ -70,8 +73,8 @@ test.describe('Sentiment Data Visibility', () => {
     const chart = page.getByRole('img', { name: /price and sentiment/i });
     await chart.waitFor({ timeout: 15000 });
 
-    // Click 1M time range button
-    await page.getByRole('button', { name: /^1M$/i }).click();
+    // Click 1M time range button (aria-label is "1M time range")
+    await page.getByRole('button', { name: /1M time range/i }).click();
 
     // Wait for chart to update
     await page.waitForTimeout(2000);

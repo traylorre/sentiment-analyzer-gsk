@@ -11,7 +11,8 @@ test.describe('Auth Menu Navigation (Feature 1247)', () => {
   });
 
   test('guest menu trigger opens menu', async ({ page }) => {
-    const menuTrigger = page.locator('[data-testid="user-menu-trigger"]');
+    // Scope to desktop sidebar (aside) to avoid matching hidden mobile header trigger
+    const menuTrigger = page.locator('aside [data-testid="user-menu-trigger"]');
     await expect(menuTrigger).toBeVisible();
 
     // Click to open menu
@@ -30,7 +31,7 @@ test.describe('Auth Menu Navigation (Feature 1247)', () => {
 
   test('menu Sign in with email navigates', async ({ page }) => {
     // Open menu
-    const menuTrigger = page.locator('[data-testid="user-menu-trigger"]');
+    const menuTrigger = page.locator('aside [data-testid="user-menu-trigger"]');
     await menuTrigger.click();
 
     // Click "Sign in with email" menu item
@@ -52,7 +53,7 @@ test.describe('Auth Menu Navigation (Feature 1247)', () => {
 
   test('menu Settings navigates', async ({ page }) => {
     // Open menu
-    const menuTrigger = page.locator('[data-testid="user-menu-trigger"]');
+    const menuTrigger = page.locator('aside [data-testid="user-menu-trigger"]');
     await menuTrigger.click();
 
     // Click Settings menu item
@@ -60,13 +61,13 @@ test.describe('Auth Menu Navigation (Feature 1247)', () => {
     await expect(settingsItem).toBeVisible();
     await settingsItem.click();
 
-    // Assert URL contains /settings
-    await expect(page).toHaveURL(/\/settings/);
+    // Assert Settings content visible (hard navigation completed)
+    await page.waitForLoadState('networkidle');
+    await expect(page.getByText(/customize your dashboard/i)).toBeVisible({ timeout: 10000 });
 
-    // Unwind: click Dashboard tab to go back
-    const dashboardTab = page.getByRole('tab', { name: /dashboard/i });
-    await dashboardTab.click();
-    await expect(page).toHaveURL(/\/$/);
+    // Unwind: navigate back to root
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
 
     await assertCleanState(page);
   });

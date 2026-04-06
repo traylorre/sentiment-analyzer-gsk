@@ -20,7 +20,11 @@ import {
 
 test.describe('Chaos Dashboard Keyboard Navigation', () => {
   // Chaos dashboard is served by the Python API server (port 8000)
+  // This endpoint only exists in deployed environments, not local dev
   const CHAOS_URL = process.env.CHAOS_DASHBOARD_URL ?? 'http://localhost:8000/chaos/dashboard';
+
+  // Skip when chaos dashboard isn't available (local dev / CI without deployed backend)
+  test.skip(!process.env.CHAOS_DASHBOARD_URL, 'Chaos dashboard not available (set CHAOS_DASHBOARD_URL)');
 
   test.beforeEach(async ({ page }) => {
     await page.goto(CHAOS_URL);

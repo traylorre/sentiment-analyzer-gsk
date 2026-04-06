@@ -49,8 +49,8 @@ test.describe('Account Linking (US5)', () => {
     await page.goto('/settings');
     await page.waitForLoadState('networkidle');
 
-    // The account section should show linked providers info
-    const accountSection = page.getByText(/account|profile/i);
+    // The account section heading should be visible
+    const accountSection = page.getByRole('heading', { name: /account/i });
     await expect(accountSection).toBeVisible({ timeout: 10000 });
 
     // For anonymous users, shows upgrade prompt

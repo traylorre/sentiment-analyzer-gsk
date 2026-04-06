@@ -90,34 +90,20 @@ test.describe('Chaos: Error Boundary', () => {
       page.getByText(/something went wrong/i),
     ).toBeVisible({ timeout: 5000 });
 
-    // Tab through action buttons and verify focus order
-    // Focus should move: Try Again → Reload Page → Go Home
-    await page.keyboard.press('Tab');
-    const firstFocused = await page.evaluate(() =>
-      document.activeElement?.textContent?.trim(),
-    );
+    // Verify each recovery button is programmatically focusable.
+    // Uses .focus() instead of chained Tab presses — Tab key behavior in
+    // headless Chromium is unreliable (see keyboard.ts FR-007: chained Tab banned).
+    const tryAgainButton = page.getByRole('button', { name: /try again/i });
+    const reloadButton = page.getByRole('button', { name: /reload page/i });
+    const goHomeButton = page.getByRole('button', { name: /go home/i });
 
-    await page.keyboard.press('Tab');
-    const secondFocused = await page.evaluate(() =>
-      document.activeElement?.textContent?.trim(),
-    );
+    await tryAgainButton.focus();
+    await expect(tryAgainButton).toBeFocused();
 
-    await page.keyboard.press('Tab');
-    const thirdFocused = await page.evaluate(() =>
-      document.activeElement?.textContent?.trim(),
-    );
+    await reloadButton.focus();
+    await expect(reloadButton).toBeFocused();
 
-    // All three buttons should have received focus (exact text may vary)
-    const focusedElements = [firstFocused, secondFocused, thirdFocused].filter(
-      Boolean,
-    );
-    expect(focusedElements.length).toBeGreaterThanOrEqual(2);
-
-    // At least one should be a recovery action
-    const hasRecoveryAction = focusedElements.some(
-      (text) =>
-        /try again|reload|go home/i.test(text || ''),
-    );
-    expect(hasRecoveryAction).toBeTruthy();
+    await goHomeButton.focus();
+    await expect(goHomeButton).toBeFocused();
   });
 });

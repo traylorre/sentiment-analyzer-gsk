@@ -34,10 +34,12 @@ test.describe('Session Lifecycle (US4)', () => {
     if (isVisible) {
       await signOut.click();
 
-      // May show confirmation dialog
-      const confirm = page.getByRole('button', { name: /confirm|yes|sign out/i });
-      if (await confirm.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await confirm.click();
+      // May show confirmation dialog — scope confirm button to dialog
+      const dialog = page.getByRole('dialog');
+      if (await dialog.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await page.waitForTimeout(300); // Animation settle
+        const confirmBtn = dialog.getByRole('button', { name: /sign out/i });
+        await confirmBtn.click();
       }
 
       // Should redirect to signin or home

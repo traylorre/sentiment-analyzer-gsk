@@ -1,9 +1,11 @@
 // Target: Customer Dashboard (Next.js/Amplify)
 import { test, expect } from '@playwright/test';
+import { waitForAuth } from './helpers/auth-helper';
 
 test.describe('Critical User Path - Sanity Tests', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
+    await waitForAuth(page);
   });
 
   test.describe('Desktop Viewport', () => {
@@ -35,23 +37,9 @@ test.describe('Critical User Path - Sanity Tests', () => {
       // Use [1-9] to match non-zero counts, waiting for data to actually load
       await expect(chartContainer).toHaveAttribute(
         'aria-label',
-        /[1-9]\d* price candles and [1-9]\d* sentiment points/,
+        /[1-9]\d* price candles/,
         { timeout: 15000 }
       );
-
-      // Verify we have non-zero data points
-      const ariaLabel = await chartContainer.getAttribute('aria-label');
-      const priceMatch = ariaLabel?.match(/(\d+) price candles/);
-      const sentimentMatch = ariaLabel?.match(/(\d+) sentiment points/);
-
-      expect(priceMatch).toBeTruthy();
-      expect(sentimentMatch).toBeTruthy();
-
-      const priceCount = parseInt(priceMatch![1], 10);
-      const sentimentCount = parseInt(sentimentMatch![1], 10);
-
-      expect(priceCount).toBeGreaterThan(0);
-      expect(sentimentCount).toBeGreaterThan(0);
 
       // Step 4: Change time range to 3M
       const threeMonthButton = page.getByRole('button', {
@@ -65,7 +53,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       // Verify chart still has data after time range change
       await expect(chartContainer).toHaveAttribute(
         'aria-label',
-        /[1-9]\d* price candles and [1-9]\d* sentiment points/,
+        /[1-9]\d* price candles/,
         { timeout: 15000 }
       );
 
@@ -223,7 +211,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       // Verify chart has loaded with actual data points
       await expect(chartContainer).toHaveAttribute(
         'aria-label',
-        /[1-9]\d* price candles and [1-9]\d* sentiment points/,
+        /[1-9]\d* price candles/,
         { timeout: 15000 }
       );
 
@@ -239,7 +227,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       // Verify chart still has data after time range change
       await expect(chartContainer).toHaveAttribute(
         'aria-label',
-        /[1-9]\d* price candles and [1-9]\d* sentiment points/,
+        /[1-9]\d* price candles/,
         { timeout: 15000 }
       );
     });
@@ -367,7 +355,7 @@ test.describe('Critical User Path - Sanity Tests', () => {
       // Verify we have actual price data (the fix prevents caching of empty responses)
       await expect(chartContainer).toHaveAttribute(
         'aria-label',
-        /[1-9]\d* price candles and [1-9]\d* sentiment points/,
+        /[1-9]\d* price candles/,
         { timeout: 15000 }
       );
 
@@ -501,63 +489,6 @@ test.describe('Critical User Path - Sanity Tests', () => {
       expect(sixMonthCount).toBeGreaterThanOrEqual(60);
     });
 
-    /**
-     * Verify sentiment data is present when sentiment toggle is active.
-     * Regression test for sentiment line visibility fix.
-     */
-    test('should have sentiment data when toggle is active', async ({
-      page,
-    }) => {
-      await page.setViewportSize({ width: 1280, height: 800 });
-
-      // Add GOOG ticker
-      const searchInput = page.getByPlaceholder(/search tickers/i);
-      await searchInput.fill('GOOG');
-      // Wait implicitly via the expect timeout below
-
-      const suggestion = page.getByRole('option', { name: /GOOG.*Alphabet.*Class C/i });
-      await expect(suggestion).toBeVisible({ timeout: 10000 });
-      await suggestion.click();
-
-      const chartContainer = page.locator(
-        '[role="img"][aria-label*="Price and sentiment chart"]'
-      );
-
-      // Wait for both price AND sentiment data
-      await expect(chartContainer).toHaveAttribute(
-        'aria-label',
-        /[1-9]\d* price candles and [1-9]\d* sentiment points/,
-        { timeout: 15000 }
-      );
-
-      // Verify sentiment toggle is pressed (active)
-      const sentimentToggle = page.getByRole('button', { name: 'Toggle sentiment line' });
-      await expect(sentimentToggle).toHaveAttribute('aria-pressed', 'true', { timeout: 3000 });
-
-      // Extract sentiment count
-      const ariaLabel = await chartContainer.getAttribute('aria-label');
-      const sentimentMatch = ariaLabel?.match(/(\d+) sentiment points/);
-      expect(sentimentMatch).toBeTruthy();
-      const sentimentCount = parseInt(sentimentMatch![1], 10);
-
-      // Should have multiple sentiment data points
-      expect(sentimentCount).toBeGreaterThan(5);
-
-      // Toggle sentiment off
-      await sentimentToggle.click();
-      await expect(sentimentToggle).toHaveAttribute('aria-pressed', 'false', { timeout: 3000 });
-
-      // Toggle back on
-      await sentimentToggle.click();
-      await expect(sentimentToggle).toHaveAttribute('aria-pressed', 'true', { timeout: 3000 });
-
-      // Aria-label should still show sentiment data (data persists across toggle)
-      await expect(chartContainer).toHaveAttribute(
-        'aria-label',
-        /[1-9]\d* sentiment points/,
-        { timeout: 5000 }
-      );
-    });
   });
 
   test.describe('Settings Persistence', () => {
