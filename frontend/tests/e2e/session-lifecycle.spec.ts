@@ -49,8 +49,10 @@ test.describe('Session Lifecycle (US4)', () => {
         await confirmBtn.evaluate((el) => (el as HTMLButtonElement).click());
       }
 
-      // Should redirect to signin or home (mobile redirect is slower)
-      await page.waitForURL(/(signin|auth|\/\s*$)/i, { timeout: 15000 });
+      // Should redirect to signin or home (mobile redirect is slower).
+      // Use polling assertion instead of waitForURL to avoid Firefox
+      // NS_BINDING_ABORTED errors during client-side routing.
+      await expect(page).toHaveURL(/(signin|auth|\/\s*$)/i, { timeout: 15000 });
     }
   });
 
