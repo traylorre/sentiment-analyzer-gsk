@@ -26,7 +26,11 @@ test.describe('Session Lifecycle (US4)', () => {
 
   test('sign out clears session and redirects to signin', async ({ page }) => {
     await page.goto('/settings');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForFunction(
+      () => !document.querySelector('[class*="animate-pulse"]'),
+      { timeout: 10000 }
+    );
 
     const signOut = page.getByRole('button', { name: /sign out|log out/i });
     const isVisible = await signOut.isVisible().catch(() => false);
@@ -37,13 +41,16 @@ test.describe('Session Lifecycle (US4)', () => {
       // May show confirmation dialog — scope confirm button to dialog
       const dialog = page.getByRole('dialog');
       if (await dialog.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await page.waitForTimeout(300); // Animation settle
+        await page.waitForFunction(
+          () => !document.querySelector('[class*="animate"]'),
+          { timeout: 5000 }
+        );
         const confirmBtn = dialog.getByRole('button', { name: /sign out/i });
-        await confirmBtn.click();
+        await confirmBtn.evaluate((el) => (el as HTMLButtonElement).click());
       }
 
-      // Should redirect to signin or home
-      await page.waitForURL(/(signin|auth|\/\s*$)/i, { timeout: 10000 });
+      // Should redirect to signin or home (mobile redirect is slower)
+      await page.waitForURL(/(signin|auth|\/\s*$)/i, { timeout: 15000 });
     }
   });
 

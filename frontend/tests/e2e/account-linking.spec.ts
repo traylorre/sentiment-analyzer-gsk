@@ -31,15 +31,19 @@ test.describe('Account Linking (US5)', () => {
 
   test('settings page shows anonymous badge with upgrade prompt', async ({ page }) => {
     await page.goto('/settings');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForFunction(
+      () => !document.querySelector('[class*="animate-pulse"]'),
+      { timeout: 10000 }
+    );
 
     // Anonymous users should see their status
     const anonBadge = page.getByText(/anonymous/i);
     const upgradeCta = page.getByText(/upgrade|sign in|create account/i);
 
     // At least one of these should be visible
-    const badgeVisible = await anonBadge.isVisible().catch(() => false);
-    const upgradeVisible = await upgradeCta.isVisible().catch(() => false);
+    const badgeVisible = await anonBadge.isVisible({ timeout: 5000 }).catch(() => false);
+    const upgradeVisible = await upgradeCta.isVisible({ timeout: 5000 }).catch(() => false);
 
     expect(badgeVisible || upgradeVisible).toBeTruthy();
   });

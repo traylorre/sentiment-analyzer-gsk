@@ -85,8 +85,11 @@ test.describe('Dialog Dismissal (Feature 1247)', () => {
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
 
-    // Wait for dialog animation to settle before clicking
-    await page.waitForTimeout(500);
+    // Wait for dialog animation to finish (replaces blind waitForTimeout)
+    await page.waitForFunction(
+      () => !document.querySelector('[class*="animate"]'),
+      { timeout: 5000 }
+    );
 
     // Click confirm — the destructive "Sign out" button in the dialog.
     // Use JS click because on mobile viewports the dialog button may be outside the viewport.
@@ -94,9 +97,10 @@ test.describe('Dialog Dismissal (Feature 1247)', () => {
     await expect(confirmButton).toBeVisible();
     await confirmButton.evaluate((el) => (el as HTMLButtonElement).click());
 
-    // Assert navigated away (URL changes to auth page or root)
-    await page.waitForURL(/\/(auth\/signin|)$/);
-    await expect(page).toHaveURL(/\/(auth\/signin|)$/);
+    // Assert navigated away (URL changes to auth page or root).
+    // Use polling assertion instead of waitForURL to avoid Firefox NS_BINDING_ABORTED
+    // errors caused by client-side routing aborting the navigation event.
+    await expect(page).toHaveURL(/\/(auth\/signin|)$/, { timeout: 15000 });
   });
 
   test('delete dialog: cancel preserves item', async ({ page }) => {
