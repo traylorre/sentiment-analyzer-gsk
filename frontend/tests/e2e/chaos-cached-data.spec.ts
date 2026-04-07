@@ -110,10 +110,11 @@ test.describe('Chaos: Cached Data Resilience', () => {
     const fragment = textBefore!.substring(0, 20);
     expect(textDuring).toContain(fragment);
 
-    // Content should still be interactive (clicking doesn't crash)
+    // Content should still be interactive (clicking doesn't crash).
+    // Use visible() filter — on mobile viewports some elements in main are hidden.
     const clickableElements = mainContent.locator(
       'button, a, [role="button"]',
-    );
+    ).locator('visible=true');
     const clickableCount = await clickableElements.count();
     if (clickableCount > 0) {
       // Assert element is still interactive during outage

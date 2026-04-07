@@ -13,21 +13,28 @@ test.describe('Navigation Flow', () => {
       return;
     }
 
+    // Mobile nav uses Zustand view-store (setView), not Next.js routing,
+    // so URL does NOT change. Assert tab selection state instead.
+
     // Navigate to Configs
-    await page.getByRole('tab', { name: /configs/i }).click();
-    await expect(page).toHaveURL(/\/configs/);
+    const configsTab = page.getByRole('tab', { name: /configs/i });
+    await configsTab.click();
+    await expect(configsTab).toHaveAttribute('aria-selected', 'true');
 
     // Navigate to Alerts
-    await page.getByRole('tab', { name: /alerts/i }).click();
-    await expect(page).toHaveURL(/\/alerts/);
+    const alertsTab = page.getByRole('tab', { name: /alerts/i });
+    await alertsTab.click();
+    await expect(alertsTab).toHaveAttribute('aria-selected', 'true');
 
     // Navigate to Settings
-    await page.getByRole('tab', { name: /settings/i }).click();
-    await expect(page).toHaveURL(/\/settings/);
+    const settingsTab = page.getByRole('tab', { name: /settings/i });
+    await settingsTab.click();
+    await expect(settingsTab).toHaveAttribute('aria-selected', 'true');
 
     // Navigate back to Dashboard
-    await page.getByRole('tab', { name: /dashboard/i }).click();
-    await expect(page).toHaveURL(/\/$/);
+    const dashboardTab = page.getByRole('tab', { name: /dashboard/i });
+    await dashboardTab.click();
+    await expect(dashboardTab).toHaveAttribute('aria-selected', 'true');
   });
 
   test('should support keyboard navigation in tabs', async ({ page, isMobile }) => {

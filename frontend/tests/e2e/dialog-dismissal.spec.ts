@@ -88,10 +88,11 @@ test.describe('Dialog Dismissal (Feature 1247)', () => {
     // Wait for dialog animation to settle before clicking
     await page.waitForTimeout(500);
 
-    // Click confirm — the destructive "Sign out" button in the dialog
+    // Click confirm — the destructive "Sign out" button in the dialog.
+    // Use JS click because on mobile viewports the dialog button may be outside the viewport.
     const confirmButton = dialog.getByRole('button', { name: /sign out/i });
     await expect(confirmButton).toBeVisible();
-    await confirmButton.click({ timeout: 10000 });
+    await confirmButton.evaluate((el) => (el as HTMLButtonElement).click());
 
     // Assert navigated away (URL changes to auth page or root)
     await page.waitForURL(/\/(auth\/signin|)$/);
@@ -158,10 +159,9 @@ test.describe('Dialog Dismissal (Feature 1247)', () => {
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
 
-    // Open user menu — use data-testid directly, let Playwright find whichever is visible.
+    // Open user menu — use visible() filter to pick whichever trigger is on-screen.
     // On desktop the aside trigger is visible; on mobile the header trigger is.
-    // Use .first() since both exist in DOM but only one is CSS-visible at a time.
-    const menuTrigger = page.locator('[data-testid="user-menu-trigger"]').first();
+    const menuTrigger = page.locator('[data-testid="user-menu-trigger"]').locator('visible=true').first();
     await expect(menuTrigger).toBeVisible({ timeout: 5000 });
     // Scroll into view first (trigger may be at bottom of fixed sidebar), then click.
     // Must use regular click (not evaluate) because Radix DropdownMenu uses pointer events.

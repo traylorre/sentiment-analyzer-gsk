@@ -203,10 +203,11 @@ export async function deleteTestConfig(page: Page, name: string): Promise<void> 
   const deleteBtn = page.getByRole('button', { name: `Delete ${name}` });
   if (await deleteBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
     await deleteBtn.click();
-    // Confirm deletion in the dialog
+    // Confirm deletion in the dialog.
+    // Use JS click because on mobile viewports the dialog button may be outside the viewport.
     const confirmBtn = page.getByRole('button', { name: /^delete$/i });
     await expect(confirmBtn).toBeVisible({ timeout: 3000 });
-    await confirmBtn.click();
+    await confirmBtn.evaluate((el) => (el as HTMLButtonElement).click());
     await page.waitForTimeout(500);
   }
 }

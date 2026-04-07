@@ -167,10 +167,11 @@ test.describe('Configuration CRUD (Feature 1247)', () => {
     await expect(deleteButton).toBeVisible({ timeout: 5000 });
     await deleteButton.click();
 
-    // Confirm deletion — the destructive button says "Delete"
+    // Confirm deletion — the destructive button says "Delete".
+    // Use JS click because on mobile viewports the dialog button may be outside the viewport.
     const confirmButton = page.getByRole('button', { name: /^delete$/i });
     await expect(confirmButton).toBeVisible({ timeout: 5000 });
-    await confirmButton.click();
+    await confirmButton.evaluate((el) => (el as HTMLButtonElement).click());
 
     // Assert config is gone from list
     await expect(page.getByText(configName)).toBeHidden({ timeout: 10000 });

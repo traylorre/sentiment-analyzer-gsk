@@ -74,8 +74,8 @@ test.describe('Chaos: Scenario Customer Outcomes', () => {
     expect(textDuring).toContain(fragment);
 
     // Stale data indicator MUST be visible and in warning/stale state (Feature 1266)
-    // Desktop header indicator (mobile header is hidden at md+ breakpoint)
-    const freshnessIndicator = page.locator('[data-testid="data-freshness-indicator"]').last();
+    // Use visible() filter — on mobile, only the header indicator is visible; on desktop, the aside one.
+    const freshnessIndicator = page.locator('[data-testid="data-freshness-indicator"]').locator('visible=true').first();
     await expect(freshnessIndicator).toBeVisible({ timeout: 5000 });
     const freshnessState = await freshnessIndicator.getAttribute('data-freshness-state');
     expect(['stale', 'critical']).toContain(freshnessState);
@@ -196,8 +196,8 @@ test.describe('Chaos: Scenario Customer Outcomes', () => {
     expect(textDuring).toContain(fragment);
 
     // Stale data indicator MUST be visible and in critical state (20min > 4x 5min) (Feature 1266)
-    // Desktop header indicator (mobile header is hidden at md+ breakpoint)
-    const freshnessIndicator = page.locator('[data-testid="data-freshness-indicator"]').last();
+    // Use visible() filter — on mobile, only the header indicator is visible; on desktop, the aside one.
+    const freshnessIndicator = page.locator('[data-testid="data-freshness-indicator"]').locator('visible=true').first();
     await expect(freshnessIndicator).toBeVisible({ timeout: 5000 });
     const freshnessState = await freshnessIndicator.getAttribute('data-freshness-state');
     expect(freshnessState).toBe('critical');

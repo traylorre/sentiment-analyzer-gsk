@@ -134,9 +134,9 @@ test.describe('Anonymous Mode', () => {
     // Wait for page to fully load
     await page.waitForLoadState('networkidle');
 
-    // Dashboard should be accessible - check for the app logo/title in header or sidebar
-    // Use more specific selector to avoid matching multiple "sentiment" headings
-    const appTitle = page.locator('span').filter({ hasText: /^Sentiment$/ }).first();
+    // Dashboard should be accessible - check for the app logo/title in header or sidebar.
+    // On mobile, the aside is hidden so use visible() filter to pick whichever is on-screen.
+    const appTitle = page.locator('span').filter({ hasText: /^Sentiment$/ }).locator('visible=true').first();
     await expect(appTitle).toBeVisible();
   });
 

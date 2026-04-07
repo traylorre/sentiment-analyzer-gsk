@@ -11,8 +11,8 @@ test.describe('Auth Menu Navigation (Feature 1247)', () => {
   });
 
   test('guest menu trigger opens menu', async ({ page }) => {
-    // Scope to desktop sidebar (aside) to avoid matching hidden mobile header trigger
-    const menuTrigger = page.locator('aside [data-testid="user-menu-trigger"]');
+    // Use visible() filter to pick whichever trigger is on-screen (aside on desktop, header on mobile)
+    const menuTrigger = page.locator('[data-testid="user-menu-trigger"]').locator('visible=true').first();
     await expect(menuTrigger).toBeVisible();
 
     // Click to open menu
@@ -30,8 +30,8 @@ test.describe('Auth Menu Navigation (Feature 1247)', () => {
   });
 
   test('menu Sign in with email navigates', async ({ page }) => {
-    // Open menu
-    const menuTrigger = page.locator('aside [data-testid="user-menu-trigger"]');
+    // Open menu — use visible() filter to pick whichever trigger is on-screen
+    const menuTrigger = page.locator('[data-testid="user-menu-trigger"]').locator('visible=true').first();
     await menuTrigger.click();
 
     // Click "Sign in with email" menu item
@@ -52,8 +52,8 @@ test.describe('Auth Menu Navigation (Feature 1247)', () => {
   });
 
   test('menu Settings navigates', async ({ page }) => {
-    // Open menu
-    const menuTrigger = page.locator('aside [data-testid="user-menu-trigger"]');
+    // Open menu — use visible() filter to pick whichever trigger is on-screen
+    const menuTrigger = page.locator('[data-testid="user-menu-trigger"]').locator('visible=true').first();
     await menuTrigger.click();
 
     // Click Settings menu item
