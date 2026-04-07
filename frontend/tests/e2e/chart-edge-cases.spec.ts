@@ -165,21 +165,19 @@ test.describe('Chart Edge Cases', () => {
       await page.waitForTimeout(3000);
 
       // Verify error state is visible — component shows error or "no data"
-      const hasError = await page
-        .getByText(/error|failed|trouble|no.*data|try again/i)
-        .first()
-        .isVisible()
-        .catch(() => false);
-      expect(hasError).toBe(true);
+      // 15s timeout: React Query retries with exponential backoff before showing error
+      await expect(
+        page.getByText(/error|failed|trouble|no.*data|try again/i).first()
+      ).toBeVisible({ timeout: 15000 });
     });
 
     test('retry button re-fetches data after error', async ({ page }) => {
       let callCount = 0;
 
-      // First call fails, second succeeds
+      // Fail first 2 calls (initial + React Query's 1 retry), then succeed
       await page.route('**/api/v2/tickers/*/ohlc**', async (route) => {
         callCount++;
-        if (callCount === 1) {
+        if (callCount <= 2) {
           await route.fulfill({ status: 500, body: 'Internal Server Error' });
         } else {
           await route.fulfill({
@@ -223,19 +221,19 @@ test.describe('Chart Edge Cases', () => {
       // Wait for error state
       await page.waitForTimeout(3000);
 
-      // Click retry/try again button
+      // Click retry/try again button — first call mocked to 500, so error state
+      // with retry button is guaranteed
       const retryButton = page.getByRole('button', { name: /try again|retry|refetch/i });
-      if (await retryButton.isVisible().catch(() => false)) {
-        await retryButton.click();
+      await expect(retryButton).toBeVisible({ timeout: 10000 });
+      await retryButton.click();
 
-        // Wait for second call to succeed
-        await page.waitForTimeout(3000);
+      // Wait for second call to succeed
+      await page.waitForTimeout(3000);
 
-        // Verify chart loaded (aria-label with candle count)
-        await expect(
-          page.locator('[role="img"][aria-label*="candle"]'),
-        ).toBeVisible({ timeout: 10000 });
-      }
+      // Verify chart loaded (aria-label with candle count)
+      await expect(
+        page.locator('[role="img"][aria-label*="candle"]'),
+      ).toBeVisible({ timeout: 10000 });
     });
   });
 });

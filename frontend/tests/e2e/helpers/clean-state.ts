@@ -290,3 +290,89 @@ export async function deleteTestAlert(page: Page, index: number = 0): Promise<vo
     await page.waitForTimeout(500);
   }
 }
+
+/**
+ * Mock alert API routes so alert tests have deterministic data.
+ *
+ * Sets up route interception for /api/v2/alerts and /api/v2/alerts/*
+ * with a synthetic AlertRule. Supports GET, POST, PATCH, DELETE.
+ *
+ * Must be called BEFORE page.goto() so the initial GET is intercepted.
+ */
+export async function mockAlertData(page: Page): Promise<void> {
+  const mockAlert = {
+    alertId: 'mock-alert-001',
+    configId: 'mock-config-001',
+    ticker: 'AAPL',
+    alertType: 'sentiment_threshold',
+    thresholdValue: 0.7,
+    thresholdDirection: 'above',
+    isEnabled: true,
+    lastTriggeredAt: null,
+    triggerCount: 0,
+    createdAt: new Date().toISOString(),
+  };
+
+  let deleted = false;
+
+  await page.route('**/api/v2/alerts', async (route) => {
+    const method = route.request().method();
+    if (method === 'GET') {
+      if (deleted) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            alerts: [],
+            total: 0,
+            dailyEmailQuota: { used: 0, limit: 10, resetsAt: new Date().toISOString() },
+          }),
+        });
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            alerts: [mockAlert],
+            total: 1,
+            dailyEmailQuota: { used: 0, limit: 10, resetsAt: new Date().toISOString() },
+          }),
+        });
+      }
+    } else if (method === 'POST') {
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify(mockAlert),
+      });
+    } else {
+      await route.continue();
+    }
+  });
+
+  await page.route('**/api/v2/alerts/*', async (route) => {
+    const method = route.request().method();
+    if (method === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(mockAlert),
+      });
+    } else if (method === 'PATCH') {
+      const postData = route.request().postData();
+      if (postData) {
+        Object.assign(mockAlert, JSON.parse(postData));
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(mockAlert),
+      });
+    } else if (method === 'DELETE') {
+      deleted = true;
+      await route.fulfill({ status: 204 });
+    } else {
+      await route.continue();
+    }
+  });
+}

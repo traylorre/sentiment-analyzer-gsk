@@ -72,16 +72,8 @@ test.describe('Session Lifecycle (US4)', () => {
     await page.goto('/alerts');
     await page.waitForLoadState('networkidle');
 
-    // Should either show login prompt or redirect to signin
-    const body = await page.textContent('body');
-    const isAuthPrompted =
-      body?.match(/sign in|log in|authenticate|unauthorized/i) ||
-      page.url().includes('signin') ||
-      page.url().includes('auth');
-
-    // For anonymous users, they'll still see the page (just limited)
-    // The test validates the app handles cleared storage gracefully
-    expect(body).toBeTruthy(); // Page rendered without crash
+    // App handled cleared session gracefully — either shows content or redirects to auth
+    await expect(page).toHaveURL(/(alerts|auth|signin)/);
   });
 
   test('multiple sessions can coexist', async ({ page, browser }) => {
@@ -94,8 +86,8 @@ test.describe('Session Lifecycle (US4)', () => {
     await page2.goto('/');
 
     // Both should load without errors
-    await expect(page.locator('body')).not.toBeEmpty();
-    await expect(page2.locator('body')).not.toBeEmpty();
+    await expect(page.getByRole('combobox')).toBeVisible();
+    await expect(page2.getByRole('combobox')).toBeVisible();
 
     await context2.close();
   });

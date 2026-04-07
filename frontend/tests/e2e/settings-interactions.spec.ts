@@ -126,12 +126,11 @@ test.describe('Settings Interactions (Feature 1247)', () => {
     const toggledState = await emailSwitch.getAttribute('aria-checked');
     expect(toggledState).not.toBe(initialState);
 
-    // Save button may be enabled after toggle
+    // Save button should be enabled after toggle
     const saveButton = page.getByRole('button', { name: /save/i });
-    if (await saveButton.isEnabled({ timeout: 3000 }).catch(() => false)) {
-      await saveButton.click();
-      await page.waitForLoadState('networkidle');
-    }
+    await expect(saveButton).toBeEnabled({ timeout: 3000 });
+    await saveButton.click();
+    await page.waitForLoadState('networkidle');
 
     // Reload and verify persistence (local mock may not persist — verify UI state only)
     await page.reload();

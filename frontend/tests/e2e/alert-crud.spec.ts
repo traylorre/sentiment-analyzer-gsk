@@ -1,6 +1,6 @@
 // Target: Customer Dashboard (Next.js/Amplify)
 import { test, expect } from '@playwright/test';
-import { assertCleanState, createTestConfig } from './helpers/clean-state';
+import { assertCleanState, createTestConfig, mockAlertData } from './helpers/clean-state';
 import { setupAuthSession } from './helpers/auth-helper';
 
 /**
@@ -125,60 +125,49 @@ test.describe('Alert CRUD (Feature 1247)', () => {
   });
 
   test('alert toggle switch changes state', async ({ page }) => {
+    await mockAlertData(page);
     await page.goto('/alerts');
     await page.waitForLoadState('domcontentloaded');
 
-    // Find a toggle switch on an existing alert card
     const toggleSwitch = page.getByRole('switch').first();
+    await expect(toggleSwitch).toBeVisible({ timeout: 5000 });
 
-    if (await toggleSwitch.isVisible({ timeout: 5000 }).catch(() => false)) {
-      const initialState = await toggleSwitch.getAttribute('aria-checked');
+    const initialState = await toggleSwitch.getAttribute('aria-checked');
+    await toggleSwitch.click();
 
-      // Click to toggle
-      await toggleSwitch.click();
+    await expect(async () => {
+      const newState = await toggleSwitch.getAttribute('aria-checked');
+      expect(newState).not.toBe(initialState);
+    }).toPass({ timeout: 5000 });
 
-      // Assert state changed
-      await expect(async () => {
-        const newState = await toggleSwitch.getAttribute('aria-checked');
-        expect(newState).not.toBe(initialState);
-      }).toPass({ timeout: 5000 });
-
-      // Unwind: toggle back to original state
-      await toggleSwitch.click();
-      await expect(async () => {
-        const restoredState = await toggleSwitch.getAttribute('aria-checked');
-        expect(restoredState).toBe(initialState);
-      }).toPass({ timeout: 5000 });
-    } else {
-      test.skip(true, 'No alerts with toggle switches exist');
-    }
+    // Unwind: toggle back
+    await toggleSwitch.click();
+    await expect(async () => {
+      const restoredState = await toggleSwitch.getAttribute('aria-checked');
+      expect(restoredState).toBe(initialState);
+    }).toPass({ timeout: 5000 });
 
     await assertCleanState(page);
   });
 
   test('alert delete button opens confirmation', async ({ page }) => {
+    await mockAlertData(page);
     await page.goto('/alerts');
     await page.waitForLoadState('domcontentloaded');
 
-    // Find a delete button on an existing alert card (aria-label="Delete {ticker} alert")
     const deleteButton = page.getByRole('button', { name: /delete.*alert/i }).first();
+    await expect(deleteButton).toBeVisible({ timeout: 5000 });
+    await deleteButton.click();
 
-    if (await deleteButton.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await deleteButton.click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible({ timeout: 5000 });
 
-      // Assert confirmation dialog appeared with "Delete" destructive button
-      const dialog = page.getByRole('dialog').or(page.getByText(/are you sure/i));
-      await expect(dialog).toBeVisible({ timeout: 5000 });
-
-      // Unwind: cancel
-      const cancelButton = page.getByRole('button', { name: /cancel/i });
-      if (await cancelButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await cancelButton.click();
-      } else {
-        await page.keyboard.press('Escape');
-      }
+    // Unwind: cancel
+    const cancelButton = page.getByRole('button', { name: /cancel/i });
+    if (await cancelButton.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await cancelButton.click();
     } else {
-      test.skip(true, 'No alerts exist to test deletion');
+      await page.keyboard.press('Escape');
     }
 
     await assertCleanState(page);

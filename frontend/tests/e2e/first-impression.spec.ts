@@ -34,6 +34,15 @@ test.describe('First Impression Flow', () => {
       await expect(page.getByRole('tab', { name: /configs/i })).toBeVisible();
       await expect(page.getByRole('tab', { name: /alerts/i })).toBeVisible();
       await expect(page.getByRole('tab', { name: /settings/i })).toBeVisible();
+    } else {
+      // Desktop: sidebar navigation with full labels
+      const aside = page.locator('aside');
+      await expect(aside).toBeVisible();
+
+      await expect(aside.getByText(/dashboard/i)).toBeVisible();
+      await expect(aside.getByText(/configurations/i)).toBeVisible();
+      await expect(aside.getByText(/alerts/i)).toBeVisible();
+      await expect(aside.getByText(/settings/i)).toBeVisible();
     }
   });
 
