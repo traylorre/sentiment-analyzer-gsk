@@ -1,9 +1,14 @@
 // Target: Customer Dashboard (Next.js/Amplify)
 import { test, expect } from '@playwright/test';
 import { waitForAuth } from './helpers/auth-helper';
+import { skipWithoutDataApis } from './helpers/data-api-guard';
 
 test.describe('Sentiment Data Visibility', () => {
   test.setTimeout(30000);
+
+  test.beforeEach(async () => {
+    await skipWithoutDataApis(test);
+  });
 
   async function searchAndSelectTicker(page: import('@playwright/test').Page, ticker: string) {
     const searchInput = page.getByPlaceholder(/search tickers/i);
