@@ -1,5 +1,6 @@
 // Target: Customer Dashboard (Next.js/Amplify)
 import { test, expect } from '@playwright/test';
+import { setupAuthSession } from './helpers/auth-helper';
 
 /**
  * Settings Page E2E Tests
@@ -260,19 +261,34 @@ test.describe('Settings Page', () => {
   });
 
   test.describe('Sign Out (Authenticated Users)', () => {
-    // These tests require authentication setup.
-    // For now, we skip them with a clear reason.
-    // TODO: Add auth fixture setup when backend sets cookies properly.
+    // Auth setup: setupAuthSession sets cookies so sign-out button renders
+    test.beforeEach(async ({ context }) => {
+      await setupAuthSession(context);
+    });
 
-    test.skip('should show sign out button when authenticated', async ({ page }) => {
+    test('should show sign out button when authenticated', async ({ page }) => {
+      await page.goto('/settings');
+      await page.waitForLoadState('domcontentloaded');
+      await page.waitForFunction(
+        () => !document.querySelector('[class*="animate-pulse"]'),
+        { timeout: 10000 }
+      );
+
       const signOutButton = page.getByRole('button', { name: /sign out/i });
       await expect(signOutButton).toBeVisible();
       await expect(signOutButton).toBeEnabled();
     });
 
-    test.skip('should open confirmation dialog on sign out click', async ({
+    test('should open confirmation dialog on sign out click', async ({
       page,
     }) => {
+      await page.goto('/settings');
+      await page.waitForLoadState('domcontentloaded');
+      await page.waitForFunction(
+        () => !document.querySelector('[class*="animate-pulse"]'),
+        { timeout: 10000 }
+      );
+
       const signOutButton = page.getByRole('button', { name: /sign out/i });
       await signOutButton.click();
 
@@ -295,7 +311,14 @@ test.describe('Settings Page', () => {
       await page.keyboard.press('Escape');
     });
 
-    test.skip('should close sign out dialog on cancel', async ({ page }) => {
+    test('should close sign out dialog on cancel', async ({ page }) => {
+      await page.goto('/settings');
+      await page.waitForLoadState('domcontentloaded');
+      await page.waitForFunction(
+        () => !document.querySelector('[class*="animate-pulse"]'),
+        { timeout: 10000 }
+      );
+
       const signOutButton = page.getByRole('button', { name: /sign out/i });
       await signOutButton.click();
 
