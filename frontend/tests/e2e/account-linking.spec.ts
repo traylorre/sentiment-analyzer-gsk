@@ -15,7 +15,7 @@ test.describe('Account Linking (US5)', () => {
     await page.waitForLoadState('networkidle');
 
     // Dashboard should load and show anonymous state
-    await expect(page.locator('body')).not.toBeEmpty();
+    await expect(page.getByRole('combobox')).toBeVisible();
 
     // Search for a ticker (creates anonymous session automatically)
     const searchInput = page.getByRole('searchbox').or(page.getByPlaceholder(/search/i));
@@ -25,8 +25,7 @@ test.describe('Account Linking (US5)', () => {
     }
 
     // Anonymous user should be able to interact with the dashboard
-    const pageContent = await page.textContent('body');
-    expect(pageContent).toBeTruthy();
+    await expect(page.getByText(/Price & Sentiment Analysis/i)).toBeVisible();
   });
 
   test('settings page shows anonymous badge with upgrade prompt', async ({ page }) => {
@@ -59,7 +58,8 @@ test.describe('Account Linking (US5)', () => {
 
     // For anonymous users, shows upgrade prompt
     // For authenticated users, shows linked providers
-    const body = await page.textContent('body');
-    expect(body).toBeTruthy();
+    await expect(
+      page.getByText(/anonymous|google|upgrade|member since/i).first()
+    ).toBeVisible();
   });
 });

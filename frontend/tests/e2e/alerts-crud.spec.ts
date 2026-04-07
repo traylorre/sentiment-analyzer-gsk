@@ -9,7 +9,8 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { setupAuthSession } from './helpers/auth-helper';
+import { setupAuthSession, mockAnonymousAuth } from './helpers/auth-helper';
+import { mockAlertData } from './helpers/clean-state';
 
 test.describe('Alert Management CRUD (US3)', () => {
   test.beforeEach(async ({ context, page }) => {
@@ -43,27 +44,33 @@ test.describe('Alert Management CRUD (US3)', () => {
     await expect(newAlertBtn.first()).toBeVisible({ timeout: 10000 });
   });
 
-  test('delete alert removes it from list', async ({ page }) => {
-    // Look for existing alerts with delete buttons (aria-label="Delete {ticker} alert")
+  test('delete alert removes it from list', async ({ page, context }) => {
+    // Set up auth mock + alert mock, then navigate fresh to avoid TanStack Query cache
+    // from beforeEach's unmocked load (staleTime: 2min prevents refetch).
+    await setupAuthSession(context);
+    await mockAnonymousAuth(page);
+    await mockAlertData(page);
+    await page.goto('/alerts');
+    await page.waitForLoadState('domcontentloaded');
+
+    // Wait for mock alerts to render (session init + TanStack Query fetch)
     const deleteButtons = page.getByRole('button', { name: /delete.*alert/i });
-    const count = await deleteButtons.count();
+    await expect(deleteButtons.first()).toBeVisible({ timeout: 10000 });
+    const beforeCount = await deleteButtons.count();
+    expect(beforeCount).toBeGreaterThan(0);
 
-    if (count > 0) {
-      const beforeCount = count;
-      await deleteButtons.first().click();
+    await deleteButtons.first().scrollIntoViewIfNeeded();
+    await deleteButtons.first().click();
 
-      // Confirm deletion in dialog
-      const confirmButton = page.getByRole('button', { name: /^delete$/i });
-      if (await confirmButton.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await confirmButton.click();
-      }
-
-      // Verify count decreased
-      await page.waitForTimeout(1000);
-      const afterCount = await page.getByRole('button', { name: /delete.*alert/i }).count();
-      expect(afterCount).toBeLessThan(beforeCount);
-    } else {
-      test.skip(true, 'No alerts exist to test deletion');
+    // Confirm deletion in dialog (use JS click — button may be outside viewport on mobile)
+    const confirmButton = page.getByRole('button', { name: /^delete$/i });
+    if (await confirmButton.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await confirmButton.evaluate((el) => (el as HTMLButtonElement).click());
     }
+
+    // Verify count decreased
+    await page.waitForTimeout(1000);
+    const afterCount = await page.getByRole('button', { name: /delete.*alert/i }).count();
+    expect(afterCount).toBeLessThan(beforeCount);
   });
 });

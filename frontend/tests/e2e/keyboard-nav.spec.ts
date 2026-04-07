@@ -43,20 +43,10 @@ test.describe('Chaos Dashboard Keyboard Navigation', () => {
       await focusAndAssert(reportsTab);
     });
 
-    test('safety control buttons receive focus via .focus()', async ({
-      page,
-    }) => {
-      // Health check button (Feature 1244)
-      const healthBtn = page.locator('button:has-text("Health Check")');
-      if ((await healthBtn.count()) > 0) {
-        await focusAndAssert(healthBtn);
-      }
-
-      // Gate toggle button (Feature 1245)
-      const gateBtn = page.locator('button:has-text("Gate")');
-      if ((await gateBtn.count()) > 0) {
-        await focusAndAssert(gateBtn);
-      }
+    test.fixme('safety control buttons receive focus via .focus()', async () => {
+      // Feature 1242: chaos dashboard page not yet created —
+      // Health Check and Gate buttons only exist in the React customer dashboard,
+      // not in the Alpine.js chaos dashboard this test targets.
     });
   });
 
@@ -72,16 +62,9 @@ test.describe('Chaos Dashboard Keyboard Navigation', () => {
       ).toBeVisible({ timeout: 3000 });
     });
 
-    test('Enter activates focused action button', async ({ page }) => {
-      const healthBtn = page.locator('button:has-text("Health Check")');
-      if ((await healthBtn.count()) > 0) {
-        await focusAndAssert(healthBtn);
-        await page.keyboard.press('Enter');
-        // Button should respond (loading state or result)
-        await page.waitForTimeout(500);
-      } else {
-        test.skip();
-      }
+    test.fixme('Enter activates focused action button', async () => {
+      // Feature 1242: chaos dashboard page not yet created —
+      // Health Check button only exists in the React customer dashboard.
     });
   });
 
@@ -124,19 +107,9 @@ test.describe('Chaos Dashboard Keyboard Navigation', () => {
   });
 
   test.describe('Modal Focus Trap (FR-009)', () => {
-    test('Andon cord modal traps and returns focus', async ({ page }) => {
-      const andonBtn = page.locator('button:has-text("Andon")');
-      if ((await andonBtn.count()) > 0) {
-        await assertModalFocusTrap(
-          page,
-          'button:has-text("Andon")',
-          'dialog, [role="dialog"]',
-          'button:has-text("Cancel")',
-        );
-      } else {
-        // Feature 1245/1246 not implemented
-        test.skip();
-      }
+    test.fixme('Andon cord modal traps and returns focus', async () => {
+      // Feature 1242: chaos dashboard page not yet created —
+      // Andon cord button only exists in the React customer dashboard.
     });
   });
 

@@ -69,16 +69,15 @@ test.describe('Configs Page', () => {
   test('should open config form when creating new', async ({ page }) => {
     await page.goto('/configs');
 
-    // Click create button (specific name to avoid matching form submit)
+    // Create button is guaranteed visible (empty state shows it)
     const createButton = page.getByRole('button', { name: /create configuration/i });
-    if (await createButton.isVisible()) {
-      await createButton.click();
+    await expect(createButton).toBeVisible();
+    await createButton.click();
 
-      // Form should be visible (dialog or heading)
-      await expect(
-        page.getByRole('dialog').or(page.getByRole('heading', { name: /new configuration/i }))
-      ).toBeVisible();
-    }
+    // Form should be visible (dialog or heading)
+    await expect(
+      page.getByRole('dialog').or(page.getByRole('heading', { name: /new configuration/i }))
+    ).toBeVisible();
   });
 });
 
@@ -124,17 +123,16 @@ test.describe('Settings Page', () => {
 
     // Find haptic toggle
     const hapticSwitch = page.getByRole('switch', { name: /haptic/i });
+    await expect(hapticSwitch).toBeVisible();
 
-    if (await hapticSwitch.isVisible()) {
-      const initialState = await hapticSwitch.getAttribute('aria-checked');
+    const initialState = await hapticSwitch.getAttribute('aria-checked');
 
-      // Toggle
-      await hapticSwitch.click();
+    // Toggle
+    await hapticSwitch.click();
 
-      // State should change
-      const newState = await hapticSwitch.getAttribute('aria-checked');
-      expect(newState).not.toBe(initialState);
-    }
+    // State should change
+    const newState = await hapticSwitch.getAttribute('aria-checked');
+    expect(newState).not.toBe(initialState);
   });
 
   test('should toggle reduced motion setting', async ({ page }) => {
@@ -142,16 +140,15 @@ test.describe('Settings Page', () => {
 
     // Find reduced motion toggle
     const motionSwitch = page.getByRole('switch', { name: /reduced motion/i });
+    await expect(motionSwitch).toBeVisible();
 
-    if (await motionSwitch.isVisible()) {
-      const initialState = await motionSwitch.getAttribute('aria-checked');
+    const initialState = await motionSwitch.getAttribute('aria-checked');
 
-      // Toggle
-      await motionSwitch.click();
+    // Toggle
+    await motionSwitch.click();
 
-      // State should change
-      const newState = await motionSwitch.getAttribute('aria-checked');
-      expect(newState).not.toBe(initialState);
-    }
+    // State should change
+    const newState = await motionSwitch.getAttribute('aria-checked');
+    expect(newState).not.toBe(initialState);
   });
 });

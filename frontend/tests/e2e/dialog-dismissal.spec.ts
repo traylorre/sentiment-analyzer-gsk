@@ -54,16 +54,10 @@ test.describe('Dialog Dismissal (Feature 1247)', () => {
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
 
-    // Press Escape (may need to focus dialog first)
+    // Press Escape to dismiss dialog
     await dialog.press('Escape');
 
-    // Assert dialog is hidden (use Cancel fallback if Escape didn't work)
-    if (await dialog.isVisible({ timeout: 1000 }).catch(() => false)) {
-      const cancelButton = dialog.getByRole('button', { name: /cancel|no|close/i });
-      if (await cancelButton.isVisible({ timeout: 1000 }).catch(() => false)) {
-        await cancelButton.click();
-      }
-    }
+    // Hard assertion: Escape MUST close the dialog (no Cancel fallback)
     await expect(dialog).toBeHidden({ timeout: 5000 });
 
     await assertCleanState(page);
@@ -153,8 +147,9 @@ test.describe('Dialog Dismissal (Feature 1247)', () => {
     // Press Escape
     await page.keyboard.press('Escape');
 
-    // Assert dialog is closed — wait for animation
-    await page.waitForTimeout(500);
+    // Hard assertion: Escape MUST close the dialog
+    const dialog2 = page.getByRole('dialog');
+    await expect(dialog2).toBeHidden({ timeout: 5000 });
 
     await assertCleanState(page);
   });
@@ -186,7 +181,7 @@ test.describe('Dialog Dismissal (Feature 1247)', () => {
     await assertCleanState(page);
   });
 
-  test('toast dismiss button', async ({ page }) => {
+  test('save confirmation appears and auto-dismisses', async ({ page }) => {
     await page.goto('/settings');
     await page.waitForLoadState('domcontentloaded');
     await page.waitForFunction(
@@ -194,7 +189,20 @@ test.describe('Dialog Dismissal (Feature 1247)', () => {
       { timeout: 10000 }
     );
 
-    // Trigger a toast by saving settings
+    // Mock the notification preferences API so save succeeds
+    await page.route('**/api/v2/notifications/preferences**', async (route) => {
+      if (route.request().method() === 'PATCH') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ success: true }),
+        });
+      } else {
+        await route.continue();
+      }
+    });
+
+    // Trigger save by toggling email notifications
     const emailSwitch = page.getByRole('switch', { name: /email notifications/i });
     await expect(emailSwitch).toBeVisible();
     await emailSwitch.click();
@@ -203,23 +211,11 @@ test.describe('Dialog Dismissal (Feature 1247)', () => {
     await expect(saveButton).toBeEnabled();
     await saveButton.click();
 
-    // Wait briefly for toast to appear
-    await page.waitForTimeout(1000);
+    // Hard assertion: inline "Settings saved" confirmation must appear
+    await expect(page.getByText(/settings saved/i)).toBeVisible({ timeout: 5000 });
 
-    // Look for toast dismiss button
-    const toastDismiss = page.locator(
-      '[data-sonner-toaster] button[aria-label*="close" i], ' +
-      '[data-sonner-toaster] button[aria-label*="dismiss" i], ' +
-      '[role="status"] button'
-    );
-
-    if (await toastDismiss.first().isVisible({ timeout: 3000 }).catch(() => false)) {
-      await toastDismiss.first().click();
-      // Assert toast is gone
-      await expect(toastDismiss.first()).toBeHidden({ timeout: 3000 });
-    } else {
-      test.skip('No toast triggered in this flow');
-    }
+    // Auto-dismisses after 2s — assert it disappears
+    await expect(page.getByText(/settings saved/i)).toBeHidden({ timeout: 5000 });
 
     await assertCleanState(page);
   });
