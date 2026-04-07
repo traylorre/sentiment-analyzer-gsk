@@ -1,9 +1,11 @@
 // Target: Customer Dashboard (Next.js/Amplify)
 import { test, expect } from '@playwright/test';
 import { waitForAuth } from './helpers/auth-helper';
+import { skipWithoutDataApis } from './helpers/data-api-guard';
 
 test.describe('Critical User Path - Sanity Tests', () => {
   test.beforeEach(async ({ page }) => {
+    await skipWithoutDataApis(test);
     await page.goto('/');
     await waitForAuth(page);
   });

@@ -1,6 +1,7 @@
 // Target: Customer Dashboard (Next.js/Amplify)
 import { test, expect } from '@playwright/test';
 import { waitForAuth } from './helpers/auth-helper';
+import { skipWithoutDataApis } from './helpers/data-api-guard';
 
 /**
  * Chart Zoom Data Visibility (Feature 1316)
@@ -11,6 +12,9 @@ import { waitForAuth } from './helpers/auth-helper';
  * Uses real API data (not mocks) to test actual zoom/fitContent behavior.
  */
 test.describe('Chart Zoom Data Visibility', () => {
+  test.beforeEach(async () => {
+    await skipWithoutDataApis(test);
+  });
 
   test('1Y + Day resolution should show >= 200 candles (full year)', async ({
     page,

@@ -278,32 +278,50 @@ class LambdaProxyHandler(BaseHTTPRequestHandler):
         body = response.get("body", "")
         resp_headers = response.get("headers", {})
 
-        self.send_response(status_code)
+        try:
+            self.send_response(status_code)
 
-        # CORS headers for local development
-        self.send_header("Access-Control-Allow-Origin", "http://localhost:3000")
-        self.send_header("Access-Control-Allow-Credentials", "true")
-        self.send_header(
-            "Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS"
-        )
-        self.send_header(
-            "Access-Control-Allow-Headers",
-            "Content-Type, Authorization, Accept, Cache-Control, "
-            "Last-Event-ID, X-Amzn-Trace-Id, X-User-ID",
-        )
+            # CORS headers for local development
+            self.send_header("Access-Control-Allow-Origin", "http://localhost:3000")
+            self.send_header("Access-Control-Allow-Credentials", "true")
+            self.send_header(
+                "Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS"
+            )
+            self.send_header(
+                "Access-Control-Allow-Headers",
+                "Content-Type, Authorization, Accept, Cache-Control, "
+                "Last-Event-ID, X-Amzn-Trace-Id, X-User-ID",
+            )
 
-        for key, value in resp_headers.items():
-            self.send_header(key, value)
+            for key, value in resp_headers.items():
+                self.send_header(key, value)
 
-        # Set-Cookie from multiValueHeaders (v1) or cookies (v2)
-        for cookie in response.get("multiValueHeaders", {}).get("Set-Cookie", []):
-            self.send_header("Set-Cookie", cookie)
-        for cookie in response.get("cookies", []):
-            self.send_header("Set-Cookie", cookie)
+            # Set-Cookie from multiValueHeaders (v1) or cookies (v2)
+            for cookie in response.get("multiValueHeaders", {}).get("Set-Cookie", []):
+                self.send_header("Set-Cookie", cookie)
+            for cookie in response.get("cookies", []):
+                self.send_header("Set-Cookie", cookie)
 
-        self.end_headers()
-        if body:
-            self.wfile.write(body.encode() if isinstance(body, str) else body)
+            self.end_headers()
+            if body:
+                self.wfile.write(body.encode() if isinstance(body, str) else body)
+        except BrokenPipeError:
+            # Client disconnected before response was sent (e.g., Playwright
+            # navigated away or aborted the request). Normal under parallel
+            # test load — not an error.
+            pass
+        except ConnectionResetError:
+            # Client sent TCP RST (e.g., route.abort('connectionreset')).
+            pass
+
+    def log_message(self, format, *args):
+        """Route HTTP log lines through the module logger.
+
+        BaseHTTPRequestHandler.log_message prints to stderr, which
+        mixes poorly with structured logging and surfaces raw
+        BrokenPipeError tracebacks in CI output.
+        """
+        logger.info(f"{self.address_string()} - {format % args}")
 
     def do_GET(self):
         self._invoke_handler("GET")
@@ -318,18 +336,23 @@ class LambdaProxyHandler(BaseHTTPRequestHandler):
         self._invoke_handler("DELETE")
 
     def do_OPTIONS(self):
-        self.send_response(204)
-        self.send_header("Access-Control-Allow-Origin", "http://localhost:3000")
-        self.send_header("Access-Control-Allow-Credentials", "true")
-        self.send_header(
-            "Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS"
-        )
-        self.send_header(
-            "Access-Control-Allow-Headers",
-            "Content-Type, Authorization, Accept, Cache-Control, "
-            "Last-Event-ID, X-Amzn-Trace-Id, X-User-ID",
-        )
-        self.end_headers()
+        try:
+            self.send_response(204)
+            self.send_header("Access-Control-Allow-Origin", "http://localhost:3000")
+            self.send_header("Access-Control-Allow-Credentials", "true")
+            self.send_header(
+                "Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS"
+            )
+            self.send_header(
+                "Access-Control-Allow-Headers",
+                "Content-Type, Authorization, Accept, Cache-Control, "
+                "Last-Event-ID, X-Amzn-Trace-Id, X-User-ID",
+            )
+            self.end_headers()
+        except BrokenPipeError:
+            pass
+        except ConnectionResetError:
+            pass
 
 
 def main():
