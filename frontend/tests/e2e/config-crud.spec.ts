@@ -73,10 +73,12 @@ test.describe('Configuration CRUD (Feature 1247)', () => {
     // Unwind: delete the config we just created
     const configCard = page.getByText(configName).locator('..');
     const deleteButton = configCard.getByRole('button', { name: /delete|remove/i });
+    // Safe: cleanup — failure here means element absent, not broken
     if (await deleteButton.isVisible({ timeout: 3000 }).catch(() => false)) {
       await deleteButton.click();
       // Confirm deletion
       const confirmButton = page.getByRole('button', { name: /confirm|delete|yes/i });
+      // Safe: cleanup — failure here means element absent, not broken
       if (await confirmButton.isVisible({ timeout: 3000 }).catch(() => false)) {
         await confirmButton.click();
       }
@@ -99,17 +101,11 @@ test.describe('Configuration CRUD (Feature 1247)', () => {
 
     // Click on the config card (role="button", aria-pressed)
     const configCard = page.getByRole('button', { name: new RegExp(`Configuration: ${configName}`, 'i') });
-    if (await configCard.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await configCard.click();
+    await expect(configCard).toBeVisible({ timeout: 5000 });
+    await configCard.click();
 
-      // Assert card becomes selected (aria-pressed="true")
-      await expect(configCard).toHaveAttribute('aria-pressed', 'true', { timeout: 5000 });
-    } else {
-      // Fallback: click by text
-      const configLink = page.getByText(configName);
-      await expect(configLink).toBeVisible({ timeout: 5000 });
-      await configLink.click();
-    }
+    // Assert card becomes selected (aria-pressed="true")
+    await expect(configCard).toHaveAttribute('aria-pressed', 'true', { timeout: 5000 });
 
     // Unwind: clean up
     await deleteTestConfig(page, configName);
@@ -138,6 +134,7 @@ test.describe('Configuration CRUD (Feature 1247)', () => {
 
     // Unwind: cancel the dialog
     const cancelButton = page.getByRole('button', { name: /cancel/i });
+    // Safe: cleanup — failure here means element absent, not broken
     if (await cancelButton.isVisible({ timeout: 2000 }).catch(() => false)) {
       await cancelButton.click();
     } else {

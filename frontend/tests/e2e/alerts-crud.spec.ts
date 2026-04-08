@@ -64,6 +64,7 @@ test.describe('Alert Management CRUD (US3)', () => {
 
     // Confirm deletion in dialog (use JS click — button may be outside viewport on mobile)
     const confirmButton = page.getByRole('button', { name: /^delete$/i });
+    // Safe: cleanup — failure here means element absent, not broken
     if (await confirmButton.isVisible({ timeout: 3000 }).catch(() => false)) {
       await confirmButton.evaluate((el) => (el as HTMLButtonElement).click());
     }

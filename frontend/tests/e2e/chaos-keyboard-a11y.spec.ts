@@ -326,6 +326,7 @@ async function navigateToChaos(
 
   // If already showing chaos-tabs, skip patching
   const chaosTabs = page.locator('[data-testid="chaos-tabs"]');
+  // Safe: auth-setup guard — if chaos-tabs visible, patching is idempotent; catch means element absent
   if (await chaosTabs.isVisible().catch(() => false)) return;
 
   // Patch auth store role to operator

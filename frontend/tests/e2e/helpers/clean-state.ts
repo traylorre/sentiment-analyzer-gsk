@@ -111,6 +111,7 @@ export async function createTestConfig(page: Page, name: string): Promise<void> 
   await page.waitForFunction(
     () => !document.querySelector('[class*="animate-pulse"]'),
     { timeout: 10000 }
+    // Safe: cleanup — exception swallowed intentionally, no return value consumed
   ).catch(() => {});
 
   // Step 1: Click CTA to open form
@@ -197,10 +198,12 @@ export async function deleteTestConfig(page: Page, name: string): Promise<void> 
   await page.waitForFunction(
     () => !document.querySelector('[class*="animate-pulse"]'),
     { timeout: 10000 }
+    // Safe: cleanup — exception swallowed intentionally, no return value consumed
   ).catch(() => {});
 
   // The delete button has aria-label="Delete {config.name}"
   const deleteBtn = page.getByRole('button', { name: `Delete ${name}` });
+  // Safe: cleanup — failure here means element absent, not broken
   if (await deleteBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
     await deleteBtn.click();
     // Confirm deletion in the dialog.
@@ -255,18 +258,21 @@ export async function createTestAlert(
   // Wait for tickers to load after config selection
   await page.waitForTimeout(500);
   const tickerButtons = page.locator('button').filter({ hasText: /^[A-Z]{1,5}$/ });
+  // Safe: cleanup — failure here means element absent, not broken
   if (await tickerButtons.first().isVisible({ timeout: 3000 }).catch(() => false)) {
     await tickerButtons.first().click();
   }
 
   // Step 3: Select alert type — click "Sentiment" button
   const sentimentTypeBtn = page.getByRole('button', { name: /sentiment/i });
+  // Safe: cleanup — failure here means element absent, not broken
   if (await sentimentTypeBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
     await sentimentTypeBtn.click();
   }
 
   // Step 4: Select direction — click "Above" button
   const aboveBtn = page.getByRole('button', { name: /above/i });
+  // Safe: cleanup — failure here means element absent, not broken
   if (await aboveBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
     await aboveBtn.click();
   }

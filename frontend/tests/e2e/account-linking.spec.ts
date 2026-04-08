@@ -40,11 +40,10 @@ test.describe('Account Linking (US5)', () => {
     const anonBadge = page.getByText(/anonymous/i);
     const upgradeCta = page.getByText(/upgrade|sign in|create account/i);
 
-    // At least one of these should be visible
-    const badgeVisible = await anonBadge.isVisible({ timeout: 5000 }).catch(() => false);
-    const upgradeVisible = await upgradeCta.isVisible({ timeout: 5000 }).catch(() => false);
-
-    expect(badgeVisible || upgradeVisible).toBeTruthy();
+    // At least one must be visible — .or() fails with descriptive error if NEITHER appears
+    await expect(
+      anonBadge.or(upgradeCta)
+    ).toBeVisible({ timeout: 5000 });
   });
 
   test('authenticated user with Google can see linked providers', async ({ page }) => {

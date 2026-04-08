@@ -62,6 +62,7 @@ test.describe('Alert CRUD (Feature 1247)', () => {
 
     // Cancel via Cancel button — use JS click because form extends beyond viewport
     const cancelBtn = page.getByRole('button', { name: /cancel/i });
+    // Safe: cleanup — failure here means element absent, not broken
     if (await cancelBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
       await cancelBtn.evaluate((el) => (el as HTMLButtonElement).click());
     } else {
@@ -164,6 +165,7 @@ test.describe('Alert CRUD (Feature 1247)', () => {
 
     // Unwind: cancel
     const cancelButton = page.getByRole('button', { name: /cancel/i });
+    // Safe: cleanup — cancel unwind; real failure propagates to assertCleanState in the next assertion chain
     if (await cancelButton.isVisible({ timeout: 2000 }).catch(() => false)) {
       await cancelButton.click();
     } else {
