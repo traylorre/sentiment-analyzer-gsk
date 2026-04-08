@@ -165,6 +165,7 @@ test.describe('Settings Interactions (Feature 1247)', () => {
 
     // Unwind: close dialog via Cancel button or Escape
     const cancelButton = dialog.getByRole('button', { name: /cancel|no|close/i });
+    // Safe: cleanup — failure here means element absent, not broken
     if (await cancelButton.isVisible({ timeout: 2000 }).catch(() => false)) {
       await cancelButton.click();
     } else {

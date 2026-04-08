@@ -643,18 +643,12 @@ test.describe('Critical User Path - Sanity Tests', () => {
       const noResults = page.getByText(/no results/i);
       const suggestions = page.locator('[role="option"]');
 
-      // Either no results message or no suggestion options (listbox might still exist but empty)
-      const noResultsVisible = await noResults.isVisible().catch(() => false);
+      // Invalid ticker should produce no suggestion options
       const suggestionsCount = await suggestions.count();
-
-      // One of these conditions should be true:
-      // 1. "No results" message is visible
-      // 2. No suggestion options are visible (empty listbox is OK)
-      // Note: We don't crash on invalid input - that's the main assertion
       expect(
-        noResultsVisible || suggestionsCount === 0,
-        `Expected no results message or empty suggestions, got ${suggestionsCount} suggestions`
-      ).toBeTruthy();
+        suggestionsCount,
+        `Expected 0 suggestions for invalid ticker 'XYZNOTAREALTICKER123', got ${suggestionsCount}`
+      ).toBe(0);
     });
 
     test('should show loading state while fetching chart data', async ({
@@ -677,11 +671,6 @@ test.describe('Critical User Path - Sanity Tests', () => {
 
       // Wait for chart container to be visible
       await expect(chartContainer).toBeVisible({ timeout: 15000 });
-
-      // Check that loading state is shown OR data is already loaded
-      // (loading may be too brief to catch, so we just verify the sequence works)
-      const loadingText = page.getByText('Loading chart data...');
-      const isLoadingVisible = await loadingText.isVisible().catch(() => false);
 
       // Eventually chart should have data
       await expect(chartContainer).toHaveAttribute(

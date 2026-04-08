@@ -246,20 +246,11 @@ test.describe('Dashboard Interactions (Feature 1247)', () => {
 
     await removeButton.click();
 
-    // Chart should disappear or empty state should appear
-    await expect(
-      chart.or(page.getByText(/track price|no ticker|select a ticker|search to get started/i))
-    ).toBeVisible({ timeout: 10000 });
-    // If the chart is gone, pass. If empty state appeared, also pass.
-    // Use a more specific check: empty state OR chart hidden
-    const chartHidden = await chart.isHidden().catch(() => true);
-    if (!chartHidden) {
-      // Chart still visible — check empty state instead
-      const emptyState = page.getByText(
-        /track price|no ticker|select a ticker|search to get started/i
-      );
-      await expect(emptyState).toBeVisible({ timeout: 10000 });
-    }
+    // After removing the last ticker, empty state MUST appear.
+    const emptyState = page.getByText(
+      /track price|no ticker|select a ticker|search to get started/i
+    );
+    await expect(emptyState).toBeVisible({ timeout: 10000 });
 
     await assertCleanState(page);
   });

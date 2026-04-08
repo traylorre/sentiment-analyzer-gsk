@@ -15,13 +15,15 @@ test.describe('Session Lifecycle (US4)', () => {
     // Sign out button should be visible for any authenticated user
     // (Anonymous users may not see it — that's acceptable)
     const signOut = page.getByRole('button', { name: /sign out|log out/i });
-    const isVisible = await signOut.isVisible().catch(() => false);
+    const signOutCount = await signOut.count();
 
-    if (isVisible) {
+    if (signOutCount > 0) {
+      // Element exists in DOM — assert it is actually visible (catches CSS display:none bugs)
+      await expect(signOut).toBeVisible();
       // Verify button is interactive
       await expect(signOut).toBeEnabled();
     }
-    // If not visible, user is anonymous (no sign-out needed)
+    // If count === 0, user is anonymous (no sign-out button rendered)
   });
 
   test('sign out clears session and redirects to signin', async ({ page }) => {
@@ -33,14 +35,20 @@ test.describe('Session Lifecycle (US4)', () => {
     );
 
     const signOut = page.getByRole('button', { name: /sign out|log out/i });
-    const isVisible = await signOut.isVisible().catch(() => false);
+    const signOutCount = await signOut.count();
 
-    if (isVisible) {
+    if (signOutCount > 0) {
+      await expect(signOut).toBeVisible();
       await signOut.click();
 
       // May show confirmation dialog — scope confirm button to dialog
       const dialog = page.getByRole('dialog');
-      if (await dialog.isVisible({ timeout: 3000 }).catch(() => false)) {
+      // Dialog is optional: some sign-out flows show a confirmation, others redirect directly.
+      // waitFor throws TimeoutError only on timeout, not on selector errors — catch here means dialog genuinely absent.
+      const dialogAppeared = await dialog.waitFor({ state: 'visible', timeout: 3000 })
+        .then(() => true)
+        .catch(() => false);
+      if (dialogAppeared) {
         await page.waitForFunction(
           () => !document.querySelector('[class*="animate"]'),
           { timeout: 5000 }
