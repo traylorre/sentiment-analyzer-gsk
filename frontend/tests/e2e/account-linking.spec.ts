@@ -40,9 +40,10 @@ test.describe('Account Linking (US5)', () => {
     const anonBadge = page.getByText(/anonymous/i);
     const upgradeCta = page.getByText(/upgrade|sign in|create account/i);
 
-    // At least one must be visible — .or() fails with descriptive error if NEITHER appears
+    // At least one must be visible — .or().first() avoids strict mode violation
+    // when multiple elements match (e.g., "Upgrade" heading + description + button)
     await expect(
-      anonBadge.or(upgradeCta)
+      anonBadge.or(upgradeCta).first()
     ).toBeVisible({ timeout: 5000 });
   });
 
