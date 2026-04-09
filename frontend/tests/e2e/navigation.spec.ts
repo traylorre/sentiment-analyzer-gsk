@@ -9,7 +9,7 @@ test.describe('Navigation Flow', () => {
 
   test('should navigate between views via tabs', async ({ page, isMobile }) => {
     if (!isMobile) {
-      test.skip();
+      test.skip(true, 'Tab navigation only exists on mobile viewport — desktop uses sidebar');
       return;
     }
 
@@ -39,7 +39,7 @@ test.describe('Navigation Flow', () => {
 
   test('should support keyboard navigation in tabs', async ({ page, isMobile }) => {
     if (!isMobile) {
-      test.skip();
+      test.skip(true, 'Tab keyboard navigation only exists on mobile viewport — desktop uses sidebar');
       return;
     }
 

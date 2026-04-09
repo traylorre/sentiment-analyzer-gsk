@@ -193,34 +193,6 @@ test.describe('Dashboard Interactions (Feature 1247)', () => {
     await assertCleanState(page);
   });
 
-  test.fixme(
-    'chart hover shows tooltip',
-    // Canvas-based tooltip from Lightweight Charts may not be DOM-accessible
-    async ({ page }) => {
-      await page.goto('/');
-
-      const searchInput = page.getByPlaceholder(/search tickers/i);
-      await searchInput.fill('AAPL');
-      const suggestion = page.getByRole('option', { name: /AAPL/i });
-      await expect(suggestion).toBeVisible({ timeout: 10000 });
-      await suggestion.click();
-
-      const chart = page.locator(
-        '[role="img"][aria-label*="Price and sentiment"]'
-      );
-      await expect(chart).toBeVisible({ timeout: 15000 });
-
-      // Hover the center of the chart
-      const box = await chart.boundingBox();
-      if (box) {
-        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-      }
-
-      // Tooltip may not be in DOM since Lightweight Charts renders on canvas
-      await assertCleanState(page);
-    }
-  );
-
   test('ticker chip remove clears chart', async ({ page }) => {
     // Mock all API data for consistent chart behavior
     await mockTickerDataApis(page);

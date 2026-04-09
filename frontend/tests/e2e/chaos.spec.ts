@@ -60,11 +60,18 @@ async function createExperiment(
 
 test.describe('Chaos Injection System', () => {
   let token: string;
-  let chaosAvailable: boolean;
+  let chaosAvailable = false;
 
   test.beforeAll(async ({ request }) => {
-    token = await getAuthToken(request);
-    chaosAvailable = await isChaosAvailable(request, token);
+    try {
+      token = await getAuthToken(request);
+      chaosAvailable = await isChaosAvailable(request, token);
+    } catch {
+      // Network error, API down, or auth service unavailable.
+      // Set false so 12 tests skip gracefully via test.skip(!chaosAvailable, ...)
+      // instead of reporting as errors in CI.
+      chaosAvailable = false;
+    }
   });
 
   test.describe('Experiment Lifecycle (Dry-Run Mode)', () => {

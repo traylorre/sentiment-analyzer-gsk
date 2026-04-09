@@ -175,7 +175,4 @@ test.describe('Alert CRUD (Feature 1247)', () => {
     await assertCleanState(page);
   });
 
-  test.fixme('quota exceeded shows message', () => {
-    // Requires max alerts — dedicated test environment needed
-  });
 });

@@ -7,7 +7,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { mockOAuthRedirect, mockAnonymousAuth } from './helpers/auth-helper';
+import { mockOAuthRedirect } from './helpers/auth-helper';
 
 /**
  * Mock the /api/v2/auth/oauth/urls endpoint so the signin page
@@ -70,75 +70,10 @@ test.describe('OAuth Login Flow (US1)', () => {
     expect(capturedUrl!.searchParams.get('response_type')).toBe('code');
   });
 
-  // TODO: This test requires useSessionInit to not clear oauth_* sessionStorage on /auth/callback.
-  // The init hook clears oauth_provider and oauth_state before the callback page can read them.
-  // Fix tracked separately — requires production code change in use-session-init.ts.
-  test.fixme('successful OAuth callback creates session and loads dashboard', async ({ page }) => {
-    // Mock anonymous auth to prevent session init from hanging
-    await mockAnonymousAuth(page);
-
-    // Mock OAuth URLs so signin page shows provider buttons
-    await mockOAuthUrls(page);
-
-    // Mock the OAuth callback endpoint (code → token exchange)
-    await page.route('**/api/v2/auth/oauth/callback', route =>
-      route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          status: 'success',
-          email_masked: 't***@example.com',
-          auth_type: 'google',
-          tokens: {
-            id_token: 'mock-id-token',
-            access_token: 'mock-access-token',
-            expires_in: 3600,
-          },
-          merged_anonymous_data: false,
-          is_new_user: false,
-          conflict: false,
-          existing_provider: null,
-          message: null,
-          error: null,
-          role: 'user',
-          verification: 'verified',
-          linked_providers: ['google'],
-          last_provider_used: 'google',
-        }),
-      })
-    );
-
-    // Use addInitScript to set sessionStorage BEFORE page JS runs.
-    // Also patch sessionStorage.removeItem to preserve oauth_* keys during this page load,
-    // because useSessionInit clears them before the callback page can read them.
-    await page.addInitScript(() => {
-      sessionStorage.setItem('oauth_provider', 'google');
-      sessionStorage.setItem('oauth_state', 'mock-state-google');
-
-      // Preserve oauth_* keys from being cleared by useSessionInit
-      const originalRemoveItem = sessionStorage.removeItem.bind(sessionStorage);
-      let preserveOAuth = true;
-      sessionStorage.removeItem = function(key: string) {
-        if (preserveOAuth && (key === 'oauth_provider' || key === 'oauth_state')) {
-          // Skip the first removal (from useSessionInit), allow subsequent ones
-          return;
-        }
-        return originalRemoveItem(key);
-      };
-      // After a short delay, stop preserving (let the callback page's cleanup work)
-      setTimeout(() => { preserveOAuth = false; }, 5000);
-    });
-
-    // Navigate directly to callback (bypassing the 302 issue with route.fulfill)
-    await page.goto('/auth/callback?code=valid-test-code&state=mock-state-google');
-
-    // After callback processes, should redirect to dashboard
-    await page.waitForURL(/\/(dashboard|$|\?)/i, { timeout: 15000 });
-
-    // Dashboard should be accessible (not stuck on error page)
-    const body = await page.textContent('body');
-    expect(body).not.toContain('error');
-  });
+  // COVERAGE GAP (Feature 1363): No E2E coverage for successful OAuth callback
+  // -> session creation. Blocked by useSessionInit clearing oauth_* sessionStorage
+  // before the callback page reads them. Requires production fix in
+  // use-session-init.ts (separate feature). See spec 1363, EC-1.
 
   test('OAuth callback with provider denial shows friendly error', async ({ page }) => {
     // Mock OAuth URLs so signin page shows provider buttons
