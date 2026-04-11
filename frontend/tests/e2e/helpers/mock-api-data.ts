@@ -24,7 +24,10 @@ const MOCK_TICKER_SEARCH_RESPONSE = {
   ],
 };
 
-/** Generate N price candles starting from a base date */
+/** Generate N price candles starting from a base date.
+ * Uses UTC-only arithmetic to avoid DST duplicate-date bugs (Feature 1333).
+ * March 2, 2026 is a Monday — i=0 is always a weekday.
+ */
 function generateCandles(count: number): Array<{
   date: string;
   open: number;
@@ -33,16 +36,18 @@ function generateCandles(count: number): Array<{
   close: number;
   volume: number | null;
 }> {
+  const BASE_MS = Date.UTC(2026, 2, 2); // March 2, 2026 (Monday) in UTC
+  const DAY_MS = 86_400_000;
   const candles = [];
-  const baseDate = new Date('2026-03-01');
   let price = 178.5;
 
   for (let i = 0; i < count; i++) {
-    const date = new Date(baseDate);
-    date.setDate(baseDate.getDate() + i);
-    // Skip weekends
-    if (date.getDay() === 0 || date.getDay() === 6) continue;
+    const ms = BASE_MS + i * DAY_MS;
+    const d = new Date(ms);
+    // Skip weekends (UTC day-of-week)
+    if (d.getUTCDay() === 0 || d.getUTCDay() === 6) continue;
 
+    const date = d.toISOString().split('T')[0];
     const open = price;
     const high = price + Math.random() * 3;
     const low = price - Math.random() * 2;
@@ -50,7 +55,7 @@ function generateCandles(count: number): Array<{
     price = close;
 
     candles.push({
-      date: date.toISOString().split('T')[0],
+      date,
       open: Math.round(open * 100) / 100,
       high: Math.round(high * 100) / 100,
       low: Math.round(low * 100) / 100,
@@ -66,6 +71,7 @@ function generateCandles(count: number): Array<{
  * FR-008: Uses multiple source values for realistic coverage.
  * FR-009: First entry has null confidence and label to exercise null-handling.
  * Includes negative scores to exercise full [-1.0, 1.0] range.
+ * Uses UTC-only arithmetic to avoid DST duplicate-date bugs (Feature 1333).
  */
 function generateSentimentPoints(
   count: number,
@@ -76,14 +82,18 @@ function generateSentimentPoints(
   confidence: number | null;
   label: 'positive' | 'neutral' | 'negative' | null;
 }> {
+  const BASE_MS = Date.UTC(2026, 2, 2); // March 2, 2026 (Monday) in UTC
+  const DAY_MS = 86_400_000;
   const sources = ['aggregated', 'our_model', 'tiingo', 'finnhub'] as const;
   const points = [];
-  const baseDate = new Date('2026-03-01');
 
   for (let i = 0; i < count; i++) {
-    const date = new Date(baseDate);
-    date.setDate(baseDate.getDate() + i);
-    if (date.getDay() === 0 || date.getDay() === 6) continue;
+    const ms = BASE_MS + i * DAY_MS;
+    const d = new Date(ms);
+    // Skip weekends (UTC day-of-week)
+    if (d.getUTCDay() === 0 || d.getUTCDay() === 6) continue;
+
+    const date = d.toISOString().split('T')[0];
 
     // Include negative scores for range coverage (FR-007)
     const score = i === 1 ? -0.85 : 0.3 + Math.random() * 0.5;
@@ -93,7 +103,7 @@ function generateSentimentPoints(
     const isNullVariant = i === 0;
 
     points.push({
-      date: date.toISOString().split('T')[0],
+      date,
       score: roundedScore,
       source: sources[i % sources.length],
       confidence: isNullVariant ? null : 0.85,
@@ -179,16 +189,18 @@ export const MOCK_EMPTY_SENTIMENT_RESPONSE = {
  */
 export async function mockTickerDataApis(page: Page): Promise<() => Promise<void>> {
   // Mock anonymous auth — useChartData requires hasAccessToken=true
+  // Response shape must match AnonymousSessionResponse (src/types/auth.ts)
   await page.route('**/api/v2/auth/anonymous', async (route) => {
     await route.fulfill({
       status: 201,
       contentType: 'application/json',
       body: JSON.stringify({
-        access_token: 'mock-test-token',
-        token_type: 'bearer',
+        token: 'mock-test-token',
         auth_type: 'anonymous',
         user_id: 'anon-test-user',
-        session_expires_in_seconds: 3600,
+        created_at: new Date().toISOString(),
+        session_expires_at: new Date(Date.now() + 3600_000).toISOString(),
+        storage_hint: 'localStorage',
       }),
     });
   });

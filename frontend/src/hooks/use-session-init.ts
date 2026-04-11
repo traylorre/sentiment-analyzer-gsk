@@ -87,7 +87,11 @@ export function useSessionInit() {
   ]);
 
   return {
-    isInitializing: !isInitialized || isLoading,
+    // Bug fix: Only show initializing during actual session init, NOT during
+    // subsequent auth operations (verify, refresh, OAuth callback). The shared
+    // isLoading flag from auth store was causing SessionProvider to re-show
+    // "Initializing session..." when other auth actions set isLoading=true.
+    isInitializing: !isInitialized,
     isError: !!error,
     error,
     isReady: isInitialized && !isLoading && !error,

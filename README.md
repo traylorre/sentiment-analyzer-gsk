@@ -14,6 +14,7 @@ A cloud-hosted Sentiment Analyzer service built with serverless AWS architecture
 
 [![PR Checks](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pr-checks.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pr-checks.yml)
 [![Deploy Pipeline](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/deploy.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/deploy.yml)
+[![Nightly External-API E2E](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/nightly-e2e.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/nightly-e2e.yml)
 
 ```mermaid
 %%{init: {"theme": "dark", "themeVariables": {"primaryColor": "#4A90A4", "tertiaryColor": "#2d2d2d", "lineColor": "#88CCFF", "primaryTextColor": "#FFFFFF", "clusterBkg": "#2d2d2d", "clusterBorder": "#555555"}, "flowchart": {"curve": "basis", "nodeSpacing": 50, "rankSpacing": 60}}}%%

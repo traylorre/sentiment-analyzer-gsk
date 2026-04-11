@@ -7,7 +7,7 @@
  * - OAuth route interception for mocked login flows
  */
 
-import { type Page } from '@playwright/test';
+import { type Page, type BrowserContext } from '@playwright/test';
 
 /** Generate unique test run ID for data isolation. */
 export function generateRunId(): string {
@@ -25,23 +25,147 @@ export function getDashboardUrl(): string {
   return process.env.PREPROD_FRONTEND_URL || 'http://localhost:3000';
 }
 
+/** Promise-based sleep for retry backoff. */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 /**
  * Create an anonymous session via the API.
  * Returns the session response with user_id, token, etc.
+ *
+ * Retries up to 3 times with exponential backoff (1s, 2s) on network errors
+ * (ECONNREFUSED, ETIMEDOUT). This handles the case where parallel Playwright
+ * workers overwhelm the single-threaded Python API server's connection queue.
+ *
+ * HTTP errors (4xx/5xx) are NOT retried — if the server responded, the
+ * connection worked and retrying won't help.
  */
 export async function createAnonymousSession(baseUrl: string): Promise<{
   user_id: string;
   auth_type: string;
   session_expires_at: string;
 }> {
-  const response = await fetch(`${baseUrl}/api/v2/auth/anonymous`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-  });
-  if (response.status !== 201) {
-    throw new Error(`Anonymous session creation failed: HTTP ${response.status}`);
+  const MAX_ATTEMPTS = 3;
+  const BASE_DELAY_MS = 1000;
+  let lastError: Error | undefined;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const response = await fetch(`${baseUrl}/api/v2/auth/anonymous`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (response.status !== 201) {
+        // Server responded — no point retrying
+        throw new Error(`Anonymous session creation failed: HTTP ${response.status}`);
+      }
+      return response.json();
+    } catch (error) {
+      if (error instanceof TypeError) {
+        // Network-level failure (ECONNREFUSED, ETIMEDOUT, DNS)
+        lastError = error;
+        if (attempt < MAX_ATTEMPTS) {
+          const delayMs = BASE_DELAY_MS * Math.pow(2, attempt - 1);
+          console.warn(
+            `[auth-helper] createAnonymousSession attempt ${attempt}/${MAX_ATTEMPTS} failed: ${error.message}. Retrying in ${delayMs}ms...`,
+          );
+          await sleep(delayMs);
+          continue;
+        }
+      } else {
+        // HTTP error or unknown — throw immediately
+        throw error;
+      }
+    }
   }
-  return response.json();
+
+  // All attempts exhausted with network errors
+  throw new Error(
+    `Anonymous session creation failed after ${MAX_ATTEMPTS} attempts: ${lastError?.message}`,
+  );
+}
+
+/**
+ * Set up session cookies to bypass Next.js middleware auth checks.
+ * Creates an anonymous session via the API, then sets browser cookies
+ * so the middleware treats the user as authenticated (non-anonymous).
+ *
+ * Use this for tests that navigate to protected routes like /alerts.
+ */
+export async function setupAuthSession(context: BrowserContext): Promise<void> {
+  // Use 127.0.0.1 (not localhost) to avoid IPv6 ::1 resolution in Node 18+
+  // which causes ECONNREFUSED when Python server binds to IPv4 only
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+  const session = await createAnonymousSession(apiUrl);
+
+  // Set cookies that the Next.js middleware checks for route protection
+  await context.addCookies([
+    {
+      name: 'sentiment-access-token',
+      value: session.user_id,
+      domain: 'localhost',
+      path: '/',
+    },
+    {
+      name: 'sentiment-is-anonymous',
+      value: 'false', // Pretend non-anonymous to pass upgraded route check
+      domain: 'localhost',
+      path: '/',
+    },
+  ]);
+}
+
+/**
+ * Mock the anonymous auth endpoint via Playwright route interception.
+ *
+ * Use for tests that DON'T need real API data (chaos, error-boundary, etc.).
+ * For tests that need real chart data (sanity, dashboard-interactions),
+ * use waitForAuth() instead — it waits for the real auth to complete.
+ *
+ * The response shape must match what mapAnonymousSession() reads:
+ * - `token` (NOT `access_token`) — used for Bearer header
+ * - `user_id` — used for session identification
+ * - `auth_type` — "anonymous"
+ */
+export async function mockAnonymousAuth(page: Page): Promise<void> {
+  await page.route('**/api/v2/auth/anonymous', async (route) => {
+    await route.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        user_id: 'anon-e2e-user',
+        token: 'mock-e2e-token',
+        auth_type: 'anonymous',
+        created_at: new Date().toISOString(),
+        session_expires_at: new Date(Date.now() + 86400000).toISOString(),
+        storage_hint: 'session',
+      }),
+    });
+  });
+}
+
+/**
+ * Wait for the real anonymous auth session to complete after page load.
+ *
+ * Use for tests that need real API data (sanity, dashboard-interactions).
+ * The session init hook calls POST /api/v2/auth/anonymous on mount.
+ * This function waits until the auth store has a valid token before
+ * allowing the test to proceed.
+ *
+ * Must be called AFTER page.goto().
+ */
+export async function waitForAuth(page: Page): Promise<void> {
+  await page.waitForFunction(
+    () => {
+      // Check if the search input is interactive (implies auth is done and app is ready)
+      const input = document.querySelector('input[placeholder*="earch"]');
+      return input !== null && !(input as HTMLInputElement).disabled;
+    },
+    { timeout: 15000 }
+  );
+  // Small settle time for React state propagation
+  await page.waitForTimeout(500);
 }
 
 /**

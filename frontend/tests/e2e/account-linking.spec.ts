@@ -15,7 +15,7 @@ test.describe('Account Linking (US5)', () => {
     await page.waitForLoadState('networkidle');
 
     // Dashboard should load and show anonymous state
-    await expect(page.locator('body')).not.toBeEmpty();
+    await expect(page.getByRole('combobox')).toBeVisible();
 
     // Search for a ticker (creates anonymous session automatically)
     const searchInput = page.getByRole('searchbox').or(page.getByPlaceholder(/search/i));
@@ -25,23 +25,26 @@ test.describe('Account Linking (US5)', () => {
     }
 
     // Anonymous user should be able to interact with the dashboard
-    const pageContent = await page.textContent('body');
-    expect(pageContent).toBeTruthy();
+    await expect(page.getByText(/Price & Sentiment Analysis/i)).toBeVisible();
   });
 
   test('settings page shows anonymous badge with upgrade prompt', async ({ page }) => {
     await page.goto('/settings');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForFunction(
+      () => !document.querySelector('[class*="animate-pulse"]'),
+      { timeout: 10000 }
+    );
 
     // Anonymous users should see their status
     const anonBadge = page.getByText(/anonymous/i);
     const upgradeCta = page.getByText(/upgrade|sign in|create account/i);
 
-    // At least one of these should be visible
-    const badgeVisible = await anonBadge.isVisible().catch(() => false);
-    const upgradeVisible = await upgradeCta.isVisible().catch(() => false);
-
-    expect(badgeVisible || upgradeVisible).toBeTruthy();
+    // At least one must be visible — .or().first() avoids strict mode violation
+    // when multiple elements match (e.g., "Upgrade" heading + description + button)
+    await expect(
+      anonBadge.or(upgradeCta).first()
+    ).toBeVisible({ timeout: 5000 });
   });
 
   test('authenticated user with Google can see linked providers', async ({ page }) => {
@@ -49,13 +52,14 @@ test.describe('Account Linking (US5)', () => {
     await page.goto('/settings');
     await page.waitForLoadState('networkidle');
 
-    // The account section should show linked providers info
-    const accountSection = page.getByText(/account|profile/i);
+    // The account section heading should be visible
+    const accountSection = page.getByRole('heading', { name: /account/i });
     await expect(accountSection).toBeVisible({ timeout: 10000 });
 
     // For anonymous users, shows upgrade prompt
     // For authenticated users, shows linked providers
-    const body = await page.textContent('body');
-    expect(body).toBeTruthy();
+    await expect(
+      page.getByText(/anonymous|google|upgrade|member since/i).first()
+    ).toBeVisible();
   });
 });

@@ -8,10 +8,16 @@ import {
 import { mockTickerDataApis } from './helpers/mock-api-data';
 
 /**
- * Chaos: Cross-Browser Validation (Feature 1265, US5)
+ * Chaos: Cross-Browser Smoke Tests (Feature 1265, US5)
  *
- * Validates that degradation behavior is consistent across browser engines.
- * Runs selected chaos tests across Mobile Chrome and Mobile Safari projects.
+ * PURPOSE: These are intentional DUPLICATES of tests in chaos-degradation.spec.ts
+ * and chaos-cached-data.spec.ts. They exist because Playwright runs them against
+ * Mobile Chrome and Mobile Safari projects (configured in playwright.config.ts),
+ * validating that degradation behavior works across browser engines.
+ *
+ * If you're looking for the authoritative version of these tests, see:
+ * - chaos-degradation.spec.ts (health banner lifecycle)
+ * - chaos-cached-data.spec.ts (cached data resilience)
  *
  * Caveat: Playwright's WebKit is not identical to Safari's production
  * network stack. These tests validate WebKit compatibility, not Safari-specific
@@ -20,7 +26,8 @@ import { mockTickerDataApis } from './helpers/mock-api-data';
 test.describe('Chaos: Cross-Browser Validation', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await page.waitForTimeout(2000);
+    // Wait for page content to render instead of blind timeout
+    await expect(page.locator('main')).toBeVisible({ timeout: 10000 });
   });
 
   // T042: Banner lifecycle works across browsers
@@ -58,48 +65,20 @@ test.describe('Chaos: Cross-Browser Validation', () => {
 
     await blockAllApi(page, 503);
     // Brief settle for in-flight React Query refetch requests to hit the route block
+    // 500ms is conservative — routes take effect immediately, but in-flight requests
+    // may still return before the block applies. This is a known timing tradeoff.
     await page.waitForTimeout(500);
 
     const textDuring = await mainContent.textContent();
     expect(textDuring).toBeTruthy();
     expect(textDuring!.length).toBeGreaterThan(10);
+
+    // Content comparison: verify SAME content persists (not replaced by error page)
+    const contentFragment = textBefore!.substring(0, 20);
+    expect(textDuring).toContain(contentFragment);
   });
 
-  // T043: SSE reconnection on WebKit
-  // FIXME(1280): SSE reconnection requires a streaming server that doesn't exist
-  // in the Playwright test environment. The mock API (run-local-api.py) doesn't
-  // implement SSE endpoints. This test needs SSE mock infrastructure to be viable.
-  // Tracked for future: add SSE mock to run-local-api.py or use page.route() to
-  // simulate EventSource streams.
-  test.fixme('SSE reconnection issues new fetch after connection drop', async ({
-    page,
-  }) => {
-    const sseRequests: number[] = [];
-    page.on('request', (req) => {
-      if (req.url().includes('/stream') || req.url().includes('/sse')) {
-        sseRequests.push(Date.now());
-      }
-    });
-
-    // Abort SSE to trigger reconnection
-    await page.route('**/api/v2/stream**', (route) =>
-      route.abort('connectionreset'),
-    );
-
-    // Wait for at least 2 reconnection attempts (poll instead of blind wait
-    // to avoid racing against exponential backoff timing — see Feature 1274)
-    await expect
-      .poll(() => sseRequests.length, {
-        message: 'Expected 2+ SSE reconnection attempts',
-        timeout: 15000,
-        intervals: [500],
-      })
-      .toBeGreaterThanOrEqual(2);
-
-    if (sseRequests.length >= 2) {
-      // Intervals should be > 0 (backoff is working, within 2x tolerance)
-      const interval = sseRequests[1] - sseRequests[0];
-      expect(interval).toBeGreaterThan(100);
-    }
-  });
+  // T043 (SSE reconnection) DELETED — Feature 1344.
+  // Mock API (run-local-api.py) doesn't implement SSE endpoints.
+  // SSE test infrastructure tracked in Feature 1280.
 });

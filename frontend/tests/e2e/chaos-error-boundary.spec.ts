@@ -1,6 +1,10 @@
 // Target: Customer Dashboard (Next.js/Amplify)
 import { test, expect } from '@playwright/test';
-import { triggerHealthBanner, getBannerLocator } from './helpers/chaos-helpers';
+import {
+  triggerHealthBanner,
+  getBannerLocator,
+  forceErrorBoundary,
+} from './helpers/chaos-helpers';
 
 /**
  * Chaos: Error Boundary Fallback (Feature 1265, FR-009/SC-004/EC-005)
@@ -15,22 +19,8 @@ import { triggerHealthBanner, getBannerLocator } from './helpers/chaos-helpers';
 test.describe('Chaos: Error Boundary', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await page.waitForTimeout(2000);
+    await expect(page.locator('main')).toBeVisible({ timeout: 10000 });
   });
-
-  /**
-   * Force the error boundary to trigger via the test-only ErrorTrigger component.
-   * Sets the global flag, then triggers a re-render by navigating.
-   */
-  async function forceErrorBoundary(page: import('@playwright/test').Page) {
-    // Must use addInitScript — page.evaluate() sets the flag on the current page,
-    // but goto() loads a NEW page where the flag doesn't exist.
-    // addInitScript runs before any page JS, so the flag is set when ErrorTrigger renders.
-    await page.addInitScript(() => {
-      (window as any).__TEST_FORCE_ERROR = true;
-    });
-    await page.goto('/');
-  }
 
   // T022: Error boundary fallback renders with recovery actions
   test('error boundary fallback renders with recovery actions', async ({
@@ -53,6 +43,16 @@ test.describe('Chaos: Error Boundary', () => {
     await expect(page.getByRole('link', { name: /go home/i }).or(
       page.getByRole('button', { name: /go home/i }),
     )).toBeVisible();
+
+    // Verify "Try Again" button is functional (not just visible)
+    const tryAgain = page.getByRole('button', { name: /try again/i });
+    await tryAgain.click();
+    // Either error boundary re-renders (still visible) or page recovers
+    // Both are valid — the test proves the button is clickable and doesn't crash
+    await page.waitForTimeout(1000); // settle after click
+    const pageContent = await page.locator('body').textContent();
+    expect(pageContent).toBeTruthy();
+    expect(pageContent!.length).toBeGreaterThan(10);
   });
 
   // T023: Error boundary during degradation (EC-005)
@@ -66,18 +66,17 @@ test.describe('Chaos: Error Boundary', () => {
     await expect(banner).toBeVisible();
 
     // Now force error boundary on top of degradation — addInitScript survives navigation
-    await page.addInitScript(() => {
-      (window as any).__TEST_FORCE_ERROR = true;
-    });
-    await page.goto('/');
+    await forceErrorBoundary(page);
 
     // Error boundary fallback should now be visible
     await expect(
       page.getByText(/something went wrong/i),
     ).toBeVisible({ timeout: 5000 });
 
-    // Banner should no longer be visible (error boundary replaces entire dashboard content)
-    // The banner is inside the dashboard layout which is now showing the fallback
+    // Banner should no longer be visible — error boundary replaces entire dashboard content
+    await expect(banner).not.toBeVisible({ timeout: 5000 });
+
+    // Fallback buttons should be visible
     const fallbackButtons = page.getByRole('button', { name: /try again/i });
     await expect(fallbackButtons).toBeVisible();
   });
@@ -90,34 +89,20 @@ test.describe('Chaos: Error Boundary', () => {
       page.getByText(/something went wrong/i),
     ).toBeVisible({ timeout: 5000 });
 
-    // Tab through action buttons and verify focus order
-    // Focus should move: Try Again → Reload Page → Go Home
-    await page.keyboard.press('Tab');
-    const firstFocused = await page.evaluate(() =>
-      document.activeElement?.textContent?.trim(),
-    );
+    // Verify each recovery button is programmatically focusable.
+    // Uses .focus() instead of chained Tab presses — Tab key behavior in
+    // headless Chromium is unreliable (see keyboard.ts FR-007: chained Tab banned).
+    const tryAgainButton = page.getByRole('button', { name: /try again/i });
+    const reloadButton = page.getByRole('button', { name: /reload page/i });
+    const goHomeButton = page.getByRole('button', { name: /go home/i });
 
-    await page.keyboard.press('Tab');
-    const secondFocused = await page.evaluate(() =>
-      document.activeElement?.textContent?.trim(),
-    );
+    await tryAgainButton.focus();
+    await expect(tryAgainButton).toBeFocused();
 
-    await page.keyboard.press('Tab');
-    const thirdFocused = await page.evaluate(() =>
-      document.activeElement?.textContent?.trim(),
-    );
+    await reloadButton.focus();
+    await expect(reloadButton).toBeFocused();
 
-    // All three buttons should have received focus (exact text may vary)
-    const focusedElements = [firstFocused, secondFocused, thirdFocused].filter(
-      Boolean,
-    );
-    expect(focusedElements.length).toBeGreaterThanOrEqual(2);
-
-    // At least one should be a recovery action
-    const hasRecoveryAction = focusedElements.some(
-      (text) =>
-        /try again|reload|go home/i.test(text || ''),
-    );
-    expect(hasRecoveryAction).toBeTruthy();
+    await goHomeButton.focus();
+    await expect(goHomeButton).toBeFocused();
   });
 });
