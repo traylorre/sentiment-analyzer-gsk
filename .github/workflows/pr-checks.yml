@@ -318,11 +318,14 @@ jobs:
       - name: Run E2E tests
         run: |
           cd frontend
+          # Exclude @external-api tests — they hit real Tiingo/Finnhub APIs.
+          # Run nightly via nightly-e2e.yml instead. DO NOT REMOVE this flag.
           timeout 900 npx playwright test tests/e2e/*.spec.ts \
             --project="Desktop Chrome" \
             --workers=4 \
             --retries=0 \
-            --reporter=html,list
+            --reporter=html,list \
+            --grep-invert "@external-api"
 
       - name: Upload Playwright HTML report
         uses: actions/upload-artifact@v7

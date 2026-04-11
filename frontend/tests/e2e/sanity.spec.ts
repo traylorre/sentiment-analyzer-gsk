@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 import { waitForAuth } from './helpers/auth-helper';
 import { skipWithoutDataApis } from './helpers/data-api-guard';
 
-test.describe('Critical User Path - Sanity Tests', () => {
+test.describe('Critical User Path - Sanity Tests', { tag: '@external-api' }, () => {
   test.beforeEach(async ({ page }) => {
     await skipWithoutDataApis(test);
     await page.goto('/');

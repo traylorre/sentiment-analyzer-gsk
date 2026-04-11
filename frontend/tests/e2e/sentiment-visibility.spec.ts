@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 import { waitForAuth } from './helpers/auth-helper';
 import { skipWithoutDataApis } from './helpers/data-api-guard';
 
-test.describe('Sentiment Data Visibility', () => {
+test.describe('Sentiment Data Visibility', { tag: '@external-api' }, () => {
   test.setTimeout(30000);
 
   test.beforeEach(async () => {

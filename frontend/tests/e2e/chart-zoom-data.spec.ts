@@ -11,7 +11,7 @@ import { skipWithoutDataApis } from './helpers/data-api-guard';
  *
  * Uses real API data (not mocks) to test actual zoom/fitContent behavior.
  */
-test.describe('Chart Zoom Data Visibility', () => {
+test.describe('Chart Zoom Data Visibility', { tag: '@external-api' }, () => {
   test.beforeEach(async () => {
     await skipWithoutDataApis(test);
   });
