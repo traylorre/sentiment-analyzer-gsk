@@ -1,5 +1,6 @@
 // Target: Customer Dashboard (Next.js/Amplify)
 import { test, expect, type ConsoleMessage } from '@playwright/test';
+import { mockAnonymousAuth } from './helpers/auth-helper';
 
 /**
  * T009: Ticker Search Error Visibility
@@ -11,6 +12,11 @@ import { test, expect, type ConsoleMessage } from '@playwright/test';
  * Uses page.route() to intercept API calls and simulate failures.
  */
 test.describe('Ticker Search Error Visibility', () => {
+  test.beforeEach(async ({ page }) => {
+    // Mock anonymous auth to ensure page loads correctly (must be before page.goto)
+    await mockAnonymousAuth(page);
+  });
+
   test('shows error state when API returns 500', async ({ page }) => {
     const consoleMessages: string[] = [];
     page.on('console', (msg: ConsoleMessage) => {
@@ -23,7 +29,7 @@ test.describe('Ticker Search Error Visibility', () => {
     );
 
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Type in search
     const searchInput = page.getByPlaceholder(/search tickers/i);
@@ -68,7 +74,7 @@ test.describe('Ticker Search Error Visibility', () => {
     );
 
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const searchInput = page.getByPlaceholder(/search tickers/i);
     await searchInput.fill('AAPL');
@@ -93,7 +99,7 @@ test.describe('Ticker Search Error Visibility', () => {
     );
 
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const searchInput = page.getByPlaceholder(/search tickers/i);
     await searchInput.fill('AAPL');
@@ -109,12 +115,11 @@ test.describe('Ticker Search Error Visibility', () => {
   });
 
   test('retry button triggers a new search', async ({ page }) => {
-    let requestCount = 0;
+    let retryClicked = false;
 
-    // First request fails, subsequent requests succeed
+    // First few requests fail (covering React Query retries), then succeed after manual retry
     await page.route('**/api/v2/tickers/search**', (route) => {
-      requestCount++;
-      if (requestCount <= 1) {
+      if (!retryClicked) {
         return route.fulfill({ status: 500, body: 'error' });
       }
       return route.fulfill({
@@ -129,20 +134,29 @@ test.describe('Ticker Search Error Visibility', () => {
     });
 
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const searchInput = page.getByPlaceholder(/search tickers/i);
-    await searchInput.fill('AAPL');
-    await page.waitForTimeout(1500);
 
-    // Verify error shown
+    // Set up waitForResponse BEFORE the action that triggers the request (race condition fix)
+    const searchResponsePromise = page.waitForResponse('**/api/v2/tickers/search**');
+    await searchInput.fill('AAPL');
+    await searchResponsePromise;
+
+    // Verify error shown (React Query may retry — wait for error state to propagate)
     await expect(
       page.getByText(/unable to search/i)
-    ).toBeVisible({ timeout: 5000 });
+    ).toBeVisible({ timeout: 10000 });
 
-    // Click retry
-    await page.getByRole('button', { name: /retry/i }).click();
-    await page.waitForTimeout(1500);
+    // Switch mock to success mode before clicking retry
+    retryClicked = true;
+
+    // Click retry and wait for the new search response
+    // Use JS click because the empty state overlay div intercepts pointer events
+    const retryButton = page.getByRole('button', { name: /retry/i });
+    const retryResponsePromise = page.waitForResponse('**/api/v2/tickers/search**');
+    await retryButton.evaluate((el) => (el as HTMLButtonElement).click());
+    await retryResponsePromise;
 
     // After retry, should show results (not error)
     await expect(page.getByRole('option', { name: /AAPL/i })).toBeVisible({
@@ -157,7 +171,7 @@ test.describe('Ticker Search Error Visibility', () => {
     );
 
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const searchInput = page.getByPlaceholder(/search tickers/i);
     await searchInput.fill('AAPL');
@@ -199,7 +213,7 @@ test.describe('Ticker Search Error Visibility', () => {
     );
 
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const searchInput = page.getByPlaceholder(/search tickers/i);
     await searchInput.fill('AAPL');

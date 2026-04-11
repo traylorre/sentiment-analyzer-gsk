@@ -15,33 +15,52 @@ test.describe('Session Lifecycle (US4)', () => {
     // Sign out button should be visible for any authenticated user
     // (Anonymous users may not see it — that's acceptable)
     const signOut = page.getByRole('button', { name: /sign out|log out/i });
-    const isVisible = await signOut.isVisible().catch(() => false);
+    const signOutCount = await signOut.count();
 
-    if (isVisible) {
+    if (signOutCount > 0) {
+      // Element exists in DOM — assert it is actually visible (catches CSS display:none bugs)
+      await expect(signOut).toBeVisible();
       // Verify button is interactive
       await expect(signOut).toBeEnabled();
     }
-    // If not visible, user is anonymous (no sign-out needed)
+    // If count === 0, user is anonymous (no sign-out button rendered)
   });
 
   test('sign out clears session and redirects to signin', async ({ page }) => {
     await page.goto('/settings');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForFunction(
+      () => !document.querySelector('[class*="animate-pulse"]'),
+      { timeout: 10000 }
+    );
 
     const signOut = page.getByRole('button', { name: /sign out|log out/i });
-    const isVisible = await signOut.isVisible().catch(() => false);
+    const signOutCount = await signOut.count();
 
-    if (isVisible) {
+    if (signOutCount > 0) {
+      await expect(signOut).toBeVisible();
       await signOut.click();
 
-      // May show confirmation dialog
-      const confirm = page.getByRole('button', { name: /confirm|yes|sign out/i });
-      if (await confirm.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await confirm.click();
+      // May show confirmation dialog — scope confirm button to dialog
+      const dialog = page.getByRole('dialog');
+      // Dialog is optional: some sign-out flows show a confirmation, others redirect directly.
+      // waitFor throws TimeoutError only on timeout, not on selector errors — catch here means dialog genuinely absent.
+      const dialogAppeared = await dialog.waitFor({ state: 'visible', timeout: 3000 })
+        .then(() => true)
+        .catch(() => false);
+      if (dialogAppeared) {
+        await page.waitForFunction(
+          () => !document.querySelector('[class*="animate"]'),
+          { timeout: 5000 }
+        );
+        const confirmBtn = dialog.getByRole('button', { name: /sign out/i });
+        await confirmBtn.evaluate((el) => (el as HTMLButtonElement).click());
       }
 
-      // Should redirect to signin or home
-      await page.waitForURL(/(signin|auth|\/\s*$)/i, { timeout: 10000 });
+      // Should redirect to signin or home (mobile redirect is slower).
+      // Use polling assertion instead of waitForURL to avoid Firefox
+      // NS_BINDING_ABORTED errors during client-side routing.
+      await expect(page).toHaveURL(/(signin|auth|\/\s*$)/i, { timeout: 15000 });
     }
   });
 
@@ -61,16 +80,8 @@ test.describe('Session Lifecycle (US4)', () => {
     await page.goto('/alerts');
     await page.waitForLoadState('networkidle');
 
-    // Should either show login prompt or redirect to signin
-    const body = await page.textContent('body');
-    const isAuthPrompted =
-      body?.match(/sign in|log in|authenticate|unauthorized/i) ||
-      page.url().includes('signin') ||
-      page.url().includes('auth');
-
-    // For anonymous users, they'll still see the page (just limited)
-    // The test validates the app handles cleared storage gracefully
-    expect(body).toBeTruthy(); // Page rendered without crash
+    // App handled cleared session gracefully — either shows content or redirects to auth
+    await expect(page).toHaveURL(/(alerts|auth|signin)/);
   });
 
   test('multiple sessions can coexist', async ({ page, browser }) => {
@@ -83,8 +94,8 @@ test.describe('Session Lifecycle (US4)', () => {
     await page2.goto('/');
 
     // Both should load without errors
-    await expect(page.locator('body')).not.toBeEmpty();
-    await expect(page2.locator('body')).not.toBeEmpty();
+    await expect(page.getByRole('combobox')).toBeVisible();
+    await expect(page2.getByRole('combobox')).toBeVisible();
 
     await context2.close();
   });

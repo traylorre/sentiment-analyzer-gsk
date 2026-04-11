@@ -6,6 +6,7 @@ import {
   triggerHealthBanner,
   waitForRecovery,
   captureConsoleEvents,
+  captureTelemetryEvents,
   getBannerLocator,
   getDismissButton,
 } from './helpers/chaos-helpers';
@@ -24,14 +25,14 @@ import {
 test.describe('Chaos: API Degradation', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await page.waitForTimeout(2000);
+    await expect(page.locator('main')).toBeVisible({ timeout: 10000 });
   });
 
   // T007: Health banner appears after 3 consecutive API failures
   test('health banner appears after 3 consecutive API failures', async ({
     page,
   }) => {
-    const consoleMessages = captureConsoleEvents(page);
+    const telemetry = captureTelemetryEvents(page);
 
     await triggerHealthBanner(page);
 
@@ -41,16 +42,14 @@ test.describe('Chaos: API Degradation', () => {
     // Verify accessibility attributes
     await expect(banner).toHaveAttribute('aria-live', 'assertive', { timeout: 3000 });
 
-    // Verify console telemetry event
-    const bannerEvent = consoleMessages.find((m) =>
-      m.includes('api_health_banner_shown'),
-    );
+    // Verify structured telemetry event (JSON-parsed, not substring match)
+    const bannerEvent = telemetry.findEvent('api_health_banner_shown');
     expect(bannerEvent).toBeTruthy();
   });
 
   // T008: Health banner dismissal emits console event
   test('health banner dismissal emits console event', async ({ page }) => {
-    const consoleMessages = captureConsoleEvents(page);
+    const telemetry = captureTelemetryEvents(page);
 
     await triggerHealthBanner(page);
 
@@ -65,14 +64,14 @@ test.describe('Chaos: API Degradation', () => {
     // Banner should disappear
     await expect(banner).not.toBeVisible({ timeout: 3000 });
 
-    // Verify dismiss event
-    const dismissEvent = consoleMessages.find((m) =>
-      m.includes('api_health_banner_dismissed'),
-    );
+    // Verify structured dismiss event (JSON-parsed, not substring match)
+    const dismissEvent = telemetry.findEvent('api_health_banner_dismissed');
     expect(dismissEvent).toBeTruthy();
   });
 
   // T009: Health banner auto-clears on recovery
+  // Uses legacy captureConsoleEvents — see Feature 1339 for structured migration
+  // (waitForRecovery() expects string[], so captureTelemetryEvents cannot be used here)
   test('health banner auto-clears on recovery', async ({ page }) => {
     const consoleMessages = captureConsoleEvents(page);
 
@@ -127,14 +126,18 @@ test.describe('Chaos: API Degradation', () => {
 
     const searchInput = page.getByPlaceholder(/search tickers/i);
 
-    // First search fails
+    // First search fails (requestCount === 1 -> 500)
     await searchInput.fill('AAPL');
-    await page.waitForTimeout(1500);
+    await page.waitForResponse(
+      (r) => r.url().includes('/tickers/search') && r.status() === 500,
+    );
 
-    // Second search succeeds — resets failure counter
+    // Second search succeeds (requestCount > 1 -> 200) — resets failure counter
     await searchInput.fill('');
     await searchInput.fill('GOOG');
-    await page.waitForTimeout(1500);
+    await page.waitForResponse(
+      (r) => r.url().includes('/tickers/search') && r.status() === 200,
+    );
 
     // Banner should NOT appear (only 1 failure, then recovery)
     const banner = getBannerLocator(page);
@@ -172,17 +175,17 @@ test.describe('Chaos: API Degradation', () => {
     // Interaction 1: search triggers both sentiment (fail) and ticker (success)
     // The success on ticker calls recordSuccess() which resets the counter
     await searchInput.fill('AAPL');
-    await page.waitForTimeout(1500);
+    await page.waitForResponse((r) => r.url().includes('/tickers/search'));
 
     // Interaction 2: same pattern — sentiment fails, ticker succeeds
     await searchInput.fill('');
     await searchInput.fill('GOOG');
-    await page.waitForTimeout(1500);
+    await page.waitForResponse((r) => r.url().includes('/tickers/search'));
 
     // Interaction 3: same pattern
     await searchInput.fill('');
     await searchInput.fill('MSFT');
-    await page.waitForTimeout(1500);
+    await page.waitForResponse((r) => r.url().includes('/tickers/search'));
 
     // Banner should NOT appear — each successful ticker response resets the counter
     const banner = getBannerLocator(page);
@@ -223,10 +226,17 @@ test.describe('Chaos: API Degradation', () => {
     const searchInput = page.getByPlaceholder(/search tickers/i);
     await searchInput.fill('');
     await searchInput.fill('TSLA');
-    await page.waitForTimeout(2000);
+    await page.waitForResponse(
+      (r) => r.url().includes('/tickers/search') && r.ok(),
+      { timeout: 5000 },
+    );
 
     // Remove the success mock
     await page.unroute('**/api/v2/tickers/search**');
+    // Settle: ensure route deregistration completes and any in-flight requests
+    // resolve before re-blocking. Without this, triggerHealthBanner may still
+    // match the now-removed success mock for requests already in the pipeline.
+    await page.waitForTimeout(500);
 
     // Second degradation cycle — banner should reappear (not stay dismissed)
     await triggerHealthBanner(page);
