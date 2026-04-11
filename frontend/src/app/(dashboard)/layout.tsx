@@ -33,13 +33,13 @@ export default function DashboardLayout({
         <DesktopHeader lastUpdated={lastUpdated} />
 
         {/* Content */}
-        <main className="container mx-auto px-4 py-6 pb-24 md:pb-6">
+        <div className="container mx-auto px-4 py-6 pb-24 md:pb-6">
           <ErrorBoundary>
             <ErrorTrigger>
               {children}
             </ErrorTrigger>
           </ErrorBoundary>
-        </main>
+        </div>
 
         {/* Mobile view indicator (swipe hints) */}
         <div className="fixed bottom-20 left-0 right-0 md:hidden">

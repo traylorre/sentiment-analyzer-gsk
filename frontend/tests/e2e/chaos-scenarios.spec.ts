@@ -20,8 +20,8 @@ import {
 test.describe('Chaos: Scenario Customer Outcomes', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    // Wait for initial data to render before applying chaos
-    await page.waitForTimeout(3000);
+    // Wait for main content to render before applying chaos (response-driven, not arbitrary timeout)
+    await expect(page.locator('main')).toBeVisible({ timeout: 10000 });
   });
 
   // T016: Ingestion failure — dashboard persists with no new data
@@ -52,20 +52,33 @@ test.describe('Chaos: Scenario Customer Outcomes', () => {
       }),
     );
 
-    // Wait for chaos to take effect
-    await page.waitForTimeout(2000);
+    // Seed activeConfigId so useSentiment query is enabled on reload
+    await page.evaluate(() => {
+      localStorage.setItem(
+        'sentiment-configs',
+        JSON.stringify({ state: { activeConfigId: 'test' }, version: 0 }),
+      );
+    });
+
+    // Reload to trigger refetch against the mocked stale sentiment endpoint
+    await page.reload();
+    await expect(page.locator('main')).toBeVisible({ timeout: 10000 });
 
     // Dashboard should still have rendered content — NOT empty
     const textDuring = await mainContent.textContent();
     expect(textDuring).toBeTruthy();
     expect(textDuring!.length).toBeGreaterThan(10);
 
-    // Stale data indicator should be visible and in warning/stale state (Feature 1266)
-    const freshnessIndicator = page.locator('[data-testid="data-freshness-indicator"]');
-    if (await freshnessIndicator.isVisible({ timeout: 3000 }).catch(() => false)) {
-      const freshnessState = await freshnessIndicator.getAttribute('data-freshness-state');
-      expect(['stale', 'critical']).toContain(freshnessState);
-    }
+    // Verify content identity — not just "something is visible"
+    const fragment = textBefore!.substring(0, 20);
+    expect(textDuring).toContain(fragment);
+
+    // Stale data indicator MUST be visible and in warning/stale state (Feature 1266)
+    // Use visible() filter — on mobile, only the header indicator is visible; on desktop, the aside one.
+    const freshnessIndicator = page.locator('[data-testid="data-freshness-indicator"]').locator('visible=true').first();
+    await expect(freshnessIndicator).toBeVisible({ timeout: 5000 });
+    const freshnessState = await freshnessIndicator.getAttribute('data-freshness-state');
+    expect(['stale', 'critical']).toContain(freshnessState);
 
     await page.unroute('**/api/v2/configurations/*/sentiment');
     await restore();
@@ -86,13 +99,13 @@ test.describe('Chaos: Scenario Customer Outcomes', () => {
     // Trigger 3+ search interactions to accumulate failures for banner
     const searchInput = page.getByPlaceholder(/search tickers/i);
     await searchInput.fill('AAPL');
-    await page.waitForTimeout(1500);
+    await page.waitForResponse((r) => r.url().includes('/api/') && r.status() === 503);
     await searchInput.fill('');
     await searchInput.fill('GOOG');
-    await page.waitForTimeout(1500);
+    await page.waitForResponse((r) => r.url().includes('/api/') && r.status() === 503);
     await searchInput.fill('');
     await searchInput.fill('MSFT');
-    await page.waitForTimeout(1500);
+    await page.waitForResponse((r) => r.url().includes('/api/') && r.status() === 503);
 
     // Health banner should appear
     const banner = getBannerLocator(page);
@@ -118,13 +131,14 @@ test.describe('Chaos: Scenario Customer Outcomes', () => {
 
     // During the 3s delay, loading skeletons should be visible
     const skeletons = page.locator('.animate-pulse');
-    // There should be at least one skeleton element during loading
-    await expect(skeletons.first()).toBeVisible({ timeout: 2000 }).catch(() => {
-      // If no skeletons visible, the page may have cached data — still valid
-    });
+    // Skeletons MUST be visible during the 3s cold start delay
+    await expect(skeletons.first()).toBeVisible({ timeout: 2000 });
 
-    // After delay resolves, content should eventually render
-    await page.waitForTimeout(5000);
+    // After delay resolves, content should eventually render (response-driven wait)
+    await page.waitForResponse(
+      (r) => r.url().includes('/api/') && r.ok(),
+      { timeout: 10000 },
+    );
     const mainContent = page.locator('main');
     const textAfter = await mainContent.textContent();
     expect(textAfter).toBeTruthy();
@@ -160,19 +174,33 @@ test.describe('Chaos: Scenario Customer Outcomes', () => {
       }),
     );
 
-    await page.waitForTimeout(2000);
+    // Seed activeConfigId so useSentiment query is enabled on reload
+    await page.evaluate(() => {
+      localStorage.setItem(
+        'sentiment-configs',
+        JSON.stringify({ state: { activeConfigId: 'test' }, version: 0 }),
+      );
+    });
+
+    // Reload to trigger refetch against the mocked stale sentiment endpoint
+    await page.reload();
+    await expect(page.locator('main')).toBeVisible({ timeout: 10000 });
 
     // Dashboard still has rendered content
     const textDuring = await mainContent.textContent();
     expect(textDuring).toBeTruthy();
     expect(textDuring!.length).toBeGreaterThan(10);
 
-    // Stale data indicator should be visible and in critical state (20min > 4x 5min) (Feature 1266)
-    const freshnessIndicator = page.locator('[data-testid="data-freshness-indicator"]');
-    if (await freshnessIndicator.isVisible({ timeout: 3000 }).catch(() => false)) {
-      const freshnessState = await freshnessIndicator.getAttribute('data-freshness-state');
-      expect(freshnessState).toBe('critical');
-    }
+    // Verify content identity — not just "something is visible"
+    const fragment = textBefore!.substring(0, 20);
+    expect(textDuring).toContain(fragment);
+
+    // Stale data indicator MUST be visible and in critical state (20min > 4x 5min) (Feature 1266)
+    // Use visible() filter — on mobile, only the header indicator is visible; on desktop, the aside one.
+    const freshnessIndicator = page.locator('[data-testid="data-freshness-indicator"]').locator('visible=true').first();
+    await expect(freshnessIndicator).toBeVisible({ timeout: 5000 });
+    const freshnessState = await freshnessIndicator.getAttribute('data-freshness-state');
+    expect(freshnessState).toBe('critical');
 
     await page.unroute('**/api/v2/configurations/*/sentiment');
     await restore();
@@ -185,27 +213,25 @@ test.describe('Chaos: Scenario Customer Outcomes', () => {
     // Apply API timeout: all calls aborted with timeout error
     const restore = await simulateChaosScenario(page, 'api_timeout');
 
-    // Trigger interactions that will timeout
+    // Trigger interactions that will timeout (event-driven waits)
     const searchInput = page.getByPlaceholder(/search tickers/i);
     await searchInput.fill('AAPL');
-    await page.waitForTimeout(1500);
+    await page.waitForEvent('requestfailed', { timeout: 5000 });
     await searchInput.fill('');
     await searchInput.fill('GOOG');
-    await page.waitForTimeout(1500);
+    await page.waitForEvent('requestfailed', { timeout: 5000 });
     await searchInput.fill('');
     await searchInput.fill('MSFT');
-    await page.waitForTimeout(1500);
+    await page.waitForEvent('requestfailed', { timeout: 5000 });
 
-    // Either health banner or error toast should be visible — not a blank screen
+    // BOTH health banner AND content must be present — not just one or the other
     const banner = getBannerLocator(page);
+    await expect(banner).toBeVisible({ timeout: 5000 });
+
     const mainContent = page.locator('main');
     const mainText = await mainContent.textContent();
-
-    // At least one error indicator should be present
-    const bannerVisible = await banner.isVisible().catch(() => false);
     const hasContent = mainText && mainText.length > 10;
-
-    expect(bannerVisible || hasContent).toBeTruthy();
+    expect(hasContent).toBeTruthy();
 
     await restore();
   });
@@ -232,10 +258,8 @@ test.describe('Chaos: Scenario Customer Outcomes', () => {
     await searchInput.fill('');
     await searchInput.fill('TSLA');
 
-    const response = await responsePromise.catch(() => null);
-    // Recovery is confirmed if we get a 200 response
-    // (May not always succeed if local server doesn't have data for TSLA,
-    // but the request reaching the server proves route interception is removed)
-    expect(response === null || response.ok()).toBeTruthy();
+    const response = await responsePromise;
+    // Recovery is confirmed by a successful API response — no error swallowing
+    expect(response.ok()).toBeTruthy();
   });
 });

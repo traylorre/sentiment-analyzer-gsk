@@ -1,6 +1,7 @@
 // Target: Customer Dashboard (Next.js/Amplify)
 import { test, expect } from '@playwright/test';
 import { mockTickerDataApis } from './helpers/mock-api-data';
+import { mockAnonymousAuth } from './helpers/auth-helper';
 
 /**
  * Ticker Search Gap Tests: No-results, keyboard nav, multi-ticker (Feature 1282)
@@ -10,23 +11,11 @@ import { mockTickerDataApis } from './helpers/mock-api-data';
  */
 test.describe('Ticker Search Gaps', () => {
   test.beforeEach(async ({ page }) => {
-    // Mock anonymous auth
-    await page.route('**/api/v2/auth/anonymous', async (route) => {
-      await route.fulfill({
-        status: 201,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          access_token: 'mock-test-token',
-          token_type: 'bearer',
-          auth_type: 'anonymous',
-          user_id: 'anon-test-user',
-          session_expires_in_seconds: 3600,
-        }),
-      });
-    });
+    // Mock anonymous auth (must be before page.goto)
+    await mockAnonymousAuth(page);
 
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
   });
 
   test.describe('No-Results State (US1)', () => {
@@ -221,13 +210,16 @@ test.describe('Ticker Search Gaps', () => {
       await searchInput.fill('AAPL');
       await page.waitForResponse('**/api/v2/tickers/search**');
       await page.getByRole('option', { name: /AAPL/i }).first().click();
-      await expect(page.getByText('AAPL')).toBeVisible({ timeout: 5000 });
+      // Verify chip by its remove button (exact match to avoid strict mode with chip text)
+      await expect(page.getByRole('button', { name: 'Remove AAPL', exact: true })).toBeVisible({ timeout: 5000 });
 
-      // Add second ticker
+      // Add second ticker — clear first to ensure fresh query
+      await searchInput.clear();
       await searchInput.fill('GOOGL');
       await page.waitForResponse('**/api/v2/tickers/search**');
       await page.getByRole('option', { name: /GOOGL/i }).first().click();
-      await expect(page.getByText('GOOGL')).toBeVisible({ timeout: 5000 });
+      // Verify second chip by its remove button (exact match)
+      await expect(page.getByRole('button', { name: 'Remove GOOGL', exact: true })).toBeVisible({ timeout: 5000 });
     });
 
     test('duplicate ticker switches to existing chip without adding', async ({
@@ -235,28 +227,36 @@ test.describe('Ticker Search Gaps', () => {
     }) => {
       const searchInput = page.getByPlaceholder(/search tickers/i);
 
-      // Add AAPL
+      // Add AAPL — set up waitForResponse BEFORE fill to avoid race
+      const firstSearch = page.waitForResponse('**/api/v2/tickers/search**');
       await searchInput.fill('AAPL');
-      await page.waitForResponse('**/api/v2/tickers/search**');
+      await firstSearch;
       await page.getByRole('option', { name: /AAPL/i }).first().click();
 
-      // Add GOOGL
+      // Add GOOGL — set up waitForResponse BEFORE fill
+      const secondSearch = page.waitForResponse('**/api/v2/tickers/search**');
       await searchInput.fill('GOOGL');
-      await page.waitForResponse('**/api/v2/tickers/search**');
+      await secondSearch;
       await page.getByRole('option', { name: /GOOGL/i }).first().click();
 
-      // Try to add AAPL again
+      // Try to add AAPL again — the search may be cached by React Query
+      // so we can't rely on waitForResponse. Instead, just type and wait for the option.
+      await searchInput.clear();
       await searchInput.fill('AAPL');
-      await page.waitForResponse('**/api/v2/tickers/search**');
+      // Wait for autocomplete to appear (may come from cache, no network request)
+      await expect(page.getByRole('option', { name: /AAPL/i }).first()).toBeVisible({ timeout: 5000 });
       await page.getByRole('option', { name: /AAPL/i }).first().click();
 
+      // Wait for potential chip update
+      await page.waitForTimeout(500);
+
       // Should still have exactly 2 chips, not 3
-      // Count elements containing ticker symbols
-      const aaplChips = page.locator('button:has-text("AAPL"), [data-ticker="AAPL"]');
-      const googlChips = page.locator('button:has-text("GOOGL"), [data-ticker="GOOGL"]');
-      // At most 1 of each (chip + possible tab text)
-      expect(await aaplChips.count()).toBeLessThanOrEqual(2);
-      expect(await googlChips.count()).toBeLessThanOrEqual(2);
+      // Count chip remove buttons (exact match to avoid matching chip text)
+      const aaplRemoveButtons = page.getByRole('button', { name: 'Remove AAPL', exact: true });
+      const googlRemoveButtons = page.getByRole('button', { name: 'Remove GOOGL', exact: true });
+      // Exactly 1 chip each
+      expect(await aaplRemoveButtons.count()).toBe(1);
+      expect(await googlRemoveButtons.count()).toBe(1);
     });
   });
 });
