@@ -21,6 +21,18 @@ export function DeleteConfirmation({
   onCancel,
   isDeleting = false,
 }: DeleteConfirmationProps) {
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onCancel();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onCancel]);
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -36,6 +48,8 @@ export function DeleteConfirmation({
 
           {/* Dialog */}
           <motion.div
+            role="dialog"
+            aria-modal="true"
             className="fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 p-4"
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}

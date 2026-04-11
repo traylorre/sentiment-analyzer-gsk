@@ -1,6 +1,6 @@
 'use client';
 
-import { Component, type ReactNode, type ErrorInfo } from 'react';
+import { Component, type ReactNode, type ErrorInfo, useRef, useEffect } from 'react';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -77,14 +77,29 @@ export function ErrorFallback({
   onReload,
   onGoHome,
 }: ErrorFallbackProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // Move focus to the error boundary container on mount so keyboard users
+    // land inside the error region. tabIndex={-1} makes it focusable
+    // programmatically without adding it to the Tab order.
+    containerRef.current?.focus();
+  }, []);
+
   return (
-    <div role="alert" className="min-h-[400px] flex items-center justify-center p-4">
+    <div
+      ref={containerRef}
+      role="alert"
+      aria-labelledby="error-boundary-heading"
+      tabIndex={-1}
+      className="min-h-[400px] flex items-center justify-center p-4 outline-none"
+    >
       <Card className="max-w-md w-full p-6 text-center">
         <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mx-auto mb-4">
           <AlertTriangle className="w-8 h-8 text-red-500" aria-hidden="true" />
         </div>
 
-        <h2 className="text-xl font-semibold text-foreground mb-2">
+        <h2 id="error-boundary-heading" className="text-xl font-semibold text-foreground mb-2">
           Something went wrong
         </h2>
 

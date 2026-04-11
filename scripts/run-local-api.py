@@ -89,6 +89,16 @@ os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "testing")
 os.environ.setdefault("AWS_XRAY_SDK_ENABLED", "false")
 os.environ.setdefault("SSE_LAMBDA_URL", "http://localhost:8000/api/v2/stream")
 
+# OAuth / Cognito config for local development (Feature 1323)
+# Enables OAuth button rendering on /auth/signin. Buttons link to fake Cognito
+# domain — clicking them won't complete a real OAuth flow, but the UI renders.
+os.environ.setdefault("ENABLED_OAUTH_PROVIDERS", "google,github")
+os.environ.setdefault("COGNITO_USER_POOL_ID", "us-east-1_localdev")
+os.environ.setdefault("COGNITO_CLIENT_ID", "local-client-id")
+os.environ.setdefault("COGNITO_DOMAIN", "local-auth")
+os.environ.setdefault("COGNITO_REDIRECT_URI", "http://localhost:3000/auth/callback")
+os.environ.setdefault("FRONTEND_URL", "http://localhost:3000")
+
 
 def create_mock_tables():
     """Create mock DynamoDB tables using moto."""
@@ -268,32 +278,50 @@ class LambdaProxyHandler(BaseHTTPRequestHandler):
         body = response.get("body", "")
         resp_headers = response.get("headers", {})
 
-        self.send_response(status_code)
+        try:
+            self.send_response(status_code)
 
-        # CORS headers for local development
-        self.send_header("Access-Control-Allow-Origin", "http://localhost:3000")
-        self.send_header("Access-Control-Allow-Credentials", "true")
-        self.send_header(
-            "Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS"
-        )
-        self.send_header(
-            "Access-Control-Allow-Headers",
-            "Content-Type, Authorization, Accept, Cache-Control, "
-            "Last-Event-ID, X-Amzn-Trace-Id, X-User-ID",
-        )
+            # CORS headers for local development
+            self.send_header("Access-Control-Allow-Origin", "http://localhost:3000")
+            self.send_header("Access-Control-Allow-Credentials", "true")
+            self.send_header(
+                "Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS"
+            )
+            self.send_header(
+                "Access-Control-Allow-Headers",
+                "Content-Type, Authorization, Accept, Cache-Control, "
+                "Last-Event-ID, X-Amzn-Trace-Id, X-User-ID",
+            )
 
-        for key, value in resp_headers.items():
-            self.send_header(key, value)
+            for key, value in resp_headers.items():
+                self.send_header(key, value)
 
-        # Set-Cookie from multiValueHeaders (v1) or cookies (v2)
-        for cookie in response.get("multiValueHeaders", {}).get("Set-Cookie", []):
-            self.send_header("Set-Cookie", cookie)
-        for cookie in response.get("cookies", []):
-            self.send_header("Set-Cookie", cookie)
+            # Set-Cookie from multiValueHeaders (v1) or cookies (v2)
+            for cookie in response.get("multiValueHeaders", {}).get("Set-Cookie", []):
+                self.send_header("Set-Cookie", cookie)
+            for cookie in response.get("cookies", []):
+                self.send_header("Set-Cookie", cookie)
 
-        self.end_headers()
-        if body:
-            self.wfile.write(body.encode() if isinstance(body, str) else body)
+            self.end_headers()
+            if body:
+                self.wfile.write(body.encode() if isinstance(body, str) else body)
+        except BrokenPipeError:
+            # Client disconnected before response was sent (e.g., Playwright
+            # navigated away or aborted the request). Normal under parallel
+            # test load — not an error.
+            pass
+        except ConnectionResetError:
+            # Client sent TCP RST (e.g., route.abort('connectionreset')).
+            pass
+
+    def log_message(self, format, *args):
+        """Route HTTP log lines through the module logger.
+
+        BaseHTTPRequestHandler.log_message prints to stderr, which
+        mixes poorly with structured logging and surfaces raw
+        BrokenPipeError tracebacks in CI output.
+        """
+        logger.info(f"{self.address_string()} - {format % args}")
 
     def do_GET(self):
         self._invoke_handler("GET")
@@ -308,18 +336,23 @@ class LambdaProxyHandler(BaseHTTPRequestHandler):
         self._invoke_handler("DELETE")
 
     def do_OPTIONS(self):
-        self.send_response(204)
-        self.send_header("Access-Control-Allow-Origin", "http://localhost:3000")
-        self.send_header("Access-Control-Allow-Credentials", "true")
-        self.send_header(
-            "Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS"
-        )
-        self.send_header(
-            "Access-Control-Allow-Headers",
-            "Content-Type, Authorization, Accept, Cache-Control, "
-            "Last-Event-ID, X-Amzn-Trace-Id, X-User-ID",
-        )
-        self.end_headers()
+        try:
+            self.send_response(204)
+            self.send_header("Access-Control-Allow-Origin", "http://localhost:3000")
+            self.send_header("Access-Control-Allow-Credentials", "true")
+            self.send_header(
+                "Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS"
+            )
+            self.send_header(
+                "Access-Control-Allow-Headers",
+                "Content-Type, Authorization, Accept, Cache-Control, "
+                "Last-Event-ID, X-Amzn-Trace-Id, X-User-ID",
+            )
+            self.end_headers()
+        except BrokenPipeError:
+            pass
+        except ConnectionResetError:
+            pass
 
 
 def main():

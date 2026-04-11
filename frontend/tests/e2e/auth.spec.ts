@@ -64,27 +64,13 @@ test.describe('Authentication Flow', () => {
     // Click submit
     await submitButton.click();
 
-    // Should either:
-    // 1. Show "Check your email" confirmation (success)
-    // 2. Show "Sending..." loading state
-    // 3. Show an error (API failure in test env)
-    // Any of these indicates the form submission was attempted
-    const checkEmail = page.getByText(/check your email/i);
-    const sending = page.getByText(/sending/i);
-    const errorState = page.getByText(/failed|error|try again/i);
-
+    // Should show a response: "Check your email", "Sending...", or an error
     // Wait for network to settle
     await page.waitForLoadState('networkidle');
 
-    // Verify we're still on the signin page or showing a response
-    const pageUrl = page.url();
-    const hasResponse =
-      (await checkEmail.isVisible().catch(() => false)) ||
-      (await sending.isVisible().catch(() => false)) ||
-      (await errorState.isVisible().catch(() => false));
-
-    // Test passes if form reacted (showed response or stayed on page)
-    expect(pageUrl.includes('/auth') || hasResponse).toBeTruthy();
+    await expect(
+      page.getByText(/check your email|sending|failed|error|try again/i).first()
+    ).toBeVisible({ timeout: 10000 });
   });
 
   test('should display verify page with appropriate state', async ({ page }) => {
@@ -114,16 +100,13 @@ test.describe('Sign Out Flow', () => {
     const signOutButton = page.getByRole('button', { name: /sign out/i });
 
     // With anonymous auth, users are authenticated, so button should be visible
-    const isVisible = await signOutButton.isVisible({ timeout: 5000 }).catch(() => false);
+    await expect(signOutButton).toBeVisible({ timeout: 5000 });
 
-    if (isVisible) {
-      // Click should open confirmation dialog
-      await signOutButton.click();
+    // Click should open confirmation dialog
+    await signOutButton.click();
 
-      // Confirmation dialog should appear
-      await expect(page.getByRole('dialog')).toBeVisible();
-    }
-    // If not visible, test passes - user may not be authenticated
+    // Confirmation dialog should appear
+    await expect(page.getByRole('dialog')).toBeVisible();
   });
 });
 
@@ -134,9 +117,9 @@ test.describe('Anonymous Mode', () => {
     // Wait for page to fully load
     await page.waitForLoadState('networkidle');
 
-    // Dashboard should be accessible - check for the app logo/title in header or sidebar
-    // Use more specific selector to avoid matching multiple "sentiment" headings
-    const appTitle = page.locator('span').filter({ hasText: /^Sentiment$/ }).first();
+    // Dashboard should be accessible - check for the app logo/title in header or sidebar.
+    // On mobile, the aside is hidden so use visible() filter to pick whichever is on-screen.
+    const appTitle = page.locator('span').filter({ hasText: /^Sentiment$/ }).locator('visible=true').first();
     await expect(appTitle).toBeVisible();
   });
 
@@ -152,8 +135,9 @@ test.describe('Anonymous Mode', () => {
 
     // The page should have some content (not blank)
     // This test verifies navigation works, not full auth state
-    const body = page.locator('body');
-    await expect(body).not.toBeEmpty();
+    await expect(
+      page.getByRole('heading', { name: /account/i })
+    ).toBeVisible({ timeout: 10000 });
   });
 });
 
@@ -243,8 +227,8 @@ test.describe('OAuth Callback Error Handling', () => {
       timeout: 5000,
     });
 
-    // Should show the specific error description
-    await expect(page.getByText('User denied access')).toBeVisible();
+    // Component maps access_denied to its own message (ignores error_description)
+    await expect(page.getByText('Sign-in was cancelled. You can try again or continue as guest.')).toBeVisible();
 
     // Should show try again button
     await expect(page.getByRole('button', { name: /try again/i })).toBeVisible();
@@ -259,8 +243,8 @@ test.describe('OAuth Callback Error Handling', () => {
       timeout: 5000,
     });
 
-    // Should show generic cancellation message
-    await expect(page.getByText('Authentication was cancelled')).toBeVisible();
+    // Component maps server_error to its own message
+    await expect(page.getByText('Something went wrong with sign-in. Please try again.')).toBeVisible();
 
     // Should show try again button
     await expect(page.getByRole('button', { name: /try again/i })).toBeVisible();
