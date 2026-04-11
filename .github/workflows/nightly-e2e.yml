@@ -1,0 +1,88 @@
+# Nightly External-API E2E Tests
+# ===============================
+#
+# Runs @external-api tagged Playwright tests against real Tiingo/Finnhub APIs.
+# These tests are excluded from PR checks (--grep-invert "@external-api") to
+# avoid rate-limiting API keys on every PR.
+#
+# Schedule: Daily at 2am UTC (GitHub may drift up to 15 min)
+#
+# IMPORTANT: GitHub auto-disables scheduled workflows after 60 days of repo
+# inactivity (no pushes, no PRs). The workflow_dispatch trigger allows manual
+# re-enablement. The README badge shows "no status" when disabled, making
+# staleness visible.
+
+name: Nightly External-API E2E
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: '3.13'
+
+jobs:
+  external-api-e2e:
+    name: External-API E2E Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        run: pip install -r requirements-ci.txt
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: cd frontend && npm ci
+
+      - name: Install Playwright Chromium
+        run: cd frontend && npx playwright install chromium --with-deps
+
+      - name: Run external-API E2E tests
+        run: |
+          cd frontend
+          npx playwright test \
+            --grep "@external-api" \
+            --project="Desktop Chrome" \
+            --workers=1 \
+            --retries=1 \
+            --reporter=html,list
+        env:
+          CI: 'true'
+          TIINGO_API_KEY: ${{ secrets.TIINGO_API_KEY }}
+          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+
+      - name: Upload Playwright HTML report
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: nightly-e2e-report
+          path: frontend/playwright-report/
+          retention-days: 7
+
+      - name: Upload Playwright test results
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: nightly-e2e-results
+          path: frontend/test-results/
+          retention-days: 7
