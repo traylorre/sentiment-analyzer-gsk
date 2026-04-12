@@ -51,4 +51,4 @@ pytest-playwright>=0.7.2  # Pytest fixtures for Playwright (0.7.2 adds pytest 9.
 playwright>=1.49.0        # Browser automation (requires: playwright install)
 
 # Terraform parsing - Feature 075 (validation gaps)
-python-hcl2>=4.3.0
+python-hcl2==7.3.1  # Pinned: 8.x wraps all identifiers in literal quotes, breaking HCL parsing tests
