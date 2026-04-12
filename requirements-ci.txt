@@ -13,8 +13,8 @@
 #   - This file saves ~15min in CI by excluding 2GB+ torch
 
 # AWS SDK - Lambda runtime includes boto3, but we pin for local testing
-boto3==1.42.73
-botocore==1.42.73
+boto3==1.42.78
+botocore==1.42.78
 
 
 # HTTP Client - Financial API adapters (Tiingo, Finnhub)
