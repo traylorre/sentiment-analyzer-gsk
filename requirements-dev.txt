@@ -38,8 +38,8 @@ pre-commit==4.5.1       # Git hooks framework
 bandit==1.9.4          # Security vulnerability scanner (local CodeQL alternative)
 
 # Type Checking (optional but recommended)
-mypy==1.19.1
-boto3-stubs==1.42.68     # Type stubs for boto3
+mypy==1.20.0
+boto3-stubs==1.42.83     # Type stubs for boto3
 
 # Testing Utilities
 httpx==0.28.1           # Async HTTP client for financial API adapters
