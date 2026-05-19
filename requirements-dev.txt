@@ -32,19 +32,19 @@ moto[all]==5.2.1
 responses==0.26.0
 
 # Code Quality
-black==26.3.1          # Code formatter
-ruff==0.15.12             # Fast linter (replaces flake8, isort)
+black==26.5.1          # Code formatter
+ruff==0.15.13             # Fast linter (replaces flake8, isort)
 pre-commit==4.6.0       # Git hooks framework
 bandit==1.9.4          # Security vulnerability scanner (local CodeQL alternative)
 
 # Type Checking (optional but recommended)
 mypy==1.19.1
-boto3-stubs==1.43.6     # Type stubs for boto3
+boto3-stubs==1.43.10     # Type stubs for boto3
 
 # Testing Utilities
 httpx==0.28.1           # Async HTTP client for financial API adapters
 freezegun==1.5.5        # Time mocking for TTL tests
-hypothesis>=6.152.6
+hypothesis>=6.152.8
 
 # E2E Testing - Playwright for browser automation
 pytest-playwright>=0.7.2  # Pytest fixtures for Playwright (0.7.2 adds pytest 9.0+ support)

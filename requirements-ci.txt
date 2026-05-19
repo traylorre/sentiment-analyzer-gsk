@@ -18,7 +18,7 @@ botocore==1.43.10
 
 
 # HTTP Client - Financial API adapters (Tiingo, Finnhub)
-requests==2.34.0
+requests==2.34.2
 httpx==0.28.1
 
 # Data Validation - Input/output schemas
@@ -53,20 +53,20 @@ moto[all]==5.2.1
 responses==0.26.0
 
 # Code Quality
-black==26.3.1
-ruff==0.15.12
+black==26.5.1
+ruff==0.15.13
 pre-commit==4.6.0
 bandit==1.9.4
 
 # Type Checking
 mypy==1.19.1
-boto3-stubs==1.43.6
+boto3-stubs==1.43.10
 
 # Testing Utilities
 freezegun==1.5.5
 
 # Property-Based Testing (tests/property/ requires this)
-hypothesis==6.152.6
+hypothesis==6.152.8
 
 # Terraform HCL Parsing - For resource_naming validator tests
 python-hcl2==7.3.1
