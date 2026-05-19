@@ -18,11 +18,11 @@ botocore==1.43.6
 # Note: torch is large (~2GB); Lambda layer built separately
 # See infrastructure/scripts/build-model-layer.sh
 transformers==4.57.6
-torch==2.11.0
+torch==2.12.0
 
 
 # HTTP Client - Financial API adapters (Tiingo, Finnhub)
-requests==2.34.0
+requests==2.34.2
 httpx==0.28.1  # Async HTTP client for financial APIs
 
 # Data Validation - Input/output schemas
