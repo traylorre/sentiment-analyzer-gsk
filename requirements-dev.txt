@@ -29,7 +29,7 @@ pytest-asyncio==1.3.0  # Async test support for SSE endpoints
 moto[all]==5.2.1
 
 # HTTP Mocking - For NewsAPI adapter tests
-responses==0.26.0
+responses==0.26.1
 
 # Code Quality
 black==26.5.1          # Code formatter
