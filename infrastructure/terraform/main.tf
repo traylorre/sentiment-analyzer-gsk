@@ -900,8 +900,8 @@ module "api_gateway" {
   log_retention_days  = var.environment == "prod" ? 90 : 30
   enable_xray_tracing = true
 
-  # CloudWatch alarms
-  create_alarms       = true
+  # CloudWatch alarms (gated to stay near the 10-alarm free tier in non-prod)
+  create_alarms       = var.enable_extended_cloudwatch_alarms
   alarm_actions       = [module.monitoring.alarm_topic_arn]
   error_4xx_threshold = 100  # Alert after 100 client errors in 5 minutes
   error_5xx_threshold = 10   # Alert after 10 server errors in 5 minutes
@@ -922,6 +922,7 @@ module "api_gateway" {
 # Separate module for reuse with CloudFront in Feature 1255 (FR-009).
 
 module "waf" {
+  count  = var.enable_waf ? 1 : 0
   source = "./modules/waf"
 
   environment  = var.environment
@@ -963,8 +964,9 @@ module "cloudfront_sse" {
   # Feature 1256: Lambda ARN for OAC permission (CloudFront → Lambda via SigV4)
   lambda_function_arn = module.sse_streaming_lambda.function_arn
 
-  # FR-005: WAF WebACL (CLOUDFRONT scope)
-  waf_web_acl_arn = module.waf_cloudfront.web_acl_arn
+  # FR-005: WAF WebACL (CLOUDFRONT scope). Empty string => CloudFront runs
+  # without a WAF (var.enable_waf=false). cloudfront_sse maps "" to null.
+  waf_web_acl_arn = var.enable_waf ? module.waf_cloudfront[0].web_acl_arn : ""
 
   # FR-003: 60s default max (180s requires AWS quota increase)
   origin_read_timeout = 60
@@ -988,6 +990,7 @@ module "cloudfront_sse" {
 # Independent from the API Gateway WAF (REGIONAL scope, Feature 1254).
 
 module "waf_cloudfront" {
+  count  = var.enable_waf ? 1 : 0
   source = "./modules/waf"
 
   environment  = var.environment
@@ -1194,6 +1197,7 @@ resource "aws_servicequotas_service_quota" "xray_trace_segments" {
 # ===================================================================
 
 module "cloudwatch_alarms" {
+  count  = var.enable_extended_cloudwatch_alarms ? 1 : 0
   source = "./modules/cloudwatch-alarms"
 
   environment = var.environment
