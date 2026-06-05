@@ -109,33 +109,11 @@ variable "cognito_identity_providers" {
   default     = []
 }
 
-variable "google_oauth_client_id" {
-  description = "Google OAuth client ID (from Google Cloud Console)"
-  type        = string
-  default     = ""
-  sensitive   = true
-}
-
-variable "google_oauth_client_secret" {
-  description = "Google OAuth client secret"
-  type        = string
-  default     = ""
-  sensitive   = true
-}
-
-variable "github_oauth_client_id" {
-  description = "GitHub OAuth client ID (from GitHub Developer Settings)"
-  type        = string
-  default     = ""
-  sensitive   = true
-}
-
-variable "github_oauth_client_secret" {
-  description = "GitHub OAuth client secret"
-  type        = string
-  default     = ""
-  sensitive   = true
-}
+# Feature 1370: OAuth credentials moved to AWS Secrets Manager.
+# Removed variables: google_oauth_client_id, google_oauth_client_secret,
+#                    github_oauth_client_id, github_oauth_client_secret.
+# Credentials are now read by main.tf via data.aws_secretsmanager_secret_version
+# from secrets created by module.secrets.
 
 variable "frontend_url" {
   description = "Customer dashboard URL (e.g., https://main.d29tlmksqcx494.amplifyapp.com). Used for OAuth callback redirect URI selection."

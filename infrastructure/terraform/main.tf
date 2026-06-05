@@ -108,6 +108,40 @@ module "secrets" {
 }
 
 # ===================================================================
+# Feature 1370: OAuth credentials read from Secrets Manager
+# ===================================================================
+# These data sources read the OAuth client credentials at apply time and
+# substitute them into the Cognito identity provider config and the
+# dashboard Lambda env var below. Placeholder versions created by
+# module.secrets ensure these reads succeed before real credentials are
+# provisioned. `try()` provides defense-in-depth against malformed JSON.
+
+data "aws_secretsmanager_secret_version" "google_oauth" {
+  secret_id  = module.secrets.google_oauth_secret_arn
+  depends_on = [module.secrets]
+}
+
+data "aws_secretsmanager_secret_version" "github_oauth" {
+  secret_id  = module.secrets.github_oauth_secret_arn
+  depends_on = [module.secrets]
+}
+
+locals {
+  google_oauth = try(
+    jsondecode(data.aws_secretsmanager_secret_version.google_oauth.secret_string),
+    { client_id = "", client_secret = "" }
+  )
+  github_oauth = try(
+    jsondecode(data.aws_secretsmanager_secret_version.github_oauth.secret_string),
+    { client_id = "", client_secret = "" }
+  )
+  enabled_oauth_providers = join(",", compact([
+    local.google_oauth.client_id != "" ? "google" : "",
+    local.github_oauth.client_id != "" ? "github" : "",
+  ]))
+}
+
+# ===================================================================
 # Module: Cognito User Pool (Feature 006)
 # ===================================================================
 
@@ -120,12 +154,12 @@ module "cognito" {
   callback_urls = var.cognito_callback_urls
   logout_urls   = var.cognito_logout_urls
 
-  # OAuth providers (configured via variables)
+  # OAuth providers — credentials sourced from Secrets Manager (Feature 1370)
   enabled_identity_providers = var.cognito_identity_providers
-  google_client_id           = var.google_oauth_client_id
-  google_client_secret       = var.google_oauth_client_secret
-  github_client_id           = var.github_oauth_client_id
-  github_client_secret       = var.github_oauth_client_secret
+  google_client_id           = local.google_oauth.client_id
+  google_client_secret       = local.google_oauth.client_secret
+  github_client_id           = local.github_oauth.client_id
+  github_client_secret       = local.github_oauth.client_secret
 }
 
 # ===================================================================
@@ -430,7 +464,8 @@ module "dashboard_lambda" {
     # COGNITO_CLIENT_SECRET not set - module has generate_secret=false, code handles None
     COGNITO_REDIRECT_URI = length(var.cognito_callback_urls) > 0 ? var.cognito_callback_urls[0] : ""
     # Feature 1245: Dynamic OAuth provider detection + redirect URI selection
-    ENABLED_OAUTH_PROVIDERS = join(",", compact([var.google_oauth_client_id != "" ? "google" : "", var.github_oauth_client_id != "" ? "github" : ""]))
+    # Feature 1370: Sourced from Secrets Manager via local.enabled_oauth_providers
+    ENABLED_OAUTH_PROVIDERS = local.enabled_oauth_providers
     FRONTEND_URL            = var.frontend_url
     TICKER_CACHE_BUCKET     = aws_s3_bucket.ticker_cache.id
     SSE_POLL_INTERVAL       = tostring(var.sse_poll_interval)

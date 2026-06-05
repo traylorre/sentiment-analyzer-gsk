@@ -60,3 +60,14 @@ output "stripe_webhook_secret_name" {
   description = "Name of the Stripe webhook secret"
   value       = aws_secretsmanager_secret.stripe_webhook.name
 }
+
+# Feature 1370: OAuth Identity Provider Credentials
+output "google_oauth_secret_arn" {
+  description = "ARN of the Google OAuth client credentials secret"
+  value       = aws_secretsmanager_secret.google_oauth.arn
+}
+
+output "github_oauth_secret_arn" {
+  description = "ARN of the GitHub OAuth client credentials secret"
+  value       = aws_secretsmanager_secret.github_oauth.arn
+}
