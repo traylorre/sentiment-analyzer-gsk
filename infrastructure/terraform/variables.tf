@@ -223,3 +223,19 @@ variable "enable_amplify" {
   type        = bool
   default     = false
 }
+
+# ===================================================================
+# Cost toggles (no behavioral change to app; perimeter/observability only)
+# ===================================================================
+
+variable "enable_waf" {
+  description = "Deploy WAF v2 Web ACLs for API Gateway + CloudFront. WAF v2 has no free tier (~$42/mo: $5/ACL + Bot Control managed rules + per-request). Set false in non-prod to remove the cost; re-enabling is a single flag flip. When false, the public API/CloudFront lose SQLi/XSS/bot/rate-limit filtering."
+  type        = bool
+  default     = true
+}
+
+variable "enable_extended_cloudwatch_alarms" {
+  description = "Deploy the extended cloudwatch-alarms module (~26 alarms incl. per-Lambda for_each) and the API Gateway alarms. CloudWatch bills $0.10/alarm beyond the first 10 free. Set false in non-prod to stay near the free tier. The core monitoring module's alarms and its SNS topic are unaffected."
+  type        = bool
+  default     = true
+}
