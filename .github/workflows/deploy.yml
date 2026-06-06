@@ -818,7 +818,7 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v4
         with:
-          terraform_version: 1.6.0
+          terraform_version: 1.9.8
 
       - name: Terraform Init (Preprod)
         run: |
@@ -1291,7 +1291,7 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v4
         with:
-          terraform_version: 1.6.0
+          terraform_version: 1.9.8
 
       - name: Get Preprod Infrastructure Outputs
         id: infra
@@ -1867,7 +1867,7 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v4
         with:
-          terraform_version: 1.6.0
+          terraform_version: 1.9.8
 
       - name: Terraform Init (Production)
         run: |
