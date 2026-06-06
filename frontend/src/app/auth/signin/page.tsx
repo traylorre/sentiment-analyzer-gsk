@@ -7,11 +7,14 @@ import { MagicLinkForm } from '@/components/auth/magic-link-form';
 import { OAuthButtons, AuthDivider } from '@/components/auth/oauth-buttons';
 import { Card } from '@/components/ui/card';
 import { authApi } from '@/lib/api/auth';
+import { ApiClientError } from '@/lib/api/client';
 
 export default function SignInPage() {
   // Feature 1245: Dynamically discover available OAuth providers
   const [availableProviders, setAvailableProviders] = useState<string[]>();
   const [providersLoaded, setProvidersLoaded] = useState(false);
+  // Feature 1373: distinguish "API failed" from "providers configured = 0"
+  const [providersFetchFailed, setProvidersFetchFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -22,10 +25,19 @@ export default function SignInPage() {
         if (!cancelled) {
           setAvailableProviders(Object.keys(data.providers));
         }
-      } catch {
-        // Graceful degradation (FR-009): if API unreachable, show email only
+      } catch (err: unknown) {
+        // Feature 1373: log status + code only (no message — backend-controlled).
+        // Graceful degradation (FR-009) preserved: email form remains usable.
         if (!cancelled) {
+          const status = err instanceof ApiClientError ? err.status : undefined;
+          const code = err instanceof ApiClientError ? err.code : 'NETWORK';
+          console.error('[signin] OAuth providers fetch failed', {
+            url: '/api/v2/auth/oauth/urls',
+            status,
+            code,
+          });
           setAvailableProviders([]);
+          setProvidersFetchFailed(true);
         }
       } finally {
         if (!cancelled) {
@@ -71,6 +83,17 @@ export default function SignInPage() {
               <OAuthButtons availableProviders={availableProviders} />
               <AuthDivider />
             </>
+          )}
+
+          {/* Feature 1373: surface a true API failure (distinct from intentional empty providers) */}
+          {providersLoaded && providersFetchFailed && (
+            <p
+              role="status"
+              aria-live="polite"
+              className="text-xs text-muted-foreground text-center"
+            >
+              Some sign-in options are temporarily unavailable. You can still sign in with email.
+            </p>
           )}
 
           {/* Magic link form — always rendered immediately (FR-009) */}

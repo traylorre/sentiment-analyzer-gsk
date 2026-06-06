@@ -192,7 +192,76 @@ resource "aws_secretsmanager_secret_rotation" "stripe_webhook" {
   count = var.rotation_lambda_arn != null ? 1 : 0
 }
 
-# NOTE: Secret values are NOT stored in Terraform state
+# ===================================================================
+# Feature 1370: OAuth Identity Provider Credentials
+# ===================================================================
+# Unlike the API-key secrets above, OAuth credentials are read by Terraform
+# at apply time (via data source in main.tf) and substituted into the
+# Cognito identity provider resources. The Lambda does NOT need runtime
+# read access to these secrets — they are baked into the IdP config.
+#
+# Placeholder versions are managed by Terraform so the first apply succeeds
+# before the operator obtains real credentials. `ignore_changes = [secret_string]`
+# preserves operator-set real values across subsequent applies.
+
+resource "aws_secretsmanager_secret" "google_oauth" {
+  name        = "${var.environment}/sentiment-analyzer/google-oauth"
+  description = "Google OAuth client credentials for Cognito federation"
+  kms_key_id  = var.kms_key_arn
+
+  recovery_window_in_days = 7
+
+  tags = {
+    Environment = var.environment
+    Feature     = "1370-oauth-secrets-infra"
+    Purpose     = "oauth-google"
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "google_oauth_placeholder" {
+  secret_id     = aws_secretsmanager_secret.google_oauth.id
+  secret_string = jsonencode({ client_id = "", client_secret = "" })
+
+  lifecycle {
+    ignore_changes = [secret_string, version_stages]
+  }
+}
+
+resource "aws_secretsmanager_secret" "github_oauth" {
+  name        = "${var.environment}/sentiment-analyzer/github-oauth"
+  description = "GitHub OAuth client credentials for Cognito federation"
+  kms_key_id  = var.kms_key_arn
+
+  recovery_window_in_days = 7
+
+  tags = {
+    Environment = var.environment
+    Feature     = "1370-oauth-secrets-infra"
+    Purpose     = "oauth-github"
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "github_oauth_placeholder" {
+  secret_id     = aws_secretsmanager_secret.github_oauth.id
+  secret_string = jsonencode({ client_id = "", client_secret = "" })
+
+  lifecycle {
+    ignore_changes = [secret_string, version_stages]
+  }
+}
+
+# NOTE: Secret values are NOT stored in Terraform state for the API-key
+# secrets above. For OAuth secrets, only an empty placeholder is in state;
+# real values are supplied via `aws secretsmanager put-secret-value`.
+#
 # Use AWS CLI or Console to set initial secret values:
 #
 # aws secretsmanager put-secret-value \
