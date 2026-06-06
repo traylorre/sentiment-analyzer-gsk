@@ -48,3 +48,17 @@ jwt_audience = "sentiment-api-preprod"
 # SNS topic subscription sends alarm state changes to this email.
 # You must confirm the subscription via email after first deploy.
 alarm_email = "scotthazlett+sentiment-alarm@gmail.com"
+
+# ===================================================================
+# Cost controls (active development shelved — minimize spend)
+# ===================================================================
+# WAF v2 has no free tier (~$42/mo: $5/ACL × 2 + Bot Control managed rules).
+# Disabled while shelved. Re-enable by flipping to true (single flag flip,
+# no feature rebuild). Removes SQLi/XSS/bot/rate-limit filtering on the
+# public API + CloudFront while off.
+enable_waf = false
+
+# Extended alarms (~26 from cloudwatch-alarms module + 3 API Gateway alarms)
+# bill $0.10 each beyond the 10-alarm free tier. Disabled to stay near free
+# tier. Core monitoring-module alarms and the SNS topic remain.
+enable_extended_cloudwatch_alarms = false
