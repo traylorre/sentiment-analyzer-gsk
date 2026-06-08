@@ -217,3 +217,17 @@ variable "enable_extended_cloudwatch_alarms" {
   type        = bool
   default     = true
 }
+
+# Controls ONLY the existence of the CloudFront-scoped WAF Web ACL, decoupled
+# from enable_waf (which controls association). Deleting a CloudFront WAF is a
+# two-step transition: the distribution must first drop web_acl_id and finish
+# a global redeploy (~10-15 min) before the ACL can be deleted, or AWS returns
+# WAFAssociatedItemException. Phase 1: enable_waf=false (disassociate) +
+# enable_cloudfront_waf=true (keep ACL). Phase 2: enable_cloudfront_waf=false
+# (delete the now-orphaned ACL). Defaults true to match enable_waf for fresh
+# stacks where both create together.
+variable "enable_cloudfront_waf" {
+  description = "Whether the CloudFront-scoped WAF Web ACL resource exists. Decoupled from enable_waf to allow safe two-phase teardown (disassociate, then delete)."
+  type        = bool
+  default     = true
+}

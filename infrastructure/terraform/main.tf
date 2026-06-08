@@ -990,7 +990,10 @@ module "cloudfront_sse" {
 # Independent from the API Gateway WAF (REGIONAL scope, Feature 1254).
 
 module "waf_cloudfront" {
-  count  = var.enable_waf ? 1 : 0
+  # Existence gated separately from enable_waf so the ACL can be kept alive
+  # while CloudFront disassociates (Phase 1), then deleted (Phase 2). See
+  # var.enable_cloudfront_waf.
+  count  = var.enable_cloudfront_waf ? 1 : 0
   source = "./modules/waf"
 
   environment  = var.environment

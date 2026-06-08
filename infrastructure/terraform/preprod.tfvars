@@ -62,3 +62,11 @@ enable_waf = false
 # bill $0.10 each beyond the 10-alarm free tier. Disabled to stay near free
 # tier. Core monitoring-module alarms and the SNS topic remain.
 enable_extended_cloudwatch_alarms = false
+
+# CloudFront WAF teardown — PHASE 1 (disassociate, keep the ACL).
+# enable_waf=false already drops web_acl_id from the CloudFront distribution.
+# Keep the ACL itself alive (true) for this apply so Terraform doesn't try to
+# delete it while CloudFront is still propagating the disassociation, which
+# fails with WAFAssociatedItemException. Once this deploy reaches
+# Status=Deployed, PHASE 2 sets this to false to delete the orphaned ACL.
+enable_cloudfront_waf = true
