@@ -16,7 +16,7 @@
 # Include production dependencies
 -r requirements.txt
 
-# Note: pydantic version is pinned in requirements.txt (2.12.4) to match moto[all]==5.2.1 constraint
+# Note: pydantic version is pinned in requirements.txt (2.12.4) to match moto[all]==5.2.2 constraint
 
 # Testing Framework
 pytest==9.0.3           # Compatible with pytest-asyncio 1.3.0
@@ -26,7 +26,7 @@ pytest-asyncio==1.3.0  # Async test support for SSE endpoints
 # AWS Mocking - Critical for unit tests
 # Note: moto version must support all AWS services we use
 # moto 5.0+ required for unified mock_aws decorator
-moto[all]==5.2.1
+moto[all]==5.2.2
 
 # HTTP Mocking - For NewsAPI adapter tests
 responses==0.26.1
