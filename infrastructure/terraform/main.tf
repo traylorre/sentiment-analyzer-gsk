@@ -1018,6 +1018,18 @@ module "waf_cloudfront" {
   }
 }
 
+# Feature 1378: state migration for the count added above. Before count,
+# resources lived at module.waf_cloudfront.*; adding count (even at 1) moves
+# them to module.waf_cloudfront[0].*. Without this block Terraform plans a
+# destroy+recreate of the live WebACL, which deadlocks: the destroy fails with
+# WAFAssociatedItemException (CloudFront still references it) and the recreate
+# fails with WAFDuplicateItemException. This is idempotent — once count=0
+# (Phase 2) deletes the ACL, the block becomes a no-op.
+moved {
+  from = module.waf_cloudfront
+  to   = module.waf_cloudfront[0]
+}
+
 # ===================================================================
 # Module: SNS Topic (for Analysis Triggers)
 # ===================================================================
