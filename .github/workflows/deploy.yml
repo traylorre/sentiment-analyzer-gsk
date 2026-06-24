@@ -65,7 +65,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Python 3.13
         uses: actions/setup-python@v6
@@ -420,7 +420,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Python
         uses: actions/setup-python@v6
@@ -502,7 +502,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Configure AWS Credentials (Preprod)
         uses: aws-actions/configure-aws-credentials@v6
@@ -599,7 +599,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Configure AWS Credentials (Preprod)
         uses: aws-actions/configure-aws-credentials@v6
@@ -677,7 +677,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Configure AWS Credentials (Preprod)
         uses: aws-actions/configure-aws-credentials@v6
@@ -768,7 +768,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Download Lambda Packages
         uses: actions/download-artifact@v8
@@ -1247,7 +1247,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Python
         uses: actions/setup-python@v6
@@ -1648,7 +1648,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Configure AWS Credentials (Production)
         uses: aws-actions/configure-aws-credentials@v6
@@ -1736,7 +1736,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Configure AWS Credentials (Production)
         uses: aws-actions/configure-aws-credentials@v6
@@ -1817,7 +1817,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Download Lambda Packages
         uses: actions/download-artifact@v8
