@@ -35,7 +35,7 @@ aws-xray-sdk==2.15.0
 sendgrid==6.12.5
 
 # AWS Lambda Powertools - Enhanced observability
-aws-lambda-powertools==3.29.0
+aws-lambda-powertools==3.31.0
 
 # =============================================================================
 # Testing Dependencies (from requirements-dev.txt)
@@ -60,19 +60,19 @@ bandit==1.9.4
 
 # Type Checking
 mypy==1.19.1
-boto3-stubs==1.43.10
+boto3-stubs==1.43.36
 
 # Testing Utilities
 freezegun==1.5.5
 
 # Property-Based Testing (tests/property/ requires this)
-hypothesis==6.152.8
+hypothesis==6.155.7
 
 # Terraform HCL Parsing - For resource_naming validator tests
 python-hcl2==7.3.1
 
 # JWT Authentication - For auth_middleware (Feature 075)
-PyJWT==2.12.1
+PyJWT==2.13.0
 
 # Retry Library - Feature 1032 (config API stability)
 tenacity==9.1.4
