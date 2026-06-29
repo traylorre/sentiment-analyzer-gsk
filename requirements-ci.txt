@@ -59,7 +59,7 @@ pre-commit==4.6.0
 bandit==1.9.4
 
 # Type Checking
-mypy==1.19.1
+mypy==2.1.0
 boto3-stubs==1.43.10
 
 # Testing Utilities
