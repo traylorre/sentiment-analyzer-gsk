@@ -39,12 +39,12 @@ bandit==1.9.4          # Security vulnerability scanner (local CodeQL alternativ
 
 # Type Checking (optional but recommended)
 mypy==1.19.1
-boto3-stubs==1.43.36     # Type stubs for boto3
+boto3-stubs==1.43.46     # Type stubs for boto3
 
 # Testing Utilities
 httpx==0.28.1           # Async HTTP client for financial API adapters
 freezegun==1.5.5        # Time mocking for TTL tests
-hypothesis>=6.155.7
+hypothesis>=6.156.6
 
 # E2E Testing - Playwright for browser automation
 pytest-playwright>=0.7.2  # Pytest fixtures for Playwright (0.7.2 adds pytest 9.0+ support)
