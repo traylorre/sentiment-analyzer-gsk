@@ -990,7 +990,10 @@ module "cloudfront_sse" {
 # Independent from the API Gateway WAF (REGIONAL scope, Feature 1254).
 
 module "waf_cloudfront" {
-  count  = var.enable_waf ? 1 : 0
+  # Existence gated separately from enable_waf so the ACL can be kept alive
+  # while CloudFront disassociates (Phase 1), then deleted (Phase 2). See
+  # var.enable_cloudfront_waf.
+  count  = var.enable_cloudfront_waf ? 1 : 0
   source = "./modules/waf"
 
   environment  = var.environment
@@ -1013,6 +1016,18 @@ module "waf_cloudfront" {
     Security  = "ddos-protection"
     Feature   = "1255"
   }
+}
+
+# Feature 1378: state migration for the count added above. Before count,
+# resources lived at module.waf_cloudfront.*; adding count (even at 1) moves
+# them to module.waf_cloudfront[0].*. Without this block Terraform plans a
+# destroy+recreate of the live WebACL, which deadlocks: the destroy fails with
+# WAFAssociatedItemException (CloudFront still references it) and the recreate
+# fails with WAFDuplicateItemException. This is idempotent — once count=0
+# (Phase 2) deletes the ACL, the block becomes a no-op.
+moved {
+  from = module.waf_cloudfront
+  to   = module.waf_cloudfront[0]
 }
 
 # ===================================================================
