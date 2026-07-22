@@ -1,5 +1,11 @@
 """CollectionEvent persistence for audit trail (T052).
 
+UNWIRED (repo cleanup inventory, docs/cleanup-pristine/open-questions.md Q9):
+this module has ZERO production callers - only tests import it. It implements
+the only CollectionEvent persistence (US4 audit trail); no production code persists collection events anywhere. The wiring was never built. Kept in tree as a signpost, not dead weight:
+either wire it or formally descope the requirement before deleting.
+
+
 Provides DynamoDB persistence for collection events to support
 operational visibility and audit requirements per US4.
 

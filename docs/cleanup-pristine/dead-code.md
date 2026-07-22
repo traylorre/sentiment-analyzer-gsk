@@ -29,6 +29,27 @@
 | No dynamic-dispatch rescue | LIVE | `grep -rnE 'importlib\|__import__\|import_module' src` → nothing. `handler.py:189` = `getattr(context, 'aws_request_id', ...)`, a runtime attr on the Lambda context, not module-name dispatch. |
 | No Dockerfile hidden entrypoint | LIVE | SSE Dockerfile copies only `lib/timeseries` (59) + `lib/metrics.py` (62), not `lib/deduplication.py` / `lib/timeseries/preload.py`. dashboard/analysis Dockerfiles `COPY lib` wholesale with `CMD ["handler.lambda_handler"]`; verified handler import chains never reach the orphans. |
 
+## WS2 execution resolution (post-archaeology)
+
+Git archaeology split the 12 targets into SUPERSEDED (live replacement exists; deleted) and
+UNWIRED-LATENT (specced behavior whose wiring never shipped; KEPT with in-file signposts and
+Q8-Q12 in open-questions.md). Recovery: any deleted implementation lives at the sha noted.
+
+| Target | Resolution | Detail |
+|---|---|---|
+| `ingestion/collector.py` | DELETED (superseded) | live path = `parallel_fetcher.py` (Feature 1010); born unwired in feat(072) `b3e502d` |
+| `ingestion/adapters/base.py` | DELETED (superseded) | replaced by divergent `shared/adapters/base.py` at `b115e46`; whole `adapters/` dir removed |
+| `shared/schemas.py` | DELETED (superseded) | domain moved to `shared/models/` package; never imported by src/ in all history |
+| `sse_streaming/resolution_filter.py` | DELETED (superseded) | born-dead duplicate of inline filtering in `connection.py` (same commit `fe63460`) |
+| `lib/deduplication.py` | DELETED (superseded) | was live NewsAPI-era code (unwired `66b9271`); replaced by `ingestion/dedup.py` + `shared/utils/dedup.py` |
+| `shared/errors_module.py` | DELETED (superseded) | live error responses = `utils/response_builder.py`; `errors/__init__.py` pruned; `session_errors.py`/`auth_errors.py` kept (live) |
+| `infrastructure/scripts/build-model-layer.sh` | DELETED (superseded) | S3 lazy loading `991dce0` (PR #55) replaced the /opt/model layer |
+| `notification/alert_evaluator.py` | KEPT (Q8) | user alerts never fire; evaluator is the missing middle link |
+| `ingestion/audit.py` | KEPT (Q9) | only CollectionEvent persistence; US4 never wired |
+| `shared/auth/audit.py` | KEPT (Q10) | Feature 1175 call sites never converted |
+| `lib/timeseries/preload.py` | KEPT (Q11) | FR-007/FR-008 unimplemented anywhere |
+| `utils/` 4 helpers + defining modules | KEPT (Q12) | X-Ray-spec FR helpers; handlers never converted |
+
 ## Caveats (do not change DEAD verdicts)
 
 - **`ingestion/adapters/base.py`**, flagged as a *duplicate* of `shared/adapters/base.py`; semantic diff of the two files (redundant vs intentionally divergent) not re-verified. Production-dead either way.

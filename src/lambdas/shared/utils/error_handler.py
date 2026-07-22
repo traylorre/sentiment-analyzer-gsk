@@ -1,5 +1,11 @@
 """Top-level error handler for Lambda handlers (FR-023, FR-024, FR-039).
 
+UNWIRED (repo cleanup inventory, docs/cleanup-pristine/open-questions.md Q12):
+this module has ZERO production callers - only tests import it. It implements
+an X-Ray-spec handler wrapper (FR-023/FR-024/FR-039); handlers were never converted to use it. The wiring was never built. Kept in tree as a signpost, not dead weight:
+either wire it or formally descope the requirement before deleting.
+
+
 Wraps handler functions in try/except to produce structured error responses.
 Converts Pydantic ValidationError to 422, and all other exceptions to 500
 with full traceback logging. No fallbacks — fail fast with structured errors.

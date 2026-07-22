@@ -12,7 +12,12 @@ Everything below is UNKNOWN read-only. These are scoped, not answered. Each is a
 | Q4 | Are root `index.html` (+`.nojekyll`) and `interview/` live surfaces or artifacts? | UNKNOWN | Yes | Check repo Settings > Pages (not tracked in-repo); open `interview/` files for intent |
 | Q5 | Are `CONTEXT-CARRYOVER-*.md` + `DRIFT-INVENTORY.md` deletable? | ✅ RESOLVED (deleted, WS3) | — | 3 tracked files git-rm'd; 31 untracked local files removed. `docs/cleanup/*` references retained as historical map rows |
 | Q6 | `by_tag` GSI live-queried but never populated (silent-empty endpoint) | CONFIRMED bug / DEFERRED | No (behavior/feature) | Implement fan-out writer, or delete GSI+attr+route (dedicated task) |
-| Q7 | `build-model-layer.sh` builds an orphaned `/opt/model` layer nothing attaches | DELETE-CANDIDATE / DEFERRED | No | Delete in WS2 dead-infra pass after confirming no manual runbook |
+| Q7 | `build-model-layer.sh` builds an orphaned `/opt/model` layer nothing attaches | ✅ RESOLVED (deleted, WS2) | — | Superseded by S3 lazy loading (`991dce0`); recover from git if ever needed |
+| Q8 | User-created alerts NEVER FIRE: `alert_evaluator.py` unwired | CONFIRMED bug / KEPT+SIGNPOSTED | No | Wire the evaluator (dashboard CRUD + email sender both live, middle link missing) or descope alerts |
+| Q9 | US4 collection audit trail unwired (`ingestion/audit.py` + `collection_event.py`) | KEPT+SIGNPOSTED | No | Wire CollectionEvent persistence or formally drop US4 |
+| Q10 | Feature 1175 role-change audit helper unadopted (`shared/auth/audit.py`) | KEPT+SIGNPOSTED | No | Convert role-writer call sites or drop the audit requirement |
+| Q11 | FR-007/FR-008 preloading MUSTs unimplemented (`lib/timeseries/preload.py`) | KEPT+SIGNPOSTED | No | Implement preloading or formally descope the FRs |
+| Q12 | X-Ray-spec handler helpers unwired (utils: error_handler, event_validator, payload_guard, url_decode) | KEPT+SIGNPOSTED | No | Convert handlers to the helpers or descope FR-023/024/039 |
 
 ---
 
