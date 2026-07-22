@@ -13,11 +13,38 @@ Everything below is UNKNOWN read-only. These are scoped, not answered. Each is a
 | Q5 | Are `CONTEXT-CARRYOVER-*.md` + `DRIFT-INVENTORY.md` deletable? | ✅ RESOLVED (deleted, WS3) | — | 3 tracked files git-rm'd; 31 untracked local files removed. `docs/cleanup/*` references retained as historical map rows |
 | Q6 | `by_tag` GSI live-queried but never populated (silent-empty endpoint) | CONFIRMED bug / DEFERRED | No (behavior/feature) | Implement fan-out writer, or delete GSI+attr+route (dedicated task) |
 | Q7 | `build-model-layer.sh` builds an orphaned `/opt/model` layer nothing attaches | ✅ RESOLVED (deleted, WS2) | — | Superseded by S3 lazy loading (`991dce0`); recover from git if ever needed |
-| Q8 | User-created alerts NEVER FIRE: `alert_evaluator.py` unwired | CONFIRMED bug / KEPT+SIGNPOSTED | No | Wire the evaluator (dashboard CRUD + email sender both live, middle link missing) or descope alerts |
+| Q8 | User-created alerts NEVER FIRE: `alert_evaluator.py` unwired (paid-tier feature, silent) | CONFIRMED bug / DEFERRED w/ design notes | No | See "Q8 design notes" below — owner prefers periodic batch, no new resources; wiring deferred deliberately |
 | Q9 | US4 collection audit trail unwired (`ingestion/audit.py` + `collection_event.py`) | KEPT+SIGNPOSTED | No | Wire CollectionEvent persistence or formally drop US4 |
 | Q10 | Feature 1175 role-change audit helper unadopted (`shared/auth/audit.py`) | KEPT+SIGNPOSTED | No | Convert role-writer call sites or drop the audit requirement |
 | Q11 | FR-007/FR-008 preloading MUSTs unimplemented (`lib/timeseries/preload.py`) | KEPT+SIGNPOSTED | No | Implement preloading or formally descope the FRs |
 | Q12 | X-Ray-spec handler helpers unwired (utils: error_handler, event_validator, payload_guard, url_decode) | KEPT+SIGNPOSTED | No | Convert handlers to the helpers or descope FR-023/024/039 |
+| Q13 | Magic-link emails never send: no `send_email_callback` provider, no notification-Lambda invoker | CONFIRMED gap / KEPT | No | Wire dashboard→notification magic_link path, or descope (auth may be intentionally OAuth/guest-only now) |
+
+---
+
+## Q8 design notes (owner steer, 2026-07-22 — for whoever wires it)
+
+Investigated end to end; wiring deferred deliberately. Constraints and findings:
+
+- **Chain state:** dashboard `/alerts` CRUD is live (and gated to UPGRADED tier — this is a paid
+  feature that silently does nothing). `alert_evaluator.py` logic is complete (thresholds, 1h
+  cooldown, 10/day quota) but writes `NOTIFICATION_QUEUE` records that contain **no email address**
+  and have **no consumer**. The SendGrid alert sender (`handler.py` `_handle_alert`) is live code on
+  an unreachable branch: NOTHING invokes the notification Lambda except the daily-digest
+  EventBridge rule (no SNS subscription, no lambda:Invoke caller anywhere in src/ or Terraform).
+- **Owner constraints:** no new AWS resources for now; keep analysis Lambda untouched (do not have
+  analysis ping notification on every score); prefer periodic batch evaluation.
+- **Preferred shape (sketch, not committed):** maintain the set of tickers having ≥1 enabled alert
+  ("whitelist") + a ticker→subscribers lookup (today: `by_entity_status` GSI + ticker filter in
+  `_find_alerts_by_ticker`; a dedicated `by_ticker` GSI is the additive upgrade). A periodic job
+  evaluates latest scores (timeseries table has them) and drains the pending queue into SendGrid
+  emails (needs user-email lookup from USER#/PROFILE — the queue record lacks it).
+- **Transport tradeoffs considered:** push-on-write (best latency, ~150 no-op invokes/hour at
+  current scale, couples analysis→notification); new SNS topic (decoupled, but new resources —
+  ruled out); periodic sweep (analysis untouched, cost scales with subscribed tickers, latency =
+  interval; sub-daily needs one new EventBridge rule eventually).
+- **Nothing blocks:** evaluator, queue schema, and sender are transport-agnostic; the only
+  lock-in-ish choice (a `by_ticker` GSI) is additive.
 
 ---
 
