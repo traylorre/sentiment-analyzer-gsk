@@ -27,7 +27,7 @@ On-demand capacity mode for unpredictable workloads.
 | --------- | ----------- | ------------ |
 | Write Request Units | 4000/day × 30 = 120,000 WRUs | $0.15 |
 | Read Request Units | 9600/day × 30 = 288,000 RRUs | $0.07 |
-| Storage | 13 tickers × 8 resolutions × 30 days × 1KB = ~3MB | $0.001 |
+| Storage | 13 tickers × 6 resolutions × 30 days × 1KB = ~2.3MB | $0.001 |
 | **Subtotal** | | **$0.23** |
 
 **Pricing Reference** (us-east-1):
@@ -127,7 +127,7 @@ If costs need to be reduced in the future:
 
 ### 3. Batch Ingestion Writes
 
-**Current**: 1 write per item × 8 resolutions = 8 WRUs per item
+**Current**: 1 write per item × 6 resolutions = 6 WRUs per item
 **Proposed**: BatchWriteItem with 25 items = ~1.5 WRUs per item
 **Savings**: ~$0.10/month
 **Trade-off**: Increased complexity, slight latency increase

@@ -27,6 +27,7 @@ flowchart LR
     subgraph Images["Container Images"]
         sse_img["Build SSE<br/>Lambda Image"]
         analysis_img["Build Analysis<br/>Lambda Image"]
+        dashboard_img["Build Dashboard<br/>Lambda Image"]
     end
 
     subgraph Preprod["Preprod Stage"]
@@ -43,8 +44,10 @@ flowchart LR
     build --> test
     test --> sse_img
     test --> analysis_img
+    test --> dashboard_img
     sse_img --> deploy_preprod
     analysis_img --> deploy_preprod
+    dashboard_img --> deploy_preprod
     deploy_preprod --> test_preprod
     test_preprod --> deploy_prod
     deploy_prod --> canary
@@ -230,11 +233,12 @@ graph TB
             Notification[Notification Lambda<br/>Alerts + Digests]
         end
 
-        subgraph StorageLayer["Storage Layer ── 5 Tables"]
+        subgraph StorageLayer["Storage Layer ── 6 Tables"]
             DDBItems[(sentiment-items<br/>News + Scores<br/>TTL: 30d)]
             DDBUsers[(sentiment-users<br/>Configs · Alerts<br/>Sessions)]
             DDBTimeseries[(sentiment-timeseries<br/>Multi-Resolution<br/>1m→24h buckets)]
             DDBOhlc[(ohlc-cache<br/>Price Data)]
+            DDBChaos[(chaos-experiments +<br/>chaos-reports)]
             DLQ[SQS DLQ<br/>Failed Messages]
         end
 
