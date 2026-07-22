@@ -11,6 +11,8 @@ Everything below is UNKNOWN read-only. These are scoped, not answered. Each is a
 | Q3 | Are `dev.tfvars` + `backend-dev.hcl` truly orphaned (deletable)? | DELETE-CANDIDATE / UNKNOWN | Yes | Confirm no human runbook still runs the documented manual dev apply |
 | Q4 | Are root `index.html` (+`.nojekyll`) and `interview/` live surfaces or artifacts? | UNKNOWN | Yes | Check repo Settings > Pages (not tracked in-repo); open `interview/` files for intent |
 | Q5 | Are `CONTEXT-CARRYOVER-*.md` + `DRIFT-INVENTORY.md` deletable? | DELETE-CANDIDATE / UNKNOWN | Low-risk | Judgment call; removal leaves 2 dangling links in `docs/cleanup/*` |
+| Q6 | `by_tag` GSI live-queried but never populated (silent-empty endpoint) | CONFIRMED bug / DEFERRED | No (behavior/feature) | Implement fan-out writer, or delete GSI+attr+route (dedicated task) |
+| Q7 | `build-model-layer.sh` builds an orphaned `/opt/model` layer nothing attaches | DELETE-CANDIDATE / DEFERRED | No | Delete in WS2 dead-infra pass after confirming no manual runbook |
 
 ---
 
@@ -86,3 +88,47 @@ Neither is doable from the repo.
 **Why still UNKNOWN.** "Tracked" is CONFIRMED and "zero runtime blast radius" is well-supported. But DELETE-CANDIDATE stays a proposal: removing the two carryover files leaves two dangling doc links in `docs/cleanup/*` to fix. Low-risk, not a verified deletion.
 
 **Evidence to resolve:** decide whether to fix or accept the dangling `docs/cleanup/*` links; then delete.
+
+---
+
+## Execution-phase deferred items (found during WS1, not fixed this round)
+
+Policy for the cleanup campaign: these rounds correct documentation drift and remove proven
+cruft. They do **not** build features or change runtime behavior (that turns cleanup into a
+moving target). The two items below are real but require behavior/feature work, so they are
+tracked here as TODOs rather than acted on.
+
+### Q6: `by_tag` GSI is live-queried but never populated (behavioral bug)
+
+**State:** CONFIRMED bug, deferred. Blocks nothing in cleanup; needs a feature or a deletion decision later.
+
+**Confirmed at source:**
+- `GET /api/v2/sentiment?tags=` is live-routed: `dashboard/handler.py:51,53` import
+  `get_sentiment_by_tags`, called at `handler.py:727`.
+- `api_v2.py:94-98` queries `IndexName="by_tag"` on `Key("tag")`.
+- No writer sets a scalar `tag` attribute: ingestion writes the `matched_tickers` list
+  (`ingestion/handler.py`), analysis updates only sentiment/score/model_version/status. Grep for
+  a scalar `"tag"` write in ingestion/analysis handlers returns nothing.
+- Net: the index is never populated, so every tag query returns empty with HTTP 200 (silent failure).
+
+**Resolution options (deferred, pick one in a dedicated feature/cleanup task):**
+1. Implement the fan-out writer (feature) so the endpoint returns data, or
+2. Delete the `by_tag` GSI + scalar `tag` attr + `get_sentiment_by_tags` + its route (behavior removal).
+
+The misleading fan-out comment at `dynamodb/main.tf` GSI-2 was corrected in WS1 to describe this gap.
+
+### Q7: `build-model-layer.sh` builds an orphaned `/opt/model` Lambda layer
+
+**State:** DELETE-CANDIDATE, deferred to a dead-infra pass.
+
+**Confirmed at source:**
+- `infrastructure/scripts/build-model-layer.sh` builds a Lambda layer staging the model at `/opt/model`.
+- Nothing attaches it: `modules/lambda/variables.tf:88-91` `var.layers` defaults `[]`; the analysis
+  Lambda module block in `infrastructure/terraform/main.tf` passes no `layers` argument.
+- No workflow or Makefile calls the script (`grep build-model-layer .github/ Makefile scripts/` → none).
+- Runtime loads the model from S3 to `/tmp/model` instead: `sentiment.py:188` `_download_model_from_s3()`
+  runs unconditionally on cold start; `MODEL_PATH` is never set in Terraform (only `MODEL_S3_BUCKET`).
+- Vestige of the pre-S3 model-loading design (script added in `9d09c68`, model→S3 switch superseded it).
+
+**Resolution (deferred):** delete `build-model-layer.sh` in the WS2 dead-code/infra pass after confirming
+no human runbook still builds the layer manually. The `/opt/model` doc references were corrected in WS1.

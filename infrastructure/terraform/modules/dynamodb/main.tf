@@ -17,7 +17,7 @@ resource "aws_dynamodb_table" "sentiment_items" {
   # Primary table attributes
   attribute {
     name = "source_id"
-    type = "S" # String (e.g., "newsapi#abc123def456")
+    type = "S" # String (e.g., "article#abc123def456")
   }
 
   attribute {
@@ -52,7 +52,10 @@ resource "aws_dynamodb_table" "sentiment_items" {
 
   # GSI 2: by_tag
   # Query pattern: Get items by individual tag
-  # Note: Application code must fan-out matched_tags into separate writes
+  # KNOWN GAP (see docs/cleanup-pristine/open-questions.md, Q6): no writer sets a
+  # scalar `tag` attribute (ingestion writes the `matched_tickers` list), so this GSI
+  # is never populated and GET /api/v2/sentiment?tags= returns empty with a 200.
+  # Tracked as a behavioral bug; do not rely on this index until a writer exists.
   global_secondary_index {
     name            = "by_tag"
     hash_key        = "tag"
@@ -66,7 +69,7 @@ resource "aws_dynamodb_table" "sentiment_items" {
     name            = "by_status"
     hash_key        = "status"
     range_key       = "timestamp"
-    projection_type = "ALL" # Minimal storage for monitoring
+    projection_type = "ALL" # Full projection (all attributes)
   }
 
   # TTL configuration (30-day auto-deletion)
@@ -523,7 +526,7 @@ resource "aws_dynamodb_table" "chaos_reports" {
 
 resource "aws_dynamodb_table" "sentiment_timeseries" {
   name         = "${var.environment}-sentiment-timeseries"
-  billing_mode = "PAY_PER_REQUEST" # On-demand: ~$8/month at 18K writes/day × 8 resolutions
+  billing_mode = "PAY_PER_REQUEST" # On-demand: ~$8/month at 18K writes/day × 6 resolutions
   hash_key     = "PK"
   range_key    = "SK"
 
@@ -544,7 +547,7 @@ resource "aws_dynamodb_table" "sentiment_timeseries" {
   }
 
   # TTL configuration (resolution-dependent expiration)
-  # 1m: 6h, 5m: 12h, 10m: 24h, 1h: 7d, 3h: 14d, 6h: 30d, 12h: 60d, 24h: 90d
+  # 1m: 6h, 5m: 12h, 15m: 24h, 30m: 3d, 1h: 7d, 24h: 90d
   ttl {
     attribute_name = "ttl"
     enabled        = true

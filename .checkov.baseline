@@ -454,6 +454,18 @@
                     "check_ids": [
                         "CKV_AWS_304"
                     ]
+                },
+                {
+                    "resource": "module.secrets.aws_secretsmanager_secret.google_oauth",
+                    "check_ids": [
+                        "CKV2_AWS_57"
+                    ]
+                },
+                {
+                    "resource": "module.secrets.aws_secretsmanager_secret.github_oauth",
+                    "check_ids": [
+                        "CKV2_AWS_57"
+                    ]
                 }
             ]
         },
