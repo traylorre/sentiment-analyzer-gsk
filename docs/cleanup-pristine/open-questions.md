@@ -10,7 +10,7 @@ Everything below is UNKNOWN read-only. These are scoped, not answered. Each is a
 | Q2 | Does `ENVIRONMENT` ever reach a dev-class value in any *live* Lambda? | RECONCILE / UNKNOWN | Informs Q1 | Runtime read of deployed Lambda `ENVIRONMENT`; confirm no out-of-band `terraform apply -var-file=dev.tfvars` |
 | Q3 | Are `dev.tfvars` + `backend-dev.hcl` truly orphaned (deletable)? | DELETE-CANDIDATE / UNKNOWN | Yes | Confirm no human runbook still runs the documented manual dev apply |
 | Q4 | Are root `index.html` (+`.nojekyll`) and `interview/` live surfaces or artifacts? | UNKNOWN | Yes | Check repo Settings > Pages (not tracked in-repo); open `interview/` files for intent |
-| Q5 | Are `CONTEXT-CARRYOVER-*.md` + `DRIFT-INVENTORY.md` deletable? | DELETE-CANDIDATE / UNKNOWN | Low-risk | Judgment call; removal leaves 2 dangling links in `docs/cleanup/*` |
+| Q5 | Are `CONTEXT-CARRYOVER-*.md` + `DRIFT-INVENTORY.md` deletable? | ✅ RESOLVED (deleted, WS3) | — | 3 tracked files git-rm'd; 31 untracked local files removed. `docs/cleanup/*` references retained as historical map rows |
 | Q6 | `by_tag` GSI live-queried but never populated (silent-empty endpoint) | CONFIRMED bug / DEFERRED | No (behavior/feature) | Implement fan-out writer, or delete GSI+attr+route (dedicated task) |
 | Q7 | `build-model-layer.sh` builds an orphaned `/opt/model` layer nothing attaches | DELETE-CANDIDATE / DEFERRED | No | Delete in WS2 dead-infra pass after confirming no manual runbook |
 
@@ -78,7 +78,12 @@ Neither is doable from the repo.
 
 ---
 
-## Q5: Are stale session artifacts deletable?
+## Q5: Are stale session artifacts deletable? ✅ RESOLVED (WS3 execution)
+
+**Resolution:** deleted. `CONTEXT-CARRYOVER-2026-02-03-session4.md`, `-session5.md`, and
+`DRIFT-INVENTORY.md` removed from git; 31 untracked `CONTEXT-CARRYOVER*` local files removed
+from disk. The `docs/cleanup/*` rows that referenced them are the map that adjudicated the
+deletion, retained as history. Original analysis below.
 
 **Confirmed at source (git ls-files):**
 - `CONTEXT-CARRYOVER-2026-02-03-session4.md`, `-session5.md`, `DRIFT-INVENTORY.md` all tracked at repo root.
