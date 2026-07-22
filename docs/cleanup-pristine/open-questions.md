@@ -8,7 +8,7 @@ Everything below is UNKNOWN read-only. These are scoped, not answered. Each is a
 |---|---|---|---|---|
 | Q1 (flagship) | Is `src/dashboard/` (11-file HTMX admin dashboard) dead in deployed preprod/prod, i.e. safe to delete? | DELETE-CANDIDATE / UNKNOWN | Yes | HTTP probe of deployed `/`, `/favicon.ico`, `/static/*` in preprod+prod; proof `frontend/` imports zero `src/dashboard` assets |
 | Q2 | Does `ENVIRONMENT` ever reach a dev-class value in any *live* Lambda? | RECONCILE / UNKNOWN | Informs Q1 | Runtime read of deployed Lambda `ENVIRONMENT`; confirm no out-of-band `terraform apply -var-file=dev.tfvars` |
-| Q3 | Are `dev.tfvars` + `backend-dev.hcl` truly orphaned (deletable)? | DELETE-CANDIDATE / UNKNOWN | Yes | Confirm no human runbook still runs the documented manual dev apply |
+| Q3 | Are `dev.tfvars` + `backend-dev.hcl` truly orphaned (deletable)? | ✅ RESOLVED (deleted, WS3) | — | Owner confirmed no manual dev flow; both deleted, README + tf comments scrubbed to preprod/prod |
 | Q4 | Are root `index.html` (+`.nojekyll`) and `interview/` live surfaces or artifacts? | UNKNOWN | Yes | Check repo Settings > Pages (not tracked in-repo); open `interview/` files for intent |
 | Q5 | Are `CONTEXT-CARRYOVER-*.md` + `DRIFT-INVENTORY.md` deletable? | ✅ RESOLVED (deleted, WS3) | — | 3 tracked files git-rm'd; 31 untracked local files removed. `docs/cleanup/*` references retained as historical map rows |
 | Q6 | `by_tag` GSI live-queried but never populated (silent-empty endpoint) | CONFIRMED bug / DEFERRED | No (behavior/feature) | Implement fan-out writer, or delete GSI+attr+route (dedicated task) |
@@ -73,6 +73,12 @@ Neither is doable from the repo.
 - No tracked GitHub Pages deploy job: grep across `.github/` for `actions/deploy-pages`, `peaceiris`, `gh-pages`, `github-pages` returned nothing; no workflow references root `index.html`.
 
 **Why still UNKNOWN.** Absence of a Pages workflow weakens the "live Pages surface" hypothesis but does not kill it, Pages can be enabled via repo settings, which are not tracked in-repo and are unverifiable read-only. `interview/` purpose (demo/hiring artifact vs live surface) is undetermined; files not opened line-by-line.
+
+**New evidence (WS3 execution):** `preprod.tfvars` `cors_allowed_origins` includes
+`https://traylorre.github.io` with the comment "GitHub Pages interview demo". A live
+config references the Pages origin, which raises the odds this IS a deployed surface.
+Treat root `index.html`/`.nojekyll`/`interview/` as KEEP until repo Settings > Pages is
+checked directly. Do NOT delete on the strength of the missing workflow alone.
 
 **Evidence to resolve:** check repo Settings > Pages for an enabled source; open `interview/` files to classify intent.
 
