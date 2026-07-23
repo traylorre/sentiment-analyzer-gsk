@@ -90,10 +90,28 @@ an edit to this table in a signed commit — never at attestation time.
 | `auth-guest-04-alerts-redirect` | 5 | Guest bounced off `/alerts`: signin page rendered (Q-M1-2 resolved 2026-07-23: strip middleware gate, client-side guard redirects) | starts `/auth/signin`, query `redirect=%2Falerts` + `upgrade=true`; NOT `/alerts` | none additional required (redirect is client-side, no backend leg) | signin-page selector present | forbidden `anonymous 201 max_count:1` still holds across the spec; redirect via `router.replace` so no `/alerts` history entry |
 | `next-version.txt` | 4 | n/a (text artifact) | n/a | n/a | n/a | installed Next.js >= 14.2.25; guest set re-captured green against bumped build |
 | `auth-oauth-01-signin-buttons` | 6 | Google button visible on signin page | `/auth/signin` | `GET /api/v2/auth/oauth/urls 200` (non-empty providers) | Google button selector | |
-| `auth-oauth-02-callback-return` | 6 | Callback completing (loading/redirect state acceptable) | `/auth/callback*` | `POST /api/v2/auth/oauth/callback 200` | — | |
+| `auth-oauth-02-callback-return` | 6 | Callback completing (loading/redirect state acceptable) | `/auth/callback*` **or** `/` (transient client-side nav; `main_status` may be null) | `POST /api/v2/auth/oauth/callback 200` (**this auth-log leg is the gate, not the screenshot URL**) | — | WI-6 amendment (a)+(e): capture_mode interactive; verifier trace-checks `id_token.iss = accounts.google.com` before trace destruction |
 | `auth-oauth-03-identity` | 6 | UserMenu shows non-Guest display name or masked email; session chip in open menu | `/` | none additional | UserMenu, text NOT "Guest" | |
-| `auth-oauth-04-post-reload` | 6 | Same identity as 03 after F5 | `/` | `POST /api/v2/auth/refresh 200` | identity probe equal to step-03 | forbidden: zero `anonymous 201` in oauth spec; TRACE SPOT-CHECK |
-| `auth-oauth-05-alerts-page` | 6 | Alerts page rendered for the signed-in Google user | ends `/alerts` | none additional | named alerts-page selector present | |
+| `auth-oauth-04-post-reload` | 6 | Same identity as 03 after F5 | `/` | `POST /api/v2/auth/refresh 200` | identity probe equal to step-03 (lineage-tied to row-02 login) | forbidden: `anonymous 201` **max_count:1** (one inherent pre-login guest mint — amendment (d)); TRACE SPOT-CHECK |
+| `auth-oauth-05-alerts-page` | 6 | Alerts page rendered for the signed-in Google user | ends `/alerts` | none additional | named alerts-page selector present (`h1:has-text("Alerts")`) | lineage-tied to row-02 login |
+
+### WI-6 amendments (feature 1375, signed pre-capture per this document's rule that a WI refines its own rows via a signed table edit — never at attestation time)
+
+- **(a)** Row `auth-oauth-02` `page_url` tolerance `{/auth/callback*, /}`; the `POST /oauth/callback 200`
+  auth-log leg is the gate (the callback page is transient and may have redirected to `/` by screenshot
+  time; `main_status` may be null on client-side nav).
+- **(b)** `capture_mode: interactive` for `auth-oauth.spec.ts` — Google bot-detects automation, so rows
+  02–05 are captured once, headed, with a real human Google login in a clean context. Not headless-repeatable.
+- **(c)** Rows 03–05 identity MUST be lineage-tied to the row-02 login (same run/session), not an
+  arbitrary non-guest cookie. The attestation reason states the session origin is the row-02 Google login.
+- **(d)** Row `auth-oauth-04` forbidden rule is `anonymous 201` `max_count:1` (was "zero"). The root-layout
+  `SessionProvider` (`frontend/src/app/layout.tsx`) mints one inherent guest on the clean-context signin
+  load; `verify.forbid` counts spec-wide at teardown and cannot be scoped post-login, so the "no silent
+  re-guest" guarantee is carried by the row-04 identity-equality probe. A second `anonymous 201` fails.
+- **(e)** Row `auth-oauth-02` trace spot-check (restore-critical class): the verifier confirms in the raw
+  trace, BEFORE it is destroyed, both `POST /oauth/callback 200` AND that the returned `id_token`'s `iss`
+  claim = `accounts.google.com` — proving a genuine Google leg rather than a reused Cognito session. The
+  trace is NEVER sealed (it carries a refresh token); redact `code`/token fields before sealing (FR-9).
 
 ## Attestation contents
 

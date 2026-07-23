@@ -11,6 +11,12 @@
 /playwright/.cache/
 /test-results/
 
+# OAuth verification: never commit auth/session artifacts or raw traces (they carry
+# live tokens). Sealed evidence is redacted PNGs + manifest + attestation only (WI-6 FR-9).
+/tests/e2e/.auth/
+**/storageState*.json
+**/trace.zip
+
 # Next.js
 /.next/
 /out/
