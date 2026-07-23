@@ -9,13 +9,13 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { setupAuthSession, mockAnonymousAuth } from './helpers/auth-helper';
+import { setupUpgradedSession, mockAnonymousAuth } from './helpers/auth-helper';
 import { mockAlertData } from './helpers/clean-state';
 
 test.describe('Alert Management CRUD (US3)', () => {
-  test.beforeEach(async ({ context, page }) => {
-    // /alerts requires upgraded auth — set up session cookies
-    await setupAuthSession(context);
+  test.beforeEach(async ({ page }) => {
+    // /alerts requires upgraded auth (M1 WI-5): real upgraded restore
+    await setupUpgradedSession(page);
     await page.goto('/alerts');
     // Avoid networkidle — TanStack Query keeps network busy with background refetches
     await page.waitForLoadState('domcontentloaded');
@@ -44,10 +44,10 @@ test.describe('Alert Management CRUD (US3)', () => {
     await expect(newAlertBtn.first()).toBeVisible({ timeout: 10000 });
   });
 
-  test('delete alert removes it from list', async ({ page, context }) => {
+  test('delete alert removes it from list', async ({ page }) => {
     // Set up auth mock + alert mock, then navigate fresh to avoid TanStack Query cache
     // from beforeEach's unmocked load (staleTime: 2min prevents refetch).
-    await setupAuthSession(context);
+    await setupUpgradedSession(page);
     await mockAnonymousAuth(page);
     await mockAlertData(page);
     await page.goto('/alerts');

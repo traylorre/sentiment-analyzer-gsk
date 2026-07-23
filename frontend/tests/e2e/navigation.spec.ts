@@ -1,6 +1,6 @@
 // Target: Customer Dashboard (Next.js/Amplify)
 import { test, expect } from '@playwright/test';
-import { setupAuthSession } from './helpers/auth-helper';
+import { setupUpgradedSession } from './helpers/auth-helper';
 
 test.describe('Navigation Flow', () => {
   test.beforeEach(async ({ page }) => {
@@ -82,9 +82,10 @@ test.describe('Configs Page', () => {
 });
 
 test.describe('Alerts Page', () => {
-  // /alerts requires upgraded auth
-  test.beforeEach(async ({ context }) => {
-    await setupAuthSession(context);
+  // /alerts requires upgraded auth (M1 WI-5): client-side ProtectedRoute gates
+  // on the store, so drive a real upgraded restore.
+  test.beforeEach(async ({ page }) => {
+    await setupUpgradedSession(page);
   });
 
   test('should display alerts page', async ({ page }) => {

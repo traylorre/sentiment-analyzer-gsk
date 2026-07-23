@@ -37,6 +37,7 @@ Security Notes:
 import hashlib
 import logging
 import os
+import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
@@ -104,6 +105,10 @@ class AnonymousSessionResponse(BaseModel):
     created_at: str
     session_expires_at: str
     storage_hint: str = "localStorage"
+    # M1 WI-3: opaque anonymous refresh token, set as httpOnly cookie by the
+    # endpoint and NEVER returned in the response body (excluded at dump time,
+    # same pattern as the OAuth callback).
+    refresh_token_for_cookie: str | None = None
 
 
 class ValidateSessionResponse(BaseModel):
@@ -164,12 +169,22 @@ def create_anonymous_session(
         daily_email_count=0,
     )
 
+    # M1 WI-3: mint an opaque, self-describing refresh token for guest session
+    # restore across reloads (Feature 1165 removed localStorage persistence;
+    # restoration goes through the httpOnly cookie + POST /refresh instead).
+    # Format anon.{user_id}.{secret}: /refresh recovers the user without any
+    # lookup index; only the hash is stored server-side.
+    anon_refresh_token = f"anon.{user_id}.{secrets.token_urlsafe(32)}"
+
     try:
         # Store in DynamoDB
         item = user.to_dynamodb_item()
 
         # Add TTL for automatic cleanup (must match Terraform ttl_timestamp attribute)
         item["ttl_timestamp"] = int(expires_at.timestamp())
+
+        # M1 WI-3: only the SHA-256 hash of the refresh token is persisted
+        item["anon_refresh_token_hash"] = hash_refresh_token(anon_refresh_token)
 
         table.put_item(Item=item)
 
@@ -188,6 +203,7 @@ def create_anonymous_session(
             created_at=now.isoformat().replace("+00:00", "Z"),
             session_expires_at=expires_at.isoformat().replace("+00:00", "Z"),
             storage_hint="localStorage",
+            refresh_token_for_cookie=anon_refresh_token,
         )
 
     except Exception as e:
@@ -1493,6 +1509,15 @@ class RefreshTokenResponse(BaseModel):
     expires_in: int = 3600
     error: str | None = None
     message: str | None = None
+    # M1 WI-3: guest-session restore fields. For anonymous refreshes the access
+    # token IS the user_id (bearer), and the client needs auth_type to rebuild
+    # its state. None for Cognito-backed refreshes.
+    user_id: str | None = None
+    auth_type: str | None = None
+    session_expires_at: str | None = None
+    # Rotated refresh token, set as httpOnly cookie by the endpoint and NEVER
+    # serialized into the response body (endpoint excludes it at dump time).
+    refresh_token_for_cookie: str | None = None
 
 
 class ErrorDetail(BaseModel):
@@ -2774,6 +2799,102 @@ def _mark_email_verified(
 
 
 # T094: Token Refresh
+def _refresh_anonymous_session(
+    table: Any | None,
+    refresh_token: str,
+) -> RefreshTokenResponse:
+    """Restore an anonymous (guest) session from its opaque refresh token.
+
+    M1 WI-3: guests are not Cognito-backed, so their restore path is served
+    from DynamoDB. Token format anon.{user_id}.{secret}; only the SHA-256 hash
+    is stored on the USER#/PROFILE item. On success the token is ROTATED
+    (single-use), matching the Cognito path's rotation semantics.
+
+    Failure modes are uniform 401-class errors: malformed token, unknown user,
+    hash mismatch, non-anonymous user, or expired session.
+    """
+    generic = RefreshTokenResponse(
+        error="invalid_token", message="Session could not be restored"
+    )
+    if table is None:
+        return generic
+
+    parts = refresh_token.split(".")
+    if len(parts) != 3 or not parts[1] or not parts[2]:
+        return generic
+    user_id = parts[1]
+
+    try:
+        response = table.get_item(Key={"PK": f"USER#{user_id}", "SK": "PROFILE"})
+    except Exception as e:
+        logger.error("Anonymous refresh lookup failed", extra=get_safe_error_info(e))
+        return generic
+
+    item = response.get("Item")
+    if not item or item.get("auth_type") != "anonymous":
+        return generic
+
+    stored_hash = item.get("anon_refresh_token_hash")
+    presented_hash = hash_refresh_token(refresh_token)
+    if not stored_hash or not secrets.compare_digest(stored_hash, presented_hash):
+        logger.warning(
+            "Anonymous refresh hash mismatch",
+            extra={"user_id_prefix": sanitize_for_log(user_id[:8])},
+        )
+        return generic
+
+    expires_at_raw = item.get("session_expires_at", "")
+    try:
+        expires_at = datetime.fromisoformat(str(expires_at_raw).replace("Z", "+00:00"))
+    except ValueError:
+        return generic
+    now = datetime.now(UTC)
+    if expires_at <= now:
+        return RefreshTokenResponse(
+            error="session_expired", message="Session has expired"
+        )
+
+    # Rotate: single-use refresh tokens (same posture as the Cognito path)
+    new_token = f"anon.{user_id}.{secrets.token_urlsafe(32)}"
+    try:
+        table.update_item(
+            Key={"PK": f"USER#{user_id}", "SK": "PROFILE"},
+            UpdateExpression=(
+                "SET anon_refresh_token_hash = :h, last_active_at = :now"
+            ),
+            # Rotation is race-safe: only rotate the hash we just verified
+            ConditionExpression="anon_refresh_token_hash = :old",
+            ExpressionAttributeValues={
+                ":h": hash_refresh_token(new_token),
+                ":old": stored_hash,
+                ":now": now.isoformat(),
+            },
+        )
+    except Exception as e:
+        logger.warning(
+            "Anonymous refresh rotation failed (concurrent refresh?)",
+            extra={
+                "user_id_prefix": sanitize_for_log(user_id[:8]),
+                **get_safe_error_info(e),
+            },
+        )
+        return generic
+
+    remaining = max(0, int((expires_at - now).total_seconds()))
+    logger.info(
+        "Restored anonymous session",
+        extra={"user_id_prefix": sanitize_for_log(user_id[:8])},
+    )
+    return RefreshTokenResponse(
+        access_token=user_id,  # Guest bearer token IS the user_id
+        expires_in=remaining,
+        user_id=user_id,
+        auth_type="anonymous",
+        session_expires_at=str(expires_at_raw),
+        refresh_token_for_cookie=new_token,
+    )
+
+
 def refresh_access_tokens(
     refresh_token: str,
     table: Any | None = None,
@@ -2801,6 +2922,11 @@ def refresh_access_tokens(
                 error="token_revoked",
                 message="Session has been revoked",
             )
+
+    # M1 WI-3: anonymous-session refresh path. Guest refresh tokens are opaque
+    # and self-describing (anon.{user_id}.{secret}); they never reach Cognito.
+    if refresh_token.startswith("anon."):
+        return _refresh_anonymous_session(table, refresh_token)
 
     config = CognitoConfig.from_env()
 

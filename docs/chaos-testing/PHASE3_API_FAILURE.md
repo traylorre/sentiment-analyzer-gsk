@@ -1,8 +1,23 @@
 # Phase 3: Financial API Failure Chaos Testing
 
-**Status**: ✅ Implemented
-**PR**: #78
-**Implementation Date**: 2025-11-24
+**Status**: ⛔ Superseded — describes a REMOVED implementation
+**Originally implemented**: PR #78 (2025-11-24)
+**Removed by**: Feature 1237 external-actor refactor (PR #774, commit `979a652`)
+
+> **⚠️ This document is historical.** The DynamoDB-flag coordination it describes
+> (`chaos_injection.py`, `financial_handler.py`, `is_chaos_active()`, the `api_failure`
+> scenario) was deleted in Feature 1237. None of that code exists in the repo today, and
+> ingestion performs **no** chaos-experiment status query (its `by_status` GSI queries
+> serve self-healing of pending news items only — `self_healing.py:117,136`).
+>
+> Shipped chaos injection is **control-plane, from the dashboard Lambda**
+> (`src/lambdas/dashboard/chaos.py:1646-1654,1785-1892`), with 5 scenarios:
+> `ingestion_failure` (reserved concurrency → 0), `dynamodb_throttle` (attach IAM deny
+> policy), `lambda_cold_start` (MemorySize → 128), `trigger_failure` (disable EventBridge
+> rule), `api_timeout` (Timeout → 1s). Pre-chaos state snapshots to SSM. The closest
+> current analog to this document's `api_failure` scenario is `api_timeout`.
+>
+> Everything below is retained for design history only. Do not use it operationally.
 
 ## Overview
 

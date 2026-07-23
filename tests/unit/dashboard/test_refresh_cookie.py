@@ -85,3 +85,41 @@ class TestRefreshEndpointIntegration:
         cookie_token = _extract_refresh_token_from_event(event)
         assert cookie_token is None
         # In this case, endpoint uses body.refresh_token
+
+
+class TestCookiePathStagePrefix:
+    """M1 WI-3: cookie Path must include the API Gateway stage segment.
+
+    Behind API Gateway the browser-visible path is /{stage}/api/v2/...;
+    a cookie with Path=/api/v2/auth is never sent back, which silently broke
+    every cookie-based refresh on deployed environments.
+    """
+
+    def test_refresh_cookie_path_includes_stage(self):
+        from src.lambdas.dashboard.router_v2 import _make_refresh_token_cookie
+
+        event = {"requestContext": {"stage": "prod"}}
+        cookie = _make_refresh_token_cookie("tok", event)
+        assert "Path=/prod/api/v2/auth" in cookie
+
+    def test_refresh_cookie_no_prefix_for_function_url(self):
+        from src.lambdas.dashboard.router_v2 import _make_refresh_token_cookie
+
+        event = {"requestContext": {"stage": "$default"}}
+        cookie = _make_refresh_token_cookie("tok", event)
+        assert "Path=/api/v2/auth" in cookie
+        assert "Path=/$default" not in cookie
+
+    def test_refresh_cookie_samesite_none(self):
+        """Feature 1159 posture: Strict blocks all cross-site Amplify->API calls."""
+        from src.lambdas.dashboard.router_v2 import _make_refresh_token_cookie
+
+        cookie = _make_refresh_token_cookie("tok", None)
+        assert "SameSite=None" in cookie
+        assert "SameSite=Strict" not in cookie
+
+    def test_csrf_cookie_path_includes_stage(self):
+        from src.lambdas.dashboard.router_v2 import _make_csrf_set_cookie
+
+        cookie = _make_csrf_set_cookie({"requestContext": {"stage": "prod"}})
+        assert "Path=/prod/api/v2" in cookie

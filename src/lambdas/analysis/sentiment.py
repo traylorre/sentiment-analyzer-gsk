@@ -7,7 +7,7 @@ DistilBERT-based sentiment inference with model caching.
 For On-Call Engineers:
     Model loading issues:
     - If cold start > 5s: Check memory allocation (should be 1024MB)
-    - If model not found: Verify /opt/model exists in Lambda layer
+    - If model not found: Verify S3 download succeeded (model.tar.gz extracted to /tmp/model)
     - If inference errors: Check CloudWatch logs for OOM errors
 
     Quick commands:
@@ -33,7 +33,7 @@ For Developers:
     - Text is truncated to 512 tokens (DistilBERT limit)
 
 Security Notes:
-    - Model loaded from Lambda layer (/opt/model)
+    - Model downloaded from S3 to /tmp/model (no Lambda layer)
     - No user input in model path (prevent path traversal)
     - Text input is truncated, not sanitized (model handles encoding)
 """

@@ -71,7 +71,7 @@ export default function SignInPage() {
         {/* Card */}
         <Card className="p-6 space-y-6">
           <div className="text-center space-y-2">
-            <h1 className="text-2xl font-bold text-foreground">Welcome back</h1>
+            <h1 className="text-2xl font-bold text-foreground" data-testid="signin-heading">Welcome back</h1>
             <p className="text-muted-foreground">
               Sign in to access your sentiment dashboard
             </p>

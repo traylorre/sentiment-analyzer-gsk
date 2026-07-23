@@ -1,0 +1,33 @@
+# URL & Endpoint Inventory: Anti-Rabbit-Hole Map
+
+Purpose: one row per URL/endpoint surface so a cleanup pass knows what is LIVE, what is DISABLED/ORPHANED, and where the emitter→consumer wire actually lands. Every claim carries its `file:line`. Do not act on this map, it only marks terrain.
+
+## Surface Map
+
+| Surface | Emitter (file:line) | Consumer (file:line) | State | Citation | Notes |
+|---|---|---|---|---|---|
+| Amplify production URL (customer frontend) | `main.tf:1284` (module `amplify_frontend`), output `main.tf:1645` (`amplify_production_url`); `main.tf:1640` (`amplify_default_domain`) | Browser (static site) | LIVE | main.tf:1284, 1640, 1645 | Guarded by `var.enable_amplify`. Original citation `main.tf:1320` was off by ~36; corrected loci confirmed via grep. |
+| API Gateway invoke URL | `main.tf:859` (module `api_gateway`); `main.tf:1295` `api_gateway_url = module.api_gateway.api_endpoint`; `modules/amplify/main.tf:63` `NEXT_PUBLIC_API_URL = var.api_gateway_url` | `runtime.ts:22`, `constants.ts:1`, `runtime-store.ts:85`, `sse.ts:187` (all read `process.env.NEXT_PUBLIC_API_URL`) | LIVE | main.tf:859, 1295; modules/amplify/main.tf:63; frontend/src/lib/api/runtime.ts:22; frontend/src/lib/constants.ts:1; frontend/src/stores/runtime-store.ts:85; frontend/src/lib/api/sse.ts:187 | Emit→consume wire fully closed. Also the de-facto SSE base (see SSE row). |
+| Dashboard Lambda Function URL | `main.tf:425` (module `dashboard_lambda`); `create_function_url=false` at `main.tf:508`; output removed `main.tf:1458` | None, served via API Gateway; `dashboard_api_url = module.api_gateway.api_endpoint` (main.tf:1461-1464) | DISABLED | main.tf:425, 504-508, 1458, 1461-1464 | Zombie infra since Feature 1253/1256 IAM auth (403). CITATION FIX: original `main.tf:615` targets the NOTIFICATION lambda, not dashboard; dashboard disable is `508`. |
+| SSE Lambda Function URL (IAM-locked, RESPONSE_STREAM) | `main.tf:824` `create_function_url=true`, `825` `auth_type="AWS_IAM"`, `826` `invoke_mode="RESPONSE_STREAM"`; fronted by `module.cloudfront_sse` (`main.tf:957`, origin `961`); `main.tf:1296` `sse_cloudfront_url`; `modules/amplify/main.tf:64` `NEXT_PUBLIC_SSE_URL = var.sse_cloudfront_url` | ORPHANED at consumer, `grep -rn NEXT_PUBLIC_SSE_URL frontend/` → nothing; `sse.ts:187-188` builds stream URL from `NEXT_PUBLIC_API_URL` + `/api/stream`, never `NEXT_PUBLIC_SSE_URL` | LIVE (infra) / consumer wire BROKEN | main.tf:824-826, 957, 961, 1296, 1601; modules/amplify/main.tf:64; frontend/src/lib/api/sse.ts:187-188 | Terraform emits the var correctly; the frontend never reads it. `sse_lambda_function_url` output still present at main.tf:1601. |
+| Cognito user pool domain / Hosted UI | `main.tf:148` (module `cognito`); `463` `COGNITO_DOMAIN`; `1299` `cognito_domain`; `modules/cognito/outputs.tf:21` (`domain`), `26-29` (`hosted_ui_url`); output `main.tf:1519` | Dashboard lambda env + Amplify input | LIVE | main.tf:148, 463, 1299, 1316, 1325, 1519; modules/cognito/outputs.tf:21-23, 26-29 | Circular-dep patch is `terraform_data "cognito_callback_patch"` (main.tf:1316, local-exec 1325). CORRECTION upheld: resource type is `terraform_data`, NOT `null_resource` as originally claimed. |
+| `/api/v2/runtime` handing out SSE URL | `handler.py:612` route, `handler.py:621` `"sse_url": SSE_LAMBDA_URL or None` (gated by `_is_dev_environment()` at 619; `SSE_LAMBDA_URL` from env at 109, wired `main.tf:501`) | Browser (dev only); non-dev branch 625-628 returns `sse_url:None` | LIVE (dev-only exposure) | handler.py:109, 139-146, 612-628; main.tf:501, 825, 960 | Raw IAM-locked URL leaks ONLY in dev; preprod/prod return None (fail-closed gate). An unsigned EventSource against an AWS_IAM Function URL gets 403, but exposure is dev-scoped, so the original unconditional "(would 403)" framing is inaccurate (see STALE section). |
+| Root GitHub Pages stub | `index.html` (338 bytes: meta-refresh + JS redirect to `interview/`); `.nojekyll` (0 bytes) | No in-repo Pages pipeline references it (`grep pages .github/workflows/` → nothing; `grep github.io/gh-pages/nojekyll .github/` → nothing) | ORPHANED | index.html (full read); .nojekyll | Best in-repo evidence = orphaned stub. Server-side Pages setting not observable from checkout (see OPEN QUESTIONS). |
+| General/dashboard CloudFront (Feature 1203) | Removed, `grep 'module "cloudfront' main.tf` → only `main.tf:957 cloudfront_sse`; `ls modules/` → only `cloudfront_sse` | N/A | ORPHANED (removed) | main.tf:957, 168-169, 607 (comment/suspect), 1530 | Claim rests on grep-proven absence, NOT the `main.tf:607` comment (which is only a SUSPECT). Only `cloudfront_sse` remains. |
+
+## STALE claims flagged
+
+| Stale artifact | Where | Reality |
+|---|---|---|
+| specs/1159-samesite-cors-update describes pre-Amplify "CloudFront frontend / Lambda Function URL backend" | spec.md:5, 9, 10, 48; plan.md:5 | Sole genuinely-stale pre-Amplify doc. Current world = Amplify frontend + API Gateway backend. (README:249/252, CHANGELOG:39, and the main diagram were re-checked and are already current, the bundled "ALL still describe pre-Amplify" claim is REFUTED; only 1159 holds.) |
+| Original claim: `/api/v2/runtime` unconditionally "would 403" | handler.py:621 | REFUTED. Raw IAM-locked SSE URL is handed out ONLY in dev (gated at handler.py:619); non-dev returns `sse_url:None`. |
+| Original citation: dashboard Function URL disabled at `main.tf:615` | main.tf:615 | Mis-targeted, `615` is the NOTIFICATION lambda. Dashboard disable is `main.tf:508`. |
+| Original claim: Cognito circular-dep patch via `null_resource` | main.tf:1316 | Resource is `terraform_data "cognito_callback_patch"`, not `null_resource`. |
+| Original citation: `module.amplify_frontend` at `main.tf:1320` | main.tf:1284 | Off by ~36; module is at `1284`. |
+
+## OPEN QUESTIONS
+
+| Question | State | Evidence still needed |
+|---|---|---|
+| Is the root GitHub Pages stub actually published (LIVE) vs a dead file? | ORPHANED by in-repo evidence, but server-side unconfirmed | Upgrading to LIVE requires the GitHub repo's Settings→Pages setting (default branch root), not observable from the checkout. In-repo evidence supports ORPHANED. |
+| Does any dev-environment frontend actually open a direct EventSource against `runtime.sse_url`? | LIVE exposure confirmed; real-world impact unconfirmed | Consumer-side check of whether a dev frontend consumes `runtime.sse_url` directly vs routing through the CloudFront OAC origin (main.tf:960). Terraform + handler prove the URL handed out is IAM-locked and unusable by an unsigned browser; consumer confirmation not performed. |

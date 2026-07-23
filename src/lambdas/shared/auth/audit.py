@@ -1,5 +1,11 @@
 """Role assignment audit trail helpers (Feature 1175).
 
+UNWIRED (repo cleanup inventory, docs/cleanup-pristine/open-questions.md Q10):
+this module has ZERO production callers - only tests import it. It implements
+Feature 1175 role-change audit fields; the intended role-writer call sites were never converted. The wiring was never built. Kept in tree as a signpost, not dead weight:
+either wire it or formally descope the requirement before deleting.
+
+
 Provides consistent audit field generation for role changes.
 Supports multiple sources: OAuth, Stripe webhooks, admin operations.
 """
