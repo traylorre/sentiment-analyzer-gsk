@@ -1,7 +1,7 @@
 // Target: Customer Dashboard (Next.js/Amplify)
 import { test, expect } from '@playwright/test';
 import { assertCleanState, createTestConfig, mockAlertData } from './helpers/clean-state';
-import { setupAuthSession } from './helpers/auth-helper';
+import { setupUpgradedSession } from './helpers/auth-helper';
 
 /**
  * Alert CRUD tests — rewritten to match actual form UI.
@@ -19,9 +19,10 @@ import { setupAuthSession } from './helpers/auth-helper';
 test.describe('Alert CRUD (Feature 1247)', () => {
   test.setTimeout(45_000);
 
-  // /alerts requires upgraded auth — set up session cookies before each test
-  test.beforeEach(async ({ context }) => {
-    await setupAuthSession(context);
+  // /alerts requires upgraded auth (M1 WI-5): client-side ProtectedRoute reads
+  // the store, so drive a real upgraded restore before each test.
+  test.beforeEach(async ({ page }) => {
+    await setupUpgradedSession(page);
   });
 
   test('new alert button opens form', async ({ page }) => {

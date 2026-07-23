@@ -1,8 +1,9 @@
 // Target: Customer Dashboard (Next.js/Amplify)
 /**
  * M1 WI-3: guest session with restore across reload.
+ * M1 WI-5: guest gated off /alerts client-side (step 04, Q-M1-2 resolved).
  *
- * Canonical rows auth-guest-01..03 (docs/cleanup-pristine/m1-verifier-convention.md).
+ * Canonical rows auth-guest-01..04 (docs/cleanup-pristine/m1-verifier-convention.md).
  * The core claim is negative-space: a reload must NOT mint a second anonymous
  * user (forbidden_requests), and MUST restore via POST /refresh 200.
  *
@@ -85,6 +86,25 @@ test.describe('auth-guest: session with restore', () => {
         expect_text: 'Guest',
       },
     });
+
+    // ── Step 4 (M1 WI-5, Q-M1-2): guest bounced off /alerts client-side ──
+    // Middleware gating was stripped; ProtectedRoute (requireUpgraded) in the
+    // alerts layout redirects via router.replace, so the guest lands on
+    // /auth/signin?redirect=%2Falerts&upgrade=true. No backend leg involved.
+    await page.goto('/alerts');
+    await page.waitForURL('**/auth/signin**');
+    await page.waitForLoadState('networkidle');
+    await verify.shot('alerts-redirect', {
+      expected_ui_state:
+        'Guest redirected off /alerts to signin; page_url has redirect=%2Falerts and upgrade=true',
+      probe: { selector: '[data-testid="signin-heading"]' },
+    });
+    const redirectedUrl = new URL(page.url());
+    expect(redirectedUrl.pathname, 'guest lands on signin, not /alerts').toBe(
+      '/auth/signin'
+    );
+    expect(redirectedUrl.searchParams.get('redirect')).toBe('/alerts');
+    expect(redirectedUrl.searchParams.get('upgrade')).toBe('true');
 
     // Assertions (necessary, never sufficient - attestation is the gate):
     const minted = authBodies.filter((b) => b.path.endsWith('/anonymous'));

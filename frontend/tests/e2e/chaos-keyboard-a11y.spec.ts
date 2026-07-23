@@ -144,11 +144,25 @@ async function mockApiEndpoints(page: Page): Promise<void> {
       body: '{}',
     });
   });
+  // M1 WI-5 (Q-M1-2): /admin is now gated client-side by ProtectedRoute
+  // (requireUpgraded), which reads the store — not the dead middleware cookie.
+  // Return a real non-anonymous session so restoreSession() rebuilds an
+  // upgraded user (role comes from the /me mock above = operator). This makes
+  // chaos-tabs render on first load; the webpack role-patch below is now an
+  // unused fallback kept only for resilience.
   await page.route('**/api/v2/auth/refresh', async (route) => {
+    if (route.request().method() !== 'POST') return route.fallback();
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: '{}',
+      body: JSON.stringify({
+        access_token: 'mock-operator-token-e2e',
+        id_token: 'mock-operator-id-token',
+        expires_in: 3600,
+        user_id: 'e2e-operator-user',
+        auth_type: 'magic_link',
+        session_expires_at: new Date(Date.now() + 86400000).toISOString(),
+      }),
     });
   });
 
