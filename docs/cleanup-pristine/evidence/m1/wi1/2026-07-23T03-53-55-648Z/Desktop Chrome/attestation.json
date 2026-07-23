@@ -1,0 +1,27 @@
+{
+  "schema": "attestation.schema.json#v1",
+  "spec": "infra-smoke",
+  "run_id": "2026-07-23T03-53-55-648Z",
+  "verifier": "claude-opus-4-8 verifier-agent (independent, non-implementer)",
+  "convention_version": "a016708",
+  "overall": "pass",
+  "hard_fail_checks": {
+    "interception_clean": true,
+    "forbidden_requests_hold": true,
+    "target_is_preprod": true,
+    "manifest_schema_valid": true
+  },
+  "steps": [
+    {
+      "step": "infra-smoke-01-landing",
+      "verdict": "pass",
+      "reason": "Judged against the canonical-table row for infra-smoke-01-landing, not the manifest prose. Screenshot viewed directly: left sidebar nav present (Dashboard, Configurations, Alerts, Settings), ticker search input present ('Search tickers (e.g., AAPL, MSFT, GOOGL)'), page header present ('Dashboard' title plus 'Sentiment' brand and a Guest chip), and no raw error text anywhere on the page. page_url is the Amplify domain root (https://main.d29tlmksqcx494.amplifyapp.com/), matching the 'Amplify domain /' requirement and confirming this is the customer dashboard, not the Lambda HTMX admin dashboard. main_status is 200 (table default). Auth log: none required by the row; auth_requests is empty, consistent. console_errors and page_errors are both empty. DOM probe: selector 'header' present:true (text 'Sentiment5:00Guest'), satisfying the row's probe requirement; no text_match required by this row. Extras: interception_at_capture is false and manifest interception.clean is true with 0 route registrations; the forbidden POST /api/v2/auth/anonymous 201 rule (max_count 1) holds with observed_count 0, pass:true. Manifest validated cleanly against verification-manifest.schema.json (Draft 2020-12, zero errors). This step is not restore-critical per the convention, so no trace spot-check is required and none was performed.",
+      "trace_spot_check": {
+        "performed": false,
+        "manifest_matches_trace": null,
+        "note": "Not a restore-critical step (only auth-guest-03 and auth-oauth-04 require the trace spot-check)."
+      }
+    }
+  ],
+  "timestamp": "2026-07-23T04:02:11Z"
+}
