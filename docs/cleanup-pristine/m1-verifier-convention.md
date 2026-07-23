@@ -84,9 +84,9 @@ an edit to this table in a signed commit — never at attestation time.
 | Step | WI | Screenshot must show | page_url | Auth log (required) | Probe | Extra |
 |---|---|---|---|---|---|---|
 | `infra-smoke-01-landing` | 1 | Customer dashboard landing: sidebar nav, ticker search, header present; no raw error text | Amplify domain `/` | none required | `header` present | interception false; forbidden anonymous-201>1 holds |
-| `auth-guest-01-landing` | 3 | Header UserMenu shows "Guest" | `/` | `POST /api/v2/auth/anonymous 201` | UserMenu w/ text "Guest" | zero console errors |
-| `auth-guest-02-menu-open` | 3 | Open menu: session-remaining chip + anonymous "Sign in with email" upsell item | `/` | none additional | menu container present | |
-| `auth-guest-03-post-reload` | 3 | Same UI as 01, still "Guest" | `/` | `POST /api/v2/auth/refresh 200`; NO new `anonymous 201` | user-id probe equal to step-01 value | forbidden `anonymous 201 max_count:1` holds; TRACE SPOT-CHECK |
+| `auth-guest-01-landing` | 3 | Header UserMenu shows "Guest" | `/` | `POST /api/v2/auth/refresh 401` (cold-load restore attempt, no cookie yet) then `POST /api/v2/auth/anonymous 201` | UserMenu w/ text "Guest" | console allowlist (this step only): the single browser-logged `Failed to load resource ... 401` from that restore attempt. Restore-first makes it inherent |
+| `auth-guest-02-menu-open` | 3 | Open menu: Guest identity + anonymous "Sign in with email" upsell item (session-remaining chip renders in the HEADER trigger area, not the menu; WI-3 reality correction) | `/` | none additional | `text=Sign in with email` present | |
+| `auth-guest-03-post-reload` | 3 | Same UI as 01, still "Guest" | `/` | `POST /api/v2/auth/refresh 200`; NO new `anonymous 201` | UserMenu "Guest"; user_id equality vs step 01 verified from response bodies in the TRACE | forbidden `anonymous 201 max_count:1` holds; TRACE SPOT-CHECK |
 | `auth-guest-04-alerts-redirect` | 5 | Guest bounced off `/alerts` | redirect destination (signin), NOT `/alerts` | per WI-5 fix direction (Q-M1-2) | — | row updates when Q-M1-2 resolves |
 | `next-version.txt` | 4 | n/a (text artifact) | n/a | n/a | n/a | installed Next.js >= 14.2.25; guest set re-captured green against bumped build |
 | `auth-oauth-01-signin-buttons` | 6 | Google button visible on signin page | `/auth/signin` | `GET /api/v2/auth/oauth/urls 200` (non-empty providers) | Google button selector | |
