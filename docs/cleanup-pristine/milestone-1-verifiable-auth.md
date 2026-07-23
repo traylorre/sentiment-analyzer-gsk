@@ -208,7 +208,16 @@ contract item 7.
 
 *Depends on:* WI-1 (for evidence capture). Parallel with WI-3.
 
-### WI-5: Middleware cookie reconciliation (guest gate provable) — Effort: M
+### WI-5: Middleware cookie reconciliation (guest gate provable) — Effort: M — ✅ DONE
+
+**Status: DONE (preprod-attested + sealed 2026-07-23).** Merged to main via PR #929
+(`c46c6f3`), Amplify build #383. Independent verifier attested `auth-guest-04` PASS
+against the canonical row on preprod; sealed under
+`docs/cleanup-pristine/evidence/m1/wi5-preprod/2026-07-23T20-24-45-535Z/`. Latent
+OAuth-restore bug fixed on the way (upgraded restore never set the user because
+`/me` omits `user_id`; now sourced from `/refresh`) — de-risks WI-6
+`auth-oauth-04`. A separate config-delete snake_case bug the fix unmasked is
+tracked in PR #930.
 
 R1 defect 3.1: `middleware.ts:48-67` gates `/admin` and `/alerts` on cookies
 (`sentiment-access-token`, `sentiment-is-anonymous`) that nothing in `frontend/src`
