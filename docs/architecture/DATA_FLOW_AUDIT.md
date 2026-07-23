@@ -28,7 +28,7 @@ flowchart TB
         subgraph IngestionCache["Caching Layer"]
             CB["Circuit Breaker<br/>State Cache"]
             QT["Quota Tracker<br/>Cache"]
-            APIC["API Response<br/>Cache (1hr TTL)<br/>✅ FIXED"]
+            APIC["API Response Cache<br/>news 30min / OHLC 1hr<br/>✅ FIXED"]
         end
     end
 
@@ -55,7 +55,7 @@ flowchart TB
         DASH["Dashboard Lambda"]
 
         subgraph DashCache["Caching Layer"]
-            MC["Metrics Cache<br/>30s TTL<br/>✅ FIXED"]
+            MC["Metrics Cache<br/>300s TTL<br/>✅ FIXED"]
             TC["Table Object<br/>Cache<br/>✅ FIXED"]
             SC["Secrets Cache<br/>5min TTL"]
         end
@@ -132,10 +132,10 @@ flowchart LR
         direction TB
 
         subgraph InMemory["In-Memory (Lambda Container)"]
-            M1["Metrics Cache<br/>TTL: 30s<br/>✅ IMPLEMENTED"]
+            M1["Metrics Cache<br/>TTL: 300s (5 min)<br/>✅ IMPLEMENTED"]
             M2["Table Object<br/>TTL: Container lifetime<br/>✅ IMPLEMENTED"]
             M3["ML Model<br/>TTL: Container lifetime<br/>✅ EXISTING"]
-            M4["Ticker Cache<br/>TTL: Container lifetime<br/>✅ EXISTING"]
+            M4["Ticker Cache<br/>TTL: 300s + S3 ETag refresh<br/>✅ Feature 1224"]
         end
 
         subgraph SecretsCache["Secrets Manager Cache"]
@@ -146,10 +146,7 @@ flowchart LR
         subgraph Implemented["Recently Implemented"]
             P1["API Response Cache<br/>TTL: 30min/1hr<br/>✅ DFA-004"]
             P3["Active Tickers<br/>TTL: 5 min<br/>✅ DFA-003"]
-        end
-
-        subgraph Pending["Pending Implementation"]
-            P2["Circuit Breaker<br/>TTL: In-memory<br/>⚠️ DFA-008"]
+            P2["Circuit Breaker<br/>DynamoDB write-through,<br/>60s in-memory read cache<br/>✅ IMPLEMENTED"]
         end
     end
 
@@ -226,7 +223,7 @@ sequenceDiagram
         Note over C,DB: AFTER FIX (with Metrics Cache)
         C->>L: SSE Connect
         loop Every 5 seconds (per client)
-            L->>Cache: Check cache (< 30s old?)
+            L->>Cache: Check cache (< 300s old?)
             alt Cache Hit
                 Cache-->>L: Cached metrics
             else Cache Miss
@@ -235,7 +232,7 @@ sequenceDiagram
                 L->>DB: Query ingestion_rate (×2)
                 DB-->>L: Results
                 L->>L: Parse & Sanitize (once)
-                L->>Cache: Store (30s TTL)
+                L->>Cache: Store (300s TTL)
             end
             L-->>C: SSE Event
         end
@@ -270,6 +267,7 @@ flowchart TB
                 SU_G1["by_email<br/>(email)"]
                 SU_G2["by_cognito_sub<br/>(cognito_sub)"]
                 SU_G3["by_entity_status<br/>(entity_type, status)"]
+                SU_G4["by_provider_sub<br/>(provider_sub, Feature 1180)"]
             end
         end
     end
@@ -335,7 +333,7 @@ flowchart TB
 | ID | Issue | File | Status | PR |
 |----|-------|------|--------|-----|
 | DFA-007 | Redundant item existence check | dynamodb.py:208-242 | ✅ N/A | Function unused in prod |
-| DFA-008 | Circuit breaker DynamoDB persistence | handler.py:164-169 | DEFERRED | Low priority |
+| DFA-008 | Circuit breaker DynamoDB persistence | circuit_breaker.py:438-452 | IMPLEMENTED | Write-through to DynamoDB, 60s in-memory read cache |
 
 ### LOW (Deploy Week 4-5)
 

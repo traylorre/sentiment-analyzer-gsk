@@ -37,9 +37,10 @@ infrastructure/terraform/
 ├── main.tf                    # Main Terraform configuration
 ├── variables.tf               # Variable definitions
 ├── .gitignore                 # Terraform-specific gitignore
-├── environments/
-│   ├── dev.tfvars            # Development environment variables
-│   └── prod.tfvars           # Production environment variables
+├── preprod.tfvars             # Preprod environment variables
+├── prod.tfvars                # Production environment variables
+├── backend-preprod.hcl        # Preprod state backend config
+├── backend-prod.hcl           # Prod state backend config
 └── modules/
     ├── dynamodb/             # DynamoDB table + backups + alarms
     ├── iam/                  # Lambda IAM roles
@@ -60,19 +61,19 @@ cd infrastructure/terraform
 # Initialize Terraform
 terraform init
 
-# Plan deployment (dev environment)
-terraform plan -var-file=dev.tfvars
+# Plan deployment (preprod environment; CI is the normal deploy path)
+terraform plan -var-file=preprod.tfvars
 
 # Apply deployment
-terraform apply -var-file=dev.tfvars
+terraform apply -var-file=preprod.tfvars
 ```
 
 **What gets deployed**:
-- DynamoDB table: `dev-sentiment-items`
+- DynamoDB table: `preprod-sentiment-items`
 - Secrets Manager:
-  - `dev/sentiment-analyzer/tiingo`
-  - `dev/sentiment-analyzer/finnhub`
-  - `dev/sentiment-analyzer/dashboard-api-key`
+  - `preprod/sentiment-analyzer/tiingo`
+  - `preprod/sentiment-analyzer/finnhub`
+  - `preprod/sentiment-analyzer/dashboard-api-key`
 - AWS Backup vault and plan
 - CloudWatch alarms
 
@@ -95,8 +96,8 @@ After Lambda functions are deployed, uncomment the following sections in `main.t
 Then re-run Terraform:
 
 ```bash
-terraform plan -var-file=dev.tfvars
-terraform apply -var-file=dev.tfvars
+terraform plan -var-file=preprod.tfvars
+terraform apply -var-file=preprod.tfvars
 ```
 
 **What gets deployed**:
@@ -148,13 +149,13 @@ echo "Dashboard API Key: $API_KEY"
 
 ## Environment Variables
 
-### Development (`dev.tfvars`)
+### Preprod (`preprod.tfvars`)
 
 ```hcl
-environment   = "dev"
-aws_region    = "us-east-1"
-watch_tags    = "AI,climate,economy,health,sports"
-model_version = "v1.0.0"
+environment  = "preprod"
+aws_region   = "us-east-1"
+jwt_audience = "sentiment-api-preprod"
+# Full file includes CORS origins, Amplify config, alarm email
 ```
 
 ### Production (`prod.tfvars`)
@@ -241,8 +242,8 @@ aws cloudwatch describe-alarms \
 To destroy all resources:
 
 ```bash
-# Destroy dev environment
-terraform destroy -var-file=dev.tfvars
+# Destroy preprod environment
+terraform destroy -var-file=preprod.tfvars
 
 # Destroy prod environment
 terraform destroy -var-file=prod.tfvars

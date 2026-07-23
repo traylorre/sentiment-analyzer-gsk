@@ -22,7 +22,7 @@ If you're here during an incident:
    - Secret issues: Check `shared/secrets.py` caching logic
 
 2. **Analysis failures** → Check `lambdas/analysis/handler.py`
-   - Model loading: Look for `/opt/model` path issues
+   - Model loading: Look for `/tmp/model` path issues (model downloaded from S3)
    - DynamoDB updates: Check conditional expressions in handler
 
 3. **Dashboard issues** → Check `lambdas/dashboard/handler.py`

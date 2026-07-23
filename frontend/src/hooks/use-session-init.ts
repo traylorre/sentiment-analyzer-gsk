@@ -35,6 +35,7 @@ export function useSessionInit() {
     isInitialized,
     isLoading,
     error,
+    restoreSession,
     signInAnonymous,
     setInitialized,
     setError,
@@ -56,10 +57,17 @@ export function useSessionInit() {
 
     const initializeSession = async () => {
       try {
-        // TODO: In future, call /refresh endpoint here to restore session from httpOnly cookie
-        // For now, create anonymous session with timeout protection
+        // M1 WI-3: restore-first. The httpOnly refresh cookie (set for both
+        // guest and OAuth sessions) restores the previous session across
+        // reloads; only when nothing is restorable do we mint a NEW anonymous
+        // user. Before this, every F5 created a fresh DynamoDB user row.
         await Promise.race([
-          signInAnonymous(),
+          (async () => {
+            const restored = await restoreSession();
+            if (!restored) {
+              await signInAnonymous();
+            }
+          })(),
           new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error('timeout')), SESSION_INIT_TIMEOUT_MS)
           ),
@@ -81,6 +89,7 @@ export function useSessionInit() {
     initializeSession();
   }, [
     isInitialized,
+    restoreSession,
     signInAnonymous,
     setInitialized,
     setError,
