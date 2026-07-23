@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "verification-manifest.schema.json",
+  "title": "M1 verification manifest",
+  "description": "Per-spec evidence manifest emitted by tests/e2e/helpers/verification.ts. A verifier agent attests against this plus the screenshots; see docs/cleanup-pristine/milestone-1-verifiable-auth.md trust contract.",
+  "type": "object",
+  "required": [
+    "schema",
+    "spec",
+    "run_id",
+    "project",
+    "target",
+    "base_url",
+    "started_at",
+    "steps",
+    "forbidden_requests",
+    "interception"
+  ],
+  "properties": {
+    "schema": { "const": "verification-manifest.schema.json#v1" },
+    "spec": { "type": "string" },
+    "run_id": { "type": "string" },
+    "project": { "type": "string" },
+    "target": { "enum": ["preprod", "localhost-mock"] },
+    "base_url": { "type": "string" },
+    "started_at": { "type": "string" },
+    "finished_at": { "type": "string" },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "n",
+          "name",
+          "file",
+          "page_url",
+          "main_status",
+          "auth_requests",
+          "api_errors",
+          "console_errors",
+          "page_errors",
+          "timestamp",
+          "test_location",
+          "interception_at_capture"
+        ],
+        "properties": {
+          "n": { "type": "integer", "minimum": 1 },
+          "name": { "type": "string" },
+          "file": { "type": "string", "pattern": "\\.png$" },
+          "expected_ui_state": {
+            "type": "string",
+            "description": "Informational only; pass criteria live in the WI-2 canonical expected-state table."
+          },
+          "page_url": { "type": "string" },
+          "main_status": { "type": ["integer", "null"] },
+          "auth_requests": { "$ref": "#/$defs/requestList" },
+          "api_errors": { "$ref": "#/$defs/requestList" },
+          "console_errors": { "type": "array", "items": { "type": "string" } },
+          "page_errors": { "type": "array", "items": { "type": "string" } },
+          "dom_probe": {
+            "type": "object",
+            "required": ["selector", "present"],
+            "properties": {
+              "selector": { "type": "string" },
+              "present": { "type": "boolean" },
+              "text": { "type": "string" },
+              "expect_text": { "type": "string" },
+              "text_match": { "type": "boolean" }
+            }
+          },
+          "timestamp": { "type": "string" },
+          "test_location": { "type": "string" },
+          "interception_at_capture": { "type": "boolean" }
+        }
+      }
+    },
+    "forbidden_requests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["method", "path", "max_count", "observed_count", "pass"],
+        "properties": {
+          "method": { "type": "string" },
+          "path": { "type": "string" },
+          "status": { "type": "integer" },
+          "max_count": { "type": "integer", "minimum": 0 },
+          "observed_count": { "type": "integer", "minimum": 0 },
+          "pass": { "type": "boolean" }
+        }
+      }
+    },
+    "interception": {
+      "type": "object",
+      "required": ["route_registrations", "clean"],
+      "properties": {
+        "route_registrations": { "type": "integer", "minimum": 0 },
+        "clean": { "type": "boolean" }
+      }
+    }
+  },
+  "$defs": {
+    "requestList": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["method", "path", "status"],
+        "properties": {
+          "method": { "type": "string" },
+          "path": { "type": "string" },
+          "status": { "type": "integer" }
+        }
+      }
+    }
+  }
+}
