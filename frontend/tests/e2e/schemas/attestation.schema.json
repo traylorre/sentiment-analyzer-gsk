@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "attestation.schema.json",
+  "title": "M1 verifier attestation",
+  "description": "Emitted by an independent verifier agent over one spec's verification evidence. Pass criteria come from docs/cleanup-pristine/m1-verifier-convention.md, never from the manifest's own prose. Valid only when hash-referenced from a GPG-signed evidence commit.",
+  "type": "object",
+  "required": [
+    "schema",
+    "spec",
+    "run_id",
+    "verifier",
+    "convention_version",
+    "overall",
+    "hard_fail_checks",
+    "steps",
+    "timestamp"
+  ],
+  "properties": {
+    "schema": { "const": "attestation.schema.json#v1" },
+    "spec": { "type": "string" },
+    "run_id": { "type": "string" },
+    "verifier": {
+      "type": "string",
+      "description": "Identity of the verifying agent (model/agent string). Must not be the implementer."
+    },
+    "convention_version": {
+      "type": "string",
+      "description": "Git sha of m1-verifier-convention.md at attestation time."
+    },
+    "overall": { "enum": ["pass", "fail", "suspicious"] },
+    "hard_fail_checks": {
+      "type": "object",
+      "required": [
+        "interception_clean",
+        "forbidden_requests_hold",
+        "target_is_preprod",
+        "manifest_schema_valid"
+      ],
+      "properties": {
+        "interception_clean": { "type": "boolean" },
+        "forbidden_requests_hold": { "type": "boolean" },
+        "target_is_preprod": { "type": "boolean" },
+        "manifest_schema_valid": { "type": "boolean" }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["step", "verdict", "reason"],
+        "properties": {
+          "step": { "type": "string" },
+          "verdict": { "enum": ["pass", "fail", "suspicious"] },
+          "reason": {
+            "type": "string",
+            "minLength": 20,
+            "description": "Which canonical-table criteria carried the verdict."
+          },
+          "trace_spot_check": {
+            "type": "object",
+            "description": "Present for restore-critical steps.",
+            "required": ["performed", "manifest_matches_trace"],
+            "properties": {
+              "performed": { "type": "boolean" },
+              "manifest_matches_trace": { "type": ["boolean", "null"] },
+              "note": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "timestamp": { "type": "string" }
+  }
+}
