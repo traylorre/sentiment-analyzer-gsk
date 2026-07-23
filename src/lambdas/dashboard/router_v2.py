@@ -380,7 +380,22 @@ def create_anonymous_session():
 
     try:
         result = auth_service.create_anonymous_session(table=table, request=body)
-        return json_response(201, result.model_dump(), _get_no_cache_headers())
+
+        # M1 WI-3: set the guest refresh token as an httpOnly cookie so the
+        # session survives reloads via POST /refresh (Feature 1165 posture:
+        # nothing sensitive in localStorage). Token NEVER appears in the body.
+        cookies = []
+        if result.refresh_token_for_cookie:
+            cookies.append(_make_refresh_token_cookie(result.refresh_token_for_cookie))
+            cookies.append(_make_csrf_set_cookie())
+
+        response_data = result.model_dump(exclude={"refresh_token_for_cookie"})
+        return _json_response_with_cookies(
+            response_data,
+            cookies=cookies,
+            extra_headers=_get_no_cache_headers(),
+            status_code=201,
+        )
     except Exception as e:
         logger.error("Failed to create anonymous session", extra=get_safe_error_info(e))
         return error_response(500, "Failed to create session")
@@ -652,7 +667,8 @@ def refresh_tokens():
     if result.error:
         return error_response(401, result.message or result.error)
 
-    response_data = result.model_dump()
+    # M1 WI-3: the rotated refresh token travels ONLY in the httpOnly cookie
+    response_data = result.model_dump(exclude={"refresh_token_for_cookie"})
 
     cookies = []
     # Feature 1160: Set rotated refresh token as httpOnly cookie

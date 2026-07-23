@@ -1,0 +1,46 @@
+{
+  "schema": "verification-manifest.schema.json#v1",
+  "spec": "infra-smoke",
+  "run_id": "2026-07-23T03-53-55-648Z",
+  "project": "Desktop Chrome",
+  "target": "preprod",
+  "base_url": "https://main.d29tlmksqcx494.amplifyapp.com",
+  "started_at": "2026-07-23T03:53:55.753Z",
+  "steps": [
+    {
+      "n": 1,
+      "name": "landing",
+      "file": "infra-smoke-01-landing.png",
+      "expected_ui_state": "Dashboard landing page rendered: header visible, no raw error page",
+      "page_url": "https://main.d29tlmksqcx494.amplifyapp.com/",
+      "main_status": 200,
+      "auth_requests": [],
+      "api_errors": [],
+      "console_errors": [],
+      "page_errors": [],
+      "dom_probe": {
+        "selector": "header",
+        "present": true,
+        "text": "Sentiment5:00Guest"
+      },
+      "timestamp": "2026-07-23T03:53:57.213Z",
+      "test_location": "tests/e2e/infra-smoke.spec.ts:13",
+      "interception_at_capture": false
+    }
+  ],
+  "forbidden_requests": [
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/anonymous",
+      "status": 201,
+      "max_count": 1,
+      "observed_count": 0,
+      "pass": true
+    }
+  ],
+  "interception": {
+    "route_registrations": 0,
+    "clean": true
+  },
+  "finished_at": "2026-07-23T03:53:57.259Z"
+}

@@ -16,7 +16,12 @@ export default defineConfig({
   reporter: 'html',
   use: {
     baseURL,
-    trace: 'on-first-retry',
+    // M1 WI-1 evidence pipeline: screenshots on every run (pass or fail).
+    // Verification runs (VERIFICATION=1) force full traces so the verifier
+    // agent has helper-independent ground truth; ordinary runs keep traces
+    // only on failure. ('on-first-retry' never fired under --retries=0.)
+    screenshot: 'on',
+    trace: process.env.VERIFICATION ? 'on' : 'retain-on-failure',
   },
   projects: [
     {

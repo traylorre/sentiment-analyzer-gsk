@@ -1,5 +1,11 @@
 """Alert evaluation service for Feature 006.
 
+UNWIRED (repo cleanup inventory, docs/cleanup-pristine/open-questions.md Q8):
+this module has ZERO production callers - only tests import it. It implements
+the missing evaluation step that would make user-created alert rules actually fire (dashboard CRUD and the notification email sender are both live; nothing evaluates thresholds and publishes the alert message). The wiring was never built. Kept in tree as a signpost, not dead weight:
+either wire it or formally descope the requirement before deleting.
+
+
 Implements T145-T147:
 - Alert evaluation logic comparing current values to thresholds
 - Internal evaluate endpoint for analysis Lambda to call

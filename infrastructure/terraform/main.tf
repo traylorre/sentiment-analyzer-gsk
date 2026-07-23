@@ -14,8 +14,8 @@ terraform {
   # Backend configuration for persistent state
   # Resources created by infrastructure/terraform/bootstrap
   #
-  # CRITICAL: Use partial backend configuration to separate dev/prod state
-  # Initialize with: terraform init -backend-config=backend-dev.hcl
+  # CRITICAL: Use partial backend configuration to separate preprod/prod state
+  # Initialize with: terraform init -backend-config=backend-preprod.hcl
   #              or: terraform init -backend-config=backend-prod.hcl
   backend "s3" {
     # Values provided by backend-{env}.hcl files

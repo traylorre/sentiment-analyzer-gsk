@@ -105,10 +105,10 @@ output "backend_config_instructions" {
   value       = <<-EOT
     Initialize with environment-specific backend:
 
-    DEV:  terraform init -backend-config=backend-dev.hcl
-    PROD: terraform init -backend-config=backend-prod.hcl
+    PREPROD: terraform init -backend-config=backend-preprod.hcl
+    PROD:    terraform init -backend-config=backend-prod.hcl
 
-    State files: dev/terraform.tfstate, prod/terraform.tfstate
+    State files: preprod/terraform.tfstate, prod/terraform.tfstate
   EOT
   description = "Backend configuration instructions"
 }

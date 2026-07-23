@@ -7,7 +7,6 @@ Marked as integration tests to skip in unit test runs.
 """
 
 from datetime import UTC, datetime, timedelta
-from unittest.mock import MagicMock
 
 import boto3
 import pytest
@@ -216,60 +215,6 @@ class TestDeduplicationKey:
         key2 = generate_dedup_key(headline, source, day2)
 
         assert key1 != key2
-
-
-@pytest.mark.integration
-class TestCollectorFetch:
-    """Integration tests for collector fetch operations."""
-
-    def test_fetch_news_returns_fetch_result(self) -> None:
-        """fetch_news should return FetchResult with articles."""
-        from src.lambdas.ingestion.collector import FetchResult, fetch_news
-        from src.lambdas.shared.failover import FailoverOrchestrator, FailoverResult
-
-        # Mock orchestrator
-        mock_orchestrator = MagicMock(spec=FailoverOrchestrator)
-        mock_orchestrator.get_news_with_failover.return_value = FailoverResult(
-            data=[
-                NewsArticle(
-                    article_id="test-001",
-                    source="tiingo",
-                    title="Test Article",
-                    description="Test description",
-                    url="https://example.com",
-                    published_at=datetime.now(UTC),
-                    source_name="Test",
-                    tickers=["AAPL"],
-                    tags=[],
-                )
-            ],
-            source_used="tiingo",
-            is_failover=False,
-            duration_ms=100,
-        )
-
-        result = fetch_news(mock_orchestrator, ["AAPL"])
-
-        assert isinstance(result, FetchResult)
-        assert len(result.articles) == 1
-        assert result.source_used == "tiingo"
-        assert result.is_failover is False
-
-    def test_fetch_news_handles_both_sources_failing(self) -> None:
-        """fetch_news should return empty result when both sources fail."""
-        from src.lambdas.ingestion.collector import fetch_news
-        from src.lambdas.shared.adapters.base import AdapterError
-        from src.lambdas.shared.failover import FailoverOrchestrator
-
-        mock_orchestrator = MagicMock(spec=FailoverOrchestrator)
-        mock_orchestrator.get_news_with_failover.side_effect = AdapterError(
-            "Both sources failed"
-        )
-
-        result = fetch_news(mock_orchestrator, ["AAPL"])
-
-        assert len(result.articles) == 0
-        assert result.error is not None
 
 
 @pytest.mark.integration

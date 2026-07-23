@@ -40,7 +40,7 @@ For Developers:
     5. Emit CloudWatch metrics
 
 Security Notes:
-    - Model loaded from Lambda layer (/opt/model)
+    - Model downloaded from S3 to /tmp/model (no Lambda layer)
     - Conditional updates prevent duplicate processing
     - No secrets in this Lambda (model is public)
 """
