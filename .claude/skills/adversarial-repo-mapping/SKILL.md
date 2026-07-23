@@ -88,6 +88,48 @@ that per-domain refutation structurally cannot, because no single finder sees an
 Emit the maps from reconciled findings only. Never assert an UNKNOWN as fact; render it as an
 OPEN QUESTION with its evidence-to-resolve. Maps are citation-backed, em-dash-free, AI-tell-free.
 
+## Execution-phase retrospective (learned by running the whole campaign)
+
+The maps this skill produced were executed against (fix, delete, signpost). Execution exposed
+gaps in the mapping phase itself. Fold these into every future run:
+
+1. **Report drift by CLASS, not by citation.** Every drift class the map spot-checked
+   undercounted its real blast radius by about 2x ("8 resolutions": 3 cited loci, 13 real;
+   "/opt/model": 3 cited, 8 real). Once a false claim is confirmed, grep it repo-wide and
+   report the full extent. A cited-loci list reads as complete when it is not.
+2. **Do git archaeology at mapping time.** A test-only orphan cannot be adjudicated without
+   its history: added-in commit, ever production-imported (and the unwiring sha if so),
+   superseded-by. Execution needed a full second archaeology pass before any deletion was
+   safe. Capture (added_in, ever_wired, unwired_at, superseded_by) when the orphan is first
+   found. The split that matters: SUPERSEDED (live replacement exists, safe delete) vs
+   UNWIRED-LATENT (specced behavior whose wiring never shipped, deleting erases intent).
+3. **Chain reachability is a first-class domain.** The map found dead modules but missed that
+   an entire Lambda was reachable only by one daily EventBridge timer, which silently killed
+   THREE user-facing features (alert emails, magic-link emails, a notification queue with no
+   consumer). Map who invokes every entrypoint: SNS subscriptions, EventBridge targets,
+   lambda:Invoke callers, Function URLs, API routes. Then follow each dead module to its live
+   ends; a dead middle link means the live ends are dead too, and that is a product bug, not
+   a code smell.
+4. **Mine commit messages and in-tree TODOs as a finder domain.** Deferred-work promises
+   buried in git log are exactly the class owners fear losing. A dedicated mining pass
+   (grep log for deferred/follow-up/for now/phase 2/known issue, then adversarially verify
+   each promise against the current tree) carded 17 still-outstanding items, including a
+   session-restore bug both full mapping runs missed.
+5. **Map the execution environment, not just the repo.** Two blockers during execution were
+   environment facts the validator inventory could have caught: the checkov hook resolves to
+   a different (broken) interpreter without the project venv active, and a stale security
+   baseline made an unrelated pre-existing finding block every .tf commit. For each validator
+   record: which interpreter/binary it resolves to, and whether its baseline is current.
+6. **Fix comments against the wired fork, not the plausible one.** A comment describing
+   mechanism A is not wrong just because code implements mechanism B somewhere; both can
+   exist (a config fork, an env fallback, an orphaned build script). Before correcting,
+   prove which side is actually wired (env vars set, resources attached, callers present).
+   Executing a "fix" against the unwired half injects fresh drift with a confident tone.
+7. **Signpost what you keep.** UNWIRED-LATENT code left in tree must carry an in-file marker
+   pointing at a tracked open question, or the next mapper re-discovers it from scratch and
+   the next reader mistakes it for live code. Resolved questions stay on the map as resolved,
+   never deleted; the trail is the deliverable.
+
 ## Import-graph caveat (learned the hard way)
 
 A dotted-path AST import graph produces **false positives** in Docker-flattened Lambda layouts,
