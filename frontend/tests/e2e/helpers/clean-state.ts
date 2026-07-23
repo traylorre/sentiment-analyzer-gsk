@@ -46,14 +46,17 @@ export async function createTestConfig(page: Page, name: string): Promise<void> 
 
   const mockConfigId = `mock-config-${Date.now()}`;
   const now = new Date().toISOString();
+  // M1 WI-5: mocks MUST mirror the real backend contract (snake_case). They
+  // previously used camelCase, which masked the configsApi mapping bug — the
+  // real API returns snake_case and configsApi now maps it.
   const mockConfig = {
-    configId: mockConfigId,
+    config_id: mockConfigId,
     name,
     tickers: [{ symbol: 'AAPL', name: 'Apple Inc', exchange: 'NASDAQ' }],
-    timeframeDays: 30,
-    includeExtendedHours: false,
-    createdAt: now,
-    updatedAt: now,
+    timeframe_days: 30,
+    include_extended_hours: false,
+    created_at: now,
+    updated_at: now,
   };
 
   // Mock configurations endpoint — handles both GET (list) and POST (create).
@@ -71,7 +74,7 @@ export async function createTestConfig(page: Page, name: string): Promise<void> 
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ configurations: [mockConfig], maxAllowed: 5 }),
+        body: JSON.stringify({ configurations: [mockConfig], max_allowed: 5 }),
       });
     } else {
       await route.continue();
