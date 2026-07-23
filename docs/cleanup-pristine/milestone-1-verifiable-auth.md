@@ -216,7 +216,10 @@ sets (the setter died with Feature 1145). Every user, including valid OAuth user
 gets redirected off `/alerts`. Two candidate fixes: set the cookies for real, or
 strip the middleware gating and rely on backend Bearer auth plus the client-side
 role check the middleware itself acknowledges at `middleware.ts:16-17`. Which one is
-open question Q-M1-2.
+open question Q-M1-2 — **resolved 2026-07-23: strip** (see Open questions; the fix
+wires the latent Feature-1165 `ProtectedRoute` with `requireUpgraded` around
+`/alerts` and `/admin`, and the guest redirect becomes client-side
+`router.replace` to `/auth/signin?redirect=%2Falerts&upgrade=true`).
 
 Scope note: the upgraded-user proof (`auth-oauth-05-alerts-page.png`) does NOT live
 here. On preprod the only working upgrade path is Google OAuth — magic-link dispatch
@@ -379,10 +382,19 @@ WI-3's backend half.
   to call WI-6 green. GitHub OAuth (`oidc_issuer` wired to the GitHub Actions
   issuer, `modules/cognito/github.tf:22`, will fail token exchange) becomes a
   tracked follow-up card on the cleanup board, out of M1.
-- **Q-M1-2:** Middleware fix direction: set the `sentiment-access-token` /
-  `sentiment-is-anonymous` cookies for real, or strip middleware gating in favor of
-  backend Bearer auth plus the client-side role check? Affects WI-5's guest-redirect
-  row in WI-2's canonical expected-state table, not WI-6's OAuth DoD.
+- **Q-M1-2: CLOSED (owner decision, 2026-07-23).** Strip the middleware cookie
+  gating; middleware keeps security headers only. `/alerts` and `/admin` gate
+  client-side by wiring the latent `ProtectedRoute` component
+  (`frontend/src/components/auth/protected-route.tsx`, built in Feature 1165,
+  never mounted) with `requireUpgraded`; the backend Bearer + role middleware
+  remains the sole security boundary. Rationale: the HttpOnly refresh cookie
+  lives on the API Gateway domain and can never reach Amplify's middleware, so
+  any middleware-readable cookie must be JS-written on the Amplify domain — the
+  exact pattern Feature 1145 deleted as CVSS 8.6. Both options are equally
+  secure (spoofing either gate yields an empty shell + backend 403); a flag
+  cookie buys only a sub-second flash at the cost of permanently synced shadow
+  state. Canonical `auth-guest-04` row amended in the same commit as this
+  closure, before capture.
 - **Q-M1-3: CLOSED.** `POST /api/v2/auth/anonymous` does not set the httpOnly
   refresh cookie — `json_response(201, ...)` with no Set-Cookie at
   `src/lambdas/dashboard/router_v2.py:383` (handler `:361-386`); only magic-link
