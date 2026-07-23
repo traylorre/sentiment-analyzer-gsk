@@ -1,0 +1,37 @@
+{
+  "schema": "attestation.schema.json#v1",
+  "spec": "auth-guest",
+  "run_id": "2026-07-23T20-24-45-535Z",
+  "verifier": "claude-opus-4-8[1m] (independent M1 WI-5 verifier; not the implementer)",
+  "convention_version": "c46c6f3",
+  "overall": "pass",
+  "hard_fail_checks": {
+    "interception_clean": true,
+    "forbidden_requests_hold": true,
+    "target_is_preprod": true,
+    "manifest_schema_valid": true
+  },
+  "steps": [
+    {
+      "step": "auth-guest-04-alerts-redirect",
+      "verdict": "pass",
+      "reason": "Screenshot renders the signin page (heading 'Welcome back', 'Sign in to access your sentiment dashboard', 'Continue as guest' link), NOT /alerts content. page_url is https://main.d29tlmksqcx494.amplifyapp.com/auth/signin?redirect=%2Falerts&upgrade=true which starts with /auth/signin and carries both required query params (redirect=%2Falerts AND upgrade=true) and is NOT /alerts. main_status 200. dom_probe [data-testid=signin-heading] present:true. No backend auth leg required per the canonical row (client-side redirect). forbidden anonymous-201 max_count:1 holds across the whole spec (observed_count 1, independently confirmed = 1 in the trace). Trace shows the /alerts document shell fetched (GET /alerts 200) then a client-side RSC navigation to GET /auth/signin?redirect=%2Falerts&upgrade=true 200; final URL is signin and no /alerts content rendered, consistent with a router.replace client-side guard.",
+      "trace_spot_check": {
+        "performed": true,
+        "manifest_matches_trace": true,
+        "note": "Step-4 manifest auth_requests (refresh 200 at 20:24:51.814Z, oauth/urls 200 at 20:24:52.341Z) both appear in 0-trace.network with matching method/path/status. Navigation sequence in trace: GET /alerts 200 (app-shell document, 20:24:51.423Z) -> alerts page/layout JS chunks 200 -> POST refresh 200 -> GET /auth/signin?redirect=%2Falerts&upgrade=true (RSC) 200 -> signin page JS chunk 200 -> GET oauth/urls 200. The /alerts shell document loaded but its content did not render; the URL ended on /auth/signin (screenshot corroborates). router.replace itself cannot be distinguished from router.push at the network layer, but nothing contradicts it: the final committed URL is signin, not /alerts."
+      }
+    },
+    {
+      "step": "auth-guest-03-post-reload (restore precondition for WI-5 run)",
+      "verdict": "pass",
+      "reason": "Independent trace spot-check of the guest-restore leg that the WI-5 run depends on. On the step-3 reload a POST /api/v2/auth/refresh returned 200 (20:24:50.354Z) with the SAME user_id (8ec543de-5aaf-4aa7-805d-9900b11c4d98) as the original anonymous 201 mint (20:24:47.333Z) and NO second anonymous mint occurred. Manifest step-3 auth_requests (refresh 200 only) matches the trace exactly.",
+      "trace_spot_check": {
+        "performed": true,
+        "manifest_matches_trace": true,
+        "note": "Response bodies from resources/: anonymous 201 user_id=8ec543de-5aaf-4aa7-805d-9900b11c4d98; both reload/nav refresh 200s carry the identical user_id. Restore is genuine, not a re-mint."
+      }
+    }
+  ],
+  "timestamp": "2026-07-23T20:40:00.000Z"
+}
