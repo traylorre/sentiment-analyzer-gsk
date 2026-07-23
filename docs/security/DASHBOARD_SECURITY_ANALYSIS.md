@@ -354,12 +354,15 @@ T+60s:  All dashboard functionality unavailable
 ```mermaid
 %%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#fff8e1', 'primaryTextColor':'#333', 'primaryBorderColor':'#c9a227', 'lineColor':'#555'}}}%%
 graph TB
-    Internet[Internet Users] --> CloudFront[CloudFront CDN<br/>DDoS Protection]
-    CloudFront --> WAF[AWS WAF<br/>Rate Limiting<br/>IP Blocking]
-    WAF --> APIGW[API Gateway<br/>Throttling: 100 req/min<br/>Custom Authorizer]
-    APIGW --> Dashboard[Dashboard Lambda<br/>Connection Limits<br/>API Key Rotation]
+    Internet[Internet Users] --> Amplify[Amplify Frontend<br/>Next.js Customer Dashboard]
+    Internet --> CloudFront[CloudFront CDN<br/>SSE path ONLY<br/>DDoS Protection]
+    Amplify --> WAFRegional[AWS WAF - REGIONAL scope<br/>associated with API GW stage]
+    WAFRegional --> APIGW[API Gateway REST<br/>Throttling: 100 req/sec, burst 200<br/>Cognito Authorizer]
+    CloudFront --> WAFCF[AWS WAF - CLOUDFRONT scope]
+    WAFCF --> SSE[SSE Streaming Lambda<br/>Function URL, OAC SigV4]
+    APIGW --> Dashboard[Dashboard Lambda]
     Dashboard --> DynamoDB[DynamoDB<br/>On-Demand]
-    Dashboard --> Secrets[Secrets Manager<br/>Auto-Rotation]
+    Dashboard --> Secrets[Secrets Manager<br/>NO auto-rotation deployed<br/>rotation_lambda_arn = null]
 
     APIGW --> CW[CloudWatch Alarms<br/>Request Rate<br/>401 Errors<br/>Concurrent Executions]
     CW --> SNS[SNS Notifications<br/>On-Call Alerts]
@@ -367,16 +370,16 @@ graph TB
     classDef secureNode fill:#a8d5a2,stroke:#4a7c4e,stroke-width:2px,color:#1e3a1e
     classDef monitoringNode fill:#ffb74d,stroke:#c77800,stroke-width:2px,color:#4a2800
 
-    class CloudFront,WAF,APIGW,Dashboard,Secrets,DynamoDB secureNode
+    class Amplify,CloudFront,WAFRegional,WAFCF,APIGW,SSE,Dashboard,Secrets,DynamoDB secureNode
     class CW,SNS monitoringNode
 ```
 
 **Key Improvements**:
-1. **CloudFront**: DDoS protection, geo-blocking, caching
-2. **AWS WAF**: IP-based rate limiting, automatic blocking
-3. **API Gateway**: Request throttling, custom authorizer, usage plans
+1. **CloudFront**: DDoS protection for the SSE streaming path only (the REST path goes Amplify → API Gateway, no CloudFront)
+2. **AWS WAF**: two WebACLs — REGIONAL on the API Gateway stage, CLOUDFRONT on the SSE distribution
+3. **API Gateway**: request throttling at 100 req/sec (burst 200), Cognito authorizer
 4. **Connection Limits**: Max 2 SSE per IP, max 5 per API key
-5. **Key Rotation**: 30-day automatic rotation via Secrets Manager
+5. **Key Rotation**: NOT deployed — `rotation_lambda_arn = null`, every `aws_secretsmanager_secret_rotation` resolves to `count = 0`
 6. **CloudWatch Alarms**: Real-time attack detection
 
 **Estimated Cost**: +$5/month (API Gateway + WAF)

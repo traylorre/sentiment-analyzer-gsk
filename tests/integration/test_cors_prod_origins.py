@@ -11,8 +11,11 @@ import pytest
 
 TERRAFORM_DIR = Path(__file__).parent.parent.parent / "infrastructure" / "terraform"
 
-# Environments expected to have tfvars files
-EXPECTED_ENVIRONMENTS = {"dev", "preprod", "prod"}
+# Environments expected to have tfvars files.
+# Cleanup campaign Q3 (docs/cleanup-pristine/open-questions.md): the dev
+# environment was removed from the deploy pipeline and dev.tfvars deleted
+# (owner-confirmed, commit e9f21c2). Deployed environments are preprod + prod.
+EXPECTED_ENVIRONMENTS = {"preprod", "prod"}
 
 
 def _parse_tfvars(tfvars_path: Path) -> dict:

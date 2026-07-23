@@ -69,8 +69,8 @@ while len(self._entries) >= self.max_entries:
 ```
 
 **Capacity Planning**:
-- 13 tickers × 8 resolutions = 104 key combinations
-- 256 entries supports ~2.5 time ranges per (ticker, resolution)
+- 13 tickers × 6 resolutions = 78 key combinations
+- 256 entries supports ~3 time ranges per (ticker, resolution)
 - For 26 tickers, increase `max_entries` to 512
 
 ### Access Pattern

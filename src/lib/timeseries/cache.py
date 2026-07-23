@@ -93,7 +93,7 @@ class ResolutionCache:
 
         Args:
             max_entries: Maximum entries before LRU eviction.
-                         Default 256 supports 13 tickers * 8 resolutions
+                         Default 256 supports 13 tickers * 6 resolutions
                          with room for multiple time ranges.
         """
         self.max_entries = max_entries

@@ -1,11 +1,10 @@
 'use client';
 
 import { useEffect, type ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Loader2, Lock } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
-import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 interface ProtectedRouteProps {
@@ -26,6 +25,7 @@ export function ProtectedRoute({
   className,
 }: ProtectedRouteProps) {
   const router = useRouter();
+  const pathname = usePathname();
   // Feature 1165: Use isInitialized instead of hasHydrated (memory-only store)
   const { isAuthenticated, isAnonymous, isLoading, isInitialized } = useAuth();
 
@@ -35,12 +35,24 @@ export function ProtectedRoute({
     ? isAuthenticated
     : true;
 
-  // Feature 1165: Only redirect after initialized + auth check fails
+  // M1 WI-5: preserve the old middleware redirect contract:
+  // /auth/signin?redirect=<origin path>&upgrade=true (upgrade only when the
+  // route needs a non-anonymous session).
+  const params = new URLSearchParams({ redirect: pathname });
+  if (requireUpgraded) {
+    params.set('upgrade', 'true');
+  }
+  const redirectUrl = `${redirectTo}?${params.toString()}`;
+
+  // Feature 1165: Only redirect after initialized + auth check fails.
+  // M1 WI-5: replace, not push — a history entry for the gated page would
+  // bounce the user right back here on Back (the old middleware 302 left no
+  // entry either).
   useEffect(() => {
-    if (isInitialized && !isLoading && !hasAccess) {
-      router.push(redirectTo);
+    if (isInitialized && !isLoading && !hasAccess && !fallback) {
+      router.replace(redirectUrl);
     }
-  }, [isInitialized, isLoading, hasAccess, router, redirectTo]);
+  }, [isInitialized, isLoading, hasAccess, router, redirectUrl, fallback]);
 
   // Feature 1165: Show loading state until initialized
   if (!isInitialized || isLoading) {
@@ -63,39 +75,20 @@ export function ProtectedRoute({
     return <>{fallback}</>;
   }
 
-  // Show upgrade prompt if anonymous but need upgraded
-  if (requireUpgraded && isAnonymous) {
-    return (
-      <div className={cn('min-h-[400px] flex items-center justify-center', className)}>
-        <motion.div
-          className="text-center space-y-4 max-w-sm"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          <div className="w-16 h-16 mx-auto rounded-full bg-accent/10 flex items-center justify-center">
-            <Lock className="w-8 h-8 text-accent" />
-          </div>
-          <h3 className="text-xl font-semibold text-foreground">
-            Sign in required
-          </h3>
-          <p className="text-muted-foreground">
-            Please sign in with your email to access this feature.
-          </p>
-          <Button onClick={() => router.push(redirectTo)}>
-            Sign in
-          </Button>
-        </motion.div>
-      </div>
-    );
-  }
-
   // Show children if access granted
   if (hasAccess) {
     return <>{children}</>;
   }
 
-  // Default: redirect in progress
-  return null;
+  // M1 WI-5: redirect in progress (router.replace fired in the effect above).
+  // The old inline "Sign in required" prompt was removed: it rendered AND the
+  // effect redirected, so users saw a prompt flash before navigation. Q-M1-2
+  // resolved to redirect semantics; pass `fallback` to opt out of redirecting.
+  return (
+    <div className={cn('min-h-[400px] flex items-center justify-center', className)} role="status" aria-label="Redirecting to sign in">
+      <Loader2 className="w-8 h-8 text-accent animate-spin" />
+    </div>
+  );
 }
 
 // Higher-order component version

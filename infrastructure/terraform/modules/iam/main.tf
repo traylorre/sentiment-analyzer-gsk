@@ -109,7 +109,7 @@ resource "aws_iam_role_policy" "ingestion_sns" {
 }
 
 # Feature 1009: Ingestion Lambda - Time-series table write access
-# BatchWriteItem for write fanout to 8 resolutions per sentiment score [CS-001, CS-003]
+# BatchWriteItem for write fanout to 6 resolutions per sentiment score [CS-001, CS-003]
 resource "aws_iam_role_policy" "ingestion_timeseries" {
   count = var.enable_timeseries ? 1 : 0
   name  = "${var.environment}-ingestion-timeseries-policy"

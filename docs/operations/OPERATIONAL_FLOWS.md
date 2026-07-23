@@ -87,11 +87,8 @@ flowchart TD
     Count -->|No| EmitZero[Emit CloudWatch Metric<br/>StuckItems = 0]
     EmitMetric --> LogResults[Log stuck item count<br/>and oldest timestamp]
     EmitZero --> LogResults
-    LogResults --> CheckAlarm{StuckItems > 10?}
-    CheckAlarm -->|Yes| TriggerAlarm[CloudWatch Alarm<br/>Triggers SNS]
-    CheckAlarm -->|No| End[Complete]
-    TriggerAlarm --> NotifyOnCall[Notify On-Call<br/>via Email/PagerDuty]
-    NotifyOnCall --> End
+    LogResults --> End[Complete]
+    End -.-> NoAlarm[Note: no CloudWatch alarm is wired<br/>to StuckItems - metric only]
 
     classDef successNode fill:#bbf7d0,stroke:#16a34a,stroke-width:2px,color:#14532d
     classDef processNode fill:#ddd6fe,stroke:#7c3aed,stroke-width:2px,color:#2e1065
@@ -100,8 +97,8 @@ flowchart TD
 
     class Start,End successNode
     class MetricsLambda,QueryGSI,FilterOld,EmitMetric,EmitZero,LogResults processNode
-    class Count,CheckAlarm decisionNode
-    class TriggerAlarm,NotifyOnCall alertNode
+    class Count decisionNode
+    class NoAlarm alertNode
 ```
 
 **Key Points:**
@@ -109,7 +106,7 @@ flowchart TD
 - Queries `by_status` GSI for items with `status = 'pending'`
 - Stuck threshold: items pending for more than 5 minutes
 - Emits `SentimentAnalyzer/StuckItems` CloudWatch metric
-- CloudWatch Alarm triggers if stuck items > 10 for 3 consecutive periods
+- No CloudWatch alarm is wired to this metric today (metric-only); visibility is via dashboards/logs
 
 **Stuck Items Causes:**
 - Analysis Lambda failures (check DLQ)
@@ -221,7 +218,7 @@ flowchart TD
     S3Exists -->|Yes| CheckPerms[Check IAM Permissions]
 
     CheckDDB --> Throttled{Throttling?}
-    Throttled -->|Yes| IncreaseCapacity[Increase WCU/RCU]
+    Throttled -->|Yes| IncreaseCapacity[Investigate hot partition keys<br/>tables are on-demand, no WCU/RCU to raise]
     Throttled -->|No| CheckIndex[Check GSI status]
 
     IncreaseMem --> TestFix{Issue<br/>Resolved?}
@@ -348,19 +345,14 @@ terraform apply
 flowchart TD
     Throttle[DynamoDB<br/>Throttling Error] --> CheckMetrics[Check CloudWatch<br/>DynamoDB Metrics]
     CheckMetrics --> TableOrIndex{Table or<br/>GSI throttled?}
-    TableOrIndex -->|Table| CheckWCU[Check WCU/RCU<br/>consumption]
-    TableOrIndex -->|GSI| CheckGSI[Check GSI capacity]
-    CheckWCU --> AtLimit{At capacity<br/>limit?}
-    AtLimit -->|Yes| IncreaseCapacity[Increase capacity<br/>in Terraform]
-    AtLimit -->|No| HotKey[Investigate hot<br/>partition keys]
-    CheckGSI --> GSILimit{GSI at<br/>limit?}
-    GSILimit -->|Yes| IncreaseGSI[Increase GSI capacity]
-    GSILimit -->|No| QueryPattern[Review query patterns]
-    IncreaseCapacity --> Deploy[Deploy change]
-    IncreaseGSI --> Deploy
+    TableOrIndex -->|Table| CheckWCU[Check consumed capacity<br/>and throttle metrics]
+    TableOrIndex -->|GSI| CheckGSI[Check GSI metrics]
+    CheckWCU --> OnDemand[All tables are PAY_PER_REQUEST:<br/>no provisioned capacity to raise]
+    OnDemand --> HotKey[Investigate hot<br/>partition keys]
+    CheckGSI --> QueryPattern[Review query patterns]
     HotKey --> RefactorKeys[Refactor partition keys]
     QueryPattern --> OptimizeQueries[Optimize queries]
-    RefactorKeys --> Deploy
+    RefactorKeys --> Deploy[Deploy change]
     OptimizeQueries --> Deploy
 
     classDef errorNode fill:#fecaca,stroke:#dc2626,stroke-width:2px,color:#7f1d1d
@@ -368,15 +360,15 @@ flowchart TD
     classDef actionNode fill:#e0e7ff,stroke:#4f46e5,stroke-width:2px,color:#1e1b4b
 
     class Throttle errorNode
-    class TableOrIndex,AtLimit,GSILimit decisionNode
-    class CheckMetrics,CheckWCU,CheckGSI,IncreaseCapacity,HotKey,IncreaseGSI,QueryPattern,RefactorKeys,OptimizeQueries,Deploy actionNode
+    class TableOrIndex decisionNode
+    class CheckMetrics,CheckWCU,CheckGSI,OnDemand,HotKey,QueryPattern,RefactorKeys,OptimizeQueries,Deploy actionNode
 ```
 
 **Quick Fix:**
 ```bash
-# Check current capacity
+# Confirm billing mode (all tables are PAY_PER_REQUEST / on-demand)
 aws dynamodb describe-table --table-name preprod-sentiment-items \
-  --query 'Table.ProvisionedThroughput'
+  --query 'Table.BillingModeSummary'
 
 # View consumed capacity
 aws cloudwatch get-metric-statistics \
@@ -556,20 +548,19 @@ The system has the following CloudWatch alarms configured:
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#e8f4fd', 'primaryTextColor': '#1a365d', 'primaryBorderColor': '#3182ce', 'lineColor': '#4a5568'}}}%%
 graph TD
     subgraph LambdaAlarms["Lambda Alarms"]
-        IngestionErrors[Ingestion Errors<br/>>5 in 5 min]
-        AnalysisErrors[Analysis Errors<br/>>5 in 5 min]
-        AnalysisDuration[Analysis Duration<br/>>5 seconds]
-        DashboardErrors[Dashboard Errors<br/>>10 in 5 min]
-        MetricsErrors[Metrics Errors<br/>>3 in 5 min]
+        IngestionErrors[Ingestion Errors<br/>>3 in 5 min]
+        AnalysisErrors[Analysis Errors<br/>>3 in 5 min]
+        AnalysisDuration[Analysis Duration<br/>p95 >25s for 3x5 min]
+        DashboardErrors[Dashboard Errors<br/>>5 in 5 min]
+        MetricsErrors[Metrics Errors<br/>>1 in 10 min]
     end
 
     subgraph DDBAlarms["DynamoDB Alarms"]
-        ReadThrottle[Read Throttle Events]
-        WriteThrottle[Write Throttle Events]
+        WriteCapacity[Write Capacity Spike<br/>>1000 WCU consumed/min]
     end
 
-    subgraph OpsAlarms["Operational Alarms"]
-        StuckItems[Stuck Items<br/>>10 for 3 periods]
+    subgraph OpsAlarms["Operational Metrics"]
+        StuckItems[StuckItems metric<br/>emitted - no alarm wired]
     end
 
     subgraph CostAlarms["Cost Alarms"]
@@ -581,9 +572,7 @@ graph TD
     AnalysisDuration --> SNSTopic
     DashboardErrors --> SNSTopic
     MetricsErrors --> SNSTopic
-    ReadThrottle --> SNSTopic
-    WriteThrottle --> SNSTopic
-    StuckItems --> SNSTopic
+    WriteCapacity --> SNSTopic
     BudgetAlert --> SNSTopic
 
     SNSTopic --> Email[Email Notification<br/>to On-Call]
@@ -594,7 +583,7 @@ graph TD
     classDef operationalNode fill:#fed7aa,stroke:#ea580c,stroke-width:2px,color:#7c2d12
 
     class LambdaAlarms,DDBAlarms,OpsAlarms,CostAlarms stageBox
-    class IngestionErrors,AnalysisErrors,AnalysisDuration,DashboardErrors,MetricsErrors,ReadThrottle,WriteThrottle,BudgetAlert alarmNode
+    class IngestionErrors,AnalysisErrors,AnalysisDuration,DashboardErrors,MetricsErrors,WriteCapacity,BudgetAlert alarmNode
     class StuckItems operationalNode
     class SNSTopic,Email notificationNode
 ```
@@ -608,8 +597,8 @@ graph TD
 | Analysis Duration | P2 | 1 hour | Review memory/timeout settings |
 | Dashboard Errors | P0 | Immediate | Check Function URL, verify dependencies |
 | Metrics Errors | P2 | 1 hour | Check Metrics Lambda logs, verify GSI access |
-| Stuck Items | P1 | 15 minutes | Check Analysis Lambda, DLQ, SNS delivery |
-| DynamoDB Throttle | P1 | 30 minutes | Increase capacity or optimize queries |
+| Stuck Items (metric only, no alarm) | P1 | 15 minutes | Check Analysis Lambda, DLQ, SNS delivery. Watch dashboards: no alarm fires for this metric today |
+| DynamoDB Write Capacity | P1 | 30 minutes | Investigate hot partition keys and query patterns (tables are on-demand: no provisioned capacity to raise) |
 | Budget Alert | P2 | 1 business day | Review cost allocation, optimize resources |
 
 ---

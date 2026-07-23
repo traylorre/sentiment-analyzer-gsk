@@ -22,6 +22,8 @@ const mockCreateAnonymousSession = vi.fn();
 const mockRequestMagicLink = vi.fn();
 const mockVerifyMagicLink = vi.fn();
 const mockSignOut = vi.fn();
+const mockRefreshToken = vi.fn();
+const mockGetProfile = vi.fn();
 
 vi.mock('@/lib/api/auth', () => ({
   authApi: {
@@ -31,7 +33,8 @@ vi.mock('@/lib/api/auth', () => ({
     signOut: () => mockSignOut(),
     getOAuthUrls: vi.fn(),
     exchangeOAuthCode: vi.fn(),
-    refreshToken: vi.fn(),
+    refreshToken: () => mockRefreshToken(),
+    getProfile: () => mockGetProfile(),
   },
 }));
 
@@ -182,6 +185,110 @@ describe('Auth Store', () => {
 
       setError(null);
       expect(useAuthStore.getState().error).toBeNull();
+    });
+  });
+
+  describe('restoreSession', () => {
+    it('should restore an anonymous session from the refresh cookie', async () => {
+      mockRefreshToken.mockResolvedValueOnce({
+        accessToken: 'anon-bearer',
+        idToken: '',
+        expiresIn: 3600,
+        userId: 'anon-xyz',
+        authType: 'anonymous',
+        sessionExpiresAt: '2030-01-01T00:00:00Z',
+      });
+
+      const restored = await useAuthStore.getState().restoreSession();
+
+      expect(restored).toBe(true);
+      const state = useAuthStore.getState();
+      expect(state.isAuthenticated).toBe(true);
+      expect(state.isAnonymous).toBe(true);
+      expect(state.user?.userId).toBe('anon-xyz');
+      // Anonymous restore must NOT hit /me
+      expect(mockGetProfile).not.toHaveBeenCalled();
+    });
+
+    // M1 WI-5 regression: /auth/me deliberately omits user_id (backend data-
+    // leakage guard). The old code guarded setUser() on profile.userId, so an
+    // upgraded (OAuth) restore set tokens but never a user — isAuthenticated
+    // stayed false and every reload silently logged the user out. The user_id
+    // must come from the /refresh response instead.
+    it('should restore an UPGRADED session using user_id from /refresh, not /me', async () => {
+      mockRefreshToken.mockResolvedValueOnce({
+        accessToken: 'upgraded-bearer',
+        idToken: 'id-token',
+        expiresIn: 3600,
+        userId: 'oauth-user-42',
+        authType: 'email',
+        sessionExpiresAt: '2030-01-01T00:00:00Z',
+      });
+      // /me profile: note NO userId (matches the real backend contract)
+      mockGetProfile.mockResolvedValueOnce({
+        authType: 'email',
+        email: 'j***@example.com',
+        role: 'operator',
+        configurationCount: 0,
+        linkedProviders: [],
+        verification: 'verified',
+      });
+
+      const restored = await useAuthStore.getState().restoreSession();
+
+      expect(restored).toBe(true);
+      const state = useAuthStore.getState();
+      expect(state.isAuthenticated).toBe(true);
+      expect(state.isAnonymous).toBe(false);
+      expect(state.user?.userId).toBe('oauth-user-42');
+      expect(state.user?.role).toBe('operator');
+      expect(state.tokens?.accessToken).toBe('upgraded-bearer');
+    });
+
+    it('should still register identity when /me fails (best-effort profile)', async () => {
+      mockRefreshToken.mockResolvedValueOnce({
+        accessToken: 'upgraded-bearer',
+        idToken: 'id-token',
+        expiresIn: 3600,
+        userId: 'oauth-user-99',
+        authType: 'email',
+        sessionExpiresAt: '2030-01-01T00:00:00Z',
+      });
+      mockGetProfile.mockRejectedValueOnce(new Error('me 500'));
+
+      const restored = await useAuthStore.getState().restoreSession();
+
+      expect(restored).toBe(true);
+      const state = useAuthStore.getState();
+      expect(state.isAuthenticated).toBe(true);
+      expect(state.isAnonymous).toBe(false);
+      expect(state.user?.userId).toBe('oauth-user-99');
+      expect(state.user?.role).toBe('free'); // conservative default
+    });
+
+    it('should return false when refresh yields no access token', async () => {
+      mockRefreshToken.mockResolvedValueOnce({
+        accessToken: null,
+        idToken: null,
+        expiresIn: 0,
+        userId: null,
+        authType: null,
+        sessionExpiresAt: null,
+      });
+
+      const restored = await useAuthStore.getState().restoreSession();
+
+      expect(restored).toBe(false);
+      expect(useAuthStore.getState().isAuthenticated).toBe(false);
+    });
+
+    it('should return false (not throw) when refresh rejects', async () => {
+      mockRefreshToken.mockRejectedValueOnce(new Error('401'));
+
+      const restored = await useAuthStore.getState().restoreSession();
+
+      expect(restored).toBe(false);
+      expect(useAuthStore.getState().isAuthenticated).toBe(false);
     });
   });
 

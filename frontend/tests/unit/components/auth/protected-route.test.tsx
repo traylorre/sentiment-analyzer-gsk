@@ -2,12 +2,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { ProtectedRoute, AuthGuard, withProtectedRoute } from '@/components/auth/protected-route';
 
-// Mock useRouter
+// Mock useRouter + usePathname
+// M1 WI-5: ProtectedRoute now uses router.replace (no history entry for the
+// gated page) and builds the redirect URL from the current pathname.
 const mockPush = vi.fn();
+const mockReplace = vi.fn();
 vi.mock('next/navigation', () => ({
   useRouter: () => ({
     push: mockPush,
+    replace: mockReplace,
   }),
+  usePathname: () => '/alerts',
 }));
 
 // framer-motion is mocked globally in tests/setup.ts
@@ -97,7 +102,7 @@ describe('ProtectedRoute', () => {
       );
 
       await waitFor(() => {
-        expect(mockPush).toHaveBeenCalledWith('/auth/signin');
+        expect(mockReplace).toHaveBeenCalledWith('/auth/signin?redirect=%2Falerts');
       });
     });
 
@@ -117,7 +122,7 @@ describe('ProtectedRoute', () => {
       );
 
       await waitFor(() => {
-        expect(mockPush).toHaveBeenCalledWith('/custom-login');
+        expect(mockReplace).toHaveBeenCalledWith('/custom-login?redirect=%2Falerts');
       });
     });
 
@@ -138,6 +143,8 @@ describe('ProtectedRoute', () => {
 
       expect(screen.getByText(/please sign in/i)).toBeInTheDocument();
       expect(screen.queryByText(/protected content/i)).not.toBeInTheDocument();
+      // M1 WI-5: providing a fallback opts out of the redirect
+      expect(mockReplace).not.toHaveBeenCalled();
     });
   });
 
@@ -160,7 +167,10 @@ describe('ProtectedRoute', () => {
       expect(screen.getByText(/premium content/i)).toBeInTheDocument();
     });
 
-    it('should show upgrade prompt for anonymous users', () => {
+    // M1 WI-5 (Q-M1-2): anonymous users on requireUpgraded routes are now
+    // redirected (replace) to signin with redirect + upgrade params — the old
+    // inline "Sign in required" prompt was removed (it rendered AND redirected).
+    it('should redirect anonymous users with upgrade param', async () => {
       mockUseAuth.mockReturnValue({
         // Feature 1165: Use isInitialized instead of hasHydrated
         isAuthenticated: true,
@@ -175,11 +185,15 @@ describe('ProtectedRoute', () => {
         </ProtectedRoute>
       );
 
-      expect(screen.getByText(/sign in required/i)).toBeInTheDocument();
       expect(screen.queryByText(/premium content/i)).not.toBeInTheDocument();
+      await waitFor(() => {
+        expect(mockReplace).toHaveBeenCalledWith(
+          '/auth/signin?redirect=%2Falerts&upgrade=true'
+        );
+      });
     });
 
-    it('should have sign in button in upgrade prompt', () => {
+    it('should show redirect spinner while navigation is in flight', () => {
       mockUseAuth.mockReturnValue({
         // Feature 1165: Use isInitialized instead of hasHydrated
         isAuthenticated: true,
@@ -194,7 +208,9 @@ describe('ProtectedRoute', () => {
         </ProtectedRoute>
       );
 
-      expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole('status', { name: /redirecting to sign in/i })
+      ).toBeInTheDocument();
     });
   });
 
@@ -355,7 +371,7 @@ describe('withProtectedRoute HOC', () => {
     expect(screen.getByText(/hoc wrapped content/i)).toBeInTheDocument();
   });
 
-  it('should pass options to ProtectedRoute', () => {
+  it('should pass options to ProtectedRoute', async () => {
     mockUseAuth.mockReturnValue({
       hasHydrated: true,
       isAuthenticated: true,
@@ -374,9 +390,13 @@ describe('withProtectedRoute HOC', () => {
 
     render(<ProtectedTestComponent />);
 
-    // Should show upgrade prompt for anonymous user
-    expect(screen.getByText(/sign in required/i)).toBeInTheDocument();
+    // M1 WI-5: anonymous user on requireUpgraded route → redirect, not prompt
     expect(screen.queryByText(/premium hoc content/i)).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith(
+        '/auth/signin?redirect=%2Falerts&upgrade=true'
+      );
+    });
   });
 
   it('should pass props to wrapped component', () => {

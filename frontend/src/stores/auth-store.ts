@@ -32,6 +32,7 @@ interface AuthStore extends AuthState {
   setInitialized: (initialized: boolean) => void;
 
   // Auth operations
+  restoreSession: () => Promise<boolean>; // M1 WI-3: cookie-based restore at init
   signInAnonymous: () => Promise<void>;
   signInWithMagicLink: (email: string, token: string) => Promise<void>;
   verifyMagicLink: (token: string, sig?: string) => Promise<void>;
@@ -97,6 +98,104 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   setError: (error) => set({ error }),
 
   setInitialized: (initialized) => set({ isInitialized: initialized }),
+
+  restoreSession: async () => {
+    // M1 WI-3: restore the previous session from the httpOnly refresh cookie
+    // instead of minting a new anonymous user on every reload. Returns true
+    // when a session was restored; false means the caller should fall back
+    // to signInAnonymous(). Never throws.
+    const { setUser, setSession, setTokens } = get();
+
+    try {
+      const data = await authApi.refreshToken();
+
+      if (!data.accessToken) {
+        return false;
+      }
+
+      if (data.authType === 'anonymous' && data.userId) {
+        // Guest restore: bearer token IS the user_id; rebuild minimal user
+        // state exactly as signInAnonymous does.
+        setUser({
+          userId: data.userId,
+          authType: 'anonymous',
+          createdAt: '',
+          configurationCount: 0,
+          alertCount: 0,
+          emailNotificationsEnabled: false,
+          role: 'anonymous',
+          linkedProviders: [],
+          verification: 'none',
+          lastProviderUsed: undefined,
+        });
+        setTokens({
+          accessToken: data.accessToken,
+          refreshToken: '', // stays in the httpOnly cookie
+          idToken: '',
+          expiresIn: data.expiresIn,
+        });
+        setSession(data.sessionExpiresAt);
+        return true;
+      }
+
+      // Cognito-backed restore (OAuth session): tokens first, then rebuild
+      // the profile from /auth/me using the fresh bearer.
+      setTokens({
+        accessToken: data.accessToken,
+        refreshToken: '', // stays in the httpOnly cookie
+        idToken: data.idToken ?? '',
+        expiresIn: data.expiresIn,
+      });
+
+      // M1 WI-5: the user_id comes from the /refresh response, NOT /auth/me.
+      // The backend /me endpoint deliberately omits user_id to prevent data
+      // leakage (router_v2.py:2145), so `profile.userId` is ALWAYS undefined.
+      // The prior code guarded setUser() on `profile.userId`, meaning an
+      // upgraded (OAuth) session restored its tokens but NEVER its user object
+      // — isAuthenticated stayed false, so every reload silently logged the
+      // user out. Build the user from data.userId + the /me profile fields.
+      if (!data.userId) {
+        // Tokens without an identity: session is technically restored, but we
+        // cannot populate the user. Report not-restorable so init falls back.
+        return false;
+      }
+      try {
+        const profile = await authApi.getProfile();
+        setUser({
+          userId: data.userId,
+          authType: profile.authType ?? 'email',
+          createdAt: profile.createdAt ?? '',
+          configurationCount: profile.configurationCount ?? 0,
+          alertCount: profile.alertCount ?? 0,
+          emailNotificationsEnabled: profile.emailNotificationsEnabled ?? false,
+          role: profile.role ?? 'free',
+          linkedProviders: profile.linkedProviders ?? [],
+          verification: profile.verification ?? 'none',
+          lastProviderUsed: profile.lastProviderUsed,
+          email: profile.email,
+        });
+      } catch {
+        // Profile rebuild is best-effort: still register the identity so the
+        // session is usable (role defaults conservatively to 'free').
+        setUser({
+          userId: data.userId,
+          authType: (data.authType as User['authType']) ?? 'email',
+          createdAt: '',
+          configurationCount: 0,
+          alertCount: 0,
+          emailNotificationsEnabled: false,
+          role: 'free',
+          linkedProviders: [],
+          verification: 'none',
+          lastProviderUsed: undefined,
+        });
+      }
+      return true;
+    } catch {
+      // 401 (no/invalid cookie) or network failure: not restorable.
+      return false;
+    }
+  },
 
   signInAnonymous: async () => {
     const { setLoading, setError, setUser, setSession, setTokens } = get();
@@ -253,11 +352,18 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       // Feature 1168: Refresh token now sent via httpOnly cookie, not in request body
       const data = await authApi.refreshToken();
 
+      // M1 WI-3: the unmapped client used to yield accessToken === undefined
+      // here silently; a refresh without an access token is now an explicit
+      // failure that feeds the degradation counter.
+      if (!data.accessToken) {
+        throw new Error('Refresh returned no access token');
+      }
+
       // Update tokens with new access token (preserving refresh token)
       setTokens({
         ...tokens,
         accessToken: data.accessToken,
-        idToken: data.idToken,
+        idToken: data.idToken ?? tokens.idToken ?? '',
       });
       // User Story 3: Reset degradation state on successful refresh
       set({ refreshFailureCount: 0, sessionDegraded: false });
