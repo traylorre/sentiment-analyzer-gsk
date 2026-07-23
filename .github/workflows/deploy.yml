@@ -783,6 +783,42 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ vars.AWS_REGION }}
 
+      # M1 WI-6 (spec 1375, FR-8): fail the apply if Google is enabled in tfvars while
+      # the google-oauth secret's client_id is empty. Without this, a premature merge of
+      # the tfvars line auto-applies a poisoned Cognito Google IdP (empty creds) that
+      # modules/cognito/google.tf's lifecycle ignore_changes[client_secret] cannot repair.
+      # HCL-aware (comment-stripped), not a naive grep. Runs post-cred, pre-plan.
+      - name: OAuth enablement guard (Preprod)
+        run: |
+          set -euo pipefail
+          # Comment-stripped assignment line for cognito_identity_providers.
+          ASSIGN="$(sed -E 's/#.*$//' preprod.tfvars \
+            | grep -E '^[[:space:]]*cognito_identity_providers[[:space:]]*=' || true)"
+          if echo "$ASSIGN" | grep -qiE '"google"'; then
+            GOOGLE_ENABLED=1
+          else
+            GOOGLE_ENABLED=0
+          fi
+
+          CLIENT_ID="$(aws secretsmanager get-secret-value \
+            --secret-id preprod/sentiment-analyzer/google-oauth \
+            --region "${{ vars.AWS_REGION }}" \
+            --query SecretString --output text 2>/dev/null \
+            | jq -r '.client_id // ""' 2>/dev/null || echo "")"
+
+          if [ "$GOOGLE_ENABLED" = "1" ] && [ -z "$CLIENT_ID" ]; then
+            echo "::error::OAuth enablement guard FAILED — Google is enabled in preprod.tfvars but the"
+            echo "::error::google-oauth secret client_id is EMPTY. Applying now would create a poisoned"
+            echo "::error::Cognito Google IdP (empty creds) that ignore_changes[client_secret] cannot repair."
+            echo "Populate the secret first:"
+            echo "  aws secretsmanager put-secret-value --secret-id preprod/sentiment-analyzer/google-oauth \\"
+            echo "    --region ${{ vars.AWS_REGION }} --secret-string '{\"client_id\":\"…\",\"client_secret\":\"…\"}'"
+            echo "See specs/1375-wi6-google-oauth-enablement/plan.md (owner runbook)."
+            exit 1
+          fi
+          if [ -n "$CLIENT_ID" ]; then HAS_ID=yes; else HAS_ID=no; fi
+          echo "PASS: OAuth enablement guard (google_enabled=$GOOGLE_ENABLED, secret_client_id_present=$HAS_ID)."
+
       - name: Upload Lambda Packages to S3 (Preprod)
         run: |
           SHA="${{ needs.build.outputs.artifact-sha }}"
