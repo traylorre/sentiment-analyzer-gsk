@@ -146,26 +146,49 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         idToken: data.idToken ?? '',
         expiresIn: data.expiresIn,
       });
+
+      // M1 WI-5: the user_id comes from the /refresh response, NOT /auth/me.
+      // The backend /me endpoint deliberately omits user_id to prevent data
+      // leakage (router_v2.py:2145), so `profile.userId` is ALWAYS undefined.
+      // The prior code guarded setUser() on `profile.userId`, meaning an
+      // upgraded (OAuth) session restored its tokens but NEVER its user object
+      // — isAuthenticated stayed false, so every reload silently logged the
+      // user out. Build the user from data.userId + the /me profile fields.
+      if (!data.userId) {
+        // Tokens without an identity: session is technically restored, but we
+        // cannot populate the user. Report not-restorable so init falls back.
+        return false;
+      }
       try {
         const profile = await authApi.getProfile();
-        if (profile.userId) {
-          setUser({
-            userId: profile.userId,
-            authType: profile.authType ?? 'email',
-            createdAt: profile.createdAt ?? '',
-            configurationCount: profile.configurationCount ?? 0,
-            alertCount: profile.alertCount ?? 0,
-            emailNotificationsEnabled:
-              profile.emailNotificationsEnabled ?? false,
-            role: profile.role ?? 'free',
-            linkedProviders: profile.linkedProviders ?? [],
-            verification: profile.verification ?? 'none',
-            lastProviderUsed: profile.lastProviderUsed,
-            email: profile.email,
-          });
-        }
+        setUser({
+          userId: data.userId,
+          authType: profile.authType ?? 'email',
+          createdAt: profile.createdAt ?? '',
+          configurationCount: profile.configurationCount ?? 0,
+          alertCount: profile.alertCount ?? 0,
+          emailNotificationsEnabled: profile.emailNotificationsEnabled ?? false,
+          role: profile.role ?? 'free',
+          linkedProviders: profile.linkedProviders ?? [],
+          verification: profile.verification ?? 'none',
+          lastProviderUsed: profile.lastProviderUsed,
+          email: profile.email,
+        });
       } catch {
-        // Profile rebuild is best-effort; the session itself is restored.
+        // Profile rebuild is best-effort: still register the identity so the
+        // session is usable (role defaults conservatively to 'free').
+        setUser({
+          userId: data.userId,
+          authType: (data.authType as User['authType']) ?? 'email',
+          createdAt: '',
+          configurationCount: 0,
+          alertCount: 0,
+          emailNotificationsEnabled: false,
+          role: 'free',
+          linkedProviders: [],
+          verification: 'none',
+          lastProviderUsed: undefined,
+        });
       }
       return true;
     } catch {

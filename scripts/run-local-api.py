@@ -253,8 +253,13 @@ class LambdaProxyHandler(BaseHTTPRequestHandler):
                 "resourceId": "local",
                 "resourcePath": "/{proxy+}" if proxy_path else "/",
                 "httpMethod": method,
-                "path": f"/v1{parsed.path}",
-                "stage": "v1",
+                # M1 WI-5: the browser hits localhost:8000 WITHOUT a stage
+                # prefix, so the event must not claim one. A fake "v1" stage
+                # made _cookie_path_prefix() emit Path=/v1/api/v2/auth, which
+                # the browser never matched -> refresh cookie never returned
+                # locally. "$default" mirrors Function URL events (no prefix).
+                "path": parsed.path,
+                "stage": "$default",
                 "requestId": "local-request",
                 "identity": {
                     "sourceIp": "127.0.0.1",
