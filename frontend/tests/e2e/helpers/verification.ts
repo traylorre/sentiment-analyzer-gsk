@@ -220,14 +220,20 @@ export const test = base.extend<{ verify: Verify }>({
       } catch {
         return;
       }
-      const entry: AuthRequestEntry = {
-        method: response.request().method(),
-        path: pathname,
-        status: response.status(),
-      };
-      if (pathname.startsWith('/api/')) {
+      // Normalize away deployment prefixes: on preprod the frontend calls
+      // API Gateway whose paths carry a stage segment (/{stage}/api/v2/...).
+      // A bare startsWith('/api/') filter recorded NOTHING on the target of
+      // record - the exact blind spot this pipeline exists to prevent.
+      const apiIdx = pathname.indexOf('/api/');
+      if (apiIdx !== -1) {
+        const normalized = pathname.slice(apiIdx);
+        const entry: AuthRequestEntry = {
+          method: response.request().method(),
+          path: normalized,
+          status: response.status(),
+        };
         allRequests.push(entry);
-        if (pathname.startsWith(AUTH_PATH_PREFIX)) {
+        if (normalized.startsWith(AUTH_PATH_PREFIX)) {
           authSinceLastStep.push(entry);
         } else if (response.status() >= 400) {
           errorsSinceLastStep.push(entry);
