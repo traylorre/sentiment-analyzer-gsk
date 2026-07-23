@@ -900,8 +900,8 @@ module "api_gateway" {
   log_retention_days  = var.environment == "prod" ? 90 : 30
   enable_xray_tracing = true
 
-  # CloudWatch alarms
-  create_alarms       = true
+  # CloudWatch alarms (gated to stay near the 10-alarm free tier in non-prod)
+  create_alarms       = var.enable_extended_cloudwatch_alarms
   alarm_actions       = [module.monitoring.alarm_topic_arn]
   error_4xx_threshold = 100  # Alert after 100 client errors in 5 minutes
   error_5xx_threshold = 10   # Alert after 10 server errors in 5 minutes
@@ -922,6 +922,7 @@ module "api_gateway" {
 # Separate module for reuse with CloudFront in Feature 1255 (FR-009).
 
 module "waf" {
+  count  = var.enable_waf ? 1 : 0
   source = "./modules/waf"
 
   environment  = var.environment
@@ -963,8 +964,9 @@ module "cloudfront_sse" {
   # Feature 1256: Lambda ARN for OAC permission (CloudFront → Lambda via SigV4)
   lambda_function_arn = module.sse_streaming_lambda.function_arn
 
-  # FR-005: WAF WebACL (CLOUDFRONT scope)
-  waf_web_acl_arn = module.waf_cloudfront.web_acl_arn
+  # FR-005: WAF WebACL (CLOUDFRONT scope). Empty string => CloudFront runs
+  # without a WAF (var.enable_waf=false). cloudfront_sse maps "" to null.
+  waf_web_acl_arn = var.enable_waf ? module.waf_cloudfront[0].web_acl_arn : ""
 
   # FR-003: 60s default max (180s requires AWS quota increase)
   origin_read_timeout = 60
@@ -988,6 +990,10 @@ module "cloudfront_sse" {
 # Independent from the API Gateway WAF (REGIONAL scope, Feature 1254).
 
 module "waf_cloudfront" {
+  # Existence gated separately from enable_waf so the ACL can be kept alive
+  # while CloudFront disassociates (Phase 1), then deleted (Phase 2). See
+  # var.enable_cloudfront_waf.
+  count  = var.enable_cloudfront_waf ? 1 : 0
   source = "./modules/waf"
 
   environment  = var.environment
@@ -1010,6 +1016,18 @@ module "waf_cloudfront" {
     Security  = "ddos-protection"
     Feature   = "1255"
   }
+}
+
+# Feature 1378: state migration for the count added above. Before count,
+# resources lived at module.waf_cloudfront.*; adding count (even at 1) moves
+# them to module.waf_cloudfront[0].*. Without this block Terraform plans a
+# destroy+recreate of the live WebACL, which deadlocks: the destroy fails with
+# WAFAssociatedItemException (CloudFront still references it) and the recreate
+# fails with WAFDuplicateItemException. This is idempotent — once count=0
+# (Phase 2) deletes the ACL, the block becomes a no-op.
+moved {
+  from = module.waf_cloudfront
+  to   = module.waf_cloudfront[0]
 }
 
 # ===================================================================
@@ -1194,6 +1212,7 @@ resource "aws_servicequotas_service_quota" "xray_trace_segments" {
 # ===================================================================
 
 module "cloudwatch_alarms" {
+  count  = var.enable_extended_cloudwatch_alarms ? 1 : 0
   source = "./modules/cloudwatch-alarms"
 
   environment = var.environment

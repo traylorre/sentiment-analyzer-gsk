@@ -201,3 +201,33 @@ variable "enable_amplify" {
   type        = bool
   default     = false
 }
+
+# ===================================================================
+# Cost toggles (no behavioral change to app; perimeter/observability only)
+# ===================================================================
+
+variable "enable_waf" {
+  description = "Deploy WAF v2 Web ACLs for API Gateway + CloudFront. WAF v2 has no free tier (~$42/mo: $5/ACL + Bot Control managed rules + per-request). Set false in non-prod to remove the cost; re-enabling is a single flag flip. When false, the public API/CloudFront lose SQLi/XSS/bot/rate-limit filtering."
+  type        = bool
+  default     = true
+}
+
+variable "enable_extended_cloudwatch_alarms" {
+  description = "Deploy the extended cloudwatch-alarms module (~26 alarms incl. per-Lambda for_each) and the API Gateway alarms. CloudWatch bills $0.10/alarm beyond the first 10 free. Set false in non-prod to stay near the free tier. The core monitoring module's alarms and its SNS topic are unaffected."
+  type        = bool
+  default     = true
+}
+
+# Controls ONLY the existence of the CloudFront-scoped WAF Web ACL, decoupled
+# from enable_waf (which controls association). Deleting a CloudFront WAF is a
+# two-step transition: the distribution must first drop web_acl_id and finish
+# a global redeploy (~10-15 min) before the ACL can be deleted, or AWS returns
+# WAFAssociatedItemException. Phase 1: enable_waf=false (disassociate) +
+# enable_cloudfront_waf=true (keep ACL). Phase 2: enable_cloudfront_waf=false
+# (delete the now-orphaned ACL). Defaults true to match enable_waf for fresh
+# stacks where both create together.
+variable "enable_cloudfront_waf" {
+  description = "Whether the CloudFront-scoped WAF Web ACL resource exists. Decoupled from enable_waf to allow safe two-phase teardown (disassociate, then delete)."
+  type        = bool
+  default     = true
+}
