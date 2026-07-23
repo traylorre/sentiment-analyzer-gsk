@@ -204,6 +204,10 @@ resource "aws_secretsmanager_secret_rotation" "stripe_webhook" {
 # before the operator obtains real credentials. `ignore_changes = [secret_string]`
 # preserves operator-set real values across subsequent applies.
 
+# No aws_secretsmanager_secret_rotation for the OAuth client secrets below.
+# CKV2_AWS_57 (automatic rotation) is baselined in .checkov.baseline: OAuth client
+# secrets are rotated at the identity provider (Google/GitHub console), not via an
+# AWS rotation Lambda, so Secrets Manager auto-rotation does not apply.
 resource "aws_secretsmanager_secret" "google_oauth" {
   name        = "${var.environment}/sentiment-analyzer/google-oauth"
   description = "Google OAuth client credentials for Cognito federation"
@@ -231,6 +235,7 @@ resource "aws_secretsmanager_secret_version" "google_oauth_placeholder" {
   }
 }
 
+# See google_oauth above: rotation N/A for IdP client secrets (CKV2_AWS_57 baselined).
 resource "aws_secretsmanager_secret" "github_oauth" {
   name        = "${var.environment}/sentiment-analyzer/github-oauth"
   description = "GitHub OAuth client credentials for Cognito federation"

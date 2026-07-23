@@ -28,7 +28,7 @@ tracer = Tracer()
 
 def generate_fanout_items(score: SentimentScore) -> list[dict[str, Any]]:
     """
-    Generate DynamoDB items for all 8 resolutions from a single sentiment score.
+    Generate DynamoDB items for all 6 resolutions from a single sentiment score.
 
     Canonical: [CS-001] "Pre-aggregate at write time for known query patterns"
 
@@ -36,7 +36,7 @@ def generate_fanout_items(score: SentimentScore) -> list[dict[str, Any]]:
         score: The sentiment score to fan out
 
     Returns:
-        List of 8 DynamoDB items (one per resolution)
+        List of 6 DynamoDB items (one per resolution)
 
     Raises:
         ValueError: If score.ticker is None or empty
@@ -136,7 +136,7 @@ def write_fanout(
     score: SentimentScore,
 ) -> None:
     """
-    Write a sentiment score to all 8 resolution buckets.
+    Write a sentiment score to all 6 resolution buckets.
 
     Uses BatchWriteItem for efficiency when creating new items,
     falls back to UpdateItem for upserting existing buckets.
@@ -221,7 +221,7 @@ def write_fanout_with_update(
     score: SentimentScore,
 ) -> None:
     """
-    Write a sentiment score to all 8 resolution buckets using UpdateItem.
+    Write a sentiment score to all 6 resolution buckets using UpdateItem.
 
     This version properly handles updating existing buckets by:
     - Keeping original 'open' value

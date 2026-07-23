@@ -167,9 +167,23 @@ export interface AuthResponse {
 // RefreshTokenRequest removed - refresh token now sent via httpOnly cookie only (Feature 1168)
 
 export interface RefreshTokenResponse {
-  accessToken: string;
-  idToken: string;
+  accessToken: string | null;
+  idToken: string | null;
   expiresIn: number;
+  // M1 WI-3: guest-session restore fields (null for Cognito-backed refreshes)
+  userId: string | null;
+  authType: string | null;
+  sessionExpiresAt: string | null;
+}
+
+/** Raw backend shape for POST /api/v2/auth/refresh (snake_case). */
+interface RefreshTokenResponseRaw {
+  access_token?: string | null;
+  id_token?: string | null;
+  expires_in?: number;
+  user_id?: string | null;
+  auth_type?: string | null;
+  session_expires_at?: string | null;
 }
 
 export const authApi = {
@@ -225,9 +239,21 @@ export const authApi = {
   /**
    * Refresh access token using httpOnly cookie
    * Feature 1168: Refresh token sent via cookie only, not in request body
+   * M1 WI-3: maps the snake_case backend response explicitly (the previous
+   * unmapped version silently yielded accessToken === undefined) and carries
+   * the guest-restore fields (user_id/auth_type/session_expires_at).
    */
-  refreshToken: () =>
-    api.post<RefreshTokenResponse>('/api/v2/auth/refresh'),
+  refreshToken: async (): Promise<RefreshTokenResponse> => {
+    const raw = await api.post<RefreshTokenResponseRaw>('/api/v2/auth/refresh');
+    return {
+      accessToken: raw.access_token ?? null,
+      idToken: raw.id_token ?? null,
+      expiresIn: raw.expires_in ?? 0,
+      userId: raw.user_id ?? null,
+      authType: raw.auth_type ?? null,
+      sessionExpiresAt: raw.session_expires_at ?? null,
+    };
+  },
 
   /**
    * Extend the current session

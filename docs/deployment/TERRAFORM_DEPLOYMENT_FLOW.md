@@ -8,12 +8,10 @@ This document explains the Terraform deployment process with visual diagrams for
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#e8f4fd', 'primaryTextColor': '#1a365d', 'primaryBorderColor': '#3182ce', 'lineColor': '#4a5568'}}}%%
 flowchart TB
     subgraph DevWorkflow["Developer Workflow"]
-        A[Push to main] --> B{Paths changed?}
-        B -->|src/** or terraform/**| C[Trigger Deploy Dev]
-        B -->|Other| D[Skip Deploy]
+        A[Push to main<br/>no path filter] --> C[Trigger Deploy<br/>every push deploys]
     end
 
-    subgraph DeployWorkflow["Deploy Dev Workflow"]
+    subgraph DeployWorkflow["Deploy Workflow (preprod, then prod)"]
         C --> E[Checkout Code]
         E --> F[Configure AWS Credentials]
         F --> G[Check for S3 Lock Files]
@@ -21,8 +19,8 @@ flowchart TB
         H -->|Yes| I[Report Lock & Proceed]
         H -->|No| J[Continue]
         I --> J
-        J --> K[Package Lambda Functions]
-        K --> L[Upload to S3]
+        J --> K[Build 3 container images to ECR<br/>SSE / Analysis / Dashboard]
+        K --> L[Package zip Lambdas, upload to S3<br/>ingestion / metrics / notification / canary]
         L --> M[Terraform Init]
         M --> N[Terraform Plan]
         N --> O[Terraform Apply]
@@ -49,8 +47,8 @@ flowchart TB
     classDef failNode fill:#fecaca,stroke:#dc2626,stroke-width:2px,color:#7f1d1d
 
     class DevWorkflow,DeployWorkflow,IntegrationTests stageBox
-    class A,C,D,E,F,G,I,J,K,L,M,N,O,P,Q,S,U,V,W processNode
-    class B,H,R,X decisionNode
+    class A,C,E,F,G,I,J,K,L,M,N,O,P,Q,S,U,V,W processNode
+    class H,R,X decisionNode
     class Y successNode
     class T,Z failNode
 ```
@@ -64,7 +62,7 @@ flowchart LR
         A[S3 Buckets<br/>Lambda Deployments<br/>ML Model Storage]
         B[Secrets Manager]
         C[SNS Topic & DLQ]
-        D[DynamoDB Table]
+        D[DynamoDB Tables x6]
     end
 
     subgraph Phase2["Phase 2: IAM"]
@@ -185,7 +183,7 @@ flowchart LR
 
 **Key Points:**
 - Merging to main triggers automatic deployment
-- Watch the Deploy Dev workflow for your changes
+- Watch the Deploy workflow (preprod → prod) for your changes
 - Integration tests validate the deployment worked
 - Never run `terraform` locally during CI deployment
 
@@ -261,13 +259,13 @@ graph TB
     end
 
     subgraph AWSResources["AWS Resources Managed"]
-        G[3x Lambda Functions]
-        H[1x DynamoDB Table]
-        I[2x Secrets Manager]
+        G[7x Lambda Functions]
+        H[6x DynamoDB Tables]
+        I[8x Secrets Manager]
         J[1x S3 Bucket]
-        K[1x SNS Topic + DLQ]
-        L[1x EventBridge Rule]
-        M[8x CloudWatch Alarms]
+        K[2x SNS Topics + 1x SQS DLQ]
+        L[4x EventBridge Rules]
+        M[44x CloudWatch Alarms]
         N[1x Budget]
         O[1x Backup Plan]
     end
@@ -299,7 +297,7 @@ graph LR
         A[Root Module]
     end
 
-    subgraph Modules["Modules"]
+    subgraph Modules["Modules (7 of 17 shown)"]
         B[modules/lambda]
         C[modules/iam]
         D[modules/dynamodb]
@@ -307,6 +305,7 @@ graph LR
         F[modules/secrets]
         G[modules/monitoring]
         H[modules/eventbridge]
+        I2[...plus amplify, api_gateway, chaos,<br/>cloudfront_sse, cloudwatch-alarms, cloudwatch-rum,<br/>cognito, kms, waf, xray<br/>24 module calls total in main.tf]
     end
 
     A --> B
@@ -316,6 +315,7 @@ graph LR
     A --> F
     A --> G
     A --> H
+    A --> I2
 
     classDef stageBox fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#78350f
     classDef rootModule fill:#fecaca,stroke:#dc2626,stroke-width:2px,color:#7f1d1d
@@ -332,7 +332,7 @@ graph LR
 
 ```mermaid
 gantt
-    title Deploy Dev Workflow Timeline
+    title Deploy Workflow Timeline (preprod stage)
     dateFormat mm:ss
     axisFormat %M:%S
 
@@ -410,8 +410,8 @@ flowchart TD
 
 | Workflow | Trigger | Duration | On Failure |
 |----------|---------|----------|------------|
-| Deploy Dev | Push to main (src/**, terraform/**) | ~2-3 min | Check Terraform logs |
-| Integration Tests | After Deploy Dev success | ~2 min | Check pytest output |
+| Deploy (preprod → prod) | Every push to main (no path filter) | ~2-3 min | Check Terraform logs |
+| Integration Tests | After preprod deploy success | ~2 min | Check pytest output |
 
 | Secret | Purpose | Required By |
 |--------|---------|-------------|

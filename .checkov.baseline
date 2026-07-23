@@ -454,6 +454,18 @@
                     "check_ids": [
                         "CKV_AWS_304"
                     ]
+                },
+                {
+                    "resource": "module.secrets.aws_secretsmanager_secret.google_oauth",
+                    "check_ids": [
+                        "CKV2_AWS_57"
+                    ]
+                },
+                {
+                    "resource": "module.secrets.aws_secretsmanager_secret.github_oauth",
+                    "check_ids": [
+                        "CKV2_AWS_57"
+                    ]
                 }
             ]
         },
@@ -468,6 +480,18 @@
                 },
                 {
                     "resource": "module.waf_cloudfront.aws_wafv2_web_acl.main",
+                    "check_ids": [
+                        "CKV2_AWS_31"
+                    ]
+                },
+                {
+                    "resource": "module.waf[0].aws_wafv2_web_acl.main",
+                    "check_ids": [
+                        "CKV2_AWS_31"
+                    ]
+                },
+                {
+                    "resource": "module.waf_cloudfront[0].aws_wafv2_web_acl.main",
                     "check_ids": [
                         "CKV2_AWS_31"
                     ]

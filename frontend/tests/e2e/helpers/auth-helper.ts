@@ -117,6 +117,70 @@ export async function setupAuthSession(context: BrowserContext): Promise<void> {
 }
 
 /**
+ * Establish a genuinely UPGRADED (non-anonymous) session in the auth store.
+ *
+ * M1 WI-5 (Q-M1-2): route gating for /alerts and /admin moved from the
+ * middleware (which read cookies nothing set) to client-side ProtectedRoute,
+ * which reads the real Zustand store. The old `setupAuthSession` cookie spoof
+ * no longer grants access — the store sees an anonymous session and redirects.
+ *
+ * This helper drives the PRODUCTION restore path instead of faking it: it
+ * intercepts POST /refresh and GET /me so that `restoreSession()` on app load
+ * rebuilds a non-anonymous user with the requested role. Data endpoints are
+ * still mocked separately by each test (mockAlertData, etc.).
+ *
+ * Must be called BEFORE page.goto() so the routes are registered when the
+ * session-init hook fires.
+ *
+ * @param page - Playwright page
+ * @param role - store role; 'operator' for /admin, anything non-anonymous for /alerts
+ */
+export async function setupUpgradedSession(
+  page: Page,
+  role: 'operator' | 'free' | 'pro' = 'free',
+): Promise<void> {
+  const userId = `e2e-upgraded-${role}`;
+  const expiresAt = new Date(Date.now() + 86400000).toISOString();
+
+  // restoreSession() → POST /refresh: non-anonymous authType routes the store
+  // through the Cognito-restore branch (tokens, then /me for the profile).
+  await page.route('**/api/v2/auth/refresh', async (route) => {
+    if (route.request().method() !== 'POST') return route.fallback();
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        access_token: 'mock-e2e-upgraded-token',
+        id_token: 'mock-e2e-id-token',
+        expires_in: 3600,
+        user_id: userId,
+        auth_type: 'email',
+        session_expires_at: expiresAt,
+      }),
+    });
+  });
+
+  // restoreSession() → GET /me: supplies the role the client guards on.
+  await page.route('**/api/v2/auth/me', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        auth_type: 'email',
+        email_masked: 'e2e***@example.com',
+        configs_count: 0,
+        max_configs: 5,
+        session_expires_in_seconds: 86400,
+        role,
+        linked_providers: [],
+        verification: 'verified',
+        last_provider_used: null,
+      }),
+    });
+  });
+}
+
+/**
  * Mock the anonymous auth endpoint via Playwright route interception.
  *
  * Use for tests that DON'T need real API data (chaos, error-boundary, etc.).

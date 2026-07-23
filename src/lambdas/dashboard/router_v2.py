@@ -147,7 +147,23 @@ def _get_no_cache_headers() -> dict[str, str]:
     }
 
 
-def _make_csrf_set_cookie() -> str:
+def _cookie_path_prefix(event: dict | None) -> str:
+    """Browser-visible path prefix for cookie Path attributes (M1 WI-3).
+
+    Behind API Gateway the browser-visible request path carries the stage
+    segment (/{stage}/api/v2/...). A cookie set with Path=/api/v2/auth is
+    NEVER sent back on those requests, which silently broke every
+    cookie-based refresh on deployed environments (guest restore, and OAuth
+    restore before it). Function URL events use the $default stage and have
+    no prefix.
+    """
+    stage = ((event or {}).get("requestContext") or {}).get("stage") or ""
+    if stage and stage != "$default":
+        return f"/{stage}"
+    return ""
+
+
+def _make_csrf_set_cookie(event: dict | None = None) -> str:
     """Build Set-Cookie header value for CSRF token (Feature 1158)."""
     return make_set_cookie(
         CSRF_COOKIE_NAME,
@@ -156,20 +172,25 @@ def _make_csrf_set_cookie() -> str:
         secure=True,
         samesite="None",  # Required for cross-origin
         max_age=CSRF_COOKIE_MAX_AGE,
-        path="/api/v2",
+        path=f"{_cookie_path_prefix(event)}/api/v2",
     )
 
 
-def _make_refresh_token_cookie(token: str) -> str:
-    """Build Set-Cookie header value for refresh token (Feature 1160)."""
+def _make_refresh_token_cookie(token: str, event: dict | None = None) -> str:
+    """Build Set-Cookie header value for refresh token (Feature 1160).
+
+    M1 WI-3: SameSite=None (Feature 1159 posture; the inline OAuth/magic-link
+    cookie blocks were updated when 1159 merged but this helper kept the stale
+    Strict, which blocks the cookie on every cross-site Amplify->API call).
+    """
     return make_set_cookie(
         REFRESH_TOKEN_COOKIE_NAME,
         token,
         httponly=True,
         secure=True,
-        samesite="Strict",  # Will be "None" after Feature 1159 merges
+        samesite="None",  # Cross-origin (Feature 1159); CSRF via Feature 1158
         max_age=30 * 24 * 60 * 60,  # 30 days
-        path="/api/v2/auth",
+        path=f"{_cookie_path_prefix(event)}/api/v2/auth",
     )
 
 
@@ -380,7 +401,24 @@ def create_anonymous_session():
 
     try:
         result = auth_service.create_anonymous_session(table=table, request=body)
-        return json_response(201, result.model_dump(), _get_no_cache_headers())
+
+        # M1 WI-3: set the guest refresh token as an httpOnly cookie so the
+        # session survives reloads via POST /refresh (Feature 1165 posture:
+        # nothing sensitive in localStorage). Token NEVER appears in the body.
+        cookies = []
+        if result.refresh_token_for_cookie:
+            cookies.append(
+                _make_refresh_token_cookie(result.refresh_token_for_cookie, event)
+            )
+            cookies.append(_make_csrf_set_cookie(event))
+
+        response_data = result.model_dump(exclude={"refresh_token_for_cookie"})
+        return _json_response_with_cookies(
+            response_data,
+            cookies=cookies,
+            extra_headers=_get_no_cache_headers(),
+            status_code=201,
+        )
     except Exception as e:
         logger.error("Failed to create anonymous session", extra=get_safe_error_info(e))
         return error_response(500, "Failed to create session")
@@ -515,20 +553,10 @@ def verify_magic_link():
 
     cookies = []
     if refresh_token:
-        # Feature 1159: SameSite=None for cross-origin cookie transmission
-        cookies.append(
-            make_set_cookie(
-                REFRESH_TOKEN_COOKIE_NAME,
-                refresh_token,
-                httponly=True,
-                secure=True,
-                samesite="None",  # Cross-origin; CSRF protected by Feature 1158
-                max_age=30 * 24 * 60 * 60,
-                path="/api/v2/auth",
-            )
-        )
+        # Feature 1159 + M1 WI-3: unified helper (SameSite=None, stage-aware path)
+        cookies.append(_make_refresh_token_cookie(refresh_token, event))
         # Feature 1158: Set CSRF token cookie for double-submit pattern
-        cookies.append(_make_csrf_set_cookie())
+        cookies.append(_make_csrf_set_cookie(event))
 
     return _json_response_with_cookies(
         response_data, cookies=cookies, extra_headers=_get_no_cache_headers()
@@ -593,19 +621,9 @@ def handle_oauth_callback():
 
     cookies = []
     if refresh_token:
-        # Feature 1159: SameSite=None for cross-origin cookie transmission
-        cookies.append(
-            make_set_cookie(
-                REFRESH_TOKEN_COOKIE_NAME,
-                refresh_token,
-                httponly=True,
-                secure=True,
-                samesite="None",  # Cross-origin; CSRF protected by Feature 1158
-                max_age=30 * 24 * 60 * 60,
-                path="/api/v2/auth",
-            )
-        )
-        cookies.append(_make_csrf_set_cookie())
+        # Feature 1159 + M1 WI-3: unified helper (SameSite=None, stage-aware path)
+        cookies.append(_make_refresh_token_cookie(refresh_token, event))
+        cookies.append(_make_csrf_set_cookie(event))
 
     return _json_response_with_cookies(
         response_data, cookies=cookies, extra_headers=_get_no_cache_headers()
@@ -652,15 +670,18 @@ def refresh_tokens():
     if result.error:
         return error_response(401, result.message or result.error)
 
-    response_data = result.model_dump()
+    # M1 WI-3: the rotated refresh token travels ONLY in the httpOnly cookie
+    response_data = result.model_dump(exclude={"refresh_token_for_cookie"})
 
     cookies = []
     # Feature 1160: Set rotated refresh token as httpOnly cookie
     if hasattr(result, "refresh_token_for_cookie") and result.refresh_token_for_cookie:
-        cookies.append(_make_refresh_token_cookie(result.refresh_token_for_cookie))
+        cookies.append(
+            _make_refresh_token_cookie(result.refresh_token_for_cookie, event)
+        )
 
     # Feature 1158: Refresh CSRF token along with session
-    cookies.append(_make_csrf_set_cookie())
+    cookies.append(_make_csrf_set_cookie(event))
 
     return _json_response_with_cookies(
         response_data, cookies=cookies, extra_headers=_get_no_cache_headers()

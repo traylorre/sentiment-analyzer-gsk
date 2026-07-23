@@ -1,10 +1,13 @@
 """Shared error types for Lambda handlers.
 
-This module re-exports error utilities from the original errors.py module
-while adding Feature 014 session-specific error types.
+Feature 014 session-specific error types and Feature 1130 RBAC errors.
+
+Note: the legacy errors_module.py convenience helpers (error_response, ErrorCode,
+not_found_error, etc.) were removed in the repo cleanup campaign - they had zero
+production callers. Live error responses are built by
+src/lambdas/shared/utils/response_builder.py.
 """
 
-# Re-export original error utilities (backward compatibility)
 # Feature 014: Session-specific error types
 from src.lambdas.shared.errors.auth_errors import (
     InsufficientRoleError,
@@ -21,31 +24,8 @@ from src.lambdas.shared.errors.session_errors import (
     TokenAlreadyUsedError,
     TokenExpiredError,
 )
-from src.lambdas.shared.errors_module import (
-    ErrorCode,
-    database_error,
-    error_response,
-    internal_error,
-    model_error,
-    not_found_error,
-    rate_limit_error,
-    secret_error,
-    unauthorized_error,
-    validation_error,
-)
 
 __all__ = [
-    # Original error utilities
-    "ErrorCode",
-    "database_error",
-    "error_response",
-    "internal_error",
-    "model_error",
-    "not_found_error",
-    "rate_limit_error",
-    "secret_error",
-    "unauthorized_error",
-    "validation_error",
     # Feature 014 session errors
     "EmailAlreadyExistsError",
     "InvalidMergeTargetError",

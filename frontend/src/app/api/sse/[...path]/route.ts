@@ -20,7 +20,13 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { path: string[] } }
 ) {
-  // Cookie sent automatically (same origin)
+  // UNWIRED (M1 WI-5 / Q-M1-2): this reads the `sentiment-access-token` cookie
+  // that NOTHING sets — the client cookie writer died with Feature 1145 (CVSS
+  // 8.6 XSS fix). So this proxy currently 401s every request. SSE is out of
+  // M1 scope; this is signposted, not fixed here. When SSE is picked up, the
+  // token must come from the Authorization Bearer header (memory-only store),
+  // not a JS-readable cookie. See open-questions.md (SSE proxy auth).
+  // Cookie sent automatically (same origin) — see caveat above.
   const token = request.cookies.get('sentiment-access-token')?.value;
 
   if (!token) {

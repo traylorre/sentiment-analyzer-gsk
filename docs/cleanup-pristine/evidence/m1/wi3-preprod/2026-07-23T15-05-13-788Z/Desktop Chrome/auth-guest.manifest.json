@@ -1,0 +1,109 @@
+{
+  "schema": "verification-manifest.schema.json#v1",
+  "spec": "auth-guest",
+  "run_id": "2026-07-23T15-05-13-788Z",
+  "project": "Desktop Chrome",
+  "target": "preprod",
+  "base_url": "https://main.d29tlmksqcx494.amplifyapp.com",
+  "started_at": "2026-07-23T15:05:14.151Z",
+  "steps": [
+    {
+      "n": 1,
+      "name": "landing",
+      "file": "auth-guest-01-landing.png",
+      "expected_ui_state": "Header UserMenu shows Guest; anonymous 201 in auth log",
+      "page_url": "https://main.d29tlmksqcx494.amplifyapp.com/",
+      "main_status": 200,
+      "auth_requests": [
+        {
+          "method": "POST",
+          "path": "/api/v2/auth/refresh",
+          "status": 401
+        },
+        {
+          "method": "POST",
+          "path": "/api/v2/auth/anonymous",
+          "status": 201
+        }
+      ],
+      "api_errors": [],
+      "console_errors": [
+        "Failed to load resource: the server responded with a status of 401 ()"
+      ],
+      "page_errors": [],
+      "dom_probe": {
+        "selector": "[data-testid=\"user-menu-trigger\"]",
+        "present": true,
+        "text": "Guest",
+        "expect_text": "Guest",
+        "text_match": true
+      },
+      "timestamp": "2026-07-23T15:05:17.268Z",
+      "test_location": "tests/e2e/auth-guest.spec.ts:17",
+      "interception_at_capture": false
+    },
+    {
+      "n": 2,
+      "name": "menu-open",
+      "file": "auth-guest-02-menu-open.png",
+      "expected_ui_state": "Open user menu: Guest identity + anonymous \"Sign in with email\" upsell (session chip lives in the header)",
+      "page_url": "https://main.d29tlmksqcx494.amplifyapp.com/",
+      "main_status": 200,
+      "auth_requests": [],
+      "api_errors": [],
+      "console_errors": [],
+      "page_errors": [],
+      "dom_probe": {
+        "selector": "text=Sign in with email",
+        "present": true,
+        "text": "Sign in with email"
+      },
+      "timestamp": "2026-07-23T15:05:17.734Z",
+      "test_location": "tests/e2e/auth-guest.spec.ts:17",
+      "interception_at_capture": false
+    },
+    {
+      "n": 3,
+      "name": "post-reload",
+      "file": "auth-guest-03-post-reload.png",
+      "expected_ui_state": "Still Guest after F5; refresh 200 in auth log; no second anonymous 201",
+      "page_url": "https://main.d29tlmksqcx494.amplifyapp.com/",
+      "main_status": 200,
+      "auth_requests": [
+        {
+          "method": "POST",
+          "path": "/api/v2/auth/refresh",
+          "status": 200
+        }
+      ],
+      "api_errors": [],
+      "console_errors": [],
+      "page_errors": [],
+      "dom_probe": {
+        "selector": "[data-testid=\"user-menu-trigger\"]",
+        "present": true,
+        "text": "Guest",
+        "expect_text": "Guest",
+        "text_match": true
+      },
+      "timestamp": "2026-07-23T15:05:18.552Z",
+      "test_location": "tests/e2e/auth-guest.spec.ts:17",
+      "interception_at_capture": false
+    }
+  ],
+  "forbidden_requests": [
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/anonymous",
+      "status": 201,
+      "max_count": 1,
+      "observed_count": 1,
+      "pass": true
+    }
+  ],
+  "interception": {
+    "route_registrations": 0,
+    "clean": true
+  },
+  "finished_at": "2026-07-23T15:05:18.615Z"
+}

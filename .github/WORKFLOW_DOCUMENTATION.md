@@ -275,10 +275,10 @@ deploy-prod (requires approval)
 - Packages Lambda functions: ingestion, analysis, dashboard
 - Uploads packages as artifacts for deployment jobs
 
-**Deploy-Dev Job**:
+**Deploy-Preprod Job**:
 - Downloads Lambda packages
-- Uploads to S3: `dev-sentiment-lambda-deployments`
-- Runs Terraform with `backend-dev.hcl` and `dev.tfvars`
+- Uploads to S3: `preprod-sentiment-lambda-deployments`
+- Runs Terraform with `backend-preprod.hcl` and `preprod.tfvars`
 - Outputs: `dashboard_url`, `sns_topic_arn`
 - Runs smoke test on dashboard Lambda
 

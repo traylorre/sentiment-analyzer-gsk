@@ -1,8 +1,21 @@
 # Phase 4: Lambda Cold Start Delay Chaos Testing
 
-**Status**: 🚧 In Progress
-**PR**: TBD
-**Implementation Date**: TBD
+**Status**: ⛔ Superseded — this design was never implemented
+**PR**: none (proposal only)
+**Superseded by**: Feature 1237 external-actor refactor (PR #774, commit `979a652`)
+
+> **⚠️ This document is a historical design proposal.** The `delay_ms` DynamoDB flag,
+> the application-side `time.sleep()` injection, and the Lambda-side `by_status` chaos
+> query described below were never shipped. `chaos_injection.py` does not exist.
+>
+> The shipped `lambda_cold_start` scenario (`src/lambdas/dashboard/chaos.py:1837-1852`)
+> induces real cold-start latency from the **control plane**: the dashboard Lambda calls
+> `update_function_configuration(MemorySize=128)` on the analysis Lambda
+> (`injection_method: set_memory_128`), forcing AWS-level cold starts. The analysis
+> Lambda contains no chaos-aware code and reads no chaos table. Prior state snapshots
+> to SSM and is restored on stop.
+>
+> Everything below is retained for design history only. Do not use it operationally.
 
 ## Overview
 

@@ -73,7 +73,7 @@ That's less than a nice dinner for iPhone-level real-time charts.
 
 For comparison, your current architecture probably costs $20-30/month. The delta is ~$20-30 for:
 - True real-time (sub-second latency vs 5-second polling)
-- 8 resolution levels instead of 1
+- 6 resolution levels instead of 1
 - Shared caching across all users
 - Preloading for instant resolution switching
 

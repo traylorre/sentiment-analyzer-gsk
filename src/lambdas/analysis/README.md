@@ -13,7 +13,7 @@ SNS topic: `${environment}-sentiment-analysis-requests`
 ```
 SNS → Lambda → Load Model → Inference → DynamoDB Update
                    ↓
-            (/opt/model cache)
+            (S3 → /tmp/model cache)
 ```
 
 ## For On-Call Engineers
@@ -60,7 +60,7 @@ aws dynamodb query \
 ## Model Details
 
 - **Model**: DistilBERT (distilbert-base-uncased-finetuned-sst-2-english)
-- **Location**: `/opt/model` (Lambda layer)
+- **Location**: `/tmp/model` (downloaded from S3 on cold start)
 - **Max tokens**: 512 (truncated)
 - **Neutral threshold**: score < 0.6
 

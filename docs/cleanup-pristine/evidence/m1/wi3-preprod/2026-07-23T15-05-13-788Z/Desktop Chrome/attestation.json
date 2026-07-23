@@ -1,0 +1,43 @@
+{
+  "schema": "attestation.schema.json#v1",
+  "spec": "auth-guest",
+  "run_id": "2026-07-23T15-05-13-788Z",
+  "verifier": "claude-opus-4-8 verifier-agent (independent, non-implementer)",
+  "convention_version": "497e9a8",
+  "overall": "pass",
+  "hard_fail_checks": {
+    "interception_clean": true,
+    "forbidden_requests_hold": true,
+    "target_is_preprod": true,
+    "manifest_schema_valid": true
+  },
+  "steps": [
+    {
+      "step": "auth-guest-01-landing",
+      "verdict": "pass",
+      "reason": "Viewed screenshot: customer dashboard landing with UserMenu trigger showing 'Guest' (avatar + chevron, sidebar footer trigger area); no raw error text. page_url is base '/' and main_status 200 per row. Auth log contains required POST /api/v2/auth/refresh 401 followed by POST /api/v2/auth/anonymous 201, and the trace confirms that exact order (refresh 401 at monotonic 3523ms, anonymous 201 at 3847ms, both before the step-01 screenshot at 4501ms). console_errors contains exactly one entry, the allowlisted 'Failed to load resource ... 401' from the cold-load restore attempt; page_errors empty. DOM probe [data-testid=user-menu-trigger] present with text 'Guest', text_match true. interception_at_capture false."
+    },
+    {
+      "step": "auth-guest-02-menu-open",
+      "verdict": "pass",
+      "reason": "Viewed screenshot: open user menu shows Guest identity ('Guest' + 'Signed in via Guest') and the anonymous 'Sign in with email' upsell item, plus Settings and Sign out; no session chip inside the menu, consistent with the WI-3 reality correction that the chip renders in the header trigger area rather than the menu. page_url '/', main_status 200. No additional auth_requests required and none recorded (trace shows zero auth calls between the menu click at 4607ms and the step-02 screenshot at 5013ms). console_errors and page_errors empty. DOM probe text=Sign in with email present. interception_at_capture false."
+    },
+    {
+      "step": "auth-guest-03-post-reload",
+      "verdict": "pass",
+      "reason": "Viewed screenshot: same dashboard UI as step 01, UserMenu trigger still reads 'Guest' (focus-highlighted after reload). page_url '/', main_status 200. Auth log shows POST /api/v2/auth/refresh 200 and NO new anonymous 201; forbidden rule anonymous-201 max_count 1 holds (observed_count 1, pass true, and the raw trace contains exactly one anonymous 201 for the whole run). DOM probe user-menu-trigger 'Guest' text_match true. Trace-verified user_id equality: refresh 200 body user_id 4e7300f1-a4c9-47c1-b5b4-b0651b0f105c equals the anonymous 201 body user_id, and the refresh request carried the refresh_token cookie anon.4e7300f1-... minted by the 201.",
+      "trace_spot_check": {
+        "performed": true,
+        "manifest_matches_trace": true,
+        "note": "Unzipped auth-guest.trace.zip and read 0-trace.network + 0-trace.trace raw. Reload boundary located at the page.reload call (monotonic 5080.885ms). Exactly one /api/v2/auth/* request after it: POST .../v1/api/v2/auth/refresh with status 200 at 5157.668ms; no POST /api/v2/auth/anonymous after the boundary (the sole anonymous 201 is at 3846.763ms, pre-reload). Response bodies WERE recoverable from trace resources/: anonymous 201 body user_id=4e7300f1-a4c9-47c1-b5b4-b0651b0f105c, refresh 200 body user_id=4e7300f1-a4c9-47c1-b5b4-b0651b0f105c - equal. Manifest auth_requests for this step (single refresh 200) matches the trace exactly; no divergence found."
+      }
+    }
+  ],
+  "wi4_next_version_check": {
+    "file": "next-version.txt",
+    "content": "14.2.35",
+    "required": ">= 14.2.25",
+    "pass": true
+  },
+  "timestamp": "2026-07-23T15:07:53.331Z"
+}
