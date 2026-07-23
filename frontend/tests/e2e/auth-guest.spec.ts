@@ -30,7 +30,10 @@ test.describe('auth-guest: session with restore', () => {
     page.on('response', (r) => {
       let pathname: string;
       try {
-        pathname = new URL(r.url()).pathname;
+        // Normalize stage prefixes (API Gateway paths are /{stage}/api/v2/...)
+        const raw = new URL(r.url()).pathname;
+        const apiIdx = raw.indexOf('/api/');
+        pathname = apiIdx !== -1 ? raw.slice(apiIdx) : raw;
       } catch {
         return;
       }
