@@ -70,3 +70,16 @@ enable_extended_cloudwatch_alarms = false
 # fails with WAFAssociatedItemException. Once this deploy reaches
 # Status=Deployed, PHASE 2 sets this to false to delete the orphaned ACL.
 enable_cloudfront_waf = true
+
+# M1 WI-6: enable Google as a Cognito social identity provider.
+# Google-only per Q-M1-1 (GitHub's IdP points at the GitHub Actions OIDC issuer
+# and is a known-broken follow-up — do NOT add "GitHub" here).
+#
+# SEQUENCING (critical): the Cognito Google IdP (modules/cognito/google.tf) and
+# the Lambda's ENABLED_OAUTH_PROVIDERS (main.tf:138, derived from the secret's
+# client_id being non-empty) both take effect at `terraform apply`. Populate
+# preprod/sentiment-analyzer/google-oauth (client_id/client_secret) BEFORE the
+# apply that includes this line, so the IdP and the enabled-providers env land
+# together. Secret-without-IdP yields Cognito "Invalid state"; IdP-without-secret
+# yields a broken provider.
+cognito_identity_providers = ["Google"]
