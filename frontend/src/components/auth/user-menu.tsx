@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import {
   User,
@@ -33,6 +35,9 @@ function UserMenuSkeleton({ className }: { className?: string }) {
 
 export function UserMenu({ className }: UserMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
+  // Feature 1394: client-side routing (not window.location) so in-app nav does
+  // not full-reload and wipe the memory-only auth store.
+  const router = useRouter();
   // Feature 1165: Use isInitialized instead of hasHydrated (memory-only store)
   const { isInitialized, user, isAuthenticated, isAnonymous, signOut, isLoading } = useAuth();
 
@@ -46,7 +51,7 @@ export function UserMenu({ className }: UserMenuProps) {
       <Button
         variant="outline"
         size="sm"
-        onClick={() => (window.location.href = '/auth/signin')}
+        onClick={() => router.push('/auth/signin')}
         className={className}
       >
         Sign in
@@ -125,25 +130,29 @@ export function UserMenu({ className }: UserMenuProps) {
           {/* Menu items */}
           <div className="p-2">
             {isAnonymous && (
-              <DropdownMenu.Item
-                className="flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors text-accent hover:bg-accent/10 cursor-pointer outline-none data-[highlighted]:bg-accent/10"
-                onSelect={() => {
-                  window.location.href = '/auth/signin';
-                }}
-              >
-                <Mail className="w-4 h-4" />
-                <span>Sign in with email</span>
+              // Feature 1394: asChild + next/link is the canonical Radix nav
+              // pattern. Link owns the client-side navigation lifecycle, so
+              // there is no onSelect-vs-router.push teardown race and no
+              // full-reload that would wipe the memory-only auth store.
+              <DropdownMenu.Item asChild>
+                <Link
+                  href="/auth/signin"
+                  className="flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors text-accent hover:bg-accent/10 cursor-pointer outline-none data-[highlighted]:bg-accent/10"
+                >
+                  <Mail className="w-4 h-4" />
+                  <span>Sign in with email</span>
+                </Link>
               </DropdownMenu.Item>
             )}
 
-            <DropdownMenu.Item
-              className="flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors hover:bg-muted/50 cursor-pointer outline-none data-[highlighted]:bg-muted/50"
-              onSelect={() => {
-                window.location.href = '/settings';
-              }}
-            >
-              <Settings className="w-4 h-4" />
-              <span>Settings</span>
+            <DropdownMenu.Item asChild>
+              <Link
+                href="/settings"
+                className="flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors hover:bg-muted/50 cursor-pointer outline-none data-[highlighted]:bg-muted/50"
+              >
+                <Settings className="w-4 h-4" />
+                <span>Settings</span>
+              </Link>
             </DropdownMenu.Item>
 
             <DropdownMenu.Item
