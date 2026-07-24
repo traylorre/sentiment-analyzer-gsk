@@ -131,12 +131,22 @@ def exchange_code_for_tokens(
     config: CognitoConfig,
     code: str,
     code_verifier: str | None = None,
+    redirect_uri_override: str | None = None,
 ) -> CognitoTokens:
     """Exchange authorization code for tokens.
 
     Args:
         config: Cognito configuration
         code: Authorization code from OAuth callback
+        code_verifier: PKCE code verifier (FR-009)
+        redirect_uri_override: Feature 1383 — per-request redirect URI used for the
+            token exchange. When provided, it MUST equal the redirect_uri used at the
+            authorize step (OAuth requires an exact match). Mirrors the override
+            convention in ``get_authorize_url``. Falls back to the static
+            ``config.redirect_uri`` (COGNITO_REDIRECT_URI) when not provided. The caller
+            is responsible for validating this value against the stored OAuth state
+            before passing it (see ``validate_oauth_state``); do not pass a raw,
+            unvalidated client-supplied value.
 
     Returns:
         CognitoTokens with id_token, access_token, refresh_token
@@ -159,7 +169,9 @@ def exchange_code_for_tokens(
     data = {
         "grant_type": "authorization_code",
         "code": code,
-        "redirect_uri": config.redirect_uri,
+        # Feature 1383: use the per-request (state-validated) redirect_uri so the
+        # token exchange exactly matches the authorize step; fall back to static config.
+        "redirect_uri": redirect_uri_override or config.redirect_uri,
     }
 
     # Include client_id in body if no secret

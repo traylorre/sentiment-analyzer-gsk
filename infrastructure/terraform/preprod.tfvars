@@ -83,3 +83,21 @@ enable_cloudfront_waf = true
 # together. Secret-without-IdP yields Cognito "Invalid state"; IdP-without-secret
 # yields a broken provider.
 cognito_identity_providers = ["Google"]
+
+# Feature 1383: durable OAuth env (previously set manually during WI-6 go-live).
+# These feed two Terraform outputs (frontend_url, cognito_redirect_uri) that the CI
+# dashboard-deploy "Step 2.5" syncs onto the Lambda's FRONTEND_URL / COGNITO_REDIRECT_URI
+# env vars (the Lambda env is Terraform-frozen via ignore_changes=[environment], Feature 1290).
+#
+# frontend_url drives the OAuth redirect_uri allowlist (_resolve_redirect_uri, auth.py).
+frontend_url = "https://main.d29tlmksqcx494.amplifyapp.com"
+
+# cognito_callback_urls[0] feeds COGNITO_REDIRECT_URI (the static token-exchange fallback).
+# The Amplify callback MUST be index [0]. localhost is included to document the dev origin
+# the allowlist already permits. NOTE: the Cognito app client's registered callback URLs are
+# ignore_changes-frozen (modules/cognito/main.tf), so this list only affects the Lambda-env
+# output, not live Cognito registration.
+cognito_callback_urls = [
+  "https://main.d29tlmksqcx494.amplifyapp.com/auth/callback",
+  "http://localhost:3000/auth/callback",
+]
