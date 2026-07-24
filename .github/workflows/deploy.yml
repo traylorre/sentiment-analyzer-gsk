@@ -1043,6 +1043,26 @@ jobs:
           echo "⏳ Step 2: Waiting for function update to complete..."
           aws lambda wait function-updated --function-name "$FUNC_NAME"
 
+          # Feature 1375: sync ENABLED_OAUTH_PROVIDERS onto $LATEST BEFORE publishing.
+          # Terraform cannot manage this env var (modules/lambda ignore_changes=[environment],
+          # Feature 1290), and update-function-code does not touch env — so without this the
+          # OAuth enable/disable derived from the secret never reaches the served alias version.
+          # update-function-configuration REPLACES the whole Variables map, so we merge.
+          echo "🔐 Step 2.5: Syncing ENABLED_OAUTH_PROVIDERS from terraform output..."
+          ENABLED_OAUTH="$(terraform output -raw enabled_oauth_providers 2>/dev/null || echo "")"
+          echo "  Desired ENABLED_OAUTH_PROVIDERS='${ENABLED_OAUTH}'"
+          CUR_ENV="$(aws lambda get-function-configuration --function-name "$FUNC_NAME" --query 'Environment.Variables' --output json)"
+          CUR_OAUTH="$(printf '%s' "$CUR_ENV" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("ENABLED_OAUTH_PROVIDERS",""))')"
+          if [ "$CUR_OAUTH" != "$ENABLED_OAUTH" ]; then
+            echo "  Updating env (was '${CUR_OAUTH}')..."
+            NEW_ENV="$(printf '%s' "$CUR_ENV" | ENABLED_OAUTH="$ENABLED_OAUTH" python3 -c 'import sys,json,os;e=json.load(sys.stdin);e["ENABLED_OAUTH_PROVIDERS"]=os.environ["ENABLED_OAUTH"];print(json.dumps({"Variables":e}))')"
+            aws lambda update-function-configuration --function-name "$FUNC_NAME" --environment "$NEW_ENV" >/dev/null
+            aws lambda wait function-updated --function-name "$FUNC_NAME"
+            echo "  ✅ ENABLED_OAUTH_PROVIDERS synced to '${ENABLED_OAUTH}'"
+          else
+            echo "  Already '${CUR_OAUTH}', no change"
+          fi
+
           echo "📦 Step 3: Publishing immutable version..."
           VERSION=$(aws lambda publish-version \
             --function-name "$FUNC_NAME" \
