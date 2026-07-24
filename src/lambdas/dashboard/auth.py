@@ -2903,6 +2903,48 @@ def _refresh_anonymous_session(
     )
 
 
+def get_user_by_cognito_sub(table: Any, cognito_sub: str) -> User | None:
+    """Get a user by their Cognito user-pool sub via the by_cognito_sub GSI.
+
+    Feature 1381 (Defect B): the OAuth (Cognito) refresh path needs the internal
+    user_id so the frontend can rebuild its session instead of dropping to guest.
+    The stable Cognito `sub` from the freshly-issued id_token maps to exactly one
+    user record. Server-authoritative — sub comes from a validated token, never
+    from client input.
+
+    Args:
+        table: DynamoDB Table resource
+        cognito_sub: Cognito user-pool subject claim (stable across refreshes)
+
+    Returns:
+        User if found, None otherwise
+    """
+    if not cognito_sub:
+        return None
+
+    try:
+        response = table.query(
+            IndexName="by_cognito_sub",
+            KeyConditionExpression="cognito_sub = :sub",
+            FilterExpression="entity_type = :type",
+            ExpressionAttributeValues={
+                ":sub": cognito_sub,
+                ":type": "USER",
+            },
+            Limit=1,  # one cognito_sub maps to at most one user
+        )
+        items = response.get("Items", [])
+        if not items:
+            return None
+        return User.from_dynamodb_item(items[0])
+    except Exception as e:
+        logger.error(
+            "Failed GSI cognito_sub lookup",
+            extra=get_safe_error_info(e),
+        )
+        return None
+
+
 def refresh_access_tokens(
     refresh_token: str,
     table: Any | None = None,
@@ -2940,10 +2982,33 @@ def refresh_access_tokens(
 
     try:
         tokens = cognito_refresh_tokens(config, refresh_token)
+        # Feature 1381 (Defect B): resolve the OAuth user_id so the frontend's
+        # restoreSession() takes the Cognito branch instead of bailing to guest
+        # on a missing user_id. Identity is derived from the freshly-issued
+        # id_token's stable Cognito sub (server-authoritative, not client input).
+        user_id: str | None = None
+        auth_type: str | None = None
+        if table is not None and tokens.id_token:
+            try:
+                cognito_sub = decode_id_token(tokens.id_token).get("sub")
+                if cognito_sub:
+                    user = get_user_by_cognito_sub(table, cognito_sub)
+                    if user:
+                        user_id = user.user_id
+                        auth_type = user.auth_type
+            except Exception as e:
+                # Degrade to today's behavior (tokens without identity) rather
+                # than failing the refresh; frontend falls back gracefully.
+                logger.warning(
+                    "OAuth refresh identity resolution failed",
+                    extra=get_safe_error_info(e),
+                )
         return RefreshTokenResponse(
             id_token=tokens.id_token,
             access_token=tokens.access_token,
             expires_in=tokens.expires_in,
+            user_id=user_id,
+            auth_type=auth_type,
         )
     except TokenError as e:
         return RefreshTokenResponse(
