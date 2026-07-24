@@ -195,6 +195,70 @@ class TestExchangeCodeForTokens:
             assert tokens.refresh_token == "refresh_token_value"
             assert tokens.expires_in == 3600
 
+    def test_exchange_uses_redirect_uri_override(self):
+        """Feature 1383: per-request redirect_uri_override is used in the token exchange."""
+        config = CognitoConfig(
+            user_pool_id="us-east-1_ABC123",
+            client_id="client123",
+            client_secret="secret456",
+            domain="myapp",
+            region="us-east-1",
+            redirect_uri="https://static.example.com/callback",
+        )
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "id_token": "id_token_value",
+            "access_token": "access_token_value",
+            "refresh_token": "refresh_token_value",
+            "expires_in": 3600,
+            "token_type": "Bearer",
+        }
+
+        with patch("httpx.Client") as mock_client:
+            post = mock_client.return_value.__enter__.return_value.post
+            post.return_value = mock_response
+
+            exchange_code_for_tokens(
+                config,
+                "auth_code_123",
+                redirect_uri_override="http://localhost:3000/auth/callback",
+            )
+
+            sent_data = post.call_args.kwargs["data"]
+            assert sent_data["redirect_uri"] == "http://localhost:3000/auth/callback"
+
+    def test_exchange_falls_back_to_config_redirect_uri(self):
+        """Feature 1383: without an override, the static config.redirect_uri is used."""
+        config = CognitoConfig(
+            user_pool_id="us-east-1_ABC123",
+            client_id="client123",
+            client_secret="secret456",
+            domain="myapp",
+            region="us-east-1",
+            redirect_uri="https://static.example.com/callback",
+        )
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "id_token": "id_token_value",
+            "access_token": "access_token_value",
+            "refresh_token": "refresh_token_value",
+            "expires_in": 3600,
+            "token_type": "Bearer",
+        }
+
+        with patch("httpx.Client") as mock_client:
+            post = mock_client.return_value.__enter__.return_value.post
+            post.return_value = mock_response
+
+            exchange_code_for_tokens(config, "auth_code_123")
+
+            sent_data = post.call_args.kwargs["data"]
+            assert sent_data["redirect_uri"] == "https://static.example.com/callback"
+
     def test_exchange_failure(self):
         """Raises TokenError on exchange failure."""
         config = CognitoConfig(

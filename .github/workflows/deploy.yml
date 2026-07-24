@@ -1063,6 +1063,40 @@ jobs:
             echo "  Already '${CUR_OAUTH}', no change"
           fi
 
+          # Feature 1383: sync FRONTEND_URL + COGNITO_REDIRECT_URI onto $LATEST BEFORE publishing.
+          # Same rationale as the ENABLED_OAUTH_PROVIDERS block above — the Lambda env is
+          # Terraform-frozen (modules/lambda ignore_changes=[environment], Feature 1290), so these
+          # (previously set by hand during the WI-6 go-live) must be synced out-of-band from
+          # terraform outputs that mirror the Lambda env expressions exactly.
+          # CRITICAL: re-read CUR_ENV here so it reflects any ENABLED_OAUTH write just made above
+          # (reusing the stale map would revert it). We thread CUR_ENV across keys so a second
+          # write includes the first. Empty desired values are SKIPPED so we never clobber a
+          # correct value with "". update-function-configuration REPLACES the whole Variables map,
+          # so we always merge into the CURRENT map.
+          echo "🔐 Step 2.5b: Syncing FRONTEND_URL + COGNITO_REDIRECT_URI from terraform outputs..."
+          FRONTEND_URL_TF="$(terraform output -raw frontend_url 2>/dev/null || echo "")"
+          COGNITO_REDIRECT_TF="$(terraform output -raw cognito_redirect_uri 2>/dev/null || echo "")"
+          CUR_ENV="$(aws lambda get-function-configuration --function-name "$FUNC_NAME" --query 'Environment.Variables' --output json)"
+          for pair in "FRONTEND_URL=${FRONTEND_URL_TF}" "COGNITO_REDIRECT_URI=${COGNITO_REDIRECT_TF}"; do
+            KEY="${pair%%=*}"
+            DESIRED="${pair#*=}"
+            if [ -z "$DESIRED" ]; then
+              echo "  ${KEY}: desired empty — skip (not managed here, no clobber)"
+              continue
+            fi
+            CUR_VAL="$(printf '%s' "$CUR_ENV" | KEY="$KEY" python3 -c 'import sys,json,os;print(json.load(sys.stdin).get(os.environ["KEY"],""))')"
+            if [ "$CUR_VAL" != "$DESIRED" ]; then
+              echo "  Updating ${KEY} (was '${CUR_VAL}')..."
+              CUR_ENV="$(printf '%s' "$CUR_ENV" | KEY="$KEY" VAL="$DESIRED" python3 -c 'import sys,json,os;e=json.load(sys.stdin);e[os.environ["KEY"]]=os.environ["VAL"];print(json.dumps(e))')"
+              NEW_ENV="$(printf '%s' "$CUR_ENV" | python3 -c 'import sys,json;print(json.dumps({"Variables":json.load(sys.stdin)}))')"
+              aws lambda update-function-configuration --function-name "$FUNC_NAME" --environment "$NEW_ENV" >/dev/null
+              aws lambda wait function-updated --function-name "$FUNC_NAME"
+              echo "  ✅ ${KEY} synced to '${DESIRED}'"
+            else
+              echo "  ${KEY}: already '${CUR_VAL}', no change"
+            fi
+          done
+
           echo "📦 Step 3: Publishing immutable version..."
           VERSION=$(aws lambda publish-version \
             --function-name "$FUNC_NAME" \

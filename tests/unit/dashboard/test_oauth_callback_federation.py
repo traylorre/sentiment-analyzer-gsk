@@ -144,6 +144,52 @@ class TestOAuthCallbackFederationFieldsNewUser:
     @patch("src.lambdas.dashboard.auth.get_user_by_email_gsi")
     @patch("src.lambdas.dashboard.auth.exchange_code_for_tokens")
     @patch("src.lambdas.dashboard.auth.decode_id_token")
+    def test_callback_threads_request_redirect_uri_into_exchange(
+        self,
+        mock_decode_id_token: MagicMock,
+        mock_exchange: MagicMock,
+        mock_get_user: MagicMock,
+        mock_advance_role: MagicMock,
+        mock_mark_verified: MagicMock,
+        mock_link_provider: MagicMock,
+        mock_update_sub: MagicMock,
+        mock_create_user: MagicMock,
+    ) -> None:
+        """Feature 1383: the request's (state-validated) redirect_uri is passed to the token
+        exchange as redirect_uri_override, so the exchange matches the authorize step per-origin
+        instead of the static config value."""
+        table = MagicMock()
+        user = self._create_test_user(role="anonymous")
+        mock_create_user.return_value = user
+        mock_get_user.return_value = None
+        mock_exchange.return_value = self._mock_tokens()
+        mock_decode_id_token.return_value = {
+            "email": "test@example.com",
+            "sub": "google-123",
+            "email_verified": True,
+        }
+
+        handle_oauth_callback(
+            table=table,
+            code="auth-code",
+            provider="google",
+            redirect_uri="http://localhost:3000/auth/callback",
+            state="test_state_abc123",
+        )
+
+        # The exchange must receive the per-request redirect_uri as the override.
+        assert mock_exchange.call_args.kwargs.get("redirect_uri_override") == (
+            "http://localhost:3000/auth/callback"
+        )
+
+    @patch("src.lambdas.dashboard.auth._create_authenticated_user")
+    @patch("src.lambdas.dashboard.auth._update_cognito_sub")
+    @patch("src.lambdas.dashboard.auth._link_provider")
+    @patch("src.lambdas.dashboard.auth._mark_email_verified")
+    @patch("src.lambdas.dashboard.auth._advance_role")
+    @patch("src.lambdas.dashboard.auth.get_user_by_email_gsi")
+    @patch("src.lambdas.dashboard.auth.exchange_code_for_tokens")
+    @patch("src.lambdas.dashboard.auth.decode_id_token")
     def test_new_user_verification_verified_when_email_verified(
         self,
         mock_decode_id_token: MagicMock,
