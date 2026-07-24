@@ -965,8 +965,10 @@ module "cloudfront_sse" {
   lambda_function_arn = module.sse_streaming_lambda.function_arn
 
   # FR-005: WAF WebACL (CLOUDFRONT scope). Empty string => CloudFront runs
-  # without a WAF (var.enable_waf=false). cloudfront_sse maps "" to null.
-  waf_web_acl_arn = var.enable_waf ? module.waf_cloudfront[0].web_acl_arn : ""
+  # without a WAF. Guard on enable_cloudfront_waf (the toggle that governs
+  # module.waf_cloudfront[0]); guarding on enable_waf would index a count=0
+  # module when the two toggles diverge. cloudfront_sse maps "" to null.
+  waf_web_acl_arn = var.enable_cloudfront_waf ? module.waf_cloudfront[0].web_acl_arn : ""
 
   # FR-003: 60s default max (180s requires AWS quota increase)
   origin_read_timeout = 60
