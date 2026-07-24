@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { useAuthStore } from '@/stores/auth-store';
 import { SESSION_INIT_TIMEOUT_MS } from '@/lib/constants';
 
@@ -28,15 +28,11 @@ import { SESSION_INIT_TIMEOUT_MS } from '@/lib/constants';
  * ```
  */
 export function useSessionInit() {
-  // Ref guard to prevent multiple init attempts from different renders
-  const initAttempted = useRef(false);
-
   const {
     isInitialized,
     isLoading,
     error,
-    restoreSession,
-    signInAnonymous,
+    initializeSession,
     setInitialized,
     setError,
   } = useAuthStore();
@@ -44,12 +40,14 @@ export function useSessionInit() {
   // Feature 1165: Initialize immediately - no hydration wait needed
   // Session restoration happens via httpOnly cookies, not localStorage
   useEffect(() => {
-    // Only run once per app lifecycle
-    if (initAttempted.current || isInitialized) {
+    // Feature 1384: bootstrap runs exactly once. The guard against duplicate
+    // work now lives in the store's single-flight initializeSession() — shared
+    // across every SessionProvider mount — instead of a per-component ref, which
+    // could not stop two mounts from both minting an anonymous session and
+    // clobbering the OAuth refresh cookie. When already initialized, skip.
+    if (isInitialized) {
       return;
     }
-
-    initAttempted.current = true;
 
     // Clear stale OAuth sessionStorage keys from previous auth attempts.
     // CRITICAL: skip on /auth/callback. SessionProvider (root layout) runs this
@@ -62,24 +60,19 @@ export function useSessionInit() {
       sessionStorage.removeItem('oauth_state');
     }
 
-    const initializeSession = async () => {
+    const run = async () => {
       try {
-        // M1 WI-3: restore-first. The httpOnly refresh cookie (set for both
-        // guest and OAuth sessions) restores the previous session across
-        // reloads; only when nothing is restorable do we mint a NEW anonymous
-        // user. Before this, every F5 created a fresh DynamoDB user row.
+        // Feature 1384: restore-first, single-flight bootstrap owned by the
+        // store. initializeSession() restores from the httpOnly refresh cookie
+        // (guest OR OAuth) and only mints a NEW anonymous user when nothing is
+        // restorable. Raced against a timeout so a hung network call cannot
+        // leave the UI stuck on "Initializing session…".
         await Promise.race([
-          (async () => {
-            const restored = await restoreSession();
-            if (!restored) {
-              await signInAnonymous();
-            }
-          })(),
+          initializeSession(),
           new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error('timeout')), SESSION_INIT_TIMEOUT_MS)
           ),
         ]);
-        setInitialized(true);
       } catch (err) {
         if (err instanceof Error && err.message === 'timeout') {
           setError('Session initialization timed out. Please refresh.');
@@ -93,11 +86,10 @@ export function useSessionInit() {
       }
     };
 
-    initializeSession();
+    run();
   }, [
     isInitialized,
-    restoreSession,
-    signInAnonymous,
+    initializeSession,
     setInitialized,
     setError,
   ]);

@@ -11,7 +11,7 @@
 import { create } from 'zustand';
 import type { User, AuthTokens, AuthState, OAuthProvider } from '@/types/auth';
 import { setUserId, setAccessToken, emitErrorEvent } from '@/lib/api/client';
-import { authApi } from '@/lib/api/auth';
+import { authApi, type RefreshTokenResponse } from '@/lib/api/auth';
 
 interface AuthStore extends AuthState {
   // Loading states
@@ -32,6 +32,7 @@ interface AuthStore extends AuthState {
   setInitialized: (initialized: boolean) => void;
 
   // Auth operations
+  initializeSession: () => Promise<void>; // Feature 1384: single-flight bootstrap owner
   restoreSession: () => Promise<boolean>; // M1 WI-3: cookie-based restore at init
   signInAnonymous: () => Promise<void>;
   signInWithMagicLink: (email: string, token: string) => Promise<void>;
@@ -68,6 +69,35 @@ const initialState: AuthState & { isLoading: boolean; isInitialized: boolean; er
   sessionDegraded: false,
 };
 
+// Feature 1384: single-flight guards (module-level so they are shared across
+// EVERY component mount, unlike a per-component useRef). See the two callers
+// below for why sharing matters.
+//
+// refreshInFlight collapses concurrent POST /refresh calls (restoreSession +
+// refreshSession + any pre-expiry timer, fired by 9 useAuth mount sites on a
+// single load) into ONE network request, so the httpOnly refresh_token cookie
+// is never rotated by two racing requests at once.
+let refreshInFlight: Promise<RefreshTokenResponse> | null = null;
+
+function singleFlightRefresh(): Promise<RefreshTokenResponse> {
+  if (!refreshInFlight) {
+    refreshInFlight = authApi.refreshToken().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
+}
+
+// bootstrapInFlight makes session initialization run EXACTLY ONCE. The prior
+// per-component useRef guard in useSessionInit did not prevent the race:
+// SessionProvider mounts on every page and the shared isInitialized flag is
+// only set AFTER the async restore/mint completes, so concurrent mounts all
+// passed the `!isInitialized` check and each fired its own restore + anon-mint
+// — and any anon-mint overwrites the OAuth refresh cookie (same name/path),
+// silently logging the user out on reload. A single module-level promise
+// collapses bootstrap to one restore/mint for all callers.
+let bootstrapInFlight: Promise<void> | null = null;
+
 // Feature 1165: Memory-only store - no persist() middleware
 // Session restoration relies on httpOnly cookies via /refresh endpoint
 export const useAuthStore = create<AuthStore>((set, get) => ({
@@ -99,6 +129,34 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
   setInitialized: (initialized) => set({ isInitialized: initialized }),
 
+  initializeSession: async () => {
+    // Feature 1384: the SOLE session-bootstrap entrypoint. Guarded by the
+    // module-level bootstrapInFlight promise so all concurrent callers await
+    // the SAME restore/mint and never trigger parallel anonymous mints (which
+    // would clobber the OAuth refresh cookie). Restore-first: only mint a new
+    // anonymous user when there is genuinely no restorable session.
+    if (get().isInitialized) {
+      return;
+    }
+    if (bootstrapInFlight) {
+      return bootstrapInFlight;
+    }
+    bootstrapInFlight = (async () => {
+      const { restoreSession, signInAnonymous, setInitialized } = get();
+      try {
+        const restored = await restoreSession();
+        if (!restored) {
+          // No valid refresh cookie → genuinely no session to restore.
+          await signInAnonymous();
+        }
+        setInitialized(true);
+      } finally {
+        bootstrapInFlight = null;
+      }
+    })();
+    return bootstrapInFlight;
+  },
+
   restoreSession: async () => {
     // M1 WI-3: restore the previous session from the httpOnly refresh cookie
     // instead of minting a new anonymous user on every reload. Returns true
@@ -107,7 +165,9 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     const { setUser, setSession, setTokens } = get();
 
     try {
-      const data = await authApi.refreshToken();
+      // Feature 1384: single-flight — share one in-flight /refresh with any
+      // concurrent refreshSession() call so the cookie is rotated only once.
+      const data = await singleFlightRefresh();
 
       if (!data.accessToken) {
         return false;
@@ -350,7 +410,8 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     try {
       // Use authApi to route to Lambda backend
       // Feature 1168: Refresh token now sent via httpOnly cookie, not in request body
-      const data = await authApi.refreshToken();
+      // Feature 1384: single-flight — collapse with a concurrent restoreSession().
+      const data = await singleFlightRefresh();
 
       // M1 WI-3: the unmapped client used to yield accessToken === undefined
       // here silently; a refresh without an access token is now an explicit
