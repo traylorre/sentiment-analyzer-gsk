@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { User, Bell, Moon, Vibrate, LogOut, Shield, Mail } from 'lucide-react';
 import { PageTransition } from '@/components/layout/page-transition';
@@ -39,6 +40,7 @@ function SettingItem({ icon: Icon, label, description, children }: SettingItemPr
 }
 
 export default function SettingsPage() {
+  const router = useRouter();
   const { reducedMotion, hapticEnabled, setReducedMotion, setHapticEnabled } = useAnimationStore();
   // Feature 1165: Use isInitialized instead of hasHydrated (memory-only store)
   const { isInitialized, user, isAuthenticated, isAnonymous, signOut, isLoading } = useAuth();
@@ -134,7 +136,11 @@ export default function SettingsPage() {
                       Sign in with email or social to unlock all features and save
                       your data across devices.
                     </p>
-                    <Button size="sm" className="gap-2">
+                    <Button
+                      size="sm"
+                      className="gap-2"
+                      onClick={() => router.push('/auth/signin')}
+                    >
                       <Mail className="w-4 h-4" />
                       Upgrade Now
                     </Button>
