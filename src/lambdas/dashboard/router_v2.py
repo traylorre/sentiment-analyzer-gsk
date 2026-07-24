@@ -200,6 +200,61 @@ def _extract_refresh_token_from_event(event: dict) -> str | None:
     return cookies.get(REFRESH_TOKEN_COOKIE_NAME)
 
 
+def _noclobber_guard_response(event: dict, table) -> Response | None:
+    """Feature 1384: no-clobber guard for POST /api/v2/auth/anonymous.
+
+    Minting a new anonymous session issues a fresh refresh_token cookie under
+    the SAME name/path, so it silently overwrites (clobbers) an existing OAuth
+    (Cognito-backed) refresh cookie. When that happens the next reload can no
+    longer restore the OAuth session and the user is logged out. PR #942 fixed
+    one client trigger, but the anonymous endpoint remained reachable from other
+    paths (a second browser tab, a stray retry), so the clobber survived.
+
+    This guard closes it at the source: if the incoming request already carries
+    a VALID Cognito refresh cookie, refuse to mint and instead return the
+    existing session refreshed from that cookie — WITHOUT emitting a new
+    refresh cookie, so the OAuth cookie is preserved untouched.
+
+    Returns:
+        A 200 refresh-style Response when a valid Cognito session is present
+        (caller must NOT mint). None when there is no restorable Cognito session
+        and normal anonymous minting should proceed (no cookie, an anonymous
+        `anon.*` cookie, or an invalid/expired/revoked cookie).
+    """
+    refresh_token = _extract_refresh_token_from_event(event)
+    if not refresh_token:
+        return None
+
+    # Guest (anon.*) refresh cookies are handled by the client's restore-first
+    # flow and are safe to replace; only a Cognito-backed cookie must be
+    # protected here (that is the OAuth-persistence clobber the spec targets).
+    if refresh_token.startswith("anon."):
+        return None
+
+    result = auth_service.refresh_access_tokens(
+        refresh_token=refresh_token, table=table
+    )
+    if result.error or not result.access_token:
+        # Cookie present but invalid/expired/revoked: let the normal anonymous
+        # mint proceed. Replacing a dead Cognito cookie is correct, not a clobber.
+        return None
+
+    logger.info(
+        "anonymous.noclobber_guard",
+        extra={"auth_type": result.auth_type or "cognito"},
+    )
+
+    # Preserve the existing httpOnly Cognito refresh cookie by NOT emitting a
+    # Set-Cookie for refresh_token. Return the refreshed session so the caller
+    # still gets a usable access/id token.
+    response_data = result.model_dump(exclude={"refresh_token_for_cookie"})
+    return _json_response_with_cookies(
+        response_data,
+        extra_headers=_get_no_cache_headers(),
+        status_code=200,
+    )
+
+
 def _json_response_with_cookies(
     body: dict,
     status_code: int = 200,
@@ -390,6 +445,14 @@ def create_anonymous_session():
     """
     event = auth_router.current_event.raw_event
     table = get_users_table()
+
+    # Feature 1384: no-clobber guard — if the request already carries a valid
+    # Cognito (OAuth) refresh cookie, do NOT mint a new anonymous session that
+    # would overwrite it. Return the existing session instead. This makes the
+    # OAuth-cookie clobber unreachable from every client path (incl. multi-tab).
+    guard_response = _noclobber_guard_response(event, table)
+    if guard_response is not None:
+        return guard_response
 
     body, err = _parse_request_body(
         event, auth_service.AnonymousSessionRequest, allow_none=True
