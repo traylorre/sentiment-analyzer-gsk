@@ -1482,6 +1482,15 @@ output "dashboard_api_url" {
   value       = module.api_gateway.api_endpoint
 }
 
+# Feature 1375: consumed by the CI dashboard-deploy step to set the Lambda's
+# ENABLED_OAUTH_PROVIDERS env var. Terraform cannot manage that env directly
+# (modules/lambda ignore_changes=[environment], Feature 1290), so CI sets it
+# out-of-band from this derived value before publishing the alias version.
+output "enabled_oauth_providers" {
+  description = "Comma-separated OAuth providers derived from populated secrets (Feature 1370/1375)"
+  value       = local.enabled_oauth_providers
+}
+
 output "api_gateway_id" {
   description = "ID of the Dashboard API Gateway"
   value       = module.api_gateway.api_id
