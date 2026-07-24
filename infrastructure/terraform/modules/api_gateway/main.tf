@@ -74,8 +74,8 @@ resource "aws_api_gateway_gateway_response" "unauthorized" {
   response_parameters = {
     "gatewayresponse.header.WWW-Authenticate"                 = "'Bearer realm=\"sentiment-analyzer\"'"
     "gatewayresponse.header.Access-Control-Allow-Origin"      = "method.request.header.origin"
-    "gatewayresponse.header.Access-Control-Allow-Headers"     = "'Content-Type,Authorization,Accept,Cache-Control,Last-Event-ID,X-Amzn-Trace-Id,X-User-ID'"
-    "gatewayresponse.header.Access-Control-Allow-Methods"     = "'GET,POST,PUT,DELETE,PATCH,OPTIONS'"
+    "gatewayresponse.header.Access-Control-Allow-Headers"     = local.cors_allow_headers
+    "gatewayresponse.header.Access-Control-Allow-Methods"     = local.cors_allow_methods
     "gatewayresponse.header.Access-Control-Allow-Credentials" = "'true'"
   }
 
@@ -99,8 +99,8 @@ resource "aws_api_gateway_gateway_response" "missing_auth_token" {
   response_parameters = {
     "gatewayresponse.header.WWW-Authenticate"                 = "'Bearer realm=\"sentiment-analyzer\"'"
     "gatewayresponse.header.Access-Control-Allow-Origin"      = "method.request.header.origin"
-    "gatewayresponse.header.Access-Control-Allow-Headers"     = "'Content-Type,Authorization,Accept,Cache-Control,Last-Event-ID,X-Amzn-Trace-Id,X-User-ID'"
-    "gatewayresponse.header.Access-Control-Allow-Methods"     = "'GET,POST,PUT,DELETE,PATCH,OPTIONS'"
+    "gatewayresponse.header.Access-Control-Allow-Headers"     = local.cors_allow_headers
+    "gatewayresponse.header.Access-Control-Allow-Methods"     = local.cors_allow_methods
     "gatewayresponse.header.Access-Control-Allow-Credentials" = "'true'"
   }
 
@@ -123,8 +123,8 @@ resource "aws_api_gateway_gateway_response" "access_denied" {
   # FR-008: CORS headers on 403
   response_parameters = {
     "gatewayresponse.header.Access-Control-Allow-Origin"      = "method.request.header.origin"
-    "gatewayresponse.header.Access-Control-Allow-Headers"     = "'Content-Type,Authorization,Accept,Cache-Control,Last-Event-ID,X-Amzn-Trace-Id,X-User-ID'"
-    "gatewayresponse.header.Access-Control-Allow-Methods"     = "'GET,POST,PUT,DELETE,PATCH,OPTIONS'"
+    "gatewayresponse.header.Access-Control-Allow-Headers"     = local.cors_allow_headers
+    "gatewayresponse.header.Access-Control-Allow-Methods"     = local.cors_allow_methods
     "gatewayresponse.header.Access-Control-Allow-Credentials" = "'true'"
   }
 
@@ -212,9 +212,19 @@ locals {
   # Gateway responses (401/403/404) use method.request.header.origin which IS supported.
   cors_origin = length(var.cors_allowed_origins) > 0 ? var.cors_allowed_origins[0] : "*"
 
+  # Canonical CORS method + header lists (Feature 1382).
+  # SINGLE SOURCE OF TRUTH — every Access-Control-Allow-Methods / -Headers value in
+  # this module references these locals so the lists cannot drift out of sync again.
+  # Must mirror the backend handler constants (_CORS_ALLOW_METHODS / _CORS_ALLOW_HEADERS
+  # in src/lambdas/dashboard/handler.py). PATCH is required for
+  # PATCH /api/v2/notifications/preferences (Settings → Save Changes). Values keep the
+  # API Gateway-required single-quote wrapping ('...').
+  cors_allow_methods = "'GET,POST,PUT,DELETE,PATCH,OPTIONS'"
+  cors_allow_headers = "'Content-Type,Authorization,Accept,Cache-Control,Last-Event-ID,X-Amzn-Trace-Id,X-User-ID'"
+
   cors_headers = {
-    "method.response.header.Access-Control-Allow-Headers"     = "'Content-Type,Authorization,Accept,Cache-Control,Last-Event-ID,X-Amzn-Trace-Id,X-User-ID'"
-    "method.response.header.Access-Control-Allow-Methods"     = "'GET,POST,PUT,DELETE,PATCH,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Headers"     = local.cors_allow_headers
+    "method.response.header.Access-Control-Allow-Methods"     = local.cors_allow_methods
     "method.response.header.Access-Control-Allow-Origin"      = "'${local.cors_origin}'"
     "method.response.header.Access-Control-Allow-Credentials" = "'true'"
     "method.response.header.Vary"                             = "'Origin'"
@@ -624,8 +634,8 @@ resource "aws_api_gateway_integration_response" "proxy_options" {
 
   response_parameters = {
     "method.response.header.Access-Control-Allow-Credentials" = "'true'"
-    "method.response.header.Access-Control-Allow-Headers"     = "'Content-Type,Authorization,X-User-ID,X-Amzn-Trace-Id'"
-    "method.response.header.Access-Control-Allow-Methods"     = "'GET,POST,PUT,DELETE,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Headers"     = local.cors_allow_headers
+    "method.response.header.Access-Control-Allow-Methods"     = local.cors_allow_methods
     "method.response.header.Access-Control-Allow-Origin"      = "'${local.cors_origin}'"
     "method.response.header.Access-Control-Expose-Headers"    = "'X-Amzn-Trace-Id'"
     "method.response.header.Vary"                             = "'Origin'"
@@ -688,8 +698,8 @@ resource "aws_api_gateway_integration_response" "root_options" {
 
   response_parameters = {
     "method.response.header.Access-Control-Allow-Credentials" = "'true'"
-    "method.response.header.Access-Control-Allow-Headers"     = "'Content-Type,Authorization,X-User-ID,X-Amzn-Trace-Id'"
-    "method.response.header.Access-Control-Allow-Methods"     = "'GET,POST,PUT,DELETE,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Headers"     = local.cors_allow_headers
+    "method.response.header.Access-Control-Allow-Methods"     = local.cors_allow_methods
     "method.response.header.Access-Control-Allow-Origin"      = "'${local.cors_origin}'"
     "method.response.header.Access-Control-Expose-Headers"    = "'X-Amzn-Trace-Id'"
     "method.response.header.Vary"                             = "'Origin'"
@@ -741,6 +751,12 @@ resource "aws_api_gateway_deployment" "dashboard" {
     redeployment = sha1(jsonencode(concat(
       [
         var.lambda_invoke_arn, # Feature 1305: Force redeploy on integration URI change
+        # Feature 1382: hash the CORS method/header VALUES, not just resource IDs.
+        # OPTIONS integration_response .id does not change on a param-only edit, so
+        # without these a verb-list change would apply green while the stage keeps
+        # serving the stale preflight (see spec AR#1 finding H1 / task T008).
+        local.cors_allow_methods,
+        local.cors_allow_headers,
         aws_api_gateway_resource.proxy.id,
         aws_api_gateway_method.proxy.id,
         aws_api_gateway_method.proxy_options.id,

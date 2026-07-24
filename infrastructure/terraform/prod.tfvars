@@ -42,6 +42,12 @@ cors_allowed_origins = [
   # Format: "https://main.<app-id>.amplifyapp.com"
 ]
 
+# TODO(1383): Set frontend_url + cognito_callback_urls[0] to the prod Amplify URL once
+# enable_amplify is turned on for prod and the URL is finalized (see TODO(1269) above).
+# The CI dashboard-deploy "Step 2.5" is empty-safe and will no-op FRONTEND_URL /
+# COGNITO_REDIRECT_URI until these are set. Do NOT copy the preprod URL here — prod uses a
+# different frontend URL. Left unset deliberately (owner question O1: prod canonical URL).
+
 # Feature 1054: JWT Secret for auth middleware
 # IMPORTANT: Use a strong, unique secret for production
 # The value is passed via TF_VAR_jwt_secret in CI - never commit the actual secret

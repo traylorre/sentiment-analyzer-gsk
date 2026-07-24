@@ -51,9 +51,16 @@ export function useSessionInit() {
 
     initAttempted.current = true;
 
-    // Clear stale OAuth sessionStorage keys from previous auth attempts
-    sessionStorage.removeItem('oauth_provider');
-    sessionStorage.removeItem('oauth_state');
+    // Clear stale OAuth sessionStorage keys from previous auth attempts.
+    // CRITICAL: skip on /auth/callback. SessionProvider (root layout) runs this
+    // on every page, and useSearchParams' Suspense boundary defers the callback
+    // page's own effect — so without this guard we wipe oauth_provider/oauth_state
+    // before the callback can read them, making every OAuth sign-in fail with
+    // "Authentication session expired" (the callback clears them itself after use).
+    if (!window.location.pathname.startsWith('/auth/callback')) {
+      sessionStorage.removeItem('oauth_provider');
+      sessionStorage.removeItem('oauth_state');
+    }
 
     const initializeSession = async () => {
       try {
