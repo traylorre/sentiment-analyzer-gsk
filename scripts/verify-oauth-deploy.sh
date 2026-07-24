@@ -54,7 +54,9 @@ fi
 # -------------------------------------------------------------------
 
 # 1. Lambda env var
-LAMBDA_NAME="${ENV}-dashboard"
+# NOTE: the dashboard function is named "{env}-sentiment-dashboard" (not "{env}-dashboard").
+# The wrong name also trips the deployer IAM scope (*-sentiment-*) → AccessDenied → false FAIL.
+LAMBDA_NAME="${ENV}-sentiment-dashboard"
 ENABLED="$(aws lambda get-function-configuration \
   --function-name "$LAMBDA_NAME" \
   --query 'Environment.Variables.ENABLED_OAUTH_PROVIDERS' \
