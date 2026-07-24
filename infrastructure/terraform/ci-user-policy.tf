@@ -601,6 +601,12 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
   # Note: These require unconditional access for Terraform state refresh AND
   # for bootstrap operations on resources that don't yet have the required tags.
   # TagResource/UpdateUserPoolClient are here to avoid chicken-egg with tag conditions.
+  #
+  # Feature 1375 (M1 WI-6 Google OAuth): IdentityProvider write actions must be
+  # unconditional too. AWS does NOT populate the cognito-idp:ResourceTag/Name
+  # condition key in the auth context for CreateIdentityProvider (the IdP sub-resource
+  # doesn't exist yet), so a tag-gated grant is an effective deny — same chicken-egg
+  # as UpdateUserPoolClient. Update/Delete kept alongside for lifecycle symmetry.
   statement {
     sid    = "CognitoIDPList"
     effect = "Allow"
@@ -619,7 +625,11 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
       "cognito-idp:TagResource",
       "cognito-idp:UntagResource",
       "cognito-idp:ListTagsForResource",
-      "cognito-idp:UpdateUserPoolClient"
+      "cognito-idp:UpdateUserPoolClient",
+      # Feature 1375: unconditional IdP writes (tag condition unenforceable at create)
+      "cognito-idp:CreateIdentityProvider",
+      "cognito-idp:UpdateIdentityProvider",
+      "cognito-idp:DeleteIdentityProvider"
     ]
     resources = ["*"]
   }
@@ -653,6 +663,14 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
 
   # Cognito Identity Pools - List/Get operations (require wildcard)
   # Note: These require unconditional access for Terraform state refresh
+  #
+  # Feature 1375 (M1 WI-6): CreateIdentityPool is the identity-pool twin of the
+  # CreateIdentityProvider chicken-egg above — AWS can't evaluate the
+  # cognito-identity:ResourceTag/Name condition on a pool that doesn't exist yet,
+  # so the tag-gated grant is an effective deny. Create/Update/Delete kept here for
+  # lifecycle symmetry. NOTE: SetIdentityPoolRoles is deliberately NOT here — it
+  # stays tag-scoped in CognitoIdentity (role-assignment is the privilege-escalation
+  # surface; keep it constrained).
   statement {
     sid    = "CognitoIdentityList"
     effect = "Allow"
@@ -660,7 +678,11 @@ data "aws_iam_policy_document" "ci_deploy_monitoring" {
       "cognito-identity:ListIdentityPools",
       "cognito-identity:DescribeIdentityPool",
       "cognito-identity:GetIdentityPoolRoles",
-      "cognito-identity:ListTagsForResource"
+      "cognito-identity:ListTagsForResource",
+      # Feature 1375: unconditional pool writes (tag condition unenforceable at create)
+      "cognito-identity:CreateIdentityPool",
+      "cognito-identity:UpdateIdentityPool",
+      "cognito-identity:DeleteIdentityPool"
     ]
     resources = ["*"]
   }
