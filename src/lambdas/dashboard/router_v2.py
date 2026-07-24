@@ -1382,7 +1382,20 @@ def get_refresh_status(config_id: str):
 
 @config_router.post("/api/v2/configurations/<config_id>/refresh")
 def trigger_refresh(config_id: str):
-    """Trigger manual refresh (T061)."""
+    """Trigger manual refresh (T061). Auth + ownership added by Feature 1391 (GAP-2)."""
+    event = config_router.current_event.raw_event
+    table = get_users_table()
+
+    user_id, err = _require_user_id(event, table=table)
+    if err:
+        return err
+
+    # Ownership check: verify config belongs to this user (no existence oracle —
+    # same 404 whether the config is missing or owned by someone else)
+    config_data, err = _get_config_with_tickers(table, user_id, config_id)
+    if err:
+        return err
+
     result = market_service.trigger_refresh(config_id=config_id)
     return json_response(202, result.model_dump())
 
