@@ -2211,8 +2211,16 @@ def handle_oauth_callback(
     config = CognitoConfig.from_env()
 
     # Exchange code for tokens
+    # Feature 1383: thread the request's redirect_uri (already proven equal to the
+    # stored authorize-time value by validate_oauth_state above) so the token exchange
+    # matches the authorize redirect_uri per-origin instead of the static config value.
     try:
-        tokens = exchange_code_for_tokens(config, code, code_verifier=code_verifier)
+        tokens = exchange_code_for_tokens(
+            config,
+            code,
+            code_verifier=code_verifier,
+            redirect_uri_override=redirect_uri,
+        )
     except TokenError as e:
         logger.warning(
             "OAuth token exchange failed",
