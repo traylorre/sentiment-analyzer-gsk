@@ -661,6 +661,10 @@ def refresh_tokens():
             refresh_token = body.refresh_token
 
     if not refresh_token:
+        # Feature 1381 (FR-007): distinguish the cookie-absent 401 from a
+        # Cognito-reject 401 in CloudWatch so the OAuth-persistence failure mode
+        # is unambiguous on the live deployment. No token material logged.
+        logger.info("refresh.cookie_absent")
         return error_response(401, "Refresh token not found in cookie or request body")
 
     # Feature 1188: Pass table for blocklist check (FR-007)
@@ -668,7 +672,20 @@ def refresh_tokens():
         refresh_token=refresh_token, table=table
     )
     if result.error:
+        # Feature 1381 (FR-007): cookie WAS present but the refresh was rejected
+        # (e.g. Cognito invalid_grant / revoked). Distinct from cookie_absent.
+        logger.info("refresh.rejected", extra={"error": result.error})
         return error_response(401, result.message or result.error)
+
+    # Feature 1381 (FR-007): successful refresh; record whether an OAuth identity
+    # was resolved (Defect B). auth_type is non-sensitive; no tokens logged.
+    logger.info(
+        "refresh.success",
+        extra={
+            "auth_type": result.auth_type or "unknown",
+            "identity_resolved": bool(result.user_id),
+        },
+    )
 
     # M1 WI-3: the rotated refresh token travels ONLY in the httpOnly cookie
     response_data = result.model_dump(exclude={"refresh_token_for_cookie"})
