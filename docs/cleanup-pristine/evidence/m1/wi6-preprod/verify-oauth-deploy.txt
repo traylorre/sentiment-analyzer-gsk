@@ -1,0 +1,9 @@
+PASS: AWS account 218795110243 matches expected preprod account.
+PASS: Lambda env ENABLED_OAUTH_PROVIDERS=google
+PASS: Cognito IdPs configured: Google
+PASS: Lambda env <-> Cognito IdP consistency verified.
+PASS: https://yikrqu13lj.execute-api.us-east-1.amazonaws.com/v1/api/v2/auth/oauth/urls returned 200 with 1 provider(s).
+
+================================================================
+  All OAuth deploy checks PASSED for env: preprod
+================================================================

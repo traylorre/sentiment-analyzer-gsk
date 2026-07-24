@@ -1491,6 +1491,22 @@ output "enabled_oauth_providers" {
   value       = local.enabled_oauth_providers
 }
 
+# Feature 1383: consumed by the CI dashboard-deploy step (deploy.yml "Step 2.5") to set the
+# Lambda's FRONTEND_URL / COGNITO_REDIRECT_URI env vars. Terraform cannot manage that env
+# directly (modules/lambda ignore_changes=[environment], Feature 1290), so CI syncs these
+# out-of-band before publishing the alias version. Each output MUST mirror the exact env
+# expression the dashboard Lambda uses (see the aws_lambda_function environment block above)
+# so the synced value equals what Terraform intends.
+output "frontend_url" {
+  description = "Customer dashboard URL synced onto the dashboard Lambda FRONTEND_URL env by CI (Feature 1383). Mirrors the FRONTEND_URL env expression exactly."
+  value       = var.frontend_url
+}
+
+output "cognito_redirect_uri" {
+  description = "Static OAuth token-exchange redirect URI synced onto COGNITO_REDIRECT_URI by CI (Feature 1383). Mirrors the COGNITO_REDIRECT_URI env expression exactly."
+  value       = length(var.cognito_callback_urls) > 0 ? var.cognito_callback_urls[0] : ""
+}
+
 output "api_gateway_id" {
   description = "ID of the Dashboard API Gateway"
   value       = module.api_gateway.api_id
