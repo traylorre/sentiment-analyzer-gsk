@@ -471,6 +471,142 @@ def get_user_by_email(table: Any, email: str) -> User | None:
 # Feature 014 User Story 3: Email Uniqueness (T040-T044)
 # =============================================================================
 
+# Feature 1395: soft page threshold for identity-key lookups. Realistic per-identity
+# cardinality is tiny (one human's notifications/tokens/duplicates), so paging past this
+# is a fragmentation smell worth a WARN — but we STILL paginate to full exhaustion. A
+# fixed page cap would re-open the false-None footgun for a user with enough non-USER
+# items to span many pages before their USER item.
+_IDENTITY_QUERY_PAGE_WARN_THRESHOLD = 25
+
+
+def _created_at_sort_key(user: User) -> datetime:
+    """Sort key for canonical selection (Feature 1395, FR-004).
+
+    Returns the user's ``created_at`` (normalized to UTC-aware). A missing or malformed
+    ``created_at`` sorts LAST (``datetime.max``) so a bad record can never win the
+    "oldest" pick.
+    """
+    created_at = getattr(user, "created_at", None)
+    if not isinstance(created_at, datetime):
+        return datetime.max.replace(tzinfo=UTC)
+    if created_at.tzinfo is None:
+        return created_at.replace(tzinfo=UTC)
+    return created_at
+
+
+def _query_users_by_index(
+    table: Any,
+    index_name: str,
+    key_expr: str,
+    attr_values: dict[str, Any],
+) -> list[User]:
+    """Return ALL ``USER`` items under a GSI key, paginating to full exhaustion.
+
+    Feature 1395: drops the ``Limit=1`` footgun. DynamoDB applies ``Limit`` to the
+    key-matched items BEFORE the ``FilterExpression`` runs, so a non-USER item sharing
+    the hash key (``NOTIFICATION`` / ``MAGIC_LINK_TOKEN`` under ``by_email``) could be the
+    single item returned and get filtered out, making the helper return ``None`` even
+    though a ``USER`` exists. Here the ``entity_type = USER`` filter is applied across the
+    FULL key match and we page via ``LastEvaluatedKey`` until the query is exhausted, so
+    injected non-USER items can never mask a real USER (FR-001, T-4).
+
+    Returns ``[]`` on a query error that yielded no records at all (same observable
+    behavior as the prior helpers, error logged via ``get_safe_error_info`` — no silent
+    failure, FR-010).
+
+    Failure scoping (O-1): the ``try`` sits INSIDE the pagination loop, so a failure on
+    page N returns the ``USER`` records already collected from pages 1..N-1 instead of
+    discarding them. Discarding them would turn a transient DynamoDB error into a false
+    "no such user", and the OAuth callback would mint a DUPLICATE record — precisely the
+    identity fragmentation this feature exists to stop. A partial result is logged as
+    incomplete so the degraded canonical selection is observable.
+    """
+    users: list[User] = []
+    exclusive_start_key: dict[str, Any] | None = None
+    page_count = 0
+    while True:
+        query_kwargs: dict[str, Any] = {
+            "IndexName": index_name,
+            "KeyConditionExpression": key_expr,
+            "FilterExpression": "entity_type = :type",
+            "ExpressionAttributeValues": {**attr_values, ":type": "USER"},
+        }
+        if exclusive_start_key is not None:
+            query_kwargs["ExclusiveStartKey"] = exclusive_start_key
+
+        try:
+            response = table.query(**query_kwargs)
+        except Exception as e:
+            # Stop paginating, but KEEP what we already resolved (see O-1 above).
+            logger.error(
+                "Failed GSI identity lookup",
+                extra={
+                    "index": index_name,
+                    "pages_completed": page_count,
+                    "users_found_before_failure": len(users),
+                    **get_safe_error_info(e),
+                },
+            )
+            if users:
+                logger.warning(
+                    "GSI identity lookup INCOMPLETE — canonical selection is being made "
+                    "over a partial result set",
+                    extra={"index": index_name, "pages_completed": page_count},
+                )
+            return users
+
+        page_count += 1
+
+        for item in response.get("Items", []):
+            try:
+                users.append(User.from_dynamodb_item(item))
+            except Exception as parse_err:
+                # A single malformed record must not abort the whole lookup; skip it
+                # (it also sorts LAST via _created_at_sort_key if it did parse).
+                logger.warning(
+                    "Skipping unparseable USER item during GSI lookup",
+                    extra={"index": index_name, **get_safe_error_info(parse_err)},
+                )
+
+        if page_count == _IDENTITY_QUERY_PAGE_WARN_THRESHOLD:
+            logger.warning(
+                "GSI identity lookup paging deeply — possible index pollution",
+                extra={"index": index_name, "pages": page_count},
+            )
+
+        exclusive_start_key = response.get("LastEvaluatedKey")
+        if not exclusive_start_key:
+            break
+
+    return users
+
+
+def _select_canonical_user(
+    users: list[User],
+    *,
+    key_label: str,
+    key_prefix: str,
+) -> User | None:
+    """Deterministically pick the canonical ``USER`` among duplicates (Feature 1395).
+
+    FR-004: the record with the earliest ``created_at`` wins (oldest → most likely to
+    hold the user's data), with ``user_id`` ascending as a stable tiebreak. FR-005: when
+    more than one ``USER`` shares one identity key, emit a sanitized WARN with the key
+    type, a truncated key prefix, and the count — never the raw email or full sub.
+    """
+    if not users:
+        return None
+    if len(users) > 1:
+        logger.warning(
+            "Multiple USER records under one identity key (Feature 1395)",
+            extra={
+                "identity_key": key_label,
+                "key_prefix": sanitize_for_log(key_prefix[:8]),
+                "count": len(users),
+            },
+        )
+    return min(users, key=lambda u: (_created_at_sort_key(u), u.user_id))
+
 
 @tracer.capture_method
 def get_user_by_email_gsi(table: Any, email: str) -> User | None:
@@ -495,32 +631,22 @@ def get_user_by_email_gsi(table: Any, email: str) -> User | None:
         extra={"email_domain": sanitize_for_log(normalized_email.split("@")[-1])},
     )
 
-    try:
-        # GSI by_email has email as HASH and SK as RANGE
-        # Filter by entity_type to only return USER records
-        response = table.query(
-            IndexName="by_email",
-            KeyConditionExpression="email = :email",
-            FilterExpression="entity_type = :type",
-            ExpressionAttributeValues={
-                ":email": normalized_email,
-                ":type": "USER",
-            },
-            Limit=1,  # We only need one result for uniqueness check
-        )
-
-        items = response.get("Items", [])
-        if not items:
-            return None
-
-        return User.from_dynamodb_item(items[0])
-
-    except Exception as e:
-        logger.error(
-            "Failed GSI email lookup",
-            extra=get_safe_error_info(e),
-        )
-        return None
+    # Feature 1395: paginate the full key match and filter server-side to entity_type=USER
+    # so NOTIFICATION / MAGIC_LINK_TOKEN items sharing this email hash key can never mask
+    # the real USER (the old Limit=1 could return a non-USER item → false None). FR-001.
+    users = _query_users_by_index(
+        table,
+        "by_email",
+        "email = :email",
+        {":email": normalized_email},
+    )
+    # by_email is expected to hold at most one USER per email; >1 is itself a fragmentation
+    # signal, so pick deterministically (oldest) and WARN via _select_canonical_user.
+    return _select_canonical_user(
+        users,
+        key_label="email",
+        key_prefix=normalized_email.split("@")[-1],
+    )
 
 
 @tracer.capture_method
@@ -560,32 +686,21 @@ def get_user_by_provider_sub(
         extra={"provider": safe_provider, "sub_prefix": sanitize_for_log(sub[:8])},
     )
 
-    try:
-        # GSI by_provider_sub has provider_sub as HASH
-        # Filter by entity_type to only return USER records
-        response = table.query(
-            IndexName="by_provider_sub",
-            KeyConditionExpression="provider_sub = :provider_sub",
-            FilterExpression="entity_type = :type",
-            ExpressionAttributeValues={
-                ":provider_sub": provider_sub,
-                ":type": "USER",
-            },
-            Limit=1,  # One provider:sub should map to at most one user
-        )
-
-        items = response.get("Items", [])
-        if not items:
-            return None
-
-        return User.from_dynamodb_item(items[0])
-
-    except Exception as e:
-        logger.error(
-            "Failed GSI provider_sub lookup",
-            extra=get_safe_error_info(e),
-        )
-        return None
+    # Feature 1395: by_provider_sub is USER-only, so the footgun here is not a false None
+    # but a NONDETERMINISTIC pick among duplicate USER records sharing one provider_sub
+    # (the current live state — 10 dupes). Drop Limit=1, paginate to exhaustion, and select
+    # the earliest-created_at record deterministically. FR-002, FR-004.
+    users = _query_users_by_index(
+        table,
+        "by_provider_sub",
+        "provider_sub = :provider_sub",
+        {":provider_sub": provider_sub},
+    )
+    return _select_canonical_user(
+        users,
+        key_label="provider_sub",
+        key_prefix=sub,
+    )
 
 
 # Feature 1181: OAuth Auto-Link Detection
@@ -2244,35 +2359,54 @@ def handle_oauth_callback(
             message="Email not provided by OAuth provider.",
         )
 
-    # Check for existing user with this email (use GSI for O(1) lookup)
-    existing_user = get_user_by_email_gsi(table, email)
-
-    # Feature 1181: Check for duplicate provider_sub before linking (AUTH_023)
     oauth_email_verified = claims.get("email_verified", False)
-    if cognito_sub:
-        existing_by_sub = get_user_by_provider_sub(table, provider, cognito_sub)
-        if existing_by_sub and (
-            not existing_user or existing_by_sub.user_id != existing_user.user_id
-        ):
-            # OAuth account already linked to a different user
-            safe_provider_auth023 = (
-                str(provider)
-                .replace("\r\n", " ")
-                .replace("\n", " ")
-                .replace("\r", " ")[:200]
-            )
-            logger.warning(
-                "OAuth account already linked to different user (AUTH_023)",
-                extra={
-                    "provider": safe_provider_auth023,
-                    "sub_prefix": sanitize_for_log(cognito_sub[:8]),
-                },
-            )
-            return OAuthCallbackResponse(
-                status="error",
-                error="AUTH_023",
-                message="This OAuth account is already linked to another user.",
-            )
+
+    # Feature 1395: resolve an existing account by STABLE IDENTITY first (server-derived
+    # sub from the validated id_token), then fall back to email. The by_email GSI can be
+    # polluted by NOTIFICATION / MAGIC_LINK_TOKEN items under the same email, so an
+    # email-only lookup can falsely miss a returning user and mint a duplicate USER on
+    # nearly every login. cognito_sub / provider_sub are USER-only and server-authoritative.
+    existing_by_sub = (
+        get_user_by_provider_sub(table, provider, cognito_sub) if cognito_sub else None
+    )
+    existing_by_cognito = (
+        get_user_by_cognito_sub(table, cognito_sub) if cognito_sub else None
+    )
+    existing_by_email = get_user_by_email_gsi(table, email)
+
+    # Stable identity wins for REUSE (FR-006): the same human, resolved by validated sub.
+    # Email is only a fallback for legacy records that predate the sub GSIs.
+    stable_user = existing_by_sub or existing_by_cognito
+    existing_user = stable_user or existing_by_email
+
+    # Feature 1181/1395 (AUTH_023): a genuine cross-account conflict is when the OAuth sub
+    # is already linked to a DIFFERENT user than the email account (FR-007). A returning
+    # user whose email index is polluted (email lookup None) is NOT a conflict — the
+    # stable-identity reuse above handles them. So we fire ONLY on a real sub-vs-email
+    # divergence, never on "sub found, email None".
+    if (
+        existing_by_sub
+        and existing_by_email
+        and existing_by_sub.user_id != existing_by_email.user_id
+    ):
+        safe_provider_auth023 = (
+            str(provider)
+            .replace("\r\n", " ")
+            .replace("\n", " ")
+            .replace("\r", " ")[:200]
+        )
+        logger.warning(
+            "OAuth account already linked to different user (AUTH_023)",
+            extra={
+                "provider": safe_provider_auth023,
+                "sub_prefix": sanitize_for_log((cognito_sub or "")[:8]),
+            },
+        )
+        return OAuthCallbackResponse(
+            status="error",
+            error="AUTH_023",
+            message="This OAuth account is already linked to another user.",
+        )
 
     if existing_user and existing_user.auth_type != provider:
         # Feature 1181: Flow 3 - Check if email not verified by OAuth (AUTH_022)
@@ -2922,27 +3056,21 @@ def get_user_by_cognito_sub(table: Any, cognito_sub: str) -> User | None:
     if not cognito_sub:
         return None
 
-    try:
-        response = table.query(
-            IndexName="by_cognito_sub",
-            KeyConditionExpression="cognito_sub = :sub",
-            FilterExpression="entity_type = :type",
-            ExpressionAttributeValues={
-                ":sub": cognito_sub,
-                ":type": "USER",
-            },
-            Limit=1,  # one cognito_sub maps to at most one user
-        )
-        items = response.get("Items", [])
-        if not items:
-            return None
-        return User.from_dynamodb_item(items[0])
-    except Exception as e:
-        logger.error(
-            "Failed GSI cognito_sub lookup",
-            extra=get_safe_error_info(e),
-        )
-        return None
+    # Feature 1395: by_cognito_sub is USER-only; drop Limit=1 (nondeterministic among
+    # duplicates) and select the earliest-created_at USER deterministically so token
+    # refresh resolves the SAME user_id every time until 1397 removes the dupes.
+    # FR-003, FR-004.
+    users = _query_users_by_index(
+        table,
+        "by_cognito_sub",
+        "cognito_sub = :sub",
+        {":sub": cognito_sub},
+    )
+    return _select_canonical_user(
+        users,
+        key_label="cognito_sub",
+        key_prefix=cognito_sub,
+    )
 
 
 def refresh_access_tokens(
