@@ -9,15 +9,15 @@
 
 ## Context (verified live this session — ground truth)
 
-The live `preprod-sentiment-users` DynamoDB table (single-table design) holds **10 duplicate `USER` records** for one Cognito `sub` (`34f814f8-c0c1-707e-f0a6-27147065f706`), all `auth_type=google`, email `scotthazlett@gmail.com`, created across 2026-07-24. Each Google login minted a new `user_id` (the fragmentation bug, fixed separately by Feature 1395).
+The live `preprod-sentiment-users` DynamoDB table (single-table design) holds **10 duplicate `USER` records** for one Cognito `sub` (`TARGET_COGNITO_SUB (supplied at runtime via --cognito-sub)`), all `auth_type=google`, email `OWNER_EMAIL_REDACTED`, created across 2026-07-24. Each Google login minted a new `user_id` (the fragmentation bug, fixed separately by Feature 1395).
 
 Verified facts used by this spec:
 
 | Fact | Value | How verified |
 |---|---|---|
 | Duplicate USER records | 10 | `query by_cognito_sub` → 10 items |
-| Shared cognito_sub | `34f814f8-c0c1-707e-f0a6-27147065f706` | same on all 10 |
-| Shared email / provider | `scotthazlett@gmail.com` / google | same on all 10 |
+| Shared cognito_sub | `TARGET_COGNITO_SUB (supplied at runtime via --cognito-sub)` | same on all 10 |
+| Shared email / provider | `OWNER_EMAIL_REDACTED` / google | same on all 10 |
 | Earliest `created_at` | `2026-07-24T03:16:42.164498Z` — **winner's `user_id` deliberately NOT recorded here (FR-018)**; it is computed at runtime by `select_canonical` and printed by the dry-run for owner comparison | min over the 10 (re-queried live by independent refuter) |
 | Latest `created_at` | `2026-07-24T21:18:06.865682Z` (id not recorded — FR-018) | max over the 10 |
 | Owned data per duplicate | **PROFILE only** — zero CONFIG#/ALERT#/NOTIF#/SESSION# | `query PK=USER#{id}` for all 10 returned only `SK=PROFILE` |
@@ -195,7 +195,7 @@ Answered: **preprod only** for this feature. Prod is out of scope for execution;
 
 ## Adversarial Review #4 (Independent Refuter Resolution)
 
-An independent refuter re-queried live `preprod-sentiment-users` and confirmed three findings. Each is resolved below with the exact locations changed. The live re-query was reproduced this session (`query by_cognito_sub` for `34f814f8-c0c1-707e-f0a6-27147065f706`, projected `user_id, created_at`, sorted ascending).
+An independent refuter re-queried live `preprod-sentiment-users` and confirmed three findings. Each is resolved below with the exact locations changed. The live re-query was reproduced this session (`query by_cognito_sub` for `TARGET_COGNITO_SUB (supplied at runtime via --cognito-sub)`, projected `user_id, created_at`, sorted ascending).
 
 | # | Sev | Finding | Resolution | Locations changed |
 |---|---|---|---|---|
