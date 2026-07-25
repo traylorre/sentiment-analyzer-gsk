@@ -24,6 +24,7 @@ import { motion } from 'framer-motion';
 import { Check, X, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/use-auth';
+import { safeInternalPath } from '@/lib/auth/safe-redirect';
 import type { OAuthProvider } from '@/types/auth';
 
 function CallbackContent() {
@@ -120,9 +121,14 @@ function CallbackContent() {
         // Feature 1193: Pass state and redirectUri for backend CSRF validation
         await handleCallback(code, provider, stateFromUrl, redirectUri);
         setStatus('success');
+        // Feature 1394: honor the `?redirect=` target ProtectedRoute stashed on
+        // sign-in (open-redirect guarded — falls back to '/'). Consume it once.
+        const storedRedirect = sessionStorage.getItem('auth_redirect');
+        sessionStorage.removeItem('auth_redirect');
+        const destination = safeInternalPath(storedRedirect);
         // Brief success message before redirect (matches /auth/verify pattern)
         setTimeout(() => {
-          router.push('/');
+          router.push(destination);
         }, 2000);
       } catch (err) {
         setStatus('error');

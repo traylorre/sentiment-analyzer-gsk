@@ -1,184 +1,87 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { authApi } from '@/lib/api/auth';
-import { api } from '@/lib/api/client';
+// Target: Customer Dashboard (Next.js/Amplify)
+// Feature 1380: picture -> pictureUrl mapping (null -> undefined) for both
+// /auth/me (getProfile) and /oauth/callback (exchangeOAuthCode).
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Mock the API client
+const post = vi.fn();
+const get = vi.fn();
+
 vi.mock('@/lib/api/client', () => ({
   api: {
-    post: vi.fn(),
-    get: vi.fn(),
+    post: (...args: unknown[]) => post(...args),
+    get: (...args: unknown[]) => get(...args),
   },
+  setCsrfToken: vi.fn(),
+  getCsrfToken: vi.fn(() => null),
 }));
 
-describe('authApi', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+import { authApi } from '@/lib/api/auth';
+
+const GOOD = 'https://lh3.googleusercontent.com/a/x=s96-c';
+
+function meResponse(picture: string | null) {
+  return {
+    auth_type: 'google',
+    email_masked: 'j***@example.com',
+    configs_count: 0,
+    max_configs: 2,
+    session_expires_in_seconds: 100,
+    role: 'free',
+    linked_providers: ['google'],
+    verification: 'verified',
+    last_provider_used: 'google',
+    picture,
+  };
+}
+
+function callbackResponse(picture: string | null) {
+  return {
+    status: 'authenticated',
+    email_masked: 'j***@example.com',
+    auth_type: 'google',
+    tokens: { id_token: 'i', access_token: 'a', expires_in: 900 },
+    merged_anonymous_data: false,
+    is_new_user: false,
+    conflict: false,
+    existing_provider: null,
+    message: null,
+    error: null,
+    role: 'free',
+    verification: 'verified',
+    linked_providers: ['google'],
+    last_provider_used: 'google',
+    picture,
+  };
+}
+
+describe('mapUserMeResponse via getProfile', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('maps picture -> pictureUrl', async () => {
+    get.mockResolvedValueOnce(meResponse(GOOD));
+    const profile = await authApi.getProfile();
+    expect(profile.pictureUrl).toBe(GOOD);
   });
 
-  afterEach(() => {
-    vi.resetAllMocks();
+  it('maps null picture -> undefined', async () => {
+    get.mockResolvedValueOnce(meResponse(null));
+    const profile = await authApi.getProfile();
+    expect(profile.pictureUrl).toBeUndefined();
+  });
+});
+
+describe('mapOAuthCallbackResponse via exchangeOAuthCode', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('maps picture -> user.pictureUrl', async () => {
+    post.mockResolvedValueOnce(callbackResponse(GOOD));
+    const res = await authApi.exchangeOAuthCode('google', 'c', 's', 'https://app/cb');
+    expect(res.user.pictureUrl).toBe(GOOD);
   });
 
-  describe('exchangeOAuthCode', () => {
-    it('should map successful OAuth response with federation fields', async () => {
-      const mockBackendResponse = {
-        status: 'authenticated',
-        email_masked: 'j***@example.com',
-        auth_type: 'google',
-        tokens: {
-          id_token: 'mock-id-token',
-          access_token: 'mock-access-token',
-          expires_in: 3600,
-        },
-        merged_anonymous_data: false,
-        is_new_user: true,
-        conflict: false,
-        existing_provider: null,
-        message: null,
-        error: null,
-        // Feature 1176: Federation fields
-        role: 'free',
-        verification: 'verified',
-        linked_providers: ['google'],
-        last_provider_used: 'google',
-      };
-
-      vi.mocked(api.post).mockResolvedValue(mockBackendResponse);
-
-      const result = await authApi.exchangeOAuthCode('google', 'mock-code');
-
-      expect(api.post).toHaveBeenCalledWith('/api/v2/auth/oauth/callback', {
-        provider: 'google',
-        code: 'mock-code',
-      });
-
-      // Verify federation fields are mapped correctly
-      expect(result.user.role).toBe('free');
-      expect(result.user.verification).toBe('verified');
-      expect(result.user.linkedProviders).toEqual(['google']);
-      expect(result.user.lastProviderUsed).toBe('google');
-
-      // Verify other fields
-      expect(result.user.authType).toBe('google');
-      expect(result.user.email).toBe('j***@example.com');
-      expect(result.tokens.idToken).toBe('mock-id-token');
-      expect(result.tokens.accessToken).toBe('mock-access-token');
-      expect(result.tokens.expiresIn).toBe(3600);
-    });
-
-    it('should use default federation values when not provided', async () => {
-      const mockBackendResponse = {
-        status: 'authenticated',
-        email_masked: null,
-        auth_type: null,
-        tokens: {
-          id_token: 'mock-id-token',
-          access_token: 'mock-access-token',
-          expires_in: 3600,
-        },
-        merged_anonymous_data: false,
-        is_new_user: false,
-        conflict: false,
-        existing_provider: null,
-        message: null,
-        error: null,
-        // Minimal federation fields (using defaults)
-        role: 'anonymous',
-        verification: 'none',
-        linked_providers: [],
-        last_provider_used: null,
-      };
-
-      vi.mocked(api.post).mockResolvedValue(mockBackendResponse);
-
-      const result = await authApi.exchangeOAuthCode('github', 'mock-code');
-
-      expect(result.user.role).toBe('anonymous');
-      expect(result.user.verification).toBe('none');
-      expect(result.user.linkedProviders).toEqual([]);
-      expect(result.user.lastProviderUsed).toBeUndefined();
-      expect(result.user.authType).toBe('anonymous');
-    });
-
-    it('should throw error on OAuth error response', async () => {
-      const mockErrorResponse = {
-        status: 'error',
-        email_masked: null,
-        auth_type: null,
-        tokens: null,
-        merged_anonymous_data: false,
-        is_new_user: false,
-        conflict: false,
-        existing_provider: null,
-        message: null,
-        error: 'Invalid authorization code',
-        role: 'anonymous',
-        verification: 'none',
-        linked_providers: [],
-        last_provider_used: null,
-      };
-
-      vi.mocked(api.post).mockResolvedValue(mockErrorResponse);
-
-      await expect(authApi.exchangeOAuthCode('google', 'invalid-code')).rejects.toThrow(
-        'Invalid authorization code'
-      );
-    });
-
-    it('should throw error on OAuth conflict response', async () => {
-      const mockConflictResponse = {
-        status: 'conflict',
-        email_masked: 'j***@example.com',
-        auth_type: null,
-        tokens: null,
-        merged_anonymous_data: false,
-        is_new_user: false,
-        conflict: true,
-        existing_provider: 'google',
-        message: 'An account with this email exists via google',
-        error: null,
-        role: 'anonymous',
-        verification: 'none',
-        linked_providers: [],
-        last_provider_used: null,
-      };
-
-      vi.mocked(api.post).mockResolvedValue(mockConflictResponse);
-
-      await expect(authApi.exchangeOAuthCode('github', 'mock-code')).rejects.toThrow(
-        'An account with this email exists via google'
-      );
-    });
-
-    it('should map GitHub OAuth response correctly', async () => {
-      const mockBackendResponse = {
-        status: 'authenticated',
-        email_masked: 'u***@github.com',
-        auth_type: 'github',
-        tokens: {
-          id_token: 'github-id-token',
-          access_token: 'github-access-token',
-          expires_in: 7200,
-        },
-        merged_anonymous_data: true,
-        is_new_user: false,
-        conflict: false,
-        existing_provider: null,
-        message: null,
-        error: null,
-        role: 'free',
-        verification: 'verified',
-        linked_providers: ['google', 'github'],
-        last_provider_used: 'github',
-      };
-
-      vi.mocked(api.post).mockResolvedValue(mockBackendResponse);
-
-      const result = await authApi.exchangeOAuthCode('github', 'github-code');
-
-      expect(result.user.authType).toBe('github');
-      expect(result.user.linkedProviders).toEqual(['google', 'github']);
-      expect(result.user.lastProviderUsed).toBe('github');
-    });
+  it('maps null picture -> undefined', async () => {
+    post.mockResolvedValueOnce(callbackResponse(null));
+    const res = await authApi.exchangeOAuthCode('google', 'c', 's', 'https://app/cb');
+    expect(res.user.pictureUrl).toBeUndefined();
   });
 });

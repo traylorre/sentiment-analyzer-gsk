@@ -24,6 +24,9 @@ class TestLinkProviderNewUserGoogle:
         - All OAuth fields are preserved (sub, email, avatar, email_verified)
         """
         table = MagicMock()
+        # Feature 1395: finite empty page so the provider-uniqueness lookup resolves to
+        # None (no collision) instead of tripping the K-1 malformed-cursor guard.
+        table.query.return_value = {"Items": []}
         user = User(
             user_id=str(uuid.uuid4()),
             email="test@example.com",
@@ -83,6 +86,9 @@ class TestLinkProviderNewUserGithub:
         - Handles optional fields correctly
         """
         table = MagicMock()
+        # Feature 1395: finite empty page so the provider-uniqueness lookup resolves to
+        # None (no collision) instead of tripping the K-1 malformed-cursor guard.
+        table.query.return_value = {"Items": []}
         user = User(
             user_id=str(uuid.uuid4()),
             email="dev@example.com",
@@ -138,6 +144,9 @@ class TestLinkProviderExistingUserSameProvider:
         - Avatar and verified_at are refreshed
         """
         table = MagicMock()
+        # Feature 1395: finite empty page so the provider-uniqueness lookup resolves to
+        # None (no collision) instead of tripping the K-1 malformed-cursor guard.
+        table.query.return_value = {"Items": []}
         old_time = datetime.now(UTC) - timedelta(days=30)
         user = User(
             user_id=str(uuid.uuid4()),
@@ -197,6 +206,9 @@ class TestLinkProviderExistingUserAddProvider:
         - Old provider metadata remains intact
         """
         table = MagicMock()
+        # Feature 1395: finite empty page so the provider-uniqueness lookup resolves to
+        # None (no collision) instead of tripping the K-1 malformed-cursor guard.
+        table.query.return_value = {"Items": []}
         now = datetime.now(UTC)
         user = User(
             user_id=str(uuid.uuid4()),
@@ -260,6 +272,9 @@ class TestLinkProviderNoDuplicateEntries:
         - Prevents multiple entries for same provider
         """
         table = MagicMock()
+        # Feature 1395: finite empty page so the provider-uniqueness lookup resolves to
+        # None (no collision) instead of tripping the K-1 malformed-cursor guard.
+        table.query.return_value = {"Items": []}
         now = datetime.now(UTC)
         user = User(
             user_id=str(uuid.uuid4()),
@@ -326,6 +341,9 @@ class TestLinkProviderHandlesMissingAvatar:
         - All other fields are populated
         """
         table = MagicMock()
+        # Feature 1395: finite empty page so the provider-uniqueness lookup resolves to
+        # None (no collision) instead of tripping the K-1 malformed-cursor guard.
+        table.query.return_value = {"Items": []}
         user = User(
             user_id=str(uuid.uuid4()),
             email="noAvatar@example.com",
@@ -373,6 +391,9 @@ class TestLinkProviderHandlesMissingSub:
         - Silent failure pattern maintained
         """
         table = MagicMock()
+        # Feature 1395: finite empty page so the provider-uniqueness lookup resolves to
+        # None (no collision) instead of tripping the K-1 malformed-cursor guard.
+        table.query.return_value = {"Items": []}
         user = User(
             user_id=str(uuid.uuid4()),
             email="noSub@example.com",
@@ -414,6 +435,9 @@ class TestLinkProviderSilentFailure:
         - OAuth flow continues successfully
         """
         table = MagicMock()
+        # Feature 1395: finite empty page so the provider-uniqueness lookup resolves to
+        # None (no collision) instead of tripping the K-1 malformed-cursor guard.
+        table.query.return_value = {"Items": []}
         # Simulate DynamoDB error
         table.update_item.side_effect = Exception("DynamoDB connection failed")
 
@@ -459,6 +483,9 @@ class TestLinkProviderMetadataTimestamps:
         - Timestamp is in ISO format for DynamoDB
         """
         table = MagicMock()
+        # Feature 1395: finite empty page so the provider-uniqueness lookup resolves to
+        # None (no collision) instead of tripping the K-1 malformed-cursor guard.
+        table.query.return_value = {"Items": []}
         user = User(
             user_id=str(uuid.uuid4()),
             email="timestamp@example.com",
@@ -497,6 +524,9 @@ class TestLinkProviderMetadataTimestamps:
     def test_link_provider_sets_verified_at_when_email_verified(self):
         """verified_at is set when email_verified=True."""
         table = MagicMock()
+        # Feature 1395: finite empty page so the provider-uniqueness lookup resolves to
+        # None (no collision) instead of tripping the K-1 malformed-cursor guard.
+        table.query.return_value = {"Items": []}
         user = User(
             user_id=str(uuid.uuid4()),
             email="verified@example.com",
@@ -528,6 +558,9 @@ class TestLinkProviderMetadataTimestamps:
     def test_link_provider_omits_verified_at_when_not_verified(self):
         """verified_at is None when email_verified=False."""
         table = MagicMock()
+        # Feature 1395: finite empty page so the provider-uniqueness lookup resolves to
+        # None (no collision) instead of tripping the K-1 malformed-cursor guard.
+        table.query.return_value = {"Items": []}
         user = User(
             user_id=str(uuid.uuid4()),
             email="unverified@example.com",

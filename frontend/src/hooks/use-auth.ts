@@ -45,28 +45,16 @@ export function useAuth(options: UseAuthOptions = {}) {
     signOut,
     isSessionValid,
     getSessionRemainingMs,
-    setInitialized,
   } = useAuthStore();
 
-  // Initialize auth state - Feature 1165: No hydration wait needed
-  useEffect(() => {
-    if (!isInitialized) {
-      // Check if there's a valid session
-      const hasValidSession = isAuthenticated && isSessionValid();
-
-      if (!hasValidSession && requireAuth) {
-        // Try anonymous auth if no session
-        signInAnonymous().catch((error) => {
-          // Log the error for debugging - silent failures are hard to diagnose
-          console.error('[useAuth] Anonymous sign-in failed:', error);
-          // If anonymous fails and auth is required, redirect
-          router.push(redirectTo);
-        });
-      }
-
-      setInitialized(true);
-    }
-  }, [isInitialized, isAuthenticated, requireAuth, redirectTo, router, signInAnonymous, setInitialized, isSessionValid]);
+  // Feature 1384: useAuth no longer bootstraps the session. It previously ran
+  // its own init effect that minted an anonymous session independently of
+  // useSessionInit and set isInitialized. With useAuth mounted at 9 sites, that
+  // was a second, uncoordinated anon-mint path: it raced useSessionInit's
+  // restore-first flow and any anon-mint overwrites the OAuth refresh cookie,
+  // logging the user out on reload. useSessionInit (in SessionProvider, which
+  // runs on every page) is now the SOLE, single-flight owner of session
+  // bootstrap and of setInitialized. useAuth only consumes auth state here.
 
   // Schedule session refresh
   useEffect(() => {
