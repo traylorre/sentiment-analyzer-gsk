@@ -4,6 +4,10 @@
 **Scope:** Code-only. Fix the `Limit=1 + FilterExpression` footgun in three identity
 helpers and rewire `handle_oauth_callback` to reuse by stable identity. No infra, no data
 deletion, no JWT minting.
+**Amended 2026-07-24:** §4 (fail-closed redesign) supersedes the error-handling and
+pagination-bound language in §2 and in the WIP implementation (commit 71cb143, labeled
+KNOWN DEFECTS / DO NOT MERGE). §5 is the Phase-3 test-remediation plan. The WIP's "O-1"
+partial-result rationale is explicitly REVERSED — see §4.3.
 
 ## Technical Approach
 
@@ -51,6 +55,11 @@ def _query_users_by_index(table, index_name, key_expr, attr_values, *, max_pages
     - Bounded by max_pages as a DoS guard (T-4); realistic cardinality is tiny.
     """
 ```
+
+*(Amended: the return/error contract of this helper is superseded by §4.2 — it returns a
+COMPLETE `list[User]` or raises `IdentityLookupError`; it never returns `[]`-on-error or
+a partial list. The `max_pages=10` keyword shown here IS the contract — the WIP's removal
+of it was the R-4 drift.)*
 
 Each public helper then:
 - calls `_query_users_by_index(...)`,
@@ -100,6 +109,155 @@ Cognito user-pool sub. `provider_sub` in the table is `"{provider}:{sub}"`
 `cognito_sub`. So both stable-identity lookups key off the one server-validated sub — no
 new claim is trusted.
 
+### 4. Fail-closed redesign (amendment — fixes K-1/K-2/K-3/R-4/R-8)
+
+The first implementation attempt (WIP 71cb143) got the pagination right and the failure
+semantics wrong. Refuter-confirmed defects and their fixes:
+
+#### 4.1 K-1 — unbounded loop, unguarded cursor (CRITICAL)
+
+WIP `_query_users_by_index` (auth.py:497-581) loops on
+`response.get("LastEvaluatedKey")` with no type check and no page cap (only a WARN at
+page 25, `_IDENTITY_QUERY_PAGE_WARN_THRESHOLD`). A bare `MagicMock` table returns a
+truthy MagicMock for `.get(...)` forever → infinite loop (reproduced, rc=124; hangs 4
+existing tests, see §5.3). Fix:
+
+```python
+lek = response.get("LastEvaluatedKey")
+if lek is None or lek == {}:
+    break                                   # clean exhaustion
+if not isinstance(lek, dict):
+    raise IdentityLookupError(...)          # FR-014: uninterpretable cursor = fail closed
+if page_count >= max_pages:
+    logger.warning(...)                     # FR-013 WARN: index name + page count, sanitized
+    raise IdentityLookupError(...)          # cap trip is an ERROR, not truncation
+exclusive_start_key = lek
+```
+
+The WIP's comment block documenting the refusal to cap (auth.py:474-479) and the
+`_IDENTITY_QUERY_PAGE_WARN_THRESHOLD` constant are DELETED — that refusal is the R-4
+drift. The spec's fear that a cap "re-opens the false-None footgun" was only true of a
+*silently truncating* cap; a *raising* cap cannot produce a false None by construction.
+
+#### 4.2 K-3 + R-8 — error contract: raise, never partial, never []-on-error
+
+New module-level exception in `auth.py` (kept local; no shared-module move this feature):
+
+```python
+class IdentityLookupError(Exception):
+    """Identity GSI lookup could not prove completeness (page failure, cap trip,
+    or malformed cursor). Callers MUST fail closed — never treat as 'no user'."""
+```
+
+Amended signature/contract (supersedes §2):
+
+```python
+def _query_users_by_index(
+    table, index_name, key_expr, attr_values, *, max_pages: int = 10
+) -> list[User]:
+    # Returns the COMPLETE list of USER items under the key (may be []).
+    # Raises IdentityLookupError on ANY page failure (incl. page 1), cap trip,
+    # or malformed cursor — after logging via get_safe_error_info (FR-010/012).
+```
+
+- The WIP's try-inside-the-loop / return-partial-results design ("O-1") is **reversed**.
+  Rationale: R-8 — a partial result feeds `_select_canonical_user` a truncated set, so
+  the "canonical" pick depends on which pages happened to succeed → identity flaps
+  across refreshes, which is the bug this feature exists to kill. And returning `[]` on
+  a page-1 failure is K-3: the callback reads `None` as "no account" and mints a
+  duplicate (CWE-636 — the exact mechanism behind the 10 prod duplicates 1397 cleans
+  up).
+- **R-8 mechanism decision: raise, not a `(users, complete)` tuple.** A tuple pushes the
+  fail-closed decision to every caller; one forgotten `complete` check silently re-opens
+  CWE-636. An exception cannot be ignored silently, keeps the public helpers'
+  `User | None` signatures unchanged, and matches the verified precedent (Auth.js core
+  `handle-login.ts` and django-allauth `socialaccount` auto-provision only on a clean
+  not-found; lookup errors propagate).
+- Public helper contract: `None` ⇔ full key range scanned, zero USER items (FR-012).
+  Unparseable USER items are still skip+WARN (not raise): a permanently malformed record
+  would otherwise hard-lock the account with no retry escape, and the skip is
+  deterministic (same item fails parsing every time), so canonical selection stays
+  stable. This is the one deliberate deviation from raise-on-anything, documented here.
+
+#### 4.3 Callback + call-site behavior (FR-015)
+
+`handle_oauth_callback`: **no** try/except around the three lookups — the exception must
+make the create path unreachable by construction, not by a branch someone can invert.
+Recommended surface (OQ-3): register a router-level handler in `router_v2.py` mapping
+`IdentityLookupError` → `error_response(503, "Temporary sign-in failure — please retry.")`
+(sanitized, no key material). Fallback if the handler is judged too broad: let it
+propagate to the Powertools resolver's generic 500. Either satisfies FR-015; a bare
+propagate-to-500 must still be verified to not leak exception internals in the body.
+
+Call-site audit (all non-test callers of the three helpers; default = propagate, fail
+closed):
+
+| Call site | Flow | Behavior under IdentityLookupError |
+|---|---|---|
+| `auth.py:2370/2373/2375` | OAuth callback resolution | Propagate → 503 handler. NEVER create. |
+| `auth.py:814` | Registration email-uniqueness check | Propagate → 500. (Swallowing would let a duplicate email register.) |
+| `auth.py:913`, `auth.py:940` | Magic-link request/verify | Propagate → 500. (Swallowing could mint/mismatch an account.) |
+| `auth.py:2030` | Magic-link token consume | Propagate → 500. |
+| `auth.py:2649` | Manual provider link (`existing_owner`) | Propagate → 500. (Swallowing could double-link a provider.) |
+| `auth.py:3123` | Token refresh (`get_user_by_cognito_sub`) | Propagate → 500; client retries refresh. (Swallowing = session flap, R-8.) |
+| `auth.py:3256` | Password-reset request | Propagate → 500. |
+| `router_v2.py:1036` | Email lookup via `auth_service` | Propagate → resolver 500 (or the same 503 handler). |
+
+No call site may catch `IdentityLookupError` and continue as "not found". Phase 3 adds a
+grep-gate: `except IdentityLookupError` may appear only in `router_v2.py`'s handler (if
+OQ-3 chooses it) and in tests.
+
+#### 4.4 K-2 — stale test assertion
+
+`tests/unit/lambdas/shared/auth/test_email_uniqueness.py:338`
+(`test_gsi_query_uses_limit_one`) asserts `Limit == 1` — it now asserts the OLD bug and
+fails against any correct implementation. Replace with `test_gsi_query_does_not_use_limit`
+asserting `"Limit" not in call_kwargs` (keep the sibling index-name and lowercase-
+normalization tests as-is).
+
+### 5. Phase-3 test remediation (amendment)
+
+#### 5.1 Rewrite `tests/unit/dashboard/test_auth_gsi_partial_page_failure.py` (K-3 enshrined)
+
+The WIP file asserts the defect as the contract: page-1 failure → `result is None`
+(duplicate-minting path), later-page failure → partial result returned, partial canonical
+selection. Rewrite to the FR-012/013/014 contract, keeping the useful `_FailOnPageTable`
+fake:
+
+- page-1 failure → `pytest.raises(IdentityLookupError)` (all three helpers,
+  parametrized as today);
+- later-page failure → `pytest.raises(IdentityLookupError)` (no partial survivors);
+- cap trip: 11 pages of advertised `LastEvaluatedKey` → raises + FR-013 WARN in `caplog`;
+- malformed cursor: `LastEvaluatedKey` = truthy non-dict (e.g. `MagicMock()`) → raises
+  immediately (test completes in ms; guards the K-1 regression);
+- DELETE `test_partial_failure_prefers_the_earliest_created_at_among_what_was_resolved`
+  (partial selection is now forbidden) and the module docstring's O-1/FR-010 rationale.
+
+#### 5.2 New callback fail-closed test (SC-6)
+
+In `tests/unit/dashboard/test_oauth_callback_reuse.py`: a table whose identity-GSI query
+raises on page 1 → `handle_oauth_callback` surfaces `IdentityLookupError` (or the 503 via
+the router handler, per OQ-3 choice) and **zero** USER records are written. This is the
+CWE-636 regression pin.
+
+#### 5.3 Un-hang the 4 existing tests (K-1 fallout)
+
+`tests/unit/dashboard/test_oauth_auto_link.py`, `test_oauth_callback_federation.py`, and
+2 tests in `test_oauth_to_oauth_link.py` build bare `MagicMock` tables and don't patch
+`get_user_by_cognito_sub`, which the callback now calls. With the FR-014 guard they stop
+hanging and instead fail fast — still broken. Fix each by preference order: (a) patch
+`get_user_by_cognito_sub` alongside the existing helper patches (smallest diff), or
+(b) replace the bare `MagicMock` with a finite fake returning
+`{"Items": [...]}`-shaped dicts and no `LastEvaluatedKey`. Do NOT weaken assertions.
+
+#### 5.4 Chunked, timeout-guarded regression run
+
+All auth-suite runs during Phase 3 go through a per-file timeout wrapper (e.g.
+`timeout 120 pytest <file> -x -q` per file, or `pytest-timeout` if already a dep — do not
+add a new dependency without checking) so a reintroduced pagination hang burns 2 minutes,
+not a session. The final gate is the full chunked sweep green, then the independent
+refuter re-run (verification-refuter standard: implementer never grades own work).
+
 ## Data Model Notes (verified)
 
 - Table: `${env}-sentiment-users`, single-table, `PK`/`SK`.
@@ -121,13 +279,16 @@ Internal Python contracts only (no HTTP contract change; `OAuthCallbackResponse`
 unchanged):
 
 - `get_user_by_email_gsi(table, email) -> User | None` — now returns the USER even amid
-  non-USER key collisions.
+  non-USER key collisions. **Raises `IdentityLookupError`** on page failure / cap trip /
+  malformed cursor (§4.2); `None` only on clean exhaustive zero.
 - `get_user_by_provider_sub(table, provider, sub) -> User | None` — deterministic among
-  duplicates.
+  duplicates; same raise contract.
 - `get_user_by_cognito_sub(table, cognito_sub) -> User | None` — deterministic among
-  duplicates.
+  duplicates; same raise contract.
 - `handle_oauth_callback(...) -> OAuthCallbackResponse` — same signature and response
-  fields; behavior: reuse-by-stable-identity, one record per identity.
+  fields; behavior: reuse-by-stable-identity, one record per identity. Lets
+  `IdentityLookupError` propagate (surfaces as 5xx per §4.3); no error path reaches
+  user creation.
 
 ## Constitution Check
 
@@ -163,3 +324,28 @@ Cross-artifact drift check between `spec.md` (incl. AR#1 + Clarifications) and t
 
 **Gate: 0 CRITICAL, 0 HIGH cross-artifact drift. Plan is consistent with the spec.**
 Proceed to tasks.
+
+## Adversarial Review #2 — Second Pass (Fail-Closed Amendment)
+
+Cross-artifact drift check between the amended spec (FR-012..016, rewritten T-4/FR-004/
+FR-010, EC-7, SC-6/7) and this amended plan (§4/§5), plus attack on the amendment itself.
+
+| ID | Severity | Check / finding | Resolution |
+|---|---|---|---|
+| C-1 | CRITICAL | Does any plan path still allow error→None→create? Swept §4.2 (helper raises on all three incompleteness classes), §4.3 (no try/except in callback resolution; create unreachable on error), §4.4/§5.1 (both defect-enshrining tests removed/rewritten). The one deliberate non-raise (unparseable USER item skip) cannot produce a false None when a parseable USER exists, and a key whose ONLY user record is unparseable was already unresolvable pre-amendment. | Justified + documented in §4.2. No error→create path remains. Resolved. |
+| C-2 | CRITICAL | Contract-widening blast radius: 9 non-test call sites now face a new exception; an unaudited one could 500 with a leaking body or catch-and-continue. | §4.3 call-site table enumerates all 9 with per-site fail-closed behavior + a grep-gate confining `except IdentityLookupError` to the router handler and tests. Tracked as tasks T-405a/b. Resolved at plan level. |
+| H-1 | HIGH | Spec FR-013 says WARN **then raise** on cap trip; a sloppy read of §4.1 pseudocode could reorder or drop the WARN (losing EC-7 alertability). | §4.1 pseudocode shows WARN before raise; §5.1 pins it with a `caplog` assertion. Consistent. Resolved. |
+| H-2 | HIGH | The 4 hanging tests (§5.3): fixing via option (b) finite fakes could accidentally change what the tests assert (auto-link/federation semantics), masking a real regression behind the callback reorder. | §5.3 orders (a) patch-first (smallest diff, assertions untouched) and explicitly forbids weakening assertions; AR#3 names this in the highest-risk discussion. Resolved. |
+| M-1 | MEDIUM | `max_pages=10` appears in §2 (pre-amendment helper sketch) and §4.2 — drift risk if one changes. | §2 sketch now carries a supersession note pointing at §4.2 as the contract; single source. OQ-2 tracks the value with the owner. Resolved. |
+| M-2 | MEDIUM | §5.4 proposes `pytest-timeout` without knowing if it's a dependency (would violate no-new-deps discipline). | §5.4 already conditions on "if already a dep — do not add a new dependency without checking"; the `timeout 120` wrapper needs nothing. Resolved. |
+| L-1 | LOW | OQ-3 (503 handler vs bare 500) is unresolved and could stall Phase 3. | Non-blocking by design: FR-015 is satisfied by either; §4.3 records the recommendation and the leak-check requirement for the bare-500 fallback. Resolved. |
+
+Cross-checks: every amended FR has a plan mechanism (FR-012→§4.2; FR-013/014→§4.1;
+FR-015→§4.3; FR-016→§4.4+§5.1; amended FR-004→exhaust-then-select in §4.1/§4.2; amended
+FR-010→log-then-raise in §4.2). Plan introduces nothing beyond spec scope (one exception
+class, one optional router handler — both in existing files; no infra, no schema, no new
+deps). EC-7 tradeoff appears in both artifacts with the same resolution (accepted, not
+defeated).
+
+**Gate: 0 CRITICAL, 0 HIGH cross-artifact drift remaining. Amended plan is consistent
+with the amended spec. Proceed to tasks amendment.**

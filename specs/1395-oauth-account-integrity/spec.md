@@ -1,6 +1,8 @@
 # Feature 1395: OAuth Account Integrity
 
-**Status:** Draft
+**Status:** Draft — Amended 2026-07-24 (fail-closed + bounded-cap-that-raises; supersedes
+the T-4 "stop at first USER" language and the WIP's documented cap refusal; see FR-012
+through FR-016 and Adversarial Review #1 Second Pass)
 **Owner:** Auth / Platform
 **Related:** 1180 (provider_sub GSI), 1181/1182/1183 (auto-link flows), 1188 (session eviction), 1381 (OAuth session restore), 1396 (app JWT — downstream), 1397 (dup-record data migration — downstream)
 
@@ -146,7 +148,13 @@ can detect residual fragmentation and confirm the fix is working.
   shares that `cognito_sub`.
 - **FR-004** — The deterministic selection rule for FR-002/FR-003 MUST be the record with
   the **earliest `created_at`** (oldest wins → the canonical account most likely to hold
-  the user's data), with `user_id` ascending as a stable tiebreaker.
+  the user's data), with `user_id` ascending as a stable tiebreaker. Because the identity
+  GSIs are hash-only (no range key, no ordering), earliest-`created_at` selection
+  **requires examining every `USER` item under the key** — the lookup MUST paginate the
+  key range to full exhaustion (or hit the raising cap, FR-013) *before* selecting.
+  Early-exit ("stop at the first USER found") is **forbidden**: it makes the selection
+  page-order-dependent, i.e. nondeterministic, which is the exact defect FR-004 exists to
+  remove.
 - **FR-005** — When any of the three helpers observes **more than one** `USER` under a
   single identity key, it MUST emit a structured WARN log (sanitized via
   `sanitize_for_log`) recording the identity-key type, a truncated key prefix, and the
@@ -166,13 +174,57 @@ can detect residual fragmentation and confirm the fix is working.
   manual-link `conflict` response.
 - **FR-009** — A new `USER` record MUST be created **only** when none of the three lookups
   resolves to an existing `USER` (i.e., a genuinely first-time identity).
-- **FR-010** — No lookup may **silently** swallow an error and return `None` in a way that
-  causes account creation without a log. Every exception path MUST log via the existing
-  `get_safe_error_info` / `sanitize_for_log` helpers (existing behavior retained).
+- **FR-010** *(amended — was "log the swallowed error"; now fail-closed)* — No lookup may
+  swallow an error and return `None`/partial data, logged or not. Every exception path
+  MUST log via the existing `get_safe_error_info` / `sanitize_for_log` helpers **and then
+  raise** per FR-012. Logging alone is insufficient: a logged-but-swallowed error still
+  reaches the caller as "no such user" and mints a duplicate (CWE-636).
 - **FR-011** — The fix MUST NOT change the `by_email`, `by_provider_sub`, or
   `by_cognito_sub` GSI schema or projection. If a schema change is later judged necessary,
   it MUST be escalated to the owner (per the standing "no new AWS resources" constraint) —
   it is out of scope here.
+- **FR-012 — Fail-closed lookup contract.** For all three helpers, a `None` return means
+  **exactly one thing**: the full key range was scanned to exhaustion and zero `USER`
+  items exist. Nothing else may produce `None`. Any DynamoDB error on **any** page
+  (including page 1), any cap trip (FR-013), and any malformed pagination cursor (FR-014)
+  MUST raise a dedicated exception (`IdentityLookupError`). Partial results MUST NOT be
+  returned: selecting a "canonical" user over a truncated set makes the resolved identity
+  depend on which pages happened to succeed, flapping across refreshes (refuter finding
+  R-8). Precedent: Auth.js core `handle-login` and django-allauth auto-provision only on
+  a clean successful not-found; a lookup error propagates and never falls through to
+  account creation (OWASP Fail-Securely; CWE-636; OWASP API4:2023 for the bounded read).
+- **FR-013 — Bounded cap that raises.** `_query_users_by_index` MUST enforce
+  `max_pages=10`. Hitting the cap with pagination unfinished (a `LastEvaluatedKey` still
+  present) MUST emit a sanitized WARN (index name, page count) and **raise
+  `IdentityLookupError`** — never silent truncation, never an empty/partial result.
+  Precedent: bounds surface incompleteness rather than fabricating completeness (DynamoDB
+  1MB page returns `LastEvaluatedKey`; Elasticsearch `max_result_window` errors; boto3
+  `MaxItems` returns `NextToken`). At ~1MB/page, 10 pages ≈ 10MB under a single identity
+  key — orders of magnitude beyond any legitimate user's notifications/tokens/duplicates.
+- **FR-014 — Pagination-cursor type guard.** The loop MUST treat
+  `response.get("LastEvaluatedKey")` as a continuation token **only** if it is a non-empty
+  `dict` (`isinstance` check). `None`/empty-dict terminates normally; any other truthy
+  value (e.g. a `MagicMock` attribute, whose `.get()` is truthy forever — refuter K-1,
+  reproduced as an infinite loop) MUST raise `IdentityLookupError`. A cursor we cannot
+  interpret means completeness cannot be proven, so fail closed — and a bad test fake now
+  fails fast instead of hanging the suite.
+- **FR-015 — Callback fails closed; no call site may mint on error.**
+  `handle_oauth_callback` MUST surface `IdentityLookupError` as a **5xx** response (user
+  retries) and MUST NOT contain any code path from a lookup exception to
+  `_create_authenticated_user`. There is no catch-and-continue inside the callback's
+  resolution block. All other call sites of the three helpers (registration, magic link,
+  password reset, manual provider link, token refresh, `router_v2` email lookup) MUST
+  also fail closed: propagate (default → resolver 500) or return an explicit 5xx — never
+  translate the exception back into "user not found".
+- **FR-016 — Test remediation.** The WIP test
+  `tests/unit/dashboard/test_auth_gsi_partial_page_failure.py` currently **enshrines the
+  K-3 defect** (asserts `result is None` on a page-1 failure, and asserts partial results
+  are returned on later-page failures). It MUST be rewritten in Phase 3 to assert
+  `pytest.raises(IdentityLookupError)` for page failures (any page), cap trips, and
+  malformed cursors, and its partial-result-selection test MUST be deleted.
+  `tests/unit/lambdas/shared/auth/test_email_uniqueness.py:338`
+  (`test_gsi_query_uses_limit_one`) asserts the **old bug** (`Limit==1`) and MUST be
+  replaced with an assertion that no `Limit` is passed.
 
 ## Success Criteria
 
@@ -185,8 +237,19 @@ can detect residual fragmentation and confirm the fix is working.
 - **SC-3** — `get_user_by_provider_sub` and `get_user_by_cognito_sub` return the
   earliest-`created_at` `USER` deterministically when 10 duplicates share the key.
   (Verified by moto unit test seeding 10 records.)
-- **SC-4** — All existing OAuth-callback tests (1181/1182/1183/1381) still pass unchanged.
+- **SC-4** — All existing OAuth-callback tests (1181/1182/1183/1381) still pass. (Four of
+  them currently hang against the WIP because they use bare `MagicMock` tables and don't
+  patch the newly-called `get_user_by_cognito_sub`; they are remediated per FR-016/plan —
+  patched or given finite fakes — not weakened.)
 - **SC-5** — No new IAM/GSI/AWS resources introduced; `terraform plan` shows no infra diff.
+- **SC-6** — A DynamoDB failure on ANY page during the OAuth callback's identity
+  resolution yields a 5xx and **zero** new `USER` records. (Unit test: fake table raises
+  on page 1 → assert `IdentityLookupError` surfaces / 5xx path, assert no
+  `_create_authenticated_user` write occurred.)
+- **SC-7** — A key range that still has a `LastEvaluatedKey` after 10 pages raises
+  `IdentityLookupError` and emits the FR-013 WARN; a non-dict truthy `LastEvaluatedKey`
+  raises immediately (no hang — test completes in milliseconds where the WIP looped
+  forever, refuter rc=124).
 
 ## Edge Cases
 
@@ -215,6 +278,17 @@ can detect residual fragmentation and confirm the fix is working.
   1180/1222 may lack `provider_sub`; they are absent from `by_provider_sub` but present in
   `by_cognito_sub` (Cognito sub is set on OAuth login). FR-006's cognito_sub fallback
   covers them.
+- **EC-7 — Cap-hit → 5xx → targeted-lockout tradeoff (accepted).** An attacker who can
+  write enough items under a victim's `email` hash key to exceed 10 pages (~10MB — on the
+  order of 10,000 NOTIFICATION/MAGIC_LINK_TOKEN items) forces the victim's login to a
+  retryable 5xx (FR-013) instead of resolving. This is the **correct** trade and is
+  accepted, not defeated: the fail-open alternative is that the same pollution silently
+  masks the victim's `USER` record and every login mints a fresh duplicate — permanent,
+  invisible account corruption (the mechanism behind the 10 live prod duplicates that
+  1397 cleans up). A 5xx is transient, user-visible, and the FR-013 WARN makes the
+  pollution alertable so an operator can investigate the key. Do not add complexity
+  trying to "win" this scenario inside the lookup; rate limiting and write-path controls
+  own it.
 
 ## Threat Model
 
@@ -229,10 +303,17 @@ can detect residual fragmentation and confirm the fix is working.
 - **T-3 — Log-based info leak.** New multi-record and fallback logs (FR-005) must not emit
   raw email or full sub. Mitigation: use `sanitize_for_log` and truncated prefixes, mirror
   existing patterns in these helpers.
-- **T-4 — Denial via unbounded pagination.** Dropping `Limit` and paginating a polluted key
-  could read many items. Mitigation: bound the scan with a sane page cap and stop at the
-  first (deterministically selected) `USER`; realistic key cardinality is tiny (one user's
-  notifications/tokens), so cost is negligible.
+- **T-4 — Denial via unbounded pagination** *(amended — the original wording contained a
+  contradiction: "stop at the first USER" is incompatible with FR-004's earliest-
+  `created_at` rule, which requires seeing ALL USER items under a hash-only key. The
+  early-exit language is removed.)* Dropping `Limit` and paginating a polluted key could
+  read many items, or (refuter K-1) spin forever on a malformed cursor. Mitigation:
+  **exhaust the key range (or trip the raising cap), then select.** The scan is bounded
+  by `max_pages=10` whose trip is an ERROR (WARN + raise, FR-013), the cursor is
+  type-guarded (FR-014), and realistic key cardinality is tiny (one human's
+  notifications/tokens/duplicates), so the bound is never reached legitimately. The cap
+  converts a resource-exhaustion attack into an observable, alertable 5xx (see EC-7)
+  instead of either an unbounded read or a silent false-"no user".
 
 ## Adversarial Review #1
 
@@ -300,3 +381,44 @@ owner.
   (`attribute_not_exists` on a deterministic identity key) at user-create time to close the
   concurrent-first-login race (EC-4)? This is a stronger guarantee than the lookup fix but
   is a separate design decision; recommended for 1396 or a follow-up, not this feature.
+
+## Adversarial Review #1 — Second Pass (Fail-Closed Amendment)
+
+Attacking the amended spec. Context: the first implementation attempt (WIP 71cb143,
+labeled DO NOT MERGE) exposed defects the original spec permitted or even mandated
+(the T-4 early-exit language, the unbounded "paginate to exhaustion" reading, the
+log-and-return-None error contract). This pass verifies the amendment closes them
+without opening new holes.
+
+### Findings
+
+| ID | Severity | Finding | Resolution |
+|---|---|---|---|
+| C-3 | CRITICAL | Original FR-010 ("log the error, return None") was itself the K-3 defect: a logged error still reached `handle_oauth_callback` as "no user" and minted a duplicate — CWE-636, the literal mechanism behind the 10 live prod duplicates. The WIP even grew a test enshrining it. | FR-010 rewritten (log **then raise**), FR-012 pins the `None`-means-clean-zero contract, FR-015 forbids any exception→create path, FR-016 mandates the enshrined test be rewritten to assert raise. SC-6 makes it assertable. Resolved. |
+| C-4 | CRITICAL | Spec-internal contradiction: T-4 said "stop at the first (deterministically selected) USER" while FR-004 requires earliest-`created_at` — impossible without seeing ALL USER items under a hash-only GSI key. The WIP resolved the ambiguity by refusing the cap (R-4 drift) and paginating unboundedly (K-1 hang). | T-4 rewritten: exhaust-or-raising-cap THEN select; early-exit explicitly forbidden in FR-004. Cap refusal superseded by FR-013. Resolved. |
+| H-4 | HIGH | "Paginate to exhaustion" with no cursor validation is an infinite loop under any truthy non-dict `LastEvaluatedKey` (reproduced: bare `MagicMock` `.get()` is truthy forever, rc=124). A production SDK anomaly would hang a Lambda to timeout the same way. | FR-014 type guard: non-empty `dict` continues, `None`/`{}` terminates, anything else raises. SC-7 asserts the fast-fail. Resolved. |
+| H-5 | HIGH | Raising cap creates a targeted-lockout vector: pollute a victim's email key past 10 pages → victim gets 5xx. A reviewer could demand the cap be removed again (re-opening R-4/K-1) to "protect availability". | EC-7 documents the tradeoff as ACCEPTED with rationale: fail-open silently corrupts the account permanently; fail-closed 5xx is transient, visible, and alertable via the FR-013 WARN. Spec forbids re-litigating it inside the lookup. Resolved (accepted, documented). |
+| H-6 | HIGH | Widening the error contract from `None` to raise touches ~9 call sites beyond the callback; a site that catches broadly and maps back to `None` (or an unhandled path that 500s without sanitized logging) would re-open the hole or leak. | FR-015 extends fail-closed to ALL call sites with propagate-to-500 as the default; the plan carries a per-call-site audit table and the tasks gate on it (T-405b). Resolved at spec level; execution risk tracked in AR#3. |
+| M-4 | MEDIUM | `max_pages=10` is asserted, not derived; too low re-opens false-lockout, too high weakens the DoS bound. | FR-013 records the derivation (~1MB/page × 10 ≈ 10MB ≫ any legitimate identity key; live worst case is 10 dup USER items + a handful of tokens ≪ 1 page). Value flagged to owner as OQ-2 (non-blocking, default stands). Resolved. |
+| M-5 | MEDIUM | SC-4 ("existing tests pass unchanged") became unsatisfiable — 4 existing tests hang against the new callback because they don't patch `get_user_by_cognito_sub`. Left as-is, implementers might "fix" it by reverting the callback ordering. | SC-4 amended: tests are remediated (patched/finite fakes), not weakened; remediation is FR-016-adjacent and tasked (T-406). Resolved. |
+| L-3 | LOW | `IdentityLookupError` name/location unspecified could drift into a shared-module bikeshed. | Plan pins it: module-level exception in `auth.py`, no shared-module move in this feature. Resolved. |
+
+### Edits made
+- FR-010 rewritten; FR-012/013/014/015/016 added; FR-004 exhaustion requirement added.
+- T-4 rewritten (contradiction removed); EC-7 added; SC-4 amended; SC-6/SC-7 added.
+- Status header notes the amendment and supersessions.
+
+### Gate
+**0 CRITICAL, 0 HIGH remaining.** (C-3/C-4 resolved by the rewritten FRs; H-4 resolved by
+FR-014; H-5 accepted+documented in EC-7; H-6 resolved at spec level, execution tracked in
+AR#3.) Spec amendment coherent; proceed to plan amendment.
+
+### Open questions for the owner (amendment)
+- **OQ-2 (non-blocking):** `max_pages=10` default. Derivation in FR-013 says 10 pages
+  ≈ 10MB per identity key, ~3 orders of magnitude above the live worst case. Confirm or
+  adjust; any value ≥2 preserves correctness because the trip RAISES rather than
+  truncates.
+- **OQ-3 (non-blocking):** exact 5xx surface for the callback — propagate to the
+  Powertools resolver's generic 500 vs. a router-level `IdentityLookupError` handler
+  returning 503 + retryable message. Plan recommends the 503 handler; either satisfies
+  FR-015.
