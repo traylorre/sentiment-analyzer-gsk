@@ -16,9 +16,15 @@ import pytest
 from tests.e2e.conftest import SkipInfo
 
 skip = SkipInfo(
-    condition=os.getenv("AWS_ENV") != "preprod",
-    reason="Requires preprod API Gateway with WAF enabled",
-    remediation="Run with AWS_ENV=preprod and PREPROD_API_URL set to API Gateway URL",
+    condition=os.getenv("AWS_ENV") != "preprod"
+    or os.getenv("WAF_ENABLED", "false").lower() != "true",
+    reason=(
+        "Requires preprod API Gateway with WAF enabled. WAF is shelved for cost "
+        "(preprod.tfvars enable_waf=false, ~$42/mo), so these assertions skip "
+        "instead of failing the integration suite. Set WAF_ENABLED=true when "
+        "enable_waf is flipped back on."
+    ),
+    remediation="Enable WAF (preprod.tfvars enable_waf=true), run with AWS_ENV=preprod WAF_ENABLED=true",
 )
 
 

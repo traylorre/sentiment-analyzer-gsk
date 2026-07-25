@@ -163,11 +163,18 @@ def _cookie_path_prefix(event: dict | None) -> str:
     return ""
 
 
-def _make_csrf_set_cookie(event: dict | None = None) -> str:
-    """Build Set-Cookie header value for CSRF token (Feature 1158)."""
+def _make_csrf_set_cookie(event: dict | None = None, token: str | None = None) -> str:
+    """Build Set-Cookie header value for CSRF token (Feature 1158).
+
+    Feature 1396 (N2): the caller may pass a pre-generated ``token`` so the SAME value
+    can also be returned in the JSON response body (body-delivered CSRF). The cross-
+    origin Amplify frontend cannot read the API-domain ``csrf_token`` cookie via
+    ``document.cookie``, so it learns the value from the body and echoes it as
+    ``X-CSRF-Token``. When ``token`` is None a fresh value is generated (legacy callers).
+    """
     return make_set_cookie(
         CSRF_COOKIE_NAME,
-        generate_csrf_token(),
+        token or generate_csrf_token(),
         httponly=False,  # JS must read this
         secure=True,
         samesite="None",  # Required for cross-origin
@@ -198,6 +205,61 @@ def _extract_refresh_token_from_event(event: dict) -> str | None:
     """Extract refresh_token from httpOnly cookie in raw event (Feature 1160)."""
     cookies = parse_cookies(event)
     return cookies.get(REFRESH_TOKEN_COOKIE_NAME)
+
+
+def _noclobber_guard_response(event: dict, table) -> Response | None:
+    """Feature 1384: no-clobber guard for POST /api/v2/auth/anonymous.
+
+    Minting a new anonymous session issues a fresh refresh_token cookie under
+    the SAME name/path, so it silently overwrites (clobbers) an existing OAuth
+    (Cognito-backed) refresh cookie. When that happens the next reload can no
+    longer restore the OAuth session and the user is logged out. PR #942 fixed
+    one client trigger, but the anonymous endpoint remained reachable from other
+    paths (a second browser tab, a stray retry), so the clobber survived.
+
+    This guard closes it at the source: if the incoming request already carries
+    a VALID Cognito refresh cookie, refuse to mint and instead return the
+    existing session refreshed from that cookie — WITHOUT emitting a new
+    refresh cookie, so the OAuth cookie is preserved untouched.
+
+    Returns:
+        A 200 refresh-style Response when a valid Cognito session is present
+        (caller must NOT mint). None when there is no restorable Cognito session
+        and normal anonymous minting should proceed (no cookie, an anonymous
+        `anon.*` cookie, or an invalid/expired/revoked cookie).
+    """
+    refresh_token = _extract_refresh_token_from_event(event)
+    if not refresh_token:
+        return None
+
+    # Guest (anon.*) refresh cookies are handled by the client's restore-first
+    # flow and are safe to replace; only a Cognito-backed cookie must be
+    # protected here (that is the OAuth-persistence clobber the spec targets).
+    if refresh_token.startswith("anon."):
+        return None
+
+    result = auth_service.refresh_access_tokens(
+        refresh_token=refresh_token, table=table
+    )
+    if result.error or not result.access_token:
+        # Cookie present but invalid/expired/revoked: let the normal anonymous
+        # mint proceed. Replacing a dead Cognito cookie is correct, not a clobber.
+        return None
+
+    logger.info(
+        "anonymous.noclobber_guard",
+        extra={"auth_type": result.auth_type or "cognito"},
+    )
+
+    # Preserve the existing httpOnly Cognito refresh cookie by NOT emitting a
+    # Set-Cookie for refresh_token. Return the refreshed session so the caller
+    # still gets a usable access/id token.
+    response_data = result.model_dump(exclude={"refresh_token_for_cookie"})
+    return _json_response_with_cookies(
+        response_data,
+        extra_headers=_get_no_cache_headers(),
+        status_code=200,
+    )
 
 
 def _json_response_with_cookies(
@@ -390,6 +452,14 @@ def create_anonymous_session():
     """
     event = auth_router.current_event.raw_event
     table = get_users_table()
+
+    # Feature 1384: no-clobber guard — if the request already carries a valid
+    # Cognito (OAuth) refresh cookie, do NOT mint a new anonymous session that
+    # would overwrite it. Return the existing session instead. This makes the
+    # OAuth-cookie clobber unreachable from every client path (incl. multi-tab).
+    guard_response = _noclobber_guard_response(event, table)
+    if guard_response is not None:
+        return guard_response
 
     body, err = _parse_request_body(
         event, auth_service.AnonymousSessionRequest, allow_none=True
@@ -623,7 +693,12 @@ def handle_oauth_callback():
     if refresh_token:
         # Feature 1159 + M1 WI-3: unified helper (SameSite=None, stage-aware path)
         cookies.append(_make_refresh_token_cookie(refresh_token, event))
-        cookies.append(_make_csrf_set_cookie(event))
+        # Feature 1396 (N2): generate the CSRF token ONCE, set it in the cookie AND
+        # return it in the body so the cross-origin frontend can echo it as
+        # X-CSRF-Token on the next /refresh (it cannot read the API-domain cookie).
+        csrf = generate_csrf_token()
+        cookies.append(_make_csrf_set_cookie(event, token=csrf))
+        response_data["csrf_token"] = csrf
 
     return _json_response_with_cookies(
         response_data, cookies=cookies, extra_headers=_get_no_cache_headers()
@@ -661,14 +736,36 @@ def refresh_tokens():
             refresh_token = body.refresh_token
 
     if not refresh_token:
+        # Feature 1381 (FR-007): distinguish the cookie-absent 401 from a
+        # Cognito-reject 401 in CloudWatch so the OAuth-persistence failure mode
+        # is unambiguous on the live deployment. No token material logged.
+        logger.info("refresh.cookie_absent")
         return error_response(401, "Refresh token not found in cookie or request body")
+
+    # Feature 1396 (N1): plumb the expiring app JWT from the Authorization header so
+    # refresh_access_tokens can run the refresh-time revocation check. The frontend
+    # api client already attaches this bearer on every call including /refresh.
+    incoming_bearer = get_header(event, "Authorization", "") or None
 
     # Feature 1188: Pass table for blocklist check (FR-007)
     result = auth_service.refresh_access_tokens(
-        refresh_token=refresh_token, table=table
+        refresh_token=refresh_token, table=table, incoming_bearer=incoming_bearer
     )
     if result.error:
+        # Feature 1381 (FR-007): cookie WAS present but the refresh was rejected
+        # (e.g. Cognito invalid_grant / revoked). Distinct from cookie_absent.
+        logger.info("refresh.rejected", extra={"error": result.error})
         return error_response(401, result.message or result.error)
+
+    # Feature 1381 (FR-007): successful refresh; record whether an OAuth identity
+    # was resolved (Defect B). auth_type is non-sensitive; no tokens logged.
+    logger.info(
+        "refresh.success",
+        extra={
+            "auth_type": result.auth_type or "unknown",
+            "identity_resolved": bool(result.user_id),
+        },
+    )
 
     # M1 WI-3: the rotated refresh token travels ONLY in the httpOnly cookie
     response_data = result.model_dump(exclude={"refresh_token_for_cookie"})
@@ -680,8 +777,11 @@ def refresh_tokens():
             _make_refresh_token_cookie(result.refresh_token_for_cookie, event)
         )
 
-    # Feature 1158: Refresh CSRF token along with session
-    cookies.append(_make_csrf_set_cookie(event))
+    # Feature 1158 + 1396 (N2): refresh the CSRF token and deliver its value in the body
+    # so the cross-origin frontend can echo it as X-CSRF-Token on the NEXT /refresh.
+    csrf = generate_csrf_token()
+    cookies.append(_make_csrf_set_cookie(event, token=csrf))
+    response_data["csrf_token"] = csrf
 
     return _json_response_with_cookies(
         response_data, cookies=cookies, extra_headers=_get_no_cache_headers()
@@ -1302,7 +1402,20 @@ def get_refresh_status(config_id: str):
 
 @config_router.post("/api/v2/configurations/<config_id>/refresh")
 def trigger_refresh(config_id: str):
-    """Trigger manual refresh (T061)."""
+    """Trigger manual refresh (T061). Auth + ownership added by Feature 1391 (GAP-2)."""
+    event = config_router.current_event.raw_event
+    table = get_users_table()
+
+    user_id, err = _require_user_id(event, table=table)
+    if err:
+        return err
+
+    # Ownership check: verify config belongs to this user (no existence oracle —
+    # same 404 whether the config is missing or owned by someone else)
+    config_data, err = _get_config_with_tickers(table, user_id, config_id)
+    if err:
+        return err
+
     result = market_service.trigger_refresh(config_id=config_id)
     return json_response(202, result.model_dump())
 
@@ -2174,11 +2287,18 @@ def get_current_user():
         linked_providers=user.linked_providers,
         verification=user.verification,
         last_provider_used=user.last_provider_used,
+        # Feature 1380: derive avatar from persisted provider_metadata (reload
+        # path). auth imported as auth_service at module top — no circular import.
+        picture=auth_service._select_avatar(user),
     )
 
     return json_response(200, response.model_dump(), _get_no_cache_headers())
 
 
+# Feature 1395 (OQ-3 / FR-015): the fail-closed handler for IdentityLookupError is
+# registered on the APIGatewayRestResolver in handler.py (via @app.exception_handler),
+# NOT here — Powertools 3.x does not merge Router-level exception handlers into the app,
+# so a router-scoped handler would silently never fire. See handler.py.
 def include_routers(app):
     """Include all v2 routers in the Powertools app."""
     app.include_router(auth_router)

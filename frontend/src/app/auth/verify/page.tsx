@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import { Check, X, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/use-auth';
+import { safeInternalPath } from '@/lib/auth/safe-redirect';
 
 function VerifyContent() {
   const searchParams = useSearchParams();
@@ -25,9 +26,14 @@ function VerifyContent() {
       try {
         await verifyToken(token);
         setStatus('success');
+        // Feature 1394: honor the `?redirect=` target stashed on sign-in
+        // (open-redirect guarded — falls back to '/'). Consume it once.
+        const storedRedirect = sessionStorage.getItem('auth_redirect');
+        sessionStorage.removeItem('auth_redirect');
+        const destination = safeInternalPath(storedRedirect);
         // Redirect after success
         setTimeout(() => {
-          router.push('/');
+          router.push(destination);
         }, 2000);
       } catch {
         setStatus('error');

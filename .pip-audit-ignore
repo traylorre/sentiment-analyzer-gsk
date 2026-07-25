@@ -1,0 +1,18 @@
+# pip-audit ignore list (Feature 1400 — validator gating)
+# ======================================================
+# Each non-comment line: VULN_ID  EXPIRY(YYYY-MM-DD)  justification
+#
+# Rules enforced by scripts/pip-audit-gate.sh:
+#   - Ignores are LOANS, not write-offs. Max lifetime 90 days per entry.
+#   - An entry past its EXPIRY fails CI (forces a fresh, reviewable decision).
+#   - Renewal = a new commit updating the date + justification (visible in PR diff).
+#   - Removing the fixable dep (upgrade) is always preferred over ignoring.
+#
+# This replaces the old blanket `|| true` (which ignored everything, forever,
+# with no justification and no expiry).
+#
+# VULN_ID          EXPIRY       justification
+PYSEC-2025-217     2026-10-22   transformers 4.57.6; no fixed release listed; upgrade to 5.x deferred to Feature 1399 (torch/transformers decision)
+PYSEC-2026-2288    2026-10-22   transformers 4.57.6; fix is 5.0.0 (major); upgrade deferred to Feature 1399 (torch/transformers decision)
+PYSEC-2026-2289    2026-10-22   transformers 4.57.6; fix is 5.3.0 (major); upgrade deferred to Feature 1399 (torch/transformers decision)
+PYSEC-2026-2290    2026-10-22   transformers 4.57.6; fix is 5.5.0 (major); upgrade deferred to Feature 1399 (torch/transformers decision)

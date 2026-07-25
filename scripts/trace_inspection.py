@@ -12,7 +12,6 @@ Usage:
 import argparse
 import json
 import os
-import sys
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -119,7 +118,7 @@ def make_request(
         body = None
         try:
             body = resp.json()
-        except Exception:
+        except Exception:  # noqa: S110 - body stays None if response is not JSON
             pass
 
         return RequestResult(
@@ -176,8 +175,7 @@ def fetch_trace(trace_id: str, xray_client) -> TraceTree | None:
             "duration_ms": duration,
             "annotations": doc.get("annotations", {}),
             "metadata_keys": {
-                ns: list(data.keys())
-                for ns, data in doc.get("metadata", {}).items()
+                ns: list(data.keys()) for ns, data in doc.get("metadata", {}).items()
             },
             "fault": doc.get("fault", False),
             "error": doc.get("error", False),
@@ -285,7 +283,7 @@ def fetch_cache_metrics(
                 datapoints = resp.get("Datapoints", [])
                 total = sum(dp.get("Sum", 0) for dp in datapoints)
                 setattr(snapshot, attr, total)
-            except Exception:
+            except Exception:  # noqa: S110 - metric optional; skip if datapoint missing
                 pass
 
         results.append(snapshot)
@@ -310,10 +308,14 @@ def generate_report(
 
     lines.append("# Trace Inspection Report")
     lines.append("")
-    lines.append(f"**Generated:** {datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}")
-    lines.append(f"**Environment:** preprod")
+    lines.append(
+        f"**Generated:** {datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}"
+    )
+    lines.append("**Environment:** preprod")
     lines.append(f"**Dashboard URL:** `{DASHBOARD_URL}`")
-    lines.append(f"**Test Window:** {test_start.strftime('%H:%M:%S')} → {test_end.strftime('%H:%M:%S')} UTC ({(test_end - test_start).seconds}s)")
+    lines.append(
+        f"**Test Window:** {test_start.strftime('%H:%M:%S')} → {test_end.strftime('%H:%M:%S')} UTC ({(test_end - test_start).seconds}s)"
+    )
     lines.append(f"**Session:** `{session_info['user_id'][:8]}...` (anonymous)")
     lines.append("")
 
@@ -330,7 +332,11 @@ def generate_report(
     cold_req = [r for r in requests if r.scenario == "cold_miss"]
     warm_req = [r for r in requests if r.scenario == "cold_hit"]
     if cold_req and warm_req:
-        speedup = cold_req[0].latency_ms / warm_req[0].latency_ms if warm_req[0].latency_ms > 0 else 0
+        speedup = (
+            cold_req[0].latency_ms / warm_req[0].latency_ms
+            if warm_req[0].latency_ms > 0
+            else 0
+        )
         lines.append(
             f"- **Cache speedup:** {cold_req[0].latency_ms:.0f}ms (cold) → "
             f"{warm_req[0].latency_ms:.0f}ms (warm) = **{speedup:.1f}x faster**"
@@ -340,8 +346,12 @@ def generate_report(
     # --- Request Summary Table ---
     lines.append("## Request Results")
     lines.append("")
-    lines.append("| # | Ticker | Scenario | Endpoint | Status | Latency | Cache Source | Trace |")
-    lines.append("|---|--------|----------|----------|--------|---------|-------------|-------|")
+    lines.append(
+        "| # | Ticker | Scenario | Endpoint | Status | Latency | Cache Source | Trace |"
+    )
+    lines.append(
+        "|---|--------|----------|----------|--------|---------|-------------|-------|"
+    )
     for i, r in enumerate(requests, 1):
         trace_link = f"`{r.trace_id[:16]}...`" if r.trace_id else "—"
         cache = r.cache_source or "—"
@@ -358,7 +368,9 @@ def generate_report(
     for r in requests:
         if not r.trace_id or r.trace_id not in traces or traces[r.trace_id] is None:
             lines.append(f"### {r.ticker} ({r.scenario})")
-            lines.append(f"*No trace data available (trace_id: {r.trace_id or 'none'})*")
+            lines.append(
+                f"*No trace data available (trace_id: {r.trace_id or 'none'})*"
+            )
             lines.append("")
             continue
 
@@ -403,17 +415,27 @@ def generate_report(
         lines.append("")
 
     # --- Cold vs Warm Comparison ---
-    cold_ohlc = [r for r in requests if r.scenario == "cold_miss" and "ohlc" in r.endpoint]
-    warm_ohlc = [r for r in requests if r.scenario == "cold_hit" and "ohlc" in r.endpoint]
+    cold_ohlc = [
+        r for r in requests if r.scenario == "cold_miss" and "ohlc" in r.endpoint
+    ]
+    warm_ohlc = [
+        r for r in requests if r.scenario == "cold_hit" and "ohlc" in r.endpoint
+    ]
     if cold_ohlc and warm_ohlc:
         lines.append("## Cold vs Warm Path Comparison (OHLC)")
         lines.append("")
         c, w = cold_ohlc[0], warm_ohlc[0]
         lines.append("| Metric | Cold (1st request) | Warm (2nd request) |")
         lines.append("|--------|-------------------|-------------------|")
-        lines.append(f"| **Client latency** | {c.latency_ms:.0f}ms | {w.latency_ms:.0f}ms |")
-        lines.append(f"| **Cache source** | {c.cache_source or '—'} | {w.cache_source or '—'} |")
-        lines.append(f"| **Cache age** | {c.cache_age or '—'}s | {w.cache_age or '—'}s |")
+        lines.append(
+            f"| **Client latency** | {c.latency_ms:.0f}ms | {w.latency_ms:.0f}ms |"
+        )
+        lines.append(
+            f"| **Cache source** | {c.cache_source or '—'} | {w.cache_source or '—'} |"
+        )
+        lines.append(
+            f"| **Cache age** | {c.cache_age or '—'}s | {w.cache_age or '—'}s |"
+        )
         lines.append(f"| **Status** | {c.status_code} | {w.status_code} |")
 
         # Compare trace subsegments
@@ -423,12 +445,18 @@ def generate_report(
             c_ext = [s for s in ct.subsegments if s["namespace"] in ("aws", "remote")]
             w_ext = [s for s in wt.subsegments if s["namespace"] in ("aws", "remote")]
             lines.append(f"| **External calls** | {len(c_ext)} | {len(w_ext)} |")
-            lines.append(f"| **Trace duration** | {ct.total_duration_ms:.0f}ms | {wt.total_duration_ms:.0f}ms |")
+            lines.append(
+                f"| **Trace duration** | {ct.total_duration_ms:.0f}ms | {wt.total_duration_ms:.0f}ms |"
+            )
 
             c_tiingo = [s for s in ct.subsegments if "tiingo" in s["name"].lower()]
             w_tiingo = [s for s in wt.subsegments if "tiingo" in s["name"].lower()]
-            c_tiingo_str = f"Yes ({c_tiingo[0]['duration_ms']:.0f}ms)" if c_tiingo else "No"
-            w_tiingo_str = f"Yes ({w_tiingo[0]['duration_ms']:.0f}ms)" if w_tiingo else "No"
+            c_tiingo_str = (
+                f"Yes ({c_tiingo[0]['duration_ms']:.0f}ms)" if c_tiingo else "No"
+            )
+            w_tiingo_str = (
+                f"Yes ({w_tiingo[0]['duration_ms']:.0f}ms)" if w_tiingo else "No"
+            )
             lines.append(f"| **Tiingo API call** | {c_tiingo_str} | {w_tiingo_str} |")
 
             c_dynamo = [s for s in ct.subsegments if "dynamo" in s["name"].lower()]
@@ -450,7 +478,7 @@ def generate_report(
     lines.append("|-------|---------|-----------|--------------|----------|")
 
     any_data = False
-    for before, after in zip(cache_before, cache_after):
+    for before, after in zip(cache_before, cache_after, strict=False):
         d_hits = after.hits - before.hits
         d_misses = after.misses - before.misses
         d_evictions = after.evictions - before.evictions
@@ -517,10 +545,14 @@ def generate_report(
         for r in invalid_reqs:
             lines.append(f"**`{r.endpoint}`** → HTTP {r.status_code}")
             if r.response_body:
-                lines.append(f"```json\n{json.dumps(r.response_body, indent=2)[:300]}\n```")
+                lines.append(
+                    f"```json\n{json.dumps(r.response_body, indent=2)[:300]}\n```"
+                )
             tree = traces.get(r.trace_id)
             if tree:
-                lines.append(f"Trace duration: {tree.total_duration_ms:.0f}ms | Error: {tree.has_error} | Fault: {tree.has_fault}")
+                lines.append(
+                    f"Trace duration: {tree.total_duration_ms:.0f}ms | Error: {tree.has_error} | Fault: {tree.has_fault}"
+                )
             lines.append("")
 
     # --- Raw Trace IDs ---
@@ -575,23 +607,51 @@ def main():
 
     # 3a: Warm ticker (AAPL) — likely already cached
     print(f"  → {WARM_TICKER} OHLC (warm)...")
-    r = make_request(DASHBOARD_URL, token, WARM_TICKER, f"/api/v2/tickers/{WARM_TICKER}/ohlc", "warm", {"range": "1W"})
+    r = make_request(
+        DASHBOARD_URL,
+        token,
+        WARM_TICKER,
+        f"/api/v2/tickers/{WARM_TICKER}/ohlc",
+        "warm",
+        {"range": "1W"},
+    )
     requests_list.append(r)
     print(f"    {r.status_code} | {r.latency_ms:.0f}ms | cache={r.cache_source}")
 
     print(f"  → {WARM_TICKER} sentiment (warm)...")
-    r = make_request(DASHBOARD_URL, token, WARM_TICKER, f"/api/v2/tickers/{WARM_TICKER}/sentiment/history", "warm", {"range": "1W"})
+    r = make_request(
+        DASHBOARD_URL,
+        token,
+        WARM_TICKER,
+        f"/api/v2/tickers/{WARM_TICKER}/sentiment/history",
+        "warm",
+        {"range": "1W"},
+    )
     requests_list.append(r)
     print(f"    {r.status_code} | {r.latency_ms:.0f}ms | cache={r.cache_source}")
 
     # 3b: Cold ticker (LCID) — first request (cache miss)
     print(f"  → {COLD_TICKER} OHLC (cold miss)...")
-    r = make_request(DASHBOARD_URL, token, COLD_TICKER, f"/api/v2/tickers/{COLD_TICKER}/ohlc", "cold_miss", {"range": "1W"})
+    r = make_request(
+        DASHBOARD_URL,
+        token,
+        COLD_TICKER,
+        f"/api/v2/tickers/{COLD_TICKER}/ohlc",
+        "cold_miss",
+        {"range": "1W"},
+    )
     requests_list.append(r)
     print(f"    {r.status_code} | {r.latency_ms:.0f}ms | cache={r.cache_source}")
 
     print(f"  → {COLD_TICKER} sentiment (cold miss)...")
-    r = make_request(DASHBOARD_URL, token, COLD_TICKER, f"/api/v2/tickers/{COLD_TICKER}/sentiment/history", "cold_miss", {"range": "1W"})
+    r = make_request(
+        DASHBOARD_URL,
+        token,
+        COLD_TICKER,
+        f"/api/v2/tickers/{COLD_TICKER}/sentiment/history",
+        "cold_miss",
+        {"range": "1W"},
+    )
     requests_list.append(r)
     print(f"    {r.status_code} | {r.latency_ms:.0f}ms | cache={r.cache_source}")
 
@@ -601,23 +661,51 @@ def main():
 
     # 3d: Cold ticker again (should be cache hit now)
     print(f"  → {COLD_TICKER} OHLC (warm hit)...")
-    r = make_request(DASHBOARD_URL, token, COLD_TICKER, f"/api/v2/tickers/{COLD_TICKER}/ohlc", "cold_hit", {"range": "1W"})
+    r = make_request(
+        DASHBOARD_URL,
+        token,
+        COLD_TICKER,
+        f"/api/v2/tickers/{COLD_TICKER}/ohlc",
+        "cold_hit",
+        {"range": "1W"},
+    )
     requests_list.append(r)
     print(f"    {r.status_code} | {r.latency_ms:.0f}ms | cache={r.cache_source}")
 
     print(f"  → {COLD_TICKER} sentiment (warm hit)...")
-    r = make_request(DASHBOARD_URL, token, COLD_TICKER, f"/api/v2/tickers/{COLD_TICKER}/sentiment/history", "cold_hit", {"range": "1W"})
+    r = make_request(
+        DASHBOARD_URL,
+        token,
+        COLD_TICKER,
+        f"/api/v2/tickers/{COLD_TICKER}/sentiment/history",
+        "cold_hit",
+        {"range": "1W"},
+    )
     requests_list.append(r)
     print(f"    {r.status_code} | {r.latency_ms:.0f}ms | cache={r.cache_source}")
 
     # 3e: Invalid ticker
     print(f"  → {INVALID_TICKER} OHLC (invalid)...")
-    r = make_request(DASHBOARD_URL, token, INVALID_TICKER, f"/api/v2/tickers/{INVALID_TICKER}/ohlc", "invalid", {"range": "1W"})
+    r = make_request(
+        DASHBOARD_URL,
+        token,
+        INVALID_TICKER,
+        f"/api/v2/tickers/{INVALID_TICKER}/ohlc",
+        "invalid",
+        {"range": "1W"},
+    )
     requests_list.append(r)
     print(f"    {r.status_code} | {r.latency_ms:.0f}ms")
 
     print(f"  → {INVALID_TICKER} sentiment (invalid)...")
-    r = make_request(DASHBOARD_URL, token, INVALID_TICKER, f"/api/v2/tickers/{INVALID_TICKER}/sentiment/history", "invalid", {"range": "1W"})
+    r = make_request(
+        DASHBOARD_URL,
+        token,
+        INVALID_TICKER,
+        f"/api/v2/tickers/{INVALID_TICKER}/sentiment/history",
+        "invalid",
+        {"range": "1W"},
+    )
     requests_list.append(r)
     print(f"    {r.status_code} | {r.latency_ms:.0f}ms")
 
@@ -632,26 +720,41 @@ def main():
     for tid in trace_ids:
         tree = fetch_trace(tid, xray)
         traces[tid] = tree
-        status = f"{tree.total_duration_ms:.0f}ms, {len(tree.subsegments)} subsegments" if tree else "NOT FOUND"
+        status = (
+            f"{tree.total_duration_ms:.0f}ms, {len(tree.subsegments)} subsegments"
+            if tree
+            else "NOT FOUND"
+        )
         print(f"  {tid[:20]}... → {status}")
 
     # -- Step 6: Snapshot cache metrics AFTER --
     print("\n[6/7] Snapshotting cache metrics (after)...")
     test_end = datetime.now(UTC)
     # Wait a bit more to allow metric flush
-    cache_after = fetch_cache_metrics(cw, metric_window_start, test_end + timedelta(minutes=2))
+    cache_after = fetch_cache_metrics(
+        cw, metric_window_start, test_end + timedelta(minutes=2)
+    )
     deltas = []
-    for b, a in zip(cache_before, cache_after):
+    for b, a in zip(cache_before, cache_after, strict=False):
         d = a.hits - b.hits + a.misses - b.misses
         if d > 0:
-            deltas.append(f"{a.cache_name}: +{a.hits - b.hits:.0f}H/+{a.misses - b.misses:.0f}M")
-    print(f"  Deltas: {', '.join(deltas) if deltas else '(none yet — 60s flush interval)'}")
+            deltas.append(
+                f"{a.cache_name}: +{a.hits - b.hits:.0f}H/+{a.misses - b.misses:.0f}M"
+            )
+    print(
+        f"  Deltas: {', '.join(deltas) if deltas else '(none yet — 60s flush interval)'}"
+    )
 
     # -- Step 7: Generate report --
     print("\n[7/7] Generating report...")
     report = generate_report(
-        requests_list, traces, cache_before, cache_after,
-        session_info, test_start, test_end,
+        requests_list,
+        traces,
+        cache_before,
+        cache_after,
+        session_info,
+        test_start,
+        test_end,
     )
 
     output_path = Path(args.output)
@@ -665,8 +768,16 @@ def main():
     print("QUICK SUMMARY")
     print("=" * 60)
     for r in requests_list:
-        emoji = "✅" if r.status_code in (200,) else "⚠️" if r.status_code in (400, 404) else "❌"
-        print(f"  {emoji} {r.scenario:12} {r.ticker:8} {r.status_code} {r.latency_ms:>7.0f}ms {r.cache_source or ''}")
+        emoji = (
+            "✅"
+            if r.status_code in (200,)
+            else "⚠️"
+            if r.status_code in (400, 404)
+            else "❌"
+        )
+        print(
+            f"  {emoji} {r.scenario:12} {r.ticker:8} {r.status_code} {r.latency_ms:>7.0f}ms {r.cache_source or ''}"
+        )
 
 
 if __name__ == "__main__":

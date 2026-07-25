@@ -1063,6 +1063,16 @@ class TestAPIv2ArticlesEndpoint:
 class TestChaosExperimentsAPI:
     """Tests for chaos experiment CRUD endpoints."""
 
+    @pytest.fixture
+    def auth_headers(self, jwt_env):
+        """Operator-role headers.
+
+        Feature 1391 (GAP-3): /chaos/* routes now require the operator role via
+        require_role_middleware("operator"). Overrides the module-level
+        free-role fixture for this class.
+        """
+        return {"Authorization": f"Bearer {create_test_jwt(roles=['operator'])}"}
+
     def test_create_experiment_requires_auth(self, mock_lambda_context):
         """Test that create experiment requires authentication."""
         event = make_event(
@@ -1849,6 +1859,11 @@ class TestItemRetrievalErrors:
 
 class TestChaosEndpointErrors:
     """Tests for chaos endpoint error handlers (lines 910-1136)."""
+
+    @pytest.fixture
+    def auth_headers(self, jwt_env):
+        """Operator-role headers (Feature 1391 GAP-3: /chaos/* is operator-gated)."""
+        return {"Authorization": f"Bearer {create_test_jwt(roles=['operator'])}"}
 
     def test_chaos_error_response_500(
         self, mock_lambda_context, auth_headers, monkeypatch, caplog
