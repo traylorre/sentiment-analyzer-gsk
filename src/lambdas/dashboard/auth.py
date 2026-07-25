@@ -41,6 +41,7 @@ import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 import boto3
 import jwt
@@ -1650,6 +1651,8 @@ class OAuthCallbackResponse(BaseModel):
     verification: str = "none"
     linked_providers: list[str] = Field(default_factory=list)
     last_provider_used: str | None = None
+    # Feature 1380: host-validated OAuth avatar URL (null unless allowlisted).
+    picture: str | None = None
 
 
 class RefreshTokenRequest(BaseModel):
@@ -2181,6 +2184,67 @@ def _mask_email(email: str | None) -> str | None:
         return f"{local[0]}***@{domain}"
     except ValueError:
         return "***"
+
+
+# Feature 1380: OAuth avatar / profile picture surfacing.
+_AVATAR_ALLOWED_HOST = "googleusercontent.com"
+
+
+def _validate_avatar_url(url: str | None) -> str | None:
+    """SSRF-safe host allowlist for OAuth avatar URLs (Feature 1380, FR-004).
+
+    Backend-authoritative. Returns the URL ONLY if it is https and its parsed
+    hostname is exactly ``googleusercontent.com`` or ends with the
+    ``.googleusercontent.com`` suffix (the leading dot is load-bearing). Every
+    other value fails closed to None. The check parses the URL and compares the
+    hostname — never a substring/`in`/regex test on the raw string — so path
+    tricks (``https://evil.com/googleusercontent.com/x``), userinfo tricks
+    (``https://googleusercontent.com@evil.com``), lookalikes
+    (``evil-googleusercontent.com``), suffix tricks
+    (``foo.googleusercontent.com.evil.com``) and non-https schemes are rejected.
+    Hot-link only: this function never fetches the URL. Logs nothing (PII).
+    """
+    if not url or not isinstance(url, str):
+        return None
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        # Malformed URL → fail closed.
+        return None
+    if parsed.scheme != "https":
+        return None
+    hostname = parsed.hostname  # normalized (lowercased, userinfo/port stripped)
+    if not hostname:
+        return None
+    # Normalize a trailing dot (FQDN form) before matching.
+    hostname = hostname.rstrip(".")
+    if hostname == _AVATAR_ALLOWED_HOST or hostname.endswith(
+        "." + _AVATAR_ALLOWED_HOST
+    ):
+        return url
+    return None
+
+
+def _select_avatar(user: User) -> str | None:
+    """Pick the current user's avatar URL from persisted provider metadata.
+
+    Feature 1380 (FR-003): selects the avatar for ``user.last_provider_used``,
+    falling back to the first provider_metadata entry with a non-null avatar
+    (handles multi-provider linking). The chosen URL is host-validated by
+    ``_validate_avatar_url`` (FR-004, fail-closed). Pure, no I/O, no logging.
+    """
+    metadata = getattr(user, "provider_metadata", None) or {}
+    candidate: str | None = None
+    last = user.last_provider_used
+    if last is not None and last in metadata:
+        candidate = getattr(metadata[last], "avatar", None)
+    if not candidate:
+        for entry in metadata.values():
+            avatar = getattr(entry, "avatar", None)
+            if avatar:
+                candidate = avatar
+                break
+    return _validate_avatar_url(candidate)
 
 
 # T092: OAuth URLs
@@ -2739,6 +2803,11 @@ def handle_oauth_callback(
         verification=final_verification,
         linked_providers=final_linked_providers,
         last_provider_used=provider,
+        # Feature 1380: surface this login's avatar. _link_provider persists to
+        # DynamoDB but does NOT mutate the in-memory `user`, so validate the fresh
+        # claim directly (same SSRF allowlist as /auth/me's _select_avatar). This
+        # is the just-authenticated provider, so it IS the "current" avatar.
+        picture=_validate_avatar_url(claims.get("picture")),
     )
 
 

@@ -2287,6 +2287,9 @@ def get_current_user():
         linked_providers=user.linked_providers,
         verification=user.verification,
         last_provider_used=user.last_provider_used,
+        # Feature 1380: derive avatar from persisted provider_metadata (reload
+        # path). auth imported as auth_service at module top — no circular import.
+        picture=auth_service._select_avatar(user),
     )
 
     return json_response(200, response.model_dump(), _get_no_cache_headers())
