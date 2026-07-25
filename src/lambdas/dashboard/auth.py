@@ -471,12 +471,23 @@ def get_user_by_email(table: Any, email: str) -> User | None:
 # Feature 014 User Story 3: Email Uniqueness (T040-T044)
 # =============================================================================
 
-# Feature 1395: soft page threshold for identity-key lookups. Realistic per-identity
-# cardinality is tiny (one human's notifications/tokens/duplicates), so paging past this
-# is a fragmentation smell worth a WARN — but we STILL paginate to full exhaustion. A
-# fixed page cap would re-open the false-None footgun for a user with enough non-USER
-# items to span many pages before their USER item.
-_IDENTITY_QUERY_PAGE_WARN_THRESHOLD = 25
+# Feature 1395 (fail-closed amendment): identity-key lookups paginate under a bounded
+# page cap. Realistic per-identity cardinality is tiny (one human's
+# notifications/tokens/duplicates ≪ one 1MB page), so hitting the cap means the key is
+# polluted or something is wrong — we FAIL CLOSED (WARN + raise), never silently truncate.
+# A *raising* cap cannot produce the false-None footgun by construction; only a *silently
+# truncating* cap could, which is why the WIP's cap-refusal (R-4) was wrong.
+_IDENTITY_QUERY_MAX_PAGES = 10
+
+
+class IdentityLookupError(Exception):
+    """Identity GSI lookup could not prove completeness (page failure, cap trip,
+    or malformed pagination cursor).
+
+    Feature 1395: callers MUST fail closed — never treat this as "no user". Swallowing
+    it and returning ``None`` re-opens CWE-636 (a logged-but-swallowed error reaches the
+    OAuth callback as "no account" and mints a duplicate USER record).
+    """
 
 
 def _created_at_sort_key(user: User) -> datetime:
@@ -499,27 +510,34 @@ def _query_users_by_index(
     index_name: str,
     key_expr: str,
     attr_values: dict[str, Any],
+    *,
+    max_pages: int = _IDENTITY_QUERY_MAX_PAGES,
 ) -> list[User]:
-    """Return ALL ``USER`` items under a GSI key, paginating to full exhaustion.
+    """Return the COMPLETE list of ``USER`` items under a GSI key, or raise.
 
     Feature 1395: drops the ``Limit=1`` footgun. DynamoDB applies ``Limit`` to the
     key-matched items BEFORE the ``FilterExpression`` runs, so a non-USER item sharing
     the hash key (``NOTIFICATION`` / ``MAGIC_LINK_TOKEN`` under ``by_email``) could be the
     single item returned and get filtered out, making the helper return ``None`` even
     though a ``USER`` exists. Here the ``entity_type = USER`` filter is applied across the
-    FULL key match and we page via ``LastEvaluatedKey`` until the query is exhausted, so
-    injected non-USER items can never mask a real USER (FR-001, T-4).
+    FULL key match and we page via ``LastEvaluatedKey`` until the key range is exhausted,
+    so injected non-USER items can never mask a real USER (FR-001).
 
-    Returns ``[]`` on a query error that yielded no records at all (same observable
-    behavior as the prior helpers, error logged via ``get_safe_error_info`` — no silent
-    failure, FR-010).
+    Fail-closed contract (amendment — FR-010/012/013/014, supersedes the WIP's O-1
+    partial-result design):
 
-    Failure scoping (O-1): the ``try`` sits INSIDE the pagination loop, so a failure on
-    page N returns the ``USER`` records already collected from pages 1..N-1 instead of
-    discarding them. Discarding them would turn a transient DynamoDB error into a false
-    "no such user", and the OAuth callback would mint a DUPLICATE record — precisely the
-    identity fragmentation this feature exists to stop. A partial result is logged as
-    incomplete so the degraded canonical selection is observable.
+    - Returns a COMPLETE ``list[User]`` (possibly ``[]`` when the range holds zero USER
+      items). An empty list therefore means EXACTLY "scanned to exhaustion, zero USERs".
+    - Raises ``IdentityLookupError`` (after logging) on ANY page-query failure (including
+      page 1), on a ``max_pages`` cap trip with pagination unfinished, and on a malformed
+      pagination cursor. It NEVER returns a partial/truncated result: selecting a
+      "canonical" user over a truncated set makes the resolved identity depend on which
+      pages happened to succeed (refuter R-8), and returning ``[]`` on a page-1 error mints
+      a duplicate (K-3 / CWE-636).
+    - The one deliberate non-raise: a single unparseable USER item is skipped+WARNed, not
+      raised. A permanently malformed record would otherwise hard-lock that account with no
+      retry escape, and the skip is deterministic (same item fails every time), so
+      canonical selection stays stable.
     """
     users: list[User] = []
     exclusive_start_key: dict[str, Any] | None = None
@@ -536,24 +554,22 @@ def _query_users_by_index(
 
         try:
             response = table.query(**query_kwargs)
+        except IdentityLookupError:
+            raise
         except Exception as e:
-            # Stop paginating, but KEEP what we already resolved (see O-1 above).
+            # FR-010/012: log then RAISE — never return partial/[] on error. A swallowed
+            # error reaches the OAuth callback as "no user" and mints a duplicate.
             logger.error(
-                "Failed GSI identity lookup",
+                "Failed GSI identity lookup — failing closed",
                 extra={
                     "index": index_name,
                     "pages_completed": page_count,
-                    "users_found_before_failure": len(users),
                     **get_safe_error_info(e),
                 },
             )
-            if users:
-                logger.warning(
-                    "GSI identity lookup INCOMPLETE — canonical selection is being made "
-                    "over a partial result set",
-                    extra={"index": index_name, "pages_completed": page_count},
-                )
-            return users
+            raise IdentityLookupError(
+                f"GSI identity lookup failed on index {index_name}"
+            ) from e
 
         page_count += 1
 
@@ -561,22 +577,43 @@ def _query_users_by_index(
             try:
                 users.append(User.from_dynamodb_item(item))
             except Exception as parse_err:
-                # A single malformed record must not abort the whole lookup; skip it
-                # (it also sorts LAST via _created_at_sort_key if it did parse).
+                # Deliberate deviation (plan §4.2): a single malformed record must not
+                # abort the whole lookup; skip+WARN it. It also sorts LAST via
+                # _created_at_sort_key if it partially parsed.
                 logger.warning(
                     "Skipping unparseable USER item during GSI lookup",
                     extra={"index": index_name, **get_safe_error_info(parse_err)},
                 )
 
-        if page_count == _IDENTITY_QUERY_PAGE_WARN_THRESHOLD:
-            logger.warning(
-                "GSI identity lookup paging deeply — possible index pollution",
-                extra={"index": index_name, "pages": page_count},
+        # FR-014: only a non-empty dict is a real continuation token. None / empty-dict
+        # terminates normally; any other truthy value (e.g. a MagicMock attribute whose
+        # .get() is truthy forever — refuter K-1 infinite loop) is uninterpretable, so we
+        # cannot prove completeness → fail closed.
+        lek = response.get("LastEvaluatedKey")
+        if lek is None or lek == {}:
+            break
+        if not isinstance(lek, dict):
+            logger.error(
+                "Malformed pagination cursor in GSI identity lookup — failing closed",
+                extra={"index": index_name, "cursor_type": type(lek).__name__},
+            )
+            raise IdentityLookupError(
+                f"Malformed pagination cursor on index {index_name}"
             )
 
-        exclusive_start_key = response.get("LastEvaluatedKey")
-        if not exclusive_start_key:
-            break
+        # FR-013: bounded cap that RAISES (never silent truncation). Hitting it with
+        # pagination still unfinished means we cannot prove completeness.
+        if page_count >= max_pages:
+            logger.warning(
+                "GSI identity lookup hit max_pages cap with pagination unfinished — "
+                "failing closed (possible index pollution)",
+                extra={"index": index_name, "pages": page_count},
+            )
+            raise IdentityLookupError(
+                f"GSI identity lookup exceeded {max_pages} pages on index {index_name}"
+            )
+
+        exclusive_start_key = lek
 
     return users
 
@@ -2742,6 +2779,11 @@ def _link_provider(
                 "is_new_link": provider not in user.linked_providers,
             },
         )
+    except IdentityLookupError:
+        # Feature 1395 (FR-015): a failed-closed provider-uniqueness lookup must NOT be
+        # swallowed here — swallowing it would skip the uniqueness guard and could
+        # double-link a provider. Propagate → router 503.
+        raise
     except Exception as e:
         safe_provider_failed = (
             str(provider)
@@ -3124,6 +3166,14 @@ def refresh_access_tokens(
                     if user:
                         user_id = user.user_id
                         auth_type = user.auth_type
+            except IdentityLookupError:
+                # Feature 1395 (FR-015 / R-8): a failed-closed identity lookup must NOT
+                # degrade to "tokens without identity" here — that resolves the refresh to
+                # a nondeterministic/absent user_id and flaps the session across reloads
+                # (the exact bug this feature exists to kill). Fail closed: propagate past
+                # the outer TokenError handler (IdentityLookupError is not a TokenError)
+                # → router 503; the client retries the refresh.
+                raise
             except Exception as e:
                 # Degrade to today's behavior (tokens without identity) rather
                 # than failing the refresh; frontend falls back gracefully.

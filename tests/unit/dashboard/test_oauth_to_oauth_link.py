@@ -34,6 +34,10 @@ def mock_table():
     table.meta.client = MagicMock()
     table.meta.client.exceptions = MagicMock()
     table.meta.client.exceptions.ConditionalCheckFailedException = Exception
+    # Feature 1395: default finite empty page so the callback's cognito_sub lookup
+    # resolves to None instead of looping on a truthy-MagicMock cursor (K-1). Tests that
+    # need a seeded row override table.query.return_value themselves.
+    table.query.return_value = {"Items": []}
     return table
 
 

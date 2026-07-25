@@ -8,6 +8,8 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
+import pytest
+
 from src.lambdas.dashboard.auth import (
     _link_provider,
     get_user_by_provider_sub,
@@ -132,13 +134,16 @@ class TestGetUserByProviderSub:
         mock_table.query.assert_not_called()
 
     def test_handles_query_exception(self):
-        """Test that function returns None and logs on exception."""
+        """Feature 1395 (fail-closed): a query exception MUST raise IdentityLookupError,
+        NOT return None. Returning None on a transient DynamoDB error is the K-3 defect —
+        the OAuth callback reads it as "no user" and mints a duplicate (CWE-636)."""
+        from src.lambdas.dashboard.auth import IdentityLookupError
+
         mock_table = MagicMock()
         mock_table.query.side_effect = Exception("DynamoDB error")
 
-        result = get_user_by_provider_sub(mock_table, "google", "12345")
-
-        assert result is None
+        with pytest.raises(IdentityLookupError):
+            get_user_by_provider_sub(mock_table, "google", "12345")
 
 
 class TestLinkProviderPopulatesProviderSub:
@@ -149,6 +154,9 @@ class TestLinkProviderPopulatesProviderSub:
         # Arrange
         user = _create_test_user()
         mock_table = MagicMock()
+        # Feature 1395: finite empty page so the uniqueness lookup returns None (no
+        # collision) instead of tripping the K-1 malformed-cursor guard.
+        mock_table.query.return_value = {"Items": []}
         provider = "google"
         sub = "118368473829470293847"
         expected_provider_sub = f"{provider}:{sub}"
@@ -187,6 +195,8 @@ class TestLinkProviderPopulatesProviderSub:
         )
 
         mock_table = MagicMock()
+        # Feature 1395: finite empty page (uniqueness lookup → None, no K-1 hang).
+        mock_table.query.return_value = {"Items": []}
         provider = "google"
         new_sub = "new_sub_after_reauth"
 
@@ -212,6 +222,8 @@ class TestLinkProviderPopulatesProviderSub:
         user = _create_test_user()
 
         mock_table = MagicMock()
+        # Feature 1395: finite empty page (uniqueness lookup → None, no K-1 hang).
+        mock_table.query.return_value = {"Items": []}
         provider = "github"
         sub = "12345678"
 

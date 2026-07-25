@@ -11,9 +11,10 @@ from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import boto3
+import pytest
 from moto import mock_aws
 
-from src.lambdas.dashboard.auth import handle_oauth_callback
+from src.lambdas.dashboard.auth import IdentityLookupError, handle_oauth_callback
 
 EMAIL = "returning.user@gmail.com"
 COGNITO_SUB = "google-cognito-sub-abc123"
@@ -200,3 +201,49 @@ def test_sub_vs_email_divergence_returns_auth_023():
     assert result.status == "error"
     assert result.error == "AUTH_023"
     assert _count_user_records(table) == 0
+
+
+class _QueryRaisesTable:
+    """Wraps a moto table but makes every GSI ``query`` fail (page-1 DynamoDB error).
+
+    Base-table operations (``put_item``, ``scan``, ``update_item``) still work so the test
+    can assert that ZERO USER records were written despite the identity resolution failing.
+    """
+
+    def __init__(self, inner):
+        self._inner = inner
+
+    def query(self, **kwargs):
+        raise RuntimeError("ProvisionedThroughputExceededException (simulated page-1)")
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+
+@mock_aws
+def test_page_one_lookup_failure_fails_closed_no_user_minted():
+    """SC-6 (CWE-636 regression pin): a DynamoDB failure during identity resolution must
+    surface as IdentityLookupError and mint ZERO USER records — never fall through to
+    _create_authenticated_user."""
+    inner = _create_users_table()
+    table = _QueryRaisesTable(inner)
+
+    with (
+        patch(
+            "src.lambdas.dashboard.auth.validate_oauth_state",
+            return_value=(True, "", None),
+        ),
+        patch("src.lambdas.dashboard.auth.CognitoConfig.from_env"),
+        patch(
+            "src.lambdas.dashboard.auth.exchange_code_for_tokens",
+            return_value=_mock_tokens(),
+        ),
+        patch("src.lambdas.dashboard.auth.decode_id_token", return_value=_claims()),
+        patch("src.lambdas.dashboard.auth._mark_email_verified"),
+        patch("src.lambdas.dashboard.auth._advance_role"),
+    ):
+        with pytest.raises(IdentityLookupError):
+            _run_callback(table)
+
+    # Fail closed: no account created on a transient lookup error.
+    assert _count_user_records(inner) == 0

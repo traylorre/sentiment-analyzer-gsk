@@ -133,7 +133,12 @@ class TestHandleOAuthCallbackFlow3:
     @pytest.fixture
     def mock_table(self):
         """Create a mock DynamoDB table."""
-        return MagicMock()
+        table = MagicMock()
+        # Feature 1395: finite empty page so the callback's cognito_sub lookup resolves
+        # to None instead of looping on a truthy-MagicMock LastEvaluatedKey (K-1). The
+        # provider_sub / email lookups are patched per-test; this covers cognito_sub.
+        table.query.return_value = {"Items": []}
+        return table
 
     @pytest.fixture
     def mock_config(self):

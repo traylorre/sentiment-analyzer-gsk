@@ -115,6 +115,9 @@ class TestOAuthCallbackFederationFieldsNewUser:
     ) -> None:
         """New anonymous user gets role=free in response."""
         table = MagicMock()
+        # Feature 1395: finite empty page so the callback's provider_sub / cognito_sub
+        # lookups resolve to None instead of hitting a truthy-MagicMock cursor (K-1).
+        table.query.return_value = {"Items": []}
         user = self._create_test_user(role="anonymous")
         mock_create_user.return_value = user
         mock_get_user.return_value = None  # New user
@@ -159,6 +162,9 @@ class TestOAuthCallbackFederationFieldsNewUser:
         exchange as redirect_uri_override, so the exchange matches the authorize step per-origin
         instead of the static config value."""
         table = MagicMock()
+        # Feature 1395: finite empty page so the callback's provider_sub / cognito_sub
+        # lookups resolve to None instead of hitting a truthy-MagicMock cursor (K-1).
+        table.query.return_value = {"Items": []}
         user = self._create_test_user(role="anonymous")
         mock_create_user.return_value = user
         mock_get_user.return_value = None
@@ -203,6 +209,9 @@ class TestOAuthCallbackFederationFieldsNewUser:
     ) -> None:
         """New user with verified email gets verification=verified."""
         table = MagicMock()
+        # Feature 1395: finite empty page so the callback's provider_sub / cognito_sub
+        # lookups resolve to None instead of hitting a truthy-MagicMock cursor (K-1).
+        table.query.return_value = {"Items": []}
         user = self._create_test_user()
         mock_create_user.return_value = user
         mock_get_user.return_value = None
@@ -245,6 +254,9 @@ class TestOAuthCallbackFederationFieldsNewUser:
     ) -> None:
         """New user without verified email keeps verification=none."""
         table = MagicMock()
+        # Feature 1395: finite empty page so the callback's provider_sub / cognito_sub
+        # lookups resolve to None instead of hitting a truthy-MagicMock cursor (K-1).
+        table.query.return_value = {"Items": []}
         user = self._create_test_user()
         mock_create_user.return_value = user
         mock_get_user.return_value = None
@@ -287,6 +299,9 @@ class TestOAuthCallbackFederationFieldsNewUser:
     ) -> None:
         """New user gets provider added to linked_providers."""
         table = MagicMock()
+        # Feature 1395: finite empty page so the callback's provider_sub / cognito_sub
+        # lookups resolve to None instead of hitting a truthy-MagicMock cursor (K-1).
+        table.query.return_value = {"Items": []}
         user = self._create_test_user()
         mock_create_user.return_value = user
         mock_get_user.return_value = None
@@ -329,6 +344,9 @@ class TestOAuthCallbackFederationFieldsNewUser:
     ) -> None:
         """New user gets last_provider_used set to the OAuth provider."""
         table = MagicMock()
+        # Feature 1395: finite empty page so the callback's provider_sub / cognito_sub
+        # lookups resolve to None instead of hitting a truthy-MagicMock cursor (K-1).
+        table.query.return_value = {"Items": []}
         user = self._create_test_user()
         mock_create_user.return_value = user
         mock_get_user.return_value = None
@@ -396,6 +414,9 @@ class TestOAuthCallbackFederationFieldsExistingUser:
     ) -> None:
         """Existing free user keeps role=free."""
         table = MagicMock()
+        # Feature 1395: finite empty page so the callback's provider_sub / cognito_sub
+        # lookups resolve to None instead of hitting a truthy-MagicMock cursor (K-1).
+        table.query.return_value = {"Items": []}
         user = self._create_existing_user()
         mock_get_user.return_value = user
         mock_exchange.return_value = self._mock_tokens()
@@ -438,6 +459,9 @@ class TestOAuthCallbackFederationFieldsExistingUser:
         This is Federation Flow 5: OAuth-to-OAuth auto-link.
         """
         table = MagicMock()
+        # Feature 1395: finite empty page so the callback's provider_sub / cognito_sub
+        # lookups resolve to None instead of hitting a truthy-MagicMock cursor (K-1).
+        table.query.return_value = {"Items": []}
         user = self._create_existing_user()  # Has google linked
         mock_get_user.return_value = user
         mock_exchange.return_value = self._mock_tokens()
@@ -477,6 +501,9 @@ class TestOAuthCallbackFederationFieldsExistingUser:
     ) -> None:
         """Re-authenticating with same provider doesn't duplicate."""
         table = MagicMock()
+        # Feature 1395: finite empty page so the callback's provider_sub / cognito_sub
+        # lookups resolve to None instead of hitting a truthy-MagicMock cursor (K-1).
+        table.query.return_value = {"Items": []}
         user = self._create_existing_user()  # Has google linked
         mock_get_user.return_value = user
         mock_exchange.return_value = self._mock_tokens()
@@ -514,6 +541,9 @@ class TestOAuthCallbackFederationFieldsExistingUser:
     ) -> None:
         """last_provider_used set to current OAuth provider on re-auth."""
         table = MagicMock()
+        # Feature 1395: finite empty page so the callback's provider_sub / cognito_sub
+        # lookups resolve to None instead of hitting a truthy-MagicMock cursor (K-1).
+        table.query.return_value = {"Items": []}
         user = self._create_existing_user()  # Has google linked
         mock_get_user.return_value = user
         mock_exchange.return_value = self._mock_tokens()

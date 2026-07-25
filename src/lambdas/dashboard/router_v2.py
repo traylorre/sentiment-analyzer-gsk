@@ -2272,6 +2272,10 @@ def get_current_user():
     return json_response(200, response.model_dump(), _get_no_cache_headers())
 
 
+# Feature 1395 (OQ-3 / FR-015): the fail-closed handler for IdentityLookupError is
+# registered on the APIGatewayRestResolver in handler.py (via @app.exception_handler),
+# NOT here — Powertools 3.x does not merge Router-level exception handlers into the app,
+# so a router-scoped handler would silently never fire. See handler.py.
 def include_routers(app):
     """Include all v2 routers in the Powertools app."""
     app.include_router(auth_router)
