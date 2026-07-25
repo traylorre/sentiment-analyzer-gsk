@@ -26,6 +26,7 @@ from src.lambdas.shared.errors.session_errors import (
     TokenAlreadyUsedError,
     TokenExpiredError,
 )
+from src.lambdas.shared.middleware.auth_middleware import validate_jwt
 from src.lambdas.shared.models.user import User
 
 # Feature 1166: TestMagicLinkSignature class removed - HMAC functions deleted.
@@ -364,11 +365,38 @@ class TestRefreshAccessTokens:
     """Tests for T094: refresh_access_tokens."""
 
     def test_refresh_success(self):
-        """Returns new tokens on success."""
+        """Re-mints a first-party app JWT on success (Feature 1396, FR-005/SC-003).
+
+        The Cognito access token is no longer the bearer: refresh resolves the
+        internal user via the by_cognito_sub GSI and re-mints an app JWT. The
+        returned access_token must be a valid, validator-accepted app JWT (NOT
+        the raw Cognito access token); id_token stays the Cognito id_token.
+        Mirrors tests/unit/dashboard/test_oauth_refresh_identity.py.
+        """
         mock_tokens = MagicMock()
         mock_tokens.id_token = "new_id_token"
-        mock_tokens.access_token = "new_access_token"
+        mock_tokens.access_token = "new_access_token"  # raw Cognito token, NOT bearer
+        mock_tokens.refresh_token = None
         mock_tokens.expires_in = 3600
+
+        now = datetime.now(UTC).isoformat()
+        user_item = {
+            "PK": "USER#u-1",
+            "SK": "PROFILE",
+            "user_id": "u-1",
+            "auth_type": "google",
+            "cognito_sub": "sub-abc",
+            "entity_type": "USER",
+            "role": "free",
+            "verification": "verified",
+            "created_at": now,
+            "last_active_at": now,
+            "session_expires_at": now,
+        }
+
+        table = MagicMock()
+        table.get_item.return_value = {}  # blocklist check: token not revoked
+        table.query.return_value = {"Items": [user_item]}  # by_cognito_sub GSI
 
         with patch.dict(
             os.environ,
@@ -379,15 +407,34 @@ class TestRefreshAccessTokens:
                 "AWS_REGION": "us-east-1",
                 "COGNITO_REDIRECT_URI": "https://app.example.com/callback",
             },
+            clear=False,
         ):
-            with patch(
-                "src.lambdas.dashboard.auth.cognito_refresh_tokens",
-                return_value=mock_tokens,
+            os.environ.pop("JWT_AUDIENCE", None)
+            with (
+                patch("src.lambdas.dashboard.auth.CognitoConfig"),
+                patch(
+                    "src.lambdas.dashboard.auth.decode_id_token",
+                    return_value={"sub": "sub-abc"},
+                ),
+                patch(
+                    "src.lambdas.dashboard.auth.cognito_refresh_tokens",
+                    return_value=mock_tokens,
+                ),
             ):
-                response = refresh_access_tokens("refresh_token")
+                response = refresh_access_tokens("refresh_token", table=table)
 
+                # Refresh genuinely SUCCEEDS for a resolvable user.
+                assert response.error is None
+                assert response.user_id == "u-1"
+                assert response.auth_type == "google"
+                # id_token stays the Cognito id_token.
                 assert response.id_token == "new_id_token"
-                assert response.access_token == "new_access_token"
+                # access_token is a freshly-minted app JWT, NOT the raw Cognito token.
+                assert response.access_token != "new_access_token"
+                # SC-003: the returned access_token is a valid, validator-accepted app JWT.
+                claim = validate_jwt(response.access_token)
+                assert claim is not None
+                assert claim.subject == "u-1"
 
     def test_refresh_failure(self):
         """Returns error on failure."""
