@@ -867,8 +867,16 @@ module "api_gateway" {
   # Feature 1267: Pass CORS allowed origins for documentation/validation
   cors_allowed_origins = var.cors_allowed_origins
 
-  # Feature 1253: Enable Cognito JWT authorization (FR-001)
-  enable_cognito_auth   = true
+  # Feature 1253 enabled a Cognito user-pool authorizer here; Feature 1396 then
+  # switched the frontend bearer to a first-party HS256 app JWT, which a Cognito
+  # authorizer can never validate — every gateway-authorized route 401'd for
+  # OAuth users before the Lambda ran (2026-07-25 incident). Disabled: the
+  # Lambda auth middleware (1146/1147/1130 — signature, aud/nbf, roles,
+  # revocation) is the auth layer; gateway keeps rate limiting + WAF. Accepted
+  # tradeoff (owner, 2026-07-25): unauthenticated invokes reach the Lambda
+  # (cost/noise surface). Carded follow-up: Lambda REQUEST authorizer that
+  # validates the app JWT at the gateway (new resource — owner-gated).
+  enable_cognito_auth   = false
   cognito_user_pool_arn = module.cognito.user_pool_arn
 
   # Feature 1253: Public routes that bypass Cognito auth (FR-002)
