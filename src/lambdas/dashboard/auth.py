@@ -2458,6 +2458,19 @@ def _read_rev_from_expiring_bearer(bearer: str | None) -> int | None:
 
 # T093: OAuth Callback
 @tracer.capture_method
+def _email_verified_claim_is_true(claims: dict[str, Any]) -> bool:
+    """Read the email_verified claim, tolerating Cognito's string form.
+
+    Cognito re-emits mapped IdP attributes on federated id_tokens as the
+    strings "true"/"false", while native flows use a real boolean. A bare
+    truthiness check would treat "false" as verified.
+    """
+    value = claims.get("email_verified", False)
+    if isinstance(value, str):
+        return value.strip().lower() == "true"
+    return bool(value)
+
+
 def handle_oauth_callback(
     table: Any,
     code: str,
@@ -2562,7 +2575,7 @@ def handle_oauth_callback(
             message="Email not provided by OAuth provider.",
         )
 
-    oauth_email_verified = claims.get("email_verified", False)
+    oauth_email_verified = _email_verified_claim_is_true(claims)
 
     # Feature 1395: resolve an existing account by STABLE IDENTITY first (server-derived
     # sub from the validated id_token), then fall back to email. The by_email GSI can be
@@ -2708,7 +2721,7 @@ def handle_oauth_callback(
             sub=cognito_sub,
             email=email,
             avatar=claims.get("picture"),
-            email_verified=claims.get("email_verified", False),
+            email_verified=oauth_email_verified,
         )
         # Mark email as verified from OAuth (Feature 1171)
         _mark_email_verified(
@@ -2716,7 +2729,7 @@ def handle_oauth_callback(
             user=user,
             provider=provider,
             email=email,
-            email_verified=claims.get("email_verified", False),
+            email_verified=oauth_email_verified,
         )
         # Advance role from anonymous to free (Feature 1170)
         _advance_role(table=table, user=user, provider=provider)
@@ -2737,7 +2750,7 @@ def handle_oauth_callback(
             sub=cognito_sub,
             email=email,
             avatar=claims.get("picture"),
-            email_verified=claims.get("email_verified", False),
+            email_verified=oauth_email_verified,
         )
         # Mark email as verified from OAuth (Feature 1171)
         _mark_email_verified(
@@ -2745,7 +2758,7 @@ def handle_oauth_callback(
             user=user,
             provider=provider,
             email=email,
-            email_verified=claims.get("email_verified", False),
+            email_verified=oauth_email_verified,
         )
         # Advance role from anonymous to free (Feature 1170)
         _advance_role(table=table, user=user, provider=provider)
@@ -2763,21 +2776,25 @@ def handle_oauth_callback(
         if provider in user.linked_providers
         else user.linked_providers + [provider]
     )
-    final_verification = (
-        "verified" if claims.get("email_verified", False) else user.verification
-    )
-    final_role = "free" if user.role == "anonymous" else user.role
+    # 1163 incident fix: _mark_email_verified/_advance_role now sync this in-memory
+    # object on SUCCESSFUL writes, so the response and JWT report what the row
+    # actually says. The old unconditional "anonymous → free" forcing here minted
+    # free-tier JWTs even when the advance was skipped (unverified email) or its
+    # write failed — advertising the forbidden free:none state to the client.
+    final_verification = user.verification
+    final_role = user.role
 
-    # Feature 1396 (N4/FR-002a): make the in-hand user AUTHORITATIVE before roles are
-    # read. get_roles_for_user gates on user.auth_type (roles.py), NOT user.role, and
-    # _advance_role/_mark_email_verified persist to DynamoDB WITHOUT mutating this
-    # in-memory object. Without this reconciliation a just-upgraded existing anonymous
-    # user would mint roles=["anonymous"] (under-grant). New OAuth users already get
-    # auth_type=<provider> at creation, so this is a no-op for them.
+    # Feature 1396 (N4/FR-002a): get_roles_for_user gates on user.auth_type
+    # (roles.py), NOT user.role. An existing anonymous-row user who just
+    # authenticated via OAuth keeps auth_type="anonymous" in the row, which would
+    # under-grant roles=["anonymous"]; record the authn fact for this request.
+    # New OAuth users already get auth_type=<provider> at creation (no-op).
+    # NOTE (carded follow-up): roles.py deriving privileges from auth_type instead
+    # of role means an unverified OAuth user (role=anonymous) still mints free-tier
+    # roles. Unreachable today (Google=verified post-fix; GitHub IdP is broken),
+    # but the derivation should move to user.role.
     if user.auth_type == "anonymous":
         user.auth_type = provider  # authenticated via OAuth; matches new-user creation
-    if user.role == "anonymous":
-        user.role = "free"  # keep role consistent with _advance_role's persisted value
 
     # Feature 1396 (FR-004): return a first-party app JWT as the bearer, NOT the raw
     # Cognito access token (which validate_jwt rejects on signature/aud/iss/roles → the
@@ -3017,6 +3034,19 @@ def _advance_role(
         )
         return
 
+    # Feature 1163 (FR-003): free requires verified. Advancing without it wrote
+    # the forbidden free:none state, which the model then rejected on read —
+    # lookups skipped the row and every OAuth login minted a duplicate user.
+    if user.verification != "verified":
+        logger.info(
+            "Role advancement skipped - email not verified (1163 FR-003)",
+            extra={
+                "verification": user.verification,
+                "user_id_prefix": sanitize_for_log(user.user_id[:8]),
+            },
+        )
+        return
+
     try:
         now = datetime.now(UTC)
         role_assigned_by = f"oauth:{provider}"
@@ -3031,6 +3061,9 @@ def _advance_role(
                 ":assigned_by": role_assigned_by,
             },
         )
+        # Keep the in-memory object consistent with the row: the callback mints
+        # the app JWT from this instance after the helpers run.
+        user.role = "free"
 
         safe_provider_role = (
             str(provider)
@@ -3137,6 +3170,9 @@ def _mark_email_verified(
                 ":pending": "pending",
             },
         )
+        # Sync the in-memory object: _advance_role runs next in the callback and
+        # its 1163 guard reads user.verification from this instance.
+        user.verification = "verified"
 
         safe_provider_verified = (
             str(provider)

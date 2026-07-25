@@ -120,6 +120,19 @@ class TestOAuthCallbackFederationFieldsNewUser:
         table.query.return_value = {"Items": []}
         user = self._create_test_user(role="anonymous")
         mock_create_user.return_value = user
+        # The real helpers sync the in-memory user on successful writes (1163
+        # incident fix); the response now reports actual state, so the mocks
+        # must honor that contract.
+        mock_mark_verified.side_effect = (
+            lambda **kw: setattr(kw["user"], "verification", "verified")
+            if kw["email_verified"]
+            else None
+        )
+        mock_advance_role.side_effect = lambda **kw: (
+            setattr(kw["user"], "role", "free")
+            if kw["user"].role == "anonymous" and kw["user"].verification == "verified"
+            else None
+        )
         mock_get_user.return_value = None  # New user
         mock_exchange.return_value = self._mock_tokens()
         mock_decode_id_token.return_value = {
@@ -214,6 +227,19 @@ class TestOAuthCallbackFederationFieldsNewUser:
         table.query.return_value = {"Items": []}
         user = self._create_test_user()
         mock_create_user.return_value = user
+        # The real helpers sync the in-memory user on successful writes (1163
+        # incident fix); the response now reports actual state, so the mocks
+        # must honor that contract.
+        mock_mark_verified.side_effect = (
+            lambda **kw: setattr(kw["user"], "verification", "verified")
+            if kw["email_verified"]
+            else None
+        )
+        mock_advance_role.side_effect = lambda **kw: (
+            setattr(kw["user"], "role", "free")
+            if kw["user"].role == "anonymous" and kw["user"].verification == "verified"
+            else None
+        )
         mock_get_user.return_value = None
         mock_exchange.return_value = self._mock_tokens()
         mock_decode_id_token.return_value = {
