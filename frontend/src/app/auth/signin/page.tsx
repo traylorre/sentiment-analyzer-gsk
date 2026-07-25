@@ -16,6 +16,21 @@ export default function SignInPage() {
   // Feature 1373: distinguish "API failed" from "providers configured = 0"
   const [providersFetchFailed, setProvidersFetchFailed] = useState(false);
 
+  // Feature 1394: ProtectedRoute bounces gated routes here with `?redirect=<path>`.
+  // Persist it so the sign-in completion flows (OAuth callback / magic-link
+  // verify) can return the user to where they were. sessionStorage survives the
+  // OAuth round-trip to the provider and back within the same tab. Clearing it
+  // when absent prevents a stale target from a prior visit hijacking this one.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const redirect = new URLSearchParams(window.location.search).get('redirect');
+    if (redirect) {
+      sessionStorage.setItem('auth_redirect', redirect);
+    } else {
+      sessionStorage.removeItem('auth_redirect');
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
 

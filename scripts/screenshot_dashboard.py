@@ -23,7 +23,10 @@ async def capture_dashboard(ticker: str, output_path: str) -> None:
         page = await context.new_page()
 
         api_calls = []
-        page.on("request", lambda req: api_calls.append(req.url) if "api" in req.url else None)
+        page.on(
+            "request",
+            lambda req: api_calls.append(req.url) if "api" in req.url else None,
+        )
 
         frontend_url = "https://main.d29tlmksqcx494.amplifyapp.com"
         output = Path(output_path)
@@ -33,13 +36,14 @@ async def capture_dashboard(ticker: str, output_path: str) -> None:
         await page.goto(frontend_url, timeout=30000)
         try:
             await page.wait_for_load_state("networkidle", timeout=15000)
-        except Exception:
+        except Exception:  # noqa: S110 - best-effort wait; timeout is non-fatal here
             pass
         await asyncio.sleep(2)
 
         # Find ticker search input
-        search_input = await page.query_selector('input[placeholder*="ticker" i]') or \
-                       await page.query_selector('input[placeholder*="search" i]')
+        search_input = await page.query_selector(
+            'input[placeholder*="ticker" i]'
+        ) or await page.query_selector('input[placeholder*="search" i]')
 
         if not search_input:
             print("No search input found — screenshot landing page only")
@@ -60,7 +64,7 @@ async def capture_dashboard(ticker: str, output_path: str) -> None:
 
         # Click result
         clicked = False
-        for sel in [f'text={ticker}', '[role="option"]', f'li:has-text("{ticker}")']:
+        for sel in [f"text={ticker}", '[role="option"]', f'li:has-text("{ticker}")']:
             try:
                 result = await page.query_selector(sel)
                 if result and await result.is_visible():
@@ -68,7 +72,7 @@ async def capture_dashboard(ticker: str, output_path: str) -> None:
                     clicked = True
                     print(f"  Selected: {sel}")
                     break
-            except Exception:
+            except Exception:  # noqa: S110 - best-effort selector; try next candidate
                 pass
 
         if clicked:
@@ -87,7 +91,7 @@ async def capture_dashboard(ticker: str, output_path: str) -> None:
             else:
                 print(f"  WARNING: Chart may be empty ({size_kb:.0f}KB)")
         else:
-            print(f"  Could not select {ticker} from results")
+            print(f"  Could not select {ticker} from results")  # noqa: S608 - log text, not SQL
 
         # Log API calls
         data_calls = [c for c in api_calls if "ohlc" in c or "sentiment" in c]

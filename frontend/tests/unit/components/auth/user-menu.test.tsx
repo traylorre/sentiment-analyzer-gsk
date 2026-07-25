@@ -13,17 +13,15 @@ vi.mock('@/hooks/use-auth', () => ({
   useAuth: () => mockUseAuth(),
 }));
 
-// Mock window.location
-const mockLocation = { href: '' };
-Object.defineProperty(window, 'location', {
-  value: mockLocation,
-  writable: true,
-});
+// Feature 1394: nav is now client-side routing, not window.location hard-nav.
+const mockPush = vi.fn();
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: mockPush }),
+}));
 
 describe('UserMenu', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockLocation.href = '';
   });
 
   describe('unauthenticated state', () => {
@@ -42,7 +40,7 @@ describe('UserMenu', () => {
       expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument();
     });
 
-    it('should redirect to sign in page when clicked', async () => {
+    it('should route to sign in page via router (no hard-nav) when clicked', async () => {
       const user = userEvent.setup();
       mockUseAuth.mockReturnValue({
         isInitialized: true, // Feature 1165: Use isInitialized instead of hasHydrated
@@ -58,7 +56,8 @@ describe('UserMenu', () => {
       const button = screen.getByRole('button', { name: /sign in/i });
       await user.click(button);
 
-      expect(mockLocation.href).toBe('/auth/signin');
+      // Feature 1394: client-side routing preserves the memory-only auth store.
+      expect(mockPush).toHaveBeenCalledWith('/auth/signin');
     });
   });
 
@@ -202,7 +201,7 @@ describe('UserMenu', () => {
       expect(mockSignOut).toHaveBeenCalled();
     });
 
-    it('should navigate to settings when settings clicked', async () => {
+    it('should route to settings via router (no hard-nav) when settings clicked', async () => {
       const user = userEvent.setup();
       mockUseAuth.mockReturnValue({
         isInitialized: true, // Feature 1165: Use isInitialized instead of hasHydrated
@@ -225,7 +224,8 @@ describe('UserMenu', () => {
       const settingsButton = screen.getByText(/settings/i);
       await user.click(settingsButton);
 
-      expect(mockLocation.href).toBe('/settings');
+      // Feature 1394: client-side routing preserves the memory-only auth store.
+      expect(mockPush).toHaveBeenCalledWith('/settings');
     });
   });
 });

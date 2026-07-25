@@ -347,4 +347,63 @@ describe('OAuth Callback Page', () => {
       expect(mockPush).toHaveBeenCalledWith('/auth/signin');
     });
   });
+
+  // Feature 1394: after sign-in, return the user to the `?redirect=` target that
+  // ProtectedRoute stashed in sessionStorage — guarded against open redirects.
+  describe('Post-sign-in redirect (Feature 1394)', () => {
+    async function completeSuccessfulCallback() {
+      setSearchParams({ code: 'auth_code', state: 'test_state' });
+      sessionStorage.setItem('oauth_provider', 'google');
+      sessionStorage.setItem('oauth_state', 'test_state');
+      mockHandleCallback.mockResolvedValueOnce(undefined);
+
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      await act(async () => {
+        render(<CallbackPage />);
+      });
+      await act(async () => {
+        await vi.runAllTimersAsync();
+      });
+      vi.useRealTimers();
+    }
+
+    it('honors a safe internal redirect target', async () => {
+      sessionStorage.setItem('auth_redirect', '/settings');
+      await completeSuccessfulCallback();
+
+      await waitFor(() => {
+        expect(mockPush).toHaveBeenCalledWith('/settings');
+      });
+      // Consumed once.
+      expect(sessionStorage.getItem('auth_redirect')).toBeNull();
+    });
+
+    it('rejects a protocol-relative open-redirect and falls back to /', async () => {
+      sessionStorage.setItem('auth_redirect', '//evil.com');
+      await completeSuccessfulCallback();
+
+      await waitFor(() => {
+        expect(mockPush).toHaveBeenCalledWith('/');
+      });
+      expect(mockPush).not.toHaveBeenCalledWith('//evil.com');
+    });
+
+    it('rejects an absolute-URL open-redirect and falls back to /', async () => {
+      sessionStorage.setItem('auth_redirect', 'https://evil.com');
+      await completeSuccessfulCallback();
+
+      await waitFor(() => {
+        expect(mockPush).toHaveBeenCalledWith('/');
+      });
+      expect(mockPush).not.toHaveBeenCalledWith('https://evil.com');
+    });
+
+    it('falls back to / when no redirect was stored', async () => {
+      await completeSuccessfulCallback();
+
+      await waitFor(() => {
+        expect(mockPush).toHaveBeenCalledWith('/');
+      });
+    });
+  });
 });

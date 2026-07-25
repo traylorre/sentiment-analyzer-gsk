@@ -39,8 +39,13 @@ test.describe('Auth Menu Navigation (Feature 1247)', () => {
     await expect(signInItem).toBeVisible();
     await signInItem.click();
 
-    // Assert URL contains /auth/signin
-    await expect(page).toHaveURL(/\/auth\/signin/);
+    // Assert URL contains /auth/signin.
+    // The 5s default is too tight against a cold Next.js dev-server on-demand
+    // compile of /auth/signin under --workers=4 (the URL only flips after the
+    // RSC payload resolves). The identical sibling test below tolerates this
+    // via a 10s budget; mirror that here so the assertion measures navigation,
+    // not first-compile latency.
+    await expect(page).toHaveURL(/\/auth\/signin/, { timeout: 15000 });
 
     // Unwind: click "Continue as guest" link to return to root
     const continueAsGuest = page.getByRole('link', { name: /continue as guest/i });

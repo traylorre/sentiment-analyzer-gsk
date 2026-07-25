@@ -63,13 +63,12 @@ enable_waf = false
 # tier. Core monitoring-module alarms and the SNS topic remain.
 enable_extended_cloudwatch_alarms = false
 
-# CloudFront WAF teardown — PHASE 1 (disassociate, keep the ACL).
-# enable_waf=false already drops web_acl_id from the CloudFront distribution.
-# Keep the ACL itself alive (true) for this apply so Terraform doesn't try to
-# delete it while CloudFront is still propagating the disassociation, which
-# fails with WAFAssociatedItemException. Once this deploy reaches
-# Status=Deployed, PHASE 2 sets this to false to delete the orphaned ACL.
-enable_cloudfront_waf = true
+# CloudFront WAF teardown — PHASE 2 (delete the orphaned ACL to stop billing).
+# Phase 1 (enable_waf=false) disassociated the ACL from CloudFront. The ACL
+# (preprod-sentiment-waf) is confirmed present-but-disassociated on the
+# CLOUDFRONT scope, so deleting it now is safe (no WAFAssociatedItemException)
+# and stops the idle-ACL billing. Re-enable WAF later via enable_waf=true.
+enable_cloudfront_waf = false
 
 # M1 WI-6: enable Google as a Cognito social identity provider.
 # Google-only per Q-M1-1 (GitHub's IdP points at the GitHub Actions OIDC issuer
