@@ -9,10 +9,22 @@ Serialize `auth.py` edits with Feature 1395.
 
 - **T001** Confirm Feature 1395's deterministic `get_user_by_cognito_sub` (dedup + footgun fix) is
   merged, OR scope this PR to callback-mint only and gate refresh-mint behind 1395. (FR-015)
+  **Status as of this planning pass: 1395 is a WIP commit on this branch (`71cb143`, "KNOWN DEFECTS,
+  DO NOT MERGE") → Phase 3 is BLOCKED. Phase 2 (callback mint) is shippable independently (FR-015)
+  but must rebase onto 1395's branch state and re-anchor all `auth.py` line refs (FR-015a):
+  callback response block has moved `2434-2453` → ~`2568-2581`.**
 - **T002** [P] Grep-verify no server path re-presents the response `access_token` to Cognito
   (`sign_out` uses its own arg). Lock the AR1-6 finding. (AR1-6)
 - **T003** [P] Confirm with owner: prod `JWT_SECRET` is strong and distinct from
   `PREPROD_TEST_JWT_SECRET`. Record as deploy gate; do not assume done. (FR-011, OQ-1)
+- **T004** **[PREPROD-BLOCKING GATE — RIDER a]** Rotate the **preprod** `JWT_SECRET` to a distinct,
+  high-entropy, non-test value via `TF_VAR_jwt_secret` from the CI secret store, rotating
+  `PREPROD_TEST_JWT_SECRET` to the **same value in the same window** (E2E parity — never commit
+  either). Verify: (a) the old committed default no longer validates in preprod; (b) preprod E2E auth
+  still passes. **No M1 seal evidence for this feature may be captured into
+  `docs/cleanup-pristine/evidence/m1/` before this gate passes** — a forgeable `roles` claim
+  invalidates the attestation. Rotation mass-logs-out preprod sessions; schedule deliberately.
+  (FR-011a, AR1-11, plan §4c)
 
 ## Phase 1 — Mint helper (TDD)
 
@@ -50,6 +62,9 @@ Serialize `auth.py` edits with Feature 1395.
   in-memory user first — set `user.auth_type` off `"anonymous"` (→ provider) and `user.role` off
   `"anonymous"` (→ `"free"`) to match what `_advance_role` persisted — so `get_roles_for_user` (which
   gates on `auth_type`) does not under-grant. (FR-004, FR-002a) — depends on T011.
+  **Merge hotspot (FR-015a):** the cited `auth.py:2434-2453` block now sits at ~`2568-2581` after
+  1395's WIP commit `71cb143` (which rewrote the identity-resolution region directly upstream,
+  pre-shift ~`2359-2402`). Re-anchor against the merged 1395 tree before editing; serialize with 1395.
 
 ## Phase 3 — Refresh re-mint (depends on 1395 / T001)
 
@@ -67,11 +82,26 @@ Serialize `auth.py` edits with Feature 1395.
   route (`router_v2.py:639-657`); decode it `verify_exp=False` with `_get_jwt_config()`'s secret to read
   `rev`; refuse to re-mint (`error="session_revoked"`, 401) when `rev != user.revocation_id`. Tests:
   (a) matching `rev` → re-mint succeeds; (b) after `user.revocation_id` bump, the same expiring bearer →
-  `session_revoked`; (c) absent/invalid-signature bearer → check skipped (backward-compat), still re-mints.
+  `session_revoked`; (c) absent/invalid-signature bearer → check skipped (backward-compat, **migration window only — T033
+  later makes the bearer required**), still re-mints.
   **Do NOT touch the middleware** — `check_revocation_id` stays uncalled (FR-007). (FR-008, SC-004, OQ-4)
   — depends on T011, T031.
+- **T033** **(AR1-12 — close the bearer-omission revocation bypass)** After verifying the LIVE frontend
+  always attaches the `Authorization` bearer on `POST /api/v2/auth/refresh` (including the
+  cold-reload/restoreSession path — persisted token rehydrated before first refresh), make a
+  signature-valid bearer REQUIRED on the Cognito-backed refresh branch: absent/invalid-sig bearer →
+  401 `error="bearer_required"` (replaces the T032 backward-compat skip, which is a migration window
+  only). Tests: bearer-absent refresh → 401 post-enforcement; anon branch untouched. **Live-gate
+  ordering like T042** — enforcement deploys only after the frontend verification. (FR-008, AR1-12,
+  AR2-9) — depends on T032; deploy-gated.
 
 ## Phase 4 — CSRF on refresh (body-delivered token, N2; ordering-sensitive)
+
+> **HARD GATE (RIDER b / FR-013a): T041 must be deployed and verified LIVE on Amplify before T042
+> deploys.** Merged-first is NOT sufficient — until live clients echo `X-CSRF-Token`, removing the
+> exemption 403s every refresh and logs out every existing user on deploy. T042 ships in a separate,
+> LATER deploy cycle with a pre-deploy check that the T041 Amplify build is serving. Rollback:
+> re-add the exempt path (one-line revert).
 
 - **T040** **Backend** [body-delivery]: in `router_v2.py`, generate the CSRF token **once** per
   callback (`:626`) and refresh (`:701`) handler, use it for both the `csrf_token` Set-Cookie and a new
@@ -84,8 +114,9 @@ Serialize `auth.py` edits with Feature 1395.
   land **before** T042.
 - **T042** Remove `"/api/v2/auth/refresh"` from `CSRF_EXEMPT_PATHS` (`csrf.py:38`); add/adjust tests so
   refresh without a matching `X-CSRF-Token` returns 403 and with it succeeds (double-submit against the
-  auto-attached API-domain cookie). (FR-013, SC-006) — depends on T040 **and** T041 (deploy-order gate,
-  OQ-2). Callback stays exempt (OAuth `state`, FR-012).
+  auto-attached API-domain cookie). (FR-013, FR-013a, SC-006) — depends on T040 **and T041 verified
+  LIVE on Amplify** (hard deploy-order gate above, OQ-2). Callback stays exempt (OAuth `state`,
+  FR-012).
 
 ## Phase 5 — Validation & docs
 
@@ -110,14 +141,18 @@ Serialize `auth.py` edits with Feature 1395.
 | FR-006 | T010, T030, T031 |
 | FR-006a (N3) | T030, T031 |
 | FR-007 | T010, T020, T032 (middleware untouched) |
-| FR-008 (N1, refresh-time) | T032 |
+| FR-008 (N1, refresh-time) | T032, T033 (bearer-required enforcement) |
 | FR-009 | T010, T011 |
 | FR-010 | T051 |
 | FR-011 | T003 |
+| FR-011a (RIDER a, preprod-blocking) | T004 |
 | FR-012 | T042 |
 | FR-013 (N2, body-delivered) | T040, T041, T042 |
+| FR-013a (RIDER b, live deploy gate) | T042 (gate note) |
 | FR-014 | T041 (bearer: no change) |
 | FR-015 | T001, T030, T031 |
+| FR-015a (1395 hotspot re-anchor) | T001, T021 |
+| GAP-1 risk note (RIDER c) | none — deliberately unscheduled (spec Risk Note) |
 | N5 (import jwt) | T011 |
 
 ---
@@ -156,3 +191,41 @@ TTL + refresh-time rev).
 tests cover every success criterion including the regression lock and the AR#4 (N1-N5) fixes.
 **READY FOR IMPLEMENTATION pending owner decisions OQ-1 (prod secret), OQ-2 (CSRF deploy lockstep), OQ-4
 (refresh-time revocation posture).** T001 (Feature 1395 status) still gates the refresh phase.
+
+---
+
+## Adversarial Review #3 — Addendum (rider reconciliation pass)
+
+Re-graded task risk after folding in T004, T033, the FR-013a hard gate, and the FR-015a hotspot.
+
+**Highest-risk task: still T042 (remove refresh CSRF exemption).** The failure mode (403 every
+refresh → mass logout) is unchanged; the mitigation is now stronger — a **live-deploy** gate
+(T041 verified serving on Amplify, T042 in a separate later cycle), not just merge ordering. One-line
+rollback recorded.
+
+**New risk, second: T004 (preprod secret rotation).** Two coupled failure modes: (a) rotating
+`JWT_SECRET` without `PREPROD_TEST_JWT_SECRET` in the same window fails all self-minting preprod E2E
+tests and masquerades as a 1396 regression (AR2-8); (b) NOT rotating before M1 evidence capture
+silently invalidates the attestation (AR1-11) — worse because nothing fails loudly. Both are encoded in
+the task; the M1-evidence ordering is the reason T004 is PREPROD-BLOCKING rather than a nice-to-have.
+
+**Third: T033 (bearer-required enforcement).** Premature enforcement logs out cold-reload users whose
+persisted token isn't rehydrated before the first refresh; hence the frontend-verification live gate
+(AR2-9). Until T033 lands, the AR1-12 revocation bypass persists — accepted as a migration window
+because it is no worse than today's status quo (no revocation exists at all pre-1396).
+
+**Merge hotspot (serialization constraint):** 1396 T021 edits the callback response block
+(spec-anchored `auth.py:2434-2453`, now ~`2568-2581`) while 1395's WIP `71cb143` rewrote the upstream
+identity-resolution region (pre-shift ~`2359-2402`) and moved `get_user_by_cognito_sub` to `:3040`.
+All 1396 `auth.py` anchors re-verify against the merged 1395 tree before any edit (T001/T021 notes,
+FR-015a).
+
+**Verdict:**
+- **Phases 0-2 (pre-flight, mint helper, callback mint): READY** — callback mint is
+  1395-independent by design (FR-015) and shippable first, subject to the FR-015a rebase/re-anchor.
+- **Phase 3 (refresh re-mint + rev revocation): BLOCKED** on Feature 1395 — currently a WIP commit
+  on this branch marked "KNOWN DEFECTS, DO NOT MERGE" (`71cb143`). T001 gate fails as of this pass.
+- **T004 is PREPROD-BLOCKING** for any M1 seal evidence regardless of phase.
+- Owner decisions outstanding: OQ-1 (rotation timing/E2E parity mechanism), OQ-2 (now hardened into
+  the FR-013a live gate — confirm), OQ-3 (jti blocklist deferral), OQ-4 (refresh-time revocation
+  posture, now with T033 enforcement follow-through).

@@ -158,9 +158,12 @@ stale-role, or CSRF holes.
     `refresh_access_tokens`. The helper decodes that app JWT **signature-verified with `verify_exp=False`**
     (it is expected to be expired — that's why we're refreshing) using the same `_get_jwt_config()`
     secret, and reads its `rev`. A bearer that fails signature verification is ignored (treated as absent).
-  - **Backward-compat / bearer-absent:** if no valid app-JWT bearer accompanies the refresh, the `rev`
-    check is **skipped** (mirrors `check_revocation_id`'s `None` handling); the ≤15-min bound then holds on
-    the next refresh that does carry the bearer. This limitation MUST be recorded.
+  - **Backward-compat / bearer-absent (migration window ONLY — AR1-12):** if no valid app-JWT bearer
+    accompanies the refresh, the `rev` check is **skipped** (mirrors `check_revocation_id`'s `None`
+    handling). This skip is attacker-controllable (omit the header, bypass revocation forever), so it is
+    a **temporary migration accommodation**, not a permanent posture: task **T033** makes a
+    signature-valid bearer REQUIRED on the Cognito-backed refresh branch (401 `bearer_required`) once
+    the deployed frontend is verified to always attach it. Recorded in AR#1 Addendum (AR1-12).
   This bounds a force-revoked session to at most **one access-token TTL (≤15 min)** with **no per-request
   cost** (refresh already does the user lookup). There is no instant per-session kill short of rotating
   `JWT_SECRET` (mass logout).
@@ -177,10 +180,22 @@ stale-role, or CSRF holes.
   JWT is ever introduced, the mint MUST migrate to an asymmetric algorithm (RS256) so the verifier
   cannot also forge. That migration is a **carded follow-up, OUT of scope** here.
 - **FR-011** Prod secret hygiene: the live preprod `JWT_SECRET` is the **shared E2E test secret**
-  (`infrastructure/terraform/preprod.tfvars:33` — "must match `PREPROD_TEST_JWT_SECRET`"), acceptable
-  for **preprod only**. Because the app JWT is now the real OAuth session credential, **PROD MUST use a
+  (`infrastructure/terraform/preprod.tfvars` — "must match `PREPROD_TEST_JWT_SECRET`", Feature 1054
+  comment block). ~~acceptable for **preprod only**~~ **SUPERSEDED by FR-011a — no longer acceptable
+  for preprod either.** Because the app JWT is now the real OAuth session credential, **PROD MUST use a
   strong, non-test `JWT_SECRET` sourced securely** (via `TF_VAR_jwt_secret`, never committed). This is an
   **owner action item** and MUST NOT be assumed done. A spec note flags it.
+- **FR-011a (RIDER a — PREPROD-BLOCKING).** The app JWT signing secret in **preprod** MUST be a
+  distinct, non-test secret: high-entropy, NOT the committed default
+  (`test-jwt-secret-for-e2e-only-not-production`), and NOT any value recorded in the repo, docs, or
+  public CI logs. Rationale: preprod is where **M1 verifiable-auth evidence is sealed**
+  (`docs/cleanup-pristine/evidence/m1/`); with a known/test secret, anyone can forge the `roles` claim
+  and the attestation is invalid. This is **PREPROD-BLOCKING**, not prod-only: the secret MUST be
+  rotated and **verified before any M1 seal evidence is captured** for this feature. E2E signing
+  parity, if still required, MUST come from the same CI secret store (`TF_VAR_jwt_secret` /
+  `PREPROD_TEST_JWT_SECRET` both fed the new value), never a committed constant. Rotating the secret
+  invalidates all outstanding app JWTs (mass logout) — acceptable in preprod; schedule accordingly.
+  Task: T004 (deploy gate).
 
 ### CSRF (double-submit, Feature 1158)
 - **FR-012** The OAuth callback's CSRF protection is the OAuth `state` nonce
@@ -211,6 +226,14 @@ stale-role, or CSRF holes.
   Remove `"/api/v2/auth/refresh"` from `CSRF_EXEMPT_PATHS` **after** the frontend ships steps 1-2
   (deploy-order gate, OQ-2). Callback stays exempt — protected by the OAuth `state` nonce (FR-012). The
   CSRF cookie is already re-issued on both callback and refresh (`router_v2.py:626,701`).
+- **FR-013a (RIDER b — ordered-deploy constraint, HARD GATE).** The frontend CSRF-echo change (read
+  body `csrf_token`, send `X-CSRF-Token` on refresh — T041) MUST be **deployed and verified LIVE on
+  Amplify** before the backend exemption removal (T042) deploys. "Merged before" is NOT sufficient —
+  the gate is on **live traffic**: until every active client echoes the header, dropping the exemption
+  403s every refresh and **logs out every existing user** on deploy. T042 carries an explicit
+  pre-deploy checklist item: confirm the Amplify build containing T041 is serving, then deploy T042 in
+  a separate, later deploy cycle (never the same cycle unless the owner explicitly accepts the risk
+  window). Rollback path: re-adding the exempt path is a one-line revert.
 
 ### Frontend
 - **FR-014** Confirmed: the frontend uses `tokens.access_token` as the bearer
@@ -228,6 +251,17 @@ stale-role, or CSRF holes.
   already holds the resolved `user` object** (`auth.py:2361-2417`), so callback-mint does **not** depend
   on the lookup and may ship independently of 1395 for that path. If refresh cannot deterministically
   resolve the user, it MUST fail closed (FR-006), not mint a token with an ambiguous `sub`.
+- **FR-015a (serialization constraint — auth.py merge hotspot, verified this session).** 1395 is a WIP
+  commit on the current branch (`71cb143 wip(1395): identity GSI pagination + canonical-user resolution
+  — KNOWN DEFECTS, DO NOT MERGE`) and has **already shifted `auth.py` line numbers**: the callback
+  response block this spec cites as `auth.py:2434-2453` (1396 T021's edit target) now sits at
+  **~2568-2581**; the refresh identity block cited as `2991-3005` now sits at **~3118-3140**;
+  `get_user_by_cognito_sub` is defined at `:3040` with the callback-side lookup at `:2373`. 1395's
+  rewrite covered the `~2359-2402` (pre-shift) identity-resolution region — directly upstream of 1396's
+  edit sites. **Constraint:** all 1396 `auth.py` line references MUST be re-anchored against the merged
+  1395 tree before implementation; Phase 3 (refresh re-mint) serializes strictly AFTER 1395 merges;
+  Phase 2 (callback mint) may proceed but must rebase onto 1395's branch state to avoid a semantic
+  merge conflict in the callback region.
 
 ---
 
@@ -289,6 +323,33 @@ stale-role, or CSRF holes.
 | T6 | **Token-in-URL** leakage | Bearer ends up in query string / referer / logs | Bearer travels only in the `Authorization` header and JSON body over TLS; refresh token stays httpOnly; no token logged (existing `refresh.success` logs only `auth_type`) |
 | T7 | **XSS exfil of bearer** | Script reads the in-memory bearer | Out-of-scope structural mitigation, but short TTL (FR-003) + `rev` revocation (FR-008) bound damage; refresh token is httpOnly (unreachable by JS) |
 | T8 | **Ambiguous `sub`** from non-deterministic lookup | Refresh mints a token for the wrong user | Depends on Feature 1395 (FR-015); fail closed if lookup is ambiguous (FR-006) |
+| T9 | **GAP-1 SSE raw-identity acceptance** (deferred surface) | Deferred SSE config-stream path accepts ANY bearer string as `user_id` unvalidated | **No work scheduled here** — see the Risk Note below. Flagged so the eventual GAP-1 fix validates the app JWT; SSE path is deferred, never deleted (owner constraint) |
+
+---
+
+## Risk Note — GAP-1 SSE Interaction (RIDER c — recorded, NO work scheduled)
+
+The deferred, unauthenticated SSE config-stream path treats the bearer as a **raw identity string**:
+`src/lambdas/sse_streaming/handler.py:365-369` assigns `user_id = bearer_token` with **no validation**
+(verified this session; `X-User-ID` header and `user_token` query param fall through the same way at
+`:371-377`). This is the **GAP-1 IDOR**, carded CRITICAL-deferred.
+
+**What 1396 changes about that surface:** nothing in code — FR-010's grep-verified assumption (SSE does
+not validate app JWTs) still holds, and this feature touches no SSE file. But 1396 makes the surface
+**concretely exploitable-by-format**: the minted app JWT is now the one bearer the frontend holds and
+attaches everywhere, its payload is base64-decodable by anyone who sees it (JWT payloads are encoded,
+not encrypted), and it advertises a real internal `user_id` in `sub`. Any leak of any app JWT hands an
+attacker a valid victim `user_id` to present, raw, to the SSE path — which will accept it as identity.
+The token designed to be safe-if-captured (15-min TTL, signature-gated) is fully impersonation-capable
+against GAP-1 because GAP-1 never checks the signature.
+
+**Constraints recorded for the eventual GAP-1 fix (owner: SSE is DEFERRED, NEVER DELETED):**
+1. The fix MUST validate the app JWT on the SSE path (signature, `exp`, `aud`/`iss`, `sub`-derived
+   identity) — not merely rename or hide the raw-identity parameters.
+2. Validating there makes the SSE Lambda a **second independent verifier** of the app JWT, which trips
+   FR-010's trigger: the mint MUST migrate to RS256 (or the SSE verifier must be prevented from holding
+   forgery-capable key material). The GAP-1 fix and the RS256 migration card are therefore coupled.
+3. Do NOT propose deleting or disabling the SSE path as the remediation.
 
 ---
 
@@ -357,8 +418,11 @@ sites in `src/`** (tests only); the request auth path (`extract_auth_context_typ
 an honest refresh-time check (≤15-min bound) rather than claiming instant revocation.
 
 ### Deferred to owner
-- **OQ-1 (FR-011):** Confirm prod `JWT_SECRET` is a strong, non-test value distinct from
-  `PREPROD_TEST_JWT_SECRET`, and how/when it is rotated. Owner action; not assumed done.
+- **OQ-1 (FR-011, ESCALATED by FR-011a):** Confirm prod `JWT_SECRET` is a strong, non-test value
+  distinct from `PREPROD_TEST_JWT_SECRET`, and how/when it is rotated. **Rider (a) escalation: the
+  PREPROD secret is now also in scope and PREPROD-BLOCKING** — rotate before any M1 seal evidence is
+  captured (FR-011a, T004). Remaining owner input: rotation timing (mass-logout window) and whether E2E
+  keeps signing parity via the CI secret store or moves to a login-flow token source.
 - **OQ-2 (FR-013 deploy order):** Confirm the frontend `X-CSRF-Token`-on-refresh change can ship in
   lockstep with the exemption removal, or whether the backend change must be gated behind the frontend
   deploy to avoid a lockout window.
@@ -393,3 +457,25 @@ SC-004/006/007, edge cases, threat model, and new OQ-4. Middleware-unchanged gua
 the revocation and CSRF fixes live entirely in the callback/refresh handlers and the frontend.
 **0 CRITICAL, 0 HIGH remaining.** Ready for implementation pending owner decisions **OQ-1** (prod
 secret), **OQ-2** (CSRF deploy lockstep), **OQ-4** (refresh-time revocation posture).
+
+---
+
+## Adversarial Review #1 — Addendum (rider reconciliation pass)
+
+Re-attacked the JWT design after folding in riders (a)-(c): algorithm confusion, TTL-vs-revocation
+lag, clock skew, secret rotation, replay. Prior AR findings re-checked against the current tree
+(1395 WIP `71cb143` present on branch).
+
+| ID | Sev | Attack / Gap | Resolution |
+|----|-----|--------------|------------|
+| AR1-11 | CRITICAL | **Preprod attestation forgery.** AR1-1 gated the test-secret risk as prod-only, but M1 verifiable-auth evidence is sealed FROM PREPROD (`docs/cleanup-pristine/evidence/m1/` — wi1/wi3/wi5/wi6 already present). With `JWT_SECRET` = the committed E2E default, anyone can mint an arbitrary `roles`/`sub` token in preprod, so any sealed evidence claiming "roles are cryptographically bound" is false at capture time. | **Self-resolved: FR-011a (PREPROD-BLOCKING)** — distinct high-entropy secret in preprod, rotated and verified BEFORE any M1 seal evidence is captured; E2E parity only via the CI secret store. Deploy gate T004. Supersedes AR1-1's preprod-only carve-out. |
+| AR1-12 | HIGH | **Revocation bypass by bearer omission.** FR-008's backward-compat skip ("no valid app-JWT bearer → `rev` check skipped") is attacker-controllable: an attacker holding the victim's refresh cookie (stolen device, cookie-jar malware) simply calls `/refresh` WITHOUT the `Authorization` header and re-mints forever — the ≤15-min revocation bound never engages. CSRF enforcement (FR-013) does not help this attacker: they hold the cookie, they are not cross-site. | **Self-resolved:** the skip is downgraded from a permanent accommodation to a **migration window only**. New task **T033**: once the deployed frontend is verified to always attach the bearer on `/refresh` (it already does via `client.ts:138`; verify the cold-reload path reads the persisted token before first refresh), the Cognito-backed refresh branch MUST require a signature-valid bearer (401 `bearer_required` when absent). Ordered like T042: enforcement deploys only after frontend behavior is confirmed live. FR-008 limitation text now points at T033. Residual (accepted, recorded): during the migration window the bypass exists — same exposure as today's status quo, so no regression. |
+| AR1-13 | MEDIUM | **Secret rotation has no dual-key story.** Rotating `JWT_SECRET` (the only instant kill switch, and now required by FR-011a in preprod) invalidates every outstanding token at once — mass logout — and any misordered rotation (Lambda picks up the new secret while old tokens circulate) is indistinguishable from an outage. There is no `kid` header or dual-secret validate window. | Accepted for this feature: mass logout on rotation is the documented posture (FR-008/T1) and preprod rotation (T004) is scheduled deliberately. A `kid` + dual-secret validation window is **carded as a follow-up, out of scope** (same card family as the RS256 migration, FR-010). Mint SHOULD NOT add a `kid` header now — the validator ignores it and it invites header-trust bugs. |
+| AR1-14 | LOW | **Clock skew re-check.** `nbf = iat` with the validator's 60s leeway (`auth_middleware.py:103,163`) is safe; a mint host whose clock runs ≥60s fast could still emit tokens rejected by a correct validator. | Lambda hosts are NTP-disciplined; leeway already covers realistic skew. T010 keeps the `nbf == iat` assertion. No change. |
+| AR1-15 | LOW | **Replay window re-check under rider (b).** The CSRF deploy-order gate (FR-013a) means refresh stays CSRF-exempt until T042 deploys; during that window a captured 15-min bearer plus a cross-site page could drive a silent re-mint chain. | Window exists today pre-1396 too (refresh is currently exempt AND returns usable Cognito tokens); 1396 does not widen it, and T042 closes it. Ordering risk is the lesser risk vs. mass logout from premature enforcement. Recorded; no change. |
+
+**Gate:** AR1-11 resolved into FR-011a/T004; AR1-12 resolved into T033 + FR-008 limitation rewrite.
+**0 CRITICAL, 0 HIGH remaining.** Algorithm confusion re-verified closed (validator pins
+`algorithms=[config.algorithm]`, mint uses the same single pinned alg, no header-driven trust —
+FR-009/T2); TTL-vs-revocation lag is honestly bounded at ≤15 min post-T033 (N1); replay bounded by TTL
++ `jti` groundwork (OQ-3).

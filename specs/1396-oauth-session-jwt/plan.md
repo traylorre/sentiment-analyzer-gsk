@@ -193,9 +193,31 @@ cannot produce a matching `X-CSRF-Token`. Callback stays exempt — protected by
 (FR-012). `validate_csrf_token` / `csrf.py`'s comparison logic is **unchanged** (only the exempt-path set
 and the token-plumbing change).
 
-> Deploy-order gate (OQ-2): the frontend body-read + header-echo MUST ship before the exemption removal,
-> else refresh 403s. If they can't land in the same cycle, gate the exemption removal behind the frontend
-> deploy. Encoded in tasks.md (T040/T041 before T042... see tasks).
+> Deploy-order gate (OQ-2 / FR-013a — RIDER b, HARD GATE): the frontend body-read + header-echo MUST be
+> **deployed and verified LIVE on Amplify** before the exemption removal deploys — merged-first is not
+> enough; the gate is on live traffic, else every existing user's refresh 403s and they are logged out
+> on deploy. T042 deploys in a separate, later cycle with an explicit pre-deploy check that the T041
+> Amplify build is serving. Rollback: re-add the exempt path (one line). Encoded in tasks.md
+> (T040/T041 live-gate before T042).
+
+### 4b. Line-number re-anchor (FR-015a — 1395 merge hotspot)
+
+All `auth.py` line references in this plan and the spec were captured **pre-1395**. The 1395 WIP commit
+(`71cb143`, on this branch, "KNOWN DEFECTS, DO NOT MERGE") has already shifted them: the callback
+response block (`2434-2453` as cited) now sits at **~2568-2581**; the refresh identity block
+(`2991-3005` as cited) now at **~3118-3140**; `get_user_by_cognito_sub` defined at `:3040`, callback
+lookup at `:2373`. Before implementing any task that edits `auth.py`, re-anchor against the merged 1395
+tree. Phase 3 serializes strictly after 1395; Phase 2 rebases onto 1395's branch state.
+
+### 4c. Preprod secret rotation (FR-011a — RIDER a, PREPROD-BLOCKING)
+
+Escalated from prod-only: the preprod `JWT_SECRET` currently equals the committed E2E default, and M1
+verifiable-auth evidence is sealed from preprod (`docs/cleanup-pristine/evidence/m1/`). Before any M1
+seal evidence for this feature is captured, rotate preprod `JWT_SECRET` to a high-entropy value fed via
+`TF_VAR_jwt_secret` from the CI secret store. **E2E impact:** preprod E2E tests that self-mint tokens
+with `PREPROD_TEST_JWT_SECRET` (Feature 1053/1054 parity) break unless that CI secret is rotated to the
+**same new value in the same window** — rotate both together, never commit either. Rotation invalidates
+all outstanding preprod app JWTs (mass logout — acceptable in preprod, schedule it). Deploy gate: T004.
 
 ---
 
@@ -317,3 +339,20 @@ Plan sections updated to match the revised spec FRs (full narrative in spec.md �
 
 **Gate:** plan aligns with the AR#4-revised spec; middleware-unchanged guardrail intact. **0 CRITICAL,
 0 HIGH remaining.** Owner decisions OQ-1/OQ-2/OQ-4 remain before implementation.
+
+---
+
+## Adversarial Review #2 — Addendum (rider reconciliation pass)
+
+Cross-checked the rider-driven spec changes (FR-011a, FR-013a, FR-015a, GAP-1 risk note, AR1-11..15)
+against this plan and the current tree (1395 WIP `71cb143` on branch).
+
+| ID | Sev | Issue | Resolution |
+|----|-----|-------|------------|
+| AR2-7 | HIGH | **Stale line anchors.** Plan §2/§3 cite `auth.py:2434-2453` / `2991-3005`, both already shifted by 1395's WIP commit; implementing against these anchors risks editing the wrong region or a phantom-clean merge that drops 1395's canonical-user resolution. | §4b added: mandatory re-anchor against the merged 1395 tree; Phase 3 strictly after 1395, Phase 2 rebases. Consistent with spec FR-015a. |
+| AR2-8 | HIGH | **Preprod secret rotation breaks E2E parity if done alone.** FR-011a rotation without rotating `PREPROD_TEST_JWT_SECRET` in the same window fails every self-minting preprod E2E test — which would be misread as a 1396 regression. | §4c requires lockstep rotation of both CI secrets to the same value, never committed. T004 encodes the ordering (rotate → verify → only then capture M1 evidence). |
+| AR2-9 | MEDIUM | **Bearer-required enforcement (T033) could lock out cold-reload sessions.** If any legit client path calls `/refresh` without a bearer (e.g. hard reload before the persisted token is rehydrated), T033's 401 `bearer_required` logs those users out. | T033 is gated on a **verification step** (confirm live frontend always attaches the bearer on `/refresh`, including the cold-reload/restoreSession path) before enforcement deploys — same live-gate pattern as T042. Backward-compat skip remains until then. |
+| AR2-10 | LOW | **GAP-1 note could be misread as scheduling SSE work.** | Spec risk-note section states three times that no work is scheduled and the SSE path is deferred-never-deleted; plan adds no SSE task. FR-010's RS256 trigger coupling is recorded on the GAP-1 card, not here. |
+
+**Gate:** plan consistent with the rider-amended spec. **0 CRITICAL, 0 HIGH remaining.** Proceed to
+tasks.md.
