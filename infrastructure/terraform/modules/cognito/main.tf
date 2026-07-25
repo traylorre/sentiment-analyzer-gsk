@@ -137,12 +137,15 @@ resource "aws_cognito_user_pool_client" "dashboard" {
   enable_token_revocation       = true
 
   # Read/write attributes
-  read_attributes = ["email", "email_verified", "custom:anonymous_session_id"]
-  # email_verified must be writable or Cognito silently drops the mapped Google
-  # email_verified attribute at federation time (mapped IdP attributes require
-  # app-client write access) — which kept the claim out of the id_token and
-  # left every OAuth user unverified (2026-07-25 incident).
-  write_attributes = ["email", "email_verified", "custom:anonymous_session_id"]
+  # NOTE: email_verified is deliberately NOT in write_attributes — Cognito
+  # rejects it ("Invalid write attributes specified", deploy 30172429653);
+  # only admin APIs may write it. The Google IdP attribute_mapping for
+  # email_verified applied fine and federation updates run with admin
+  # privileges, so the mapping alone should carry the claim. Verify on the
+  # first post-deploy Google login; if verification stays "none", the
+  # fallback is a provider-trust decision in _mark_email_verified.
+  read_attributes  = ["email", "email_verified", "custom:anonymous_session_id"]
+  write_attributes = ["email", "custom:anonymous_session_id"]
 
   # Gap 3: Ignore callback/logout URLs to break circular dependency with Amplify
   # These URLs are patched by terraform_data after Amplify URL is known
