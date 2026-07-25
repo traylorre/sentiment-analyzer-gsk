@@ -144,8 +144,8 @@ resource "aws_cognito_user_pool_client" "dashboard" {
   # privileges, so the mapping alone should carry the claim. Verify on the
   # first post-deploy Google login; if verification stays "none", the
   # fallback is a provider-trust decision in _mark_email_verified.
-  read_attributes  = ["email", "email_verified", "custom:anonymous_session_id"]
-  write_attributes = ["email", "custom:anonymous_session_id"]
+  read_attributes  = ["email", "email_verified", "picture", "custom:anonymous_session_id"]
+  write_attributes = ["email", "picture", "custom:anonymous_session_id"]
 
   # Gap 3: Ignore callback/logout URLs to break circular dependency with Amplify
   # These URLs are patched by terraform_data after Amplify URL is known
