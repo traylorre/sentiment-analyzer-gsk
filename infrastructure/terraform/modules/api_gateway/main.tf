@@ -57,9 +57,10 @@ resource "aws_api_gateway_authorizer" "cognito" {
   provider_arns   = [var.cognito_user_pool_arn]
   identity_source = "method.request.header.Authorization"
 
-  lifecycle {
-    prevent_destroy = true
-  }
+  # prevent_destroy removed 2026-07-25: enable_cognito_auth=false takes count
+  # to 0, and destroying this authorizer is the intent — it can only validate
+  # Cognito-issued JWTs, incompatible with the 1396 first-party app JWT
+  # bearer (see the gateway-authorizer board card for the replacement plan).
 }
 
 # Gateway Response: UNAUTHORIZED (FR-013)
