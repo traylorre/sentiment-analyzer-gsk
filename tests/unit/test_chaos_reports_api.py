@@ -60,8 +60,13 @@ def jwt_env():
 
 @pytest.fixture
 def auth_headers(jwt_env):
-    """Return valid authenticated session headers."""
-    token = _create_test_jwt()
+    """Return valid authenticated operator session headers.
+
+    Feature 1391 (GAP-3): /chaos/* routes now require the operator role via
+    require_role_middleware("operator"), so these endpoint tests authenticate
+    as an operator.
+    """
+    token = _create_test_jwt(roles=["operator"])
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -156,7 +161,11 @@ class TestReportEndpointAuth:
 
         event = make_event(method=method, path=path, headers=anonymous_headers)
         response = lambda_handler(event, mock_lambda_context)
-        assert response["statusCode"] == 401
+        # Feature 1391 (GAP-3): report routes are operator-gated. An anonymous
+        # session carries roles=["anonymous"], so the operator middleware denies
+        # it with 403 (tightened from the pre-1391 handler-body 401). Either
+        # code means "anonymous is rejected" — the security invariant holds.
+        assert response["statusCode"] in (401, 403)
 
 
 # ===================================================================

@@ -41,8 +41,10 @@ import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 import boto3
+import jwt
 from aws_lambda_powertools import Tracer
 from botocore.exceptions import ClientError
 from pydantic import BaseModel, EmailStr, Field
@@ -65,7 +67,10 @@ from src.lambdas.shared.auth.oauth_state import (
     store_oauth_state,
     validate_oauth_state,
 )
-from src.lambdas.shared.auth.roles import map_stripe_plan_to_role
+from src.lambdas.shared.auth.roles import (
+    get_roles_for_user,
+    map_stripe_plan_to_role,
+)
 from src.lambdas.shared.auth.stripe_utils import (
     extract_price_id_from_subscription,
     extract_user_id_from_subscription,
@@ -78,6 +83,7 @@ from src.lambdas.shared.errors.session_errors import (
     TokenExpiredError,
 )
 from src.lambdas.shared.logging_utils import get_safe_error_info, sanitize_for_log
+from src.lambdas.shared.middleware.auth_middleware import _get_jwt_config
 from src.lambdas.shared.models.magic_link_token import MagicLinkToken
 from src.lambdas.shared.models.user import ProviderMetadata, User
 from src.lambdas.shared.models.webhook_event import WebhookEvent
@@ -471,6 +477,179 @@ def get_user_by_email(table: Any, email: str) -> User | None:
 # Feature 014 User Story 3: Email Uniqueness (T040-T044)
 # =============================================================================
 
+# Feature 1395 (fail-closed amendment): identity-key lookups paginate under a bounded
+# page cap. Realistic per-identity cardinality is tiny (one human's
+# notifications/tokens/duplicates ≪ one 1MB page), so hitting the cap means the key is
+# polluted or something is wrong — we FAIL CLOSED (WARN + raise), never silently truncate.
+# A *raising* cap cannot produce the false-None footgun by construction; only a *silently
+# truncating* cap could, which is why the WIP's cap-refusal (R-4) was wrong.
+_IDENTITY_QUERY_MAX_PAGES = 10
+
+
+class IdentityLookupError(Exception):
+    """Identity GSI lookup could not prove completeness (page failure, cap trip,
+    or malformed pagination cursor).
+
+    Feature 1395: callers MUST fail closed — never treat this as "no user". Swallowing
+    it and returning ``None`` re-opens CWE-636 (a logged-but-swallowed error reaches the
+    OAuth callback as "no account" and mints a duplicate USER record).
+    """
+
+
+def _created_at_sort_key(user: User) -> datetime:
+    """Sort key for canonical selection (Feature 1395, FR-004).
+
+    Returns the user's ``created_at`` (normalized to UTC-aware). A missing or malformed
+    ``created_at`` sorts LAST (``datetime.max``) so a bad record can never win the
+    "oldest" pick.
+    """
+    created_at = getattr(user, "created_at", None)
+    if not isinstance(created_at, datetime):
+        return datetime.max.replace(tzinfo=UTC)
+    if created_at.tzinfo is None:
+        return created_at.replace(tzinfo=UTC)
+    return created_at
+
+
+def _query_users_by_index(
+    table: Any,
+    index_name: str,
+    key_expr: str,
+    attr_values: dict[str, Any],
+    *,
+    max_pages: int = _IDENTITY_QUERY_MAX_PAGES,
+) -> list[User]:
+    """Return the COMPLETE list of ``USER`` items under a GSI key, or raise.
+
+    Feature 1395: drops the ``Limit=1`` footgun. DynamoDB applies ``Limit`` to the
+    key-matched items BEFORE the ``FilterExpression`` runs, so a non-USER item sharing
+    the hash key (``NOTIFICATION`` / ``MAGIC_LINK_TOKEN`` under ``by_email``) could be the
+    single item returned and get filtered out, making the helper return ``None`` even
+    though a ``USER`` exists. Here the ``entity_type = USER`` filter is applied across the
+    FULL key match and we page via ``LastEvaluatedKey`` until the key range is exhausted,
+    so injected non-USER items can never mask a real USER (FR-001).
+
+    Fail-closed contract (amendment — FR-010/012/013/014, supersedes the WIP's O-1
+    partial-result design):
+
+    - Returns a COMPLETE ``list[User]`` (possibly ``[]`` when the range holds zero USER
+      items). An empty list therefore means EXACTLY "scanned to exhaustion, zero USERs".
+    - Raises ``IdentityLookupError`` (after logging) on ANY page-query failure (including
+      page 1), on a ``max_pages`` cap trip with pagination unfinished, and on a malformed
+      pagination cursor. It NEVER returns a partial/truncated result: selecting a
+      "canonical" user over a truncated set makes the resolved identity depend on which
+      pages happened to succeed (refuter R-8), and returning ``[]`` on a page-1 error mints
+      a duplicate (K-3 / CWE-636).
+    - The one deliberate non-raise: a single unparseable USER item is skipped+WARNed, not
+      raised. A permanently malformed record would otherwise hard-lock that account with no
+      retry escape, and the skip is deterministic (same item fails every time), so
+      canonical selection stays stable.
+    """
+    users: list[User] = []
+    exclusive_start_key: dict[str, Any] | None = None
+    page_count = 0
+    while True:
+        query_kwargs: dict[str, Any] = {
+            "IndexName": index_name,
+            "KeyConditionExpression": key_expr,
+            "FilterExpression": "entity_type = :type",
+            "ExpressionAttributeValues": {**attr_values, ":type": "USER"},
+        }
+        if exclusive_start_key is not None:
+            query_kwargs["ExclusiveStartKey"] = exclusive_start_key
+
+        try:
+            response = table.query(**query_kwargs)
+        except IdentityLookupError:
+            raise
+        except Exception as e:
+            # FR-010/012: log then RAISE — never return partial/[] on error. A swallowed
+            # error reaches the OAuth callback as "no user" and mints a duplicate.
+            logger.error(
+                "Failed GSI identity lookup — failing closed",
+                extra={
+                    "index": index_name,
+                    "pages_completed": page_count,
+                    **get_safe_error_info(e),
+                },
+            )
+            raise IdentityLookupError(
+                f"GSI identity lookup failed on index {index_name}"
+            ) from e
+
+        page_count += 1
+
+        for item in response.get("Items", []):
+            try:
+                users.append(User.from_dynamodb_item(item))
+            except Exception as parse_err:
+                # Deliberate deviation (plan §4.2): a single malformed record must not
+                # abort the whole lookup; skip+WARN it. It also sorts LAST via
+                # _created_at_sort_key if it partially parsed.
+                logger.warning(
+                    "Skipping unparseable USER item during GSI lookup",
+                    extra={"index": index_name, **get_safe_error_info(parse_err)},
+                )
+
+        # FR-014: only a non-empty dict is a real continuation token. None / empty-dict
+        # terminates normally; any other truthy value (e.g. a MagicMock attribute whose
+        # .get() is truthy forever — refuter K-1 infinite loop) is uninterpretable, so we
+        # cannot prove completeness → fail closed.
+        lek = response.get("LastEvaluatedKey")
+        if lek is None or lek == {}:
+            break
+        if not isinstance(lek, dict):
+            logger.error(
+                "Malformed pagination cursor in GSI identity lookup — failing closed",
+                extra={"index": index_name, "cursor_type": type(lek).__name__},
+            )
+            raise IdentityLookupError(
+                f"Malformed pagination cursor on index {index_name}"
+            )
+
+        # FR-013: bounded cap that RAISES (never silent truncation). Hitting it with
+        # pagination still unfinished means we cannot prove completeness.
+        if page_count >= max_pages:
+            logger.warning(
+                "GSI identity lookup hit max_pages cap with pagination unfinished — "
+                "failing closed (possible index pollution)",
+                extra={"index": index_name, "pages": page_count},
+            )
+            raise IdentityLookupError(
+                f"GSI identity lookup exceeded {max_pages} pages on index {index_name}"
+            )
+
+        exclusive_start_key = lek
+
+    return users
+
+
+def _select_canonical_user(
+    users: list[User],
+    *,
+    key_label: str,
+    key_prefix: str,
+) -> User | None:
+    """Deterministically pick the canonical ``USER`` among duplicates (Feature 1395).
+
+    FR-004: the record with the earliest ``created_at`` wins (oldest → most likely to
+    hold the user's data), with ``user_id`` ascending as a stable tiebreak. FR-005: when
+    more than one ``USER`` shares one identity key, emit a sanitized WARN with the key
+    type, a truncated key prefix, and the count — never the raw email or full sub.
+    """
+    if not users:
+        return None
+    if len(users) > 1:
+        logger.warning(
+            "Multiple USER records under one identity key (Feature 1395)",
+            extra={
+                "identity_key": key_label,
+                "key_prefix": sanitize_for_log(key_prefix[:8]),
+                "count": len(users),
+            },
+        )
+    return min(users, key=lambda u: (_created_at_sort_key(u), u.user_id))
+
 
 @tracer.capture_method
 def get_user_by_email_gsi(table: Any, email: str) -> User | None:
@@ -495,32 +674,22 @@ def get_user_by_email_gsi(table: Any, email: str) -> User | None:
         extra={"email_domain": sanitize_for_log(normalized_email.split("@")[-1])},
     )
 
-    try:
-        # GSI by_email has email as HASH and SK as RANGE
-        # Filter by entity_type to only return USER records
-        response = table.query(
-            IndexName="by_email",
-            KeyConditionExpression="email = :email",
-            FilterExpression="entity_type = :type",
-            ExpressionAttributeValues={
-                ":email": normalized_email,
-                ":type": "USER",
-            },
-            Limit=1,  # We only need one result for uniqueness check
-        )
-
-        items = response.get("Items", [])
-        if not items:
-            return None
-
-        return User.from_dynamodb_item(items[0])
-
-    except Exception as e:
-        logger.error(
-            "Failed GSI email lookup",
-            extra=get_safe_error_info(e),
-        )
-        return None
+    # Feature 1395: paginate the full key match and filter server-side to entity_type=USER
+    # so NOTIFICATION / MAGIC_LINK_TOKEN items sharing this email hash key can never mask
+    # the real USER (the old Limit=1 could return a non-USER item → false None). FR-001.
+    users = _query_users_by_index(
+        table,
+        "by_email",
+        "email = :email",
+        {":email": normalized_email},
+    )
+    # by_email is expected to hold at most one USER per email; >1 is itself a fragmentation
+    # signal, so pick deterministically (oldest) and WARN via _select_canonical_user.
+    return _select_canonical_user(
+        users,
+        key_label="email",
+        key_prefix=normalized_email.split("@")[-1],
+    )
 
 
 @tracer.capture_method
@@ -560,32 +729,21 @@ def get_user_by_provider_sub(
         extra={"provider": safe_provider, "sub_prefix": sanitize_for_log(sub[:8])},
     )
 
-    try:
-        # GSI by_provider_sub has provider_sub as HASH
-        # Filter by entity_type to only return USER records
-        response = table.query(
-            IndexName="by_provider_sub",
-            KeyConditionExpression="provider_sub = :provider_sub",
-            FilterExpression="entity_type = :type",
-            ExpressionAttributeValues={
-                ":provider_sub": provider_sub,
-                ":type": "USER",
-            },
-            Limit=1,  # One provider:sub should map to at most one user
-        )
-
-        items = response.get("Items", [])
-        if not items:
-            return None
-
-        return User.from_dynamodb_item(items[0])
-
-    except Exception as e:
-        logger.error(
-            "Failed GSI provider_sub lookup",
-            extra=get_safe_error_info(e),
-        )
-        return None
+    # Feature 1395: by_provider_sub is USER-only, so the footgun here is not a false None
+    # but a NONDETERMINISTIC pick among duplicate USER records sharing one provider_sub
+    # (the current live state — 10 dupes). Drop Limit=1, paginate to exhaustion, and select
+    # the earliest-created_at record deterministically. FR-002, FR-004.
+    users = _query_users_by_index(
+        table,
+        "by_provider_sub",
+        "provider_sub = :provider_sub",
+        {":provider_sub": provider_sub},
+    )
+    return _select_canonical_user(
+        users,
+        key_label="provider_sub",
+        key_prefix=sub,
+    )
 
 
 # Feature 1181: OAuth Auto-Link Detection
@@ -1493,6 +1651,8 @@ class OAuthCallbackResponse(BaseModel):
     verification: str = "none"
     linked_providers: list[str] = Field(default_factory=list)
     last_provider_used: str | None = None
+    # Feature 1380: host-validated OAuth avatar URL (null unless allowlisted).
+    picture: str | None = None
 
 
 class RefreshTokenRequest(BaseModel):
@@ -2026,6 +2186,67 @@ def _mask_email(email: str | None) -> str | None:
         return "***"
 
 
+# Feature 1380: OAuth avatar / profile picture surfacing.
+_AVATAR_ALLOWED_HOST = "googleusercontent.com"
+
+
+def _validate_avatar_url(url: str | None) -> str | None:
+    """SSRF-safe host allowlist for OAuth avatar URLs (Feature 1380, FR-004).
+
+    Backend-authoritative. Returns the URL ONLY if it is https and its parsed
+    hostname is exactly ``googleusercontent.com`` or ends with the
+    ``.googleusercontent.com`` suffix (the leading dot is load-bearing). Every
+    other value fails closed to None. The check parses the URL and compares the
+    hostname — never a substring/`in`/regex test on the raw string — so path
+    tricks (``https://evil.com/googleusercontent.com/x``), userinfo tricks
+    (``https://googleusercontent.com@evil.com``), lookalikes
+    (``evil-googleusercontent.com``), suffix tricks
+    (``foo.googleusercontent.com.evil.com``) and non-https schemes are rejected.
+    Hot-link only: this function never fetches the URL. Logs nothing (PII).
+    """
+    if not url or not isinstance(url, str):
+        return None
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        # Malformed URL → fail closed.
+        return None
+    if parsed.scheme != "https":
+        return None
+    hostname = parsed.hostname  # normalized (lowercased, userinfo/port stripped)
+    if not hostname:
+        return None
+    # Normalize a trailing dot (FQDN form) before matching.
+    hostname = hostname.rstrip(".")
+    if hostname == _AVATAR_ALLOWED_HOST or hostname.endswith(
+        "." + _AVATAR_ALLOWED_HOST
+    ):
+        return url
+    return None
+
+
+def _select_avatar(user: User) -> str | None:
+    """Pick the current user's avatar URL from persisted provider metadata.
+
+    Feature 1380 (FR-003): selects the avatar for ``user.last_provider_used``,
+    falling back to the first provider_metadata entry with a non-null avatar
+    (handles multi-provider linking). The chosen URL is host-validated by
+    ``_validate_avatar_url`` (FR-004, fail-closed). Pure, no I/O, no logging.
+    """
+    metadata = getattr(user, "provider_metadata", None) or {}
+    candidate: str | None = None
+    last = user.last_provider_used
+    if last is not None and last in metadata:
+        candidate = getattr(metadata[last], "avatar", None)
+    if not candidate:
+        for entry in metadata.values():
+            avatar = getattr(entry, "avatar", None)
+            if avatar:
+                candidate = avatar
+                break
+    return _validate_avatar_url(candidate)
+
+
 # T092: OAuth URLs
 def _resolve_redirect_uri(origin: str) -> str:
     """Resolve the OAuth redirect URI based on request origin.
@@ -2138,6 +2359,103 @@ def get_oauth_urls(table: Any, origin: str = "") -> OAuthURLsResponse:
     )
 
 
+# Feature 1396 (FR-003): first-party app-JWT session bearer lifetime. Single named
+# constant, not a magic number; matches JWTConfig.access_token_lifetime_seconds (900s)
+# so the frontend schedules refresh before the token the validator expects expires.
+APP_JWT_TTL_SECONDS = 900
+
+
+def mint_app_jwt(user: User, *, now: datetime | None = None) -> str:
+    """Mint a first-party HS256 app JWT that passes validate_jwt (Feature 1396).
+
+    Option B: the OAuth callback and refresh return THIS token as the frontend bearer
+    in place of the raw Cognito access token (which the middleware never validated).
+
+    Config (secret / algorithm / issuer / audience) is sourced from the SAME accessor
+    ``validate_jwt`` uses (``_get_jwt_config``) so mint and validate cannot drift
+    (FR-001). Algorithm is pinned to ``config.algorithm`` — no header-driven ``alg``,
+    no ``alg:none`` (FR-009). Fails closed when ``JWT_SECRET`` is unset (FR-006): raises
+    rather than emitting an unsigned or fallback token.
+
+    N4/FR-002a: ``roles`` come from ``get_roles_for_user`` which gates on
+    ``user.auth_type`` (NOT ``user.role``). Callers on the existing-user upgrade path
+    MUST reconcile the in-hand user's ``auth_type``/``role`` to the persisted post-
+    advancement state before calling, or an upgraded user under-grants ``["anonymous"]``.
+
+    Args:
+        user: Authoritative in-hand user (roles/rev read from it, no extra lookup).
+        now: Optional clock override for tests.
+
+    Returns:
+        Encoded HS256 JWT string.
+
+    Raises:
+        RuntimeError: JWT_SECRET not configured (fail closed).
+    """
+    config = _get_jwt_config()
+    if config is None:
+        # FR-006: never fall back to a Cognito token (the middleware would reject it,
+        # reintroducing the 401 storm invisibly). Fail loudly instead.
+        raise RuntimeError(
+            "JWT_SECRET not configured; cannot mint app JWT (failing closed)"
+        )
+
+    iat = int((now or datetime.now(UTC)).timestamp())
+    payload: dict[str, Any] = {
+        "sub": user.user_id,
+        "iss": config.issuer,
+        "iat": iat,
+        "nbf": iat,  # FR-002 / AR1-7: never future-dated (validator has 60s leeway)
+        "exp": iat + APP_JWT_TTL_SECONDS,  # FR-003
+        "roles": get_roles_for_user(user),  # canonical list[str] (FR-002 / FR-002a)
+        "jti": str(uuid.uuid4()),  # fresh per mint (FR-002 / AR1-10)
+        "rev": user.revocation_id,  # FR-008 refresh-time revocation
+    }
+    # AR1-9: include aud iff the validator will check it (mint/validate read the same env).
+    if config.audience is not None:
+        payload["aud"] = config.audience
+
+    return jwt.encode(payload, config.secret, algorithm=config.algorithm)
+
+
+def _read_rev_from_expiring_bearer(bearer: str | None) -> int | None:
+    """Read the ``rev`` claim from an expiring app JWT for the refresh-time check (N1).
+
+    The bearer is the app JWT the frontend attaches on ``POST /api/v2/auth/refresh``.
+    It is EXPECTED to be expired (that is why the client is refreshing), so ``exp`` is
+    not verified — but the SIGNATURE is (same ``_get_jwt_config`` secret/algorithm), so
+    a forged/tampered bearer cannot influence the revocation decision.
+
+    Returns the integer ``rev`` on success, or ``None`` when the bearer is absent,
+    malformed, or fails signature verification. A ``None`` result means the refresh-time
+    ``rev`` check is skipped (migration-window backward-compat, AR1-12; T033 later makes
+    a valid bearer required on the Cognito branch).
+    """
+    if not bearer:
+        return None
+    token = bearer[7:].strip() if bearer.startswith("Bearer ") else bearer.strip()
+    if not token:
+        return None
+    config = _get_jwt_config()
+    if config is None:
+        return None
+    try:
+        payload = jwt.decode(
+            token,
+            config.secret,
+            algorithms=[config.algorithm],  # FR-009: pinned, no alg confusion
+            issuer=config.issuer,
+            audience=config.audience,
+            leeway=config.leeway_seconds,
+            options={"verify_exp": False},  # expired-by-design
+        )
+    except Exception:
+        # Bad signature / malformed / wrong issuer|audience → treat as absent.
+        return None
+    rev = payload.get("rev")
+    return rev if isinstance(rev, int) else None
+
+
 # T093: OAuth Callback
 @tracer.capture_method
 def handle_oauth_callback(
@@ -2244,35 +2562,54 @@ def handle_oauth_callback(
             message="Email not provided by OAuth provider.",
         )
 
-    # Check for existing user with this email (use GSI for O(1) lookup)
-    existing_user = get_user_by_email_gsi(table, email)
-
-    # Feature 1181: Check for duplicate provider_sub before linking (AUTH_023)
     oauth_email_verified = claims.get("email_verified", False)
-    if cognito_sub:
-        existing_by_sub = get_user_by_provider_sub(table, provider, cognito_sub)
-        if existing_by_sub and (
-            not existing_user or existing_by_sub.user_id != existing_user.user_id
-        ):
-            # OAuth account already linked to a different user
-            safe_provider_auth023 = (
-                str(provider)
-                .replace("\r\n", " ")
-                .replace("\n", " ")
-                .replace("\r", " ")[:200]
-            )
-            logger.warning(
-                "OAuth account already linked to different user (AUTH_023)",
-                extra={
-                    "provider": safe_provider_auth023,
-                    "sub_prefix": sanitize_for_log(cognito_sub[:8]),
-                },
-            )
-            return OAuthCallbackResponse(
-                status="error",
-                error="AUTH_023",
-                message="This OAuth account is already linked to another user.",
-            )
+
+    # Feature 1395: resolve an existing account by STABLE IDENTITY first (server-derived
+    # sub from the validated id_token), then fall back to email. The by_email GSI can be
+    # polluted by NOTIFICATION / MAGIC_LINK_TOKEN items under the same email, so an
+    # email-only lookup can falsely miss a returning user and mint a duplicate USER on
+    # nearly every login. cognito_sub / provider_sub are USER-only and server-authoritative.
+    existing_by_sub = (
+        get_user_by_provider_sub(table, provider, cognito_sub) if cognito_sub else None
+    )
+    existing_by_cognito = (
+        get_user_by_cognito_sub(table, cognito_sub) if cognito_sub else None
+    )
+    existing_by_email = get_user_by_email_gsi(table, email)
+
+    # Stable identity wins for REUSE (FR-006): the same human, resolved by validated sub.
+    # Email is only a fallback for legacy records that predate the sub GSIs.
+    stable_user = existing_by_sub or existing_by_cognito
+    existing_user = stable_user or existing_by_email
+
+    # Feature 1181/1395 (AUTH_023): a genuine cross-account conflict is when the OAuth sub
+    # is already linked to a DIFFERENT user than the email account (FR-007). A returning
+    # user whose email index is polluted (email lookup None) is NOT a conflict — the
+    # stable-identity reuse above handles them. So we fire ONLY on a real sub-vs-email
+    # divergence, never on "sub found, email None".
+    if (
+        existing_by_sub
+        and existing_by_email
+        and existing_by_sub.user_id != existing_by_email.user_id
+    ):
+        safe_provider_auth023 = (
+            str(provider)
+            .replace("\r\n", " ")
+            .replace("\n", " ")
+            .replace("\r", " ")[:200]
+        )
+        logger.warning(
+            "OAuth account already linked to different user (AUTH_023)",
+            extra={
+                "provider": safe_provider_auth023,
+                "sub_prefix": sanitize_for_log((cognito_sub or "")[:8]),
+            },
+        )
+        return OAuthCallbackResponse(
+            status="error",
+            error="AUTH_023",
+            message="This OAuth account is already linked to another user.",
+        )
 
     if existing_user and existing_user.auth_type != provider:
         # Feature 1181: Flow 3 - Check if email not verified by OAuth (AUTH_022)
@@ -2431,6 +2768,22 @@ def handle_oauth_callback(
     )
     final_role = "free" if user.role == "anonymous" else user.role
 
+    # Feature 1396 (N4/FR-002a): make the in-hand user AUTHORITATIVE before roles are
+    # read. get_roles_for_user gates on user.auth_type (roles.py), NOT user.role, and
+    # _advance_role/_mark_email_verified persist to DynamoDB WITHOUT mutating this
+    # in-memory object. Without this reconciliation a just-upgraded existing anonymous
+    # user would mint roles=["anonymous"] (under-grant). New OAuth users already get
+    # auth_type=<provider> at creation, so this is a no-op for them.
+    if user.auth_type == "anonymous":
+        user.auth_type = provider  # authenticated via OAuth; matches new-user creation
+    if user.role == "anonymous":
+        user.role = "free"  # keep role consistent with _advance_role's persisted value
+
+    # Feature 1396 (FR-004): return a first-party app JWT as the bearer, NOT the raw
+    # Cognito access token (which validate_jwt rejects on signature/aud/iss/roles → the
+    # M1 401 storm). Minted from the in-hand user — no extra lookup (T8-safe).
+    app_jwt = mint_app_jwt(user)
+
     return OAuthCallbackResponse(
         status="authenticated",
         # user_id removed - frontend doesn't need it
@@ -2438,9 +2791,9 @@ def handle_oauth_callback(
         auth_type=provider,
         tokens={
             "id_token": tokens.id_token,
-            "access_token": tokens.access_token,
+            "access_token": app_jwt,  # Feature 1396: app JWT, was tokens.access_token
             # NO refresh_token in body
-            "expires_in": tokens.expires_in,
+            "expires_in": APP_JWT_TTL_SECONDS,  # reflect the app JWT's real lifetime
         },
         refresh_token_for_cookie=tokens.refresh_token,  # Router sets HttpOnly cookie
         merged_anonymous_data=merged_data,
@@ -2450,6 +2803,11 @@ def handle_oauth_callback(
         verification=final_verification,
         linked_providers=final_linked_providers,
         last_provider_used=provider,
+        # Feature 1380: surface this login's avatar. _link_provider persists to
+        # DynamoDB but does NOT mutate the in-memory `user`, so validate the fresh
+        # claim directly (same SSRF allowlist as /auth/me's _select_avatar). This
+        # is the just-authenticated provider, so it IS the "current" avatar.
+        picture=_validate_avatar_url(claims.get("picture")),
     )
 
 
@@ -2608,6 +2966,11 @@ def _link_provider(
                 "is_new_link": provider not in user.linked_providers,
             },
         )
+    except IdentityLookupError:
+        # Feature 1395 (FR-015): a failed-closed provider-uniqueness lookup must NOT be
+        # swallowed here — swallowing it would skip the uniqueness guard and could
+        # double-link a provider. Propagate → router 503.
+        raise
     except Exception as e:
         safe_provider_failed = (
             str(provider)
@@ -2903,17 +3266,62 @@ def _refresh_anonymous_session(
     )
 
 
+def get_user_by_cognito_sub(table: Any, cognito_sub: str) -> User | None:
+    """Get a user by their Cognito user-pool sub via the by_cognito_sub GSI.
+
+    Feature 1381 (Defect B): the OAuth (Cognito) refresh path needs the internal
+    user_id so the frontend can rebuild its session instead of dropping to guest.
+    The stable Cognito `sub` from the freshly-issued id_token maps to exactly one
+    user record. Server-authoritative — sub comes from a validated token, never
+    from client input.
+
+    Args:
+        table: DynamoDB Table resource
+        cognito_sub: Cognito user-pool subject claim (stable across refreshes)
+
+    Returns:
+        User if found, None otherwise
+    """
+    if not cognito_sub:
+        return None
+
+    # Feature 1395: by_cognito_sub is USER-only; drop Limit=1 (nondeterministic among
+    # duplicates) and select the earliest-created_at USER deterministically so token
+    # refresh resolves the SAME user_id every time until 1397 removes the dupes.
+    # FR-003, FR-004.
+    users = _query_users_by_index(
+        table,
+        "by_cognito_sub",
+        "cognito_sub = :sub",
+        {":sub": cognito_sub},
+    )
+    return _select_canonical_user(
+        users,
+        key_label="cognito_sub",
+        key_prefix=cognito_sub,
+    )
+
+
 def refresh_access_tokens(
     refresh_token: str,
     table: Any | None = None,
+    incoming_bearer: str | None = None,
 ) -> RefreshTokenResponse:
     """Refresh access and ID tokens.
 
     FR-007 (Feature 1188): Checks blocklist BEFORE issuing new tokens.
 
+    Feature 1396: the Cognito-backed branch re-mints a first-party app JWT (FR-005)
+    instead of returning the raw Cognito access token, applies a refresh-time
+    revocation check (N1/FR-008), and fails closed on unresolved identity (FR-006).
+
     Args:
         refresh_token: Current refresh token
         table: DynamoDB Table resource (optional, for blocklist check)
+        incoming_bearer: The expiring app JWT from the request's Authorization header
+            (Feature 1396 N1). Decoded signature-verified with verify_exp=False to read
+            its ``rev`` for the refresh-time revocation check. Absent/invalid → check
+            skipped (migration window; T033 makes it required).
 
     Returns:
         RefreshTokenResponse with new tokens
@@ -2940,10 +3348,77 @@ def refresh_access_tokens(
 
     try:
         tokens = cognito_refresh_tokens(config, refresh_token)
+        # Feature 1396 (FR-005/FR-006): the Cognito access token is NOT the bearer any
+        # more — we re-mint a first-party app JWT from the resolved user. Under Option B
+        # the old "degrade to Cognito tokens without identity" path would hand the client
+        # a middleware-rejected bearer (the invisible 401 storm), so identity resolution
+        # is now REQUIRED to mint, and unresolved identity fails closed.
+        #
+        # Feature 1395 (N3/FR-006a) transient-vs-definitive split is preserved: an infra
+        # fault inside get_user_by_cognito_sub raises IdentityLookupError, which is NOT a
+        # TokenError and so propagates past this handler to the app-level exception
+        # handler → retryable 503 (session preserved). Only DEFINITIVE unresolved identity
+        # (no sub / deterministic None) returns 401 identity_unresolved.
+        if table is None or not tokens.id_token:
+            # Cannot resolve a user → cannot mint an app JWT. Fail closed.
+            return RefreshTokenResponse(
+                error="identity_unresolved",
+                message="Could not resolve session identity",
+            )
+
+        try:
+            cognito_sub = decode_id_token(tokens.id_token).get("sub")
+        except IdentityLookupError:
+            raise
+        except Exception as e:
+            # id_token decode failure = definitive (the refresh itself succeeded, but we
+            # cannot derive an identity to mint against).
+            logger.warning(
+                "OAuth refresh id_token decode failed",
+                extra=get_safe_error_info(e),
+            )
+            return RefreshTokenResponse(
+                error="identity_unresolved",
+                message="Could not resolve session identity",
+            )
+
+        if not cognito_sub:
+            return RefreshTokenResponse(
+                error="identity_unresolved",
+                message="Could not resolve session identity",
+            )
+
+        # IdentityLookupError (transient/infra) intentionally propagates → 503.
+        user = get_user_by_cognito_sub(table, cognito_sub)
+        if not user:
+            # Deterministic None (post-1395) = definitive unresolved identity.
+            return RefreshTokenResponse(
+                error="identity_unresolved",
+                message="Could not resolve session identity",
+            )
+
+        # Feature 1396 (N1/FR-008): refresh-time revocation. Read the expiring bearer's
+        # rev and refuse to re-mint if the user's revocation_id has advanced. Absent/
+        # invalid bearer → check skipped (migration window, AR1-12 / T033).
+        incoming_rev = _read_rev_from_expiring_bearer(incoming_bearer)
+        if incoming_rev is not None and incoming_rev != user.revocation_id:
+            logger.warning(
+                "Refresh refused: session revoked (rev advanced)",
+                extra={"user_id_prefix": sanitize_for_log(user.user_id[:8])},
+            )
+            return RefreshTokenResponse(
+                error="session_revoked",
+                message="Session has been revoked",
+            )
+
+        # FR-005: re-mint a fresh app JWT on every refresh (authoritative user).
+        app_jwt = mint_app_jwt(user)
         return RefreshTokenResponse(
             id_token=tokens.id_token,
-            access_token=tokens.access_token,
-            expires_in=tokens.expires_in,
+            access_token=app_jwt,  # Feature 1396: app JWT, was tokens.access_token
+            expires_in=APP_JWT_TTL_SECONDS,
+            user_id=user.user_id,
+            auth_type=user.auth_type,
         )
     except TokenError as e:
         return RefreshTokenResponse(

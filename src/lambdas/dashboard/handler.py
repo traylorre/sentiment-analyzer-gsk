@@ -91,6 +91,7 @@ from src.lambdas.shared.middleware.auth_middleware import (
     extract_auth_context,
     extract_auth_context_typed,
 )
+from src.lambdas.shared.middleware.require_role import require_role_middleware
 from src.lambdas.shared.utils.event_helpers import get_query_params
 
 # Feature 1290: Validate cross-module env vars at cold start (degraded, not fatal)
@@ -192,6 +193,30 @@ from src.lambdas.dashboard.router_v2 import include_routers
 
 include_routers(app)
 logger.info("API v2 routers included")
+
+
+# Feature 1395 (OQ-3 / FR-015): fail-closed surface for identity-lookup errors.
+# A DynamoDB page failure, pagination cap trip, or malformed cursor during any of the
+# three identity GSI lookups raises IdentityLookupError. It MUST surface as a retryable
+# 5xx with a sanitized body — NEVER be swallowed into "user not found" (which would let
+# the OAuth callback mint a duplicate USER, CWE-636). Registered on the resolver here
+# because Powertools 3.x does NOT merge Router-level exception handlers into the app.
+from src.lambdas.dashboard.auth import IdentityLookupError
+from src.lambdas.shared.utils.response_builder import (
+    error_response as _identity_error_response,
+)
+
+
+@app.exception_handler(IdentityLookupError)
+def handle_identity_lookup_error(exc: IdentityLookupError) -> Response:
+    """Map an unprovable identity lookup to a clean, retryable 503 (no internals leaked)."""
+    logger.warning(
+        "Identity lookup failed closed — returning 503 (Feature 1395)",
+        extra={"error_type": type(exc).__name__},
+    )
+    return _identity_error_response(
+        503, "Temporary sign-in problem. Please try again in a moment."
+    )
 
 
 # ===================================================================
@@ -309,6 +334,25 @@ def _make_not_found_response(origin: str | None = None) -> Response:
         body=orjson.dumps({"detail": "Not found"}).decode(),
         headers=headers,
     )
+
+
+def _chaos_dev_env_gate(app, next_middleware):
+    """Env-gate that runs BEFORE the operator gate on chaos experiment routes.
+
+    Feature 1250 makes chaos experiment routes invisible (404, no existence
+    oracle) in prod/preprod. Feature 1391 (GAP-3) adds
+    require_role_middleware("operator"). Powertools runs middlewares in list
+    order, so this must be ordered first: otherwise an unauthenticated caller in
+    prod/preprod would get a 401 (revealing the route exists) before the env
+    gate's 404. Ordering the env gate first preserves the invisible-in-prod
+    property for every caller, authenticated or not.
+
+    The in-body ``_is_dev_environment()`` check on each experiment route is
+    retained as additive defense-in-depth.
+    """
+    if not _is_dev_environment():
+        return _make_not_found_response(_get_request_origin())
+    return next_middleware(app)
 
 
 def _inject_cors_headers(response: dict, event: dict) -> dict:
@@ -951,7 +995,10 @@ def get_articles_v2():
 # ===================================================================
 
 
-@app.post("/chaos/experiments")
+@app.post(
+    "/chaos/experiments",
+    middlewares=[_chaos_dev_env_gate, require_role_middleware("operator")],
+)
 def create_chaos_experiment():
     """Create a new chaos experiment (locked down in prod/preprod)."""
     if not _is_dev_environment():
@@ -1014,7 +1061,10 @@ def create_chaos_experiment():
         )
 
 
-@app.get("/chaos/experiments")
+@app.get(
+    "/chaos/experiments",
+    middlewares=[_chaos_dev_env_gate, require_role_middleware("operator")],
+)
 def list_chaos_experiments():
     """List chaos experiments (locked down in prod/preprod)."""
     if not _is_dev_environment():
@@ -1047,7 +1097,10 @@ def list_chaos_experiments():
         )
 
 
-@app.get("/chaos/experiments/<experiment_id>")
+@app.get(
+    "/chaos/experiments/<experiment_id>",
+    middlewares=[_chaos_dev_env_gate, require_role_middleware("operator")],
+)
 def get_chaos_experiment(experiment_id: str):
     """Get chaos experiment by ID (locked down in prod/preprod)."""
     if not _is_dev_environment():
@@ -1076,7 +1129,10 @@ def get_chaos_experiment(experiment_id: str):
     )
 
 
-@app.post("/chaos/experiments/<experiment_id>/start")
+@app.post(
+    "/chaos/experiments/<experiment_id>/start",
+    middlewares=[_chaos_dev_env_gate, require_role_middleware("operator")],
+)
 def start_chaos_experiment(experiment_id: str):
     """Start a chaos experiment (locked down in prod/preprod)."""
     if not _is_dev_environment():
@@ -1125,7 +1181,10 @@ def start_chaos_experiment(experiment_id: str):
         )
 
 
-@app.post("/chaos/experiments/<experiment_id>/stop")
+@app.post(
+    "/chaos/experiments/<experiment_id>/stop",
+    middlewares=[_chaos_dev_env_gate, require_role_middleware("operator")],
+)
 def stop_chaos_experiment(experiment_id: str):
     """Stop a running chaos experiment (locked down in prod/preprod)."""
     if not _is_dev_environment():
@@ -1167,7 +1226,10 @@ def stop_chaos_experiment(experiment_id: str):
         )
 
 
-@app.get("/chaos/experiments/<experiment_id>/report")
+@app.get(
+    "/chaos/experiments/<experiment_id>/report",
+    middlewares=[_chaos_dev_env_gate, require_role_middleware("operator")],
+)
 def get_chaos_experiment_report(experiment_id: str):
     """Get chaos experiment report (locked down in prod/preprod)."""
     if not _is_dev_environment():
@@ -1203,7 +1265,10 @@ def get_chaos_experiment_report(experiment_id: str):
         )
 
 
-@app.delete("/chaos/experiments/<experiment_id>")
+@app.delete(
+    "/chaos/experiments/<experiment_id>",
+    middlewares=[_chaos_dev_env_gate, require_role_middleware("operator")],
+)
 def delete_chaos_experiment(experiment_id: str):
     """Delete a chaos experiment (locked down in prod/preprod)."""
     if not _is_dev_environment():
@@ -1235,7 +1300,10 @@ def delete_chaos_experiment(experiment_id: str):
 # --- Chaos Reports (Feature 1240) ---
 
 
-@app.post("/chaos/reports")
+@app.post(
+    "/chaos/reports",
+    middlewares=[require_role_middleware("operator")],
+)
 def create_chaos_report():
     """Persist an experiment report (Feature 1240)."""
     event = app.current_event.raw_event
@@ -1299,7 +1367,10 @@ def create_chaos_report():
         )
 
 
-@app.post("/chaos/reports/plan")
+@app.post(
+    "/chaos/reports/plan",
+    middlewares=[require_role_middleware("operator")],
+)
 def create_chaos_plan_report():
     """Generate plan-level report (Feature 1240)."""
     event = app.current_event.raw_event
@@ -1345,7 +1416,10 @@ def create_chaos_plan_report():
         )
 
 
-@app.get("/chaos/reports")
+@app.get(
+    "/chaos/reports",
+    middlewares=[require_role_middleware("operator")],
+)
 def list_chaos_reports():
     """List reports with optional filters (Feature 1240)."""
     event = app.current_event.raw_event
@@ -1381,7 +1455,10 @@ def list_chaos_reports():
         )
 
 
-@app.get("/chaos/reports/trends/<scenario_type>")
+@app.get(
+    "/chaos/reports/trends/<scenario_type>",
+    middlewares=[require_role_middleware("operator")],
+)
 def get_chaos_report_trends(scenario_type: str):
     """Get trend data for scenario type (Feature 1240)."""
     event = app.current_event.raw_event
@@ -1410,7 +1487,10 @@ def get_chaos_report_trends(scenario_type: str):
         )
 
 
-@app.get("/chaos/reports/<report_id>")
+@app.get(
+    "/chaos/reports/<report_id>",
+    middlewares=[require_role_middleware("operator")],
+)
 def get_chaos_report(report_id: str):
     """Get single report by ID (Feature 1240)."""
     event = app.current_event.raw_event
@@ -1437,7 +1517,10 @@ def get_chaos_report(report_id: str):
     )
 
 
-@app.get("/chaos/reports/<report_id>/compare")
+@app.get(
+    "/chaos/reports/<report_id>/compare",
+    middlewares=[require_role_middleware("operator")],
+)
 def compare_chaos_reports(report_id: str):
     """Compare report against baseline (Feature 1240)."""
     event = app.current_event.raw_event
@@ -1481,7 +1564,10 @@ def compare_chaos_reports(report_id: str):
         )
 
 
-@app.delete("/chaos/reports/<report_id>")
+@app.delete(
+    "/chaos/reports/<report_id>",
+    middlewares=[require_role_middleware("operator")],
+)
 def delete_chaos_report(report_id: str):
     """Delete report by ID (Feature 1240)."""
     event = app.current_event.raw_event
@@ -1511,7 +1597,10 @@ def delete_chaos_report(report_id: str):
 # --- Safety Controls & Metrics (Features 1244, 1245, 1246) ---
 
 
-@app.get("/chaos/health")
+@app.get(
+    "/chaos/health",
+    middlewares=[require_role_middleware("operator")],
+)
 def get_chaos_health():
     """Pre-flight health check (Feature 1244)."""
     event = app.current_event.raw_event
@@ -1543,7 +1632,10 @@ def get_chaos_health():
         )
 
 
-@app.get("/chaos/gate")
+@app.get(
+    "/chaos/gate",
+    middlewares=[require_role_middleware("operator")],
+)
 def get_chaos_gate():
     """Get current gate state (Feature 1245)."""
     event = app.current_event.raw_event
@@ -1575,7 +1667,10 @@ def get_chaos_gate():
         )
 
 
-@app.put("/chaos/gate")
+@app.put(
+    "/chaos/gate",
+    middlewares=[require_role_middleware("operator")],
+)
 def set_chaos_gate():
     """Set gate state to armed or disarmed (Feature 1245)."""
     event = app.current_event.raw_event
@@ -1623,7 +1718,10 @@ def set_chaos_gate():
         )
 
 
-@app.post("/chaos/andon-cord")
+@app.post(
+    "/chaos/andon-cord",
+    middlewares=[require_role_middleware("operator")],
+)
 def pull_chaos_andon_cord():
     """Emergency stop -- pull the andon cord (Feature 1246)."""
     event = app.current_event.raw_event
@@ -1656,7 +1754,10 @@ def pull_chaos_andon_cord():
         )
 
 
-@app.get("/chaos/metrics")
+@app.get(
+    "/chaos/metrics",
+    middlewares=[require_role_middleware("operator")],
+)
 def get_chaos_metrics():
     """Real-time CloudWatch metrics for chaos dashboard (Feature 1247)."""
     event = app.current_event.raw_event

@@ -223,8 +223,10 @@ class FinnhubAdapter(BaseAdapter):
             # Parse response - Finnhub returns array of news
             for item in data[:limit]:
                 try:
-                    # Finnhub uses Unix timestamp
-                    published_at = datetime.fromtimestamp(item["datetime"])
+                    # Finnhub uses Unix timestamp (epoch seconds are UTC-anchored).
+                    # Feature 1398: parse as tz-aware UTC so published_at.isoformat()
+                    # matches Tiingo's, keeping the cross-source dedup SK identical.
+                    published_at = datetime.fromtimestamp(item["datetime"], tz=UTC)
                     articles.append(
                         NewsArticle(
                             article_id=str(item.get("id", hash(item["headline"]))),

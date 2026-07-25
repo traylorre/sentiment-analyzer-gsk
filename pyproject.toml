@@ -51,7 +51,7 @@ dev = [
     "boto3>=1.34.0",
     "aws-xray-sdk>=2.12.0",
     # SAST tools (070-validation-blindspot-audit)
-    "bandit>=1.7.0",
+    "bandit==1.9.4",  # Feature 1400: pinned to match requirements-{dev,ci}.txt + pre-commit rev
     "semgrep>=1.50.0",
 ]
 

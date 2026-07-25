@@ -3,7 +3,7 @@
 import { motion } from 'framer-motion';
 import { LayoutDashboard, Settings2, Bell, Cog, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useViewStore, type ViewType } from '@/stores/view-store';
 import { useHaptic } from '@/hooks/use-haptic';
 import { useIsOperator } from '@/hooks/use-operator';
@@ -12,16 +12,17 @@ import { UserMenu } from '@/components/auth/user-menu';
 import { DataFreshnessIndicator } from '@/components/dashboard/data-freshness-indicator';
 
 interface NavItem {
-  view: ViewType;
+  // Feature 1394: real file-routed destination under app/(dashboard).
+  href: string;
   label: string;
   icon: typeof LayoutDashboard;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { view: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { view: 'configs', label: 'Configurations', icon: Settings2 },
-  { view: 'alerts', label: 'Alerts', icon: Bell },
-  { view: 'settings', label: 'Settings', icon: Cog },
+  { href: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/configs', label: 'Configurations', icon: Settings2 },
+  { href: '/alerts', label: 'Alerts', icon: Bell },
+  { href: '/settings', label: 'Settings', icon: Cog },
 ];
 
 interface DesktopNavProps {
@@ -29,15 +30,18 @@ interface DesktopNavProps {
 }
 
 export function DesktopNav({ className }: DesktopNavProps) {
-  const { currentView, setView } = useViewStore();
+  // Feature 1394: nav routes for real via the App Router; active state derives
+  // from the URL (usePathname), NOT the vestigial view-store. Hard navigations
+  // used to full-reload and wipe the memory-only auth store.
   const haptic = useHaptic();
   const isOperator = useIsOperator();
   const pathname = usePathname();
+  const router = useRouter();
 
-  const handleNavClick = (view: ViewType) => {
-    if (view === currentView) return;
+  const handleNavClick = (href: string) => {
+    if (pathname === href) return;
     haptic.light();
-    setView(view);
+    router.push(href);
   };
 
   return (
@@ -61,13 +65,13 @@ export function DesktopNav({ className }: DesktopNavProps) {
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-1">
         {NAV_ITEMS.map((item) => {
-          const isActive = currentView === item.view;
+          const isActive = pathname === item.href;
           const Icon = item.icon;
 
           return (
             <button
-              key={item.view}
-              onClick={() => handleNavClick(item.view)}
+              key={item.href}
+              onClick={() => handleNavClick(item.href)}
               className={cn(
                 'relative w-full flex items-center gap-3 px-3 py-2.5 rounded-lg',
                 'text-left transition-colors duration-200',

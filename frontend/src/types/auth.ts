@@ -18,6 +18,8 @@ export interface User {
   linkedProviders?: ProviderType[];
   verification?: VerificationStatus;
   lastProviderUsed?: ProviderType;
+  // Feature 1380: host-validated OAuth avatar URL (undefined unless allowlisted).
+  pictureUrl?: string;
   // Feature 1191: Subscription fields for tier upgrade
   subscriptionActive?: boolean;
   subscriptionExpiresAt?: string;
