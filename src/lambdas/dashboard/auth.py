@@ -2776,19 +2776,25 @@ def handle_oauth_callback(
         if provider in user.linked_providers
         else user.linked_providers + [provider]
     )
-    final_verification = "verified" if oauth_email_verified else user.verification
-    final_role = "free" if user.role == "anonymous" else user.role
+    # 1163 incident fix: _mark_email_verified/_advance_role now sync this in-memory
+    # object on SUCCESSFUL writes, so the response and JWT report what the row
+    # actually says. The old unconditional "anonymous → free" forcing here minted
+    # free-tier JWTs even when the advance was skipped (unverified email) or its
+    # write failed — advertising the forbidden free:none state to the client.
+    final_verification = user.verification
+    final_role = user.role
 
-    # Feature 1396 (N4/FR-002a): make the in-hand user AUTHORITATIVE before roles are
-    # read. get_roles_for_user gates on user.auth_type (roles.py), NOT user.role, and
-    # _advance_role/_mark_email_verified persist to DynamoDB WITHOUT mutating this
-    # in-memory object. Without this reconciliation a just-upgraded existing anonymous
-    # user would mint roles=["anonymous"] (under-grant). New OAuth users already get
-    # auth_type=<provider> at creation, so this is a no-op for them.
+    # Feature 1396 (N4/FR-002a): get_roles_for_user gates on user.auth_type
+    # (roles.py), NOT user.role. An existing anonymous-row user who just
+    # authenticated via OAuth keeps auth_type="anonymous" in the row, which would
+    # under-grant roles=["anonymous"]; record the authn fact for this request.
+    # New OAuth users already get auth_type=<provider> at creation (no-op).
+    # NOTE (carded follow-up): roles.py deriving privileges from auth_type instead
+    # of role means an unverified OAuth user (role=anonymous) still mints free-tier
+    # roles. Unreachable today (Google=verified post-fix; GitHub IdP is broken),
+    # but the derivation should move to user.role.
     if user.auth_type == "anonymous":
         user.auth_type = provider  # authenticated via OAuth; matches new-user creation
-    if user.role == "anonymous":
-        user.role = "free"  # keep role consistent with _advance_role's persisted value
 
     # Feature 1396 (FR-004): return a first-party app JWT as the bearer, NOT the raw
     # Cognito access token (which validate_jwt rejects on signature/aud/iss/roles → the
