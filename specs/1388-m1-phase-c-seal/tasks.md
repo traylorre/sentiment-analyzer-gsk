@@ -104,3 +104,65 @@ the T002 gate.
 (Feature 1384 not yet verified working on preprod)**; **T004/T008/T010 are owner-gated**. Ready to execute the
 moment T001 + T002 clear and the owner is available for the interactive login. **Gate: 0 CRITICAL, 0 HIGH
 unresolved; 2 process-gate residual risks tracked (verifier independence; 1384-verified).**
+
+## Appendix — Blocker Report (verified 2026-07-24, battleplan re-check)
+
+Refuter-flagged blockers, each independently re-verified this session with the evidence commands quoted.
+The adversarial frame throughout: do not seal evidence that doesn't prove what it claims — localhost-mock
+never counts; only real-preprod, independently-attested evidence.
+
+### B1 — T001 / PR #934 — type: merge-action-required (NOT missing-PR)
+
+The refuter flagged #934 as absent from `git log --oneline --all`. Verified: it is absent because it was
+**never merged** — the PR exists and is **OPEN**.
+
+- `gh pr view 934` → `state: OPEN`, `mergedAt: null`, title
+  `test(m1-wi6): verifiable Google OAuth prep — spec, interactive capture, redaction`,
+  branch `m1-wi6-preprod-verification`, created 2026-07-23T22:26:39Z.
+- **Not renumbered, not squashed elsewhere, not closed**: its 7 files
+  (`frontend/tests/e2e/auth-oauth.spec.ts`, `scripts/redact-oauth-evidence.py`, `frontend/.gitignore`,
+  `specs/1375-wi6-google-oauth-enablement/{spec,plan,tasks}.md`, `m1-verifier-convention.md` amendments)
+  are absent from `main` and the working tree — the content landed nowhere else.
+- Merge readiness at check time: CodeQL **pass**; `git merge-tree` vs `origin/main` → **0 conflicts**;
+  branch 3 ahead / 5 behind `origin/main` (rebase optional; T001's "favor main for unrelated cleanup
+  files" note stands).
+- **Unblock**: merge #934 (owner push-gate). T001 is correct **as written** — no SHA rewrite needed,
+  since the PR is real and its content is nowhere else. This battleplan is planning-only and does not merge.
+
+### B2 — T002 / Feature 1384 preprod attestation — type: missing-attestation
+
+- 1384 **merged** to `main` as #944 (`2a4d8d5`) — but T002 requires **verified on preprod**, not merged.
+- `grep -ril 1384 docs/cleanup-pristine/evidence/` → **empty**. The only wi6-preprod artifacts are the
+  go-live `ATTESTATION.md` + `verify-oauth-deploy.txt`, and the go-live attestation itself records the
+  defect as Known gap #4 (`POST /auth/refresh` 401 → session falls back to guest). No manifest, screenshot,
+  or attestation demonstrating `/refresh 200` + identity-preserved-across-reload for an OAuth session on
+  preprod exists anywhere under `docs/cleanup-pristine/evidence/m1/`.
+- **Unblock**: an observed preprod run showing `POST /api/v2/auth/refresh 200` for a real OAuth session
+  with `user_id` preserved across reload. Note this requires a real OAuth session, which requires the
+  owner's headed Google login — so B2 is itself owner-in-the-loop. It can be folded into the T004 capture
+  window (row-04 doubles as the 1384 verification, per FR-9) or done as a standalone owner-witnessed
+  check beforehand.
+
+### B3 — T004/T005 capture + attestation — type: owner-action-required
+
+- Structural, not incidental: Google bot-detects headless browsers on the consent screen (1375 FR-6/R-3),
+  so rows 02–05 require a **headed, interactive, single-window, clean-context** run with **one real owner
+  Google login**. No agent can auto-complete this.
+- T005 (independent verifier) is agent-executable, but only **after** T004 produces a run dir; its
+  independence gate (fresh context, `verifier` ≠ implementer) is a process control the battleplan can
+  arrange at that time.
+- **Unblock**: owner schedules the capture window after B1 + B2 clear (spec Clarification Q3).
+
+### What this battleplan cleared vs what needs the owner
+
+| | Item |
+|---|---|
+| **Cleared now** | The #934 mystery: OPEN, mergeable, content nowhere else — T001 stands as written. |
+| **Battleplan-arrangeable later** | T003 (scriptable deploy re-verify); T005 (fresh-context verifier invocation, post-capture); T006 redaction gate run. |
+| **Owner-only** | Merge #934 (push-gate); 1384 preprod attestation (real login); T004 capture; T008 GPG seal; T010 milestone close. |
+
+### Gate confirmation
+
+**AR#3 BLOCKED stands.** Explicit blocker list: **B1** (merge #934), **B2** (1384 preprod attestation
+does not exist), **B3** (owner capture window). This is the correct outcome — forcing READY here would
+mean sealing evidence that does not yet exist.
