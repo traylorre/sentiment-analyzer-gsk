@@ -156,6 +156,36 @@ def test_rollback_restores_all(dynamodb_table, confirmed, monkeypatch, tmp_path)
         assert after.get(key) == item
 
 
+def test_validate_backup_rejects_right_count_wrong_keys(
+    dynamodb_table, monkeypatch, tmp_path
+):
+    """Backup with the CORRECT count but a WRONG (PK, SK) key-set must be rejected.
+
+    Last-safety-net guard for a destructive migration: count-only validation is
+    insufficient (right count, wrong items). A count-only regression in
+    ``validate_backup`` would pass every other test; this one refutes it.
+    All ids are SYNTHETIC (FR-018).
+    """
+    monkeypatch.chdir(tmp_path)
+    sub = f"google-cognito-{uuid4().hex}"
+    user_ids, _, _ = seed_group(
+        dynamodb_table, sub, ["2026-07-24T03:16:42Z", "2026-07-24T06:40:14Z"]
+    )
+    put_owned(dynamodb_table, user_ids[1], "CONFIG#c1", name="cfg")
+
+    before = list(dynamodb_table.scan().get("Items", []))
+    backup_path = str(tmp_path / "backup.json")
+    mod.backup_group(before, backup_path)
+
+    real_keys = [(i["PK"], i["SK"]) for i in before]
+    assert mod.validate_backup(backup_path, real_keys) is True
+
+    # Same COUNT, but swap one real key for a bogus one the backup never held.
+    tampered_keys = real_keys[:-1] + [(f"USER#{uuid4()}", "PROFILE")]
+    assert len(tampered_keys) == len(real_keys)
+    assert mod.validate_backup(backup_path, tampered_keys) is False
+
+
 def test_verify_asserts_single(dynamodb_table, confirmed, monkeypatch, tmp_path):
     """T023: verify passes post-apply; an orphan projection makes verify FAIL."""
     monkeypatch.chdir(tmp_path)
