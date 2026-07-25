@@ -31,6 +31,8 @@ interface UserMeResponse {
   linked_providers: string[];
   verification: string;
   last_provider_used: string | null;
+  // Feature 1380: host-validated avatar URL (null unless allowlisted).
+  picture?: string | null;
 }
 
 /**
@@ -59,6 +61,8 @@ interface OAuthCallbackResponse {
   verification: string;
   linked_providers: string[];
   last_provider_used: string | null;
+  // Feature 1380: host-validated avatar URL (null unless allowlisted).
+  picture?: string | null;
 }
 
 /**
@@ -93,6 +97,8 @@ function mapUserMeResponse(response: UserMeResponse): Partial<User> {
     linkedProviders: response.linked_providers as User['linkedProviders'],
     verification: response.verification as User['verification'],
     lastProviderUsed: (response.last_provider_used ?? undefined) as User['lastProviderUsed'],
+    // Feature 1380: null → undefined so it survives the User spread paths.
+    pictureUrl: response.picture ?? undefined,
   };
 }
 
@@ -130,6 +136,8 @@ function mapOAuthCallbackResponse(response: OAuthCallbackResponse): AuthResponse
       linkedProviders: (response.linked_providers ?? []) as User['linkedProviders'],
       verification: (response.verification ?? 'none') as User['verification'],
       lastProviderUsed: (response.last_provider_used ?? undefined) as User['lastProviderUsed'],
+      // Feature 1380: avatar URL from callback (null → undefined).
+      pictureUrl: response.picture ?? undefined,
     },
     tokens: response.tokens
       ? {

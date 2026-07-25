@@ -233,6 +233,9 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
           verification: profile.verification ?? 'none',
           lastProviderUsed: profile.lastProviderUsed,
           email: profile.email,
+          // Feature 1380: carry the avatar so it survives reload (the real
+          // acceptance path — the avatar comes from /auth/me, not the callback).
+          pictureUrl: profile.pictureUrl,
         });
       } catch {
         // Profile rebuild is best-effort: still register the identity so the
