@@ -2458,6 +2458,50 @@ def _read_rev_from_expiring_bearer(bearer: str | None) -> int | None:
 
 # T093: OAuth Callback
 @tracer.capture_method
+def _restart_session_expiry(table: Any, user: User) -> None:
+    """Restart the 30-day session window on OAuth re-authentication.
+
+    Unlike extend_session_expiry (activity-based; refuses expired sessions),
+    a completed OAuth callback is proof of identity, so an expired window is
+    restarted. Deliberately does NOT touch `revoked` — administrative
+    revocation must survive re-login. Follows the callback helpers' silent
+    failure pattern (a failed write degrades to the pre-fix behavior).
+    """
+    now = datetime.now(UTC)
+    new_expiry = now + timedelta(days=SESSION_DURATION_DAYS)
+    try:
+        table.update_item(
+            Key={"PK": user.pk, "SK": user.sk},
+            UpdateExpression=(
+                "SET session_expires_at = :expires, "
+                "last_active_at = :last_active, #ttl = :ttl"
+            ),
+            ExpressionAttributeNames={"#ttl": "ttl_timestamp"},
+            ExpressionAttributeValues={
+                ":expires": new_expiry.isoformat(),
+                ":last_active": now.isoformat(),
+                # Mirror extend_session_expiry's retention convention (90d grace)
+                ":ttl": int(new_expiry.timestamp()) + (90 * 24 * 3600),
+            },
+        )
+        # Sync the in-memory object: the callback response reports
+        # session_expires_in_seconds from this instance.
+        user.session_expires_at = new_expiry
+        user.last_active_at = now
+        logger.info(
+            "Session window restarted on OAuth re-authentication",
+            extra={"user_id_prefix": sanitize_for_log(user.user_id[:8])},
+        )
+    except Exception as e:
+        logger.warning(
+            "Failed to restart session expiry on OAuth login",
+            extra={
+                "user_id_prefix": sanitize_for_log(user.user_id[:8]),
+                **get_safe_error_info(e),
+            },
+        )
+
+
 def _email_verified_claim_is_true(claims: dict[str, Any]) -> bool:
     """Read the email_verified claim, tolerating Cognito's string form.
 
@@ -2710,6 +2754,13 @@ def handle_oauth_callback(
 
     if existing_user:
         user = existing_user
+        # A completed OAuth callback is re-authentication: restart the session
+        # window even if sign_out backdated it. Without this, sign-out then
+        # sign-in returns a valid JWT pointing at a dead session and /auth/me
+        # 404s forever (get_user returns None past session_expires_at). The
+        # bug was masked pre-1395 because every login minted a fresh duplicate
+        # user with a fresh session.
+        _restart_session_expiry(table, user)
         # Update cognito_sub if not set
         if not user.cognito_sub:
             _update_cognito_sub(table, user, cognito_sub)
