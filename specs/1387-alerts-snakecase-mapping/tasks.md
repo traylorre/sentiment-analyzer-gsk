@@ -70,7 +70,7 @@ real id — SC-001, SC-003.
 - [ ] **T007** [US2] Rewrite `update` (`alerts.ts:38-39`) to
   `api.patch<RawAlert>(..., toUpdateBody(updates))` then `return mapAlert(raw)`.
   **Satisfies**: FR-002. **Depends**: T006, T002. With T004 supplying the real id and
-  correct `isEnabled`, the toggle (`alert-card.tsx:107`) now sends
+  correct `isEnabled`, the toggle (`alert-card.tsx:106`) now sends
   `PATCH /api/v2/alerts/{real-id}` with `{ is_enabled: false }`, which the backend accepts
   (`alerts.py:78-91,361-370`), flipping stored `status` to `disabled` so
   `alert_evaluator.py:157` skips it and no further emails fire.
@@ -139,7 +139,7 @@ the most likely silent-drop spot.
 **Likely rework**: the `daily_email_quota` mapping and the empty-response default. Two
 concrete traps — (1) forgetting `resets_at`→`resetsAt` leaves the reset time blank; (2)
 copying `use-alerts.ts:119`'s `limit: 100` default contradicts the backend limit of 10
-(`alert_rule.py:121`). T003/T009 pin both: the test asserts `resetsAt` maps and the default
+(`alert_rule.py:120`). T003/T009 pin both: the test asserts `resetsAt` maps and the default
 is `{ used: 0, limit: 10, resetsAt: '' }`.
 
 **Second-order risk**: a reviewer trimming `mapAlert` to only `alertId` to shrink the diff.
@@ -153,4 +153,15 @@ its test exist (`configs.ts`, `configs.test.ts`); no new dependencies, no backen
 new AWS resources. Single-file source change (read + update paths only) plus one additive
 regression test keeps blast radius minimal. `create` and `getNotifications` are DEFERRED,
 so their brokenness is out of scope by design (documented in spec Deferred Work).
+
+**Re-verification addendum (BP4 reconciliation, 2026-07-24)**: every task's file:line
+anchor re-checked on branch; all task targets exist and are unchanged since authoring
+(`alerts.ts:14-15,20-21,26-27,38-39` method bodies verified verbatim). One citation
+corrected in T007 context (toggle at `alert-card.tsx:106`) and one in the rework note
+(`alert_rule.py:120`); no task content changed. T004 remains the highest-risk task and the
+quota-block mapping remains the most-likely rework, both unchanged. This feature ships on
+the lightweight track (doctrine §8, see plan.md "Ship Track") — PR + paragraph +
+independent refuter.
+
+**Gate**: 0 CRITICAL, 0 HIGH remaining. **READY** — cleared for BP4 implementation phase.
 </content>

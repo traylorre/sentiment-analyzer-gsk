@@ -56,7 +56,7 @@ mappers). Lowest risk, most reviewable, minimal blast radius.
 Why Option A must map more than the id field alone (partial-state hazard, see Adversarial
 Review #1 in spec.md):
 
-- `alert-card.tsx:107` computes the toggle target as `!alert.isEnabled` — needs `isEnabled`
+- `alert-card.tsx:106` computes the toggle target as `!alert.isEnabled` — needs `isEnabled`
   mapped, or disable is impossible (always computes "enable").
 - `alert-card.tsx:94` calls `alert.thresholdValue.toFixed(2)` — needs `thresholdValue`
   mapped, or the card throws and the delete button is unreachable.
@@ -66,7 +66,7 @@ Review #1 in spec.md):
 
 ## The Exact Change (file:line)
 
-### Source: `frontend/src/lib/api/alerts.ts` (currently 53 lines, no mapping)
+### Source: `frontend/src/lib/api/alerts.ts` (currently 52 lines, no mapping)
 
 1. Add a snake_case `RawAlert` interface mirroring `AlertResponse` (`alerts.py:47-60`) and a
    `RawAlertList` interface (`{ alerts, total, daily_email_quota }`, `alerts.py:62-67`).
@@ -82,7 +82,7 @@ Review #1 in spec.md):
 5. Rewrite `list` (`alerts.ts:14-15`) and `listByConfig` (`alerts.ts:20-21`) to
    `api.get<RawAlertList>(...)` then `return mapAlertList(raw)`. **This is the line that
    makes `alert.alertId` resolve** so the delete dialog opens (`page.tsx:117`) and the
-   toggle stops targeting `/api/v2/alerts/undefined` (`alert-card.tsx:107`).
+   toggle stops targeting `/api/v2/alerts/undefined` (`alert-card.tsx:106`).
 6. Rewrite `get` (`alerts.ts:26-27`) to `api.get<RawAlert>(...)` then `mapAlert(raw)`.
 7. Rewrite `update` (`alerts.ts:38-39`) to
    `api.patch<RawAlert>(..., toUpdateBody(updates))` then `mapAlert(raw)`. **This is the
@@ -109,6 +109,16 @@ functional for free once FR-001 populates `alertId`.
 
 `frontend/src/lib/api/configs.ts:10-121` (same bug, accepted fix) and its test
 `frontend/tests/unit/lib/api/configs.test.ts`.
+
+## Ship Track (doctrine §8)
+
+Per `docs/cleanup-pristine/battleplan-refuter-doctrine.md` §8 ("Size the process to the
+change"), this feature qualifies for the **lightweight ship track**: the production diff is
+sub-~50 lines in one file plus one additive test, so it ships as a PR with a paragraph and
+an **independent refuter** — no further heavy-pipeline artifacts. The three adversarial
+reviews (AR#1 spec, AR#2 plan, AR#3 tasks) are complete as required and remain the review
+record; the refuter at ship time independently verifies delete/disable against a mapped
+alert (implementer does not grade their own work).
 
 ## Constitution Check
 
@@ -147,7 +157,7 @@ one sibling test added next to `configs.test.ts`. No new directories, no backend
 
 - **D2 — "map only id" temptation.** A reviewer might trim the mapper to just `alertId` to
   minimize the diff. Plan and spec (Adversarial Review #1, A1) explicitly require mapping
-  `isEnabled` and `thresholdValue` too, because `alert-card.tsx:94,107` read them and the
+  `isEnabled` and `thresholdValue` too, because `alert-card.tsx:94,106` read them and the
   card crashes / the toggle inverts without them. The regression test (FR-004) asserts all
   three are populated, blocking that trim. RESOLVED.
 
@@ -159,14 +169,26 @@ one sibling test added next to `configs.test.ts`. No new directories, no backend
 - **D4 — Components need editing?** No. `alert-card.tsx`, `alert-list.tsx`, `page.tsx`
   already read camelCase (`alert.alertId`, `alert.isEnabled`, `alert.thresholdValue`);
   they were correct all along and only received `undefined`. Fixing the client alone
-  restores them. Verified at `alert-list.tsx:84`, `alert-card.tsx:94,107`, `page.tsx:98,117`.
+  restores them. Verified at `alert-list.tsx:84`, `alert-card.tsx:94,106`, `page.tsx:98,117`.
   RESOLVED.
 
 - **D5 — Quota default mismatch.** `use-alerts.ts:119` defaults `limit` to 100; backend
-  limit is 10 (`alert_rule.py:121`). The mapper passes the real backend value through and
+  limit is 10 (`alert_rule.py:120`). The mapper passes the real backend value through and
   uses `10` only in the absent-response default. Spec Clarification #5 marks the hook's 100
   out of scope. Consistent. RESOLVED.
 
+**Re-verification addendum (BP4 reconciliation, 2026-07-24)**: all backend anchors
+re-confirmed on branch — `AlertResponse` at `alerts.py:47`, `AlertListResponse` at
+`alerts.py:62`, `AlertUpdateRequest` at `alerts.py:78-91` (`populate_by_name=True`, aliases
+`threshold`/`condition`/`enabled`), empty-update short-circuit at `alerts.py:368-370`
+(`if not update_parts: return existing`), quota serializer at `alerts.py:576-588`,
+`_alert_to_response` at `alerts.py:591-608`, burn mechanics at `alert_evaluator.py:157,477`
+(evaluator lives at `src/lambdas/notification/alert_evaluator.py`). Frontend anchors
+re-confirmed: `alerts.ts` is 52 lines with zero mapping; toggle at `alert-card.tsx:106`;
+`configs.ts:34-70` reference pattern and `configs.test.ts` sibling test both present. Line
+citations corrected in place (:107→:106, alert_rule.py:121→:120, 53→52 lines). No
+structural drift between spec, plan, tasks, or code.
+
 **Gate**: 0 CRITICAL, 0 HIGH cross-artifact inconsistencies. Plan matches spec and matches
-the code as read at authoring time. **PASS.**
+the code as re-read at reconciliation time (2026-07-24). **PASS.**
 </content>

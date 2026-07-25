@@ -29,7 +29,7 @@ Consequence — the two controls that let a user stop a firing alert are both br
 - **Delete is unreachable.** `alert-list.tsx:84` calls `onDelete(alert.alertId)` (undefined)
   → `page.tsx:98` `setDeletingAlertId(undefined)` → the confirm dialog is gated on
   `!!deletingAlertId` (`page.tsx:117`) → **the dialog never opens**. The user cannot delete.
-- **Disable is a no-op.** `alert-card.tsx:107` calls `onToggle(alert.alertId, !alert.isEnabled)`:
+- **Disable is a no-op.** `alert-card.tsx:106` calls `onToggle(alert.alertId, !alert.isEnabled)`:
   `alertId` is undefined → `PATCH /api/v2/alerts/undefined` → backend `get_alert` returns
   `None` → 404 no-op (`alerts.py:317-338`). And `isEnabled` is undefined → `!undefined` is
   always `true`, so the toggle can only ever ask to *enable*, never disable. Even with a
@@ -43,7 +43,7 @@ Consequence — the two controls that let a user stop a firing alert are both br
 user's daily quota on every send (`alert_evaluator.py:477` `_increment_user_quota`). The
 frontend delete/disable controls are the ONLY user-facing levers that flip `status` to
 `disabled` or remove the row. Both are broken, so a user who wants to silence a noisy alert
-**cannot**, and it keeps consuming the daily email quota (limit 10/day, `alert_rule.py:121`).
+**cannot**, and it keeps consuming the daily email quota (limit 10/day, `alert_rule.py:120`).
 
 This is the same latent defect class already fixed for the configs client in M1 WI-5 (the
 "config-delete bug"): `configsApi` never mapped snake↔camel, so `configId` was always
@@ -120,7 +120,7 @@ actually stop the quota burn, or only the UI symptom?
 
 - **A1 (CRITICAL) — "map only the id" is insufficient and leaves a partial-state hazard.**
   If we map `alert_id`→`alertId` but not `is_enabled`→`isEnabled`, the toggle
-  (`alert-card.tsx:107` `!alert.isEnabled`) still reads `undefined`, so `!undefined` is
+  (`alert-card.tsx:106` `!alert.isEnabled`) still reads `undefined`, so `!undefined` is
   always `true` — the switch can only ever request *enable*, never disable. A user trying
   to silence an alert would flip the switch, see no effect, and the alert keeps firing. And
   if we map neither `is_enabled` nor `threshold_value`, `alert-card.tsx:94`
@@ -157,8 +157,24 @@ actually stop the quota burn, or only the UI symptom?
   history). Both are explicitly DEFERRED to the full-remap board card so this mitigation
   stays minimal. Noted.
 
+**Re-verification addendum (BP4 reconciliation, 2026-07-24)**: every file:line citation
+re-checked against current code on branch. All hold, with three trivial corrections applied
+in place: the toggle handler is `alert-card.tsx:106` (was cited :107; the keyboard path at
+:110 calls it too), the email limit constant is `alert_rule.py:120` (`max_emails_per_day:
+10`), and component paths resolve under `frontend/src/components/dashboard/`. Additional
+failure modes probed this pass: (1) *create response mapping* — not needed here; `create`
+is DEFERRED and produces no firing alert, so no burn path (A5 stands); (2) *partial list
+response* — covered by the `?? []` guard and quota default in FR-001; (3) *null fields* —
+`last_triggered_at: null` preservation is already an explicit FR-001/T009 assertion;
+(4) *extra backend quota fields* (`remaining`, `is_exceeded`, `alerts.py:576-588`) — the
+mapper picks only `used`/`limit`/`resets_at`, matching the `AlertList` type
+(`types/alert.ts:20-24`); dropping the extras is intentional and harmless. The refuted
+quota-limit claim (use-alerts.ts:119) remains correctly excluded — Clarification #5 marks
+it a display fallback, not a bug; no quota "fix" exists anywhere in this spec.
+
 **Gate**: 0 CRITICAL remaining (A1, A2 resolved by FR-001/FR-002). 0 HIGH remaining (A3
-resolved by choosing Option A). MEDIUM/LOW noted or deferred. **PASS.**
+resolved by choosing Option A). MEDIUM/LOW noted or deferred. Re-verified 2026-07-24.
+**PASS.**
 
 ## Clarifications
 
@@ -168,7 +184,7 @@ resolved by choosing Option A). MEDIUM/LOW noted or deferred. **PASS.**
    **A**: No. Disable also needs `is_enabled` mapped on the way in (so `!alert.isEnabled`
    computes correctly) AND the PATCH body mapped on the way out (so the backend accepts it).
    Delete additionally needs the card to render, which needs `threshold_value` mapped
-   (`alert-card.tsx:94`). Evidence: `alert-card.tsx:94,107`, `alerts.py:78-91,361-370`.
+   (`alert-card.tsx:94`). Evidence: `alert-card.tsx:94,106`, `alerts.py:78-91,361-370`.
 
 2. **Q**: Is the delete/disable failure actually what burns quota, or is there another path?
    **A**: It is the path. Emails fire only for alerts whose stored `status == enabled`
@@ -189,7 +205,7 @@ resolved by choosing Option A). MEDIUM/LOW noted or deferred. **PASS.**
    the board card's job.
 
 5. **Q**: Does the `dailyEmailQuota.limit` default of 100 in `use-alerts.ts:119` matter?
-   **A**: No. The backend limit is 10 (`alert_rule.py:121`); the mapper passes the real
+   **A**: No. The backend limit is 10 (`alert_rule.py:120`); the mapper passes the real
    backend value through. The hook's hardcoded 100 only shows on a truly-absent response
    and is out of scope. Noted, not changed.
 
