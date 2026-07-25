@@ -752,6 +752,11 @@ resource "aws_api_gateway_deployment" "dashboard" {
     redeployment = sha1(jsonencode(concat(
       [
         var.lambda_invoke_arn, # Feature 1305: Force redeploy on integration URI change
+        # 2026-07-25 incident: method AUTHORIZATION values are not resource IDs,
+        # so flipping enable_cognito_auth applied green while the stage kept
+        # serving the old authorizer config (same class as the 1382 CORS gap
+        # below). Hash the flag so auth flips force a stage redeployment.
+        tostring(var.enable_cognito_auth),
         # Feature 1382: hash the CORS method/header VALUES, not just resource IDs.
         # OPTIONS integration_response .id does not change on a param-only edit, so
         # without these a verb-list change would apply green while the stage keeps
