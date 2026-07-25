@@ -142,7 +142,7 @@ Wherever the user avatar appears (currently only the UserMenu trigger + dropdown
 
 ## Dependencies
 
-- **Feature 1384 (session persistence)**: US1 scenario 2 / SC-003 ("avatar survives reload") is only end-to-end verifiable once the OAuth session reliably restores across reload. The backend `/auth/me` picture surfacing (FR-002) is a prerequisite this feature owns; the reload restoration itself is 1384's. If 1384 is not yet merged, T-level E2E for reload is expected to be flaky and should be gated behind 1384.
+- **Feature 1384 (session persistence)**: US1 scenario 2 / SC-003 ("avatar survives reload") is only end-to-end verifiable once the OAuth session reliably restores across reload. The backend `/auth/me` picture surfacing (FR-002) is a prerequisite this feature owns; the reload restoration itself is 1384's. **Status 2026-07-24: 1384 is MERGED (#944) — this gate is CLEAR; the reload E2E can run ungated.**
 - **Features 1381 / 1383 (merge hotspot)**: both edit `handle_oauth_callback` in `auth.py`. FR-015 keeps this feature's callback diff to one kwarg + an out-of-body helper to keep merges serializable.
 
 ---
@@ -216,7 +216,7 @@ A user linking Google + GitHub has two `provider_metadata` entries. FR-003 selec
 Session 2026-07-23 — up to 5 targeted questions, self-answered from the codebase where possible.
 
 **Q1 — Is a Content-Security-Policy enforced on the customer (Amplify/Next) frontend today, and would it block a remote `<img>`?**
-**A (self-answered):** No CSP is set. `frontend/src/middleware.ts` sets `X-Frame-Options` (`:22`) and `Referrer-Policy` (`:24`) but **no `Content-Security-Policy`** header. So a plain `<img src="https://…googleusercontent.com/…">` renders without a CSP block. FR-012's CSP allowance is a forward-guard: only needed if a CSP is later introduced; add `img-src https://*.googleusercontent.com` at that point. (Note: `src/lambdas/shared/middleware/security_headers.py` sets `img-src 'self' data: https:` for the Lambda-served HTML admin dashboard — already permissive, and out of scope.) Resolves owner-question Q-B.
+**A (self-answered):** No CSP is set. `frontend/src/middleware.ts` sets `X-Content-Type-Options` (`:21`), `X-Frame-Options` (`:22`), `X-XSS-Protection` (`:23`), `Referrer-Policy` (`:24`), and `Permissions-Policy` (`:27–28`) — but **no `Content-Security-Policy`** header. So a plain `<img src="https://…googleusercontent.com/…">` renders without a CSP block. FR-012's CSP allowance is a forward-guard: only needed if a CSP is later introduced; add `img-src https://*.googleusercontent.com` at that point. (Note: `src/lambdas/shared/middleware/security_headers.py:58` sets `img-src 'self' data: https:` for the Lambda-served HTML admin dashboard — already permissive, and out of scope.) Resolves owner-question Q-B. *(Header list + line citations salvaged from the worktree draft and re-verified 2026-07-24.)*
 
 **Q2 — Plain `<img>` or `next/image`?**
 **A (self-answered):** Plain `<img>`. `next.config.js:4–5` has no `remotePatterns`, no component imports `next/image`, and `middleware.ts:45` excludes `_next/image` from the matcher; using `next/image` would require config plus a server-side optimizer fetch (the AR#1 F1/F4 SSRF surface). Decision R4 stands: `<img referrerpolicy="no-referrer" onError=…>`.
@@ -225,11 +225,17 @@ Session 2026-07-23 — up to 5 targeted questions, self-answered from the codeba
 **A (self-answered):** Select by `User.last_provider_used` (`user.py:114–115`, explicitly commented "for avatar selection"), falling back to the first `provider_metadata` entry with a non-null avatar. Encoded in FR-003 / R2.
 
 **Q4 — Does the avatar survive a page reload, and where must `pictureUrl` be threaded?**
-**A (self-answered):** Session restore rebuilds `User` from `/auth/me` in `restoreSession` (`auth-store.ts:164–176`), so `/auth/me` MUST carry `picture` (FR-002) or the avatar vanishes on reload. Tier-upgrade / broadcast paths spread the existing user, so `pictureUrl` is preserved automatically there — no extra work beyond the restore/signIn mapper additions. End-to-end reload correctness also depends on Feature 1384.
+**A (self-answered):** Session restore rebuilds `User` from `/auth/me` in `restoreSession` (`auth-store.ts:164–176`), so `/auth/me` MUST carry `picture` (FR-002) or the avatar vanishes on reload. Tier-upgrade (`use-tier-upgrade.ts:96–97` `setUser({ ...currentUser, … })`) and broadcast (`use-auth-broadcast.ts:46–47`, `:70–71` `setUser({ ...user, … })`) paths spread the existing user, so `pictureUrl` is preserved automatically there — no extra work beyond the restore/signIn mapper additions. (Bonus: the broadcast refresh handler spreads `...profile` from `getProfile()`, so once the mapper carries `pictureUrl` it also refreshes on cross-tab refresh.) End-to-end reload correctness also depends on Feature 1384. *(Concrete file:line citations salvaged from the worktree draft and re-verified 2026-07-24.)*
 
 **Q5 — With `email_masked` (`j***@example.com`), can initials still be derived?**
 **A (self-answered):** Yes. `displayName` already uses `user?.email?.split('@')[0]` (`user-menu.tsx:57–59`), yielding `j***` for a masked email; the first character uppercased ("J") is a usable initial. No new `name`/`given_name` claim is needed for MVP (that would require adding a field end-to-end and is out of scope).
 
 ### Deferred (cannot be fully answered from code) — for owner
 
-- **Q-A (PII deletion coverage):** Is the persisted `provider_metadata[provider].avatar` covered by an account-data deletion/erasure path? **Finding:** there is currently **no account-deletion flow in `src/lambdas/dashboard/`**. So the question is moot today; when a deletion flow is built, it should delete the whole `User` item (avatar included). Low priority, no action for this feature.
+- **Q-A (PII deletion coverage):** Is the persisted `provider_metadata[provider].avatar` covered by an account-data deletion/erasure path? **Finding:** there is currently **no account-deletion flow in `src/lambdas/dashboard/`** (no `delete_user`/`delete_account` anywhere in the module — grep re-verified 2026-07-24). So the question is moot today; when a deletion flow is built, it should delete the whole `User` item (avatar included). Low priority, no action for this feature.
+
+---
+
+## Worktree Draft Reconciliation (2026-07-24)
+
+A divergent older draft existed at `.claude/worktrees/agent-a7bc7836fc7e73b90/specs/1380-oauth-avatar-picture/`. Diffed line-by-line against this (newer) copy. Verdict: this copy is the hardened superset — the worktree-only lines are almost entirely pre-hardening versions of paragraphs rewritten here (weaker FR-004 allowlist wording, stale `auth.py` line numbers `:2365/:2394/:2426/:2544` from before #942/#944 landed, merged F1/F2 SSRF finding, single spoof test instead of four). Salvaged into this copy: (1) full middleware header list + `security_headers.py:58` citation in Q1; (2) `use-tier-upgrade.ts:96` / `use-auth-broadcast.ts:46,70` citations in Q4 (re-verified exact); (3) the `delete_user`/`delete_account` grep evidence in Q-A. Everything else worktree-only was deliberately superseded, not lost.

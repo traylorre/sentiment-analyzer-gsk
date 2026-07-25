@@ -5,7 +5,7 @@
 
 ## Summary
 
-Surface the already-persisted Google profile picture end-to-end so the customer-frontend UserMenu renders it as a circular avatar, with graceful fallback to initials/generic icon for users without a picture or on image-load failure. The picture is already extracted (`auth.py:2373/2402`) and stored in `provider_metadata[provider].avatar` (`auth.py:2552`), but it is never returned by any API and the frontend has no field/type/render for it. The fix adds one nullable `picture` field to two response models (`OAuthCallbackResponse` `auth.py:1472`, `UserMeResponse` `response_models.py:50`) sourced through a small pure `_select_avatar(user)` helper that host-validates (`urlparse` → `hostname` exact-suffix `.googleusercontent.com` + `https`, fail-closed), plus a frontend `pictureUrl` type field, two mapper additions, store propagation, and a shared `Avatar` component (plain `<img>` + `referrerpolicy="no-referrer"` + `onError`→initials; no `next/image` optimizer, to avoid a server-side fetch/SSRF surface). No CSP change is needed (the frontend emits none today — R5; forward-guard only). Backend change is deliberately minimal/localized because `handle_oauth_callback` is a merge hotspot shared with Features 1381/1383. End-to-end "avatar survives reload" verification depends on Feature 1384 session persistence.
+Surface the already-persisted Google profile picture end-to-end so the customer-frontend UserMenu renders it as a circular avatar, with graceful fallback to initials/generic icon for users without a picture or on image-load failure. The picture is already extracted (`auth.py:2373/2402`) and stored in `provider_metadata[provider].avatar` (`auth.py:2552`), but it is never returned by any API and the frontend has no field/type/render for it. The fix adds one nullable `picture` field to two response models (`OAuthCallbackResponse` `auth.py:1472`, `UserMeResponse` `response_models.py:50`) sourced through a small pure `_select_avatar(user)` helper that host-validates (`urlparse` → `hostname` exact-suffix `.googleusercontent.com` + `https`, fail-closed), plus a frontend `pictureUrl` type field, two mapper additions, store propagation, and a shared `Avatar` component (plain `<img>` + `referrerpolicy="no-referrer"` + `onError`→initials; no `next/image` optimizer, to avoid a server-side fetch/SSRF surface). No CSP change is needed (the frontend emits none today — R5; forward-guard only). Backend change is deliberately minimal/localized because `handle_oauth_callback` is a merge hotspot shared with Features 1381/1383. End-to-end "avatar survives reload" verification depends on Feature 1384 session persistence — **merged (#944) as of 2026-07-24, gate clear**.
 
 ## Technical Context
 
@@ -93,6 +93,19 @@ Google OIDC id_token.picture
 ```
 `POST /api/v2/auth/oauth/callback` → `OAuthCallbackResponse` gains the same nullable `picture`. Additive, backward-compatible (all consumers ignore unknown fields; new field nullable).
 
+### Hot-link vs proxy — decision: HOT-LINK
+
+Two ways to get the pixels on screen:
+
+| | Hot-link (browser fetches Google directly) | Proxy (our server fetches, re-serves) |
+|---|---|---|
+| SSRF surface | **None** — no server-side fetch exists | Real — server fetches an attacker-influenceable URL; needs allowlist + redirect refusal + `Content-Type: image/*` check + size cap (~1 MB) + timeout + no cookie forwarding |
+| Privacy | Viewer IP + fetch timing exposed to Google (inherent to any 3rd-party image, same as gravatar); app path leak suppressed via `referrerpolicy="no-referrer"` (FR-011) | Viewer IP hidden from Google; but our Lambda pays the fetch |
+| Infra/cost | Zero | New egress + Lambda time; conflicts with the standing no-new-AWS-resources constraint |
+| Freshness | URL-stable; Google serves current bytes | Cache-staleness handling needed |
+
+**Recommendation: hot-link.** The avatar host is Google's own CDN (`lh3.googleusercontent.com` in practice — the standard OIDC `picture` host; the suffix allowlist covers `lh4`/`play-lh` variants). The privacy cost is the viewer's IP to Google — a party that already has it (the user just completed a Google OAuth flow in the same browser). Accepting that buys total elimination of the SSRF class instead of mitigating it. The allowlist (R3, backend + client) still gates *which* hosts may be hot-linked, so a spoofed claim can't point the browser at an attacker server. **Forward-guard:** if a proxy is ever introduced (e.g. for caching/resizing), it MUST refuse redirects (`allow_redirects=False`, 3xx → treat as failure), enforce the same exact-suffix host allowlist *after* DNS-rebind-safe resolution, require `Content-Type: image/*`, cap the body (~1 MB), time out fast, and never forward credentials. None of that is built today.
+
 ### next/image consideration
 
 `next/image` is **not** involved and is deliberately avoided (R4). No component imports it; `next.config.js` has no `remotePatterns`. Using it would (a) require adding a narrowly-scoped `remotePatterns` for `**.googleusercontent.com`, and (b) route the fetch through the `/_next/image` server-side optimizer — an optimizer-as-open-proxy SSRF surface if ever misconfigured (AR#1 F1/F4), plus Amplify image-optimization cost. A plain `<img referrerpolicy="no-referrer">` sidesteps all of that. If image optimization is wanted later, revisit with the scoped `remotePatterns` only.
@@ -101,7 +114,7 @@ Google OIDC id_token.picture
 
 - New `frontend/src/components/ui/avatar.tsx` — `<Avatar src?, name?, size, className>`: renders `<img src referrerPolicy="no-referrer" onError=…>` when `src` present AND passes the client-side host allowlist; else initials from `name`; else existing generic `<User>` glyph. Fixed circular dimensions, `object-cover`, no layout shift. Fallback is text/glyph (never an `<img>`) to avoid an error loop.
 - `mapUserMeResponse` / `mapOAuthCallbackResponse` (`lib/api/auth.ts:84,104`): add `pictureUrl: response.picture ?? undefined`; add `picture: string | null` to the two raw interfaces (`:24–34`, `:40–60`).
-- `auth-store.ts` restore path (`:164–176`, OAuth/Cognito restore from `profile.pictureUrl`) and OAuth sign-in path thread `pictureUrl`. Guest (`:119`) and anonymous (`:180`) paths set no picture.
+- `auth-store.ts` restore path (`:164–176`, OAuth/Cognito restore from `profile.pictureUrl`) and OAuth sign-in path thread `pictureUrl`. Guest (`:119`) and anonymous (`:180`) paths set no picture. Tier-upgrade (`use-tier-upgrade.ts:96–97`) and broadcast (`use-auth-broadcast.ts:46–47`, `:70–71`) spread the existing user object, so `pictureUrl` survives those paths with no change (verified 2026-07-24).
 - `user-menu.tsx`: replace the two generic `<div><User/></div>` blocks (`:78–80` trigger, `:103–105` header) with `<Avatar src={user?.pictureUrl} name={displayName} size=…>`.
 - CSP / `next.config.js`: **no change** (R5; plain `<img>`, no `next/image`).
 
@@ -193,6 +206,7 @@ Every FR maps to at least one design element. No design element introduces scope
 
 **D1 (LOW → resolved): allowlist wording alignment.**
 Spec FR-004 now specifies the parsed-hostname exact-suffix rule; plan R3 + Allowlist design state the same rule with the leading dot and the four rejected examples. The frontend defense-in-depth (`new URL().hostname`) mirrors the backend. Consistent. No change.
+*Provenance (salvaged from the worktree draft's AR#2):* in the earlier draft pass this area carried a **MEDIUM** drift — R5 was phrased as "add a CSP `img-src` allowance" as though a CSP existed, which would have sent an implementer chasing (or inventing) a nonexistent header. That was resolved by a plan second pass amending R5 to forward-guard-only. Recorded here because CSP phrasing is a demonstrated error-prone spot for this feature; reviewers should re-check it on any future edit.
 
 **D2 (LOW → resolved): "initials" vs generic glyph.**
 Spec notes the current UI is a generic `<User>` glyph, not true initials. Plan R7 derives initials from displayName and keeps the glyph as last-resort. SC-002 ("0 broken-image icons") is satisfied by either fallback. No contradiction.
@@ -219,3 +233,7 @@ Spec SC-003 / US1 scenario 2 depend on Feature 1384 for the end-to-end reload. P
 | LOW | 0 open | D1/D2/D4 resolved; D3 noted for Stage 7 |
 
 **Gate result: PASS.** No MEDIUM+ drift; line citations re-verified against the main worktree. Proceeding to Tasks.
+
+### Addendum (2026-07-24 worktree reconciliation)
+
+Post-gate edits from reconciling the divergent worktree draft (`.claude/worktrees/agent-a7bc7836fc7e73b90/…`): (a) added the explicit **Hot-link vs proxy** decision table (decision unchanged — hot-link was already implied by R4; now stated with the privacy tradeoff and proxy forward-guard requirements); (b) restored the D1 CSP-drift provenance note; (c) added verified `use-tier-upgrade.ts`/`use-auth-broadcast.ts` citations to the store design. No FR/SC/design change; gate result unaffected.

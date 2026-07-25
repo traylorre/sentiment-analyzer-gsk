@@ -6,7 +6,7 @@
 Legend: `[P]` = parallelizable (different file, no ordering dep). Tasks are dependency-ordered. Each FR maps to ≥1 task (traceability table at bottom).
 
 Note (from AR#2 D3): research/data-model/contracts are folded into `plan.md`; there are no separate `research.md`/`data-model.md` files to reference.
-Note (Dependencies): T015 reload verification depends on **Feature 1384** (session persistence). Backend `handle_oauth_callback` edits share `auth.py` with **Features 1381/1383** (merge hotspot) — keep the diff minimal (FR-015).
+Note (Dependencies): T015 reload verification depended on **Feature 1384** (session persistence) — **MERGED (#944) 2026-07-24, gate CLEAR**. Backend `handle_oauth_callback` edits share `auth.py` with **Features 1381/1383** (merge hotspot) — keep the diff minimal (FR-015).
 
 ## Phase A — Backend: derive + surface picture (merge-hotspot; keep minimal)
 
@@ -25,7 +25,7 @@ Note (Dependencies): T015 reload verification depends on **Feature 1384** (sessi
 
 - [ ] **T008 [P]** Add optional `pictureUrl?: string` to the `User` interface in `frontend/src/types/auth.ts:8–25`. (FR-006)
 - [ ] **T009** In `frontend/src/lib/api/auth.ts`: add `picture: string | null` to the raw `UserMeResponse` interface (`:24–34`) and the raw `OAuthCallbackResponse` interface (`:40–60`); in `mapUserMeResponse` (`:84`) and `mapOAuthCallbackResponse` (`:104`) set `pictureUrl: response.picture ?? undefined`. (FR-006)
-- [ ] **T010** In `frontend/src/stores/auth-store.ts`, thread `pictureUrl` onto the `User` in the OAuth/Cognito restore path of `restoreSession` (`:164–176`, from `profile.pictureUrl`) and the OAuth sign-in path (from mapped `data.user.pictureUrl`). Guest restore (`:119`) and anonymous fallback (`:180`) set no picture (guests have none — FR-013). Confirm tier-upgrade/broadcast paths spread `...currentUser` so `pictureUrl` is preserved (no change expected; add a guard/comment if not). (FR-007, FR-013)
+- [ ] **T010** In `frontend/src/stores/auth-store.ts`, thread `pictureUrl` onto the `User` in the OAuth/Cognito restore path of `restoreSession` (`:164–176`, from `profile.pictureUrl`) and the OAuth sign-in path (from mapped `data.user.pictureUrl`). Guest restore (`:119`) and anonymous fallback (`:180`) set no picture (guests have none — FR-013). Confirm tier-upgrade (`use-tier-upgrade.ts:96–97` spreads `...currentUser`) and broadcast (`use-auth-broadcast.ts:46–47`, `:70–71` spread `...user`) paths preserve `pictureUrl` (verified 2026-07-24 — no change expected; add a guard/comment if a rebase breaks the spread). (FR-007, FR-013)
 
 ## Phase D — Frontend: shared Avatar component + wiring
 
@@ -39,7 +39,7 @@ Note (Dependencies): T015 reload verification depends on **Feature 1384** (sessi
 
 ## Phase F — E2E + verification (real Amplify)
 
-- [ ] **T015** Playwright E2E (`frontend/tests/e2e/oauth-avatar.spec.ts`, header `// Target: Customer Dashboard (Next.js/Amplify)`): against `https://main.d29tlmksqcx494.amplifyapp.com/`, complete a real Google login, assert UserMenu trigger renders an `<img>` with a `googleusercontent.com` `src`; reload the page and assert the avatar is still present (session restore via `/refresh`→`/auth/me`). **The reload assertion depends on Feature 1384 (session persistence); gate/skip that half until 1384 is merged.** Use a freshly-linked Google account (pre-extraction accounts have no stored avatar — see AR#3). (SC-001, SC-003, US1)
+- [ ] **T015** Playwright E2E (`frontend/tests/e2e/oauth-avatar.spec.ts`, header `// Target: Customer Dashboard (Next.js/Amplify)`): against `https://main.d29tlmksqcx494.amplifyapp.com/`, complete a real Google login, assert UserMenu trigger renders an `<img>` with a `googleusercontent.com` `src`; reload the page and assert the avatar is still present (session restore via `/refresh`→`/auth/me`). **The reload assertion depends on Feature 1384 (session persistence) — 1384 is MERGED (#944) as of 2026-07-24, so run the reload half ungated.** Use a freshly-linked Google account (pre-extraction accounts have no stored avatar — see AR#3). (SC-001, SC-003, US1)
 - [ ] **T016 [P]** Manual/scripted verification matrix (record in PR): Google-with-photo (photo), Google-without-photo (initials), email/magic-link (initials), guest/anonymous (generic glyph + **no network request** to any image host — check devtools), forced bad URL (onError→initials). (SC-002, SC-004, US2)
 
 ## Phase G — Guardrails
@@ -55,7 +55,7 @@ Note (Dependencies): T015 reload verification depends on **Feature 1384** (sessi
 - T011 → T012, T013.
 - T009 → T014.
 - T001–T012 → T015/T016 (feature must be built to verify).
-- T015 reload half → **Feature 1384** (external).
+- T015 reload half → **Feature 1384** (external) — **satisfied: merged #944**.
 - T003/T005 backend edits ↔ **Features 1381/1383** (merge-serialize `auth.py`).
 - Parallelizable groups: {T001, T004, T008}; {T006, T007}; {T013, T014}; {T016, T017, T018}.
 
@@ -80,7 +80,7 @@ Note (Dependencies): T015 reload verification depends on **Feature 1384** (sessi
 | FR-015 | T003, T017 |
 | SC-001 | T015 |
 | SC-002 | T013, T016 |
-| SC-003 | T015 (gated on 1384) |
+| SC-003 | T015 (1384 gate cleared — merged #944) |
 | SC-004 | T016 |
 | SC-005 | T006 |
 | SC-006 | T017 |
@@ -105,7 +105,7 @@ Non-destructive consistency scan across spec.md / plan.md / tasks.md after task 
 - **Merge-hotspot:** T003 + T017 enforce the minimal localized diff (FR-015). ✅
 - **Two-dashboard hazard:** every frontend/e2e task targets `frontend/` + Amplify URL; T015 header mandated. No `src/dashboard/` task. ✅
 - **No new AWS resources / frozen env / httpOnly session:** no infra/terraform/env task exists. ✅
-- **1384 dependency:** T015 reload half explicitly gated. ✅
+- **1384 dependency:** T015 reload half was explicitly gated; 1384 merged (#944) → gate cleared. ✅
 
 ### Ambiguities / residual
 - **A1 (LOW):** T005 needs `_select_avatar` importable from `router_v2.py`. If the `auth.py`↔`router_v2.py` import direction risks a circular import at cold start, place `_select_avatar` in the auth service module both import, lazy-import inside the handler, or duplicate the ~8-line pure helper. Implementer's call; flagged, not blocking.
@@ -130,7 +130,7 @@ The single line that decides whether SSRF/exfiltration is possible. The overwhel
 ### Second-highest risk: **T005 `/auth/me` surfacing (the real reload acceptance path)**
 
 1. **Import direction / circular import.** `_select_avatar` lives in `auth.py`; `/auth/me` is in `router_v2.py`. Powertools resolves routers at import time, so a new top-level import can surface a circular import at Lambda cold start. Mitigation: lazy-import inside the handler or relocate the helper (Analyze A1).
-2. **Session-restore is the real acceptance path, not the callback.** Per Clarification Q4, the avatar on reload comes from `/auth/me`, not the callback. If T005 is skipped or `_select_avatar` returns `None` due to a `last_provider_used` mismatch, US1 scenario 2 / SC-003 fail silently — avatar appears after login, vanishes on refresh. This is the same class of bug seen in the M1 session-restore regressions. T015 must test the reload path (it does) — **but that half depends on Feature 1384**, so until 1384 lands, reload correctness is verified by the backend unit/response-shape tests (T007) plus a manual check, not the full E2E.
+2. **Session-restore is the real acceptance path, not the callback.** Per Clarification Q4, the avatar on reload comes from `/auth/me`, not the callback. If T005 is skipped or `_select_avatar` returns `None` due to a `last_provider_used` mismatch, US1 scenario 2 / SC-003 fail silently — avatar appears after login, vanishes on refresh. This is the same class of bug seen in the M1 session-restore regressions (WI-3/WI-5). T015 must test the reload path (it does) — that half was gated on Feature 1384, which is **now merged (#944)**, so the full reload E2E runs ungated.
 3. **Empty `provider_metadata` for pre-existing users.** Accounts linked before the extraction code existed have no stored avatar → initials until next login. Expected (Assumptions), but reads as "doesn't work for me" if a tester uses an old account. Mitigation: T016/T015 use a freshly-linked Google account.
 
 ### Most likely rework
@@ -140,13 +140,13 @@ The single line that decides whether SSRF/exfiltration is possible. The overwhel
 
 ### Cross-feature risk (merge)
 
-`auth.py` is edited by 1380/1381/1383. T003 keeps this feature's callback change to one kwarg; if 1381/1383 also add helpers near `_mask_email`, expect a trivial textual conflict in the helper cluster (not logic). T017 verifies the diff is minimal. Recommend the owner serialize merges and re-run T006/T007 after each rebase. Reload E2E (T015) additionally waits on Feature 1384.
+`auth.py` is edited by 1380/1381/1383. T003 keeps this feature's callback change to one kwarg; if 1381/1383 also add helpers near `_mask_email`, expect a trivial textual conflict in the helper cluster (not logic). T017 verifies the diff is minimal. Recommend the owner serialize merges and re-run T006/T007 after each rebase. The former 1384 wait on the reload E2E (T015) is resolved (merged #944).
 
 ### Residual open items (non-blocking)
 
 - Owner Q-A (deletion-path coverage) — deferred; no deletion flow exists today.
 - A1 (import placement) — implementer's call at T005.
-- Feature 1384 dependency for the T015 reload assertion — external, tracked in Dependencies.
+- Feature 1384 dependency for the T015 reload assertion — external, tracked in Dependencies; **now satisfied (merged #944)**.
 
 ### Gate
 
@@ -157,6 +157,10 @@ The single line that decides whether SSRF/exfiltration is possible. The overwhel
 | Likely rework flagged with catching test | ✅ (T001 allowlist ↔ T006 b–e; T011 flicker ↔ T013e) |
 | CRITICAL/HIGH open | 0 |
 | Two-dashboard / no-new-AWS / frozen-env / httpOnly respected | ✅ |
-| External dependency (1384) tracked, not blocking backend | ✅ |
+| External dependency (1384) tracked, now satisfied (merged #944) | ✅ |
 
-**Gate result: READY.** Planning pipeline complete. Implementation is intentionally NOT executed (stops here per battleplan pre-implementation gate). Recommend owner: (1) review deferred Q-A, (2) serialize `auth.py` merges with 1381/1383, (3) gate the T015 reload assertion on Feature 1384 before `/speckit.implement`.
+**Gate result: READY.** Planning pipeline complete. Implementation is intentionally NOT executed (stops here per battleplan pre-implementation gate). Recommend owner: (1) review deferred Q-A, (2) serialize `auth.py` merges with 1381/1383 — and serialize the `auth-store.ts`/`user-menu.tsx` frontend hunks after the 1395/1394 FE work (shared OAuth-cohort hotspot), (3) note Feature 1384 is now MERGED (#944), so the T015 reload assertion gate is CLEAR — run the full E2E including reload.
+
+### Addendum (2026-07-24 worktree reconciliation)
+
+Reconciled the divergent worktree draft. tasks.md salvage: T010 gained the verified `use-tier-upgrade.ts:96` / `use-auth-broadcast.ts:46,70` spread citations; AR#3 restored the WI-3/WI-5 regression reference. All other worktree-only task text was the pre-hardening version (weaker T001 allowlist wording without the leading-dot rule, T006 with only 3 spoof cases instead of 4+malformed, stale `auth.py:2426`/`router_v2.py:2166` line numbers) — superseded, not lost. Gate remains READY.
