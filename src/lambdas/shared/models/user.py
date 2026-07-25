@@ -3,10 +3,13 @@
 Feature 1162: Added ProviderMetadata class and federation fields.
 """
 
+import logging
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, EmailStr, Field, model_validator
+from pydantic import BaseModel, EmailStr, Field, ValidationInfo, model_validator
+
+logger = logging.getLogger(__name__)
 
 # Type aliases for federation
 ProviderType = Literal["email", "google", "github"]
@@ -122,7 +125,7 @@ class User(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_role_verification_state(self) -> "User":
+    def validate_role_verification_state(self, info: ValidationInfo) -> "User":
         """Enforce role-verification state machine invariants.
 
         Feature 1163: Validates cross-field constraints per spec-v2.md matrix:
@@ -130,6 +133,13 @@ class User(BaseModel):
         - anonymous:pending  → Valid
         - anonymous:verified → Auto-upgrade to free:verified
         - free/paid/operator → Must have verification="verified"
+
+        The invariant guards WRITES (constructing a user to persist). Reads
+        from storage pass context={"from_storage": True}: a stored row that
+        violates the matrix is logged and returned as-is, never rejected —
+        rejecting on read turned one corrupt row into "no user", which made
+        the OAuth callback mint a duplicate per login and /refresh return 401
+        (preprod incident 2026-07-25).
         """
         # Rule 1 & 2: anonymous + verified → auto-upgrade to free
         if self.role == "anonymous" and self.verification == "verified":
@@ -137,6 +147,15 @@ class User(BaseModel):
 
         # Rule 3: non-anonymous requires verified
         if self.role != "anonymous" and self.verification != "verified":
+            if info.context and info.context.get("from_storage"):
+                logger.warning(
+                    "Stored user violates role-verification invariant "
+                    "(role=%s, verification=%s) — accepting on read, "
+                    "fix the writer",
+                    self.role,
+                    self.verification,
+                )
+                return self
             raise ValueError(
                 f"Invalid state: {self.role} role requires verified status, "
                 f"got verification={self.verification}"
@@ -266,40 +285,49 @@ class User(BaseModel):
                 )
             provider_metadata[provider_key] = ProviderMetadata(**metadata_dict)
 
-        return cls(
-            user_id=item["user_id"],
-            email=item.get("email"),
-            cognito_sub=item.get("cognito_sub"),
-            auth_type=item.get("auth_type", "anonymous"),
-            created_at=datetime.fromisoformat(item["created_at"]),
-            last_active_at=datetime.fromisoformat(item["last_active_at"]),
-            session_expires_at=datetime.fromisoformat(item["session_expires_at"]),
-            timezone=item.get("timezone", "America/New_York"),
-            email_notifications_enabled=item.get("email_notifications_enabled", True),
-            daily_email_count=item.get("daily_email_count", 0),
-            entity_type=item.get("entity_type", "USER"),
-            # Feature 014 fields
-            revoked=item.get("revoked", False),
-            revoked_at=revoked_at,
-            revoked_reason=item.get("revoked_reason"),
-            # Feature 1186: Revocation ID for atomic token rotation (A14)
-            revocation_id=item.get("revocation_id", 0),
-            merged_to=item.get("merged_to"),
-            merged_at=merged_at,
-            # Feature 1151: RBAC fields with backward-compatible defaults
-            subscription_active=item.get("subscription_active", False),
-            subscription_expires_at=subscription_expires_at,
-            is_operator=item.get("is_operator", False),
-            # Feature 1162: Federation fields with backward-compatible defaults
-            role=item.get("role", "anonymous"),
-            verification=item.get("verification", "none"),
-            pending_email=item.get("pending_email"),
-            primary_email=item.get("primary_email"),
-            linked_providers=item.get("linked_providers", []),
-            provider_metadata=provider_metadata,
-            last_provider_used=item.get("last_provider_used"),
-            role_assigned_at=role_assigned_at,
-            role_assigned_by=item.get("role_assigned_by"),
+        # context marks this as a READ: invariant violations in stored rows are
+        # logged and tolerated (see validate_role_verification_state).
+        return cls.model_validate(
+            {
+                "user_id": item["user_id"],
+                "email": item.get("email"),
+                "cognito_sub": item.get("cognito_sub"),
+                "auth_type": item.get("auth_type", "anonymous"),
+                "created_at": datetime.fromisoformat(item["created_at"]),
+                "last_active_at": datetime.fromisoformat(item["last_active_at"]),
+                "session_expires_at": datetime.fromisoformat(
+                    item["session_expires_at"]
+                ),
+                "timezone": item.get("timezone", "America/New_York"),
+                "email_notifications_enabled": item.get(
+                    "email_notifications_enabled", True
+                ),
+                "daily_email_count": item.get("daily_email_count", 0),
+                "entity_type": item.get("entity_type", "USER"),
+                # Feature 014 fields
+                "revoked": item.get("revoked", False),
+                "revoked_at": revoked_at,
+                "revoked_reason": item.get("revoked_reason"),
+                # Feature 1186: Revocation ID for atomic token rotation (A14)
+                "revocation_id": item.get("revocation_id", 0),
+                "merged_to": item.get("merged_to"),
+                "merged_at": merged_at,
+                # Feature 1151: RBAC fields with backward-compatible defaults
+                "subscription_active": item.get("subscription_active", False),
+                "subscription_expires_at": subscription_expires_at,
+                "is_operator": item.get("is_operator", False),
+                # Feature 1162: Federation fields with backward-compatible defaults
+                "role": item.get("role", "anonymous"),
+                "verification": item.get("verification", "none"),
+                "pending_email": item.get("pending_email"),
+                "primary_email": item.get("primary_email"),
+                "linked_providers": item.get("linked_providers", []),
+                "provider_metadata": provider_metadata,
+                "last_provider_used": item.get("last_provider_used"),
+                "role_assigned_at": role_assigned_at,
+                "role_assigned_by": item.get("role_assigned_by"),
+            },
+            context={"from_storage": True},
         )
 
 
