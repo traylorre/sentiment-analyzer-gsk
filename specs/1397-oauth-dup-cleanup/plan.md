@@ -2,7 +2,7 @@
 
 **Artifact type:** Migration design + non-executing script skeleton. No destructive action in this feature.
 **Script home:** `scripts/consolidate_oauth_duplicates.py` (alongside existing `scripts/migrate_status_field.py`, `scripts/audit_duplicate_provider_subs.py`, `scripts/cleanup_orphaned_sessions.py`).
-**Tests:** `tests/unit/scripts/test_consolidate_oauth_duplicates.py` (moto, `-m "not preprod"`).
+**Tests:** `tests/unit/scripts/test_consolidate_oauth_duplicates.py` (moto, `-m "not preprod"`). NOTE: `tests/unit/scripts/` does NOT exist yet — T002 creates the directory + `__init__.py` (matching the package convention used by `tests/unit/dashboard/`).
 
 ---
 
@@ -34,16 +34,31 @@ INPUT: --table <name>  --cognito-sub <sub>  [--apply]  [--backup-file <path>]
    - classify by SK prefix: PROFILE / CONFIG# / ALERT# / NOTIF# / PREF# / SESSION# / <unknown>
    - <unknown> prefixes reported, never dropped
 
-4. REPORT (US1)
-   - print canonical, 9 non-canonical, per-record inventory, planned action per item
+4. REPORT (US1, FR-018)
+   - print the RUNTIME-COMPUTED canonical (user_id + created_at + rule applied),
+     the non-canonical ids, per-record inventory, planned action per item —
+     the FULL reassignment plan, printed at execution time
+   - the owner compares this printout to their own independently-queried
+     expectation BEFORE approving --apply (FR-018); no artifact names the winner
    - DRY-RUN ENDS HERE — zero writes
 
 --- everything below only under --apply, after gates pass ---
+--- ALL gates are enforced INSIDE apply(), not only in main() (AR#5/A7) ---
 
-5. BACKUP (FR-011, A5)
+5. BACKUP (FR-011, A5, A9)
    - export EVERY affected item (all group PROFILEs + all owned items), full attribute fidelity, to local JSON
-   - re-open + parse the file; assert parsed_count == enumerated_count; else ABORT
+   - re-open + parse the file; assert parsed_count == enumerated_count AND
+     exact (PK, SK) key-set equality vs the fresh enumeration; else ABORT
+   - record SHA-256 of the serialized backup in the audit log
+   - a --backup-file whose key set mismatches the current group is REFUSED
    - NO S3 / new AWS resource (Open Q2 if S3 desired)
+
+5b. FREEZE + ASSERT (FR-019, FR-020)
+   - re-enumerate the group immediately before the destructive phase
+   - any user_id/item NOT in the validated backup → straggler: never touched,
+     reported (fail-closed; a concurrent-login dup created mid-run lands here)
+   - HARD-ASSERT the canonical id is absent from every delete/discard/
+     reassign-source set; abort with zero writes if it appears
 
 6. APPLY per non-canonical user_id (FR-005..FR-008, FR-012, FR-013)
    for each owned item (excluding PROFILE):
@@ -75,7 +90,7 @@ INPUT: --table <name>  --cognito-sub <sub>  [--apply]  [--backup-file <path>]
 
 ## 2. Canonical-selection decision (and coordination with 1395)
 
-**Decision: canonical = earliest `created_at`** (`dd0da3c8-769c-466c-ae1f-3495cc851921`, `2026-07-24T03:16:42Z` — the true earliest, re-queried live), `user_id` asc as secondary tie-break. The winner is an EXAMPLE; `select_canonical` computes it at runtime — never hard-coded.
+**Decision: canonical = earliest `created_at`** (the record created `2026-07-24T03:16:42Z` — the true earliest, re-queried live by an independent refuter), `user_id` asc as secondary tie-break. Per FR-018 the winner's id is NOT recorded in any artifact; `select_canonical` computes it at runtime and the dry-run prints it for owner comparison.
 
 **Why earliest-created (not most-data, not GSI-first):**
 - **Deterministic & reproducible.** `created_at` is immutable; re-runs and independent operators pick the same record. "Most owned data" changes as data moves and is undefined when all records own nothing (our exact case — all 10 own only PROFILE).
@@ -83,7 +98,7 @@ INPUT: --table <name>  --cognito-sub <sub>  [--apply]  [--backup-file <path>]
 - **Owned data is decoupled from the choice.** FR-005 moves any owned data ONTO the canonical regardless of which record accumulated it, so choosing the oldest record never loses data (EC-6).
 
 **Coordination with Feature 1395 — RULE CONFIRMED (deploy status is the residual gate — FR-002a, Open Q1):**
-1395 fixes the fragmentation by making login resolve an existing user instead of minting a new `user_id`. Its spec exists (`specs/1395-oauth-account-integrity/`) and **FR-004 pins the SAME survivor rule this feature uses: earliest `created_at`, then `user_id` ascending.** The rule alignment is therefore confirmed, not assumed — both features crown `dd0da3c8-769c-466c-ae1f-3495cc851921`. For a table that *already* contains duplicates, 1395's resolver still hits a `Limit=1` hash query until cleanup collapses the group to one record; after cleanup there is exactly one record so `Limit=1` is deterministic. If a future revision of 1395 instead:
+1395 fixes the fragmentation by making login resolve an existing user instead of minting a new `user_id`. Its spec exists (`specs/1395-oauth-account-integrity/`) and **FR-004 pins the SAME survivor rule this feature uses: earliest `created_at`, then `user_id` ascending.** The rule alignment is therefore confirmed, not assumed — both features crown the same runtime-computed winner (id not recorded per FR-018). For a table that *already* contains duplicates, 1395's resolver still hits a `Limit=1` hash query until cleanup collapses the group to one record; after cleanup there is exactly one record so `Limit=1` is deterministic. If a future revision of 1395 instead:
 - adds a dedup on write (so no NEW dups) but leaves reads as `Limit=1` → reads stay non-deterministic among the existing 10 until cleanup runs; cleanup collapsing to earliest is fine, and afterward there is exactly one record so `Limit=1` is deterministic. **This is the most likely reality** (1395 is a write-path fragmentation fix).
 - picks a DIFFERENT surviving record (e.g. most-recent) → cleanup MUST change FR-002 to match, else the login lands on a deleted PK.
 
@@ -139,7 +154,7 @@ Checking plan.md against the (AR#1-amended) spec.md for contradictions, gaps, an
 |---|---|---|---|
 | D1 | Every FR maps to a plan step? | FR-001→step1, FR-002/002a→step2, FR-003→step1, FR-004→step3, FR-005/006/007/008→step6, FR-009→step7, FR-010→step0, FR-011→step5, FR-012→step6+8, FR-013→idempotency invariant, FR-014→step0, FR-015→§3 rollback, FR-016→§4, FR-017→ (missing from plan). | **GAP:** FR-017 (low-traffic window / stale-client self-heal, added in AR#1) not reflected in plan. Add to step 0 guard: `--apply` prints a low-traffic-window advisory and, for interactive runs, requires operator to confirm no active session expected. Non-blocking, advisory. FIXED below. |
 | D2 | AR#1 spec edits reflected in plan? | A1 (collision items carry `merged_from`) → plan step6 says "item already carrying merged_from (incl. collision-diverted) → skip" ✓. A4 (PROFILE deleted only after all children) → plan step6 "AFTER all children resolved" ✓. A5 (backup re-read) → step5 ✓. A6 (null created_at sorts last) → step2 ✓. | Consistent. No drift. |
-| D3 | Canonical value consistent across artifacts? | spec FR-002 + C2 + plan §2 all say `dd0da3c8-769c-466c-ae1f-3495cc851921` (`2026-07-24T03:16:42Z`), earliest created_at. ✓ (Corrected in AR#4 — earlier drafts named the wrong record `835c1629`.) | Consistent. |
+| D3 | Canonical value consistent across artifacts? | spec FR-002 + C2 + plan §2 all state the RULE (earliest `created_at`, `user_id` asc) with NO literal winner — FR-018 bans literal ids after the AR#4/NF-1 near-miss (a prior draft named a wrong record; exactly the error class FR-018 now prevents mechanically). ✓ | Consistent. |
 | D4 | Convention inversion documented in both? | plan §3 + spec FR-010 both state the dry-run-default inversion vs `migrate_status_field.py`. ✓ | Consistent. |
 | D5 | Does plan invent scope not in spec? | Plan adds `--rollback` subcommand — traces to FR-015. Adds `--verify` — traces to FR-009/US5. No orphan scope. | OK. |
 | D6 | Coordination gate consistent? | spec FR-002a + Open Q1 + plan §2 all block `--apply` on 1395 tie-break confirmation. ✓ | Consistent. |
@@ -151,3 +166,22 @@ Step 0 guard amended to satisfy FR-017: under `--apply`, the script prints a low
 
 ### Gate — Adversarial Review #2
 **PROCEED to tasks.md.** One gap found (FR-017 not carried into the plan) and fixed. No contradictions between spec and plan. Canonical selection, safety rails, idempotency, and the 1395 coordination gate are consistent across both artifacts. The destructive `--apply` remains blocked on Open Q1 — correct.
+
+---
+
+## Adversarial Review #6 — Finalization drift check (post-AR#5)
+
+Re-checking plan against the AR#5-amended spec (new FR-018/019/020, amended FR-011, gate-inside-apply).
+
+| # | Check | Finding | Resolution |
+|---|---|---|---|
+| E1 | FR-018 mapped? | Step 4 amended: dry-run prints runtime-computed canonical + full reassignment plan; no artifact names the winner; plan §2 and D3 scrubbed of literal ids. ✓ | Consistent. |
+| E2 | FR-019 mapped? | New step 5b: pre-destructive hard assertion that the canonical is absent from every destructive set. ✓ | Consistent. |
+| E3 | FR-020 mapped? | New step 5b: frozen delete set — re-enumerate before apply, stragglers (concurrent-login dups) untouched + reported. ✓ | Consistent. |
+| E4 | FR-011 amendment mapped? | Step 5 now validates key-set equality (not count-only), records SHA-256, refuses mismatched `--backup-file`. ✓ | Consistent. |
+| E5 | A7 gate placement mapped? | Banner above step 5: all gates enforced INSIDE `apply()`; `main()` only collects flags. Carried to T013/T034. ✓ | Consistent. |
+| E6 | Any remaining literal live-data id in plan.md? | Grep for the known ids returns zero after this round (only the rule and timestamps remain). ✓ | Clean. |
+| E7 | Does the plan still avoid inventing scope? | Step 5b traces to FR-019/FR-020; nothing else added. No orphan scope. ✓ | OK. |
+
+### Gate — Adversarial Review #6
+**PROCEED to tasks finalization.** All AR#5 spec changes are reflected in the plan; no drift, no literal ids, no orphan scope.

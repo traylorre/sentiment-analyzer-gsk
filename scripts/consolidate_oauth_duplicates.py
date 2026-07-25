@@ -25,7 +25,7 @@ Usage (once implemented):
     # dry-run report (no writes):
     python scripts/consolidate_oauth_duplicates.py \
         --table preprod-sentiment-users \
-        --cognito-sub 34f814f8-c0c1-707e-f0a6-27147065f706
+        --cognito-sub <sub>   # live identifiers are runtime inputs, never literals (FR-018)
 
     # apply (GATED — owner approval + 1395 deployed + Open Q1 answered):
     python scripts/consolidate_oauth_duplicates.py \
@@ -46,9 +46,12 @@ from typing import Any
 
 # Selection rule constant — aligned with Feature 1395's survivor rule.
 # CONFIRMED: 1395 spec (specs/1395-oauth-account-integrity/) FR-004 pins the SAME
-# rule (earliest created_at, then user_id asc). No rule negotiation remains. The
-# winner for the known group is dd0da3c8-769c-466c-ae1f-3495cc851921 — computed at
-# runtime by select_canonical, NEVER hard-coded in executable logic. (FR-002/002a)
+# rule (earliest created_at, then user_id asc). No rule negotiation remains.
+# FR-018: the winner is computed at runtime by select_canonical and is NEVER
+# recorded as a literal — not here, not in any spec/plan/tasks artifact. NO live
+# user_id appears anywhere in this file (enforced by a static test scan, T028).
+# The dry-run prints the computed canonical + the full reassignment plan; the
+# owner compares that printout to their own live query before approving --apply.
 CANONICAL_RULE = "earliest_created_at"
 
 # Coordination gate: the RULE is already confirmed (1395 FR-004). This flag gates on
