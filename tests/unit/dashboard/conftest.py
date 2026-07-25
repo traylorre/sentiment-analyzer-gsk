@@ -13,9 +13,24 @@ For Developers:
     - Test-specific fixtures belong in individual test files
 """
 
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def default_app_jwt_secret(monkeypatch):
+    """Feature 1396: the OAuth callback and refresh now mint a first-party app JWT and
+    fail closed when JWT_SECRET is unset (production always sets it). Provide a default
+    so callback/refresh tests that don't exercise the JWT itself keep working. Tests
+    that need a specific secret (or an UNSET secret) override this via their own
+    monkeypatch — function-scoped monkeypatch composes cleanly with this autouse set.
+    """
+    if "JWT_SECRET" not in os.environ:
+        monkeypatch.setenv(
+            "JWT_SECRET", "test-default-app-jwt-secret"
+        )  # pragma: allowlist secret
 
 
 @pytest.fixture(autouse=True)

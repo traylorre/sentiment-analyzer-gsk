@@ -1,4 +1,4 @@
-import { api } from './client';
+import { api, setCsrfToken, getCsrfToken } from './client';
 import { SESSION_INIT_TIMEOUT_MS } from '@/lib/constants';
 import type { User, AuthTokens, AnonymousSession, AnonymousSessionResponse } from '@/types/auth';
 
@@ -46,6 +46,8 @@ interface OAuthCallbackResponse {
     access_token: string;
     expires_in: number;
   } | null;
+  // Feature 1396 (N2): body-delivered CSRF token (echoed as X-CSRF-Token on /refresh).
+  csrf_token?: string | null;
   merged_anonymous_data: boolean;
   is_new_user: boolean;
   conflict: boolean;
@@ -184,6 +186,8 @@ interface RefreshTokenResponseRaw {
   user_id?: string | null;
   auth_type?: string | null;
   session_expires_at?: string | null;
+  // Feature 1396 (N2): rotated body-delivered CSRF token for the next /refresh echo.
+  csrf_token?: string | null;
 }
 
 export const authApi = {
@@ -233,6 +237,11 @@ export const authApi = {
       state,
       redirect_uri: redirectUri,
     });
+    // Feature 1396 (N2): remember the body-delivered CSRF token so the next /refresh
+    // can echo it as X-CSRF-Token (the API-domain cookie is unreadable cross-origin).
+    if (response.csrf_token) {
+      setCsrfToken(response.csrf_token);
+    }
     return mapOAuthCallbackResponse(response);
   },
 
@@ -244,7 +253,20 @@ export const authApi = {
    * the guest-restore fields (user_id/auth_type/session_expires_at).
    */
   refreshToken: async (): Promise<RefreshTokenResponse> => {
-    const raw = await api.post<RefreshTokenResponseRaw>('/api/v2/auth/refresh');
+    // Feature 1396 (N2): echo the in-memory CSRF token as X-CSRF-Token. The backend
+    // double-submit compares it against the browser-auto-attached API-domain cookie.
+    // (During the migration window /refresh stays CSRF-exempt; sending the header early
+    // is harmless and lets the exemption be dropped later without a frontend redeploy.)
+    const csrf = getCsrfToken();
+    const raw = await api.post<RefreshTokenResponseRaw>(
+      '/api/v2/auth/refresh',
+      undefined,
+      csrf ? { headers: { 'X-CSRF-Token': csrf } } : undefined
+    );
+    // Rotate the stored CSRF token to the freshly-issued value for the next refresh.
+    if (raw.csrf_token) {
+      setCsrfToken(raw.csrf_token);
+    }
     return {
       accessToken: raw.access_token ?? null,
       idToken: raw.id_token ?? null,

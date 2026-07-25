@@ -43,6 +43,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
 import boto3
+import jwt
 from aws_lambda_powertools import Tracer
 from botocore.exceptions import ClientError
 from pydantic import BaseModel, EmailStr, Field
@@ -65,7 +66,10 @@ from src.lambdas.shared.auth.oauth_state import (
     store_oauth_state,
     validate_oauth_state,
 )
-from src.lambdas.shared.auth.roles import map_stripe_plan_to_role
+from src.lambdas.shared.auth.roles import (
+    get_roles_for_user,
+    map_stripe_plan_to_role,
+)
 from src.lambdas.shared.auth.stripe_utils import (
     extract_price_id_from_subscription,
     extract_user_id_from_subscription,
@@ -78,6 +82,7 @@ from src.lambdas.shared.errors.session_errors import (
     TokenExpiredError,
 )
 from src.lambdas.shared.logging_utils import get_safe_error_info, sanitize_for_log
+from src.lambdas.shared.middleware.auth_middleware import _get_jwt_config
 from src.lambdas.shared.models.magic_link_token import MagicLinkToken
 from src.lambdas.shared.models.user import ProviderMetadata, User
 from src.lambdas.shared.models.webhook_event import WebhookEvent
@@ -2290,6 +2295,103 @@ def get_oauth_urls(table: Any, origin: str = "") -> OAuthURLsResponse:
     )
 
 
+# Feature 1396 (FR-003): first-party app-JWT session bearer lifetime. Single named
+# constant, not a magic number; matches JWTConfig.access_token_lifetime_seconds (900s)
+# so the frontend schedules refresh before the token the validator expects expires.
+APP_JWT_TTL_SECONDS = 900
+
+
+def mint_app_jwt(user: User, *, now: datetime | None = None) -> str:
+    """Mint a first-party HS256 app JWT that passes validate_jwt (Feature 1396).
+
+    Option B: the OAuth callback and refresh return THIS token as the frontend bearer
+    in place of the raw Cognito access token (which the middleware never validated).
+
+    Config (secret / algorithm / issuer / audience) is sourced from the SAME accessor
+    ``validate_jwt`` uses (``_get_jwt_config``) so mint and validate cannot drift
+    (FR-001). Algorithm is pinned to ``config.algorithm`` — no header-driven ``alg``,
+    no ``alg:none`` (FR-009). Fails closed when ``JWT_SECRET`` is unset (FR-006): raises
+    rather than emitting an unsigned or fallback token.
+
+    N4/FR-002a: ``roles`` come from ``get_roles_for_user`` which gates on
+    ``user.auth_type`` (NOT ``user.role``). Callers on the existing-user upgrade path
+    MUST reconcile the in-hand user's ``auth_type``/``role`` to the persisted post-
+    advancement state before calling, or an upgraded user under-grants ``["anonymous"]``.
+
+    Args:
+        user: Authoritative in-hand user (roles/rev read from it, no extra lookup).
+        now: Optional clock override for tests.
+
+    Returns:
+        Encoded HS256 JWT string.
+
+    Raises:
+        RuntimeError: JWT_SECRET not configured (fail closed).
+    """
+    config = _get_jwt_config()
+    if config is None:
+        # FR-006: never fall back to a Cognito token (the middleware would reject it,
+        # reintroducing the 401 storm invisibly). Fail loudly instead.
+        raise RuntimeError(
+            "JWT_SECRET not configured; cannot mint app JWT (failing closed)"
+        )
+
+    iat = int((now or datetime.now(UTC)).timestamp())
+    payload: dict[str, Any] = {
+        "sub": user.user_id,
+        "iss": config.issuer,
+        "iat": iat,
+        "nbf": iat,  # FR-002 / AR1-7: never future-dated (validator has 60s leeway)
+        "exp": iat + APP_JWT_TTL_SECONDS,  # FR-003
+        "roles": get_roles_for_user(user),  # canonical list[str] (FR-002 / FR-002a)
+        "jti": str(uuid.uuid4()),  # fresh per mint (FR-002 / AR1-10)
+        "rev": user.revocation_id,  # FR-008 refresh-time revocation
+    }
+    # AR1-9: include aud iff the validator will check it (mint/validate read the same env).
+    if config.audience is not None:
+        payload["aud"] = config.audience
+
+    return jwt.encode(payload, config.secret, algorithm=config.algorithm)
+
+
+def _read_rev_from_expiring_bearer(bearer: str | None) -> int | None:
+    """Read the ``rev`` claim from an expiring app JWT for the refresh-time check (N1).
+
+    The bearer is the app JWT the frontend attaches on ``POST /api/v2/auth/refresh``.
+    It is EXPECTED to be expired (that is why the client is refreshing), so ``exp`` is
+    not verified — but the SIGNATURE is (same ``_get_jwt_config`` secret/algorithm), so
+    a forged/tampered bearer cannot influence the revocation decision.
+
+    Returns the integer ``rev`` on success, or ``None`` when the bearer is absent,
+    malformed, or fails signature verification. A ``None`` result means the refresh-time
+    ``rev`` check is skipped (migration-window backward-compat, AR1-12; T033 later makes
+    a valid bearer required on the Cognito branch).
+    """
+    if not bearer:
+        return None
+    token = bearer[7:].strip() if bearer.startswith("Bearer ") else bearer.strip()
+    if not token:
+        return None
+    config = _get_jwt_config()
+    if config is None:
+        return None
+    try:
+        payload = jwt.decode(
+            token,
+            config.secret,
+            algorithms=[config.algorithm],  # FR-009: pinned, no alg confusion
+            issuer=config.issuer,
+            audience=config.audience,
+            leeway=config.leeway_seconds,
+            options={"verify_exp": False},  # expired-by-design
+        )
+    except Exception:
+        # Bad signature / malformed / wrong issuer|audience → treat as absent.
+        return None
+    rev = payload.get("rev")
+    return rev if isinstance(rev, int) else None
+
+
 # T093: OAuth Callback
 @tracer.capture_method
 def handle_oauth_callback(
@@ -2602,6 +2704,22 @@ def handle_oauth_callback(
     )
     final_role = "free" if user.role == "anonymous" else user.role
 
+    # Feature 1396 (N4/FR-002a): make the in-hand user AUTHORITATIVE before roles are
+    # read. get_roles_for_user gates on user.auth_type (roles.py), NOT user.role, and
+    # _advance_role/_mark_email_verified persist to DynamoDB WITHOUT mutating this
+    # in-memory object. Without this reconciliation a just-upgraded existing anonymous
+    # user would mint roles=["anonymous"] (under-grant). New OAuth users already get
+    # auth_type=<provider> at creation, so this is a no-op for them.
+    if user.auth_type == "anonymous":
+        user.auth_type = provider  # authenticated via OAuth; matches new-user creation
+    if user.role == "anonymous":
+        user.role = "free"  # keep role consistent with _advance_role's persisted value
+
+    # Feature 1396 (FR-004): return a first-party app JWT as the bearer, NOT the raw
+    # Cognito access token (which validate_jwt rejects on signature/aud/iss/roles → the
+    # M1 401 storm). Minted from the in-hand user — no extra lookup (T8-safe).
+    app_jwt = mint_app_jwt(user)
+
     return OAuthCallbackResponse(
         status="authenticated",
         # user_id removed - frontend doesn't need it
@@ -2609,9 +2727,9 @@ def handle_oauth_callback(
         auth_type=provider,
         tokens={
             "id_token": tokens.id_token,
-            "access_token": tokens.access_token,
+            "access_token": app_jwt,  # Feature 1396: app JWT, was tokens.access_token
             # NO refresh_token in body
-            "expires_in": tokens.expires_in,
+            "expires_in": APP_JWT_TTL_SECONDS,  # reflect the app JWT's real lifetime
         },
         refresh_token_for_cookie=tokens.refresh_token,  # Router sets HttpOnly cookie
         merged_anonymous_data=merged_data,
@@ -3118,14 +3236,23 @@ def get_user_by_cognito_sub(table: Any, cognito_sub: str) -> User | None:
 def refresh_access_tokens(
     refresh_token: str,
     table: Any | None = None,
+    incoming_bearer: str | None = None,
 ) -> RefreshTokenResponse:
     """Refresh access and ID tokens.
 
     FR-007 (Feature 1188): Checks blocklist BEFORE issuing new tokens.
 
+    Feature 1396: the Cognito-backed branch re-mints a first-party app JWT (FR-005)
+    instead of returning the raw Cognito access token, applies a refresh-time
+    revocation check (N1/FR-008), and fails closed on unresolved identity (FR-006).
+
     Args:
         refresh_token: Current refresh token
         table: DynamoDB Table resource (optional, for blocklist check)
+        incoming_bearer: The expiring app JWT from the request's Authorization header
+            (Feature 1396 N1). Decoded signature-verified with verify_exp=False to read
+            its ``rev`` for the refresh-time revocation check. Absent/invalid → check
+            skipped (migration window; T033 makes it required).
 
     Returns:
         RefreshTokenResponse with new tokens
@@ -3152,41 +3279,77 @@ def refresh_access_tokens(
 
     try:
         tokens = cognito_refresh_tokens(config, refresh_token)
-        # Feature 1381 (Defect B): resolve the OAuth user_id so the frontend's
-        # restoreSession() takes the Cognito branch instead of bailing to guest
-        # on a missing user_id. Identity is derived from the freshly-issued
-        # id_token's stable Cognito sub (server-authoritative, not client input).
-        user_id: str | None = None
-        auth_type: str | None = None
-        if table is not None and tokens.id_token:
-            try:
-                cognito_sub = decode_id_token(tokens.id_token).get("sub")
-                if cognito_sub:
-                    user = get_user_by_cognito_sub(table, cognito_sub)
-                    if user:
-                        user_id = user.user_id
-                        auth_type = user.auth_type
-            except IdentityLookupError:
-                # Feature 1395 (FR-015 / R-8): a failed-closed identity lookup must NOT
-                # degrade to "tokens without identity" here — that resolves the refresh to
-                # a nondeterministic/absent user_id and flaps the session across reloads
-                # (the exact bug this feature exists to kill). Fail closed: propagate past
-                # the outer TokenError handler (IdentityLookupError is not a TokenError)
-                # → router 503; the client retries the refresh.
-                raise
-            except Exception as e:
-                # Degrade to today's behavior (tokens without identity) rather
-                # than failing the refresh; frontend falls back gracefully.
-                logger.warning(
-                    "OAuth refresh identity resolution failed",
-                    extra=get_safe_error_info(e),
-                )
+        # Feature 1396 (FR-005/FR-006): the Cognito access token is NOT the bearer any
+        # more — we re-mint a first-party app JWT from the resolved user. Under Option B
+        # the old "degrade to Cognito tokens without identity" path would hand the client
+        # a middleware-rejected bearer (the invisible 401 storm), so identity resolution
+        # is now REQUIRED to mint, and unresolved identity fails closed.
+        #
+        # Feature 1395 (N3/FR-006a) transient-vs-definitive split is preserved: an infra
+        # fault inside get_user_by_cognito_sub raises IdentityLookupError, which is NOT a
+        # TokenError and so propagates past this handler to the app-level exception
+        # handler → retryable 503 (session preserved). Only DEFINITIVE unresolved identity
+        # (no sub / deterministic None) returns 401 identity_unresolved.
+        if table is None or not tokens.id_token:
+            # Cannot resolve a user → cannot mint an app JWT. Fail closed.
+            return RefreshTokenResponse(
+                error="identity_unresolved",
+                message="Could not resolve session identity",
+            )
+
+        try:
+            cognito_sub = decode_id_token(tokens.id_token).get("sub")
+        except IdentityLookupError:
+            raise
+        except Exception as e:
+            # id_token decode failure = definitive (the refresh itself succeeded, but we
+            # cannot derive an identity to mint against).
+            logger.warning(
+                "OAuth refresh id_token decode failed",
+                extra=get_safe_error_info(e),
+            )
+            return RefreshTokenResponse(
+                error="identity_unresolved",
+                message="Could not resolve session identity",
+            )
+
+        if not cognito_sub:
+            return RefreshTokenResponse(
+                error="identity_unresolved",
+                message="Could not resolve session identity",
+            )
+
+        # IdentityLookupError (transient/infra) intentionally propagates → 503.
+        user = get_user_by_cognito_sub(table, cognito_sub)
+        if not user:
+            # Deterministic None (post-1395) = definitive unresolved identity.
+            return RefreshTokenResponse(
+                error="identity_unresolved",
+                message="Could not resolve session identity",
+            )
+
+        # Feature 1396 (N1/FR-008): refresh-time revocation. Read the expiring bearer's
+        # rev and refuse to re-mint if the user's revocation_id has advanced. Absent/
+        # invalid bearer → check skipped (migration window, AR1-12 / T033).
+        incoming_rev = _read_rev_from_expiring_bearer(incoming_bearer)
+        if incoming_rev is not None and incoming_rev != user.revocation_id:
+            logger.warning(
+                "Refresh refused: session revoked (rev advanced)",
+                extra={"user_id_prefix": sanitize_for_log(user.user_id[:8])},
+            )
+            return RefreshTokenResponse(
+                error="session_revoked",
+                message="Session has been revoked",
+            )
+
+        # FR-005: re-mint a fresh app JWT on every refresh (authoritative user).
+        app_jwt = mint_app_jwt(user)
         return RefreshTokenResponse(
             id_token=tokens.id_token,
-            access_token=tokens.access_token,
-            expires_in=tokens.expires_in,
-            user_id=user_id,
-            auth_type=auth_type,
+            access_token=app_jwt,  # Feature 1396: app JWT, was tokens.access_token
+            expires_in=APP_JWT_TTL_SECONDS,
+            user_id=user.user_id,
+            auth_type=user.auth_type,
         )
     except TokenError as e:
         return RefreshTokenResponse(
