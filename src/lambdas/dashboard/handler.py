@@ -288,7 +288,7 @@ def _get_chaos_user_id_from_event(event: dict) -> str | None:
 _CORS_ALLOW_METHODS = "GET,POST,PUT,DELETE,PATCH,OPTIONS"
 _CORS_ALLOW_HEADERS = (
     "Content-Type,Authorization,Accept,Cache-Control,"
-    "Last-Event-ID,X-Amzn-Trace-Id,X-User-ID"
+    "Last-Event-ID,X-Amzn-Trace-Id,X-User-ID,X-CSRF-Token"
 )
 
 

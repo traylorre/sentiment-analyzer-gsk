@@ -220,7 +220,7 @@ locals {
   # PATCH /api/v2/notifications/preferences (Settings → Save Changes). Values keep the
   # API Gateway-required single-quote wrapping ('...').
   cors_allow_methods = "'GET,POST,PUT,DELETE,PATCH,OPTIONS'"
-  cors_allow_headers = "'Content-Type,Authorization,Accept,Cache-Control,Last-Event-ID,X-Amzn-Trace-Id,X-User-ID'"
+  cors_allow_headers = "'Content-Type,Authorization,Accept,Cache-Control,Last-Event-ID,X-Amzn-Trace-Id,X-User-ID,X-CSRF-Token'"
 
   cors_headers = {
     "method.response.header.Access-Control-Allow-Headers"     = local.cors_allow_headers
