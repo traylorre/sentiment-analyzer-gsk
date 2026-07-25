@@ -54,12 +54,26 @@ interface RequestOptions extends RequestInit {
 let accessToken: string | null = null;
 let userId: string | null = null;
 
+// Feature 1396 (N2): body-delivered CSRF token. The API-domain `csrf_token` cookie is
+// SameSite=None on a different registrable domain than this Amplify app, so it is
+// unreadable via document.cookie. The callback/refresh responses return the token value
+// in their body; we hold it in memory here and echo it as X-CSRF-Token on /refresh.
+let csrfToken: string | null = null;
+
 export function setAccessToken(token: string | null) {
   accessToken = token;
 }
 
 export function getAccessToken(): string | null {
   return accessToken;
+}
+
+export function setCsrfToken(token: string | null) {
+  csrfToken = token;
+}
+
+export function getCsrfToken(): string | null {
+  return csrfToken;
 }
 
 /**

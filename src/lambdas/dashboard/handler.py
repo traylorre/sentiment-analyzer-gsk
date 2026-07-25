@@ -195,6 +195,30 @@ include_routers(app)
 logger.info("API v2 routers included")
 
 
+# Feature 1395 (OQ-3 / FR-015): fail-closed surface for identity-lookup errors.
+# A DynamoDB page failure, pagination cap trip, or malformed cursor during any of the
+# three identity GSI lookups raises IdentityLookupError. It MUST surface as a retryable
+# 5xx with a sanitized body — NEVER be swallowed into "user not found" (which would let
+# the OAuth callback mint a duplicate USER, CWE-636). Registered on the resolver here
+# because Powertools 3.x does NOT merge Router-level exception handlers into the app.
+from src.lambdas.dashboard.auth import IdentityLookupError
+from src.lambdas.shared.utils.response_builder import (
+    error_response as _identity_error_response,
+)
+
+
+@app.exception_handler(IdentityLookupError)
+def handle_identity_lookup_error(exc: IdentityLookupError) -> Response:
+    """Map an unprovable identity lookup to a clean, retryable 503 (no internals leaked)."""
+    logger.warning(
+        "Identity lookup failed closed — returning 503 (Feature 1395)",
+        extra={"error_type": type(exc).__name__},
+    )
+    return _identity_error_response(
+        503, "Temporary sign-in problem. Please try again in a moment."
+    )
+
+
 # ===================================================================
 # Static file and root endpoints (defined on app directly)
 # ===================================================================

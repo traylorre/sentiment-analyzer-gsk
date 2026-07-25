@@ -17,6 +17,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+# Feature 1396: the autouse ``default_app_jwt_secret`` fixture that defaults JWT_SECRET
+# for OAuth callback/refresh tests now lives in ``tests/unit/conftest.py`` so it also
+# covers ``tests/unit/lambdas/dashboard/`` (which drives the same code paths). Do not
+# re-add it here — a single higher-scoped fixture is the source of truth.
+
 
 @pytest.fixture(autouse=True)
 def mock_stripe_webhook_secret():

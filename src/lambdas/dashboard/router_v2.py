@@ -163,11 +163,18 @@ def _cookie_path_prefix(event: dict | None) -> str:
     return ""
 
 
-def _make_csrf_set_cookie(event: dict | None = None) -> str:
-    """Build Set-Cookie header value for CSRF token (Feature 1158)."""
+def _make_csrf_set_cookie(event: dict | None = None, token: str | None = None) -> str:
+    """Build Set-Cookie header value for CSRF token (Feature 1158).
+
+    Feature 1396 (N2): the caller may pass a pre-generated ``token`` so the SAME value
+    can also be returned in the JSON response body (body-delivered CSRF). The cross-
+    origin Amplify frontend cannot read the API-domain ``csrf_token`` cookie via
+    ``document.cookie``, so it learns the value from the body and echoes it as
+    ``X-CSRF-Token``. When ``token`` is None a fresh value is generated (legacy callers).
+    """
     return make_set_cookie(
         CSRF_COOKIE_NAME,
-        generate_csrf_token(),
+        token or generate_csrf_token(),
         httponly=False,  # JS must read this
         secure=True,
         samesite="None",  # Required for cross-origin
@@ -686,7 +693,12 @@ def handle_oauth_callback():
     if refresh_token:
         # Feature 1159 + M1 WI-3: unified helper (SameSite=None, stage-aware path)
         cookies.append(_make_refresh_token_cookie(refresh_token, event))
-        cookies.append(_make_csrf_set_cookie(event))
+        # Feature 1396 (N2): generate the CSRF token ONCE, set it in the cookie AND
+        # return it in the body so the cross-origin frontend can echo it as
+        # X-CSRF-Token on the next /refresh (it cannot read the API-domain cookie).
+        csrf = generate_csrf_token()
+        cookies.append(_make_csrf_set_cookie(event, token=csrf))
+        response_data["csrf_token"] = csrf
 
     return _json_response_with_cookies(
         response_data, cookies=cookies, extra_headers=_get_no_cache_headers()
@@ -730,9 +742,14 @@ def refresh_tokens():
         logger.info("refresh.cookie_absent")
         return error_response(401, "Refresh token not found in cookie or request body")
 
+    # Feature 1396 (N1): plumb the expiring app JWT from the Authorization header so
+    # refresh_access_tokens can run the refresh-time revocation check. The frontend
+    # api client already attaches this bearer on every call including /refresh.
+    incoming_bearer = get_header(event, "Authorization", "") or None
+
     # Feature 1188: Pass table for blocklist check (FR-007)
     result = auth_service.refresh_access_tokens(
-        refresh_token=refresh_token, table=table
+        refresh_token=refresh_token, table=table, incoming_bearer=incoming_bearer
     )
     if result.error:
         # Feature 1381 (FR-007): cookie WAS present but the refresh was rejected
@@ -760,8 +777,11 @@ def refresh_tokens():
             _make_refresh_token_cookie(result.refresh_token_for_cookie, event)
         )
 
-    # Feature 1158: Refresh CSRF token along with session
-    cookies.append(_make_csrf_set_cookie(event))
+    # Feature 1158 + 1396 (N2): refresh the CSRF token and deliver its value in the body
+    # so the cross-origin frontend can echo it as X-CSRF-Token on the NEXT /refresh.
+    csrf = generate_csrf_token()
+    cookies.append(_make_csrf_set_cookie(event, token=csrf))
+    response_data["csrf_token"] = csrf
 
     return _json_response_with_cookies(
         response_data, cookies=cookies, extra_headers=_get_no_cache_headers()
@@ -2267,11 +2287,18 @@ def get_current_user():
         linked_providers=user.linked_providers,
         verification=user.verification,
         last_provider_used=user.last_provider_used,
+        # Feature 1380: derive avatar from persisted provider_metadata (reload
+        # path). auth imported as auth_service at module top — no circular import.
+        picture=auth_service._select_avatar(user),
     )
 
     return json_response(200, response.model_dump(), _get_no_cache_headers())
 
 
+# Feature 1395 (OQ-3 / FR-015): the fail-closed handler for IdentityLookupError is
+# registered on the APIGatewayRestResolver in handler.py (via @app.exception_handler),
+# NOT here — Powertools 3.x does not merge Router-level exception handlers into the app,
+# so a router-scoped handler would silently never fire. See handler.py.
 def include_routers(app):
     """Include all v2 routers in the Powertools app."""
     app.include_router(auth_router)

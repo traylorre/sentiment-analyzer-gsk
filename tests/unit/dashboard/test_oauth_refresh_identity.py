@@ -15,6 +15,7 @@ from src.lambdas.dashboard.auth import (
     refresh_access_tokens,
 )
 from src.lambdas.shared.auth.cognito import CognitoTokens, TokenError
+from src.lambdas.shared.middleware.auth_middleware import validate_jwt
 
 
 def _user_item(user_id: str, cognito_sub: str, auth_type: str = "google") -> dict:
@@ -71,9 +72,15 @@ class TestCognitoRefreshResolvesUserId:
     @patch("src.lambdas.dashboard.auth.CognitoConfig")
     @patch("src.lambdas.dashboard.auth.decode_id_token")
     @patch("src.lambdas.dashboard.auth.cognito_refresh_tokens")
-    def test_populates_user_id_and_auth_type(
-        self, mock_refresh, mock_decode, mock_config
+    def test_remints_app_jwt_with_identity(
+        self, mock_refresh, mock_decode, mock_config, monkeypatch
     ):
+        # Feature 1396 (FR-005): the Cognito access token is no longer the bearer —
+        # refresh re-mints a first-party app JWT carrying the resolved identity/roles.
+        monkeypatch.setenv(
+            "JWT_SECRET", "test-refresh-secret"
+        )  # pragma: allowlist secret
+        monkeypatch.delenv("JWT_AUDIENCE", raising=False)
         mock_refresh.return_value = _cognito_tokens()
         mock_decode.return_value = {"sub": "sub-abc"}
         table = MagicMock()
@@ -84,14 +91,25 @@ class TestCognitoRefreshResolvesUserId:
         result = refresh_access_tokens(refresh_token="cognito-rt", table=table)
 
         assert result.error is None
-        assert result.access_token == "access-xyz"
+        assert result.access_token != "access-xyz"  # app JWT, not the Cognito token
+        assert result.expires_in == 900
         assert result.user_id == "u-1"
         assert result.auth_type == "google"
+        claim = validate_jwt(result.access_token)
+        assert claim is not None and claim.subject == "u-1"
 
     @patch("src.lambdas.dashboard.auth.CognitoConfig")
     @patch("src.lambdas.dashboard.auth.decode_id_token")
     @patch("src.lambdas.dashboard.auth.cognito_refresh_tokens")
-    def test_degrades_when_user_not_found(self, mock_refresh, mock_decode, mock_config):
+    def test_fails_closed_when_user_not_found(
+        self, mock_refresh, mock_decode, mock_config, monkeypatch
+    ):
+        # Feature 1396 (FR-006, supersedes 1381 degrade-to-guest): a deterministic
+        # None (definitive unresolved identity) must NOT hand back a Cognito bearer
+        # (validate_jwt would reject it → invisible 401 storm). Fail closed with 401.
+        monkeypatch.setenv(
+            "JWT_SECRET", "test-refresh-secret"
+        )  # pragma: allowlist secret
         mock_refresh.return_value = _cognito_tokens()
         mock_decode.return_value = {"sub": "unknown-sub"}
         table = MagicMock()
@@ -100,17 +118,23 @@ class TestCognitoRefreshResolvesUserId:
 
         result = refresh_access_tokens(refresh_token="cognito-rt", table=table)
 
-        # tokens still returned; identity simply unresolved (today's behavior)
-        assert result.error is None
-        assert result.access_token == "access-xyz"
+        assert result.error == "identity_unresolved"
+        assert result.access_token is None
         assert result.user_id is None
 
     @patch("src.lambdas.dashboard.auth.CognitoConfig")
     @patch("src.lambdas.dashboard.auth.decode_id_token")
     @patch("src.lambdas.dashboard.auth.cognito_refresh_tokens")
-    def test_identity_resolution_error_does_not_fail_refresh(
-        self, mock_refresh, mock_decode, mock_config
+    def test_id_token_decode_error_is_definitive_401(
+        self, mock_refresh, mock_decode, mock_config, monkeypatch
     ):
+        # Feature 1396 (N3): an id_token decode failure is DEFINITIVE (the refresh
+        # succeeded but no identity can be derived to mint against) → 401, no Cognito
+        # bearer. (Transient infra faults during the GSI lookup instead raise
+        # IdentityLookupError → 503, covered in test_app_jwt_refresh.)
+        monkeypatch.setenv(
+            "JWT_SECRET", "test-refresh-secret"
+        )  # pragma: allowlist secret
         mock_refresh.return_value = _cognito_tokens()
         mock_decode.side_effect = ValueError("bad token")
         table = MagicMock()
@@ -118,8 +142,8 @@ class TestCognitoRefreshResolvesUserId:
 
         result = refresh_access_tokens(refresh_token="cognito-rt", table=table)
 
-        assert result.error is None
-        assert result.access_token == "access-xyz"
+        assert result.error == "identity_unresolved"
+        assert result.access_token is None
         assert result.user_id is None
 
     @patch("src.lambdas.dashboard.auth.CognitoConfig")

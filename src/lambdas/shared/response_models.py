@@ -60,6 +60,8 @@ class UserMeResponse(BaseModel):
     linked_providers: list[str] = Field(default_factory=list)  # ["google", "github"]
     verification: str = "none"  # none, pending, verified
     last_provider_used: str | None = None  # Most recent provider for avatar
+    # Feature 1380: host-validated OAuth avatar URL (null unless allowlisted).
+    picture: str | None = None
 
 
 class SessionValidResponse(BaseModel):

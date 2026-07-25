@@ -324,8 +324,15 @@ class TestEmailAlreadyExistsError:
 class TestEmailGSIPerformance:
     """Tests for GSI query performance optimization (T071)."""
 
-    def test_gsi_query_uses_limit_one(self):
-        """GSI query uses Limit=1 for performance (only need one result)."""
+    def test_gsi_query_does_not_use_limit(self):
+        """GSI query MUST NOT pass Limit (Feature 1395, FR-016 / K-2).
+
+        The old Limit=1 was the footgun: DynamoDB applies Limit to key-matched items
+        BEFORE the entity_type=USER FilterExpression, so a NOTIFICATION/MAGIC_LINK_TOKEN
+        item sharing the email hash key could be the single returned item, get filtered
+        out, and make the helper return None even though a USER exists. The fix drops
+        Limit and paginates+filters server-side, so no Limit may be sent.
+        """
         from src.lambdas.dashboard.auth import get_user_by_email_gsi
 
         mock_table = MagicMock()
@@ -333,9 +340,9 @@ class TestEmailGSIPerformance:
 
         get_user_by_email_gsi(table=mock_table, email="test@example.com")
 
-        # Verify Limit=1 is used
+        # Verify NO Limit is sent (paginate + server-side filter instead).
         call_kwargs = mock_table.query.call_args.kwargs
-        assert call_kwargs.get("Limit") == 1
+        assert "Limit" not in call_kwargs
 
     def test_gsi_query_uses_index_name(self):
         """GSI query specifies correct index name."""

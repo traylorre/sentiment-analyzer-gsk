@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import {
-  User,
   Settings,
   LogOut,
   ChevronDown,
@@ -14,6 +13,7 @@ import {
   Clock,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Avatar } from '@/components/ui/avatar';
 import { useAuth } from '@/hooks/use-auth';
 import { cn } from '@/lib/utils';
 
@@ -80,9 +80,14 @@ export function UserMenu({ className }: UserMenuProps) {
           data-testid="user-menu-trigger"
           className={cn('gap-2', className)}
         >
-          <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center">
-            <User className="w-4 h-4 text-accent" />
-          </div>
+          {/* Feature 1380: avatar (photo → initials → glyph). Guests pass no
+              name so they keep the generic glyph and issue no image request. */}
+          <Avatar
+            src={user?.pictureUrl}
+            name={isAnonymous ? undefined : displayName}
+            size={32}
+            className="w-8 h-8"
+          />
           <span className="hidden sm:inline text-sm font-medium truncate max-w-[100px]">
             {displayName}
           </span>
@@ -105,9 +110,12 @@ export function UserMenu({ className }: UserMenuProps) {
           {/* User info section */}
           <div className="p-4 border-b border-border">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center">
-                <User className="w-5 h-5 text-accent" />
-              </div>
+              <Avatar
+                src={user?.pictureUrl}
+                name={isAnonymous ? undefined : displayName}
+                size={40}
+                className="w-10 h-10"
+              />
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-foreground truncate">
                   {displayName}
