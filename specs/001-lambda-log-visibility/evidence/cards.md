@@ -48,3 +48,13 @@ convention).
   in the ZIP) is fixed IN feature 001's PR (deploy.yml one-line pin, same as
   Feature 1227's ingestion fix) because FR-008/SC-002 are unachievable while
   the function cannot import its handler. The filter fix remains carded.
+
+## Card D — notification hourly digest schedule never fires (found by T023)
+
+- /aws/lambda/preprod-sentiment-notification: zero invocations in 7+ days
+  despite modules/eventbridge hourly digest rule. This silence is what hid
+  the notification ZIP's missing-powertools ImportModuleError (fixed in the
+  001 follow-up PR).
+- Fix shape: verify the EventBridge rule state/target/permissions; add an
+  invocation-count alarm (metric-based) so a silent scheduled function is
+  loud.
