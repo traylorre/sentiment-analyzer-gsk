@@ -163,3 +163,30 @@ ImportModuleError-shaped line, watch the metric); outcome either proves the
 filter alive (then Text preservation keeps it alive) or proves it
 dead-on-arrival (then card its fix separately; this feature changes nothing
 about it either way).
+
+## R-10: SECOND masking layer found post-deploy — powertools SuppressFilter substring bug (2026-07-26)
+
+Feature 001's own discriminating verification caught it: root=INFO went live
+(C-8 visible) yet route-phase dashboard records still dropped.
+`Logger(service="dashboard")` (handler.py) installs powertools'
+`SuppressFilter("dashboard")` on every ROOT handler (logger.py:374-383,
+powertools 3.23.0) to dedup its own propagated records — but
+`SuppressFilter.filter` (filters.py:4-16) is a raw SUBSTRING test:
+`"dashboard" in "src.lambdas.dashboard.router_v2"` → suppressed. Every
+dashboard module logger was silenced at the root handler since that Logger
+landed, INDEPENDENT of the root-level bug (two stacked masks). Deterministic
+3/3 local repro with remove-filter control; awslambdaric and aws_xray_sdk
+exonerated by source read. Fix: `_repair_powertools_suppress_filters()` in
+the helper swaps it for a name-boundary filter (suppresses exactly
+`dashboard` and `dashboard.*` — the documented intent); dashboard entrypoint
+now calls the helper AFTER Logger() (the filter exists only post-init).
+Upstream powertools issue worth filing.
+
+## R-11: notification ZIP missing powertools + digest schedule dead (2026-07-26)
+
+Notification E2E failure was a BROKEN DEPLOY, not dark loggers: its ZIP pip
+list lacks aws-lambda-powertools while handler.py imports Tracer →
+Runtime.ImportModuleError on every invoke (same class as metrics/1227).
+Masked because the function has ZERO invocations in 7+ days — the hourly
+digest EventBridge schedule evidently never fires (new card D). Pin added in
+the follow-up PR.
