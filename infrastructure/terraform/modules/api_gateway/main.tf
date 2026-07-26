@@ -57,9 +57,10 @@ resource "aws_api_gateway_authorizer" "cognito" {
   provider_arns   = [var.cognito_user_pool_arn]
   identity_source = "method.request.header.Authorization"
 
-  lifecycle {
-    prevent_destroy = true
-  }
+  # prevent_destroy removed 2026-07-25: enable_cognito_auth=false takes count
+  # to 0, and destroying this authorizer is the intent — it can only validate
+  # Cognito-issued JWTs, incompatible with the 1396 first-party app JWT
+  # bearer (see the gateway-authorizer board card for the replacement plan).
 }
 
 # Gateway Response: UNAUTHORIZED (FR-013)
@@ -220,7 +221,7 @@ locals {
   # PATCH /api/v2/notifications/preferences (Settings → Save Changes). Values keep the
   # API Gateway-required single-quote wrapping ('...').
   cors_allow_methods = "'GET,POST,PUT,DELETE,PATCH,OPTIONS'"
-  cors_allow_headers = "'Content-Type,Authorization,Accept,Cache-Control,Last-Event-ID,X-Amzn-Trace-Id,X-User-ID'"
+  cors_allow_headers = "'Content-Type,Authorization,Accept,Cache-Control,Last-Event-ID,X-Amzn-Trace-Id,X-User-ID,X-CSRF-Token'"
 
   cors_headers = {
     "method.response.header.Access-Control-Allow-Headers"     = local.cors_allow_headers
@@ -751,6 +752,11 @@ resource "aws_api_gateway_deployment" "dashboard" {
     redeployment = sha1(jsonencode(concat(
       [
         var.lambda_invoke_arn, # Feature 1305: Force redeploy on integration URI change
+        # 2026-07-25 incident: method AUTHORIZATION values are not resource IDs,
+        # so flipping enable_cognito_auth applied green while the stage kept
+        # serving the old authorizer config (same class as the 1382 CORS gap
+        # below). Hash the flag so auth flips force a stage redeployment.
+        tostring(var.enable_cognito_auth),
         # Feature 1382: hash the CORS method/header VALUES, not just resource IDs.
         # OPTIONS integration_response .id does not change on a param-only edit, so
         # without these a verb-list change would apply green while the stage keeps

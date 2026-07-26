@@ -78,6 +78,10 @@ import boto3
 from aws_lambda_powertools import Tracer
 from botocore.config import Config
 
+from src.lambdas.shared.logging_config import configure_lambda_logging
+
+configure_lambda_logging()
+
 tracer = Tracer(service="sentiment-analyzer-ingestion")
 
 from src.lambdas.ingestion.alerting import (

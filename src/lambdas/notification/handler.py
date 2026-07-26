@@ -25,7 +25,10 @@ from src.lambdas.notification.sendgrid_service import (
     RateLimitExceededError,
 )
 from src.lambdas.shared.env_validation import validate_critical_env_vars
+from src.lambdas.shared.logging_config import configure_lambda_logging
 from src.lib.metrics import emit_metric
+
+configure_lambda_logging()
 
 tracer = Tracer(service="sentiment-analyzer-notification")
 

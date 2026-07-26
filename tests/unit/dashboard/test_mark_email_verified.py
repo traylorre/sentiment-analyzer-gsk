@@ -332,3 +332,65 @@ class TestMarkEmailVerifiedProviders:
             call_kwargs["ExpressionAttributeValues"][":marked_by"]
             == f"oauth:{provider}"
         )
+
+
+class TestMarkEmailVerifiedInMemorySync:
+    """The callback runs _advance_role right after this helper, and its 1163
+    guard reads user.verification from the same in-memory instance."""
+
+    @staticmethod
+    def _anon_user() -> User:
+        return User(
+            user_id=str(uuid.uuid4()),
+            email="test@example.com",
+            auth_type="google",
+            role="anonymous",
+            created_at=datetime.now(UTC),
+            last_active_at=datetime.now(UTC),
+            session_expires_at=datetime.now(UTC) + timedelta(days=30),
+        )
+
+    def test_successful_mark_syncs_in_memory(self) -> None:
+        table = MagicMock()
+        user = self._anon_user()
+
+        _mark_email_verified(
+            table=table,
+            user=user,
+            provider="google",
+            email="test@example.com",
+            email_verified=True,
+        )
+
+        table.update_item.assert_called_once()
+        assert user.verification == "verified"
+
+    def test_failed_update_does_not_sync_in_memory(self) -> None:
+        table = MagicMock()
+        table.update_item.side_effect = RuntimeError("boom")
+        user = self._anon_user()
+
+        _mark_email_verified(
+            table=table,
+            user=user,
+            provider="google",
+            email="test@example.com",
+            email_verified=True,
+        )
+
+        assert user.verification == "none"
+
+    def test_unverified_claim_does_not_sync(self) -> None:
+        table = MagicMock()
+        user = self._anon_user()
+
+        _mark_email_verified(
+            table=table,
+            user=user,
+            provider="google",
+            email="test@example.com",
+            email_verified=False,
+        )
+
+        table.update_item.assert_not_called()
+        assert user.verification == "none"

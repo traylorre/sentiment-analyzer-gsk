@@ -4,6 +4,7 @@ Feature 1163: Tests the @model_validator that enforces the role-verification
 state matrix from spec-v2.md.
 """
 
+import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -182,3 +183,59 @@ class TestRoleVerificationEdgeCases:
         with pytest.raises(ValueError) as exc_info:
             User(**base_user_kwargs, role="operator", verification="none")
         assert "operator role" in str(exc_info.value)
+
+
+class TestInvariantReadTolerance:
+    """Preprod 2026-07-25: rejecting invariant-violating rows on READ turned
+    corrupt data into 'no user' — the OAuth callback minted a duplicate per
+    login and /refresh returned 401. Reads tolerate; writes still reject."""
+
+    @staticmethod
+    def _free_none_item() -> dict:
+        now = datetime.now(UTC).isoformat()
+        return {
+            "user_id": str(uuid.uuid4()),
+            "email": "legacy@example.com",
+            "auth_type": "google",
+            "role": "free",
+            "verification": "none",
+            "created_at": now,
+            "last_active_at": now,
+            "session_expires_at": now,
+        }
+
+    def test_from_dynamodb_item_tolerates_free_none(self) -> None:
+        user = User.from_dynamodb_item(self._free_none_item())
+        assert user.role == "free"
+        assert user.verification == "none"
+
+    def test_from_dynamodb_item_logs_violation(self, caplog) -> None:
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="src.lambdas.shared.models.user"):
+            User.from_dynamodb_item(self._free_none_item())
+        assert any(
+            "violates role-verification invariant" in r.message for r in caplog.records
+        )
+
+    def test_direct_construction_still_rejects_free_none(self) -> None:
+        now = datetime.now(UTC)
+        with pytest.raises(ValueError, match="requires verified status"):
+            User(
+                user_id=str(uuid.uuid4()),
+                role="free",
+                verification="none",
+                created_at=now,
+                last_active_at=now,
+                session_expires_at=now,
+            )
+
+    def test_from_dynamodb_item_valid_row_no_warning(self, caplog) -> None:
+        import logging
+
+        item = self._free_none_item()
+        item["verification"] = "verified"
+        with caplog.at_level(logging.WARNING, logger="src.lambdas.shared.models.user"):
+            user = User.from_dynamodb_item(item)
+        assert user.verification == "verified"
+        assert not [r for r in caplog.records if "violates" in r.message]

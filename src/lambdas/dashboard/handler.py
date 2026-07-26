@@ -81,6 +81,7 @@ from src.lambdas.dashboard.metrics import sanitize_item_for_response
 from src.lambdas.shared.dynamodb import get_table, parse_dynamodb_item
 from src.lambdas.shared.env_validation import validate_critical_env_vars
 from src.lambdas.shared.errors.session_errors import SessionRevokedException
+from src.lambdas.shared.logging_config import configure_lambda_logging
 from src.lambdas.shared.logging_utils import (
     get_safe_error_info,
     get_safe_error_message_for_user,
@@ -98,6 +99,8 @@ from src.lambdas.shared.utils.event_helpers import get_query_params
 validate_critical_env_vars(["SCHEDULER_ROLE_ARN"])
 
 # Structured logging (FR-028: module-level logging replaces lifespan)
+configure_lambda_logging()
+
 logger = Logger(service="dashboard")
 tracer = Tracer(service="dashboard")
 
@@ -288,7 +291,7 @@ def _get_chaos_user_id_from_event(event: dict) -> str | None:
 _CORS_ALLOW_METHODS = "GET,POST,PUT,DELETE,PATCH,OPTIONS"
 _CORS_ALLOW_HEADERS = (
     "Content-Type,Authorization,Accept,Cache-Control,"
-    "Last-Event-ID,X-Amzn-Trace-Id,X-User-ID"
+    "Last-Event-ID,X-Amzn-Trace-Id,X-User-ID,X-CSRF-Token"
 )
 
 

@@ -27,6 +27,14 @@ resource "aws_cognito_identity_provider" "google" {
   attribute_mapping = {
     email    = "email"
     username = "sub"
+    # Feature 1171 depends on this claim reaching the id_token. Without the
+    # mapping, _mark_email_verified never fires, _advance_role writes the
+    # forbidden free:none state (1163 FR-003), and every OAuth login minted
+    # a duplicate user once lookups skipped the unparseable rows.
+    email_verified = "email_verified"
+    # Feature 1380 renders the Google avatar; without this mapping the picture
+    # claim never reaches the id_token and _link_provider stores no avatar.
+    picture = "picture"
   }
 
   lifecycle {
