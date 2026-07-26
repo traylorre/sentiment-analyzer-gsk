@@ -343,10 +343,13 @@ jobs:
             --disable-pip-version-check \
             --quiet
 
-          # Build canary package (standalone — no shared modules needed)
-          mkdir -p packages/canary-build
+          # Build canary package (feature 001: bundles src/lambdas/shared for
+          # logging_config — same recipe as notification/metrics packages)
+          mkdir -p packages/canary-build/src/lambdas/canary
           cp -r packages/canary-deps/* packages/canary-build/
-          cp -r src/lambdas/canary/* packages/canary-build/
+          cp -r src/lambdas/canary/* packages/canary-build/          # handler.py at ROOT
+          cp -r src/lambdas/canary/* packages/canary-build/src/lambdas/canary/  # also in src/ for imports
+          cp -r src/lambdas/shared packages/canary-build/src/lambdas/
           cd packages/canary-build
           zip -r ../canary-${SHA}.zip . \
             -x "*.pyc" "__pycache__/*" "*.pytest_cache/*" "tests/*" -q
