@@ -287,6 +287,7 @@ jobs:
             python-json-logger==4.0.0 \
             aws-xray-sdk==2.14.0 \
             aws-lambda-powertools==3.7.0 \
+            email-validator==2.3.0 \
             -t packages/notification-deps/ \
             --platform manylinux2014_x86_64 \
             --implementation cp \
