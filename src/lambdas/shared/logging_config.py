@@ -44,9 +44,54 @@ def configure_lambda_logging(*, default_level: int = logging.INFO) -> None:
     for name in _PINNED_LOGGERS:
         logging.getLogger(name).setLevel(logging.WARNING)
 
+    _repair_powertools_suppress_filters()
+
     if not _selftest_emitted:
         _selftest_emitted = True
         logging.getLogger(__name__).info(SELF_TEST_MESSAGE)
+
+
+class _BoundarySuppressFilter(logging.Filter):
+    """Name-boundary-aware replacement for powertools' SuppressFilter (C-9).
+
+    Powertools installs SuppressFilter(service) on every ROOT handler to
+    dedup its own propagated records, but its filter() is a raw SUBSTRING
+    test: with service="dashboard" it also rejects every record from
+    "src.lambdas.dashboard.*" module loggers — total log loss for the
+    subtree, discovered live 2026-07-26. This filter suppresses exactly the
+    powertools logger and its children (the documented intent) and nothing
+    else.
+    """
+
+    def __init__(self, service: str):
+        super().__init__()
+        self.logger = service  # attribute name mirrors SuppressFilter's
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return not (
+            record.name == self.logger or record.name.startswith(self.logger + ".")
+        )
+
+
+def _repair_powertools_suppress_filters() -> None:
+    """Swap any powertools SuppressFilter on root handlers for the boundary-
+    aware version. No-op when powertools is absent or no filter is installed.
+
+    Ordering: powertools installs the filter during the first
+    ``Logger(service=...)`` init, so the entrypoint must call
+    ``configure_lambda_logging()`` AFTER constructing its powertools Logger
+    (the dashboard handler does; the other five have no powertools Logger
+    and this is a no-op).
+    """
+    try:
+        from aws_lambda_powertools.logging.filters import SuppressFilter
+    except ImportError:  # powertools not packaged in this Lambda
+        return
+    for handler in logging.getLogger().handlers:
+        for flt in list(handler.filters):
+            if type(flt) is SuppressFilter:
+                handler.removeFilter(flt)
+                handler.addFilter(_BoundarySuppressFilter(flt.logger))
 
 
 def _resolve_level(raw: str | None, default: int) -> int:

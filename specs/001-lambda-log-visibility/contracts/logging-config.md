@@ -53,3 +53,9 @@ def configure_lambda_logging(*, default_level: int = logging.INFO) -> None:
   glob catches any new `src/lambdas/<name>/handler.py` in CI, which is
   detection at PR time — accepted as the strongest guard available without
   the platform-level mechanism (signposted O1).
+
+## Post-deploy addendum (2026-07-26)
+
+| # | Guarantee | Verifying test |
+|---|---|---|
+| C-9 | Any powertools `SuppressFilter` on a root handler is replaced with a name-boundary filter: records named exactly the service or `service.*` stay suppressed (dedup intent), all other records — including `src.lambdas.<service>.*` module loggers — pass. No-op when powertools/filter absent. ORDERING: an entrypoint that constructs a powertools Logger MUST call the helper AFTER that construction (dashboard does) | unit (TestC9SuppressFilterRepair) |

@@ -150,3 +150,56 @@ class TestC8SelfTestLineShape:
         assert record.levelno == logging.INFO
         assert record.getMessage() == SELF_TEST_MESSAGE
         assert record.args in (None, ())
+
+
+class TestC9SuppressFilterRepair:
+    """C-9: powertools SuppressFilter substring bug repaired at root handlers.
+
+    Live defect 2026-07-26: Logger(service="dashboard") installs
+    SuppressFilter("dashboard") on the awslambdaric root handler; its raw
+    substring match rejects every src.lambdas.dashboard.* record.
+    """
+
+    @pytest.fixture()
+    def root_handler_with_suppress(self):
+        from aws_lambda_powertools.logging.filters import SuppressFilter
+
+        handler = logging.NullHandler()
+        handler.addFilter(SuppressFilter("dashboard"))
+        root = logging.getLogger()
+        root.addHandler(handler)
+        yield handler
+        root.removeHandler(handler)
+
+    def _record(self, name):
+        return logging.LogRecord(name, logging.INFO, __file__, 1, "msg", None, None)
+
+    def test_module_subtree_records_pass_after_repair(
+        self, monkeypatch, root_handler_with_suppress
+    ):
+        monkeypatch.delenv("LOG_LEVEL", raising=False)
+        handler = root_handler_with_suppress
+        assert not handler.filter(self._record("src.lambdas.dashboard.router_v2"))
+        configure_lambda_logging()
+        assert handler.filter(self._record("src.lambdas.dashboard.router_v2"))
+        assert handler.filter(self._record("src.lambdas.dashboard.auth"))
+
+    def test_powertools_own_records_still_suppressed(
+        self, monkeypatch, root_handler_with_suppress
+    ):
+        monkeypatch.delenv("LOG_LEVEL", raising=False)
+        handler = root_handler_with_suppress
+        configure_lambda_logging()
+        assert not handler.filter(self._record("dashboard"))
+        assert not handler.filter(self._record("dashboard.child"))
+
+    def test_noop_without_suppress_filter(self, monkeypatch):
+        monkeypatch.delenv("LOG_LEVEL", raising=False)
+        handler = logging.NullHandler()
+        root = logging.getLogger()
+        root.addHandler(handler)
+        try:
+            configure_lambda_logging()
+            assert handler.filters == []
+        finally:
+            root.removeHandler(handler)

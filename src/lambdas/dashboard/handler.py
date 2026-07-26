@@ -99,9 +99,13 @@ from src.lambdas.shared.utils.event_helpers import get_query_params
 validate_critical_env_vars(["SCHEDULER_ROLE_ARN"])
 
 # Structured logging (FR-028: module-level logging replaces lifespan)
-configure_lambda_logging()
-
 logger = Logger(service="dashboard")
+
+# AFTER Logger(): powertools installs a substring-matching SuppressFilter on
+# the root handler at first init, which silently swallowed every
+# src.lambdas.dashboard.* record; the helper replaces it with a
+# name-boundary-aware filter (contract C-9).
+configure_lambda_logging()
 tracer = Tracer(service="dashboard")
 
 # Configuration from environment
