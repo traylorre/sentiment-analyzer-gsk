@@ -58,3 +58,18 @@ convention).
 - Fix shape: verify the EventBridge rule state/target/permissions; add an
   invocation-count alarm (metric-based) so a silent scheduled function is
   loud.
+
+## Card E — digest user query fails on preprod (surfaced BY feature 001)
+
+- Every digest run logs `[ERROR] Failed to query digest users` +
+  `Failed to get users for digest` (digest_service error path;
+  DigestServiceError early-return) — observed on the first successful
+  notification invoke after the packaging fixes (2026-07-26 07:12 UTC,
+  request 194a506e). Response stays 200 with processed:0 — silent failure.
+- Consequence: digest emails can NEVER send on preprod even now that the
+  function imports; also blocks the digest_service dark-INFO lines from
+  serving as notification's FR-008 evidence (E2E uses C-8 instead until
+  this is fixed).
+- Fix shape: diagnose the DynamoDB query (likely GSI name/permissions on
+  the users table digest index); newly-visible ERROR lines now make this
+  loud in CloudWatch.
