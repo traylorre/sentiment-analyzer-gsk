@@ -1,0 +1,152 @@
+# Target: backend Lambda CloudWatch log groups (not either dashboard UI)
+"""FR-008 preprod E2E: dark-line evidence per function (feature 001).
+
+Each assertion targets a line that CANNOT appear pre-deploy:
+- dashboard: refresh.* classification lines (un-leveled stdlib logger)
+- ingestion: storage.py "Storage operation complete" (dark module INFO)
+- analysis: sentiment.py dark module INFO
+- metrics + canary: the C-8 self-test line (their ONLY discriminating line)
+- notification: digest_service dark INFO on a synthetic empty-digest invoke
+
+AR#3 flake guard: C-8 emits once per COLD START, so C-8 queries window from
+the function's LastModified timestamp, never "now minus N minutes".
+"""
+
+import json
+import os
+import time
+from datetime import UTC, datetime
+
+import boto3
+import pytest
+
+pytestmark = pytest.mark.preprod
+
+REGION = os.environ.get("AWS_REGION", "us-east-1")
+ENV = os.environ.get("AWS_ENV", "preprod")
+SELF_TEST_MESSAGE = "logging configured: root INFO visibility active (feature 001)"
+POLL_TIMEOUT_S = 180
+POLL_INTERVAL_S = 15
+
+
+def _log_group(fn: str) -> str:
+    return f"/aws/lambda/{ENV}-sentiment-{fn}"
+
+
+def _function_name(fn: str) -> str:
+    return f"{ENV}-sentiment-{fn}"
+
+
+def _last_modified_ms(lambda_client, fn: str) -> int:
+    cfg = lambda_client.get_function_configuration(FunctionName=_function_name(fn))
+    dt = datetime.strptime(cfg["LastModified"], "%Y-%m-%dT%H:%M:%S.%f%z")
+    return int(dt.timestamp() * 1000)
+
+
+def _find_line(logs_client, group: str, pattern: str, start_ms: int) -> bool:
+    deadline = time.time() + POLL_TIMEOUT_S
+    while time.time() < deadline:
+        resp = logs_client.filter_log_events(
+            logGroupName=group,
+            startTime=start_ms,
+            filterPattern=f'"{pattern}"',
+            limit=1,
+        )
+        if resp.get("events"):
+            return True
+        time.sleep(POLL_INTERVAL_S)
+    return False
+
+
+@pytest.fixture(scope="module")
+def logs_client():
+    return boto3.client("logs", region_name=REGION)
+
+
+@pytest.fixture(scope="module")
+def lambda_client():
+    return boto3.client("lambda", region_name=REGION)
+
+
+class TestSelfTestLinePerColdStart:
+    """C-8 probe: the only discriminating evidence for metrics and canary."""
+
+    @pytest.mark.parametrize("fn", ["metrics", "canary"])
+    def test_self_test_line_since_deploy(self, logs_client, lambda_client, fn):
+        start_ms = _last_modified_ms(lambda_client, fn)
+        assert _find_line(logs_client, _log_group(fn), SELF_TEST_MESSAGE, start_ms), (
+            f"{fn}: C-8 self-test line absent since LastModified — root-level "
+            "fix not live (or no cold start yet in window)"
+        )
+
+
+class TestDashboardRefreshClassification:
+    """SC-006 drill — asserted via scripts/verify-log-visibility.py logic."""
+
+    def test_refresh_lines_visible(self, logs_client, lambda_client):
+        import subprocess
+        import sys
+        from pathlib import Path
+
+        script = (
+            Path(__file__).resolve().parents[2] / "scripts" / "verify-log-visibility.py"
+        )
+        # S603: argv is sys.executable + a repo-fixed script path — no
+        # untrusted input reaches the subprocess.
+        result = subprocess.run(  # noqa: S603
+            [sys.executable, str(script)],
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        assert (
+            result.returncode == 0
+        ), f"verify-log-visibility failed:\n{result.stdout}\n{result.stderr}"
+
+
+class TestNotificationDigestDarkLines:
+    def test_synthetic_empty_digest_emits_digest_service_info(
+        self, logs_client, lambda_client
+    ):
+        start_ms = int(time.time() * 1000) - 10_000
+        lambda_client.invoke(
+            FunctionName=_function_name("notification"),
+            Payload=json.dumps({"notification_type": "digest"}).encode(),
+        )
+        found = _find_line(
+            logs_client,
+            _log_group("notification"),
+            "Digest processing complete",
+            start_ms,
+        ) or _find_line(
+            logs_client,
+            _log_group("notification"),
+            "Found users due for digest",
+            start_ms,
+        )
+        assert found, (
+            "notification: digest_service dark INFO lines absent after "
+            "synthetic empty-digest invoke — root-level fix not live"
+        )
+
+
+class TestScheduledFunctionsDarkModuleLines:
+    """Ingestion/analysis emit dark module INFO on every real cycle."""
+
+    def test_ingestion_storage_line(self, logs_client):
+        start_ms = int((datetime.now(UTC).timestamp() - 2 * 3600) * 1000)
+        assert _find_line(
+            logs_client, _log_group("ingestion"), "Storage operation complete", start_ms
+        ), "ingestion: storage.py dark INFO absent in last 2h of scheduled cycles"
+
+    def test_analysis_sentiment_line(self, logs_client, lambda_client):
+        # Analysis runs on ingestion notifications; window from last deploy to
+        # tolerate quiet market periods, and accept the C-8 line as fallback
+        # evidence (same discriminating power).
+        start_ms = _last_modified_ms(lambda_client, "analysis")
+        found = _find_line(
+            logs_client, _log_group("analysis"), "Sentiment analysis", start_ms
+        ) or _find_line(
+            logs_client, _log_group("analysis"), SELF_TEST_MESSAGE, start_ms
+        )
+        assert found, "analysis: no dark INFO (module line or C-8) since deploy"
