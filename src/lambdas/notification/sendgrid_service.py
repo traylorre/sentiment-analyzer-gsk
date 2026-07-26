@@ -21,6 +21,20 @@ from sendgrid.helpers.mail import Mail
 from src.lambdas.shared.secrets import SecretRetrievalError, get_secret
 
 logger = logging.getLogger(__name__)
+
+
+def _mask_email(email: str) -> str:
+    """Mask a recipient address for logs: 'scott@example.com' -> 's***@example.com'.
+
+    Feature 001 (FR-012): these lines were dark before root-level INFO went
+    live; masking prevents the visibility fix from newly exposing PII.
+    """
+    local, sep, domain = email.partition("@")
+    if not sep:
+        return "***"
+    return f"{local[:1]}***@{domain}"
+
+
 tracer = Tracer()
 
 # Template directory path
@@ -133,12 +147,16 @@ class EmailService:
 
             # 202 = Accepted (queued for sending)
             if response.status_code == 202:
-                logger.info(f"Email sent to {to_email}, subject: {subject[:50]}")
+                logger.info(
+                    f"Email sent to {_mask_email(to_email)}, subject: {subject[:50]}"
+                )
                 return True
 
             # Other success codes
             if 200 <= response.status_code < 300:
-                logger.info(f"Email sent to {to_email}, status: {response.status_code}")
+                logger.info(
+                    f"Email sent to {_mask_email(to_email)}, status: {response.status_code}"
+                )
                 return True
 
             logger.warning(

@@ -31,6 +31,9 @@ class TestAdvanceRoleAnonymousToFree:
             provider_metadata={},
         )
 
+        # Mimic the callback sequence: _mark_email_verified has already
+        # synced the in-memory object before _advance_role runs (1163 FR-003).
+        user.verification = "verified"
         _advance_role(table=table, user=user, provider="google")
 
         table.update_item.assert_called_once()
@@ -55,6 +58,9 @@ class TestAdvanceRoleAnonymousToFree:
             provider_metadata={},
         )
 
+        # Mimic the callback sequence: _mark_email_verified has already
+        # synced the in-memory object before _advance_role runs (1163 FR-003).
+        user.verification = "verified"
         with patch("src.lambdas.dashboard.auth.datetime") as mock_dt:
             mock_now = datetime(2026, 1, 7, 12, 0, 0, tzinfo=UTC)
             mock_dt.now.return_value = mock_now
@@ -83,6 +89,9 @@ class TestAdvanceRoleAnonymousToFree:
             provider_metadata={},
         )
 
+        # Mimic the callback sequence: _mark_email_verified has already
+        # synced the in-memory object before _advance_role runs (1163 FR-003).
+        user.verification = "verified"
         _advance_role(table=table, user=user, provider="google")
 
         call_kwargs = table.update_item.call_args.kwargs
@@ -106,6 +115,9 @@ class TestAdvanceRoleAnonymousToFree:
             provider_metadata={},
         )
 
+        # Mimic the callback sequence: _mark_email_verified has already
+        # synced the in-memory object before _advance_role runs (1163 FR-003).
+        user.verification = "verified"
         _advance_role(table=table, user=user, provider="github")
 
         call_kwargs = table.update_item.call_args.kwargs
@@ -134,6 +146,9 @@ class TestAdvanceRolePreservesHigherRoles:
             provider_metadata={},
         )
 
+        # Mimic the callback sequence: _mark_email_verified has already
+        # synced the in-memory object before _advance_role runs (1163 FR-003).
+        user.verification = "verified"
         _advance_role(table=table, user=user, provider="google")
 
         table.update_item.assert_not_called()
@@ -155,6 +170,9 @@ class TestAdvanceRolePreservesHigherRoles:
             provider_metadata={},
         )
 
+        # Mimic the callback sequence: _mark_email_verified has already
+        # synced the in-memory object before _advance_role runs (1163 FR-003).
+        user.verification = "verified"
         _advance_role(table=table, user=user, provider="google")
 
         table.update_item.assert_not_called()
@@ -176,6 +194,9 @@ class TestAdvanceRolePreservesHigherRoles:
             provider_metadata={},
         )
 
+        # Mimic the callback sequence: _mark_email_verified has already
+        # synced the in-memory object before _advance_role runs (1163 FR-003).
+        user.verification = "verified"
         _advance_role(table=table, user=user, provider="google")
 
         table.update_item.assert_not_called()
@@ -202,6 +223,9 @@ class TestAdvanceRoleErrorHandling:
         )
 
         # Should not raise
+        # Mimic the callback sequence: _mark_email_verified has already
+        # synced the in-memory object before _advance_role runs (1163 FR-003).
+        user.verification = "verified"
         _advance_role(table=table, user=user, provider="google")
 
         table.update_item.assert_called_once()
@@ -226,6 +250,9 @@ class TestAdvanceRoleUpdateExpression:
             provider_metadata={},
         )
 
+        # Mimic the callback sequence: _mark_email_verified has already
+        # synced the in-memory object before _advance_role runs (1163 FR-003).
+        user.verification = "verified"
         _advance_role(table=table, user=user, provider="google")
 
         call_kwargs = table.update_item.call_args.kwargs
@@ -250,7 +277,78 @@ class TestAdvanceRoleUpdateExpression:
             provider_metadata={},
         )
 
+        # Mimic the callback sequence: _mark_email_verified has already
+        # synced the in-memory object before _advance_role runs (1163 FR-003).
+        user.verification = "verified"
         _advance_role(table=table, user=user, provider="google")
 
         call_kwargs = table.update_item.call_args.kwargs
         assert call_kwargs["ExpressionAttributeNames"]["#role"] == "role"
+
+
+class TestAdvanceRole1163Guard:
+    """Feature 1163 FR-003: free requires verified — enforced at write time.
+
+    Regression tests for the preprod 2026-07-25 incident: _advance_role used
+    to promote anonymous:none to free:none, a state the model rejects, which
+    made identity lookups skip the row and mint a duplicate per OAuth login.
+    """
+
+    @staticmethod
+    def _make_user() -> User:
+        return User(
+            user_id=str(uuid.uuid4()),
+            email="test@example.com",
+            cognito_sub="cognito-123",
+            auth_type="google",
+            role="anonymous",
+            created_at=datetime.now(UTC),
+            last_active_at=datetime.now(UTC),
+            session_expires_at=datetime.now(UTC) + timedelta(days=30),
+            linked_providers=["google"],
+            provider_metadata={},
+        )
+
+    def test_unverified_user_is_not_advanced(self) -> None:
+        """anonymous:none stays anonymous — no DB write, no in-memory change."""
+        table = MagicMock()
+        user = self._make_user()
+        assert user.verification == "none"
+
+        _advance_role(table=table, user=user, provider="google")
+
+        table.update_item.assert_not_called()
+        assert user.role == "anonymous"
+
+    def test_pending_verification_is_not_advanced(self) -> None:
+        table = MagicMock()
+        user = self._make_user()
+        user.verification = "pending"
+
+        _advance_role(table=table, user=user, provider="google")
+
+        table.update_item.assert_not_called()
+        assert user.role == "anonymous"
+
+    def test_verified_user_advances_and_syncs_in_memory(self) -> None:
+        """The in-memory object reflects the new role: the callback mints the
+        app JWT from this instance after the helpers run."""
+        table = MagicMock()
+        user = self._make_user()
+        user.verification = "verified"
+
+        _advance_role(table=table, user=user, provider="google")
+
+        table.update_item.assert_called_once()
+        assert user.role == "free"
+
+    def test_failed_update_does_not_sync_in_memory(self) -> None:
+        """If the DB write fails, the in-memory role must not lie."""
+        table = MagicMock()
+        table.update_item.side_effect = RuntimeError("boom")
+        user = self._make_user()
+        user.verification = "verified"
+
+        _advance_role(table=table, user=user, provider="google")
+
+        assert user.role == "anonymous"

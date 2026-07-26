@@ -431,3 +431,56 @@ class TestClearApiKeyCache:
         clear_api_key_cache()
         # Should not raise an error
         assert True
+
+
+class TestMaskEmail:
+    """FR-012 masked-line shape (feature 001-lambda-log-visibility, T016).
+
+    The 'Email sent to ...' INFO lines were dark pre-feature; with root-level
+    INFO live they become visible, so the recipient must be masked.
+    """
+
+    @pytest.mark.parametrize(
+        ("raw", "masked"),
+        [
+            ("scott@example.com", "s***@example.com"),
+            ("a@b.io", "a***@b.io"),
+            ("long.local.part@sub.domain.org", "l***@sub.domain.org"),
+        ],
+    )
+    def test_masks_local_part_keeps_domain(self, raw, masked):
+        from src.lambdas.notification.sendgrid_service import _mask_email
+
+        assert _mask_email(raw) == masked
+
+    def test_no_at_sign_fully_masked(self):
+        from src.lambdas.notification.sendgrid_service import _mask_email
+
+        assert _mask_email("not-an-email") == "***"
+
+    def test_send_email_success_log_masks_recipient(self, caplog):
+        """The emitted INFO line must never contain the full address."""
+        import logging as _logging
+
+        from src.lambdas.notification.sendgrid_service import EmailService
+
+        with patch("src.lambdas.notification.sendgrid_service.SendGridAPIClient") as m:
+            m.return_value.send.return_value = MagicMock(status_code=202)
+            service = EmailService(
+                secret_arn="arn:test",
+                from_email="sender@example.com",
+                api_key="SG.test-key",  # pragma: allowlist secret
+            )
+            with caplog.at_level(_logging.INFO):
+                assert service.send_email(
+                    to_email="sensitive.user@example.com",
+                    subject="hi",
+                    html_content="<p>hi</p>",
+                )
+        sent_lines = [
+            r.getMessage() for r in caplog.records if "Email sent" in r.getMessage()
+        ]
+        assert sent_lines, "expected an 'Email sent' INFO line"
+        for line in sent_lines:
+            assert "sensitive.user@example.com" not in line
+            assert "s***@example.com" in line

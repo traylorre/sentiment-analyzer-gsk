@@ -1223,6 +1223,54 @@ def is_token_blocklisted(table: Any, refresh_token_hash: str) -> bool:
         return True
 
 
+def blocklist_refresh_token(
+    table: Any,
+    refresh_token: str,
+    user_id: str,
+    reason: str = "sign_out",
+) -> None:
+    """Blocklist a refresh token so /refresh can never resurrect the session.
+
+    Sign-out hardening (2026-07-25 zombie-session incident): sign_out
+    backdates session_expires_at, but the refresh endpoint's Cognito branch
+    does not consult session expiry — a surviving refresh_token cookie kept
+    re-minting app JWTs after sign-out ("Signed in via Google" with /me 404).
+    refresh_access_tokens checks is_token_blocklisted FIRST for every token
+    type (Cognito JWE and anon.*), so this closes the loop server-side; the
+    route also expires the cookies client-side. Silent-failure pattern: the
+    cookie expiry still covers the common case if this write fails.
+    """
+    now = datetime.now(UTC)
+    try:
+        table.put_item(
+            Item={
+                "PK": f"BLOCK#refresh#{hash_refresh_token(refresh_token)}",
+                "SK": "BLOCK",
+                "ttl_timestamp": int(
+                    (now + timedelta(days=SESSION_DURATION_DAYS)).timestamp()
+                ),
+                "evicted_at": now.isoformat(),
+                "user_id": user_id,
+                "reason": reason,
+            }
+        )
+        logger.info(
+            "Refresh token blocklisted",
+            extra={
+                "user_id_prefix": sanitize_for_log(user_id[:8]),
+                "reason": reason,
+            },
+        )
+    except Exception as e:
+        logger.warning(
+            "Failed to blocklist refresh token on sign-out",
+            extra={
+                "user_id_prefix": sanitize_for_log(user_id[:8]),
+                **get_safe_error_info(e),
+            },
+        )
+
+
 @tracer.capture_method
 def evict_oldest_session_atomic(
     table: Any,
@@ -2458,6 +2506,63 @@ def _read_rev_from_expiring_bearer(bearer: str | None) -> int | None:
 
 # T093: OAuth Callback
 @tracer.capture_method
+def _restart_session_expiry(table: Any, user: User) -> None:
+    """Restart the 30-day session window on OAuth re-authentication.
+
+    Unlike extend_session_expiry (activity-based; refuses expired sessions),
+    a completed OAuth callback is proof of identity, so an expired window is
+    restarted. Deliberately does NOT touch `revoked` — administrative
+    revocation must survive re-login. Follows the callback helpers' silent
+    failure pattern (a failed write degrades to the pre-fix behavior).
+    """
+    now = datetime.now(UTC)
+    new_expiry = now + timedelta(days=SESSION_DURATION_DAYS)
+    try:
+        table.update_item(
+            Key={"PK": user.pk, "SK": user.sk},
+            UpdateExpression=(
+                "SET session_expires_at = :expires, "
+                "last_active_at = :last_active, #ttl = :ttl"
+            ),
+            ExpressionAttributeNames={"#ttl": "ttl_timestamp"},
+            ExpressionAttributeValues={
+                ":expires": new_expiry.isoformat(),
+                ":last_active": now.isoformat(),
+                # Mirror extend_session_expiry's retention convention (90d grace)
+                ":ttl": int(new_expiry.timestamp()) + (90 * 24 * 3600),
+            },
+        )
+        # Sync the in-memory object: the callback response reports
+        # session_expires_in_seconds from this instance.
+        user.session_expires_at = new_expiry
+        user.last_active_at = now
+        logger.info(
+            "Session window restarted on OAuth re-authentication",
+            extra={"user_id_prefix": sanitize_for_log(user.user_id[:8])},
+        )
+    except Exception as e:
+        logger.warning(
+            "Failed to restart session expiry on OAuth login",
+            extra={
+                "user_id_prefix": sanitize_for_log(user.user_id[:8]),
+                **get_safe_error_info(e),
+            },
+        )
+
+
+def _email_verified_claim_is_true(claims: dict[str, Any]) -> bool:
+    """Read the email_verified claim, tolerating Cognito's string form.
+
+    Cognito re-emits mapped IdP attributes on federated id_tokens as the
+    strings "true"/"false", while native flows use a real boolean. A bare
+    truthiness check would treat "false" as verified.
+    """
+    value = claims.get("email_verified", False)
+    if isinstance(value, str):
+        return value.strip().lower() == "true"
+    return bool(value)
+
+
 def handle_oauth_callback(
     table: Any,
     code: str,
@@ -2562,7 +2667,7 @@ def handle_oauth_callback(
             message="Email not provided by OAuth provider.",
         )
 
-    oauth_email_verified = claims.get("email_verified", False)
+    oauth_email_verified = _email_verified_claim_is_true(claims)
 
     # Feature 1395: resolve an existing account by STABLE IDENTITY first (server-derived
     # sub from the validated id_token), then fall back to email. The by_email GSI can be
@@ -2697,6 +2802,13 @@ def handle_oauth_callback(
 
     if existing_user:
         user = existing_user
+        # A completed OAuth callback is re-authentication: restart the session
+        # window even if sign_out backdated it. Without this, sign-out then
+        # sign-in returns a valid JWT pointing at a dead session and /auth/me
+        # 404s forever (get_user returns None past session_expires_at). The
+        # bug was masked pre-1395 because every login minted a fresh duplicate
+        # user with a fresh session.
+        _restart_session_expiry(table, user)
         # Update cognito_sub if not set
         if not user.cognito_sub:
             _update_cognito_sub(table, user, cognito_sub)
@@ -2708,7 +2820,7 @@ def handle_oauth_callback(
             sub=cognito_sub,
             email=email,
             avatar=claims.get("picture"),
-            email_verified=claims.get("email_verified", False),
+            email_verified=oauth_email_verified,
         )
         # Mark email as verified from OAuth (Feature 1171)
         _mark_email_verified(
@@ -2716,7 +2828,7 @@ def handle_oauth_callback(
             user=user,
             provider=provider,
             email=email,
-            email_verified=claims.get("email_verified", False),
+            email_verified=oauth_email_verified,
         )
         # Advance role from anonymous to free (Feature 1170)
         _advance_role(table=table, user=user, provider=provider)
@@ -2737,7 +2849,7 @@ def handle_oauth_callback(
             sub=cognito_sub,
             email=email,
             avatar=claims.get("picture"),
-            email_verified=claims.get("email_verified", False),
+            email_verified=oauth_email_verified,
         )
         # Mark email as verified from OAuth (Feature 1171)
         _mark_email_verified(
@@ -2745,7 +2857,7 @@ def handle_oauth_callback(
             user=user,
             provider=provider,
             email=email,
-            email_verified=claims.get("email_verified", False),
+            email_verified=oauth_email_verified,
         )
         # Advance role from anonymous to free (Feature 1170)
         _advance_role(table=table, user=user, provider=provider)
@@ -2763,21 +2875,25 @@ def handle_oauth_callback(
         if provider in user.linked_providers
         else user.linked_providers + [provider]
     )
-    final_verification = (
-        "verified" if claims.get("email_verified", False) else user.verification
-    )
-    final_role = "free" if user.role == "anonymous" else user.role
+    # 1163 incident fix: _mark_email_verified/_advance_role now sync this in-memory
+    # object on SUCCESSFUL writes, so the response and JWT report what the row
+    # actually says. The old unconditional "anonymous → free" forcing here minted
+    # free-tier JWTs even when the advance was skipped (unverified email) or its
+    # write failed — advertising the forbidden free:none state to the client.
+    final_verification = user.verification
+    final_role = user.role
 
-    # Feature 1396 (N4/FR-002a): make the in-hand user AUTHORITATIVE before roles are
-    # read. get_roles_for_user gates on user.auth_type (roles.py), NOT user.role, and
-    # _advance_role/_mark_email_verified persist to DynamoDB WITHOUT mutating this
-    # in-memory object. Without this reconciliation a just-upgraded existing anonymous
-    # user would mint roles=["anonymous"] (under-grant). New OAuth users already get
-    # auth_type=<provider> at creation, so this is a no-op for them.
+    # Feature 1396 (N4/FR-002a): get_roles_for_user gates on user.auth_type
+    # (roles.py), NOT user.role. An existing anonymous-row user who just
+    # authenticated via OAuth keeps auth_type="anonymous" in the row, which would
+    # under-grant roles=["anonymous"]; record the authn fact for this request.
+    # New OAuth users already get auth_type=<provider> at creation (no-op).
+    # NOTE (carded follow-up): roles.py deriving privileges from auth_type instead
+    # of role means an unverified OAuth user (role=anonymous) still mints free-tier
+    # roles. Unreachable today (Google=verified post-fix; GitHub IdP is broken),
+    # but the derivation should move to user.role.
     if user.auth_type == "anonymous":
         user.auth_type = provider  # authenticated via OAuth; matches new-user creation
-    if user.role == "anonymous":
-        user.role = "free"  # keep role consistent with _advance_role's persisted value
 
     # Feature 1396 (FR-004): return a first-party app JWT as the bearer, NOT the raw
     # Cognito access token (which validate_jwt rejects on signature/aud/iss/roles → the
@@ -3017,6 +3133,19 @@ def _advance_role(
         )
         return
 
+    # Feature 1163 (FR-003): free requires verified. Advancing without it wrote
+    # the forbidden free:none state, which the model then rejected on read —
+    # lookups skipped the row and every OAuth login minted a duplicate user.
+    if user.verification != "verified":
+        logger.info(
+            "Role advancement skipped - email not verified (1163 FR-003)",
+            extra={
+                "verification": user.verification,
+                "user_id_prefix": sanitize_for_log(user.user_id[:8]),
+            },
+        )
+        return
+
     try:
         now = datetime.now(UTC)
         role_assigned_by = f"oauth:{provider}"
@@ -3031,6 +3160,9 @@ def _advance_role(
                 ":assigned_by": role_assigned_by,
             },
         )
+        # Keep the in-memory object consistent with the row: the callback mints
+        # the app JWT from this instance after the helpers run.
+        user.role = "free"
 
         safe_provider_role = (
             str(provider)
@@ -3137,6 +3269,9 @@ def _mark_email_verified(
                 ":pending": "pending",
             },
         )
+        # Sync the in-memory object: _advance_role runs next in the callback and
+        # its 1163 guard reads user.verification from this instance.
+        user.verification = "verified"
 
         safe_provider_verified = (
             str(provider)

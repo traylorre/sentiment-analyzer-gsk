@@ -51,7 +51,10 @@ import boto3
 from aws_lambda_powertools import Tracer
 from boto3.dynamodb.conditions import Key
 
+from src.lambdas.shared.logging_config import configure_lambda_logging
 from src.lib.metrics import emit_metric, log_structured
+
+configure_lambda_logging()
 
 tracer = Tracer(service="sentiment-analyzer-metrics")
 
