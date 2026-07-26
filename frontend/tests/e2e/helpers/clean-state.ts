@@ -309,17 +309,21 @@ export async function deleteTestAlert(page: Page, index: number = 0): Promise<vo
  * Must be called BEFORE page.goto() so the initial GET is intercepted.
  */
 export async function mockAlertData(page: Page): Promise<void> {
+  // Snake_case, matching the real backend AlertResponse. The old camelCase
+  // fixture mirrored the frontend's pre-1387 casting bug, so these tests
+  // passed while production delete/toggle silently no-op'd. Keep this shape
+  // in sync with RawAlert in src/lib/api/alerts.ts.
   const mockAlert = {
-    alertId: 'mock-alert-001',
-    configId: 'mock-config-001',
+    alert_id: 'mock-alert-001',
+    config_id: 'mock-config-001',
     ticker: 'AAPL',
-    alertType: 'sentiment_threshold',
-    thresholdValue: 0.7,
-    thresholdDirection: 'above',
-    isEnabled: true,
-    lastTriggeredAt: null,
-    triggerCount: 0,
-    createdAt: new Date().toISOString(),
+    alert_type: 'sentiment_threshold',
+    threshold_value: 0.7,
+    threshold_direction: 'above',
+    is_enabled: true,
+    last_triggered_at: null,
+    trigger_count: 0,
+    created_at: new Date().toISOString(),
   };
 
   let deleted = false;
@@ -334,7 +338,7 @@ export async function mockAlertData(page: Page): Promise<void> {
           body: JSON.stringify({
             alerts: [],
             total: 0,
-            dailyEmailQuota: { used: 0, limit: 10, resetsAt: new Date().toISOString() },
+            daily_email_quota: { used: 0, limit: 10, resets_at: new Date().toISOString() },
           }),
         });
       } else {
@@ -344,7 +348,7 @@ export async function mockAlertData(page: Page): Promise<void> {
           body: JSON.stringify({
             alerts: [mockAlert],
             total: 1,
-            dailyEmailQuota: { used: 0, limit: 10, resetsAt: new Date().toISOString() },
+            daily_email_quota: { used: 0, limit: 10, resets_at: new Date().toISOString() },
           }),
         });
       }

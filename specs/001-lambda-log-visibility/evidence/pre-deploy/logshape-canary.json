@@ -1,0 +1,359 @@
+{
+  "logGroupName": "/aws/lambda/preprod-sentiment-canary",
+  "collectedAt": "2026-07-26T03:50:39.614027+00:00",
+  "windowUsed": "1h",
+  "error": null,
+  "eventCount": 50,
+  "events": [
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785036429926,
+      "message": "[INFO]\t2026-07-26T03:27:09.926Z\tb533e31a-8fbb-4ce0-a7e1-53a501b8b9c1\tCanary invocation started\n",
+      "ingestionTime": 1785036438938,
+      "eventId": "39807642593874489635709013790405712341312125382492487681"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785036430126,
+      "message": "[INFO]\t2026-07-26T03:27:10.126Z\tb533e31a-8fbb-4ce0-a7e1-53a501b8b9c1\tSubmitted synthetic trace\n",
+      "ingestionTime": 1785036438938,
+      "eventId": "39807642598334638675415138418712855995841797683688570882"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785036430342,
+      "message": "[WARNING]\t2026-07-26T03:27:10.342Z\tb533e31a-8fbb-4ce0-a7e1-53a501b8b9c1\tNo canary traces found\n",
+      "ingestionTime": 1785036438938,
+      "eventId": "39807642603151599638297753017284571142733843768980340739"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785036460389,
+      "message": "[WARNING]\t2026-07-26T03:27:40.389Z\tb533e31a-8fbb-4ce0-a7e1-53a501b8b9c1\tNo canary traces found\n",
+      "ingestionTime": 1785036469403,
+      "eventId": "39807643273222090618547386587838372511714795455392579584"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785036520586,
+      "message": "[WARNING]\t2026-07-26T03:28:40.586Z\tb533e31a-8fbb-4ce0-a7e1-53a501b8b9c1\tNo canary traces found\n",
+      "ingestionTime": 1785036529602,
+      "eventId": "39807644615660049334495307911639859071660186771334365184"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785036520773,
+      "message": "[INFO]\t2026-07-26T03:28:40.773Z\tb533e31a-8fbb-4ce0-a7e1-53a501b8b9c1\tMetrics emitted\n",
+      "ingestionTime": 1785036529602,
+      "eventId": "39807644619830288686620534439107038388645430372952702977"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785036520773,
+      "message": "[INFO]\t2026-07-26T03:28:40.773Z\tb533e31a-8fbb-4ce0-a7e1-53a501b8b9c1\tCanary complete\n",
+      "ingestionTime": 1785036529602,
+      "eventId": "39807644619830288686620534439107038388645430372952702978"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785036520847,
+      "message": "END RequestId: b533e31a-8fbb-4ce0-a7e1-53a501b8b9c1\n",
+      "ingestionTime": 1785036529602,
+      "eventId": "39807644621480543831311800551580681540821409124395253763"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785036520847,
+      "message": "REPORT RequestId: b533e31a-8fbb-4ce0-a7e1-53a501b8b9c1\tDuration: 90929.92 ms\tBilled Duration: 90930 ms\tMemory Size: 128 MB\tMax Memory Used: 92 MB\t\n",
+      "ingestionTime": 1785036529602,
+      "eventId": "39807644621480543831311800551580681540821409124395253764"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785036729944,
+      "message": "START RequestId: 2f9dea49-c8ec-4722-907f-cb24f2ed967e Version: $LATEST\n",
+      "ingestionTime": 1785036738963,
+      "eventId": "39807649284499462608469507830376728733352593942590914560"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785036729948,
+      "message": "[INFO]\t2026-07-26T03:32:09.948Z\t2f9dea49-c8ec-4722-907f-cb24f2ed967e\tCanary invocation started\n",
+      "ingestionTime": 1785036738963,
+      "eventId": "39807649284588665589263630322942871606443187388614836225"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785036730068,
+      "message": "[INFO]\t2026-07-26T03:32:10.068Z\t2f9dea49-c8ec-4722-907f-cb24f2ed967e\tSubmitted synthetic trace\n",
+      "ingestionTime": 1785036738963,
+      "eventId": "39807649287264755013087305099927157799160990769332486146"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785036730276,
+      "message": "[WARNING]\t2026-07-26T03:32:10.276Z\t2f9dea49-c8ec-4722-907f-cb24f2ed967e\tNo canary traces found\n",
+      "ingestionTime": 1785036738963,
+      "eventId": "39807649291903310014381674713366587199871849962576412675"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785036760307,
+      "message": "[WARNING]\t2026-07-26T03:32:40.307Z\t2f9dea49-c8ec-4722-907f-cb24f2ed967e\tNo canary traces found\n",
+      "ingestionTime": 1785036769323,
+      "eventId": "39807649961616989071454818313528754057990279335253835776"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785036820508,
+      "message": "[WARNING]\t2026-07-26T03:33:40.508Z\t2f9dea49-c8ec-4722-907f-cb24f2ed967e\tNo canary traces found\n",
+      "ingestionTime": 1785036829523,
+      "eventId": "39807651304144150768196862129898167505699585045121073152"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785036820708,
+      "message": "[INFO]\t2026-07-26T03:33:40.708Z\t2f9dea49-c8ec-4722-907f-cb24f2ed967e\tMetrics emitted\n",
+      "ingestionTime": 1785036829523,
+      "eventId": "39807651308604299807902986758205311160229257346317156353"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785036820708,
+      "message": "[INFO]\t2026-07-26T03:33:40.708Z\t2f9dea49-c8ec-4722-907f-cb24f2ed967e\tCanary complete\n",
+      "ingestionTime": 1785036829523,
+      "eventId": "39807651308604299807902986758205311160229257346317156354"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785036820788,
+      "message": "END RequestId: 2f9dea49-c8ec-4722-907f-cb24f2ed967e\n",
+      "ingestionTime": 1785036829523,
+      "eventId": "39807651310388359423785436609528168622041126266795589635"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785036820788,
+      "message": "REPORT RequestId: 2f9dea49-c8ec-4722-907f-cb24f2ed967e\tDuration: 90844.35 ms\tBilled Duration: 90845 ms\tMemory Size: 128 MB\tMax Memory Used: 92 MB\t\n",
+      "ingestionTime": 1785036829523,
+      "eventId": "39807651310388359423785436609528168622041126266795589636"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785037030068,
+      "message": "START RequestId: 9514f67a-9457-4384-a281-8b263b19f80d Version: $LATEST\n",
+      "ingestionTime": 1785037039089,
+      "eventId": "39807655977488314572274247923472986727915453604176658432"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785037030069,
+      "message": "[INFO]\t2026-07-26T03:37:10.069Z\t9514f67a-9457-4384-a281-8b263b19f80d\tCanary invocation started\n",
+      "ingestionTime": 1785037039089,
+      "eventId": "39807655977510615317472778546614522446188101965682638849"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785037030169,
+      "message": "[INFO]\t2026-07-26T03:37:10.169Z\t9514f67a-9457-4384-a281-8b263b19f80d\tSubmitted synthetic trace\n",
+      "ingestionTime": 1785037039089,
+      "eventId": "39807655979740689837325840860768094273452938116280680450"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785037030465,
+      "message": "[WARNING]\t2026-07-26T03:37:10.465Z\t9514f67a-9457-4384-a281-8b263b19f80d\tNo canary traces found\n",
+      "ingestionTime": 1785037039089,
+      "eventId": "39807655986341710416090905310662666882156853122050883587"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785037060530,
+      "message": "[WARNING]\t2026-07-26T03:37:40.530Z\t9514f67a-9457-4384-a281-8b263b19f80d\tNo canary traces found\n",
+      "ingestionTime": 1785037069547,
+      "eventId": "39807656656813614809914090097755357638729683751189938176"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785037120726,
+      "message": "[WARNING]\t2026-07-26T03:38:40.726Z\t9514f67a-9457-4384-a281-8b263b19f80d\tNo canary traces found\n",
+      "ingestionTime": 1785037129747,
+      "eventId": "39807657999229272780663480798416662080645321299100434432"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785037120929,
+      "message": "[INFO]\t2026-07-26T03:38:40.929Z\t9514f67a-9457-4384-a281-8b263b19f80d\tMetrics emitted\n",
+      "ingestionTime": 1785037129747,
+      "eventId": "39807658003756324055965197296148412889992938684814458881"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785037120930,
+      "message": "[INFO]\t2026-07-26T03:38:40.930Z\t9514f67a-9457-4384-a281-8b263b19f80d\tCanary complete\n",
+      "ingestionTime": 1785037129747,
+      "eventId": "39807658003778624801163727919289948608265587046320439298"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785037120990,
+      "message": "END RequestId: 9514f67a-9457-4384-a281-8b263b19f80d\n",
+      "ingestionTime": 1785037129747,
+      "eventId": "39807658005116669513075565307782091704624488736679264259"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785037120990,
+      "message": "REPORT RequestId: 9514f67a-9457-4384-a281-8b263b19f80d\tDuration: 90921.09 ms\tBilled Duration: 90922 ms\tMemory Size: 128 MB\tMax Memory Used: 92 MB\t\n",
+      "ingestionTime": 1785037129747,
+      "eventId": "39807658005116669513075565307782091704624488736679264260"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785037329992,
+      "message": "START RequestId: 15bc2321-899d-4cc6-b126-5bc83ebfaf90 Version: $LATEST\n",
+      "ingestionTime": 1785037339012,
+      "eventId": "39807662666017017496372863388016318135104758512959029248"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785037330011,
+      "message": "[INFO]\t2026-07-26T03:42:10.011Z\t15bc2321-899d-4cc6-b126-5bc83ebfaf90\tCanary invocation started\n",
+      "ingestionTime": 1785037339012,
+      "eventId": "39807662666440731655144945227705496782285077381572657153"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785037330150,
+      "message": "[INFO]\t2026-07-26T03:42:10.074Z\t15bc2321-899d-4cc6-b126-5bc83ebfaf90\tSubmitted synthetic trace\n",
+      "ingestionTime": 1785037339012,
+      "eventId": "39807662669540535237740701844378961622183199630903934978"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785037330378,
+      "message": "[WARNING]\t2026-07-26T03:42:10.378Z\t15bc2321-899d-4cc6-b126-5bc83ebfaf90\tNo canary traces found\n",
+      "ingestionTime": 1785037339012,
+      "eventId": "39807662674625105143005683920649105388347026054267469827"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785037360415,
+      "message": "[WARNING]\t2026-07-26T03:42:40.414Z\t15bc2321-899d-4cc6-b126-5bc83ebfaf90\tNo canary traces found\n",
+      "ingestionTime": 1785037369433,
+      "eventId": "39807663344472588671270011259734132801653692728913100800"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785037420597,
+      "message": "[WARNING]\t2026-07-26T03:43:40.597Z\t15bc2321-899d-4cc6-b126-5bc83ebfaf90\tNo canary traces found\n",
+      "ingestionTime": 1785037429615,
+      "eventId": "39807664686576036209239973236392295686016734604140347392"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785037420791,
+      "message": "[INFO]\t2026-07-26T03:43:40.791Z\t15bc2321-899d-4cc6-b126-5bc83ebfaf90\tMetrics emitted\n",
+      "ingestionTime": 1785037429615,
+      "eventId": "39807664690902380777754914125850225030910516736300548097"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785037420791,
+      "message": "[INFO]\t2026-07-26T03:43:40.791Z\t15bc2321-899d-4cc6-b126-5bc83ebfaf90\tCanary complete\n",
+      "ingestionTime": 1785037429615,
+      "eventId": "39807664690902380777754914125850225030910516736300548098"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785037420871,
+      "message": "END RequestId: 15bc2321-899d-4cc6-b126-5bc83ebfaf90\n",
+      "ingestionTime": 1785037429615,
+      "eventId": "39807664692686440393637363977173082492722385656778981379"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785037420871,
+      "message": "REPORT RequestId: 15bc2321-899d-4cc6-b126-5bc83ebfaf90\tDuration: 90878.64 ms\tBilled Duration: 90879 ms\tMemory Size: 128 MB\tMax Memory Used: 92 MB\t\n",
+      "ingestionTime": 1785037429615,
+      "eventId": "39807664692686440393637363977173082492722385656778981380"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785037629931,
+      "message": "START RequestId: 7af2b2e8-0699-4647-92c0-fd2f78203a4d Version: $LATEST\n",
+      "ingestionTime": 1785037638949,
+      "eventId": "39807669354880231598449438199699665336941846380542558208"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785037629953,
+      "message": "[INFO]\t2026-07-26T03:47:09.953Z\t7af2b2e8-0699-4647-92c0-fd2f78203a4d\tCanary invocation started\n",
+      "ingestionTime": 1785037638949,
+      "eventId": "39807669355370847992817111908813451138940110333674127361"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785037630093,
+      "message": "[INFO]\t2026-07-26T03:47:10.093Z\t7af2b2e8-0699-4647-92c0-fd2f78203a4d\tSubmitted synthetic trace\n",
+      "ingestionTime": 1785037638949,
+      "eventId": "39807669358492952320611399148628451697110880944511385602"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785037630301,
+      "message": "[WARNING]\t2026-07-26T03:47:10.301Z\t7af2b2e8-0699-4647-92c0-fd2f78203a4d\tNo canary traces found\n",
+      "ingestionTime": 1785037638949,
+      "eventId": "39807669363131507321905768762067881097821740137755312131"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785037660328,
+      "message": "[WARNING]\t2026-07-26T03:47:40.328Z\t7af2b2e8-0699-4647-92c0-fd2f78203a4d\tNo canary traces found\n",
+      "ingestionTime": 1785037669340,
+      "eventId": "39807670032755983398184789869701124749025256101027250176"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785037720498,
+      "message": "[WARNING]\t2026-07-26T03:48:40.498Z\t7af2b2e8-0699-4647-92c0-fd2f78203a4d\tNo canary traces found\n",
+      "ingestionTime": 1785037729518,
+      "eventId": "39807671374591821993772384368656183870212868743428571136"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785037720712,
+      "message": "[INFO]\t2026-07-26T03:48:40.699Z\t7af2b2e8-0699-4647-92c0-fd2f78203a4d\tMetrics emitted\n",
+      "ingestionTime": 1785037729518,
+      "eventId": "39807671379364181466257937720944827580559618105708380161"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785037720712,
+      "message": "[INFO]\t2026-07-26T03:48:40.712Z\t7af2b2e8-0699-4647-92c0-fd2f78203a4d\tCanary complete\n",
+      "ingestionTime": 1785037729518,
+      "eventId": "39807671379364181466257937720944827580559618105708380162"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785037720773,
+      "message": "END RequestId: 7af2b2e8-0699-4647-92c0-fd2f78203a4d\n",
+      "ingestionTime": 1785037729518,
+      "eventId": "39807671380724526923368305732578506395191168157573185539"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]1091310250734a2c80fea86f19117d5a",
+      "timestamp": 1785037720773,
+      "message": "REPORT RequestId: 7af2b2e8-0699-4647-92c0-fd2f78203a4d\tDuration: 90841.56 ms\tBilled Duration: 90842 ms\tMemory Size: 128 MB\tMax Memory Used: 92 MB\t\n",
+      "ingestionTime": 1785037729518,
+      "eventId": "39807671380724526923368305732578506395191168157573185540"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]f5fe6670be5d4e3d9d4c37cb06720409",
+      "timestamp": 1785037825016,
+      "message": "INIT_START Runtime Version: python:3.13.mainlinev2.v18\tRuntime Version ARN: arn:aws:lambda:us-east-1::runtime:85016a02049aea54df8f85632acb695fe6e1c8623b63b4ed1d582917e22e8e4d\n",
+      "ingestionTime": 1785037827415,
+      "eventId": "39807673705421108653796053994036762458642125794393653248"
+    }
+  ]
+}

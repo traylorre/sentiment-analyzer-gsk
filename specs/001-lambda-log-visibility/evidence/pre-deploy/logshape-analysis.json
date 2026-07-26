@@ -1,0 +1,359 @@
+{
+  "logGroupName": "/aws/lambda/preprod-sentiment-analysis",
+  "collectedAt": "2026-07-26T03:50:34.613762+00:00",
+  "windowUsed": "6h",
+  "error": null,
+  "eventCount": 50,
+  "events": [
+    {
+      "logStreamName": "2026/07/26/[$LATEST]edf1457fd86b4bc79031e87243cd7b5b",
+      "timestamp": 1785033514087,
+      "message": "[WARNING]\t2026-07-26T02:38:34.087Z\td3814ed7-df04-430c-bc1c-99efd5c8e7f6\tItem already analyzed, skipping\n",
+      "ingestionTime": 1785033522642,
+      "eventId": "39807577568491910697375359872452714102912783637258043394"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]57e6f3069d8e40d283a08fb863d32d1b",
+      "timestamp": 1785033514093,
+      "message": "[WARNING]\t2026-07-26T02:38:34.093Z\t19165ec0-92a2-4373-aedb-b4066ed528cb\tItem already analyzed, skipping\n",
+      "ingestionTime": 1785033522640,
+      "eventId": "39807577568625715168566543611299616035755486023841939458"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]17fc3c3251e840e88d369751d9a992f0",
+      "timestamp": 1785033514103,
+      "message": "{\"timestamp\": \"2026-07-26T02:38:34.103451+00:00\", \"level\": \"INFO\", \"message\": \"Inference complete\", \"source_id\": \"dedup:a08dfe267e72314470348ac127950492\", \"sentiment\": \"negative\", \"score\": 0.9765, \"inference_time_ms\": 105.8}\n",
+      "ingestionTime": 1785033522985,
+      "eventId": "39807577568848722620551849843132293651422217519087288322"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]7c3db65770284fc9998abe999d525398",
+      "timestamp": 1785033514142,
+      "message": "{\"timestamp\": \"2026-07-26T02:38:34.142395+00:00\", \"level\": \"INFO\", \"message\": \"Inference complete\", \"source_id\": \"dedup:a08dfe267e72314470348ac127950492\", \"sentiment\": \"negative\", \"score\": 0.9765, \"inference_time_ms\": 318.81}\n",
+      "ingestionTime": 1785033522796,
+      "eventId": "39807577569718451683294544145423365448932710271689687041"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]edf1457fd86b4bc79031e87243cd7b5b",
+      "timestamp": 1785033514145,
+      "message": "{\"timestamp\": \"2026-07-26T02:38:34.145047+00:00\", \"level\": \"INFO\", \"message\": \"Analysis completed\", \"source_id\": \"dedup:480d191be91a79c82776f1538a270bd0\", \"sentiment\": \"negative\", \"score\": 0.9991, \"model_version\": \"a4b88c6\", \"inference_time_ms\": 300.74, \"execution_time_ms\": 32939.06, \"updated\": false}\n",
+      "ingestionTime": 1785033522642,
+      "eventId": "39807577569785353918890136014661785762726388604604907523"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]edf1457fd86b4bc79031e87243cd7b5b",
+      "timestamp": 1785033514147,
+      "message": "END RequestId: d3814ed7-df04-430c-bc1c-99efd5c8e7f6\n",
+      "ingestionTime": 1785033522642,
+      "eventId": "39807577569829955409287197260944857199271685327616868356"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]edf1457fd86b4bc79031e87243cd7b5b",
+      "timestamp": 1785033514147,
+      "message": "REPORT RequestId: d3814ed7-df04-430c-bc1c-99efd5c8e7f6\tDuration: 32974.08 ms\tBilled Duration: 33779 ms\tMemory Size: 2048 MB\tMax Memory Used: 850 MB\tInit Duration: 804.50 ms\t\nXRAY TraceId: 1-6a6572f4-74632e5e2a4b2f4646cd9e02\tSegmentId: 0c20fb548cf3153a\tSampled: true\t\n",
+      "ingestionTime": 1785033522642,
+      "eventId": "39807577569829955409287197260944857199271685327616868357"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]57e6f3069d8e40d283a08fb863d32d1b",
+      "timestamp": 1785033514155,
+      "message": "{\"timestamp\": \"2026-07-26T02:38:34.155805+00:00\", \"level\": \"INFO\", \"message\": \"Analysis completed\", \"source_id\": \"dedup:8c22ebbe86163e50e94c5e1e3fecde29\", \"sentiment\": \"positive\", \"score\": 0.9943, \"model_version\": \"a4b88c6\", \"inference_time_ms\": 329.04, \"execution_time_ms\": 32984.99, \"updated\": false}\n",
+      "ingestionTime": 1785033522640,
+      "eventId": "39807577570008361370875442246074830568659684437212725251"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]57e6f3069d8e40d283a08fb863d32d1b",
+      "timestamp": 1785033514158,
+      "message": "END RequestId: 19165ec0-92a2-4373-aedb-b4066ed528cb\n",
+      "ingestionTime": 1785033522640,
+      "eventId": "39807577570075263606471034115499437723477629521730666500"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]57e6f3069d8e40d283a08fb863d32d1b",
+      "timestamp": 1785033514158,
+      "message": "REPORT RequestId: 19165ec0-92a2-4373-aedb-b4066ed528cb\tDuration: 33022.18 ms\tBilled Duration: 33781 ms\tMemory Size: 2048 MB\tMax Memory Used: 837 MB\tInit Duration: 758.34 ms\t\nXRAY TraceId: 1-6a6572f4-74632e5e2a4b2f4646cd9e02\tSegmentId: 4457f0e5fcbad0a7\tSampled: true\t\n",
+      "ingestionTime": 1785033522640,
+      "eventId": "39807577570075263606471034115499437723477629521730666501"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]17fc3c3251e840e88d369751d9a992f0",
+      "timestamp": 1785033514200,
+      "message": "{\"timestamp\": \"2026-07-26T02:38:34.200784+00:00\", \"level\": \"INFO\", \"message\": \"Time-series fanout complete\", \"tickers_written\": 1, \"tickers_failed\": 0}\n",
+      "ingestionTime": 1785033522985,
+      "eventId": "39807577571011894904809320287861258323869108585167388675"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]17fc3c3251e840e88d369751d9a992f0",
+      "timestamp": 1785033514227,
+      "message": "{\"timestamp\": \"2026-07-26T02:38:34.227265+00:00\", \"level\": \"INFO\", \"message\": \"Analysis completed\", \"source_id\": \"dedup:a08dfe267e72314470348ac127950492\", \"sentiment\": \"negative\", \"score\": 0.9765, \"model_version\": \"a4b88c6\", \"inference_time_ms\": 105.8, \"execution_time_ms\": 231.16, \"updated\": true}\n",
+      "ingestionTime": 1785033522985,
+      "eventId": "39807577571614015025169647112682722717230614345828859908"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]17fc3c3251e840e88d369751d9a992f0",
+      "timestamp": 1785033514230,
+      "message": "END RequestId: 91cf344e-f895-490d-85ea-615055bc51bd\n",
+      "ingestionTime": 1785033522985,
+      "eventId": "39807577571680917260765238982107329872048559430346801157"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]17fc3c3251e840e88d369751d9a992f0",
+      "timestamp": 1785033514230,
+      "message": "REPORT RequestId: 91cf344e-f895-490d-85ea-615055bc51bd\tDuration: 261.78 ms\tBilled Duration: 262 ms\tMemory Size: 2048 MB\tMax Memory Used: 848 MB\t\nXRAY TraceId: 1-6a6572f4-74632e5e2a4b2f4646cd9e02\tSegmentId: ba3291924130c773\tSampled: true\t\n",
+      "ingestionTime": 1785033522985,
+      "eventId": "39807577571680917260765238982107329872048559430346801158"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]7c3db65770284fc9998abe999d525398",
+      "timestamp": 1785033514246,
+      "message": "[WARNING]\t2026-07-26T02:38:34.246Z\t7ac550c4-e3c1-416a-878b-6922be9f6e93\tItem already analyzed, skipping\n",
+      "ingestionTime": 1785033522796,
+      "eventId": "39807577572037729183941728952143080149288139868311650306"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]7c3db65770284fc9998abe999d525398",
+      "timestamp": 1785033514307,
+      "message": "{\"timestamp\": \"2026-07-26T02:38:34.307645+00:00\", \"level\": \"INFO\", \"message\": \"Analysis completed\", \"source_id\": \"dedup:a08dfe267e72314470348ac127950492\", \"sentiment\": \"negative\", \"score\": 0.9765, \"model_version\": \"a4b88c6\", \"inference_time_ms\": 318.81, \"execution_time_ms\": 33182.13, \"updated\": false}\n",
+      "ingestionTime": 1785033522796,
+      "eventId": "39807577573398074641052096963776758963919689920176455683"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]7c3db65770284fc9998abe999d525398",
+      "timestamp": 1785033514310,
+      "message": "END RequestId: 7ac550c4-e3c1-416a-878b-6922be9f6e93\n",
+      "ingestionTime": 1785033522796,
+      "eventId": "39807577573464976876647688833201366118737635004694396932"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]7c3db65770284fc9998abe999d525398",
+      "timestamp": 1785033514310,
+      "message": "REPORT RequestId: 7ac550c4-e3c1-416a-878b-6922be9f6e93\tDuration: 33217.46 ms\tBilled Duration: 33931 ms\tMemory Size: 2048 MB\tMax Memory Used: 842 MB\tInit Duration: 713.46 ms\t\nXRAY TraceId: 1-6a6572f4-74632e5e2a4b2f4646cd9e02\tSegmentId: c7dbb500bc12cf4f\tSampled: true\t\n",
+      "ingestionTime": 1785033522796,
+      "eventId": "39807577573464976876647688833201366118737635004694396933"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]7ba8a465af474d0a97cfebeaf8460cbd",
+      "timestamp": 1785034974376,
+      "message": "START RequestId: da7afb60-7d75-4a3d-a148-27add1486ca9 Version: $LATEST\n",
+      "ingestionTime": 1785034975201,
+      "eventId": "39807610134024815914460498358541436070533405013177860096"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]7ba8a465af474d0a97cfebeaf8460cbd",
+      "timestamp": 1785034974377,
+      "message": "{\"timestamp\": \"2026-07-26T03:02:54.377228+00:00\", \"level\": \"INFO\", \"message\": \"Analysis started\", \"request_id\": \"da7afb60-7d75-4a3d-a148-27add1486ca9\", \"source_id\": \"dedup:a0e95d9b3b3d0c36173d7bccaca02a81\", \"ticker_count\": 1}\n",
+      "ingestionTime": 1785034975201,
+      "eventId": "39807610134047116659659028981682971788806053374683840513"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]65d221a293c143829854afce2854a507",
+      "timestamp": 1785034974632,
+      "message": "START RequestId: c8d9d0ad-407d-4ac8-aada-56e26e1b7f9d Version: $LATEST\n",
+      "ingestionTime": 1785034978339,
+      "eventId": "39807610139733806685284337886568051206885196097690140672"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]65d221a293c143829854afce2854a507",
+      "timestamp": 1785034974633,
+      "message": "{\"timestamp\": \"2026-07-26T03:02:54.632910+00:00\", \"level\": \"INFO\", \"message\": \"Analysis started\", \"request_id\": \"c8d9d0ad-407d-4ac8-aada-56e26e1b7f9d\", \"source_id\": \"dedup:a0e95d9b3b3d0c36173d7bccaca02a81\", \"ticker_count\": 1}\n",
+      "ingestionTime": 1785034978339,
+      "eventId": "39807610139756107430482868509709586925157844459196121089"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]7ba8a465af474d0a97cfebeaf8460cbd",
+      "timestamp": 1785034982248,
+      "message": "Device set to use cpu\n",
+      "ingestionTime": 1785034991264,
+      "eventId": "39807610309576282117293563748129813940311625713262395392"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]7ba8a465af474d0a97cfebeaf8460cbd",
+      "timestamp": 1785034982426,
+      "message": "{\"timestamp\": \"2026-07-26T03:03:02.426522+00:00\", \"level\": \"INFO\", \"message\": \"Inference complete\", \"source_id\": \"dedup:a0e95d9b3b3d0c36173d7bccaca02a81\", \"sentiment\": \"negative\", \"score\": 0.9919, \"inference_time_ms\": 132.36}\n",
+      "ingestionTime": 1785034991264,
+      "eventId": "39807610313545814762632014667323171792843034061326909441"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]7ba8a465af474d0a97cfebeaf8460cbd",
+      "timestamp": 1785034982669,
+      "message": "{\"timestamp\": \"2026-07-26T03:03:02.669511+00:00\", \"level\": \"INFO\", \"message\": \"Time-series fanout complete\", \"tickers_written\": 1, \"tickers_failed\": 0}\n",
+      "ingestionTime": 1785034991264,
+      "eventId": "39807610318964895845874956090716351333096585907280150530"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]7ba8a465af474d0a97cfebeaf8460cbd",
+      "timestamp": 1785034982696,
+      "message": "{\"timestamp\": \"2026-07-26T03:03:02.695916+00:00\", \"level\": \"INFO\", \"message\": \"Analysis completed\", \"source_id\": \"dedup:a0e95d9b3b3d0c36173d7bccaca02a81\", \"sentiment\": \"negative\", \"score\": 0.9919, \"model_version\": \"a4b88c6\", \"inference_time_ms\": 132.36, \"execution_time_ms\": 8292.57, \"updated\": true}\n",
+      "ingestionTime": 1785034991264,
+      "eventId": "39807610319567015966235282915537815726458091667941621763"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]7ba8a465af474d0a97cfebeaf8460cbd",
+      "timestamp": 1785034982700,
+      "message": "END RequestId: da7afb60-7d75-4a3d-a148-27add1486ca9\n",
+      "ingestionTime": 1785034991264,
+      "eventId": "39807610319656218947029405408103958599548685113965543428"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]7ba8a465af474d0a97cfebeaf8460cbd",
+      "timestamp": 1785034982700,
+      "message": "REPORT RequestId: da7afb60-7d75-4a3d-a148-27add1486ca9\tDuration: 8323.78 ms\tBilled Duration: 9134 ms\tMemory Size: 2048 MB\tMax Memory Used: 855 MB\tInit Duration: 809.68 ms\t\nXRAY TraceId: 1-6a6578d0-0b8d7a4612beaaf972a340e9\tSegmentId: 8d02f99b15d9afa9\tSampled: true\t\n",
+      "ingestionTime": 1785034991264,
+      "eventId": "39807610319656218947029405408103958599548685113965543429"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]65d221a293c143829854afce2854a507",
+      "timestamp": 1785034982767,
+      "message": "Device set to use cpu\n",
+      "ingestionTime": 1785034991784,
+      "eventId": "39807610321150368875330957159215521639412076868958552064"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]65d221a293c143829854afce2854a507",
+      "timestamp": 1785034982950,
+      "message": "{\"timestamp\": \"2026-07-26T03:03:02.950792+00:00\", \"level\": \"INFO\", \"message\": \"Inference complete\", \"source_id\": \"dedup:a0e95d9b3b3d0c36173d7bccaca02a81\", \"sentiment\": \"negative\", \"score\": 0.9919, \"inference_time_ms\": 140.8}\n",
+      "ingestionTime": 1785034991784,
+      "eventId": "39807610325231405246662061194116558083306727024552968193"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]65d221a293c143829854afce2854a507",
+      "timestamp": 1785034983048,
+      "message": "[WARNING]\t2026-07-26T03:03:03.048Z\tc8d9d0ad-407d-4ac8-aada-56e26e1b7f9d\tItem already analyzed, skipping\n",
+      "ingestionTime": 1785034991784,
+      "eventId": "39807610327416878276118062261987058474026266452139048962"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]65d221a293c143829854afce2854a507",
+      "timestamp": 1785034983120,
+      "message": "{\"timestamp\": \"2026-07-26T03:03:03.120795+00:00\", \"level\": \"INFO\", \"message\": \"Analysis completed\", \"source_id\": \"dedup:a0e95d9b3b3d0c36173d7bccaca02a81\", \"sentiment\": \"negative\", \"score\": 0.9919, \"model_version\": \"a4b88c6\", \"inference_time_ms\": 140.8, \"execution_time_ms\": 8446.06, \"updated\": false}\n",
+      "ingestionTime": 1785034991784,
+      "eventId": "39807610329022531930412267128177630189656948480569638915"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]65d221a293c143829854afce2854a507",
+      "timestamp": 1785034983123,
+      "message": "END RequestId: c8d9d0ad-407d-4ac8-aada-56e26e1b7f9d\n",
+      "ingestionTime": 1785034991784,
+      "eventId": "39807610329089434166007858997602237344474893565087580164"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]65d221a293c143829854afce2854a507",
+      "timestamp": 1785034983123,
+      "message": "REPORT RequestId: c8d9d0ad-407d-4ac8-aada-56e26e1b7f9d\tDuration: 8491.06 ms\tBilled Duration: 9621 ms\tMemory Size: 2048 MB\tMax Memory Used: 845 MB\tInit Duration: 1129.49 ms\t\nXRAY TraceId: 1-6a6578d0-0b8d7a4612beaaf972a340e9\tSegmentId: 63afe225a357accb\tSampled: true\t\n",
+      "ingestionTime": 1785034991784,
+      "eventId": "39807610329089434166007858997602237344474893565087580165"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]2aa2b2645def4f299b56803ed8e49c45",
+      "timestamp": 1785037386089,
+      "message": "START RequestId: 039ccb10-b47f-4fcd-9f1d-fe7dc99234ce Version: $LATEST\n",
+      "ingestionTime": 1785037389921,
+      "eventId": "39807663917021920898345229820290892802044251177199730688"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]2aa2b2645def4f299b56803ed8e49c45",
+      "timestamp": 1785037386089,
+      "message": "{\"timestamp\": \"2026-07-26T03:43:06.089764+00:00\", \"level\": \"INFO\", \"message\": \"Analysis started\", \"request_id\": \"039ccb10-b47f-4fcd-9f1d-fe7dc99234ce\", \"source_id\": \"dedup:11d34698f0eb6941bfe3ab8e6abd8780\", \"ticker_count\": 1}\n",
+      "ingestionTime": 1785037389921,
+      "eventId": "39807663917021920898345229820290892802044251177199730689"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]cc4eb9db81284c02a90dc8e66b4dac7d",
+      "timestamp": 1785037386198,
+      "message": "START RequestId: 1a7c3202-3806-4837-b84a-1f2634f37941 Version: $LATEST\n",
+      "ingestionTime": 1785037389242,
+      "eventId": "39807663919452702124985067741897147342275971882798219264"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]cc4eb9db81284c02a90dc8e66b4dac7d",
+      "timestamp": 1785037386199,
+      "message": "{\"timestamp\": \"2026-07-26T03:43:06.198907+00:00\", \"level\": \"INFO\", \"message\": \"Analysis started\", \"request_id\": \"1a7c3202-3806-4837-b84a-1f2634f37941\", \"source_id\": \"dedup:11d34698f0eb6941bfe3ab8e6abd8780\", \"ticker_count\": 1}\n",
+      "ingestionTime": 1785037389242,
+      "eventId": "39807663919475002870183598365038683060548620244304199681"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]2aa2b2645def4f299b56803ed8e49c45",
+      "timestamp": 1785037394506,
+      "message": "Device set to use cpu\n",
+      "ingestionTime": 1785037403521,
+      "eventId": "39807664104727293234377484819038270690710137278417403904"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]2aa2b2645def4f299b56803ed8e49c45",
+      "timestamp": 1785037394667,
+      "message": "{\"timestamp\": \"2026-07-26T03:43:14.667673+00:00\", \"level\": \"INFO\", \"message\": \"Inference complete\", \"source_id\": \"dedup:11d34698f0eb6941bfe3ab8e6abd8780\", \"sentiment\": \"positive\", \"score\": 0.9991, \"inference_time_ms\": 117.25}\n",
+      "ingestionTime": 1785037403521,
+      "eventId": "39807664108317713211340915144825521332606523480880250881"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]2aa2b2645def4f299b56803ed8e49c45",
+      "timestamp": 1785037394847,
+      "message": "{\"timestamp\": \"2026-07-26T03:43:14.847852+00:00\", \"level\": \"INFO\", \"message\": \"Time-series fanout complete\", \"tickers_written\": 1, \"tickers_failed\": 0}\n",
+      "ingestionTime": 1785037403521,
+      "eventId": "39807664112331847347076427310301950621683228551956725762"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]2aa2b2645def4f299b56803ed8e49c45",
+      "timestamp": 1785037394880,
+      "message": "{\"timestamp\": \"2026-07-26T03:43:14.880691+00:00\", \"level\": \"INFO\", \"message\": \"Analysis completed\", \"source_id\": \"dedup:11d34698f0eb6941bfe3ab8e6abd8780\", \"sentiment\": \"positive\", \"score\": 0.9991, \"model_version\": \"a4b88c6\", \"inference_time_ms\": 117.25, \"execution_time_ms\": 8758.4, \"updated\": true}\n",
+      "ingestionTime": 1785037403521,
+      "eventId": "39807664113067771938627937873972629324680624481654079491"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]2aa2b2645def4f299b56803ed8e49c45",
+      "timestamp": 1785037394884,
+      "message": "END RequestId: 039ccb10-b47f-4fcd-9f1d-fe7dc99234ce\n",
+      "ingestionTime": 1785037403521,
+      "eventId": "39807664113156974919422060366538772197771217927678001156"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]2aa2b2645def4f299b56803ed8e49c45",
+      "timestamp": 1785037394885,
+      "message": "REPORT RequestId: 039ccb10-b47f-4fcd-9f1d-fe7dc99234ce\tDuration: 8795.49 ms\tBilled Duration: 9622 ms\tMemory Size: 2048 MB\tMax Memory Used: 849 MB\tInit Duration: 825.57 ms\t\nXRAY TraceId: 1-6a658230-5051985d74f95a4c3c814b1d\tSegmentId: d751d1b6faf277c2\tSampled: true\t\n",
+      "ingestionTime": 1785037403521,
+      "eventId": "39807664113179275664620590989680307916043866289183981573"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]cc4eb9db81284c02a90dc8e66b4dac7d",
+      "timestamp": 1785037394900,
+      "message": "Device set to use cpu\n",
+      "ingestionTime": 1785037403914,
+      "eventId": "39807664113513786842598550337278292997736361182765187072"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]cc4eb9db81284c02a90dc8e66b4dac7d",
+      "timestamp": 1785037395064,
+      "message": "{\"timestamp\": \"2026-07-26T03:43:15.064335+00:00\", \"level\": \"INFO\", \"message\": \"Inference complete\", \"source_id\": \"dedup:11d34698f0eb6941bfe3ab8e6abd8780\", \"sentiment\": \"positive\", \"score\": 0.9991, \"inference_time_ms\": 122.98}\n",
+      "ingestionTime": 1785037403914,
+      "eventId": "39807664117171109055157572532490150794450692469745975297"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]cc4eb9db81284c02a90dc8e66b4dac7d",
+      "timestamp": 1785037395160,
+      "message": "[WARNING]\t2026-07-26T03:43:15.160Z\t1a7c3202-3806-4837-b84a-1f2634f37941\tItem already analyzed, skipping\n",
+      "ingestionTime": 1785037403914,
+      "eventId": "39807664119311980594216512354077579748624935174320095234"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]cc4eb9db81284c02a90dc8e66b4dac7d",
+      "timestamp": 1785037395223,
+      "message": "{\"timestamp\": \"2026-07-26T03:43:15.222969+00:00\", \"level\": \"INFO\", \"message\": \"Analysis completed\", \"source_id\": \"dedup:11d34698f0eb6941bfe3ab8e6abd8780\", \"sentiment\": \"positive\", \"score\": 0.9991, \"model_version\": \"a4b88c6\", \"inference_time_ms\": 122.98, \"execution_time_ms\": 8987.61, \"updated\": false}\n",
+      "ingestionTime": 1785037403914,
+      "eventId": "39807664120716927541723941611994329999801781949196861443"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]cc4eb9db81284c02a90dc8e66b4dac7d",
+      "timestamp": 1785037395225,
+      "message": "END RequestId: 1a7c3202-3806-4837-b84a-1f2634f37941\n",
+      "ingestionTime": 1785037403914,
+      "eventId": "39807664120761529032121002858277401436347078672208822276"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]cc4eb9db81284c02a90dc8e66b4dac7d",
+      "timestamp": 1785037395225,
+      "message": "REPORT RequestId: 1a7c3202-3806-4837-b84a-1f2634f37941\tDuration: 9027.18 ms\tBilled Duration: 10008 ms\tMemory Size: 2048 MB\tMax Memory Used: 857 MB\tInit Duration: 980.06 ms\t\nXRAY TraceId: 1-6a658230-5051985d74f95a4c3c814b1d\tSegmentId: c102bf5e191e57b7\tSampled: true\t\n",
+      "ingestionTime": 1785037403914,
+      "eventId": "39807664120761529032121002858277401436347078672208822277"
+    }
+  ]
+}

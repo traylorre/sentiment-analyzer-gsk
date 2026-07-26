@@ -21,6 +21,10 @@ import boto3
 from aws_lambda_powertools import Tracer
 from botocore.exceptions import ClientError
 
+from src.lambdas.shared.logging_config import configure_lambda_logging
+
+configure_lambda_logging()
+
 logger = logging.getLogger(__name__)
 logger.setLevel(os.environ.get("LOG_LEVEL", "INFO"))
 

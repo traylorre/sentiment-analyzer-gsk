@@ -1,0 +1,229 @@
+{
+  "collectedAt": "2026-07-26T03:54:23.848494+00:00",
+  "function": "preprod-sentiment-dashboard",
+  "qualifier": "live",
+  "path": "/health",
+  "invocations": [
+    {
+      "i": 0,
+      "request_id": "2632b1b3-97b4-492f-8c0c-643a080d165a",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 3320.8,
+      "ts": 1785038011.7787523,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    },
+    {
+      "i": 1,
+      "request_id": "f3cad494-73ee-4fd6-aa92-5564a87d4c78",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 149.4,
+      "ts": 1785038015.099617,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    },
+    {
+      "i": 2,
+      "request_id": "a422dbb2-b99f-4e77-901e-ff3a061f1cf2",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 146.5,
+      "ts": 1785038015.2491207,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    },
+    {
+      "i": 3,
+      "request_id": "5dcd4849-1b90-4c27-9447-22dc84e0473b",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 157.2,
+      "ts": 1785038015.3956409,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    },
+    {
+      "i": 4,
+      "request_id": "af3dcabb-0fe7-4ab9-aea4-f09e473c7ba1",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 149.0,
+      "ts": 1785038015.5528803,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    },
+    {
+      "i": 5,
+      "request_id": "82ce2992-811c-4529-a414-9f7ae64e70f4",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 179.8,
+      "ts": 1785038015.7019653,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    },
+    {
+      "i": 6,
+      "request_id": "ad5d3a23-786b-4f8a-adf2-11907030ecf4",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 177.3,
+      "ts": 1785038015.8819537,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    },
+    {
+      "i": 7,
+      "request_id": "80810077-031b-45f3-bfe6-29b5d24fd60f",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 155.4,
+      "ts": 1785038016.0594015,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    },
+    {
+      "i": 8,
+      "request_id": "2a997091-af65-4036-aa30-89dd8d414d2c",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 159.4,
+      "ts": 1785038016.2148166,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    },
+    {
+      "i": 9,
+      "request_id": "b04893ab-b167-4a78-9931-00b28c3d8e57",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 146.4,
+      "ts": 1785038016.3743224,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    },
+    {
+      "i": 10,
+      "request_id": "c54cb328-3005-427a-ba56-709928b52c67",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 150.5,
+      "ts": 1785038016.5207803,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    },
+    {
+      "i": 11,
+      "request_id": "af467b73-3574-48f1-a6b4-05dba1828371",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 145.6,
+      "ts": 1785038016.6713421,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    },
+    {
+      "i": 12,
+      "request_id": "c41138cd-fce5-4e8f-bd67-f1f292ed70c0",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 154.0,
+      "ts": 1785038016.8170705,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    },
+    {
+      "i": 13,
+      "request_id": "5e7523d1-32f7-4b90-b896-c0c102ce8471",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 159.3,
+      "ts": 1785038016.9711158,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    },
+    {
+      "i": 14,
+      "request_id": "eebae5fa-10af-472d-8d05-5baba2637410",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 137.8,
+      "ts": 1785038017.1305277,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    },
+    {
+      "i": 15,
+      "request_id": "ef6a1ea5-483b-4bee-946c-cafa1d8cdbd8",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 140.8,
+      "ts": 1785038017.2686582,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    },
+    {
+      "i": 16,
+      "request_id": "fd6fc95c-a9ca-423e-bbc4-8fcc531337a9",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 126.6,
+      "ts": 1785038017.4098125,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    },
+    {
+      "i": 17,
+      "request_id": "090f7f51-55d7-4272-9968-af3cc9fc2c6d",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 154.3,
+      "ts": 1785038017.5365603,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    },
+    {
+      "i": 18,
+      "request_id": "5c5fced1-030d-4807-8c6d-ed428319ab9f",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 158.5,
+      "ts": 1785038017.6909575,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    },
+    {
+      "i": 19,
+      "request_id": "f9be7f38-b7f0-4628-9d7e-dd272d8a38e0",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 153.3,
+      "ts": 1785038017.8495917,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    }
+  ],
+  "log_events_in_window": 83
+}

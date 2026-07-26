@@ -126,7 +126,19 @@ class TestPublicEndpoints:
 @pytest.mark.skipif(skip.condition, reason=skip.reason)
 @pytest.mark.preprod
 class TestCORSOnErrorResponses:
-    """US4: 401 responses include CORS headers."""
+    """US4: 401 responses include CORS headers.
+
+    Post gateway-authorizer removal (2026-07-25): 401s come from the Lambda,
+    which echoes CORS headers only for ALLOWED origins (the gateway's canned
+    401 used to reflect any origin — that behavior is gone, deliberately).
+    These tests must therefore present the real frontend origin.
+    """
+
+    @pytest.fixture
+    def frontend_origin(self) -> str:
+        return os.environ.get(
+            "PREPROD_FRONTEND_URL", "https://main.d29tlmksqcx494.amplifyapp.com"
+        ).rstrip("/")
 
     @pytest.fixture
     def api_url(self) -> str:
@@ -136,35 +148,41 @@ class TestCORSOnErrorResponses:
         return url
 
     @pytest.mark.asyncio
-    async def test_401_includes_cors_allow_origin(self, api_url: str) -> None:
+    async def test_401_includes_cors_allow_origin(
+        self, api_url: str, frontend_origin: str
+    ) -> None:
         """Scenario 15: 401 includes Access-Control-Allow-Origin."""
         async with httpx.AsyncClient() as client:
             response = await client.get(
                 f"{api_url}/api/v2/configurations",
-                headers={"Origin": "https://test.example.com"},
+                headers={"Origin": frontend_origin},
             )
         assert response.status_code == 401
-        assert "access-control-allow-origin" in {k.lower() for k in response.headers}
+        assert response.headers.get("access-control-allow-origin") == frontend_origin
 
     @pytest.mark.asyncio
-    async def test_401_includes_cors_allow_credentials(self, api_url: str) -> None:
+    async def test_401_includes_cors_allow_credentials(
+        self, api_url: str, frontend_origin: str
+    ) -> None:
         """Scenario 15: 401 includes Access-Control-Allow-Credentials: true."""
         async with httpx.AsyncClient() as client:
             response = await client.get(
                 f"{api_url}/api/v2/configurations",
-                headers={"Origin": "https://test.example.com"},
+                headers={"Origin": frontend_origin},
             )
         assert response.status_code == 401
         cred_header = response.headers.get("access-control-allow-credentials", "")
         assert cred_header == "true"
 
     @pytest.mark.asyncio
-    async def test_401_uses_explicit_allow_headers(self, api_url: str) -> None:
+    async def test_401_uses_explicit_allow_headers(
+        self, api_url: str, frontend_origin: str
+    ) -> None:
         """CORS Allow-Headers must be explicit list, not wildcard '*'."""
         async with httpx.AsyncClient() as client:
             response = await client.get(
                 f"{api_url}/api/v2/configurations",
-                headers={"Origin": "https://test.example.com"},
+                headers={"Origin": frontend_origin},
             )
         assert response.status_code == 401
         allow_headers = response.headers.get("access-control-allow-headers", "")
@@ -218,10 +236,14 @@ class TestAnonymousSessions:
                 assert response.status_code in (200, 404)  # 404 if market is closed
 
     @pytest.mark.asyncio
-    async def test_uuid_token_on_protected_endpoint_returns_401(
+    async def test_uuid_token_on_protected_endpoint_scopes_to_own_data(
         self, api_url: str
     ) -> None:
-        """Scenario 18: Anonymous UUID token on protected endpoint → 401."""
+        """Scenario 18 (rewritten 2026-07-25): anonymous sessions are valid
+        app-level auth — the Guest flow owns configurations. The old 401
+        expectation encoded the gateway Cognito authorizer, which rejected
+        anything that wasn't a Cognito JWT and thereby broke anon flows.
+        The Lambda scopes the response to the session's own (empty) data."""
         async with httpx.AsyncClient() as client:
             session_resp = await client.post(f"{api_url}/api/v2/auth/anonymous")
             if session_resp.status_code == 201:
@@ -232,4 +254,21 @@ class TestAnonymousSessions:
                     f"{api_url}/api/v2/configurations",
                     headers={"Authorization": f"Bearer {token}"},
                 )
-                assert response.status_code == 401
+                assert response.status_code == 200
+                body = response.json()
+                configs = body.get(
+                    "configurations", body if isinstance(body, list) else []
+                )
+                assert configs == []
+
+    @pytest.mark.asyncio
+    async def test_garbage_token_on_protected_endpoint_returns_401(
+        self, api_url: str
+    ) -> None:
+        """A malformed bearer must still be rejected by the Lambda middleware."""
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{api_url}/api/v2/configurations",
+                headers={"Authorization": "Bearer not.a.real-token"},
+            )
+            assert response.status_code == 401

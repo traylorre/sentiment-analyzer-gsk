@@ -1,0 +1,359 @@
+{
+  "logGroupName": "/aws/lambda/preprod-sentiment-metrics",
+  "collectedAt": "2026-07-26T03:50:36.888455+00:00",
+  "windowUsed": "1h",
+  "error": null,
+  "eventCount": 50,
+  "events": [
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037683246,
+      "message": "END RequestId: 54265b85-fc8d-4a53-b4e5-144f2fdf6ca6\n",
+      "ingestionTime": 1785037685295,
+      "eventId": "39807670543844461858109611046705184378364454478590115842"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037683247,
+      "message": "REPORT RequestId: 54265b85-fc8d-4a53-b4e5-144f2fdf6ca6\tDuration: 633.34 ms\tBilled Duration: 634 ms\tMemory Size: 128 MB\tMax Memory Used: 71 MB\tStatus: error\tError Type: Runtime.ImportModuleError\nXRAY TraceId: 1-6a658338-6fd015a80f9288ae24614956\tSegmentId: b609c7fd81d6cac2\tSampled: true\t\n",
+      "ingestionTime": 1785037685295,
+      "eventId": "39807670543866762603308141669846720096637102840096096259"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037685291,
+      "message": "[WARNING]\t2026-07-26T03:48:05.291Z\t\tLAMBDA_WARNING: Unhandled exception. The most likely cause is an issue in the function code. However, in rare cases, a Lambda runtime update can cause unexpected function behavior. For functions using managed runtimes, runtime updates can be triggered by a function change, or can be applied automatically. To determine if the runtime has been updated, check the runtime version in the INIT_START log entry. If this error correlates with a change in the runtime version, you may be able to mitigate this error by temporarily rolling back to the previous runtime version. For more information, see https://docs.aws.amazon.com/lambda/latest/dg/runtimes-update.html\r\n",
+      "ingestionTime": 1785037685295,
+      "eventId": "39807670589449485789104735371145728245930353758320066564"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037685291,
+      "message": "[ERROR] Runtime.ImportModuleError: Unable to import module 'handler': No module named 'aws_lambda_powertools'\nTraceback (most recent call last):",
+      "ingestionTime": 1785037685295,
+      "eventId": "39807670589449485789104735371145728245930353758320066565"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037685333,
+      "message": "INIT_REPORT Init Duration: 610.17 ms\tPhase: invoke\tStatus: error\tError Type: Runtime.ImportModuleError\n",
+      "ingestionTime": 1785037694351,
+      "eventId": "39807670590386117087443021554038209478725937279095734272"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037685333,
+      "message": "START RequestId: 36771c7a-f71a-46e3-98d2-c0a4412b5400 Version: $LATEST\n",
+      "ingestionTime": 1785037694351,
+      "eventId": "39807670590386117087443021554038209478725937279095734273"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037685337,
+      "message": "END RequestId: 36771c7a-f71a-46e3-98d2-c0a4412b5400\n",
+      "ingestionTime": 1785037694351,
+      "eventId": "39807670590475320068237144046604352351816530725119655938"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037685337,
+      "message": "REPORT RequestId: 36771c7a-f71a-46e3-98d2-c0a4412b5400\tDuration: 619.55 ms\tBilled Duration: 620 ms\tMemory Size: 128 MB\tMax Memory Used: 71 MB\tStatus: error\tError Type: Runtime.ImportModuleError\nXRAY TraceId: 1-6a658374-622c8d5c314474ba6aba891a\tSegmentId: f035f6d97bc26219\tSampled: true\t\n",
+      "ingestionTime": 1785037694351,
+      "eventId": "39807670590475320068237144046604352351816530725119655939"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037696879,
+      "message": "[WARNING]\t2026-07-26T03:48:16.879Z\t\tLAMBDA_WARNING: Unhandled exception. The most likely cause is an issue in the function code. However, in rare cases, a Lambda runtime update can cause unexpected function behavior. For functions using managed runtimes, runtime updates can be triggered by a function change, or can be applied automatically. To determine if the runtime has been updated, check the runtime version in the INIT_START log entry. If this error correlates with a change in the runtime version, you may be able to mitigate this error by temporarily rolling back to the previous runtime version. For more information, see https://docs.aws.amazon.com/lambda/latest/dg/runtimes-update.html\r\n",
+      "ingestionTime": 1785037696885,
+      "eventId": "39807670847870521149677596349273287223386165211551563776"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037696879,
+      "message": "[ERROR] Runtime.ImportModuleError: Unable to import module 'handler': No module named 'aws_lambda_powertools'\nTraceback (most recent call last):",
+      "ingestionTime": 1785037696885,
+      "eventId": "39807670847870521149677596349273287223386165211551563777"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037696917,
+      "message": "INIT_REPORT Init Duration: 608.04 ms\tPhase: invoke\tStatus: error\tError Type: Runtime.ImportModuleError\n",
+      "ingestionTime": 1785037705930,
+      "eventId": "39807670848717949467221760039586105978231853058888695808"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037696917,
+      "message": "START RequestId: 501c6069-886b-46f3-aee4-53c1246287e2 Version: $LATEST\n",
+      "ingestionTime": 1785037705930,
+      "eventId": "39807670848717949467221760039586105978231853058888695809"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037696920,
+      "message": "END RequestId: 501c6069-886b-46f3-aee4-53c1246287e2\n",
+      "ingestionTime": 1785037705930,
+      "eventId": "39807670848784851702817351909010713133049798143406637058"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037696920,
+      "message": "REPORT RequestId: 501c6069-886b-46f3-aee4-53c1246287e2\tDuration: 616.33 ms\tBilled Duration: 617 ms\tMemory Size: 128 MB\tMax Memory Used: 70 MB\tStatus: error\tError Type: Runtime.ImportModuleError\nXRAY TraceId: 1-6a6582c0-5ec4cc1a2fb41e9c048e3649\tSegmentId: 037954508d06bdfb\tSampled: true\t\n",
+      "ingestionTime": 1785037705930,
+      "eventId": "39807670848784851702817351909010713133049798143406637059"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037745387,
+      "message": "[WARNING]\t2026-07-26T03:49:05.387Z\t\tLAMBDA_WARNING: Unhandled exception. The most likely cause is an issue in the function code. However, in rare cases, a Lambda runtime update can cause unexpected function behavior. For functions using managed runtimes, runtime updates can be triggered by a function change, or can be applied automatically. To determine if the runtime has been updated, check the runtime version in the INIT_START log entry. If this error correlates with a change in the runtime version, you may be able to mitigate this error by temporarily rolling back to the previous runtime version. For more information, see https://docs.aws.amazon.com/lambda/latest/dg/runtimes-update.html\r\n",
+      "ingestionTime": 1785037745470,
+      "eventId": "39807671929635069240001063757623350632109927592771911680"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037745387,
+      "message": "[ERROR] Runtime.ImportModuleError: Unable to import module 'handler': No module named 'aws_lambda_powertools'\nTraceback (most recent call last):",
+      "ingestionTime": 1785037745470,
+      "eventId": "39807671929635069240001063757623350632109927592771911681"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037745432,
+      "message": "INIT_REPORT Init Duration: 636.16 ms\tPhase: invoke\tStatus: error\tError Type: Runtime.ImportModuleError\n",
+      "ingestionTime": 1785037745489,
+      "eventId": "39807671930638602773934941799015510550509045052705275904"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037745432,
+      "message": "START RequestId: d2298232-2650-42a4-a2ae-b1b0437ae14d Version: $LATEST\n",
+      "ingestionTime": 1785037745489,
+      "eventId": "39807671930638602773934941799015510550509045052705275905"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037745437,
+      "message": "END RequestId: d2298232-2650-42a4-a2ae-b1b0437ae14d\n",
+      "ingestionTime": 1785037745489,
+      "eventId": "39807671930750106499927594914723189141872286860235177986"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037745437,
+      "message": "REPORT RequestId: d2298232-2650-42a4-a2ae-b1b0437ae14d\tDuration: 647.20 ms\tBilled Duration: 648 ms\tMemory Size: 128 MB\tMax Memory Used: 71 MB\tStatus: error\tError Type: Runtime.ImportModuleError\nXRAY TraceId: 1-6a6583b0-30364c1d1ef4beea3ad133fa\tSegmentId: 2e5cb040a6198cd6\tSampled: true\t\n",
+      "ingestionTime": 1785037745489,
+      "eventId": "39807671930750106499927594914723189141872286860235177987"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037752090,
+      "message": "[WARNING]\t2026-07-26T03:49:12.090Z\t\tLAMBDA_WARNING: Unhandled exception. The most likely cause is an issue in the function code. However, in rare cases, a Lambda runtime update can cause unexpected function behavior. For functions using managed runtimes, runtime updates can be triggered by a function change, or can be applied automatically. To determine if the runtime has been updated, check the runtime version in the INIT_START log entry. If this error correlates with a change in the runtime version, you may be able to mitigate this error by temporarily rolling back to the previous runtime version. For more information, see https://docs.aws.amazon.com/lambda/latest/dg/runtimes-update.html\r\n",
+      "ingestionTime": 1785037752111,
+      "eventId": "39807672079116964305751830683365773889673623558500581376"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037752090,
+      "message": "[ERROR] Runtime.ImportModuleError: Unable to import module 'handler': No module named 'aws_lambda_powertools'\nTraceback (most recent call last):",
+      "ingestionTime": 1785037752111,
+      "eventId": "39807672079116964305751830683365773889673623558500581377"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037752132,
+      "message": "INIT_REPORT Init Duration: 634.78 ms\tPhase: invoke\tStatus: error\tError Type: Runtime.ImportModuleError\n",
+      "ingestionTime": 1785037761147,
+      "eventId": "39807672080053595604090116866234313313975851380569800704"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037752132,
+      "message": "START RequestId: 36771c7a-f71a-46e3-98d2-c0a4412b5400 Version: $LATEST\n",
+      "ingestionTime": 1785037761147,
+      "eventId": "39807672080053595604090116866234313313975851380569800705"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037752136,
+      "message": "END RequestId: 36771c7a-f71a-46e3-98d2-c0a4412b5400\n",
+      "ingestionTime": 1785037761147,
+      "eventId": "39807672080142798584884239358800456187066444826593722370"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037752136,
+      "message": "REPORT RequestId: 36771c7a-f71a-46e3-98d2-c0a4412b5400\tDuration: 644.39 ms\tBilled Duration: 645 ms\tMemory Size: 128 MB\tMax Memory Used: 71 MB\tStatus: error\tError Type: Runtime.ImportModuleError\nXRAY TraceId: 1-6a658374-622c8d5c314474ba6aba891a\tSegmentId: b3d78e52d78ead56\tSampled: true\t\n",
+      "ingestionTime": 1785037761147,
+      "eventId": "39807672080142798584884239358800456187066444826593722371"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037762217,
+      "message": "[WARNING]\t2026-07-26T03:49:22.217Z\t\tLAMBDA_WARNING: Unhandled exception. The most likely cause is an issue in the function code. However, in rare cases, a Lambda runtime update can cause unexpected function behavior. For functions using managed runtimes, runtime updates can be triggered by a function change, or can be applied automatically. To determine if the runtime has been updated, check the runtime version in the INIT_START log entry. If this error correlates with a change in the runtime version, you may be able to mitigate this error by temporarily rolling back to the previous runtime version. For more information, see https://docs.aws.amazon.com/lambda/latest/dg/runtimes-update.html\r\n",
+      "ingestionTime": 1785037762221,
+      "eventId": "39807672304956610931271451249920651114339272458992484352"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037762217,
+      "message": "[ERROR] Runtime.ImportModuleError: Unable to import module 'handler': No module named 'aws_lambda_powertools'\nTraceback (most recent call last):",
+      "ingestionTime": 1785037762221,
+      "eventId": "39807672304956610931271451249920651114339272458992484353"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037762257,
+      "message": "INIT_REPORT Init Duration: 650.70 ms\tPhase: invoke\tStatus: error\tError Type: Runtime.ImportModuleError\n",
+      "ingestionTime": 1785037771270,
+      "eventId": "39807672305848640739212676186521223897012947787901239296"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037762257,
+      "message": "START RequestId: cfa775f7-07e7-4b97-b311-5eea166777b9 Version: $LATEST\n",
+      "ingestionTime": 1785037771270,
+      "eventId": "39807672305848640739212676186521223897012947787901239297"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037762260,
+      "message": "END RequestId: cfa775f7-07e7-4b97-b311-5eea166777b9\n",
+      "ingestionTime": 1785037771270,
+      "eventId": "39807672305915542974808268055945831051830892872419180546"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037762260,
+      "message": "REPORT RequestId: cfa775f7-07e7-4b97-b311-5eea166777b9\tDuration: 659.67 ms\tBilled Duration: 660 ms\tMemory Size: 128 MB\tMax Memory Used: 70 MB\tStatus: error\tError Type: Runtime.ImportModuleError\nXRAY TraceId: 1-6a6582fc-7e11b4a3557a73661fd9a4a1\tSegmentId: fa6191c5eacc5d5e\tSampled: true\t\n",
+      "ingestionTime": 1785037771270,
+      "eventId": "39807672305915542974808268055945831051830892872419180547"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037803997,
+      "message": "[WARNING]\t2026-07-26T03:50:03.997Z\t\tLAMBDA_WARNING: Unhandled exception. The most likely cause is an issue in the function code. However, in rare cases, a Lambda runtime update can cause unexpected function behavior. For functions using managed runtimes, runtime updates can be triggered by a function change, or can be applied automatically. To determine if the runtime has been updated, check the runtime version in the INIT_START log entry. If this error correlates with a change in the runtime version, you may be able to mitigate this error by temporarily rolling back to the previous runtime version. For more information, see https://docs.aws.amazon.com/lambda/latest/dg/runtimes-update.html\r\n",
+      "ingestionTime": 1785037804016,
+      "eventId": "39807673236681745325880886153809477526531630709958574080"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037803997,
+      "message": "[ERROR] Runtime.ImportModuleError: Unable to import module 'handler': No module named 'aws_lambda_powertools'\nTraceback (most recent call last):",
+      "ingestionTime": 1785037804016,
+      "eventId": "39807673236681745325880886153809477526531630709958574081"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037804036,
+      "message": "INIT_REPORT Init Duration: 618.07 ms\tPhase: invoke\tStatus: error\tError Type: Runtime.ImportModuleError\n",
+      "ingestionTime": 1785037805211,
+      "eventId": "39807673237551474388623580457774430531444985994111090688"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037804036,
+      "message": "START RequestId: 54265b85-fc8d-4a53-b4e5-144f2fdf6ca6 Version: $LATEST\n",
+      "ingestionTime": 1785037805211,
+      "eventId": "39807673237551474388623580457774430531444985994111090689"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037804040,
+      "message": "END RequestId: 54265b85-fc8d-4a53-b4e5-144f2fdf6ca6\n",
+      "ingestionTime": 1785037805211,
+      "eventId": "39807673237640677369417702950340573404535579440135012354"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037804040,
+      "message": "REPORT RequestId: 54265b85-fc8d-4a53-b4e5-144f2fdf6ca6\tDuration: 629.05 ms\tBilled Duration: 630 ms\tMemory Size: 128 MB\tMax Memory Used: 71 MB\tStatus: error\tError Type: Runtime.ImportModuleError\nXRAY TraceId: 1-6a658338-6fd015a80f9288ae24614956\tSegmentId: fc9a46c9e5d24394\tSampled: true\t\n",
+      "ingestionTime": 1785037805211,
+      "eventId": "39807673237640677369417702950340573404535579440135012355"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037805206,
+      "message": "[WARNING]\t2026-07-26T03:50:05.206Z\t\tLAMBDA_WARNING: Unhandled exception. The most likely cause is an issue in the function code. However, in rare cases, a Lambda runtime update can cause unexpected function behavior. For functions using managed runtimes, runtime updates can be triggered by a function change, or can be applied automatically. To determine if the runtime has been updated, check the runtime version in the INIT_START log entry. If this error correlates with a change in the runtime version, you may be able to mitigate this error by temporarily rolling back to the previous runtime version. For more information, see https://docs.aws.amazon.com/lambda/latest/dg/runtimes-update.html\r\n",
+      "ingestionTime": 1785037805211,
+      "eventId": "39807673263643346270904409533371220910443568956108177412"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037805206,
+      "message": "[ERROR] Runtime.ImportModuleError: Unable to import module 'handler': No module named 'aws_lambda_powertools'\nTraceback (most recent call last):",
+      "ingestionTime": 1785037805211,
+      "eventId": "39807673263643346270904409533371220910443568956108177413"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037805249,
+      "message": "INIT_REPORT Init Duration: 628.99 ms\tPhase: invoke\tStatus: error\tError Type: Runtime.ImportModuleError\n",
+      "ingestionTime": 1785037806648,
+      "eventId": "39807673264602278314441226330194649426676383050645176320"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037805249,
+      "message": "START RequestId: d2298232-2650-42a4-a2ae-b1b0437ae14d Version: $LATEST\n",
+      "ingestionTime": 1785037806648,
+      "eventId": "39807673264602278314441226330194649426676383050645176321"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037805253,
+      "message": "END RequestId: d2298232-2650-42a4-a2ae-b1b0437ae14d\n",
+      "ingestionTime": 1785037806648,
+      "eventId": "39807673264691481295235348822760792299766976496669097986"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037805253,
+      "message": "REPORT RequestId: d2298232-2650-42a4-a2ae-b1b0437ae14d\tDuration: 639.28 ms\tBilled Duration: 640 ms\tMemory Size: 128 MB\tMax Memory Used: 71 MB\tStatus: error\tError Type: Runtime.ImportModuleError\nXRAY TraceId: 1-6a6583b0-30364c1d1ef4beea3ad133fa\tSegmentId: 6727d7a26c473730\tSampled: true\t\n",
+      "ingestionTime": 1785037806648,
+      "eventId": "39807673264691481295235348822760792299766976496669097987"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037806640,
+      "message": "[WARNING]\t2026-07-26T03:50:06.640Z\t\tLAMBDA_WARNING: Unhandled exception. The most likely cause is an issue in the function code. However, in rare cases, a Lambda runtime update can cause unexpected function behavior. For functions using managed runtimes, runtime updates can be triggered by a function change, or can be applied automatically. To determine if the runtime has been updated, check the runtime version in the INIT_START log entry. If this error correlates with a change in the runtime version, you may be able to mitigate this error by temporarily rolling back to the previous runtime version. For more information, see https://docs.aws.amazon.com/lambda/latest/dg/runtimes-update.html\r\n",
+      "ingestionTime": 1785037806648,
+      "eventId": "39807673295622614885597323120070833543930253905463934980"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037806640,
+      "message": "[ERROR] Runtime.ImportModuleError: Unable to import module 'handler': No module named 'aws_lambda_powertools'\nTraceback (most recent call last):",
+      "ingestionTime": 1785037806648,
+      "eventId": "39807673295622614885597323120070833543930253905463934981"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037806684,
+      "message": "INIT_REPORT Init Duration: 625.13 ms\tPhase: invoke\tStatus: error\tError Type: Runtime.ImportModuleError\n",
+      "ingestionTime": 1785037815701,
+      "eventId": "39807673296603847674332670549242692769200959929368838144"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037806684,
+      "message": "START RequestId: a501b050-eab0-4139-867f-aa4e5a929a52 Version: $LATEST\n",
+      "ingestionTime": 1785037815701,
+      "eventId": "39807673296603847674332670549242692769200959929368838145"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037806688,
+      "message": "END RequestId: a501b050-eab0-4139-867f-aa4e5a929a52\n",
+      "ingestionTime": 1785037815701,
+      "eventId": "39807673296693050655126793041808835642291553375392759810"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]d38c0c49edf04c87ae9ccfdbced20fdc",
+      "timestamp": 1785037806688,
+      "message": "REPORT RequestId: a501b050-eab0-4139-867f-aa4e5a929a52\tDuration: 634.48 ms\tBilled Duration: 635 ms\tMemory Size: 128 MB\tMax Memory Used: 71 MB\tStatus: error\tError Type: Runtime.ImportModuleError\nXRAY TraceId: 1-6a6583ec-14c99c6f0cac176379bdb195\tSegmentId: 18787ef08efee900\tSampled: true\t\n",
+      "ingestionTime": 1785037815701,
+      "eventId": "39807673296693050655126793041808835642291553375392759811"
+    }
+  ]
+}
