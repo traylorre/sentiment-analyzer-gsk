@@ -38,6 +38,43 @@ already enables informational logging; deferred by owner constraint; zero
 invocations in 30+ days) and the chaos-restore handler (code exists but the
 function is not deployed — terraform TODO TD-2).
 
+## Clarifications
+
+### Session 2026-07-25 (battleplan autonomy mode — self-answered from evidence; none deferred)
+
+- Q: Which third-party loggers get pinned to WARNING (exact list vs open-ended
+  policy)? → A: Exactly `httpx` and `httpcore` now. Evidence: research R-5 —
+  httpx is the only third-party logger that emits at INFO per request (with
+  full URL, the credential vector); botocore/urllib3 are DEBUG-chatty but
+  INFO-quiet; the analysis Lambda's ML stack writes via stderr prints, not
+  INFO logging. Policy: pin-on-evidence — the SC-004/SC-007 first-week
+  queries are the detection mechanism for any logger that proves this wrong,
+  and adding a pin is a one-line change to the helper.
+- Q: What counts as the notification function's FR-008 evidence, given a
+  synthetic empty-digest run exercises only entrypoint-level INFO and a real
+  send would consume SendGrid quota (100/day) against a real recipient? →
+  A: Accepted evidence pair: (1) synthetic digest trigger produces the
+  entrypoint INFO line in the log group (proves the function's runtime level
+  config), plus (2) the coverage-guard test proves the helper call, plus
+  (3) the masked sendgrid_service line is unit-tested for shape. No real
+  email is sent for verification. Evidence: eventbridge digest test event
+  exists (modules/eventbridge input template); no sandbox-mode send path is
+  wired in sendgrid_service.py; quota constraint is real.
+- Q: SC-005's "bounded, reviewed amount" — what bound? → A: Guardrail: a
+  representative dashboard request adds ≤10 new INFO lines (p50), and
+  projected CloudWatch ingestion delta at current traffic is <$1/month.
+  Evidence: the 48h diagnosis sample (400 events on the busiest group)
+  puts absolute volumes so low that even a 3× multiplier is cents; the
+  ≤10-line figure is verified during the FR-004 before/after comparison.
+- Q: Does a deliberately set LOG_LEVEL=DEBUG env violate FR-002 ("DEBUG
+  suppressed by default")? → A: No. Precedence: explicitly-set LOG_LEVEL
+  (including DEBUG for temporary diagnostics) wins; unset → INFO floor.
+  "By default" in FR-002 means the unset state. Evidence: this generalizes
+  the existing notification pattern (handler.py:33 reads LOG_LEVEL, defaults
+  INFO); contract C-1/C-2 already encode it, and the httpx/httpcore pins
+  hold at WARNING regardless of LOG_LEVEL so the credential path stays
+  closed even under DEBUG.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Operator debugs a production incident from logs (Priority: P1)
@@ -230,16 +267,22 @@ in the enabled output.
   check demonstrating an informational line from a non-entrypoint module
   reaching its log group. The dashboard check MUST be executable on demand;
   the other five MAY use scheduled runs (canary fires every 5 minutes) or a
-  synthetic trigger (e.g., the notification digest's documented test event) —
-  "wait for organic traffic" is not an acceptable verification plan for a
-  function that may not organically emit for a week.
+  synthetic trigger — "wait for organic traffic" is not an acceptable
+  verification plan for a function that may not organically emit for a week.
+  Notification's accepted evidence is the three-part pair from
+  Clarifications (synthetic-digest entrypoint INFO line + coverage-guard
+  test + unit-tested masked line); no real email is sent for verification.
 - **FR-009**: Log severity MUST remain distinguishable per line after the
   change (an operator can filter informational vs warning vs error).
 - **FR-010**: Informational visibility MUST be scoped to first-party module
-  loggers. Third-party HTTP-client loggers (httpx and its dependencies) MUST
-  be pinned to warning-or-stricter as part of this feature. (AR#1 removed the
-  former "or demonstrate no material volume increase" branch: it was
-  satisfiable while leaking a credential at low volume.)
+  loggers. The third-party loggers `httpx` and `httpcore` MUST be pinned to
+  warning-or-stricter as part of this feature, and the pins MUST hold even
+  under an explicit debug-level override (the credential path stays closed
+  in every configuration). Pin list is exact per Clarifications (pin-on-
+  evidence policy; first-week SC-004/SC-007 queries detect any needed
+  additions). (AR#1 removed the former "or demonstrate no material volume
+  increase" branch: it was satisfiable while leaking a credential at low
+  volume.)
 - **FR-011**: Modules and entrypoints that already configure their own
   logging LEVELS retain their current effective levels (no regression to
   stricter levels, no duplicate emission). This preservation covers level
@@ -299,9 +342,10 @@ in the enabled output.
 - **SC-004**: Debug-level lines remain absent from all six log groups
   post-deploy (spot-checked over one week of normal traffic).
 - **SC-005**: Per-invocation log event count on a representative dashboard
-  request increases by a bounded, reviewed amount, and monthly CloudWatch
-  ingestion cost projection stays within the project's existing budget
-  envelope (~$60/month total project spend).
+  request increases by ≤10 new informational lines (p50, measured in the
+  FR-004 before/after comparison), and projected CloudWatch ingestion delta
+  at current traffic is <$1/month — comfortably inside the project's
+  ~$60/month budget envelope.
 - **SC-006** (refresh-classification drill, replaces the former unfalsifiable
   "next incident" criterion): exercising all three session-refresh outcomes
   against preprod (cookie absent; cookie rejected; cookie valid) yields all
