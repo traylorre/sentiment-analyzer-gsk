@@ -137,6 +137,8 @@ The Lambda is named `dashboard Lambda`, the handler is `src/lambdas/dashboard/`,
 - HCL (Terraform 1.5+, AWS Provider ~> 5.0) + AWS API Gateway (REST API), AWS Cognito, AWS Amplify, AWS Lambda (1253-api-gateway-cognito-auth)
 - HCL (Terraform 1.5+, AWS Provider ~> 5.0) + AWS WAF v2, AWS API Gateway (existing) (1254-api-gateway-waf)
 - HCL (Terraform 1.5+, AWS Provider ~> 5.0) + AWS CloudFront, AWS WAF v2, existing SSE Lambda (1255-cloudfront-sse-waf)
+- Python 3.13 (Lambda base image `public.ecr.aws/lambda/python:3.13` for image Lambdas; managed python3.13 runtime for ZIP Lambdas) + stdlib `logging` only for the mechanism; aws-lambda-powertools 3.23.0 already present (dashboard handler) and untouched (001-lambda-log-visibility)
+- N/A (observability-only; no data-store changes) (001-lambda-log-visibility)
 
 - **Python 3.13** with aws-lambda-powertools, boto3, pydantic, httpx, orjson
 - **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, Amplify
@@ -934,12 +936,9 @@ aws cloudwatch get-metric-data --metric-data-queries '[...]' --start-time ... --
 ```
 
 ## Recent Changes
+- 001-lambda-log-visibility: Added Python 3.13 (Lambda base image `public.ecr.aws/lambda/python:3.13` for image Lambdas; managed python3.13 runtime for ZIP Lambdas) + stdlib `logging` only for the mechanism; aws-lambda-powertools 3.23.0 already present (dashboard handler) and untouched
 - 1256-restrict-function-urls: Added HCL (Terraform 1.5+, AWS Provider ~> 5.0)
 - 1255-cloudfront-sse-waf: Added HCL (Terraform 1.5+, AWS Provider ~> 5.0) + AWS CloudFront, AWS WAF v2, existing SSE Lambda
-- 1254-api-gateway-waf: Added HCL (Terraform 1.5+, AWS Provider ~> 5.0) + AWS WAF v2, AWS API Gateway (existing)
-- 1227-real-sentiment-pipeline: Added Python 3.13 (existing project standard) + aws_lambda_powertools 3.7.0 (missing from ingestion ZIP), boto3 (existing), pydantic (existing)
-- 1226-frontend-error-visibility: Added TypeScript ^5 / Next.js 14.2.21 / React ^18 + @tanstack/react-query ^5.90.11, zustand ^5.0.8, sonner ^2.0.7
-- 001-cache-architecture-audit: Added Python 3.13 + boto3 (AWS SDK), pydantic (validation), functools (current caching)
 
 <!-- MANUAL ADDITIONS START -->
 

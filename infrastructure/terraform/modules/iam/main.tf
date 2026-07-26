@@ -652,7 +652,11 @@ resource "aws_iam_role_policy" "dashboard_feature_006_users" {
           var.feature_006_users_table_arn,
           "${var.feature_006_users_table_arn}/index/by_email",
           "${var.feature_006_users_table_arn}/index/by_cognito_sub",
-          "${var.feature_006_users_table_arn}/index/by_entity_status"
+          "${var.feature_006_users_table_arn}/index/by_entity_status",
+          # Feature 1180 created this GSI but never granted it here. Every OAuth
+          # login's get_user_by_provider_sub Query got AccessDenied: swallowed
+          # pre-1395 (minting the duplicate users), a fail-closed 503 post-1395.
+          "${var.feature_006_users_table_arn}/index/by_provider_sub"
         ]
       }
     ]

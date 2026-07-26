@@ -56,6 +56,10 @@ from typing import Any
 import boto3
 from aws_lambda_powertools import Tracer
 
+from src.lambdas.shared.logging_config import configure_lambda_logging
+
+configure_lambda_logging()
+
 tracer = Tracer(service="sentiment-analyzer-analysis")
 
 from src.lambdas.analysis.sentiment import (

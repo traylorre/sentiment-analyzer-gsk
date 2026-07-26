@@ -1,0 +1,359 @@
+{
+  "logGroupName": "/aws/lambda/preprod-sentiment-dashboard",
+  "collectedAt": "2026-07-26T03:50:28.959325+00:00",
+  "windowUsed": "6h",
+  "error": null,
+  "eventCount": 50,
+  "events": [
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785030834873,
+      "message": "REPORT RequestId: f6762773-4488-424f-ab5d-9f12b215ba4d\tDuration: 2.04 ms\tBilled Duration: 3 ms\tMemory Size: 1024 MB\tMax Memory Used: 178 MB\t\nXRAY TraceId: 1-6a6568b2-32735e1f4635bece02412276\tSegmentId: 77f1e035d9e81f20\tSampled: true\t\n",
+      "ingestionTime": 1785030840421,
+      "eventId": "39807517820023164361350407103368772821693779984943743011"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785030834879,
+      "message": "START RequestId: 2ba25fb5-c5e1-4eaa-abe7-ffca9881ae6c Version: 134\n",
+      "ingestionTime": 1785030840421,
+      "eventId": "39807517820156968832541590842217987131329670153979625508"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785030834879,
+      "message": "{\"level\":\"INFO\",\"location\":\"lambda_handler:1871\",\"message\":\"Dashboard Lambda invoked\",\"timestamp\":\"2026-07-26 01:53:54,879+0000\",\"service\":\"dashboard\",\"cold_start\":false,\"function_name\":\"preprod-sentiment-dashboard\",\"function_memory_size\":\"1024\",\"function_arn\":\"arn:aws:lambda:us-east-1:218795110243:function:preprod-sentiment-dashboard:live\",\"function_request_id\":\"2ba25fb5-c5e1-4eaa-abe7-ffca9881ae6c\",\"path\":\"/api/v2/runtime\",\"method\":\"GET\",\"xray_trace_id\":\"1-6a6568b2-3e4033a90d16c70e2e414af3\"}\n",
+      "ingestionTime": 1785030840421,
+      "eventId": "39807517820156968832541590842217987131329670153979625509"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785030834881,
+      "message": "END RequestId: 2ba25fb5-c5e1-4eaa-abe7-ffca9881ae6c\n",
+      "ingestionTime": 1785030840421,
+      "eventId": "39807517820201570322938652088501058567874966876991586342"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785030834881,
+      "message": "REPORT RequestId: 2ba25fb5-c5e1-4eaa-abe7-ffca9881ae6c\tDuration: 1.87 ms\tBilled Duration: 2 ms\tMemory Size: 1024 MB\tMax Memory Used: 178 MB\t\nXRAY TraceId: 1-6a6568b2-3e4033a90d16c70e2e414af3\tSegmentId: 04d18820711d7ed7\tSampled: true\t\n",
+      "ingestionTime": 1785030840421,
+      "eventId": "39807517820201570322938652088501058567874966876991586343"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785030834892,
+      "message": "START RequestId: 3b50d362-c19a-464c-ada6-be5c0fc64fb3 Version: 134\n",
+      "ingestionTime": 1785030840421,
+      "eventId": "39807517820446878520122488943057951468874098853557370920"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785030834893,
+      "message": "{\"level\":\"INFO\",\"location\":\"lambda_handler:1871\",\"message\":\"Dashboard Lambda invoked\",\"timestamp\":\"2026-07-26 01:53:54,893+0000\",\"service\":\"dashboard\",\"cold_start\":false,\"function_name\":\"preprod-sentiment-dashboard\",\"function_memory_size\":\"1024\",\"function_arn\":\"arn:aws:lambda:us-east-1:218795110243:function:preprod-sentiment-dashboard:live\",\"function_request_id\":\"3b50d362-c19a-464c-ada6-be5c0fc64fb3\",\"path\":\"/api/v2/auth/oauth/urls\",\"method\":\"GET\",\"xray_trace_id\":\"1-6a6568b2-099f9dff1f488bc25f6ee716\"}\n",
+      "ingestionTime": 1785030840421,
+      "eventId": "39807517820469179265321019566199487187146747215063351337"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785030834901,
+      "message": "END RequestId: 3b50d362-c19a-464c-ada6-be5c0fc64fb3\n",
+      "ingestionTime": 1785030840421,
+      "eventId": "39807517820647585226909264551331772933327934107111194666"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785030834901,
+      "message": "REPORT RequestId: 3b50d362-c19a-464c-ada6-be5c0fc64fb3\tDuration: 8.51 ms\tBilled Duration: 9 ms\tMemory Size: 1024 MB\tMax Memory Used: 178 MB\t\nXRAY TraceId: 1-6a6568b2-099f9dff1f488bc25f6ee716\tSegmentId: 43a55fbcf6afb231\tSampled: true\t\n",
+      "ingestionTime": 1785030840421,
+      "eventId": "39807517820647585226909264551331772933327934107111194667"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785030834958,
+      "message": "START RequestId: 40ff4e5a-0f85-4eb3-a27f-4d6fefd26f8f Version: 134\n",
+      "ingestionTime": 1785030840421,
+      "eventId": "39807517821918727703225510070399308874868890712952078380"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785030834959,
+      "message": "{\"level\":\"INFO\",\"location\":\"lambda_handler:1871\",\"message\":\"Dashboard Lambda invoked\",\"timestamp\":\"2026-07-26 01:53:54,959+0000\",\"service\":\"dashboard\",\"cold_start\":false,\"function_name\":\"preprod-sentiment-dashboard\",\"function_memory_size\":\"1024\",\"function_arn\":\"arn:aws:lambda:us-east-1:218795110243:function:preprod-sentiment-dashboard:live\",\"function_request_id\":\"40ff4e5a-0f85-4eb3-a27f-4d6fefd26f8f\",\"path\":\"/api/v2/auth/anonymous\",\"method\":\"POST\",\"xray_trace_id\":\"1-6a6568b2-39479fc630fe71207a283ad4\"}\n",
+      "ingestionTime": 1785030840421,
+      "eventId": "39807517821941028448424040693540844593141539074458058797"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785030834966,
+      "message": "END RequestId: 40ff4e5a-0f85-4eb3-a27f-4d6fefd26f8f\n",
+      "ingestionTime": 1785030840421,
+      "eventId": "39807517822097133664813755055531594621050077604999921710"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785030834966,
+      "message": "REPORT RequestId: 40ff4e5a-0f85-4eb3-a27f-4d6fefd26f8f\tDuration: 7.57 ms\tBilled Duration: 8 ms\tMemory Size: 1024 MB\tMax Memory Used: 178 MB\t\nXRAY TraceId: 1-6a6568b2-39479fc630fe71207a283ad4\tSegmentId: e153327476f404b3\tSampled: true\t\n",
+      "ingestionTime": 1785030840421,
+      "eventId": "39807517822097133664813755055531594621050077604999921711"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785030835147,
+      "message": "START RequestId: 3260cba2-8a33-44d2-9292-cce1c72e1ed1 Version: 134\n",
+      "ingestionTime": 1785030840421,
+      "eventId": "39807517826133568545747797844149559628399431037582377008"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785030835148,
+      "message": "{\"level\":\"INFO\",\"location\":\"lambda_handler:1871\",\"message\":\"Dashboard Lambda invoked\",\"timestamp\":\"2026-07-26 01:53:55,148+0000\",\"service\":\"dashboard\",\"cold_start\":false,\"function_name\":\"preprod-sentiment-dashboard\",\"function_memory_size\":\"1024\",\"function_arn\":\"arn:aws:lambda:us-east-1:218795110243:function:preprod-sentiment-dashboard:live\",\"function_request_id\":\"3260cba2-8a33-44d2-9292-cce1c72e1ed1\",\"path\":\"/api/v2/auth/oauth/urls\",\"method\":\"GET\",\"xray_trace_id\":\"1-6a6568b3-4613e5ab226378b245e046f0\"}\n",
+      "ingestionTime": 1785030840421,
+      "eventId": "39807517826155869290946328467291095346672079399088357425"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785030835156,
+      "message": "END RequestId: 3260cba2-8a33-44d2-9292-cce1c72e1ed1\n",
+      "ingestionTime": 1785030840421,
+      "eventId": "39807517826334275252534573452423381092853266291136200754"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785030835156,
+      "message": "REPORT RequestId: 3260cba2-8a33-44d2-9292-cce1c72e1ed1\tDuration: 8.33 ms\tBilled Duration: 9 ms\tMemory Size: 1024 MB\tMax Memory Used: 178 MB\t\nXRAY TraceId: 1-6a6568b3-4613e5ab226378b245e046f0\tSegmentId: b06881cdd43d1e1b\tSampled: true\t\n",
+      "ingestionTime": 1785030840421,
+      "eventId": "39807517826334275252534573452423381092853266291136200755"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785030841855,
+      "message": "START RequestId: 70e7f4c8-7c14-46ae-b5cf-ec5de94a10c6 Version: 134\n",
+      "ingestionTime": 1785030850871,
+      "eventId": "39807517975726967337491217890204583328936232941436338176"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785030841856,
+      "message": "{\"level\":\"INFO\",\"location\":\"lambda_handler:1871\",\"message\":\"Dashboard Lambda invoked\",\"timestamp\":\"2026-07-26 01:54:01,856+0000\",\"service\":\"dashboard\",\"cold_start\":false,\"function_name\":\"preprod-sentiment-dashboard\",\"function_memory_size\":\"1024\",\"function_arn\":\"arn:aws:lambda:us-east-1:218795110243:function:preprod-sentiment-dashboard:live\",\"function_request_id\":\"70e7f4c8-7c14-46ae-b5cf-ec5de94a10c6\",\"path\":\"/api/v2/runtime\",\"method\":\"GET\",\"xray_trace_id\":\"1-6a6568b9-7c46279a1d5843741ca57ac1\"}\n",
+      "ingestionTime": 1785030850871,
+      "eventId": "39807517975749268082689748513346119047208881302942318593"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785030841858,
+      "message": "END RequestId: 70e7f4c8-7c14-46ae-b5cf-ec5de94a10c6\n",
+      "ingestionTime": 1785030850871,
+      "eventId": "39807517975793869573086809759629190483754178025954279426"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785030841858,
+      "message": "REPORT RequestId: 70e7f4c8-7c14-46ae-b5cf-ec5de94a10c6\tDuration: 2.01 ms\tBilled Duration: 3 ms\tMemory Size: 1024 MB\tMax Memory Used: 178 MB\t\nXRAY TraceId: 1-6a6568b9-7c46279a1d5843741ca57ac1\tSegmentId: ac103c2ebd8cba07\tSampled: true\t\n",
+      "ingestionTime": 1785030850871,
+      "eventId": "39807517975793869573086809759629190483754178025954279427"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785030841864,
+      "message": "START RequestId: 8172cd39-cd0a-4173-b498-53484d5138d4 Version: 134\n",
+      "ingestionTime": 1785030850871,
+      "eventId": "39807517975927674044277993498478404793390068194990161924"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785030841865,
+      "message": "{\"level\":\"INFO\",\"location\":\"lambda_handler:1871\",\"message\":\"Dashboard Lambda invoked\",\"timestamp\":\"2026-07-26 01:54:01,865+0000\",\"service\":\"dashboard\",\"cold_start\":false,\"function_name\":\"preprod-sentiment-dashboard\",\"function_memory_size\":\"1024\",\"function_arn\":\"arn:aws:lambda:us-east-1:218795110243:function:preprod-sentiment-dashboard:live\",\"function_request_id\":\"8172cd39-cd0a-4173-b498-53484d5138d4\",\"path\":\"/api/v2/auth/refresh\",\"method\":\"POST\",\"xray_trace_id\":\"1-6a6568b9-045abf6e362ad2d377b8297c\"}\n",
+      "ingestionTime": 1785030850871,
+      "eventId": "39807517975949974789476524121619940511662716556496142341"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785030841866,
+      "message": "END RequestId: 8172cd39-cd0a-4173-b498-53484d5138d4\n",
+      "ingestionTime": 1785030850871,
+      "eventId": "39807517975972275534675054744761476229935364918002122758"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785030841866,
+      "message": "REPORT RequestId: 8172cd39-cd0a-4173-b498-53484d5138d4\tDuration: 1.79 ms\tBilled Duration: 2 ms\tMemory Size: 1024 MB\tMax Memory Used: 178 MB\t\nXRAY TraceId: 1-6a6568b9-045abf6e362ad2d377b8297c\tSegmentId: 772ae76dc0d3a3e1\tSampled: true\t\n",
+      "ingestionTime": 1785030850871,
+      "eventId": "39807517975972275534675054744761476229935364918002122759"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785030841958,
+      "message": "START RequestId: 5c8e49a4-7802-4552-828d-9558d06bcd79 Version: 134\n",
+      "ingestionTime": 1785030850871,
+      "eventId": "39807517978023944092939872073782762311019014176552321032"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785030841959,
+      "message": "{\"level\":\"INFO\",\"location\":\"lambda_handler:1871\",\"message\":\"Dashboard Lambda invoked\",\"timestamp\":\"2026-07-26 01:54:01,958+0000\",\"service\":\"dashboard\",\"cold_start\":false,\"function_name\":\"preprod-sentiment-dashboard\",\"function_memory_size\":\"1024\",\"function_arn\":\"arn:aws:lambda:us-east-1:218795110243:function:preprod-sentiment-dashboard:live\",\"function_request_id\":\"5c8e49a4-7802-4552-828d-9558d06bcd79\",\"path\":\"/api/v2/auth/anonymous\",\"method\":\"POST\",\"xray_trace_id\":\"1-6a6568b9-02711d9322b9de59690e81e7\"}\n",
+      "ingestionTime": 1785030850871,
+      "eventId": "39807517978046244838138402696924298029291662538058301449"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785030841966,
+      "message": "END RequestId: 5c8e49a4-7802-4552-828d-9558d06bcd79\n",
+      "ingestionTime": 1785030850871,
+      "eventId": "39807517978202350054528117058915048057200201068600164362"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785030841966,
+      "message": "REPORT RequestId: 5c8e49a4-7802-4552-828d-9558d06bcd79\tDuration: 7.51 ms\tBilled Duration: 8 ms\tMemory Size: 1024 MB\tMax Memory Used: 178 MB\t\nXRAY TraceId: 1-6a6568b9-02711d9322b9de59690e81e7\tSegmentId: cad425a2b0a79aee\tSampled: true\t\n",
+      "ingestionTime": 1785030850871,
+      "eventId": "39807517978202350054528117058915048057200201068600164363"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785030842147,
+      "message": "START RequestId: a3b960c6-6c6c-49de-b7f0-275357ca090e Version: 134\n",
+      "ingestionTime": 1785030850871,
+      "eventId": "39807517982238784935462159847533013064549554501182619660"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785030842148,
+      "message": "{\"level\":\"INFO\",\"location\":\"lambda_handler:1871\",\"message\":\"Dashboard Lambda invoked\",\"timestamp\":\"2026-07-26 01:54:02,148+0000\",\"service\":\"dashboard\",\"cold_start\":false,\"function_name\":\"preprod-sentiment-dashboard\",\"function_memory_size\":\"1024\",\"function_arn\":\"arn:aws:lambda:us-east-1:218795110243:function:preprod-sentiment-dashboard:live\",\"function_request_id\":\"a3b960c6-6c6c-49de-b7f0-275357ca090e\",\"path\":\"/api/v2/auth/oauth/urls\",\"method\":\"GET\",\"xray_trace_id\":\"1-6a6568ba-46ed921552b2d15135fd9155\"}\n",
+      "ingestionTime": 1785030850871,
+      "eventId": "39807517982261085680660690470674548782822202862688600077"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785030842156,
+      "message": "END RequestId: a3b960c6-6c6c-49de-b7f0-275357ca090e\n",
+      "ingestionTime": 1785030850871,
+      "eventId": "39807517982439491642248935455806834529003389754736443406"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785030842156,
+      "message": "REPORT RequestId: a3b960c6-6c6c-49de-b7f0-275357ca090e\tDuration: 7.78 ms\tBilled Duration: 8 ms\tMemory Size: 1024 MB\tMax Memory Used: 178 MB\t\nXRAY TraceId: 1-6a6568ba-46ed921552b2d15135fd9155\tSegmentId: 4d03be589d238406\tSampled: true\t\n",
+      "ingestionTime": 1785030850871,
+      "eventId": "39807517982439491642248935455806834529003389754736443407"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785031000038,
+      "message": "START RequestId: d13b124b-6ddf-4f30-87b3-23d5aaeeb224 Version: 134\n",
+      "ingestionTime": 1785031009053,
+      "eventId": "39807521503325745076660778478979659528965954345543335936"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785031000040,
+      "message": "{\"level\":\"INFO\",\"location\":\"lambda_handler:1871\",\"message\":\"Dashboard Lambda invoked\",\"timestamp\":\"2026-07-26 01:56:40,039+0000\",\"service\":\"dashboard\",\"cold_start\":false,\"function_name\":\"preprod-sentiment-dashboard\",\"function_memory_size\":\"1024\",\"function_arn\":\"arn:aws:lambda:us-east-1:218795110243:function:preprod-sentiment-dashboard:live\",\"function_request_id\":\"d13b124b-6ddf-4f30-87b3-23d5aaeeb224\",\"path\":\"/api/v2/auth/me\",\"method\":\"GET\",\"xray_trace_id\":\"1-6a656958-1d56cef153f023bc7ad46867\"}\n",
+      "ingestionTime": 1785031009053,
+      "eventId": "39807521503370346567057839725262730965511251068555296769"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785031000041,
+      "message": "[WARNING]\t2026-07-26T01:56:40.041Z\td13b124b-6ddf-4f30-87b3-23d5aaeeb224\tJWT audience mismatch detected\n",
+      "ingestionTime": 1785031009053,
+      "eventId": "39807521503392647312256370348404266683783899430061277186"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785031000043,
+      "message": "END RequestId: d13b124b-6ddf-4f30-87b3-23d5aaeeb224\n",
+      "ingestionTime": 1785031009053,
+      "eventId": "39807521503437248802653431594687338120329196153073238019"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785031000043,
+      "message": "REPORT RequestId: d13b124b-6ddf-4f30-87b3-23d5aaeeb224\tDuration: 4.80 ms\tBilled Duration: 5 ms\tMemory Size: 1024 MB\tMax Memory Used: 178 MB\t\nXRAY TraceId: 1-6a656958-1d56cef153f023bc7ad46867\tSegmentId: 9a78d6f62e517f49\tSampled: true\t\n",
+      "ingestionTime": 1785031009053,
+      "eventId": "39807521503437248802653431594687338120329196153073238020"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785031000163,
+      "message": "START RequestId: b12a21db-7824-404f-bf83-5800d797f5d6 Version: 134\n",
+      "ingestionTime": 1785031009053,
+      "eventId": "39807521506113338226477106371671624313046999533790887941"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785031000164,
+      "message": "{\"level\":\"INFO\",\"location\":\"lambda_handler:1871\",\"message\":\"Dashboard Lambda invoked\",\"timestamp\":\"2026-07-26 01:56:40,163+0000\",\"service\":\"dashboard\",\"cold_start\":false,\"function_name\":\"preprod-sentiment-dashboard\",\"function_memory_size\":\"1024\",\"function_arn\":\"arn:aws:lambda:us-east-1:218795110243:function:preprod-sentiment-dashboard:live\",\"function_request_id\":\"b12a21db-7824-404f-bf83-5800d797f5d6\",\"path\":\"/api/v2/auth/me\",\"method\":\"GET\",\"xray_trace_id\":\"1-6a656958-7d0fc1fe17ef3e283a9f441e\"}\n",
+      "ingestionTime": 1785031009053,
+      "eventId": "39807521506135638971675636994813160031319647895296868358"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785031000165,
+      "message": "END RequestId: b12a21db-7824-404f-bf83-5800d797f5d6\n",
+      "ingestionTime": 1785031009053,
+      "eventId": "39807521506157939716874167617954695749592296256802848775"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785031000165,
+      "message": "REPORT RequestId: b12a21db-7824-404f-bf83-5800d797f5d6\tDuration: 2.19 ms\tBilled Duration: 3 ms\tMemory Size: 1024 MB\tMax Memory Used: 178 MB\t\nXRAY TraceId: 1-6a656958-7d0fc1fe17ef3e283a9f441e\tSegmentId: 778c4184857e8512\tSampled: true\t\n",
+      "ingestionTime": 1785031009053,
+      "eventId": "39807521506157939716874167617954695749592296256802848776"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785031000266,
+      "message": "START RequestId: 33a81a25-886d-4d70-ba24-c4c581272845 Version: 134\n",
+      "ingestionTime": 1785031009053,
+      "eventId": "39807521508410314981925760555249803295129780768906870793"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785031000267,
+      "message": "{\"level\":\"INFO\",\"location\":\"lambda_handler:1871\",\"message\":\"Dashboard Lambda invoked\",\"timestamp\":\"2026-07-26 01:56:40,267+0000\",\"service\":\"dashboard\",\"cold_start\":false,\"function_name\":\"preprod-sentiment-dashboard\",\"function_memory_size\":\"1024\",\"function_arn\":\"arn:aws:lambda:us-east-1:218795110243:function:preprod-sentiment-dashboard:live\",\"function_request_id\":\"33a81a25-886d-4d70-ba24-c4c581272845\",\"path\":\"/api/v2/auth/me\",\"method\":\"GET\",\"xray_trace_id\":\"1-6a656958-26d1ac40359746cb2e64568d\"}\n",
+      "ingestionTime": 1785031009053,
+      "eventId": "39807521508432615727124291178391339013402429130412851210"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785031000269,
+      "message": "END RequestId: 33a81a25-886d-4d70-ba24-c4c581272845\n",
+      "ingestionTime": 1785031009053,
+      "eventId": "39807521508477217217521352424674410449947725853424812043"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]778907c660394325b4d8b9f1baba8e34",
+      "timestamp": 1785031000269,
+      "message": "REPORT RequestId: 33a81a25-886d-4d70-ba24-c4c581272845\tDuration: 2.26 ms\tBilled Duration: 3 ms\tMemory Size: 1024 MB\tMax Memory Used: 178 MB\t\nXRAY TraceId: 1-6a656958-26d1ac40359746cb2e64568d\tSegmentId: 5b5f0f1ed622b75d\tSampled: true\t\n",
+      "ingestionTime": 1785031009053,
+      "eventId": "39807521508477217217521352424674410449947725853424812044"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]22543b3ecf6c468b97918156da5b7cb7",
+      "timestamp": 1785031152222,
+      "message": "START RequestId: b5a4eb16-cb31-467c-80e8-05b76e7ebdf0 Version: 134\n",
+      "ingestionTime": 1785031161244,
+      "eventId": "39807524897142352369845130834438533267505090536369094656"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]22543b3ecf6c468b97918156da5b7cb7",
+      "timestamp": 1785031152225,
+      "message": "{\"level\":\"INFO\",\"location\":\"lambda_handler:1871\",\"message\":\"Dashboard Lambda invoked\",\"timestamp\":\"2026-07-26 01:59:12,223+0000\",\"service\":\"dashboard\",\"cold_start\":false,\"function_name\":\"preprod-sentiment-dashboard\",\"function_memory_size\":\"1024\",\"function_arn\":\"arn:aws:lambda:us-east-1:218795110243:function:preprod-sentiment-dashboard:live\",\"function_request_id\":\"b5a4eb16-cb31-467c-80e8-05b76e7ebdf0\",\"path\":\"/api/v2/auth/oauth/urls\",\"method\":\"GET\",\"xray_trace_id\":\"1-6a6569f0-35484db6621dddd148df7dcf\"}\n",
+      "ingestionTime": 1785031161244,
+      "eventId": "39807524897209254605440722703863140422323035620887035905"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]22543b3ecf6c468b97918156da5b7cb7",
+      "timestamp": 1785031152290,
+      "message": "END RequestId: b5a4eb16-cb31-467c-80e8-05b76e7ebdf0\n",
+      "ingestionTime": 1785031161244,
+      "eventId": "39807524898658803043345213208062962110045179118775762946"
+    },
+    {
+      "logStreamName": "2026/07/26/[134]22543b3ecf6c468b97918156da5b7cb7",
+      "timestamp": 1785031152290,
+      "message": "REPORT RequestId: b5a4eb16-cb31-467c-80e8-05b76e7ebdf0\tDuration: 66.98 ms\tBilled Duration: 67 ms\tMemory Size: 1024 MB\tMax Memory Used: 178 MB\t\nXRAY TraceId: 1-6a6569f0-35484db6621dddd148df7dcf\tSegmentId: 7b2080d88a5f9173\tSampled: true\t\n",
+      "ingestionTime": 1785031161244,
+      "eventId": "39807524898658803043345213208062962110045179118775762947"
+    }
+  ]
+}
