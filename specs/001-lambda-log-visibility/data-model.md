@@ -10,8 +10,8 @@ logging configuration state machine per process.
 | Field | Type | Rules |
 |---|---|---|
 | root_level | int | INFO (20) after helper runs; overridable via LOG_LEVEL env, floor INFO for prod-normal ops (DEBUG requires explicit deliberate value; FR-002 default holds) |
-| pinned_loggers | map[str,int] | `httpx`→WARNING, `httpcore`→WARNING (FR-010); applied after root level so pins always win |
-| configured | bool | idempotency latch — second call is a no-op (module-level flag), safe under Lambda re-import and unit-test re-entry |
+| pinned_loggers | map[str,int] | `httpx`→WARNING, `httpcore`→WARNING (FR-010); pins win because those loggers get their OWN explicit level (application order is not load-bearing — AR#2 F14) |
+| selftest_emitted | bool | once-per-process latch for the C-8 self-test line ONLY; level assertions (C-1/C-2) re-assert on every call (AR#2 F5); unit tests reset via the module's documented reset hook |
 
 State transition: `unconfigured → configured` exactly once per process, at
 entrypoint import time, before first request. No reverse transition.

@@ -79,9 +79,10 @@ src/lambdas/canary/handler.py        # + call (keeps its own setLevel)
 src/lambdas/notification/sendgrid_service.py  # FR-012: mask recipient email
 src/lambdas/notification/handler.py           # FR-012: stop raw-event dump widening (see research R-7)
 
-tests/unit/shared/test_logging_config.py       # helper semantics
-tests/unit/test_entrypoint_logging_coverage.py # guard: every deployed handler calls helper
-tests/e2e/test_log_visibility.py               # preprod: INFO line per function (FR-008)
+tests/unit/shared/test_logging_config.py       # helper semantics (C-1..C-6, C-8)
+tests/unit/test_entrypoint_logging_coverage.py # C-7 guard: GLOB src/lambdas/*/handler.py minus {sse_streaming, chaos_restore}
+tests/e2e/test_log_visibility.py               # preprod: dark-line evidence per function (FR-008)
+scripts/verify-log-visibility.py               # on-demand dashboard probe + SC-006 drill (AR#2 F6)
 ```
 
 **Structure Decision**: single-project layout; the only new module is
@@ -144,25 +145,45 @@ as O3; rejected on scale alone.
 
 ## Verification Design (FR-008 / SC-001..007)
 
-- **Dashboard (on demand)**: direct alias-qualified invoke of a request that
-  crosses a known INFO site (session refresh → `refresh.*` classification
-  lines, router_v2.py:742/757/762) then `filter_log_events` for the line —
-  this simultaneously executes the SC-006 drill.
-- **Canary**: fires every 5 minutes; assert any non-entrypoint INFO within
-  15 minutes of deploy.
-- **Ingestion/analysis**: next scheduled collection cycle (both emit
-  non-entrypoint INFO on every real run: storage/parallel-fetcher modules).
-- **Metrics**: scheduled run; baseline measurement doubles as its check.
-- **Notification**: synthetic digest trigger (EventBridge test event
-  `{"notification_type": "digest"}`) — empty-digest runs exercise
-  entrypoint INFO only, so the E2E asserts on a masked sendgrid_service
-  line via a test-mode send or accepts the entrypoint line plus the
-  coverage-guard as the evidence pair (decision recorded in tasks).
+Universal evidence line (AR#2): the helper's C-8 self-test probe — one
+static INFO line per cold start on the helper's own un-leveled child logger
+— can only appear when root=INFO is live, in every function. Per-function
+checks assert it PLUS the strongest function-specific dark line:
+
+- **Dashboard (on demand)**: `scripts/verify-log-visibility.py` (owned by
+  this feature) performs an alias-qualified invoke of the three session-
+  refresh outcomes (no cookie / garbage cookie / valid session) then
+  `filter_log_events` for `refresh.cookie_absent` / `refresh.rejected` /
+  `refresh.success` (router_v2.py:742/757/762 — verified logger.info on the
+  stdlib logger) — this IS the SC-006 drill.
+- **Canary**: fires every 5 minutes; assert the C-8 self-test line within
+  15 minutes of deploy (AR#2 F1: canary has NO first-party imports — any
+  `[INFO]` grep is a false-positive verifier since its entrypoint self-
+  levels today; only the probe line discriminates).
+- **Ingestion/analysis**: next scheduled cycle; assert SPECIFIC dark module
+  lines (ingestion: storage.py:184 "Storage operation complete"; analysis:
+  sentiment.py INFO sites), not any-`[INFO]`.
+- **Metrics**: C-8 self-test line only (AR#2 F2: no other dark INFO exists
+  in this function; its StructuredLogger lines are visible pre-fix).
+- **Notification**: synthetic empty-digest invoke (flat payload
+  `{"notification_type": "digest"}`, handler accepts it directly); assert
+  the DARK digest_service lines ("Found users due for digest" /
+  "Digest processing complete") — AR#2 F3 established these exist and
+  cannot appear pre-deploy. No email is sent; no test-mode path needed.
 - **FR-004 baseline**: before deploy, capture 24h of metrics-Lambda log
   events and count StructuredLogger duplicates (the propagate=True question);
   re-run after deploy; assert no additional duplication.
-- **SC-007 content safety**: targeted queries for `token=`, `@`-bearing
-  addresses in new INFO lines across all six groups during the first week.
+- **SC-005 p50 procedure (AR#2 F7)**: fixed workload of 20 identical
+  dashboard requests pre- and post-deploy; count INFO events per request-id;
+  compare p50; assert delta ≤10.
+- **SC-003 positive control (AR#2 F8)**: the metric filter's field order may
+  never have matched application lines (pre-existing question, research
+  R-9). Fire one synthetic ImportModuleError-shaped line pre- and
+  post-deploy; identical filter behavior in both = no regression regardless
+  of whether the filter was ever alive.
+- **SC-007 content safety**: targeted queries for `token=` AND `@`-bearing
+  address patterns in new INFO lines across all six groups during the first
+  week (both patterns, per spec).
 
 ## Rollback
 
@@ -170,3 +191,41 @@ Single revert of the feature commit restores the status quo (root level
 returns to WARNING). No infrastructure state, no data migration, no consumer
 migration to unwind. This is the smallest-rollback option of the four — a
 deliberate selection criterion 48 hours after a 7-defect incident.
+
+## Adversarial Review #2
+
+Independent cross-artifact reviewer (post-Clarifications): 14 findings —
+0 CRITICAL, 3 HIGH, 5 MEDIUM, 6 LOW. All resolved in this revision.
+
+**Drift found (Stage 1 → Stage 5)**: the Clarifications pass introduced a
+factually wrong premise (notification empty-digest "exercises only
+entrypoint INFO" — digest_service actually has dark INFO lines that fire on
+every run), and the plan contradicted the settled no-test-mode-send decision.
+Both corrected.
+
+| # | Sev | Finding (compressed) | Resolution |
+|---|-----|----------------------|------------|
+| 1 | HIGH | Canary FR-008 unsatisfiable: no first-party imports exist; quickstart any-INFO grep passes PRE-deploy (false-positive verifier) | C-8 self-test probe line added to helper contract — the only line that discriminates; quickstart + FR-008 rewritten |
+| 2 | HIGH | Metrics function has zero currently-dark INFO (StructuredLogger self-handled, visible today) — its check was circular, SC-002 vacuous for it | Same C-8 probe is its evidence; spec FR-008 amended honestly |
+| 3 | HIGH | Notification Clarification premise false — empty digest DOES emit dark digest_service INFO (count=0 + completion lines, PII-safe); plan reopened settled decision with nonexistent "test-mode send" | Clarification rewritten to use digest_service lines as evidence; plan verification bullet corrected; stronger check than the compromise it replaces |
+| 4 | MEDIUM | Coverage-guard set undefined — hardcoded list would make regression-resistance circular | C-7 now mandates glob src/lambdas/*/handler.py minus documented exclusions {sse_streaming, chaos_restore} |
+| 5 | MEDIUM | C-4 latch contradicted C-1 (external mutation between calls) | Levels re-assert every call; latch scoped to self-test emission only; data-model updated |
+| 6 | MEDIUM | quickstart invoked scripts/verify-log-visibility.py — absent from plan file list; FR-008 on-demand check had no owning artifact | Script added to Project Structure + tasks |
+| 7 | MEDIUM | SC-005 p50 had no defined procedure (FR-004 comparison never touches dashboard) | 20-request fixed-workload p50 procedure added to Verification Design |
+| 8 | MEDIUM | Contract line-shape vs metric-filter field order disagree — filter may never have matched (SC-003 vacuously true) | research R-9 records the pre-existing question; SC-003 gains a positive control; filter fix (if dead) carded separately |
+| 9 | MEDIUM | FR-012 review record incomplete (digest_service, secrets.py, cognito.py unreviewed in R-8) | R-8 completed with reviewed-no-exposure verdicts; repo-wide PII-in-INFO grep recorded clean |
+| 10 | LOW | notification handler:170/220 (+error paths) same already-visible email class as :56, unrecorded | Spec FR-012 recorded-not-endorsed bullet now covers the full set, one card |
+| 11 | LOW | C-6 vs C-2 theoretical conflict if httpx ever deliberately configured | C-6 scoped to "other than root/httpx/httpcore" |
+| 12 | LOW | C-5 wording could be misread vs call-at-entrypoint-import | Clarifying sentence added to C-5 |
+| 13 | LOW | quickstart SC-007 grep missed @-pattern; SC-004 conflicts with deliberate DEBUG window | Both queries in quickstart; SC-004 caveat noted there |
+| 14 | LOW | data-model "applied after root so pins win" — wrong rationale (order not load-bearing) | Rationale corrected (pins win via own explicit level) |
+
+**Cross-artifact consistency**: verified post-edit — spec FR-008/Clarifications,
+plan Verification Design, contract C-1..C-8, data-model, research R-8/R-9, and
+quickstart all describe the same design (probe line + specific dark lines +
+glob-based guard). Verified accurate by AR#2's independent reads:
+router_v2.py:742/757/762 classification set matches the drill exactly; 7
+terraform lambda instantiations confirm the six-function scope; exactly one
+log metric filter repo-wide.
+
+**Gate: 0 CRITICAL, 0 HIGH remaining.**

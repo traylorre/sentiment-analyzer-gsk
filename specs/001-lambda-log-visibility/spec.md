@@ -51,15 +51,17 @@ function is not deployed — terraform TODO TD-2).
   queries are the detection mechanism for any logger that proves this wrong,
   and adding a pin is a one-line change to the helper.
 - Q: What counts as the notification function's FR-008 evidence, given a
-  synthetic empty-digest run exercises only entrypoint-level INFO and a real
-  send would consume SendGrid quota (100/day) against a real recipient? →
-  A: Accepted evidence pair: (1) synthetic digest trigger produces the
-  entrypoint INFO line in the log group (proves the function's runtime level
-  config), plus (2) the coverage-guard test proves the helper call, plus
-  (3) the masked sendgrid_service line is unit-tested for shape. No real
-  email is sent for verification. Evidence: eventbridge digest test event
-  exists (modules/eventbridge input template); no sandbox-mode send path is
-  wired in sendgrid_service.py; quota constraint is real.
+  real send would consume SendGrid quota (100/day) against a real recipient?
+  → A (REVISED by AR#2 — the original premise "empty digest exercises only
+  entrypoint INFO" was factually wrong): a synthetic empty-digest invoke
+  (flat payload `{"notification_type": "digest"}`, accepted by the handler
+  directly) DOES execute a genuinely dark non-entrypoint module —
+  digest_service uses a bare un-leveled module logger and emits INFO on
+  every run including empty ones ("Found users due for digest" count=0,
+  "Digest processing complete"; both PII-safe). Notification's FR-008
+  evidence = that digest_service line appearing post-deploy (it cannot
+  appear pre-deploy), plus the unit-tested masked sendgrid_service line
+  shape. No real email is sent; no test-mode send path exists or is needed.
 - Q: SC-005's "bounded, reviewed amount" — what bound? → A: Guardrail: a
   representative dashboard request adds ≤10 new INFO lines (p50), and
   projected CloudWatch ingestion delta at current traffic is <$1/month.
@@ -264,8 +266,15 @@ in the enabled output.
   pinned alias, so configuration applied to the unpublished version is not
   live until publish — verification MUST target the alias-qualified path.
 - **FR-008**: Each of the six functions MUST have a verifiable post-deploy
-  check demonstrating an informational line from a non-entrypoint module
-  reaching its log group. The dashboard check MUST be executable on demand;
+  check demonstrating an informational line that CANNOT appear pre-deploy
+  reaching its log group — i.e., a line from a currently-dark (un-leveled,
+  non-entrypoint) logger. AR#2 established that canary and metrics contain
+  NO such first-party line (canary imports no first-party modules; metrics'
+  only INFO is its self-handled structured logger, visible today) — for
+  them, the evidence line is the configuration helper's own self-test probe
+  (one static INFO line per cold start on the helper's un-leveled child
+  logger), which by construction can only appear when the fix is live.
+  The dashboard check MUST be executable on demand;
   the other five MAY use scheduled runs (canary fires every 5 minutes) or a
   synthetic trigger — "wait for organic traffic" is not an acceptable
   verification plan for a function that may not organically emit for a week.
@@ -302,11 +311,13 @@ in the enabled output.
   - The notification module's currently-dark lines logging full recipient
     email addresses (must be masked before they become visible).
   - Already-visible today and OUT of this feature's causal scope, but
-    recorded so preservation is not misread as endorsement: the notification
-    entrypoint logs the raw invocation event, which for magic-link events
-    contains the recipient email and a live sign-in token. This pre-existing
-    CWE-312 defect MUST be carded as its own fix; this feature MUST NOT
-    widen it.
+    recorded so preservation is not misread as endorsement (all in the
+    notification entrypoint, whose logger is INFO today): the raw invocation
+    event dump (for magic-link events: recipient email + live sign-in
+    token), and the full-recipient-email lines "Alert email sent to …" /
+    "Magic link email sent to …" plus their error-path counterparts. These
+    pre-existing CWE-312 defects MUST be carded as one fix; this feature
+    MUST NOT widen them.
 
 ### Key Entities
 

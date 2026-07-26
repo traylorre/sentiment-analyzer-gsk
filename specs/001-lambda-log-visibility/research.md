@@ -138,3 +138,28 @@ Newly-visible-line review is scoped to modules handling credentials/PII:
   root-level change does not affect it).
 - dashboard/auth.py discipline confirmed good (8-char prefixes,
   sanitize_for_log, domain-only emails) — no edits needed.
+
+AR#2 completion of the review record (FR-012/SC-007 require it recorded;
+each verified REVIEWED, NO EXPOSURE):
+- notification/digest_service.py:153,635,656 — dark INFO, logs counts and
+  sanitized 8-char user ids only; PII-safe (and now notification's FR-008
+  evidence line).
+- shared/secrets.py:244 — "Secret retrieved from Secrets Manager", name-only,
+  no value.
+- shared/auth/cognito.py:157,312 — INFO lines, no values.
+- Cross-repo grep for interpolated PII in INFO lines outside notification:
+  no hits. Content verdict: clean beyond the already-recorded notification
+  entrypoint defects (spec FR-012 records the full set incl. lines 170/220
+  and error-path counterparts).
+
+## R-9: Metric filter field-order discrepancy (AR#2 F8 — pre-existing)
+
+The `dashboard_import_errors` filter pattern assumes field order `[time,
+request_id, level=ERROR*, msg...]` but observed application lines lead with
+`[LEVEL]`. If the filter never matched an application line, it has been dead
+since authoring — a PRE-EXISTING defect, not a regression risk of this
+feature. SC-003 verification includes a positive control (fire a synthetic
+ImportModuleError-shaped line, watch the metric); outcome either proves the
+filter alive (then Text preservation keeps it alive) or proves it
+dead-on-arrival (then card its fix separately; this feature changes nothing
+about it either way).
