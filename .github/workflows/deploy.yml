@@ -232,7 +232,7 @@ jobs:
           # Metrics Lambda - Minimal dependencies (TD-011)
           # ============================================================
           echo ""
-          echo "📦 Packaging Metrics Lambda (minimal - boto3 only)..."
+          echo "📦 Packaging Metrics Lambda (boto3, aws-lambda-powertools)..."
 
           # Install minimal metrics dependencies
           # Note: Metrics Lambda doesn't use pydantic, but we include platform flags
@@ -240,6 +240,7 @@ jobs:
           pip install \
             boto3==1.41.0 \
             python-json-logger==4.0.0 \
+            aws-lambda-powertools==3.7.0 \
             -t packages/metrics-deps/ \
             --platform manylinux2014_x86_64 \
             --implementation cp \

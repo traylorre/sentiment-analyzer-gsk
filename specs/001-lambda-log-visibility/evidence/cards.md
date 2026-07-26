@@ -31,3 +31,20 @@ to the owner board follow-up queue alongside the existing cards from the
 Status: recorded here per T018; to be added to CLEANUP-BOARD.html riders at
 the next board update (board edits batch with the next board PR per session
 convention).
+
+## Card C — dashboard_import_errors metric filter is dead-on-arrival (found by T005)
+
+- Filter pattern (modules/monitoring/main.tf:30-41) assumes field order
+  `[time, request_id, level=ERROR*, ...]`; real runtime lines lead with
+  `[LEVEL]`. Metric namespace `SentimentAnalyzer/Packaging` has been EMPTY
+  since the filter's creation (2025-12-06) — it has never matched anything.
+- Proven consequence: the metrics Lambda crash-looped with
+  Runtime.ImportModuleError for 7+ days (26,036 errors/24h) and the CRITICAL
+  alarm built for exactly that failure never fired.
+- Fix shape: correct the filter pattern to match real line shapes (both
+  `[ERROR]`-prefixed app lines AND bare `Runtime.ImportModuleError` platform
+  lines), then a positive control proving the metric increments.
+- NOTE: the metrics-Lambda crash-loop ITSELF (missing aws-lambda-powertools
+  in the ZIP) is fixed IN feature 001's PR (deploy.yml one-line pin, same as
+  Feature 1227's ingestion fix) because FR-008/SC-002 are unachievable while
+  the function cannot import its handler. The filter fix remains carded.

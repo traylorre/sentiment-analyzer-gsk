@@ -1,0 +1,8 @@
+{
+  "logGroupName": "/aws/lambda/preprod-sentiment-notification",
+  "collectedAt": "2026-07-26T03:50:38.149835+00:00",
+  "windowUsed": "168h",
+  "error": null,
+  "eventCount": 0,
+  "events": []
+}
