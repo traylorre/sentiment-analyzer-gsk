@@ -3,7 +3,7 @@
 **Input**: Design documents from `/specs/001-lambda-log-visibility/`
 **Prerequisites**: plan.md (post-AR#2), spec.md (post-Clarifications), research.md, data-model.md, contracts/logging-config.md, quickstart.md
 **Tests**: TDD explicitly requested — contract tests precede implementation.
-**Ordering constraint (hard)**: T004/T005 pre-deploy baselines MUST complete before the merge/deploy task T020.
+**Ordering constraint (hard)**: T002-T005 pre-deploy baselines MUST complete before the deploy task T022.
 
 ## Phase 1: Setup & Pre-Deploy Baselines
 
