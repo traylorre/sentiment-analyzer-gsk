@@ -7,19 +7,19 @@
 
 ## Phase 1: Setup & Pre-Deploy Baselines
 
-- [ ] T001 Verify branch `001-lambda-log-visibility` is current with origin/main; venv active (`source .venv/bin/activate`)
-- [ ] T002 [P] Record pre-deploy log-shape samples: capture 50 recent events from each of the six log groups (`/aws/lambda/preprod-sentiment-{dashboard,ingestion,analysis,metrics,notification,canary}`) into `specs/001-lambda-log-visibility/evidence/pre-deploy/` (SC-003 comparison input)
-- [ ] T003 [P] FR-004 baseline: count StructuredLogger duplicate emissions over 24h on `/aws/lambda/preprod-sentiment-metrics` (same logical event appearing 2x); record count + query in `specs/001-lambda-log-visibility/evidence/pre-deploy/metrics-dup-baseline.md`
-- [ ] T004 [P] SC-005 baseline: run 20 identical dashboard requests (alias-qualified invoke, same route), count INFO events per request-id, record p50 in `specs/001-lambda-log-visibility/evidence/pre-deploy/dashboard-p50-baseline.md`
-- [ ] T005 [P] SC-003 positive control (pre): `aws logs put-log-events` one synthetic ImportModuleError-shaped line into a FRESH test stream in the dashboard log group (filters evaluate group-wide at ingestion — AR#3 confirmed viable; needs operator `logs:CreateLogStream`/`PutLogEvents`); record whether metric `dashboard_import_errors` incremented in `specs/001-lambda-log-visibility/evidence/pre-deploy/filter-control.md` (research R-9 question)
+- [X] T001 Verify branch `001-lambda-log-visibility` is current with origin/main; venv active (`source .venv/bin/activate`)
+- [X] T002 [P] Record pre-deploy log-shape samples: capture 50 recent events from each of the six log groups (`/aws/lambda/preprod-sentiment-{dashboard,ingestion,analysis,metrics,notification,canary}`) into `specs/001-lambda-log-visibility/evidence/pre-deploy/` (SC-003 comparison input)
+- [X] T003 [P] FR-004 baseline: count StructuredLogger duplicate emissions over 24h on `/aws/lambda/preprod-sentiment-metrics` (same logical event appearing 2x); record count + query in `specs/001-lambda-log-visibility/evidence/pre-deploy/metrics-dup-baseline.md`
+- [X] T004 [P] SC-005 baseline: run 20 identical dashboard requests (alias-qualified invoke, same route), count INFO events per request-id, record p50 in `specs/001-lambda-log-visibility/evidence/pre-deploy/dashboard-p50-baseline.md`
+- [X] T005 [P] SC-003 positive control (pre): `aws logs put-log-events` one synthetic ImportModuleError-shaped line into a FRESH test stream in the dashboard log group (filters evaluate group-wide at ingestion — AR#3 confirmed viable; needs operator `logs:CreateLogStream`/`PutLogEvents`); record whether metric `dashboard_import_errors` incremented in `specs/001-lambda-log-visibility/evidence/pre-deploy/filter-control.md` (research R-9 question)
 
 **Checkpoint**: evidence/pre-deploy/ populated — deploy-gating baselines exist.
 
 ## Phase 2: Foundational (helper + contract tests — blocks all user stories)
 
-- [ ] T006 Write failing contract tests C-1..C-6, C-8 in `tests/unit/shared/test_logging_config.py`: C-1 re-assert level every call; C-2 httpx/httpcore WARNING pins survive LOG_LEVEL=DEBUG; C-3 zero handler mutations; C-4 self-test line emits exactly once per process (latch scoped to emission only, reset hook for tests); C-5 import of module is side-effect-free; C-6 other loggers' levels untouched; C-8 self-test line goes through `logging.getLogger("src.lambdas.shared.logging_config")`, static message
-- [ ] T007 Implement `src/lambdas/shared/logging_config.py::configure_lambda_logging()` to pass T006: root setLevel from LOG_LEVEL env (unset→INFO), explicit own-level pins httpx/httpcore=WARNING, once-per-process self-test INFO emission, documented test reset hook, no handlers/formatters/propagation touched. STATED DEPENDENCY (AR#3): C-8's evidence value assumes awslambdaric bootstrap attaches the root handler BEFORE importing the handler module (research R-1 source read: `main()` runs `_setup_logging` before `_get_handler`) — record this in the module docstring; if it were ever false the self-test would fall to logging.lastResort (WARNING) and drop
-- [ ] T008 Write failing coverage-guard test in `tests/unit/test_entrypoint_logging_coverage.py`: glob `src/lambdas/*/handler.py`, exclude exactly `{sse_streaming, chaos_restore}` (documented in-test), assert per file: character index of top-level `configure_lambda_logging(` call < index of the first line matching `^def ` in the module source (AR#3 precise criterion — not "before lambda_handler", not docstring-fooled) (C-7; AR#2 F4 — no hardcoded function list)
+- [X] T006 Write failing contract tests C-1..C-6, C-8 in `tests/unit/shared/test_logging_config.py`: C-1 re-assert level every call; C-2 httpx/httpcore WARNING pins survive LOG_LEVEL=DEBUG; C-3 zero handler mutations; C-4 self-test line emits exactly once per process (latch scoped to emission only, reset hook for tests); C-5 import of module is side-effect-free; C-6 other loggers' levels untouched; C-8 self-test line goes through `logging.getLogger("src.lambdas.shared.logging_config")`, static message
+- [X] T007 Implement `src/lambdas/shared/logging_config.py::configure_lambda_logging()` to pass T006: root setLevel from LOG_LEVEL env (unset→INFO), explicit own-level pins httpx/httpcore=WARNING, once-per-process self-test INFO emission, documented test reset hook, no handlers/formatters/propagation touched. STATED DEPENDENCY (AR#3): C-8's evidence value assumes awslambdaric bootstrap attaches the root handler BEFORE importing the handler module (research R-1 source read: `main()` runs `_setup_logging` before `_get_handler`) — record this in the module docstring; if it were ever false the self-test would fall to logging.lastResort (WARNING) and drop
+- [X] T008 Write failing coverage-guard test in `tests/unit/test_entrypoint_logging_coverage.py`: glob `src/lambdas/*/handler.py`, exclude exactly `{sse_streaming, chaos_restore}` (documented in-test), assert per file: character index of top-level `configure_lambda_logging(` call < index of the first line matching `^def ` in the module source (AR#3 precise criterion — not "before lambda_handler", not docstring-fooled) (C-7; AR#2 F4 — no hardcoded function list)
 
 **Checkpoint**: helper green under contract tests; guard red (no entrypoint wired yet).
 
@@ -28,13 +28,13 @@
 **Goal**: INFO from first-party modules visible in all six functions' log groups.
 **Independent test**: quickstart preprod steps 1-2 post-deploy; guard green locally.
 
-- [ ] T009 [P] [US1] Wire `configure_lambda_logging()` at import top-level in `src/lambdas/dashboard/handler.py` (before Powertools app/resolver setup; powertools Logger untouched)
-- [ ] T010 [P] [US1] Wire in `src/lambdas/ingestion/handler.py` (keep existing module-logger setLevel(INFO) at ~:116 — FR-011)
-- [ ] T011 [P] [US1] Wire in `src/lambdas/analysis/handler.py` (keep ~:78 setLevel; log_structured print path untouched)
-- [ ] T012 [P] [US1] Wire in `src/lambdas/metrics/handler.py` (currently configures nothing; StructuredLogger untouched)
-- [ ] T013 [P] [US1] Wire in `src/lambdas/notification/handler.py` (keep LOG_LEVEL env read at ~:33 — same semantics, no duplicate config)
-- [ ] T014 [P] [US1] Wire in `src/lambdas/canary/handler.py` (keep ~:25 setLevel)
-- [ ] T015 [US1] Run T008 guard → green; run full unit suite (`pytest tests/unit/ -v`) → no regressions (FR-011/C-6 verified across suites)
+- [X] T009 [P] [US1] Wire `configure_lambda_logging()` at import top-level in `src/lambdas/dashboard/handler.py` (before Powertools app/resolver setup; powertools Logger untouched)
+- [X] T010 [P] [US1] Wire in `src/lambdas/ingestion/handler.py` (keep existing module-logger setLevel(INFO) at ~:116 — FR-011)
+- [X] T011 [P] [US1] Wire in `src/lambdas/analysis/handler.py` (keep ~:78 setLevel; log_structured print path untouched)
+- [X] T012 [P] [US1] Wire in `src/lambdas/metrics/handler.py` (currently configures nothing; StructuredLogger untouched)
+- [X] T013 [P] [US1] Wire in `src/lambdas/notification/handler.py` (keep LOG_LEVEL env read at ~:33 — same semantics, no duplicate config)
+- [X] T014 [P] [US1] Wire in `src/lambdas/canary/handler.py` (keep ~:25 setLevel)
+- [X] T015 [US1] Run T008 guard → green; run full unit suite (`pytest tests/unit/ -v`) → no regressions (FR-011/C-6 verified across suites)
 
 **Checkpoint**: all six entrypoints wired; guard + contract tests green — US1 code-complete.
 
@@ -43,9 +43,9 @@
 **Goal**: nothing newly visible leaks secrets/PII (FR-012, SC-007).
 **Independent test**: unit tests for masked shapes; grep-audit recorded.
 
-- [ ] T016 [P] [US3] Mask recipient email in `src/lambdas/notification/sendgrid_service.py` lines ~136/141 ONLY (`s***@domain` shape); do NOT touch the handler.py:56/170/220 lines — those are T018's card, already visible today, out of this feature's causal scope (AR#3 over-masking guardrail); unit test the masked line shape in `tests/unit/notification/test_sendgrid_service.py` (create or extend)
-- [ ] T017 [P] [US3] Confirm httpx pin closes the finnhub key-in-URL path: unit test in `tests/unit/shared/test_logging_config.py` — with root=DEBUG (worst case), an httpx-logger INFO record is NOT emitted (pin holds); reference research R-5/R-8
-- [ ] T018 [US3] Card the two out-of-scope defects on the owner board follow-up list (do NOT fix here): (a) notification entrypoint raw-event dump + full-email lines (handler.py:56/170/220 + error paths) — pre-existing CWE-312; (b) finnhub API key passed as URL query param (adapter hygiene). Record card refs in `specs/001-lambda-log-visibility/evidence/cards.md`
+- [X] T016 [P] [US3] Mask recipient email in `src/lambdas/notification/sendgrid_service.py` lines ~136/141 ONLY (`s***@domain` shape); do NOT touch the handler.py:56/170/220 lines — those are T018's card, already visible today, out of this feature's causal scope (AR#3 over-masking guardrail); unit test the masked line shape in `tests/unit/notification/test_sendgrid_service.py` (create or extend)
+- [X] T017 [P] [US3] Confirm httpx pin closes the finnhub key-in-URL path: unit test in `tests/unit/shared/test_logging_config.py` — with root=DEBUG (worst case), an httpx-logger INFO record is NOT emitted (pin holds); reference research R-5/R-8
+- [X] T018 [US3] Card the two out-of-scope defects on the owner board follow-up list (do NOT fix here): (a) notification entrypoint raw-event dump + full-email lines (handler.py:56/170/220 + error paths) — pre-existing CWE-312; (b) finnhub API key passed as URL query param (adapter hygiene). Record card refs in `specs/001-lambda-log-visibility/evidence/cards.md`
 
 **Checkpoint**: FR-012 satisfied; SC-007 pre-conditions in place.
 
@@ -54,8 +54,8 @@
 **Goal**: byte-compatible existing lines; on-demand dashboard proof exists.
 **Independent test**: script runs against preprod pre-deploy (refresh lines absent) and post-deploy (present).
 
-- [ ] T019 [US2] Write `scripts/verify-log-visibility.py`: alias-qualified dashboard invokes for the three refresh outcomes — (a) POST /api/v2/auth/refresh with no cookie → `refresh.cookie_absent`; (b) same with garbage cookie → `refresh.rejected`; (c) POST /api/v2/auth/anonymous (CSRF-exempt), capture the `refresh_token=anon.…` Set-Cookie, replay it to /refresh → `refresh.success` via the anon branch (AR#3: NO bearer/JWT-secret needed; a bearer cannot reach refresh.success — the branch requires a refresh COOKIE). Then `filter_log_events` asserting all three lines + the C-8 self-test line; exit non-zero on any missing (FR-008 dashboard + SC-006 drill)
-- [ ] T020 [US2] Write preprod E2E `tests/e2e/test_log_visibility.py` (marker `preprod`): per-function dark-line assertions — dashboard: refresh.* lines; ingestion: `storage.py:185` "Storage operation complete"; analysis: a pinned sentiment.py INFO line (research R-2 set); metrics: C-8 self-test line; notification: synthetic empty-digest invoke (flat payload) then digest_service:154/656 lines; canary: C-8 self-test line. AR#3 flake guard: C-8 is COLD-START-ONLY (once-per-process latch survives freeze/thaw) — window every C-8 `filter_log_events` query from the function's LastModified/publish timestamp, never "now minus N minutes"
+- [X] T019 [US2] Write `scripts/verify-log-visibility.py`: alias-qualified dashboard invokes for the three refresh outcomes — (a) POST /api/v2/auth/refresh with no cookie → `refresh.cookie_absent`; (b) same with garbage cookie → `refresh.rejected`; (c) POST /api/v2/auth/anonymous (CSRF-exempt), capture the `refresh_token=anon.…` Set-Cookie, replay it to /refresh → `refresh.success` via the anon branch (AR#3: NO bearer/JWT-secret needed; a bearer cannot reach refresh.success — the branch requires a refresh COOKIE). Then `filter_log_events` asserting all three lines + the C-8 self-test line; exit non-zero on any missing (FR-008 dashboard + SC-006 drill)
+- [X] T020 [US2] Write preprod E2E `tests/e2e/test_log_visibility.py` (marker `preprod`): per-function dark-line assertions — dashboard: refresh.* lines; ingestion: `storage.py:185` "Storage operation complete"; analysis: a pinned sentiment.py INFO line (research R-2 set); metrics: C-8 self-test line; notification: synthetic empty-digest invoke (flat payload) then digest_service:154/656 lines; canary: C-8 self-test line. AR#3 flake guard: C-8 is COLD-START-ONLY (once-per-process latch survives freeze/thaw) — window every C-8 `filter_log_events` query from the function's LastModified/publish timestamp, never "now minus N minutes"
 
 **Checkpoint**: verification artifacts exist and fail against current preprod (proves they discriminate).
 
