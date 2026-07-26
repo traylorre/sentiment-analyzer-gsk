@@ -1223,6 +1223,54 @@ def is_token_blocklisted(table: Any, refresh_token_hash: str) -> bool:
         return True
 
 
+def blocklist_refresh_token(
+    table: Any,
+    refresh_token: str,
+    user_id: str,
+    reason: str = "sign_out",
+) -> None:
+    """Blocklist a refresh token so /refresh can never resurrect the session.
+
+    Sign-out hardening (2026-07-25 zombie-session incident): sign_out
+    backdates session_expires_at, but the refresh endpoint's Cognito branch
+    does not consult session expiry — a surviving refresh_token cookie kept
+    re-minting app JWTs after sign-out ("Signed in via Google" with /me 404).
+    refresh_access_tokens checks is_token_blocklisted FIRST for every token
+    type (Cognito JWE and anon.*), so this closes the loop server-side; the
+    route also expires the cookies client-side. Silent-failure pattern: the
+    cookie expiry still covers the common case if this write fails.
+    """
+    now = datetime.now(UTC)
+    try:
+        table.put_item(
+            Item={
+                "PK": f"BLOCK#refresh#{hash_refresh_token(refresh_token)}",
+                "SK": "BLOCK",
+                "ttl_timestamp": int(
+                    (now + timedelta(days=SESSION_DURATION_DAYS)).timestamp()
+                ),
+                "evicted_at": now.isoformat(),
+                "user_id": user_id,
+                "reason": reason,
+            }
+        )
+        logger.info(
+            "Refresh token blocklisted",
+            extra={
+                "user_id_prefix": sanitize_for_log(user_id[:8]),
+                "reason": reason,
+            },
+        )
+    except Exception as e:
+        logger.warning(
+            "Failed to blocklist refresh token on sign-out",
+            extra={
+                "user_id_prefix": sanitize_for_log(user_id[:8]),
+                **get_safe_error_info(e),
+            },
+        )
+
+
 @tracer.capture_method
 def evict_oldest_session_atomic(
     table: Any,

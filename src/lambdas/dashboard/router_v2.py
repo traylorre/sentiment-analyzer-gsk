@@ -807,7 +807,45 @@ def sign_out():
         user_id=user_id,
         access_token=access_token,
     )
-    return json_response(200, result.model_dump(), _get_no_cache_headers())
+
+    # Zombie-session fix (2026-07-25): backdating the session is not enough —
+    # the refresh endpoint doesn't consult session expiry, so a surviving
+    # refresh_token cookie kept resurrecting a half-dead identity ("Signed in
+    # via Google" with /me 404). Blocklist the presented token server-side
+    # (refresh checks the blocklist first, for all token types) AND expire
+    # both cookies client-side.
+    refresh_token = _extract_refresh_token_from_event(event)
+    if refresh_token:
+        auth_service.blocklist_refresh_token(
+            table, refresh_token, user_id, reason="sign_out"
+        )
+
+    prefix = _cookie_path_prefix(event)
+    expired_cookies = [
+        make_set_cookie(
+            REFRESH_TOKEN_COOKIE_NAME,
+            "",
+            httponly=True,
+            secure=True,
+            samesite="None",
+            max_age=0,
+            path=f"{prefix}/api/v2/auth",
+        ),
+        make_set_cookie(
+            CSRF_COOKIE_NAME,
+            "",
+            httponly=False,
+            secure=True,
+            samesite="None",
+            max_age=0,
+            path=f"{prefix}/api/v2",
+        ),
+    ]
+    return _json_response_with_cookies(
+        result.model_dump(),
+        cookies=expired_cookies,
+        extra_headers=_get_no_cache_headers(),
+    )
 
 
 @auth_router.get("/api/v2/auth/session", middlewares=[require_csrf_middleware])
