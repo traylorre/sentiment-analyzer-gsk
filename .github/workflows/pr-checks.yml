@@ -206,7 +206,7 @@ jobs:
           cache: 'pip'
 
       - name: Set up Terraform (for terraform_fmt hook)
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@v4
 
       - name: Install pre-commit + system-hook dependencies (pinned)
         run: |
