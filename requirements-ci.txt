@@ -54,8 +54,8 @@ responses==0.26.2
 
 # Code Quality
 black==26.5.1
-ruff==0.15.14
-pre-commit==4.6.0
+ruff==0.16.0
+pre-commit==4.6.1
 bandit==1.9.4
 
 # Type Checking
