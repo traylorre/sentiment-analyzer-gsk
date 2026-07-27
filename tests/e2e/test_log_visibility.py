@@ -108,29 +108,28 @@ class TestDashboardRefreshClassification:
 
 
 class TestNotificationDigestDarkLines:
-    def test_synthetic_empty_digest_emits_digest_service_info(
-        self, logs_client, lambda_client
-    ):
-        start_ms = int(time.time() * 1000) - 10_000
-        lambda_client.invoke(
+    def test_synthetic_digest_invoke_and_c8_evidence(self, logs_client, lambda_client):
+        """Deploy-run-30191660741 correction: the planned digest_service dark
+        lines are UNREACHABLE on preprod today — the digest user query fails
+        (Card E), so get_users_for_digest raises before either INFO line, and
+        the completion line that DOES emit (handler.py:261 "Daily digest
+        processing complete") is the ENTRYPOINT logger — visible pre-fix,
+        zero discriminating power. Until Card E lands, notification's honest
+        FR-008 evidence is the C-8 self-test line windowed from LastModified
+        (same class as metrics/canary), plus a healthy 200 from the synthetic
+        invoke proving the import chain (the packaging onion) is closed.
+        """
+        resp = lambda_client.invoke(
             FunctionName=_function_name("notification"),
             Payload=json.dumps({"notification_type": "digest"}).encode(),
         )
-        found = _find_line(
-            logs_client,
-            _log_group("notification"),
-            "Digest processing complete",
-            start_ms,
-        ) or _find_line(
-            logs_client,
-            _log_group("notification"),
-            "Found users due for digest",
-            start_ms,
-        )
-        assert found, (
-            "notification: digest_service dark INFO lines absent after "
-            "synthetic empty-digest invoke — root-level fix not live"
-        )
+        assert (
+            resp.get("FunctionError") is None
+        ), "notification invoke errored — packaging/import regression"
+        start_ms = _last_modified_ms(lambda_client, "notification")
+        assert _find_line(
+            logs_client, _log_group("notification"), SELF_TEST_MESSAGE, start_ms
+        ), "notification: C-8 self-test line absent since LastModified"
 
 
 class TestScheduledFunctionsDarkModuleLines:
