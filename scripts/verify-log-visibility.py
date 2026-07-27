@@ -99,6 +99,22 @@ def main() -> int:
     print(f"  -> {r_success.status_code} (must be 2xx for the branch to log success)")
 
     logs = boto3.client("logs", region_name=os.environ["AWS_REGION"])
+
+    # C-8 emits once per COLD START; probes against warm sandboxes emit no
+    # new C-8 (bit us on deploy run 30191660741: three refresh lines FOUND,
+    # C-8 "missing"). Window the C-8 query from the function's LastModified
+    # instead of the probe window (AR#3 flake guard, now applied here too).
+    import datetime as _dt
+
+    cfg = transport._client.get_function_configuration(
+        FunctionName=transport.function_name, Qualifier=transport.qualifier
+    )
+    lm = _dt.datetime.strptime(cfg["LastModified"], "%Y-%m-%dT%H:%M:%S.%f%z")
+    selftest_window_ms = int(lm.timestamp() * 1000)
+
+    def _window_for(line: str) -> int:
+        return selftest_window_ms if line == SELF_TEST_MESSAGE else window_start_ms
+
     missing = set(EXPECTED_LINES)
     deadline = time.time() + POLL_TIMEOUT_S
     while missing and time.time() < deadline:
@@ -106,7 +122,7 @@ def main() -> int:
         for line in list(missing):
             resp = logs.filter_log_events(
                 logGroupName=LOG_GROUP,
-                startTime=window_start_ms,
+                startTime=_window_for(line),
                 filterPattern=f'"{line}"',
                 limit=1,
             )
