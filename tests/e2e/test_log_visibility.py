@@ -72,7 +72,14 @@ def lambda_client():
 
 
 class TestSelfTestLinePerColdStart:
-    """C-8 probe: the only discriminating evidence for metrics and canary."""
+    """C-8 probe: the only discriminating evidence for metrics and canary.
+
+    HARD LESSON (metrics, 2026-07-26..29): C-8 emits during handler import
+    BEFORE later imports/constructions can fail — the metrics function
+    crash-looped for 3 days on Tracer()'s lazy aws_xray_sdk import while
+    this test's C-8 assertion passed. C-8 proves the LOGGING fix only;
+    function health needs its own probe (below).
+    """
 
     @pytest.mark.parametrize("fn", ["metrics", "canary"])
     def test_self_test_line_since_deploy(self, logs_client, lambda_client, fn):
@@ -80,6 +87,15 @@ class TestSelfTestLinePerColdStart:
         assert _find_line(logs_client, _log_group(fn), SELF_TEST_MESSAGE, start_ms), (
             f"{fn}: C-8 self-test line absent since LastModified — root-level "
             "fix not live (or no cold start yet in window)"
+        )
+
+    def test_metrics_function_actually_healthy(self, lambda_client):
+        """Synthetic invoke must complete without FunctionError — catches the
+        packaging-onion class (ImportModuleError) that C-8 cannot see."""
+        resp = lambda_client.invoke(FunctionName=_function_name("metrics"))
+        assert resp.get("FunctionError") is None, (
+            "metrics invoke errored — packaging/import regression "
+            "(C-8 alone cannot detect this)"
         )
 
 

@@ -1,0 +1,359 @@
+{
+  "logGroupName": "/aws/lambda/preprod-sentiment-ingestion",
+  "collectedAt": "2026-07-29T13:56:45.895253+00:00",
+  "windowUsed": "1h",
+  "error": null,
+  "eventCount": 50,
+  "events": [
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785332267982,
+      "message": "REPORT RequestId: 6e1371bd-ed22-45ef-83f7-1d5cc51c2608\tDuration: 7657.36 ms\tBilled Duration: 7658 ms\tMemory Size: 512 MB\tMax Memory Used: 136 MB\t\nXRAY TraceId: 1-6a6a0224-375aa8260c4a487460db89fa\tSegmentId: 1e22883549649b57\tSampled: true\t\n",
+      "ingestionTime": 1785332269345,
+      "eventId": "39814240002981374269316031967171579586808591534253539342"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785332560421,
+      "message": "START RequestId: ff3df652-40fc-4b07-a3cf-88128c54632f Version: $LATEST\n",
+      "ingestionTime": 1785332569441,
+      "eventId": "39814246524588999382412933217529079686681050553401671680"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785332560422,
+      "message": "[INFO]\t2026-07-29T13:42:40.422Z\tff3df652-40fc-4b07-a3cf-88128c54632f\tFinancial ingestion started\n",
+      "ingestionTime": 1785332569441,
+      "eventId": "39814246524611300127611463840670615404953698914907652097"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785332567113,
+      "message": "[INFO]\t2026-07-29T13:42:47.113Z\tff3df652-40fc-4b07-a3cf-88128c54632f\tFound active tickers\n",
+      "ingestionTime": 1785332569441,
+      "eventId": "39814246673825586250979863280686106367243885751422615554"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785332567251,
+      "message": "[INFO]\t2026-07-29T13:42:47.251Z\tff3df652-40fc-4b07-a3cf-88128c54632f\tSecret retrieved from Secrets Manager\n",
+      "ingestionTime": 1785332569441,
+      "eventId": "39814246676903089088377089274218035488869359639247912963"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785332567346,
+      "message": "[INFO]\t2026-07-29T13:42:47.346Z\tff3df652-40fc-4b07-a3cf-88128c54632f\tSecret retrieved from Secrets Manager\n",
+      "ingestionTime": 1785332569441,
+      "eventId": "39814246679021659882237498472663928724770953982316052484"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785332567351,
+      "message": "[WARNING]\t2026-07-29T13:42:47.351Z\tff3df652-40fc-4b07-a3cf-88128c54632f\tALERT_TOPIC_ARN not configured, failure alerts will not be sent\n",
+      "ingestionTime": 1785332569441,
+      "eventId": "39814246679133163608230151588371607316134195789845954565"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785332567351,
+      "message": "[INFO]\t2026-07-29T13:42:47.351Z\tff3df652-40fc-4b07-a3cf-88128c54632f\tUsing parallel ingestion mode\n",
+      "ingestionTime": 1785332569441,
+      "eventId": "39814246679133163608230151588371607316134195789845954566"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785332567434,
+      "message": "[WARNING]\t2026-07-29T13:42:47.434Z\tff3df652-40fc-4b07-a3cf-88128c54632f\tParallel fetch failed\n",
+      "ingestionTime": 1785332569441,
+      "eventId": "39814246680984125459708193309119071932764009794842329095"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785332567499,
+      "message": "[ERROR]\t2026-07-29T13:42:47.499Z\tff3df652-40fc-4b07-a3cf-88128c54632f\tFailed to emit metric: An error occurred (AccessDenied) when calling the PutMetricData operation: User: arn:aws:sts::218795110243:assumed-role/preprod-ingestion-lambda-role/preprod-sentiment-ingestion is not authorized to perform: cloudwatch:PutMetricData because no identity-based policy allows the cloudwatch:PutMetricData action\n",
+      "ingestionTime": 1785332569441,
+      "eventId": "39814246682433673897612683813318893620486153292731056136"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785332567499,
+      "message": "[INFO]\t2026-07-29T13:42:47.499Z\tff3df652-40fc-4b07-a3cf-88128c54632f\tParallel fetch complete\n",
+      "ingestionTime": 1785332569441,
+      "eventId": "39814246682433673897612683813318893620486153292731056137"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785332567499,
+      "message": "[WARNING]\t2026-07-29T13:42:47.499Z\tff3df652-40fc-4b07-a3cf-88128c54632f\tCollection failure recorded\n",
+      "ingestionTime": 1785332569441,
+      "eventId": "39814246682433673897612683813318893620486153292731056138"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785332567499,
+      "message": "[INFO]\t2026-07-29T13:42:47.499Z\tff3df652-40fc-4b07-a3cf-88128c54632f\tIngestion metrics\n",
+      "ingestionTime": 1785332569441,
+      "eventId": "39814246682433673897612683813318893620486153292731056139"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785332567562,
+      "message": "[ERROR]\t2026-07-29T13:42:47.562Z\tff3df652-40fc-4b07-a3cf-88128c54632f\tFailed to publish CloudWatch metrics: An error occurred (AccessDenied) when calling the PutMetricData operation: User: arn:aws:sts::218795110243:assumed-role/preprod-ingestion-lambda-role/preprod-sentiment-ingestion is not authorized to perform: cloudwatch:PutMetricData because no identity-based policy allows the cloudwatch:PutMetricData action\n",
+      "ingestionTime": 1785332569441,
+      "eventId": "39814246683838620845120113071235643871663000067607822348"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785332567688,
+      "message": "[INFO]\t2026-07-29T13:42:47.688Z\tff3df652-40fc-4b07-a3cf-88128c54632f\tSelf-healing: no stale items found\n",
+      "ingestionTime": 1785332569441,
+      "eventId": "39814246686648514740134971587069144374016693617361354765"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785332567885,
+      "message": "[INFO]\t2026-07-29T13:42:47.885Z\tff3df652-40fc-4b07-a3cf-88128c54632f\tFinancial ingestion completed\n",
+      "ingestionTime": 1785332569441,
+      "eventId": "39814246691041761544245504345951680873728420834039496718"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785332567892,
+      "message": "END RequestId: ff3df652-40fc-4b07-a3cf-88128c54632f\n",
+      "ingestionTime": 1785332569441,
+      "eventId": "39814246691197866760635218707942430901636959364581359631"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785332567893,
+      "message": "REPORT RequestId: ff3df652-40fc-4b07-a3cf-88128c54632f\tDuration: 7471.16 ms\tBilled Duration: 7472 ms\tMemory Size: 512 MB\tMax Memory Used: 136 MB\t\nXRAY TraceId: 1-6a6a0350-6c25c9190e615f535a585d52\tSegmentId: 0017ba924209d82a\tSampled: true\t\n",
+      "ingestionTime": 1785332569441,
+      "eventId": "39814246691220167505833749331083966619909607726087340048"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785332860174,
+      "message": "START RequestId: 1502ff32-eba1-4e79-8ebe-f103bf02f586 Version: $LATEST\n",
+      "ingestionTime": 1785332869196,
+      "eventId": "39814253209304274877562812124666846109754236092419014656"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785332860178,
+      "message": "[INFO]\t2026-07-29T13:47:40.178Z\t1502ff32-eba1-4e79-8ebe-f103bf02f586\tFinancial ingestion started\n",
+      "ingestionTime": 1785332869196,
+      "eventId": "39814253209393477858356934617232988982844829538442936321"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785332860220,
+      "message": "[INFO]\t2026-07-29T13:47:40.220Z\t1502ff32-eba1-4e79-8ebe-f103bf02f586\tFound active tickers\n",
+      "ingestionTime": 1785332869196,
+      "eventId": "39814253210330109156695220789177489150296060721694113794"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785332860413,
+      "message": "[INFO]\t2026-07-29T13:47:40.413Z\t1502ff32-eba1-4e79-8ebe-f103bf02f586\tSecret retrieved from Secrets Manager\n",
+      "ingestionTime": 1785332869196,
+      "eventId": "39814253214634152980011631055493882776917194492348334083"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785332860418,
+      "message": "[WARNING]\t2026-07-29T13:47:40.418Z\t1502ff32-eba1-4e79-8ebe-f103bf02f586\tALERT_TOPIC_ARN not configured, failure alerts will not be sent\n",
+      "ingestionTime": 1785332869196,
+      "eventId": "39814253214745656706004284171201561368280436299878236164"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785332860418,
+      "message": "[INFO]\t2026-07-29T13:47:40.418Z\t1502ff32-eba1-4e79-8ebe-f103bf02f586\tUsing parallel ingestion mode\n",
+      "ingestionTime": 1785332869196,
+      "eventId": "39814253214745656706004284171201561368280436299878236165"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785332860488,
+      "message": "[WARNING]\t2026-07-29T13:47:40.488Z\t1502ff32-eba1-4e79-8ebe-f103bf02f586\tParallel fetch failed\n",
+      "ingestionTime": 1785332869196,
+      "eventId": "39814253216306708869901427791109061647365821605296865286"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785332860554,
+      "message": "[ERROR]\t2026-07-29T13:47:40.554Z\t1502ff32-eba1-4e79-8ebe-f103bf02f586\tFailed to emit metric: An error occurred (AccessDenied) when calling the PutMetricData operation: User: arn:aws:sts::218795110243:assumed-role/preprod-ingestion-lambda-role/preprod-sentiment-ingestion is not authorized to perform: cloudwatch:PutMetricData because no identity-based policy allows the cloudwatch:PutMetricData action\n",
+      "ingestionTime": 1785332869196,
+      "eventId": "39814253217778558053004448918450419053360613464691572743"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785332860554,
+      "message": "[INFO]\t2026-07-29T13:47:40.554Z\t1502ff32-eba1-4e79-8ebe-f103bf02f586\tParallel fetch complete\n",
+      "ingestionTime": 1785332869196,
+      "eventId": "39814253217778558053004448918450419053360613464691572744"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785332860554,
+      "message": "[WARNING]\t2026-07-29T13:47:40.554Z\t1502ff32-eba1-4e79-8ebe-f103bf02f586\tCollection failure recorded\n",
+      "ingestionTime": 1785332869196,
+      "eventId": "39814253217778558053004448918450419053360613464691572745"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785332860554,
+      "message": "[INFO]\t2026-07-29T13:47:40.554Z\t1502ff32-eba1-4e79-8ebe-f103bf02f586\tIngestion metrics\n",
+      "ingestionTime": 1785332869196,
+      "eventId": "39814253217778558053004448918450419053360613464691572746"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785332860622,
+      "message": "[ERROR]\t2026-07-29T13:47:40.622Z\t1502ff32-eba1-4e79-8ebe-f103bf02f586\tFailed to publish CloudWatch metrics: An error occurred (AccessDenied) when calling the PutMetricData operation: User: arn:aws:sts::218795110243:assumed-role/preprod-ingestion-lambda-role/preprod-sentiment-ingestion is not authorized to perform: cloudwatch:PutMetricData because no identity-based policy allows the cloudwatch:PutMetricData action\n",
+      "ingestionTime": 1785332869196,
+      "eventId": "39814253219295008726504531292074847895900702047098241035"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785332860732,
+      "message": "[INFO]\t2026-07-29T13:47:40.732Z\t1502ff32-eba1-4e79-8ebe-f103bf02f586\tSelf-healing: no stale items found\n",
+      "ingestionTime": 1785332869196,
+      "eventId": "39814253221748090698342899837643776905892021812756086796"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785332860967,
+      "message": "[INFO]\t2026-07-29T13:47:40.967Z\t1502ff32-eba1-4e79-8ebe-f103bf02f586\tFinancial ingestion completed\n",
+      "ingestionTime": 1785332869196,
+      "eventId": "39814253226988765819997596275904670699964386766661484557"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785332860977,
+      "message": "END RequestId: 1502ff32-eba1-4e79-8ebe-f103bf02f586\n",
+      "ingestionTime": 1785332869196,
+      "eventId": "39814253227211773271982902507320027882690870381721288718"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785332860977,
+      "message": "REPORT RequestId: 1502ff32-eba1-4e79-8ebe-f103bf02f586\tDuration: 802.13 ms\tBilled Duration: 803 ms\tMemory Size: 512 MB\tMax Memory Used: 136 MB\t\nXRAY TraceId: 1-6a6a047c-5ad8132c3c100a566828a44d\tSegmentId: f1eb1ec368c2b474\tSampled: true\t\n",
+      "ingestionTime": 1785332869196,
+      "eventId": "39814253227211773271982902507320027882690870381721288719"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785333160361,
+      "message": "START RequestId: dadf7412-efa7-4fd8-8a81-2a9a10d57163 Version: $LATEST\n",
+      "ingestionTime": 1785333169383,
+      "eventId": "39814259903698073788874981475753522663566662113486766080"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785333160375,
+      "message": "[INFO]\t2026-07-29T13:52:40.375Z\tdadf7412-efa7-4fd8-8a81-2a9a10d57163\tFinancial ingestion started\n",
+      "ingestionTime": 1785333169383,
+      "eventId": "39814259904010284221654410199735022719383739174570491905"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785333166996,
+      "message": "[INFO]\t2026-07-29T13:52:46.996Z\tdadf7412-efa7-4fd8-8a81-2a9a10d57163\tFound active tickers\n",
+      "ingestionTime": 1785333169383,
+      "eventId": "39814260051663518181125666019843013402588540705666826242"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785333167121,
+      "message": "[INFO]\t2026-07-29T13:52:47.121Z\tdadf7412-efa7-4fd8-8a81-2a9a10d57163\tSecret retrieved from Secrets Manager\n",
+      "ingestionTime": 1785333169383,
+      "eventId": "39814260054451111330941993912534978186669585893914378243"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785333167126,
+      "message": "[WARNING]\t2026-07-29T13:52:47.126Z\tdadf7412-efa7-4fd8-8a81-2a9a10d57163\tALERT_TOPIC_ARN not configured, failure alerts will not be sent\n",
+      "ingestionTime": 1785333169383,
+      "eventId": "39814260054562615056934647028242656778032827701444280324"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785333167134,
+      "message": "[INFO]\t2026-07-29T13:52:47.134Z\tdadf7412-efa7-4fd8-8a81-2a9a10d57163\tUsing parallel ingestion mode\n",
+      "ingestionTime": 1785333169383,
+      "eventId": "39814260054741021018522892013374942524214014593492123653"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785333167191,
+      "message": "[WARNING]\t2026-07-29T13:52:47.191Z\tdadf7412-efa7-4fd8-8a81-2a9a10d57163\tParallel fetch failed\n",
+      "ingestionTime": 1785333169383,
+      "eventId": "39814260056012163494839137532442478465754971199333007366"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785333167243,
+      "message": "[ERROR]\t2026-07-29T13:52:47.243Z\tdadf7412-efa7-4fd8-8a81-2a9a10d57163\tFailed to emit metric: An error occurred (AccessDenied) when calling the PutMetricData operation: User: arn:aws:sts::218795110243:assumed-role/preprod-ingestion-lambda-role/preprod-sentiment-ingestion is not authorized to perform: cloudwatch:PutMetricData because no identity-based policy allows the cloudwatch:PutMetricData action\n",
+      "ingestionTime": 1785333169383,
+      "eventId": "39814260057171802245162729935802335815932685997643988999"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785333167255,
+      "message": "[INFO]\t2026-07-29T13:52:47.254Z\tdadf7412-efa7-4fd8-8a81-2a9a10d57163\tParallel fetch complete\n",
+      "ingestionTime": 1785333169383,
+      "eventId": "39814260057439411187545097413500764435204466335715753992"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785333167255,
+      "message": "[WARNING]\t2026-07-29T13:52:47.255Z\tdadf7412-efa7-4fd8-8a81-2a9a10d57163\tCollection failure recorded\n",
+      "ingestionTime": 1785333169383,
+      "eventId": "39814260057439411187545097413500764435204466335715753993"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785333167255,
+      "message": "[INFO]\t2026-07-29T13:52:47.255Z\tdadf7412-efa7-4fd8-8a81-2a9a10d57163\tIngestion metrics\n",
+      "ingestionTime": 1785333169383,
+      "eventId": "39814260057439411187545097413500764435204466335715753994"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785333167322,
+      "message": "[ERROR]\t2026-07-29T13:52:47.321Z\tdadf7412-efa7-4fd8-8a81-2a9a10d57163\tFailed to publish CloudWatch metrics: An error occurred (AccessDenied) when calling the PutMetricData operation: User: arn:aws:sts::218795110243:assumed-role/preprod-ingestion-lambda-role/preprod-sentiment-ingestion is not authorized to perform: cloudwatch:PutMetricData because no identity-based policy allows the cloudwatch:PutMetricData action\n",
+      "ingestionTime": 1785333169383,
+      "eventId": "39814260058933561115846649163983657559471906556616441867"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785333167429,
+      "message": "[INFO]\t2026-07-29T13:52:47.428Z\tdadf7412-efa7-4fd8-8a81-2a9a10d57163\tSelf-healing: no stale items found\n",
+      "ingestionTime": 1785333169383,
+      "eventId": "39814260061319740852089425840127979414645281237756346380"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785333167623,
+      "message": "[INFO]\t2026-07-29T13:52:47.623Z\tdadf7412-efa7-4fd8-8a81-2a9a10d57163\tFinancial ingestion completed\n",
+      "ingestionTime": 1785333169383,
+      "eventId": "39814260065646085420604366729585908759539063369916547085"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785333167625,
+      "message": "END RequestId: dadf7412-efa7-4fd8-8a81-2a9a10d57163\n",
+      "ingestionTime": 1785333169383,
+      "eventId": "39814260065690686911001427975868980196084360092928507918"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]bb15c1436bca4635860124dcd812b420",
+      "timestamp": 1785333167625,
+      "message": "REPORT RequestId: dadf7412-efa7-4fd8-8a81-2a9a10d57163\tDuration: 7263.36 ms\tBilled Duration: 7264 ms\tMemory Size: 512 MB\tMax Memory Used: 136 MB\t\nXRAY TraceId: 1-6a6a05a8-21b303aa2d396c9f057c3f82\tSegmentId: 8d3da017f4bd6d1a\tSampled: true\t\n",
+      "ingestionTime": 1785333169383,
+      "eventId": "39814260065690686911001427975868980196084360092928507919"
+    }
+  ]
+}
