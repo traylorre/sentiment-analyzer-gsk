@@ -1,0 +1,228 @@
+{
+  "collectedAt": "2026-07-29T14:05:22.641141+00:00",
+  "function": "preprod-sentiment-dashboard",
+  "qualifier": "live",
+  "path": "/health",
+  "invocations": [
+    {
+      "i": 0,
+      "request_id": "519a6689-86fd-413f-a39b-50443b376ff5",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 3469.2,
+      "ts": 1785333869.5073524,
+      "stdlib_info": 1,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    },
+    {
+      "i": 1,
+      "request_id": "fdfe9249-7f86-42f6-ba9b-88746e9947c0",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 185.0,
+      "ts": 1785333872.976606,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    },
+    {
+      "i": 2,
+      "request_id": "4ee46fff-9494-460e-a97b-2a7dd172f89c",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 179.0,
+      "ts": 1785333873.161687,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    },
+    {
+      "i": 3,
+      "request_id": "5ddc0a65-ed24-4ff9-a01c-f0cf027848a2",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 159.0,
+      "ts": 1785333873.3408608,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    },
+    {
+      "i": 4,
+      "request_id": "704ef0c5-8e72-4fc2-aeb6-19953c77a212",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 152.0,
+      "ts": 1785333873.4999654,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    },
+    {
+      "i": 5,
+      "request_id": "e15aa504-cf8c-4efc-92fc-3309ee33cc7e",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 160.3,
+      "ts": 1785333873.6520214,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    },
+    {
+      "i": 6,
+      "request_id": "e41df40b-9a3d-4120-9d3a-69e0b547427e",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 207.8,
+      "ts": 1785333873.8124874,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    },
+    {
+      "i": 7,
+      "request_id": "58f8da19-05a1-4707-bfa1-f810b0a873ac",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 153.8,
+      "ts": 1785333874.0203557,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    },
+    {
+      "i": 8,
+      "request_id": "04b2d3a0-5d18-415f-9be1-89095f72a1d8",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 145.6,
+      "ts": 1785333874.174273,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    },
+    {
+      "i": 9,
+      "request_id": "a6e34d58-2a08-4349-ba37-e7536c9740f1",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 151.3,
+      "ts": 1785333874.3199863,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    },
+    {
+      "i": 10,
+      "request_id": "5d8f6bff-93a2-4534-b062-5617aae2b9d9",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 140.1,
+      "ts": 1785333874.4714465,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    },
+    {
+      "i": 11,
+      "request_id": "3c3b8cfc-6e09-4add-9a78-d6cf9b19d312",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 149.4,
+      "ts": 1785333874.6117198,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    },
+    {
+      "i": 12,
+      "request_id": "e72ac536-3e04-4db4-9d1d-04ef9f4fd0f5",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 146.9,
+      "ts": 1785333874.7612536,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    },
+    {
+      "i": 13,
+      "request_id": "e6fdce1b-7f1d-4bd9-bf4c-eda4e7d08bd8",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 151.1,
+      "ts": 1785333874.9083118,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    },
+    {
+      "i": 14,
+      "request_id": "4b3d781c-b455-4413-be61-3f691bf548de",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 161.4,
+      "ts": 1785333875.059527,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    },
+    {
+      "i": 15,
+      "request_id": "42a91354-4ec8-45a1-b5b7-2f224a5e56bc",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 158.4,
+      "ts": 1785333875.2209983,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    },
+    {
+      "i": 16,
+      "request_id": "dd101d5c-0f77-43e1-b533-bbdd60191f4d",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 154.6,
+      "ts": 1785333875.3794856,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    },
+    {
+      "i": 17,
+      "request_id": "6b1e775a-aad2-4e21-a05b-459c5480e2c9",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 156.2,
+      "ts": 1785333875.534106,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    },
+    {
+      "i": 18,
+      "request_id": "40a7d65a-88db-4fe7-a432-0807b4f14f06",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 156.0,
+      "ts": 1785333875.6903193,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    },
+    {
+      "i": 19,
+      "request_id": "94dbe64f-53e2-46ce-920f-b36d99835d43",
+      "status_code": 200,
+      "function_error": null,
+      "latency_ms": 155.8,
+      "ts": 1785333875.8463883,
+      "stdlib_info": 0,
+      "powertools_json_info": 1,
+      "other_app_lines": 0
+    }
+  ]
+}
