@@ -1,0 +1,359 @@
+{
+  "logGroupName": "/aws/lambda/preprod-sentiment-analysis",
+  "collectedAt": "2026-07-29T13:56:50.277861+00:00",
+  "windowUsed": "24h",
+  "error": null,
+  "eventCount": 50,
+  "events": [
+    {
+      "logStreamName": "2026/07/29/[$LATEST]8e95f44cb80c4712abc396088b8d39e5",
+      "timestamp": 1785293288938,
+      "message": "START RequestId: 7bebdd52-7785-4859-ab68-c59a7b80d700 Version: $LATEST\n",
+      "ingestionTime": 1785293290343,
+      "eventId": "39813370741253047955421203505459200405939699745505476629"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]8e95f44cb80c4712abc396088b8d39e5",
+      "timestamp": 1785293288939,
+      "message": "{\"timestamp\": \"2026-07-29T02:48:08.939371+00:00\", \"level\": \"INFO\", \"message\": \"Analysis started\", \"request_id\": \"7bebdd52-7785-4859-ab68-c59a7b80d700\", \"source_id\": \"dedup:ba13c617afeffe836ef96884b4159068\", \"ticker_count\": 1}\n",
+      "ingestionTime": 1785293290343,
+      "eventId": "39813370741275348700619734128600736124212348107011457046"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]e3830eb90bd74aa5bb22d43149155b03",
+      "timestamp": 1785293288941,
+      "message": "START RequestId: 14285381-436b-4223-b0e8-765afec836ac Version: $LATEST\n",
+      "ingestionTime": 1785293290327,
+      "eventId": "39813370741319950191016795374864837539271230513357193237"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]e3830eb90bd74aa5bb22d43149155b03",
+      "timestamp": 1785293288942,
+      "message": "{\"timestamp\": \"2026-07-29T02:48:08.942555+00:00\", \"level\": \"INFO\", \"message\": \"Analysis started\", \"request_id\": \"14285381-436b-4223-b0e8-765afec836ac\", \"source_id\": \"dedup:828f1d9fb1784911928c5e098b25a432\", \"ticker_count\": 1}\n",
+      "ingestionTime": 1785293290327,
+      "eventId": "39813370741342250936215325998006373257543878874863173654"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]8e95f44cb80c4712abc396088b8d39e5",
+      "timestamp": 1785293289048,
+      "message": "{\"timestamp\": \"2026-07-29T02:48:09.048782+00:00\", \"level\": \"INFO\", \"message\": \"Inference complete\", \"source_id\": \"dedup:ba13c617afeffe836ef96884b4159068\", \"sentiment\": \"negative\", \"score\": 0.9589, \"inference_time_ms\": 82.36}\n",
+      "ingestionTime": 1785293290343,
+      "eventId": "39813370743706129927259572051028129415931019511163322391"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]e3830eb90bd74aa5bb22d43149155b03",
+      "timestamp": 1785293289090,
+      "message": "{\"timestamp\": \"2026-07-29T02:48:09.089925+00:00\", \"level\": \"INFO\", \"message\": \"Inference complete\", \"source_id\": \"dedup:828f1d9fb1784911928c5e098b25a432\", \"sentiment\": \"negative\", \"score\": 0.8902, \"inference_time_ms\": 122.56}\n",
+      "ingestionTime": 1785293290327,
+      "eventId": "39813370744642761225597858222953659561895836377748275223"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]8e95f44cb80c4712abc396088b8d39e5",
+      "timestamp": 1785293289114,
+      "message": "[WARNING]\t2026-07-29T02:48:09.114Z\t7bebdd52-7785-4859-ab68-c59a7b80d700\tItem already analyzed, skipping\n",
+      "ingestionTime": 1785293290343,
+      "eventId": "39813370745177979110362593178369486821925811370558029848"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]e3830eb90bd74aa5bb22d43149155b03",
+      "timestamp": 1785293289168,
+      "message": "[WARNING]\t2026-07-29T02:48:09.168Z\t14285381-436b-4223-b0e8-765afec836ac\tItem already analyzed, skipping\n",
+      "ingestionTime": 1785293290327,
+      "eventId": "39813370746382219351083246827993445587162408575214747672"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]8e95f44cb80c4712abc396088b8d39e5",
+      "timestamp": 1785293289168,
+      "message": "{\"timestamp\": \"2026-07-29T02:48:09.168149+00:00\", \"level\": \"INFO\", \"message\": \"Analysis completed\", \"source_id\": \"dedup:ba13c617afeffe836ef96884b4159068\", \"sentiment\": \"negative\", \"score\": 0.9589, \"model_version\": \"a4b88c6\", \"inference_time_ms\": 82.36, \"execution_time_ms\": 204.72, \"updated\": false}\n",
+      "ingestionTime": 1785293290343,
+      "eventId": "39813370746382219351083246828012415608648822891880972313"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]8e95f44cb80c4712abc396088b8d39e5",
+      "timestamp": 1785293289170,
+      "message": "END RequestId: 7bebdd52-7785-4859-ab68-c59a7b80d700\n",
+      "ingestionTime": 1785293290343,
+      "eventId": "39813370746426820841480308074295487045194119614892933146"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]8e95f44cb80c4712abc396088b8d39e5",
+      "timestamp": 1785293289170,
+      "message": "REPORT RequestId: 7bebdd52-7785-4859-ab68-c59a7b80d700\tDuration: 231.16 ms\tBilled Duration: 232 ms\tMemory Size: 2048 MB\tMax Memory Used: 856 MB\t\nXRAY TraceId: 1-6a6969cc-3f6ae7a7451479fb448ba5eb\tSegmentId: ed6a601d648fee71\tSampled: true\t\n",
+      "ingestionTime": 1785293290343,
+      "eventId": "39813370746426820841480308074295487045194119614892933147"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]e3830eb90bd74aa5bb22d43149155b03",
+      "timestamp": 1785293289239,
+      "message": "{\"timestamp\": \"2026-07-29T02:48:09.239359+00:00\", \"level\": \"INFO\", \"message\": \"Analysis completed\", \"source_id\": \"dedup:828f1d9fb1784911928c5e098b25a432\", \"sentiment\": \"negative\", \"score\": 0.8902, \"model_version\": \"a4b88c6\", \"inference_time_ms\": 122.56, \"execution_time_ms\": 268.94, \"updated\": false}\n",
+      "ingestionTime": 1785293290327,
+      "eventId": "39813370747965572260178921071042481584520442242139357209"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]e3830eb90bd74aa5bb22d43149155b03",
+      "timestamp": 1785293289241,
+      "message": "END RequestId: 14285381-436b-4223-b0e8-765afec836ac\n",
+      "ingestionTime": 1785293290327,
+      "eventId": "39813370748010173750575982317325553021065738965151318042"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]e3830eb90bd74aa5bb22d43149155b03",
+      "timestamp": 1785293289241,
+      "message": "REPORT RequestId: 14285381-436b-4223-b0e8-765afec836ac\tDuration: 299.39 ms\tBilled Duration: 300 ms\tMemory Size: 2048 MB\tMax Memory Used: 861 MB\t\nXRAY TraceId: 1-6a6969cc-3f6ae7a7451479fb448ba5eb\tSegmentId: 51cea05b123e11f5\tSampled: true\t\n",
+      "ingestionTime": 1785293290327,
+      "eventId": "39813370748010173750575982317325553021065738965151318043"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]ae2379200797483fb31e4d83adcaf2d5",
+      "timestamp": 1785294783419,
+      "message": "[INFO]\t2026-07-29T03:13:03.418Z\t\tlogging configured: root INFO visibility active (feature 001)\n",
+      "ingestionTime": 1785294791749,
+      "eventId": "39813404069293033000665408505989411399863175733956837376"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]ae2379200797483fb31e4d83adcaf2d5",
+      "timestamp": 1785294783468,
+      "message": "[INFO]\t2026-07-29T03:13:03.467Z\t\tsuccessfully patched module sqlite3\n",
+      "ingestionTime": 1785294791749,
+      "eventId": "39813404070385769515393409039924661595222945447749877761"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]ae2379200797483fb31e4d83adcaf2d5",
+      "timestamp": 1785294783473,
+      "message": "[INFO]\t2026-07-29T03:13:03.473Z\t\tsuccessfully patched module botocore\n",
+      "ingestionTime": 1785294791749,
+      "eventId": "39813404070497273241386062155632340186586187255279779842"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]ae2379200797483fb31e4d83adcaf2d5",
+      "timestamp": 1785294783512,
+      "message": "[INFO]\t2026-07-29T03:13:03.512Z\t\tsuccessfully patched module requests\n",
+      "ingestionTime": 1785294791749,
+      "eventId": "39813404071367002304128756458152233199219473354013016067"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]124f9d52788d479fbe2aad4441323441",
+      "timestamp": 1785294783574,
+      "message": "[INFO]\t2026-07-29T03:13:03.574Z\t\tlogging configured: root INFO visibility active (feature 001)\n",
+      "ingestionTime": 1785294790888,
+      "eventId": "39813404072749648506437655091886439079735407816662384640"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]124f9d52788d479fbe2aad4441323441",
+      "timestamp": 1785294783635,
+      "message": "[INFO]\t2026-07-29T03:13:03.635Z\t\tsuccessfully patched module botocore\n",
+      "ingestionTime": 1785294790888,
+      "eventId": "39813404074109993963548023103520117894366957868527190017"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]124f9d52788d479fbe2aad4441323441",
+      "timestamp": 1785294783643,
+      "message": "[INFO]\t2026-07-29T03:13:03.643Z\t\tsuccessfully patched module sqlite3\n",
+      "ingestionTime": 1785294790888,
+      "eventId": "39813404074288399925136268088652403640548144760575033346"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]ae2379200797483fb31e4d83adcaf2d5",
+      "timestamp": 1785294783650,
+      "message": "START RequestId: 5770e50a-fbe6-40c9-977b-a1ecbf2744ba Version: $LATEST\n",
+      "ingestionTime": 1785294791749,
+      "eventId": "39813404074444505141525982451684162320844947241838313476"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]ae2379200797483fb31e4d83adcaf2d5",
+      "timestamp": 1785294783650,
+      "message": "{\"timestamp\": \"2026-07-29T03:13:03.650823+00:00\", \"level\": \"INFO\", \"message\": \"Analysis started\", \"request_id\": \"5770e50a-fbe6-40c9-977b-a1ecbf2744ba\", \"source_id\": \"dedup:1401ce4558bfa9344efab1d23f3b9392\", \"ticker_count\": 1}\n",
+      "ingestionTime": 1785294791749,
+      "eventId": "39813404074444505141525982451684162320844947241838313477"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]ae2379200797483fb31e4d83adcaf2d5",
+      "timestamp": 1785294783651,
+      "message": "[INFO]\t2026-07-29T03:13:03.650Z\t5770e50a-fbe6-40c9-977b-a1ecbf2744ba\tLoading sentiment model from /tmp/model\n",
+      "ingestionTime": 1785294791749,
+      "eventId": "39813404074466805886724513074825698039117595603344293894"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]ae2379200797483fb31e4d83adcaf2d5",
+      "timestamp": 1785294783651,
+      "message": "[INFO]\t2026-07-29T03:13:03.651Z\t5770e50a-fbe6-40c9-977b-a1ecbf2744ba\tDownloading model from S3: s3://sentiment-analyzer-models-218795110243/distilbert/v1.0.0/model.tar.gz\n",
+      "ingestionTime": 1785294791749,
+      "eventId": "39813404074466805886724513074825698039117595603344293895"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]ae2379200797483fb31e4d83adcaf2d5",
+      "timestamp": 1785294783664,
+      "message": "[INFO]\t2026-07-29T03:13:03.664Z\t5770e50a-fbe6-40c9-977b-a1ecbf2744ba\tFound credentials in environment variables.\n",
+      "ingestionTime": 1785294791749,
+      "eventId": "39813404074756715574305411175665662376662024302922039304"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]124f9d52788d479fbe2aad4441323441",
+      "timestamp": 1785294783689,
+      "message": "[INFO]\t2026-07-29T03:13:03.689Z\t\tsuccessfully patched module requests\n",
+      "ingestionTime": 1785294790888,
+      "eventId": "39813404075314234204268676753163046681089969389850132483"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]124f9d52788d479fbe2aad4441323441",
+      "timestamp": 1785294783867,
+      "message": "START RequestId: 9600f213-5e8b-4428-8ff7-f8f79ae04b10 Version: $LATEST\n",
+      "ingestionTime": 1785294790888,
+      "eventId": "39813404079283766849607127672356404533621377737914646532"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]124f9d52788d479fbe2aad4441323441",
+      "timestamp": 1785294783868,
+      "message": "{\"timestamp\": \"2026-07-29T03:13:03.867918+00:00\", \"level\": \"INFO\", \"message\": \"Analysis started\", \"request_id\": \"9600f213-5e8b-4428-8ff7-f8f79ae04b10\", \"source_id\": \"dedup:1401ce4558bfa9344efab1d23f3b9392\", \"ticker_count\": 1}\n",
+      "ingestionTime": 1785294790888,
+      "eventId": "39813404079306067594805658295497940251894026099420626949"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]124f9d52788d479fbe2aad4441323441",
+      "timestamp": 1785294783868,
+      "message": "[INFO]\t2026-07-29T03:13:03.868Z\t9600f213-5e8b-4428-8ff7-f8f79ae04b10\tLoading sentiment model from /tmp/model\n",
+      "ingestionTime": 1785294790888,
+      "eventId": "39813404079306067594805658295497940251894026099420626950"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]124f9d52788d479fbe2aad4441323441",
+      "timestamp": 1785294783868,
+      "message": "[INFO]\t2026-07-29T03:13:03.868Z\t9600f213-5e8b-4428-8ff7-f8f79ae04b10\tDownloading model from S3: s3://sentiment-analyzer-models-218795110243/distilbert/v1.0.0/model.tar.gz\n",
+      "ingestionTime": 1785294790888,
+      "eventId": "39813404079306067594805658295497940251894026099420626951"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]124f9d52788d479fbe2aad4441323441",
+      "timestamp": 1785294783884,
+      "message": "[INFO]\t2026-07-29T03:13:03.884Z\t9600f213-5e8b-4428-8ff7-f8f79ae04b10\tFound credentials in environment variables.\n",
+      "ingestionTime": 1785294790888,
+      "eventId": "39813404079662879517982148265762511744256399883516313608"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]ae2379200797483fb31e4d83adcaf2d5",
+      "timestamp": 1785294785467,
+      "message": "[INFO]\t2026-07-29T03:13:05.467Z\t5770e50a-fbe6-40c9-977b-a1ecbf2744ba\tModel downloaded from S3\n",
+      "ingestionTime": 1785294791749,
+      "eventId": "39813404114964959167256124699854562422247020098204729353"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]124f9d52788d479fbe2aad4441323441",
+      "timestamp": 1785294785480,
+      "message": "[INFO]\t2026-07-29T03:13:05.480Z\t9600f213-5e8b-4428-8ff7-f8f79ae04b10\tModel downloaded from S3\n",
+      "ingestionTime": 1785294790888,
+      "eventId": "39813404115254868854837022799653518107403184847061057545"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]124f9d52788d479fbe2aad4441323441",
+      "timestamp": 1785294787622,
+      "message": "[INFO]\t2026-07-29T03:13:07.622Z\t9600f213-5e8b-4428-8ff7-f8f79ae04b10\tModel extracted successfully\n",
+      "ingestionTime": 1785294790888,
+      "eventId": "39813404163023065070089617568823026647415975192871108618"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]ae2379200797483fb31e4d83adcaf2d5",
+      "timestamp": 1785294788529,
+      "message": "[INFO]\t2026-07-29T03:13:08.529Z\t5770e50a-fbe6-40c9-977b-a1ecbf2744ba\tModel extracted successfully\n",
+      "ingestionTime": 1785294791749,
+      "eventId": "39813404183249840965156892759236931773096303029516763146"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]124f9d52788d479fbe2aad4441323441",
+      "timestamp": 1785294792336,
+      "message": "Device set to use cpu\n",
+      "ingestionTime": 1785294801354,
+      "eventId": "39813404268148777935962975070675119176424632584287027200"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]124f9d52788d479fbe2aad4441323441",
+      "timestamp": 1785294792336,
+      "message": "[INFO]\t2026-07-29T03:13:12.336Z\t9600f213-5e8b-4428-8ff7-f8f79ae04b10\tModel loaded successfully\n",
+      "ingestionTime": 1785294801354,
+      "eventId": "39813404268148777935962975070675119176424632584287027201"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]124f9d52788d479fbe2aad4441323441",
+      "timestamp": 1785294792530,
+      "message": "{\"timestamp\": \"2026-07-29T03:13:12.530155+00:00\", \"level\": \"INFO\", \"message\": \"Inference complete\", \"source_id\": \"dedup:1401ce4558bfa9344efab1d23f3b9392\", \"sentiment\": \"positive\", \"score\": 0.8934, \"inference_time_ms\": 151.33}\n",
+      "ingestionTime": 1785294801354,
+      "eventId": "39813404272475122504477915960133048521318414716447227906"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]124f9d52788d479fbe2aad4441323441",
+      "timestamp": 1785294792711,
+      "message": "{\"timestamp\": \"2026-07-29T03:13:12.711706+00:00\", \"level\": \"INFO\", \"message\": \"Time-series fanout complete\", \"tickers_written\": 1, \"tickers_failed\": 0}\n",
+      "ingestionTime": 1785294801354,
+      "eventId": "39813404276511557385411958748751013528667768149029683203"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]124f9d52788d479fbe2aad4441323441",
+      "timestamp": 1785294792745,
+      "message": "{\"timestamp\": \"2026-07-29T03:13:12.745533+00:00\", \"level\": \"INFO\", \"message\": \"Analysis completed\", \"source_id\": \"dedup:1401ce4558bfa9344efab1d23f3b9392\", \"sentiment\": \"positive\", \"score\": 0.8934, \"model_version\": \"a4b88c6\", \"inference_time_ms\": 151.33, \"execution_time_ms\": 8844.06, \"updated\": true}\n",
+      "ingestionTime": 1785294801354,
+      "eventId": "39813404277269782722161999935563227949937812440233017348"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]124f9d52788d479fbe2aad4441323441",
+      "timestamp": 1785294792749,
+      "message": "END RequestId: 9600f213-5e8b-4428-8ff7-f8f79ae04b10\n",
+      "ingestionTime": 1785294801354,
+      "eventId": "39813404277358985702956122428129370823028405886256939013"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]124f9d52788d479fbe2aad4441323441",
+      "timestamp": 1785294792749,
+      "message": "REPORT RequestId: 9600f213-5e8b-4428-8ff7-f8f79ae04b10\tDuration: 8882.33 ms\tBilled Duration: 9860 ms\tMemory Size: 2048 MB\tMax Memory Used: 856 MB\tInit Duration: 976.99 ms\t\nXRAY TraceId: 1-6a696fa8-08f8ce831361251305f4f277\tSegmentId: 5805632761289e31\tSampled: true\t\n",
+      "ingestionTime": 1785294801354,
+      "eventId": "39813404277358985702956122428129370823028405886256939014"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]ae2379200797483fb31e4d83adcaf2d5",
+      "timestamp": 1785294793148,
+      "message": "Device set to use cpu\n",
+      "ingestionTime": 1785294802167,
+      "eventId": "39813404286256983037169841062585371842167536027468824576"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]ae2379200797483fb31e4d83adcaf2d5",
+      "timestamp": 1785294793148,
+      "message": "[INFO]\t2026-07-29T03:13:13.148Z\t5770e50a-fbe6-40c9-977b-a1ecbf2744ba\tModel loaded successfully\n",
+      "ingestionTime": 1785294802167,
+      "eventId": "39813404286256983037169841062585371842167536027468824577"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]ae2379200797483fb31e4d83adcaf2d5",
+      "timestamp": 1785294793402,
+      "message": "{\"timestamp\": \"2026-07-29T03:13:13.402164+00:00\", \"level\": \"INFO\", \"message\": \"Inference complete\", \"source_id\": \"dedup:1401ce4558bfa9344efab1d23f3b9392\", \"sentiment\": \"positive\", \"score\": 0.8934, \"inference_time_ms\": 213.31}\n",
+      "ingestionTime": 1785294802167,
+      "eventId": "39813404291921372317596619340535444283420219849987850242"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]ae2379200797483fb31e4d83adcaf2d5",
+      "timestamp": 1785294793501,
+      "message": "[WARNING]\t2026-07-29T03:13:13.500Z\t5770e50a-fbe6-40c9-977b-a1ecbf2744ba\tItem already analyzed, skipping\n",
+      "ingestionTime": 1785294802167,
+      "eventId": "39813404294129146092251151031547480392412407639079911427"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]ae2379200797483fb31e4d83adcaf2d5",
+      "timestamp": 1785294793563,
+      "message": "{\"timestamp\": \"2026-07-29T03:13:13.562932+00:00\", \"level\": \"INFO\", \"message\": \"Analysis completed\", \"source_id\": \"dedup:1401ce4558bfa9344efab1d23f3b9392\", \"sentiment\": \"positive\", \"score\": 0.8934, \"model_version\": \"a4b88c6\", \"inference_time_ms\": 213.31, \"execution_time_ms\": 9879.67, \"updated\": false}\n",
+      "ingestionTime": 1785294802167,
+      "eventId": "39813404295511792294560049666322694925316606052450697220"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]ae2379200797483fb31e4d83adcaf2d5",
+      "timestamp": 1785294793565,
+      "message": "END RequestId: 5770e50a-fbe6-40c9-977b-a1ecbf2744ba\n",
+      "ingestionTime": 1785294802167,
+      "eventId": "39813404295556393784957110912605766361861902775462658053"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]ae2379200797483fb31e4d83adcaf2d5",
+      "timestamp": 1785294793565,
+      "message": "REPORT RequestId: 5770e50a-fbe6-40c9-977b-a1ecbf2744ba\tDuration: 9915.00 ms\tBilled Duration: 10593 ms\tMemory Size: 2048 MB\tMax Memory Used: 838 MB\tInit Duration: 677.41 ms\t\nXRAY TraceId: 1-6a696fa8-08f8ce831361251305f4f277\tSegmentId: 2aff4c4e152bdc84\tSampled: true\t\n",
+      "ingestionTime": 1785294802167,
+      "eventId": "39813404295556393784957110912605766361861902775462658054"
+    }
+  ]
+}
