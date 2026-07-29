@@ -73,3 +73,22 @@ convention).
 - Fix shape: diagnose the DynamoDB query (likely GSI name/permissions on
   the users table digest index); newly-visible ERROR lines now make this
   loud in CloudWatch.
+
+## Card F — metrics crash-loop round 2 + the verification gap it exposed
+
+- The #965 powertools pin peeled ONE onion layer: 43s later the metrics
+  Lambda began failing on `No module named 'aws_xray_sdk'` (powertools
+  Tracer lazy-loads it at construction, tracer.py:29) — ~14,600 errors over
+  3 days, zero healthy invocations, caught only by the T024 measurement
+  sweep. Fixed: aws-xray-sdk==2.14.0 pinned + isolated import simulation
+  now part of the fix discipline.
+- Verification gap (recorded honestly): the E2E's C-8 assertion PASSED
+  throughout — C-8 emits at handler import before Tracer() fails, so it
+  proves logging visibility, not function health. E2E now adds a synthetic
+  invoke asserting no FunctionError for metrics (and notification already
+  has one).
+- Standing gap for the board: NO deploy smoke step exercises ZIP-Lambda
+  imports (dashboard has one; metrics/notification/canary/ingestion don't),
+  and the dead import-error metric filter (Card C) means ImportModuleError
+  storms are silent. An import smoke per ZIP Lambda in the deploy pipeline
+  would have caught all three onion layers pre-merge.
