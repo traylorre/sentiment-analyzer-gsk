@@ -1,0 +1,359 @@
+{
+  "logGroupName": "/aws/lambda/preprod-sentiment-notification",
+  "collectedAt": "2026-07-29T13:56:55.681775+00:00",
+  "windowUsed": "168h",
+  "error": null,
+  "eventCount": 50,
+  "events": [
+    {
+      "logStreamName": "2026/07/26/[$LATEST]f317a1f7e18442eb852a4d6e9b4b1119",
+      "timestamp": 1785049492617,
+      "message": "[INFO]\t2026-07-26T07:04:52.617Z\t20438eeb-7324-4a5f-acd8-8d85abec16ae\tFound credentials in environment variables.\n",
+      "ingestionTime": 1785049496067,
+      "eventId": "39807933901618087774893164905859504208790916935567343621"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]f317a1f7e18442eb852a4d6e9b4b1119",
+      "timestamp": 1785049493496,
+      "message": "[ERROR]\t2026-07-26T07:04:53.496Z\t20438eeb-7324-4a5f-acd8-8d85abec16ae\tFailed to query digest users\n",
+      "ingestionTime": 1785049496067,
+      "eventId": "39807933921220442804401582647269400570448826699324129286"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]f317a1f7e18442eb852a4d6e9b4b1119",
+      "timestamp": 1785049493496,
+      "message": "[ERROR]\t2026-07-26T07:04:53.496Z\t20438eeb-7324-4a5f-acd8-8d85abec16ae\tFailed to get users for digest\n",
+      "ingestionTime": 1785049496067,
+      "eventId": "39807933921220442804401582647269400570448826699324129287"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]f317a1f7e18442eb852a4d6e9b4b1119",
+      "timestamp": 1785049493496,
+      "message": "[INFO]\t2026-07-26T07:04:53.496Z\t20438eeb-7324-4a5f-acd8-8d85abec16ae\tDaily digest processing complete\n",
+      "ingestionTime": 1785049496067,
+      "eventId": "39807933921220442804401582647269400570448826699324129288"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]f317a1f7e18442eb852a4d6e9b4b1119",
+      "timestamp": 1785049493499,
+      "message": "END RequestId: 20438eeb-7324-4a5f-acd8-8d85abec16ae\n",
+      "ingestionTime": 1785049496067,
+      "eventId": "39807933921287345039997174516694007725266771783842070537"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]f317a1f7e18442eb852a4d6e9b4b1119",
+      "timestamp": 1785049493499,
+      "message": "REPORT RequestId: 20438eeb-7324-4a5f-acd8-8d85abec16ae\tDuration: 1197.80 ms\tBilled Duration: 2604 ms\tMemory Size: 256 MB\tMax Memory Used: 107 MB\tInit Duration: 1406.13 ms\t\nXRAY TraceId: 1-6a65b192-388b775d42c2ffb227abbf62\tSegmentId: da98644e05b46460\tSampled: true\t\n",
+      "ingestionTime": 1785049496067,
+      "eventId": "39807933921287345039997174516694007725266771783842070538"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]6f9e3c4b45234064bd53ce9d42cf7623",
+      "timestamp": 1785049939822,
+      "message": "INIT_START Runtime Version: python:3.13.mainlinev2.v18\tRuntime Version ARN: arn:aws:lambda:us-east-1::runtime:85016a02049aea54df8f85632acb695fe6e1c8623b63b4ed1d582917e22e8e4d\n",
+      "ingestionTime": 1785049942686,
+      "eventId": "39807943874622844283780487456269805408764901217512783872"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]6f9e3c4b45234064bd53ce9d42cf7623",
+      "timestamp": 1785049941200,
+      "message": "[INFO]\t2026-07-26T07:12:21.200Z\t\tlogging configured: root INFO visibility active (feature 001)\n",
+      "ingestionTime": 1785049942686,
+      "eventId": "39807943905353271167355686145306025188474343372753797121"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]6f9e3c4b45234064bd53ce9d42cf7623",
+      "timestamp": 1785049941214,
+      "message": "START RequestId: 194a506e-c51f-45c5-9ea4-5789d4f5303f Version: $LATEST\n",
+      "ingestionTime": 1785049942686,
+      "eventId": "39807943905665481600135114869287525244291420433837522946"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]6f9e3c4b45234064bd53ce9d42cf7623",
+      "timestamp": 1785049941215,
+      "message": "[INFO]\t2026-07-26T07:12:21.214Z\t194a506e-c51f-45c5-9ea4-5789d4f5303f\tNotification Lambda invoked: {\"notification_type\": \"digest\"}\n",
+      "ingestionTime": 1785049942686,
+      "eventId": "39807943905687782345333645492429060962564068795343503363"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]6f9e3c4b45234064bd53ce9d42cf7623",
+      "timestamp": 1785049941215,
+      "message": "[INFO]\t2026-07-26T07:12:21.215Z\t194a506e-c51f-45c5-9ea4-5789d4f5303f\tDaily digest handler invoked\n",
+      "ingestionTime": 1785049942686,
+      "eventId": "39807943905687782345333645492429060962564068795343503364"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]6f9e3c4b45234064bd53ce9d42cf7623",
+      "timestamp": 1785049941517,
+      "message": "[INFO]\t2026-07-26T07:12:21.517Z\t194a506e-c51f-45c5-9ea4-5789d4f5303f\tFound credentials in environment variables.\n",
+      "ingestionTime": 1785049942686,
+      "eventId": "39807943912422607395289893681172847880903873970149588997"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]6f9e3c4b45234064bd53ce9d42cf7623",
+      "timestamp": 1785049942396,
+      "message": "[ERROR]\t2026-07-26T07:12:22.396Z\t194a506e-c51f-45c5-9ea4-5789d4f5303f\tFailed to query digest users\n",
+      "ingestionTime": 1785049942686,
+      "eventId": "39807943932024962424798311422582744242561783733906374662"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]6f9e3c4b45234064bd53ce9d42cf7623",
+      "timestamp": 1785049942396,
+      "message": "[ERROR]\t2026-07-26T07:12:22.396Z\t194a506e-c51f-45c5-9ea4-5789d4f5303f\tFailed to get users for digest\n",
+      "ingestionTime": 1785049942686,
+      "eventId": "39807943932024962424798311422582744242561783733906374663"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]6f9e3c4b45234064bd53ce9d42cf7623",
+      "timestamp": 1785049942396,
+      "message": "[INFO]\t2026-07-26T07:12:22.396Z\t194a506e-c51f-45c5-9ea4-5789d4f5303f\tDaily digest processing complete\n",
+      "ingestionTime": 1785049942686,
+      "eventId": "39807943932024962424798311422582744242561783733906374664"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]6f9e3c4b45234064bd53ce9d42cf7623",
+      "timestamp": 1785049942416,
+      "message": "END RequestId: 194a506e-c51f-45c5-9ea4-5789d4f5303f\n",
+      "ingestionTime": 1785049942686,
+      "eventId": "39807943932470977328768923885413458608014750964025982985"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]6f9e3c4b45234064bd53ce9d42cf7623",
+      "timestamp": 1785049942416,
+      "message": "REPORT RequestId: 194a506e-c51f-45c5-9ea4-5789d4f5303f\tDuration: 1201.49 ms\tBilled Duration: 2590 ms\tMemory Size: 256 MB\tMax Memory Used: 107 MB\tInit Duration: 1388.22 ms\t\nXRAY TraceId: 1-6a65b353-0d8c44e6771d454061ce825a\tSegmentId: 82d6def404e5a20d\tSampled: true\t\n",
+      "ingestionTime": 1785049942686,
+      "eventId": "39807943932470977328768923885413458608014750964025982986"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]dc270b5f4fde416fbf1f8e23fc0b5b6f",
+      "timestamp": 1785051695802,
+      "message": "INIT_START Runtime Version: python:3.13.mainlinev2.v18\tRuntime Version ARN: arn:aws:lambda:us-east-1::runtime:85016a02049aea54df8f85632acb695fe6e1c8623b63b4ed1d582917e22e8e4d\n",
+      "ingestionTime": 1785051697487,
+      "eventId": "39807983034285397999584113651584171334204341016370020352"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]dc270b5f4fde416fbf1f8e23fc0b5b6f",
+      "timestamp": 1785051697162,
+      "message": "[INFO]\t2026-07-26T07:41:37.162Z\t\tlogging configured: root INFO visibility active (feature 001)\n",
+      "ingestionTime": 1785051697487,
+      "eventId": "39807983064614411469585761124072748185006112664503386113"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]dc270b5f4fde416fbf1f8e23fc0b5b6f",
+      "timestamp": 1785051697175,
+      "message": "START RequestId: 702f51c2-41d6-4e04-a30e-e3c6f9855e87 Version: $LATEST\n",
+      "ingestionTime": 1785051697487,
+      "eventId": "39807983064904321157166659224912712522550541364081131522"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]dc270b5f4fde416fbf1f8e23fc0b5b6f",
+      "timestamp": 1785051697176,
+      "message": "[INFO]\t2026-07-26T07:41:37.176Z\t702f51c2-41d6-4e04-a30e-e3c6f9855e87\tNotification Lambda invoked: {\"notification_type\": \"digest\"}\n",
+      "ingestionTime": 1785051697487,
+      "eventId": "39807983064926621902365189848054248240823189725587111939"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]dc270b5f4fde416fbf1f8e23fc0b5b6f",
+      "timestamp": 1785051697176,
+      "message": "[INFO]\t2026-07-26T07:41:37.176Z\t702f51c2-41d6-4e04-a30e-e3c6f9855e87\tDaily digest handler invoked\n",
+      "ingestionTime": 1785051697487,
+      "eventId": "39807983064926621902365189848054248240823189725587111940"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]dc270b5f4fde416fbf1f8e23fc0b5b6f",
+      "timestamp": 1785051697476,
+      "message": "[INFO]\t2026-07-26T07:41:37.476Z\t702f51c2-41d6-4e04-a30e-e3c6f9855e87\tFound credentials in environment variables.\n",
+      "ingestionTime": 1785051706491,
+      "eventId": "39807983071616845461924376801400065157652789357744619520"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]dc270b5f4fde416fbf1f8e23fc0b5b6f",
+      "timestamp": 1785051698317,
+      "message": "[ERROR]\t2026-07-26T07:41:38.317Z\t702f51c2-41d6-4e04-a30e-e3c6f9855e87\tFailed to query digest users\n",
+      "ingestionTime": 1785051706491,
+      "eventId": "39807983090371772173888630863431604224950061384274149377"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]dc270b5f4fde416fbf1f8e23fc0b5b6f",
+      "timestamp": 1785051698317,
+      "message": "[ERROR]\t2026-07-26T07:41:38.317Z\t702f51c2-41d6-4e04-a30e-e3c6f9855e87\tFailed to get users for digest\n",
+      "ingestionTime": 1785051706491,
+      "eventId": "39807983090371772173888630863431604224950061384274149378"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]dc270b5f4fde416fbf1f8e23fc0b5b6f",
+      "timestamp": 1785051698317,
+      "message": "[INFO]\t2026-07-26T07:41:38.317Z\t702f51c2-41d6-4e04-a30e-e3c6f9855e87\tDaily digest processing complete\n",
+      "ingestionTime": 1785051706491,
+      "eventId": "39807983090371772173888630863431604224950061384274149379"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]dc270b5f4fde416fbf1f8e23fc0b5b6f",
+      "timestamp": 1785051698319,
+      "message": "END RequestId: 702f51c2-41d6-4e04-a30e-e3c6f9855e87\n",
+      "ingestionTime": 1785051706491,
+      "eventId": "39807983090416373664285692109714675661495358107286110212"
+    },
+    {
+      "logStreamName": "2026/07/26/[$LATEST]dc270b5f4fde416fbf1f8e23fc0b5b6f",
+      "timestamp": 1785051698319,
+      "message": "REPORT RequestId: 702f51c2-41d6-4e04-a30e-e3c6f9855e87\tDuration: 1143.55 ms\tBilled Duration: 2513 ms\tMemory Size: 256 MB\tMax Memory Used: 107 MB\tInit Duration: 1369.32 ms\t\nXRAY TraceId: 1-6a65ba2f-3ab42733575803747a92c20e\tSegmentId: 2e07868f75efeca1\tSampled: true\t\n",
+      "ingestionTime": 1785051706491,
+      "eventId": "39807983090416373664285692109714675661495358107286110213"
+    },
+    {
+      "logStreamName": "2026/07/27/[$LATEST]fb90571374314e25aa7bba5a9d51e1da",
+      "timestamp": 1785169742211,
+      "message": "INIT_START Runtime Version: python:3.13.mainlinev2.v18\tRuntime Version ARN: arn:aws:lambda:us-east-1::runtime:85016a02049aea54df8f85632acb695fe6e1c8623b63b4ed1d582917e22e8e4d\n",
+      "ingestionTime": 1785169750384,
+      "eventId": "39810615557174108531722646959066820720358530843875934208"
+    },
+    {
+      "logStreamName": "2026/07/27/[$LATEST]fb90571374314e25aa7bba5a9d51e1da",
+      "timestamp": 1785169743425,
+      "message": "[INFO]\t2026-07-27T16:29:03.424Z\t\tlogging configured: root INFO visibility active (feature 001)\n",
+      "ingestionTime": 1785169750384,
+      "eventId": "39810615584247213202738823452891182703353641712136159233"
+    },
+    {
+      "logStreamName": "2026/07/27/[$LATEST]fb90571374314e25aa7bba5a9d51e1da",
+      "timestamp": 1785169743436,
+      "message": "START RequestId: 7371adb4-b83a-45a3-b720-8f879353a8c3 Version: $LATEST\n",
+      "ingestionTime": 1785169750384,
+      "eventId": "39810615584492521399922660307448075604352773688701943810"
+    },
+    {
+      "logStreamName": "2026/07/27/[$LATEST]fb90571374314e25aa7bba5a9d51e1da",
+      "timestamp": 1785169743437,
+      "message": "[INFO]\t2026-07-27T16:29:03.437Z\t7371adb4-b83a-45a3-b720-8f879353a8c3\tNotification Lambda invoked: {\"notification_type\": \"digest\"}\n",
+      "ingestionTime": 1785169750384,
+      "eventId": "39810615584514822145121190930589611322625422050207924227"
+    },
+    {
+      "logStreamName": "2026/07/27/[$LATEST]fb90571374314e25aa7bba5a9d51e1da",
+      "timestamp": 1785169743437,
+      "message": "[INFO]\t2026-07-27T16:29:03.437Z\t7371adb4-b83a-45a3-b720-8f879353a8c3\tDaily digest handler invoked\n",
+      "ingestionTime": 1785169750384,
+      "eventId": "39810615584514822145121190930589611322625422050207924228"
+    },
+    {
+      "logStreamName": "2026/07/27/[$LATEST]fb90571374314e25aa7bba5a9d51e1da",
+      "timestamp": 1785169743719,
+      "message": "[INFO]\t2026-07-27T16:29:03.719Z\t7371adb4-b83a-45a3-b720-8f879353a8c3\tFound credentials in environment variables.\n",
+      "ingestionTime": 1785169750384,
+      "eventId": "39810615590803632291106826656502683875512259994894401541"
+    },
+    {
+      "logStreamName": "2026/07/27/[$LATEST]fb90571374314e25aa7bba5a9d51e1da",
+      "timestamp": 1785169744558,
+      "message": "[ERROR]\t2026-07-27T16:29:04.558Z\t7371adb4-b83a-45a3-b720-8f879353a8c3\tFailed to query digest users\n",
+      "ingestionTime": 1785169750384,
+      "eventId": "39810615609513957512674019472251151506264235298411970566"
+    },
+    {
+      "logStreamName": "2026/07/27/[$LATEST]fb90571374314e25aa7bba5a9d51e1da",
+      "timestamp": 1785169744558,
+      "message": "[ERROR]\t2026-07-27T16:29:04.558Z\t7371adb4-b83a-45a3-b720-8f879353a8c3\tFailed to get users for digest\n",
+      "ingestionTime": 1785169750384,
+      "eventId": "39810615609513957512674019472251151506264235298411970567"
+    },
+    {
+      "logStreamName": "2026/07/27/[$LATEST]fb90571374314e25aa7bba5a9d51e1da",
+      "timestamp": 1785169744558,
+      "message": "[INFO]\t2026-07-27T16:29:04.558Z\t7371adb4-b83a-45a3-b720-8f879353a8c3\tDaily digest processing complete\n",
+      "ingestionTime": 1785169750384,
+      "eventId": "39810615609513957512674019472251151506264235298411970568"
+    },
+    {
+      "logStreamName": "2026/07/27/[$LATEST]fb90571374314e25aa7bba5a9d51e1da",
+      "timestamp": 1785169744560,
+      "message": "END RequestId: 7371adb4-b83a-45a3-b720-8f879353a8c3\n",
+      "ingestionTime": 1785169750384,
+      "eventId": "39810615609558559003071080718534222942809532021423931401"
+    },
+    {
+      "logStreamName": "2026/07/27/[$LATEST]fb90571374314e25aa7bba5a9d51e1da",
+      "timestamp": 1785169744560,
+      "message": "REPORT RequestId: 7371adb4-b83a-45a3-b720-8f879353a8c3\tDuration: 1122.96 ms\tBilled Duration: 2345 ms\tMemory Size: 256 MB\tMax Memory Used: 107 MB\tInit Duration: 1221.87 ms\t\nXRAY TraceId: 1-6a67874d-01758b3e593b56516a126a8a\tSegmentId: 3ca118b1d9fd13f1\tSampled: true\t\n",
+      "ingestionTime": 1785169750384,
+      "eventId": "39810615609558559003071080718534222942809532021423931402"
+    },
+    {
+      "logStreamName": "2026/07/27/[$LATEST]630bc44bf2544e759a66183f26d5c2a5",
+      "timestamp": 1785171117023,
+      "message": "INIT_START Runtime Version: python:3.13.mainlinev2.v18\tRuntime Version ARN: arn:aws:lambda:us-east-1::runtime:85016a02049aea54df8f85632acb695fe6e1c8623b63b4ed1d582917e22e8e4d\n",
+      "ingestionTime": 1785171120897,
+      "eventId": "39810646216506216414005711076919249503808079831772233728"
+    },
+    {
+      "logStreamName": "2026/07/27/[$LATEST]630bc44bf2544e759a66183f26d5c2a5",
+      "timestamp": 1785171118305,
+      "message": "[INFO]\t2026-07-27T16:51:58.305Z\t\tlogging configured: root INFO visibility active (feature 001)\n",
+      "ingestionTime": 1785171120897,
+      "eventId": "39810646245095771758521969944368040329343279282439127041"
+    },
+    {
+      "logStreamName": "2026/07/27/[$LATEST]630bc44bf2544e759a66183f26d5c2a5",
+      "timestamp": 1785171118317,
+      "message": "START RequestId: 88f28df0-36ab-455f-b278-ee624ea1ee1a Version: $LATEST\n",
+      "ingestionTime": 1785171120897,
+      "eventId": "39810646245363380700904337422066468948615059620510892034"
+    },
+    {
+      "logStreamName": "2026/07/27/[$LATEST]630bc44bf2544e759a66183f26d5c2a5",
+      "timestamp": 1785171118318,
+      "message": "[INFO]\t2026-07-27T16:51:58.318Z\t88f28df0-36ab-455f-b278-ee624ea1ee1a\tNotification Lambda invoked: {\"notification_type\": \"digest\"}\n",
+      "ingestionTime": 1785171120897,
+      "eventId": "39810646245385681446102868045208004666887707982016872451"
+    },
+    {
+      "logStreamName": "2026/07/27/[$LATEST]630bc44bf2544e759a66183f26d5c2a5",
+      "timestamp": 1785171118318,
+      "message": "[INFO]\t2026-07-27T16:51:58.318Z\t88f28df0-36ab-455f-b278-ee624ea1ee1a\tDaily digest handler invoked\n",
+      "ingestionTime": 1785171120897,
+      "eventId": "39810646245385681446102868045208004666887707982016872452"
+    },
+    {
+      "logStreamName": "2026/07/27/[$LATEST]630bc44bf2544e759a66183f26d5c2a5",
+      "timestamp": 1785171118607,
+      "message": "[INFO]\t2026-07-27T16:51:58.607Z\t88f28df0-36ab-455f-b278-ee624ea1ee1a\tFound credentials in environment variables.\n",
+      "ingestionTime": 1785171120897,
+      "eventId": "39810646251830596808478218133111827247683084457245212677"
+    },
+    {
+      "logStreamName": "2026/07/27/[$LATEST]630bc44bf2544e759a66183f26d5c2a5",
+      "timestamp": 1785171119487,
+      "message": "[ERROR]\t2026-07-27T16:51:59.487Z\t88f28df0-36ab-455f-b278-ee624ea1ee1a\tFailed to query digest users\n",
+      "ingestionTime": 1785171120897,
+      "eventId": "39810646271455252583185166497663259327613642582507978758"
+    },
+    {
+      "logStreamName": "2026/07/27/[$LATEST]630bc44bf2544e759a66183f26d5c2a5",
+      "timestamp": 1785171119487,
+      "message": "[ERROR]\t2026-07-27T16:51:59.487Z\t88f28df0-36ab-455f-b278-ee624ea1ee1a\tFailed to get users for digest\n",
+      "ingestionTime": 1785171120897,
+      "eventId": "39810646271455252583185166497663259327613642582507978759"
+    },
+    {
+      "logStreamName": "2026/07/27/[$LATEST]630bc44bf2544e759a66183f26d5c2a5",
+      "timestamp": 1785171119487,
+      "message": "[INFO]\t2026-07-27T16:51:59.487Z\t88f28df0-36ab-455f-b278-ee624ea1ee1a\tDaily digest processing complete\n",
+      "ingestionTime": 1785171120897,
+      "eventId": "39810646271455252583185166497663259327613642582507978760"
+    },
+    {
+      "logStreamName": "2026/07/27/[$LATEST]630bc44bf2544e759a66183f26d5c2a5",
+      "timestamp": 1785171119489,
+      "message": "END RequestId: 88f28df0-36ab-455f-b278-ee624ea1ee1a\n",
+      "ingestionTime": 1785171120897,
+      "eventId": "39810646271499854073582227743946330764158939305519939593"
+    },
+    {
+      "logStreamName": "2026/07/27/[$LATEST]630bc44bf2544e759a66183f26d5c2a5",
+      "timestamp": 1785171119489,
+      "message": "REPORT RequestId: 88f28df0-36ab-455f-b278-ee624ea1ee1a\tDuration: 1171.30 ms\tBilled Duration: 2462 ms\tMemory Size: 256 MB\tMax Memory Used: 106 MB\tInit Duration: 1290.53 ms\t\nXRAY TraceId: 1-6a678cac-370d7219559ef6fb780d6386\tSegmentId: fd84580507d90ce5\tSampled: true\t\n",
+      "ingestionTime": 1785171120897,
+      "eventId": "39810646271499854073582227743946330764158939305519939594"
+    }
+  ]
+}
