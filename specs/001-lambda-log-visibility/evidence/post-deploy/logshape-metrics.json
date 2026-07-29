@@ -1,0 +1,359 @@
+{
+  "logGroupName": "/aws/lambda/preprod-sentiment-metrics",
+  "collectedAt": "2026-07-29T13:56:52.669074+00:00",
+  "windowUsed": "1h",
+  "error": null,
+  "eventCount": 50,
+  "events": [
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333246612,
+      "message": "REPORT RequestId: 41764550-7275-41c7-a607-48f9ab0f33f4\tDuration: 750.43 ms\tBilled Duration: 751 ms\tMemory Size: 128 MB\tMax Memory Used: 74 MB\tStatus: error\tError Type: Runtime.ImportModuleError\nXRAY TraceId: 1-6a6a05fc-06d8eb8c5a780c261cb9e39b\tSegmentId: 6d97c510efa1fbe3\tSampled: true\t\n",
+      "ingestionTime": 1785333255621,
+      "eventId": "39814261827159647907339758160605660801788404883515637763"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333261324,
+      "message": "[INFO]\t2026-07-29T13:54:21.324Z\t\tlogging configured: root INFO visibility active (feature 001)\n",
+      "ingestionTime": 1785333261331,
+      "eventId": "39814262155248211268122285825782331917531484540012462080"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333261324,
+      "message": "[WARNING]\t2026-07-29T13:54:21.324Z\t\tLAMBDA_WARNING: Unhandled exception. The most likely cause is an issue in the function code. However, in rare cases, a Lambda runtime update can cause unexpected function behavior. For functions using managed runtimes, runtime updates can be triggered by a function change, or can be applied automatically. To determine if the runtime has been updated, check the runtime version in the INIT_START log entry. If this error correlates with a change in the runtime version, you may be able to mitigate this error by temporarily rolling back to the previous runtime version. For more information, see https://docs.aws.amazon.com/lambda/latest/dg/runtimes-update.html\r\n",
+      "ingestionTime": 1785333261331,
+      "eventId": "39814262155248211268122285825782331917531484540012462081"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333261324,
+      "message": "[ERROR] Runtime.ImportModuleError: Unable to import module 'handler': No module named 'aws_xray_sdk'\nTraceback (most recent call last):",
+      "ingestionTime": 1785333261331,
+      "eventId": "39814262155248211268122285825782331917531484540012462082"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333261371,
+      "message": "INIT_REPORT Init Duration: 715.02 ms\tPhase: invoke\tStatus: error\tError Type: Runtime.ImportModuleError\n",
+      "ingestionTime": 1785333270387,
+      "eventId": "39814262156296346292453225124382735130411305093687345152"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333261371,
+      "message": "START RequestId: e717cc00-ceb2-470d-8e26-9f89961f85fd Version: $LATEST\n",
+      "ingestionTime": 1785333270387,
+      "eventId": "39814262156296346292453225124382735130411305093687345153"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333261374,
+      "message": "END RequestId: e717cc00-ceb2-470d-8e26-9f89961f85fd\n",
+      "ingestionTime": 1785333270387,
+      "eventId": "39814262156363248528048816993807342285229250178205286402"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333261374,
+      "message": "REPORT RequestId: e717cc00-ceb2-470d-8e26-9f89961f85fd\tDuration: 724.26 ms\tBilled Duration: 725 ms\tMemory Size: 128 MB\tMax Memory Used: 74 MB\tStatus: error\tError Type: Runtime.ImportModuleError\nXRAY TraceId: 1-6a6a0548-5a15cac540cc82027a106446\tSegmentId: c3db7b806fe3eed2\tSampled: true\t\n",
+      "ingestionTime": 1785333270387,
+      "eventId": "39814262156363248528048816993807342285229250178205286403"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333305479,
+      "message": "[INFO]\t2026-07-29T13:55:05.479Z\t\tlogging configured: root INFO visibility active (feature 001)\n",
+      "ingestionTime": 1785333305500,
+      "eventId": "39814263139937615509241950693689140097161822655274680320"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333305480,
+      "message": "[WARNING]\t2026-07-29T13:55:05.480Z\t\tLAMBDA_WARNING: Unhandled exception. The most likely cause is an issue in the function code. However, in rare cases, a Lambda runtime update can cause unexpected function behavior. For functions using managed runtimes, runtime updates can be triggered by a function change, or can be applied automatically. To determine if the runtime has been updated, check the runtime version in the INIT_START log entry. If this error correlates with a change in the runtime version, you may be able to mitigate this error by temporarily rolling back to the previous runtime version. For more information, see https://docs.aws.amazon.com/lambda/latest/dg/runtimes-update.html\r\n",
+      "ingestionTime": 1785333305500,
+      "eventId": "39814263139959916254440481316830675815434471016780660737"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333305480,
+      "message": "[ERROR] Runtime.ImportModuleError: Unable to import module 'handler': No module named 'aws_xray_sdk'\nTraceback (most recent call last):",
+      "ingestionTime": 1785333305500,
+      "eventId": "39814263139959916254440481316830675815434471016780660738"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333305529,
+      "message": "INIT_REPORT Init Duration: 717.03 ms\tPhase: invoke\tStatus: error\tError Type: Runtime.ImportModuleError\n",
+      "ingestionTime": 1785333313452,
+      "eventId": "39814263141052652769168481860379375789285515693181698048"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333305529,
+      "message": "START RequestId: 34803fa9-4750-481f-b2f0-36ed81e8fe0d Version: $LATEST\n",
+      "ingestionTime": 1785333313452,
+      "eventId": "39814263141052652769168481860379375789285515693181698049"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333305533,
+      "message": "END RequestId: 34803fa9-4750-481f-b2f0-36ed81e8fe0d\n",
+      "ingestionTime": 1785333313452,
+      "eventId": "39814263141141855749962604352945518662376109139205619714"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333305533,
+      "message": "REPORT RequestId: 34803fa9-4750-481f-b2f0-36ed81e8fe0d\tDuration: 728.36 ms\tBilled Duration: 729 ms\tMemory Size: 128 MB\tMax Memory Used: 74 MB\tStatus: error\tError Type: Runtime.ImportModuleError\nXRAY TraceId: 1-6a6a0638-4274ab681ac8c9097a411531\tSegmentId: 9f27695a3436c8d0\tSampled: true\t\n",
+      "ingestionTime": 1785333313452,
+      "eventId": "39814263141141855749962604352945518662376109139205619715"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333313423,
+      "message": "[INFO]\t2026-07-29T13:55:13.423Z\t\tlogging configured: root INFO visibility active (feature 001)\n",
+      "ingestionTime": 1785333313452,
+      "eventId": "39814263317094735366369220939662335833571681421391101956"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333313424,
+      "message": "[WARNING]\t2026-07-29T13:55:13.424Z\t\tLAMBDA_WARNING: Unhandled exception. The most likely cause is an issue in the function code. However, in rare cases, a Lambda runtime update can cause unexpected function behavior. For functions using managed runtimes, runtime updates can be triggered by a function change, or can be applied automatically. To determine if the runtime has been updated, check the runtime version in the INIT_START log entry. If this error correlates with a change in the runtime version, you may be able to mitigate this error by temporarily rolling back to the previous runtime version. For more information, see https://docs.aws.amazon.com/lambda/latest/dg/runtimes-update.html\r\n",
+      "ingestionTime": 1785333313452,
+      "eventId": "39814263317117036111567751562803871551844329782897082373"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333313424,
+      "message": "[ERROR] Runtime.ImportModuleError: Unable to import module 'handler': No module named 'aws_xray_sdk'\nTraceback (most recent call last):",
+      "ingestionTime": 1785333313452,
+      "eventId": "39814263317117036111567751562803871551844329782897082374"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333313471,
+      "message": "INIT_REPORT Init Duration: 708.05 ms\tPhase: invoke\tStatus: error\tError Type: Runtime.ImportModuleError\n",
+      "ingestionTime": 1785333318299,
+      "eventId": "39814263318165171135898690856315200413143693982951014400"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333313471,
+      "message": "START RequestId: 41764550-7275-41c7-a607-48f9ab0f33f4 Version: $LATEST\n",
+      "ingestionTime": 1785333318299,
+      "eventId": "39814263318165171135898690856315200413143693982951014401"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333313476,
+      "message": "END RequestId: 41764550-7275-41c7-a607-48f9ab0f33f4\n",
+      "ingestionTime": 1785333318299,
+      "eventId": "39814263318276674861891343972022879004506935790480916482"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333313476,
+      "message": "REPORT RequestId: 41764550-7275-41c7-a607-48f9ab0f33f4\tDuration: 719.35 ms\tBilled Duration: 720 ms\tMemory Size: 128 MB\tMax Memory Used: 74 MB\tStatus: error\tError Type: Runtime.ImportModuleError\nXRAY TraceId: 1-6a6a05fc-06d8eb8c5a780c261cb9e39b\tSegmentId: 66f566aa7a2454fe\tSampled: true\t\n",
+      "ingestionTime": 1785333318299,
+      "eventId": "39814263318276674861891343972022879004506935790480916483"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333318294,
+      "message": "[INFO]\t2026-07-29T13:55:18.294Z\t\tlogging configured: root INFO visibility active (feature 001)\n",
+      "ingestionTime": 1785333318299,
+      "eventId": "39814263425721665228411886267941969642126741526294560772"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333318294,
+      "message": "[WARNING]\t2026-07-29T13:55:18.294Z\t\tLAMBDA_WARNING: Unhandled exception. The most likely cause is an issue in the function code. However, in rare cases, a Lambda runtime update can cause unexpected function behavior. For functions using managed runtimes, runtime updates can be triggered by a function change, or can be applied automatically. To determine if the runtime has been updated, check the runtime version in the INIT_START log entry. If this error correlates with a change in the runtime version, you may be able to mitigate this error by temporarily rolling back to the previous runtime version. For more information, see https://docs.aws.amazon.com/lambda/latest/dg/runtimes-update.html\r\n",
+      "ingestionTime": 1785333318299,
+      "eventId": "39814263425721665228411886267941969642126741526294560773"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333318294,
+      "message": "[ERROR] Runtime.ImportModuleError: Unable to import module 'handler': No module named 'aws_xray_sdk'\nTraceback (most recent call last):",
+      "ingestionTime": 1785333318299,
+      "eventId": "39814263425721665228411886267941969642126741526294560774"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333318339,
+      "message": "INIT_REPORT Init Duration: 717.56 ms\tPhase: invoke\tStatus: error\tError Type: Runtime.ImportModuleError\n",
+      "ingestionTime": 1785333327486,
+      "eventId": "39814263426725198762345764320417474288935284915014270976"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333318339,
+      "message": "START RequestId: ee192975-a934-499b-9588-cc0e133c40bf Version: $LATEST\n",
+      "ingestionTime": 1785333327486,
+      "eventId": "39814263426725198762345764320417474288935284915014270977"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333318343,
+      "message": "END RequestId: ee192975-a934-499b-9588-cc0e133c40bf\n",
+      "ingestionTime": 1785333327486,
+      "eventId": "39814263426814401743139886812983617162025878361038192642"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333318343,
+      "message": "REPORT RequestId: ee192975-a934-499b-9588-cc0e133c40bf\tDuration: 728.24 ms\tBilled Duration: 729 ms\tMemory Size: 128 MB\tMax Memory Used: 74 MB\tStatus: error\tError Type: Runtime.ImportModuleError\nXRAY TraceId: 1-6a6a0584-3f25ef307d9776411e08ee62\tSegmentId: 41806b02ea60e3f8\tSampled: true\t\n",
+      "ingestionTime": 1785333327486,
+      "eventId": "39814263426814401743139886812983617162025878361038192643"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333365514,
+      "message": "[INFO]\t2026-07-29T13:56:05.514Z\t\tlogging configured: root INFO visibility active (feature 001)\n",
+      "ingestionTime": 1785333365532,
+      "eventId": "39814264478762853503027911068359881635565867580468756480"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333365514,
+      "message": "[WARNING]\t2026-07-29T13:56:05.514Z\t\tLAMBDA_WARNING: Unhandled exception. The most likely cause is an issue in the function code. However, in rare cases, a Lambda runtime update can cause unexpected function behavior. For functions using managed runtimes, runtime updates can be triggered by a function change, or can be applied automatically. To determine if the runtime has been updated, check the runtime version in the INIT_START log entry. If this error correlates with a change in the runtime version, you may be able to mitigate this error by temporarily rolling back to the previous runtime version. For more information, see https://docs.aws.amazon.com/lambda/latest/dg/runtimes-update.html\r\n",
+      "ingestionTime": 1785333365532,
+      "eventId": "39814264478762853503027911068359881635565867580468756481"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333365514,
+      "message": "[ERROR] Runtime.ImportModuleError: Unable to import module 'handler': No module named 'aws_xray_sdk'\nTraceback (most recent call last):",
+      "ingestionTime": 1785333365532,
+      "eventId": "39814264478762853503027911068359881635565867580468756482"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333365565,
+      "message": "INIT_REPORT Init Duration: 741.11 ms\tPhase: invoke\tStatus: error\tError Type: Runtime.ImportModuleError\n",
+      "ingestionTime": 1785333365569,
+      "eventId": "39814264479900191508152972848623135791297506571304239104"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333365565,
+      "message": "START RequestId: 6521eee9-537c-45cb-8aae-03f73d43d779 Version: $LATEST\n",
+      "ingestionTime": 1785333365569,
+      "eventId": "39814264479900191508152972848623135791297506571304239105"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333365569,
+      "message": "END RequestId: 6521eee9-537c-45cb-8aae-03f73d43d779\n",
+      "ingestionTime": 1785333365581,
+      "eventId": "39814264479989394488947095341203696648803186301077618688"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333365569,
+      "message": "REPORT RequestId: 6521eee9-537c-45cb-8aae-03f73d43d779\tDuration: 751.02 ms\tBilled Duration: 752 ms\tMemory Size: 128 MB\tMax Memory Used: 74 MB\tStatus: error\tError Type: Runtime.ImportModuleError\nXRAY TraceId: 1-6a6a0674-308e0476134af80f32bd1e49\tSegmentId: cc6999d49746b0fd\tSampled: true\t\n",
+      "ingestionTime": 1785333365581,
+      "eventId": "39814264479989394488947095341203696648803186301077618689"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333369304,
+      "message": "[INFO]\t2026-07-29T13:56:09.304Z\t\tlogging configured: root INFO visibility active (feature 001)\n",
+      "ingestionTime": 1785333369309,
+      "eventId": "39814264563282677805458972779346468134849299838882545664"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333369304,
+      "message": "[WARNING]\t2026-07-29T13:56:09.304Z\t\tLAMBDA_WARNING: Unhandled exception. The most likely cause is an issue in the function code. However, in rare cases, a Lambda runtime update can cause unexpected function behavior. For functions using managed runtimes, runtime updates can be triggered by a function change, or can be applied automatically. To determine if the runtime has been updated, check the runtime version in the INIT_START log entry. If this error correlates with a change in the runtime version, you may be able to mitigate this error by temporarily rolling back to the previous runtime version. For more information, see https://docs.aws.amazon.com/lambda/latest/dg/runtimes-update.html\r\n",
+      "ingestionTime": 1785333369309,
+      "eventId": "39814264563282677805458972779346468134849299838882545665"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333369304,
+      "message": "[ERROR] Runtime.ImportModuleError: Unable to import module 'handler': No module named 'aws_xray_sdk'\nTraceback (most recent call last):",
+      "ingestionTime": 1785333369309,
+      "eventId": "39814264563282677805458972779346468134849299838882545666"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333369352,
+      "message": "INIT_REPORT Init Duration: 714.96 ms\tPhase: invoke\tStatus: error\tError Type: Runtime.ImportModuleError\n",
+      "ingestionTime": 1785333371403,
+      "eventId": "39814264564353113574988442692671685299160805522862112768"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333369352,
+      "message": "START RequestId: 5acd224e-93ea-4bff-9753-d05956310023 Version: $LATEST\n",
+      "ingestionTime": 1785333371403,
+      "eventId": "39814264564353113574988442692671685299160805522862112769"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333369356,
+      "message": "END RequestId: 5acd224e-93ea-4bff-9753-d05956310023\n",
+      "ingestionTime": 1785333371403,
+      "eventId": "39814264564442316555782565185237828172251398968886034434"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333369356,
+      "message": "REPORT RequestId: 5acd224e-93ea-4bff-9753-d05956310023\tDuration: 724.14 ms\tBilled Duration: 725 ms\tMemory Size: 128 MB\tMax Memory Used: 74 MB\tStatus: error\tError Type: Runtime.ImportModuleError\nXRAY TraceId: 1-6a6a05c0-09270ab8296d421e6d96fc04\tSegmentId: c97f3fe138b71060\tSampled: true\t\n",
+      "ingestionTime": 1785333371403,
+      "eventId": "39814264564442316555782565185237828172251398968886034435"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333371398,
+      "message": "[INFO]\t2026-07-29T13:56:11.398Z\t\tlogging configured: root INFO visibility active (feature 001)\n",
+      "ingestionTime": 1785333371403,
+      "eventId": "39814264609980438251182097640253764884999353164098043908"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333371398,
+      "message": "[WARNING]\t2026-07-29T13:56:11.398Z\t\tLAMBDA_WARNING: Unhandled exception. The most likely cause is an issue in the function code. However, in rare cases, a Lambda runtime update can cause unexpected function behavior. For functions using managed runtimes, runtime updates can be triggered by a function change, or can be applied automatically. To determine if the runtime has been updated, check the runtime version in the INIT_START log entry. If this error correlates with a change in the runtime version, you may be able to mitigate this error by temporarily rolling back to the previous runtime version. For more information, see https://docs.aws.amazon.com/lambda/latest/dg/runtimes-update.html\r\n",
+      "ingestionTime": 1785333371403,
+      "eventId": "39814264609980438251182097640253764884999353164098043909"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333371398,
+      "message": "[ERROR] Runtime.ImportModuleError: Unable to import module 'handler': No module named 'aws_xray_sdk'\nTraceback (most recent call last):",
+      "ingestionTime": 1785333371403,
+      "eventId": "39814264609980438251182097640253764884999353164098043910"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333371448,
+      "message": "INIT_REPORT Init Duration: 738.63 ms\tPhase: invoke\tStatus: error\tError Type: Runtime.ImportModuleError\n",
+      "ingestionTime": 1785333380464,
+      "eventId": "39814264611095475511108628808284405527395755858529157120"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333371448,
+      "message": "START RequestId: 34803fa9-4750-481f-b2f0-36ed81e8fe0d Version: $LATEST\n",
+      "ingestionTime": 1785333380464,
+      "eventId": "39814264611095475511108628808284405527395755858529157121"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333371452,
+      "message": "END RequestId: 34803fa9-4750-481f-b2f0-36ed81e8fe0d\n",
+      "ingestionTime": 1785333380464,
+      "eventId": "39814264611184678491902751300850548400486349304553078786"
+    },
+    {
+      "logStreamName": "2026/07/29/[$LATEST]91c470a370bc4fd08d5995937c3e4b54",
+      "timestamp": 1785333371452,
+      "message": "REPORT RequestId: 34803fa9-4750-481f-b2f0-36ed81e8fe0d\tDuration: 750.00 ms\tBilled Duration: 750 ms\tMemory Size: 128 MB\tMax Memory Used: 74 MB\tStatus: error\tError Type: Runtime.ImportModuleError\nXRAY TraceId: 1-6a6a0638-4274ab681ac8c9097a411531\tSegmentId: 78edc412a53eb648\tSampled: true\t\n",
+      "ingestionTime": 1785333380464,
+      "eventId": "39814264611184678491902751300850548400486349304553078787"
+    }
+  ]
+}
