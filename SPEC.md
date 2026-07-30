@@ -476,7 +476,7 @@ CI / CD (with deployment safety and resilience patterns)
 -------------------------------------------------------
 - GitHub Actions responsibilities (PR):
   - Run `terraform fmt`, `terraform validate`, `tflint`.
-  - Run security checks: `tfsec` (Terraform), `semgrep` or other SAST for code, dependency checks.
+  - Run security checks: Trivy/Checkov (IaC), `semgrep` or other SAST for code, dependency checks.
   - Run unit tests and build model artifact; upload artifact to S3 artifact bucket (versioned path) and publish artifact path as output for the TFC plan.
   - **Pre-deployment validation:**
     - Lambda package size check: Fail if package >200MB (approaching 250MB limit)

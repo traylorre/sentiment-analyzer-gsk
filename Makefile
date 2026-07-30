@@ -67,7 +67,6 @@ lint: ## Run linters
 
 security: ## Run security scanners
 	pip-audit --ignore-vuln PYSEC-2024-58 || true
-	@if command -v tfsec &>/dev/null && [ -d "$(TF_DIR)" ]; then tfsec $(TF_DIR) --soft-fail; fi
 	@echo "$(YELLOW)⚠ Review security findings above$(NC)"
 
 sast: ## Run SAST (Static Application Security Testing) - Bandit + Semgrep

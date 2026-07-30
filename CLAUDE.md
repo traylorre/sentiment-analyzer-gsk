@@ -139,6 +139,7 @@ The Lambda is named `dashboard Lambda`, the handler is `src/lambdas/dashboard/`,
 - HCL (Terraform 1.5+, AWS Provider ~> 5.0) + AWS CloudFront, AWS WAF v2, existing SSE Lambda (1255-cloudfront-sse-waf)
 - Python 3.13 (Lambda base image `public.ecr.aws/lambda/python:3.13` for image Lambdas; managed python3.13 runtime for ZIP Lambdas) + stdlib `logging` only for the mechanism; aws-lambda-powertools 3.23.0 already present (dashboard handler) and untouched (001-lambda-log-visibility)
 - N/A (observability-only; no data-store changes) (001-lambda-log-visibility)
+- GNU Make (Makefile recipe edit), Markdown (two doc edits), HTML (board card lane move). No Python code. + None added or removed. tfsec binary itself is untouched (remains at user level on some machines). (001-tfsec-removal)
 
 - **Python 3.13** with aws-lambda-powertools, boto3, pydantic, httpx, orjson
 - **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, Amplify
@@ -936,9 +937,9 @@ aws cloudwatch get-metric-data --metric-data-queries '[...]' --start-time ... --
 ```
 
 ## Recent Changes
+- 001-tfsec-removal: Added GNU Make (Makefile recipe edit), Markdown (two doc edits), HTML (board card lane move). No Python code. + None added or removed. tfsec binary itself is untouched (remains at user level on some machines).
 - 001-lambda-log-visibility: Added Python 3.13 (Lambda base image `public.ecr.aws/lambda/python:3.13` for image Lambdas; managed python3.13 runtime for ZIP Lambdas) + stdlib `logging` only for the mechanism; aws-lambda-powertools 3.23.0 already present (dashboard handler) and untouched
 - 1256-restrict-function-urls: Added HCL (Terraform 1.5+, AWS Provider ~> 5.0)
-- 1255-cloudfront-sse-waf: Added HCL (Terraform 1.5+, AWS Provider ~> 5.0) + AWS CloudFront, AWS WAF v2, existing SSE Lambda
 
 <!-- MANUAL ADDITIONS START -->
 
