@@ -62,7 +62,7 @@ One item stays an inversion, not an amendment:
 gate, not a formality: 002 was specified against prose, because at authoring time every 001 task was
 unchecked. This is where prose meets a running program.
 
-- [ ] **T001** Confirm 001 has landed and the tree is clean
+- [x] **T001** Confirm 001 has landed and the tree is clean
   - **Files**: none modified
   - **Satisfies**: FR-009 precondition
   - **Acceptance criteria**:
@@ -73,7 +73,7 @@ unchecked. This is where prose meets a running program.
        `helpers/search-helpers.ts` from 001 T004). If it returns 47, 001's T004 did not land and
        this phase stops.
 
-- [ ] **T002** Verify the detector against `contracts/detector-cli.md` C6, all six rows
+- [x] **T002** Verify the detector against `contracts/detector-cli.md` C6, all six rows
   - **Files**: none modified
   - **Satisfies**: FR-005, FR-012, FR-013
   - **Acceptance criteria**:
@@ -111,7 +111,7 @@ unchecked. This is where prose meets a running program.
        `contracts/detector-cli.md` is now observable from Phase A. Phase A is a complete contract
        gate, which is what plan Phase A claims it is.
 
-- [ ] **T003** Record contract divergences as amendments against 001 T001 (depends on T002)
+- [x] **T003** Record contract divergences as amendments against 001 T001 (depends on T002)
   - **Files**: `specs/002-waitforresponse-lint-guard/contracts/detector-cli.md` (amendment log only)
   - **Satisfies**: FR-010's amendment clause, FR-012
   - **Acceptance criteria**:
@@ -133,7 +133,7 @@ unchecked. This is where prose meets a running program.
 
 ## Phase B — Local enforcement point (FR-003)
 
-- [ ] **T004** Add the `scan-waitforresponse-race` hook to `.pre-commit-config.yaml`
+- [x] **T004** Add the `scan-waitforresponse-race` hook to `.pre-commit-config.yaml`
   - **Files**: `.pre-commit-config.yaml`
   - **Satisfies**: FR-003, FR-004's `SKIP` constraint
   - **Acceptance criteria**:
@@ -151,7 +151,7 @@ unchecked. This is where prose meets a running program.
        does not "fix" it toward the `pytest` hook's form.
     7. `pre-commit run scan-waitforresponse-race --all-files` exits 0 on the clean tree.
 
-- [ ] **T005** Correct the two stale "BLOCKING gate" statements
+- [x] **T005** Correct the two stale "BLOCKING gate" statements
   - **Files**: `.pre-commit-config.yaml`, `.github/workflows/pr-checks.yml`
   - **Satisfies**: FR-015
   - **Acceptance criteria**:
@@ -162,7 +162,7 @@ unchecked. This is where prose meets a running program.
        (AR#3 G-10). This follows 001's own "PRE-SWEEP locators" discipline
        (`001/tasks.md:17-21`). Replacement states the verified position: the job runs on every PR to `main`,
        and is **not** among `main`'s `required_status_checks.contexts`
-       (`["Secrets Scan", "Lint", "Run Tests"]`).
+       (`["Secrets Scan", "Lint", "Run Tests", "Playwright E2E Tests"]`).
     2. The step name at `pr-checks.yml:229`, "Run pre-commit (blocking)", is corrected or annotated.
     3. The replacement text names how to re-check the claim
        (`gh api repos/traylorre/sentiment-analyzer-gsk/branches/main/protection`), so it can be
@@ -179,7 +179,7 @@ unchecked. This is where prose meets a running program.
 
 ## Phase C — Blocking enforcement point (FR-004, FR-014)
 
-- [ ] **T006** Add the guard step to the required `Lint` job
+- [x] **T006** Add the guard step to the required `Lint` job
   - **Files**: `.github/workflows/pr-checks.yml`
   - **Satisfies**: FR-004
   - **Acceptance criteria**:
@@ -192,14 +192,14 @@ unchecked. This is where prose meets a running program.
        this any ruff failure means the guard never runs and produces no output (AR#2 N-06). The job
        still fails; both failures surface in one run.
     4. It carries a comment explaining why a Playwright race scan lives in a job named `Lint`:
-       `Lint` is one of `main`'s three required status checks and `Pre-commit Hooks` is not, so this
+       `Lint` is one of `main`'s four required status checks and `Pre-commit Hooks` is not, so this
        is the only place the guard can actually block a merge. Without the comment, a maintainer
        tidying the job would reasonably move the step out and silently make the guard advisory.
     5. No new `pip install` is added. The job already provides Python 3.13 via
        `actions/setup-python@v7` (`pr-checks.yml:29`, `:46-50`) and the detector is stdlib-only.
     6. The `Lint` job's existing steps are unchanged.
 
-- [ ] **T007** Add the `check-waitforresponse-race` make target and wire it into `validate`
+- [x] **T007** Add the `check-waitforresponse-race` make target and wire it into `validate`
   - **Files**: `Makefile`
   - **Satisfies**: FR-014, Clarification C1
   - **Acceptance criteria**:
@@ -219,7 +219,7 @@ unchecked. This is where prose meets a running program.
 
 **Nothing in this phase may be committed.** The planted violation exists only as evidence.
 
-- [ ] **T008** Plant the violation
+- [x] **T008** Plant the violation
   - **Files**: `frontend/tests/e2e/__scratch-race.spec.ts` (temporary, never committed)
   - **Satisfies**: prerequisite for T009–T013
   - **Acceptance criteria**:
@@ -229,7 +229,7 @@ unchecked. This is where prose meets a running program.
        `check-test-target-headers` and confuse the evidence with an unrelated failure.
     3. `python3 scripts/scan-waitforresponse-race.py` now reports `RACY 1` and exits 1.
 
-- [ ] **T009** Mode (a): the local commit path refuses the commit (depends on T008)
+- [x] **T009** Mode (a): the local commit path refuses the commit (depends on T008)
   - **Files**: none modified
   - **Satisfies**: FR-007(a), FR-006, SC-002
   - **Acceptance criteria**:
@@ -241,7 +241,7 @@ unchecked. This is where prose meets a running program.
        `const <name>Promise = page.waitForResponse` positioned before the triggering action
        (FR-006). If it does not, that is amendment 3 from the ground rules, recorded per T003.
 
-- [ ] **T010** Mode (b): whole-tree scan with a clean index (depends on T009)
+- [x] **T010** Mode (b): whole-tree scan with a clean index (depends on T009)
   - **Files**: none modified
   - **Satisfies**: FR-007(b), SC-003
   - **Acceptance criteria**:
@@ -260,7 +260,7 @@ unchecked. This is where prose meets a running program.
     5. This is the criterion that distinguishes the guard from `check-false-pass-patterns`, which is
        green in CI for exactly this input.
 
-- [ ] **T011** Mode (c): site-packages-free invocation (depends on T008)
+- [x] **T011** Mode (c): site-packages-free invocation (depends on T008)
   - **Files**: none modified
   - **Satisfies**: FR-007(c), FR-005, SC-004
   - **Acceptance criteria**:
@@ -273,7 +273,7 @@ unchecked. This is where prose meets a running program.
     4. Record the interpreter actually used: `python3 -I -S -c "import sys; print(sys.version)"`
        must report **3.13.x**, matching the `Lint` job's `PYTHON_VERSION`.
 
-- [ ] **T012** Detector-absent case (depends on T008)
+- [x] **T012** Detector-absent case (depends on T008)
   - **Files**: none modified (temporary rename only)
   - **Satisfies**: FR-008, SC-012
   - **Acceptance criteria**:
@@ -289,7 +289,7 @@ unchecked. This is where prose meets a running program.
     5. A missing detector must never read as a pass. Without this task FR-008 is asserted by
        construction and checked by nobody.
 
-- [ ] **T013** Revert and re-assert green (depends on T009–T012)
+- [x] **T013** Revert and re-assert green (depends on T009–T012)
   - **Files**: none modified
   - **Satisfies**: FR-007, SC-001, SC-005, SC-015
   - **Acceptance criteria**:
@@ -308,7 +308,7 @@ unchecked. This is where prose meets a running program.
        guard failure.
     5. `git status --short` is empty and `git stash list` is empty.
 
-- [ ] **T014** `make validate` fails on a violation (depends on T007, T013)
+- [ ] **T014** `make validate` fails on a violation (depends on T007, T013) — **PARTIAL: crit 1 (attributable form) and crit 2 pass; crit 3 blocked by pre-existing `check-banned-terms` redness. See Execution Log.**
   - **Files**: none modified
   - **Satisfies**: FR-014, SC-013
   - **Acceptance criteria**:
@@ -317,7 +317,7 @@ unchecked. This is where prose meets a running program.
        line.
     3. Remove the violation; `make validate` exits 0; tree clean.
 
-- [ ] **T015** Measure the scan cost (depends on T013)
+- [x] **T015** Measure the scan cost (depends on T013)
   - **Files**: evidence recorded in the Execution Log below
   - **Satisfies**: SC-010
   - **Acceptance criteria**:
@@ -327,7 +327,7 @@ unchecked. This is where prose meets a running program.
        "roughly ten files" guess was wrong by ~5x against the real 47, which is why the criterion
        demands measurement.
 
-- [ ] **T016** Single-definition-site check (depends on T013)
+- [x] **T016** Single-definition-site check (depends on T013)
   - **Files**: none modified
   - **Satisfies**: FR-002, SC-009
   - **Acceptance criteria**:
@@ -341,7 +341,7 @@ unchecked. This is where prose meets a running program.
        `--include` filters match. It is **not** for `001/tasks.md`, which is Markdown and
        unreachable by these filters.
 
-- [ ] **T017** Wiring assertions (depends on T004, T006)
+- [x] **T017** Wiring assertions (depends on T004, T006)
   - **Files**: none modified
   - **Satisfies**: SC-007, SC-008
   - **Acceptance criteria**:
@@ -361,7 +361,7 @@ unchecked. This is where prose meets a running program.
 pass every local mode and still be attached to a job that cannot block, or guarded by an `if:` that
 never fires.
 
-- [ ] **T018** Draft red-team PR (depends on Phase D complete)
+- [x] **T018** Draft red-team PR (depends on Phase D complete)
   - **Files**: temporary branch only; **nothing merged**
   - **Satisfies**: FR-007(d), SC-006
   - **Acceptance criteria**:
@@ -401,12 +401,15 @@ never fires.
 
 ## Phase F — Board (FR-011, US4)
 
-- [ ] **T019** Add eight cards to `CLEANUP-BOARD.html` (depends on T018)
+- [x] **T019** Add nine cards to `CLEANUP-BOARD.html` (depends on T018) — **amended from eight; see crit 1**
   - **Files**: `CLEANUP-BOARD.html`
   - **Satisfies**: FR-011, US4, SC-014
   - **Acceptance criteria**:
-    1. Board count goes from **120** (118 today plus 001's two follow-up cards) to **128**.
-    2. All eight carry `"source": "002-waitforresponse-lint-guard"`, matching the convention set by
+    1. ~~Board count goes from **120** (118 today plus 001's two follow-up cards) to **128**.~~
+       **Amended 2026-07-30**: the board was at **123** when 002 ran, not 120, and a ninth card was
+       added for the `make validate` short-circuit found at T014 — a real defect matching none of the
+       FR-011 items. Board goes **123 → 132**, with **9** cards tagged `002-waitforresponse-lint-guard`.
+    2. All nine carry `"source": "002-waitforresponse-lint-guard"`, matching the convention set by
        `001-lambda-log-visibility cards.md`. SC-014 counts by this field rather than by an
        unspecified grep pattern, which any eight cards or none would satisfy.
     3. Cards, with lane and severity per Clarification C2:
@@ -428,9 +431,9 @@ never fires.
        `next_action`, `source`). Note the board also carries an eighth key, `milestone`, on 3 of 118
        cards; it is optional and not used here.
     6. `python3 -c "import json; ..."` `raw_decode` on the text after `const CARDS = ` parses
-       cleanly and returns 128.
+       cleanly and returns ~~128~~ **132** (amended, see crit 1).
 
-- [ ] **T020** Final scope and cleanliness check (depends on T019)
+- [x] **T020** Final scope and cleanliness check (depends on T019)
   - **Files**: none modified
   - **Satisfies**: SC-015
   - **Acceptance criteria**:
@@ -525,12 +528,120 @@ the earlier "exactly one" wording contradicted the table printed directly above 
 
 ## Execution Log
 
-*(populated during implementation — Phase A output, T015's measured runtime, T018's PR number and
-check result, and the final board count go here)*
+Implemented 2026-07-30 on branch `002-waitforresponse-lint-guard`, cut from `main` at `d6e64fc`.
 
 | Task | Date | Result | Evidence |
 |---|---|---|---|
-| | | | |
+| T001 | 2026-07-30 | PASS | 001 landed at `daba1a9`; tree clean; `find frontend/tests/e2e -name "*.ts" \| wc -l` = 48 |
+| T002 | 2026-07-30 | PASS (8/8) | Full evidence table in `contracts/detector-cli.md` C7 |
+| T003 | 2026-07-30 | PASS, empty log | C7 records the gate ran and nothing diverged; detector not edited |
+| T004 | 2026-07-30 | PASS | `pre-commit run scan-waitforresponse-race --all-files` exit 0 on clean tree |
+| T005 | 2026-07-30 | PASS | Both "blocking" claims corrected; SKIP rationale untouched (`git diff` shows one deleted line) |
+| T006 | 2026-07-30 | PASS | YAML parses; guard is `jobs.lint.steps[-1]`, plain `run:`, `if: always()` |
+| T007 | 2026-07-30 | PASS | `make check-waitforresponse-race` exit 0; on `validate` line at `Makefile:42` |
+| T008 | 2026-07-30 | PASS | Plant → `RACY 1 / PROMISE-FIRST 16 / OTHER 1 / total 18 / files scanned 49`, exit 1 |
+| T009 | 2026-07-30 | PASS (4/4) | `git commit -S` exit 1; HEAD unchanged at `36a77d7`; output names `__scratch-race.spec.ts:8 RACY` and carries the corrected example |
+| T010 | 2026-07-30 | PASS (5/5) | Index empty; `pre-commit run --all-files` exit 1 with **`scan-waitforresponse-race` the only Failed hook**, named by id, naming the planted `file:line`; isolated form exit 1 |
+| T011 | 2026-07-30 | PASS (4/4) | `python3 -I -S` exit 1; interpreter `3.13.0`, matching the `Lint` job's `PYTHON_VERSION: '3.13'`. AR#2 N-01 reconfirmed: plain and `env -u VIRTUAL_ENV` both resolve to `.venv/bin/python3` |
+| T012 | 2026-07-30 | PASS (5/5) | Detector renamed → hook exit 1, `python3 scripts/...` exit 2; undecodable `.ts` → exit 1 with `cannot read ...: 'utf-8' codec can't decode byte 0xff`, not a silent skip |
+| T013 | 2026-07-30 | PASS (5/5) | Post-revert: hook 0, make target 0, `-I -S` 0, `git status` and `git stash list` both empty. Advisory: `pre-commit run --all-files` exit **0**, no failures |
+| T014 | 2026-07-30 | **PARTIAL — crit 3 blocked, see below** | crit 1 (attributable form) and crit 2 PASS; crit 1 as literally written and crit 3 are unreachable on this tree |
+| T015 | 2026-07-30 | PASS | `0.06s` real, three consecutive runs, against 48 files. Budget 2s; margin ~33x |
+| T016 | 2026-07-30 | PASS | File count **1**: `scripts/scan-waitforresponse-race.py` |
+| T017 | 2026-07-30 | PASS (3/3) | Hits in both `.pre-commit-config.yaml` and `.github/workflows/pr-checks.yml`; guard absent from `SKIP:`; step has `run:` and `if: always()` |
+
+| T018 | 2026-07-30 | PASS (8/8) | PR **#988**, draft, closed unmerged (`state: CLOSED`, `mergedAt: null`). `Lint` **FAILURE**. Step conclusions below |
+| T019 | 2026-07-30 | PASS | Board 123 → 132. Nine cards, not the eight planned; see the count note |
+| T020 | 2026-07-30 | PASS | See final scope check |
+
+### T020: one file outside the allowlist, and why it is not scope creep
+
+`git diff --stat d6e64fc..HEAD` touches eleven files. Ten are inside FR-010's allowlist. The
+eleventh is **`.secrets.baseline`**, which is not, and that is stated plainly rather than waved
+through.
+
+The entire diff is mechanical:
+
+```
+-        "line_number": 212,
++        "line_number": 234,
+-  "generated_at": "2026-07-30T17:35:41Z"
++  "generated_at": "2026-07-30T20:35:06Z"
+```
+
+The tracked entry is an existing `pr-checks.yml` finding whose line number moved by 22 because T006
+inserted 22 lines above it. No secret was added, removed, or re-classified. The change was produced
+by the repo's own `scripts/detect-secrets-autostage.sh` wrapper, which CLAUDE.md documents as
+running the hook, auto-staging the baseline and retrying until stable — so any commit that shifts
+line numbers in a file with a baseline entry necessarily updates it. Avoiding it would have required
+bypassing a hook, which policy forbids.
+
+Recorded as a known, bounded exception to FR-010 rather than an unlogged eleventh file.
+
+Criteria 2 through 5 pass with no qualification: the detector is unmodified by this branch,
+`frontend/tests/e2e/**` is unmodified, no `__scratch` file appears anywhere in branch history, and
+all commits report `G` (good signature) under `git log --format='%G?'`.
+
+### T018 mode (d): the step conclusions are the whole result
+
+```
+5. Check formatting with ruff          -> success
+6. Check linting with ruff             -> failure    (co-planted F401)
+7. Check for security issues           -> skipped    (fail-fast)
+8. Check waitForResponse race ordering -> failure    (ran anyway)
+```
+
+Step 7 was skipped by fail-fast while step 8 ran. That isolates exactly what `if: always()` buys:
+without it, step 8 would have been skipped like step 7, the job would still have gone red on ruff
+alone, and the guard would have been shipped untested behind a plausible-looking red check. This is
+the condition AR#3 G-05 required the co-planted ruff violation to create, and it is the only run in
+the whole feature where the flag's absence would have been observable.
+
+Both failures in one run, from the job log:
+
+- `F401 [*] `json` imported but unused --> tests/unit/__scratch_ruff_violation.py:3:8`
+- `frontend/tests/e2e/__scratch-race.spec.ts:8 RACY` and
+  `SUMMARY: RACY 1 / PROMISE-FIRST 16 / OTHER 1 / total 18 / files scanned 49`
+
+Cleanup verified: PR closed unmerged, remote branch deleted and pruned, local branch deleted. The
+planted files appear in `git log` for neither `main` nor the feature branch, and commit `32cb1c6` is
+reachable from no remote branch.
+
+**Deviation from crit 2, recorded.** The prescribed bypass is
+`SKIP=scan-waitforresponse-race git commit -S`. That is insufficient once crit 3's co-planted ruff
+violation exists: the `ruff-check` pre-commit hook refuses the commit for an unrelated reason. Used
+`SKIP=scan-waitforresponse-race,ruff-check` instead. The tasks never reconciled crit 2's literal
+string with crit 3, which was added later by AR#3 G-05. No property is weakened — `ruff-check` is a
+pre-commit hook, and the point of mode (d) is that the `Lint` job is not one and `SKIP=` cannot
+reach it, which the run confirms: ruff failed *in CI* on the same violation the hook was told to
+skip locally. The guard hook reported `Skipped` in the commit output, which is itself the evidence
+crit 2 wanted that the local hook was armed and firing.
+
+### T014 blocker: `make validate` never reaches the guard on this tree
+
+`make validate`'s prerequisites run in order: `fmt lint security sast check-banned-terms
+check-test-target-headers check-waitforresponse-race`. **`check-banned-terms` fails with 15
+pre-existing matches** in `specs/1157-auth-cache-headers/`, `specs/1268-cors-404-headers/` and
+`docs/cleanup/diagram-drift.md`, so make stops at `Makefile:98` and the guard target never executes.
+Measured: `grep -c 'Checking waitForResponse race ordering'` over a full `make validate` run with the
+violation planted returns **0**.
+
+Consequences, stated precisely rather than papered over:
+
+- **T014 crit 1 as literally written is satisfied for the wrong reason.** `make validate` does exit
+  non-zero with the violation planted, but it would exit non-zero with no violation too. This is the
+  identical attribution defect T010 crit 3 was written to forbid, so it is not accepted as evidence
+  here either.
+- **T014 crit 3 (`make validate` exits 0 after removing the violation) cannot pass**, and not
+  because of anything this feature did.
+- **The guard target itself is proven** in the attributable form: with the violation planted,
+  `make check-waitforresponse-race` fails at `Makefile:47` (detector exit 1, make exit 2); with it
+  removed, exit 0. FR-014's substance holds. What fails is the ability to observe it *through*
+  `make validate`.
+
+Not fixed here. The 15 matches live in files outside FR-010's allowlist, so clearing them is a
+separate change, and reordering the prerequisites would not help: make halts on the first failing
+prerequisite whatever the order. Carded rather than absorbed — see the board card added by T019.
 
 ---
 

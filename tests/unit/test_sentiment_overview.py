@@ -182,6 +182,10 @@ class TestSentimentOverview:
         mock_query.assert_called_once_with(
             ticker="AAPL",
             resolution=Resolution.ONE_HOUR,
+            # This reader takes buckets[-1] as the current value, so it must ask
+            # for the newest buckets. Without latest=True the ascending scan plus
+            # the small fallback limit returns the oldest buckets ever recorded.
+            latest=True,
         )
 
     @freeze_time("2024-01-02T10:00:00Z")
@@ -201,6 +205,7 @@ class TestSentimentOverview:
         mock_query.assert_called_once_with(
             ticker="AAPL",
             resolution=Resolution.TWENTY_FOUR_HOURS,
+            latest=True,
         )
 
     @freeze_time("2024-01-02T10:00:00Z")

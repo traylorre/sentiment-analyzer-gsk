@@ -184,7 +184,7 @@ is required.
 | `Pre-commit Hooks` job (ride-along) | Every PR to `main` | No — job is not in the required contexts |
 | `make validate` | Manual | No |
 
-`main`'s required contexts are `["Secrets Scan", "Lint", "Run Tests"]`. Verify with:
+`main`'s required contexts are `["Secrets Scan", "Lint", "Run Tests", "Playwright E2E Tests"]`. Verify with:
 
 ```bash
 gh api repos/traylorre/sentiment-analyzer-gsk/branches/main/protection \

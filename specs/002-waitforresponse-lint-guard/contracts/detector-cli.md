@@ -191,3 +191,59 @@ untracked and `pre-commit run --all-files` would not pass it to the hook. If the
 gains a "scan only the files given to me" mode, SC-003 goes inert with no other symptom (AR#2 N-17).
 
 Any failure here is an amendment against 001 T001, filed before proceeding to Phase B.
+
+---
+
+## C7 — Amendment log (filed by T003)
+
+**Status: T002 executed in full on 2026-07-30 against `main` at `d6e64fc`. All eight criteria
+passed. The amendment log below is empty because nothing diverged, not because the check was
+skipped** (T003 criterion 3).
+
+`scripts/scan-waitforresponse-race.py` was **not** edited by this feature, and no repair branch
+was required (T003 criterion 2).
+
+### Amendments filed
+
+**None.**
+
+### Evidence, per T002 criterion
+
+| Crit | Check | Observed | Verdict |
+|---|---|---|---|
+| 1 | Stdlib-only, statically | Imports are `sys, argparse, os, re, pathlib` only | PASS |
+| 2 | Stdlib-only, dynamically | `python3 -I -S scripts/scan-waitforresponse-race.py` → exit 0 | PASS |
+| 3 | Clean exit and counts | `RACY 0 / PROMISE-FIRST 16 / OTHER 1 / total 17 / files scanned 48`, exit 0 | PASS |
+| 4 | Five summary numbers | All five present on the `SUMMARY:` line | PASS |
+| 5(i) | Zero-file, root renamed | Exit **2**; root restored; `git status --short` empty | PASS |
+| 5(ii) | Zero-file, empty directory | Exit **2** via `WAITFORRESPONSE_SCAN_ROOT` at an empty `mktemp -d` | PASS |
+| 6 | Ignores any file list | Invoked with `README.md Makefile /etc/hosts does-not-exist.ts`; output byte-identical to the no-argument run, 48 files scanned, exit 0 | PASS |
+| 7 | Remediation guidance | Planted violation → `RACY` at line 8, exit 1, remediation block emitted; plant deleted; `git status --short` empty | PASS |
+| 8 | Gate completeness | All six C6 rows plus both non-C6 contract requirements observed at Phase A (below) | PASS |
+
+Criterion 3's figures are 001's pinned values and were **not** adjusted to match the detector; the
+detector matched them.
+
+### Criterion 5 was performed literally
+
+5(i) renamed `frontend/tests/e2e` to `frontend/tests/e2e__t002_renamed`, ran the detector, and moved
+it back in the same shell invocation. The env override was used only for 5(ii), which needs an
+existing-but-empty directory that a rename cannot produce. Both shapes reach the same
+`files_scanned == 0` branch and both exit 2, which is the property FR-013 requires: a detector that
+raises on a missing root but returns 0 on an empty one would pass 5(i) and fail 5(ii).
+
+### Criterion 8, itemised
+
+C6 has six rows and all six are covered by criteria 1, 2, 3, 5, 4 and 6 respectively. Two further
+contract requirements sit outside the C6 table and were also observed here, so Phase A is a complete
+contract gate rather than a partial one:
+
+- **Findings on stdout** (this document's "Findings, on stdout" and "Summary, on stdout" sections,
+  plus the fourth change request at C3). With a violation planted, findings, summary and remediation
+  all landed on stdout (2357 bytes) and stderr was empty (0 bytes).
+- **In-script `sys.version_info >= (3, 13)` floor** (fold-in item 7, 001 T001 criterion 13). Present
+  at `scripts/scan-waitforresponse-race.py:75`.
+
+### Consequence
+
+T003 criterion 4 is satisfied: no T002 criterion is failing, so Phase B is unblocked.
