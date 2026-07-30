@@ -361,7 +361,7 @@ unchecked. This is where prose meets a running program.
 pass every local mode and still be attached to a job that cannot block, or guarded by an `if:` that
 never fires.
 
-- [ ] **T018** Draft red-team PR (depends on Phase D complete)
+- [x] **T018** Draft red-team PR (depends on Phase D complete)
   - **Files**: temporary branch only; **nothing merged**
   - **Satisfies**: FR-007(d), SC-006
   - **Acceptance criteria**:
@@ -401,12 +401,15 @@ never fires.
 
 ## Phase F — Board (FR-011, US4)
 
-- [ ] **T019** Add eight cards to `CLEANUP-BOARD.html` (depends on T018)
+- [x] **T019** Add nine cards to `CLEANUP-BOARD.html` (depends on T018) — **amended from eight; see crit 1**
   - **Files**: `CLEANUP-BOARD.html`
   - **Satisfies**: FR-011, US4, SC-014
   - **Acceptance criteria**:
-    1. Board count goes from **120** (118 today plus 001's two follow-up cards) to **128**.
-    2. All eight carry `"source": "002-waitforresponse-lint-guard"`, matching the convention set by
+    1. ~~Board count goes from **120** (118 today plus 001's two follow-up cards) to **128**.~~
+       **Amended 2026-07-30**: the board was at **123** when 002 ran, not 120, and a ninth card was
+       added for the `make validate` short-circuit found at T014 — a real defect matching none of the
+       FR-011 items. Board goes **123 → 132**, with **9** cards tagged `002-waitforresponse-lint-guard`.
+    2. All nine carry `"source": "002-waitforresponse-lint-guard"`, matching the convention set by
        `001-lambda-log-visibility cards.md`. SC-014 counts by this field rather than by an
        unspecified grep pattern, which any eight cards or none would satisfy.
     3. Cards, with lane and severity per Clarification C2:
@@ -428,9 +431,9 @@ never fires.
        `next_action`, `source`). Note the board also carries an eighth key, `milestone`, on 3 of 118
        cards; it is optional and not used here.
     6. `python3 -c "import json; ..."` `raw_decode` on the text after `const CARDS = ` parses
-       cleanly and returns 128.
+       cleanly and returns ~~128~~ **132** (amended, see crit 1).
 
-- [ ] **T020** Final scope and cleanliness check (depends on T019)
+- [x] **T020** Final scope and cleanliness check (depends on T019)
   - **Files**: none modified
   - **Satisfies**: SC-015
   - **Acceptance criteria**:
@@ -546,6 +549,73 @@ Implemented 2026-07-30 on branch `002-waitforresponse-lint-guard`, cut from `mai
 | T015 | 2026-07-30 | PASS | `0.06s` real, three consecutive runs, against 48 files. Budget 2s; margin ~33x |
 | T016 | 2026-07-30 | PASS | File count **1**: `scripts/scan-waitforresponse-race.py` |
 | T017 | 2026-07-30 | PASS (3/3) | Hits in both `.pre-commit-config.yaml` and `.github/workflows/pr-checks.yml`; guard absent from `SKIP:`; step has `run:` and `if: always()` |
+
+| T018 | 2026-07-30 | PASS (8/8) | PR **#988**, draft, closed unmerged (`state: CLOSED`, `mergedAt: null`). `Lint` **FAILURE**. Step conclusions below |
+| T019 | 2026-07-30 | PASS | Board 123 → 132. Nine cards, not the eight planned; see the count note |
+| T020 | 2026-07-30 | PASS | See final scope check |
+
+### T020: one file outside the allowlist, and why it is not scope creep
+
+`git diff --stat d6e64fc..HEAD` touches eleven files. Ten are inside FR-010's allowlist. The
+eleventh is **`.secrets.baseline`**, which is not, and that is stated plainly rather than waved
+through.
+
+The entire diff is mechanical:
+
+```
+-        "line_number": 212,
++        "line_number": 234,
+-  "generated_at": "2026-07-30T17:35:41Z"
++  "generated_at": "2026-07-30T20:35:06Z"
+```
+
+The tracked entry is an existing `pr-checks.yml` finding whose line number moved by 22 because T006
+inserted 22 lines above it. No secret was added, removed, or re-classified. The change was produced
+by the repo's own `scripts/detect-secrets-autostage.sh` wrapper, which CLAUDE.md documents as
+running the hook, auto-staging the baseline and retrying until stable — so any commit that shifts
+line numbers in a file with a baseline entry necessarily updates it. Avoiding it would have required
+bypassing a hook, which policy forbids.
+
+Recorded as a known, bounded exception to FR-010 rather than an unlogged eleventh file.
+
+Criteria 2 through 5 pass with no qualification: the detector is unmodified by this branch,
+`frontend/tests/e2e/**` is unmodified, no `__scratch` file appears anywhere in branch history, and
+all commits report `G` (good signature) under `git log --format='%G?'`.
+
+### T018 mode (d): the step conclusions are the whole result
+
+```
+5. Check formatting with ruff          -> success
+6. Check linting with ruff             -> failure    (co-planted F401)
+7. Check for security issues           -> skipped    (fail-fast)
+8. Check waitForResponse race ordering -> failure    (ran anyway)
+```
+
+Step 7 was skipped by fail-fast while step 8 ran. That isolates exactly what `if: always()` buys:
+without it, step 8 would have been skipped like step 7, the job would still have gone red on ruff
+alone, and the guard would have been shipped untested behind a plausible-looking red check. This is
+the condition AR#3 G-05 required the co-planted ruff violation to create, and it is the only run in
+the whole feature where the flag's absence would have been observable.
+
+Both failures in one run, from the job log:
+
+- `F401 [*] `json` imported but unused --> tests/unit/__scratch_ruff_violation.py:3:8`
+- `frontend/tests/e2e/__scratch-race.spec.ts:8 RACY` and
+  `SUMMARY: RACY 1 / PROMISE-FIRST 16 / OTHER 1 / total 18 / files scanned 49`
+
+Cleanup verified: PR closed unmerged, remote branch deleted and pruned, local branch deleted. The
+planted files appear in `git log` for neither `main` nor the feature branch, and commit `32cb1c6` is
+reachable from no remote branch.
+
+**Deviation from crit 2, recorded.** The prescribed bypass is
+`SKIP=scan-waitforresponse-race git commit -S`. That is insufficient once crit 3's co-planted ruff
+violation exists: the `ruff-check` pre-commit hook refuses the commit for an unrelated reason. Used
+`SKIP=scan-waitforresponse-race,ruff-check` instead. The tasks never reconciled crit 2's literal
+string with crit 3, which was added later by AR#3 G-05. No property is weakened — `ruff-check` is a
+pre-commit hook, and the point of mode (d) is that the `Lint` job is not one and `SKIP=` cannot
+reach it, which the run confirms: ruff failed *in CI* on the same violation the hook was told to
+skip locally. The guard hook reported `Skipped` in the commit output, which is itself the evidence
+crit 2 wanted that the local hook was armed and firing.
 
 ### T014 blocker: `make validate` never reaches the guard on this tree
 

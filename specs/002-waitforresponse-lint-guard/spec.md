@@ -552,9 +552,11 @@ Each criterion names the command that decides it.
   `grep -n 'check-waitforresponse-race' Makefile` shows the target on the `validate` dependency
   line.
 - **SC-014**: All required cards exist in `CLEANUP-BOARD.html`, verified by counting cards whose
-  `source` field is `002-waitforresponse-lint-guard`: exactly **8** — one guard card plus one per
-  FR-011 item (a) through (g), which is seven items. Total board count goes 118 → 120 (after 001's
-  two follow-up cards) → **128**. Counting by `source` rather than "locatable by grep" is
+  `source` field is `002-waitforresponse-lint-guard`: exactly **9** — one guard card, one per
+  FR-011 item (a) through (g), which is seven items, plus one for the `make validate` short-circuit
+  found at T014. Total board count goes **123 → 132**. *Amended at implementation, 2026-07-30.* The
+  original read "exactly 8" and "118 → 120 → 128"; the board was already at 123 when 002 ran, and
+  T014 surfaced a defect that existed in none of the FR-011 items. Counting by `source` rather than "locatable by grep" is
   deliberate: an unspecified grep pattern is satisfied by any eight cards, or by none.
 - **SC-015**: No file outside the FR-010 allowlist is modified, verified by `git diff --stat` against
   the branch point; and, after Phase E completes, the planted violation exists in no commit on
