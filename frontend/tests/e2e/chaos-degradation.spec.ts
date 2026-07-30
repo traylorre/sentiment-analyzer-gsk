@@ -10,6 +10,7 @@ import {
   getBannerLocator,
   getDismissButton,
 } from './helpers/chaos-helpers';
+import { searchAndAwaitResponse } from './helpers/search-helpers';
 
 /**
  * Chaos: API Degradation — Health Banner Lifecycle (Feature 1265, US1)
@@ -126,18 +127,25 @@ test.describe('Chaos: API Degradation', () => {
 
     const searchInput = page.getByPlaceholder(/search tickers/i);
 
-    // First search fails (requestCount === 1 -> 500)
-    await searchInput.fill('AAPL');
-    await page.waitForResponse(
-      (r) => r.url().includes('/tickers/search') && r.status() === 500,
-    );
+    // First search fails (requestCount === 1 -> 500).
+    // Query-scoped on q=AAPL: the 500 makes React Query retry (retry: 1, providers.tsx:48) about a
+    // second later, and that retry gets a 200. Without the q= clause the GOOG listener below could
+    // match the AAPL retry and the test would assert on a state GOOG never reached.
+    await searchAndAwaitResponse(page, searchInput, 'AAPL', {
+      predicate: (r) =>
+        r.url().includes('/tickers/search') &&
+        r.url().includes('q=AAPL') &&
+        r.status() === 500,
+    });
 
     // Second search succeeds (requestCount > 1 -> 200) — resets failure counter
-    await searchInput.fill('');
-    await searchInput.fill('GOOG');
-    await page.waitForResponse(
-      (r) => r.url().includes('/tickers/search') && r.status() === 200,
-    );
+    await searchAndAwaitResponse(page, searchInput, 'GOOG', {
+      clearFirst: true,
+      predicate: (r) =>
+        r.url().includes('/tickers/search') &&
+        r.url().includes('q=GOOG') &&
+        r.status() === 200,
+    });
 
     // Banner should NOT appear (only 1 failure, then recovery)
     const banner = getBannerLocator(page);
@@ -148,6 +156,11 @@ test.describe('Chaos: API Degradation', () => {
   test('cross-endpoint success prevents banner despite other endpoint failures', async ({
     page,
   }) => {
+    // Three 15000ms waits under Playwright's default 30000ms test cap (playwright.config.ts sets
+    // no top-level `timeout`) would let a second hung wait blow the test cap before the per-call
+    // cap fires, reporting against the test instead of the wait.
+    test.setTimeout(60000);
+
     // Block sentiment endpoint — returns 503
     await page.route('**/api/v2/sentiment**', (route) =>
       route.fulfill({
@@ -174,18 +187,13 @@ test.describe('Chaos: API Degradation', () => {
 
     // Interaction 1: search triggers both sentiment (fail) and ticker (success)
     // The success on ticker calls recordSuccess() which resets the counter
-    await searchInput.fill('AAPL');
-    await page.waitForResponse((r) => r.url().includes('/tickers/search'));
+    await searchAndAwaitResponse(page, searchInput, 'AAPL');
 
     // Interaction 2: same pattern — sentiment fails, ticker succeeds
-    await searchInput.fill('');
-    await searchInput.fill('GOOG');
-    await page.waitForResponse((r) => r.url().includes('/tickers/search'));
+    await searchAndAwaitResponse(page, searchInput, 'GOOG', { clearFirst: true });
 
     // Interaction 3: same pattern
-    await searchInput.fill('');
-    await searchInput.fill('MSFT');
-    await page.waitForResponse((r) => r.url().includes('/tickers/search'));
+    await searchAndAwaitResponse(page, searchInput, 'MSFT', { clearFirst: true });
 
     // Banner should NOT appear — each successful ticker response resets the counter
     const banner = getBannerLocator(page);
