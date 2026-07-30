@@ -682,8 +682,9 @@ detector rather than duplicate logic, so the single-definition property (FR-002)
 
 ### C2 — What lane, severity, and source should 002's board cards carry?
 
-**Answer**: the guard card lands in `done` at severity `medium`. The six FR-011 deferred cards land
-in `track` at severity `low`, except FR-011(d) and FR-011(f), which are `medium`.
+**Answer**: the guard card lands in `done` at severity `medium`. The seven FR-011 deferred cards,
+(a) through (g), land in `track` at severity `low`, except FR-011(d) and FR-011(f), which are
+`medium`.
 
 **Evidence**: `CLEANUP-BOARD.html` currently holds **118** cards
 (`raw_decode` on the text following `const CARDS = `). Its vocabularies are:
