@@ -224,12 +224,17 @@ test.describe('Chaos: API Degradation', () => {
     );
 
     const searchInput = page.getByPlaceholder(/search tickers/i);
+    // Register the listener BEFORE the action that triggers it. The route above
+    // is a route.fulfill mock, so it answers with no network latency: an
+    // act-then-wait ordering can miss the response entirely and then block until
+    // the timeout waiting for a second one that never arrives.
+    const searchResponse = page.waitForResponse(
+      (r) => r.url().includes('/tickers/search') && r.ok(),
+      { timeout: 15000 },
+    );
     await searchInput.fill('');
     await searchInput.fill('TSLA');
-    await page.waitForResponse(
-      (r) => r.url().includes('/tickers/search') && r.ok(),
-      { timeout: 5000 },
-    );
+    await searchResponse;
 
     // Remove the success mock
     await page.unroute('**/api/v2/tickers/search**');
