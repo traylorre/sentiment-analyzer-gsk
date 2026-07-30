@@ -97,11 +97,22 @@ items carried from 001's research say that instead.
 - **The `Lint` job is a required status check; the `Pre-commit Hooks` job is not.** *Checked at
   `35d5f61` via the GitHub API.*
   `repos/traylorre/sentiment-analyzer-gsk/branches/main/protection` reports
-  `required_status_checks.contexts` = `["Secrets Scan", "Lint", "Run Tests"]`, and
+  `required_status_checks.contexts` = `["Secrets Scan", "Lint", "Run Tests", "Playwright E2E Tests"]`, and
   `repos/.../rulesets` is empty. The `pre-commit` job's display name is `Pre-commit Hooks`
   (`pr-checks.yml:192`), which is absent from that list. **A red `Pre-commit Hooks` job does not
   block a merge**, and CLAUDE.md's documented workflow is `gh pr merge --auto --squash`, which waits
   only on required checks. 1400 FR-007 step (b) has not been performed for this job.
+
+  **Re-verified 2026-07-30 at implementation time, and the list had changed.** When this spec was
+  authored the contexts were `["Secrets Scan", "Lint", "Run Tests"]`. `"Playwright E2E Tests"` was
+  added as a fourth after PR #985 split the Playwright suite into a blocking job and a non-blocking
+  chaos job; the chaos job is deliberately not required. Every count and list in this feature's
+  artifacts has been updated to four. The load-bearing fact is unchanged: `Lint` is required and
+  `Pre-commit Hooks` is not, so FR-004's placement decision stands on the same reasoning it always
+  did. Recorded rather than silently corrected, because a spec whose pinned evidence drifts without
+  comment is indistinguishable from one that was never checked. Re-check with:
+  `gh api repos/traylorre/sentiment-analyzer-gsk/branches/main/protection --jq '.required_status_checks.contexts'`
+  (rulesets still `0`).
 - **The required `Lint` job can host the detector as-is.** *Checked at `35d5f61`.*
   `pr-checks.yml:35-65` runs `actions/setup-python@v7` with `PYTHON_VERSION: '3.13'` (`:29`) and
   then `pip install ruff==0.15.14`. It has a Python 3.13 interpreter on `PATH` and installs nothing
@@ -327,8 +338,8 @@ list. Exactly one definition site exists.
 - **FR-004 (blocking enforcement point)**: The guard MUST additionally run as a step in the
   **`Lint`** job of `.github/workflows/pr-checks.yml`, invoking the same detector directly.
 
-  This is the requirement that makes FR-001's "MUST fail CI" true. `Lint` is one of the three
-  required status checks on `main` (`["Secrets Scan", "Lint", "Run Tests"]`); the `Pre-commit Hooks`
+  This is the requirement that makes FR-001's "MUST fail CI" true. `Lint` is one of the four
+  required status checks on `main` (`["Secrets Scan", "Lint", "Run Tests", "Playwright E2E Tests"]`); the `Pre-commit Hooks`
   job is not, so a guard reaching CI only through the pre-commit config would be advisory and could
   not stop `gh pr merge --auto --squash`. The `Lint` job already provides Python 3.13 via
   `actions/setup-python@v7` and installs only ruff, so the step adds no dependency.
@@ -604,7 +615,7 @@ verified TRUE:
 
 | Re-checked claim | Command | Result |
 |---|---|---|
-| `Pre-commit Hooks` is not a required status check | `gh api repos/traylorre/sentiment-analyzer-gsk/branches/main/protection --jq '.required_status_checks.contexts'` | `["Secrets Scan","Lint","Run Tests"]`; rulesets count `0` |
+| `Pre-commit Hooks` is not a required status check | `gh api repos/traylorre/sentiment-analyzer-gsk/branches/main/protection --jq '.required_status_checks.contexts'` | `["Secrets Scan","Lint","Run Tests","Playwright E2E Tests"]`; rulesets count `0` |
 | The false-pass CI no-op was already documented | `sed -n '230,245p' .github/workflows/pr-checks.yml` | Documented verbatim at `:236-240` |
 | `check-error-log-assertions` is `stages: [push]` | `sed -n '168,189p' .pre-commit-config.yaml` | Confirmed at `:177` |
 | Scan root holds 47 `.ts` files, not "roughly ten" | `find frontend/tests/e2e -name "*.ts" \| wc -l` | `47` |
@@ -745,8 +756,8 @@ a file this feature does not own (FR-010).
 **Evidence**: the `Lint` job (`pr-checks.yml:35-65`) runs checkout → setup-python → install ruff →
 `ruff format --check` → `ruff check src/ tests/` → `ruff check src/ --select S`. Its identity is
 Python linting. A Playwright race scan is a genuine outlier there, placed in that job solely because
-it is one of the three required status checks
-(`["Secrets Scan", "Lint", "Run Tests"]`), which the `Pre-commit Hooks` job is not.
+it is one of the four required status checks
+(`["Secrets Scan", "Lint", "Run Tests", "Playwright E2E Tests"]`), which the `Pre-commit Hooks` job is not.
 
 Placing it last preserves the job's readable narrative and means a ruff failure — the far more
 common case — still surfaces first. The comment is not optional: a future maintainer tidying the

@@ -145,7 +145,7 @@ the lint invocation. Carded under FR-011(b).
 hook.
 
 **Rationale**: `main`'s branch protection lists `required_status_checks.contexts` =
-`["Secrets Scan", "Lint", "Run Tests"]`, with no rulesets. The `pre-commit` job's display name is
+`["Secrets Scan", "Lint", "Run Tests", "Playwright E2E Tests"]`, with no rulesets. The `pre-commit` job's display name is
 `Pre-commit Hooks` (`pr-checks.yml:192`) and is absent from that list. A guard reaching CI only
 through the pre-commit config would be **advisory**: it could go red and `gh pr merge --auto
 --squash`, the repo's documented merge command, would merge anyway.

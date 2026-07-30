@@ -133,7 +133,7 @@ unchecked. This is where prose meets a running program.
 
 ## Phase B — Local enforcement point (FR-003)
 
-- [ ] **T004** Add the `scan-waitforresponse-race` hook to `.pre-commit-config.yaml`
+- [x] **T004** Add the `scan-waitforresponse-race` hook to `.pre-commit-config.yaml`
   - **Files**: `.pre-commit-config.yaml`
   - **Satisfies**: FR-003, FR-004's `SKIP` constraint
   - **Acceptance criteria**:
@@ -151,7 +151,7 @@ unchecked. This is where prose meets a running program.
        does not "fix" it toward the `pytest` hook's form.
     7. `pre-commit run scan-waitforresponse-race --all-files` exits 0 on the clean tree.
 
-- [ ] **T005** Correct the two stale "BLOCKING gate" statements
+- [x] **T005** Correct the two stale "BLOCKING gate" statements
   - **Files**: `.pre-commit-config.yaml`, `.github/workflows/pr-checks.yml`
   - **Satisfies**: FR-015
   - **Acceptance criteria**:
@@ -162,7 +162,7 @@ unchecked. This is where prose meets a running program.
        (AR#3 G-10). This follows 001's own "PRE-SWEEP locators" discipline
        (`001/tasks.md:17-21`). Replacement states the verified position: the job runs on every PR to `main`,
        and is **not** among `main`'s `required_status_checks.contexts`
-       (`["Secrets Scan", "Lint", "Run Tests"]`).
+       (`["Secrets Scan", "Lint", "Run Tests", "Playwright E2E Tests"]`).
     2. The step name at `pr-checks.yml:229`, "Run pre-commit (blocking)", is corrected or annotated.
     3. The replacement text names how to re-check the claim
        (`gh api repos/traylorre/sentiment-analyzer-gsk/branches/main/protection`), so it can be
@@ -179,7 +179,7 @@ unchecked. This is where prose meets a running program.
 
 ## Phase C — Blocking enforcement point (FR-004, FR-014)
 
-- [ ] **T006** Add the guard step to the required `Lint` job
+- [x] **T006** Add the guard step to the required `Lint` job
   - **Files**: `.github/workflows/pr-checks.yml`
   - **Satisfies**: FR-004
   - **Acceptance criteria**:
@@ -192,14 +192,14 @@ unchecked. This is where prose meets a running program.
        this any ruff failure means the guard never runs and produces no output (AR#2 N-06). The job
        still fails; both failures surface in one run.
     4. It carries a comment explaining why a Playwright race scan lives in a job named `Lint`:
-       `Lint` is one of `main`'s three required status checks and `Pre-commit Hooks` is not, so this
+       `Lint` is one of `main`'s four required status checks and `Pre-commit Hooks` is not, so this
        is the only place the guard can actually block a merge. Without the comment, a maintainer
        tidying the job would reasonably move the step out and silently make the guard advisory.
     5. No new `pip install` is added. The job already provides Python 3.13 via
        `actions/setup-python@v7` (`pr-checks.yml:29`, `:46-50`) and the detector is stdlib-only.
     6. The `Lint` job's existing steps are unchanged.
 
-- [ ] **T007** Add the `check-waitforresponse-race` make target and wire it into `validate`
+- [x] **T007** Add the `check-waitforresponse-race` make target and wire it into `validate`
   - **Files**: `Makefile`
   - **Satisfies**: FR-014, Clarification C1
   - **Acceptance criteria**:
