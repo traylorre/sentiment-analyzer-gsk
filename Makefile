@@ -74,12 +74,8 @@ sast: ## Run SAST (Static Application Security Testing) - Bandit + Semgrep
 	bandit -c pyproject.toml -r src/ -ll || true
 	@echo ""
 	@echo "$(YELLOW)Running Semgrep (comprehensive SAST)...$(NC)"
-	@if command -v semgrep &>/dev/null; then \
-		semgrep scan --config auto --error --severity ERROR --severity WARNING src/ 2>/dev/null || \
-		echo "$(RED)✗ Semgrep found security issues$(NC)"; \
-	else \
-		echo "$(YELLOW)Semgrep not installed, skipping. Install with: pip install semgrep$(NC)"; \
-	fi
+	@command -v semgrep >/dev/null 2>&1 || { echo "$(RED)✗ Semgrep not installed. Install: pip install -r requirements-dev.txt$(NC)"; exit 1; }
+	semgrep scan --config auto --error --severity ERROR --severity WARNING src/
 	@echo "$(GREEN)✓ SAST scan complete$(NC)"
 
 audit-pragma: ## Audit pragma comments (# noqa, # nosec) for validity
