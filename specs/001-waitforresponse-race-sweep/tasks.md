@@ -70,13 +70,34 @@ the baseline, because a baseline taken after a conversion is worthless.
        which **7 are comments** (`error-visibility-search.spec.ts:141`, `helpers/chaos-helpers.ts:338`,
        `helpers/chaos-helpers.ts:392`, `ticker-search-gaps.spec.ts:37`, `:230`, `:236`, `:243`).
        The script MUST report **34**, not 41.
-    5. Output names every site as `file:line CLASSIFICATION` plus a summary line with the four counts.
-    6. `sys.exit(1)` when `RACY > 0`; `sys.exit(0)` otherwise. Assert both branches by running the
-       script before and after Phase C (T002 → exit 1; T018 → exit 0).
+    5. Output names every site as `file:line CLASSIFICATION`, **on stdout**, plus a summary line
+       carrying **five** numbers: RACY, PROMISE-FIRST, OTHER, total, and **files scanned**. When
+       `RACY > 0`, the output additionally carries remediation guidance: a literal corrected example
+       showing `const <name>Promise = page.waitForResponse(...)` positioned *before* the triggering
+       action, then awaited after it. A developer whose commit is refused must be able to act on the
+       message without opening the spec.
+       *(Requirements 5, 6, 8 and 12 are shaped by the dependent regression-guard feature, which
+       consumes this script as a contract. See `specs/002-waitforresponse-lint-guard/contracts/detector-cli.md`.
+       They were folded in before implementation so the guard needs no modification to the script.)*
+    6. `sys.exit(1)` when `RACY > 0`. `sys.exit(0)` **only** when the scan examined at least one
+       file and found no `RACY` site. A scan that examines **zero files** exits **non-zero**,
+       whatever the reason — root missing, root renamed, root present but empty. A guard whose
+       target has moved must fail loudly rather than report a clean tree. Assert the `RACY > 0` and
+       clean branches by running the script before and after Phase C (T002 → exit 1; T018 → exit 0),
+       and assert the zero-file branch against an empty temporary directory.
     7. It classifies `chaos-scenarios.spec.ts:138` as `OTHER` (an intervening
        `await expect(...).toBeVisible({ timeout: 2000 })` separates its `page.reload()` from the wait).
        If it reports `RACY` there, the adjacency rule is not implemented correctly.
-    8. Runs under the project venv: `source .venv/bin/activate && python scripts/scan-waitforresponse-race.py`.
+    8. **Standard library only.** No third-party import, so the script runs under a bare `python3`
+       with no virtualenv and no installed dependencies. Verify in a stdlib-only sandbox:
+       `python3 -I -S scripts/scan-waitforresponse-race.py` must behave identically to a normal run.
+       (`-I -S` is the correct sandbox here. Clearing `VIRTUAL_ENV` leaves `.venv/bin` on `PATH`, and
+       `/usr/bin/python3` is 3.12 on the dev machine and 3.10 per CLAUDE.md, so neither alternative
+       is a faithful test.) It must also still run under the project venv:
+       `source .venv/bin/activate && python scripts/scan-waitforresponse-race.py`. The stdlib
+       constraint exists because the CI job that will enforce this script installs no project
+       dependencies; a single `import yaml` would put the guard permanently red in an environment
+       nobody is blocked by, which is how guards get skip-listed.
     9. NOT wired into pre-commit or any workflow (spec C4). `grep -rn "scan-waitforresponse-race" .pre-commit-config.yaml .github/` returns nothing.
     10. `OTHER` sites are printed under an explicit **"requires human triage"** banner, not folded
         into the summary counts alone. A shape the classifier cannot place must be *visible*, or it
@@ -88,6 +109,18 @@ the baseline, because a baseline taken after a conversion is worthless.
         **admin** pytest suite under `tests/`, and this repo has a documented history of confusing
         the two dashboards (CLAUDE.md, "Two Dashboards"). A reader must not have to open the source
         to learn which suite this scans.
+    12. **The scan root is fixed; file arguments are ignored.** Invoked with arbitrary paths as
+        positional arguments, the script still walks `frontend/tests/e2e/` and scans nothing else.
+        It MUST NOT accept a file list that narrows the scan. This is load-bearing for the dependent
+        guard: its pre-commit hook runs `pass_filenames: false` against an **untracked** planted
+        file, which a file-list-driven detector would never be handed and would silently report
+        clean. If argparse is used, do not add a positional `paths` argument.
+    13. **Interpreter floor asserted in-script.** The first executable statement checks
+        `sys.version_info >= (3, 13)` and, if not, prints the required version and exits non-zero.
+        The guard invokes this script as a bare `python3`, which resolves from the committing
+        shell's `PATH` — verified to be 3.12.3 on the dev machine with the venv off `PATH`, and
+        documented as 3.10 system-wide in CLAUDE.md. Without this check the guard runs the detector
+        under an unvalidated interpreter and the result is silently untrustworthy.
 
 - [ ] **T002** [US1] Capture the pre-sweep scan baseline (depends on T001)
   - **Files**: none modified; output recorded in the T001/T002 commit message and pasted into this

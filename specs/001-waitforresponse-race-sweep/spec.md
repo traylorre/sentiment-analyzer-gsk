@@ -511,8 +511,18 @@ test suite and report", and Python is the repo standard with venv and pre-commit
 **Answer**: No. Commit it as a runnable artifact only.
 
 **Evidence**: enforcement is the dependent regression-guard feature, listed in this spec's Out of
-Scope. The script exits non-zero when `RACY > 0` so the guard can wire it in without modification,
-but this feature does not add it to pre-commit or any workflow.
+Scope. This feature does not add the script to pre-commit or any workflow.
+
+**Amended after the guard feature was specified.** This answer originally read "the script exits
+non-zero when `RACY > 0` so the guard can wire it in without modification". That was wrong in a way
+worth recording: the guard's own review derived six requirements on this script that T001 did not
+carry, four of which its criteria actively contradicted. Exiting non-zero on `RACY > 0` is necessary
+and nowhere near sufficient. T001 criteria 5, 6, 8, 12 and 13 now carry the full contract
+(stdlib-only invocation, five summary numbers including files-scanned, non-zero on a zero-file scan,
+findings on stdout, remediation guidance in the failure output, a fixed scan root that ignores file
+arguments, and an in-script interpreter floor). The contract of record is
+`specs/002-waitforresponse-lint-guard/contracts/detector-cli.md`. With those folded in, the original
+claim holds: the guard wires this script in without modifying it.
 
 ### C5 — Should the six already-correct sites adopt the helper for consistency?
 
