@@ -1089,7 +1089,7 @@ them now requires an artifact edit or an owner decision**:
 | Task | Date | Result |
 |---|---|---|
 | T002 | 2026-07-30 | **PASS.** `RACY 27 / PROMISE-FIRST 6 / OTHER 1 / total 34 / files scanned 47`, exit **1**, at `18b5323`. All 27 RACY lines and all 6 PROMISE-FIRST lines match the spec inventory exactly (criteria 4, 5). The single `OTHER` is `chaos-scenarios.spec.ts:138`, as criterion 7 requires. Full output below. |
-| T003 | | |
+| T003 | 2026-07-30 | **29 tests: 26 passed / 3 failed / 0 skipped** in 38.0s, at `18b5323`, `--project="Desktop Chrome"` against `PREPROD_FRONTEND_URL=https://main.d29tlmksqcx494.amplifyapp.com` (the Amplify customer dashboard, per CLAUDE.md rule 2 — not the Lambda URL). All 3 failures are in `chaos-error-boundary.spec.ts` (`:26`, `:59`, `:85`), a file this sweep does **not** convert; it is one of the two unedited `triggerHealthBanner` callers. Pre-existing and unrelated to the race class. Counting run only, non-evidential per criterion 3. |
 | T018 | | |
 | T020 | | |
 | T021 | | |
