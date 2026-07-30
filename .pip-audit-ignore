@@ -16,3 +16,6 @@ PYSEC-2025-217     2026-10-22   transformers 4.57.6; no fixed release listed; up
 PYSEC-2026-2288    2026-10-22   transformers 4.57.6; fix is 5.0.0 (major); upgrade deferred to Feature 1399 (torch/transformers decision)
 PYSEC-2026-2289    2026-10-22   transformers 4.57.6; fix is 5.3.0 (major); upgrade deferred to Feature 1399 (torch/transformers decision)
 PYSEC-2026-2290    2026-10-22   transformers 4.57.6; fix is 5.5.0 (major); upgrade deferred to Feature 1399 (torch/transformers decision)
+PYSEC-2026-3481    2026-09-30   mcp 1.23.3 is a strict transitive pin of semgrep 1.172.0 (latest release as of 2026-07-29); dev-only SAST tooling, never deployed to Lambda; remove when semgrep ships mcp>=1.27.2
+PYSEC-2026-3482    2026-09-30   mcp 1.23.3 is a strict transitive pin of semgrep 1.172.0 (latest release as of 2026-07-29); dev-only SAST tooling, never deployed to Lambda; remove when semgrep ships mcp>=1.27.2
+PYSEC-2026-3483    2026-09-30   mcp 1.23.3 is a strict transitive pin of semgrep 1.172.0 (latest release as of 2026-07-29); dev-only SAST tooling, never deployed to Lambda; remove when semgrep ships mcp>=1.28.1
