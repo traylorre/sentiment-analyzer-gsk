@@ -140,6 +140,7 @@ The Lambda is named `dashboard Lambda`, the handler is `src/lambdas/dashboard/`,
 - Python 3.13 (Lambda base image `public.ecr.aws/lambda/python:3.13` for image Lambdas; managed python3.13 runtime for ZIP Lambdas) + stdlib `logging` only for the mechanism; aws-lambda-powertools 3.23.0 already present (dashboard handler) and untouched (001-lambda-log-visibility)
 - N/A (observability-only; no data-store changes) (001-lambda-log-visibility)
 - GNU Make (Makefile recipe edit), Markdown (two doc edits), HTML (board card lane move). No Python code. + None added or removed. tfsec binary itself is untouched (remains at user level on some machines). (001-tfsec-removal)
+- GNU Make (recipe edit), pip requirements + TOML (two pin edits), Python 3.13 (one-argument fix in `src/lambdas/analysis/sentiment.py` + one new unit test), Dockerfile comments (two suppressions), HTML (board card string surgery). + `semgrep==1.172.0` added to requirements-dev.txt; pyproject dev extra tightened from `>=1.50.0` to the same pin. requirements-ci.txt untouched (FR-001). No runtime dependencies change. (001-semgrep-gating)
 
 - **Python 3.13** with aws-lambda-powertools, boto3, pydantic, httpx, orjson
 - **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, Amplify
@@ -937,6 +938,7 @@ aws cloudwatch get-metric-data --metric-data-queries '[...]' --start-time ... --
 ```
 
 ## Recent Changes
+- 001-semgrep-gating: Added GNU Make (recipe edit), pip requirements + TOML (two pin edits), Python 3.13 (one-argument fix in `src/lambdas/analysis/sentiment.py` + one new unit test), Dockerfile comments (two suppressions), HTML (board card string surgery). + `semgrep==1.172.0` added to requirements-dev.txt; pyproject dev extra tightened from `>=1.50.0` to the same pin. requirements-ci.txt untouched (FR-001). No runtime dependencies change.
 - 001-tfsec-removal: Added GNU Make (Makefile recipe edit), Markdown (two doc edits), HTML (board card lane move). No Python code. + None added or removed. tfsec binary itself is untouched (remains at user level on some machines).
 - 001-lambda-log-visibility: Added Python 3.13 (Lambda base image `public.ecr.aws/lambda/python:3.13` for image Lambdas; managed python3.13 runtime for ZIP Lambdas) + stdlib `logging` only for the mechanism; aws-lambda-powertools 3.23.0 already present (dashboard handler) and untouched
 - 1256-restrict-function-urls: Added HCL (Terraform 1.5+, AWS Provider ~> 5.0)

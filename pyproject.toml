@@ -52,7 +52,7 @@ dev = [
     "aws-xray-sdk>=2.12.0",
     # SAST tools (070-validation-blindspot-audit)
     "bandit==1.9.4",  # Feature 1400: pinned to match requirements-{dev,ci}.txt + pre-commit rev
-    "semgrep>=1.50.0",
+    "semgrep==1.172.0",  # Feature 001-semgrep-gating: pinned to match requirements-dev.txt
 ]
 
 [project.urls]

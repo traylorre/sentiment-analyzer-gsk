@@ -114,8 +114,11 @@ def _download_model_from_s3() -> None:
 
         # Extract tar.gz to /tmp/model
         extract_start = time.perf_counter()
+        # Extraction hardened with filter="data" (raises on traversal/absolute/link
+        # members; unit-tested). The trailofbits rule pattern predates the filter argument.
+        # nosemgrep: trailofbits.python.tarfile-extractall-traversal.tarfile-extractall-traversal
         with tarfile.open(tar_path, "r:gz") as tar:
-            tar.extractall(path="/tmp")  # nosec B108 B202 - Lambda /tmp
+            tar.extractall(path="/tmp", filter="data")  # nosec B108 B202 - Lambda /tmp
         extract_time_ms = (time.perf_counter() - extract_start) * 1000
 
         logger.info(
