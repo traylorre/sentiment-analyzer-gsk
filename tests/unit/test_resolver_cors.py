@@ -210,12 +210,12 @@ class TestResolverCors:
                 acao_values = val
                 break
 
-        assert (
-            acao_values is not None
-        ), "Access-Control-Allow-Origin not found in multiValueHeaders"
-        assert isinstance(
-            acao_values, list
-        ), f"ACAO value should be a list, got {type(acao_values)}"
+        assert acao_values is not None, (
+            "Access-Control-Allow-Origin not found in multiValueHeaders"
+        )
+        assert isinstance(acao_values, list), (
+            f"ACAO value should be a list, got {type(acao_values)}"
+        )
         assert acao_values == [ALLOWED_ORIGIN]
 
     def test_api_index_route_gets_cors(self, mock_lambda_context):

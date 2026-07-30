@@ -118,9 +118,9 @@ class TestXRaySilentFailureInstrumentation:
     def test_all_source_files_exist(self):
         """All source files under test must be present on disk."""
         for module_name, path in _SOURCE_FILES.items():
-            assert (
-                path.exists()
-            ), f"Source file missing for module '{module_name}': {path}"
+            assert path.exists(), (
+                f"Source file missing for module '{module_name}': {path}"
+            )
 
     def test_expected_subsegment_names_are_present_in_codebase(self):
         """Every expected subsegment name must appear in at least one source file."""

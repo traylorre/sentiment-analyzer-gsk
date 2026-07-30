@@ -341,17 +341,17 @@ class TestSentimentLabelThresholds:
             label = point["label"]
 
             if score >= 0.33:
-                assert (
-                    label == "positive"
-                ), f"Score {score} >= 0.33 should be 'positive', got '{label}'"
+                assert label == "positive", (
+                    f"Score {score} >= 0.33 should be 'positive', got '{label}'"
+                )
             elif score <= -0.33:
-                assert (
-                    label == "negative"
-                ), f"Score {score} <= -0.33 should be 'negative', got '{label}'"
+                assert label == "negative", (
+                    f"Score {score} <= -0.33 should be 'negative', got '{label}'"
+                )
             else:
-                assert (
-                    label == "neutral"
-                ), f"Score {score} between thresholds should be 'neutral', got '{label}'"
+                assert label == "neutral", (
+                    f"Score {score} between thresholds should be 'neutral', got '{label}'"
+                )
 
     @pytest.mark.sentiment_history
     @pytest.mark.boundary
@@ -390,6 +390,6 @@ class TestSentimentLabelThresholds:
         for point in data["history"]:
             if "confidence" in point and point["confidence"] is not None:
                 confidence = point["confidence"]
-                assert (
-                    0.0 <= confidence <= 1.0
-                ), f"Confidence {confidence} out of [0.0, 1.0] bounds"
+                assert 0.0 <= confidence <= 1.0, (
+                    f"Confidence {confidence} out of [0.0, 1.0] bounds"
+                )

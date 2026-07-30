@@ -529,6 +529,54 @@ class TestS3ModelDownload:
 
                 assert_error_logged(caplog, "Failed to download model from S3")
 
+    def test_download_model_rejects_traversal_member(self, tmp_path, caplog):
+        """Test extraction rejects a tar member escaping the destination.
+
+        The filter="data" hardening must raise tarfile.OutsideDestinationError
+        on a ../-escaping member; the download wrapper converts it to
+        ModelLoadError. Asserting on __cause__ discriminates the hardened
+        extraction from the unhardened one (which fails differently or not
+        at all).
+        """
+        import shutil
+        import tarfile
+        from pathlib import Path
+
+        from src.lambdas.analysis.sentiment import _download_model_from_s3
+
+        model_path = tmp_path / "model"
+
+        # Build a tar.gz containing a member that escapes the destination
+        payload = tmp_path / "payload.txt"
+        payload.write_text("escaped")
+        malicious_tar = tmp_path / "malicious.tar.gz"
+        with tarfile.open(malicious_tar, "w:gz") as tar:
+            tar.add(payload, arcname="../model_escape_test.txt")
+
+        def fake_download(Bucket, Key, Filename):
+            shutil.copyfile(malicious_tar, Filename)
+
+        try:
+            with patch(
+                "src.lambdas.analysis.sentiment.LOCAL_MODEL_PATH", str(model_path)
+            ):
+                with patch("boto3.client") as mock_boto3_client:
+                    mock_s3 = MagicMock()
+                    mock_s3.download_file.side_effect = fake_download
+                    mock_boto3_client.return_value = mock_s3
+
+                    with pytest.raises(ModelLoadError) as exc_info:
+                        _download_model_from_s3()
+
+            # Load-bearing assertion: the hardened extraction raises
+            # OutsideDestinationError; the unhardened path would surface a
+            # different cause (or none at all when running privileged).
+            assert isinstance(exc_info.value.__cause__, tarfile.OutsideDestinationError)
+            # Belt-and-braces: nothing escaped the extraction destination
+            assert not Path("/model_escape_test.txt").exists()
+        finally:
+            Path("/tmp/model.tar.gz").unlink(missing_ok=True)
+
     def test_general_client_error(self, tmp_path, caplog):
         """Test general S3 ClientError handling (e.g., AccessDenied)."""
         from botocore.exceptions import ClientError

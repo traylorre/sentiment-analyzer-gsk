@@ -52,12 +52,12 @@ class TestCORSE2E:
             timeout=10,
         )
         assert preflight.status_code == 200
-        assert (
-            preflight.headers.get("Access-Control-Allow-Origin") == ALLOWED_ORIGIN
-        ), "Preflight must echo the allowed origin"
-        assert (
-            preflight.headers.get("Access-Control-Allow-Credentials") == "true"
-        ), "Preflight must include Allow-Credentials: true"
+        assert preflight.headers.get("Access-Control-Allow-Origin") == ALLOWED_ORIGIN, (
+            "Preflight must echo the allowed origin"
+        )
+        assert preflight.headers.get("Access-Control-Allow-Credentials") == "true", (
+            "Preflight must include Allow-Credentials: true"
+        )
 
         # Step 2: Make authenticated API call
         response = requests.get(
@@ -69,12 +69,12 @@ class TestCORSE2E:
             timeout=10,
         )
         # Should get a successful response (200) or at least not a CORS error
-        assert (
-            response.status_code == 200
-        ), f"Expected 200 from authenticated API call, got {response.status_code}"
+        assert response.status_code == 200, (
+            f"Expected 200 from authenticated API call, got {response.status_code}"
+        )
 
         # Step 3: Verify response includes correct CORS headers
         allow_origin = response.headers.get("Access-Control-Allow-Origin", "")
-        assert (
-            allow_origin == ALLOWED_ORIGIN
-        ), f"Response must echo allowed origin, got: {allow_origin}"
+        assert allow_origin == ALLOWED_ORIGIN, (
+            f"Response must echo allowed origin, got: {allow_origin}"
+        )

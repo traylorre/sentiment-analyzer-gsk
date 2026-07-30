@@ -15,7 +15,12 @@
 #
 # For On-Call Engineers:
 #   If hooks fail in CI but not locally:
-#   1. Run: pre-commit autoupdate
+#   1. Do NOT run `pre-commit autoupdate` — ruff is version-locked across five
+#      surfaces (requirements-dev.txt, requirements-ci.txt, pyproject.toml,
+#      pr-checks.yml lint job, and the rev below). pyproject's
+#      [tool.ruff] required-version rejects any other binary, so an autoupdate
+#      past the rev bricks every commit. Ruff upgrades are a deliberate
+#      multi-surface operation: see specs/001-ruff-bump-forward.
 #   2. Run: pre-commit run --all-files
 #   3. Check Python/Terraform versions match CI
 #
@@ -51,9 +56,9 @@ repos:
   # Note: Black removed in feat(057) - Ruff formatter preserves pragma comments
   # (# noqa, # nosec, # type:) by excluding them from line length calculations
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.4
+    rev: v0.15.14
     hooks:
-      - id: ruff
+      - id: ruff-check
         args: [--fix]
       - id: ruff-format
 

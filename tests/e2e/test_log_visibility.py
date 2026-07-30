@@ -118,9 +118,9 @@ class TestDashboardRefreshClassification:
             text=True,
             timeout=300,
         )
-        assert (
-            result.returncode == 0
-        ), f"verify-log-visibility failed:\n{result.stdout}\n{result.stderr}"
+        assert result.returncode == 0, (
+            f"verify-log-visibility failed:\n{result.stdout}\n{result.stderr}"
+        )
 
 
 class TestNotificationDigestDarkLines:
@@ -139,9 +139,9 @@ class TestNotificationDigestDarkLines:
             FunctionName=_function_name("notification"),
             Payload=json.dumps({"notification_type": "digest"}).encode(),
         )
-        assert (
-            resp.get("FunctionError") is None
-        ), "notification invoke errored — packaging/import regression"
+        assert resp.get("FunctionError") is None, (
+            "notification invoke errored — packaging/import regression"
+        )
         start_ms = _last_modified_ms(lambda_client, "notification")
         assert _find_line(
             logs_client, _log_group("notification"), SELF_TEST_MESSAGE, start_ms

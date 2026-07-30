@@ -61,12 +61,12 @@
 
 ## Phase 6: Merge, Deploy & Post-Deploy Verification
 
-- [ ] T021 Pre-push gate: `make validate` + `pytest tests/unit/` + security-alert check per CLAUDE.md pre-push checklist; PR with plan-linked description; owner-gated push per standing rule
-- [ ] T022 Merge → deploy pipeline; monitor Deploy-to-Preprod + Preprod Integration Tests (Monitor tool pattern; stuck-credentials watch)
-- [ ] T023 Post-deploy: run `scripts/verify-log-visibility.py` (SC-001 + SC-006); run `pytest tests/e2e/test_log_visibility.py -m preprod` (FR-008 all six; SC-002 start)
-- [ ] T024 [P] SC-003 comparison: re-capture the six log-group samples (as T002) post-deploy; diff warning/error line shapes (FR-003), powertools/StructuredLogger JSON byte-shape (FR-004 vs T003 baseline — no ADDITIONAL duplication), re-run T005 positive control identically; record verdicts in `specs/001-lambda-log-visibility/evidence/post-deploy/`
-- [ ] T025 [P] SC-005 close: re-run T004's 20-request workload, p50 delta ≤10 INFO lines; project monthly ingestion delta <$1; record in evidence/post-deploy/
-- [ ] T026 [P] SC-004/SC-007 week-one watch: scheduled queries (token= pattern AND @-address pattern AND `[DEBUG]`) across six groups; record daily results in evidence/post-deploy/week-one.md; SC-004 caveat: a deliberate LOG_LEVEL=DEBUG window, if any, must be recorded
+- [X] T021 Pre-push gate: `make validate` + `pytest tests/unit/` + security-alert check per CLAUDE.md pre-push checklist; PR with plan-linked description; owner-gated push per standing rule
+- [X] T022 Merge → deploy pipeline; monitor Deploy-to-Preprod + Preprod Integration Tests (Monitor tool pattern; stuck-credentials watch) — final deploy run 30460798707 SUCCESS 2026-07-29 (after metrics crash-loop rounds 1-2, PRs #968/#972)
+- [X] T023 Post-deploy: run `scripts/verify-log-visibility.py` (SC-001 + SC-006); run `pytest tests/e2e/test_log_visibility.py -m preprod` (FR-008 all six; SC-002 start) — evidence/post-deploy/sc001-sc006-drill-pass.md
+- [X] T024 [P] SC-003 comparison: re-capture the six log-group samples (as T002) post-deploy; diff warning/error line shapes (FR-003), powertools/StructuredLogger JSON byte-shape (FR-004 vs T003 baseline — no ADDITIONAL duplication), re-run T005 positive control identically; record verdicts in `specs/001-lambda-log-visibility/evidence/post-deploy/` — t024-consumer-comparison.md
+- [X] T025 [P] SC-005 close: re-run T004's 20-request workload, p50 delta ≤10 INFO lines; project monthly ingestion delta <$1; record in evidence/post-deploy/ — t025-p50-delta.md PASS
+- [ ] T026 [P] SC-004/SC-007 week-one watch: scheduled queries (token= pattern AND @-address pattern AND `[DEBUG]`) across six groups; record daily results in evidence/post-deploy/week-one.md; SC-004 caveat: a deliberate LOG_LEVEL=DEBUG window, if any, must be recorded — IN PROGRESS: days 1-3 recorded PASS (day 3: 2026-07-29); days 4-7 pending
 
 **Checkpoint**: SC-001..SC-007 all evidenced; feature DONE pending week-one watch closure.
 

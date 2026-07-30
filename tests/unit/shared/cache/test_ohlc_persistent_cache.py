@@ -493,9 +493,9 @@ class TestTTLExpiration:
         expected_ttl = frozen_epoch + (90 * 86400)
 
         # Tolerance: +/- 1 day (86400 seconds)
-        assert (
-            abs(stored_ttl - expected_ttl) <= 86400
-        ), f"TTL {stored_ttl} not within 1 day of expected {expected_ttl}"
+        assert abs(stored_ttl - expected_ttl) <= 86400, (
+            f"TTL {stored_ttl} not within 1 day of expected {expected_ttl}"
+        )
 
     @mock_aws
     def test_current_day_intraday_ttl_5_minutes(self, env_vars):
@@ -550,9 +550,9 @@ class TestTTLExpiration:
         expected_ttl = frozen_epoch + 300
 
         # Tolerance: +/- 1 minute (60 seconds)
-        assert (
-            abs(stored_ttl - expected_ttl) <= 60
-        ), f"TTL {stored_ttl} not within 1 minute of expected {expected_ttl}"
+        assert abs(stored_ttl - expected_ttl) <= 60, (
+            f"TTL {stored_ttl} not within 1 minute of expected {expected_ttl}"
+        )
 
     @mock_aws
     def test_past_day_intraday_ttl_90_days(self, env_vars):
@@ -605,9 +605,9 @@ class TestTTLExpiration:
         expected_ttl = frozen_epoch + (90 * 86400)
 
         # Tolerance: +/- 1 day (86400 seconds)
-        assert (
-            abs(stored_ttl - expected_ttl) <= 86400
-        ), f"TTL {stored_ttl} not within 1 day of expected {expected_ttl}"
+        assert abs(stored_ttl - expected_ttl) <= 86400, (
+            f"TTL {stored_ttl} not within 1 day of expected {expected_ttl}"
+        )
 
 
 class TestDirectParsing:

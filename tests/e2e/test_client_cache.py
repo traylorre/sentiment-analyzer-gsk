@@ -210,9 +210,9 @@ class TestOfflineDataAccess:
         # Cache should be accessible offline
         # This tests IndexedDB works without network
         # Note: May be null if no data was cached yet - that's expected in TDD
-        assert (
-            cached_data is not None or cached_data is False
-        ), "Cache should be queryable in offline mode"
+        assert cached_data is not None or cached_data is False, (
+            "Cache should be queryable in offline mode"
+        )
 
     def test_offline_mode_indicator_shown(self, dashboard_page: Page) -> None:
         """T060: Dashboard shows degraded mode indicator when offline.
@@ -282,9 +282,9 @@ class TestCacheVersionValidation:
             }
         """)
 
-        assert (
-            version_tracked is True
-        ), "Cache version should be tracked in localStorage"
+        assert version_tracked is True, (
+            "Cache version should be tracked in localStorage"
+        )
 
     def test_cache_cleared_on_version_mismatch(self, dashboard_page: Page) -> None:
         """Cache should be cleared when version changes.

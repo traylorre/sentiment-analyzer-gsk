@@ -4,7 +4,7 @@
 [![Python 3.13](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/downloads/)
 [![Coverage](https://img.shields.io/badge/coverage-%3E80%25-brightgreen.svg)](./pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-261230.svg)](https://github.com/astral-sh/ruff)
 [![Terraform](https://img.shields.io/badge/terraform-%3E%3D1.5-623CE4.svg?logo=terraform)](https://www.terraform.io/)
 [![AWS](https://img.shields.io/badge/AWS-Lambda%20%7C%20DynamoDB-FF9900.svg?logo=amazon-aws)](https://aws.amazon.com/)
 
@@ -613,7 +613,7 @@ pip install -r requirements-dev.txt
 pytest
 
 # 4. Run linting
-black --check src/ tests/
+ruff format --check src/ tests/
 ruff check src/ tests/
 ```
 
@@ -691,7 +691,6 @@ python --version
 
 # ✅ Dependencies installed
 pytest --version
-black --version
 ruff --version
 
 # ✅ Git configured
@@ -723,7 +722,7 @@ pre-commit install --hook-type pre-push
 
 **What happens automatically:**
 
-- **On commit**: Formatting (black), linting (ruff), Terraform fmt, security checks
+- **On commit**: Formatting and linting (ruff), Terraform fmt, security checks
 - **On push**: Full test suite runs before code is pushed
 
 **Manual commands:**
@@ -765,7 +764,7 @@ git checkout -b feature/your-feature-name
 pytest
 
 # Ensure code follows project conventions
-black src/ tests/
+ruff format src/ tests/
 ruff check src/ tests/
 ```
 
@@ -981,7 +980,7 @@ sentiment-analyzer-gsk/
 
 **All contributions require:**
 - Passing tests (`pytest`)
-- Code formatting (`black`, `ruff`)
+- Code formatting (`ruff`)
 - Security scans (automated via pre-commit)
 - Review approval from @traylorre
 

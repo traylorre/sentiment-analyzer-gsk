@@ -129,9 +129,9 @@ class TestDashboardLoad:
 
         # SC-001: < 500ms for returning users
         # Note: First load may be slower due to cold start, use generous threshold
-        assert (
-            load_time_ms < 5000
-        ), f"Dashboard load took {load_time_ms:.0f}ms, expected < 5000ms"
+        assert load_time_ms < 5000, (
+            f"Dashboard load took {load_time_ms:.0f}ms, expected < 5000ms"
+        )
 
     def test_skeleton_ui_shown_not_spinner(self, dashboard_page: Page) -> None:
         """FR-011: Display skeleton placeholders, never loading spinners.
@@ -166,9 +166,9 @@ class TestDashboardLoad:
         has_skeleton = any(page.locator(sel).count() > 0 for sel in skeleton_selectors)
 
         # Either no spinners found, or skeleton UI is present
-        assert (
-            len(spinners_found) == 0 or has_skeleton
-        ), f"Found spinners {spinners_found} without skeleton UI (FR-011)"
+        assert len(spinners_found) == 0 or has_skeleton, (
+            f"Found spinners {spinners_found} without skeleton UI (FR-011)"
+        )
 
     def test_default_resolution_is_5m(self, timeseries_ready_page: Page) -> None:
         """Default resolution should be 5m per spec.
@@ -249,9 +249,9 @@ class TestResolutionSwitching:
 
         # SC-002: < 100ms for cached resolution
         # Use generous threshold for E2E (network variance)
-        assert (
-            switch_time < 1000
-        ), f"Resolution switch took {switch_time:.0f}ms, expected < 1000ms"
+        assert switch_time < 1000, (
+            f"Resolution switch took {switch_time:.0f}ms, expected < 1000ms"
+        )
 
     def test_all_6_resolutions_available(self, timeseries_ready_page: Page) -> None:
         """FR-002: System supports 6 resolution levels.
@@ -291,9 +291,9 @@ class TestResolutionSwitching:
 
         # Should have all 6 resolutions available
         for res in RESOLUTIONS:
-            assert (
-                res in available_resolutions
-            ), f"Resolution {res} not available (FR-002)"
+            assert res in available_resolutions, (
+                f"Resolution {res} not available (FR-002)"
+            )
 
     def test_cached_resolution_loads_instantly(
         self, timeseries_ready_page: Page
@@ -339,9 +339,9 @@ class TestResolutionSwitching:
 
         # Either cache shows hit, or no network request was made
         timeseries_requests = [r for r in network_requests if "timeseries" in r]
-        assert (
-            cache_hit is True or len(timeseries_requests) == 0
-        ), "Cached resolution should load without network request"
+        assert cache_hit is True or len(timeseries_requests) == 0, (
+            "Cached resolution should load without network request"
+        )
 
 
 class TestLiveUpdates:
@@ -563,9 +563,9 @@ class TestHistoricalScrolling:
         """)
 
         # Cache should be tracking hits/misses
-        assert cache_behavior is None or cache_behavior.get(
-            "cacheWorking", True
-        ), "Cache should track historical data requests"
+        assert cache_behavior is None or cache_behavior.get("cacheWorking", True), (
+            "Cache should track historical data requests"
+        )
 
     def test_live_data_appends_at_edge(self, timeseries_ready_page: Page) -> None:
         """Edge case: Live data appends at current-time edge.
@@ -615,9 +615,9 @@ class TestHistoricalScrolling:
         """)
 
         # Count should stay same or increase (not decrease)
-        assert (
-            final_count >= initial_count
-        ), f"Data count should not decrease: {initial_count} -> {final_count}"
+        assert final_count >= initial_count, (
+            f"Data count should not decrease: {initial_count} -> {final_count}"
+        )
 
 
 class TestMultiTickerConnectivity:
@@ -769,6 +769,6 @@ class TestMultiTickerConnectivity:
             None,
         ]
 
-        assert (
-            has_polling_ui or has_mode_state
-        ), "Should have polling mode indicator or connection mode state"
+        assert has_polling_ui or has_mode_state, (
+            "Should have polling mode indicator or connection mode state"
+        )

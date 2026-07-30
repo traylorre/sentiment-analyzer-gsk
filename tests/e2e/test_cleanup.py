@@ -185,9 +185,9 @@ async def test_verify_no_production_data_affected(
                 if not any(marker in pk for marker in ["E2E", "TEST", "test", "e2e"]):
                     production_matches.append(item)
 
-    assert (
-        len(production_matches) == 0
-    ), f"Cleanup patterns might affect production data: {production_matches}"
+    assert len(production_matches) == 0, (
+        f"Cleanup patterns might affect production data: {production_matches}"
+    )
 
 
 def pytest_addoption(parser):

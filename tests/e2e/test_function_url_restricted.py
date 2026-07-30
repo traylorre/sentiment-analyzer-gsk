@@ -39,9 +39,9 @@ class TestDirectSSEFunctionURLBlocked:
             pytest.skip("SSE_FUNCTION_URL not set")
         async with httpx.AsyncClient() as client:
             response = await client.get(f"{url}/api/v2/stream/status")
-        assert (
-            response.status_code == 403
-        ), f"Expected 403 (auth_type=AWS_IAM), got {response.status_code}"
+        assert response.status_code == 403, (
+            f"Expected 403 (auth_type=AWS_IAM), got {response.status_code}"
+        )
 
 
 @pytest.mark.skipif(skip.condition, reason=skip.reason)
