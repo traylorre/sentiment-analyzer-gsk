@@ -111,7 +111,7 @@ An invocation of the detector wired into a developer or CI workflow.
 
 Only the second row can stop a merge. That distinction is the feature's central design fact and is
 recorded here so it is not re-lost: `main`'s `required_status_checks.contexts` is
-`["Secrets Scan", "Lint", "Run Tests"]`.
+`["Secrets Scan", "Lint", "Run Tests", "Playwright E2E Tests"]`.
 
 ### Planted violation
 
