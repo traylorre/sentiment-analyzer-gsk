@@ -56,9 +56,9 @@ async def test_global_stream_available(
     # regardless of the Content-Type set in the response. This is a known AWS limitation.
     # See: https://repost.aws/questions/QU3G889txXR-aVe_GIxAvnGQ
     # The SSE functionality works correctly - clients receive properly formatted SSE events.
-    assert (
-        "text/event-stream" in content_type or "stream" in content_type.lower()
-    ), f"Expected event-stream content type, got: {content_type}"
+    assert "text/event-stream" in content_type or "stream" in content_type.lower(), (
+        f"Expected event-stream content type, got: {content_type}"
+    )
 
 
 @pytest.mark.asyncio
@@ -317,9 +317,9 @@ async def test_stream_status_shows_connection_limit(
 
     # Verify connection limit is configured correctly per FR-008
     assert "max_connections" in data, "Status should include max_connections"
-    assert (
-        data["max_connections"] == 100
-    ), f"Max connections should be 100 per FR-008, got {data['max_connections']}"
+    assert data["max_connections"] == 100, (
+        f"Max connections should be 100 per FR-008, got {data['max_connections']}"
+    )
 
     # Verify available slots calculation
     assert "available" in data, "Status should include available slots"

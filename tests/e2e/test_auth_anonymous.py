@@ -30,20 +30,20 @@ async def test_anonymous_session_creation(api_client: PreprodAPIClient) -> None:
 
     data = response.json()
     # Response may use user_id or session_id depending on implementation
-    assert (
-        "user_id" in data or "session_id" in data
-    ), "Response missing user_id/session_id"
+    assert "user_id" in data or "session_id" in data, (
+        "Response missing user_id/session_id"
+    )
     assert "token" in data, "Response missing token"
     # Response may use session_expires_at or expires_at
-    assert (
-        "session_expires_at" in data or "expires_at" in data
-    ), "Response missing expiration"
+    assert "session_expires_at" in data or "expires_at" in data, (
+        "Response missing expiration"
+    )
 
     # Verify session_id/user_id format (should be UUID-like)
     session_id = data.get("session_id") or data.get("user_id")
-    assert (
-        session_id and len(session_id) >= 8
-    ), f"session_id/user_id too short: {session_id}"
+    assert session_id and len(session_id) >= 8, (
+        f"session_id/user_id too short: {session_id}"
+    )
 
     # Verify token is non-empty
     token = data["token"]
@@ -120,9 +120,9 @@ async def test_anonymous_config_creation(
         # Status may be 201 (created) or 200 (ok)
 
         # 201 Created is the correct status for resource creation
-        assert (
-            config_response.status_code == 201
-        ), f"Expected 201, got {config_response.status_code}"
+        assert config_response.status_code == 201, (
+            f"Expected 201, got {config_response.status_code}"
+        )
 
         config_data = config_response.json()
         assert "config_id" in config_data, "Response missing config_id"
@@ -130,9 +130,9 @@ async def test_anonymous_config_creation(
         # Verify config can be retrieved
         config_id = config_data["config_id"]
         get_response = await api_client.get(f"/api/v2/configurations/{config_id}")
-        assert (
-            get_response.status_code == 200
-        ), f"Failed to retrieve config: {config_id}"
+        assert get_response.status_code == 200, (
+            f"Failed to retrieve config: {config_id}"
+        )
 
         retrieved = get_response.json()
         assert retrieved["name"] == config_payload["name"]

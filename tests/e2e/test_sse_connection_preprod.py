@@ -100,9 +100,9 @@ class TestSSEConnectionHealth:
                             f"Response: {content_str[:200]}"
                         )
 
-                        assert (
-                            "errorType" not in content_str
-                        ), f"SSE Lambda returned error: {content_str[:200]}"
+                        assert "errorType" not in content_str, (
+                            f"SSE Lambda returned error: {content_str[:200]}"
+                        )
 
                         return  # Success
             except httpx.ReadTimeout as e:
@@ -171,9 +171,9 @@ class TestSSEConnectionHealth:
                         content_type = response.headers.get("content-type", "")
 
                         valid_types = ["text/event-stream", "application/octet-stream"]
-                        assert any(
-                            t in content_type for t in valid_types
-                        ), f"Expected event-stream content type, got: {content_type}."
+                        assert any(t in content_type for t in valid_types), (
+                            f"Expected event-stream content type, got: {content_type}."
+                        )
                         return  # Success
             except httpx.ReadTimeout as e:
                 last_error = e
@@ -263,9 +263,9 @@ class TestDashboardConnectionIndicator:
                     async with client.stream(
                         "GET", f"{sse_lambda_url}/api/v2/stream", headers=headers
                     ) as response:
-                        assert (
-                            response.status_code == 200
-                        ), "EventSource onopen would not fire"
+                        assert response.status_code == 200, (
+                            "EventSource onopen would not fire"
+                        )
 
                         first_chunk = b""
                         async for chunk in response.aiter_bytes():
@@ -273,9 +273,9 @@ class TestDashboardConnectionIndicator:
                             break
 
                         chunk_str = first_chunk.decode("utf-8", errors="ignore")
-                        assert (
-                            "errorType" not in chunk_str
-                        ), f"Lambda error: {chunk_str[:100]}"
+                        assert "errorType" not in chunk_str, (
+                            f"Lambda error: {chunk_str[:100]}"
+                        )
                         return  # Success
             except httpx.ReadTimeout as e:
                 last_error = e

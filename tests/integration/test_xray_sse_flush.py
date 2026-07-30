@@ -129,9 +129,9 @@ class TestSafeForceFlush:
 
         # Verify
         assert result is True, "force_flush should return True on success"
-        assert (
-            elapsed_ms < 2500
-        ), f"Flush took {elapsed_ms:.0f}ms, exceeds 2500ms timeout"
+        assert elapsed_ms < 2500, (
+            f"Flush took {elapsed_ms:.0f}ms, exceeds 2500ms timeout"
+        )
         assert collector.spans_received > 0, "No spans received by mock endpoint"
 
         provider.shutdown()

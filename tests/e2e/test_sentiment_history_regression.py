@@ -86,9 +86,9 @@ class TestSentimentHistoryAPI:
             headers={"Authorization": f"Bearer {auth_token}"},
         )
 
-        assert (
-            response.status_code == 200
-        ), f"Expected 200, got {response.status_code}: {response.text}"
+        assert response.status_code == 200, (
+            f"Expected 200, got {response.status_code}: {response.text}"
+        )
 
         data = response.json()
         assert data["ticker"] == "AAPL"
@@ -105,9 +105,9 @@ class TestSentimentHistoryAPI:
         )
 
         # 200 with data, or 200 with empty history (ticker may lack data)
-        assert (
-            response.status_code == 200
-        ), f"{ticker}: Expected 200, got {response.status_code}: {response.text}"
+        assert response.status_code == 200, (
+            f"{ticker}: Expected 200, got {response.status_code}: {response.text}"
+        )
         data = response.json()
         assert data["ticker"] == ticker
 
@@ -157,9 +157,9 @@ class TestSentimentHistoryAPI:
                 "dedup",
                 "unknown",
             }
-            assert (
-                point["source"] in valid_sources
-            ), f"Unknown source '{point['source']}' — add to SentimentSourceType"
+            assert point["source"] in valid_sources, (
+                f"Unknown source '{point['source']}' — add to SentimentSourceType"
+            )
 
             # Label if present must be valid
             if point.get("label"):

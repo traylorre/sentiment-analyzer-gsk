@@ -79,9 +79,9 @@ async def test_alert_trigger_creates_notification(
             pytest.skip("Notifications endpoint not implemented")
 
         # Should return 200 with list (possibly empty)
-        assert (
-            response.status_code == 200
-        ), f"Notifications list failed: {response.status_code}"
+        assert response.status_code == 200, (
+            f"Notifications list failed: {response.status_code}"
+        )
 
         data = response.json()
         notifications = (

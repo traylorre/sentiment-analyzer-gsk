@@ -213,9 +213,9 @@ class TestStreamSSEEdgeCases:
 
         for path in paths_with_stream:
             effective_url = client.sse_url if "/stream" in path else client.base_url
-            assert (
-                effective_url == "https://sse.example.com"
-            ), f"Path {path} should route to SSE"
+            assert effective_url == "https://sse.example.com", (
+                f"Path {path} should route to SSE"
+            )
 
     def test_path_without_stream_slash_does_not_match(self):
         """Verify paths with 'stream' but not '/stream' route to base URL."""
@@ -228,9 +228,9 @@ class TestStreamSSEEdgeCases:
 
         for path in paths_without_stream_slash:
             effective_url = client.sse_url if "/stream" in path else client.base_url
-            assert (
-                effective_url == "https://dashboard.example.com"
-            ), f"Path {path} should route to base"
+            assert effective_url == "https://dashboard.example.com", (
+                f"Path {path} should route to base"
+            )
 
     def test_multiple_trailing_slashes(self):
         """Verify multiple trailing slashes are handled."""

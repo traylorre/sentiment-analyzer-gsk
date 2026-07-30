@@ -67,7 +67,6 @@ lint: ## Run linters
 
 security: ## Run security scanners
 	pip-audit --ignore-vuln PYSEC-2024-58 || true
-	@if command -v tfsec &>/dev/null && [ -d "$(TF_DIR)" ]; then tfsec $(TF_DIR) --soft-fail; fi
 	@echo "$(YELLOW)⚠ Review security findings above$(NC)"
 
 sast: ## Run SAST (Static Application Security Testing) - Bandit + Semgrep
@@ -75,17 +74,13 @@ sast: ## Run SAST (Static Application Security Testing) - Bandit + Semgrep
 	bandit -c pyproject.toml -r src/ -ll || true
 	@echo ""
 	@echo "$(YELLOW)Running Semgrep (comprehensive SAST)...$(NC)"
-	@if command -v semgrep &>/dev/null; then \
-		semgrep scan --config auto --error --severity ERROR --severity WARNING src/ 2>/dev/null || \
-		echo "$(RED)✗ Semgrep found security issues$(NC)"; \
-	else \
-		echo "$(YELLOW)Semgrep not installed, skipping. Install with: pip install semgrep$(NC)"; \
-	fi
+	@command -v semgrep >/dev/null 2>&1 || { echo "$(RED)✗ Semgrep not installed. Install: pip install -r requirements-dev.txt$(NC)"; exit 1; }
+	semgrep scan --config auto --error --severity ERROR --severity WARNING src/
 	@echo "$(GREEN)✓ SAST scan complete$(NC)"
 
 audit-pragma: ## Audit pragma comments (# noqa, # nosec) for validity
 	@echo "$(YELLOW)=== Checking for unused # noqa comments (RUF100) ===$(NC)"
-	ruff check --select RUF100 src/ tests/
+	ruff check --extend-select RUF100 src/ tests/
 	@echo ""
 	@echo "$(YELLOW)=== Auditing # nosec usage (Bandit with suppressions disabled) ===$(NC)"
 	bandit -r src/ --ignore-nosec 2>/dev/null | grep -E "^(>>|Issue)" || echo "No issues found"

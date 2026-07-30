@@ -14,7 +14,7 @@ from typing import Any
 from pydantic import BaseModel, Field, field_validator
 
 
-class Resolution(str, Enum):
+class Resolution(str, Enum):  # noqa: UP042 - StrEnum changes str() of serialized members
     """
     Supported time resolutions for sentiment aggregation.
 

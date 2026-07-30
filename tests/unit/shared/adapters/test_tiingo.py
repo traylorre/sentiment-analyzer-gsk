@@ -311,9 +311,9 @@ class TestTiingoGetIntradayOHLC:
                 tiingo_adapter.get_intraday_ohlc("AAPL", resolution=resolution)
 
             call_params = mock_get.call_args[1]["params"]
-            assert (
-                call_params["resampleFreq"] == expected_freq
-            ), f"Resolution {resolution} should map to {expected_freq}"
+            assert call_params["resampleFreq"] == expected_freq, (
+                f"Resolution {resolution} should map to {expected_freq}"
+            )
 
     def test_get_intraday_ohlc_default_resolution(self, tiingo_adapter: TiingoAdapter):
         """Test default resolution is 5min."""

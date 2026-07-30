@@ -98,9 +98,9 @@ class TestWindowExportsExist:
     def test_registry_has_entries(self) -> None:
         """Verify the registry is not empty."""
         assert WINDOW_EXPORT_REGISTRY, "Window export registry is empty"
-        assert (
-            len(WINDOW_EXPORT_REGISTRY) >= 3
-        ), f"Expected at least 3 files in registry, found {len(WINDOW_EXPORT_REGISTRY)}"
+        assert len(WINDOW_EXPORT_REGISTRY) >= 3, (
+            f"Expected at least 3 files in registry, found {len(WINDOW_EXPORT_REGISTRY)}"
+        )
 
 
 class TestWindowExportPattern:

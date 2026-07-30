@@ -53,9 +53,9 @@ async def test_unauthenticated_configs_returns_401(
 
     response = await api_client.get("/api/v2/configurations")
 
-    assert (
-        response.status_code == 401
-    ), f"Expected 401 for unauthenticated access, got {response.status_code}"
+    assert response.status_code == 401, (
+        f"Expected 401 for unauthenticated access, got {response.status_code}"
+    )
 
 
 @pytest.mark.asyncio
@@ -496,9 +496,9 @@ async def test_anonymous_test_digest_may_be_restricted(
         if response.status_code in (401, 403):
             data = response.json()
             # Error responses use "detail" field for error messages
-            assert (
-                "error" in data or "message" in data or "detail" in data
-            ), "401/403 response should have error message"
+            assert "error" in data or "message" in data or "detail" in data, (
+                "401/403 response should have error message"
+            )
 
     finally:
         api_client.clear_access_token()
@@ -527,15 +527,14 @@ async def test_access_nonexistent_config_returns_404(
 
         # May return 404 (not found), 401 (auth check first), 403 (forbidden),
         # or 500 (if error handling not complete)
-        assert (
-            response.status_code
-            in (
-                401,
-                403,
-                404,
-                500,
-            )
-        ), f"Nonexistent config should return 401/403/404/500, got {response.status_code}"
+        assert response.status_code in (
+            401,
+            403,
+            404,
+            500,
+        ), (
+            f"Nonexistent config should return 401/403/404/500, got {response.status_code}"
+        )
 
     finally:
         api_client.clear_access_token()
@@ -562,15 +561,14 @@ async def test_access_nonexistent_alert_returns_404(
         if response.status_code == 405:
             pytest.skip("Alerts endpoint not implemented")
 
-        assert (
-            response.status_code
-            in (
-                401,
-                403,
-                404,
-                500,
-            )
-        ), f"Nonexistent alert should return 401/403/404/500, got {response.status_code}"
+        assert response.status_code in (
+            401,
+            403,
+            404,
+            500,
+        ), (
+            f"Nonexistent alert should return 401/403/404/500, got {response.status_code}"
+        )
 
     finally:
         api_client.clear_access_token()

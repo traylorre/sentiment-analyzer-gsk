@@ -48,12 +48,12 @@ class TestEnvGated404CorsE2E:
             headers={"Origin": PREPROD_CORS_ORIGIN},
             timeout=10,
         )
-        assert (
-            response.status_code == 404
-        ), f"Expected 404 for nonexistent route, got {response.status_code}"
-        assert (
-            response.headers.get("access-control-allow-origin") is not None
-        ), "Missing Access-Control-Allow-Origin on 404 response"
+        assert response.status_code == 404, (
+            f"Expected 404 for nonexistent route, got {response.status_code}"
+        )
+        assert response.headers.get("access-control-allow-origin") is not None, (
+            "Missing Access-Control-Allow-Origin on 404 response"
+        )
         assert response.headers.get("access-control-allow-credentials") == "true"
 
     def test_404_response_no_cors_for_unknown_origin(self):
@@ -64,10 +64,10 @@ class TestEnvGated404CorsE2E:
             headers={"Origin": bad_origin},
             timeout=10,
         )
-        assert (
-            response.status_code == 404
-        ), f"Expected 404 for nonexistent route, got {response.status_code}"
+        assert response.status_code == 404, (
+            f"Expected 404 for nonexistent route, got {response.status_code}"
+        )
         allow_origin = response.headers.get("access-control-allow-origin", "")
-        assert (
-            allow_origin != bad_origin
-        ), f"Should not echo unknown origin: {allow_origin}"
+        assert allow_origin != bad_origin, (
+            f"Should not echo unknown origin: {allow_origin}"
+        )

@@ -34,9 +34,9 @@ async def test_health_endpoint_returns_json(
 
     assert response.status_code == 200
     content_type = response.headers.get("content-type", "")
-    assert (
-        "application/json" in content_type
-    ), f"Expected application/json, got: {content_type}"
+    assert "application/json" in content_type, (
+        f"Expected application/json, got: {content_type}"
+    )
 
     # Verify response is valid JSON (not chunked stream)
     data = response.json()
@@ -66,9 +66,9 @@ async def test_configs_list_returns_json(
 
         assert response.status_code == 200
         content_type = response.headers.get("content-type", "")
-        assert (
-            "application/json" in content_type
-        ), f"Expected application/json, got: {content_type}"
+        assert "application/json" in content_type, (
+            f"Expected application/json, got: {content_type}"
+        )
 
         # Verify response is valid JSON with expected structure
         data = response.json()
@@ -105,9 +105,9 @@ async def test_config_create_returns_json(
         # Should return 201 Created
         assert response.status_code == 201
         content_type = response.headers.get("content-type", "")
-        assert (
-            "application/json" in content_type
-        ), f"Expected application/json, got: {content_type}"
+        assert "application/json" in content_type, (
+            f"Expected application/json, got: {content_type}"
+        )
 
         # Verify response is valid JSON with expected fields
         data = response.json()
@@ -150,9 +150,9 @@ async def test_sentiment_endpoint_returns_json(
 
         assert response.status_code == 200
         content_type = response.headers.get("content-type", "")
-        assert (
-            "application/json" in content_type
-        ), f"Expected application/json, got: {content_type}"
+        assert "application/json" in content_type, (
+            f"Expected application/json, got: {content_type}"
+        )
 
         # Verify response is valid JSON
         data = response.json()
@@ -186,9 +186,9 @@ async def test_dashboard_metrics_returns_json(
 
         assert response.status_code == 200
         content_type = response.headers.get("content-type", "")
-        assert (
-            "application/json" in content_type
-        ), f"Expected application/json, got: {content_type}"
+        assert "application/json" in content_type, (
+            f"Expected application/json, got: {content_type}"
+        )
 
         data = response.json()
         assert isinstance(data, dict)
@@ -212,9 +212,9 @@ async def test_error_response_is_json(
     # Should return 404
     assert response.status_code == 404
     content_type = response.headers.get("content-type", "")
-    assert (
-        "application/json" in content_type
-    ), f"Expected application/json, got: {content_type}"
+    assert "application/json" in content_type, (
+        f"Expected application/json, got: {content_type}"
+    )
 
     # Verify error response is valid JSON
     data = response.json()
@@ -269,9 +269,9 @@ async def test_anonymous_auth_returns_json(
 
     assert response.status_code == 201
     content_type = response.headers.get("content-type", "")
-    assert (
-        "application/json" in content_type
-    ), f"Expected application/json, got: {content_type}"
+    assert "application/json" in content_type, (
+        f"Expected application/json, got: {content_type}"
+    )
 
     data = response.json()
     assert isinstance(data, dict)
@@ -309,9 +309,9 @@ async def test_alerts_list_returns_json(
 
         assert response.status_code == 200
         content_type = response.headers.get("content-type", "")
-        assert (
-            "application/json" in content_type
-        ), f"Expected application/json, got: {content_type}"
+        assert "application/json" in content_type, (
+            f"Expected application/json, got: {content_type}"
+        )
 
         data = response.json()
         # API returns AlertListResponse with alerts list, total count, and quota info
@@ -350,12 +350,12 @@ async def test_multiple_requests_all_return_json(
 
         # All should return JSON
         content_type = response.headers.get("content-type", "")
-        assert (
-            "application/json" in content_type
-        ), f"Endpoint {endpoint} returned non-JSON: {content_type}"
+        assert "application/json" in content_type, (
+            f"Endpoint {endpoint} returned non-JSON: {content_type}"
+        )
 
         # All should be parseable
         data = response.json()
-        assert isinstance(
-            data, dict | list
-        ), f"Endpoint {endpoint} returned invalid JSON"
+        assert isinstance(data, dict | list), (
+            f"Endpoint {endpoint} returned invalid JSON"
+        )

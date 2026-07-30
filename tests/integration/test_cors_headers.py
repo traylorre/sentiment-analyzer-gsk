@@ -168,9 +168,9 @@ class TestUnauthorizedOriginRejection:
         )
         # Lambda middleware should NOT echo the evil origin
         allow_origin = resp.headers.get("Access-Control-Allow-Origin", "")
-        assert (
-            allow_origin != "https://evil.example.com"
-        ), "Lambda should reject unauthorized origins in data responses"
+        assert allow_origin != "https://evil.example.com", (
+            "Lambda should reject unauthorized origins in data responses"
+        )
 
     @pytest.mark.skipif(
         not os.getenv("PREPROD_AUTH_TOKEN"),
@@ -185,9 +185,9 @@ class TestUnauthorizedOriginRejection:
             auth_token=auth_token,
         )
         allow_origin = resp.headers.get("Access-Control-Allow-Origin", "")
-        assert (
-            allow_origin == ALLOWED_ORIGIN
-        ), f"Expected Lambda to echo authorized origin, got: {allow_origin}"
+        assert allow_origin == ALLOWED_ORIGIN, (
+            f"Expected Lambda to echo authorized origin, got: {allow_origin}"
+        )
 
 
 # =============================================================================
@@ -212,9 +212,9 @@ class TestErrorResponseCORS:
         )
         assert resp.status_code == 401
         allow_origin = resp.headers.get("Access-Control-Allow-Origin", "")
-        assert (
-            allow_origin == ALLOWED_ORIGIN
-        ), f"Expected 401 response to echo origin, got: {allow_origin}"
+        assert allow_origin == ALLOWED_ORIGIN, (
+            f"Expected 401 response to echo origin, got: {allow_origin}"
+        )
 
     def test_403_error_echoes_origin(self) -> None:
         """T025: 403 Forbidden response echoes the Origin header.
@@ -231,6 +231,6 @@ class TestErrorResponseCORS:
         # Accept either 401 or 403 as both should echo origin
         assert resp.status_code in (401, 403)
         allow_origin = resp.headers.get("Access-Control-Allow-Origin", "")
-        assert (
-            allow_origin == ALLOWED_ORIGIN
-        ), f"Expected error response to echo origin, got: {allow_origin}"
+        assert allow_origin == ALLOWED_ORIGIN, (
+            f"Expected error response to echo origin, got: {allow_origin}"
+        )

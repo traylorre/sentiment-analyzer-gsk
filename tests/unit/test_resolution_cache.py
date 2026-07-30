@@ -33,16 +33,16 @@ class TestResolutionAwareCache:
         # 1-minute resolution: duration=60s, jittered ±10% = 54-66
         cache.set("AAPL", Resolution.ONE_MINUTE, data={"test": 1})
         entry = cache._entries[("AAPL", Resolution.ONE_MINUTE)]
-        assert (
-            54 <= entry.ttl_seconds <= 66
-        ), f"1min TTL {entry.ttl_seconds} out of jitter range"
+        assert 54 <= entry.ttl_seconds <= 66, (
+            f"1min TTL {entry.ttl_seconds} out of jitter range"
+        )
 
         # 1-hour resolution: duration=3600s, jittered ±10% = 3240-3960
         cache.set("AAPL", Resolution.ONE_HOUR, data={"test": 2})
         entry = cache._entries[("AAPL", Resolution.ONE_HOUR)]
-        assert (
-            3240 <= entry.ttl_seconds <= 3960
-        ), f"1hr TTL {entry.ttl_seconds} out of jitter range"
+        assert 3240 <= entry.ttl_seconds <= 3960, (
+            f"1hr TTL {entry.ttl_seconds} out of jitter range"
+        )
 
     @freeze_time("2025-12-21T10:35:00Z")
     def test_cache_hit_within_ttl(self) -> None:
@@ -159,9 +159,9 @@ class TestResolutionAwareCache:
             # Feature 1224: TTL includes ±10% jitter
             low = expected_ttl * 0.9
             high = expected_ttl * 1.1
-            assert (
-                low <= entry.ttl_seconds <= high
-            ), f"{res.value} TTL {entry.ttl_seconds} outside jitter range [{low}, {high}]"
+            assert low <= entry.ttl_seconds <= high, (
+                f"{res.value} TTL {entry.ttl_seconds} outside jitter range [{low}, {high}]"
+            )
 
     def test_global_scope_initialization(self) -> None:
         """Cache MUST be initializable outside Lambda handler per [CS-005]."""

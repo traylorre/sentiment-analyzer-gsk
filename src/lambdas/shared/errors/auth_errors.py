@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     pass
 
 
-class AuthErrorCode(str, Enum):
+class AuthErrorCode(str, Enum):  # noqa: UP042 - StrEnum changes str() of serialized members
     """Numeric auth error codes per spec-v2.md A23.
 
     These codes are returned in error responses to enable

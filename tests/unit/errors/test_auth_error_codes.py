@@ -83,9 +83,9 @@ class TestAuthErrorMessages:
         for code, message in AUTH_ERROR_MESSAGES.items():
             message_lower = message.lower()
             for term in forbidden_terms:
-                assert (
-                    term not in message_lower
-                ), f"Message for {code} contains forbidden term '{term}': {message}"
+                assert term not in message_lower, (
+                    f"Message for {code} contains forbidden term '{term}': {message}"
+                )
 
     def test_messages_dont_leak_internals(self) -> None:
         """Verify no message contains internal details."""
@@ -106,9 +106,9 @@ class TestAuthErrorMessages:
                 # Allow "token" in AUTH_018 message context
                 if code == AuthErrorCode.AUTH_018 and term == "token":
                     continue
-                assert (
-                    term not in message_lower
-                ), f"Message for {code} contains forbidden term '{term}': {message}"
+                assert term not in message_lower, (
+                    f"Message for {code} contains forbidden term '{term}': {message}"
+                )
 
 
 class TestAuthErrorStatus:
