@@ -239,12 +239,17 @@ for everything above it.
     1. Sites `:38`, `:77`, `:82`, `:109`, `:129`, `:144`, `:162`, `:211`, `:219` all become
        `searchAndAwaitResponse(...)` calls with the default predicate (all nine originals are the
        glob `'**/api/v2/tickers/search**'` — no widening, no declaration needed).
-    2. **`.clear()` → `clearFirst: true` at `:219`** (test `'duplicate ticker switches to existing
-       chip without adding'`). The original sequence is
+    2. **`.clear()` → `clearFirst: true` at `:219`** (test `'adding second ticker creates second
+       chip'`, which opens at `:206`). The original sequence is
        `await searchInput.clear(); await searchInput.fill('GOOGL'); await page.waitForResponse(...)`.
        The helper's `clearFirst: true` performs `fill('')`. Playwright documents `locator.clear()`
        as equivalent to `fill('')`, so this is not a behavioural change and needs no declaration
        beyond a one-line note in the commit message. No fallback shape is offered; use the helper.
+       *(An earlier draft named this site's enclosing test as `'duplicate ticker switches to
+       existing chip without adding'`. That is the **next** test, opening at `:225`; it holds the
+       two FR-004 hold-outs and the FR-010 cache hold-out and is converted by no criterion here.
+       The line number `:219` was always correct — only the test name was wrong. Corrected during
+       T006 implementation.)*
     3. **FR-010 hold-out**: `ticker-search-gaps.spec.ts:242-247` is left **byte-unchanged**. It
        deliberately omits a wait because the repeated `AAPL` query is served from React Query cache
        inside the 30s `staleTime` window (`ticker-input.tsx:38`) and no network request occurs.
