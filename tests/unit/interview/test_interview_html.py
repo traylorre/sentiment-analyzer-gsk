@@ -105,9 +105,9 @@ class TestNavigation:
 
         # Every nav item should have a section
         for nav_section in nav_sections:
-            assert (
-                nav_section in section_ids
-            ), f"Nav item '{nav_section}' has no matching section"
+            assert nav_section in section_ids, (
+                f"Nav item '{nav_section}' has no matching section"
+            )
 
     def test_all_sections_have_nav_items(self):
         """Every section should have a nav item (except special sections)."""
@@ -310,9 +310,9 @@ class TestAccessibility:
             # Button should have onclick or be an env-btn (handled via event delegation)
             has_onclick = "onclick=" in button
             is_env_btn = "env-btn" in button
-            assert (
-                has_onclick or is_env_btn
-            ), f"Button should have handler: {button[:50]}..."
+            assert has_onclick or is_env_btn, (
+                f"Button should have handler: {button[:50]}..."
+            )
 
     def test_labels_for_checkboxes(self):
         """Checkboxes should have associated labels."""
@@ -322,9 +322,9 @@ class TestAccessibility:
 
         for checkbox_id in checkboxes:
             # Should have a corresponding label
-            assert (
-                f'for="{checkbox_id}"' in content
-            ), f"Checkbox '{checkbox_id}' should have label"
+            assert f'for="{checkbox_id}"' in content, (
+                f"Checkbox '{checkbox_id}' should have label"
+            )
 
 
 class TestContentIntegrity:
@@ -346,9 +346,9 @@ class TestContentIntegrity:
             # Allow "placeholder" in specific contexts like attrs
             if placeholder.lower() == "placeholder":
                 continue
-            assert (
-                placeholder.lower() not in content_lower
-            ), f"Found placeholder: {placeholder}"
+            assert placeholder.lower() not in content_lower, (
+                f"Found placeholder: {placeholder}"
+            )
 
     def test_consistent_branding(self):
         """Should have consistent branding."""
@@ -367,9 +367,9 @@ class TestContentIntegrity:
         ]
 
         for stat_id in stats:
-            assert (
-                f'id="{stat_id}"' in content
-            ), f"Stat element '{stat_id}' should exist"
+            assert f'id="{stat_id}"' in content, (
+                f"Stat element '{stat_id}' should exist"
+            )
 
 
 class TestDashboardLink:

@@ -78,9 +78,9 @@ class TestExactResolutionsConfig:
         exact_resolutions = ["'1m'", "'5m'", "'1h'", "'D'"]
         for res in exact_resolutions:
             pattern = rf"key:\s*{res}.*?exact:\s*true"
-            assert re.search(
-                pattern, content, re.DOTALL
-            ), f"Resolution {res} should have exact: true in config.js"
+            assert re.search(pattern, content, re.DOTALL), (
+                f"Resolution {res} should have exact: true in config.js"
+            )
 
     def test_config_has_no_hybrid_resolutions(self) -> None:
         """Verify config.js has no hybrid resolutions (all exact: true).

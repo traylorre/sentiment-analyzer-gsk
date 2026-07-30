@@ -363,9 +363,9 @@ class TestResolutionSwitchPerformance:
         for resolution in RESOLUTIONS:
             timing = click_resolution_and_capture(page, resolution)
             assert timing is not None, f"Failed to switch to resolution {resolution}"
-            assert (
-                timing.to_resolution == resolution
-            ), f"Expected to_resolution={resolution}, got {timing.to_resolution}"
+            assert timing.to_resolution == resolution, (
+                f"Expected to_resolution={resolution}, got {timing.to_resolution}"
+            )
 
     def test_switch_metrics_structure(self, dashboard_page: Page) -> None:
         """Validate window.lastSwitchMetrics has correct structure.
@@ -379,13 +379,13 @@ class TestResolutionSwitchPerformance:
 
         assert timing is not None, "No metrics captured"
         assert timing.duration_ms >= 0, f"Invalid duration: {timing.duration_ms}"
-        assert timing.from_resolution in RESOLUTIONS + [
-            "5m"
-        ], f"Invalid from_resolution: {timing.from_resolution}"
-        assert (
-            timing.to_resolution == "1h"
-        ), f"Invalid to_resolution: {timing.to_resolution}"
-        assert isinstance(
-            timing.cache_hit, bool
-        ), f"cache_hit should be bool: {timing.cache_hit}"
+        assert timing.from_resolution in RESOLUTIONS + ["5m"], (
+            f"Invalid from_resolution: {timing.from_resolution}"
+        )
+        assert timing.to_resolution == "1h", (
+            f"Invalid to_resolution: {timing.to_resolution}"
+        )
+        assert isinstance(timing.cache_hit, bool), (
+            f"cache_hit should be bool: {timing.cache_hit}"
+        )
         assert timing.timestamp > 0, f"Invalid timestamp: {timing.timestamp}"

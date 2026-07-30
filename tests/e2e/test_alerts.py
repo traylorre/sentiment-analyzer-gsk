@@ -226,9 +226,9 @@ async def test_alert_toggle_off(
             json={"enabled": False},
         )
 
-        assert (
-            toggle_response.status_code == 200
-        ), f"Alert toggle failed: {toggle_response.status_code}"
+        assert toggle_response.status_code == 200, (
+            f"Alert toggle failed: {toggle_response.status_code}"
+        )
 
         # Verify disabled
         data = toggle_response.json()

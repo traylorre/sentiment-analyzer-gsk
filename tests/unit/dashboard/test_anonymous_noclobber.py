@@ -131,9 +131,9 @@ class TestNoClobberGuardWithValidCognitoCookie:
 
         # No Set-Cookie touches refresh_token → the OAuth cookie is preserved.
         for cookie in _set_cookie_values(response):
-            assert not cookie.startswith(
-                "refresh_token="
-            ), f"anon mint clobbered the OAuth refresh cookie: {cookie}"
+            assert not cookie.startswith("refresh_token="), (
+                f"anon mint clobbered the OAuth refresh cookie: {cookie}"
+            )
 
 
 class TestNoClobberGuardFallsThroughToNormalMint:

@@ -57,9 +57,9 @@ class TestChaosAuthentication:
                     },
                 )
                 result = _get_chaos_user_id_from_event(event)
-                assert (
-                    result is None
-                ), f"Anonymous should be rejected in {env}, got {result}"
+                assert result is None, (
+                    f"Anonymous should be rejected in {env}, got {result}"
+                )
 
     def test_authenticated_accepted(self):
         """JWT token returns user_id."""

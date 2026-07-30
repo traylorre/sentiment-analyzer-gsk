@@ -80,9 +80,9 @@ class TestSentimentOverview:
         assert len(response.tickers) == 2
 
         for ticker_data in response.tickers:
-            assert (
-                "aggregated" in ticker_data.sentiment
-            ), f"Expected 'aggregated' key in sentiment for {ticker_data.symbol}"
+            assert "aggregated" in ticker_data.sentiment, (
+                f"Expected 'aggregated' key in sentiment for {ticker_data.symbol}"
+            )
             source = ticker_data.sentiment["aggregated"]
             assert source.score is not None
             assert source.label in ("positive", "negative", "neutral")

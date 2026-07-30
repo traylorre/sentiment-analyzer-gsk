@@ -384,9 +384,9 @@ class TestLiveUpdateLatency:
                 await asyncio.sleep(1)
 
             assert metrics is not None, "No SSE events received with latency metrics"
-            assert (
-                metrics.origin_timestamp
-            ), "SSE event missing origin_timestamp field (FR-001)"
+            assert metrics.origin_timestamp, (
+                "SSE event missing origin_timestamp field (FR-001)"
+            )
 
             # Validate ISO8601 format
             try:
@@ -426,12 +426,12 @@ class TestLiveUpdateLatency:
             # Validate required fields
             assert hasattr(metrics, "latency_ms"), "Missing latency_ms field"
             assert hasattr(metrics, "event_type"), "Missing event_type field"
-            assert hasattr(
-                metrics, "origin_timestamp"
-            ), "Missing origin_timestamp field"
-            assert hasattr(
-                metrics, "receive_timestamp"
-            ), "Missing receive_timestamp field"
+            assert hasattr(metrics, "origin_timestamp"), (
+                "Missing origin_timestamp field"
+            )
+            assert hasattr(metrics, "receive_timestamp"), (
+                "Missing receive_timestamp field"
+            )
             assert hasattr(metrics, "is_clock_skew"), "Missing is_clock_skew field"
 
         finally:

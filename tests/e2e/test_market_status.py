@@ -33,16 +33,16 @@ async def test_market_status_open(
     if response.status_code == 404:
         pytest.skip("Market status endpoint not implemented")
 
-    assert (
-        response.status_code == 200
-    ), f"Market status request failed: {response.status_code}"
+    assert response.status_code == 200, (
+        f"Market status request failed: {response.status_code}"
+    )
 
     data = response.json()
 
     # Should have status field
-    assert (
-        "status" in data or "is_open" in data or "market_open" in data
-    ), f"Missing market status field: {data}"
+    assert "status" in data or "is_open" in data or "market_open" in data, (
+        f"Missing market status field: {data}"
+    )
 
     # Status should be valid value
     status = data.get("status") or ("OPEN" if data.get("is_open") else "CLOSED")

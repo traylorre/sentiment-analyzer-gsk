@@ -313,9 +313,9 @@ class TestAnonymousSessionCreation:
         )
         response = lambda_handler(event, mock_lambda_context)
 
-        assert (
-            response["statusCode"] == 201
-        ), f"Expected 201, got {response['statusCode']}: {response['body']}"
+        assert response["statusCode"] == 201, (
+            f"Expected 201, got {response['statusCode']}: {response['body']}"
+        )
         data = json.loads(response["body"])
         assert "user_id" in data
         assert data["auth_type"] == "anonymous"
@@ -339,9 +339,9 @@ class TestAnonymousSessionCreation:
         )
         response = lambda_handler(event, mock_lambda_context)
 
-        assert (
-            response["statusCode"] == 201
-        ), f"Expected 201, got {response['statusCode']}: {response['body']}"
+        assert response["statusCode"] == 201, (
+            f"Expected 201, got {response['statusCode']}: {response['body']}"
+        )
         data = json.loads(response["body"])
         assert "user_id" in data
         assert data["auth_type"] == "anonymous"
@@ -362,9 +362,9 @@ class TestAnonymousSessionCreation:
         )
         response = lambda_handler(event, mock_lambda_context)
 
-        assert (
-            response["statusCode"] == 201
-        ), f"Expected 201, got {response['statusCode']}: {response['body']}"
+        assert response["statusCode"] == 201, (
+            f"Expected 201, got {response['statusCode']}: {response['body']}"
+        )
         data = json.loads(response["body"])
         assert "user_id" in data
         assert data["auth_type"] == "anonymous"
@@ -381,9 +381,9 @@ class TestStaticFiles:
         """Test serving index.html at root."""
         event = make_event(method="GET", path="/")
         response = lambda_handler(event, mock_lambda_context)
-        assert (
-            response["statusCode"] == 200
-        ), f"Expected 200 for index.html, got {response['statusCode']}"
+        assert response["statusCode"] == 200, (
+            f"Expected 200 for index.html, got {response['statusCode']}"
+        )
         content_type = get_response_header(response, "Content-Type")
         assert "text/html" in content_type
 
@@ -391,9 +391,9 @@ class TestStaticFiles:
         """Test serving CSS file."""
         event = make_event(method="GET", path="/static/styles.css")
         response = lambda_handler(event, mock_lambda_context)
-        assert (
-            response["statusCode"] == 200
-        ), f"Expected 200 for styles.css, got {response['statusCode']}"
+        assert response["statusCode"] == 200, (
+            f"Expected 200 for styles.css, got {response['statusCode']}"
+        )
         content_type = get_response_header(response, "Content-Type")
         assert "text/css" in content_type
 
@@ -401,9 +401,9 @@ class TestStaticFiles:
         """Test serving JavaScript file."""
         event = make_event(method="GET", path="/static/app.js")
         response = lambda_handler(event, mock_lambda_context)
-        assert (
-            response["statusCode"] == 200
-        ), f"Expected 200 for app.js, got {response['statusCode']}"
+        assert response["statusCode"] == 200, (
+            f"Expected 200 for app.js, got {response['statusCode']}"
+        )
         content_type = get_response_header(response, "Content-Type")
         assert "javascript" in content_type
 
@@ -419,9 +419,9 @@ class TestStaticFiles:
         # Path with slashes - not in whitelist, so returns 404
         event = make_event(method="GET", path="/static/foo/bar.css")
         response = lambda_handler(event, mock_lambda_context)
-        assert (
-            response["statusCode"] == 404
-        ), f"Expected 404 for non-whitelisted file, got {response['statusCode']}"
+        assert response["statusCode"] == 404, (
+            f"Expected 404 for non-whitelisted file, got {response['statusCode']}"
+        )
 
     def test_dotdot_in_filename_blocked(self, mock_lambda_context):
         """Test .. in filename is blocked (returns 404 since not in whitelist)."""
@@ -535,9 +535,9 @@ class TestStaticFilePackaging:
 
         content = index_html.read_text()
         assert len(content) > 0, "index.html is empty"
-        assert (
-            "<html" in content.lower() or "<!doctype" in content.lower()
-        ), "index.html doesn't appear to be valid HTML"
+        assert "<html" in content.lower() or "<!doctype" in content.lower(), (
+            "index.html doesn't appear to be valid HTML"
+        )
 
     def test_handler_defines_allowed_static_files(self):
         """Verify handler has a static file whitelist (security feature)."""

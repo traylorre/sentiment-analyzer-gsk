@@ -73,9 +73,9 @@ async def test_sentiment_data_all_sources(
     try:
         response = await api_client.get(f"/api/v2/configurations/{config_id}/sentiment")
 
-        assert (
-            response.status_code == 200
-        ), f"Sentiment request failed: {response.status_code}"
+        assert response.status_code == 200, (
+            f"Sentiment request failed: {response.status_code}"
+        )
 
         data = response.json()
 
@@ -124,9 +124,9 @@ async def test_heatmap_sources_view(
         if response.status_code == 404:
             pytest.skip("Heatmap endpoint not implemented")
 
-        assert (
-            response.status_code == 200
-        ), f"Heatmap request failed: {response.status_code}"
+        assert response.status_code == 200, (
+            f"Heatmap request failed: {response.status_code}"
+        )
 
         data = response.json()
         # Should have some structure for heatmap data
@@ -189,9 +189,9 @@ async def test_volatility_atr_data(
         if response.status_code == 404:
             pytest.skip("Volatility endpoint not implemented")
 
-        assert (
-            response.status_code == 200
-        ), f"Volatility request failed: {response.status_code}"
+        assert response.status_code == 200, (
+            f"Volatility request failed: {response.status_code}"
+        )
 
         data = response.json()
 
@@ -242,9 +242,9 @@ async def test_correlation_data(
         if response.status_code == 404:
             pytest.skip("Correlation endpoint not implemented")
 
-        assert (
-            response.status_code == 200
-        ), f"Correlation request failed: {response.status_code}"
+        assert response.status_code == 200, (
+            f"Correlation request failed: {response.status_code}"
+        )
 
         data = response.json()
         # Should have correlation data structure
@@ -312,9 +312,9 @@ async def test_sentiment_with_synthetic_oracle(
 
         if extracted is not None:
             # Validate sentiment is in valid range
-            assert (
-                -1.0 <= extracted <= 1.0
-            ), f"Sentiment {extracted} outside valid range [-1.0, 1.0]"
+            assert -1.0 <= extracted <= 1.0, (
+                f"Sentiment {extracted} outside valid range [-1.0, 1.0]"
+            )
 
             # Demonstrate oracle validation pattern
             result = ValidationResult.from_comparison(range_expectation, extracted)
@@ -322,9 +322,9 @@ async def test_sentiment_with_synthetic_oracle(
         else:
             # Response doesn't have extractable sentiment - validate structure
             # This is acceptable if API returns structured data differently
-            assert isinstance(
-                data, dict | list
-            ), f"Response should be dict or list, got {type(data)}"
+            assert isinstance(data, dict | list), (
+                f"Response should be dict or list, got {type(data)}"
+            )
 
     finally:
         api_client.clear_access_token()
@@ -383,9 +383,9 @@ async def test_sentiment_oracle_tolerance_comparison(
         result = test_oracle.validate_api_response(data, expectation)
 
         assert result.passed, f"Oracle validation failed unexpectedly: {result.message}"
-        assert (
-            result.difference < 0.001
-        ), "Self-validation should have near-zero difference"
+        assert result.difference < 0.001, (
+            "Self-validation should have near-zero difference"
+        )
 
     finally:
         api_client.clear_access_token()
@@ -472,6 +472,6 @@ async def test_sentiment_unauthorized(
     # Try to access without token
     response = await api_client.get(f"/api/v2/configurations/{config_id}/sentiment")
 
-    assert (
-        response.status_code == 401
-    ), f"Unauthenticated request should return 401: {response.status_code}"
+    assert response.status_code == 401, (
+        f"Unauthenticated request should return 401: {response.status_code}"
+    )

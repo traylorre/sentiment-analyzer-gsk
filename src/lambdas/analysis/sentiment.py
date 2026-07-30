@@ -353,7 +353,7 @@ def clear_model_cache() -> None:
 # =============================================================================
 
 
-class SentimentSource(str, Enum):
+class SentimentSource(str, Enum):  # noqa: UP042 - StrEnum changes str() of serialized members
     """Available sentiment data sources."""
 
     TIINGO = "tiingo"
@@ -361,7 +361,7 @@ class SentimentSource(str, Enum):
     OUR_MODEL = "our_model"
 
 
-class SentimentLabel(str, Enum):
+class SentimentLabel(str, Enum):  # noqa: UP042 - StrEnum changes str() of serialized members
     """Sentiment classification labels."""
 
     POSITIVE = "positive"

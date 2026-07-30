@@ -123,8 +123,8 @@ class TestOAuthCallbackFederationFieldsNewUser:
         # The real helpers sync the in-memory user on successful writes (1163
         # incident fix); the response now reports actual state, so the mocks
         # must honor that contract.
-        mock_mark_verified.side_effect = (
-            lambda **kw: setattr(kw["user"], "verification", "verified")
+        mock_mark_verified.side_effect = lambda **kw: (
+            setattr(kw["user"], "verification", "verified")
             if kw["email_verified"]
             else None
         )
@@ -230,8 +230,8 @@ class TestOAuthCallbackFederationFieldsNewUser:
         # The real helpers sync the in-memory user on successful writes (1163
         # incident fix); the response now reports actual state, so the mocks
         # must honor that contract.
-        mock_mark_verified.side_effect = (
-            lambda **kw: setattr(kw["user"], "verification", "verified")
+        mock_mark_verified.side_effect = lambda **kw: (
+            setattr(kw["user"], "verification", "verified")
             if kw["email_verified"]
             else None
         )

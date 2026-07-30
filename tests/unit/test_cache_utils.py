@@ -30,9 +30,9 @@ class TestJitteredTtl:
         mean = sum(values) / len(values)
         variance = sum((v - mean) ** 2 for v in values) / len(values)
         std_dev = variance**0.5
-        assert (
-            std_dev >= base * 0.05
-        ), f"Standard deviation {std_dev:.2f} is less than 5% of base ({base * 0.05})"
+        assert std_dev >= base * 0.05, (
+            f"Standard deviation {std_dev:.2f} is less than 5% of base ({base * 0.05})"
+        )
 
     def test_jitter_deterministic_with_seed(self):
         """Jitter is deterministic when random seed is set."""
