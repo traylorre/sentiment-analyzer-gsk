@@ -88,6 +88,11 @@ test.describe('Chaos: Scenario Customer Outcomes', () => {
   test('database throttle — health banner appears, cached data visible', async ({
     page,
   }) => {
+    // Three 15000ms waits under a 30000ms cap (playwright.config.ts sets no top-level `timeout`,
+    // so Playwright's default applies) means a second hung wait would blow the test cap before the
+    // per-call cap fires, and the failure would name the test rather than the wait.
+    test.setTimeout(60000);
+
     // Capture initial content
     const mainContent = page.locator('main');
     const textBefore = await mainContent.textContent();
@@ -96,16 +101,32 @@ test.describe('Chaos: Scenario Customer Outcomes', () => {
     // Apply DynamoDB throttle: all endpoints return 503
     const restore = await simulateChaosScenario(page, 'dynamodb_throttle');
 
-    // Trigger 3+ search interactions to accumulate failures for banner
+    // Trigger 3+ search interactions to accumulate failures for banner.
+    // Each 503 listener is registered BEFORE its fill: under a blanket throttle the response can
+    // arrive before an act-then-wait listener exists, and the wait then blocks until its timeout.
     const searchInput = page.getByPlaceholder(/search tickers/i);
+    const throttled1 = page.waitForResponse(
+      (r) => r.url().includes('/api/') && r.status() === 503,
+      { timeout: 15000 },
+    );
     await searchInput.fill('AAPL');
-    await page.waitForResponse((r) => r.url().includes('/api/') && r.status() === 503);
+    await throttled1;
+
+    const throttled2 = page.waitForResponse(
+      (r) => r.url().includes('/api/') && r.status() === 503,
+      { timeout: 15000 },
+    );
     await searchInput.fill('');
     await searchInput.fill('GOOG');
-    await page.waitForResponse((r) => r.url().includes('/api/') && r.status() === 503);
+    await throttled2;
+
+    const throttled3 = page.waitForResponse(
+      (r) => r.url().includes('/api/') && r.status() === 503,
+      { timeout: 15000 },
+    );
     await searchInput.fill('');
     await searchInput.fill('MSFT');
-    await page.waitForResponse((r) => r.url().includes('/api/') && r.status() === 503);
+    await throttled3;
 
     // Health banner should appear
     const banner = getBannerLocator(page);
@@ -210,19 +231,32 @@ test.describe('Chaos: Scenario Customer Outcomes', () => {
   test('API timeout — errors communicated, no blank screens', async ({
     page,
   }) => {
+    // Three 15000ms waits under a 30000ms cap (playwright.config.ts sets no top-level `timeout`,
+    // so Playwright's default applies) means a second hung wait would blow the test cap before the
+    // per-call cap fires, and the failure would name the test rather than the wait.
+    test.setTimeout(60000);
+
     // Apply API timeout: all calls aborted with timeout error
     const restore = await simulateChaosScenario(page, 'api_timeout');
 
-    // Trigger interactions that will timeout (event-driven waits)
+    // Trigger interactions that will timeout (event-driven waits).
+    // `api_timeout` uses route.abort, which fires the failure with even less latency than a
+    // route.fulfill, so each listener must exist before its fill. Same act-then-wait race as the
+    // waitForResponse sites despite the different method name.
     const searchInput = page.getByPlaceholder(/search tickers/i);
+    const failed1 = page.waitForEvent('requestfailed', { timeout: 15000 });
     await searchInput.fill('AAPL');
-    await page.waitForEvent('requestfailed', { timeout: 5000 });
+    await failed1;
+
+    const failed2 = page.waitForEvent('requestfailed', { timeout: 15000 });
     await searchInput.fill('');
     await searchInput.fill('GOOG');
-    await page.waitForEvent('requestfailed', { timeout: 5000 });
+    await failed2;
+
+    const failed3 = page.waitForEvent('requestfailed', { timeout: 15000 });
     await searchInput.fill('');
     await searchInput.fill('MSFT');
-    await page.waitForEvent('requestfailed', { timeout: 5000 });
+    await failed3;
 
     // BOTH health banner AND content must be present — not just one or the other
     const banner = getBannerLocator(page);

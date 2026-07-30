@@ -34,7 +34,8 @@ there.
 | Never `--no-verify` / `commit -n` | CLAUDE.md, `block-no-verify.sh` hook | Hook denies the command |
 | Activate the venv before any Python work (`source .venv/bin/activate`) | CLAUDE.md | `python --version` must report 3.13.x |
 | Test-only changes. No product code. | FR-007 | `git diff --stat` must show no path under `frontend/src/` |
-| Permitted paths outside `frontend/tests/e2e/`: `scripts/scan-waitforresponse-race.py`, `CLEANUP-BOARD.html`, `specs/001-waitforresponse-race-sweep/` | FR-007 | Audited by T025 |
+| Permitted paths outside `frontend/tests/e2e/`: `scripts/scan-waitforresponse-race.py`, `CLEANUP-BOARD.html`, `specs/001-waitforresponse-race-sweep/`, `.secrets.baseline` | FR-007 | Audited by T025 |
+| `.secrets.baseline` is hook-forced, not discretionary — `scripts/detect-secrets-autostage.sh` rewrites and stages it whenever an edit shifts a recorded line number. Permitted only for that mechanical shift; any other hunk in it is a real violation. | FR-007 | T025 crit. 1 |
 | The Playwright E2E job stays **non-required** | FR-009, Out of Scope | No edit to `.github/workflows/pr-checks.yml` |
 | Target is the **customer** dashboard (Next.js/Amplify), run via `npx playwright test` from `frontend/` | CLAUDE.md two-dashboard rule | Every touched file already carries `// Target: Customer Dashboard (Next.js/Amplify)` (verified) |
 | Verification runs use `--project="Desktop Chrome"` only | plan Technical Context, AR#2 N-06 | The other four configured projects are not exercised by CI and are not verified here |
@@ -239,12 +240,17 @@ for everything above it.
     1. Sites `:38`, `:77`, `:82`, `:109`, `:129`, `:144`, `:162`, `:211`, `:219` all become
        `searchAndAwaitResponse(...)` calls with the default predicate (all nine originals are the
        glob `'**/api/v2/tickers/search**'` — no widening, no declaration needed).
-    2. **`.clear()` → `clearFirst: true` at `:219`** (test `'duplicate ticker switches to existing
-       chip without adding'`). The original sequence is
+    2. **`.clear()` → `clearFirst: true` at `:219`** (test `'adding second ticker creates second
+       chip'`, which opens at `:206`). The original sequence is
        `await searchInput.clear(); await searchInput.fill('GOOGL'); await page.waitForResponse(...)`.
        The helper's `clearFirst: true` performs `fill('')`. Playwright documents `locator.clear()`
        as equivalent to `fill('')`, so this is not a behavioural change and needs no declaration
        beyond a one-line note in the commit message. No fallback shape is offered; use the helper.
+       *(An earlier draft named this site's enclosing test as `'duplicate ticker switches to
+       existing chip without adding'`. That is the **next** test, opening at `:225`; it holds the
+       two FR-004 hold-outs and the FR-010 cache hold-out and is converted by no criterion here.
+       The line number `:219` was always correct — only the test name was wrong. Corrected during
+       T006 implementation.)*
     3. **FR-010 hold-out**: `ticker-search-gaps.spec.ts:242-247` is left **byte-unchanged**. It
        deliberately omits a wait because the repeated `AAPL` query is served from React Query cache
        inside the 30s `staleTime` window (`ticker-input.tsx:38`) and no network request occurs.
@@ -732,8 +738,11 @@ meaningless.
   - **Satisfies**: FR-007
   - **Acceptance criteria**:
     1. `git diff --name-only main...HEAD` lists **only**: paths under `frontend/tests/e2e/`,
-       `scripts/scan-waitforresponse-race.py`, `CLEANUP-BOARD.html`, and
-       `specs/001-waitforresponse-race-sweep/`.
+       `scripts/scan-waitforresponse-race.py`, `CLEANUP-BOARD.html`,
+       `specs/001-waitforresponse-race-sweep/`, and `.secrets.baseline`.
+       The last is hook-forced (see Standing Constraints) and permitted **only** for a mechanical
+       line-number shift plus the `generated_at` stamp. Inspect its diff rather than waving it
+       through: any hunk that adds, removes, or re-classifies a finding is a real violation.
     2. **Zero** paths under `frontend/src/` — no product-code change to search, caching, or the
        health banner.
     3. No workflow file is touched. `.github/workflows/pr-checks.yml` is unchanged, so the Playwright
@@ -838,6 +847,62 @@ recoverable, a silently mangled card is not.
     5. `git diff CLEANUP-BOARD.html` touches only the `CARDS` array — no incidental reformatting of
        the surrounding HTML, CSS, or unrelated cards.
 
+- [ ] **T029** [US3] Card the two root-cause findings surfaced by verification (FR-009a)
+  - **Files**: `CLEANUP-BOARD.html` (depends on T028 — this is a second, later edit to the same
+    array, added after T028 had already validated the board at 120)
+  - **Satisfies**: FR-009a
+  - **Why this exists**: T023 and T003/T024 each produced a failure set that this feature does not
+    cause and must not fix. Recording them as "pre-existing" would have discarded the diagnosis, so
+    both were driven to a mechanism (tasks.md → "Root-cause findings") and each gets a card.
+  - **Acceptance criteria**:
+    1. Card A: the three `chaos-error-boundary.spec.ts` tests cannot pass against a production
+       build. Its `evidence` MUST carry the mechanism (`error-trigger.tsx:61-63` production
+       passthrough, `ErrorTriggerInner` being the sole reader of `window.__TEST_FORCE_ERROR`), the
+       artifact-level verification (0 occurrences of `TEST_FORCE_ERROR` across 778,391 bytes of
+       deployed `_next/static` chunks — the *shipped bundle*, not the source comment asserting tree
+       shaking), and the reason CI is green anyway (`pr-checks.yml:396` never sets
+       `PREPROD_FRONTEND_URL`, so `playwright.config.ts:5` falls back to the local dev server;
+       `deploy.yml:1658` sets it but runs only `sanity` + `auth`). It MUST name the conflict with
+       CLAUDE.md rule 2. `next_action` MUST present the fix as an owner decision, not a foregone
+       one, since option A puts test-only code in a deployed bundle.
+    2. Card B: `chart-edge-cases.spec.ts:46` and `ticker-search-gaps.spec.ts:116` leave
+       `/api/v2/runtime` and `/api/v2/auth/refresh` unmocked against a live API Gateway origin. Its
+       `evidence` MUST record the mock-coverage audit **and** the refutation: the phase-timed replay
+       at 1 vs 8 concurrent workers showing `networkidle` flat (816 → 899ms median) while a fully
+       mocked round trip inflated 12× and a bare `waitForTimeout(2000)` overshot to 3416ms. Severity
+       is `low` precisely *because* the causal story was refuted; a card that carried only the
+       mock gap would invite the next reader to re-adopt the hypothesis this feature killed.
+    3. Neither defect is fixed here. No file under `frontend/src/` and no file outside this
+       feature's permitted set is touched (T025 still holds).
+    4. Both cards use the existing schema keys: `title`, `lane`, `severity`, `evidence`, `citation`,
+       `next_action`, `source`.
+    5. Card count goes **120 → 122**, `CARDS` re-parses, the board renders with **0 console
+       errors** and 122 `.card` elements, and `git diff CLEANUP-BOARD.html` touches exactly one
+       line. Re-dump with `json.dumps(cards, ensure_ascii=False)`: the array is a single-line
+       literal, and `indent=2` reformats all 122 cards into a 1103-line diff that buries the change.
+
+
+- [ ] **T030** [US3] Record the owner's decision to arm Playwright as merge-required (FR-009b)
+  - **Files**: `CLEANUP-BOARD.html` (depends on T029)
+  - **Satisfies**: FR-009b
+  - **Acceptance criteria**:
+    1. The FR-009 card (1) is **retitled**. Its old title opened with "Decide whether", which
+       presents a settled decision as open; the title is the most-read line, so correcting only the
+       body would leave the misleading claim in place. (Same reasoning as T026's retitle.)
+    2. `evidence` records the decision date, the **verified** current state (`main` required contexts
+       are exactly `["Secrets Scan", "Lint", "Run Tests"]`, `strict=true`, 0 rulesets, read from
+       `gh api` and not inferred from workflow files), and both preconditions.
+    3. `evidence` MUST state the interaction with the `chaos-error-boundary` card explicitly: those
+       3 tests pass in CI only because `pr-checks.yml` falls back to the local dev server, so arming
+       the job as required and re-targeting it at Amplify are **not independent changes**. Doing both
+       without fixing the trigger permanently blocks every PR.
+    4. `next_action` is an ordered sequence, not a list of options, and names the `--retries=0`
+       decision that comes with arming a required job.
+    5. **The required status is NOT changed by this feature.** Branch protection is untouched; the
+       card records the decision only. Re-verify `main`'s required contexts after the edit.
+    6. Card count stays **122**; single-line diff; board re-parses and renders with 0 console errors.
+
+
 ---
 
 ## Dependencies & Execution Order
@@ -860,7 +925,8 @@ Phase C, order MANDATORY:
         ▼
 Phase D (T018 → T019 → T020 → T021 → T022 → T023 → T024 [P] / T025 [P])
         │
-Phase E (T026 → T027 → T028)  ── independent of Phase D, may run alongside
+Phase E (T026 → T027 → T028 → T029 → T030)  ── independent of Phase D, may run alongside
+                (T029 was added mid-implementation and depends on Phase D's findings)
 ```
 
 ### Why the Phase C order is not negotiable
@@ -917,7 +983,7 @@ tree at `frontend/tests/e2e/` and `CLEANUP-BOARD.html`, not against the artifact
 | SC-003(a) | Fault injection at the two sound targets; pre-fix FAILS, post-fix PASSES | **T020** (pre-fix + stop condition), **T021** (post-fix), **T022** (honest record) | COVERED |
 | SC-003(b) | Contention 20/20 across all affected files | **T023** (file list includes `chaos-cross-browser`, `chaos-error-boundary`, `chaos-scenarios`) | COVERED |
 | SC-004 | Test count unchanged; nothing skipped, deleted, or weakened | **T003** (baseline), **T024** (comparison) | COVERED |
-| SC-005 | `CARDS` parses, board renders, 118 → 120 | **T028** | COVERED |
+| SC-005 | `CARDS` parses, board renders, 118 → 120 (then → 122 via T029) | **T028**, **T029** | COVERED |
 
 **Gaps found: 0.** Every FR-001…FR-012 has at least one implementing task and every SC-001…SC-005 has
 at least one dedicated verification task. Four requirements that are easy to lose as incidental edits
@@ -946,6 +1012,8 @@ Every task traces. No scope creep found.
 | T026 | FR-008, US3 |
 | T027 | FR-009 |
 | T028 | SC-005 |
+| T029 | SC-005 (FR-009a addendum) |
+| T030 | SC-005 (FR-009b addendum) |
 
 Two tasks warrant a note because they sit closest to the scope-creep line:
 
@@ -1088,15 +1156,254 @@ them now requires an artifact edit or an owner decision**:
 
 | Task | Date | Result |
 |---|---|---|
-| T002 | | |
-| T003 | | |
-| T018 | | |
-| T020 | | |
-| T021 | | |
-| T022 | | |
-| T023 | | |
-| T024 | | |
-| T028 | | |
+| T002 | 2026-07-30 | **PASS.** `RACY 27 / PROMISE-FIRST 6 / OTHER 1 / total 34 / files scanned 47`, exit **1**, at `18b5323`. All 27 RACY lines and all 6 PROMISE-FIRST lines match the spec inventory exactly (criteria 4, 5). The single `OTHER` is `chaos-scenarios.spec.ts:138`, as criterion 7 requires. Full output below. |
+| T003 | 2026-07-30 | **29 tests: 26 passed / 3 failed / 0 skipped** in 38.0s, at `18b5323`, `--project="Desktop Chrome"` against `PREPROD_FRONTEND_URL=https://main.d29tlmksqcx494.amplifyapp.com` (the Amplify customer dashboard, per CLAUDE.md rule 2 — not the Lambda URL). All 3 failures are in `chaos-error-boundary.spec.ts` (`:26`, `:59`, `:85`), a file this sweep does **not** convert; it is one of the two unedited `triggerHealthBanner` callers. **Root-caused, not written off as flaky** (see "Finding 1" below): the tests are structurally incapable of passing against a production build, and fail 3/3 deterministically. Pre-existing, deterministic, and independent of the race class. Counting run only, non-evidential per criterion 3. |
+| T018 | 2026-07-30 | **PASS**, all 7 criteria. `RACY 0 / PROMISE-FIRST 16 / OTHER 1 / total 17 / files scanned 48`, exit **0** (T002 recorded exit 1, so both branches of FR-011's exit contract are now exercised). Per-file PROMISE-FIRST matches the criterion-3 table exactly: `chaos-scenarios` 7, `helpers/chaos-helpers` 3, `error-visibility-search` 2, `ticker-search-gaps` 2, `chaos-degradation` 1, `helpers/search-helpers` 1, `chart-edge-cases` 0. RACY is 0 in **every** file, not merely in total. The single `OTHER` is in `chaos-scenarios.spec.ts`, test `'cold start — loading skeletons appear during delay'` — the FR-003 hold-out. `grep -rn "searchAndAwaitResponse(" --include="*.spec.ts" \| wc -l` = **18**, distributed 4 (`chart-edge-cases`) + 9 (`ticker-search-gaps`) + 5 (`chaos-degradation`) across **3** spec files. |
+| T020 | 2026-07-30 | **PASS — the stop condition was NOT triggered.** Pre-fix content restored from merge base `18b5323` via `git checkout "$BASE" --`. Injected `await new Promise((r) => setTimeout(r, 250));` between the triggering action and the listener at both sound targets (`ticker-search-gaps.spec.ts` site `:38`, `chart-edge-cases.spec.ts` site `:72`). Result: **both injected tests FAILED**, and only those two — 2 failed / 10 passed. The diagnosis is not falsified. |
+| T021 | 2026-07-30 | **PASS, including the crit-5 negative control.** Conversions restored, tree clean before patching; `git diff --name-only` listed `helpers/search-helpers.ts` and nothing else. Post-fix shape with the same 250ms delay between `fill(query)` and `await responsePromise`: **12/12 passed**. Negative control, promise moved below the fill with the delay unchanged: **11 failed / 1 passed**. The single pass is `'duplicate ticker switches to existing chip without adding'`, whose two waits are FR-004 pre-existing sites that never route through the helper — so it is not exercising the patched code and its pass is expected. The delay therefore *discriminates* between the two shapes; the result is not void. Patch reverted via `git checkout HEAD --`; the helper carries no delay and no flipped order. |
+| T022 | 2026-07-30 | **Recorded below** in "T020/T021 fault-injection record". Includes the explicit statement that the 6 status-only and 3 `requestfailed` sites were **not** validated by injection. |
+| T023 | 2026-07-30 | **PASS WITH RESIDUAL — not a clean 20/20 on first execution, and deliberately not rounded up.** Two full six-file runs at `--repeat-each=20 --workers=8` against the Amplify URL. **Run 1: 518 passed / 62 failed.** 60 of those are the 3 pre-existing `chaos-error-boundary` tests × 20; the other **2 were genuine single flakes in converted tests** (`chart-edge-cases.spec.ts:46`, `ticker-search-gaps.spec.ts:116`). **Run 3: 520 passed / 60 failed** — the 60 pre-existing only, every converted test **20/20**. An isolated 240-run re-run of just those two files was also clean. Run 1's two flakes were **root-caused by measurement, not retried away** — see "Finding 2" below. Summary: the inflation under contention is **client-side CPU oversubscription in the verification harness**, not the swept race and not a network dependency. A phase-timed replay of the exact `chart-edge-cases:46` path at 1 vs 8 concurrent workers on this 8-core box (n=40) shows every browser-side phase inflating while the only network-bound phase stays flat: `networkidle` 816ms → 899ms median (flat), but the *fully mocked* search round trip 40ms → 497ms (12×), the option click 324ms → 721ms (max 2362ms), and a literal `waitForTimeout(2000)` overshooting to **3416ms**. A timer that depends only on the local scheduler cannot be delayed by a remote service, so the network hypothesis is refuted outright. `--workers=8` on 8 cores with `screenshot: 'on'` per test (`playwright.config.ts:23`) plus 60 concurrently-timing-out `chaos-error-boundary` tests oversubscribes the box; CI runs 4 workers against a local `webServer`. Since crit. 2 forbids retrying a flake away, this is still recorded as a **residual**, and the honest limit of the attribution is stated: run 1's error text was lost before capture, so the two failures are attributed by phase measurement rather than by reading their own output. Independent evidence it is not the swept race: neither flaked test names a wait in its assertions (both assert chart/UI render at 10s and 15s budgets), a raced converted wait would fail at the helper's 15000ms cap, and T021's negative control shows ordering is what governs these sites. Each flaked test has since passed **40/40** consecutive. **T023 crit. 5** (mis-scoped T010 predicate would show as nondeterministic pass): the T010 test `'single failure does not trigger banner'` was **20/20 in both runs**, so T010's predicates are not implicated. **T023 crit. 6** wall-clock: single-pass six-file run **30.3s** (32.3s real) against the `timeout 900` CI hard wall = **3.4%**, far below the 30% flag threshold. |
+| T024 | 2026-07-30 | **PASS.** Post-sweep six-file tally **29 tests: 26 passed / 3 failed / 0 skipped**, identical to the T003 pre-sweep baseline. No drop in `passed`, no new `skipped`, no deleted test. The 3 failures are the same pre-existing `chaos-error-boundary` tests (`:26`, `:59`, `:85`); confirmed pre-existing by stashing the sweep and re-running, which reproduced the identical failure set, and root-caused in "Finding 1" below. `git diff` adds no `test.skip`, `test.fixme`, `test.only`, and deletes no `test(` block. No assertion weakened: the only intentional predicate edits are T010's **tightening** and T011's **narrowing**, both declared. |
+| T028 | 2026-07-30 | **PASS.** `CARDS` re-parses at **120** (baseline **118** asserted in the mutation script before any edit). Rendered headless via Chromium from `file://`: **0 console errors**, **120** `.card` elements, both new cards and the corrected card present in body text. `git diff CLEANUP-BOARD.html` touches exactly **one line** — the `CARDS` array literal — with no incidental reformatting of surrounding HTML or CSS. |
+| T029 | 2026-07-30 | **PASS.** `CARDS` re-parses at **122** (baseline **120** asserted in the mutation script before any edit). Rendered headless via Chromium from `file://`: **0 console errors**, **122** `.card` elements, both new cards present in body text. `git diff --numstat CLEANUP-BOARD.html` = `1  1` — exactly one line changed. The first attempt used `json.dumps(indent=2)` and produced a **1103-insertion** diff by reformatting all 122 cards; it was reverted with `git checkout --` and re-done with `json.dumps(cards, ensure_ascii=False)` to match the file's single-line convention. Recorded because the reformatted version parsed and rendered identically — the defect was invisible to every check except the diff shape. |
+| T030 | 2026-07-30 | **PASS.** Owner decided mid-implementation that the Playwright E2E job should become merge-required. Recorded, **not executed**. Card retitled from `Decide whether the Playwright E2E job becomes merge-required` to `Arm the Playwright E2E job as merge-required (owner decided 2026-07-30; blocked on two preconditions)` and moved `track` → `fix`. Current state re-verified via `gh api .../branches/main/protection` rather than read off a workflow file: required contexts are exactly `["Secrets Scan", "Lint", "Run Tests"]`, `strict=true`, 0 rulesets — so `Playwright E2E` is confirmed non-required, and confirmed **still** non-required after this edit. The card now carries the precondition interaction that neither card stated alone: the 3 `chaos-error-boundary` tests pass in CI only because `pr-checks.yml` falls back to the dev server, so arming the job *and* re-targeting it at Amplify are not independent changes — doing both without fixing the trigger would permanently block every PR with no obvious cause. Card count unchanged at **122**; `git diff --numstat` = `1  1`. |
+
+### T020/T021 fault-injection record (T022)
+
+The falsifiable half of SC-003(a). Recorded in full, including what was **not** validated.
+
+**Injected fault (identical in both directions):** `await new Promise((r) => setTimeout(r, 250));`
+
+**Sound targets — the only two.** Both mock ticker search with a single `route.fulfill` 200, so
+`retry: 1` never fires a second matching response and exactly one response exists per interaction.
+
+| Target | Pre-fix (T020) | Post-fix (T021) |
+|---|---|---|
+| `ticker-search-gaps.spec.ts`, `'shows "no tickers found" when search returns empty results'` (pre-sweep site `:38`) | **FAIL** | **PASS** |
+| `chart-edge-cases.spec.ts`, `'shows empty state message when OHLC returns zero candles'` (pre-sweep site `:72`) | **FAIL** | **PASS** |
+
+**Commands.**
+
+```bash
+# T020 — pre-fix, delay between the action and the listener, in the spec files
+BASE=$(git merge-base main HEAD)          # 18b5323
+git checkout "$BASE" -- frontend/tests/e2e/ticker-search-gaps.spec.ts \
+                        frontend/tests/e2e/chart-edge-cases.spec.ts
+# inject, then:
+cd frontend && npx playwright test tests/e2e/ticker-search-gaps.spec.ts \
+  tests/e2e/chart-edge-cases.spec.ts --project="Desktop Chrome"
+# => 2 failed / 10 passed. Only the two injected tests failed.
+git checkout HEAD -- frontend/tests/e2e/ticker-search-gaps.spec.ts \
+                     frontend/tests/e2e/chart-edge-cases.spec.ts
+
+# T021 — post-fix, same delay, moved inside the helper (the only observable position left)
+# in frontend/tests/e2e/helpers/search-helpers.ts, between:
+#   await searchInput.fill(query);
+#   await new Promise((r) => setTimeout(r, 250));   <-- here
+#   return await responsePromise;
+cd frontend && npx playwright test tests/e2e/ticker-search-gaps.spec.ts \
+  tests/e2e/chart-edge-cases.spec.ts --project="Desktop Chrome"
+# => 12 passed.
+git checkout HEAD -- frontend/tests/e2e/helpers/search-helpers.ts
+```
+
+**Negative control (T021 crit. 5), the hard gate.** The same helper-side delay was run against both
+statement orders, changing nothing else:
+
+| Helper shape (delay held constant) | Result |
+|---|---|
+| **POST-FIX** — `waitForResponse` created before the fill | **12 passed** |
+| **PRE-FIX** — `waitForResponse` moved below the fill | **11 failed / 1 passed** |
+
+The lone pass under the pre-fix shape is `'duplicate ticker switches to existing chip without
+adding'`, whose two waits are FR-004-protected pre-existing promise-first sites that never call the
+helper. It is not exercising the patched code, so its pass is expected and does not void the
+control. Both runs passing would have voided the result; they did not.
+
+Together T020 and T021 show the conversion **removes** the race rather than reducing its
+probability. A green contention run alone cannot show that.
+
+**What injection did NOT validate — stated plainly so partial coverage is not mistaken for full.**
+The 6 status-only 503 sites (`chaos-scenarios.spec.ts` × 3, `helpers/chaos-helpers.ts` × 3) and the
+3 `waitForEvent('requestfailed')` sites (`chaos-scenarios.spec.ts`) are **unsound** injection
+targets and were not injected. Under `retry: 1` plus a blanket `page.route('**/api/**', … 503)`, a
+matching response keeps arriving however wide the gap, so the listener resolves regardless of
+ordering. Their non-reproduction under injection would falsify nothing. **Those 9 sites are covered
+by the T023 contention run only** — a weaker form of evidence than the two injected targets receive.
+
+`chaos-degradation.spec.ts` was not an injection target either: PR #981 (`8c27271`) already
+converted its racy site before this feature's merge base, so restoring merge-base content cannot
+reproduce the old shape.
+
+**Patch hygiene (T022 crit. 5).** The injection patch was never committed. `git status` was clean of
+it before every commit, and `frontend/tests/e2e/helpers/search-helpers.ts` at HEAD carries no
+injected delay and no flipped statement order.
+
+### Root-cause findings for the failures observed during verification
+
+Two sets of test failures showed up during T003/T019/T023/T024. Neither is caused by this sweep, but
+"pre-existing" and "flaky" are not diagnoses, so both were driven to a mechanism. Recorded here so a
+later reader gets the cause and the evidence rather than a shrug.
+
+#### Finding 1 — the 3 `chaos-error-boundary` failures are deterministic, not flaky
+
+**Claim.** `chaos-error-boundary.spec.ts` (`:26`, `:59`, `:85`) is structurally incapable of passing
+against a production build. It fails 3/3, every run, by construction.
+
+**Mechanism.** `frontend/src/components/ui/error-trigger.tsx:61-63`:
+
+```tsx
+if (process.env.NODE_ENV === 'production') {
+  return <>{children}</>;   // transparent passthrough
+}
+return <ErrorTriggerInner>{children}</ErrorTriggerInner>;
+```
+
+`ErrorTriggerInner` is the only reader of the `window.__TEST_FORCE_ERROR` flag that the tests'
+`forceErrorBoundary()` helper sets. In a production build the outer component early-returns before
+ever rendering it, so setting the flag has no effect, "Something went wrong" never renders, and each
+test exhausts its 5s wait.
+
+**Verified against the shipped artifact, not the source comment.** The comment above that branch
+asserts tree shaking removes the inner component; comments are not evidence. All 20 `_next/static`
+chunks were pulled from the deployed Amplify build and concatenated (778,391 bytes). Occurrences of
+`TEST_FORCE_ERROR`: **0**. The trigger is genuinely absent from what customers load.
+
+**Why CI is nonetheless green.** `.github/workflows/pr-checks.yml:396` runs `tests/e2e/*.spec.ts` and
+**never sets `PREPROD_FRONTEND_URL`** (grep confirms the variable appears in no `pr-checks.yml` line).
+`playwright.config.ts:5` therefore falls back to `http://localhost:3000` and the `webServer` array
+starts `npm run dev`, where `NODE_ENV` is `development` and `ErrorTriggerInner` exists. The one
+workflow that does set the Amplify URL, `deploy.yml:1658`, runs only `sanity.spec.ts` and
+`auth.spec.ts` — `chaos-error-boundary.spec.ts` is not in that list. So these 3 tests have never
+actually executed against a production build in CI.
+
+**Why it matters beyond this feature.** CLAUDE.md rule 2 requires customer-facing E2E to target the
+Amplify URL. These 3 tests cannot satisfy that rule as written; today the conflict is masked because
+the only job that runs them points at a dev server. Carded as a follow-up under FR-009's successor.
+
+**Bearing on this sweep.** None. The file is not converted here, the failure predates the merge base,
+and the mechanism is in product code this feature is forbidden to touch (FR-007).
+
+#### Finding 2 — the 2 contention flakes are CPU oversubscription in the harness, and the network hypothesis is refuted
+
+**What happened.** In T023 contention run 1 (580 executions), `chart-edge-cases.spec.ts:46` and
+`ticker-search-gaps.spec.ts:116` each failed exactly once. Both passed 20/20 in run 3 and 40/40 in an
+isolated re-run.
+
+**First hypothesis, and its refutation.** An instrumented replay showed both tests leave two calls
+unmocked, to a *different origin* than the mocked ones, both landing during page load inside the
+`waitForLoadState('networkidle')` wait:
+
+```
+https://yikrqu13lj.execute-api.us-east-1.amazonaws.com/v1/api/v2/runtime
+https://yikrqu13lj.execute-api.us-east-1.amazonaws.com/v1/api/v2/auth/refresh
+```
+
+A mock-coverage audit confirms this is real: `mockAnonymousAuth` (`helpers/auth-helper.ts:195`) mocks
+only `**/api/v2/auth/anonymous`; `/auth/refresh` is mocked only in `setupUpgradedSession`
+(`auth-helper.ts:147`), `error-visibility-auth.spec.ts`, and `chaos-keyboard-a11y.spec.ts`, none of
+which these two tests use, and `chart-edge-cases.spec.ts` hand-rolls its anonymous mock without
+importing the helper at all. Neither test mocks `/runtime` or `/auth/refresh`.
+
+That made "live Lambda cold starts under 8-way concurrency stall `networkidle`" the obvious
+candidate. **It was measured, and it is wrong.** A phase-timed replay of the exact `:46` path
+(same `beforeEach` mocks, same body, same `waitForTimeout(2000)`) at 1 worker (n=5) and 8 concurrent
+workers (n=40) on this 8-core / 9 GB box:
+
+| Phase | median @ 1 worker | median @ 8 workers | max @ 8 | network-bound? |
+|---|---|---|---|---|
+| browser launch | 57ms | 386ms | 702ms | no |
+| `goto` | 224ms | 638ms | 789ms | partly |
+| **`networkidle`** | **816ms** | **899ms** | **1159ms** | **yes — the live calls live here** |
+| search fill → response | 40ms | 497ms | 724ms | **no, fully mocked** |
+| option click | 324ms | 721ms | 2362ms | no |
+| `waitForTimeout(2000)` | 2001ms | 2002ms | **3416ms** | no — pure local timer |
+| assertion | 4ms | 7ms | 16ms | no |
+| **TOTAL** | 3421ms | 4836ms | 6641ms | |
+
+0 failures in 45 runs. The decisive rows: `networkidle` is the *only* phase touching the unmocked
+live endpoints and it is essentially **flat** (816 → 899ms), while a `route.fulfill` round trip that
+never leaves the browser inflates **12×**, and a bare `waitForTimeout(2000)` overshoots by 1.4s. A
+timer that depends only on the local event loop cannot be delayed by a remote service. The variance
+is client-side scheduling starvation, not the network.
+
+**Actual cause.** `--workers=8` on 8 cores, with `screenshot: 'on'` for every test
+(`playwright.config.ts:23`) and 60 `chaos-error-boundary` executions concurrently burning 5s timeouts
+while holding workers, oversubscribes CPU and IO. Every browser-side phase dilates, and all of these
+tests run under the 30s default cap, since T005 crit. 4 and T006 crit. 5 correctly declined to raise
+their timeouts.
+
+**A tempting sub-claim, checked and dropped.** "The two that flaked are the two carrying the largest
+fixed budgets" is false, and is recorded here so it is not re-invented. It holds for
+`ticker-search-gaps` (the flaked `:116` carries the file's only 15s assertion; every other assertion
+there is 5s) but **fails for `chart-edge-cases`**: the flaked `:46` carries
+`waitForTimeout(2000)` + a 10s assertion, while `:163` (`waitForTimeout(3000)` + 15s) and `:219`
+(two 3s hard waits + two 10s assertions) carry strictly more and did not flake. Budget size does not
+predict which test flakes. That is what a starvation model predicts — the tail lands stochastically
+— and it is what a deterministic budget-exhaustion model does not.
+CI runs 4 workers against a local `webServer`, so it does not reproduce this harness's load profile.
+
+**Honest limits of the attribution.** Run 1's error text was lost before capture (Playwright wipes
+`test-results/` at the start of each run), so these two failures are attributed by phase measurement
+of the same code path, not by reading their own failure output. The refutation of the network
+hypothesis is direct and measured; the positive attribution to CPU starvation is strong inference.
+Stated plainly rather than rounded up.
+
+**Separately confirmed defect, independent of the flakes.** Whether or not it caused them, the
+mock-coverage gap above is real: two tests' page load depends on a live API Gateway. That is a
+hermeticity defect worth fixing on its own merits, and is carded. The measurement shows its cost is
+small when the endpoint is warm; a genuine cold start is unbounded and was not observed here.
+
+**Bearing on this sweep.** None. Neither flaked test names a wait in its assertions, a raced
+converted wait would fail at the helper's 15000ms cap rather than at a render assertion, and T021's
+negative control shows statement ordering is what governs these sites.
+
+### T002 pre-sweep baseline — full detector output
+
+Taken at `18b5323` (spec merge), before any conversion existed in the tree.
+
+```text
+frontend/tests/e2e/chaos-degradation.spec.ts:131 RACY
+frontend/tests/e2e/chaos-degradation.spec.ts:138 RACY
+frontend/tests/e2e/chaos-degradation.spec.ts:178 RACY
+frontend/tests/e2e/chaos-degradation.spec.ts:183 RACY
+frontend/tests/e2e/chaos-degradation.spec.ts:188 RACY
+frontend/tests/e2e/chaos-degradation.spec.ts:231 PROMISE-FIRST
+frontend/tests/e2e/chaos-scenarios.spec.ts:102 RACY
+frontend/tests/e2e/chaos-scenarios.spec.ts:105 RACY
+frontend/tests/e2e/chaos-scenarios.spec.ts:108 RACY
+frontend/tests/e2e/chaos-scenarios.spec.ts:138 OTHER
+frontend/tests/e2e/chaos-scenarios.spec.ts:219 RACY
+frontend/tests/e2e/chaos-scenarios.spec.ts:222 RACY
+frontend/tests/e2e/chaos-scenarios.spec.ts:225 RACY
+frontend/tests/e2e/chaos-scenarios.spec.ts:251 PROMISE-FIRST
+frontend/tests/e2e/chart-edge-cases.spec.ts:72 RACY
+frontend/tests/e2e/chart-edge-cases.spec.ts:130 RACY
+frontend/tests/e2e/chart-edge-cases.spec.ts:161 RACY
+frontend/tests/e2e/chart-edge-cases.spec.ts:218 RACY
+frontend/tests/e2e/error-visibility-search.spec.ts:142 PROMISE-FIRST
+frontend/tests/e2e/error-visibility-search.spec.ts:157 PROMISE-FIRST
+frontend/tests/e2e/helpers/chaos-helpers.ts:364 RACY
+frontend/tests/e2e/helpers/chaos-helpers.ts:367 RACY
+frontend/tests/e2e/helpers/chaos-helpers.ts:370 RACY
+frontend/tests/e2e/ticker-search-gaps.spec.ts:38 RACY
+frontend/tests/e2e/ticker-search-gaps.spec.ts:77 RACY
+frontend/tests/e2e/ticker-search-gaps.spec.ts:82 RACY
+frontend/tests/e2e/ticker-search-gaps.spec.ts:109 RACY
+frontend/tests/e2e/ticker-search-gaps.spec.ts:129 RACY
+frontend/tests/e2e/ticker-search-gaps.spec.ts:144 RACY
+frontend/tests/e2e/ticker-search-gaps.spec.ts:162 RACY
+frontend/tests/e2e/ticker-search-gaps.spec.ts:211 RACY
+frontend/tests/e2e/ticker-search-gaps.spec.ts:219 RACY
+frontend/tests/e2e/ticker-search-gaps.spec.ts:231 PROMISE-FIRST
+frontend/tests/e2e/ticker-search-gaps.spec.ts:237 PROMISE-FIRST
+==============================================================================
+OTHER sites - requires human triage
+==============================================================================
+  frontend/tests/e2e/chaos-scenarios.spec.ts:138  (in: cold start — loading skeletons appear during delay)
+      await page.waitForResponse(
+SUMMARY: RACY 27 / PROMISE-FIRST 6 / OTHER 1 / total 34 / files scanned 47
+```
 
 ---
 
