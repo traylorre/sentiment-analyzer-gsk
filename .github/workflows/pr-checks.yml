@@ -64,6 +64,28 @@ jobs:
       - name: Check for security issues
         run: ruff check src/ --select S --output-format=github
 
+      # waitForResponse race guard (002-waitforresponse-lint-guard, FR-004).
+      #
+      # Why a Playwright race scan lives in a job named `Lint`: `Lint` is one of
+      # main's required status checks and `Pre-commit Hooks` is not, so this is the
+      # only place the guard can actually block a merge. If you are tidying this job
+      # and this step looks misfiled, it is not. Moving it into `Pre-commit Hooks`
+      # or a job of its own silently downgrades the guard to advisory, with no
+      # symptom until a race merges green. Required contexts verified 2026-07-30:
+      #   gh api repos/traylorre/sentiment-analyzer-gsk/branches/main/protection \
+      #     --jq .required_status_checks.contexts
+      #
+      # Invoked directly rather than through pre-commit so the `Pre-commit Hooks`
+      # job's SKIP env cannot reach it. No pip install: the detector is stdlib-only
+      # and setup-python above already provides 3.13.
+      #
+      # `if: always()` because steps are fail-fast and this one is last. Without it
+      # any ruff failure means the guard never runs and reports nothing. The job
+      # still fails either way; this just makes both failures visible in one run.
+      - name: Check waitForResponse race ordering
+        if: always()
+        run: python3 scripts/scan-waitforresponse-race.py
+
   # ========================================================================
   # JOB 2: Test (pytest + coverage)
   # ========================================================================
@@ -226,7 +248,12 @@ jobs:
           path: ~/.cache/pre-commit
           key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
 
-      - name: Run pre-commit (blocking)
+      # Named "(blocking)" until 002 T005. It is not: the `Pre-commit Hooks` job is
+      # not among main's required status checks, so a red run here does not prevent
+      # a merge. Verified 2026-07-30; re-check rather than trusting this line:
+      #   gh api repos/traylorre/sentiment-analyzer-gsk/branches/main/protection \
+      #     --jq .required_status_checks.contexts
+      - name: Run pre-commit (advisory, not merge-blocking)
         env:
           # detect-secrets: local autostage wrapper mutates + git-adds the baseline
           #   (a retry-until-stable loop) — no place in a blocking gate. CI runs the

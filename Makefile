@@ -39,8 +39,12 @@ install-tools: ## Install CLI tools via aqua
 # Validation (Zero AWS Cost)
 # ============================================================================
 
-validate: fmt lint security sast check-banned-terms check-test-target-headers ## Run all validation (fmt + lint + security + sast + banned terms + test headers)
+validate: fmt lint security sast check-banned-terms check-test-target-headers check-waitforresponse-race ## Run all validation (fmt + lint + security + sast + banned terms + test headers + waitForResponse races)
 	@echo "$(GREEN)✓ All validation passed$(NC)"
+
+check-waitforresponse-race: ## Detect act-then-wait waitForResponse races in frontend/tests/e2e/
+	@echo "Checking waitForResponse race ordering..."
+	@python3 scripts/scan-waitforresponse-race.py
 
 check-test-target-headers: ## Verify all Playwright test files have Target: dashboard headers
 	@echo "Checking test target headers..."

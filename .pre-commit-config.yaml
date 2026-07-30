@@ -187,9 +187,42 @@ repos:
         always_run: true
         stages: [commit]
 
+      # waitForResponse race guard (002-waitforresponse-lint-guard)
+      # Blocks act-then-wait races in the CUSTOMER dashboard Playwright suite at
+      # frontend/tests/e2e/. This is not the admin pytest suite under tests/.
+      #
+      # `entry` is a bare `python3`, deliberately NOT `.venv/bin/python3` like the
+      # `pytest` hook above. The same command runs as a step in the CI `Lint` job,
+      # where there is no venv — Python 3.13 comes from actions/setup-python. The
+      # detector is stdlib-only and carries its own sys.version_info >= (3, 13)
+      # floor, so a bare interpreter is both sufficient and portable. Do not
+      # "fix" this toward the pytest hook's form: it would work on a developer
+      # laptop and fail everywhere else.
+      #
+      # pass_filenames is false and the detector ignores positional arguments, so
+      # it always scans its whole root. That is load-bearing, not incidental: a
+      # commit touching no .ts file must still be scanned, and the guard must see
+      # untracked files that pre-commit would never hand it.
+      - id: scan-waitforresponse-race
+        name: Check waitForResponse race ordering
+        entry: python3 scripts/scan-waitforresponse-race.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
 # CI Integration (Feature 1400 — validator gating):
 # The `pre-commit` job in .github/workflows/pr-checks.yml runs these hooks on every
-# PR to main as a BLOCKING gate (`pre-commit run --all-files --show-diff-on-failure`).
+# PR to main (`pre-commit run --all-files --show-diff-on-failure`). It is NOT a
+# blocking gate. `Pre-commit Hooks` is not among main's required status checks, so a
+# red run here does not prevent a merge. Verified 2026-07-30; the required contexts
+# were ["Secrets Scan", "Lint", "Run Tests", "Playwright E2E Tests"]. Do not trust
+# that list, re-check it:
+#   gh api repos/traylorre/sentiment-analyzer-gsk/branches/main/protection \
+#     --jq .required_status_checks.contexts
+# This is exactly why the scan-waitforresponse-race hook above is ALSO a step in the
+# `Lint` job (002 FR-004). As a pre-commit hook alone it would be advisory, and a
+# contributor who skipped local hooks could merge a race with every check green.
 # It SKIPs detect-secrets (local autostage wrapper mutates+git-adds the baseline — no
 # place in a gate; CI runs the non-mutating detect-secrets-hook step instead) and
 # gitleaks (already a dedicated blocking `secrets-scan` job). CI and local hooks are

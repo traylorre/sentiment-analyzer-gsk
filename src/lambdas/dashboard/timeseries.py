@@ -223,7 +223,16 @@ class TimeseriesQueryService:
         self._table = self._dynamodb.Table(table_name)
         self._cache: ResolutionCache | None = get_global_cache() if use_cache else None
 
-    # Default limits per resolution (approximately 1 hour of data at that resolution)
+    # Fallback bucket counts used ONLY when the caller supplies neither an explicit
+    # limit nor a start/end range. The old comment claimed these were "approximately
+    # 1 hour of data at that resolution", which is true for the intraday entries and
+    # false for TWENTY_FOUR_HOURS -- 7 daily buckets is 7 days, not 1 hour.
+    #
+    # These are a *fallback*, not a cap on a requested range. When start and end are
+    # both given, the limit is derived from that range instead (see query()), because
+    # applying a small fallback to an explicit range silently truncates it. Combined
+    # with the ascending scan below, that truncation used to return the OLDEST N
+    # buckets of the requested window rather than the newest.
     DEFAULT_LIMITS = {
         Resolution.ONE_MINUTE: 60,
         Resolution.FIVE_MINUTES: 12,
@@ -233,6 +242,11 @@ class TimeseriesQueryService:
         Resolution.TWENTY_FOUR_HOURS: 7,
     }
 
+    # Ceiling for a range-derived limit. Matches the documented ceiling the public
+    # timeseries endpoint already enforces (router_v2: "limit must be between 1 and
+    # 1000"), so a range query cannot ask DynamoDB for an unbounded page.
+    MAX_DERIVED_LIMIT = 1000
+
     def query(
         self,
         ticker: str,
@@ -241,6 +255,7 @@ class TimeseriesQueryService:
         end: datetime | None = None,
         limit: int | None = None,
         cursor: str | None = None,
+        latest: bool = False,
     ) -> TimeseriesResponse:
         """Query time-series data for a ticker/resolution with pagination.
 
@@ -250,10 +265,18 @@ class TimeseriesQueryService:
         Args:
             ticker: Stock ticker symbol (e.g., "AAPL").
             resolution: Time resolution for data.
-            start: Start of time range (inclusive). Defaults to 1 period ago.
-            end: End of time range (exclusive). Defaults to now.
-            limit: Maximum number of buckets to return. Defaults to resolution-based limit.
+            start: Start of time range (inclusive). No default -- when omitted the
+                whole partition is scanned from its oldest record.
+            end: End of time range (inclusive). No default.
+            limit: Maximum number of buckets to return. When omitted, derived from
+                start/end if both are given, else the DEFAULT_LIMITS fallback.
             cursor: Pagination cursor (SK value) to continue from previous query.
+            latest: Return the NEWEST buckets instead of the oldest. Scans the index
+                backwards, then restores ascending order before returning, so
+                ``buckets[-1]`` is the most recent bucket either way. Use this for
+                "current value" reads that do not supply a range. Not compatible with
+                cursor pagination, and bypasses the resolution cache (whose entries
+                are written under oldest-first semantics).
 
         Returns:
             TimeseriesResponse with buckets, metadata, and pagination info.
@@ -261,12 +284,26 @@ class TimeseriesQueryService:
         query_start = time.time()
         cache_hit = False
 
-        # Use default limit if not specified
+        # Resolve the limit.
+        #
+        # A caller that supplies an explicit start AND end is asking for that window.
+        # Applying a small per-resolution fallback to it silently truncates the window,
+        # and because the scan is ascending that truncation keeps the OLDEST buckets --
+        # so a "last 3 months" request would return the first week of that span. Derive
+        # the cap from the range instead, bounded by MAX_DERIVED_LIMIT.
         if limit is None:
-            limit = self.DEFAULT_LIMITS.get(resolution, 60)
+            if start is not None and end is not None:
+                span_seconds = max(0.0, (end - start).total_seconds())
+                # +2 covers both inclusive endpoints and a partial bucket at the edge.
+                derived = int(span_seconds // resolution.duration_seconds) + 2
+                limit = max(1, min(self.MAX_DERIVED_LIMIT, derived))
+            else:
+                limit = self.DEFAULT_LIMITS.get(resolution, 60)
 
-        # Check cache first if enabled (only for non-paginated queries)
-        if self._cache is not None and cursor is None:
+        # Check cache first if enabled (only for non-paginated queries).
+        # `latest` bypasses the cache: entries are stored oldest-first, so serving one
+        # to a newest-first caller would reintroduce the very inversion this fixes.
+        if self._cache is not None and cursor is None and not latest:
             if start is None and end is None:
                 # Only use cache for default time range queries
                 cached = self._cache.get(ticker, resolution)
@@ -311,7 +348,10 @@ class TimeseriesQueryService:
         query_kwargs: dict[str, Any] = {
             "KeyConditionExpression": key_condition,
             "ExpressionAttributeValues": expression_values,
-            "ScanIndexForward": True,  # Ascending order by SK (timestamp)
+            # Ascending by SK (timestamp) normally. When `latest` is set we scan
+            # backwards so DynamoDB's Limit keeps the NEWEST rows, then restore
+            # ascending order below so callers see a consistent shape.
+            "ScanIndexForward": not latest,
             "Limit": limit,
         }
 
@@ -329,7 +369,13 @@ class TimeseriesQueryService:
         all_buckets: list[SentimentBucketResponse] = []
         partial_bucket: SentimentBucketResponse | None = None
 
-        for item in response.get("Items", []):
+        # With latest=True DynamoDB returned newest-first; restore ascending order so
+        # buckets[-1] is the most recent bucket regardless of which mode was used.
+        items = response.get("Items", [])
+        if latest:
+            items = list(reversed(items))
+
+        for item in items:
             bucket = _item_to_bucket(item)
             # Bucket is complete if explicitly marked OR if time window has ended
             is_complete = not bucket.is_partial or _is_bucket_complete(
@@ -345,8 +391,16 @@ class TimeseriesQueryService:
         next_cursor = last_evaluated_key["SK"] if last_evaluated_key else None
         has_more = last_evaluated_key is not None
 
-        # Cache the result if using cache and no time range/pagination specified
-        if self._cache is not None and start is None and end is None and cursor is None:
+        # Cache the result if using cache and no time range/pagination specified.
+        # `latest` results are excluded: they are newest-first slices, and storing one
+        # under the same key an oldest-first reader uses would poison that reader.
+        if (
+            self._cache is not None
+            and start is None
+            and end is None
+            and cursor is None
+            and not latest
+        ):
             self._cache.set(
                 ticker,
                 resolution,
@@ -462,6 +516,7 @@ def query_timeseries(
     end: datetime | None = None,
     limit: int | None = None,
     cursor: str | None = None,
+    latest: bool = False,
 ) -> TimeseriesResponse:
     """Convenience function to query time-series data with pagination.
 
@@ -475,6 +530,8 @@ def query_timeseries(
         end: Optional end time.
         limit: Maximum number of buckets to return.
         cursor: Pagination cursor to continue from previous query.
+        latest: Return the newest buckets rather than the oldest. Required for
+            "current value" reads that supply no time range.
 
     Returns:
         TimeseriesResponse with buckets, metadata, and pagination info.
@@ -490,4 +547,6 @@ def query_timeseries(
             region=region,
         )
 
-    return _global_service.query(ticker, resolution, start, end, limit, cursor)
+    return _global_service.query(
+        ticker, resolution, start, end, limit, cursor, latest=latest
+    )
