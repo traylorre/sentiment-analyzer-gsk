@@ -96,6 +96,6 @@ class TestCorsProdHeaders:
             timeout=10,
         )
         acao = response.headers.get("Access-Control-Allow-Origin")
-        assert (
-            acao == "https://traylorre.github.io"
-        ), f"GET response missing ACAO header for configured origin. Got: {acao}"
+        assert acao == "https://traylorre.github.io", (
+            f"GET response missing ACAO header for configured origin. Got: {acao}"
+        )

@@ -62,9 +62,9 @@ async def test_config_create_success(
         # Verify tickers are present (synthetic config has 3 by default)
         tickers = data.get("tickers", [])
         expected_count = len(synthetic_config.tickers)
-        assert (
-            len(tickers) == expected_count
-        ), f"Expected {expected_count} tickers, got {len(tickers)}"
+        assert len(tickers) == expected_count, (
+            f"Expected {expected_count} tickers, got {len(tickers)}"
+        )
 
     finally:
         api_client.clear_access_token()
@@ -139,9 +139,9 @@ async def test_config_read_by_id(
         # Read the config
         read_response = await api_client.get(f"/api/v2/configurations/{config_id}")
 
-        assert (
-            read_response.status_code == 200
-        ), f"Config read failed: {read_response.status_code}"
+        assert read_response.status_code == 200, (
+            f"Config read failed: {read_response.status_code}"
+        )
 
         data = read_response.json()
         assert data.get("config_id") == config_id
@@ -188,9 +188,9 @@ async def test_config_update_name_and_tickers(
             json=update_payload,
         )
 
-        assert (
-            update_response.status_code == 200
-        ), f"Config update failed: {update_response.status_code}"
+        assert update_response.status_code == 200, (
+            f"Config update failed: {update_response.status_code}"
+        )
 
         # Verify update
         verify_response = await api_client.get(f"/api/v2/configurations/{config_id}")
@@ -240,9 +240,9 @@ async def test_config_delete(
 
         # Verify deleted - should get 404
         verify_response = await api_client.get(f"/api/v2/configurations/{config_id}")
-        assert (
-            verify_response.status_code == 404
-        ), f"Deleted config still accessible: {verify_response.status_code}"
+        assert verify_response.status_code == 404, (
+            f"Deleted config still accessible: {verify_response.status_code}"
+        )
 
     finally:
         api_client.clear_access_token()
@@ -331,9 +331,9 @@ async def test_config_invalid_ticker_rejected(
         ), f"Invalid ticker should be rejected: {response.status_code}"
 
         data = response.json()
-        assert (
-            "error" in data or "message" in data or "detail" in data
-        ), "Error response should have message"
+        assert "error" in data or "message" in data or "detail" in data, (
+            "Error response should have message"
+        )
 
     finally:
         api_client.clear_access_token()
@@ -403,9 +403,9 @@ async def test_config_not_found(
             "/api/v2/configurations/non-existent-config-id-12345"
         )
 
-        assert (
-            response.status_code == 404
-        ), f"Non-existent config should return 404: {response.status_code}"
+        assert response.status_code == 404, (
+            f"Non-existent config should return 404: {response.status_code}"
+        )
 
     finally:
         api_client.clear_access_token()

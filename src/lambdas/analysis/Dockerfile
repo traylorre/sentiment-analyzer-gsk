@@ -54,4 +54,8 @@ COPY lib /var/task/src/lib
 ENV PYTHONPATH=/var/task
 
 # Lambda handler configuration
+# Managed-base-image Lambda: runtime-environment changes vetoed by image-Lambda crash-loop
+# history (commit 118ab27); platform sandbox is defense-in-depth. sse_streaming's `USER lambda`
+# is a custom-bootstrap image (different execution model).
+# nosemgrep: dockerfile.security.missing-user.missing-user
 CMD ["handler.lambda_handler"]

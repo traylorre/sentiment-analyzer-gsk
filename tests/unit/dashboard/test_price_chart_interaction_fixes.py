@@ -112,12 +112,12 @@ class TestPriceAxisAutoFit:
         content = read_ohlc_js()
 
         # Check that we extract lows and highs from candles
-        assert (
-            "candles.map(c => c.low)" in content
-        ), "Price limits should extract low values from candles."
-        assert (
-            "candles.map(c => c.high)" in content
-        ), "Price limits should extract high values from candles."
+        assert "candles.map(c => c.low)" in content, (
+            "Price limits should extract low values from candles."
+        )
+        assert "candles.map(c => c.high)" in content, (
+            "Price limits should extract high values from candles."
+        )
 
     def test_price_limits_have_padding(self) -> None:
         """Verify price limits include padding for visual clarity."""
@@ -135,12 +135,12 @@ class TestPriceAxisAutoFit:
         content = read_ohlc_js()
 
         # Check that limits are set dynamically, not just at init
-        assert (
-            "this.chart.options.plugins.zoom.limits.price.min" in content
-        ), "Price limits should be updated dynamically in updateChart."
-        assert (
-            "this.chart.options.plugins.zoom.limits.price.max" in content
-        ), "Price limits should be updated dynamically in updateChart."
+        assert "this.chart.options.plugins.zoom.limits.price.min" in content, (
+            "Price limits should be updated dynamically in updateChart."
+        )
+        assert "this.chart.options.plugins.zoom.limits.price.max" in content, (
+            "Price limits should be updated dynamically in updateChart."
+        )
 
 
 class TestSentimentAxisFixed:
@@ -207,9 +207,9 @@ class TestPanConfiguration:
         content = read_ohlc_js()
 
         pan_enabled_pattern = r"pan:\s*\{[^}]*enabled:\s*true"
-        assert re.search(
-            pan_enabled_pattern, content
-        ), "Pan not enabled. Add pan: { enabled: true } to zoom config."
+        assert re.search(pan_enabled_pattern, content), (
+            "Pan not enabled. Add pan: { enabled: true } to zoom config."
+        )
 
     def test_pan_mode_xy(self) -> None:
         """Verify pan mode is 'xy' for bi-directional navigation (Feature 1080)."""

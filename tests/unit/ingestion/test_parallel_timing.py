@@ -114,12 +114,12 @@ class TestParallelTiming:
         max_parallel_time = latency_ms + 50
         min_sequential_time = latency_ms * 2 - 20  # With some tolerance
 
-        assert (
-            elapsed_ms < min_sequential_time
-        ), f"Execution took {elapsed_ms:.0f}ms, appears sequential (>={min_sequential_time}ms)"
-        assert (
-            elapsed_ms < max_parallel_time
-        ), f"Execution took {elapsed_ms:.0f}ms, too slow for parallel (<{max_parallel_time}ms)"
+        assert elapsed_ms < min_sequential_time, (
+            f"Execution took {elapsed_ms:.0f}ms, appears sequential (>={min_sequential_time}ms)"
+        )
+        assert elapsed_ms < max_parallel_time, (
+            f"Execution took {elapsed_ms:.0f}ms, too slow for parallel (<{max_parallel_time}ms)"
+        )
 
     def test_parallel_execution_with_varying_latencies(
         self,
@@ -161,9 +161,9 @@ class TestParallelTiming:
         # Should be dominated by slowest source + overhead
         # Parallel: ~150ms, Sequential: ~200ms
         max_parallel_time = finnhub_latency_ms + 50
-        assert (
-            elapsed_ms < max_parallel_time
-        ), f"Execution took {elapsed_ms:.0f}ms, expected <{max_parallel_time}ms"
+        assert elapsed_ms < max_parallel_time, (
+            f"Execution took {elapsed_ms:.0f}ms, expected <{max_parallel_time}ms"
+        )
 
         # Verify both returned results
         assert len(results["tiingo"]) == 3
@@ -208,9 +208,9 @@ class TestParallelTiming:
 
         # Should still complete in parallel time (not blocked by failure)
         max_time = latency_ms + 50
-        assert (
-            elapsed_ms < max_time
-        ), f"Execution took {elapsed_ms:.0f}ms, failure blocked parallel execution"
+        assert elapsed_ms < max_time, (
+            f"Execution took {elapsed_ms:.0f}ms, failure blocked parallel execution"
+        )
 
         # Tiingo should succeed
         assert len(results["tiingo"]) == 5
@@ -295,6 +295,6 @@ class TestParallelTiming:
             # Should still be parallel time regardless of ticker count
             # (assuming adapters handle all tickers in one call)
             max_time = latency_ms + 50
-            assert (
-                elapsed_ms < max_time
-            ), f"{ticker_count} tickers took {elapsed_ms:.0f}ms, expected <{max_time}ms"
+            assert elapsed_ms < max_time, (
+                f"{ticker_count} tickers took {elapsed_ms:.0f}ms, expected <{max_time}ms"
+            )

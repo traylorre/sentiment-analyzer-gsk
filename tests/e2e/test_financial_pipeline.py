@@ -201,9 +201,9 @@ class TestOracleComputesExpectedValues:
         # Get oracle's expected ATR
         oracle_atr = oracle.compute_expected_atr(ticker, days, period=14)
 
-        assert (
-            direct_atr == oracle_atr
-        ), f"Oracle ATR {oracle_atr} != direct calculation {direct_atr}"
+        assert direct_atr == oracle_atr, (
+            f"Oracle ATR {oracle_atr} != direct calculation {direct_atr}"
+        )
 
     def test_oracle_atr_result_includes_trend(self, oracle):
         """Oracle ATR result includes trend and volatility level."""
@@ -242,9 +242,9 @@ class TestVolatilityCalculation:
         actual_result = calculate_atr_result(ticker, scenario.candles, period=14)
 
         # Compare with oracle expected values
-        assert (
-            actual_atr == scenario.expected_atr
-        ), f"ATR mismatch: actual={actual_atr}, expected={scenario.expected_atr}"
+        assert actual_atr == scenario.expected_atr, (
+            f"ATR mismatch: actual={actual_atr}, expected={scenario.expected_atr}"
+        )
         assert actual_result.volatility_level == scenario.expected_volatility_level, (
             f"Volatility level mismatch: "
             f"actual={actual_result.volatility_level}, "
@@ -668,9 +668,9 @@ class TestAlertTriggerWithSyntheticData:
         bearish_sentiment = sentiment_gen.generate_sentiment(ticker)
 
         # Verify sentiment is below threshold
-        assert (
-            bearish_sentiment.sentiment_score < -0.3
-        ), f"Expected bearish sentiment below -0.3, got {bearish_sentiment.sentiment_score}"
+        assert bearish_sentiment.sentiment_score < -0.3, (
+            f"Expected bearish sentiment below -0.3, got {bearish_sentiment.sentiment_score}"
+        )
 
         # Simulate alert evaluation
         current_score = bearish_sentiment.sentiment_score

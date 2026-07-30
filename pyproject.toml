@@ -43,7 +43,7 @@ dev = [
     "pytest>=7.4.3",
     "pytest-asyncio>=0.23.0",
     "moto>=4.2.0",
-    "ruff>=0.8.0",
+    "ruff==0.15.14",
     "orjson>=3.10.0",
     # E2E test dependencies (008-e2e-validation-suite)
     "httpx>=0.27.0",
@@ -52,7 +52,7 @@ dev = [
     "aws-xray-sdk>=2.12.0",
     # SAST tools (070-validation-blindspot-audit)
     "bandit==1.9.4",  # Feature 1400: pinned to match requirements-{dev,ci}.txt + pre-commit rev
-    "semgrep>=1.50.0",
+    "semgrep==1.172.0",  # Feature 001-semgrep-gating: pinned to match requirements-dev.txt
 ]
 
 [project.urls]
@@ -68,6 +68,7 @@ dev = [
 # them from line length calculations, preventing drift on long lines.
 
 [tool.ruff]
+required-version = "==0.15.14"
 line-length = 88
 target-version = "py313"
 

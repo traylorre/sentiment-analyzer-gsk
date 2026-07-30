@@ -413,9 +413,9 @@ class TestOHLCCandleValidation:
         data = json.loads(response["body"])
 
         for i, candle in enumerate(data["candles"]):
-            assert (
-                candle["high"] >= candle["low"]
-            ), f"Candle {i}: high ({candle['high']}) must be >= low ({candle['low']})"
+            assert candle["high"] >= candle["low"], (
+                f"Candle {i}: high ({candle['high']}) must be >= low ({candle['low']})"
+            )
 
     @pytest.mark.ohlc
     @patch("src.lambdas.dashboard.ohlc.get_tiingo_adapter")

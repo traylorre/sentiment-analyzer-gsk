@@ -141,9 +141,9 @@ class TestWriteFanout:
             # Normalize to compare (handle Z vs +00:00)
             actual_dt = datetime.fromisoformat(actual_sk.replace("Z", "+00:00"))
             expected_dt = datetime.fromisoformat(expected_sk)
-            assert (
-                actual_dt == expected_dt
-            ), f"{pk}: expected {expected_sk}, got {actual_sk}"
+            assert actual_dt == expected_dt, (
+                f"{pk}: expected {expected_sk}, got {actual_sk}"
+            )
 
 
 class TestQueryOrdering:

@@ -52,9 +52,9 @@ async def test_metrics_401_without_auth(
     # Verify error message matches what handler.py returns
     data = response.json()
     assert "detail" in data, f"Expected error detail in response: {data}"
-    assert (
-        "missing user identification" in data["detail"].lower()
-    ), f"Expected 'Missing user identification' in detail, got: {data['detail']}"
+    assert "missing user identification" in data["detail"].lower(), (
+        f"Expected 'Missing user identification' in detail, got: {data['detail']}"
+    )
 
 
 @pytest.mark.asyncio
@@ -71,9 +71,9 @@ async def test_metrics_200_with_anonymous_session(
     """
     # Create anonymous session
     session_response = await api_client.post("/api/v2/auth/anonymous", json={})
-    assert (
-        session_response.status_code == 201
-    ), f"Failed to create anonymous session: {session_response.status_code}"
+    assert session_response.status_code == 201, (
+        f"Failed to create anonymous session: {session_response.status_code}"
+    )
 
     session_data = session_response.json()
     # Handle both camelCase and snake_case response formats

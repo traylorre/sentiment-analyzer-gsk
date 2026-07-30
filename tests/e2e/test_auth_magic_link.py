@@ -50,9 +50,9 @@ async def test_magic_link_request(
         data = response.json()
         # Response might include message about email being sent
         # or a message_id for tracking
-        assert (
-            "message_id" in data or "success" in data or "message" in data
-        ), f"Unexpected response structure: {data}"
+        assert "message_id" in data or "success" in data or "message" in data, (
+            f"Unexpected response structure: {data}"
+        )
 
 
 @pytest.mark.asyncio
@@ -79,14 +79,13 @@ async def test_magic_link_request_rate_limited(
     )
 
     # 500 is a server error - test should fail, not skip
-    assert (
-        first_response.status_code
-        in (
-            200,
-            202,
-            204,
-        )
-    ), f"Magic link request failed: {first_response.status_code} - {first_response.text}"
+    assert first_response.status_code in (
+        200,
+        202,
+        204,
+    ), (
+        f"Magic link request failed: {first_response.status_code} - {first_response.text}"
+    )
 
     # Make rapid follow-up requests - try more requests for preprod
     rate_limited = False
@@ -131,14 +130,13 @@ async def test_magic_link_verification(
     )
 
     # 500 is a server error - test should fail, not skip
-    assert (
-        request_response.status_code
-        in (
-            200,
-            202,
-            204,
-        )
-    ), f"Magic link request failed: {request_response.status_code} - {request_response.text}"
+    assert request_response.status_code in (
+        200,
+        202,
+        204,
+    ), (
+        f"Magic link request failed: {request_response.status_code} - {request_response.text}"
+    )
 
     # Get synthetic token from handler
     synthetic_token = sendgrid_handler.get_magic_link_token(test_email)
@@ -153,9 +151,9 @@ async def test_magic_link_verification(
         json={"token": synthetic_token},
     )
 
-    assert (
-        verify_response.status_code == 200
-    ), f"Token verification failed: {verify_response.status_code}"
+    assert verify_response.status_code == 200, (
+        f"Token verification failed: {verify_response.status_code}"
+    )
 
     data = verify_response.json()
     assert "access_token" in data, "Response missing access_token"
@@ -183,9 +181,9 @@ async def test_magic_link_invalid_token(api_client: PreprodAPIClient) -> None:
     ), f"Invalid token should be rejected: {response.status_code}"
 
     data = response.json()
-    assert (
-        "error" in data or "message" in data or "detail" in data
-    ), "Error response missing message"
+    assert "error" in data or "message" in data or "detail" in data, (
+        "Error response missing message"
+    )
 
 
 @pytest.mark.asyncio
@@ -241,14 +239,13 @@ async def test_anonymous_data_merge(
     )
 
     # 500 is a server error - test should fail, not skip
-    assert (
-        magic_response.status_code
-        in (
-            200,
-            202,
-            204,
-        )
-    ), f"Magic link request failed: {magic_response.status_code} - {magic_response.text}"
+    assert magic_response.status_code in (
+        200,
+        202,
+        204,
+    ), (
+        f"Magic link request failed: {magic_response.status_code} - {magic_response.text}"
+    )
 
     # Step 4: Get synthetic token and verify with anonymous session
     synthetic_token = sendgrid_handler.get_magic_link_token(test_email)
@@ -283,9 +280,9 @@ async def test_anonymous_data_merge(
             (c for c in config_list if c.get("name") == config_name),
             None,
         )
-        assert (
-            merged_config is not None
-        ), f"Merged config '{config_name}' not found in authenticated session"
+        assert merged_config is not None, (
+            f"Merged config '{config_name}' not found in authenticated session"
+        )
 
     finally:
         api_client.clear_access_token()
@@ -348,14 +345,13 @@ async def test_full_anonymous_to_authenticated_journey(
     )
 
     # 500 is a server error - test should fail, not skip
-    assert (
-        magic_response.status_code
-        in (
-            200,
-            202,
-            204,
-        )
-    ), f"Magic link request failed: {magic_response.status_code} - {magic_response.text}"
+    assert magic_response.status_code in (
+        200,
+        202,
+        204,
+    ), (
+        f"Magic link request failed: {magic_response.status_code} - {magic_response.text}"
+    )
 
     # === Phase 4: Verify Magic Link ===
     synthetic_token = sendgrid_handler.get_magic_link_token(test_email)
@@ -387,9 +383,9 @@ async def test_full_anonymous_to_authenticated_journey(
         config_get_response = await api_client.get(
             f"/api/v2/configurations/{config_id}"
         )
-        assert (
-            config_get_response.status_code == 200
-        ), f"Config not accessible after auth: {config_get_response.status_code}"
+        assert config_get_response.status_code == 200, (
+            f"Config not accessible after auth: {config_get_response.status_code}"
+        )
 
         config_data = config_get_response.json()
         assert config_data["name"] == config_name

@@ -59,9 +59,9 @@ async def test_healthy_api_returns_fresh_data(
         response = await api_client.get(f"/api/v2/configurations/{config_id}/sentiment")
 
         # Should succeed when external APIs are healthy
-        assert (
-            response.status_code == 200
-        ), f"Sentiment request failed: {response.status_code}"
+        assert response.status_code == 200, (
+            f"Sentiment request failed: {response.status_code}"
+        )
 
         data = response.json()
         assert data is not None

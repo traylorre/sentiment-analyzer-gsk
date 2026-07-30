@@ -48,9 +48,9 @@ class TestPanConfiguration:
 
         # Look for pan enabled configuration
         pan_enabled_pattern = r"pan:\s*\{[^}]*enabled:\s*true"
-        assert re.search(
-            pan_enabled_pattern, content, re.DOTALL
-        ), "Pan not enabled. Add enabled: true to pan configuration."
+        assert re.search(pan_enabled_pattern, content, re.DOTALL), (
+            "Pan not enabled. Add enabled: true to pan configuration."
+        )
 
     def test_pan_mode_xy_axis(self) -> None:
         """Verify pan is configured for XY-axis (bi-directional pan, Feature 1080)."""
@@ -90,9 +90,9 @@ class TestPanConfiguration:
         """Verify Feature 1071 comment exists in ohlc.js for traceability."""
         content = read_ohlc_js()
 
-        assert (
-            "1071" in content
-        ), "Missing Feature 1071 reference in ohlc.js. Add a comment for traceability."
+        assert "1071" in content, (
+            "Missing Feature 1071 reference in ohlc.js. Add a comment for traceability."
+        )
 
 
 class TestPanAndZoomCoexistence:
@@ -134,12 +134,12 @@ class TestPanAndZoomCoexistence:
         # along with scaleMode: 'y' which confirms it's for Y-axis zoom
         has_zoom_y = "mode: 'y'" in content and "scaleMode: 'y'" in content
 
-        assert (
-            has_pan_xy
-        ), "Pan should be configured for XY-axis (mode: 'xy', Feature 1080)"
-        assert (
-            has_zoom_y
-        ), "Zoom should be configured for Y-axis (mode: 'y' and scaleMode: 'y')"
+        assert has_pan_xy, (
+            "Pan should be configured for XY-axis (mode: 'xy', Feature 1080)"
+        )
+        assert has_zoom_y, (
+            "Zoom should be configured for Y-axis (mode: 'y' and scaleMode: 'y')"
+        )
 
     def test_reset_zoom_also_resets_pan(self) -> None:
         """Verify resetZoom method exists (resets both zoom and pan)."""

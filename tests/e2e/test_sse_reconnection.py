@@ -122,14 +122,14 @@ class TestSSEAutoReconnection:
             time.sleep(0.5)
 
         reconnect_time = time.time() - start_time
-        assert (
-            reconnected
-        ), f"Should auto-reconnect within 10 seconds, waited {reconnect_time:.1f}s"
+        assert reconnected, (
+            f"Should auto-reconnect within 10 seconds, waited {reconnect_time:.1f}s"
+        )
 
         # SC-007 verification
-        assert (
-            reconnect_time < 10
-        ), f"SC-007: Reconnection should complete within 5-10 seconds, took {reconnect_time:.1f}s"
+        assert reconnect_time < 10, (
+            f"SC-007: Reconnection should complete within 5-10 seconds, took {reconnect_time:.1f}s"
+        )
 
     def test_exponential_backoff_timing(self, dashboard_page: Page) -> None:
         """T057: Verify exponential backoff (1s, 2s, 4s, 8s cap) on retries.
@@ -159,9 +159,9 @@ class TestSSEAutoReconnection:
 
         # Verify backoff configuration exists
         assert retry_config is not None, "SSE retry config should be available"
-        assert (
-            retry_config["baseDelay"] >= 1000
-        ), "Base delay should be at least 1 second"
+        assert retry_config["baseDelay"] >= 1000, (
+            "Base delay should be at least 1 second"
+        )
 
         # Verify exponential backoff is implemented
         # The delay formula should be: baseDelay * 2^(retryCount - 1)
@@ -337,9 +337,9 @@ class TestDegradedModeIndicator:
         indicator_classes = indicator.get_attribute("class") or ""
 
         # Should have disconnected class
-        assert (
-            "disconnected" in indicator_classes or "offline" in indicator_classes
-        ), f"Indicator should show disconnected state, has classes: {indicator_classes}"
+        assert "disconnected" in indicator_classes or "offline" in indicator_classes, (
+            f"Indicator should show disconnected state, has classes: {indicator_classes}"
+        )
 
         # Restore online
         page.context.set_offline(False)
@@ -421,9 +421,9 @@ class TestReconnectionWithDataSync:
         page.context.set_offline(False)
 
         # IndexedDB should be accessible regardless of network state
-        assert (
-            cache_accessible is True or cache_accessible is None
-        ), "IndexedDB cache should be accessible offline"
+        assert cache_accessible is True or cache_accessible is None, (
+            "IndexedDB cache should be accessible offline"
+        )
 
 
 class TestConnectionStateTracking:

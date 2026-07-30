@@ -133,15 +133,15 @@ class TestOAuthPKCENonRegression:
             parsed = urlparse(authorize_url)
             params = parse_qs(parsed.query)
 
-            assert (
-                "code_challenge" in params
-            ), f"{provider_name} authorize_url missing code_challenge"
-            assert (
-                params["code_challenge"][0] != ""
-            ), f"{provider_name} code_challenge is empty"
-            assert (
-                "code_challenge_method" in params
-            ), f"{provider_name} authorize_url missing code_challenge_method"
+            assert "code_challenge" in params, (
+                f"{provider_name} authorize_url missing code_challenge"
+            )
+            assert params["code_challenge"][0] != "", (
+                f"{provider_name} code_challenge is empty"
+            )
+            assert "code_challenge_method" in params, (
+                f"{provider_name} authorize_url missing code_challenge_method"
+            )
             assert params["code_challenge_method"][0] == "S256", (
                 f"{provider_name} code_challenge_method is "
                 f"{params['code_challenge_method'][0]}, expected S256"

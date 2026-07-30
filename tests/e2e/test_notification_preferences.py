@@ -69,9 +69,9 @@ async def test_get_preferences_returns_structure(
 
         # Validate expected fields (may vary based on implementation)
         # At minimum should have email_enabled
-        assert (
-            "email_enabled" in data or "emailEnabled" in data
-        ), "Response missing email_enabled field"
+        assert "email_enabled" in data or "emailEnabled" in data, (
+            "Response missing email_enabled field"
+        )
 
     finally:
         api_client.clear_access_token()
@@ -133,9 +133,9 @@ async def test_update_preferences_email_enabled(
             json={"email_enabled": False},
         )
 
-        assert (
-            response.status_code == 200
-        ), f"Update preferences failed: {response.text}"
+        assert response.status_code == 200, (
+            f"Update preferences failed: {response.text}"
+        )
 
         data = response.json()
 
@@ -260,9 +260,9 @@ async def test_disable_all_notifications(
         if prefs.status_code == 200:
             data = prefs.json()
             email_enabled = data.get("email_enabled") or data.get("emailEnabled")
-            assert (
-                email_enabled is False
-            ), "email_enabled should be False after disable-all"
+            assert email_enabled is False, (
+                "email_enabled should be False after disable-all"
+            )
 
     finally:
         api_client.clear_access_token()
@@ -333,9 +333,9 @@ async def test_resubscribe_notifications(
         if prefs.status_code == 200:
             data = prefs.json()
             email_enabled = data.get("email_enabled") or data.get("emailEnabled")
-            assert (
-                email_enabled is True
-            ), "email_enabled should be True after resubscribe"
+            assert email_enabled is True, (
+                "email_enabled should be True after resubscribe"
+            )
 
     finally:
         api_client.clear_access_token()
@@ -367,9 +367,9 @@ async def test_get_digest_settings(
         if response.status_code == 403:
             pytest.skip("Digest settings requires full authentication (not anonymous)")
 
-        assert (
-            response.status_code == 200
-        ), f"Get digest settings failed: {response.text}"
+        assert response.status_code == 200, (
+            f"Get digest settings failed: {response.text}"
+        )
 
         data = response.json()
 

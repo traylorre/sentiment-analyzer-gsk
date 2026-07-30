@@ -269,9 +269,9 @@ class TestSentimentHistoryScoreValidation:
         data = json.loads(response["body"])
 
         for point in data["history"]:
-            assert (
-                -1.0 <= point["score"] <= 1.0
-            ), f"Score {point['score']} out of valid range [-1.0, 1.0]"
+            assert -1.0 <= point["score"] <= 1.0, (
+                f"Score {point['score']} out of valid range [-1.0, 1.0]"
+            )
 
     @pytest.mark.sentiment_history
     def test_sentiment_labels_consistent_with_scores(
@@ -300,9 +300,9 @@ class TestSentimentHistoryScoreValidation:
             else:
                 expected = "neutral"
 
-            assert (
-                label == expected
-            ), f"Point {i}: score={score} should have label='{expected}', got '{label}'"
+            assert label == expected, (
+                f"Point {i}: score={score} should have label='{expected}', got '{label}'"
+            )
 
     @pytest.mark.sentiment_history
     def test_sentiment_confidence_in_valid_range(
@@ -321,9 +321,9 @@ class TestSentimentHistoryScoreValidation:
 
         for point in data["history"]:
             if "confidence" in point and point["confidence"] is not None:
-                assert (
-                    0.0 <= point["confidence"] <= 1.0
-                ), f"Confidence {point['confidence']} out of valid range [0.0, 1.0]"
+                assert 0.0 <= point["confidence"] <= 1.0, (
+                    f"Confidence {point['confidence']} out of valid range [0.0, 1.0]"
+                )
 
     @pytest.mark.sentiment_history
     def test_sentiment_history_sorted_by_date(self, mock_lambda_context, auth_headers):
@@ -446,6 +446,6 @@ class TestSentimentHistoryDeterminism:
         ]
 
         # Different tickers should have different scores
-        assert (
-            scores_aapl != scores_msft
-        ), "Different tickers should have different scores"
+        assert scores_aapl != scores_msft, (
+            "Different tickers should have different scores"
+        )
