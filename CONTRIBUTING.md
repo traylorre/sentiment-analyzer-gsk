@@ -306,7 +306,7 @@ git push origin feature/your-feature-name
 **Automated Checks (GitHub Actions):**
 1. Terraform format validation (`terraform fmt`)
 2. Terraform validation (`terraform validate`)
-3. Security scanning (tfsec, checkov)
+3. Security scanning: Checkov (gating), Trivy (report-only pending validator-gating follow-up)
 4. Secret scanning (gitleaks)
 5. Linting (when configured)
 6. Unit tests (when configured)
