@@ -1088,7 +1088,7 @@ them now requires an artifact edit or an owner decision**:
 
 | Task | Date | Result |
 |---|---|---|
-| T002 | | |
+| T002 | 2026-07-30 | **PASS.** `RACY 27 / PROMISE-FIRST 6 / OTHER 1 / total 34 / files scanned 47`, exit **1**, at `18b5323`. All 27 RACY lines and all 6 PROMISE-FIRST lines match the spec inventory exactly (criteria 4, 5). The single `OTHER` is `chaos-scenarios.spec.ts:138`, as criterion 7 requires. Full output below. |
 | T003 | | |
 | T018 | | |
 | T020 | | |
@@ -1097,6 +1097,53 @@ them now requires an artifact edit or an owner decision**:
 | T023 | | |
 | T024 | | |
 | T028 | | |
+
+### T002 pre-sweep baseline — full detector output
+
+Taken at `18b5323` (spec merge), before any conversion existed in the tree.
+
+```text
+frontend/tests/e2e/chaos-degradation.spec.ts:131 RACY
+frontend/tests/e2e/chaos-degradation.spec.ts:138 RACY
+frontend/tests/e2e/chaos-degradation.spec.ts:178 RACY
+frontend/tests/e2e/chaos-degradation.spec.ts:183 RACY
+frontend/tests/e2e/chaos-degradation.spec.ts:188 RACY
+frontend/tests/e2e/chaos-degradation.spec.ts:231 PROMISE-FIRST
+frontend/tests/e2e/chaos-scenarios.spec.ts:102 RACY
+frontend/tests/e2e/chaos-scenarios.spec.ts:105 RACY
+frontend/tests/e2e/chaos-scenarios.spec.ts:108 RACY
+frontend/tests/e2e/chaos-scenarios.spec.ts:138 OTHER
+frontend/tests/e2e/chaos-scenarios.spec.ts:219 RACY
+frontend/tests/e2e/chaos-scenarios.spec.ts:222 RACY
+frontend/tests/e2e/chaos-scenarios.spec.ts:225 RACY
+frontend/tests/e2e/chaos-scenarios.spec.ts:251 PROMISE-FIRST
+frontend/tests/e2e/chart-edge-cases.spec.ts:72 RACY
+frontend/tests/e2e/chart-edge-cases.spec.ts:130 RACY
+frontend/tests/e2e/chart-edge-cases.spec.ts:161 RACY
+frontend/tests/e2e/chart-edge-cases.spec.ts:218 RACY
+frontend/tests/e2e/error-visibility-search.spec.ts:142 PROMISE-FIRST
+frontend/tests/e2e/error-visibility-search.spec.ts:157 PROMISE-FIRST
+frontend/tests/e2e/helpers/chaos-helpers.ts:364 RACY
+frontend/tests/e2e/helpers/chaos-helpers.ts:367 RACY
+frontend/tests/e2e/helpers/chaos-helpers.ts:370 RACY
+frontend/tests/e2e/ticker-search-gaps.spec.ts:38 RACY
+frontend/tests/e2e/ticker-search-gaps.spec.ts:77 RACY
+frontend/tests/e2e/ticker-search-gaps.spec.ts:82 RACY
+frontend/tests/e2e/ticker-search-gaps.spec.ts:109 RACY
+frontend/tests/e2e/ticker-search-gaps.spec.ts:129 RACY
+frontend/tests/e2e/ticker-search-gaps.spec.ts:144 RACY
+frontend/tests/e2e/ticker-search-gaps.spec.ts:162 RACY
+frontend/tests/e2e/ticker-search-gaps.spec.ts:211 RACY
+frontend/tests/e2e/ticker-search-gaps.spec.ts:219 RACY
+frontend/tests/e2e/ticker-search-gaps.spec.ts:231 PROMISE-FIRST
+frontend/tests/e2e/ticker-search-gaps.spec.ts:237 PROMISE-FIRST
+==============================================================================
+OTHER sites - requires human triage
+==============================================================================
+  frontend/tests/e2e/chaos-scenarios.spec.ts:138  (in: cold start — loading skeletons appear during delay)
+      await page.waitForResponse(
+SUMMARY: RACY 27 / PROMISE-FIRST 6 / OTHER 1 / total 34 / files scanned 47
+```
 
 ---
 
