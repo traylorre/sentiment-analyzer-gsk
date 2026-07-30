@@ -1,7 +1,8 @@
 # Quickstart: verifying the `waitForResponse` race sweep
 
-All commands from the repo root unless stated. Python steps need the venv:
-`source .venv/bin/activate`.
+All commands from the repo root unless stated. Python steps run under the venv
+(`source .venv/bin/activate`) — except the scan script, which is standard-library only by
+requirement (FR-011) and must work under a bare `python3` as well. Both invocations are exercised.
 
 ## 1. Inventory scan (SC-001)
 
@@ -21,8 +22,17 @@ conversions + 1 inside the helper. Check the other half of SC-001 too:
 grep -rn "searchAndAwaitResponse(" frontend/tests/e2e/ --include="*.spec.ts" | wc -l   # expect 18
 ```
 
-The script exits non-zero while any `RACY` site remains, so it doubles as a check the dependent
-regression-guard feature can wire into CI.
+The script exits non-zero while any `RACY` site remains, **and** when a scan examines zero files, so
+a moved or emptied scan root cannot read as a clean tree. It is standard-library only, so the same
+invocation works on a CI runner with no venv:
+
+```bash
+python3 -I -S scripts/scan-waitforresponse-race.py     # stdlib-only sandbox; must behave identically
+```
+
+That is how the dependent regression-guard feature runs it, in a pre-commit hook and in the required
+`Lint` job. `-I -S` is the faithful sandbox here: clearing `VIRTUAL_ENV` leaves `.venv/bin` on
+`PATH`, and `/usr/bin/python3` is the wrong version.
 
 ## 2. Smoke run (SC-002 — precondition only, not evidence)
 

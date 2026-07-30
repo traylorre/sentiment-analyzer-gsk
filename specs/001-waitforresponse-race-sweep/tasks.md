@@ -905,7 +905,7 @@ tree at `frontend/tests/e2e/` and `CLEANUP-BOARD.html`, not against the artifact
 | FR-008 | Two existing board cards corrected | T026 | COVERED |
 | FR-009 | Two follow-up cards added; job stays non-required; dead branch not fixed | T027 (both cards), T013 crit. 6 (dead branch untouched), T025 crit. 3 (no workflow edit) | COVERED |
 | FR-010 | Cache-served sites identified and left alone | T006 crit. 3 (`:242-247` hold-out), T015 (dedicated audit) | COVERED |
-| FR-011 | Scan committed, rule documented in-script, both APIs, non-zero exit on RACY | T001 (all four obligations as separate criteria); T002 + T018 exercise both exit branches | COVERED |
+| FR-011 | Scan committed, rule documented in-script, both APIs, non-zero exit on RACY, **plus the consumed-interface obligations** (stdlib-only, stdout, files-scanned, non-zero on a zero-file scan, remediation guidance, fixed root, interpreter floor) | T001 — every obligation is a separate criterion (1–13); T002 + T018 exercise the RACY exit branches; T001 crit. 6 exercises the zero-file branch | COVERED |
 | FR-012 | Success-path await; helper's internal guarantee; no `try/finally` requirement at the inline sites | T004 crit. 3 (G2 as a checkable code shape: `try`/`finally` or `.catch` at creation), T017 (dedicated audit incl. the deliberate absence of `try/finally` inline) | COVERED |
 
 ### Success criteria

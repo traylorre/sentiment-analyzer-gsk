@@ -133,6 +133,14 @@ classification rule is documented in the script itself (FR-011), keyed on the im
 non-comment, non-blank line. Establishes the 27/6/1 baseline (34 total) before any edit, so SC-001
 has a before-and-after.
 
+The script is **standard-library only** and is written to a consumed interface, because the dependent
+regression-guard feature wires it into a pre-commit hook and the required CI `Lint` job. Beyond the
+RACY exit branch it must report files-scanned, exit non-zero on a zero-file scan, print findings to
+stdout with remediation guidance, ignore file arguments in favour of its fixed root, and assert its
+own interpreter floor. FR-011 states the obligations; T001 criteria 5, 6, 8, 12 and 13 make each one
+checkable. Getting this wrong is not cosmetic: a venv-only or file-list-driven detector passes every
+test in this feature and is inert in the one that consumes it.
+
 **Phase B — Helper (FR-005).** Add `frontend/tests/e2e/helpers/search-helpers.ts` with a
 predicate-parameterised `searchAndAwaitResponse`. Contract in `contracts/helper-api.md`.
 

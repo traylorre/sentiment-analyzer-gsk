@@ -302,6 +302,20 @@ failure that produced this bug class in the first place.
   `retryButton.evaluate((el) => el.click())`. A list stopping at `.reload(` would miss it. The
   earlier six-token list was the same method-name-shaped mistake that hid the three
   `waitForEvent('requestfailed')` sites.
+
+  **The scan is also a consumed interface, not only an artifact.** The dependent regression-guard
+  feature wires this script into a pre-commit hook and into the required CI `Lint` job, so its
+  invocation, output and exit codes are a contract rather than an implementation detail. The scan
+  MUST therefore: import only the standard library, so it runs under a bare `python3` on a CI runner
+  with no virtualenv and no project dependencies; write findings to **stdout**; report the number of
+  **files scanned** alongside the three classification counts and the total; exit **non-zero** when
+  the scan examined zero files, whatever the cause, so a moved or emptied scan root cannot read as a
+  clean tree; carry remediation guidance in its failure output; scan a **fixed root**, ignoring any
+  file arguments, since the guard invokes it with `pass_filenames: false` against untracked files;
+  and assert its own interpreter floor, because the guard invokes a bare `python3` that resolves
+  from the committing shell's `PATH`. `specs/002-waitforresponse-lint-guard/contracts/detector-cli.md`
+  is the contract of record and carries the reasoning for each. T001 criteria 5, 6, 8, 12 and 13
+  make them checkable.
 - **FR-012**: Converted sites MUST await the listener promise on the success path, so a timeout
   surfaces as a test failure. The helper additionally handles the throw path internally (contract G2, which specifies the
   required shape rather than promising an unconditional await). A
@@ -500,11 +514,19 @@ handling needed.
 
 ### C3 — What language for the scan script (FR-011)?
 
-**Answer**: Python 3.13, at `scripts/scan-waitforresponse-race.py`, run under the project venv.
+**Answer**: Python 3.13, at `scripts/scan-waitforresponse-race.py`, **standard library only**, so it
+runs both under the project venv and under a bare `python3` with nothing installed.
 
 **Evidence**: `scripts/` already holds `audit-e2e-skips.py`, which does the closely analogous job of
 scanning the E2E suite and reporting counts. Following that precedent keeps one idiom for "scan the
 test suite and report", and Python is the repo standard with venv and pre-commit already wired.
+
+**Amended with C4.** This answer originally read "run under the project venv" and nothing more. The
+dependent guard runs this script in the CI `Lint` job, which installs ruff and no project
+dependencies at all, so a venv-only script would be permanently red there. Stdlib-only is the
+constraint that makes the same file work in both places. Verify with `python3 -I -S`, which is the
+faithful sandbox: clearing `VIRTUAL_ENV` leaves `.venv/bin` on `PATH`, and `/usr/bin/python3` is the
+wrong version. See T001 criterion 8.
 
 ### C4 — Should the scan be enforced in CI as part of this feature?
 
