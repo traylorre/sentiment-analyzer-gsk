@@ -68,12 +68,12 @@ changed to cover `frontend/tests/`.
 
 **Question**: which CI job, if any, has the authority to stop a bad merge?
 
-**Finding**: only three jobs do, and the obvious candidate is not among them.
+**Finding**: only four jobs do, and the obvious candidate is not among them.
 
 ```
 gh api repos/traylorre/sentiment-analyzer-gsk/branches/main/protection \
   --jq '.required_status_checks.contexts'
-→ ["Secrets Scan", "Lint", "Run Tests"]
+→ ["Secrets Scan", "Lint", "Run Tests", "Playwright E2E Tests"]
 
 gh api repos/traylorre/sentiment-analyzer-gsk/rulesets --jq 'length'
 → 0
