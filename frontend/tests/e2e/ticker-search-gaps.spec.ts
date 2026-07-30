@@ -2,6 +2,7 @@
 import { test, expect } from '@playwright/test';
 import { mockTickerDataApis } from './helpers/mock-api-data';
 import { mockAnonymousAuth } from './helpers/auth-helper';
+import { searchAndAwaitResponse } from './helpers/search-helpers';
 
 /**
  * Ticker Search Gap Tests: No-results, keyboard nav, multi-ticker (Feature 1282)
@@ -32,10 +33,7 @@ test.describe('Ticker Search Gaps', () => {
       });
 
       const searchInput = page.getByPlaceholder(/search tickers/i);
-      await searchInput.fill('ZZZZZ');
-
-      // Wait for debounced search response (FR-008: waitForResponse, not waitForTimeout)
-      await page.waitForResponse('**/api/v2/tickers/search**');
+      await searchAndAwaitResponse(page, searchInput, 'ZZZZZ');
 
       // Verify no-results message
       await expect(
@@ -73,13 +71,11 @@ test.describe('Ticker Search Gaps', () => {
       const searchInput = page.getByPlaceholder(/search tickers/i);
 
       // First search: no results
-      await searchInput.fill('ZZZZZ');
-      await page.waitForResponse('**/api/v2/tickers/search**');
+      await searchAndAwaitResponse(page, searchInput, 'ZZZZZ');
       await expect(page.getByText(/no tickers found/i)).toBeVisible();
 
       // Second search: results appear
-      await searchInput.fill('AAPL');
-      await page.waitForResponse('**/api/v2/tickers/search**');
+      await searchAndAwaitResponse(page, searchInput, 'AAPL');
       await expect(page.getByRole('option', { name: /AAPL/i }).first()).toBeVisible();
       await expect(page.getByText(/no tickers found/i)).not.toBeVisible();
     });
@@ -105,8 +101,7 @@ test.describe('Ticker Search Gaps', () => {
 
     test('Arrow Down highlights first result', async ({ page }) => {
       const searchInput = page.getByPlaceholder(/search tickers/i);
-      await searchInput.fill('A');
-      await page.waitForResponse('**/api/v2/tickers/search**');
+      await searchAndAwaitResponse(page, searchInput, 'A');
 
       // Arrow Down to first result
       await searchInput.press('ArrowDown');
@@ -125,8 +120,7 @@ test.describe('Ticker Search Gaps', () => {
       await mockTickerDataApis(page);
 
       const searchInput = page.getByPlaceholder(/search tickers/i);
-      await searchInput.fill('A');
-      await page.waitForResponse('**/api/v2/tickers/search**');
+      await searchAndAwaitResponse(page, searchInput, 'A');
 
       // Arrow Down + Enter to select first result (AAPL)
       await searchInput.press('ArrowDown');
@@ -140,8 +134,7 @@ test.describe('Ticker Search Gaps', () => {
 
     test('Escape closes dropdown without selecting', async ({ page }) => {
       const searchInput = page.getByPlaceholder(/search tickers/i);
-      await searchInput.fill('A');
-      await page.waitForResponse('**/api/v2/tickers/search**');
+      await searchAndAwaitResponse(page, searchInput, 'A');
 
       // Verify dropdown is visible
       await expect(page.getByRole('option').first()).toBeVisible();
@@ -158,8 +151,7 @@ test.describe('Ticker Search Gaps', () => {
       page,
     }) => {
       const searchInput = page.getByPlaceholder(/search tickers/i);
-      await searchInput.fill('A');
-      await page.waitForResponse('**/api/v2/tickers/search**');
+      await searchAndAwaitResponse(page, searchInput, 'A');
 
       // Press Arrow Down 10 times (more than 3 results)
       for (let i = 0; i < 10; i++) {
@@ -207,16 +199,13 @@ test.describe('Ticker Search Gaps', () => {
       const searchInput = page.getByPlaceholder(/search tickers/i);
 
       // Add first ticker
-      await searchInput.fill('AAPL');
-      await page.waitForResponse('**/api/v2/tickers/search**');
+      await searchAndAwaitResponse(page, searchInput, 'AAPL');
       await page.getByRole('option', { name: /AAPL/i }).first().click();
       // Verify chip by its remove button (exact match to avoid strict mode with chip text)
       await expect(page.getByRole('button', { name: 'Remove AAPL', exact: true })).toBeVisible({ timeout: 5000 });
 
       // Add second ticker — clear first to ensure fresh query
-      await searchInput.clear();
-      await searchInput.fill('GOOGL');
-      await page.waitForResponse('**/api/v2/tickers/search**');
+      await searchAndAwaitResponse(page, searchInput, 'GOOGL', { clearFirst: true });
       await page.getByRole('option', { name: /GOOGL/i }).first().click();
       // Verify second chip by its remove button (exact match)
       await expect(page.getByRole('button', { name: 'Remove GOOGL', exact: true })).toBeVisible({ timeout: 5000 });
