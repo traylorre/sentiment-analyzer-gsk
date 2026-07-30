@@ -9,7 +9,7 @@
  * - Console event capture for telemetry assertions
  */
 
-import { type Page, type Route, type APIRequestContext, expect } from '@playwright/test';
+import { type Page, type Route, type APIRequestContext, expect, test } from '@playwright/test';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -335,14 +335,28 @@ export function getDismissButton(page: Page) {
  * Trigger the health banner by causing 3 consecutive API failures.
  * Replicates the proven pattern from error-visibility-banner.spec.ts.
  *
- * Uses `page.waitForResponse()` after each search interaction (not `waitForTimeout`)
- * to ensure the failure is recorded by the health monitor before proceeding.
- * This makes the trigger deterministic rather than timing-dependent.
+ * Each search registers its `page.waitForResponse()` listener BEFORE the fill that triggers the
+ * request, so the response cannot arrive unobserved.
+ *
+ * What the waits actually prove is narrower than an earlier version of this docstring claimed. The
+ * predicate is status-only (`resp.status() === 503`), so each wait confirms that **a** failing
+ * response was observed before proceeding, not that **this particular search's** failure was
+ * recorded. Any of the three searches, or a React Query retry (`retry: 1`, providers.tsx:48), can
+ * satisfy any of them. The residual risk that follows: a regression that made only one of the three
+ * searches fail would still satisfy all three waits.
+ *
+ * Narrowing the predicates to the search endpoint is deliberately out of scope — these waits guard
+ * the health monitor's "the API is failing" signal, which is endpoint-agnostic.
  *
  * @param page - Playwright Page instance (must already be navigated to '/')
  * @returns Resolves when the health banner is visible
  */
 export async function triggerHealthBanner(page: Page): Promise<void> {
+  // Three 15000ms waits below would not fit inside Playwright's default 30000ms test cap. Raise
+  // only: a bare setTimeout(60000) would silently lower a caller's deliberate cap, and
+  // chaos-accessibility.spec.ts sets 30_000 at the describe level.
+  test.setTimeout(Math.max(test.info().timeout, 60000));
+
   // Block all API calls
   await page.route('**/api/**', (route) =>
     route.fulfill({
@@ -358,16 +372,28 @@ export async function triggerHealthBanner(page: Page): Promise<void> {
   const searchInput = page.getByPlaceholder(/search tickers/i);
 
   // 3 search interactions to accumulate failures.
-  // Wait for the 503 response after each search to confirm the failure was recorded,
-  // rather than using a blind waitForTimeout.
+  // Each listener is registered before its fill, so no 503 can arrive unobserved. The predicate is
+  // status-only, so each wait confirms that a failing response was seen — not that this search's
+  // failure was recorded. See the residual risk noted in the docstring above.
+  const failure1 = page.waitForResponse((resp) => resp.status() === 503, {
+    timeout: 15000,
+  });
   await searchInput.fill('AAPL');
-  await page.waitForResponse((resp) => resp.status() === 503);
+  await failure1;
+
+  const failure2 = page.waitForResponse((resp) => resp.status() === 503, {
+    timeout: 15000,
+  });
   await searchInput.fill('');
   await searchInput.fill('GOOG');
-  await page.waitForResponse((resp) => resp.status() === 503);
+  await failure2;
+
+  const failure3 = page.waitForResponse((resp) => resp.status() === 503, {
+    timeout: 15000,
+  });
   await searchInput.fill('');
   await searchInput.fill('MSFT');
-  await page.waitForResponse((resp) => resp.status() === 503);
+  await failure3;
 
   // Wait for banner to appear
   const banner = getBannerLocator(page);
