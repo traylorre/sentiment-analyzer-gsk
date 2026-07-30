@@ -301,6 +301,19 @@ failure that produced this bug class in the first place.
   recorded in tasks.md under "Root-cause findings". The card for (2) MUST also record that the
   obvious causal story (these live calls explain the observed contention flakes) was measured and
   **refuted**, so a later reader does not re-adopt it.
+- **FR-009b** (added 2026-07-30, owner decision): the FR-009 card (1) is no longer an open
+  "whether". The owner has decided the Playwright E2E job **should** become merge-required, so the
+  card MUST be re-scoped from a deferred decision to a sequenced action, and MUST record two
+  preconditions rather than presenting the flip as immediately safe: (a) the job must first hold a
+  green streak across several real PR runs, and (b) the `chaos-error-boundary` defect in FR-009a(1)
+  must be resolved first. Precondition (b) is load-bearing and MUST be stated on the card: those 3
+  tests pass today only because CI falls back to the local dev server, so arming the job as required
+  and later re-targeting `pr-checks.yml` at the Amplify URL would permanently block every PR with no
+  obvious cause. The two must not be done independently.
+  **This feature still MUST NOT change the job's required status** (FR-009, Out of Scope): the
+  decision is recorded, not executed. Verified unchanged during implementation via `gh api` rather
+  than inferred from workflow files: `main`'s required contexts remain exactly
+  `["Secrets Scan", "Lint", "Run Tests"]`, `strict=true`, 0 rulesets.
 - **FR-010**: Sites where the query is served from React Query cache with no network request MUST
   be identified and left unconverted. A wait MUST NOT be introduced where none exists today. The
   helper MUST NOT be applied to a repeat of the same query within the 30s `staleTime` window.

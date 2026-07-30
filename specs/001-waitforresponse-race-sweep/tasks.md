@@ -882,6 +882,27 @@ recoverable, a silently mangled card is not.
        literal, and `indent=2` reformats all 122 cards into a 1103-line diff that buries the change.
 
 
+- [ ] **T030** [US3] Record the owner's decision to arm Playwright as merge-required (FR-009b)
+  - **Files**: `CLEANUP-BOARD.html` (depends on T029)
+  - **Satisfies**: FR-009b
+  - **Acceptance criteria**:
+    1. The FR-009 card (1) is **retitled**. Its old title opened with "Decide whether", which
+       presents a settled decision as open; the title is the most-read line, so correcting only the
+       body would leave the misleading claim in place. (Same reasoning as T026's retitle.)
+    2. `evidence` records the decision date, the **verified** current state (`main` required contexts
+       are exactly `["Secrets Scan", "Lint", "Run Tests"]`, `strict=true`, 0 rulesets, read from
+       `gh api` and not inferred from workflow files), and both preconditions.
+    3. `evidence` MUST state the interaction with the `chaos-error-boundary` card explicitly: those
+       3 tests pass in CI only because `pr-checks.yml` falls back to the local dev server, so arming
+       the job as required and re-targeting it at Amplify are **not independent changes**. Doing both
+       without fixing the trigger permanently blocks every PR.
+    4. `next_action` is an ordered sequence, not a list of options, and names the `--retries=0`
+       decision that comes with arming a required job.
+    5. **The required status is NOT changed by this feature.** Branch protection is untouched; the
+       card records the decision only. Re-verify `main`'s required contexts after the edit.
+    6. Card count stays **122**; single-line diff; board re-parses and renders with 0 console errors.
+
+
 ---
 
 ## Dependencies & Execution Order
@@ -904,7 +925,7 @@ Phase C, order MANDATORY:
         ▼
 Phase D (T018 → T019 → T020 → T021 → T022 → T023 → T024 [P] / T025 [P])
         │
-Phase E (T026 → T027 → T028 → T029)  ── independent of Phase D, may run alongside
+Phase E (T026 → T027 → T028 → T029 → T030)  ── independent of Phase D, may run alongside
                 (T029 was added mid-implementation and depends on Phase D's findings)
 ```
 
@@ -992,6 +1013,7 @@ Every task traces. No scope creep found.
 | T027 | FR-009 |
 | T028 | SC-005 |
 | T029 | SC-005 (FR-009a addendum) |
+| T030 | SC-005 (FR-009b addendum) |
 
 Two tasks warrant a note because they sit closest to the scope-creep line:
 
@@ -1144,6 +1166,7 @@ them now requires an artifact edit or an owner decision**:
 | T024 | 2026-07-30 | **PASS.** Post-sweep six-file tally **29 tests: 26 passed / 3 failed / 0 skipped**, identical to the T003 pre-sweep baseline. No drop in `passed`, no new `skipped`, no deleted test. The 3 failures are the same pre-existing `chaos-error-boundary` tests (`:26`, `:59`, `:85`); confirmed pre-existing by stashing the sweep and re-running, which reproduced the identical failure set, and root-caused in "Finding 1" below. `git diff` adds no `test.skip`, `test.fixme`, `test.only`, and deletes no `test(` block. No assertion weakened: the only intentional predicate edits are T010's **tightening** and T011's **narrowing**, both declared. |
 | T028 | 2026-07-30 | **PASS.** `CARDS` re-parses at **120** (baseline **118** asserted in the mutation script before any edit). Rendered headless via Chromium from `file://`: **0 console errors**, **120** `.card` elements, both new cards and the corrected card present in body text. `git diff CLEANUP-BOARD.html` touches exactly **one line** — the `CARDS` array literal — with no incidental reformatting of surrounding HTML or CSS. |
 | T029 | 2026-07-30 | **PASS.** `CARDS` re-parses at **122** (baseline **120** asserted in the mutation script before any edit). Rendered headless via Chromium from `file://`: **0 console errors**, **122** `.card` elements, both new cards present in body text. `git diff --numstat CLEANUP-BOARD.html` = `1  1` — exactly one line changed. The first attempt used `json.dumps(indent=2)` and produced a **1103-insertion** diff by reformatting all 122 cards; it was reverted with `git checkout --` and re-done with `json.dumps(cards, ensure_ascii=False)` to match the file's single-line convention. Recorded because the reformatted version parsed and rendered identically — the defect was invisible to every check except the diff shape. |
+| T030 | 2026-07-30 | **PASS.** Owner decided mid-implementation that the Playwright E2E job should become merge-required. Recorded, **not executed**. Card retitled from `Decide whether the Playwright E2E job becomes merge-required` to `Arm the Playwright E2E job as merge-required (owner decided 2026-07-30; blocked on two preconditions)` and moved `track` → `fix`. Current state re-verified via `gh api .../branches/main/protection` rather than read off a workflow file: required contexts are exactly `["Secrets Scan", "Lint", "Run Tests"]`, `strict=true`, 0 rulesets — so `Playwright E2E` is confirmed non-required, and confirmed **still** non-required after this edit. The card now carries the precondition interaction that neither card stated alone: the 3 `chaos-error-boundary` tests pass in CI only because `pr-checks.yml` falls back to the dev server, so arming the job *and* re-targeting it at Amplify are not independent changes — doing both without fixing the trigger would permanently block every PR with no obvious cause. Card count unchanged at **122**; `git diff --numstat` = `1  1`. |
 
 ### T020/T021 fault-injection record (T022)
 
