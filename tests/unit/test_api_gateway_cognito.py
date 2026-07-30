@@ -268,9 +268,9 @@ class TestCORSNoWildcard:
             for name, val in origin_values
             if val == "'*'" or val == '"*"' or val == "*"
         ]
-        assert (
-            wildcards == []
-        ), f"Found wildcard Access-Control-Allow-Origin in: {wildcards}"
+        assert wildcards == [], (
+            f"Found wildcard Access-Control-Allow-Origin in: {wildcards}"
+        )
 
     def test_cors_uses_origin_echoing(self) -> None:
         """T012: Gateway response Allow-Origin values use origin echoing.
@@ -329,9 +329,9 @@ class TestCORSNoWildcard:
             if creds_key not in params:
                 missing_creds.append(name)
 
-        assert (
-            missing_creds == []
-        ), f"Missing Access-Control-Allow-Credentials in: {missing_creds}"
+        assert missing_creds == [], (
+            f"Missing Access-Control-Allow-Credentials in: {missing_creds}"
+        )
 
         wrong_value = [
             (name, params[creds_key])
@@ -340,9 +340,9 @@ class TestCORSNoWildcard:
             and creds_key in params
             and params[creds_key] != "'true'"
         ]
-        assert (
-            wrong_value == []
-        ), f"Access-Control-Allow-Credentials not 'true' in: {wrong_value}"
+        assert wrong_value == [], (
+            f"Access-Control-Allow-Credentials not 'true' in: {wrong_value}"
+        )
 
     def test_cors_vary_origin_present(self) -> None:
         """T014: All OPTIONS integration responses include Vary: 'Origin'.

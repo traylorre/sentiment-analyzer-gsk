@@ -212,9 +212,9 @@ class TestHistoryWithSourceFilter:
         )
 
         # Assert: should be a SentimentResponse (not ErrorResponse)
-        assert not isinstance(
-            result, ErrorResponse
-        ), f"Expected SentimentResponse, got {result}"
+        assert not isinstance(result, ErrorResponse), (
+            f"Expected SentimentResponse, got {result}"
+        )
 
         # Only buckets with tiingo in sources should be present
         assert len(result.tickers) == 1
@@ -224,15 +224,15 @@ class TestHistoryWithSourceFilter:
         sentiment_entries = result.tickers[0].sentiment
         # tiingo_bucket and mixed_bucket have "tiingo" in sources; finnhub_bucket does not
         returned_timestamps = set(sentiment_entries.keys())
-        assert (
-            "2024-01-01T00:00:00Z" in returned_timestamps
-        ), "tiingo-only bucket should be included"
-        assert (
-            "2023-12-30T00:00:00Z" in returned_timestamps
-        ), "mixed tiingo+finnhub bucket should be included"
-        assert (
-            "2023-12-31T00:00:00Z" not in returned_timestamps
-        ), "finnhub-only bucket should be excluded"
+        assert "2024-01-01T00:00:00Z" in returned_timestamps, (
+            "tiingo-only bucket should be included"
+        )
+        assert "2023-12-30T00:00:00Z" in returned_timestamps, (
+            "mixed tiingo+finnhub bucket should be included"
+        )
+        assert "2023-12-31T00:00:00Z" not in returned_timestamps, (
+            "finnhub-only bucket should be excluded"
+        )
 
 
 # =============================================================================
@@ -353,6 +353,6 @@ class TestOverviewPerformance:
 
         # Each ticker should have aggregated sentiment
         for ticker_data in response.tickers:
-            assert (
-                "aggregated" in ticker_data.sentiment
-            ), f"{ticker_data.symbol} missing aggregated sentiment"
+            assert "aggregated" in ticker_data.sentiment, (
+                f"{ticker_data.symbol} missing aggregated sentiment"
+            )

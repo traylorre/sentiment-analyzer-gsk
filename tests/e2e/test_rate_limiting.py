@@ -110,9 +110,9 @@ async def test_rate_limit_headers_on_normal_response(
             if limit:
                 assert limit.isdigit(), f"X-RateLimit-Limit should be numeric: {limit}"
             if remaining:
-                assert (
-                    remaining.isdigit()
-                ), f"X-RateLimit-Remaining should be numeric: {remaining}"
+                assert remaining.isdigit(), (
+                    f"X-RateLimit-Remaining should be numeric: {remaining}"
+                )
         else:
             # Rate limit headers not present - acceptable if rate limiting
             # is enforced at API Gateway/infrastructure level
@@ -300,14 +300,13 @@ async def test_magic_link_rate_limit(
 
     # 500 is a server error - test should fail, not skip
     # Should succeed
-    assert (
-        first_response.status_code
-        in (
-            200,
-            202,
-            204,
-        )
-    ), f"Magic link request failed: {first_response.status_code} - {first_response.text}"
+    assert first_response.status_code in (
+        200,
+        202,
+        204,
+    ), (
+        f"Magic link request failed: {first_response.status_code} - {first_response.text}"
+    )
 
     # Make rapid follow-up requests
     rate_limited = False

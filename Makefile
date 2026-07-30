@@ -80,7 +80,7 @@ sast: ## Run SAST (Static Application Security Testing) - Bandit + Semgrep
 
 audit-pragma: ## Audit pragma comments (# noqa, # nosec) for validity
 	@echo "$(YELLOW)=== Checking for unused # noqa comments (RUF100) ===$(NC)"
-	ruff check --select RUF100 src/ tests/
+	ruff check --extend-select RUF100 src/ tests/
 	@echo ""
 	@echo "$(YELLOW)=== Auditing # nosec usage (Bandit with suppressions disabled) ===$(NC)"
 	bandit -r src/ --ignore-nosec 2>/dev/null | grep -E "^(>>|Issue)" || echo "No issues found"

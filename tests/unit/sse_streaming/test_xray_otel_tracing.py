@@ -302,9 +302,9 @@ class TestFlushFiredFlag:
 
         # Verify flush_fired guard is present before trace_event_dispatch calls
         assert "flush_fired" in source
-        assert (
-            "not flush_fired" in source
-        ), "Must check flush_fired before creating spans"
+        assert "not flush_fired" in source, (
+            "Must check flush_fired before creating spans"
+        )
 
     def test_deadline_check_sets_flush_fired(self):
         """_check_deadline_flush returning True should cause flush_fired=True."""

@@ -39,9 +39,9 @@ class TestSentimentOverlayFields:
     def test_update_sentiment_overlay_method_exists(self) -> None:
         """Verify updateSentimentOverlay method exists."""
         content = read_ohlc_js()
-        assert (
-            "updateSentimentOverlay()" in content
-        ), "updateSentimentOverlay method not found"
+        assert "updateSentimentOverlay()" in content, (
+            "updateSentimentOverlay method not found"
+        )
 
     def test_uses_timestamp_field_first(self) -> None:
         """
@@ -125,6 +125,6 @@ class TestSentimentApiFieldNames:
         content = read_ohlc_js()
 
         # The API returns { buckets: [...] }
-        assert (
-            "data.buckets" in content
-        ), "Code should access data.buckets from API response"
+        assert "data.buckets" in content, (
+            "Code should access data.buckets from API response"
+        )

@@ -24,7 +24,7 @@ tracer = Tracer()
 logger = logging.getLogger(__name__)
 
 
-class AuthType(str, Enum):
+class AuthType(str, Enum):  # noqa: UP042 - StrEnum changes str() of serialized members
     """Authentication type determined by token validation (Feature 1048).
 
     CRITICAL: This is determined by token validation, NOT request headers.

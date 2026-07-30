@@ -49,9 +49,9 @@ class TestTracerInitialization:
             for line in source.splitlines()
             if line.strip().startswith("from") or line.strip().startswith("import")
         )
-        assert (
-            has_tracer_import
-        ), f"{handler_path} missing Tracer import from aws_lambda_powertools"
+        assert has_tracer_import, (
+            f"{handler_path} missing Tracer import from aws_lambda_powertools"
+        )
 
         assert (
             f'Tracer(service="{expected_service}"' in source
@@ -76,9 +76,9 @@ class TestTracerInitialization:
         filepath = LAMBDAS_DIR / handler_path
         source = filepath.read_text()
 
-        assert (
-            "@tracer.capture_lambda_handler" in source
-        ), f"{handler_path} missing @tracer.capture_lambda_handler decorator"
+        assert "@tracer.capture_lambda_handler" in source, (
+            f"{handler_path} missing @tracer.capture_lambda_handler decorator"
+        )
 
     def test_sse_handler_uses_auto_patch_false(self):
         """SSE handler must use auto_patch=False (FR-060)."""
@@ -102,9 +102,9 @@ class TestNoLegacyXRaySDK:
     def test_no_xray_recorder_import(self, filepath):
         """No file should import xray_recorder."""
         source = filepath.read_text()
-        assert (
-            "xray_recorder" not in source
-        ), f"{filepath.relative_to(LAMBDAS_DIR)} still imports xray_recorder"
+        assert "xray_recorder" not in source, (
+            f"{filepath.relative_to(LAMBDAS_DIR)} still imports xray_recorder"
+        )
 
     @pytest.mark.parametrize(
         "filepath",
@@ -118,9 +118,9 @@ class TestNoLegacyXRaySDK:
     def test_no_patch_all(self, filepath):
         """No file should call patch_all() (FR-030)."""
         source = filepath.read_text()
-        assert (
-            "patch_all()" not in source
-        ), f"{filepath.relative_to(LAMBDAS_DIR)} still calls patch_all()"
+        assert "patch_all()" not in source, (
+            f"{filepath.relative_to(LAMBDAS_DIR)} still calls patch_all()"
+        )
 
 
 class TestCaptureMethodCoverage:
@@ -157,15 +157,15 @@ class TestCaptureMethodCoverage:
         """Key files must use @tracer.capture_method on at least one function."""
         filepath = LAMBDAS_DIR / handler_path
         source = filepath.read_text()
-        assert (
-            "@tracer.capture_method" in source
-        ), f"{handler_path} missing @tracer.capture_method"
+        assert "@tracer.capture_method" in source, (
+            f"{handler_path} missing @tracer.capture_method"
+        )
 
     @pytest.mark.parametrize("handler_path", FILES_WITH_SUBSEGMENT)
     def test_file_has_subsegment_instrumentation(self, handler_path):
         """Silent failure files must use tracer.provider.in_subsegment()."""
         filepath = LAMBDAS_DIR / handler_path
         source = filepath.read_text()
-        assert (
-            "tracer.provider.in_subsegment" in source
-        ), f"{handler_path} missing tracer.provider.in_subsegment()"
+        assert "tracer.provider.in_subsegment" in source, (
+            f"{handler_path} missing tracer.provider.in_subsegment()"
+        )

@@ -355,6 +355,22 @@ class CloudDatabase(ComponentResource):
 **Effort**: 4-6 weeks
 **Risk**: High (complete infrastructure rewrite)
 
+### TD-023: UP042 Suppressions on 7 (str, Enum) Classes
+**Status**: Acceptable
+**Location**: `src/lib/timeseries/models.py` (Resolution), `src/lambdas/analysis/sentiment.py` (SentimentSource, SentimentLabel), `src/lambdas/shared/errors/auth_errors.py` (AuthErrorCode), `src/lambdas/shared/middleware/auth_middleware.py` (AuthType), `src/lambdas/shared/models/ohlc.py` (TimeRange, OHLCResolution)
+**Issue**: ruff 0.15.14 flags all seven `class Foo(str, Enum)` definitions with UP042 (prefer `enum.StrEnum`). Each carries a same-line `# noqa: UP042` rider (feature 001-ruff-bump-forward).
+
+**Root Cause**: ruff marks the UP042 autofix as unsafe, and it is here: converting to StrEnum changes `str(member)` from `"ClassName.MEMBER"` to the bare member value. These enums are serialized into DynamoDB items and JSON responses, so the conversion is behavior-changing, which violated the bump-forward feature's behavior-neutrality constraint.
+
+**Guard**: `tests/unit/shared/test_enum_serialization_lock.py` locks `str(member)` and `.value` for every member of all seven enums; an accidental StrEnum conversion fails the suite.
+
+**Proposed Fix**: Dedicated StrEnum migration feature: convert all seven enums, sweep every `str()`/f-string call site, update the lock tests in the same change, and verify DynamoDB/JSON wire formats with a serialization test sweep.
+
+**Effort**: 2-4 hours (the sweep dominates; the conversion itself is mechanical)
+**Risk**: Low while suppressed (riders are same-line and audited by `make audit-pragma`); Medium during migration (silent wire-format change if a call site is missed)
+
+---
+
 ### TD-022: chaos_restore Lambda Not Deployed via Terraform
 **Status**: Blocked - Waiting for deployer IAM permissions
 **Location**: `src/lambdas/chaos_restore/handler.py` (code complete), `infrastructure/terraform/main.tf` (TODO comment)

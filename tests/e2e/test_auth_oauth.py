@@ -62,12 +62,12 @@ async def test_oauth_urls_returned(api_client: PreprodAPIClient) -> None:
         if provider_name in providers:
             provider = providers[provider_name]
             if isinstance(provider, dict):
-                assert (
-                    "authorize_url" in provider
-                ), f"{provider_name} provider missing authorize_url"
-                assert (
-                    len(provider["authorize_url"]) > 0
-                ), f"{provider_name} authorize_url is empty"
+                assert "authorize_url" in provider, (
+                    f"{provider_name} provider missing authorize_url"
+                )
+                assert len(provider["authorize_url"]) > 0, (
+                    f"{provider_name} authorize_url is empty"
+                )
             else:
                 assert isinstance(provider, str) and len(provider) > 0
 
@@ -110,9 +110,9 @@ async def test_oauth_url_structure_google(api_client: PreprodAPIClient) -> None:
         google_url, "accounts.google.com"
     ) or _host_matches_domain(google_url, "googleapis.com")
 
-    assert (
-        is_cognito or is_google_direct
-    ), f"Invalid Google OAuth URL (expected Cognito or Google domain): {google_url}"
+    assert is_cognito or is_google_direct, (
+        f"Invalid Google OAuth URL (expected Cognito or Google domain): {google_url}"
+    )
 
     # For Cognito federated auth, check for identity_provider parameter
     if is_cognito:
@@ -158,9 +158,9 @@ async def test_oauth_url_structure_github(api_client: PreprodAPIClient) -> None:
     is_cognito = _host_matches_domain(github_url, "amazoncognito.com")
     is_github_direct = _host_matches_domain(github_url, "github.com")
 
-    assert (
-        is_cognito or is_github_direct
-    ), f"Invalid GitHub OAuth URL (expected Cognito or GitHub domain): {github_url}"
+    assert is_cognito or is_github_direct, (
+        f"Invalid GitHub OAuth URL (expected Cognito or GitHub domain): {github_url}"
+    )
 
     # For Cognito federated auth, check for identity_provider parameter
     if is_cognito:
@@ -301,9 +301,9 @@ async def test_signout_invalidates_session(
         verify_response = await api_client.get("/api/v2/configurations")
 
         # Should get 401 with invalidated token
-        assert (
-            verify_response.status_code == 401
-        ), f"Token not invalidated after signout: {verify_response.status_code}"
+        assert verify_response.status_code == 401, (
+            f"Token not invalidated after signout: {verify_response.status_code}"
+        )
 
     finally:
         api_client.clear_access_token()
@@ -343,9 +343,9 @@ async def test_token_refresh(
     if response.text and response.text.strip():
         try:
             data = response.json()
-            assert (
-                "error" in data or "message" in data or "detail" in data
-            ), "Error response missing message"
+            assert "error" in data or "message" in data or "detail" in data, (
+                "Error response missing message"
+            )
         except Exception:
             # If response is not JSON, that's acceptable for error responses
             pass
@@ -436,18 +436,18 @@ async def test_me_endpoint_returns_federation_fields(
         if me_response.status_code == 401:
             pytest.skip("Anonymous sessions cannot access /me endpoint")
 
-        assert (
-            me_response.status_code == 200
-        ), f"Expected 200, got {me_response.status_code}"
+        assert me_response.status_code == 200, (
+            f"Expected 200, got {me_response.status_code}"
+        )
 
         data = me_response.json()
 
         # Feature 1172/1178: Verify federation fields are present
         assert "role" in data, f"Missing 'role' in /me response: {data}"
         assert "verification" in data, f"Missing 'verification' in /me response: {data}"
-        assert (
-            "linked_providers" in data
-        ), f"Missing 'linked_providers' in /me response: {data}"
+        assert "linked_providers" in data, (
+            f"Missing 'linked_providers' in /me response: {data}"
+        )
         # last_provider_used may be null for anonymous users
 
         # Verify field values are valid
@@ -455,21 +455,21 @@ async def test_me_endpoint_returns_federation_fields(
         assert data["role"] in valid_roles, f"Invalid role: {data['role']}"
 
         valid_verifications = ["none", "pending", "verified"]
-        assert (
-            data["verification"] in valid_verifications
-        ), f"Invalid verification: {data['verification']}"
+        assert data["verification"] in valid_verifications, (
+            f"Invalid verification: {data['verification']}"
+        )
 
-        assert isinstance(
-            data["linked_providers"], list
-        ), "linked_providers should be a list"
+        assert isinstance(data["linked_providers"], list), (
+            "linked_providers should be a list"
+        )
 
         # For anonymous user, expect role="anonymous" and no linked providers
-        assert (
-            data["role"] == "anonymous"
-        ), f"Anonymous user should have role='anonymous', got {data['role']}"
-        assert (
-            len(data["linked_providers"]) == 0
-        ), "Anonymous user should have no linked providers"
+        assert data["role"] == "anonymous", (
+            f"Anonymous user should have role='anonymous', got {data['role']}"
+        )
+        assert len(data["linked_providers"]) == 0, (
+            "Anonymous user should have no linked providers"
+        )
 
     finally:
         api_client.clear_access_token()
@@ -506,18 +506,18 @@ async def test_oauth_callback_response_includes_federation_fields(
         if "status" in data and data.get("status") == "error":
             # Error responses - federation fields should still be present with defaults
             assert "role" in data, f"Error response missing 'role': {data}"
-            assert (
-                data["role"] == "anonymous"
-            ), f"Error response role should be 'anonymous': {data}"
+            assert data["role"] == "anonymous", (
+                f"Error response role should be 'anonymous': {data}"
+            )
         elif "status" in data and data.get("status") == "authenticated":
             # Successful auth (unlikely with invalid code) - federation fields required
             assert "role" in data, f"Success response missing 'role': {data}"
-            assert (
-                "verification" in data
-            ), f"Success response missing 'verification': {data}"
-            assert (
-                "linked_providers" in data
-            ), f"Success response missing 'linked_providers': {data}"
+            assert "verification" in data, (
+                f"Success response missing 'verification': {data}"
+            )
+            assert "linked_providers" in data, (
+                f"Success response missing 'linked_providers': {data}"
+            )
 
 
 @pytest.mark.asyncio
@@ -554,24 +554,24 @@ async def test_federation_field_types(
 
         # Verify types
         assert isinstance(data.get("role"), str), "role should be string"
-        assert isinstance(
-            data.get("verification"), str
-        ), "verification should be string"
-        assert isinstance(
-            data.get("linked_providers"), list
-        ), "linked_providers should be list"
+        assert isinstance(data.get("verification"), str), (
+            "verification should be string"
+        )
+        assert isinstance(data.get("linked_providers"), list), (
+            "linked_providers should be list"
+        )
 
         # last_provider_used can be string or None
         last_provider = data.get("last_provider_used")
-        assert last_provider is None or isinstance(
-            last_provider, str
-        ), f"last_provider_used should be string or null, got {type(last_provider)}"
+        assert last_provider is None or isinstance(last_provider, str), (
+            f"last_provider_used should be string or null, got {type(last_provider)}"
+        )
 
         # Verify linked_providers contains only strings
         for provider in data.get("linked_providers", []):
-            assert isinstance(
-                provider, str
-            ), f"linked_provider item should be string: {provider}"
+            assert isinstance(provider, str), (
+                f"linked_provider item should be string: {provider}"
+            )
 
     finally:
         api_client.clear_access_token()

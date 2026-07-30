@@ -115,9 +115,9 @@ async def test_quota_values_are_consistent(
 
         # Verify is_exceeded flag
         expected_exceeded = used >= limit
-        assert (
-            is_exceeded == expected_exceeded
-        ), f"is_exceeded should be {expected_exceeded} when used={used}, limit={limit}"
+        assert is_exceeded == expected_exceeded, (
+            f"is_exceeded should be {expected_exceeded} when used={used}, limit={limit}"
+        )
 
     finally:
         api_client.clear_access_token()
@@ -198,9 +198,9 @@ async def test_quota_is_consistent_across_requests(
         # Values should be the same (no emails sent between requests)
         assert data1["used"] == data2["used"], "used should be consistent"
         assert data1["limit"] == data2["limit"], "limit should be consistent"
-        assert (
-            data1["remaining"] == data2["remaining"]
-        ), "remaining should be consistent"
+        assert data1["remaining"] == data2["remaining"], (
+            "remaining should be consistent"
+        )
 
     finally:
         api_client.clear_access_token()

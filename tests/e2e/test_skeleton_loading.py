@@ -159,9 +159,9 @@ class TestSkeletonAccessibility:
 
             for overlay in skeleton_overlays:
                 aria_hidden = await overlay.get_attribute("aria-hidden")
-                assert (
-                    aria_hidden == "true"
-                ), "Skeleton overlay should have aria-hidden='true'"
+                assert aria_hidden == "true", (
+                    "Skeleton overlay should have aria-hidden='true'"
+                )
 
             await browser.close()
 

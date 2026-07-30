@@ -141,6 +141,8 @@ The Lambda is named `dashboard Lambda`, the handler is `src/lambdas/dashboard/`,
 - N/A (observability-only; no data-store changes) (001-lambda-log-visibility)
 - GNU Make (Makefile recipe edit), Markdown (two doc edits), HTML (board card lane move). No Python code. + None added or removed. tfsec binary itself is untouched (remains at user level on some machines). (001-tfsec-removal)
 - GNU Make (recipe edit), pip requirements + TOML (two pin edits), Python 3.13 (one-argument fix in `src/lambdas/analysis/sentiment.py` + one new unit test), Dockerfile comments (two suppressions), HTML (board card string surgery). + `semgrep==1.172.0` added to requirements-dev.txt; pyproject dev extra tightened from `>=1.50.0` to the same pin. requirements-ci.txt untouched (FR-001). No runtime dependencies change. (001-semgrep-gating)
+- Python 3.13 (tooling target; no runtime code changes). Config formats: pip requirements, TOML, YAML (GitHub Actions + pre-commit), Make, Markdown (README surgery). + ruff 0.15.14 (PyPI, verified exists); astral-sh/ruff-pre-commit tag `v0.15.14` (verified, sha `0c7b6c98`, hook ids `ruff-check`/`ruff-format` with `ruff` as legacy alias). (001-ruff-bump-forward)
+- N/A (toolchain configuration only). (001-ruff-bump-forward)
 
 - **Python 3.13** with aws-lambda-powertools, boto3, pydantic, httpx, orjson
 - **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, Amplify
@@ -938,6 +940,7 @@ aws cloudwatch get-metric-data --metric-data-queries '[...]' --start-time ... --
 ```
 
 ## Recent Changes
+- 001-ruff-bump-forward: Added Python 3.13 (tooling target; no runtime code changes). Config formats: pip requirements, TOML, YAML (GitHub Actions + pre-commit), Make, Markdown (README surgery). + ruff 0.15.14 (PyPI, verified exists); astral-sh/ruff-pre-commit tag `v0.15.14` (verified, sha `0c7b6c98`, hook ids `ruff-check`/`ruff-format` with `ruff` as legacy alias).
 - 001-semgrep-gating: Added GNU Make (recipe edit), pip requirements + TOML (two pin edits), Python 3.13 (one-argument fix in `src/lambdas/analysis/sentiment.py` + one new unit test), Dockerfile comments (two suppressions), HTML (board card string surgery). + `semgrep==1.172.0` added to requirements-dev.txt; pyproject dev extra tightened from `>=1.50.0` to the same pin. requirements-ci.txt untouched (FR-001). No runtime dependencies change.
 - 001-tfsec-removal: Added GNU Make (Makefile recipe edit), Markdown (two doc edits), HTML (board card lane move). No Python code. + None added or removed. tfsec binary itself is untouched (remains at user level on some machines).
 - 001-lambda-log-visibility: Added Python 3.13 (Lambda base image `public.ecr.aws/lambda/python:3.13` for image Lambdas; managed python3.13 runtime for ZIP Lambdas) + stdlib `logging` only for the mechanism; aws-lambda-powertools 3.23.0 already present (dashboard handler) and untouched

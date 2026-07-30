@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from src.lambdas.shared.cache.ohlc_cache import CachedCandle
 
 
-class TimeRange(str, Enum):
+class TimeRange(str, Enum):  # noqa: UP042 - StrEnum changes str() of serialized members
     """Predefined time ranges for chart display."""
 
     ONE_WEEK = "1W"
@@ -33,7 +33,7 @@ TIME_RANGE_DAYS: dict[TimeRange, int] = {
 }
 
 
-class OHLCResolution(str, Enum):
+class OHLCResolution(str, Enum):  # noqa: UP042 - StrEnum changes str() of serialized members
     """Candlestick time resolution for OHLC data.
 
     Maps to Finnhub API resolution parameter values.

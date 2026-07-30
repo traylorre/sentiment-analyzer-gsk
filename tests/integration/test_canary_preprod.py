@@ -44,9 +44,9 @@ class TestCanaryPreprod:
         """
         response = await api_client.get("/health")
 
-        assert (
-            response.status_code == 200
-        ), f"Health check failed with {response.status_code}"
+        assert response.status_code == 200, (
+            f"Health check failed with {response.status_code}"
+        )
 
         data = response.json()
         assert isinstance(data, dict), "Response must be JSON object"
@@ -82,9 +82,9 @@ class TestCanaryPreprod:
         """
         response = await api_client.get("/health")
 
-        assert (
-            response.status_code == 200
-        ), f"Health endpoint should return 200 without auth, got {response.status_code}."
+        assert response.status_code == 200, (
+            f"Health endpoint should return 200 without auth, got {response.status_code}."
+        )
         data = response.json()
         assert data["status"] in ["healthy", "degraded"]
 
@@ -101,9 +101,9 @@ class TestCanaryPreprod:
             responses.append(response.json())
 
         statuses = [r["status"] for r in responses]
-        assert all(
-            s == "healthy" for s in statuses
-        ), f"Health endpoint returned inconsistent statuses: {statuses}"
+        assert all(s == "healthy" for s in statuses), (
+            f"Health endpoint returned inconsistent statuses: {statuses}"
+        )
 
     @pytest.mark.asyncio
     async def test_health_endpoint_concurrent_requests(
@@ -119,9 +119,9 @@ class TestCanaryPreprod:
             return resp.status_code
 
         results = await asyncio.gather(*[check_health() for _ in range(5)])
-        assert all(
-            status == 200 for status in results
-        ), f"Concurrent health checks had failures: {results}"
+        assert all(status == 200 for status in results), (
+            f"Concurrent health checks had failures: {results}"
+        )
 
     @pytest.mark.asyncio
     async def test_health_endpoint_error_messages(self, api_client: PreprodAPIClient):
@@ -134,9 +134,9 @@ class TestCanaryPreprod:
 
         data = response.json()
         if data["status"] == "degraded":
-            assert (
-                "details" in data or "message" in data or "errors" in data
-            ), "Degraded status should include error details for debugging"
+            assert "details" in data or "message" in data or "errors" in data, (
+                "Degraded status should include error details for debugging"
+            )
 
 
 class TestCanaryMetadata:

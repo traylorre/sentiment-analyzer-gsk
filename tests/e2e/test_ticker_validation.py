@@ -37,9 +37,9 @@ async def test_valid_ticker_returns_metadata(
     if response.status_code == 404:
         pytest.skip("Ticker validation endpoint not implemented")
 
-    assert (
-        response.status_code == 200
-    ), f"Valid ticker request failed: {response.status_code}"
+    assert response.status_code == 200, (
+        f"Valid ticker request failed: {response.status_code}"
+    )
 
     data = response.json()
 
@@ -152,9 +152,9 @@ async def test_ticker_search_returns_matches(
         symbols = [r.get("symbol", r.get("ticker", "")).upper() for r in results]
         all_text = str(results).lower()
         # Accept AAPL symbol or "apple" in company name
-        assert (
-            "AAPL" in symbols or "apple" in all_text
-        ), f"Expected AAPL/Apple in results for 'apple' search: {results[:3]}"
+        assert "AAPL" in symbols or "apple" in all_text, (
+            f"Expected AAPL/Apple in results for 'apple' search: {results[:3]}"
+        )
 
 
 @pytest.mark.asyncio
@@ -218,9 +218,9 @@ async def test_ticker_search_partial_match(
             all_text = str(results).lower()
             # Search for "micro" should return MSFT/Microsoft
             # Accept either symbol or company name match
-            assert (
-                "msft" in all_text or "microsoft" in all_text
-            ), f"Expected MSFT/Microsoft in results for 'micro' search: {results[:3]}"
+            assert "msft" in all_text or "microsoft" in all_text, (
+                f"Expected MSFT/Microsoft in results for 'micro' search: {results[:3]}"
+            )
 
 
 @pytest.mark.asyncio
