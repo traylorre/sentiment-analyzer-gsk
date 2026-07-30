@@ -353,7 +353,18 @@ jobs:
         continue-on-error: true
 
   # ========================================================================
-  # JOB: Playwright Chaos Tests (Feature 1265)
+  # JOB: Playwright E2E Tests -- BLOCKING (merge-required)
+  #
+  # Runs every spec EXCEPT tests/e2e/chaos*.spec.ts. Chaos injection was never
+  # completed, so chaos reds are not a signal about product health and must not
+  # gate merges (owner decision 2026-07-30). They still run, in the separate
+  # non-blocking playwright-chaos job below, so the signal is not lost.
+  #
+  # This job's name is a required status check on main. Renaming it silently
+  # disables the gate, because branch protection matches on the job NAME --
+  # a required context that no job reports stays permanently pending, and a
+  # renamed job reports under a name nothing requires. Do not rename it
+  # without updating branch protection in the same change.
   # ========================================================================
   playwright-e2e:
     name: Playwright E2E Tests
@@ -388,12 +399,21 @@ jobs:
       - name: Install Playwright Chromium
         run: cd frontend && npx playwright install chromium --with-deps
 
-      - name: Run E2E tests
+      - name: Run E2E tests (blocking, excludes chaos)
         run: |
           cd frontend
+          # Chaos specs are excluded here and run in the non-blocking
+          # playwright-chaos job instead. Chaos injection was never completed.
+          SPECS=$(ls tests/e2e/*.spec.ts | grep -v '/chaos' | tr '\n' ' ')
+          if [ -z "$SPECS" ]; then
+            echo "::error::No non-chaos specs matched - the glob or the exclude is wrong."
+            echo "This would otherwise report a vacuous green on a required check."
+            exit 1
+          fi
+          echo "Blocking suite: $(echo "$SPECS" | wc -w) spec files"
           # Exclude @external-api tests — they hit real Tiingo/Finnhub APIs.
           # Run nightly via nightly-e2e.yml instead. DO NOT REMOVE this flag.
-          timeout 900 npx playwright test tests/e2e/*.spec.ts \
+          timeout 900 npx playwright test $SPECS \
             --project="Desktop Chrome" \
             --workers=4 \
             --retries=0 \
@@ -414,6 +434,80 @@ jobs:
         with:
           name: playwright-e2e-results
           path: frontend/test-results/
+          retention-days: 7
+
+    timeout-minutes: 20
+
+  # ========================================================================
+  # JOB: Playwright Chaos Tests -- NON-BLOCKING (Feature 1265)
+  #
+  # Chaos injection was never completed, so these reds are not a signal about
+  # product health (owner decision 2026-07-30). They run for visibility and
+  # MUST NOT be added to main's required status checks until chaos work is
+  # finished. Known-broken today: the 3 chaos-error-boundary tests can only
+  # pass against a dev server, because the window.__TEST_FORCE_ERROR reader is
+  # stripped from production builds -- see CLEANUP-BOARD.html.
+  #
+  # This job does NOT use continue-on-error. A red here is meant to be visible
+  # as a red job; it simply is not a required context, so it cannot block a
+  # merge. continue-on-error would paint it green and hide the signal we are
+  # deliberately keeping.
+  # ========================================================================
+  playwright-chaos:
+    name: Playwright Chaos Tests (non-blocking)
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        run: pip install -r requirements-ci.txt
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: cd frontend && npm ci
+
+      - name: Install Playwright Chromium
+        run: cd frontend && npx playwright install chromium --with-deps
+
+      - name: Run chaos E2E tests
+        run: |
+          cd frontend
+          SPECS=$(ls tests/e2e/chaos*.spec.ts | tr '\n' ' ')
+          if [ -z "$SPECS" ]; then
+            echo "::error::No chaos specs matched - the glob is wrong."
+            exit 1
+          fi
+          echo "Chaos suite: $(echo "$SPECS" | wc -w) spec files"
+          timeout 900 npx playwright test $SPECS \
+            --project="Desktop Chrome" \
+            --workers=4 \
+            --retries=0 \
+            --reporter=html,list \
+            --grep-invert "@external-api"
+
+      - name: Upload chaos Playwright report
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: playwright-chaos-report
+          path: frontend/playwright-report/
           retention-days: 7
 
     timeout-minutes: 20

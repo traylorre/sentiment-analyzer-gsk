@@ -4,6 +4,7 @@ import {
   MOCK_EMPTY_OHLC_RESPONSE,
   MOCK_EMPTY_SENTIMENT_RESPONSE,
 } from './helpers/mock-api-data';
+import { searchAndAwaitResponse } from './helpers/search-helpers';
 
 /**
  * Chart Edge Cases: Empty data, resolution fallback, API errors (Feature 1281)
@@ -68,8 +69,7 @@ test.describe('Chart Edge Cases', () => {
 
       // Search and select AAPL
       const searchInput = page.getByPlaceholder(/search tickers/i);
-      await searchInput.fill('AAPL');
-      await page.waitForResponse('**/api/v2/tickers/search**');
+      await searchAndAwaitResponse(page, searchInput, 'AAPL');
       await page.getByRole('option', { name: /AAPL/i }).first().click();
 
       // Wait for chart area to render
@@ -126,8 +126,7 @@ test.describe('Chart Edge Cases', () => {
 
       // Search and select AAPL
       const searchInput = page.getByPlaceholder(/search tickers/i);
-      await searchInput.fill('AAPL');
-      await page.waitForResponse('**/api/v2/tickers/search**');
+      await searchAndAwaitResponse(page, searchInput, 'AAPL');
       await page.getByRole('option', { name: /AAPL/i }).first().click();
 
       // Wait for chart to load
@@ -157,8 +156,7 @@ test.describe('Chart Edge Cases', () => {
 
       // Search and select AAPL
       const searchInput = page.getByPlaceholder(/search tickers/i);
-      await searchInput.fill('AAPL');
-      await page.waitForResponse('**/api/v2/tickers/search**');
+      await searchAndAwaitResponse(page, searchInput, 'AAPL');
       await page.getByRole('option', { name: /AAPL/i }).first().click();
 
       // Wait for error to render
@@ -214,8 +212,7 @@ test.describe('Chart Edge Cases', () => {
 
       // Search and select AAPL (triggers first OHLC call → 500)
       const searchInput = page.getByPlaceholder(/search tickers/i);
-      await searchInput.fill('AAPL');
-      await page.waitForResponse('**/api/v2/tickers/search**');
+      await searchAndAwaitResponse(page, searchInput, 'AAPL');
       await page.getByRole('option', { name: /AAPL/i }).first().click();
 
       // Wait for error state
