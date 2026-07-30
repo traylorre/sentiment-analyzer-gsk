@@ -418,16 +418,20 @@ list. Exactly one definition site exists.
   (f) the owner decision on whether `Pre-commit Hooks` should be added to `main`'s required status
   checks, completing 1400 FR-007 step (b) for that job;
   (g) `scripts/` is outside every **required** CI check. Verified: the `Lint` job runs
-  `ruff format --check src/ tests/`, `ruff check src/ tests/`, and `ruff check src/ --select S`;
+  `ruff format --check --diff src/ tests/`, `ruff check src/ tests/`, and `ruff check src/ --select S`;
   the bandit hook is `-r src/`; `make sast` scans `src/`; `make lint` is `ruff check src tests`. The
   detector is linted only by the `ruff-check` / `ruff-format` pre-commit hooks, which in CI run
   solely in the **non-required** `Pre-commit Hooks` job. This feature promotes a `scripts/` file into
   the required merge path without any required check covering it.
 
-- **FR-015**: This feature MUST correct the two in-repo statements that the `pre-commit` job is a
-  blocking gate:
-  `.pre-commit-config.yaml:190-192` (*"runs these hooks on every PR to main as a **BLOCKING**
-  gate"*) and the step name at `pr-checks.yml:229` (*"Run pre-commit (blocking)"*). Both are false
+- **FR-015** *(out of numeric order: FR-012, FR-013 and FR-014 follow this entry. FR-015 was added
+  during AR#1 and appended next to the FR-010/FR-011 scope block it belongs with. Do not stop
+  reading here — FR-012 carries the detector interface contract, AR#3 G-17)*: This feature MUST
+  correct the two in-repo statements that the `pre-commit` job is a blocking gate:
+  the comment block in `.pre-commit-config.yaml` reading *"runs these hooks on every PR to main as a
+  **BLOCKING** gate"* (at `:190-192` today, but locate it by that string — the new hook is inserted
+  into the same file first and shifts it, AR#3 G-10) and the step name at `pr-checks.yml:229`
+  (*"Run pre-commit (blocking)"*). Both are false
   against `main`'s verified `required_status_checks.contexts`, and both files are already inside
   FR-010's allowlist.
 
@@ -457,9 +461,12 @@ list. Exactly one definition site exists.
 - **FR-013**: The detector MUST report the number of files scanned, and a scan that examines **zero**
   files MUST exit non-zero. "No violations found" and "no files found" MUST NOT share an exit code.
   This closes the cheapest route to a permanently green inert guard: renaming or moving
-  `frontend/tests/e2e/`. This **extends** 001 T001 criterion 5 (which requires four counts but not
-  files-scanned) and **amends** criterion 6 (whose `sys.exit(0)` "otherwise" branch would return 0
-  on an empty scan). Both are filed under FR-010's amendment clause.
+  `frontend/tests/e2e/`. A zero-file scan MUST exit non-zero whether the root is **missing, renamed,
+  or present but empty** — testing only the rename passes a detector that raises on a missing
+  directory and returns 0 on an empty one (AR#3 G-08). This requirement is now carried by 001 T001
+  criteria 5 and 6 directly, folded in at `3b86d9c`. It was originally filed as an amendment against
+  criterion 5 (four counts, no files-scanned) and criterion 6 (whose `sys.exit(0)` "otherwise"
+  branch returned 0 on an empty scan); both criteria have since been rewritten.
 
 - **FR-014**: The guard MUST be exposed through a `make` target, that target MUST
   shell out to the same detector rather than duplicating any logic, and MUST be added to the
@@ -504,8 +511,10 @@ Each criterion names the command that decides it.
 - **SC-007**: `grep -rn "scan-waitforresponse-race" .pre-commit-config.yaml .github/` returns hits in
   **both** `.pre-commit-config.yaml` and `.github/workflows/pr-checks.yml`, inverting 001's T001
   criterion 9.
-- **SC-008**: `grep -A3 'SKIP:' .github/workflows/pr-checks.yml | grep -c scan-waitforresponse-race`
-  returns `0`, and the guard's step under `jobs.lint.steps` has a `run:` key (not a `uses:` or a
+- **SC-008**: `! grep -A3 'SKIP:' .github/workflows/pr-checks.yml | grep -q scan-waitforresponse-race`
+  succeeds — written as a negated `grep -q`, not `grep -c ... = 0`, because `grep -c` exits 1 on a
+  zero count and the success case would report as a failure (AR#3 G-19) — and the guard's step under
+  `jobs.lint.steps` has a `run:` key (not a `uses:` or a
   `pre-commit` invocation), so the `pre-commit` job's `SKIP` cannot reach it.
 - **SC-009**:
   `grep -rn "setInputFiles" --include='*.py' --include='*.js' --include='*.ts' --include='*.yaml' . | grep -v node_modules | grep -v '^./specs/' | cut -d: -f1 | sort -u | wc -l`
@@ -537,7 +546,11 @@ Each criterion names the command that decides it.
   two follow-up cards) → **128**. Counting by `source` rather than "locatable by grep" is
   deliberate: an unspecified grep pattern is satisfied by any eight cards, or by none.
 - **SC-015**: No file outside the FR-010 allowlist is modified, verified by `git diff --stat` against
-  the branch point, and the planted violation appears in no commit on any branch.
+  the branch point; and, after Phase E completes, the planted violation exists in no commit on
+  `main` and on no surviving branch or open PR. It necessarily exists on the temporary
+  `tmp/gate-red-team` branch while FR-007 mode (d) runs, which is what that mode tests. The earlier
+  absolute wording ("no commit on any branch") contradicted mode (d) and was unsatisfiable alongside
+  it (AR#3 G-11). FR-007's phrasing is the one of record.
 
 ## Out of Scope
 

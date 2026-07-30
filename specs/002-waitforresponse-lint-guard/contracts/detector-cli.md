@@ -4,6 +4,11 @@
 **Subject**: `scripts/scan-waitforresponse-race.py`
 **Owner**: Feature `001-waitforresponse-race-sweep`, task T001
 **Consumer**: this feature's two enforcement points
+**Status**: **ACCEPTED BY THE OWNER.** As of `3b86d9c`, every requirement below is carried by a
+001 T001 acceptance criterion (5, 6, 8, 12, 13), and 001's Clarification C4 records the amendment.
+This file remains the contract of record and the place to read the reasoning; 001 T001 is where an
+implementer will actually encounter it. See AR#3 G-01 in `../tasks.md` for why the split mattered:
+four of these requirements were not gaps in 001 but direct contradictions of its written criteria.
 
 ---
 

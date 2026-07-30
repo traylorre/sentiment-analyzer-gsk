@@ -29,7 +29,9 @@ There is no product code to test.
 **Target Platform**: developer workstations (Linux/WSL2) and `ubuntu-latest` GitHub Actions runners
 **Project Type**: repository tooling / CI configuration
 **Performance Goals**: detector completes the full scan root in under 2 seconds (spec SC-010); scan
-root is 48 `.ts` files on the post-001 tree (47 at `35d5f61` plus the helper 001 T004 adds), 6 of which contain matches
+root is 48 `.ts` files on the post-001 tree (47 at `35d5f61` plus the helper 001 T004 adds). Six
+files contain matches **pre-001**; the post-001 figure is not derived anywhere and is at least seven,
+since 001 T004's new `helpers/search-helpers.ts` contains a `page.waitForResponse` (AR#3 G-16)
 **Constraints**: no `.venv` on the CI runner; no repository settings changes; detector is owned by
 001 and may only be amended through a recorded change request
 **Scale/Scope**: 2 enforcement points, 1 make target, 8 board cards, 2 stale-comment corrections, 0 lines of new
@@ -217,10 +219,10 @@ violations proves only that it can find violations, never that it can be green.
 
 | Phase | Purpose | Gate to enter |
 |---|---|---|
-| **A — Precondition check** | Confirm 001 landed; run the detector under `python3 -I -S`; confirm it satisfies all six rows of `contracts/detector-cli.md` C6; file amendments against 001 T001 for every divergence (four are already known: stdlib-only, files-scanned + non-zero-on-empty, remediation guidance, stdout stream) | 001 merged |
-| **B — Local enforcement point** | Add the `repo: local` hook per D3 | Phase A clean |
-| **C — Blocking enforcement point** | Add the `Lint` job step with `if: always()`; add the make target and wire it into `validate`; correct the two stale "BLOCKING gate" statements per FR-015 | Phase B green locally |
-| **D — Adversarial verification** | Plant a violation; assert non-zero in modes (a) `git commit`, (b) `pre-commit run --all-files` on a clean index, (c) `python3 -I -S`; revert and assert zero in all three; measure runtime; rename the scan root and assert non-zero; rename the detector and assert non-zero | Phases B and C complete |
+| **A — Precondition check** | Confirm 001 landed; run the detector under `python3 -I -S`; confirm it satisfies all six rows of `contracts/detector-cli.md` C6, **including remediation guidance** (checked here against a throwaway violation, not deferred to Phase D — AR#3 G-07); assert non-zero on a zero-file scan for both a renamed root and an empty directory; record any divergence from 001 T001. The contract is folded into 001 T001 as of `3b86d9c`, so this phase is expected to pass | 001 merged |
+| **B — Local enforcement point** | Add the `repo: local` hook per D3; correct the two stale "BLOCKING gate" statements per FR-015 (tasks T005) | Phase A clean |
+| **C — Blocking enforcement point** | Add the `Lint` job step with `if: always()`; add the make target and wire it into `validate` | Phase B green locally |
+| **D — Adversarial verification** | Plant a violation; assert non-zero in modes (a) `git commit`, (b) `pre-commit run --all-files` on a clean index **with the failure attributed to this hook by name**, (c) `python3 -I -S`; revert and assert zero in all three; measure runtime; rename the detector and assert non-zero; assert an undecodable file under the scan root is not silently skipped | Phases B and C complete |
 | **E — Real-CI verification** | Mode (d): draft red-team PR carrying the planted violation; observe the **required `Lint`** check fail; close the PR and delete the branch | Phase D clean |
 | **F — Board** | Guard card plus one card per FR-011 item (a)–(g); eight cards total, `source: 002-waitforresponse-lint-guard` | Phase E evidence recorded |
 
@@ -314,7 +316,7 @@ catch. AR#1 renumbered and inserted requirements; the prose that cited them was 
 | N-11 | MEDIUM | SC-010's "locatable by grep" specified no pattern, so it was satisfiable by any cards or none | Now **SC-014**: count cards whose `source` is `002-waitforresponse-lint-guard`, expect exactly 8 |
 | N-12 | MEDIUM | The fork-PR edge case concluded "no gap here today" having checked only for `paths:` filters. `pull_request` builds the fork's checkout, so a fork can edit the detector or delete the step from its copy of the workflow | Conclusion narrowed to what was checked; the fork-edits-the-detector case recorded as a review-mitigated residual |
 | N-13 | LOW | SC-006 named no command despite the section preamble promising one for each | Now **SC-008**, with an explicit grep |
-| N-14 | LOW | Contract C1 assumed `python3` is 3.13 everywhere; CLAUDE.md documents system Python as 3.10 and the symlink as apt-resettable | Resolved by N-01's `-I -S`, which uses whichever 3.13 is in play rather than reaching for a system interpreter |
+| N-14 | LOW | Contract C1 assumed `python3` is 3.13 everywhere; CLAUDE.md documents system Python as 3.10 and the symlink as apt-resettable | ~~Resolved by N-01's `-I -S`~~ — **REOPENED AND PROPERLY RESOLVED at AR#3 (G-04)**. `-I -S` is verification mode (c), a manual command. The hook entry is `python3 scripts/...`, which resolves from the committing shell's `PATH` and was never addressed. Empirically: with the venv off `PATH`, `python3` here is **3.12.3**. Now closed by a new **001 T001 criterion 13** — an in-script `sys.version_info >= (3, 13)` floor that exits non-zero with the required version. This entry is left struck through rather than rewritten, because a resolution that names a real fix and applies it to the wrong mechanism is the failure mode this ledger exists to catch |
 | N-15 | LOW | quickstart hardcoded an absolute path | → `cd "$(git rev-parse --show-toplevel)"` |
 | N-16 | LOW | quickstart's bare `git reset` unstages the developer's whole index | → `git restore --staged <file>` |
 | N-17 | LOW | Mode (b) works only because `pass_filenames: false` plus a filesystem-walking detector catches an untracked file; undocumented and load-bearing | Added as a row in contract C6 ("ignores any file list") with the SC-003 consequence stated |

@@ -109,14 +109,35 @@ out here rather than left to the reader.
 
 Local modes prove the detector's properties. Only CI proves the wiring.
 
+Two things about this block are deliberate and easy to get wrong.
+
+**Branch from the feature branch, not `main`.** GitHub builds `pull_request` runs from the merge
+commit, so the `Lint` job contains the guard step only if this branch descends from
+`002-waitforresponse-lint-guard`. Cut it from `main` and the check goes green against a workflow
+that does not contain the thing under test.
+
+**The commit needs `SKIP=`.** By this point the local hook is installed and step 2a has already
+proved it refuses this exact file. `--no-verify` is forbidden by CLAUDE.md and denied by the global
+`block-no-verify` hook. `SKIP=` is the one bypass this design accepts, and needing it here is itself
+evidence the local hook fires. The required `Lint` job is not a pre-commit hook, so `SKIP=` has no
+effect on the gate under test.
+
 ```bash
+git checkout 002-waitforresponse-lint-guard
 git checkout -b tmp/gate-red-team
-git add -f frontend/tests/e2e/__scratch-race.spec.ts
-git commit -S -m "DO NOT MERGE [gate red-team] planted violation"
+git merge-base --is-ancestor 002-waitforresponse-lint-guard tmp/gate-red-team   # must succeed
+git add frontend/tests/e2e/__scratch-race.spec.ts
+SKIP=scan-waitforresponse-race git commit -S -m "DO NOT MERGE [gate red-team] planted violation"
 git push -u origin HEAD
 gh pr create --draft --title "DO NOT MERGE [gate red-team]" --body "Verifies 002 guard fails a required check."
 gh pr checks --watch
 ```
+
+The branch should also carry a **deliberate ruff violation** under `src/` or `tests/`. Without one,
+the ruff steps pass and the guard step runs whether or not `if: always()` is present, so the run
+cannot tell you the flag works. With one, the `Lint` log must show *both* failures in the same run.
+That is the only observation that distinguishes `if: always()` from its absence, and it is the
+flag's entire justification in FR-004.
 
 Expect the **`Lint`** check to report failure. Close the PR and delete the branch afterwards. This
 mirrors Feature 1400's T006, which used the same draft red-team PR to prove a gate could actually
