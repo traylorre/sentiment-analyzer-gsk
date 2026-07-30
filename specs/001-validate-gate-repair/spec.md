@@ -15,6 +15,37 @@ authoritative list lives in one place only: the `BANNED_TERMS` array in the chec
 
 Any downstream artifact of this feature inherits this constraint.
 
+## Clarifications
+
+### Session 2026-07-30
+
+Two dispositional questions were raised during planning and resolved by the owner. Both change task
+content rather than the feature's shape.
+
+**Q1. How should the nine matches in the superseded auth-cache-headers spec directory be
+dispositioned?** Unlike every other occurrence in the corpus, these assert in the present tense that
+the application's primary dependency *is* a retired framework. Three options were offered: move the
+directory under the already-excluded archive path, add a superseded banner plus nine inline
+exemptions, or rewrite the occurrences to name the current stack.
+
+**Decision: rewrite the occurrences.** The nine lines are corrected to name the framework the
+application actually uses. This adds nothing to the exemption baseline and leaves no stale present-
+tense claim in the repository. The acknowledged cost, recorded here so it is not discovered later, is
+that it edits documents describing a decision made at a different time. That cost is accepted: the
+adjudication rule classifies a present-tense assertion that a retired framework is current as a
+violation to correct, and applying the rule to the corpus's only true positives is what makes the
+rule credible when it is later applied to someone else's file.
+
+**Q2. Should an inline exemption marker be refused in application source?** The spec's edge cases
+accept that any per-line opt-out is pasteable onto a genuine violation, and chose review visibility
+plus a mandatory justification as the mitigation.
+
+**Decision: yes, refuse it.** A marker appearing under application source, infrastructure, or
+frontend source is an error in itself. This tightens the original choice. Under the adjudication rule
+those trees hold code rather than records of a retirement, so no legitimate exemption can exist
+there. Adopting it converts the mitigation from "a reviewer should notice this" into "this cannot
+merge", at the cost of one rule and one test. See FR-028 and SC-013.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - A maintainer runs the validation gate and gets a truthful answer (Priority: P1)
@@ -145,8 +176,11 @@ report success.
 - **Case sensitivity.** Matching is case-insensitive. An exemption mechanism must be equally
   case-insensitive or it will fail to cover the matches it is meant to cover.
 - **The exemption becomes the bypass.** Any per-line opt-out can be pasted onto a genuine violation.
-  Mitigation is that exemptions are visible in review and must carry a justification, not that they
-  are impossible.
+  Mitigation is layered. In documentation, exemptions are visible in review, must carry a
+  justification, and are enumerable by one command; they are deterred rather than impossible. In
+  application source, infrastructure and frontend source they are refused outright (FR-028, clarified
+  2026-07-30), because that is where a pasted marker would do real harm and where no legitimate
+  exemption can exist.
 - **This feature's own artifacts.** Every document this feature produces is scanned. They must either
   avoid the legacy terms entirely or use the sanctioned exemption.
 - **A guard fails while another guard also fails.** The maintainer needs both reported from one run,
@@ -197,19 +231,43 @@ report success.
 **Exemption mechanism**
 
 - **FR-013**: The project MUST define a minimal enumerated set of sanctioned exemption mechanisms,
-  each with a written applicability rule, and the checker MUST honour only those. Exactly one
-  mechanism is not achievable: an inline marker cannot reach machine-generated files (FR-017), so a
-  path-scoped mechanism is structurally required alongside it. The set MUST be as small as possible
-  and MUST NOT grow without amending FR-018's adjudication rule.
+  each with a written applicability rule, and the checker MUST honour only those. **The set is
+  exactly one: an inline marker.** The set MUST NOT grow without amending FR-018's adjudication rule.
+
+  *Amended 2026-07-30.* This requirement previously stated that one mechanism was unachievable,
+  because an inline marker cannot reach machine-generated files (FR-017) and a path-scoped mechanism
+  was therefore structurally required alongside it. That reasoning held only while a directory whose
+  *name* contained a legacy term leaked into a machine-generated file that records scanned paths.
+  Investigation established that the generated file's contents contain no legacy term at all. Once
+  the offending paths are renamed, the generated-file case has no instances and the second mechanism
+  has nothing to serve. Adversarial review finding F2, which forced the original wording, is thereby
+  resolved at its cause rather than accommodated.
+
+  If a machine-generated file ever legitimately contains a legacy term in its **content**, this
+  requirement MUST be amended to re-add a path-scoped mechanism. A future contributor should treat
+  that as a deliberate amendment, not as discovering an oversight.
 - **FR-014**: An exemption MUST be visible at or adjacent to the line it exempts.
 - **FR-015**: An exemption MUST carry a human-readable justification.
 - **FR-016**: The exemption mechanism MUST work in the file formats where exemptions are actually
   needed, at minimum Markdown and HTML.
 - **FR-017**: The exemption mechanism MUST NOT require editing machine-generated files, because such
-  edits do not survive regeneration.
+  edits do not survive regeneration. *Satisfied by elimination as of 2026-07-30*: after the offending
+  paths are renamed, no machine-generated file contains a legacy term, so no exemption of any kind is
+  required in one. The requirement stands as a constraint on any future mechanism.
 - **FR-018**: The project MUST record a written adjudication rule stating which occurrences qualify
   for exemption, sufficient for a future contributor to decide a new case without re-opening this
   debate.
+- **FR-028**: An inline exemption marker appearing under a refused tree MUST itself be an error,
+  reported with its own distinct message. The refused trees are exactly: `src/`,
+  `infrastructure/` **excluding** `infrastructure/docs/`, and `frontend/src/`. The list is stated as
+  paths rather than as the phrase "application source" because adversarial review found the phrase
+  ambiguous at two boundaries: `infrastructure/` contains a documentation subtree, where a record of
+  a retirement could legitimately live, and `frontend/` contains a test subtree that is not source.
+  `frontend/tests/` is deliberately NOT refused. Those trees
+  contain code rather than records of a retirement, so under FR-018's adjudication rule no legitimate
+  exemption can exist in them. This makes the "exemption becomes the bypass" edge case unreachable in
+  the only location where it would matter, rather than relying on a reviewer to catch it. Clarified
+  2026-07-30.
 
 **Corpus remediation**
 
@@ -272,7 +330,14 @@ report success.
 
 ### Measurable Outcomes
 
-- **SC-001**: The validation gate exits 0 on a clean checkout of the default branch.
+- **SC-001**: The validation gate exits 0 on a **provisioned** checkout of the default branch, where
+  provisioned means the documented setup has been completed. Amended 2026-07-30 after adversarial
+  review established that the original wording was unachievable by any change this feature could
+  make: on a genuinely fresh clone, five of the seven stages fail for reasons unrelated to this
+  feature's defects. The linting stage invokes an infrastructure validator that requires a module
+  install step, and the formatter, dependency auditor and both static-analysis scanners are absent
+  from the interpreter path until the project environment is created. Detecting and reporting those
+  preconditions is deferred with a written rationale, see Out of Scope.
 - **SC-002**: A single validation run produces an execution marker for 100% of its stages. Today two
   of seven produce none.
 - **SC-003**: The count of unexempted legacy-term matches is 0, reduced from 17.
@@ -292,6 +357,9 @@ report success.
 - **SC-011**: The test-target-header guard exits 0, with all 11 currently failing files dispositioned.
 - **SC-012**: Every exemption in the repository can be listed by one command, and the total count is
   recorded as a baseline so future growth is visible.
+- **SC-013**: An inline exemption marker placed on a legacy term in an application source file causes
+  the checker to fail with a message identifying the marker itself as the error, not merely to ignore
+  the marker. Demonstrated by insertion and revert, alongside SC-004.
 
 ## Assumptions
 
@@ -318,6 +386,14 @@ report success.
   adjudication concludes a file should never have been scanned, because that is a scope decision
   rather than a detection-logic change.
 - Making the dependency-audit stage blocking. Deferred by FR-005a.
+- **Environment provisioning, and any preflight stage that detects it.** Adversarial review found
+  that on a fresh clone five of seven stages fail on missing tooling rather than on repository
+  content, which is why SC-001 was amended above. A preflight stage that detected these and named a
+  remedy would be a genuine improvement, and it is deliberately not built here: it is a new stage
+  with new failure modes in a feature whose purpose is making existing stages honest, and folding it
+  in would enlarge a feature that adversarial review has already grown twice. Tracked separately.
+  Note for whoever picks it up: such a stage must only *detect*, never *repair*. The infrastructure
+  module install reaches the network and writes into the working tree, which FR-004 forbids.
 - Deleting the archived specification directories that the exclusions already cover.
 
 ## Dependencies

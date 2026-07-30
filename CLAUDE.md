@@ -143,6 +143,8 @@ The Lambda is named `dashboard Lambda`, the handler is `src/lambdas/dashboard/`,
 - GNU Make (recipe edit), pip requirements + TOML (two pin edits), Python 3.13 (one-argument fix in `src/lambdas/analysis/sentiment.py` + one new unit test), Dockerfile comments (two suppressions), HTML (board card string surgery). + `semgrep==1.172.0` added to requirements-dev.txt; pyproject dev extra tightened from `>=1.50.0` to the same pin. requirements-ci.txt untouched (FR-001). No runtime dependencies change. (001-semgrep-gating)
 - Python 3.13 (tooling target; no runtime code changes). Config formats: pip requirements, TOML, YAML (GitHub Actions + pre-commit), Make, Markdown (README surgery). + ruff 0.15.14 (PyPI, verified exists); astral-sh/ruff-pre-commit tag `v0.15.14` (verified, sha `0c7b6c98`, hook ids `ruff-check`/`ruff-format` with `ruff` as legacy alias). (001-ruff-bump-forward)
 - N/A (toolchain configuration only). (001-ruff-bump-forward)
+- Python 3.13 (checker rewrite, stdlib only), GNU Make 4.3 (gate driver), Bash (existing recipe bodies) + no new dependencies; pytest (already present) for the new script unit tests (001-validate-gate-repair)
+- N/A (repository tooling only; no runtime data, no AWS resources, no persistence) (001-validate-gate-repair)
 
 - **Python 3.13** with aws-lambda-powertools, boto3, pydantic, httpx, orjson
 - **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, Amplify
@@ -940,11 +942,9 @@ aws cloudwatch get-metric-data --metric-data-queries '[...]' --start-time ... --
 ```
 
 ## Recent Changes
+- 001-validate-gate-repair: Repairs `make validate` so every stage runs and reports truthfully; rewrites the legacy-term checker as stdlib-only Python with unit tests; corrects the test-target-header guard's scope. No new dependencies.
 - 001-ruff-bump-forward: Added Python 3.13 (tooling target; no runtime code changes). Config formats: pip requirements, TOML, YAML (GitHub Actions + pre-commit), Make, Markdown (README surgery). + ruff 0.15.14 (PyPI, verified exists); astral-sh/ruff-pre-commit tag `v0.15.14` (verified, sha `0c7b6c98`, hook ids `ruff-check`/`ruff-format` with `ruff` as legacy alias).
 - 001-semgrep-gating: Added GNU Make (recipe edit), pip requirements + TOML (two pin edits), Python 3.13 (one-argument fix in `src/lambdas/analysis/sentiment.py` + one new unit test), Dockerfile comments (two suppressions), HTML (board card string surgery). + `semgrep==1.172.0` added to requirements-dev.txt; pyproject dev extra tightened from `>=1.50.0` to the same pin. requirements-ci.txt untouched (FR-001). No runtime dependencies change.
-- 001-tfsec-removal: Added GNU Make (Makefile recipe edit), Markdown (two doc edits), HTML (board card lane move). No Python code. + None added or removed. tfsec binary itself is untouched (remains at user level on some machines).
-- 001-lambda-log-visibility: Added Python 3.13 (Lambda base image `public.ecr.aws/lambda/python:3.13` for image Lambdas; managed python3.13 runtime for ZIP Lambdas) + stdlib `logging` only for the mechanism; aws-lambda-powertools 3.23.0 already present (dashboard handler) and untouched
-- 1256-restrict-function-urls: Added HCL (Terraform 1.5+, AWS Provider ~> 5.0)
 
 <!-- MANUAL ADDITIONS START -->
 
