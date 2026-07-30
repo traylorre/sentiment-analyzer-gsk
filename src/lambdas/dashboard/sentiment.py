@@ -309,9 +309,15 @@ def get_sentiment_by_configuration(
         sentiment_data: dict[str, SourceSentiment] = {}
 
         try:
+            # latest=True is load-bearing, not a hint. Without it this query scans
+            # ascending with the small DEFAULT_LIMITS fallback, so it returns the
+            # OLDEST buckets ever recorded for the ticker and the bucket[-1] pick
+            # below reports the 7th-oldest day as the current sentiment -- a value
+            # that never changes as new data arrives.
             ts_response = query_timeseries(
                 ticker=symbol,
                 resolution=resolution,
+                latest=True,
             )
 
             # Use the latest complete bucket or partial bucket

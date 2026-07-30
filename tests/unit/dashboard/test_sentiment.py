@@ -102,6 +102,10 @@ class TestGetSentimentByConfiguration:
         mock_query.assert_called_once_with(
             ticker="AAPL",
             resolution=Resolution.ONE_HOUR,
+            # buckets[-1] is read as the current value, so this must request the
+            # newest buckets rather than the oldest. See
+            # tests/unit/test_timeseries_oldest_first_regression.py
+            latest=True,
         )
 
     @patch("src.lambdas.dashboard.timeseries.query_timeseries")
