@@ -62,7 +62,7 @@ One item stays an inversion, not an amendment:
 gate, not a formality: 002 was specified against prose, because at authoring time every 001 task was
 unchecked. This is where prose meets a running program.
 
-- [ ] **T001** Confirm 001 has landed and the tree is clean
+- [x] **T001** Confirm 001 has landed and the tree is clean
   - **Files**: none modified
   - **Satisfies**: FR-009 precondition
   - **Acceptance criteria**:
@@ -73,7 +73,7 @@ unchecked. This is where prose meets a running program.
        `helpers/search-helpers.ts` from 001 T004). If it returns 47, 001's T004 did not land and
        this phase stops.
 
-- [ ] **T002** Verify the detector against `contracts/detector-cli.md` C6, all six rows
+- [x] **T002** Verify the detector against `contracts/detector-cli.md` C6, all six rows
   - **Files**: none modified
   - **Satisfies**: FR-005, FR-012, FR-013
   - **Acceptance criteria**:
@@ -111,7 +111,7 @@ unchecked. This is where prose meets a running program.
        `contracts/detector-cli.md` is now observable from Phase A. Phase A is a complete contract
        gate, which is what plan Phase A claims it is.
 
-- [ ] **T003** Record contract divergences as amendments against 001 T001 (depends on T002)
+- [x] **T003** Record contract divergences as amendments against 001 T001 (depends on T002)
   - **Files**: `specs/002-waitforresponse-lint-guard/contracts/detector-cli.md` (amendment log only)
   - **Satisfies**: FR-010's amendment clause, FR-012
   - **Acceptance criteria**:
