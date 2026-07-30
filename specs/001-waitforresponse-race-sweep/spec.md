@@ -274,8 +274,15 @@ diff from 5 files to 7, and would leave the rule for a future caller to remember
 failure that produced this bug class in the first place.
 
 - **FR-007**: No product-code changes. Test changes MUST be confined to `frontend/tests/e2e/`.
-  The board edits under FR-008 and FR-009, and the scan script under FR-011 (which lives under
-  `scripts/`), are the only permitted changes outside that directory.
+  The board edits under FR-008 and FR-009, the scan script under FR-011 (which lives under
+  `scripts/`), this feature's own directory under `specs/`, and `.secrets.baseline` are the only
+  permitted changes outside that directory.
+  `.secrets.baseline` is listed because it is not discretionary: the repo's `detect-secrets`
+  pre-commit hook records line numbers for known-safe findings, and `scripts/detect-secrets-autostage.sh`
+  rewrites and stages the baseline whenever an edit shifts one. Adding an import line to a spec file
+  that already carries a baseline entry moves that entry, so the file changes whether or not the
+  author touches it. Verified during implementation: the only hunk is
+  `frontend/tests/e2e/chart-edge-cases.spec.ts` line 22 → 23 plus the `generated_at` stamp.
 - **FR-008**: The Playwright flake card and the `MASTER: CI/CD hygiene` card in
   `CLEANUP-BOARD.html` MUST be corrected to the verified facts and re-scoped to this sweep.
 - **FR-009**: Two follow-up cards MUST be created in `CLEANUP-BOARD.html`: (1) the owner's deferred
@@ -283,6 +290,17 @@ failure that produced this bug class in the first place.
   dead-branch trap (`chaos-helpers.ts:169-189`, byte-identical `if`/`else` branches, recorded in
   Edge Cases). This feature MUST NOT change the job's required status and MUST NOT fix the dead
   branch.
+- **FR-009a** (added during implementation): verification surfaced two further defects that are
+  outside this feature's scope but must not be lost. Each MUST get a `CLEANUP-BOARD.html` card
+  carrying its mechanism and its evidence, and this feature MUST NOT fix either: (1) the three
+  `chaos-error-boundary.spec.ts` tests are structurally incapable of passing against a production
+  build, because the `window.__TEST_FORCE_ERROR` reader is stripped from the Amplify bundle; (2)
+  `chart-edge-cases.spec.ts:46` and `ticker-search-gaps.spec.ts:116` leave `/api/v2/runtime` and
+  `/api/v2/auth/refresh` unmocked, so their page load depends on a live API Gateway. Fixing (1)
+  needs an owner decision and (2) touches files outside this sweep's conversion set; both are
+  recorded in tasks.md under "Root-cause findings". The card for (2) MUST also record that the
+  obvious causal story (these live calls explain the observed contention flakes) was measured and
+  **refuted**, so a later reader does not re-adopt it.
 - **FR-010**: Sites where the query is served from React Query cache with no network request MUST
   be identified and left unconverted. A wait MUST NOT be introduced where none exists today. The
   helper MUST NOT be applied to a repeat of the same query within the 30s `staleTime` window.
