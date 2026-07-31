@@ -234,6 +234,62 @@ def test_justification_keeps_its_own_trailing_punctuation(tmp_path):
     assert matches[0].justification == "superseded by A->B"
 
 
+def test_justification_ends_at_the_terminator_not_at_end_of_line(tmp_path):
+    """Regression: a marker inside a Markdown table cell is followed by ``|``.
+
+    Suffix-stripping the terminator only worked when the comment ended the line. The
+    single exemption this feature adds sits in a table cell, so the closing ``-->`` has
+    ``|`` after it and nothing was stripped at all, putting comment and table syntax
+    into the justification the listing prints.
+    """
+    write(
+        tmp_path,
+        "docs/table.md",
+        f"| claim | {TERM} refuted below <!-- {MARKER} historical record --> |\n",
+    )
+
+    matches = mod.scan(tmp_path)
+
+    assert matches[0].justification == "historical record"
+    assert matches[0].is_exempt is True
+
+
+def test_one_marker_covering_several_terms_counts_once(tmp_path):
+    """The exemption unit is the marker, not the match.
+
+    A line naming two banned terms produces two Match objects but carries one
+    justification. Counting matches inflates the SC-012 exemption baseline, so a line
+    would register as growth in the exemption surface for saying two words.
+    """
+    two_terms = f"{mod.BANNED_TERMS[0]} and {mod.BANNED_TERMS[1]}"
+    write(
+        tmp_path,
+        "docs/history.md",
+        f"the stack once ran {two_terms} <!-- {MARKER} migration record -->\n",
+    )
+
+    matches = mod.scan(tmp_path)
+    assert len(matches) == 2, "fixture should produce one match per term"
+    assert all(m.is_exempt for m in matches)
+
+    assert mod.main(["--root", str(tmp_path), "--list-exemptions"]) == 0
+
+
+def test_list_exemptions_reports_one_line_once(tmp_path, capsys):
+    two_terms = f"{mod.BANNED_TERMS[0]} and {mod.BANNED_TERMS[1]}"
+    write(
+        tmp_path,
+        "docs/history.md",
+        f"once ran {two_terms} <!-- {MARKER} migration record -->\n",
+    )
+
+    mod.main(["--root", str(tmp_path), "--list-exemptions"])
+    out = capsys.readouterr().out
+
+    assert out.count("docs/history.md:1") == 1
+    assert "Total: 1" in out
+
+
 # --- FR-028: trees where a marker is itself an error -----------------------
 
 

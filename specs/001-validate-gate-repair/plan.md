@@ -143,9 +143,9 @@ exists to catch. The second is the record the project agreed to keep.
 | `.specify/templates/plan-template.md` | 1, not counted (excluded path) | **Correct** | Root cause, though a slow-acting one: two escapes in 254 generated plans. Nearly free to fix, which is the reason to do it. See the corrected finding above. |
 | `specs/001-validate-gate-repair/plan.md` | 0, already remediated | **Correct** | Was 1. Injected into this file by the planning setup script and removed during planning by filling in the real Technical Context. Listed with a count of zero so the table sums to 17 and an FR-019 audit against it succeeds. |
 | `specs/1268-cors-404-headers/plan.md` | 1 | **Correct** | Unfilled template placeholder, same origin as the above. Asserts nothing intentionally. |
-| `specs/1157-auth-cache-headers/research.md` | 5 | **Correct** (rewrite) | Asserts the framework is the application's current primary dependency. Only true positives in the corpus. Resolved 2026-07-30, see below. |
-| `specs/1157-auth-cache-headers/plan.md` | 3 | **Correct** (rewrite) | Same. |
-| `specs/1157-auth-cache-headers/spec.md` | 1 | **Correct** (rewrite) | Same. |
+| `specs/1157-auth-cache-headers/research.md` | 5 | **Correct** (1 renamed, 4 de-named) | One line asserts what to use and now names the real resolver. The other four are a heading, a research question, a statement of the framework's capabilities and a line inside a code sample. Those were de-named rather than renamed: see the split recorded below. |
+| `specs/1157-auth-cache-headers/plan.md` | 3 | **Correct** (2 renamed, 1 de-named) | Two assert the application's dependency and decision. The third is a research-task list item, de-named. |
+| `specs/1157-auth-cache-headers/spec.md` | 1 | **Correct** (renamed) | Asserts the framework the application uses. Only unambiguous true positive of the three files. |
 | `docs/cleanup/diagram-drift.md` | 2 | **Exempt, inline marker** | The matching row records a drift claim sourced from an archived spec and refuted against live code. A record that the framework is gone. Textbook exemption case. |
 | `.secrets.baseline` | 3 | **Correct, by directory rename** | Machine-generated. See below: the term is in a *directory name*, not in any file's contents, so renaming removes the cause and no exemption is needed. |
 | `CLEANUP-BOARD.html` | 2 | **Reword** (FR-020) | One card, one field, describing this very defect. Rewording removes the need for any exemption. Its match count is also stale and gets corrected in the same edit. |
@@ -177,6 +177,28 @@ Everything downstream that says "17" means the 15 distinct lines that the curren
 
 **Dispositions.** All matches now have one. Eight are mechanically simple. Nine belong to one
 superseded feature directory and are rewritten per the 2026-07-30 clarification.
+
+### Renamed or de-named: the split inside the nine rewrites
+
+The clarification says the nine lines are "corrected to name the framework the application actually
+uses". Applied literally to all nine that produces a false document, and the split is worth recording
+because it is the rule a future reviewer needs rather than the count.
+
+Four of the nine assert what the application uses or should use. Those name the real resolver. The
+other five are a section heading, a research question, a statement of the old framework's
+capabilities, a line inside a code sample, and a research-task list item. None of them asserts
+anything about the current stack, and substituting the current stack into them would have the
+superseded research document report findings about a framework nobody researched, and a code sample
+attribute an import to a library that has no such API. Those five had the name removed and the
+sentence kept true instead.
+
+The document carries a supersession note saying the identifiers in its samples were genericized, so
+the samples do not read as a verbatim record of what the original research produced. That was
+required by T036 and is the reason the note exists.
+
+**Post-remediation state, 2026-07-30.** 0 unexempted occurrences. 1 inline marker, covering 2
+term-hits on the one line it exempts. Scan unchanged at 2,748 files, confirming the renames did not
+change scan scope.
 
 ### The generated-file matches are a directory name, and fixing that collapses the mechanism set
 

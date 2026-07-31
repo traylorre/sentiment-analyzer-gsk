@@ -92,3 +92,47 @@ six blocking stages and exited 0, including PASS for the two stages known to be 
 Recipe lines containing $(MAKE) run under -n so recursive make can show the tree, -n
 propagates to the sub-makes via MAKEFLAGS, and each does nothing and exits 0. The guard
 must fire at parse time: under -n a shell test in the recipe is printed, not run.
+
+# =============================================================================
+# T039 evidence: Phase 4 remediation, corpus driven to zero (2026-07-30)
+# =============================================================================
+
+## Final state
+  Scanned: 2,748 files  (unchanged from T013, so the renames did not alter scan scope)
+  Exemptions honoured: 1 inline covering 2 occurrence(s)
+  PASS: 0 unexempted occurrences.
+
+Only docs/cleanup/diagram-drift.md still holds any match at all, and both of its
+term-hits sit on the one exempted line.
+
+## Disposition audit (FR-011, SC-008)
+All 15 T001 baseline (file,line) pairs have a recorded disposition. Checked
+mechanically against the disposition table in plan.md, not by reading:
+
+  .secrets.baseline                       3  rename the recorded directory, regenerate
+  CLEANUP-BOARD.html                      1  reword the card (FR-020)
+  docs/cleanup/diagram-drift.md           1  inline exemption marker, the only one
+  specs/1157-auth-cache-headers/plan.md   3  rewrite: 2 renamed, 1 de-named
+  specs/1157-auth-cache-headers/research  5  rewrite: 1 renamed, 4 de-named
+  specs/1157-auth-cache-headers/spec.md   1  rewrite: renamed
+  specs/1268-cors-404-headers/plan.md     1  scrub template placeholder
+
+## Two defects the remediation surfaced in the checker itself
+Both were found by running the checker against the exemption T037 had just added,
+not by review, and both are now regression-tested.
+
+1. Justification terminator was stripped as a SUFFIX. T037 places the marker inside a
+   Markdown table cell, so the comment is followed by " |" and nothing was stripped:
+   the listed justification read "...in the same row --> |". Now cut at the earliest
+   terminator wherever it appears.
+
+2. Exemptions were counted per MATCH, not per MARKER. The exempted line names two
+   banned terms, so one marker with one justification was listed twice and reported as
+   a total of 2. That total is the SC-012 baseline, so the inflation would have been
+   recorded as growth in the exemption surface. Now keyed on (path, line).
+
+## FR-017 satisfied by elimination
+No generated file contains a legacy term in its content, so no path-scoped exemption
+mechanism exists to be tested. Recorded in scripts/check_banned_terms.py alongside
+MARKER_TOKEN so the absent mechanism reads as deliberate. If a generated file ever
+gains a term in its CONTENT, FR-013 must be amended rather than the gap patched.
