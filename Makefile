@@ -99,7 +99,7 @@ check-iam-patterns: ## Validate IAM ARN patterns match Terraform resource names
 	@./scripts/check-iam-patterns.sh
 
 check-banned-terms: ## Verify no legacy framework references remain
-	@bash scripts/check-banned-terms.sh
+	@python3 scripts/check_banned_terms.py
 
 # ============================================================================
 # Testing
