@@ -37,7 +37,7 @@ make test-local        # Unit + integration tests pass
 make validate          # Lint + security + banned terms
 
 # After P4 specifically:
-bash scripts/check-banned-terms.sh  # Should pass WITHOUT docs/cache/ exclusion
+python3 scripts/check_banned_terms.py  # Should pass WITHOUT docs/cache/ exclusion
 
 # Final verification:
 make validate && make test-local
@@ -50,7 +50,7 @@ make validate && make test-local
 | `src/lambdas/shared/cache/ohlc_cache.py` | Remove try/except, fix parsing, add retry, add TTL, remove dead code |
 | `src/lambdas/dashboard/ohlc.py` | Add explicit degradation handlers, add cache headers to all Response objects |
 | `infrastructure/terraform/modules/dynamodb/main.tf` | Add TTL block to ohlc-cache table |
-| `scripts/check-banned-terms.sh` | Remove `docs/cache/` exclusion |
+| `scripts/check_banned_terms.py` | Remove `docs/cache/` exclusion |
 | `docs/cache/*.md` | Purge banned terms, mark checklist complete |
 | `.specify/specs/ohlc-cache-remediation*.md` | Purge banned terms, update BENCHED status |
 | `tests/unit/shared/cache/test_ohlc_persistent_cache.py` | Add tests for error propagation, retry, TTL |

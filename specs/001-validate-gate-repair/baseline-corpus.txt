@@ -162,3 +162,58 @@ contributor is not invited to exempt a genuine violation in code.
 
 Reverted with git checkout. sha256 before == after, byte-identical. Re-ran the checker:
 PASS, 0 unexempted. The insertion was never committed.
+
+# =============================================================================
+# T057 evidence: full gate end to end, SC-001 / SC-002 / FR-003 (2026-07-30)
+# =============================================================================
+
+`make validate`, single run, exit 0.
+
+  format check          BLOCKING   PASS
+  lint                  BLOCKING   PASS
+  dependency audit      ADVISORY   reported
+  static analysis       BLOCKING   PASS
+  legacy terms          BLOCKING   PASS
+  test target headers   BLOCKING   PASS
+  e2e race guard        BLOCKING   PASS
+  -> PASS: all 6 blocking stages passed.
+
+All seven stages appear, including the two that could never run before because make
+halted at the first failing prerequisite. The legacy-terms stage moved FAIL -> PASS with
+phase 4; the header stage moved FAIL -> PASS with phase 3.
+
+FR-004 re-confirmed on this run: `git status --porcelain` byte-identical before and
+after. The gate reads and reports, it does not edit.
+
+SC-001's "provisioned" held: the dependency-audit stage reached its remote advisory
+database and the static-analysis stage downloaded its rule set. Both are network
+dependent, and a run without connectivity would report differently.
+
+# =============================================================================
+# T058 evidence: coverage of the new checker (2026-07-30)
+# =============================================================================
+
+pytest tests/unit/scripts/test_check_banned_terms.py --cov=scripts.check_banned_terms
+
+  scripts/check_banned_terms.py   152 stmts, 0 miss, 54 branch, 0 partial -> 100%
+
+40 tests. Constitution threshold for new code is 80%.
+
+Note `make test-unit` passes --cov=src, which does not measure scripts/, so the bare
+flag would report on the wrong tree entirely rather than report nothing.
+
+The last four uncovered lines were closed rather than accepted: the FR-015 "marker
+carries no justification" remedy string, the missing-scan-root path, and repo_root()'s
+derivation. The first is the message a contributor sees when their exemption is
+rejected, and it was asserted nowhere.
+
+# =============================================================================
+# T059 evidence: this feature added nothing to the corpus (2026-07-30)
+# =============================================================================
+
+Matches contributed by this feature's own artifacts: 0
+Literal legacy terms in the test module: none (all fixtures derive from BANNED_TERMS)
+Feature artifacts under specs/001-validate-gate-repair/ containing a term: none
+
+The terminology discipline in the plan's Terminology Note held across every artifact,
+which matters because these artifacts live under specs/ and are scanned.

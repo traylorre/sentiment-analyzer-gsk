@@ -392,6 +392,39 @@ def test_marker_is_honoured_in_the_documentation_exception(tmp_path):
     assert matches[0].is_exempt is True
 
 
+def test_empty_justification_remedy_says_the_justification_is_missing(tmp_path, capsys):
+    """FR-015's message, which the exemption tests assert the behaviour of but never render.
+
+    A contributor who writes an empty marker sees this text and nothing else. Told only
+    that a term was found, the obvious reading is that the marker was not recognised, and
+    the next move is to change its syntax rather than to write a reason.
+    """
+    write(tmp_path, "docs/history.md", f"once ran {TERM} <!-- {MARKER} -->\n")
+
+    mod.main(["--root", str(tmp_path)])
+    out = capsys.readouterr().out
+
+    assert "carries no justification" in out
+
+
+def test_missing_scan_root_fails_rather_than_reporting_a_clean_tree(tmp_path):
+    """A root that does not exist must not scan zero files and call that success."""
+    assert mod.main(["--root", str(tmp_path / "does-not-exist")]) == 1
+
+
+def test_repo_root_is_derived_from_the_module_not_the_cwd(tmp_path, monkeypatch):
+    """The default root must not move when the caller's directory does.
+
+    The shell version's exclusions depended on being invoked from the repository root.
+    This is the property that replaced that assumption, and it is the default path taken
+    whenever the checker runs without --root, which is how CI and the Makefile call it.
+    """
+    monkeypatch.chdir(tmp_path)
+
+    assert mod.repo_root() == Path(mod.__file__).resolve().parent.parent
+    assert (mod.repo_root() / "scripts" / "check_banned_terms.py").is_file()
+
+
 # --- scan scoping ----------------------------------------------------------
 
 

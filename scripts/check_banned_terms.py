@@ -129,6 +129,7 @@ MARKER_REFUSED_EXCEPTIONS: tuple[str, ...] = ("infrastructure/docs/",)
 # Syntax-agnostic on purpose: the checker tests for this token as a substring and never
 # parses comment syntax, so the same rule serves Markdown, HTML, Python, YAML, shell,
 # TypeScript, and formats nobody has used yet.
+#
 # Named *_TOKEN, so three scanners read it as a credential: ruff's S105, bandit's B105,
 # and detect-secrets' Secret Keyword plugin. The two suppressions below cover ruff and
 # detect-secrets. Bandit needs none because B105 is Low severity and `make sast` gates at
@@ -216,18 +217,15 @@ def canonical(path: Path, root: Path) -> str:
     return path.resolve().relative_to(root.resolve()).as_posix()
 
 
-# Files that enumerate the banned terms in order to search for them. A checker that
+# This file enumerates the banned terms in order to search for them. A checker that
 # reported its own term list would fail permanently and for no useful reason.
 #
-# The shell entry is the predecessor this module replaces. It stays listed only for the
-# window between the Makefile repoint and the script's deletion, during which both
-# checkers exist on disk; without it the corpus can never reach zero, because the
-# cleanup phase runs before the deletion phase. T053 deletes the script and this line
-# together.
-CHECKER_SELF_PATHS: tuple[str, ...] = (
-    "scripts/check_banned_terms.py",
-    "scripts/check-banned-terms.sh",
-)
+# A second entry listed the shell predecessor while both checkers coexisted on disk,
+# between the Makefile repoint and the script's deletion. Without it the corpus could
+# not reach zero, because the cleanup phase ran before the deletion phase. The script is
+# gone now and the entry went with it: kept, it would be dead configuration implying a
+# shell checker still exists.
+CHECKER_SELF_PATHS: tuple[str, ...] = ("scripts/check_banned_terms.py",)
 
 
 def _is_self(rel_path: str) -> bool:

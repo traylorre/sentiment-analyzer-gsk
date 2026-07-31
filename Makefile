@@ -1,4 +1,4 @@
-.PHONY: help install install-tools validate fmt fmt-check lint security sast audit-pragma check-banned-terms test test-local test-unit test-integration test-e2e test-spec test-mutation \
+.PHONY: help install install-tools validate fmt fmt-check lint security sast audit-pragma audit-exemptions check-banned-terms test test-local test-unit test-integration test-e2e test-spec test-mutation \
         check-test-target-headers check-waitforresponse-race check-iam-patterns \
         localstack-up localstack-down localstack-wait localstack-logs localstack-status \
         tf-init tf-plan tf-apply tf-destroy tf-init-local tf-plan-local tf-apply-local tf-destroy-local \
@@ -197,6 +197,9 @@ check-iam-patterns: ## Validate IAM ARN patterns match Terraform resource names
 
 check-banned-terms: ## Verify no legacy framework references remain
 	@python3 scripts/check_banned_terms.py
+
+audit-exemptions: ## Audit legacy-term exemptions (inline markers) for validity
+	@python3 scripts/check_banned_terms.py --list-exemptions
 
 # ============================================================================
 # Testing
