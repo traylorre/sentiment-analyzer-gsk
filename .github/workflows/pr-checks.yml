@@ -86,6 +86,29 @@ jobs:
         if: always()
         run: python3 scripts/scan-waitforresponse-race.py
 
+      # Dead scanning-suppression guard (001-bad-tag-filter-dead-suppression,
+      # FR-018, FR-019).
+      #
+      # Why it lives in `Lint` and not in `Pre-commit Hooks`: `Lint` is one of
+      # main's required status checks and `Pre-commit Hooks` is not, so this is
+      # the only place the guard can block a merge. Moving it silently downgrades
+      # the guard to advisory, with no symptom until a violation merges green.
+      # Required contexts verified 2026-07-31:
+      #   gh api repos/traylorre/sentiment-analyzer-gsk/branches/main/protection \
+      #     --jq .required_status_checks.contexts
+      #
+      # Invoked directly rather than through pre-commit so the `Pre-commit Hooks`
+      # job's SKIP env cannot reach it, and directly rather than through
+      # `make audit-pragma` because that target also runs bandit, which this job
+      # does not install. No pip install here: the checker is stdlib-only and
+      # setup-python above already provides 3.13.
+      #
+      # `if: always()` because steps are fail-fast and this one is last. Without
+      # it any earlier failure means the guard never runs and reports nothing.
+      - name: Check for dead scanning suppressions
+        if: always()
+        run: python3 scripts/check_dead_suppressions.py
+
   # ========================================================================
   # JOB 2: Test (pytest + coverage)
   # ========================================================================
