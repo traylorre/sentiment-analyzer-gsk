@@ -77,7 +77,7 @@ the site, otherwise the dismissal is no better than the seven that came before i
 
 ## 3. Verification caveats
 
-Three traps. Each has burned somebody in this repository.
+Four traps. Each has burned somebody in this repository.
 
 **Trap 1: `state` is not `fixed_at`.** Dismissal is sticky and survives a later genuine repair, so
 `state` conflates "a human dismissed this" with "the code was fixed". Alerts 26 and 27 read
@@ -100,17 +100,66 @@ code scanning alerts API, on a commit that includes the change. The useful inver
 edits the exact flagged lines, the diff-scoped PR result is directly informative, so a survivor there
 is a real survivor.
 
-Query shape:
+**Trap 4: an absence is only evidence once the read is proven live.** This is the trap that makes the
+other three survivable, and it has two independent failure modes.
+
+*Truncation.* The alerts endpoint pages at 100 and defaults to 30. This repository held 137 alerts
+across all states on 2026-07-30, and one unpaginated page covered alert numbers 59 to 180 only, so
+every number below 59 was silently absent. That range includes alert 1 on `src/lambdas/shared/errors.py`
+and alerts 22 to 27 on `src/lambdas/shared/secrets.py`, which are exactly the alerts a blast-radius
+check has to see. An unpaginated all-states query returns nothing for them and reads as clean. Always
+pass `--paginate`, and never pass `--jq` alongside it: `gh` applies the filter once per page, so a
+`.[0]` expression prints one row per page rather than one row. Write to a file, then run `jq` standalone.
+
+*A wrong field path.* `jq` does not distinguish "no match" from "could not read". A mistyped path such
+as `.most_recent_instance.locatio.path` returns `null` for every alert, does not error, and exits `0`.
+A corpus-count floor does not catch it, because the floor is computed from `.rule.id`, a different
+field the typo never touches. Reproduced on the live corpus 2026-07-30: under the typo the filtered
+count for a given path evaluated to `0`, which is the PASS value of the gate it was guarding. So a
+floor plus an exit code is **necessary and not sufficient**. Add a positive anchor: assert that no
+alert has a null path, and that a known-present path returns its known count, both read **through the
+same field path the gate filters on**. (Contrast `grep`, which exits 1 on "no match" and 2 on "could
+not read"; that asymmetry is why `grep`-based absence checks are safe and `jq`-based ones are not.)
+
+Query shape, in this order: exit code, then corpus floor, then positive anchor, then read the absence.
 
 ```bash
-gh api "repos/<owner>/<repo>/code-scanning/alerts?state=open&per_page=100" \
-  --jq '.[] | select(.rule.id == "py/clear-text-logging-sensitive-data")
-        | select(.most_recent_instance.location.path == "<path>")
-        | {number, state, fixed_at, line: .most_recent_instance.location.start_line}'
+gh api --paginate "repos/<owner>/<repo>/code-scanning/alerts?per_page=100" > /tmp/alerts.json
+rc=$?
+[ "$rc" -eq 0 ] || { echo "READ FAILED: gh exit $rc"; exit 1; }
+
+# Proof of read 1: the rule is present in the corpus at all.
+total=$(jq -s 'add | map(select(.rule.id=="py/clear-text-logging-sensitive-data")) | length' /tmp/alerts.json)
+[ "$total" -ge "<known floor>" ] || { echo "READ FAILED / TRUNCATED: only $total"; exit 1; }
+
+# Proof of read 2 (positive anchor): the PATH field is being read, through the
+# same expression the gate below filters on. Without this the gate can pass blind.
+null_paths=$(jq -s 'add | map(select(.most_recent_instance.location.path==null)) | length' /tmp/alerts.json)
+[ "$null_paths" -eq 0 ] || { echo "BLIND READ: $null_paths alerts have a null path"; exit 1; }
+anchor=$(jq -s 'add | map(select(.most_recent_instance.location.path=="<known-present path>")) | length' /tmp/alerts.json)
+[ "$anchor" -ge "<its known count>" ] || { echo "BLIND READ: anchor returned $anchor"; exit 1; }
+
+# Only now is the absence below evidence of anything.
+open_at_path=$(jq -s 'add | map(select(
+    .rule.id=="py/clear-text-logging-sensitive-data"
+    and .state=="open"
+    and .most_recent_instance.location.path=="<path>")) | length' /tmp/alerts.json)
+echo "total=$total null_paths=$null_paths anchor=$anchor open_at_path=$open_at_path"
 ```
 
-Empty output is the pass condition. Drop `state=open` and read `fixed_at` per number to distinguish
-repaired from dismissed.
+The pass condition is `open_at_path == 0` **and** `rc == 0` **and** `total >= floor` **and**
+`null_paths == 0` **and** `anchor >= its known count`. `open_at_path == 0` on its own is not a pass;
+it is the value a completely blind read also returns.
+
+The snapshot is written without a `state` filter on purpose, so the same file answers the `fixed_at`
+question in section 3 trap 1. Read `fixed_at` per number from it to distinguish repaired from
+dismissed; do not re-query with `state=open`, which cannot see a dismissal at all.
+
+One more caveat for anyone diffing two snapshots: `rule@path` is **not** a unique key. On this
+repository one such key held 24 alerts, and this rule at `src/lambdas/shared/secrets.py` held 16. A
+set-diff keyed on `rule@path` reports only whether the key still exists, so 15 of those 16 could
+vanish and it would print nothing. Build `{key: count}` on each side and diff the **counts**,
+reporting three buckets (`disappeared`, `appeared`, `changed`) so a partial loss has somewhere to land.
 
 ---
 

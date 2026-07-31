@@ -53,12 +53,12 @@
 read-only. Every task here is read-only against the repository. T001 through T005 are mutually
 independent.
 
-- [ ] **T001** [P] **Interpreter precondition.**
+- [x] **T001** [P] **Interpreter precondition.**
   Command: `source .venv/bin/activate && python -c "import sys; print(sys.version)"`
   **PASS**: the printed version starts with `3.13.`. **FAIL**: anything starting `3.12.` means the
   venv is not active and every later `pytest` result is against the wrong interpreter.
 
-- [ ] **T002** [P] **Capture the pre-change code scanning baseline (SC-005 "before" half, and the
+- [x] **T002** [P] **Capture the pre-change code scanning baseline (SC-005 "before" half, and the
   proof-of-read floor every later query reuses).** Output goes to `/tmp`, never into the repo.
 
   ```bash
@@ -98,7 +98,7 @@ independent.
   floor computed from `.rule.id`. If conditions 3 and 4 print, that field path is proven live for the
   whole run.
 
-- [ ] **T003** [P] **Read-only dismissal capability probe (FR-008a).** Never establish this by
+- [x] **T003** [P] **Read-only dismissal capability probe (FR-008a).** Never establish this by
   attempting a dismissal: a dismissal that succeeds mutates alert state, cannot be cleanly reverted,
   and SC-005 treats unintended alert-state change as a breach.
 
@@ -121,7 +121,7 @@ independent.
   Verdict on this environment is **`DISMISSAL-AVAILABLE`**, so `BLOCKED-ON-OWNER` is not the expected
   ending. Record the verdict verbatim; T019 and T022 both read it.
 
-- [ ] **T004** [P] **Pin the pre-existing repository-wide gate failure (rider 1).**
+- [x] **T004** [P] **Pin the pre-existing repository-wide gate failure (rider 1).**
 
   ```bash
   bash scripts/check-banned-terms.sh > /tmp/banned.out 2>&1; echo "exit=$?"
@@ -134,7 +134,7 @@ independent.
   is anything but 0, which would mean this feature introduced a banned term. Re-run this exact task
   after T008 and T009 as part of T013.
 
-- [ ] **T005** [P] **Baseline the ingestion unit suite (SC-004 "before" half).**
+- [x] **T005** [P] **Baseline the ingestion unit suite (SC-004 "before" half).**
   Command: `source .venv/bin/activate && python -m pytest tests/unit/lambdas/ingestion/ -q; echo "exit=$?"`
   **PASS**: exit `0` and the summary line reads `43 passed`. Measured 2026-07-30: 43 collected in the
   directory, of which `test_handler.py` contributes 22. Record both numbers; T011 asserts against
@@ -153,7 +153,7 @@ spec edge case "A test asserts on rendered log text only", research D4).
 
 **Independent test**: T007's RED gate is itself the proof the guard discriminates.
 
-- [ ] **T006** [US1] **Create `tests/unit/lambdas/ingestion/test_handler_arn_logging.py`.** New file
+- [x] **T006** [US1] **Create `tests/unit/lambdas/ingestion/test_handler_arn_logging.py`.** New file
   only. `tests/unit/lambdas/ingestion/test_handler.py` is not opened for editing at any point
   (SC-004 is then satisfied mechanically).
 
@@ -264,7 +264,7 @@ spec edge case "A test asserts on rendered log text only", research D4).
   **PASS**: the file exists, imports resolve, and `python -m pytest tests/unit/lambdas/ingestion/test_handler_arn_logging.py --collect-only -q`
   exits 0 and collects at least 5 tests.
 
-- [ ] **T007** [US1] **RED gate. Run the new module against the UNFIXED handler.** This is the single
+- [x] **T007** [US1] **RED gate. Run the new module against the UNFIXED handler.** This is the single
   most important gate in the feature and it can only be run before Phase 3.
   Command: `source .venv/bin/activate && python -m pytest tests/unit/lambdas/ingestion/test_handler_arn_logging.py -v; echo "exit=$?"`
   **PASS** requires the exact failure shape, not merely a non-zero exit:
@@ -290,7 +290,7 @@ the three sites in `src/lambdas/ingestion/handler.py:256-277`.
 
 **Independent test**: T010 plus T011.
 
-- [ ] **T008** [US1] **Site 1, `handler.py:259-265` (the definitely-rendered one).** `error_msg` is
+- [x] **T008** [US1] **Site 1, `handler.py:259-265` (the definitely-rendered one).** `error_msg` is
   built by f-string from `config['tiingo_secret_arn']` and `config['finnhub_secret_arn']`, passed to
   `logger.error()`, then reused verbatim as the `RuntimeError` message. Both uses are sinks.
   Replace the f-string with a fixed literal naming both sources, for example
@@ -318,7 +318,7 @@ the three sites in `src/lambdas/ingestion/handler.py:256-277`.
   call, an f-string or a `RuntimeError` construction. **FAIL** on a line count other than 4, or a
   second count other than 0.
 
-- [ ] **T009** [US1] **Sites 2 and 3, `handler.py:268-277` (the structured-context ones).** Delete the
+- [x] **T009** [US1] **Sites 2 and 3, `handler.py:268-277` (the structured-context ones).** Delete the
   `extra={...}` argument outright at both warnings. The messages already carry the literal source
   names, so nothing an on-call engineer uses is lost. **Do not** substitute a sanitized value: that is
   the `0e7a375` shape, it already failed in this repository, and FR-003 forbids it. Add the FR-010
@@ -334,20 +334,20 @@ the three sites in `src/lambdas/ingestion/handler.py:256-277`.
   armed by a future formatter plus an alert the engine raises regardless of rendering, not a live
   disclosure. Site 1 is the live one.
 
-- [ ] **T010** [US1] **GREEN gate (SC-001, FR-007).**
+- [x] **T010** [US1] **GREEN gate (SC-001, FR-007).**
   Command: `source .venv/bin/activate && python -m pytest tests/unit/lambdas/ingestion/test_handler_arn_logging.py -v; echo "exit=$?"`
   **PASS**: exit `0`, all 5 cases pass, zero skips, zero xfails. A skipped case is a failure of this
   task. Cross-check against T007's recorded failure list: cases 1, 2, 3 and 5 must have flipped from
   red to green, which is the only evidence that the fix, and not the test, changed.
 
-- [ ] **T011** [US1] **SC-004 regression: nothing existing loosened or removed.**
+- [x] **T011** [US1] **SC-004 regression: nothing existing loosened or removed.**
   Command: `source .venv/bin/activate && python -m pytest tests/unit/lambdas/ingestion/ -q; echo "exit=$?"`
   **PASS**: exit `0`, and the summary reads `48 passed` (T005's 43 plus the 5 new cases); the count
   MUST be `43 + N` where N is the number of new cases, never fewer than 43 pre-existing.
   Additionally: `git status --porcelain tests/unit/lambdas/ingestion/test_handler.py` prints nothing,
   proving the existing module was not touched at all.
 
-- [ ] **T012** [US1] **Static negative checks (FR-003, FR-012).**
+- [x] **T012** [US1] **Static negative checks (FR-003, FR-012).**
 
   ```bash
   grep -n "_sanitize_secret_id_for_log" src/lambdas/ingestion/handler.py; echo "grep_exit=$?"
@@ -361,7 +361,7 @@ the three sites in `src/lambdas/ingestion/handler.py:256-277`.
   Here an exit of `1` from `grep` is the pass, and it is checked explicitly rather than inferred from
   silence.
 
-- [ ] **T013** [US1] **Scope lock and comment presence (FR-013, FR-010).**
+- [x] **T013** [US1] **Scope lock and comment presence (FR-013, FR-010).**
 
   ```bash
   git status --porcelain -- ':!specs/001-bad-tag-filter-dead-suppression' \
@@ -397,7 +397,7 @@ the three sites in `src/lambdas/ingestion/handler.py:256-277`.
      (`git diff --stat` was named here previously and cannot evaluate this: it emits insertion and
      deletion counts only, with no line regions. Adversarial Review #3 finding R5).
 
-- [ ] **T014** [US1] **Targeted lint, format and SAST on the touched files only.** Do not invoke
+- [x] **T014** [US1] **Targeted lint, format and SAST on the touched files only.** Do not invoke
   `make validate` (rider 1).
 
   ```bash
@@ -641,7 +641,7 @@ instead of re-deriving the convention. `codeql-logging-convention.md` already ex
 audit it against what this feature actually did. Both are read-only against everything except that
 one file and are mutually independent.
 
-- [ ] **T020** [P] [US3] **FR-011 and SC-006 conformance audit of `codeql-logging-convention.md`.**
+- [x] **T020** [P] [US3] **FR-011 and SC-006 conformance audit of `codeql-logging-convention.md`.**
   Confirm by reading that all five required elements are present and correct:
   1. the decision rule for rewrite versus dismiss (section 1, steps 1 to 4),
   2. the three-element dismissal wording pattern and its template (section 2),
@@ -676,7 +676,7 @@ one file and are mutually independent.
   sentence present at line 112. **FAIL**: any element missing, the query shape left unpaginated, or
   the unguarded pass sentence still present. (Adversarial Review #3 finding R6.)
 
-- [ ] **T021** [P] [US3] **Sibling citation readiness (FR-011).**
+- [x] **T021** [P] [US3] **Sibling citation readiness (FR-011).**
   Command:
   `grep -nE "spec\.md:[0-9]+|plan\.md:[0-9]+|tasks\.md:[0-9]+|research\.md:[0-9]+" specs/001-ingestion-arn-logging/codeql-logging-convention.md; echo "grep_exit=$?"`
   **PASS**: `grep_exit` is `1` with no output. The convention must be citable by document and section,
@@ -691,7 +691,7 @@ pattern, the verification caveats and both terminal states from one file (SC-006
 
 ## Phase 6: Terminal state, recorded explicitly
 
-- [ ] **T022** **Determine and RECORD the terminal state.** Reaching a terminal state is an explicit,
+- [x] **T022** **Determine and RECORD the terminal state.** Reaching a terminal state is an explicit,
   written outcome. An implementation that stops without filling in the record below has not completed
   this task, regardless of how much code it wrote.
 
@@ -720,17 +720,37 @@ pattern, the verification caveats and both terminal states from one file (SC-006
 
 ## Terminal State Record
 
-*Filled in by T022. Leave the placeholders until then.*
+*Filled in by T022.*
 
-- **Date**: `<YYYY-MM-DD>`
-- **Terminal state**: `<PENDING-BRANCH-ANALYSIS | DONE | DONE (dismissed) | BLOCKED-ON-OWNER>`
-- **T003 capability verdict**: `<DISMISSAL-AVAILABLE | DISMISSAL-ABSENT>` (probed read-only; measured
-  `DISMISSAL-AVAILABLE` on 2026-07-30)
-- **T016 result**: `<open_at_path value, or "not runnable: reason">`
-- **Verification query of record**: T016 in this file (paginated, exit-checked, floor-asserted)
-- **Outstanding owner action**: `<none | apply dismissal-handoff.md | re-run T016 after the next
-  default-branch analysis | add the next free TECH_DEBT_REGISTRY identifier if the dismissal branch
-  fired>`
+- **Date**: `2026-07-31`
+- **Terminal state**: `PENDING-BRANCH-ANALYSIS` (FR-008b). Reported as **neither done nor failed**.
+  This is the expected ending of implementation, not a failure: SC-002 and SC-002a are keyed to a
+  default-branch CodeQL analysis on a commit that includes the change, and no such analysis can exist
+  while the change sits on a feature branch.
+- **T003 capability verdict**: `DISMISSAL-AVAILABLE` (probed read-only 2026-07-31; `gh auth status`
+  exit 0, scopes `gist, read:org, repo, workflow`; repository `visibility: public`,
+  `permissions.push: true`, `permissions.admin: true`. Unchanged from the 2026-07-30 measurement. A
+  missing `security_events` scope is not a blocker on a public repository, so `BLOCKED-ON-OWNER` was
+  never in play. No dismissal was attempted and no alert state was mutated.)
+- **T016 result**: `not runnable: no completed default-branch analysis includes the change`. Probed
+  2026-07-31 with the `per_page=1`, no-`--paginate` shape T016 specifies: the newest analysis on
+  `refs/heads/main` is commit `c010178` at `2026-07-30T21:06:04Z`, which is the parent of this
+  feature branch and predates the fix commit. The branch is not pushed and no pull request exists,
+  so T015 had nothing to observe either.
+- **Verification query of record**: T016 in this file (paginated, exit-checked, floor-asserted, and
+  positive-anchored on `null_paths == 0` plus the `secrets.py` count read through the same field
+  path the gate filters on).
+- **Pre-change baseline for the re-run** (captured by T002 on 2026-07-31, the "before" half of
+  SC-005, which cannot be reconstructed later): corpus **137** alerts, **22** of this rule; alerts
+  **148 / 149 / 150** `open` with `fixed_at=null` at `src/lambdas/ingestion/handler.py:264 / :271 /
+  :276`; alert **144** `open` at `src/lambdas/shared/auth/oauth_state.py:104`; alerts **22 to 25**
+  `dismissed` with `fixed_at=null` at `src/lambdas/shared/secrets.py`. Outside the handler this rule
+  sits on three paths with counts `secrets.py` **16**, `oauth_state.py` **2**, `errors.py` **1**,
+  total **19**, which is T018's `{key: count}` "before" side.
+- **Outstanding owner action**: re-run T016 after the next default-branch analysis that includes the
+  change, then T017 and T018 against the same snapshot. If T016 returns `open_at_path > 0`, T019's
+  `DISMISSAL-AVAILABLE` branch applies. No `TECH_DEBT_REGISTRY` identifier was pre-reserved (rider 5)
+  and none is needed unless the dismissal branch fires.
 
 ---
 
