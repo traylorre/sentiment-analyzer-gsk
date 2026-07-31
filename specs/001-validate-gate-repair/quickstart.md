@@ -171,14 +171,45 @@ The third exists because several tests exercise a firewall, an identity provider
 network, or log groups, none of which belongs to a dashboard. Before this feature the guard demanded
 one of the first two on every file, so those tests could only pass by declaring something untrue.
 
-One caveat on the gate itself: **`make -n validate` no longer tells you the truth** unless the
-dry-run guard is in place. The driver recipe runs under `-n` because it invokes sub-makes, and `-n`
-propagates to them, so every stage dry-runs, returns success, and the summary reports a clean pass
-without having run anything. Treat a dry-run summary as meaningless.
-
 **Pick the accurate one.** This repository has confused its two dashboards in four separate
 incidents, which is why the declaration is mandatory. A firewall test labelled as a dashboard test is
 worse than no label, because it is the exact confusion the guard exists to prevent.
+
+---
+
+## `make -n validate` is refused, and that is the change
+
+```console
+$ make -n validate
+Makefile:56: *** `make -n validate` is not supported: -n propagates to the sub-makes, so
+every stage would report success without running. Run `make validate` for a real result.
+```
+
+Dry-running a target is ordinary reconnaissance, so a target that refuses it needs saying out loud.
+
+GNU Make treats a recipe line containing `$(MAKE)` as recursive and **executes it even under `-n`**,
+so the sub-make can print its own tree. `-n` then propagates to each sub-make through `MAKEFLAGS`,
+and every stage dry-runs, does nothing, and exits 0. The driver dutifully records seven successes and
+prints a clean summary. This is not theoretical: with the guard temporarily removed, `make -n
+validate` printed PASS for all six blocking stages and exited 0 at a time when two of them were
+genuinely failing.
+
+That output is worse than useless. It is the exact failure this feature exists to remove, a stage
+that never ran reading as a stage that passed, reintroduced through a flag rather than through a
+prerequisite list. So the target refuses instead of lying.
+
+The refusal fires at **parse time**, via `$(error)` guarded on `MAKECMDGOALS`. A shell test inside
+the recipe cannot work: under `-n` a recipe line without `$(MAKE)` is printed rather than run, so the
+guard would be displayed and skipped.
+
+Individual stages still dry-run normally, because they are not recursive:
+
+```bash
+make -n check-banned-terms    # prints the command, runs nothing, as expected
+```
+
+Removing the mutating format stage (the gate now uses the check-only variant) means `make validate`
+itself no longer edits files, so the usual reason to reach for `-n` first has largely gone.
 
 ---
 

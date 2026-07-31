@@ -86,6 +86,33 @@ jobs:
         if: always()
         run: python3 scripts/scan-waitforresponse-race.py
 
+      # Legacy-term scan (001-validate-gate-repair, FR-022 / FR-022a).
+      #
+      # Same reasoning as the guard above, and for the same reason it is worth
+      # repeating rather than cross-referencing: `Lint` is a required status check
+      # and `Pre-commit Hooks` is not, so joining this job is what makes the scan
+      # able to block a merge. A pre-commit hook for the same checker exists and is
+      # deliberately secondary; it gives fast local feedback and enforces nothing.
+      # Required contexts verified 2026-07-30:
+      #   gh api repos/traylorre/sentiment-analyzer-gsk/branches/main/protection \
+      #     --jq .required_status_checks.contexts
+      #
+      # Invoked directly rather than through pre-commit so the `Pre-commit Hooks`
+      # job's SKIP env cannot reach it. No pip install: the checker is stdlib-only
+      # and setup-python above already provides 3.13.
+      #
+      # `if: always()` because steps are fail-fast. Without it an earlier lint
+      # failure means this never runs and the corpus goes unchecked, which is the
+      # precise shape of the defect this feature exists to remove: a stage that
+      # never executed reading as a stage that passed.
+      #
+      # The checker fails closed on an unusable configuration, so a failure here
+      # may mean "the checker is broken" rather than "a term was found". The two
+      # are distinguished by the message, never by the exit code.
+      - name: Check for legacy framework terms
+        if: always()
+        run: python3 scripts/check_banned_terms.py
+
   # ========================================================================
   # JOB 2: Test (pytest + coverage)
   # ========================================================================

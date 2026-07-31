@@ -7,7 +7,7 @@
 
 **Organization**: Tasks grouped by user story (P1–P5) to enable independent implementation and testing.
 
-**CRITICAL**: Do NOT introduce any banned terms (see `scripts/check-banned-terms.sh` for the full list).
+**CRITICAL**: Do NOT introduce any banned terms (see `scripts/check_banned_terms.py` for the full list).
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -265,7 +265,7 @@ This ensures each story builds cleanly on the previous work and avoids merge con
 
 - [P] tasks = different files, no dependencies
 - [Story] label maps task to specific user story for traceability
-- BANNED TERMS: See `scripts/check-banned-terms.sh` for the canonical list
+- BANNED TERMS: See `scripts/check_banned_terms.py` for the canonical list
 - Commit after each phase with `git commit -S` (GPG signed)
 - Stop at any checkpoint to validate story independently
 - All TTL test assertions use fixed dates (`datetime(2024, 1, 2, ...)`) — not `date.today()` per Constitution Amendment 1.5

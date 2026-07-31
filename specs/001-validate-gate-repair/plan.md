@@ -200,6 +200,32 @@ required by T036 and is the reason the note exists.
 term-hits on the one line it exempts. Scan unchanged at 2,748 files, confirming the renames did not
 change scan scope.
 
+### SC-012 exemption baseline: 1
+
+Recorded from `make audit-exemptions`, which is the command a reviewer runs to check it:
+
+```text
+inline (1):
+  docs/cleanup/diagram-drift.md:133  quotes a drift claim from an archived spec and
+                                     refutes it against live code in the same row
+
+Total: 1
+```
+
+The baseline at T003 was 0, because no exemption mechanism existed. It is 1 now, and 1 is the
+expected value rather than a tolerated one: T029's renames removed every case a path-scoped exemption
+would have covered, so the drift-document row is the only occurrence in the repository that the
+adjudication rule exempts rather than corrects.
+
+**The unit is the marker, not the match.** That line names two banned terms under one justification.
+Counted per match it would read as 2, and a future line naming three terms would read as growth in
+the exemption surface for saying three words. Phase 4 corrected the implementation to count markers,
+which is what `contracts/checker-cli.md` had specified all along.
+
+Growth in this number is the signal SC-012 exists to expose. An increase means either a genuine new
+record of the retirement, which is fine and should be visible in review, or the adjudication rule
+being applied loosely, which is what the count is meant to catch.
+
 ### The generated-file matches are a directory name, and fixing that collapses the mechanism set
 
 The three matches in the secrets baseline were originally planned as the justification for a second
@@ -351,7 +377,7 @@ Makefile                                   # FOUR edits, not three:
                                            #  plus .PHONY completion, see Risks
 scripts/
 ├── check_banned_terms.py                  # NEW. Replaces check-banned-terms.sh
-├── check-banned-terms.sh                  # DELETED. Four consumers must be updated, see below
+├── check-banned-terms.sh                  # DELETED. 37 references across 11 files, see below
 └── scan-waitforresponse-race.py           # UNCHANGED. Referenced as CI-wiring precedent only
 tests/unit/scripts/
 └── test_check_banned_terms.py             # NEW. Covers SC-004..SC-006, SC-013, FR-007..FR-012, FR-028
@@ -361,10 +387,17 @@ tests/unit/scripts/
 .pre-commit-config.yaml                    # One hook added, mirroring the prior feature's
 .specify/templates/plan-template.md        # Placeholder scrubbed
 
-# Consumers of the deleted script, found by adversarial review
-specs/1217-*/quickstart.md, tasks.md       # Runnable `bash scripts/check-banned-terms.sh` commands
-specs/1218-*/quickstart.md, tasks.md       # Same
-docs/cleanup/validator-inventory.md        # Inventory row goes stale
+# Consumers of the deleted script. Adversarial review estimated ~8; a mechanical
+# enumeration at T053 found 37 references across 11 files, which split two ways:
+specs/1217-*/quickstart.md                 # Live pointer: file inventory a reader consults
+specs/1218-*/{plan,quickstart,tasks}.md    # Live pointers: runnable commands and "see X for
+                                           #  the canonical term list"
+specs/{1217,1218}-*/tasks.md               # Records: "- [x] T0NN ran the script" lines, left
+                                           #  verbatim. Rewriting a completed-task line
+                                           #  falsifies what was run, per T031a's rule.
+specs/1217-*/plan.md                       # Records: the original tooling decision and a
+                                           #  verbatim copy of the then-current recipe
+docs/cleanup/validator-inventory.md        # Checked at T053: contains no reference
 
 # Directory renames (owner decision 2026-07-30, all six legacy-named paths)
 specs/archive/001-*-purge/                 # The one that leaks into the secrets baseline

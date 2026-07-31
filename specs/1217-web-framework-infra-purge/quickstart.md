@@ -44,7 +44,7 @@ All source code comments referencing the old framework now describe the current 
 - `specs/001-fastapi-purge/` → `specs/archive/001-fastapi-purge/`
 
 ### New Validation Gate
-- `scripts/check-banned-terms.sh` — scans repo for banned terms
+- `scripts/check_banned_terms.py` — scans repo for banned terms (replaced the shell version in 001-validate-gate-repair)
 - `make check-banned-terms` — invokes the scanner
 - Integrated into `make validate` — runs on every pre-push validation
 
