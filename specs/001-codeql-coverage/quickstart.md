@@ -22,9 +22,27 @@ export WF=pr-checks.yml
 ## Phase A. Pre-flight
 
 ```bash
-# A1: can we dispatch on the feature branch at all?
-gh workflow run "$WF" --repo "$REPO" --ref "$BR" && echo DISPATCH_OK
-gh run list --repo "$REPO" --workflow "$WF" --branch "$BR" --limit 3
+# A0, BEFORE A1. Get onto the branch, then prove the branch exists on origin.
+# `gh workflow run --ref` resolves the ref SERVER-SIDE, so a branch that exists only locally
+# makes A1 fail for a reason that has nothing to do with dispatch permission, which is exactly
+# the misreading FR-009c would then record. This gate is what tells the two apart.
+git rev-parse --verify "$BR" >/dev/null 2>&1 && git switch "$BR" || git switch -c "$BR"
+git rev-parse --abbrev-ref HEAD                  # must print 001-codeql-coverage
+
+git ls-files specs/001-codeql-coverage/ | wc -l   # must be > 0 before anything is pushed
+git ls-remote --exit-code --heads origin "$BR"; echo "ls-remote rc=$?"
+# rc=0 means the ref exists and A1 below is a real permission test.
+# rc=2 means the ref does NOT exist. Do NOT dispatch: push the branch first. Recording A1 as
+# NOT RUNNABLE on the strength of a dispatch failure taken while the ref did not exist is the
+# one wrong answer here.
+```
+
+```bash
+# A1: can we dispatch on the feature branch at all? Only meaningful once ls-remote rc=0.
+gh workflow run "$WF" --repo "$REPO" --ref "$BR"; echo "dispatch rc=$?"
+sleep 15
+gh run list --repo "$REPO" --workflow "$WF" --branch "$BR" --limit 3 \
+  --json databaseId,event,status,createdAt --jq '.[]'
 ```
 
 ```bash
@@ -33,11 +51,17 @@ gh run list --repo "$REPO" --workflow "$WF" --branch "$BR" --limit 3
 # pre-change list. Identity is the (rule, path) PAIR, never the alert number: closing an alert
 # and rewriting the line spawns a fresh number at the same location, so a number-keyed diff
 # reports a loss that did not happen. Numbers are kept only as a lookup convenience.
-gh api "repos/$REPO/code-scanning/alerts?ref=refs/heads/main&state=open&per_page=100" --paginate \
-  --jq '[.[] | {key: "\(.rule.id)@\(.most_recent_instance.location.path)",
-                number, sev: .rule.security_severity_level}] | sort_by(.key)' \
-  > /tmp/a2-prechange.json || { echo "A2 API READ FAILED, do not proceed"; false; }
-test -s /tmp/a2-prechange.json || echo "A2 EMPTY: this is a read failure, not a clean repo"
+#
+# --paginate WITHOUT --slurp applies --jq once PER PAGE, so an AGGREGATING filter emits one
+# object per page instead of one for the whole set. Redirect to a file, then jq the file.
+gh api "repos/$REPO/code-scanning/alerts?ref=refs/heads/main&state=open&per_page=100" \
+  --paginate --slurp > /tmp/a2-raw.json
+rc=$?
+[ "$rc" -eq 0 ] && [ -s /tmp/a2-raw.json ] \
+  || { echo "A2 API READ FAILED (rc=$rc). An empty list would read as a clean repository. STOP."; exit 1; }
+jq '[.[][] | {key: "\(.rule.id)@\(.most_recent_instance.location.path)",
+              number, sev: .rule.security_severity_level}] | sort_by(.key)' \
+  /tmp/a2-raw.json | tee /tmp/a2-prechange.json | jq 'length'
 ```
 
 Failure at A1 is not a blocker, it is an outcome, and after Q4 it is a small one: B1 needs no
@@ -48,13 +72,26 @@ query filter unchanged per FR-009b, keep B1 and B3, and take all User Story 1 ev
 **A3: route the two Clarification DEFERRALS.** Neither has a home outside spec.md's Clarifications
 appendix, which is where deferrals expire.
 
-- **Deferral 2, the 10-working-day window (Q5). Ask the owner BEFORE Phase E.** FR-021 writes the
-  computed close-out date into the baseline record at capture time and FR-016a allows exactly ONE
-  extension. An answer arriving after E2 spends that single extension on an authoring correction
-  instead of on alert volume. Unanswered at capture: record 10 working days as ASSUMED, say so in
-  the baseline record, and treat a later change as the FR-016a extension.
+**Deferral 2, the 10-working-day window (Q5), is a STEP, not a note. Do it here.** FR-021 writes
+the computed close-out date into the baseline record at capture time and FR-016a allows exactly ONE
+extension, so an answer arriving after E2 spends that single extension on an authoring correction
+instead of on alert volume.
+
+1. Ask the owner, **now**, at Phase A: confirm 10 working days, or name a different number.
+   Owner: Admin Role (Project Owner: @traylorre), `CONTRIBUTING.md:64`.
+2. Write ONE of these two literal strings into the evidence log's baseline record. **A blank field
+   fails this step**, and so does anything that is neither of these two:
+   - `WINDOW: 10 working days, CONFIRMED by owner on YYYY-MM-DD`
+   - `WINDOW: 10 working days, ASSUMED, Deferral 2 unanswered at capture`
+3. If it is still unanswered when E2 runs, take the ASSUMED string. Do not block on it and do not
+   invent an answer. Treat any later owner change as the FR-016a extension it is, spending the
+   single permitted extension on an authoring correction. That is the cost this step exists to
+   avoid, and it is a cost, not a failure.
+
 - **Deferral 1, the stale constitution §9 path (Q2). Not blocking.** Carried into the F2
   enforcement recommendation so it reaches the same named decider under the same decision-by date.
+  Record `DEFERRAL 1: routed to enforcement-recommendation.md (F2), not blocking` in the evidence
+  log, and confirm the recommendation's checklist carries the question verbatim.
 
 Record both, with status, in the evidence log.
 
@@ -81,15 +118,15 @@ This step alone satisfies SC-009 and SC-010.
 gh run view 30581930915 --repo "$REPO" --log --job 91004036909 > /tmp/py-main.log
 rc=$?
 [ "$rc" -eq 0 ] && [ -s /tmp/py-main.log ] \
-  || { echo "LOG FETCH FAILED (rc=$rc). Every zero below is meaningless. STOP."; }
+  || { echo "LOG FETCH FAILED (rc=$rc). Every zero below is meaningless. STOP."; exit 1; }
 grep -c . /tmp/py-main.log                         # sanity: total log lines, must be large
 
 grep -n 'filter exclude' /tmp/py-main.log          # extractor invoked with --filter exclude:tests/**/*
 grep -c 'Extracted file' /tmp/py-main.log          # expect 152. If 0, the guard above failed.
-grep 'Extracted file' /tmp/py-main.log | grep -c '/tests/'; echo "rc=${PIPESTATUS[0]}"
-# ^ expect 0, and PIPESTATUS[0] must be 0 too. A 0 count with PIPESTATUS[0]=1 means the first
+grep 'Extracted file' /tmp/py-main.log | grep -c '/tests/'; echo "first-grep rc=${PIPESTATUS[0]}"
+# ^ expect 0, and first-grep rc must be 0 too. A 0 count with first-grep rc=1 means the first
 #   grep matched nothing, ie. the log is wrong or empty, NOT that no test file was extracted.
-grep 'CodeQL scanned' /tmp/py-main.log             # "152 out of 154 Python files"
+grep -n 'CodeQL scanned' /tmp/py-main.log          # "152 out of 154 Python files", line 2067
 git ls-files '*.py' | grep -c '^tests/'            # expect 393, none of which are in the database
 ```
 
@@ -102,15 +139,23 @@ git commit -S -am "probe(001): codeql config control arm"
 git push origin "$BR"
 gh workflow run "$WF" --repo "$REPO" --ref "$BR"
 
-gh api "repos/$REPO/code-scanning/analyses?ref=refs/heads/$BR&per_page=10" \
-  --jq '.[] | {id, category, created_at, results_count, commit_sha}'
+gh api "repos/$REPO/code-scanning/analyses?ref=refs/heads/$BR&per_page=100" \
+  --paginate --slurp > /tmp/b2-analyses.json
+rc=$?
+[ "$rc" -eq 0 ] && [ -s /tmp/b2-analyses.json ] \
+  || { echo "ANALYSES READ FAILED (rc=$rc). An empty list is not 'the arm produced nothing'. STOP."; exit 1; }
+jq '[.[][] | {id, category, created_at, results_count, commit_sha}] | sort_by(.created_at) | reverse' \
+  /tmp/b2-analyses.json
 
 # Results MUST come from that analysis's SARIF, not from the alerts endpoint. An alert carries
 # only `most_recent_instance`, which a later run on the same ref overwrites, so an alerts query
 # reports the newest run twice and cannot separate two runs of one reference.
-ID=<analysis id for this arm>
+ID=<analysis id for this arm, matched by commit_sha to the probe commit>
 gh api "repos/$REPO/code-scanning/analyses/$ID" \
   -H "Accept: application/sarif+json" > "/tmp/arm-$ID.sarif"
+rc=$?
+[ "$rc" -eq 0 ] && [ -s "/tmp/arm-$ID.sarif" ] \
+  || { echo "SARIF FETCH FAILED (rc=$rc). A zero result below would be a read failure. STOP."; exit 1; }
 jq '[.runs[].results[] | .locations[0].physicalLocation.artifactLocation.uri as $p
      | select($p | startswith("tests/"))
      | {rule: .ruleId, path: $p}]
@@ -146,26 +191,40 @@ git commit -S -am "feat(001): add javascript-typescript to the CodeQL matrix"
 git push origin "$BR"
 gh workflow run "$WF" --repo "$REPO" --ref "$BR"
 
-# SC-002: the leg reports a results count
-gh api "repos/$REPO/code-scanning/analyses?ref=refs/heads/$BR&per_page=10" \
-  --jq '.[] | select(.category | test("javascript")) | {id, created_at, results_count}'
+# SC-002: the leg reports a results count.
+# --paginate is load-bearing, not cosmetic: this branch accumulates one analysis per language per
+# dispatch, and a default 30-item page truncates newest-first. An unpaginated read can return a
+# page holding no JavaScript/TypeScript entry at all, and a truncated read must NEVER be recorded
+# as an SC-002 failure. Any results_count value including 0 passes; an ABSENT analysis does not.
+gh api "repos/$REPO/code-scanning/analyses?ref=refs/heads/$BR&per_page=100" \
+  --paginate --slurp > /tmp/c2-analyses.json
+rc=$?
+[ "$rc" -eq 0 ] && [ -s /tmp/c2-analyses.json ] \
+  || { echo "ANALYSES READ FAILED (rc=$rc). An absent entry below would be a read failure. STOP."; exit 1; }
+jq '{total: ([.[][]] | length),
+     jsts: [.[][] | select(.category != null and (.category | test("javascript")))
+            | {id, category, created_at, results_count}]}' /tmp/c2-analyses.json
 
 # SC-003 + FR-004a: both dashboards extracted, and any resolution warnings
 RUN=$(gh run list --repo "$REPO" --workflow "$WF" --branch "$BR" --limit 1 --json databaseId --jq '.[0].databaseId')
+echo "RUN=$RUN"; [ -n "$RUN" ] || { echo "RUN EMPTY. STOP."; exit 1; }
 JOB=$(gh run view "$RUN" --repo "$REPO" --json jobs \
   --jq '.jobs[] | select(.name=="Analyze (javascript-typescript)") | .databaseId')
+echo "JOB=$JOB"; [ -n "$JOB" ] || { echo "JOB ID EMPTY. STOP."; exit 1; }
 gh run view "$RUN" --repo "$REPO" --log --job "$JOB" > /tmp/jsleg.log
 rc=$?
 # GUARD. The FR-004a check below treats EMPTY as good news ("no resolution warnings"), so a failed
 # fetch would report a clean bill of health. Assert the log exists before believing any silence.
 [ "$rc" -eq 0 ] && [ -s /tmp/jsleg.log ] \
-  || { echo "JS LEG LOG FETCH FAILED (rc=$rc). Silence below is a read failure, not a result."; }
+  || { echo "JS LEG LOG FETCH FAILED (rc=$rc). Silence below is a read failure, not a result. STOP."; exit 1; }
+wc -l /tmp/jsleg.log
 
 # TIER 1 (primary). Paths in these lines are ABSOLUTE runner paths appearing MID-LINE, after the
 # "<job>\t<step>\t<timestamp>" prefix gh prepends. A line-anchored '^frontend/' returns 0
 # UNCONDITIONALLY and is a guaranteed false negative. Match unanchored substrings.
-grep 'Extracted file' /tmp/jsleg.log | grep -c '/frontend/'
-grep 'Extracted file' /tmp/jsleg.log | grep -c '/src/dashboard/'
+grep 'Extracted file' /tmp/jsleg.log | grep -c '/frontend/';      echo "t1a first-grep rc=${PIPESTATUS[0]}"
+grep 'Extracted file' /tmp/jsleg.log | grep -c '/src/dashboard/'; echo "t1b first-grep rc=${PIPESTATUS[0]}"
+grep -c 'Extracted file' /tmp/jsleg.log            # per-file lines present at all? 0 routes to tier 2
 
 # TIER 2 (only if tier 1 emitted NO per-file lines at all). Per-file logging is extractor-specific
 # and the JavaScript extractor exposes no logging-verbosity option, so silence here means
@@ -178,12 +237,18 @@ git ls-files '*.js' '*.jsx' '*.ts' '*.tsx' '*.mjs' '*.cjs' | grep -vcE '^tests/'
 
 # FR-004a. EMPTY here means "no resolution warnings", which is the good outcome, so it is only
 # believable if the guard above passed. Record which it was, never just "none found".
-grep -iE 'could not resolve|module resolution|type resolution|no such module' /tmp/jsleg.log
-echo "grep rc=$? (1 = genuinely no warnings, 2 = file unreadable)"
+grep -inE 'could not resolve|module resolution|type resolution|no such module|cannot find module' /tmp/jsleg.log
+echo "grep rc=$? (0 = warnings found, 1 = genuinely no warnings, 2 = file unreadable)"
 
-# SC-007: leg duration and workflow total
-gh run view "$RUN" --repo "$REPO" --json jobs \
-  --jq '.jobs[] | {name, started_at, completed_at}'
+# SC-007: leg duration and workflow total. GUARD FIRST, then assert the leg is present at all:
+# a missing leg in this read is a read failure, not a fast leg.
+gh run view "$RUN" --repo "$REPO" --json jobs > /tmp/c2-jobs.json
+rc=$?
+[ "$rc" -eq 0 ] && [ -s /tmp/c2-jobs.json ] \
+  || { echo "JOBS READ FAILED (rc=$rc). A missing leg below is a read failure. STOP."; exit 1; }
+jq '.jobs[] | {name, started_at, completed_at}' /tmp/c2-jobs.json
+jq '[.jobs[] | select(.name | test("javascript-typescript"))] | length' /tmp/c2-jobs.json  # must be 1
+gh run view "$RUN" --repo "$REPO" --json createdAt,updatedAt,conclusion --jq '.'
 ```
 
 Record the analysis id from this step in the evidence log **as excluded from baseline capture**.
@@ -195,9 +260,15 @@ debt entries the Q2 triage identified. The Constitution Check in plan.md records
 obligation**; skipping this makes that row false.
 
 ```bash
-# Allocate identifiers AT MERGE TIME against the registry's then-highest value. Never pre-reserve:
+# Allocate identifiers AT WRITE TIME against the registry's then-highest value. Never pre-reserve:
 # TD-024 is contested by sibling features, and pre-reserving is what created that collision.
+#
+# RE-TAKE THIS READ IMMEDIATELY BEFORE YOU WRITE, not once at the top of the phase. A sibling
+# feature merging in between moves the highest value, and a value read minutes ago is already a
+# guess. If you write two entries, re-read between them is unnecessary but re-reading before the
+# FIRST one is not optional.
 grep -oE 'TD-[0-9]{3}' docs/reference/TECH_DEBT_REGISTRY.md | sort -u | tail -1
+echo "rc=${PIPESTATUS[0]}"
 ```
 
 Two registry entries, per constitution §9(a). §9(b)'s labelled issue is NOT raised: the owner has
@@ -213,33 +284,80 @@ A third, conditional entry is owed only if the FR-016b lapse path fires at close
 ## Phase E. Baseline (after merge only)
 
 ```bash
-# E1: the FIRST refs/heads/main javascript-typescript analysis after merge
-gh api "repos/$REPO/code-scanning/analyses?ref=refs/heads/main&per_page=30" \
-  --jq '[.[] | select(.category | test("javascript"))] | sort_by(.created_at) | .[0]'
+# E1: the FIRST refs/heads/main javascript-typescript analysis after merge.
+# --paginate is what makes the sort mean anything: refs/heads/main carries ~948 analyses, and an
+# unpaginated 30-item page read yields an oldest-of-PAGE, not an oldest. Measured, that is an
+# eight-month error in the value that becomes a deadline.
+gh api "repos/$REPO/code-scanning/analyses?ref=refs/heads/main&per_page=100" \
+  --paginate --slurp > /tmp/e1-analyses.json
+rc=$?
+[ "$rc" -eq 0 ] && [ -s /tmp/e1-analyses.json ] || { echo "E1 READ FAILED (rc=$rc). STOP."; exit 1; }
+# COUNT FLOOR FIRST. `sort_by | .[0] | {id, category}` over an EMPTY selection prints
+# {"id":null,"category":null}, whose type is "object" and whose `. == null` is false. "A non-null
+# object printed" is NOT the check; N > 0 is. Otherwise `null` gets written into the FR-021
+# baseline record as the identifier that starts the triage clock.
+N=$(jq '[.[][] | select(.category != null and (.category | test("javascript")))] | length' \
+      /tmp/e1-analyses.json)
+echo "jsts_analyses=$N"
+[ "$N" -gt 0 ] \
+  || { echo "ZERO javascript-typescript analyses on refs/heads/main. SC-001 NOT met. STOP."; exit 1; }
+# .category is null-guarded before test(): `null | test(...)` aborts the whole filter rather than
+# skipping a row. sort_by then .[0] takes the EARLIEST, which is what A1 requires; the API's
+# default ordering is newest first, so dropping the sort starts the clock late.
+jq '[.[][] | select(.category != null and (.category | test("javascript")))]
+    | sort_by(.created_at) | .[0]
+    | {id, category, created_at, results_count, commit_sha}' /tmp/e1-analyses.json
 
 # E2: the baseline alert set. Filter to state=open so it is the SAME population A2 captured,
-# otherwise the SC-004 "before 5 / after N" delta compares open-only against all-states.
-# Then split off the JavaScript/TypeScript rules: the baseline FR-016 and SC-008 are defined over
-# is the JS/TS set, and the 5 pre-existing Python alerts are explicitly Out of Scope.
-gh api "repos/$REPO/code-scanning/alerts?ref=refs/heads/main&state=open&per_page=100" --paginate \
-  --jq '[.[] | {number, rule: .rule.id, sev: .rule.security_severity_level,
-                path: .most_recent_instance.location.path}]
-        | {total_open: length,
-           jsts: [.[] | select(.rule | startswith("js/"))],
-           python: [.[] | select(.rule | startswith("py/"))]}'
+# otherwise the SC-004 "before 5 / after N" delta compares open-only against all-states and
+# reports a large FICTITIOUS increase inside a feature whose central claim is that a real
+# increase is expected. A fake increase inside that framing is uniquely hard to catch.
+gh api "repos/$REPO/code-scanning/alerts?ref=refs/heads/main&state=open&per_page=100" \
+  --paginate --slurp > /tmp/e2-raw.json
+rc=$?
+[ "$rc" -eq 0 ] && [ -s /tmp/e2-raw.json ] || { echo "E2 READ FAILED (rc=$rc). STOP."; exit 1; }
+# The `other` bucket is deliberate, not decoration. The Python leg also analyzes GitHub Actions
+# workflow files, so a two-bucket js/ + py/ partition is NOT exhaustive and would silently drop
+# actions/-prefixed alerts from both the baseline and the delta. partition_check proves it.
+jq '[.[][] | {number, rule: .rule.id, sev: .rule.security_severity_level,
+              path: .most_recent_instance.location.path,
+              key: "\(.rule.id)@\(.most_recent_instance.location.path)"}]
+    | {total_open: length,
+       jsts:   [.[] | select(.rule | startswith("js/"))],
+       python: [.[] | select(.rule | startswith("py/"))],
+       other:  [.[] | select((.rule | startswith("js/")) or (.rule | startswith("py/")) | not)]}
+    | . + {partition_check: (.total_open == ((.jsts|length)+(.python|length)+(.other|length)))}' \
+  /tmp/e2-raw.json | tee /tmp/e2-baseline.json \
+  | jq '{total_open, jsts: (.jsts|length), python: (.python|length), other: (.other|length), partition_check}'
 
-# E3 SC-005: Python floor of 9, unchanged
-gh api "repos/$REPO/code-scanning/analyses?ref=refs/heads/main&per_page=30" \
-  --jq '[.[] | select(.category | test("python"))] | .[0] | {id, results_count}'
+# E3 SC-005: Python floor of 9. A FLOOR, not an equality: if the config work widened Python scope
+# the count rises above 9, and an equality test would fail the feature for producing exactly the
+# outcome FR-012 protects.
+jq '[.[][] | select(.category != null and (.category | test("python")))]
+    | sort_by(.created_at) | reverse | .[0] | {id, created_at, results_count}' /tmp/e1-analyses.json
 
-# E3 SC-006: exactly four required contexts, unchanged
-gh api "repos/$REPO/branches/main/protection/required_status_checks" --jq '.contexts'
+# E3 SC-006: exactly four required contexts, unchanged. Print BOTH .contexts (deprecated but still
+# populated) and .checks[].context, plus both length floors. A null from a dropped or renamed API
+# field would otherwise satisfy "no unexpected context" vacuously. This is a single object, not a
+# paginated collection, so --paginate does not apply; the floors do.
+gh api "repos/$REPO/branches/main/protection/required_status_checks" > /tmp/e3-protection.json
+rc=$?
+[ "$rc" -eq 0 ] && [ -s /tmp/e3-protection.json ] \
+  || { echo "PROTECTION READ FAILED (rc=$rc). An empty context set is NOT 'no gates changed'. STOP."; exit 1; }
+jq '{contexts: .contexts, checks: [.checks[].context],
+     n_contexts: (.contexts | length), n_checks: (.checks | length)}' /tmp/e3-protection.json
+# n_contexts and n_checks must both be 4 and neither may be null.
 ```
 
 ## Record skeletons
 
-Both live in `specs/001-codeql-coverage/evidence-log.md`. Dates in ISO 8601 (`YYYY-MM-DD`), per
-constitution Amendment 1.5.
+**FOUR skeletons follow, and all four live in `specs/001-codeql-coverage/evidence-log.md`**: the
+probe record, the pre-merge verification, the baseline record and the close-out record. Copying
+them faithfully is what makes that file's four `^## ` headers exist. A fifth deliverable,
+`specs/001-codeql-coverage/enforcement-recommendation.md`, is a SEPARATE file written at close-out
+and is not one of these skeletons; its required contents are listed under Phase F.
+
+Dates in ISO 8601 (`YYYY-MM-DD`), per constitution Amendment 1.5.
 
 ### Probe record (FR-010, SC-010)
 
@@ -268,8 +386,9 @@ constitution Amendment 1.5.
   zero, not run, or not runnable, per FR-009b and FR-008)
 - FR-011 resolution applied: ...
 - FR-006 record: which shared config rules now reach the new leg, and their disposition
-- FR-007 / FR-007a: the frontend/tests decision AND the asymmetry against excluded Python tests,
-  argued or carded. Not left undiscussed.
+- FR-007 / FR-007a: the frontend/tests decision AND the asymmetry against excluded Python tests.
+  **TRANSCRIBE the argument from Clarification Q4. Do not re-derive it**: Q4 wrote it in full, and
+  a second argument invites one that disagrees with the first. The reason must name FR-008.
 ```
 
 ### Pre-merge verification (excluded from baseline)
@@ -302,14 +421,36 @@ constitution Amendment 1.5.
 | Test: frontend/tests | | | | |
 | Non-shipping: build config, specs/ contract stubs | | | | |
 
-- Window duration: 10 working days, CONFIRMED by owner | ASSUMED (Deferral 2 unanswered at capture)
-- Window extension (FR-016a, at most ONE): used? no | yes, new date + reason
+- WINDOW: 10 working days, CONFIRMED by owner on YYYY-MM-DD
+  | WINDOW: 10 working days, ASSUMED, Deferral 2 unanswered at capture
+  (exactly one of those two literal strings; a blank field fails)
+- Window extension (FR-016a, at most ONE): used? no | yes, new date YYYY-MM-DD, reason: <text>
+```
+
+### Close-out record (SC-008, SC-013)
+
+Written on the recorded close-out date, NOT at merge. The three fields below sat in the baseline
+skeleton until AR#3; they belong here, because they are the CLOSE-OUT gate and the baseline record
+is written weeks earlier. The order of the first two is load-bearing and was made so at Q5: count
+BEFORE the default is applied, because after the default every alert carries a disposition by
+construction and SC-008 could never fail.
+
+```markdown
+## Close-out record
 - **Undispositioned count at window close, BEFORE the FR-016b default is applied: N**
-  (SC-008. Record the number even when it is zero. Measured after the default it is always zero
-  by construction and the criterion could never fail.)
+  (SC-008. Record the number even when it is zero, and record the undispositioned set verbatim
+  alongside it. This number, and only this number, is what SC-008 is measured against.)
+- Undispositioned set, verbatim: ...
+- FR-016b default applied to that set as `carded follow-up`: yes | n/a (count was 0)
 - Close-out outcome (SC-013): COMPLETE (count was 0) | FAILED CLOSE-OUT (count was non-zero)
-- §9 registry entries written (D2): npm ecosystem TD-___, §10 local-SAST gap TD-___,
-  FR-016b lapse set TD-___ | n/a. Identifiers allocated at merge time, never pre-reserved.
+- §9 registry entries written: npm ecosystem TD-___ and §10 local-SAST gap TD-___ at merge (D2);
+  FR-016b lapse set TD-___ | n/a, only if the lapse path fired. Identifiers allocated AT WRITE
+  TIME against the registry's then-highest value, never pre-reserved. The value read at merge is
+  already stale by now, so re-read it.
+- §9(b) labelled GitHub issues: OUTSTANDING, not raised. The owner has directed that the
+  `tech-debt` label not be created and that no issue be raised against it, with the question
+  audited once at the end of the campaign. Do not run `gh label create` or `gh issue create`, and
+  do not substitute another label. Record this as outstanding rather than claiming §9 complete.
 ```
 
 ## Reminders that are easy to lose

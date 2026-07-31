@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-codeql-coverage`
 **Created**: 2026-07-30
-**Status**: Draft
+**Status**: Ready for Implementation
 **Input**: User description: "Expand CodeQL scanning coverage. Two parts: add JavaScript/TypeScript to the analysis matrix so the customer dashboard is scanned at all, and resolve a self-contradiction in the CodeQL config file."
 
 ## Context
@@ -23,7 +23,7 @@ that this work went wrong. The alerts were always there. Until now nothing was l
 |---|------|------------------------|
 | F1 | The analysis matrix is `language: ['python']` only. The TypeScript customer dashboard under `frontend/` is never scanned. | `.github/workflows/pr-checks.yml` line 294 at `c010178` (job `codeql`, `name: Analyze`, opens line 282) |
 | F2 | The scan uses the `security-extended` query suite and a shared config file at `.github/codeql/codeql-config.yml`. | Same workflow job |
-| F3 | The config contradicts itself: it excludes `tests/**/*` wholesale by path, then carries a narrower query filter scoped to `tests/**` plus a comment claiming tests are still scanned. **RESOLVED at Clarification Q4: the path exclusion is applied at EXTRACTION time (`--filter exclude:tests/**/*`), so all 393 `tests/` Python files are absent from the database, the query filter is INERT, and the comment is FALSE.** Of the three claims, exactly the first is true. | `.github/codeql/codeql-config.yml` lines 13, 19 to 30; job log of run `30581930915` lines 1480, 1487, 2067 |
+| F3 | The config contradicts itself: it excludes `tests/**/*` wholesale by path, then carries a narrower query filter scoped to `tests/**` plus a comment claiming tests are still scanned. **RESOLVED at Clarification Q4: the path exclusion is applied at EXTRACTION time (`--filter exclude:tests/**/*`), so all 393 `tests/` Python files are absent from the database, the query filter is INERT, and the comment is FALSE.** Of the three claims, exactly the first is true. | `.github/codeql/codeql-config.yml` lines 13, 19 to 20 and 23 to 29; job log of run `30581930915` lines 1480, 1487, 2067 |
 | F4 | All 8 historical `tests/` alerts are for one rule, all created on or before the config commit `f9381dc` (2025-11-28). Zero new `tests/` alerts since. This is consistent with EITHER reading of F3 and distinguishes nothing. | Alert API, all states, filtered to `tests/` |
 | F5 | Pull request analyses are diff-informed by design and are scoped to changed lines. They routinely report zero results. This is correct behaviour, not a broken gate. | Analyses API: every `refs/pull/*/merge` entry reports 0 results |
 | F6 | A green CodeQL check on a pull request is never evidence the repository is clean, only that the changed lines are. | PR #990 was green while 5 alerts were open |
@@ -96,23 +96,25 @@ converts an unmeasured risk into a measured one.
 ### User Story 2 - The scan config says what it does (Priority: P2)
 
 An on-call engineer reading the config to answer "is this file scanned?" gets a straight answer.
-Today the file excludes `tests/**/*` by path, carries a query filter scoped to `tests/**` that
-may be dead as a result, and carries a comment asserting tests are still scanned. At most one of
-those three things is true. The engineer cannot tell which, and neither can anyone else, because
-the behaviour has never been probed.
+Today the file excludes `tests/**/*` by path, carries a query filter scoped to `tests/**`, and
+carries a comment asserting tests are still scanned. Only the first of those three is true.
+Clarification Q4 settled it from extraction-level evidence: the path exclusion is applied at
+EXTRACTION time, so the query filter is INERT and the line-13 comment is FALSE. The engineer
+reading the file today cannot tell that, because the file still says otherwise.
 
 **Why this priority**: A config that lies is worse than a config that is merely narrow, because
 it defeats the review step that is supposed to catch narrowness. It ranks below P1 because the
 contradiction affects Python test code, while P1 affects all user-facing product code.
 
-**Independent Test**: Run the probe described in FR-007 through FR-009 and produce a recorded
+**Independent Test**: Run the probe described in FR-008 through FR-010a and produce a recorded
 determination. Delivers value even if the config is then left byte-identical, because the
 recorded determination is the thing that was missing.
 
 **Acceptance Scenarios**:
 
-1. **Given** the contradiction is unproven, **When** a change to the path or query-filter rules is
-   proposed, **Then** the change is blocked until a probe has established actual behaviour.
+1. **Given** the behaviour is settled at Q4 (extraction-time exclusion, inert query filter, false
+   comment), **When** a change to the path or query-filter rules is proposed, **Then** the change is
+   blocked unless the probe record traces it to that evidence or to the surviving control arm.
 2. **Given** the probe runs, **When** its analysis reference is a branch reference rather than a
    pull request reference, **Then** its result is admissible. A pull request analysis result is
    inadmissible for this question because it is diff-informed.
@@ -161,11 +163,12 @@ of the fixes the window exists to produce.
 
 ### Edge Cases
 
-- **The probe cannot distinguish.** If a full-tree analysis with the path exclusion removed still
-  returns zero results under `tests/`, then Python test code genuinely holds nothing that the
-  query suite flags, and the two readings of F3 remain indistinguishable. The resolution path for
-  this case is specified in FR-010 and acceptance scenario 2.4: fix the wording, do not guess the
-  behaviour.
+- **The surviving control arm returns zero.** The extraction question is already settled at Q4, so
+  a zero from the OPTIONAL control arm no longer leaves two readings of F3 open. It leaves one
+  narrower question open: whether the inert query filter is dead weight or worth retaining against a
+  future narrowing of the path exclusion. A zero result declares that control INCONCLUSIVE (FR-009a),
+  the filter is RETAINED unchanged by FR-009b's default, and the resolution path is the one specified
+  in FR-010 and acceptance scenario 2.4: fix the wording, do not guess the behaviour.
 - **Root-anchored path patterns do not reach nested test directories.** The existing exclusion is
   written against the repository root. It does not match `frontend/tests`. Once JavaScript and
   TypeScript are in the matrix, Python test code would be excluded while about 19,900 lines of
@@ -650,7 +653,7 @@ the spec's own table.
 
 | Suspicion | Verdict |
 |---|---|
-| 1. Delivers nothing enforceable | **PARTIAL, and the enforceable part was smaller than claimed.** The coverage half is genuinely enforceable and binary: SC-001 through SC-003 are API-observable and take the analyzed surface from zero to about 48,000 lines. The intake half was not: findings 1, 3, 4, and 13 confirmed that FR-016 and FR-017 had no owner, no start point, no recorded date, no lapse behaviour, and were scheduled for evaluation after the feature would have been closed. All four are now fixed. The honest residual limit is stated in the Position section: nothing in this repository can mechanically fail a build for a missing disposition. What the fixes buy is that a lapse is now visible and attributable rather than silent. |
+| 1. Delivers nothing enforceable | **PARTIAL, and the enforceable part was smaller than claimed.** The coverage half is genuinely enforceable and binary: SC-001 through SC-003 are API-observable and take the analyzed surface from zero to about 47,300 lines. The intake half was not: findings 1, 3, 4, and 13 confirmed that FR-016 and FR-017 had no owner, no start point, no recorded date, no lapse behaviour, and were scheduled for evaluation after the feature would have been closed. All four are now fixed. The honest residual limit is stated in the Position section: nothing in this repository can mechanically fail a build for a missing disposition. What the fixes buy is that a lapse is now visible and attributable rather than silent. |
 | 2. `frontend/tests` drowns the baseline | **CONFIRMED as a risk, REFUTED as unmanageable.** The volume is real: 19,913 lines of frontend test code against 22,295 lines of `frontend/src`. It genuinely could dominate the baseline, and FR-016 was arithmetically unmeetable in that case (finding 11). It is now meetable via FR-020's path-class bulk disposition. The asymmetry against excluded Python tests is confirmed to be a glob accident that A2 rationalized after the fact; FR-007a now forces it to be argued or carded (finding 12). |
 | 3. The probe cannot answer the question | **CONFIRMED.** A two-arm probe cannot separate the two readings even in principle, and per F4 the filtered rule may no longer fire at all, so an all-zero result would have been mistaken for a conclusion. Fixed with a mandatory positive-control arm run first (FR-009a) and a three-arm design (FR-009b). The spec already had an inconclusive path in FR-011 and acceptance scenario 2.4; what it lacked was the ability to KNOW it was inconclusive, and a not-runnable path (FR-009c). |
 | 4. Cost is understated | **REFUTED on dollars, PARTIAL on the rest.** The repository is public, so GitHub-hosted runner minutes bill at zero. Dependabot traffic is 5 of 100 runs over five days, not a dominant multiplier. What WAS understated: SC-007 contradicted itself (finding 7), and the workflow has no concurrency-cancel group so rapid pushes stack complete runs (finding 16). |
@@ -679,7 +682,7 @@ output nobody must act on.
 
 After the review: **a measurable improvement in what is KNOWN, plus a bounded and attributable
 process for acting on it.** The distinction still matters and is stated rather than blurred. Turning
-on the scanner does not remove a single vulnerability. It converts about 48,000 lines of unmeasured
+on the scanner does not remove a single vulnerability. It converts about 47,300 lines of unmeasured
 risk into measured risk, and the FR-016 and FR-021 machinery is what stops the measurement from
 sitting untouched. Whether it becomes enforcement depends on the FR-017 recommendation, which is
 correctly out of scope here and now carries a named decider and a date instead of being a document.
