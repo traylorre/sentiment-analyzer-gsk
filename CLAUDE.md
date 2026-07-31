@@ -618,7 +618,6 @@ When a user invokes `/speckit.specify`, ALWAYS follow the specify workflow - eve
 Before ANY push to remote, check these in order:
 
 ```bash
-# 1. Security alerts (CodeQL, Dependabot)
 gh api repos/{owner}/{repo}/code-scanning/alerts --jq '.[] | select(.state == "open") | {rule: .rule.id, file: .most_recent_instance.location.path}'
 
 # 2. Local validation
