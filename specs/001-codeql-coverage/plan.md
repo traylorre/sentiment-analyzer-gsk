@@ -280,9 +280,10 @@ An obligation with no execution step is the same defect AR#1 finding 1 caught el
 one here. Two of the three items in the Q2 triage are unconditional and are owed at merge, not at
 close-out: the npm ecosystem absent from `dependabot.yml` while 82 npm advisories are open (F18),
 and the §10 local-SAST gap this feature widens (recorded above the Constitution Check). Each gets a
-sequential entry in `docs/reference/TECH_DEBT_REGISTRY.md` plus a `tech-debt`-labelled GitHub
-issue, per constitution §9(a) and §9(b). The third item, an FR-016b lapse set, is conditional and
-belongs to F3.
+sequential entry in `docs/reference/TECH_DEBT_REGISTRY.md`, per constitution §9(a). §9(b)'s labelled
+issue is NOT raised: the owner has directed that the `tech-debt` label not be created, so that half
+is recorded as outstanding rather than discharged. The third item, an FR-016b lapse set, is
+conditional and belongs to F3.
 *Identifier allocation*: AT MERGE TIME, in merge order, against the registry's then-highest value.
 Never pre-reserved. `TD-024` is already claimed by `001-oauth-provider-taint` and contested by
 `001-ruff-bump-forward`, and pre-reserving is what created that collision.
@@ -339,8 +340,8 @@ construction and the criterion could never fail.
    never silently drops.
 3. **THEN record the outcome.** A non-zero count at step 1 means FAILED CLOSE-OUT, and one
    follow-up item is raised carrying the undispositioned set: a sequential entry in
-   `docs/reference/TECH_DEBT_REGISTRY.md` plus a `tech-debt`-labelled GitHub issue, identifier
-   allocated at merge order per D2. A zero count means COMPLETE.
+   `docs/reference/TECH_DEBT_REGISTRY.md`, identifier allocated at merge order per D2, with §9(b)
+   recorded as outstanding for the reason given there. A zero count means COMPLETE.
 
 *Proves*: SC-013, FR-016b, and the conditional third item of the Q2 §9 triage. CLOSE-OUT gate per
 FR-023: SC-004, SC-008, SC-011, SC-013.

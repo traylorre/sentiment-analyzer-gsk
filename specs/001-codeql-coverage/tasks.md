@@ -180,7 +180,7 @@ them. The only permitted configuration mutation before Phase C is the OPTIONAL B
   7. **E1 / C1.** Phase A1 dispatches before any ref check. Add the T002 `git ls-remote` gate ahead
      of it, and the T001 branch switch ahead of that.
   8. **E7 / C3, E8 / C4, E9, E11.** Deferral 2 becomes a step rather than prose; the Phase D registry
-     read is re-taken at write time and carries the `tech-debt` label guard from T032; the FR-007a
+     read is re-taken at write time; the FR-007a
      skeleton bullet is retargeted at Q4 as a transcription; the Phase E `run view --json jobs` read
      gets a guard and a leg-present assertion.
   9. **Two skeleton defects, found at AR#3 and not previously recorded.** The "Record skeletons"
@@ -827,13 +827,6 @@ and SC-002, SC-003, SC-007 and the FR-004a measurement are recorded with their e
   ```bash
   grep -oE 'TD-[0-9]{3}' docs/reference/TECH_DEBT_REGISTRY.md | sort -u | tail -1
   echo "rc=${PIPESTATUS[0]}"
-
-  # The label §9(b) requires does NOT exist in this repository. Create it before creating issues.
-  gh label list --repo "$REPO" --limit 100 --json name --jq '.[].name' | grep -qx 'tech-debt' \
-    || gh label create tech-debt --repo "$REPO" \
-         --description "Constitution section 9 tech debt registry entry" --color BFD4F2
-  gh label list --repo "$REPO" --limit 100 --json name --jq '.[].name' | grep -qx 'tech-debt' \
-    || { echo "tech-debt label still absent. gh issue create --label tech-debt WILL FAIL. STOP."; exit 1; }
   ```
 
   **Identifier allocation**: **AT MERGE TIME, in merge order, against the registry's then-highest
@@ -842,28 +835,27 @@ and SC-002, SC-003, SC-007 and the FR-004a measurement are recorded with their e
   merge-time allocation. Pre-reserving is what created the collision this rule exists to prevent. Read
   the highest value at the moment you write, not at the moment you read this file.
 
-  Write two sequential entries in `docs/reference/TECH_DEBT_REGISTRY.md`, each with a
-  `tech-debt`-labelled GitHub issue, per constitution §9(a) and §9(b):
+  Write two sequential entries in `docs/reference/TECH_DEBT_REGISTRY.md`, per constitution §9(a):
   1. **npm ecosystem absent from `.github/dependabot.yml`** while 82 npm advisories are open (F18).
      §9 trigger: "dependency issues requiring future attention".
   2. **The §10 local-SAST gap this feature widens**: `make sast` runs Bandit and Semgrep over `src/`
      only, so after this lands CodeQL covers `frontend/` and no local pre-push tier does. §9 trigger:
      "known limitations".
 
-  **Pass conditions**: the `tech-debt` label EXISTS (the guard above did not exit);
-  `grep -c 'TD-' docs/reference/TECH_DEBT_REGISTRY.md` increased by exactly 2
-  against its pre-task value; the two new identifiers are sequential from the value read above; and
-  `gh issue list --repo "$REPO" --label tech-debt --limit 200 --json number,title --jq 'length'`
-  increased by exactly 2 and the two new titles are present (`--limit` defaults to 30 and would
-  otherwise hide them, which is the same truncation class as the alerts query at T030). **Skipping this makes the Constitution Check §9 row false at merge**, which is the
-  same defect AR#1 finding 1 caught elsewhere.
-  **Measured at AR#3, and this is why the label guard exists**: the repository carries 13 labels
-  (`bug`, `documentation`, `duplicate`, `enhancement`, `good first issue`, `help wanted`, `invalid`,
-  `question`, `wontfix`, `dependencies`, `python`, `github-actions`, `terraform`) and **`tech-debt` is
-  not among them**. `gh issue list --label tech-debt` therefore returns `0`, which reads as a clean
-  starting count but is really a missing label, and `gh issue create --label tech-debt` fails
-  outright. The §9(b) half of the merge-time obligation was unexecutable as authored. The same guard
-  binds T044's conditional third entry, which runs long after this one.
+  **Pass conditions**: `grep -c 'TD-' docs/reference/TECH_DEBT_REGISTRY.md` increased by exactly 2
+  against its pre-task value, and the two new identifiers are sequential from the value read above.
+  **Skipping this makes the Constitution Check §9 row false at merge**, which is the same defect
+  AR#1 finding 1 caught elsewhere.
+
+  **§9(b) is NOT discharged by this task, and the evidence log must say so rather than claim §9
+  complete.** §9(b) asks for a `tech-debt`-labelled GitHub issue per entry. The label does not exist
+  in this repository (13 labels: `bug`, `documentation`, `duplicate`, `enhancement`,
+  `good first issue`, `help wanted`, `invalid`, `question`, `wontfix`, `dependencies`, `python`,
+  `github-actions`, `terraform`), and the owner has directed that it **NOT** be created and that no
+  issues be raised against it, with the whole question audited once at the end of the campaign. So:
+  do not run `gh label create`, do not run `gh issue create`, and do not substitute another label.
+  Record the §9(b) half as outstanding, naming the owner directive as the reason. The same applies to
+  T044's conditional third entry, which runs long after this one.
 
 ---
 
@@ -1158,8 +1150,9 @@ SC-010 and SC-012 each carry a recorded outcome. The feature status is still OPE
   - **T042's count is 0** → outcome `COMPLETE`.
   - **T042's count is non-zero** → outcome `FAILED CLOSE-OUT`, recorded as such rather than quietly
     complete, AND one follow-up item is raised carrying the undispositioned set: a sequential entry in
-    `docs/reference/TECH_DEBT_REGISTRY.md` plus a `tech-debt`-labelled GitHub issue, per constitution
-    §9(a) and §9(b). This is the **third and CONDITIONAL** item of the Q2 triage, distinct from the two
+    `docs/reference/TECH_DEBT_REGISTRY.md`, per constitution §9(a). Its §9(b) half is outstanding for
+    the reason given at T032: the label is not to be created and no issue is to be raised against it.
+    Record it as outstanding. This is the **third and CONDITIONAL** item of the Q2 triage, distinct from the two
     unconditional entries T032 wrote at merge. **Identifier allocated at that moment against the
     registry's then-highest value, never pre-reserved**, exactly as at T032, and the value read at
     T032 will already be stale by now.
@@ -1167,8 +1160,8 @@ SC-010 and SC-012 each carry a recorded outcome. The feature status is still OPE
   **Pass condition** (**SC-013**): the close-out record carries an outcome of literally `COMPLETE` or
   `FAILED CLOSE-OUT`. A close-out with no recorded outcome does not satisfy this criterion, and
   neither does a feature that was marked complete at merge. When the outcome is `FAILED CLOSE-OUT`,
-  `gh issue list --repo "$REPO" --label tech-debt` shows the new issue and the registry carries the
-  new entry. This is the criterion that makes FR-016b observable rather than aspirational.
+  the registry carries the new entry. This is the criterion that makes FR-016b observable rather than
+  aspirational.
 
 - [ ] **T045** [US3] **FR-023 final sweep: both gates evaluated, and the sweep itself recorded.**
 
@@ -1649,9 +1642,9 @@ feature is executable start to finish once Phase 0 runs.
   `gh issue list --label tech-debt --json number,title --jq 'length'` returns `0`, which reads as a
   clean starting count and is really a missing label, and `gh issue create --label tech-debt` fails
   outright. The §9(b) half of the merge-time obligation was unexecutable as authored, and the §9
-  obligation is the one the previous stage flagged as LIVE. **FIXED**: T032 now creates the label
-  idempotently and hard-stops if it is still absent. The same guard binds T044's conditional third
-  entry.
+  obligation is the one the previous stage flagged as LIVE. **RESOLVED BY OWNER DIRECTIVE**: the
+  label is not to be created and no issue is to be raised against it. T032 and T044 write the
+  registry entries (§9(a)) and record the §9(b) half as outstanding.
 - **AR3-4. Eleven recorded defects in the operator runbook, discharged by a sentence.** The
   Cross-Artifact Analysis closed section E with "`quickstart.md` should be updated to match section E
   before anyone executes from it" and gave that sentence no task. T003 corrects `spec.md`, T004
@@ -1749,7 +1742,7 @@ The previous stage named five. Execution found three more it did not name. All e
 | P3 | `plan.md` corrections | yes | T004 | Discharged by a task. Its anti-regression guard was inert (AR3-8); **now fixed** |
 | P4 | Substituted pre-push gate | yes | T005 | **GENUINELY DISCHARGED.** RAN verbatim: script rc=1 whole-tree as predicted, `grep -c 'specs/001-codeql-coverage'` prints `0` with `grep` rc=1, `/tmp/banned-before.txt` non-empty at 25 lines. Works exactly as written |
 | P5 | `quickstart.md` updated to match section E | yes, **as a sentence only** | nothing | **WAS NOT DISCHARGED. This is the prerequisite that leaked hardest**: eleven live defects in the runbook, no task. **Now discharged** by T004a (AR3-4) |
-| P6 | `tech-debt` label exists | no | nothing | **NOT NAMED, NOT DISCHARGED.** **Now discharged** by T032's label guard (AR3-3) |
+| P6 | `tech-debt` label exists | no | nothing | **NOT NAMED, NOT DISCHARGED.** **Withdrawn as a prerequisite** by owner directive: the label is not to be created, so no task depends on it (AR3-3) |
 | P7 | A fourth record skeleton exists to copy | no | nothing | **NOT NAMED, NOT DISCHARGED.** **Now discharged** by T006 + T004a item 9 (AR3-9) |
 | P8 | Deferral 2: owner confirms the 10-working-day window | yes | T009 | **CANNOT be discharged before implementation, and is handled honestly.** It has a named owner, a raise point, a hard deadline at T036, a two-valued pass condition and a stated fallback that names its own cost. This one leaks by design |
 
@@ -1834,8 +1827,9 @@ of Phases B and C are already spent.
   to 150, past page one, so the documented checklist reports a clean repository over five open HIGH
   alerts. The previous stage noted this; it belongs to the repository, not to this feature.
 - **The `tech-debt` label is missing repository-wide**, and constitution §9(b) requires it of every
-  feature. This feature can create it, but any sibling that assumed it existed has the same latent
-  break. Worth a campaign-level card.
+  feature. The owner has directed that it not be created and that the question be audited once at
+  the end of the campaign, so §9(b) goes undischarged here. Any sibling that assumed the label
+  existed has the same latent break. Worth a campaign-level card.
 - **Constitution §9 cites `docs/TECH_DEBT_REGISTRY.md` at lines 527, 569 and 584**; the file has lived
   at `docs/reference/TECH_DEBT_REGISTRY.md` since `f8db8d2`. Already carried as Deferral 1 into T043.
 - **`checklists/requirements.md` remains the weakest artifact**, certifying "Requirements are testable

@@ -366,10 +366,10 @@ of the fixes the window exists to produce.
   is applied; every undispositioned alert is THEN recorded as `carded follow-up` by default so the
   count never silently drops; the feature is recorded as FAILED CLOSE-OUT rather than quietly
   complete; and a single follow-up item is raised carrying the undispositioned set. Per F20, raising
-  that item means a sequential entry in `docs/reference/TECH_DEBT_REGISTRY.md` plus a
-  `tech-debt`-labelled GitHub issue, per constitution §9(a) and §9(b), with the `TD-` identifier
-  allocated AT MERGE TIME against the registry's then-highest value and never pre-reserved in this
-  spec. A requirement with no stated failure mode is a wish. This is the stated failure mode.
+  that item means a sequential entry in `docs/reference/TECH_DEBT_REGISTRY.md`, per constitution
+  §9(a), with the `TD-` identifier allocated AT MERGE TIME against the registry's then-highest value
+  and never pre-reserved in this spec. §9(b)'s labelled GitHub issue is NOT raised: the owner has
+  directed that the `tech-debt` label not be created, so that half is recorded as outstanding. A requirement with no stated failure mode is a wish. This is the stated failure mode.
 - **FR-017**: This feature MUST produce an enforcement recommendation as a deliverable, naming a
   severity threshold, a path scope, and a blocking or non-blocking position, justified by the
   observed alert volume. The gate question MUST be answered, not dropped. The recommendation MUST
@@ -870,8 +870,9 @@ was vacuous and is fixed.**
 - **One hole in the lapse path, now closed.** FR-016b required "a single follow-up item is raised"
   without saying where, which is the same shape of gap the adversarial review's finding 13 closed
   for FR-017. Resolved by Q2: the follow-up item is a sequential entry in
-  `docs/reference/TECH_DEBT_REGISTRY.md` plus a `tech-debt`-labelled GitHub issue, per constitution
-  §9(a) and §9(b), with the identifier allocated at merge time per the Q2 collision note.
+  `docs/reference/TECH_DEBT_REGISTRY.md`, per constitution §9(a), with the identifier allocated at
+  merge time per the Q2 collision note. §9(b) is recorded as outstanding, per the owner directive
+  that the `tech-debt` label not be created.
 - **SC-008 was vacuous.** FR-016b makes every undispositioned alert default to `carded follow-up`.
   If SC-008 is evaluated after that default is applied, every alert carries a disposition by
   construction and SC-008 can never fail. A criterion that cannot fail measures nothing. SC-008 is

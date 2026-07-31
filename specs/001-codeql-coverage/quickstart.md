@@ -200,7 +200,9 @@ obligation**; skipping this makes that row false.
 grep -oE 'TD-[0-9]{3}' docs/reference/TECH_DEBT_REGISTRY.md | sort -u | tail -1
 ```
 
-Two entries plus a `tech-debt`-labelled issue each, per constitution §9(a) and §9(b):
+Two registry entries, per constitution §9(a). §9(b)'s labelled issue is NOT raised: the owner has
+directed that the `tech-debt` label not be created, so record that half as outstanding. Do not run
+`gh label create` or `gh issue create`, and do not substitute another label.
 
 1. npm ecosystem absent from `.github/dependabot.yml` while 82 npm advisories are open (F18).
 2. The §10 local-SAST gap: `make sast` covers `src/` only, so after this lands CodeQL covers
