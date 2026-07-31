@@ -1,0 +1,62 @@
+# Baseline captured 2026-07-31T00:02:42Z at commit 176310e
+# Line content deliberately omitted: including it would add this file to the corpus.
+
+## T001: corpus as (file, line) pairs
+.secrets.baseline:2239
+.secrets.baseline:2242
+.secrets.baseline:2251
+CLEANUP-BOARD.html:71
+docs/cleanup/diagram-drift.md:133
+specs/1157-auth-cache-headers/plan.md:13
+specs/1157-auth-cache-headers/plan.md:72
+specs/1157-auth-cache-headers/plan.md:79
+specs/1157-auth-cache-headers/research.md:10
+specs/1157-auth-cache-headers/research.md:12
+specs/1157-auth-cache-headers/research.md:17
+specs/1157-auth-cache-headers/research.md:8
+specs/1157-auth-cache-headers/research.md:98
+specs/1157-auth-cache-headers/spec.md:81
+specs/1268-cors-404-headers/plan.md:21
+
+## T001: counts by basis
+term-hits (what the bash checker reports): 17
+distinct (file,line) pairs: 15
+
+## T002: per-stage exit codes before any change
+fmt-check = 0
+lint = 0
+check-banned-terms = 2
+check-test-target-headers = 2
+check-waitforresponse-race = 0
+security = 0   (structurally cannot fail; last command is an unconditional echo)
+sast     = 0   (verified separately; semgrep 478 rules / 164 files / 0 findings)
+
+## T003: exemption baseline (SC-012)
+inline markers = 0   (no exemption mechanism exists yet)
+
+## T004: paths whose NAME contains a legacy term (redacted)
+./docs/archive/<TERM>-purge
+./docs/archive/<TERM>-purge/HL-<TERM>-purge-checklist.md
+./docs/archive/<TERM>-purge/audit-<TERM>-surface.md
+./specs/1217-<TERM>-infra-purge
+./specs/archive/001-<TERM>-purge
+./specs/archive/1040-add-sse-<TERM>-dep
+
+## T013: Python checker equivalence to the shell baseline (VERIFIED)
+Command: python3 scripts/check_banned_terms.py, pairs extracted and sorted, diffed
+against the T001 corpus above.
+
+Result: IDENTICAL. 15 distinct (file, line) pairs, 17 term-hits, exit 1.
+This matches the T001 counting convention exactly (17 hits = 15 lines).
+Scanned 2,747 files. Exemptions honoured: 0 inline, consistent with T003.
+
+One checker change was required to reach equivalence. The first run reported 23 pairs:
+the 15 baseline pairs plus 8 in scripts/check-banned-terms.sh, the predecessor script,
+whose own term list the new checker was scanning. The old script self-excluded by name;
+the rewrite self-excluded only its own path. Fixed by CHECKER_SELF_PATHS, which lists
+both checkers. The shell entry is temporary and is deleted with the script at T053.
+
+Ordering note: the entry is load-bearing, not cosmetic. T011a repoints the Makefile in
+phase 2 but T053 deletes the script in phase 7, so for the whole of phases 3 to 6 both
+files exist. Without the exclusion the phase 4 cleanup could never reach zero findings,
+because 8 of them live in a file that phase 4 does not touch.
