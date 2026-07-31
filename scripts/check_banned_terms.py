@@ -112,9 +112,23 @@ EXCLUDED_FILENAME_PREFIXES: tuple[str, ...] = ("CONTEXT-CARRYOVER",)
 MARKER_REFUSED_PREFIXES: tuple[str, ...] = ("src/", "infrastructure/", "frontend/src/")
 MARKER_REFUSED_EXCEPTIONS: tuple[str, ...] = ("infrastructure/docs/",)
 
-# The one sanctioned exemption mechanism. Syntax-agnostic on purpose: the checker tests
-# for this token as a substring and never parses comment syntax, so the same rule serves
-# Markdown, HTML, Python, YAML, shell, TypeScript, and formats nobody has used yet.
+# THE SANCTIONED EXEMPTION SET IS EXACTLY ONE MECHANISM: the inline marker below.
+#
+# A path-scoped mechanism was considered and found unnecessary. The only occurrences that
+# would have needed one were filename keys inside .secrets.baseline, a generated file.
+# Renaming the four legacy-named directories and two files removed them at the source, so
+# nothing survives that a path scope would have had to forgive. FR-017 forbids an
+# exemption mechanism that requires editing generated files, and it is therefore satisfied
+# by elimination rather than by construction. That is why no task implements it, and this
+# note exists so the absence reads as deliberate rather than as an oversight.
+#
+# If a generated file ever comes to contain a legacy term in its CONTENT rather than in a
+# path, this reasoning expires: FR-013 must be amended to re-add a path-scoped mechanism.
+# Treat that as an amendment to the requirement, not as a gap in the implementation.
+#
+# Syntax-agnostic on purpose: the checker tests for this token as a substring and never
+# parses comment syntax, so the same rule serves Markdown, HTML, Python, YAML, shell,
+# TypeScript, and formats nobody has used yet.
 # Named *_TOKEN, so three scanners read it as a credential: ruff's S105, bandit's B105,
 # and detect-secrets' Secret Keyword plugin. The two suppressions below cover ruff and
 # detect-secrets. Bandit needs none because B105 is Low severity and `make sast` gates at
@@ -150,16 +164,22 @@ class Match:
         if not found:
             return None
         why = found.group("why").strip()
-        # Trailing comment syntax is not part of the justification. Terminators are
-        # removed as whole tokens: str.rstrip() takes a character SET, not a suffix, so
-        # rstrip("-->") would also eat a justification's own trailing hyphens and angle
-        # brackets. It returned the right answer on every case tested here, which is the
-        # kind of accident that survives until someone writes a justification ending in
-        # an arrow.
-        for terminator in ("-->", "*/", "#}", "?>"):
-            if why.endswith(terminator):
-                why = why[: -len(terminator)].strip()
-                break
+        # Comment syntax is not part of the justification. A terminator ENDS the
+        # justification wherever it appears, so the earliest one wins and everything
+        # after it is discarded.
+        #
+        # Two earlier shapes of this were both wrong. rstrip("-->") takes a character
+        # SET, not a suffix, so it also ate a justification's own trailing hyphens and
+        # angle brackets. Replacing it with an endswith() suffix strip fixed that but
+        # only handled markers at end of line: inside a Markdown table cell the comment
+        # is followed by " |", nothing is stripped, and the closing syntax lands in the
+        # justification. Cutting at the terminator handles both without a special case.
+        cut = min(
+            (i for i in (why.find(t) for t in ("-->", "*/", "#}", "?>")) if i != -1),
+            default=-1,
+        )
+        if cut != -1:
+            why = why[:cut].strip()
         return why or None
 
     @property
@@ -306,9 +326,15 @@ def report(matches: list[Match], scanned: int, root: Path) -> int:
     violations = [m for m in matches if not m.is_exempt]
     exempt = [m for m in matches if m.is_exempt]
 
+    # Markers, not matches: one line can hold several terms under one justification.
+    markers = {(m.path, m.line_number) for m in exempt}
+
     print("=== Legacy-Term Scanner ===")
     print(f"Scanned: {scanned:,} files under {root}")
-    print(f"Exemptions honoured: {len(exempt)} inline")
+    print(
+        f"Exemptions honoured: {len(markers)} inline "
+        f"covering {len(exempt)} occurrence(s)"
+    )
     print()
 
     if not violations:
@@ -332,17 +358,23 @@ def list_exemptions(matches: list[Match]) -> int:
     Only inline markers appear. The sanctioned set has one member, so this listing is
     complete by construction. Scan-scope exclusions are deliberately absent: they decide
     what is searched, not what is forgiven.
+
+    The unit is the MARKER, not the match. One line can contain several banned terms and
+    so produce several Match objects, but it carries one marker and one justification.
+    Counting matches would report a line twice for saying two words, and that count is
+    the SC-012 exemption baseline, so the inflation would be recorded as growth in the
+    exemption surface when nothing had been exempted.
     """
-    exempt = sorted(
-        (m for m in matches if m.is_exempt), key=lambda m: (m.path, m.line_number)
-    )
+    by_marker = {
+        (m.path, m.line_number): m.justification for m in matches if m.is_exempt
+    }
     print("=== Legacy-Term Exemptions ===")
     print()
-    print(f"inline ({len(exempt)}):")
-    for m in exempt:
-        print(f"  {m.path}:{m.line_number}  {m.justification}")
+    print(f"inline ({len(by_marker)}):")
+    for (path, line), why in sorted(by_marker.items()):
+        print(f"  {path}:{line}  {why}")
     print()
-    print(f"Total: {len(exempt)}")
+    print(f"Total: {len(by_marker)}")
     return 0
 
 

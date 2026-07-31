@@ -81,6 +81,25 @@ exempt anything. Write the reason a reviewer would need, not the word "needed".
 If this reads like the existing `# pragma: allowlist secret` convention, that is intentional. Same
 shape, same review posture.
 
+### Correct or exempt is not the whole rule
+
+Those two cover most lines and they covered barely half of the original corpus. The remaining kinds
+have dispositions of their own, and a reviewer who knows only the first two reaches the wrong answer
+on them: an example in a template reads as "not asserting anything, so exempt it", which leaves the
+template generating fresh matches forever. The full rule, one row per kind actually encountered:
+
+| The line | Disposition | Why not something else |
+|---|---|---|
+| asserts the framework is current | correct it | It is simply false. This is the only kind that is a defect in the ordinary sense. |
+| records the retirement, or discusses it as prior art | exempt it | Correcting it would delete the record. This is what the marker is for. |
+| names the framework without asserting anything: a heading, a research question, a code sample | rewrite so the sentence stays true with the name removed | Do not substitute the current stack here. A superseded research document that suddenly reports findings about a framework nobody researched is worse than the stale name it replaced. |
+| is an example or a placeholder in a template | scrub the example | Exempting hides it; the template keeps emitting the term into every document generated from it. Fix the source, then the copies. |
+| documents this policy and reproduces the terms in order to discuss them | reword to describe rather than reproduce | An exemption would work and is the wrong habit: a document about banned terms that spells them out is the most copy-pasted place in the repository. |
+| is a path recorded inside a generated file | rename the path | Covered below. There is no exemption mechanism for generated files, deliberately. |
+
+Where a line is genuinely two of these at once, the earlier row wins: an assertion that also happens
+to be a heading is still an assertion.
+
 ---
 
 ## When not to use an inline marker
@@ -168,7 +187,7 @@ worse than no label, because it is the exact confusion the guard exists to preve
 | Situation | What is happening | What to do |
 |---|---|---|
 | Gate passed locally, failed in CI on legacy terms | The check now runs in the required lint job. It was previously enforced nowhere. | Run `make check-banned-terms` locally and fix. The CI output is identical. |
-| A term appears in a file I did not touch | Most likely the plan template placeholder, or a superseded spec. | Check whether the line asserts the framework is current. If yes, correct it. If it records the retirement, exempt it. |
+| A term appears in a file I did not touch | Most likely the plan template placeholder, or a superseded spec. | Find its row in "Correct or exempt is not the whole rule" above. Those two are not the only dispositions, and a template placeholder in particular is neither. |
 | Marker added and the checker still fails | The justification is empty, or the marker is on a different line from the match. | Same line, non-empty reason after the colon. |
 | Checker reports a configuration failure | It is failing closed on an unusable configuration rather than reporting a false pass. | Read the named cause. Do not work around it: a checker that passes when it cannot see is the defect this feature removed. |
 | New spec is red immediately after `/speckit.plan` | Should no longer happen. The template placeholder that caused this was the root cause fixed by this feature. | If it recurs, the template has regained an example value naming a legacy term. Fix the template, not the generated plan. |

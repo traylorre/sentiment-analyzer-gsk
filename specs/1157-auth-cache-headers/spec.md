@@ -78,7 +78,7 @@ As a security measure, auth responses must include headers that prevent intermed
 
 ## Assumptions
 
-- The application uses a framework (FastAPI) that allows setting response headers
+- The application uses a framework (aws-lambda-powertools) that allows setting response headers
 - CloudFront is already configured with TTL=0 for auth endpoints (infrastructure-level caching already disabled)
 - This change addresses browser and proxy caching at the application response level
 - HTTP/1.0 compatibility is desired for legacy proxy support
