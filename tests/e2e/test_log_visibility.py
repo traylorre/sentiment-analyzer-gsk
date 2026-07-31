@@ -1,4 +1,4 @@
-# Target: backend Lambda CloudWatch log groups (not either dashboard UI)
+# Target: Infrastructure (backend Lambda CloudWatch log groups, not either dashboard UI)
 """FR-008 preprod E2E: dark-line evidence per function (feature 001).
 
 Each assertion targets a line that CANNOT appear pre-deploy:

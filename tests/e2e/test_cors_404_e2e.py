@@ -1,3 +1,4 @@
+# Target: Infrastructure (API Gateway CORS headers on error responses)
 """E2E: Verify CORS headers on error responses via API Gateway (Feature 1268).
 
 Feature 1296: Uses public route /api/v2/tickers/{proxy+} to bypass Cognito
