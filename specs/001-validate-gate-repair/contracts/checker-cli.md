@@ -58,7 +58,7 @@ checker is broken" would defeat the purpose.
 ```text
 === Legacy-Term Scanner ===
 Scanned: 1,284 files under <root>
-Exemptions honoured: 1 inline
+Exemptions honoured: 1 inline covering 2 occurrence(s)
 
 PASS: 0 unexempted occurrences.
 ```
@@ -67,12 +67,19 @@ The exemption line is on the success path deliberately. A passing gate that sile
 exemptions reads identically to a passing gate with nothing to honour, and the difference is exactly
 what FR-026 asks the project to keep visible.
 
+The line counts **markers**, not matches, and states both numbers because they differ. One line can
+name several banned terms under a single justification, and the repository's only exemption does
+exactly that: one marker, two term-hits. Reporting the match count alone would make that line read as
+two exemptions, and since this count is the SC-012 baseline, a line would register as growth in the
+exemption surface for saying two words. `--list-exemptions` was already specified in marker terms
+below; the implementation had drifted from it and was corrected in phase 4.
+
 ### Output: violation
 
 ```text
 === Legacy-Term Scanner ===
 Scanned: 1,284 files under <root>
-Exemptions honoured: 1 inline
+Exemptions honoured: 1 inline covering 2 occurrence(s)
 
 FAIL: 2 unexempted occurrences.
 
