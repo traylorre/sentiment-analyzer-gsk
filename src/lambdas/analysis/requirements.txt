@@ -4,11 +4,18 @@
 # PyTorch CPU-only (minimal size, no CUDA dependencies)
 # Using extra-index-url for CPU-only wheel
 --extra-index-url https://download.pytorch.org/whl/cpu
-torch==2.5.1+cpu
+torch==2.13.0+cpu
 
 # HuggingFace Transformers for DistilBERT model loading
-# Pin to version compatible with model training environment
-transformers>=4.46.0,<5.0.0
+# Kept identical to the root requirements.txt pin. These two drifted apart once
+# (this file allowed 4.x only while the root pinned a specific 4.x), so change
+# them together.
+#
+# Raised off 4.x to clear the Dependabot advisories, including the torch CRITICAL.
+# The S3 DistilBERT artifact was trained against 4.x, and CI cannot catch a
+# regression here because requirements-ci.txt excludes torch and transformers
+# entirely. Artifact load and scoring must be revalidated in preprod.
+transformers==5.14.1
 
 # AWS SDK for S3 model download and DynamoDB updates
 boto3>=1.35.0,<2.0.0
