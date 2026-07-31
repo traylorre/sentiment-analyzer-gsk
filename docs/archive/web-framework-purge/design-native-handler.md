@@ -1,9 +1,9 @@
 # Design: Native Lambda Handler Signature
 
-**Parent:** [HL-fastapi-purge-checklist.md](./HL-fastapi-purge-checklist.md)
+**Parent:** [HL-web-framework-purge-checklist.md](./HL-web-framework-purge-checklist.md)
 **Priority:** P1
 **Status:** [ ] TODO
-**Depends On:** [audit-fastapi-surface.md](./audit-fastapi-surface.md)
+**Depends On:** [audit-web-framework-surface.md](./audit-web-framework-surface.md)
 
 ---
 
@@ -152,6 +152,6 @@ Not recommended - increases infrastructure complexity and cold start surface.
 
 ## Related
 
-- [audit-fastapi-surface.md](./audit-fastapi-surface.md) - Provides inputs to finalize this design
+- [audit-web-framework-surface.md](./audit-web-framework-surface.md) - Provides inputs to finalize this design
 - [fix-request-parsing.md](./fix-request-parsing.md) - Implements the parsing helpers
 - [fix-response-format.md](./fix-response-format.md) - Implements the response helpers

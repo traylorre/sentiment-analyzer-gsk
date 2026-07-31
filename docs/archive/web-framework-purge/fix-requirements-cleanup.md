@@ -1,6 +1,6 @@
 # Fix: Remove Packages from Requirements
 
-**Parent:** [HL-fastapi-purge-checklist.md](./HL-fastapi-purge-checklist.md)
+**Parent:** [HL-web-framework-purge-checklist.md](./HL-web-framework-purge-checklist.md)
 **Priority:** P7
 **Status:** [ ] TODO
 **Depends On:** All code migration tasks (P2-P6)
@@ -100,5 +100,5 @@ No Dockerfile change needed unless it has a separate `COPY` for specific package
 
 ## Related
 
-- [audit-fastapi-surface.md](./audit-fastapi-surface.md) - Confirms no remaining imports
+- [audit-web-framework-surface.md](./audit-web-framework-surface.md) - Confirms no remaining imports
 - [fix-validation-smoketest.md](./fix-validation-smoketest.md) - Verify clean install works

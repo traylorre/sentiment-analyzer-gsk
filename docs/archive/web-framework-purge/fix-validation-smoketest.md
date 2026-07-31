@@ -1,6 +1,6 @@
 # Fix: Validation & Smoke Test
 
-**Parent:** [HL-fastapi-purge-checklist.md](./HL-fastapi-purge-checklist.md)
+**Parent:** [HL-web-framework-purge-checklist.md](./HL-web-framework-purge-checklist.md)
 **Priority:** P9 (Final step)
 **Status:** [ ] TODO
 **Depends On:** All previous tasks (P0-P8)
@@ -157,5 +157,5 @@ If native handler fails in production:
 
 ## Related
 
-- [HL-fastapi-purge-checklist.md](./HL-fastapi-purge-checklist.md) - Update status to COMPLETE
+- [HL-web-framework-purge-checklist.md](./HL-web-framework-purge-checklist.md) - Update status to COMPLETE
 - All task files - Mark as DONE

@@ -1,9 +1,9 @@
 # Fix: Replace Dependency Injection (Depends -> Singletons)
 
-**Parent:** [HL-fastapi-purge-checklist.md](./HL-fastapi-purge-checklist.md)
+**Parent:** [HL-web-framework-purge-checklist.md](./HL-web-framework-purge-checklist.md)
 **Priority:** P5
 **Status:** [ ] TODO
-**Depends On:** [audit-fastapi-surface.md](./audit-fastapi-surface.md)
+**Depends On:** [audit-web-framework-surface.md](./audit-web-framework-surface.md)
 
 ---
 
@@ -111,5 +111,5 @@ with patch("src.lambdas.dashboard.ohlc.get_dynamo_client", return_value=mock_db)
 
 ## Related
 
-- [audit-fastapi-surface.md](./audit-fastapi-surface.md) - Lists all Depends() usages
+- [audit-web-framework-surface.md](./audit-web-framework-surface.md) - Lists all Depends() usages
 - [fix-test-migration.md](./fix-test-migration.md) - Test mocking changes

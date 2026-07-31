@@ -5,6 +5,14 @@
 **Branch:** TBD (create from `main`)
 **Codename:** Final Purge
 
+> **Directory renamed 2026-07-30** by feature `001-validate-gate-repair`, which removed
+> retired-framework names from every path in the repository. Navigational links inside
+> this directory were repointed. Nothing else was touched: branch names, command
+> transcripts and quoted file contents are records of what was run and what existed at
+> the time, so paths quoted below still carry the old spelling. Rewriting them would
+> falsify a record rather than correct a stale claim. The former name is on the branch
+> line above and in `git log --follow`.
+
 ---
 
 ## Executive Summary
@@ -23,7 +31,7 @@ The dashboard Lambda currently uses **FastAPI + Mangum** as a request/response a
 
 | # | Task | File | Status | Priority |
 |---|------|------|--------|----------|
-| 1 | Audit current FastAPI surface area | [audit-fastapi-surface.md](./audit-fastapi-surface.md) | [ ] TODO | P0 |
+| 1 | Audit current FastAPI surface area | [audit-web-framework-surface.md](./audit-web-framework-surface.md) | [ ] TODO | P0 |
 | 2 | Design native handler signature | [design-native-handler.md](./design-native-handler.md) | [ ] TODO | P1 |
 | 3 | Replace request parsing (Query/Depends → event dict) | [fix-request-parsing.md](./fix-request-parsing.md) | [ ] TODO | P2 |
 | 4 | Replace response format (Response → proxy dict) | [fix-response-format.md](./fix-response-format.md) | [ ] TODO | P3 |
