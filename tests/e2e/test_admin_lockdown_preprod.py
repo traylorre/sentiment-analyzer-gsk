@@ -1,3 +1,4 @@
+# Target: Admin Dashboard (Lambda HTMX)
 """E2E tests for admin dashboard lockdown on preprod (Feature 1249).
 
 Verifies that admin routes return 404, health/runtime are stripped,

@@ -1,3 +1,4 @@
+# Target: Infrastructure (API Gateway Cognito authorizer)
 """E2E tests for API Gateway Cognito auth (Feature 1253).
 
 Tests verify that protected endpoints return 401 from API Gateway without

@@ -1,3 +1,4 @@
+# Target: Admin Dashboard (Lambda HTMX)
 """E2E tests for chaos endpoint lockdown on preprod (Feature 1250).
 
 Verifies all chaos endpoints return 404 in preprod environment.

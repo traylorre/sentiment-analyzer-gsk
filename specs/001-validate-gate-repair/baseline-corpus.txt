@@ -60,3 +60,35 @@ Ordering note: the entry is load-bearing, not cosmetic. T011a repoints the Makef
 phase 2 but T053 deletes the script in phase 7, so for the whole of phases 3 to 6 both
 files exist. Without the exclusion the phase 4 cleanup could never reach zero findings,
 because 8 of them live in a file that phase 4 does not touch.
+
+## T026 / Phase 3 checkpoint: two consecutive gate runs (VERIFIED)
+sha256 over every tracked file, taken before run 1, between the runs, and after run 2:
+  BEFORE == MID == AFTER  (8ef224ac4b6acdb8...)
+`git status --porcelain` byte-identical before and after. FR-004 / SC-007 satisfied.
+Checksums covered ALL tracked files rather than src/ and tests/ only, because the lint
+stage runs terraform validate against infrastructure/.
+
+Both runs exited 2 (the driver's `exit 1`, wrapped by make; see R3-08) and produced
+byte-identical summary blocks, so the result is deterministic.
+
+Stage execution, from the run log. All seven banners appear, including the two stages
+that never ran before because make stopped at the first failed prerequisite:
+  format check  BLOCKING  PASS
+  lint          BLOCKING  PASS
+  dependency audit  ADVISORY  reported
+  static analysis   BLOCKING  PASS
+  legacy terms      BLOCKING  FAIL
+  test target headers  BLOCKING  PASS
+  e2e race guard       BLOCKING  PASS
+  -> FAIL: 1 of 6 blocking stages failed.
+
+The header stage moved from FAIL (T002 baseline, exit 2) to PASS. The legacy-terms
+failure is the corpus, which phase 4 remediates; the exit-0 half of user story 1
+completes there, as the plan anticipated.
+
+## R3-07 confirmed by execution, not review
+With the parse-time guard temporarily disabled, `make -n validate` printed PASS for all
+six blocking stages and exited 0, including PASS for the two stages known to be failing.
+Recipe lines containing $(MAKE) run under -n so recursive make can show the tree, -n
+propagates to the sub-makes via MAKEFLAGS, and each does nothing and exits 0. The guard
+must fire at parse time: under -n a shell test in the recipe is printed, not run.

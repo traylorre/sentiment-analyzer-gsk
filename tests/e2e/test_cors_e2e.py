@@ -1,3 +1,4 @@
+# Target: Infrastructure (API Gateway CORS on the credentialed auth flow)
 """E2E tests for CORS behavior (Feature 1267).
 
 End-to-end validation that the full authentication flow works with
