@@ -48,6 +48,7 @@ from aws_lambda_powertools.event_handler import (
     Response,
 )
 
+# T049 probe: deliberate violation, naming fastapi. Reverted immediately.
 from src.lambdas.dashboard.api_v2 import (
     get_articles_by_tags,
     get_sentiment_by_tags,
