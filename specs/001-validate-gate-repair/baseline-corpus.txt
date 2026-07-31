@@ -217,3 +217,51 @@ Feature artifacts under specs/001-validate-gate-repair/ containing a term: none
 
 The terminology discipline in the plan's Terminology Note held across every artifact,
 which matters because these artifacts live under specs/ and are scanned.
+
+# =============================================================================
+# T049 evidence: the wiring blocks a merge, FR-022 / US3 (2026-07-30)
+# =============================================================================
+
+Run BEFORE T048, per the task's own ordering note, so the new pre-commit hook could not
+block the commit this task needs to make.
+
+Method: branch `t049-legacy-term-gate-probe` off the feature branch carrying one planted
+unexempted legacy term in src/lambdas/dashboard/handler.py. Planted as a comment rather
+than an import so that ruff still passes and the legacy-term step is the ONLY failing
+step. Redness alone proves nothing here; 002's T014 was refused as evidence for exactly
+that reason, because `make validate` exited non-zero whether or not the violation was
+present. Attribution is the requirement.
+
+Draft PR #989 against main. Result, from the job's step-level conclusions:
+
+  success   Check formatting with ruff
+  success   Check linting with ruff
+  success   Check for security issues
+  success   Check waitForResponse race ordering
+  failure   Check for legacy framework terms      <-- the only failure
+  ...
+  Lint: fail (45s)
+
+Every other step in the required `Lint` job succeeded, so the job's failure is
+attributable to the new step and to nothing else. `Lint` is a required status check
+(verified the same day: Secrets Scan, Lint, Run Tests, Playwright E2E Tests), so a PR in
+this state cannot merge.
+
+Cleanup: PR closed, remote branch deleted, local branch deleted, repository re-verified
+at 0 unexempted. Orphan scan over every remote branch found none. The planted violation
+was never merged and exists only in the closed PR's history.
+
+# =============================================================================
+# T048 evidence: pre-commit hook, deliberately secondary (2026-07-30)
+# =============================================================================
+
+  $ pre-commit run check-banned-terms --all-files
+  Check for legacy framework terms.........................................Passed
+
+  $ SKIP=check-banned-terms pre-commit run check-banned-terms --all-files
+  Check for legacy framework terms........................................Skipped
+
+The second command is the point. This hook is fast local feedback and enforces nothing:
+the `Pre-commit Hooks` job is not a required context and honours SKIP. The enforcing copy
+is the `Lint` step proven above, which is invoked directly rather than through pre-commit
+precisely so that SKIP cannot reach it.
