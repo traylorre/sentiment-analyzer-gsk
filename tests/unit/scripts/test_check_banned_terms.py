@@ -168,6 +168,50 @@ def test_marker_exempts_only_its_own_line(tmp_path):
     }
 
 
+def test_marker_detection_is_case_insensitive(tmp_path):
+    """The term match and the marker match are two separate patterns.
+
+    ``test_matching_is_case_insensitive`` covers the term. This covers the marker, which
+    is compiled independently, so one could lose ``re.IGNORECASE`` without the other
+    noticing. A contributor who capitalises the token in prose should still be exempt.
+    """
+    write(
+        tmp_path,
+        "docs/history.md",
+        f"we used to run {TERM} <!-- {MARKER.upper()} historical record -->\n",
+    )
+
+    matches = mod.scan(tmp_path)
+
+    assert len(matches) == 1
+    assert matches[0].is_exempt is True
+    assert matches[0].justification == "historical record"
+
+
+def test_marker_is_honoured_in_an_html_file(tmp_path):
+    """FR-016 requires the marker to work in Markdown *and* HTML.
+
+    Every other marker test writes HTML comment syntax into a ``.md`` file, which
+    exercises the syntax but not the file type. After the board card is reworded there is
+    no HTML exemption left anywhere in the repository, so the HTML half of FR-016 would
+    otherwise be asserted and never executed. The checker is syntax-agnostic by design,
+    so this test's real job is to keep that property from regressing into a Markdown
+    special case.
+    """
+    write(
+        tmp_path,
+        "docs/board.html",
+        f'<div class="card">retired {TERM}</div> <!-- {MARKER} archived board entry -->\n',
+    )
+
+    matches = mod.scan(tmp_path)
+
+    assert len(matches) == 1
+    assert matches[0].path == "docs/board.html"
+    assert matches[0].is_exempt is True
+    assert matches[0].justification == "archived board entry"
+
+
 def test_comment_syntax_is_not_mistaken_for_a_justification(tmp_path):
     """``<!-- marker: -->`` must read as empty, not as the string ``-->``."""
     write(tmp_path, "docs/a.md", f"{TERM} <!-- {MARKER}   -->\n")

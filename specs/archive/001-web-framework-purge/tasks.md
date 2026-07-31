@@ -1,6 +1,6 @@
 # Tasks: FastAPI/Mangum Permanent Removal
 
-**Input**: Design documents from `/specs/001-fastapi-purge/`
+**Input**: Design documents from `/specs/archive/001-web-framework-purge/`
 **Prerequisites**: plan.md (tech stack), spec.md (62 FRs, 8 user stories), research.md (7 decisions), data-model.md (contracts), quickstart.md (migration patterns)
 **Organization**: Tasks grouped by user story for independent implementation. Tests accompany each phase as the spec mandates test migration (US5).
 

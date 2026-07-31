@@ -1,6 +1,6 @@
 # Fix: Update Test Suite (TestClient -> Mock Event)
 
-**Parent:** [HL-fastapi-purge-checklist.md](./HL-fastapi-purge-checklist.md)
+**Parent:** [HL-web-framework-purge-checklist.md](./HL-web-framework-purge-checklist.md)
 **Priority:** P8
 **Status:** [ ] TODO
 **Depends On:** All code migration tasks (P2-P6)
@@ -163,5 +163,5 @@ Playwright tests hit the deployed API Gateway URL, not the handler directly. The
 
 ## Related
 
-- [audit-fastapi-surface.md](./audit-fastapi-surface.md) - Lists all TestClient usages
+- [audit-web-framework-surface.md](./audit-web-framework-surface.md) - Lists all TestClient usages
 - [fix-validation-smoketest.md](./fix-validation-smoketest.md) - End-to-end verification

@@ -91,7 +91,7 @@ EXCLUDED_PATH_PREFIXES: tuple[str, ...] = (
     "specs/archive/",
     "docs/archive/",
     "docs/archived-specs/",
-    "specs/1217-fastapi-infra-purge/",
+    "specs/1217-web-framework-infra-purge/",
     ".specify/",
 )
 
@@ -115,7 +115,14 @@ MARKER_REFUSED_EXCEPTIONS: tuple[str, ...] = ("infrastructure/docs/",)
 # The one sanctioned exemption mechanism. Syntax-agnostic on purpose: the checker tests
 # for this token as a substring and never parses comment syntax, so the same rule serves
 # Markdown, HTML, Python, YAML, shell, TypeScript, and formats nobody has used yet.
-MARKER_TOKEN = "legacy-term-ok:"  # noqa: S105 - a comment marker, not a credential
+# Named *_TOKEN, so three scanners read it as a credential: ruff's S105, bandit's B105,
+# and detect-secrets' Secret Keyword plugin. The two suppressions below cover ruff and
+# detect-secrets. Bandit needs none because B105 is Low severity and `make sast` gates at
+# -ll, but that is a threshold doing the work, not a judgement, so it is worth stating.
+#
+# The pragma is deliberate in preference to a .secrets.baseline entry: the baseline is a
+# register of audited secrets, and a misclassified marker token is not one.
+MARKER_TOKEN = "legacy-term-ok:"  # noqa: S105  # pragma: allowlist secret
 
 _TERM_PATTERNS = tuple((t, re.compile(t, re.IGNORECASE)) for t in BANNED_TERMS)
 _MARKER_PATTERN = re.compile(re.escape(MARKER_TOKEN) + r"\s*(?P<why>.*)", re.IGNORECASE)

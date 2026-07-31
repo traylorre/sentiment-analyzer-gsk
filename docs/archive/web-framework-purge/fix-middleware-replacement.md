@@ -1,9 +1,9 @@
 # Fix: Replace Middleware (Timing, Logging, X-Ray)
 
-**Parent:** [HL-fastapi-purge-checklist.md](./HL-fastapi-purge-checklist.md)
+**Parent:** [HL-web-framework-purge-checklist.md](./HL-web-framework-purge-checklist.md)
 **Priority:** P4
 **Status:** [ ] TODO
-**Depends On:** [audit-fastapi-surface.md](./audit-fastapi-surface.md)
+**Depends On:** [audit-web-framework-surface.md](./audit-web-framework-surface.md)
 
 ---
 
