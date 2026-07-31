@@ -20,6 +20,8 @@ because the cleanup phase drives that corpus to zero and the assertion would inv
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import scripts.check_banned_terms as mod
 
 TERM = mod.BANNED_TERMS[0]
@@ -125,6 +127,39 @@ def test_empty_marker_token_fails_closed(tmp_path, monkeypatch):
 
     assert mod._validate_config() != []
     assert mod.main(["--root", str(tmp_path)]) == 1
+
+
+def test_empty_exclusion_configuration_does_not_report_success(tmp_path, monkeypatch):
+    """SC-006 / FR-009. The shell version's most dangerous failure mode.
+
+    An empty exclusion list built an empty ``grep -Ev`` pattern, which matched every
+    line, discarded every finding, and printed PASS over a repository with real
+    violations. Emptying the exclusions here filters *nothing* instead of everything, so
+    the dangerous direction is unreachable rather than guarded.
+
+    This asserts the property rather than a guard, which is the point: there is no branch
+    to regress, and the test exists so the absence of one reads as intended.
+    """
+    monkeypatch.setattr(mod, "EXCLUDED_PATH_PREFIXES", ())
+    monkeypatch.setattr(mod, "EXCLUDED_FILENAME_PREFIXES", ())
+    write(tmp_path, "docs/notes.md", f"{TERM}\n")
+
+    assert mod.main(["--root", str(tmp_path)]) == 1
+    assert paths_found(tmp_path) == {"docs/notes.md"}
+
+
+def test_emptying_exclusions_widens_the_scan_rather_than_voiding_it(
+    tmp_path, monkeypatch
+):
+    """The direction matters: fewer exclusions must mean more findings, never fewer."""
+    prefix = mod.EXCLUDED_PATH_PREFIXES[0]
+    write(tmp_path, f"{prefix}doc.md", f"{TERM}\n")
+
+    assert mod.scan(tmp_path) == [], "normally excluded"
+
+    monkeypatch.setattr(mod, "EXCLUDED_PATH_PREFIXES", ())
+
+    assert paths_found(tmp_path) == {f"{prefix}doc.md"}
 
 
 # --- exemption semantics ---------------------------------------------------
@@ -309,6 +344,38 @@ def test_marker_is_refused_under_application_source(tmp_path):
     assert all(not m.is_exempt for m in matches)
 
 
+def test_refused_marker_is_reported_as_its_own_error(tmp_path, capsys):
+    """SC-013. The message must name the MARKER as the error, not the term.
+
+    A refused marker that reported as an ordinary violation would read as though the
+    marker were malformed, and the contributor's next move would be to fix its syntax.
+    That move cannot succeed, because there is no syntax that works here. The distinct
+    message is what stops that loop.
+    """
+    prefix = mod.MARKER_REFUSED_PREFIXES[0]
+    write(tmp_path, f"{prefix}app.py", f"# {TERM}  # {MARKER} a plausible reason\n")
+
+    code = mod.main(["--root", str(tmp_path)])
+    out = capsys.readouterr().out
+
+    assert code == 1
+    assert "exemption markers are not permitted" in out
+    assert "FR-028" in out
+    assert f"{prefix}app.py:1" in out
+
+
+def test_ordinary_source_violation_does_not_get_the_marker_message(tmp_path, capsys):
+    """The two remedies must stay distinguishable, or the distinct message is noise."""
+    prefix = mod.MARKER_REFUSED_PREFIXES[0]
+    write(tmp_path, f"{prefix}app.py", f"# {TERM}\n")
+
+    mod.main(["--root", str(tmp_path)])
+    out = capsys.readouterr().out
+
+    assert "exemption markers are not permitted" not in out
+    assert "this is application source" in out
+
+
 def test_marker_is_honoured_in_the_documentation_exception(tmp_path):
     """``infrastructure/docs/`` is a record tree inside a refused prefix."""
     exception = mod.MARKER_REFUSED_EXCEPTIONS[0]
@@ -395,6 +462,28 @@ def test_result_is_independent_of_how_the_root_is_spelled(tmp_path):
         (m.path, m.line_number) for m in indirect
     ]
     assert [m.path for m in direct] == ["docs/notes.md"]
+
+
+def test_relative_and_absolute_roots_produce_identical_results(tmp_path, monkeypatch):
+    """FR-027 for the case a caller actually hits: ``--root .`` from a shell.
+
+    ``test_result_is_independent_of_how_the_root_is_spelled`` compares two absolute
+    spellings. This compares an absolute root against a relative one, which is the form
+    the Makefile and a developer at a prompt both use, and the form under which the
+    shell version's exclusions silently stopped working: they matched only because GNU
+    grep emitted a ``./`` prefix.
+    """
+    write(tmp_path, "docs/notes.md", f"{TERM}\n")
+    write(tmp_path, f"{mod.EXCLUDED_PATH_PREFIXES[0]}doc.md", f"{TERM}\n")
+
+    absolute = mod.scan(tmp_path)
+
+    monkeypatch.chdir(tmp_path)
+    relative = mod.scan(Path("."))
+
+    key = lambda ms: [(m.path, m.line_number, m.term) for m in ms]  # noqa: E731
+    assert key(absolute) == key(relative)
+    assert [m.path for m in relative] == ["docs/notes.md"]
 
 
 def test_symlinks_are_not_followed(tmp_path):

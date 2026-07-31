@@ -136,3 +136,29 @@ No generated file contains a legacy term in its content, so no path-scoped exemp
 mechanism exists to be tested. Recorded in scripts/check_banned_terms.py alongside
 MARKER_TOKEN so the absent mechanism reads as deliberate. If a generated file ever
 gains a term in its CONTENT, FR-013 must be amended rather than the gap patched.
+
+# =============================================================================
+# T045 evidence: red-team insertion proof, SC-004 / FR-010 (2026-07-30)
+# =============================================================================
+
+With the corpus at zero, an insertion is the only available evidence that the checker
+still detects anything. A passing gate over a clean repository and a passing gate over a
+broken checker are indistinguishable from the outside, which is the failure this whole
+feature exists to remove, so it must not be assumed here either.
+
+Target: src/lambdas/dashboard/handler.py, confirmed clean before the insertion.
+Inserted one import line naming a banned term at line 50.
+
+Result:
+  FAIL: 1 unexempted occurrences.
+    src/lambdas/dashboard/handler.py:50
+      matched: <TERM>
+      remedy: this is application source. Remove the reference. Exemptions are
+              for records that the framework was retired, not for code that uses it.
+  exit code 1
+
+The remedy is the application-source one, not the generic "add a marker" one, so a
+contributor is not invited to exempt a genuine violation in code.
+
+Reverted with git checkout. sha256 before == after, byte-identical. Re-ran the checker:
+PASS, 0 unexempted. The insertion was never committed.
