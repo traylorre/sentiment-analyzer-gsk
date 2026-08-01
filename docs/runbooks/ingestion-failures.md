@@ -116,7 +116,7 @@ aws cloudwatch get-metric-statistics \
 
 - **Safe to disable**: Outside market hours (before 9:30 AM or after 4:00 PM ET)
 - **Staleness acceptable**: 1 hour outside market hours
-- **Do NOT disable during**: Market hours unless emergency
+- **Do NOT disable during**: Market hours. Escalate instead.
 
 ## Contact Information
 
