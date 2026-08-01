@@ -78,8 +78,10 @@ service. The gain is the cost not paid twice.
 
 Scanner exclusions never qualify. A path filter or a rule filter saves nothing and silences every
 future finding in its scope, including the ones nobody has written yet. It is the same move as
-calling a test flaky. An alert that is wrong is dismissed on its own, with the reason recorded
-against that finding.
+calling a test flaky.
+
+Being certain an alert is wrong settles nothing. That judgement is subjective and the tool's rules
+apply anyway. Research what the tool's community does with that rule using context7, and do that.
 
 ### Dates
 
