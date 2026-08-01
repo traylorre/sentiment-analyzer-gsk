@@ -1,47 +1,39 @@
 # Terraform Backend Bootstrap
 
-This directory contains Terraform configuration to create the S3 bucket and DynamoDB table required for remote state management.
+Creates the S3 bucket that holds Terraform state. Run once per AWS account.
+
+Operational procedure (stale locks, force-unlock, importing secrets) is in
+`docs/runbooks/terraform-state.md`.
 
 ## One-Time Setup
 
-Run these commands **once** to set up the backend infrastructure:
-
 ```bash
 cd infrastructure/terraform/bootstrap
-
-# Initialize and apply
 terraform init
-terraform apply
+terraform apply -var aws_region=<region>
+terraform output state_bucket_name
 ```
 
-After successful creation, the main Terraform configuration will use S3 backend automatically.
+`aws_region` has no default and must be passed.
 
-## Import Existing State
-
-If you have existing resources in AWS that were created before enabling the S3 backend, you need to import them:
+Put the resulting bucket name into `backend-preprod.hcl` and `backend-prod.hcl`, then initialize
+the main configuration with the environment's partial config:
 
 ```bash
 cd infrastructure/terraform
-
-# Re-initialize with new backend (will prompt for state migration)
-terraform init -migrate-state
-
-# Import existing secrets (if they exist)
-terraform import module.secrets.aws_secretsmanager_secret.tiingo dev/sentiment-analyzer/tiingo
-terraform import module.secrets.aws_secretsmanager_secret.finnhub dev/sentiment-analyzer/finnhub
-terraform import module.secrets.aws_secretsmanager_secret.dashboard_api_key dev/sentiment-analyzer/dashboard-api-key
-
-# Verify state
-terraform plan
+terraform init -backend-config=backend-preprod.hcl
 ```
+
+Bare `terraform init` fails there: `main.tf` declares only `encrypt = true` and carries no bucket
+name.
 
 ## Resources Created
 
-- **S3 Bucket**: `sentiment-analyzer-terraform-state`
+- **S3 Bucket**: `sentiment-analyzer-terraform-state-<account-id>`
   - Versioning enabled for state history
   - Server-side encryption (AES256)
   - Public access blocked
+  - `prevent_destroy` lifecycle guard
 
-- **DynamoDB Table**: `terraform-state-lock`
-  - Used for state locking to prevent concurrent modifications
-  - Pay-per-request billing
+Nothing else. There is no lock table, and `use_lockfile` is set in no backend block, so concurrent
+runs are unprotected. Do not run terraform locally while CI is deploying.

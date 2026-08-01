@@ -38,7 +38,7 @@ Most items below were resolved *empirically* during AR#1 (agent aef0c1895ca54127
 | `OHLCResolution` | src/lambdas/shared/models/ohlc.py:36 |
 
 Ruff marks the StrEnum autofix **unsafe**: `str(StrEnum.MEMBER)` returns the value where `str(str-Enum.MEMBER)` returns `"ClassName.MEMBER"` — a live behavior difference for anything that formats/serializes these members, and all seven serialize to DynamoDB/JSON. Behavior-neutrality (spec assumption) therefore forbids the fix.
-**Alternatives considered**: StrEnum migration (rejected here; recorded as the proposed fix in the TECH_DEBT_REGISTRY entry per constitution §9 — a future feature with its own serialization test sweep); per-file-ignores for UP042 (rejected: broader than needed, hides future violations in those files); global UP042 ignore (prohibited by FR-006).
+**Alternatives considered**: StrEnum migration (rejected here; recorded as the proposed fix on the CLEANUP-BOARD.html kanban card, a future feature with its own serialization test sweep); per-file-ignores for UP042 (rejected: broader than needed, hides future violations in those files); global UP042 ignore (prohibited by FR-006).
 
 ## R5 — audit-pragma repair mechanism
 

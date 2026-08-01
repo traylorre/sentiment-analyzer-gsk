@@ -1,0 +1,11 @@
+# Anchored citations: file <TAB> line <TAB> regex that line must match <TAB> which doc claims it
+# R2 only proves a cited line exists. These prove it still says what the doc says it says.
+# Add a row whenever a core doc pins a claim to a specific line.
+Makefile	49	^check-test-target-headers:	CLAUDE.md
+Makefile	51	grep -rL "Target:\.\*Dashboard"	CLAUDE.md
+Makefile	73	pip-audit.*\|\| true	CLAUDE.md
+Makefile	78	bandit.*\|\| true	CLAUDE.md
+src/lambdas/ingestion/dedup.py	59	def generate_dedup_key	CLAUDE.md
+src/lambdas/shared/utils/dedup.py	11	def generate_dedup_key	CLAUDE.md
+infrastructure/terraform/main.tf	966	cloudfront_sse	docs/ACTIVE-TECHNOLOGIES.md
+.specify/scripts/bash/update-agent-context.sh	62	CLAUDE.md	docs/ACTIVE-TECHNOLOGIES.md
