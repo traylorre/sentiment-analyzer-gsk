@@ -79,14 +79,11 @@ and should be checked before writing any dashboard code or test.
 
 ## Output schema
 
-The authoritative shapes are the Pydantic models, not prose:
-
-- `src/lambdas/shared/models/news_item.py`
-- `src/lambdas/shared/models/sentiment_result.py`
-
-The two models use different field names and disagree on nullability, so read the one for the path
-you are on. `score` is signed (`-1.0` to `1.0`) in both; `confidence` is `0.0` to `1.0` in both but
-nullable in `news_item.py` and required in `sentiment_result.py`. See `docs/MODELING.md`.
+The stored record is a plain dict keyed `source_id` / `timestamp`, assembled by ingestion and then
+amended by analysis. The Pydantic models that look authoritative, `news_item.py` and
+`sentiment_result.py`, have no callers on any live path. Read `docs/MODELING.md` before trusting
+either, and before assuming `score` is signed: the declarations allow `-1.0` to `1.0` and the live
+scorer only ever emits a probability.
 
 ## Infrastructure and deploy
 

@@ -10,8 +10,8 @@ and serves the result through a REST API and a customer dashboard.
 
 Persistence is DynamoDB. Items are deduplicated by content hash, and consumers are idempotent.
 
-Every deployed model has a version string, and inference is re-runnable against a given
-`model_version`.
+Every stored inference carries a `model_version` label. See `docs/MODELING.md` for what that
+label actually identifies, which is not the model.
 
 ## 2. Security
 
@@ -47,7 +47,9 @@ from PR checks.
 An integration test that fails has a bug in the code or in its own setup. Do not repoint a mocked
 test at real AWS to make it pass.
 
-Preprod E2E uses deterministic synthetic data: see `docs/E2E-SYNTHETIC-DATA.md`.
+Compute expected values from input you control rather than asserting against whatever preprod
+happens to hold. `docs/E2E-SYNTHETIC-DATA.md` covers the generators and the oracle, and where they
+do and do not apply.
 
 ### New code
 
