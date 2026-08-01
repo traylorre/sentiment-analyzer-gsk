@@ -371,6 +371,44 @@ class CloudDatabase(ComponentResource):
 
 ---
 
+### TD-024: npm Ecosystem Absent from Dependabot Configuration
+**Status**: Open
+**Location**: `.github/dependabot.yml`
+**Issue**: The configuration declares three ecosystems (`pip` at line 32, `github-actions` at line 98, `terraform` at line 114) and does NOT declare `npm`. Dependabot ALERTING covers npm regardless, because alerting is repository-wide and does not read this file; what is missing is automated npm version-update pull requests.
+
+**Measured**: 99 open Dependabot alerts, of which 82 are npm and 17 are pip (`repos/{owner}/{repo}/dependabot/alerts?state=open`, paginated, read 2026-07-31). The unautomated ecosystem is the one carrying 83 percent of the open advisories.
+
+**Constitution trigger**: §9, "dependency issues requiring future attention".
+
+**Why it is recorded here rather than fixed**: adding an ecosystem to `dependabot.yml` opens a version-update pull request stream against `frontend/`, which is a change in merge traffic and review load, not a one-line config edit. It belongs to its own feature with its own owner. Feature `001-codeql-coverage` recorded it because that feature's Constitution Check carries §9 as PASS **with obligation**, and leaving it unrecorded would make that row false.
+
+**Proposed Fix**: A dedicated feature that adds the `npm` ecosystem with an explicit grouping and schedule policy, sized against the existing 82 open advisories rather than against a clean slate.
+
+**Effort**: Config edit is minutes; the advisory burn-down it exposes is the real work
+**Risk**: Low to add, Medium to absorb (82 advisories become actionable pull requests)
+
+**§9(b) status**: OUTSTANDING, not discharged. §9(b) asks for a `tech-debt`-labelled GitHub issue per entry. That label does not exist in this repository and the owner has directed that it NOT be created and that no issues be raised against it, with the whole question audited once at the end of the current campaign. This entry satisfies §9(a) only.
+
+---
+
+### TD-025: Local SAST Tier Does Not Cover `frontend/`
+**Status**: Open
+**Location**: `Makefile` target `sast` (lines 76-82), `.github/workflows/pr-checks.yml` job `codeql`
+**Issue**: `make sast` runs `bandit -c pyproject.toml -r src/` and `semgrep scan --config auto ... src/`. Both are scoped to `src/` only. After feature `001-codeql-coverage` adds `javascript-typescript` to the CodeQL matrix, CodeQL analyzes `frontend/` (173 files under `frontend/src`, 101 under `frontend/tests`) and `src/dashboard` (6 files), while the local pre-push tier analyzes none of the `frontend/` half.
+
+**Why this is a widened gap and not a regression**: before that feature, neither tier covered `frontend/`. Afterwards the CI tier does and the local tier still does not, so the asymmetry between them grows. Nothing that used to be checked stopped being checked.
+
+**Constitution trigger**: §9, "known limitations". Note §10's stated acceptance criterion is scoped "≥70% coverage of CodeQL patterns **for Python**", so §10 itself is not violated; the gap is real but sits outside what §10 measures.
+
+**Proposed Fix**: Either extend the `sast` target with a JavaScript/TypeScript Semgrep ruleset over `frontend/src` and `src/dashboard`, or record a deliberate decision that the local tier stays Python-only and CodeQL is the sole JavaScript/TypeScript tier. This question is carried into `specs/001-codeql-coverage/enforcement-recommendation.md` for the named decider.
+
+**Effort**: 2-4 hours to extend, plus whatever the first clean run surfaces
+**Risk**: Low (an added local check cannot weaken an existing one)
+
+**§9(b) status**: OUTSTANDING, not discharged, for the same reason recorded in the preceding entry.
+
+---
+
 ### TD-022: chaos_restore Lambda Not Deployed via Terraform
 **Status**: Blocked - Waiting for deployer IAM permissions
 **Location**: `src/lambdas/chaos_restore/handler.py` (code complete), `infrastructure/terraform/main.tf` (TODO comment)
