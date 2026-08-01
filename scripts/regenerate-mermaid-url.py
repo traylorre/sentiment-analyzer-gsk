@@ -78,8 +78,18 @@ def validate_mermaid_syntax(code: str) -> list[str]:
         )
 
     # Check for common Mermaid syntax errors (not HTML filtering)
-    # CodeQL py/bad-tag-filter: False positive - validates Mermaid arrow syntax, not HTML
-    if re.search(r"-->\s*$", code, re.MULTILINE):  # lgtm[py/bad-tag-filter]
+    # This check is deliberately not written as a pattern match. The CodeQL rule
+    # py/bad-tag-filter fires on the pattern form, and no inline suppression
+    # comment is honoured by this repository's scanning setup, so the only fix
+    # that holds is to stop using a pattern here.
+    # Two details below are load-bearing and must not be "simplified":
+    #   - split("\n"), not splitlines(): splitlines() also breaks on \v, \f, \r,
+    #     \x85, U+2028 and U+2029, none of which regex $ treats as a line
+    #     boundary under MULTILINE. On "A -->\rB" that difference flips the
+    #     verdict from False to True.
+    #   - bare rstrip(), not rstrip(" \t"): the narrowed form disagrees with the
+    #     \s class the original expression trimmed with.
+    if any(line.rstrip().endswith("-->") for line in code.split("\n")):
         errors.append("Arrow without target node (line ends with -->)")
 
     if re.search(r"==>\s*$", code, re.MULTILINE):

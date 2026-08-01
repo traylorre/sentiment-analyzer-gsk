@@ -96,13 +96,13 @@ def store_oauth_state(
 
     table.put_item(Item=item)
 
-    safe_provider = (
-        str(provider).replace("\r\n", " ").replace("\n", " ").replace("\r", " ")[:200]
-    )
+    # py/clear-text-logging-sensitive-data: no value derived from `provider` may
+    # appear in this extra context. Removing the derived value, rather than
+    # sanitizing it in place, is the shape that closed this rule in ebcc2f4.
+    # See specs/001-oauth-provider-taint/research.md before adding a key here.
     logger.info(
         "OAuth state stored",
         extra={
-            "provider": safe_provider,
             "has_user_id": user_id is not None,
             "ttl_seconds": OAUTH_STATE_TTL_SECONDS,
         },

@@ -1,5 +1,6 @@
 """Unit tests for OAuth state management."""
 
+import logging
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
@@ -51,6 +52,27 @@ class TestStoreOAuthState:
         assert state.user_id == "u-1"
         item = mock_table.put_item.call_args.kwargs["Item"]
         assert item["user_id"] == "u-1"
+
+    def test_log_context_excludes_provider(self, mock_table, caplog):
+        """Regression guard for py/clear-text-logging-sensitive-data (alert 144).
+
+        No value derived from `provider` may reach the logger's extra context.
+        `logging` promotes every extra key to a LogRecord attribute, so this
+        asserts on the sink itself rather than on rendered output, which is bare
+        in production and would pass either way.
+        """
+        with caplog.at_level(
+            logging.INFO, logger="src.lambdas.shared.auth.oauth_state"
+        ):
+            store_oauth_state(
+                mock_table, "state-1", "google", "https://example.com/callback"
+            )
+
+        records = [r for r in caplog.records if r.getMessage() == "OAuth state stored"]
+        assert len(records) == 1
+        assert not hasattr(records[0], "provider")
+        assert records[0].has_user_id is False
+        assert records[0].ttl_seconds == OAUTH_STATE_TTL_SECONDS
 
 
 class TestGetOAuthState:
