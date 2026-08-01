@@ -52,7 +52,7 @@ ruff format --check src tests            # exits 0 (riders verified format-stabl
 ## 4. Companion deliverables (BEFORE the gates — they must pass through them)
 
 1. **FR-014 lock tests**: new `tests/unit/` module asserting, for all 7 enums: `str(member)` == `"ClassName.MEMBER"`, `.value` == wire string (verified current semantics on repo Python 3.13.0). Module docstring references the TD entry.
-2. **Tech-debt registry** (constitution §9): next sequential TD entry in `docs/reference/TECH_DEBT_REGISTRY.md` (NOT the constitution's stale flat path): 7 UP042 suppressions, root cause (unsafe autofix vs behavior-neutrality), proposed fix (StrEnum migration + serialization test sweep), effort, risk.
+2. **Tech debt**: a kanban card on `CLEANUP-BOARD.html` covering the 7 UP042 suppressions, root cause (unsafe autofix vs behavior-neutrality), proposed fix (StrEnum migration + serialization test sweep), effort, risk. Already written 2026-07-31, see T016. The registry file and the constitution section that mandated it are both gone.
 3. **FR-013 board surgery** in CLEANUP-BOARD.html (pure ASCII): ruff-drift card evidence append (corrects stale 0.15.7 citation, cites this feature; lane stays `track`); PR #902 card rewritten to live state (closed unmerged 2026-07-27, successor #971 closed by this feature per FR-009); touch up the two MASTER roll-up cards' child references ("Dependencies & CVEs": ruff #902; "CI/CD hygiene": ruff CI/dev version drift).
 
 ## 5. Gates, in order
@@ -71,7 +71,7 @@ git status --short                       # nothing unexpected = landmine retired
 git add -u src tests                     # the reformat + riders, without enumeration risk (AR#2 F8)
 git add pyproject.toml .github/workflows/pr-checks.yml .github/dependabot.yml \
         .pre-commit-config.yaml Makefile README.md CLEANUP-BOARD.html \
-        docs/reference/TECH_DEBT_REGISTRY.md tests/unit/<new lock-test module>
+        tests/unit/<new lock-test module>
 # scripts/pre-commit deletion already staged by git rm
 git status --short                       # MUST be empty of unstaged surprises before committing
 # EXPECTED at commit time: detect-secrets autostage wrapper rewrites .secrets.baseline

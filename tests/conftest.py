@@ -528,7 +528,7 @@ def assert_warning_logged(caplog, pattern: str):
 
 
 # =============================================================================
-# Synthetic Test Data Fixture (Spec 005 - TD-004)
+# Synthetic Test Data Fixture (Spec 005)
 # =============================================================================
 
 

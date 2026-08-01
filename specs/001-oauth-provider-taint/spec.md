@@ -249,10 +249,10 @@ apparently unaware of the first.
 - **FR-007**: Only after the FR-002 change is applied and refuted at the gate MAY the alert be
   dismissed as a false positive, with a written justification naming the value logged, the
   convention applied, and why the analyzer still reports the flow despite no derived value reaching
-  the sink. A dismissal is a security shortcut under constitution §9, so recording one MUST also
-  add an entry to the tech debt registry at `docs/reference/TECH_DEBT_REGISTRY.md` carrying the
-  fields §9 requires (ID, Location, Status, Root Cause, Proposed Fix, Effort, Risk). No registry
-  entry is created on the confirmed branch, where a closed finding creates no debt.
+  the sink. A dismissal is a documented security shortcut, so recording one MUST also add a kanban
+  card to `CLEANUP-BOARD.html` carrying title, lane, severity, evidence (the alert number and the
+  justification text), citation and next action. No card is created on the confirmed branch, where a closed finding
+  creates no debt.
 - **FR-008**: This feature MUST consume the convention recorded at
   `specs/001-ingestion-arn-logging/codeql-logging-convention.md` in full, not only its dismissal
   wording. That document was written under the sibling's FR-011 to be cited by this feature, and
@@ -368,8 +368,8 @@ terms, and reverting it would restore a derived-string log for no benefit.
   which branch was taken and on what observed evidence.
 - **SC-006**: If the dismissal branch is taken, the recorded justification is non-empty, matches the
   convention adopted from `001-ingestion-arn-logging`, and the artifacts show the FR-002 change was
-  applied and refuted before the dismissal was recorded. A corresponding entry exists in
-  `docs/reference/TECH_DEBT_REGISTRY.md` carrying every field constitution §9 requires.
+  applied and refuted before the dismissal was recorded. A corresponding kanban card exists on
+  `CLEANUP-BOARD.html` carrying evidence, citation and next action.
 - **SC-007**: The log call in `store_oauth_state()` carries the FR-013 comment, on whichever branch
   the gate selected, and that comment contains no suppression pragma. Verifiable by inspecting the
   merged file.

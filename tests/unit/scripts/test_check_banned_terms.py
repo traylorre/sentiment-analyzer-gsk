@@ -109,6 +109,20 @@ def test_content_mentioning_an_excluded_path_still_reports_itself(tmp_path):
     assert paths_found(tmp_path) == {"docs/inventory.md"}
 
 
+def test_agent_handoff_output_is_not_scanned(tmp_path):
+    """The gate must not measure its own output.
+
+    ``.claude/handoff/`` holds git-ignored text written by the SubagentStop hook. An agent
+    that quotes a failure line from this checker would otherwise raise the count for
+    whoever commits next, blocking every commit on any machine that has run subagents
+    while CI stayed green on a fresh clone with no such directory.
+    """
+    write(tmp_path, ".claude/handoff/sess/agent/final.md", f"the gate flagged {TERM}\n")
+    write(tmp_path, "docs/notes.md", f"we still run {TERM} here\n")
+
+    assert paths_found(tmp_path) == {"docs/notes.md"}
+
+
 def test_empty_term_list_fails_closed(tmp_path, monkeypatch):
     """FR-009: unable to detect is not the same as found nothing.
 

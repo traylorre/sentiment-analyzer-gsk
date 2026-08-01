@@ -9,7 +9,7 @@ Exclusions (documented, exact):
 - sse_streaming: owner-deferred function with its own basicConfig(INFO)
   startup path and no awslambdaric (FR-006 forbids touching it).
 - chaos_restore: code exists but the function is NOT deployed
-  (infrastructure/terraform main.tf TODO TD-2). If it ever deploys, remove
+  (see the TODO in infrastructure/terraform/main.tf). If it ever deploys, remove
   it from this set — the guard will then enforce the call.
 """
 

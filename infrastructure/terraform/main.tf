@@ -524,7 +524,7 @@ module "dashboard_lambda" {
 }
 
 # ===================================================================
-# Module: Metrics Lambda (TD-011 - Operational Monitoring)
+# Module: Metrics Lambda (Operational Monitoring)
 # ===================================================================
 
 module "metrics_lambda" {
@@ -1120,7 +1120,7 @@ module "eventbridge" {
   ingestion_lambda_arn           = module.ingestion_lambda.function_arn
   ingestion_lambda_function_name = module.ingestion_lambda.function_name
 
-  # Metrics Lambda (TD-011) - monitors for stuck items
+  # Metrics Lambda - monitors for stuck items
   create_metrics_schedule      = true
   metrics_lambda_arn           = module.metrics_lambda.function_arn
   metrics_lambda_function_name = module.metrics_lambda.function_name
@@ -1293,11 +1293,10 @@ module "chaos" {
   depends_on = [module.ingestion_lambda, module.analysis_lambda, module.dashboard_lambda, module.metrics_lambda, module.notification_lambda, module.sse_streaming_lambda, module.monitoring]
 }
 
-# TODO (TD-2): Deploy chaos_restore Lambda
+# TODO: Deploy chaos_restore Lambda
 # Code: src/lambdas/chaos_restore/handler.py (complete, tested)
 # Needs: Lambda module, IAM role (SSM + Lambda + IAM + EventBridge), SNS subscription
 # Blocked by: enable_chaos_testing = false (deployer permissions)
-# Track: docs/reference/TECH_DEBT_REGISTRY.md
 
 # ===================================================================
 # Module: AWS Amplify Frontend (Feature 1105)

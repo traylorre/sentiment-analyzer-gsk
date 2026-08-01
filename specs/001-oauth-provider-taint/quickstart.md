@@ -482,21 +482,13 @@ gh api "repos/$REPO/code-scanning/alerts/$ALERT" \
   --jq '{number, state, dismissed_reason, dismissed_comment, dismissed_at, dismissed_by: .dismissed_by.login}'
 ```
 
-Then add a registry entry, per **FR-007** and constitution §9 (security shortcuts with documented
-acceptance criteria). The file is **`docs/reference/TECH_DEBT_REGISTRY.md`**. Constitution §9 names
-`docs/TECH_DEBT_REGISTRY.md`, which has not existed since `f8db8d2` (PR #668) moved the file into
-`docs/reference/`; §9 was never updated and the stale path is carded separately. Do not create a new
-file at the §9 path.
-
-**Allocate the identifier at merge time, never from this document.** Read the registry's
-then-highest `TD-` entry at the moment the entry is written and take the next one. It ran TD-001
-through TD-023 at authoring time, but `001-ruff-bump-forward` task T016 and `001-codeql-coverage`
-Phase F both write registry entries in this same window, so any number written here is a collision
-rather than a convenience. Sibling `001-ingestion-arn-logging` (`spec.md:249`) settled the same rule
-independently. Required fields:
-`ID`, `Location` (`src/lambdas/shared/auth/oauth_state.py`, `store_oauth_state()`), `Status:
-Acceptable`, `Root Cause`, `Proposed Fix`, `Effort`, `Risk`. Link it back to this feature's
-directory.
+Then add a tech-debt card, per **FR-007** (a dismissal is a documented security shortcut).
+Add a card to
+the `CARDS` array in **`CLEANUP-BOARD.html`**, with `lane: "track"`, a `title` naming
+`store_oauth_state()`, `evidence` carrying the alert number and the exact dismissal justification,
+`citation` `src/lambdas/shared/auth/oauth_state.py`, a `next_action`, and `source` naming this
+directory. No identifier is allocated: cards have no id field, which retires the merge-time
+collision hazard this step used to guard against.
 
 Finally, recount for SC-003 as in Step 4a.
 

@@ -1,0 +1,72 @@
+[
+  {
+    "id": "p0-001",
+    "severity": "CRITICAL",
+    "claim": "The constitution's Minimal Requirements section is normative about a service that does not exist. It is not merely verbose or historical; it is factually wrong about its own subject.",
+    "evidence": {
+      "ingestion_mandate": ".specify/memory/constitution.md:13-15 requires 'Ingest text by fetching from configured external publishing endpoints (examples: Twitter tweet feed, RSS/Atom feeds)' and 'at minimum support RSS/Atom and a Twitter-style timeline API adapter'.",
+      "ingestion_actual": "ls src/lambdas/shared/adapters/ returns base.py, finnhub.py, tiingo.py. No RSS adapter, no Atom adapter, no Twitter adapter. grep -rilE 'twitter|rss|atom feed' src/ returns only src/sentiment_analyzer.egg-info/PKG-INFO, a build artifact.",
+      "sql_mandate": ".specify/memory/constitution.md:33-40 carries an eight-bullet SQL-injection subsection mandating parameterized queries, prepared statements, ORM parameter binding, separate read-only and write DB roles, stored procedures, and DB-side query auditing.",
+      "sql_actual": "grep -rilE 'psycopg|sqlalchemy|pymysql|sqlite3|rds\\.|aurora' over src/ and infrastructure/ returns exactly one file, src/lambdas/ingestion/audit.py, and that is a false positive: the regex rds\\. matched the substring 'reco[rds.]' inside the docstring 'Repository for persisting CollectionEvent audit records.' There is no SQL database in this service. Storage is DynamoDB single-table."
+    },
+    "why_it_matters": "Grounds (a) of the deletion rule, provably inaccurate against the live repo, applies to a substantial fraction of the document rather than to scattered lines. This reframes the work: the primary defect is inaccuracy, not verbosity. A sub-agent reading the SQL section will look for a database that is not there, and one reading the ingestion mandate will conclude Tiingo and Finnhub are non-compliant with the constitution.",
+    "proposed_resolution": "DEFERRED TO OWNER TRIAGE. Do not act unilaterally. The size of the inaccurate region must be measured and presented before any deletion.",
+    "status": "TRIAGED",
+    "owner_decision": {
+      "date": "2026-07-31",
+      "disposition": "Surgical prune, evaluation-gated.",
+      "detail": "Delete the inaccurate and inapplicable regions under deletion-rule ground (a) as feature F1. F1 is gated on F5 establishing the evaluation baseline first, per the brief's evaluation-first sequencing, which satisfies criterion 1 of the definition of done. A clean-sheet rewrite was considered and rejected: the load-bearing content carrying no MUST keyword and no visible heading, specifically the ExpressionAttributeNames mandate at line 99, is precisely what a rewrite fails to carry over. The three traps are a protected-relocation list, not deletions.",
+      "measurement_caveat": "47.2% by word count is a lower bound, not a measurement, because finding p0-004 shows an entire duplicated section escaped the audit's bucketing."
+    }
+  },
+  {
+    "id": "p0-002",
+    "severity": "HIGH",
+    "claim": "The constitution is at the measured near-zero compliance threshold for whole-instruction following.",
+    "evidence": {
+      "measurement": "wc -l -w .specify/memory/constitution.md returns 641 lines, 6000 words.",
+      "threshold": "The battleplan skill's own quality standard cites measured whole-instruction compliance at 27.2% at approximately 1,700 words and near zero above 6,000 words. The constitution sits at that boundary."
+    },
+    "why_it_matters": "If the cited measurement holds, the document is very likely close to unfollowed as a whole today. That is independent evidence for the >80% prune target from the Anthropic finding, and it supplies a concrete word-count goal rather than a vibe: roughly 1,700 words for meaningful compliance.",
+    "proposed_resolution": "Adopt approximately 1,700 words as the stated target for the always-loaded portion, with the remainder moved behind progressive disclosure. Owner to confirm the target.",
+    "status": "TRIAGED",
+    "owner_decision": {
+      "date": "2026-07-31",
+      "disposition": "Adopt approximately 1,700 words as the target for the always-loaded portion.",
+      "detail": "Everything beyond the target moves behind Agent Skills progressive disclosure. The number is a stopping condition for F1, deliberately NOT a hard CI gate. Enforcing it as a build failure was offered and declined, on the reasoning that a legitimate future addition would either be blocked or the threshold would be raised reflexively to make the build pass, which converts the check into a rubber stamp."
+    }
+  },
+  {
+    "id": "p0-003",
+    "severity": "MEDIUM",
+    "claim": "The constitution uses setext-style underlined headings, not ATX hash headings, which breaks naive section extraction.",
+    "evidence": {
+      "observed": "grep -nE '^#{1,3} ' .specify/memory/constitution.md returns exactly one line, the H1 title at line 1. Sections are written as 'Purpose' followed by a line of dashes.",
+      "consequence": "An awk or grep split on '^## ' returns zero sections, which is how this was discovered."
+    },
+    "why_it_matters": "Any seam analysis, conformance check, or split tooling must handle setext headings or it will silently see a single monolithic section and report success. This is a fail-open shape, the class the battleplan contract explicitly warns about.",
+    "proposed_resolution": "Normalise to ATX headings during the restructure, and assert the heading count in the conformance check so a regression is visible.",
+    "status": "OPEN"
+  },
+  {
+    "id": "p0-004",
+    "severity": "HIGH",
+    "claim": "Section 5 exists twice, under the same number, giving two different normative answers to the deployment question. This is the named 'contradictory instructions' failure mode present literally in the document, and the accuracy audit did not catch it.",
+    "evidence": {
+      "duplicate_numbering": "grep -nE '^[0-9]+\\)' .specify/memory/constitution.md returns '5) Deployment Requirements' at line 52 AND '5) Deployment Requirements (Serverless / Event-driven preferred)' at line 57. Every other number 1-10 appears exactly once.",
+      "first_section_text": "Lines 52-55 mandate 'Deploy as containerized workload (e.g., Docker) using infrastructure-as-code', 'Use a managed hosting environment (cloud VMs, serverless, or managed containers)', and 'Health-check endpoints for liveness and readiness.'",
+      "second_section_text": "Lines 57-94 mandate a specific serverless stack: 'Preferred architecture: event-driven, serverless implementation on AWS using Lambda for compute, SNS for pub/sub events, SQS for durable queues and decoupling, and DynamoDB for persistence. This stack must be described in the deployment docs and implemented via IaC.'",
+      "repo_actual_hosting": "grep -rlE 'aws_ecs_|aws_instance|aws_autoscaling' infrastructure/terraform/ returns nothing. There are no VMs and no ECS/Fargate services. Deployment is Lambda only, a mix of container-image and ZIP packaging.",
+      "repo_actual_healthcheck": "grep for health/liveness/readiness endpoints in src/ returns exactly one route, @app.get('/health') at src/lambdas/dashboard/handler.py:616. There are no separate liveness and readiness endpoints. The only other hit, src/lambdas/sse_streaming/connection.py:137, is a comment, not a route."
+    },
+    "why_it_matters": "An agent asking 'what does the constitution require for deployment?' gets two answers under one number. The first is permissive enough to bless cloud VMs and managed containers, neither of which exists here; the second is a specific serverless mandate that matches the repo. Both can be followed only by choosing one, which is the definition of a contradiction under criterion 4 of the definition of done. It also means the audit's ACCURATE/INACCURATE bucketing is a lower bound rather than a complete count, since a whole duplicated section escaped it.",
+    "proposed_resolution": "DEFERRED TO OWNER TRIAGE, per the rule that HIGH findings are triaged individually. Recommendation on the merits: delete lines 52-55 entirely under deletion-rule ground (a), provably inaccurate against the live repo, and keep the serverless section. Do not act before triage.",
+    "status": "TRIAGED",
+    "owner_decision": {
+      "date": "2026-07-31",
+      "disposition": "Delete lines 52-55 under ground (a). Keep the serverless section.",
+      "detail": "Nothing in the deleted lines is true of this service: no VMs or container services exist in Terraform, and there is one /health route rather than the mandated liveness/readiness pair. Merging salvageable content into the serverless section was offered and declined, since the serverless section already covers deployment and IaC. Re-running the whole accuracy audit was offered and declined: the duplicate is proven on its own evidence and does not need the audit to act, though 47.2% remains a lower bound for planning purposes.",
+      "executes_under": "F1, subject to the same F5 evaluation gate as p0-001."
+    }
+  }
+]
