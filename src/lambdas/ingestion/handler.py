@@ -256,25 +256,28 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         # CRITICAL: At least one adapter must be available
         # Silent failure here causes "no articles" which looks like no news
         if not tiingo_adapter and not finnhub_adapter:
+            # py/clear-text-logging-sensitive-data: the secret ARNs were
+            # interpolated into this message, which is both logged and reused as
+            # the RuntimeError message. The ARN identifies the secret, so it is
+            # removed rather than sanitized; the fixed literal below names both
+            # sources, which is all an on-call engineer needs.
             error_msg = (
-                "CONFIGURATION ERROR: Both API keys missing. "
-                f"tiingo_secret_arn={config['tiingo_secret_arn']}, "
-                f"finnhub_secret_arn={config['finnhub_secret_arn']}"
+                "CONFIGURATION ERROR: Both API keys missing (Tiingo and Finnhub)."
             )
             logger.error(error_msg)
             raise RuntimeError(error_msg)
 
         # Warn if running in degraded mode (only one source)
         if not tiingo_adapter:
-            logger.warning(
-                "Running in degraded mode: Tiingo adapter unavailable",
-                extra={"tiingo_secret_arn": config["tiingo_secret_arn"]},
-            )
+            # py/clear-text-logging-sensitive-data: the secret ARN was carried
+            # in structured context here. The message already names the source,
+            # so the attribute is dropped outright rather than sanitized.
+            logger.warning("Running in degraded mode: Tiingo adapter unavailable")
         if not finnhub_adapter:
-            logger.warning(
-                "Running in degraded mode: Finnhub adapter unavailable",
-                extra={"finnhub_secret_arn": config["finnhub_secret_arn"]},
-            )
+            # py/clear-text-logging-sensitive-data: the secret ARN was carried
+            # in structured context here. The message already names the source,
+            # so the attribute is dropped outright rather than sanitized.
+            logger.warning("Running in degraded mode: Finnhub adapter unavailable")
 
         # Get SNS client
         sns_client = _get_sns_client(config["aws_region"])

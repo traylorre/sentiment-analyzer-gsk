@@ -82,12 +82,16 @@ sast: ## Run SAST (Static Application Security Testing) - Bandit + Semgrep
 	semgrep scan --config auto --error --severity ERROR --severity WARNING src/
 	@echo "$(GREEN)✓ SAST scan complete$(NC)"
 
-audit-pragma: ## Audit pragma comments (# noqa, # nosec) for validity
-	@echo "$(YELLOW)=== Checking for unused # noqa comments (RUF100) ===$(NC)"
-	ruff check --extend-select RUF100 src/ tests/
+audit-pragma: ## Audit pragma comments (# noqa, # nosec) and dead scanning suppressions
+	@echo "$(YELLOW)=== [BLOCKING] Unused # noqa comments (RUF100) ===$(NC)"
+	ruff check --extend-select RUF100 src/ tests/ scripts/
 	@echo ""
-	@echo "$(YELLOW)=== Auditing # nosec usage (Bandit with suppressions disabled) ===$(NC)"
-	bandit -r src/ --ignore-nosec 2>/dev/null | grep -E "^(>>|Issue)" || echo "No issues found"
+	@echo "$(YELLOW)=== [BLOCKING] Dead inline scanning suppressions ===$(NC)"
+	@python3 scripts/check_dead_suppressions.py
+	@echo ""
+	@echo "$(YELLOW)=== [ADVISORY - never fails this target] # nosec usage (Bandit, suppressions disabled) ===$(NC)"
+	@bandit -r src/ scripts/ --ignore-nosec 2>/dev/null | grep -E "^(>>|Issue)" || true
+	@echo "$(YELLOW)(the line above is advisory by design; see FR-012)$(NC)"
 	@echo ""
 	@echo "$(GREEN)✓ Pragma audit complete$(NC)"
 
