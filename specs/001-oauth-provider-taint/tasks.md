@@ -14,7 +14,7 @@ to spec.md: US1 = apply the proven remediation, US2 = justified dismissal fallba
 failed approach being retried.
 
 **Tests**: FR-011 and SC-004 freeze the existing assertions. One new regression method is added under
-constitution §7, and it is written and proven failing *before* the production edit (T007, T008), which
+constitution §3 (Testing, New code), and it is written and proven failing *before* the production edit (T007, T008), which
 is the only way to show it is not vacuous.
 
 ---
@@ -39,10 +39,9 @@ was met.
    directories (re-verified 2026-07-30: 15 of one legacy framework name, 2 of another; the names are
    not written here because writing them into this directory is what that scanner exists to prevent).
    `make sast` is the substitute, per quickstart Step 1c.
-4. **No `TD-` identifier is pre-reserved.** `docs/reference/TECH_DEBT_REGISTRY.md` runs TD-001 to
-   TD-023 today. The number is read from the registry's then-highest entry at the moment the entry is
-   written, at merge time. `001-ruff-bump-forward` T016 and `001-codeql-coverage` Phase F write
-   registry entries in this same window.
+4. **No identifier is allocated at all.** Superseded 2026-07-31: the tech-debt registry was
+   deleted and debt is now a `CLEANUP-BOARD.html` kanban card, which has no id field. The
+   merge-time allocation-collision hazard this invariant guarded against no longer exists.
 5. **Repo-wide alert counts are never a criterion.** SC-003 is an attribution test. Sibling
    `001-codeql-coverage` is expected to raise the repo-wide open count on purpose, and per the owner's
    directive that is success, not regression.
@@ -525,17 +524,16 @@ any file is edited outside `specs/001-oauth-provider-taint/`.
   **Pass**: `patch exit=0`, `gh exit=0`, `$VER` non-empty, `state` is `dismissed`, `dismissed_reason`
   is `false positive`, and `dismissed_comment` is non-empty and contains all three §2 elements. A
   `PATCH` failing on permissions is an observation that routes to T028, not a retry loop.
-- [ ] **T027** [US2] Tech debt registry entry, required on this branch only (FR-007, SC-006,
-  constitution §9: a dismissal is a documented security shortcut). File is
-  **`docs/reference/TECH_DEBT_REGISTRY.md`**. Constitution §9 names `docs/TECH_DEBT_REGISTRY.md`,
-  which has not existed since `f8db8d2` (PR #668) relocated it; the stale constitution path is carded,
-  not repaired here, and no new file is created at it.
-  **Allocate the identifier at merge time** by reading the registry's then-highest `TD-` entry and
-  taking the next one. Never take a number from any spec artifact (invariant 4). Fields: `ID`,
-  `Location` (`src/lambdas/shared/auth/oauth_state.py`, `store_oauth_state()`), `Status: Acceptable`,
-  `Root Cause`, `Proposed Fix`, `Effort`, `Risk`, plus a link back to this directory.
-  **Pass**: `grep -n 'oauth_state' docs/reference/TECH_DEBT_REGISTRY.md` exits 0, and the entry's `ID`
-  is greater than every other `TD-` id in the file at the time of writing.
+- [ ] **T027** [US2] Tech debt card, required on this branch only (FR-007, SC-006: a dismissal is a
+  documented security shortcut). **Re-targeted 2026-07-31**: this task wrote a
+  `docs/reference/TECH_DEBT_REGISTRY.md` entry; `001-constitution-prune` deleted both that file and
+  the constitution section mandating it. Add a card to the `CARDS` array in **`CLEANUP-BOARD.html`**
+  instead, with `lane: "track"`, `severity` set from the surviving alert, `title` naming
+  `store_oauth_state()`, `evidence` carrying the alert number and the exact dismissal justification,
+  `citation` `src/lambdas/shared/auth/oauth_state.py`, `next_action`, and `source` naming this
+  directory. No identifier is allocated (invariant 4).
+  **Pass**: the board's `CARDS` array still parses as JSON and contains a card whose evidence names
+  the dismissed alert number.
 - [ ] **T028** **`BLOCKED-ON-OWNER`**, reached only when the T006 read-only probe resolved to *absent*
   or a T026 `PATCH` failed on permissions. Inherited from `codeql-logging-convention.md` **§5b**, not
   newly defined. Write a handoff artifact into `specs/001-oauth-provider-taint/` carrying: the exact
@@ -744,7 +742,7 @@ disagreements.
    governs and both documents now follow it.
 2. **Test-first ordering**: **open, and deliberately.** quickstart Step 1 applies the source edit (1a)
    before adding the test (1b); tasks.md inverts this (T007, T008 before T009) so the guard is proven
-   failing on unfixed code. Nothing in quickstart forbids it and the constitution §7 accompaniment gate
+   failing on unfixed code. Nothing in quickstart forbids it and the constitution §3 accompaniment gate
    is satisfied either way, so quickstart is left alone. The inverted order is what makes the guard's
    non-vacuity checkable rather than asserted, and tasks.md is the document the implementer executes.
 3. **Terminal-state count** (F-01, F-07): **closed.** All three documents now say seven and name the
@@ -838,7 +836,7 @@ output, not a restatement of the artifact.
 | `--paginate` without `--slurp`, per-page collector | prints `[]` **twice** | Confirmed |
 | `gh api --arg` | `unknown flag: --arg`; `gh version 2.89.0` | Confirmed, AR#2 X1 was a real defect |
 | T031 prior-art grep | `16` matching lines, `grep exit=0` | PASS, floor of 3 cleared |
-| T027 registry target | `docs/reference/TECH_DEBT_REGISTRY.md` exists, highest id `TD-023` | PASS, merge-time allocation remains correct |
+| T027 registry target | `docs/reference/TECH_DEBT_REGISTRY.md` exists, highest id `TD-023` | PASS when checked. **OBSOLETE 2026-07-31**: registry deleted by `001-constitution-prune`; T027 now targets `CLEANUP-BOARD.html` and allocates no id |
 | `.github/workflows/pr-checks.yml:62` | `run: ruff check src/ tests/` | Citation is accurate to the line |
 | Convention §5a / §5b | lines 132 and 144 | Citations accurate |
 
@@ -948,7 +946,9 @@ Recorded because a briefing that is never wrong is a briefing nobody checked.
    `expected`/`received` pairs for both provider and `redirect_uri`. A future CodeQL query update
    that starts reporting it will spawn alerts on a file this campaign has just churned.
 2. **Constitution §9 still names `docs/TECH_DEBT_REGISTRY.md`**, relocated by `f8db8d2` (PR #668).
-   Already noted in T027 and quickstart 4b as carded. Confirmed still stale.
+   Already noted in T027 and quickstart 4b as carded. Confirmed still stale. **RESOLVED
+   2026-07-31** by retirement rather than repair: `001-constitution-prune` deleted §9 and the
+   registry file, so there is no path left to be stale.
 3. **Five stale sibling citations (F-03)** remain, deliberately, pending the campaign-wide sweep.
    Not re-derived here.
 4. **`make sast` only scans files tracked by git** ("Scan was limited to files tracked by git", from

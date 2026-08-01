@@ -1,1068 +1,127 @@
-# sentiment-analyzer-gsk Development Guidelines
+# sentiment-analyzer-gsk
 
-Auto-generated from all feature plans. Last updated: 2025-11-26
+Repo-specific knowledge that is hard to derive from the code. Rules that bind changes are in
+`.specify/memory/constitution.md`. Architecture is in `docs/SERVICE-SHAPE.md`.
 
-## CRITICAL: Two Dashboards — Know Which One You're Touching
+This file does not restate what a source file already states. Restated facts drift and give no
+signal that they have drifted; a pointer cannot.
 
-This repo has TWO completely separate dashboards. Confusing them has caused 4 separate incidents. **STOP and verify which one you mean before writing code, tests, or fixes.**
+## CRITICAL: Two Dashboards
 
-| | Customer Dashboard (what users see) | Admin/Debug Dashboard (internal) |
+Two separate dashboards, different stacks, different routes. Confusing them has caused four
+incidents. Verify which one you mean before writing code, tests, or fixes.
+
+| | Customer Dashboard | Admin Dashboard |
 |---|---|---|
-| **Tech** | Next.js 14 + React 18 + TypeScript | Vanilla JS + HTMX + Chart.js |
+| **Tech** | Next.js 14 + React 18 + TypeScript | Vanilla JS + Chart.js |
 | **Source** | `frontend/` | `src/dashboard/` |
-| **URL** | `https://main.d29tlmksqcx494.amplifyapp.com/` | Lambda Function URL (direct) |
-| **Hosted on** | AWS Amplify | Lambda Function URL response |
-| **Auth** | "Guest" button → anonymous session | None (direct Lambda access) |
-| **API routes** | `/api/v2/configurations/{id}/sentiment` | `/api/v2/tickers/{ticker}/sentiment/history` |
-| **Data hook** | `useSentiment(configId)` in React | `fetch()` in vanilla JS |
+| **URL** | `https://main.d29tlmksqcx494.amplifyapp.com/` | Served by the dashboard Lambda |
+| **API routes** | `/api/v2/configurations/{id}/sentiment` | `/api/v2/timeseries`, `/api/v2/metrics`, `/api/v2/articles`, `/api/v2/tickers` |
+| **Data access** | `useSentiment(configId)` in React | `fetch()` in vanilla JS |
 | **Env var** | `PREPROD_FRONTEND_URL` | `DASHBOARD_URL` |
 | **Test suite** | `frontend/tests/e2e/*.spec.ts` | `tests/e2e/test_*.py` |
 | **Test runner** | `cd frontend && npx playwright test` | `pytest tests/e2e/` |
 | **Header comment** | `// Target: Customer Dashboard (Next.js/Amplify)` | `# Target: Admin Dashboard (Lambda HTMX)` |
 
-### Rules
+Rules:
 
-1. **"Dashboard" always means the customer dashboard** unless explicitly qualified as "admin dashboard" or "HTMX dashboard".
-2. **E2E/Playwright tests MUST target the Amplify URL** for customer-facing features. Testing the Lambda Function URL tests an internal tool, NOT what users see.
-3. **When fixing a bug visible to users**, verify the fix on `https://main.d29tlmksqcx494.amplifyapp.com/`, not on the Lambda Function URL.
-4. **The two dashboards use different API routes.** A fix to one endpoint may not fix the other. Always check which route the customer dashboard calls.
+- "Dashboard" means the customer dashboard unless qualified as "admin".
+- Customer-facing E2E targets the Amplify URL, never the Lambda. Verify user-visible fixes there.
 
-### Why This Keeps Happening
+Three traps in that table. There is **no HTMX** in the admin dashboard despite the header string
+saying so; the string is historical and dozens of test files carry it. The
+`check-test-target-headers` gate (`Makefile:124`) greps only
+`Target:.*(Dashboard|Infrastructure)`, so the wording after that is convention, not enforcement. Second, the dashboard Lambda no longer has a Function
+URL; it is reached through API Gateway. Third, **routes do not discriminate**: both dashboards are
+served by `src/lambdas/dashboard/handler.py` and their route sets overlap, so the API row above is
+a usage example, not a partition. Check the caller, not the route.
 
-The Lambda is named `dashboard Lambda`, the handler is `src/lambdas/dashboard/`, and it serves `src/dashboard/index.html`. When following code paths, you naturally land on the HTMX dashboard. The Next.js app is in a completely separate `frontend/` directory. All existing Playwright tests already target `DASHBOARD_URL` → Lambda. The pattern is self-reinforcing. **Break the pattern by checking this table.**
+## Where code goes
 
-## Active Technologies
-- TypeScript 5.x, Node.js 20 LTS (007-sentiment-dashboard-frontend)
-- Python 3.13 + pytest, pytest-asyncio, httpx, boto3, moto (for local unit tests only), aws-xray-sdk (008-e2e-validation-suite)
-- DynamoDB (preprod - real AWS, no mocks for E2E) (008-e2e-validation-suite)
-- Python 3.13 + pytest, pytest-asyncio, httpx, boto3, moto (unit tests only) (009-e2e-test-oracle-validation)
-- Python 3.13 (backend), TypeScript 5 (frontend) + aws-lambda-powertools, httpx 0.28.1, TradingView Lightweight Charts 5.0.9, React 18, Next.js 14.2.21, Zustand 5.0.8, React Query 5.90.11 (011-price-sentiment-overlay)
-- DynamoDB (single-table design), in-memory cache for OHLC data (011-price-sentiment-overlay)
-- Python 3.13 + pytest, pytest-asyncio, httpx, responses, moto (unit tests only) (012-ohlc-sentiment-e2e-tests)
-- N/A (test suite - no storage requirements) (012-ohlc-sentiment-e2e-tests)
-- JavaScript ES6+ (vanilla, no framework) + Hammer.js or custom touch event handling (research needed) (013-interview-swipe-gestures)
-- N/A (stateless UI feature) (013-interview-swipe-gestures)
-- Python 3.13 (backend), TypeScript 5 (frontend) + aws-lambda-powertools, boto3, pydantic (backend); React 18, Next.js 14.2.21, Zustand 5.0.8, React Query 5.90.11 (frontend) (014-session-consistency)
-- DynamoDB (single-table design with GSIs for email lookup) (014-session-consistency)
-- Python 3.13 + aws-lambda-powertools, boto3, aws-xray-sdk, awslambdaric (016-sse-streaming-lambda)
-- DynamoDB (existing tables - read-only access for SSE Lambda) (016-sse-streaming-lambda)
-- N/A (IAM Policy JSON, HCL configuration) + AWS IAM, S3, Terraform (018-tfstate-bucket-fix)
-- S3 (Terraform state bucket) (018-tfstate-bucket-fix)
-- Python 3.13 + None (stdlib `time` module only) (066-fix-latency-timing)
-- N/A (in-memory latency tracking) (066-fix-latency-timing)
-- YAML (GitHub Actions workflows, Dependabot config) + GitHub Dependabot service, dependabot/fetch-metadata@v2 action, GitHub CLI (gh) (067-dependabot-automerge-audit)
-- N/A (configuration files only) (067-dependabot-automerge-audit)
-- YAML (GitHub Actions workflow syntax), Bash (slash command) + GitHub Actions, GitHub CLI (`gh`), GitHub REST API (069-stale-pr-autoupdate)
-- N/A (workflow configuration only) (069-stale-pr-autoupdate)
-- Python 3.13 (existing project standard) + Semgrep (SAST), Bandit (Python security linter), pre-commit, Make (070-validation-blindspot-audit)
-- N/A (tooling configuration only) (070-validation-blindspot-audit)
-- Terraform (HCL) with AWS Provider ~> 5.0 + AWS IAM, aws_iam_user_policy_attachment resources (094-ecr-auth-permission)
-- N/A (IAM configuration only) (094-ecr-auth-permission)
-- Python 3.13 + boto3, pydantic, pytest (no new deps needed) (501-purge-newsapi)
-- DynamoDB (existing data NOT migrated - code-only purge) (501-purge-newsapi)
-- Python 3.13 + boto3>=1.34.0, aws-xray-sdk>=2.12.0 (502-gsi-query-optimization)
-- DynamoDB with GSIs (by_entity_status, by_sentiment, by_email) (502-gsi-query-optimization)
-- Python 3.13 + boto3, pydantic (for model validation) (503-consolidate-status-field)
-- DynamoDB (preprod-sentiment-users table with by_entity_status GSI) (503-consolidate-status-field)
-- Python 3.13 (existing project standard) + boto3, aws-xray-sdk (existing) (1003-self-healing-ingestion)
-- DynamoDB with `by_status` GSI (hash: status, range: timestamp, projection: KEYS_ONLY) (1003-self-healing-ingestion)
-- Python 3.13 (existing project standard) + aws-lambda-powertools, boto3, pydantic (1009-realtime-multi-resolution)
-- DynamoDB with new time-series table (`{env}-sentiment-timeseries`) (1009-realtime-multi-resolution)
-- Python 3.13 (for any helper scripts), Terraform HCL (infrastructure) + infracost CLI, make, jq (for parsing) (1020-validate-budget-60-month)
-- N/A (documentation output only) (1020-validate-budget-60-month)
-- Python 3.13 (backend Lambda), TypeScript 5 / React 18 (frontend) + aws-lambda-powertools (backend routing), lightweight-charts 5.0.9 (charting), React Query (data fetching) (1035-ohlc-resolution-selector)
-- Session storage for resolution preference (browser-side only) (1035-ohlc-resolution-selector)
-- TypeScript 5.x (Next.js 14 frontend) + Zustand (state), fetch API, AbortController (1112-session-init-timeout)
-- localStorage (session persistence via Zustand persist) (1112-session-init-timeout)
-- Python 3.13 + AWS Lambda, pydantic, httpx (Tiingo API client) (1113-ohlc-intraday-backend)
-- N/A (stateless API calls, module-level LRU cache) (1113-ohlc-intraday-backend)
-- Terraform 1.5+ (infrastructure change only) + AWS Amplify, Lambda Function URL (1114-cors-api-gateway-fix)
-- N/A (configuration change) (1114-cors-api-gateway-fix)
-- TypeScript 5.x, React 18.x, Next.js 14.x (App Router) + zustand 5.x, @tanstack/react-query, next-auth (not used - custom auth), tailwindcss (1122-zustand-hydration-fix)
-- localStorage (zustand persist), React Query cache (1122-zustand-hydration-fix)
-- Python 3.13 + aws-lambda-powertools, functools (stdlib), typing (stdlib) (1130-require-role-decorator)
-- N/A (roles read from JWT, no database access) (1130-require-role-decorator)
-- TypeScript 5.x (Next.js frontend) + Next.js, Zustand (state management) (1145-delete-cookies-ts)
-- N/A (removing storage mechanism) (1145-delete-cookies-ts)
-- Python 3.13 + aws-lambda-powertools, PyJWT, boto3 (DynamoDB) (1146-remove-xuserid-fallback)
-- DynamoDB (users table, sessions) (1146-remove-xuserid-fallback)
-- Python 3.13 + PyJWT (existing), AWS Lambda, boto3 (1147-jwt-aud-nbf-validation)
-- N/A (stateless validation) (1147-jwt-aud-nbf-validation)
-- Python 3.13 + aws-lambda-powertools, pydantic (cookie helpers) (1158-csrf-double-submit)
-- N/A (stateless tokens) (1158-csrf-double-submit)
-- Python 3.13 + pydantic (existing), boto3/DynamoDB (existing) (1162-user-model-federation)
-- DynamoDB (NoSQL - schema-flexible, no migration required) (1162-user-model-federation)
-- Python 3.13 + pydantic (BaseModel), threading (Lock), boto3 (DynamoDB sync) (1179-fix-quota-tracker-test-flaky)
-- DynamoDB (for persistence), in-memory cache (for fast access) (1179-fix-quota-tracker-test-flaky)
-- Python 3.13 + aws-lambda-powertools, pydantic, boto3 (DynamoDB) (1181-oauth-auto-link)
-- DynamoDB (existing users table with `by_provider_sub` GSI from Feature 1180) (1181-oauth-auto-link)
-- Python 3.13 + aws-lambda-powertools 3.23.0, boto3 1.42.17, pydantic 2.12.5, PyJWT 2.10.1, aws-xray-sdk 2.15.0 (1182-email-to-oauth-link)
-- DynamoDB with composite keys (PK/SK pattern), GSI by_email for O(1) lookups (1182-email-to-oauth-link)
-- Python 3.13 + N/A (pure refactoring, no new deps) (1184-role-enum-centralization)
-- Python 3.13 + boto3==1.42.17, aws-lambda-powertools==3.23.0, pydantic==2.12.5 (1188-session-eviction-transact)
-- DynamoDB (single table: `${environment}-sentiment-users`) (1188-session-eviction-transact)
-- Python 3.13 (backend), TypeScript/Next.js (frontend) + aws-lambda-powertools (response headers), Next.js middleware (1190-security-headers-error-codes)
-- N/A (header-only change) (1190-security-headers-error-codes)
-- Python 3.13 (backend), TypeScript 5.x (frontend) + aws-lambda-powertools, boto3 (DynamoDB), Zustand (state), BroadcastChannel API (1191-mid-session-tier-upgrade)
-- DynamoDB (existing tables: Users, Sessions) (1191-mid-session-tier-upgrade)
-- Terraform 1.5+ with AWS Provider ~> 5.0 + AWS CloudFront, S3, IAM, CloudWatch RUM (1203-remove-cloudfront-module)
-- N/A (infrastructure deletion) (1203-remove-cloudfront-module)
-- Markdown, Mermaid (documentation syntax) + N/A (documentation-only, no code dependencies) (1209-remove-cloudfront-docs)
-- N/A (file-based documentation) (1209-remove-cloudfront-docs)
-- Markdown (diagrams), Python 3.13 (URL generation script) + zlib, base64, json (all stdlib) (1215-fix-diagram-inconsistencies)
-- N/A (documentation-only) (1215-fix-diagram-inconsistencies)
-- N/A (Documentation-only changes) + grep, git (for atomic commits and verification) (001-spec-doc-cleanup)
-- Python 3.13 (pyproject.toml `requires-python = ">=3.13"`, Lambda base image `public.ecr.aws/lambda/python:3.13`) + aws-lambda-powertools 3.23.0 (routing, middleware), orjson (JSON serialization — new), pydantic 2.12.5 (validation), boto3 1.42.26 (AWS SDK), aws-xray-sdk 2.15.0 (tracing), awslambdaric (streaming — bundled in base image) (001-powertools-migration)
-- DynamoDB (existing tables unchanged), S3 (model artifacts unchanged) (001-powertools-migration)
-- Python 3.13 (existing project standard), HCL/Terraform 1.5+, YAML (GitHub Actions), Bash (validation scripts) + AWS Lambda Powertools (routing), boto3 (AWS SDK), pydantic (validation) — all already in place (1217-infra-purge)
-- N/A (no data storage changes) (1217-infra-purge)
-- Python 3.13 + aws-lambda-powertools (routing, Response), boto3 (DynamoDB client), pydantic (models), orjson (JSON serialization) (1218-ohlc-cache-reconciliation)
-- DynamoDB (`{env}-ohlc-cache`, PAY_PER_REQUEST, PK=`{ticker}#{source}`, SK=`{resolution}#{timestamp}`) (1218-ohlc-cache-reconciliation)
-- Python 3.13 (backend), TypeScript/Next.js 14 (frontend), HCL/Terraform 1.5+ (infra) + opentelemetry-sdk 1.39.1, aws-lambda-powertools 3.23.0, ADOT Collector Layer v0.102.1 (1220-xray-instrumentation-hardening)
-- N/A (observability changes only) (1220-xray-instrumentation-hardening)
-- Dockerfile (Docker multi-stage build), Python 3.13 (runtime) + Docker, aws-lambda-powertools, boto3 (1221-fix-sse-metrics-copy)
-- Python 3.13 (existing project standard) + boto3 (DynamoDB), pydantic (models), aws-lambda-powertools (routing/tracing), joserfc (JWT) (1222-auth-security-hardening)
-- DynamoDB (`{env}-sentiment-users` table with `by_provider_sub`, `by_email`, `by_cognito_sub` GSIs) (1222-auth-security-hardening)
-- TypeScript (Playwright tests), Python 3.13 (backend test utilities) + Playwright 1.58+, pytest-playwright, boto3 (DynamoDB token query) (1223-e2e-test-coverage)
-- DynamoDB (read-only for token extraction in tests) (1223-e2e-test-coverage)
-- Python 3.13 + boto3 (AWS SDK), pydantic (validation), functools (current caching) (001-cache-architecture-audit)
-- DynamoDB (quota ledger, circuit breaker state, OHLC persistent cache), S3 (ticker list) (001-cache-architecture-audit)
-- TypeScript ^5 / Next.js 14.2.21 / React ^18 + @tanstack/react-query ^5.90.11, zustand ^5.0.8, sonner ^2.0.7 (1226-frontend-error-visibility)
-- N/A (client-side state only, no persistence) (1226-frontend-error-visibility)
-- Python 3.13 (existing project standard) + aws_lambda_powertools 3.7.0 (missing from ingestion ZIP), boto3 (existing), pydantic (existing) (1227-real-sentiment-pipeline)
-- DynamoDB `{env}-sentiment-timeseries` table (existing, 678 records, PK=`{ticker}#{resolution}`, SK=ISO timestamp) (1227-real-sentiment-pipeline)
-- TypeScript 5.x (frontend), Python 3.13 (backend test relabeling) + Next.js 14, React 18, Radix UI (existing: dialog, tooltip, switch; add: dropdown-menu), Playwright 1.57, TradingView Lightweight Charts (1244-customer-e2e-coverage)
-- HCL (Terraform 1.5+, AWS Provider ~> 5.0), TypeScript (Next.js frontend) + AWS API Gateway (REST API), AWS Cognito, AWS Amplify, AWS Lambda (1253-api-gateway-cognito-auth)
-- N/A (infrastructure-only changes) (1253-api-gateway-cognito-auth)
-- HCL (Terraform 1.5+, AWS Provider ~> 5.0) + AWS API Gateway (REST API), AWS Cognito, AWS Amplify, AWS Lambda (1253-api-gateway-cognito-auth)
-- HCL (Terraform 1.5+, AWS Provider ~> 5.0) + AWS WAF v2, AWS API Gateway (existing) (1254-api-gateway-waf)
-- HCL (Terraform 1.5+, AWS Provider ~> 5.0) + AWS CloudFront, AWS WAF v2, existing SSE Lambda (1255-cloudfront-sse-waf)
-- Python 3.13 (Lambda base image `public.ecr.aws/lambda/python:3.13` for image Lambdas; managed python3.13 runtime for ZIP Lambdas) + stdlib `logging` only for the mechanism; aws-lambda-powertools 3.23.0 already present (dashboard handler) and untouched (001-lambda-log-visibility)
-- N/A (observability-only; no data-store changes) (001-lambda-log-visibility)
-- GNU Make (Makefile recipe edit), Markdown (two doc edits), HTML (board card lane move). No Python code. + None added or removed. tfsec binary itself is untouched (remains at user level on some machines). (001-tfsec-removal)
-- GNU Make (recipe edit), pip requirements + TOML (two pin edits), Python 3.13 (one-argument fix in `src/lambdas/analysis/sentiment.py` + one new unit test), Dockerfile comments (two suppressions), HTML (board card string surgery). + `semgrep==1.172.0` added to requirements-dev.txt; pyproject dev extra tightened from `>=1.50.0` to the same pin. requirements-ci.txt untouched (FR-001). No runtime dependencies change. (001-semgrep-gating)
-- Python 3.13 (tooling target; no runtime code changes). Config formats: pip requirements, TOML, YAML (GitHub Actions + pre-commit), Make, Markdown (README surgery). + ruff 0.15.14 (PyPI, verified exists); astral-sh/ruff-pre-commit tag `v0.15.14` (verified, sha `0c7b6c98`, hook ids `ruff-check`/`ruff-format` with `ruff` as legacy alias). (001-ruff-bump-forward)
-- N/A (toolchain configuration only). (001-ruff-bump-forward)
-- Python 3.13 (checker rewrite, stdlib only), GNU Make 4.3 (gate driver), Bash (existing recipe bodies) + no new dependencies; pytest (already present) for the new script unit tests (001-validate-gate-repair)
-- N/A (repository tooling only; no runtime data, no AWS resources, no persistence) (001-validate-gate-repair)
-
-- **Python 3.13** with aws-lambda-powertools, boto3, pydantic, httpx, orjson
-- **AWS Services**: DynamoDB (single-table design), S3, Lambda, SNS, EventBridge, Cognito, Amplify
-- **External APIs**: Tiingo (primary), Finnhub (secondary) for financial news sentiment
-- **Email**: SendGrid (100/day free tier)
-- **Bot Protection**: hCaptcha
-
-## Python Virtual Environment (IMPORTANT)
-
-This project uses a Python 3.13 virtual environment to ensure parity with CI and production.
-Ubuntu system Python (3.10) must remain for system tools, so **always use the venv**.
-
-### Quick Start (Every Terminal Session)
-```bash
-source .venv/bin/activate
-# Verify: python --version should show 3.13.x
-```
-
-### If venv doesn't exist (fresh clone)
-```bash
-python3.13 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements-dev.txt
-```
-
-### Running Commands
-```bash
-# With venv activated:
-pytest tests/unit/
-python -m pytest tests/unit/sse_streaming/ -v
-
-# Without activation (explicit path):
-.venv/bin/pytest tests/unit/
-.venv/bin/python -m ruff check src/
-```
-
-### Why venv?
-- Ubuntu needs Python 3.10 for system tools (apt, etc.)
-- Project requires Python 3.13 (matches CI/prod Lambda runtime)
-- `python3` symlink gets reset by apt updates
-- venv provides isolation without affecting system Python
-
-## Project Structure
-
-```text
-src/
-├── lambdas/
-│   ├── dashboard/       # API endpoints (auth, configs, alerts, notifications)
-│   ├── ingestion/       # Tiingo/Finnhub news ingestion
-│   ├── analysis/        # Sentiment analysis + ATR calculation
-│   ├── notification/    # Email alerts via SendGrid
-│   └── shared/          # Models, middleware, utilities
-│       ├── models/      # Pydantic models with DynamoDB serialization
-│       ├── middleware/  # hCaptcha, rate limiting, security headers
-│       ├── adapters/    # Tiingo/Finnhub API adapters
-│       └── cache/       # Ticker symbol cache
-tests/
-├── unit/                # Mocked tests (moto, responses)
-├── contract/            # API schema validation tests
-├── integration/         # E2E tests with mocked AWS
-└── e2e/                 # Full E2E with synthetic data
-infrastructure/
-└── terraform/
-    └── modules/         # Lambda, DynamoDB, Cognito, Amplify, etc.
-```
+- Per-Lambda code in `src/lambdas/<name>/`. The Lambdas and their roles are listed in
+  `docs/SERVICE-SHAPE.md`.
+- Shared by several Lambdas: `src/lambdas/shared/` (`models/`, `middleware/`, `adapters/`,
+  `auth/`, `errors/`, `cache/`, `utils/`).
+- Cross-cutting library code: `src/lib/`. Adding an `src/lib/` import to **SSE** code breaks the
+  image build, because the SSE Dockerfile copies that directory file by file while the dashboard
+  and analysis ones copy it wholesale. See `docs/ci-gotchas.md`.
+- `src/dashboard/` is the admin dashboard's static assets, not a Lambda.
 
 ## Commands
 
-```bash
-# Run all unit tests
-pytest tests/unit/ -v
-
-# Run specific test file
-pytest tests/unit/shared/middleware/test_rate_limit.py -v
-
-# Run tests with coverage
-pytest tests/unit/ --cov=src --cov-report=term-missing
-
-# Format code (Ruff - migrated from Black in feat(057))
-ruff format src/ tests/
-
-# Lint code
-ruff check src/ tests/
-
-# Auto-fix lint issues
-ruff check --fix src/ tests/
-
-# Validate Terraform
-cd infrastructure/terraform && terraform fmt -recursive && terraform validate
-```
-
-## Code Style
-
-- Python 3.13: Follow PEP 8, use Ruff for formatting (Black removed in feat(057))
-- Linting: Ruff (replaces flake8, isort - but NOT bandit)
-- Line length: 88 characters (pragma comments excluded from limit)
-- Configuration: pyproject.toml (single source of truth)
-- Pragma audit: `make audit-pragma` validates # noqa and # nosec comments
-
-## SAST (Static Application Security Testing)
-
-Local security scanning runs before code reaches CI. Two-tier approach:
-
-### Pre-commit: Bandit (fast, every commit)
-```bash
-# Runs automatically on commit via pre-commit hook
-# Blocks HIGH and MEDIUM severity issues
-# Config: pyproject.toml [tool.bandit]
-bandit -c pyproject.toml -r src/ -ll
-```
-
-### Make validate: Semgrep (comprehensive, before push)
-```bash
-# Run as part of make validate or standalone
-make sast                    # Run SAST only
-make validate                # Full validation including SAST
-```
-
-### Common SAST Patterns Fixed in This Repo
-- **Log injection (CWE-117)**: Use `sanitize_for_log()` from `src/lambdas/shared/logging_utils.py`
-- **Clear-text logging (CWE-312)**: Never log sensitive data; use `redact_sensitive_fields()`
-- **Hardcoded secrets (CWE-798)**: Use AWS Secrets Manager, never hardcode
-
-### When SAST Flags Issues
-1. Understand the vulnerability pattern (check CWE reference)
-2. Fix with proper sanitization or redesign
-3. Do NOT suppress without documented justification
-4. Do NOT rename variables to avoid detection
-
-## SAST (Static Application Security Testing)
-
-Local security scanning runs before code reaches CI. Two-tier approach:
-
-### Pre-commit: Bandit (fast, every commit)
-```bash
-# Runs automatically on commit via pre-commit hook
-# Blocks HIGH and MEDIUM severity issues
-# Config: pyproject.toml [tool.bandit]
-bandit -c pyproject.toml -r src/ -ll
-```
-
-### Make validate: Semgrep (comprehensive, before push)
-```bash
-# Run as part of make validate or standalone
-make sast                    # Run SAST only
-make validate                # Full validation including SAST
-```
-
-### Common SAST Patterns Fixed in This Repo
-- **Log injection (CWE-117)**: Use `sanitize_for_log()` from `src/lambdas/shared/logging_utils.py`
-- **Clear-text logging (CWE-312)**: Never log sensitive data; use `redact_sensitive_fields()`
-- **Hardcoded secrets (CWE-798)**: Use AWS Secrets Manager, never hardcode
-
-### When SAST Flags Issues
-1. Understand the vulnerability pattern (check CWE reference)
-2. Fix with proper sanitization or redesign
-3. Do NOT suppress without documented justification
-4. Do NOT rename variables to avoid detection
-
-## Git Commit Security Requirements
-
-**CRITICAL SECURITY POLICY - NEVER BYPASS**:
-
-1. **ALL commits MUST be GPG-signed** - Use `git commit -S` or `git commit --amend -S`
-2. **NEVER use `--no-gpg-sign`** - This bypasses critical security verification
-3. **If GPG signing fails**, this indicates a security configuration issue that MUST be fixed
-4. **DO NOT attempt to bypass GPG failures** - Investigate and resolve the root cause
-
-**Why This Matters**:
-- GPG signatures verify commit authenticity and prevent impersonation
-- Unsigned commits create security vulnerabilities in the supply chain
-- GPG failures often indicate misconfiguration that could affect other security tools
-
-**Correct Workflow**:
-```bash
-# Making commits
-git commit -S -m "commit message"
-
-# Amending commits
-git commit --amend -S --no-edit
-
-# If GPG fails - FIX IT, don't bypass it
-# Check GPG configuration, verify key exists, ensure agent is running
-```
-
-**Test Environment Separation**:
-- **LOCAL mirrors DEV**: Always uses mocked AWS resources (moto)
-- **PREPROD mirrors PROD**: Always uses real AWS resources
-- Preprod tests are excluded from local runs via pytest marker: `-m "not preprod"`
-- Never attempt to run preprod tests locally - they require real AWS credentials
-
-## Feature 006 Patterns
-
-### DynamoDB Key Design (Single-Table)
-```python
-# User: pk="USER#{user_id}", sk="PROFILE"
-# Configuration: pk="USER#{user_id}", sk="CONFIG#{config_id}"
-# Alert Rule: pk="CONFIG#{config_id}", sk="ALERT#{alert_id}"
-# Notification: pk="USER#{user_id}", sk="NOTIF#{timestamp}#{notification_id}"
-# Magic Link Token: pk="TOKEN#{token}", sk="TOKEN"
-# Rate Limit: pk="RATE#{client_ip}#{action}", sk="RATE"
-# Circuit Breaker: pk="CB#{service}", sk="STATE"
-# Quota Tracker: pk="QUOTA#{service}", sk="DAILY#{date}"
-```
-
-### Pydantic Model Pattern
-All shared models in `src/lambdas/shared/models/` follow this pattern:
-```python
-class Configuration(BaseModel):
-    config_id: str = Field(default_factory=lambda: str(uuid4()))
-    user_id: str
-    name: str = Field(max_length=100)
-    tickers: list[TickerConfig] = Field(max_length=5)
-
-    @property
-    def pk(self) -> str:
-        return f"USER#{self.user_id}"
-
-    @property
-    def sk(self) -> str:
-        return f"CONFIG#{self.config_id}"
-
-    def to_dynamodb_item(self) -> dict[str, Any]:
-        """Serialize to DynamoDB item format."""
-
-    @classmethod
-    def from_dynamodb_item(cls, item: dict[str, Any]) -> "Configuration":
-        """Deserialize from DynamoDB item format."""
-```
-
-### Middleware Usage
-```python
-from src.lambdas.shared.middleware import (
-    add_security_headers,
-    check_rate_limit,
-    get_client_ip,
-    verify_captcha,
-)
-
-# In handler:
-client_ip = get_client_ip(event)
-rate_result = check_rate_limit(table, client_ip, action="config_create")
-if not rate_result.allowed:
-    return add_security_headers({"statusCode": 429, "body": "..."})
-```
-
-### X-Ray Tracing Pattern
-```python
-from aws_xray_sdk.core import xray_recorder, patch_all
-patch_all()  # After stdlib, before local imports
-
-@xray_recorder.capture("function_name")
-def my_function():
-    pass
-```
-
-### Testing Patterns
-- **Unit tests**: Use `moto` for DynamoDB, `responses` for HTTP mocking
-- **Contract tests**: Validate API response schemas match `specs/006-*/contracts/*.md`
-- **Integration tests**: Use `E2ETestContext` fixture with synthetic data generators
-- **All external APIs mocked**: Tiingo, Finnhub, SendGrid, hCaptcha
-
-## Feature 007 Frontend Patterns
-
-### Tech Stack
-- **Next.js 14** with App Router (`'use client'` directives)
-- **shadcn/ui** (Tailwind + Radix primitives)
-- **Zustand** for client state with persistence
-- **React Query** (@tanstack/react-query) for server state
-- **Framer Motion** for animations
-- **Lightweight Charts** (TradingView) for sentiment charts
-- **Vitest** for unit tests, **Playwright** for E2E
-
-### Frontend Commands
-```bash
-cd frontend/
-
-# Development
-npm run dev              # Start dev server at localhost:3000
-npm run build            # Production build
-npm run typecheck        # TypeScript type checking
-
-# Testing
-npm test                 # Run unit tests (Vitest)
-npm run test:watch       # Watch mode
-npm run test:e2e         # Run E2E tests (Playwright)
-npm run test:e2e:ui      # Playwright UI mode
-```
-
-### Component Patterns
-```tsx
-// Dynamic import for heavy components (reduces bundle size)
-const SentimentChart = dynamic(
-  () => import('@/components/charts/sentiment-chart').then((mod) => ({ default: mod.SentimentChart })),
-  { loading: () => <ChartSkeleton />, ssr: false }
-);
-
-// Accessibility: All interactive elements need:
-// - role, aria-label, tabIndex
-// - keyboard handlers (Enter/Space)
-// - focus-visible ring styling
-```
-
-### State Management
-```tsx
-// Zustand store with persistence
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-
-const useStore = create(persist((set) => ({
-  value: 'default',
-  setValue: (value) => set({ value }),
-}), { name: 'store-name' }));
-
-// React Query for server state
-const { data, isLoading } = useQuery({
-  queryKey: ['configs'],
-  queryFn: fetchConfigs,
-});
-```
-
-### Testing Patterns
-```tsx
-// Mock framer-motion for unit tests
-vi.mock('framer-motion', () => ({
-  motion: { div: (props) => <div {...props} /> },
-  AnimatePresence: ({ children }) => <>{children}</>,
-}));
-
-// Mock zustand stores
-vi.mock('@/stores/auth-store', () => ({
-  useAuthStore: vi.fn(() => ({ user: mockUser })),
-}));
-```
-
-## Feature 016 SSE Lambda Patterns
-
-### Two-Lambda Architecture
-The project uses two Lambdas for different concerns:
-- **Dashboard Lambda**: REST APIs with BUFFERED invoke mode (Powertools resolver)
-- **SSE Lambda**: Streaming with RESPONSE_STREAM invoke mode (custom Runtime API bootstrap)
-
-```text
-src/lambdas/
-├── dashboard/           # REST APIs (BUFFERED mode via Powertools)
-│   ├── handler.py       # Powertools APIGatewayRestResolver
-│   └── ...
-└── sse_streaming/       # SSE streaming (RESPONSE_STREAM mode via custom bootstrap)
-    ├── Dockerfile       # Docker image with custom Runtime API bootstrap
-    ├── handler.py       # Generator-based SSE handler
-    ├── connection.py    # Thread-safe ConnectionManager
-    ├── stream.py        # SSE event generators
-    ├── polling.py       # DynamoDB polling service
-    ├── config.py        # Configuration lookup service
-    ├── models.py        # SSE event models (Pydantic)
-    └── metrics.py       # CloudWatch metrics helper
-```
-
-### SSE Lambda Commands
-```bash
-# Run SSE streaming unit tests
-PYTHONPATH=. pytest tests/unit/sse_streaming/ -v
-
-# Run specific SSE test file
-PYTHONPATH=. pytest tests/unit/sse_streaming/test_connection.py -v
-
-# Run E2E SSE tests (requires preprod)
-pytest tests/e2e/test_sse.py -v -m preprod
-
-# Local development (requires Docker)
-cd src/lambdas/sse_streaming
-docker build -t sse-lambda .
-docker run -p 8080:8080 -e AWS_LAMBDA_FUNCTION_NAME=local sse-lambda
-```
-
-### SSE Endpoint Patterns
-```python
-# Global stream (public, no auth)
-@app.get("/api/v2/stream")
-async def global_stream(request: Request):
-    # Available to all users, broadcasts all metrics
-    return EventSourceResponse(sse_event_generator(connection))
-
-# Config-specific stream (requires X-User-ID header)
-@app.get("/api/v2/configurations/{config_id}/stream")
-async def config_stream(
-    request: Request,
-    config_id: str,
-    x_user_id: Optional[str] = Header(None, alias="X-User-ID"),
-):
-    # Validates X-User-ID (401 if missing)
-    # Validates config ownership (404 if not found)
-    # Filters events to config's tickers only
-    return EventSourceResponse(sse_event_generator(connection, ticker_filters))
-
-# Stream status (connection info)
-@app.get("/api/v2/stream/status")
-async def stream_status():
-    return {"connections": count, "max_connections": 100, "available": 100 - count}
-```
-
-### Connection Management
-```python
-from src.lambdas.sse_streaming.connection import connection_manager
-
-# Thread-safe connection tracking (100 max per Lambda instance)
-connection = connection_manager.add_connection(config_id, ticker_filters)
-try:
-    async for event in sse_event_generator(connection):
-        yield event
-finally:
-    connection_manager.remove_connection(connection.connection_id)
-```
-
-### SSE Event Models
-```python
-# Event types: heartbeat, metrics, sentiment_update
-from src.lambdas.sse_streaming.models import (
-    HeartbeatData,      # {"type": "heartbeat", "timestamp": "..."}
-    MetricsEventData,   # {"type": "metrics", "total": N, ...}
-    SentimentUpdateData # {"type": "sentiment_update", "ticker": "...", ...}
-)
-```
-
-### Testing SSE Endpoints
-SSE handler tests use `make_function_url_event()` and `parse_streaming_response()` from `tests/conftest.py`:
-
-```python
-from src.lambdas.sse_streaming.handler import handler
-from tests.conftest import make_function_url_event, parse_streaming_response
-
-def test_stream_status():
-    event = make_function_url_event(path="/api/v2/stream/status")
-    gen = handler(event, None)
-    metadata, body = parse_streaming_response(gen)
-    assert metadata["statusCode"] == 200
-
-def test_config_stream_requires_auth():
-    event = make_function_url_event(path="/api/v2/configurations/test/stream")
-    gen = handler(event, None)
-    metadata, body = parse_streaming_response(gen)
-    assert metadata["statusCode"] == 401
-```
-
-### Frontend SSE Integration
-```javascript
-// config.js - Two-Lambda architecture
-const CONFIG = {
-    API_BASE_URL: '',      // Dashboard Lambda (REST)
-    SSE_BASE_URL: '',      // SSE Lambda (streaming) - set in production
-    ENDPOINTS: {
-        STREAM: '/api/v2/stream'
-    }
-};
-
-// app.js - Use SSE_BASE_URL for streaming
-const baseUrl = CONFIG.SSE_BASE_URL || CONFIG.API_BASE_URL;
-const streamUrl = `${baseUrl}${CONFIG.ENDPOINTS.STREAM}`;
-const eventSource = new EventSource(streamUrl);
-```
-
-## Lessons Learned (Agent Workflow)
-
-### CRITICAL: Follow Slash Command Semantics
-
-When a user invokes `/speckit.specify`, ALWAYS follow the specify workflow - even if prior context suggests implementation is in progress. The slash command itself is the instruction.
-
-**Bad pattern**: User says `/speckit.specify fix PR #319` → Agent jumps straight to rebasing and pushing
-**Good pattern**: User says `/speckit.specify fix PR #319` → Agent creates/updates spec, waits for approval
-
-### Pre-Push Checklist (MANDATORY)
-
-Before ANY push to remote, check these in order:
+Task commands live in the Makefile; `make help` lists them. Prefer the make targets over raw
+pytest, so you run the same gates CI does.
 
 ```bash
-gh api repos/{owner}/{repo}/code-scanning/alerts --jq '.[] | select(.state == "open") | {rule: .rule.id, file: .most_recent_instance.location.path}'
-
-# 2. Local validation
-make validate
-
-# 3. Unit tests
-make test-unit
-
-# 4. Check PR CI status won't break
-gh pr checks <PR_NUMBER>  # if updating existing PR
+make validate      # format, lint, security, sast, banned terms, header + race guards
+make test-local    # unit + integration
+make test-unit     # unit only
+make sast          # semgrep
+make audit-pragma  # audits # noqa and # nosec (NOT part of make validate)
 ```
 
-**Never conflate "CI passed" with "ready to merge"** - CodeQL security alerts exist independently of PR checks.
-
-### Escalate Early, Report Honestly
-
-In a blameless postmortem culture:
-- Report blockers immediately rather than pushing past them
-- Share root causes honestly, even if they reflect poorly
-- Ask for clarification when instructions seem ambiguous
-- Don't let continuation context override explicit user commands
-
-### Common Failure Modes
-
-| Symptom | Root Cause | Prevention |
-|---------|------------|------------|
-| Push succeeds, security alerts remain | Didn't check `/security` tab | Add `gh api` security check to pre-push |
-| Merged PR breaks deploy | IAM permissions not tested | Run `/iam-audit` before merge |
-| Context continuation bypasses workflow | Over-indexed on "continue without asking" | Slash commands override context |
-| Log injection warnings | User input logged directly | Use `sanitize_for_log()` helper |
-
-### Pre-commit Hook Ordering (File-Modifying Hooks)
-
-**Problem**: Hooks that modify files can cause infinite loops when they depend on each other's output.
-The canonical example: `detect-secrets` stores line numbers in `.secrets.baseline`, but formatters
-change line counts, causing baseline drift → commit fails → add baseline → repeat.
-
-**File-Modifying Hooks (in execution order)**:
-
-| Order | Hook | Modifies | Line-Sensitive | Notes |
-|-------|------|----------|----------------|-------|
-| 1 | trailing-whitespace | ✓ | ✗ | Strips trailing whitespace |
-| 2 | end-of-file-fixer | ✓ | ✗ | Ensures newline at EOF |
-| 3-8 | check-* | ✗ | ✗ | Read-only validators |
-| 9 | ruff | ✓ | ✓ | May add/remove lines (imports, etc.) |
-| 10 | ruff-format | ✓ | ✓ | May reflow long lines |
-| 11 | terraform_fmt | ✓ | ✗ | Only affects .tf files |
-| 12-13 | terraform_* | ✗ | ✗ | Security scanners |
-| 14 | detect-secrets | ✓ | ✓ | Updates line numbers in baseline |
-| 15-17 | gitleaks, bandit, etc. | ✗ | ✗ | Read-only security scanners |
-
-**Solution**: `scripts/detect-secrets-autostage.sh` wrapper auto-stages baseline updates.
-See `.pre-commit-config.yaml` for the local hook configuration.
-
-**Three Strategies to Eliminate Churn**:
-
-1. **Auto-stage wrapper (IMPLEMENTED)**: Wrapper script runs hook, auto-stages baseline if
-   modified, retries until stable. Best balance of functionality and convenience.
-
-2. **Slim baseline**: Run `detect-secrets scan --slim > .secrets.baseline` to omit line
-   numbers. Loses audit capability (`detect-secrets audit` won't work).
-
-3. **CI-only detection**: Remove from pre-commit, run fresh scan in CI. Loses local
-   protection but eliminates all local churn.
-
-### When Resuming from Context Summary
-
-1. Read the summary, but don't let it override explicit user instructions
-2. If the user invokes a slash command, follow that command's workflow
-3. When in doubt, ask: "Should I continue the prior work or start the new workflow?"
-
-### Orphan Branch Prevention (143)
-
-**Problem**: Branches pushed to remote without a PR become orphaned. This happens when:
-1. A push fails (e.g., branch name collision)
-2. You create a new branch locally
-3. The original branch is left on remote without cleanup
-
-**Prevention**: The `check-branch-collision` pre-push hook detects orphaned branches.
-
-**Atomic Push + PR Pattern** (Recommended):
-```bash
-# Always create PR immediately after push
-git push -u origin HEAD && gh pr create --fill && gh pr merge --auto --squash --delete-branch
-```
-
-**Manual Cleanup** (if orphan exists):
-```bash
-# Find orphaned branches (no PR associated)
-for branch in $(git branch -r | grep -v HEAD | grep -v main | sed 's/origin\///'); do
-  pr_count=$(gh pr list --state all --head "$branch" --json number --jq 'length')
-  if [ "$pr_count" = "0" ]; then
-    echo "ORPHAN: $branch"
-    git push origin --delete "$branch"
-  fi
-done
-```
-
-**Recovery from Push Failure**:
-```bash
-# If push fails due to existing branch
-git push origin --delete BRANCH_NAME  # Delete orphan first
-git push -u origin HEAD               # Then push again
-```
-
-### CORS Wildcard + Credentials
-
-**Problem**: `Access-Control-Allow-Headers: *` silently fails when `credentials: 'include'` is used on fetch.
-
-**Why**: Per CORS spec, wildcard `*` is treated as the literal string "*" (not a wildcard) when credentials mode is enabled. The browser rejects the preflight and the fetch silently fails.
-
-**Symptom**: API calls return no data. Frontend shows "No tickers found" or empty state. No error in console (CORS failures are opaque).
-
-**Fix**: Replace `*` with explicit header list:
-```python
-self.send_header(
-    "Access-Control-Allow-Headers",
-    "Content-Type, Authorization, Accept, Cache-Control, "
-    "Last-Event-ID, X-Amzn-Trace-Id, X-User-ID",
-)
-```
-
-**Prevention**: Never use `Access-Control-Allow-Headers: *` when `Access-Control-Allow-Credentials: true` is set.
-
-### Dockerfile Selective COPY and Transitive Dependencies
-
-**Problem**: SSE Lambda Dockerfile selectively copies `lib/timeseries/` but not `lib/metrics.py`. When `fanout.py` gained an import of `src.lib.metrics`, the smoke test failed with `ModuleNotFoundError` and blocked all deploys.
-
-**Why**: The analysis and dashboard Dockerfiles use `COPY lib /var/task/src/lib` (copy everything), but the SSE Dockerfile was selective for image size. When a new transitive dependency was added, the Dockerfile wasn't updated.
-
-**Fix**: Add explicit COPY for each dependency:
-```dockerfile
-COPY lib/timeseries /var/task/src/lib/timeseries
-COPY lib/metrics.py /var/task/src/lib/metrics.py
-```
-
-**Prevention**: When adding imports to modules that are copied into Docker images, check all Dockerfiles that include the importing module. The CI smoke test catches this, but only after a push to main triggers the deploy pipeline.
-
-## Feature 072 Market Data Ingestion Patterns
-
-### Deduplication Key Generation
-```python
-from src.lambdas.shared.utils.dedup import generate_dedup_key
-
-# Generate 32-char SHA256 dedup key (date-only granularity)
-dedup_key = generate_dedup_key(
-    headline="Apple Reports Q4 Earnings",
-    source="tiingo",  # or "finnhub"
-    published_at=datetime(2025, 12, 9, 14, 30, 0, tzinfo=UTC)
-)
-# Result: "a1b2c3d4e5f6789012345678901234ab"  # pragma: allowlist secret
-```
-
-### NewsItem DynamoDB Schema
-```python
-from src.lambdas.shared.models.news_item import NewsItem, SentimentScore
-
-item = NewsItem(
-    dedup_key="a1b2c3d4e5f6789012345678901234ab",  # pragma: allowlist secret
-    source="tiingo",
-    headline="Apple Reports Q4 Earnings",
-    published_at=datetime(2025, 12, 9, 14, 30, 0, tzinfo=UTC),
-    ingested_at=datetime.now(UTC),
-    tickers=["AAPL"],
-    sentiment=SentimentScore.from_score(0.75, 0.92),  # Auto-derives label
-)
-
-# DynamoDB keys
-item.pk  # "NEWS#a1b2c3d4e5f6789012345678901234ab"
-item.sk  # "tiingo#2025-12-09T14:35:00+00:00"
-```
-
-### FailoverOrchestrator Pattern
-```python
-from src.lambdas.shared.failover import FailoverOrchestrator
-
-orchestrator = FailoverOrchestrator(
-    primary_adapter=tiingo_adapter,
-    secondary_adapter=finnhub_adapter,
-    timeout_seconds=10,  # FR-002: Failover within 10 seconds
-)
-
-result = await orchestrator.get_news_with_failover(tickers=["AAPL", "TSLA"])
-# Returns: (news_items, source_used, is_failover)
-```
-
-### ConsecutiveFailureTracker Pattern
-```python
-from src.lambdas.shared.failure_tracker import ConsecutiveFailureTracker
-
-tracker = ConsecutiveFailureTracker(
-    window_minutes=15,  # FR-008: 15-minute window
-    threshold=3,        # FR-008: 3 consecutive failures
-)
-
-tracker.record_failure()
-if tracker.should_alert():
-    # Publish SNS alert to operations team
-    pass
-```
-
-### Market Hours Utilities
-```python
-from src.lambdas.shared.utils.market import is_market_open, get_cache_expiration
-
-# Check if NYSE is open (9:30 AM - 4:00 PM ET, weekdays)
-if is_market_open():
-    # Collect fresh data
-    pass
-
-# Get cache expiration (expires at market close or next open)
-expiration = get_cache_expiration()
-```
-
-### CollectionEvent Audit Trail
-```python
-from src.lambdas.shared.models.collection_event import CollectionEvent
-
-event = CollectionEvent(
-    triggered_at=datetime.now(UTC),
-    status="success",
-    source_used="tiingo",
-    is_failover=False,
-    items_collected=50,
-)
-
-completed = event.mark_completed(
-    status="success",
-    items_stored=10,
-    items_duplicates=40,
-)
-# Automatically calculates duration_ms
-```
-
-### Alerting Pattern (US4)
-```python
-from src.lambdas.ingestion.alerting import AlertPublisher
-
-publisher = AlertPublisher(
-    topic_arn="arn:aws:sns:us-east-1:123456789012:ingestion-alerts",
-    sns_client=sns_client,
-)
-
-# Alert on consecutive failures (3 within 15 min)
-publisher.publish_failure_alert(
-    source="tiingo",
-    consecutive_failures=3,
-    window_minutes=15,
-    error_message="Connection timeout after 10 seconds",
-)
-```
-
-### Notification Pattern (Phase 7)
-```python
-from src.lambdas.ingestion.notification import NotificationPublisher, NewDataNotification
-from src.lambdas.ingestion.storage import store_news_items_with_notification
-
-# Storage with automatic downstream notification
-result, notification_id = store_news_items_with_notification(
-    table=dynamodb_table,
-    articles=news_articles,
-    source="tiingo",
-    notification_publisher=publisher,
-    collection_timestamp=datetime.now(UTC),
-    is_failover=False,
-)
-# notification_id is None if no new items stored (all duplicates)
-```
-
-### Metrics Pattern (US4)
-```python
-from src.lambdas.ingestion.metrics import MetricsPublisher, CollectionMetrics
-
-publisher = MetricsPublisher(cloudwatch_client=cw_client)
-
-# Record collection metrics
-publisher.record_collection(CollectionMetrics(
-    source="tiingo",
-    success=True,
-    latency_ms=1500,
-    items_collected=50,
-    items_duplicate=40,
-    is_failover=False,
-))
-
-# Check latency threshold (30s = 3x normal timeout)
-if publisher.check_latency_threshold(latency_ms=35000, source="tiingo"):
-    # High latency alert generated
-    pass
-
-# Record notification latency (30s SLA per FR-004)
-sla_met = publisher.record_notification_latency(latency_ms=500, source="tiingo")
-```
-
-### Troubleshooting Ingestion
-
-| Symptom | Likely Cause | Fix |
-|---------|--------------|-----|
-| All items are duplicates | Same news already ingested | Expected behavior - dedup working |
-| Failover not triggering | Timeout not exceeded | Check timeout config (10s default) |
-| No alerts on failure | Threshold not reached | Need 3 failures in 15-min window |
-| Stale data outside market hours | Expected behavior | 1-hour staleness acceptable per spec |
-| High latency alerts | Network/API slowness | Check source API status, adjust timeout |
-| Notification SLA exceeded | Storage slow or high volume | Check DynamoDB capacity |
-
-### Ingestion Commands
-```bash
-# Run ingestion unit tests
-pytest tests/unit/ingestion/ -v
-
-# Run specific test module
-pytest tests/unit/ingestion/test_alerting.py -v
-
-# Run integration tests
-pytest tests/integration/ingestion/ -v
-
-# Check metrics
-aws cloudwatch get-metric-data --metric-data-queries '[...]' --start-time ... --end-time ...
-```
+Frontend tasks are `cd frontend && npm run <script>`; the scripts are in `frontend/package.json`.
+
+Python work needs the venv, which is 3.13 while system Python is not:
+`source .venv/bin/activate`. Terraform commits need it active too, or the checkov hook crashes.
+
+## Gotchas that cost real time
+
+- **`make validate` does not rewrite your working tree.** Its first stage is `fmt-check`
+  (`Makefile:85`), not `fmt`. The mutating `fmt` target still exists (`Makefile:138`) and nothing
+  in `validate` calls it. `make -n validate` is refused outright, because `-n` propagates to the
+  sub-makes and every stage would report success without running.
+- **Semgrep is the only security scanner that gates.** `pip-audit` (`Makefile:161`) and `bandit`
+  (`Makefile:175`) both end in `|| true`, so a green run is no evidence either found nothing. The
+  `security` stage that carries `pip-audit` is declared ADVISORY in the driver, so it cannot fail
+  the run even in principle. Bandit is slated for removal in favour of semgrep, so do not fix,
+  harden, or extend its invocations. Every other stage is BLOCKING: `fmt-check`, `lint`, `sast`,
+  `check-banned-terms`, `check-test-target-headers` and `check-waitforresponse-race`. The driver
+  runs all of them and reports each before failing, so one broken stage no longer hides the ones
+  behind it.
+- **SSE handler tests** need `make_function_url_event()` and `parse_streaming_response()` from
+  `tests/conftest.py`. A hand-built API Gateway event returns 404 and reads as a routing bug.
+- **Checking security alerts before a push:** filtering `state` client-side returns 0, because the
+  default page is truncated. Query server-side instead:
+
+  ```bash
+  gh api 'repos/traylorre/sentiment-analyzer-gsk/code-scanning/alerts?state=open&per_page=100' --jq length
+  ```
+
+  CI green is not the same as no open alerts.
+- **Push and open the PR in one step** or the branch orphans:
+  `git push -u origin HEAD && gh pr create --fill`. The `check-branch-collision` pre-push hook
+  catches orphans that slip through.
+- **`terraform init` needs `-backend-config=backend-preprod.hcl`.** Bare init fails; `main.tf`
+  carries no bucket name. State locking is **not** configured, so running terraform locally during
+  a CI deploy is an unprotected concurrent write rather than a lock conflict.
+  See `docs/runbooks/terraform-state.md`.
+- **Two `generate_dedup_key` functions exist and they behave differently.** The live ingestion
+  handler uses the two-argument one at `src/lambdas/ingestion/dedup.py:59` (headline and publish
+  date only, so the same story from two publishers collides on purpose). The three-argument
+  version at `src/lambdas/shared/utils/dedup.py:11` also hashes source and is **not** on the live
+  path, despite living under `shared/` with the fuller docstring. Reading either file alone gives
+  you the wrong answer.
+
+## Active Technologies
+
+Audited inventory: `docs/ACTIVE-TECHNOLOGIES.md`. The manifests (`requirements.txt`,
+`pyproject.toml`, `frontend/package.json`) are authoritative for versions.
+
+`.specify/scripts/bash/update-agent-context.sh` appends new feature entries under this heading.
+Move them into the inventory file rather than letting them accumulate here.
 
 ## Recent Changes
-- 001-validate-gate-repair: Repairs `make validate` so every stage runs and reports truthfully; rewrites the legacy-term checker as stdlib-only Python with unit tests; corrects the test-target-header guard's scope. No new dependencies.
-- 001-ruff-bump-forward: Added Python 3.13 (tooling target; no runtime code changes). Config formats: pip requirements, TOML, YAML (GitHub Actions + pre-commit), Make, Markdown (README surgery). + ruff 0.15.14 (PyPI, verified exists); astral-sh/ruff-pre-commit tag `v0.15.14` (verified, sha `0c7b6c98`, hook ids `ruff-check`/`ruff-format` with `ruff` as legacy alias).
-- 001-semgrep-gating: Added GNU Make (recipe edit), pip requirements + TOML (two pin edits), Python 3.13 (one-argument fix in `src/lambdas/analysis/sentiment.py` + one new unit test), Dockerfile comments (two suppressions), HTML (board card string surgery). + `semgrep==1.172.0` added to requirements-dev.txt; pyproject dev extra tightened from `>=1.50.0` to the same pin. requirements-ci.txt untouched (FR-001). No runtime dependencies change.
 
-<!-- MANUAL ADDITIONS START -->
+The stack inventory lives in `docs/ACTIVE-TECHNOLOGIES.md`. `update-agent-context.sh` appends to
+both headings above; fold what lands there into that file rather than letting it accumulate.
 
-## GitHub CLI Setup
+## Pointers
 
-Install gh CLI for checking CI results and managing PRs:
-
-```bash
-# Install to local bin (no sudo required)
-mkdir -p ~/.local/bin
-curl -sL https://github.com/cli/cli/releases/download/v2.40.1/gh_2.40.1_linux_amd64.tar.gz | tar xz -C /tmp
-mv /tmp/gh_2.40.1_linux_amd64/bin/gh ~/.local/bin/
-export PATH="$HOME/.local/bin:$PATH"
-
-# One-time authentication
-gh auth login
-```
-
-**Auth login steps:**
-1. Where do you use GitHub? → `GitHub.com`
-2. Preferred protocol? → `HTTPS`
-3. Authenticate Git with credentials? → `Yes`
-4. How to authenticate? → `Login with a web browser`
-
-A one-time code will appear (8 characters). Copy just the code itself, then paste it in the browser when prompted.
-
-```bash
-# Check CI workflow runs
-gh run list --repo traylorre/sentiment-analyzer-gsk --limit 5
-
-# View specific run details
-gh run view <run-id> --repo traylorre/sentiment-analyzer-gsk
-```
-
-## Terraform Backend Setup (One-Time)
-
-Before CI/CD deploys will work, you must set up the Terraform state backend:
-
-```bash
-# 1. Create the S3 bucket and DynamoDB table for state
-cd infrastructure/terraform/bootstrap
-terraform init
-terraform apply
-
-# 2. Note the bucket name from output
-terraform output state_bucket_name
-
-# 3. Update main.tf with your bucket name
-# Edit infrastructure/terraform/main.tf and replace
-# "sentiment-analyzer-terraform-state-YOUR_ACCOUNT_ID" with the actual bucket name
-
-# 4. Initialize main terraform with S3 backend
-cd ../
-terraform init
-
-# 5. Import existing secrets (if they exist in AWS)
-terraform import -var="environment=dev" module.secrets.aws_secretsmanager_secret.newsapi dev/sentiment-analyzer/newsapi
-terraform import -var="environment=dev" module.secrets.aws_secretsmanager_secret.dashboard_api_key dev/sentiment-analyzer/dashboard-api-key
-
-# 6. Verify everything is in state
-terraform plan -var="environment=dev"
-```
-
-After this setup, CI/CD deployments will persist state in S3 and won't recreate existing resources.
-
-## Terraform State Management
-
-### How State Locking Works
-
-Terraform uses **S3 native locking** to prevent concurrent modifications. Lock files are stored as `.tflock` files directly in the S3 state bucket. The CI/CD pipeline handles most lock scenarios automatically:
-
-1. **Concurrency control**: Only one deployment runs at a time (GitHub Actions `concurrency` group)
-2. **Lock timeout**: Terraform waits up to 5 minutes for locks to be released (`-lock-timeout=5m`)
-3. **Lock detection**: CI checks for existing lock files before each deploy and provides guidance
-4. **Automatic cleanup**: Terraform removes lock files when operations complete normally
-
-### Best Practices
-
-- **Never run terraform locally while CI is deploying** - This causes lock conflicts
-- **Don't cancel running deploy workflows** - This may leave orphaned lock files
-- **Use the GitHub Actions UI** to trigger deploys, not local terraform
-
-### Manual State Lock Recovery
-
-If a lock file is orphaned, you can manually unlock:
-
-```bash
-cd infrastructure/terraform
-terraform init
-
-# Get the Lock ID from the error message or workflow logs, then:
-terraform force-unlock <LOCK_ID>
-
-# Example:
-terraform force-unlock 4a2b102d-2da5-6055-25d4-0aa01be88bbb
-```
-
-Or delete the lock file directly via AWS CLI:
-
-```bash
-# For preprod
-aws s3 rm s3://sentiment-analyzer-terraform-state-218795110243/preprod/terraform.tfstate.tflock
-
-# For prod
-aws s3 rm s3://sentiment-analyzer-terraform-state-218795110243/prod/terraform.tfstate.tflock
-```
-
-### Checking Lock Status
-
-```bash
-# Check for preprod lock file
-aws s3api head-object \
-  --bucket sentiment-analyzer-terraform-state-218795110243 \
-  --key preprod/terraform.tfstate.tflock
-
-# Check for prod lock file
-aws s3api head-object \
-  --bucket sentiment-analyzer-terraform-state-218795110243 \
-  --key prod/terraform.tfstate.tflock
-```
-
-<!-- MANUAL ADDITIONS END -->
+- Rules that bind changes: `.specify/memory/constitution.md`
+- Architecture, topology, and what does not exist: `docs/SERVICE-SHAPE.md`
+- Output schema, retention, model versioning: `docs/MODELING.md`
+- Metrics, alarms, dashboard privacy rules: `docs/OBSERVABILITY.md`
+- CI and build pitfalls: `docs/ci-gotchas.md`
+- Terraform state, locks, and backend setup: `docs/runbooks/terraform-state.md`
+- Tech debt: `CLEANUP-BOARD.html`

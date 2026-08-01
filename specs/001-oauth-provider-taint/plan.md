@@ -46,22 +46,25 @@ happens, per FR-006a, but only to decide who owns a survivor.
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-Evaluated against `.specify/memory/constitution.md` v1.6 (last amended 2025-12-09).
+Evaluated against `.specify/memory/constitution.md`. **Re-keyed 2026-07-31**: this table cited
+§6, §7, §8, §9 and §10 of the pre-prune document. `001-constitution-prune` renumbered the
+constitution to five sections and deleted the tech-debt and local-SAST sections outright. Verdicts
+are unchanged; the §9 row is the one whose obligation actually changed.
 
 | Gate | Status | Justification |
 |------|--------|---------------|
-| §7 Implementation Accompaniment Rule (all implementation code accompanied by unit tests; happy path plus one error path; 80% coverage on new code) | PASS | No new function or module is introduced, so the "new code" coverage clause is vacuous. The gate is nevertheless satisfied actively rather than by exemption: a caplog assertion is added to `TestStoreOAuthState` proving no `provider` attribute reaches the emitted `LogRecord`. That is the only durable guard against a later refactor silently reintroducing the sink, which is the failure mode this file has already suffered once. |
-| §7 Environment matrix (LOCAL/DEV run unit tests only, all AWS mocked) | PASS | The touched suite is `tests/unit/auth/`, which uses a `MagicMock` DynamoDB table. No AWS call, no preprod dependency. |
-| §7 External dependency mocking (mandatory in all environments) | PASS | No external API is involved. `gh api` is a verification-time operator action against GitHub, not a test dependency. |
-| §7 Deterministic time handling (no `date.today()` / `datetime.now()` / `time.time()` in tests) | PASS | The added assertion is time-independent. The production `datetime.now(UTC)` at `oauth_state.py:78` is untouched and is source code, not a test. |
-| §8 Pre-push requirements (ruff check, ruff format, GPG-signed commit, feature branch, never push to main) | PASS | Standard flow. Note the `safe_provider` assignment MUST be deleted, not merely orphaned: `[tool.ruff.lint] select` includes `F`, so a retained unused local fails `ruff check` with F841 and blocks the required `Lint` context. |
-| §10 Local SAST (Bandit pre-commit, Semgrep via `make sast`, required pattern "Clear-text logging of sensitive data (CWE-312, CWE-532)") | PASS | This feature removes an instance of exactly that pattern class rather than suppressing it. Neither tool's configuration is touched, and FR-010 forbids the suppression route the constitution's "DO NOT suppress without documented justification" clause is aimed at. |
-| §6 Observability (structured logs for requests carrying request id, model_version, latency, outcome) | PASS | The constitution's named fields are request id, model_version, latency and outcome. `provider` is none of them, and this is not a request log. The field is also unrendered in production today (evidence: `specs/001-lambda-log-visibility/evidence/post-deploy/logshape-dashboard.json`), so no telemetry, metric filter, alarm, dashboard or runbook loses an input. The repository's only log metric filter is `dashboard_import_errors`. |
-| §9 Tech debt tracking (registry entry required for workarounds and "security shortcuts with documented acceptance criteria") | PASS on the Confirmed branch; **conditional on the Refuted branch** | A code fix that closes the finding creates no debt. A dismissal is a documented security shortcut and requires a registry entry (TD-XXX, location, status, root cause, proposed fix, effort, risk). The registry lives at **`docs/reference/TECH_DEBT_REGISTRY.md`**, not at the `docs/TECH_DEBT_REGISTRY.md` path §9 names: it was relocated by `f8db8d2` (PR #668) and §9 was never updated. **The identifier is allocated at merge time** against the registry's then-highest entry and is NOT pre-reserved here: `001-ruff-bump-forward` T016 and `001-codeql-coverage` Phase F both write registry entries in this same window, so any number written into a spec is a collision waiting to happen. Clarification Q2 promoted this obligation into spec.md itself (FR-007, SC-006), so it is no longer carried only here. |
+| §3 Testing, New code (unit tests; happy path plus one error path; 80% coverage floor) | PASS | No new function or module is introduced, so the "new code" coverage clause is vacuous. The gate is nevertheless satisfied actively rather than by exemption: a caplog assertion is added to `TestStoreOAuthState` proving no `provider` attribute reaches the emitted `LogRecord`. That is the only durable guard against a later refactor silently reintroducing the sink, which is the failure mode this file has already suffered once. |
+| §3 Testing tiers (unit tests mock everything; `moto` for AWS) | PASS | The touched suite is `tests/unit/auth/`, which uses a `MagicMock` DynamoDB table. No AWS call, no preprod dependency. |
+| §3 Testing (external publishers mocked everywhere except `@external-api`) | PASS | No external API is involved. `gh api` is a verification-time operator action against GitHub, not a test dependency. |
+| §3 Testing, Dates (no `date.today()` / `datetime.now()` / `time.time()` in tests) | PASS | The added assertion is time-independent. The production `datetime.now(UTC)` at `oauth_state.py:78` is untouched and is source code, not a test. |
+| §4 Push rules (`make validate`, `make test-local`, GPG-signed commit, feature branch, never main) | PASS | Standard flow. Note the `safe_provider` assignment MUST be deleted, not merely orphaned: `[tool.ruff.lint] select` includes `F`, so a retained unused local fails `ruff check` with F841 and blocks the required `Lint` context. |
+| §2 Security (do not suppress a SAST finding without documented justification) | PASS | This feature removes an instance of exactly that pattern class rather than suppressing it. Neither tool's configuration is touched, and FR-010 forbids the suppression route the constitution's "DO NOT suppress without documented justification" clause is aimed at. |
+| §2 Security (request logs are structured; raw input text is not logged by default) | PASS | `provider` is not raw input text, and this is not a request log. (The pre-prune §6 named request id, model_version, latency and outcome as the required fields; `provider` was none of them either. The rebuilt §2 dropped the field list, so this row no longer turns on it.) The field is also unrendered in production today (evidence: `specs/001-lambda-log-visibility/evidence/post-deploy/logshape-dashboard.json`), so no telemetry, metric filter, alarm, dashboard or runbook loses an input. The repository's only log metric filter is `dashboard_import_errors`. |
+| §5 Pointers (tech debt lives on `CLEANUP-BOARD.html`) | PASS on the Confirmed branch; **conditional on the Refuted branch** | A code fix that closes the finding creates no debt. A dismissal is a documented security shortcut and must be recorded. **Target changed 2026-07-31**: constitution §9 and `docs/reference/TECH_DEBT_REGISTRY.md` were both deleted by `001-constitution-prune`; the surviving 5 live entries were ported to kanban cards and the rest were retired as stale. Record a dismissal as a `CLEANUP-BOARD.html` card carrying location, evidence and next action. **No TD-XXX identifier is needed**, which also retires the merge-time allocation-collision hazard this row previously described. FR-007 and SC-006 in spec.md carry the obligation and need the same re-target. |
 | Standing owner constraint: no new AWS resources | PASS | Nothing infrastructural. No Terraform file is touched. |
 
-**Post-design re-check (after Phase 1)**: unchanged. All gates PASS, with the §9 obligation still
-conditional on which gate branch the analysis selects. No Complexity Tracking entries needed.
+**Post-design re-check (after Phase 1)**: unchanged. All gates PASS, with the tech-debt obligation
+still conditional on which gate branch the analysis selects. No Complexity Tracking entries needed.
 
 ## Project Structure
 
@@ -227,7 +230,7 @@ every terminal state are in [quickstart.md](quickstart.md). The design in summar
 | `PENDING-BRANCH-ANALYSIS` | The code change and its regression guard are complete and green, but the change has not landed on `main`, so no qualifying default-branch analysis can exist | The gate is not evaluated. Record the code change as complete and write the closure query, filled in with this feature's path and rule id, so the check is mechanical the moment it lands. Inherited from `specs/001-ingestion-arn-logging/codeql-logging-convention.md` §5a, which calls it "the normal ending, not an edge case". Neither done nor failed. Distinct from `BLOCKED-NO-ANALYSIS`, whose 7-day clock starts only once the change is on `main`. |
 | `CONFIRMED` | No open finding for this rule on `oauth_state.py` in a fresh analysis | The analysis id and its `commit_sha`. `fixed_at` on alert 144 is recorded as **corroboration only**, never as the criterion: the criterion is the path being free of open findings, and 144 is a locating label. Stop. No dismissal. |
 | `REPORTED-FOREIGN-SINK` | A finding for this rule survives on the path but attributes outside `store_oauth_state()` | Reported to the owner per FR-006a. Not Confirmed, and not dismissed here: `validate_oauth_state()` is frozen by FR-004 and carries the same sanitize-in-place shape at lines 253 to 258. The code change is independently complete. |
-| `REFUTED-DISMISSED` | A finding survives; the maintainer dismisses it as `false positive` with the three-element justification | The alert number, the exact justification text, the API response, and a `docs/reference/TECH_DEBT_REGISTRY.md` entry (identifier allocated at merge time, never pre-reserved) per FR-007 and the §9 conditional gate. |
+| `REFUTED-DISMISSED` | A finding survives; the maintainer dismisses it as `false positive` with the three-element justification | The alert number, the exact justification text, the API response, and a `CLEANUP-BOARD.html` kanban card per FR-007 and the tech-debt conditional gate. Re-targeted 2026-07-31 from the deleted `docs/reference/TECH_DEBT_REGISTRY.md`; no TD identifier is allocated. |
 | `BLOCKED-ON-OWNER` | A finding survives and the **read-only probe** of convention §5b (token scopes read together with repository visibility and the actor's repository permissions) resolves to *absent*. Never established by attempting a dismissal. **A missing `security_events` scope is not by itself the trigger**: GitHub requires that scope only on private repositories, and on this public one `repo` subsumes `public_repo`, which is what the endpoint needs. Probed 2026-07-30 the local environment resolves to *available*, so this is not the expected ending | A handoff artifact in this directory carrying the observed alert numbers, the exact justification text for each, and the exact API call. The code change is independently complete and mergeable. Inherited via FR-008 from `specs/001-ingestion-arn-logging/codeql-logging-convention.md` §5, not newly defined here. |
 | `BLOCKED-NO-ANALYSIS` | No completed default-branch analysis covering the change within **7 days** of the change landing on `main` | Reported to the repository owner naming the missing analysis. Not classified. Not dismissed. Terminal, not a further attempt. |
 | `BLOCKED-REGRESSION` | The unit suite fails, or a new open alert is attributable to this feature's diff (SC-003) | Reported before any gate evaluation. The gate is not evaluated on a broken tree. A repo-wide open-alert count is NOT the trigger: sibling `001-codeql-coverage` is expected to raise that number, and the owner's directive is that coverage is the goal, not a low count. |
@@ -271,12 +274,13 @@ record of what was found and how it was resolved.
    unsupported. FR-008 is now widened to consume
    `specs/001-ingestion-arn-logging/codeql-logging-convention.md` in full, which carries
    `BLOCKED-ON-OWNER` at §5, so the inheritance is real rather than asserted.
-2. **The tech debt registry is never mentioned.** Constitution §9 requires a registry entry for
-   security shortcuts with documented acceptance criteria, and a CodeQL dismissal is one. CLOSED by
-   clarification Q2: the obligation now lives in FR-007 and SC-006. The investigation also found
-   that the registry exists at `docs/reference/TECH_DEBT_REGISTRY.md` rather than the
-   `docs/TECH_DEBT_REGISTRY.md` path this plan and §9 both named, having been relocated by `f8db8d2`
-   (PR #668) without a constitution update. That constitution defect is carded, not fixed here.
+2. **The tech debt obligation is never mentioned.** A CodeQL dismissal is a documented security
+   shortcut and must be recorded. CLOSED by clarification Q2: the obligation lives in FR-007 and
+   SC-006. **Superseded 2026-07-31**: the stale-path defect this paragraph described is retired
+   rather than fixed. `001-constitution-prune` deleted constitution §9 and
+   `docs/reference/TECH_DEBT_REGISTRY.md` outright, porting the 5 still-live entries to kanban
+   cards. A dismissal is now recorded as a `CLEANUP-BOARD.html` card with no identifier to
+   allocate.
 
 ## Complexity Tracking
 
@@ -329,9 +333,10 @@ on merge-time allocation and said so on the record (`specs/001-ingestion-arn-log
 **HIGH**: two features writing `TD-024` into a shared registry file is a merge conflict at best and a
 duplicated identifier in a compliance artifact at worst.
 
-All four sites corrected to merge-time allocation. The registry **path** correction
-(`docs/reference/TECH_DEBT_REGISTRY.md`, not the constitution's stale flat path) is left intact
-everywhere, since that part of Q2's answer was right.
+All four sites corrected to merge-time allocation. **Superseded 2026-07-31**: the registry and the
+constitution section that mandated it were both deleted by `001-constitution-prune`, so both the
+path correction and the merge-time allocation rule are now moot. A dismissal is recorded as a
+`CLEANUP-BOARD.html` card with no identifier.
 
 ### D. Checks run that produced no finding
 

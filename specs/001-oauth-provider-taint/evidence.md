@@ -206,8 +206,8 @@ that size drops alert 117, which is the control's anchor.
 
 If `$GATE` is non-empty, attribute every survivor at `$ANALYZED_SHA` per T022 before acting on it. A
 survivor inside `store_oauth_state()` is this feature's, and routes to T026 plus a
-`docs/reference/TECH_DEBT_REGISTRY.md` entry whose `TD-` id is read from the registry's then-highest
-entry at that moment. A survivor outside it, most likely the FR-004-frozen `validate_oauth_state()`
+`CLEANUP-BOARD.html` kanban card (re-targeted 2026-07-31 from the deleted tech-debt registry; no
+identifier is allocated). A survivor outside it, most likely the FR-004-frozen `validate_oauth_state()`
 sink at lines 253-258, is **reported and never dismissed**.
 
 ---
