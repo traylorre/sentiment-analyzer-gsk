@@ -91,7 +91,7 @@ class TestOAuthOriginRedirect:
         params = parse_qs(parsed.query)
 
         assert "redirect_uri" in params
-        assert "localhost:3000" in params["redirect_uri"][0]
+        assert urlparse(params["redirect_uri"][0]).netloc == "localhost:3000"
 
     def test_evil_origin_does_not_leak_into_redirect(self):
         """Origin https://evil.com must NOT appear in redirect_uri (open redirect prevention)."""
@@ -109,9 +109,10 @@ class TestOAuthOriginRedirect:
 
         assert "redirect_uri" in params
         redirect_uri = params["redirect_uri"][0]
-        assert "evil.com" not in redirect_uri
-        # Should fall back to FRONTEND_URL
-        assert "example.com" in redirect_uri
+        # Compare the host exactly. A substring check passes on
+        # https://evil.com/?next=example.com, which is the open redirect this
+        # test exists to catch.
+        assert urlparse(redirect_uri).netloc == "example.com"
 
 
 class TestOAuthPKCENonRegression:

@@ -10,6 +10,7 @@ Tests cover:
 
 import re
 from pathlib import Path
+from urllib.parse import urlparse
 
 
 def get_html_content() -> str:
@@ -165,9 +166,17 @@ class TestJavaScript:
     def test_preprod_url_defined(self):
         """Preprod URL should be defined with Amplify URL (Feature 1207: CloudFront removed)."""
         content = get_html_content()
-        assert "preprod:" in content
-        # Uses Amplify URL for frontend hosting
-        assert "amplifyapp.com" in content
+        # Scope to the ENVIRONMENTS object. The comment above it carries a
+        # `preprod: '...'` placeholder that matches an unscoped search first.
+        block = re.search(
+            r"const ENVIRONMENTS = Object\.assign\(\{(.*?)\}", content, re.DOTALL
+        )
+        assert block is not None, "ENVIRONMENTS object should be defined"
+        match = re.search(r"preprod:\s*'([^']+)'", block.group(1))
+        assert match is not None, "ENVIRONMENTS should define a preprod entry"
+        # Resolve the host from that entry rather than searching the whole document.
+        # A substring check passes on any stray mention and proves nothing about it.
+        assert urlparse(match.group(1)).netloc.endswith(".amplifyapp.com")
 
     def test_required_functions_defined(self):
         """All required JavaScript functions should be defined."""
