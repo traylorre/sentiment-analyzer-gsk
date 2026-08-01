@@ -73,10 +73,10 @@ changed, and retries until stable. Already wired as a local hook.
 **Alternatives considered**: a slim baseline (`detect-secrets scan --slim`) drops line numbers but
 breaks `detect-secrets audit`; CI-only scanning removes local churn but also local protection.
 
-**Ordering note**: there are 22 hooks, not the 17 an older table claimed, and `default_stages` is
-`[commit]` (`.pre-commit-config.yaml:36`). Only three hooks actually run at push: `pytest` (`:144`),
-`check-branch-collision` (`:166`) and `check-error-log-assertions` (`:177`). `mypy` is
-`stages: [manual]` (`:154`) and never runs automatically at all, so do not chase it when a push is
+**Ordering note**: there are 23 hooks, not the 17 an older table claimed, and `default_stages` is
+`[commit]` (`.pre-commit-config.yaml:36`). Only three hooks actually run at push: `pytest` (`:137`),
+`check-branch-collision` (`:160`) and `check-error-log-assertions` (`:170`). `mypy` is
+`stages: [manual]` (`:147`) and never runs automatically at all, so do not chase it when a push is
 blocked. `trivy` and `checkov` are commit-stage and `.tf`-scoped. `tfsec` and
 `checkov` were removed from `pre-commit-terraform` (`.pre-commit-config.yaml:72-74`) and replaced
 by local hooks; `trivy-terraform` runs `--exit-code 0` and is currently decorative. Read

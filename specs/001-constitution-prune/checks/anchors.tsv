@@ -1,10 +1,19 @@
 # Anchored citations: file <TAB> line <TAB> regex that line must match <TAB> which doc claims it
 # R2 only proves a cited line exists. These prove it still says what the doc says it says.
 # Add a row whenever a core doc pins a claim to a specific line.
-Makefile	49	^check-test-target-headers:	CLAUDE.md
-Makefile	51	grep -rL "Target:\.\*Dashboard"	CLAUDE.md
-Makefile	73	pip-audit.*\|\| true	CLAUDE.md
-Makefile	78	bandit.*\|\| true	CLAUDE.md
+# Patterns are POSIX ERE, evaluated with `grep -qE`, so ( ) | . * need escaping to be literal.
+Makefile	85	run_stage fmt-check	CLAUDE.md
+Makefile	124	^check-test-target-headers:	CLAUDE.md
+Makefile	126	grep -rLE "Target:.*\(Dashboard\|Infrastructure\)"	CLAUDE.md
+Makefile	138	^fmt:	CLAUDE.md
+Makefile	161	pip-audit.*\|\| true	CLAUDE.md
+Makefile	175	bandit.*\|\| true	CLAUDE.md
+.pre-commit-config.yaml	36	^default_stages: \[commit\]	docs/ci-gotchas.md
+.pre-commit-config.yaml	120	trivy config --exit-code 0	docs/ci-gotchas.md
+.pre-commit-config.yaml	137	id: pytest	docs/ci-gotchas.md
+.pre-commit-config.yaml	147	id: mypy	docs/ci-gotchas.md
+.pre-commit-config.yaml	160	id: check-branch-collision	docs/ci-gotchas.md
+.pre-commit-config.yaml	170	id: check-error-log-assertions	docs/ci-gotchas.md
 src/lambdas/ingestion/dedup.py	59	def generate_dedup_key	CLAUDE.md
 src/lambdas/shared/utils/dedup.py	11	def generate_dedup_key	CLAUDE.md
 infrastructure/terraform/main.tf	966	cloudfront_sse	docs/ACTIVE-TECHNOLOGIES.md

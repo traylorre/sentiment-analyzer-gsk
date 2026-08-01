@@ -30,8 +30,8 @@ Rules:
 
 Three traps in that table. There is **no HTMX** in the admin dashboard despite the header string
 saying so; the string is historical and dozens of test files carry it. The
-`check-test-target-headers` gate (`Makefile:49`) greps only `Target:.*Dashboard`, so the wording
-after that is convention, not enforcement. Second, the dashboard Lambda no longer has a Function
+`check-test-target-headers` gate (`Makefile:124`) greps only
+`Target:.*(Dashboard|Infrastructure)`, so the wording after that is convention, not enforcement. Second, the dashboard Lambda no longer has a Function
 URL; it is reached through API Gateway. Third, **routes do not discriminate**: both dashboards are
 served by `src/lambdas/dashboard/handler.py` and their route sets overlap, so the API row above is
 a usage example, not a partition. Check the caller, not the route.
@@ -67,13 +67,18 @@ Python work needs the venv, which is 3.13 while system Python is not:
 
 ## Gotchas that cost real time
 
-- **`make validate` rewrites your working tree.** Its `fmt` target runs `ruff format src tests`.
-  `fmt-check` is the non-mutating variant and is not wired into `validate`.
-- **Semgrep is the only security scanner that gates.** `pip-audit` (`Makefile:73`) and `bandit`
-  (`Makefile:78`) both end in `|| true`, so a green run is no evidence either found nothing.
-  Bandit is slated for removal in favour of semgrep, so do not fix, harden, or extend its
-  invocations. The rest of `validate` does gate: `lint`, `check-banned-terms`,
-  `check-test-target-headers` and `check-waitforresponse-race` all fail hard.
+- **`make validate` does not rewrite your working tree.** Its first stage is `fmt-check`
+  (`Makefile:85`), not `fmt`. The mutating `fmt` target still exists (`Makefile:138`) and nothing
+  in `validate` calls it. `make -n validate` is refused outright, because `-n` propagates to the
+  sub-makes and every stage would report success without running.
+- **Semgrep is the only security scanner that gates.** `pip-audit` (`Makefile:161`) and `bandit`
+  (`Makefile:175`) both end in `|| true`, so a green run is no evidence either found nothing. The
+  `security` stage that carries `pip-audit` is declared ADVISORY in the driver, so it cannot fail
+  the run even in principle. Bandit is slated for removal in favour of semgrep, so do not fix,
+  harden, or extend its invocations. Every other stage is BLOCKING: `fmt-check`, `lint`, `sast`,
+  `check-banned-terms`, `check-test-target-headers` and `check-waitforresponse-race`. The driver
+  runs all of them and reports each before failing, so one broken stage no longer hides the ones
+  behind it.
 - **SSE handler tests** need `make_function_url_event()` and `parse_streaming_response()` from
   `tests/conftest.py`. A hand-built API Gateway event returns 404 and reads as a routing bug.
 - **Checking security alerts before a push:** filtering `state` client-side returns 0, because the
