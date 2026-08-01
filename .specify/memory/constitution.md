@@ -70,6 +70,17 @@ either in the source or in the expectation. A broken test is diagnosed to a name
 fixed or deleted. Nothing is quarantined, tracked, or indexed, because every such list is a place
 to keep broken tests.
 
+### Exclusions
+
+An exclusion has to buy something measurable. One case qualifies: a test that already ran
+elsewhere, where running it again costs real time or money, or makes a live call to an external
+service. The gain is the cost not paid twice.
+
+Scanner exclusions never qualify. A path filter or a rule filter saves nothing and silences every
+future finding in its scope, including the ones nobody has written yet. It is the same move as
+calling a test flaky. An alert that is wrong is dismissed on its own, with the reason recorded
+against that finding.
+
 ### Dates
 
 Tests use fixed dates (`date(2024, 1, 2)`) or `freezegun`. Never `date.today()`,
