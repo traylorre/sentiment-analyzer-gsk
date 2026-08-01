@@ -1,51 +1,18 @@
 # CodeQL Configuration
 # ====================
 #
-# Custom configuration to reduce false positives while maintaining security coverage.
-#
-# WHAT THIS FILE ACTUALLY DOES, measured rather than intended:
-#
-#   The `tests/**/*` path exclusion below is applied at EXTRACTION time, not at query time. The
-#   extractor is invoked with `--filter exclude:tests/**/*`, so every file under the root-anchored
-#   `tests/` directory is absent from the CodeQL database entirely. No query can reach it.
-#
-#   The consequence: `tests/` is NOT scanned for anything. Not for the URL sanitization rule
-#   below, and not for any other rule either.
-#
-#   Evidence: run 30581930915, job 91004036909, `refs/heads/main`, full-tree Python analysis.
-#   Log line 1480 carries the extractor invocation with the exclude filter; line 2067 reports
-#   "CodeQL scanned 152 out of 154 Python files". 393 of the 544 tracked `.py` files live under
-#   `tests/` and none of them appear among the 152 extracted files.
-#
-# For On-Call Engineers:
-#   If security alerts are being incorrectly suppressed, review this file. The path exclusion is
-#   the only thing suppressing anything; the query filter below is inert.
+# This file deliberately carries no path exclusions and no query filters. Everything in
+# the repository is extracted and every query in `security-extended` runs against all of
+# it.
 #
 # For Developers:
-#   - Production code (src/) is fully scanned
-#   - Root-anchored tests/ is excluded from the database and is therefore not scanned at all
-#   - The exclusion is ROOT-ANCHORED: it reaches tests/ including tests/load/api-load-test.js,
-#     and it does NOT reach frontend/tests, which is scanned
+#   Nothing here suppresses anything. If an alert is wrong, fix the code, or dismiss that
+#   one alert on the security tab with a reason. Do not add a path or a rule id to this
+#   file to make a finding go away; a scoping rule silences every future finding in that
+#   scope too, including the ones nobody has written yet.
+#
+# For On-Call Engineers:
+#   If you believe alerts are being suppressed, they are not being suppressed here.
+#   Check dismissals on the security tab instead.
 
 name: "sentiment-analyzer-codeql-config"
-
-# Excludes the whole of tests/ from extraction. Language-neutral: this applies to every language
-# in the analysis matrix, not only to Python.
-paths-ignore:
-  - tests/**/*
-
-# INERT, and retained deliberately.
-#
-# This filter is scoped to `tests/**`, which the path exclusion above has already removed from the
-# database, so it can never match anything and deleting it would change no result. It is retained
-# rather than deleted because deleting a rule requires evidence that it is dead, and the only
-# probe that could supply that evidence is optional and was not run. It becomes live again the
-# moment the path exclusion above is narrowed, which is the case it is being kept against.
-#
-# The rule id is Python-specific and cannot match any JavaScript or TypeScript rule.
-query-filters:
-  # This rule flags test assertions that check URL presence in HTML templates
-  - exclude:
-      id: py/incomplete-url-substring-sanitization
-      paths:
-        - tests/**
