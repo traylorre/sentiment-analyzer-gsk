@@ -1,6 +1,6 @@
 # Tasks: FastAPI Infrastructure Purge
 
-**Input**: Design documents from `/specs/1217-fastapi-infra-purge/`
+**Input**: Design documents from `/specs/1217-web-framework-infra-purge/`
 **Prerequisites**: plan.md (required), spec.md (required), research.md, data-model.md, quickstart.md
 
 **Tests**: Not explicitly requested. Banned-term scanner serves as the verification gate.

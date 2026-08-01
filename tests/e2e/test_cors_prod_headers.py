@@ -1,3 +1,4 @@
+# Target: Infrastructure (production API Gateway CORS preflight)
 """E2E test for production CORS headers (Feature 1269).
 
 Verifies that the API returns correct CORS headers for configured

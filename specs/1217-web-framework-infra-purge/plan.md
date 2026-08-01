@@ -1,7 +1,7 @@
 # Implementation Plan: FastAPI Infrastructure Purge
 
 **Branch**: `1217-fastapi-infra-purge` | **Date**: 2026-02-11 | **Spec**: [spec.md](spec.md)
-**Input**: Feature specification from `/specs/1217-fastapi-infra-purge/spec.md`
+**Input**: Feature specification from `/specs/1217-web-framework-infra-purge/spec.md`
 
 ## Summary
 

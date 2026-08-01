@@ -1,7 +1,7 @@
 # Implementation Plan: FastAPI/Mangum Permanent Removal
 
 **Branch**: `001-fastapi-purge` | **Date**: 2026-02-09 | **Spec**: [spec.md](spec.md)
-**Input**: Feature specification from `/specs/001-fastapi-purge/spec.md`
+**Input**: Feature specification from `/specs/archive/001-web-framework-purge/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/commands/plan.md` for the execution workflow.
 

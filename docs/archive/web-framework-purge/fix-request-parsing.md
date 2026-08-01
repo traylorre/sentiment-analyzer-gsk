@@ -1,6 +1,6 @@
 # Fix: Replace Request Parsing (Query/Depends -> Event Dict)
 
-**Parent:** [HL-fastapi-purge-checklist.md](./HL-fastapi-purge-checklist.md)
+**Parent:** [HL-web-framework-purge-checklist.md](./HL-web-framework-purge-checklist.md)
 **Priority:** P2
 **Status:** [ ] TODO
 **Depends On:** [design-native-handler.md](./design-native-handler.md)

@@ -308,7 +308,7 @@ unchecked. This is where prose meets a running program.
        guard failure.
     5. `git status --short` is empty and `git stash list` is empty.
 
-- [ ] **T014** `make validate` fails on a violation (depends on T007, T013) — **PARTIAL: crit 1 (attributable form) and crit 2 pass; crit 3 blocked by pre-existing `check-banned-terms` redness. See Execution Log.**
+- [X] **T014** `make validate` fails on a violation (depends on T007, T013) — **CLOSED 2026-07-30 by 001-validate-gate-repair.** Crit 3's blocker is gone: the gate no longer halts at the first failing stage, and the legacy-term corpus is at zero. The guard stage now executes on every run and reports its own result. See Execution Log.
   - **Files**: none modified
   - **Satisfies**: FR-014, SC-013
   - **Acceptance criteria**:
@@ -545,7 +545,7 @@ Implemented 2026-07-30 on branch `002-waitforresponse-lint-guard`, cut from `mai
 | T011 | 2026-07-30 | PASS (4/4) | `python3 -I -S` exit 1; interpreter `3.13.0`, matching the `Lint` job's `PYTHON_VERSION: '3.13'`. AR#2 N-01 reconfirmed: plain and `env -u VIRTUAL_ENV` both resolve to `.venv/bin/python3` |
 | T012 | 2026-07-30 | PASS (5/5) | Detector renamed → hook exit 1, `python3 scripts/...` exit 2; undecodable `.ts` → exit 1 with `cannot read ...: 'utf-8' codec can't decode byte 0xff`, not a silent skip |
 | T013 | 2026-07-30 | PASS (5/5) | Post-revert: hook 0, make target 0, `-I -S` 0, `git status` and `git stash list` both empty. Advisory: `pre-commit run --all-files` exit **0**, no failures |
-| T014 | 2026-07-30 | **PARTIAL — crit 3 blocked, see below** | crit 1 (attributable form) and crit 2 PASS; crit 1 as literally written and crit 3 are unreachable on this tree |
+| T014 | 2026-07-30 | **PARTIAL at the time; CLOSED 2026-07-30 by 001-validate-gate-repair** | crit 1 (attributable form) and crit 2 PASS; crit 1 as literally written and crit 3 were unreachable on that tree. The gate no longer short-circuits and the corpus is at zero, so both are reachable now. See below. |
 | T015 | 2026-07-30 | PASS | `0.06s` real, three consecutive runs, against 48 files. Budget 2s; margin ~33x |
 | T016 | 2026-07-30 | PASS | File count **1**: `scripts/scan-waitforresponse-race.py` |
 | T017 | 2026-07-30 | PASS (3/3) | Hits in both `.pre-commit-config.yaml` and `.github/workflows/pr-checks.yml`; guard absent from `SKIP:`; step has `run:` and `if: always()` |
@@ -626,14 +626,24 @@ pre-existing matches** in `specs/1157-auth-cache-headers/`, `specs/1268-cors-404
 Measured: `grep -c 'Checking waitForResponse race ordering'` over a full `make validate` run with the
 violation planted returns **0**.
 
+> **Resolved 2026-07-30 by 001-validate-gate-repair.** Recorded rather than rewritten: the
+> measurement above was accurate when taken and is the evidence that motivated the repair.
+>
+> Both halves of it are now false. `validate` is no longer a prerequisite list; it is a driver
+> recipe that invokes each stage as a sub-make, records every exit code, and prints a per-stage
+> summary, so no stage can suppress a later one. The 15 pre-existing matches were adjudicated to
+> zero unexempted, with one inline exemption. The same measurement over a current run finds the
+> guard's banner present.
+
 Consequences, stated precisely rather than papered over:
 
 - **T014 crit 1 as literally written is satisfied for the wrong reason.** `make validate` does exit
   non-zero with the violation planted, but it would exit non-zero with no violation too. This is the
   identical attribution defect T010 crit 3 was written to forbid, so it is not accepted as evidence
-  here either.
+  here either. *(Resolved: the per-stage summary makes the exit attributable, because it names which
+  stage failed rather than only that something did.)*
 - **T014 crit 3 (`make validate` exits 0 after removing the violation) cannot pass**, and not
-  because of anything this feature did.
+  because of anything this feature did. *(Resolved: the corpus that blocked it is at zero.)*
 - **The guard target itself is proven** in the attributable form: with the violation planted,
   `make check-waitforresponse-race` fails at `Makefile:47` (detector exit 1, make exit 2); with it
   removed, exit 0. FR-014's substance holds. What fails is the ability to observe it *through*
