@@ -100,11 +100,17 @@ def store_oauth_state(
     # appear in this extra context. Removing the derived value, rather than
     # sanitizing it in place, is the shape that closed this rule in ebcc2f4.
     # See specs/001-oauth-provider-taint/research.md before adding a key here.
+    #
+    # Nor may any identifier containing "oauth" reach it. CodeQL's shared sensitive-data
+    # heuristic lists the bare substring "oauth" in its password pattern, so every such
+    # name is classified as a password whatever it holds; `OAUTH_STATE_TTL_SECONDS`, a
+    # module constant of 300, was reported that way. That query has no sanitizer, so a
+    # type assertion or an int() would not clear it. The constant is omitted here because
+    # it never varies and so carried no information in the first place.
     logger.info(
         "OAuth state stored",
         extra={
             "has_user_id": user_id is not None,
-            "ttl_seconds": OAUTH_STATE_TTL_SECONDS,
         },
     )
 
