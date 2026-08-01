@@ -251,9 +251,7 @@ apparently unaware of the first.
   convention applied, and why the analyzer still reports the flow despite no derived value reaching
   the sink. A dismissal is a documented security shortcut, so recording one MUST also add a kanban
   card to `CLEANUP-BOARD.html` carrying title, lane, severity, evidence (the alert number and the
-  justification text), citation and next action. **Re-targeted 2026-07-31**: this requirement named
-  constitution §9 and `docs/reference/TECH_DEBT_REGISTRY.md`, both deleted by
-  `001-constitution-prune`. No card is created on the confirmed branch, where a closed finding
+  justification text), citation and next action. No card is created on the confirmed branch, where a closed finding
   creates no debt.
 - **FR-008**: This feature MUST consume the convention recorded at
   `specs/001-ingestion-arn-logging/codeql-logging-convention.md` in full, not only its dismissal

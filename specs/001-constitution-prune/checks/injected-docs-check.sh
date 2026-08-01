@@ -14,7 +14,7 @@
 # this repository:
 #
 #   R1  a doc cites a path that does not exist  (docs/CLOUD_PROVIDER_PORTABILITY_AUDIT.md,
-#       docs/TECH_DEBT_REGISTRY.md)
+#       docs/SERVICE-SHAPE.md)
 #   R2  a doc cites file:NN past the end of the file  (five stale sibling
 #       citations in 001-oauth-provider-taint, three of them off by one line)
 #   R3  a doc's Lambda list drifts from src/lambdas/
@@ -67,7 +67,7 @@ is_allowed() {
 # (`roles.py`, `modules/lambda/main.tf`). None of those are checkable without
 # guessing at the prose, and the guess is where a false positive would come from.
 # Root-relative paths need no guessing, and they are the class that actually
-# broke: docs/TECH_DEBT_REGISTRY.md, docs/CLOUD_PROVIDER_PORTABILITY_AUDIT.md.
+# broke: docs/CLOUD_PROVIDER_PORTABILITY_AUDIT.md.
 #
 # KNOWN LIMIT: ROOTFILES is a whitelist, not a rule. A bare filename with no
 # directory component is only checked if it is named there. `mermaid-config.json`

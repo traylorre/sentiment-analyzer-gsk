@@ -39,9 +39,8 @@ was met.
    directories (re-verified 2026-07-30: 15 of one legacy framework name, 2 of another; the names are
    not written here because writing them into this directory is what that scanner exists to prevent).
    `make sast` is the substitute, per quickstart Step 1c.
-4. **No identifier is allocated at all.** Superseded 2026-07-31: the tech-debt registry was
-   deleted and debt is now a `CLEANUP-BOARD.html` kanban card, which has no id field. The
-   merge-time allocation-collision hazard this invariant guarded against no longer exists.
+4. **No identifier is allocated at all.** Debt is a `CLEANUP-BOARD.html` kanban card, which has
+   no id field.
 5. **Repo-wide alert counts are never a criterion.** SC-003 is an attribution test. Sibling
    `001-codeql-coverage` is expected to raise the repo-wide open count on purpose, and per the owner's
    directive that is success, not regression.
@@ -525,9 +524,7 @@ any file is edited outside `specs/001-oauth-provider-taint/`.
   is `false positive`, and `dismissed_comment` is non-empty and contains all three §2 elements. A
   `PATCH` failing on permissions is an observation that routes to T028, not a retry loop.
 - [ ] **T027** [US2] Tech debt card, required on this branch only (FR-007, SC-006: a dismissal is a
-  documented security shortcut). **Re-targeted 2026-07-31**: this task wrote a
-  `docs/reference/TECH_DEBT_REGISTRY.md` entry; `001-constitution-prune` deleted both that file and
-  the constitution section mandating it. Add a card to the `CARDS` array in **`CLEANUP-BOARD.html`**
+  documented security shortcut). Add a card to the `CARDS` array in **`CLEANUP-BOARD.html`**
   instead, with `lane: "track"`, `severity` set from the surviving alert, `title` naming
   `store_oauth_state()`, `evidence` carrying the alert number and the exact dismissal justification,
   `citation` `src/lambdas/shared/auth/oauth_state.py`, `next_action`, and `source` naming this
@@ -836,7 +833,7 @@ output, not a restatement of the artifact.
 | `--paginate` without `--slurp`, per-page collector | prints `[]` **twice** | Confirmed |
 | `gh api --arg` | `unknown flag: --arg`; `gh version 2.89.0` | Confirmed, AR#2 X1 was a real defect |
 | T031 prior-art grep | `16` matching lines, `grep exit=0` | PASS, floor of 3 cleared |
-| T027 registry target | `docs/reference/TECH_DEBT_REGISTRY.md` exists, highest id `TD-023` | PASS when checked. **OBSOLETE 2026-07-31**: registry deleted by `001-constitution-prune`; T027 now targets `CLEANUP-BOARD.html` and allocates no id |
+| T027 card target | `CLEANUP-BOARD.html` `CARDS` array | T027 adds a card and allocates no id |
 | `.github/workflows/pr-checks.yml:62` | `run: ruff check src/ tests/` | Citation is accurate to the line |
 | Convention §5a / §5b | lines 132 and 144 | Citations accurate |
 

@@ -229,7 +229,7 @@ jobs:
           rm -rf packages/analysis-deps packages/analysis-build
 
           # ============================================================
-          # Metrics Lambda - Minimal dependencies (TD-011)
+          # Metrics Lambda - Minimal dependencies
           # ============================================================
           echo ""
           echo "📦 Packaging Metrics Lambda (boto3, aws-lambda-powertools)..."
@@ -1402,7 +1402,7 @@ jobs:
           SNS_TOPIC_ARN=$(terraform output -raw sns_topic_arn 2>/dev/null || echo "")
           echo "sns_topic_arn=${SNS_TOPIC_ARN}" >> $GITHUB_OUTPUT
 
-      - name: Warm Up Lambdas for Metrics (TD-001)
+      - name: Warm Up Lambdas for Metrics
         env:
           SSE_LAMBDA_URL: ${{ needs.deploy-preprod.outputs.sse_lambda_url }}
         run: |

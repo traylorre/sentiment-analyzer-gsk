@@ -1,7 +1,7 @@
 """Serialization lock tests for the 7 UP042-suppressed (str, Enum) classes.
 
-Tripwire against accidental StrEnum conversion (TD-023 in
-docs/reference/TECH_DEBT_REGISTRY.md). These enums are serialized into
+Tripwire against accidental StrEnum conversion; the migration is carded on
+CLEANUP-BOARD.html. These enums are serialized into
 DynamoDB items and JSON responses. Converting them to enum.StrEnum changes
 str(member) from "ClassName.MEMBER" to the bare value, silently altering any
 call site that relies on str()/f-string formatting. Each test asserts both
@@ -10,7 +10,7 @@ halves of the current contract:
 - str(member) is the qualified "ClassName.MEMBER" form (str,Enum behavior)
 - member.value is the exact wire string stored in DynamoDB/JSON
 
-If a deliberate StrEnum migration lands (the TD-023 proposed fix), these
+If a deliberate StrEnum migration lands, these
 assertions must be updated in the same change, with a serialization sweep of
 every call site.
 """
