@@ -301,6 +301,15 @@ jobs:
 
   # ========================================================================
   # JOB 4: CodeQL Analysis
+  #
+  # This job's status contexts are generated PER MATRIX VALUE: the job is named
+  # "Analyze" and reports as "Analyze (python)" and "Analyze (javascript-typescript)",
+  # one context per language. Editing or removing a matrix value RETIRES the
+  # corresponding context. Nothing requires these contexts today, so nothing breaks
+  # right now. If CodeQL is ever promoted to a required check, branch protection will
+  # name the per-language string and a later matrix edit would silently retire the
+  # context that names it. Do not edit this matrix without checking required status
+  # checks in the same change.
   # ========================================================================
   codeql:
     name: Analyze
@@ -314,7 +323,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: ['python']
+        language: ['python', 'javascript-typescript']
 
     steps:
       - name: Checkout repository
