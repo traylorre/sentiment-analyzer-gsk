@@ -60,7 +60,7 @@ are unchanged; the §9 row is the one whose obligation actually changed.
 | §4 Push rules (`make validate`, `make test-local`, GPG-signed commit, feature branch, never main) | PASS | Standard flow. Note the `safe_provider` assignment MUST be deleted, not merely orphaned: `[tool.ruff.lint] select` includes `F`, so a retained unused local fails `ruff check` with F841 and blocks the required `Lint` context. |
 | §2 Security (do not suppress a SAST finding without documented justification) | PASS | This feature removes an instance of exactly that pattern class rather than suppressing it. Neither tool's configuration is touched, and FR-010 forbids the suppression route the constitution's "DO NOT suppress without documented justification" clause is aimed at. |
 | §2 Security (request logs are structured; raw input text is not logged by default) | PASS | `provider` is not raw input text, and this is not a request log. (The pre-prune §6 named request id, model_version, latency and outcome as the required fields; `provider` was none of them either. The rebuilt §2 dropped the field list, so this row no longer turns on it.) The field is also unrendered in production today (evidence: `specs/001-lambda-log-visibility/evidence/post-deploy/logshape-dashboard.json`), so no telemetry, metric filter, alarm, dashboard or runbook loses an input. The repository's only log metric filter is `dashboard_import_errors`. |
-| §5 Pointers (tech debt lives on `CLEANUP-BOARD.html`) | PASS on the Confirmed branch; **conditional on the Refuted branch** | A code fix that closes the finding creates no debt. A dismissal is a documented security shortcut and must be recorded. **Target changed 2026-07-31**: constitution §9 and `docs/reference/TECH_DEBT_REGISTRY.md` were both deleted by `001-constitution-prune`; the surviving 5 live entries were ported to kanban cards and the rest were retired as stale. Record a dismissal as a `CLEANUP-BOARD.html` card carrying location, evidence and next action. **No TD-XXX identifier is needed**, which also retires the merge-time allocation-collision hazard this row previously described. FR-007 and SC-006 in spec.md carry the obligation and need the same re-target. |
+| §5 Pointers (tech debt lives on `CLEANUP-BOARD.html`) | PASS on the Confirmed branch; **conditional on the Refuted branch** | A code fix that closes the finding creates no debt. A dismissal is a documented security shortcut and must be recorded as a `CLEANUP-BOARD.html` card carrying location, evidence and next action. **No TD-XXX identifier is needed.** FR-007 and SC-006 in spec.md carry the obligation. |
 | Standing owner constraint: no new AWS resources | PASS | Nothing infrastructural. No Terraform file is touched. |
 
 **Post-design re-check (after Phase 1)**: unchanged. All gates PASS, with the tech-debt obligation
@@ -230,7 +230,7 @@ every terminal state are in [quickstart.md](quickstart.md). The design in summar
 | `PENDING-BRANCH-ANALYSIS` | The code change and its regression guard are complete and green, but the change has not landed on `main`, so no qualifying default-branch analysis can exist | The gate is not evaluated. Record the code change as complete and write the closure query, filled in with this feature's path and rule id, so the check is mechanical the moment it lands. Inherited from `specs/001-ingestion-arn-logging/codeql-logging-convention.md` §5a, which calls it "the normal ending, not an edge case". Neither done nor failed. Distinct from `BLOCKED-NO-ANALYSIS`, whose 7-day clock starts only once the change is on `main`. |
 | `CONFIRMED` | No open finding for this rule on `oauth_state.py` in a fresh analysis | The analysis id and its `commit_sha`. `fixed_at` on alert 144 is recorded as **corroboration only**, never as the criterion: the criterion is the path being free of open findings, and 144 is a locating label. Stop. No dismissal. |
 | `REPORTED-FOREIGN-SINK` | A finding for this rule survives on the path but attributes outside `store_oauth_state()` | Reported to the owner per FR-006a. Not Confirmed, and not dismissed here: `validate_oauth_state()` is frozen by FR-004 and carries the same sanitize-in-place shape at lines 253 to 258. The code change is independently complete. |
-| `REFUTED-DISMISSED` | A finding survives; the maintainer dismisses it as `false positive` with the three-element justification | The alert number, the exact justification text, the API response, and a `CLEANUP-BOARD.html` kanban card per FR-007 and the tech-debt conditional gate. Re-targeted 2026-07-31 from the deleted `docs/reference/TECH_DEBT_REGISTRY.md`; no TD identifier is allocated. |
+| `REFUTED-DISMISSED` | A finding survives; the maintainer dismisses it as `false positive` with the three-element justification | The alert number, the exact justification text, the API response, and a `CLEANUP-BOARD.html` kanban card per FR-007 and the tech-debt conditional gate. No TD identifier is allocated. |
 | `BLOCKED-ON-OWNER` | A finding survives and the **read-only probe** of convention §5b (token scopes read together with repository visibility and the actor's repository permissions) resolves to *absent*. Never established by attempting a dismissal. **A missing `security_events` scope is not by itself the trigger**: GitHub requires that scope only on private repositories, and on this public one `repo` subsumes `public_repo`, which is what the endpoint needs. Probed 2026-07-30 the local environment resolves to *available*, so this is not the expected ending | A handoff artifact in this directory carrying the observed alert numbers, the exact justification text for each, and the exact API call. The code change is independently complete and mergeable. Inherited via FR-008 from `specs/001-ingestion-arn-logging/codeql-logging-convention.md` §5, not newly defined here. |
 | `BLOCKED-NO-ANALYSIS` | No completed default-branch analysis covering the change within **7 days** of the change landing on `main` | Reported to the repository owner naming the missing analysis. Not classified. Not dismissed. Terminal, not a further attempt. |
 | `BLOCKED-REGRESSION` | The unit suite fails, or a new open alert is attributable to this feature's diff (SC-003) | Reported before any gate evaluation. The gate is not evaluated on a broken tree. A repo-wide open-alert count is NOT the trigger: sibling `001-codeql-coverage` is expected to raise that number, and the owner's directive is that coverage is the goal, not a low count. |
@@ -276,11 +276,7 @@ record of what was found and how it was resolved.
    `BLOCKED-ON-OWNER` at §5, so the inheritance is real rather than asserted.
 2. **The tech debt obligation is never mentioned.** A CodeQL dismissal is a documented security
    shortcut and must be recorded. CLOSED by clarification Q2: the obligation lives in FR-007 and
-   SC-006. **Superseded 2026-07-31**: the stale-path defect this paragraph described is retired
-   rather than fixed. `001-constitution-prune` deleted constitution §9 and
-   `docs/reference/TECH_DEBT_REGISTRY.md` outright, porting the 5 still-live entries to kanban
-   cards. A dismissal is now recorded as a `CLEANUP-BOARD.html` card with no identifier to
-   allocate.
+   SC-006. A dismissal is recorded as a `CLEANUP-BOARD.html` card with no identifier to allocate.
 
 ## Complexity Tracking
 
@@ -333,9 +329,7 @@ on merge-time allocation and said so on the record (`specs/001-ingestion-arn-log
 **HIGH**: two features writing `TD-024` into a shared registry file is a merge conflict at best and a
 duplicated identifier in a compliance artifact at worst.
 
-All four sites corrected to merge-time allocation. **Superseded 2026-07-31**: the registry and the
-constitution section that mandated it were both deleted by `001-constitution-prune`, so both the
-path correction and the merge-time allocation rule are now moot. A dismissal is recorded as a
+A dismissal is recorded as a
 `CLEANUP-BOARD.html` card with no identifier.
 
 ### D. Checks run that produced no finding

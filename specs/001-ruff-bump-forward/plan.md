@@ -30,7 +30,7 @@ the tech-debt and local-SAST sections outright. Verdicts are unchanged; only the
 | §4 Push rules (`make validate`, `make test-local`, GPG, feature branch) | Feature strengthens this exact clause: gates and dev tool converge on one version | PASS |
 | §4 Push rules (never bypass the pipeline) | No gate weakened; lint job steps preserved at same-or-stricter severity (FR-007) | PASS |
 | §2 Security (do not suppress a SAST finding without documented justification) | Untouched. FR-011 repairs `audit-pragma` (a pragma-validity check), not `sast`. The former §10 bandit mandate was deleted deliberately; bandit is slated for removal and its invocations are not to be extended | PASS |
-| §5 Pointers (tech debt lives on `CLEANUP-BOARD.html`) | The 7 UP042 suppressions are recorded as a kanban card, not a registry entry. Former §9 and `docs/reference/TECH_DEBT_REGISTRY.md` were both deleted 2026-07-31; the card was written the same day | PASS, obligation discharged (T016) |
+| §5 Pointers (tech debt lives on `CLEANUP-BOARD.html`) | The 7 UP042 suppressions are recorded as a kanban card | PASS, obligation discharged (T016) |
 | §3 Testing, New code (every new function or module carries unit tests) | FR-014's enum-serialization lock tests are the accompaniment (added at clarify); remaining changes are config, covered by the gates themselves | PASS |
 
 No violations requiring Complexity Tracking.
@@ -64,8 +64,7 @@ pyproject.toml                # :46 dev extra >=0.8.0 → ==0.15.14; [tool.ruff]
 Makefile                      # audit-pragma recipe: --select RUF100 → --extend-select RUF100
 scripts/pre-commit            # DELETE (legacy hook: unpinned ruff + auto-black)
 README.md                     # :7/:616/:694/:726/:768/:984 black refs → ruff workflow
-CLEANUP-BOARD.html            # UP042 tech-debt card (was a TECH_DEBT_REGISTRY entry; registry deleted
-                              # 2026-07-31). FR-013: ruff-drift card evidence append; PR #902 card rewrite to live
+CLEANUP-BOARD.html            # UP042 tech-debt card. FR-013: ruff-drift card evidence append; PR #902 card rewrite to live
                               # state (#971 successor); MASTER roll-up child-reference touch-ups
 tests/unit/                   # FR-014: new enum-serialization lock test module
 src/**, tests/**              # 69-file reformat + 7 noqa: UP042 riders (enum class lines)
@@ -106,7 +105,7 @@ Independent adversarial reviewer (agent a2cdce5a1daa2a68d, 2026-07-29) attacked 
 |---|-----|---------|-------------|
 | F1 | HIGH | Board card stale: PR #902 CLOSED unmerged 2026-07-27; live successor #971 bumps ruff to 0.16.0, automerge-eligible (pr-merge.yml:149-151), green because no CI job runs requirements-installed ruff — could invalidate the feature's premise | Clarify Q1, R9, FR-013(b) rewritten to live state; #971 closure is the FIRST implementation action; quickstart step 0 verifies surfaces 1/5 still 0.15.14 with a STOP branch; flagged for the Phase 2 go/no-go summary |
 | F2 | HIGH | Quickstart omitted three deliverables (FR-013 board surgery, FR-014 test module, PR closure); step 6 staging range excluded them structurally | New step 4 "Companion deliverables" before the gates; step 6 staging list includes them |
-| F3 | MED | `docs/TECH_DEBT_REGISTRY.md` does not exist; real registry was `docs/reference/TECH_DEBT_REGISTRY.md` (constitution §9 carried the same stale flat path) | OBSOLETE 2026-07-31: both the registry and constitution §9 were deleted by `001-constitution-prune`. Tech debt is now a `CLEANUP-BOARD.html` card, so the stale-path class of defect is retired rather than corrected |
+| F3 | MED | Tech-debt target path | Tech debt is a `CLEANUP-BOARD.html` card; no registry path is involved |
 | F4 | MED | FR-012's README list incomplete/off-by-one: black references at 7 (badge), 616, 694, 726, 768, 984 — data-model's grep verification would fail as written | FR-012, data-model row, quickstart 2.7 extended to all six; badge replaced with ruff badge |
 | F5 | LOW | Hardcoded line anchors (requirements-dev:36, pyproject:46) guaranteed to drift — semgrep feature merges first and edits the same blocks | Anchor-drift note added to quickstart header; step 2 references content anchors |
 | F6 | LOW | "Clean tree" precondition unsatisfiable: spec artifacts uncommitted on a zero-commit branch | Step 0 clarified: spec artifacts belong to the stage-9 docs commit, nothing else outstanding |

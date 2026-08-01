@@ -227,7 +227,6 @@ Under `specs/001-constitution-prune/`:
   full-vocabulary term sweep, and the criterion 3 replacement.
 - `checks/residue-check.sh`: replaces criterion 3's word list, which scores zero precision and
   zero recall on this document. Six rules, all six observed failing on induced perturbations.
-- `reviews/accuracy-audit.json`: prior session, not re-verified in full.
 - `reviews/carded-out-of-scope.md`: C-001 caveman, C-002 (now D3), C-003 reference reachability.
 - `proposed-failing-tests-clause.md`: the broken-tests clause, not yet applied.
 

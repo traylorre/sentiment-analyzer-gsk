@@ -68,6 +68,11 @@ BANNED_TERMS: tuple[str, ...] = (
 )
 
 # Directory names skipped at any depth. Scan scoping, not exemption.
+#
+# ".claude" holds git-ignored subagent handoff output. Without it the gate measures its
+# own output: any agent that quotes a failure line from this checker raises the count for
+# whoever commits next, and every commit and `make validate` on a machine that has run
+# subagents fails. CI never saw it because a fresh clone has no .claude/handoff.
 EXCLUDED_DIR_NAMES: frozenset[str] = frozenset(
     {
         ".git",
@@ -77,6 +82,7 @@ EXCLUDED_DIR_NAMES: frozenset[str] = frozenset(
         ".pytest_cache",
         ".hypothesis",
         ".ruff_cache",  # absent from the shell version; caches can hold anything
+        ".claude",  # git-ignored agent handoff output; see below
     }
 )
 

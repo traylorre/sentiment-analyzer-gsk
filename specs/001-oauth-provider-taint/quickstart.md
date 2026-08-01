@@ -483,9 +483,8 @@ gh api "repos/$REPO/code-scanning/alerts/$ALERT" \
 ```
 
 Then add a tech-debt card, per **FR-007** (a dismissal is a documented security shortcut).
-**Re-targeted 2026-07-31**: this step wrote an entry to `docs/reference/TECH_DEBT_REGISTRY.md`;
-`001-constitution-prune` deleted that file and the constitution section mandating it. Add a card to
-the `CARDS` array in **`CLEANUP-BOARD.html`** instead, with `lane: "track"`, a `title` naming
+Add a card to
+the `CARDS` array in **`CLEANUP-BOARD.html`**, with `lane: "track"`, a `title` naming
 `store_oauth_state()`, `evidence` carrying the alert number and the exact dismissal justification,
 `citation` `src/lambdas/shared/auth/oauth_state.py`, a `next_action`, and `source` naming this
 directory. No identifier is allocated: cards have no id field, which retires the merge-time

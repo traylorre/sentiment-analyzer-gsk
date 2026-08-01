@@ -8,7 +8,6 @@ and alerting systems will work correctly.
 CRITICAL: These tests require the Lambda warmup step to have run first.
 If metrics are missing, the warmup step may have failed.
 
-Test Debt Item: TD-001
 Spec: 003-preprod-metrics-generation
 """
 
