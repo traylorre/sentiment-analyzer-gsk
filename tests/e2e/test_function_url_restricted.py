@@ -1,3 +1,4 @@
+# Target: Infrastructure (Lambda Function URL access restriction)
 """E2E tests for Lambda Function URL restriction (Feature 1256).
 
 Tests verify that direct access to the SSE Lambda Function URL returns 403

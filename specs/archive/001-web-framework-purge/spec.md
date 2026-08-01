@@ -5,6 +5,14 @@
 **Status**: Draft (Round 8)
 **Input**: User description: "Remove FastAPI and Mangum permanently from all Lambda functions. Replace with native AWS Lambda Proxy Integration handlers using event/context pattern. No fallbacks - fail fast on errors. Remove all traces of fastapi, mangum, uvicorn, starlette from code, tests, requirements, and Terraform."
 
+> **Directory renamed 2026-07-30** by feature `001-validate-gate-repair`, which removed
+> retired-framework names from every path in the repository. Navigational links inside
+> this directory were repointed. Nothing else was touched: branch names, command
+> transcripts and quoted file contents are records of what was run and what existed at
+> the time, so paths quoted below still carry the old spelling. Rewriting them would
+> falsify a record rather than correct a stale claim. The former name is on the branch
+> line above and in `git log --follow`.
+
 ## Revision History
 
 | Round | Date | Changes |

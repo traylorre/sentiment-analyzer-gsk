@@ -696,8 +696,11 @@ so a reader can overturn it by checking the same source rather than by re-litiga
 **Answer**: yes. Add `check-waitforresponse-race` and add it to the `validate` target's dependency
 list.
 
-**Evidence**: `Makefile:42` reads
-`validate: fmt lint security sast check-banned-terms check-test-target-headers`.
+**Evidence**: `Makefile:42` read
+`validate: fmt lint security sast check-banned-terms check-test-target-headers` at the time. That
+prerequisite list no longer exists: 001-validate-gate-repair replaced it with a driver recipe that
+runs every stage and reports each one, precisely because a prerequisite list lets the first failure
+hide the rest. The reasoning below still holds, and the guard is still wired into the gate.
 `check-test-target-headers` is the existing precedent for a repo-level guard over
 `frontend/tests/e2e/*.spec.ts`, and it is wired as a `validate` dependency rather than left
 free-floating. Following that shape costs one line and keeps `make validate` an honest name.

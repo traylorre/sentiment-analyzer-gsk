@@ -3,18 +3,25 @@
 **Feature**: 1157-auth-cache-headers
 **Date**: 2026-01-06
 
+> **Superseded 2026-07-30.** The web framework this research was conducted against has
+> since been retired from the application. Feature `001-validate-gate-repair` corrected the
+> lines that asserted it was still current and genericized the framework identifiers in the
+> samples below, so those samples are no longer a verbatim record of what the original
+> research produced. The findings and the decision are otherwise unchanged. See
+> `git log --follow` for the original text.
+
 ## Research Tasks Completed
 
-### 1. FastAPI Response Header Patterns
+### 1. Response Header Patterns
 
-**Question**: What is the best practice for setting response headers in FastAPI?
+**Question**: What was the best practice for setting response headers in the framework then in use?
 
-**Finding**: FastAPI provides multiple approaches:
+**Finding**: The framework then in use provided multiple approaches:
 
 1. **Dependency Injection** (Recommended for this use case)
 
    ```python
-   from fastapi import Depends, Response
+   from <framework> import Depends, Response
 
    async def add_no_cache_headers(response: Response):
        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
@@ -95,7 +102,7 @@
 
 ## Conclusion
 
-Use FastAPI dependency injection at the auth router level with the full header set:
+Use Powertools middleware at the auth router level with the full header set:
 
 ```
 Cache-Control: no-store, no-cache, must-revalidate
