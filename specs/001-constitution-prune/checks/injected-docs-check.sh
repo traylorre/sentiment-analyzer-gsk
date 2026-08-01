@@ -68,8 +68,16 @@ is_allowed() {
 # guessing at the prose, and the guess is where a false positive would come from.
 # Root-relative paths need no guessing, and they are the class that actually
 # broke: docs/TECH_DEBT_REGISTRY.md, docs/CLOUD_PROVIDER_PORTABILITY_AUDIT.md.
+#
+# KNOWN LIMIT: ROOTFILES is a whitelist, not a rule. A bare filename with no
+# directory component is only checked if it is named there. `mermaid-config.json`
+# is in the list because the constitution cites it and a reader would otherwise
+# look in docs/diagrams/; a bare filename this list does not know is invisible to
+# R1. Distinguishing a real root file from a prose fragment like `handler.py`
+# without a directory is the part that cannot be done generically, so extend the
+# list when a core doc starts citing a new root file.
 ROOTS='src|docs|tests|specs|infrastructure|frontend|scripts|\.github|\.specify'
-ROOTFILES='Makefile|CLAUDE\.md|CLEANUP-BOARD\.html|pyproject\.toml|requirements(-dev)?\.txt|SECURITY\.md|docker-compose\.yml|SPEC\.md'
+ROOTFILES='Makefile|CLAUDE\.md|CLEANUP-BOARD\.html|pyproject\.toml|requirements(-dev)?\.txt|SECURITY\.md|docker-compose\.yml|SPEC\.md|mermaid-config\.json|CHANGELOG\.md|README\.md'
 extract_paths() {
   grep -oE '`[^`]+`' "$1" 2>/dev/null \
     | tr -d '`' \
