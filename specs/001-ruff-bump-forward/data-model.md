@@ -58,7 +58,7 @@ Disposition for all 7: `# noqa: UP042` rider + one-line justification; NO StrEnu
 | `TimeRange` | `src/lambdas/shared/models/ohlc.py:16` |
 | `OHLCResolution` | `src/lambdas/shared/models/ohlc.py:36` |
 
-Companion artifacts: `docs/reference/TECH_DEBT_REGISTRY.md` entry, next sequential TD number (constitution §9 mandates registry entries for noqa workarounds; note §9 cites the stale flat path `docs/TECH_DEBT_REGISTRY.md` — the real registry lives under docs/reference/) — root cause "unsafe autofix vs behavior-neutrality", proposed fix "StrEnum migration feature with serialization test sweep". Plus FR-014 lock-test module in `tests/unit/` asserting `str(member)` == `"ClassName.MEMBER"` and `.value` == wire string for all 7 (verified semantics on repo Python 3.13.0; none of the 7 defines `__str__`/`__format__`).
+Companion artifacts: a `CLEANUP-BOARD.html` kanban card recording root cause "unsafe autofix vs behavior-neutrality" and proposed fix "StrEnum migration feature with serialization test sweep". Plus FR-014 lock-test module in `tests/unit/` asserting `str(member)` == `"ClassName.MEMBER"` and `.value` == wire string for all 7 (verified semantics on repo Python 3.13.0; none of the 7 defines `__str__`/`__format__`).
 
 ## Entity: Makefile Target (audit-pragma)
 

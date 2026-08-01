@@ -4,7 +4,6 @@ Synthetic Test Data Generator for E2E Testing
 This module generates deterministic test data for E2E and integration tests.
 It creates items in DynamoDB that can be verified against known properties.
 
-Test Debt Item: TD-004
 Spec: 005-synthetic-test-data
 
 Usage:

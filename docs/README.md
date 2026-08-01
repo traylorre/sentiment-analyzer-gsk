@@ -12,7 +12,7 @@ This directory contains all project documentation organized by category.
 | [Security](./security/) | IAM, security analysis, audits | [DASHBOARD_SECURITY_ANALYSIS.md](./security/DASHBOARD_SECURITY_ANALYSIS.md), [IAM_TERRAFORM_TROUBLESHOOTING.md](./security/IAM_TERRAFORM_TROUBLESHOOTING.md) |
 | [Setup](./setup/) | Development environment setup | [WORKSPACE_SETUP.md](./setup/WORKSPACE_SETUP.md), [GIT_WORKFLOW.md](./setup/GIT_WORKFLOW.md) |
 | [Testing](./testing/) | Test strategies, chaos engineering | [TESTING_LESSONS_LEARNED.md](./testing/TESTING_LESSONS_LEARNED.md), [CHAOS_TESTING_OPERATOR_GUIDE.md](./testing/CHAOS_TESTING_OPERATOR_GUIDE.md) |
-| [Reference](./reference/) | Specifications, tech debt, costs | [DASHBOARD_SPEC.md](./reference/DASHBOARD_SPEC.md), [TECH_DEBT_REGISTRY.md](./reference/TECH_DEBT_REGISTRY.md) |
+| [Reference](./reference/) | Specifications, tech debt, costs | [DASHBOARD_SPEC.md](./reference/DASHBOARD_SPEC.md) |
 | [Diagrams](./diagrams/) | Mermaid architecture diagrams | [high-level-overview.mmd](./diagrams/high-level-overview.mmd), [dataflow-all-flows.mmd](./diagrams/dataflow-all-flows.mmd) |
 | [Archive](./archive/) | Historical docs and research | Model selection, audit reports, sessions |
 
@@ -29,7 +29,6 @@ Start here:
 
 - [ARCHITECTURE_DECISIONS.md](./architecture/ARCHITECTURE_DECISIONS.md) - Key design decisions
 - [TESTING_LESSONS_LEARNED.md](./testing/TESTING_LESSONS_LEARNED.md) - Testing patterns
-- [TECH_DEBT_REGISTRY.md](./reference/TECH_DEBT_REGISTRY.md) - Known issues
 
 ## For On-Call Engineers
 
@@ -129,7 +128,6 @@ Specifications and technical references.
 |------|-------------|
 | [DASHBOARD_SPEC.md](./reference/DASHBOARD_SPEC.md) | Dashboard specification |
 | [IMPLEMENTATION_GUIDE.md](./archive/IMPLEMENTATION_GUIDE.md) | Implementation patterns (archived - historical design) |
-| [TECH_DEBT_REGISTRY.md](./reference/TECH_DEBT_REGISTRY.md) | Technical debt tracking |
 | [SPECIFICATION-GAPS.md](./reference/SPECIFICATION-GAPS.md) | Spec gap analysis |
 | [API_GATEWAY_GAP_ANALYSIS.md](./reference/API_GATEWAY_GAP_ANALYSIS.md) | API analysis |
 | [COST_BREAKDOWN.md](./reference/COST_BREAKDOWN.md) | Infrastructure costs |

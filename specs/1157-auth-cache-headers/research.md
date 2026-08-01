@@ -3,13 +3,6 @@
 **Feature**: 1157-auth-cache-headers
 **Date**: 2026-01-06
 
-> **Superseded 2026-07-30.** The web framework this research was conducted against has
-> since been retired from the application. Feature `001-validate-gate-repair` corrected the
-> lines that asserted it was still current and genericized the framework identifiers in the
-> samples below, so those samples are no longer a verbatim record of what the original
-> research produced. The findings and the decision are otherwise unchanged. See
-> `git log --follow` for the original text.
-
 ## Research Tasks Completed
 
 ### 1. Response Header Patterns
