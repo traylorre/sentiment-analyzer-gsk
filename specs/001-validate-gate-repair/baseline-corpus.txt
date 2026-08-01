@@ -1,0 +1,267 @@
+# Baseline captured 2026-07-31T00:02:42Z at commit 176310e
+# Line content deliberately omitted: including it would add this file to the corpus.
+
+## T001: corpus as (file, line) pairs
+.secrets.baseline:2239
+.secrets.baseline:2242
+.secrets.baseline:2251
+CLEANUP-BOARD.html:71
+docs/cleanup/diagram-drift.md:133
+specs/1157-auth-cache-headers/plan.md:13
+specs/1157-auth-cache-headers/plan.md:72
+specs/1157-auth-cache-headers/plan.md:79
+specs/1157-auth-cache-headers/research.md:10
+specs/1157-auth-cache-headers/research.md:12
+specs/1157-auth-cache-headers/research.md:17
+specs/1157-auth-cache-headers/research.md:8
+specs/1157-auth-cache-headers/research.md:98
+specs/1157-auth-cache-headers/spec.md:81
+specs/1268-cors-404-headers/plan.md:21
+
+## T001: counts by basis
+term-hits (what the bash checker reports): 17
+distinct (file,line) pairs: 15
+
+## T002: per-stage exit codes before any change
+fmt-check = 0
+lint = 0
+check-banned-terms = 2
+check-test-target-headers = 2
+check-waitforresponse-race = 0
+security = 0   (structurally cannot fail; last command is an unconditional echo)
+sast     = 0   (verified separately; semgrep 478 rules / 164 files / 0 findings)
+
+## T003: exemption baseline (SC-012)
+inline markers = 0   (no exemption mechanism exists yet)
+
+## T004: paths whose NAME contains a legacy term (redacted)
+./docs/archive/<TERM>-purge
+./docs/archive/<TERM>-purge/HL-<TERM>-purge-checklist.md
+./docs/archive/<TERM>-purge/audit-<TERM>-surface.md
+./specs/1217-<TERM>-infra-purge
+./specs/archive/001-<TERM>-purge
+./specs/archive/1040-add-sse-<TERM>-dep
+
+## T013: Python checker equivalence to the shell baseline (VERIFIED)
+Command: python3 scripts/check_banned_terms.py, pairs extracted and sorted, diffed
+against the T001 corpus above.
+
+Result: IDENTICAL. 15 distinct (file, line) pairs, 17 term-hits, exit 1.
+This matches the T001 counting convention exactly (17 hits = 15 lines).
+Scanned 2,747 files. Exemptions honoured: 0 inline, consistent with T003.
+
+One checker change was required to reach equivalence. The first run reported 23 pairs:
+the 15 baseline pairs plus 8 in scripts/check-banned-terms.sh, the predecessor script,
+whose own term list the new checker was scanning. The old script self-excluded by name;
+the rewrite self-excluded only its own path. Fixed by CHECKER_SELF_PATHS, which lists
+both checkers. The shell entry is temporary and is deleted with the script at T053.
+
+Ordering note: the entry is load-bearing, not cosmetic. T011a repoints the Makefile in
+phase 2 but T053 deletes the script in phase 7, so for the whole of phases 3 to 6 both
+files exist. Without the exclusion the phase 4 cleanup could never reach zero findings,
+because 8 of them live in a file that phase 4 does not touch.
+
+## T026 / Phase 3 checkpoint: two consecutive gate runs (VERIFIED)
+sha256 over every tracked file, taken before run 1, between the runs, and after run 2:
+  BEFORE == MID == AFTER  (8ef224ac4b6acdb8...)
+`git status --porcelain` byte-identical before and after. FR-004 / SC-007 satisfied.
+Checksums covered ALL tracked files rather than src/ and tests/ only, because the lint
+stage runs terraform validate against infrastructure/.
+
+Both runs exited 2 (the driver's `exit 1`, wrapped by make; see R3-08) and produced
+byte-identical summary blocks, so the result is deterministic.
+
+Stage execution, from the run log. All seven banners appear, including the two stages
+that never ran before because make stopped at the first failed prerequisite:
+  format check  BLOCKING  PASS
+  lint          BLOCKING  PASS
+  dependency audit  ADVISORY  reported
+  static analysis   BLOCKING  PASS
+  legacy terms      BLOCKING  FAIL
+  test target headers  BLOCKING  PASS
+  e2e race guard       BLOCKING  PASS
+  -> FAIL: 1 of 6 blocking stages failed.
+
+The header stage moved from FAIL (T002 baseline, exit 2) to PASS. The legacy-terms
+failure is the corpus, which phase 4 remediates; the exit-0 half of user story 1
+completes there, as the plan anticipated.
+
+## R3-07 confirmed by execution, not review
+With the parse-time guard temporarily disabled, `make -n validate` printed PASS for all
+six blocking stages and exited 0, including PASS for the two stages known to be failing.
+Recipe lines containing $(MAKE) run under -n so recursive make can show the tree, -n
+propagates to the sub-makes via MAKEFLAGS, and each does nothing and exits 0. The guard
+must fire at parse time: under -n a shell test in the recipe is printed, not run.
+
+# =============================================================================
+# T039 evidence: Phase 4 remediation, corpus driven to zero (2026-07-30)
+# =============================================================================
+
+## Final state
+  Scanned: 2,748 files  (unchanged from T013, so the renames did not alter scan scope)
+  Exemptions honoured: 1 inline covering 2 occurrence(s)
+  PASS: 0 unexempted occurrences.
+
+Only docs/cleanup/diagram-drift.md still holds any match at all, and both of its
+term-hits sit on the one exempted line.
+
+## Disposition audit (FR-011, SC-008)
+All 15 T001 baseline (file,line) pairs have a recorded disposition. Checked
+mechanically against the disposition table in plan.md, not by reading:
+
+  .secrets.baseline                       3  rename the recorded directory, regenerate
+  CLEANUP-BOARD.html                      1  reword the card (FR-020)
+  docs/cleanup/diagram-drift.md           1  inline exemption marker, the only one
+  specs/1157-auth-cache-headers/plan.md   3  rewrite: 2 renamed, 1 de-named
+  specs/1157-auth-cache-headers/research  5  rewrite: 1 renamed, 4 de-named
+  specs/1157-auth-cache-headers/spec.md   1  rewrite: renamed
+  specs/1268-cors-404-headers/plan.md     1  scrub template placeholder
+
+## Two defects the remediation surfaced in the checker itself
+Both were found by running the checker against the exemption T037 had just added,
+not by review, and both are now regression-tested.
+
+1. Justification terminator was stripped as a SUFFIX. T037 places the marker inside a
+   Markdown table cell, so the comment is followed by " |" and nothing was stripped:
+   the listed justification read "...in the same row --> |". Now cut at the earliest
+   terminator wherever it appears.
+
+2. Exemptions were counted per MATCH, not per MARKER. The exempted line names two
+   banned terms, so one marker with one justification was listed twice and reported as
+   a total of 2. That total is the SC-012 baseline, so the inflation would have been
+   recorded as growth in the exemption surface. Now keyed on (path, line).
+
+## FR-017 satisfied by elimination
+No generated file contains a legacy term in its content, so no path-scoped exemption
+mechanism exists to be tested. Recorded in scripts/check_banned_terms.py alongside
+MARKER_TOKEN so the absent mechanism reads as deliberate. If a generated file ever
+gains a term in its CONTENT, FR-013 must be amended rather than the gap patched.
+
+# =============================================================================
+# T045 evidence: red-team insertion proof, SC-004 / FR-010 (2026-07-30)
+# =============================================================================
+
+With the corpus at zero, an insertion is the only available evidence that the checker
+still detects anything. A passing gate over a clean repository and a passing gate over a
+broken checker are indistinguishable from the outside, which is the failure this whole
+feature exists to remove, so it must not be assumed here either.
+
+Target: src/lambdas/dashboard/handler.py, confirmed clean before the insertion.
+Inserted one import line naming a banned term at line 50.
+
+Result:
+  FAIL: 1 unexempted occurrences.
+    src/lambdas/dashboard/handler.py:50
+      matched: <TERM>
+      remedy: this is application source. Remove the reference. Exemptions are
+              for records that the framework was retired, not for code that uses it.
+  exit code 1
+
+The remedy is the application-source one, not the generic "add a marker" one, so a
+contributor is not invited to exempt a genuine violation in code.
+
+Reverted with git checkout. sha256 before == after, byte-identical. Re-ran the checker:
+PASS, 0 unexempted. The insertion was never committed.
+
+# =============================================================================
+# T057 evidence: full gate end to end, SC-001 / SC-002 / FR-003 (2026-07-30)
+# =============================================================================
+
+`make validate`, single run, exit 0.
+
+  format check          BLOCKING   PASS
+  lint                  BLOCKING   PASS
+  dependency audit      ADVISORY   reported
+  static analysis       BLOCKING   PASS
+  legacy terms          BLOCKING   PASS
+  test target headers   BLOCKING   PASS
+  e2e race guard        BLOCKING   PASS
+  -> PASS: all 6 blocking stages passed.
+
+All seven stages appear, including the two that could never run before because make
+halted at the first failing prerequisite. The legacy-terms stage moved FAIL -> PASS with
+phase 4; the header stage moved FAIL -> PASS with phase 3.
+
+FR-004 re-confirmed on this run: `git status --porcelain` byte-identical before and
+after. The gate reads and reports, it does not edit.
+
+SC-001's "provisioned" held: the dependency-audit stage reached its remote advisory
+database and the static-analysis stage downloaded its rule set. Both are network
+dependent, and a run without connectivity would report differently.
+
+# =============================================================================
+# T058 evidence: coverage of the new checker (2026-07-30)
+# =============================================================================
+
+pytest tests/unit/scripts/test_check_banned_terms.py --cov=scripts.check_banned_terms
+
+  scripts/check_banned_terms.py   152 stmts, 0 miss, 54 branch, 0 partial -> 100%
+
+40 tests. Constitution threshold for new code is 80%.
+
+Note `make test-unit` passes --cov=src, which does not measure scripts/, so the bare
+flag would report on the wrong tree entirely rather than report nothing.
+
+The last four uncovered lines were closed rather than accepted: the FR-015 "marker
+carries no justification" remedy string, the missing-scan-root path, and repo_root()'s
+derivation. The first is the message a contributor sees when their exemption is
+rejected, and it was asserted nowhere.
+
+# =============================================================================
+# T059 evidence: this feature added nothing to the corpus (2026-07-30)
+# =============================================================================
+
+Matches contributed by this feature's own artifacts: 0
+Literal legacy terms in the test module: none (all fixtures derive from BANNED_TERMS)
+Feature artifacts under specs/001-validate-gate-repair/ containing a term: none
+
+The terminology discipline in the plan's Terminology Note held across every artifact,
+which matters because these artifacts live under specs/ and are scanned.
+
+# =============================================================================
+# T049 evidence: the wiring blocks a merge, FR-022 / US3 (2026-07-30)
+# =============================================================================
+
+Run BEFORE T048, per the task's own ordering note, so the new pre-commit hook could not
+block the commit this task needs to make.
+
+Method: branch `t049-legacy-term-gate-probe` off the feature branch carrying one planted
+unexempted legacy term in src/lambdas/dashboard/handler.py. Planted as a comment rather
+than an import so that ruff still passes and the legacy-term step is the ONLY failing
+step. Redness alone proves nothing here; 002's T014 was refused as evidence for exactly
+that reason, because `make validate` exited non-zero whether or not the violation was
+present. Attribution is the requirement.
+
+Draft PR #989 against main. Result, from the job's step-level conclusions:
+
+  success   Check formatting with ruff
+  success   Check linting with ruff
+  success   Check for security issues
+  success   Check waitForResponse race ordering
+  failure   Check for legacy framework terms      <-- the only failure
+  ...
+  Lint: fail (45s)
+
+Every other step in the required `Lint` job succeeded, so the job's failure is
+attributable to the new step and to nothing else. `Lint` is a required status check
+(verified the same day: Secrets Scan, Lint, Run Tests, Playwright E2E Tests), so a PR in
+this state cannot merge.
+
+Cleanup: PR closed, remote branch deleted, local branch deleted, repository re-verified
+at 0 unexempted. Orphan scan over every remote branch found none. The planted violation
+was never merged and exists only in the closed PR's history.
+
+# =============================================================================
+# T048 evidence: pre-commit hook, deliberately secondary (2026-07-30)
+# =============================================================================
+
+  $ pre-commit run check-banned-terms --all-files
+  Check for legacy framework terms.........................................Passed
+
+  $ SKIP=check-banned-terms pre-commit run check-banned-terms --all-files
+  Check for legacy framework terms........................................Skipped
+
+The second command is the point. This hook is fast local feedback and enforces nothing:
+the `Pre-commit Hooks` job is not a required context and honours SKIP. The enforcing copy
+is the `Lint` step proven above, which is invoked directly rather than through pre-commit
+precisely so that SKIP cannot reach it.

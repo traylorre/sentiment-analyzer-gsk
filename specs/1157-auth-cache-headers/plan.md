@@ -10,7 +10,7 @@ Add security headers (`Cache-Control: no-store, no-cache, must-revalidate`, `Pra
 ## Technical Context
 
 **Language/Version**: Python 3.13
-**Primary Dependencies**: FastAPI (Response headers)
+**Primary Dependencies**: aws-lambda-powertools (Response headers)
 **Storage**: N/A (header-only change)
 **Testing**: pytest with existing auth endpoint tests
 **Target Platform**: AWS Lambda (containerized)
@@ -69,14 +69,14 @@ No violations. This is a straightforward, non-breaking change.
 
 ### Research Tasks
 
-1. **FastAPI response header patterns** - Best practice for setting headers
+1. **Response header patterns** - Best practice for setting headers
 2. **HTTP cache header standards** - Verify header combination is correct per RFC
 
 ### Findings
 
 **Decision 1: Header Setting Approach**
 
-- **Decision**: Use FastAPI middleware or response decorator pattern
+- **Decision**: Use Powertools middleware or response decorator pattern
 - **Rationale**: Consistent application across all auth endpoints without modifying each handler
 - **Alternatives considered**:
   - Manual `response.headers` in each endpoint (rejected: repetitive, error-prone)

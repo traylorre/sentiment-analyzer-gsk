@@ -1,3 +1,4 @@
+// Target: Customer Dashboard (Next.js/Amplify)
 // Feature 1267: CORS header validation via browser fetch
 // Uses page.evaluate(() => fetch(...)) to make real credentialed requests
 // and assert CORS headers are correctly configured.

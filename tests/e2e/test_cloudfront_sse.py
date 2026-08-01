@@ -1,3 +1,4 @@
+# Target: Infrastructure (CloudFront distribution fronting the SSE Lambda)
 """E2E tests for CloudFront SSE streaming (Feature 1255).
 
 Tests verify SSE events arrive via CloudFront, WAF blocks malicious

@@ -1,3 +1,4 @@
+# Target: Infrastructure (WAF v2 web ACL in front of API Gateway)
 """E2E tests for WAF v2 protection (Feature 1254).
 
 Tests verify that WAF blocks SQL injection, XSS, and rate-limited IPs
