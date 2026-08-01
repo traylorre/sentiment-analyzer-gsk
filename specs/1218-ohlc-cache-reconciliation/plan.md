@@ -255,7 +255,7 @@ git checkout 1218-ohlc-cache-reconciliation
 make test-local
 
 # 3. Run banned-term scanner to see current state
-bash scripts/check-banned-terms.sh
+python3 scripts/check_banned_terms.py
 
 # 4. After implementation, verify
 make validate          # lint + security + banned terms

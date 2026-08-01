@@ -1,4 +1,5 @@
-.PHONY: help install install-tools validate fmt fmt-check lint security sast audit-pragma check-banned-terms test test-local test-unit test-integration test-e2e test-spec test-mutation \
+.PHONY: help install install-tools validate fmt fmt-check lint security sast audit-pragma audit-exemptions check-banned-terms test test-local test-unit test-integration test-e2e test-spec test-mutation \
+        check-test-target-headers check-waitforresponse-race check-iam-patterns \
         localstack-up localstack-down localstack-wait localstack-logs localstack-status \
         tf-init tf-plan tf-apply tf-destroy tf-init-local tf-plan-local tf-apply-local tf-destroy-local \
         cost cost-diff cost-baseline clean clean-all
@@ -39,23 +40,100 @@ install-tools: ## Install CLI tools via aqua
 # Validation (Zero AWS Cost)
 # ============================================================================
 
-validate: fmt lint security sast check-banned-terms check-test-target-headers check-waitforresponse-race ## Run all validation (fmt + lint + security + sast + banned terms + test headers + waitForResponse races)
-	@echo "$(GREEN)✓ All validation passed$(NC)"
+# `make -n validate` cannot produce a trustworthy result, so it is refused outright.
+#
+# Recipe lines containing $(MAKE) run even under -n, by design, so that recursive make
+# can show the whole tree. The -n then propagates to those sub-makes through MAKEFLAGS,
+# each does nothing and exits 0, and the driver below records seven clean stages without
+# a single check having executed. That is precisely the false all-clear this feature
+# exists to remove, so it must not be reachable by adding one flag.
+#
+# The guard has to fire at parse time. A shell test inside the recipe would not work:
+# under -n, lines that do not contain $(MAKE) are printed rather than run, so the guard
+# would be echoed while the stages it guards went ahead.
+ifneq (,$(findstring n,$(firstword $(MAKEFLAGS))))
+ifneq (,$(filter validate,$(MAKECMDGOALS)))
+$(error `make -n validate` is not supported: -n propagates to the sub-makes, so every \
+stage would report success without running. Run `make validate` for a real result.)
+endif
+endif
+
+# Stages run in sequence; the driver continues past a failure so one run shows every
+# problem (FR-001). Before this was a driver it was a prerequisite list, and make stops
+# at the first failed prerequisite, which is how a second broken stage stayed hidden
+# behind a first one long enough for this feature's spec to be written without knowing
+# it existed.
+#
+# fmt-check, not fmt: a gate must not modify the tree it is judging (FR-004).
+#
+# Sub-make exit codes are not meaningful beyond zero versus non-zero. $(MAKE) reports 2
+# for any recipe failure regardless of what the underlying tool returned, so PASS/FAIL
+# is the only signal available here, and the stage's own output carries the detail.
+validate: ## Run every validation stage, report each, and gate on the blocking ones
+	@set -uo pipefail; \
+	declare -a ORDER=() MODE=() OUTCOME=(); \
+	run_stage() { \
+		local target="$$1" label="$$2" mode="$$3" rc=0; \
+		echo ""; \
+		printf '%b\n' "$(YELLOW)━━━ $$label ━━━$(NC)"; \
+		$(MAKE) --no-print-directory "$$target" || rc=$$?; \
+		ORDER+=("$$label"); MODE+=("$$mode"); \
+		if [ "$$mode" = "ADVISORY" ]; then OUTCOME+=("reported"); \
+		elif [ "$$rc" -eq 0 ]; then OUTCOME+=("PASS"); \
+		else OUTCOME+=("FAIL"); fi; \
+	}; \
+	run_stage fmt-check                  "format check"        BLOCKING; \
+	run_stage lint                       "lint"                BLOCKING; \
+	run_stage security                   "dependency audit"    ADVISORY; \
+	run_stage sast                       "static analysis"     BLOCKING; \
+	run_stage check-banned-terms         "legacy terms"        BLOCKING; \
+	run_stage check-test-target-headers  "test target headers" BLOCKING; \
+	run_stage check-waitforresponse-race "e2e race guard"      BLOCKING; \
+	echo ""; \
+	echo "================ validate summary ================"; \
+	fails=0; blocking=0; \
+	for i in "$${!ORDER[@]}"; do \
+		printf "  %-21s %-10s %s\n" "$${ORDER[$$i]}" "$${MODE[$$i]}" "$${OUTCOME[$$i]}"; \
+		if [ "$${MODE[$$i]}" = "BLOCKING" ]; then \
+			blocking=$$((blocking + 1)); \
+			if [ "$${OUTCOME[$$i]}" = "FAIL" ]; then fails=$$((fails + 1)); fi; \
+		fi; \
+	done; \
+	echo "=================================================="; \
+	if [ "$$fails" -eq 0 ]; then \
+		printf '%b\n' "$(GREEN)✓ PASS: all $$blocking blocking stages passed.$(NC)"; \
+	else \
+		printf '%b\n' "$(RED)✗ FAIL: $$fails of $$blocking blocking stages failed. See output above.$(NC)"; \
+		exit 1; \
+	fi
 
 check-waitforresponse-race: ## Detect act-then-wait waitForResponse races in frontend/tests/e2e/
 	@echo "Checking waitForResponse race ordering..."
 	@python3 scripts/scan-waitforresponse-race.py
 
-check-test-target-headers: ## Verify all Playwright test files have Target: dashboard headers
+# The guard exists because confusing the two dashboards has caused repeated incidents,
+# so every e2e file must declare what it targets. It previously accepted only the two
+# dashboard declarations, which left no way to be honest about a test that targets
+# neither: eleven files test API Gateway, Cognito, WAF, CloudFront and log groups. They
+# could not pass without claiming to test a UI they do not touch, so the stage simply
+# failed forever and stopped being read. A third sanctioned declaration fixes that
+# without weakening the rule: a file with no declaration at all still fails (FR-025).
+#
+# The globs are NOT recursive. Adding a subdirectory under either e2e tree would make
+# its tests invisible to this guard while it continued to report success.
+check-test-target-headers: ## Verify all e2e test files declare what they target
 	@echo "Checking test target headers..."
-	@MISSING=$$(cd $(CURDIR) && grep -rL "Target:.*Dashboard" frontend/tests/e2e/*.spec.ts tests/e2e/test_*.py 2>/dev/null); \
+	@MISSING=$$(cd $(CURDIR) && grep -rLE "Target:.*(Dashboard|Infrastructure)" frontend/tests/e2e/*.spec.ts tests/e2e/test_*.py 2>/dev/null); \
 	if [ -n "$$MISSING" ]; then \
-		echo "$(RED)✗ Files missing Target: header:$(NC)"; \
+		printf '%b\n' "$(RED)✗ Files missing Target: header:$(NC)"; \
 		echo "$$MISSING"; \
-		echo "Add '// Target: Customer Dashboard (Next.js/Amplify)' or '# Target: Admin Dashboard (Lambda HTMX)' as the first line"; \
+		echo "Add one of these as the first line, naming what the file actually exercises:"; \
+		echo "  // Target: Customer Dashboard (Next.js/Amplify)"; \
+		echo "  # Target: Admin Dashboard (Lambda HTMX)"; \
+		echo "  # Target: Infrastructure (API Gateway, WAF, Cognito, CloudFront, ...)"; \
 		exit 1; \
 	fi
-	@echo "$(GREEN)✓ All Playwright test files have target headers$(NC)"
+	@printf '%b\n' "$(GREEN)✓ All e2e test files declare a target$(NC)"
 
 fmt: ## Format Python code (Ruff only - Black removed in feat(057))
 	ruff format src tests
@@ -69,10 +147,29 @@ lint: ## Run linters
 	@if [ -d "$(TF_DIR)" ]; then terraform -chdir=$(TF_DIR) validate; fi
 	@echo "$(GREEN)✓ Linting passed$(NC)"
 
-security: ## Run security scanners
+# ADVISORY, and labelled that way in the validate summary, because this target is
+# structurally unable to fail: the scan's exit code is discarded by `|| true` and the
+# last command is an unconditional echo. It reports; it does not gate.
+#
+# The summary prints "reported" for it rather than PASS. Printing PASS for a stage that
+# cannot fail is the same misrepresentation this feature exists to remove, only quieter.
+#
+# Promotion to blocking is deferred by FR-005a until the dependency-alert backlog clears
+# (the scan currently exits non-zero on real findings, so flipping it now would wedge the
+# gate on work that is already tracked elsewhere). A board card tracks the promotion.
+security: ## Run security scanners (ADVISORY: reports findings, does not gate)
 	pip-audit --ignore-vuln PYSEC-2024-58 || true
 	@echo "$(YELLOW)⚠ Review security findings above$(NC)"
 
+# BLOCKING, and genuinely so: the Semgrep invocation carries --error and its exit code
+# reaches the shell, so a finding fails the stage. That gating was established by a prior
+# feature and is preserved unchanged here per FR-006.
+#
+# The Bandit line above it discards its exit code with `|| true` and therefore gates
+# nothing. That is deliberately NOT fixed here. Bandit is slated for removal in favour of
+# Semgrep, so hardening it would be work aimed at a tool on its way out, and a separate
+# board card tracks the removal. The stage as a whole still blocks, so the label is
+# accurate; only one of its two scanners is load-bearing.
 sast: ## Run SAST (Static Application Security Testing) - Bandit + Semgrep
 	@echo "$(YELLOW)Running Bandit (Python security linter)...$(NC)"
 	bandit -c pyproject.toml -r src/ -ll || true
@@ -99,7 +196,10 @@ check-iam-patterns: ## Validate IAM ARN patterns match Terraform resource names
 	@./scripts/check-iam-patterns.sh
 
 check-banned-terms: ## Verify no legacy framework references remain
-	@bash scripts/check-banned-terms.sh
+	@python3 scripts/check_banned_terms.py
+
+audit-exemptions: ## Audit legacy-term exemptions (inline markers) for validity
+	@python3 scripts/check_banned_terms.py --list-exemptions
 
 # ============================================================================
 # Testing

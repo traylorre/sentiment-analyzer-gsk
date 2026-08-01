@@ -211,6 +211,28 @@ repos:
         always_run: true
         stages: [pre-commit]
 
+      # Legacy-term scan (001-validate-gate-repair, FR-022).
+      #
+      # Deliberately secondary. This hook gives fast local feedback and enforces
+      # nothing: the `Pre-commit Hooks` job is not a required status check, and it
+      # honours a SKIP env var. The enforcing copy is the step in the `Lint` job,
+      # which is required. Verified 2026-07-30 by pushing a branch carrying one
+      # planted violation: `Lint` failed, attributable to that step alone, with
+      # every other step in the job green.
+      #
+      # Same shape as the guard above and for the same reasons: pass_filenames is
+      # false and always_run is true because the checker scans its whole root. A
+      # commit touching no documentation must still be scanned, since a term can
+      # arrive in a file the commit does not touch, and the checker must see
+      # untracked files that pre-commit would never hand it.
+      - id: check-banned-terms
+        name: Check for legacy framework terms
+        entry: python3 scripts/check_banned_terms.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
 # CI Integration (Feature 1400 — validator gating):
 # The `pre-commit` job in .github/workflows/pr-checks.yml runs these hooks on every
 # PR to main (`pre-commit run --all-files --show-diff-on-failure`). It is NOT a
