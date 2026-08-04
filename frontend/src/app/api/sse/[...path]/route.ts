@@ -18,7 +18,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { path: string[] } }
+  { params }: { params: Promise<{ path: string[] }> }
 ) {
   // UNWIRED (M1 WI-5 / Q-M1-2): this reads the `sentiment-access-token` cookie
   // that NOTHING sets — the client cookie writer died with Feature 1145 (CVSS
@@ -40,7 +40,9 @@ export async function GET(
   }
 
   // Build upstream path from catch-all segments
-  const upstreamPath = params.path?.join('/') || 'stream';
+  // Next 15: route params are async and must be awaited before use.
+  const { path } = await params;
+  const upstreamPath = path?.join('/') || 'stream';
   const upstreamUrl = `${sseUrl}/${upstreamPath}`;
 
   try {
