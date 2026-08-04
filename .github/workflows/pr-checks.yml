@@ -55,7 +55,6 @@ jobs:
           pip install ruff==0.15.14
 
       - name: Check formatting with ruff
-        # Note: Black removed in feat(057) - Ruff formatter preserves pragma comments
         run: ruff format --check --diff src/ tests/
 
       - name: Check linting with ruff
