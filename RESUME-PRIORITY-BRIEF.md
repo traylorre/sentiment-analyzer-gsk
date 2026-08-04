@@ -72,13 +72,12 @@ for a stronger "burned down the backlog" tail.
 
 **Why:** integrity, not a standalone bullet. The resume's IAM-validator / "machine review
 gates every deploy" bullet is stronger and more honestly stated if the gates actually run
-server-side. Today: no CI job runs pre-commit (bandit/detect-secrets/trivy/checkov/mypy are
+server-side. Today: no CI job runs pre-commit (detect-secrets/trivy/checkov/mypy are
 local-only), and pip-audit is advisory (`|| true` + continue-on-error).
 
 **Fixes (per board):** uncomment the `pre-commit run --all-files` CI block
 (.pre-commit-config.yaml:179-184 referenced); remove `|| true` + `continue-on-error: true`
-from the pip-audit security job (pr-checks.yml:136-177); fix the bandit 1.9.4 vs 1.7.10
-pre-commit rev drift.
+from the pip-audit security job (pr-checks.yml:136-177).
 
 **Acceptance bar:** CI actually runs these on PRs. Low effort (~30-60 min), high honesty
 payoff for the existing IAM-governance bullet.

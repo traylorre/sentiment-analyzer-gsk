@@ -99,7 +99,7 @@ jobs:
       #
       # Invoked directly rather than through pre-commit so the `Pre-commit Hooks`
       # job's SKIP env cannot reach it, and directly rather than through
-      # `make audit-pragma` because that target also runs bandit, which this job
+      # `make audit-pragma` because that target also runs ruff, which this job
       # does not install. No pip install here: the checker is stdlib-only and
       # setup-python above already provides 3.13.
       #
@@ -252,7 +252,7 @@ jobs:
   # ========================================================================
   # JOB: Pre-commit Hooks (validator gate — Feature 1400)
   # ------------------------------------------------------------------------
-  # Makes the previously local-only pre-commit hooks (bandit, trivy, checkov,
+  # Makes the previously local-only pre-commit hooks (trivy, checkov,
   # ruff, detect-secrets, ...) actually GATE on every PR. Runs in parallel with
   # the other jobs, so marginal wall-clock is ~zero.
   #

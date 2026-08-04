@@ -85,8 +85,6 @@ pytest tests/unit/ -v
 ruff check .
 black --check .
 
-# Run security checks
-bandit -r src/ -ll
 ```
 
 ## CI Configuration

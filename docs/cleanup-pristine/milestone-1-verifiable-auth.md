@@ -330,7 +330,7 @@ Titles verbatim from the board.
 | /api/v2/runtime DRIFT: prod SSE resolves via API Gateway, not the intended CloudFront path | SSE | OUT | SSE excluded by milestone charter. |
 | Q6: by_tag GSI live-queried but never populated — tag queries silently return empty | No | OUT | Data-plane query gap, no auth surface. |
 | LB-1 VERIFIED: Cross-source dedup merge never fires — Tiingo tz-aware vs Finnhub naive timestamps in DynamoDB SK | No | OUT | Ingestion correctness, unrelated to auth. |
-| No CI job runs pre-commit — bandit, detect-secrets, trivy, checkov, mypy all dark server-side | No | OUT | Validation hardening lane, orthogonal to auth flows. |
+| No CI job runs pre-commit — detect-secrets, trivy, checkov, mypy all dark server-side | No | OUT | Validation hardening lane, orthogonal to auth flows. |
 | pip-audit runs in CI but cannot gate a merge (advisory-only) | No | OUT | Same lane as above. |
 | Issue #491: Dashboard Lambda Terraform state drift | No | OUT | Infra state hygiene, not auth; flagged as a risk on owner action 5 since the OAuth apply crosses it. |
 | CRITICAL: torch RCE via torch.load (CVE-2025-32434) | No | OUT | Analysis Lambda inference path, not auth. |
