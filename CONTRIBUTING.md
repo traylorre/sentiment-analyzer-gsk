@@ -244,7 +244,6 @@ git rebase main  # Or merge main into your branch
 ```bash
 # Lint (when linter configured)
 # terraform fmt -check
-# python -m black --check src/
 # python -m pylint src/
 
 # Run tests (when test suite exists)

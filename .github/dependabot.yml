@@ -67,7 +67,6 @@ updates:
       # Code quality tools together
       code-quality:
         patterns:
-          - "black"
           - "ruff"
           - "pre-commit"
         update-types:

@@ -75,7 +75,7 @@ terraform workspace new dev  # or prod
 
 The project uses GitHub Actions for continuous integration and deployment. Three workflows run automatically on push to main:
 
-- **Lint** (`lint.yml`): Black formatting and ruff linting
+- **Lint** (`lint.yml`): ruff formatting and linting
 - **Tests** (`test.yml`): pytest with 80% coverage requirement
 - **Deploy Dev** (`deploy-dev.yml`): Automatic deployment to dev environment
 
@@ -133,9 +133,8 @@ The Deploy Dev workflow should now have access to AWS credentials.
 
 ### Troubleshooting CI Failures
 
-1. **Lint fails on black**: Install CI version locally: `pip3 install black==23.11.0`
-2. **Lint fails on ruff**: Install CI version locally: `pip3 install ruff==0.1.6`
-3. **Tests fail**: Ensure `requirements-dev.txt` is installed: `pip3 install -r requirements-dev.txt`
+1. **Lint fails on ruff**: Install CI version locally: `pip3 install ruff==0.1.6`
+2. **Tests fail**: Ensure `requirements-dev.txt` is installed: `pip3 install -r requirements-dev.txt`
 4. **Deploy fails on credentials**: Verify all three secrets are configured correctly
 
 ---
