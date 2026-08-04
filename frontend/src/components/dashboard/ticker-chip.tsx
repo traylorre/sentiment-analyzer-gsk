@@ -43,12 +43,12 @@ export function TickerChip({
   };
 
   return (
-    <motion.button
-      type="button"
-      onClick={handleClick}
-      disabled={isLoading}
+    // The remove control is a sibling of the select button, never a child of it.
+    // `<button>` inside `<button>` is invalid HTML: React logs a hydration error
+    // and the accessible name of the outer control absorbs the inner label.
+    <motion.div
       className={cn(
-        'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all',
+        'inline-flex items-center rounded-full border transition-all',
         'text-sm font-medium',
         isActive
           ? 'bg-accent/20 border-accent text-accent'
@@ -60,31 +60,42 @@ export function TickerChip({
       whileTap={{ scale: 0.98 }}
       layout
     >
-      {/* Symbol */}
-      <span className={cn('font-semibold', isActive && 'text-accent')}>
-        {symbol}
-      </span>
+      <button
+        type="button"
+        onClick={handleClick}
+        disabled={isLoading}
+        className={cn(
+          'inline-flex items-center gap-2 py-1.5 rounded-full',
+          removable && !isLoading ? 'pl-3 pr-1' : 'px-3',
+          isLoading && 'cursor-wait'
+        )}
+      >
+        {/* Symbol */}
+        <span className={cn('font-semibold', isActive && 'text-accent')}>
+          {symbol}
+        </span>
 
-      {/* Score indicator */}
-      {score !== undefined && !isLoading && (
-        <motion.span
-          className="text-xs font-medium px-1.5 py-0.5 rounded"
-          style={{
-            backgroundColor: `${getSentimentColor(score)}20`,
-            color: getSentimentColor(score),
-          }}
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          transition={{ type: 'spring', stiffness: 500 }}
-        >
-          {formatSentimentScore(score)}
-        </motion.span>
-      )}
+        {/* Score indicator */}
+        {score !== undefined && !isLoading && (
+          <motion.span
+            className="text-xs font-medium px-1.5 py-0.5 rounded"
+            style={{
+              backgroundColor: `${getSentimentColor(score)}20`,
+              color: getSentimentColor(score),
+            }}
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ type: 'spring', stiffness: 500 }}
+          >
+            {formatSentimentScore(score)}
+          </motion.span>
+        )}
 
-      {/* Loading indicator */}
-      {isLoading && (
-        <div className="w-3 h-3 border border-accent border-t-transparent rounded-full animate-spin" />
-      )}
+        {/* Loading indicator */}
+        {isLoading && (
+          <div className="w-3 h-3 border border-accent border-t-transparent rounded-full animate-spin" />
+        )}
+      </button>
 
       {/* Remove button */}
       {removable && !isLoading && (
@@ -92,14 +103,14 @@ export function TickerChip({
           type="button"
           onClick={handleRemove}
           aria-label={`Remove ${symbol}`}
-          className="ml-1 p-0.5 rounded-full hover:bg-destructive/20 hover:text-destructive transition-colors"
+          className="mr-2 p-0.5 rounded-full hover:bg-destructive/20 hover:text-destructive transition-colors"
           whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.9 }}
         >
           <X className="h-3 w-3" />
         </motion.button>
       )}
-    </motion.button>
+    </motion.div>
   );
 }
 
