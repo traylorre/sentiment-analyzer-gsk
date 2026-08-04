@@ -57,7 +57,7 @@ make validate      # format, lint, security, sast, banned terms, header + race g
 make test-local    # unit + integration
 make test-unit     # unit only
 make sast          # semgrep
-make audit-pragma  # audits # noqa and # nosec (NOT part of make validate)
+make audit-pragma  # audits # noqa and dead suppressions (NOT part of make validate)
 ```
 
 Frontend tasks are `cd frontend && npm run <script>`; the scripts are in `frontend/package.json`.
@@ -71,11 +71,10 @@ Python work needs the venv, which is 3.13 while system Python is not:
   (`Makefile:85`), not `fmt`. The mutating `fmt` target still exists (`Makefile:138`) and nothing
   in `validate` calls it. `make -n validate` is refused outright, because `-n` propagates to the
   sub-makes and every stage would report success without running.
-- **Semgrep is the only security scanner that gates.** `pip-audit` (`Makefile:161`) and `bandit`
-  (`Makefile:175`) both end in `|| true`, so a green run is no evidence either found nothing. The
-  `security` stage that carries `pip-audit` is declared ADVISORY in the driver, so it cannot fail
-  the run even in principle. Bandit is slated for removal in favour of semgrep, so do not fix,
-  harden, or extend its invocations. Every other stage is BLOCKING: `fmt-check`, `lint`, `sast`,
+- **Semgrep is the only security scanner that gates.** `pip-audit` (`Makefile:161`) ends in
+  `|| true`, so a green run is no evidence it found nothing. The `security` stage that carries
+  `pip-audit` is declared ADVISORY in the driver, so it cannot fail the run even in principle.
+  Every other stage is BLOCKING: `fmt-check`, `lint`, `sast`,
   `check-banned-terms`, `check-test-target-headers` and `check-waitforresponse-race`. The driver
   runs all of them and reports each before failing, so one broken stage no longer hides the ones
   behind it.

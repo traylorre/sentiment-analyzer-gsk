@@ -107,7 +107,6 @@ Development environment setup guides.
 | [GIT_WORKFLOW.md](./setup/GIT_WORKFLOW.md) | Git conventions |
 | [GPG_SIGNING_SETUP.md](./setup/GPG_SIGNING_SETUP.md) | Commit signing |
 | [PYTHON_VERSION_PARITY.md](./setup/PYTHON_VERSION_PARITY.md) | Python version requirements |
-| [CODEQL-PRE-PUSH-HOOK.md](./setup/CODEQL-PRE-PUSH-HOOK.md) | Security scanning |
 
 ### testing/
 Testing strategies and chaos engineering.
