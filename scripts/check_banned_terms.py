@@ -136,10 +136,9 @@ MARKER_REFUSED_EXCEPTIONS: tuple[str, ...] = ("infrastructure/docs/",)
 # parses comment syntax, so the same rule serves Markdown, HTML, Python, YAML, shell,
 # TypeScript, and formats nobody has used yet.
 #
-# Named *_TOKEN, so three scanners read it as a credential: ruff's S105, bandit's B105,
-# and detect-secrets' Secret Keyword plugin. The two suppressions below cover ruff and
-# detect-secrets. Bandit needs none because B105 is Low severity and `make sast` gates at
-# -ll, but that is a threshold doing the work, not a judgement, so it is worth stating.
+# Named *_TOKEN, so two scanners read it as a credential: ruff's S105 and
+# detect-secrets' Secret Keyword plugin. The two suppressions below cover ruff and
+# detect-secrets.
 #
 # The pragma is deliberate in preference to a .secrets.baseline entry: the baseline is a
 # register of audited secrets, and a misclassified marker token is not one.

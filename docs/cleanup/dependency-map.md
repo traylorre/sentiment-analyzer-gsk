@@ -2,7 +2,7 @@
 
 Purpose: sign-post only. Where a WS item goes, what blocks it, whether touching it triggers CI (Lambda packaging / Terraform deploy) or stays local. No fixes prescribed. Every settled claim carries `file:line`; every `UNKNOWN` is an OPEN QUESTION, never a fact.
 
-CI-cost rule used below: touching `src/lambdas/**` repackages + redeploys a Lambda (deploy.yml import smoke tests at deploy.yml:708-715, :1766-1795) and must clear ruff/bandit/pytest-80%, **CI-gated**. Touching `infrastructure/terraform/**` runs validate/plan/deploy, **CI-gated** (comment-only `.tf` edits produce no plan diff but still ride the infra pipeline). Everything under `docs/`, `specs/`, `CLAUDE.md`, `CONTEXT-CARRYOVER*` has no runtime import, **local-only, no CI**.
+CI-cost rule used below: touching `src/lambdas/**` repackages + redeploys a Lambda (deploy.yml import smoke tests at deploy.yml:708-715, :1766-1795) and must clear ruff/pytest-80%, **CI-gated**. Touching `infrastructure/terraform/**` runs validate/plan/deploy, **CI-gated** (comment-only `.tf` edits produce no plan diff but still ride the infra pipeline). Everything under `docs/`, `specs/`, `CLAUDE.md`, `CONTEXT-CARRYOVER*` has no runtime import, **local-only, no CI**.
 
 ---
 
@@ -118,7 +118,7 @@ graph LR
 | Batch | Files | Pipeline paid |
 |-------|-------|---------------|
 | Local docs | ARCHITECTURE.md, specs/1159, CLAUDE.md, CONTEXT-CARRYOVER×4, WAF doc | none (no runtime import) |
-| Lambda batch | storage.py + its tests, sentiment.py/handler.py docstrings, (NewsItem mapping if touched) | deploy.yml smoke (708-715, 1766-1795) + ruff + bandit + pytest-80% |
+| Lambda batch | storage.py + its tests, sentiment.py/handler.py docstrings, (NewsItem mapping if touched) | deploy.yml smoke (708-715, 1766-1795) + ruff + pytest-80% |
 | Infra batch | dynamodb/main.tf:20, :69 comments | terraform_fmt/validate + trivy(report-only) + checkov; no plan diff |
 
 Validator context that sets the local gates (branch Q-pin-hcl2):
@@ -126,7 +126,6 @@ Validator context that sets the local gates (branch Q-pin-hcl2):
 | Validator | Where it fires | Bearing on batching |
 |-----------|----------------|---------------------|
 | ruff format + lint (incl. `--select S`) | pre-commit + CI | any src/ edit must pass before push |
-| bandit | pre-commit only (CI-dark; installed via requirements-ci.txt:59 but never invoked) | local gate on Lambda batch |
 | pytest unit, `--fail-under=80` | pre-commit push hook + CI | dead-code + test removal must keep coverage ≥80% |
 | gitleaks | pre-commit + CI | active both sides |
 | detect-secrets, trivy, checkov | pre-commit only (CI-dark) | infra batch scanned locally, not in CI |
@@ -142,10 +141,10 @@ Validator context that sets the local gates (branch Q-pin-hcl2):
 WS0 ARCHITECTURE.md; WS1 doc annotations (specs/1159, CLAUDE.md); WS3 delete the 4 tracked CONTEXT-CARRYOVER files; WS4 WAF write-up into WS0. WS5 already settled, record only.
 
 **Phase B, local tests (pre-push, no deploy):**
-Stage WS2 dead-code removal + test edits; run pre-commit pytest(push, tests/unit), ruff, bandit locally; confirm the 80% coverage gate survives the deleted `store_news_items*` tests before anything is pushed. Do NOT touch the tz-aware/naive dedup bug here, it is mapped, not scheduled.
+Stage WS2 dead-code removal + test edits; run pre-commit pytest(push, tests/unit), ruff locally; confirm the 80% coverage gate survives the deleted `store_news_items*` tests before anything is pushed. Do NOT touch the tz-aware/naive dedup bug here, it is mapped, not scheduled.
 
 **Phase C, batched CI (deploy-triggering, one pass each):**
-(C1) Push the Lambda batch, WS2 removals + WS1 `/opt/model` docstrings, as a single PR; watch deploy.yml import smoke tests + ruff/bandit/coverage + CodeQL. (C2) Push the infra comment batch, dynamodb/main.tf:20 and :69, separately; expect no plan diff, terraform validate/fmt only.
+(C1) Push the Lambda batch, WS2 removals + WS1 `/opt/model` docstrings, as a single PR; watch deploy.yml import smoke tests + ruff/coverage + CodeQL. (C2) Push the infra comment batch, dynamodb/main.tf:20 and :69, separately; expect no plan diff, terraform validate/fmt only.
 
 ---
 
