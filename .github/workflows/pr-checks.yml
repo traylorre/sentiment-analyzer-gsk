@@ -475,7 +475,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: '18'
+          node-version-file: 'frontend/.nvmrc'
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
@@ -562,7 +562,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: '18'
+          node-version-file: 'frontend/.nvmrc'
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 

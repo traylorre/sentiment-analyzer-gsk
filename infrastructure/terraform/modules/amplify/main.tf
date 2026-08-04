@@ -32,6 +32,16 @@ resource "aws_amplify_app" "frontend" {
   platform = "WEB_COMPUTE"
 
   # Build specification for monorepo
+  #
+  # The Node version is pinned here because nothing else pins it. The `node-version`
+  # entries in .github/workflows are test runners; no workflow runs `npm run build`,
+  # so this buildspec is the only place the production bundle is built. Without
+  # `nvm use`, the build silently takes whatever Node the Amplify image defaults to,
+  # and that default moves without notice.
+  #
+  # Keep this in step with frontend/.nvmrc and the `engines` field in
+  # frontend/package.json. 20 is the floor Next 16 requires (>=20.9) and runs the
+  # current Next 14.2.35, so it holds across the pending frontend major.
   build_spec = <<-EOT
     version: 1
     applications:
@@ -40,6 +50,9 @@ resource "aws_amplify_app" "frontend" {
           phases:
             preBuild:
               commands:
+                - nvm install 20
+                - nvm use 20
+                - node --version
                 - npm ci
             build:
               commands:
