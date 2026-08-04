@@ -83,7 +83,6 @@ pytest tests/unit/ -v
 
 # Run linters
 ruff check .
-black --check .
 
 ```
 

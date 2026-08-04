@@ -20,7 +20,7 @@ Go to: **GitHub → Settings → Branches → Add rule** for `main`
   - [x] Require branches to be up to date before merging
   - Required status checks:
     - `Run Tests` - Unit tests with coverage validation
-    - `Code Quality` - Linting with ruff and black
+    - `Code Quality` - Linting with ruff
     - `Dependency Vulnerability Scan` - pip-audit security scanning
     - `Analyze` - CodeQL static analysis
 
