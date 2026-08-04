@@ -34,6 +34,59 @@ const DEFAULT_TICKER = 'AAPL';
 const DEFAULT_RESOLUTION = '5m';
 
 /**
+ * Ticker symbol allowlist.
+ *
+ * Anchored and length-bounded: 1-10 characters drawn from A-Z, 0-9, dot and dash. That
+ * covers class shares (BRK.B) and preferred series (BF-A) while admitting no angle
+ * bracket, quote, slash, percent, backtick or whitespace, and it cannot spell
+ * `__proto__` or `constructor`.
+ */
+const TICKER_PATTERN = /^[A-Z0-9.-]{1,10}$/;
+
+/**
+ * Coerce one untrusted value to a ticker symbol, or null if it is not one.
+ *
+ * Every ticker in this module arrives from `?ticker=` / `?tickers=` in the page URL or
+ * from a free-text input, so it is attacker-controlled. It then reaches four kinds of
+ * sink: interpolation into markup, an object property key, a request path segment, and
+ * a console format string. Validating once here is what keeps those sinks safe, so
+ * callers must route every externally supplied ticker through this function rather than
+ * escaping at each sink.
+ *
+ * @param {*} raw - Untrusted value
+ * @returns {string|null} The normalised symbol, or null if it fails the allowlist
+ */
+function sanitizeTicker(raw) {
+    if (typeof raw !== 'string') {
+        return null;
+    }
+    const candidate = raw.trim().toUpperCase();
+    return TICKER_PATTERN.test(candidate) ? candidate : null;
+}
+
+/**
+ * Coerce a comma-separated list of untrusted values to ticker symbols.
+ *
+ * Entries that fail the allowlist are dropped rather than rejecting the whole list, so
+ * one bad symbol in a shared link still renders the rest. Returns an empty array when
+ * nothing survives; callers decide whether to fall back to a default.
+ *
+ * @param {*} raw - Untrusted comma-separated string, or an array of untrusted values
+ * @returns {string[]} Symbols that passed the allowlist, deduplicated, order preserved
+ */
+function sanitizeTickerList(raw) {
+    const parts = Array.isArray(raw) ? raw : typeof raw === 'string' ? raw.split(',') : [];
+    const seen = [];
+    for (const part of parts) {
+        const ticker = sanitizeTicker(part);
+        if (ticker && !seen.includes(ticker)) {
+            seen.push(ticker);
+        }
+    }
+    return seen;
+}
+
+/**
  * Feature 1019: Latency tracking for SSE events
  * Exposes window.lastLatencyMetrics and window.latencySamples for E2E testing
  */
@@ -110,7 +163,7 @@ class TimeseriesManager {
         // Parse URL params
         const params = new URLSearchParams(window.location.search);
         if (params.has('ticker')) {
-            this.currentTicker = params.get('ticker').toUpperCase();
+            this.currentTicker = sanitizeTicker(params.get('ticker')) || DEFAULT_TICKER;
         }
         if (params.has('resolution')) {
             const res = params.get('resolution');
@@ -160,7 +213,6 @@ class TimeseriesManager {
                 <label for="ticker-input">Ticker:</label>
                 <input type="text"
                        id="ticker-input"
-                       value="${this.currentTicker}"
                        maxlength="10"
                        data-testid="ticker-input">
                 <span class="resolution-label">Resolution:</span>
@@ -189,6 +241,9 @@ class TimeseriesManager {
         // Ticker input handler
         const tickerInput = document.getElementById('ticker-input');
         if (tickerInput) {
+            // Assigned as a property rather than interpolated into the markup above, so
+            // the symbol is never parsed as HTML.
+            tickerInput.value = this.currentTicker;
             tickerInput.addEventListener('change', (e) => {
                 const ticker = e.target.value.toUpperCase().trim();
                 if (ticker && ticker !== this.currentTicker) {
@@ -318,13 +373,18 @@ class TimeseriesManager {
      * Switch to a new ticker
      */
     async switchTicker(ticker) {
-        if (ticker === this.currentTicker) {
+        const safeTicker = sanitizeTicker(ticker);
+        if (!safeTicker) {
+            console.warn('Ignoring ticker that failed the allowlist');
+            return;
+        }
+        if (safeTicker === this.currentTicker) {
             return;
         }
 
-        console.log(`Switching ticker: ${this.currentTicker} -> ${ticker}`);
+        console.log('Switching ticker: %s -> %s', this.currentTicker, safeTicker);
 
-        this.currentTicker = ticker;
+        this.currentTicker = safeTicker;
         this.updateSelectorUI();
         this.updateURL();
 
@@ -336,7 +396,7 @@ class TimeseriesManager {
 
         // Feature 1057: Update OHLC chart when ticker changes
         if (typeof updateOHLCTicker === 'function') {
-            await updateOHLCTicker(ticker);
+            await updateOHLCTicker(safeTicker);
         }
     }
 
@@ -358,7 +418,8 @@ class TimeseriesManager {
      */
     async loadData() {
         try {
-            const url = `${this.apiBaseUrl}/api/v2/timeseries/${this.currentTicker}?resolution=${this.currentResolution}`;
+            const url = `${this.apiBaseUrl}/api/v2/timeseries/${encodeURIComponent(this.currentTicker)}`
+                + `?resolution=${encodeURIComponent(this.currentResolution)}`;
             console.log(`Fetching: ${url}`);
 
             // Feature 1051: Include X-User-ID header for authentication
@@ -415,10 +476,12 @@ class TimeseriesManager {
                 chartContainer.id = 'timeseries-chart-container';
                 chartContainer.className = 'chart-container timeseries-chart';
                 chartContainer.innerHTML = `
-                    <h3>Sentiment Trend <span id="timeseries-ticker">${this.currentTicker}</span></h3>
+                    <h3>Sentiment Trend <span id="timeseries-ticker"></span></h3>
                     <canvas id="timeseries-chart" data-testid="timeseries-chart"></canvas>
                     <div id="chart-loaded" data-testid="chart-loaded" style="display:none;"></div>
                 `;
+                // textContent rather than interpolation: the symbol is never parsed as HTML.
+                chartContainer.querySelector('#timeseries-ticker').textContent = this.currentTicker;
                 chartsSection.appendChild(chartContainer);
             }
         }
@@ -692,8 +755,8 @@ class MultiTickerManager {
 
         this.tickers = [];  // Array of ticker symbols
         this.currentResolution = DEFAULT_RESOLUTION;
-        this.charts = {};   // ticker -> Chart instance
-        this.bucketData = {};  // ticker -> buckets array
+        this.charts = Object.create(null);   // ticker -> Chart instance
+        this.bucketData = Object.create(null);  // ticker -> buckets array
         this.eventSource = null;
 
         // Callbacks
@@ -705,7 +768,7 @@ class MultiTickerManager {
      * @param {string[]} tickers - Array of ticker symbols
      */
     async init(tickers = ['AAPL', 'MSFT', 'GOOGL']) {
-        this.tickers = tickers.map(t => t.toUpperCase());
+        this.tickers = sanitizeTickerList(tickers);
 
         // Initialize cache
         if (this.cache) {
@@ -715,7 +778,10 @@ class MultiTickerManager {
         // Parse URL params
         const params = new URLSearchParams(window.location.search);
         if (params.has('tickers')) {
-            this.tickers = params.get('tickers').toUpperCase().split(',').filter(t => t.trim());
+            const requested = sanitizeTickerList(params.get('tickers'));
+            if (requested.length > 0) {
+                this.tickers = requested;
+            }
         }
         if (params.has('resolution')) {
             const res = params.get('resolution');
@@ -763,7 +829,6 @@ class MultiTickerManager {
                     <label for="multi-ticker-input">Tickers (comma-separated):</label>
                     <input type="text"
                            id="multi-ticker-input"
-                           value="${this.tickers.join(', ')}"
                            placeholder="AAPL, MSFT, GOOGL"
                            data-testid="multi-ticker-input">
                     <button type="button" id="update-tickers-btn" data-testid="update-tickers">
@@ -810,6 +875,9 @@ class MultiTickerManager {
         // Allow Enter key to update
         const tickerInput = document.getElementById('multi-ticker-input');
         if (tickerInput) {
+            // Assigned as a property rather than interpolated into the markup above, so
+            // the symbols are never parsed as HTML.
+            tickerInput.value = this.tickers.join(', ');
             tickerInput.addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') {
                     this.updateTickers();
@@ -829,7 +897,7 @@ class MultiTickerManager {
     initTickerChart(ticker) {
         const canvas = document.getElementById(`chart-${ticker}`);
         if (!canvas) {
-            console.warn(`Canvas not found for ticker: ${ticker}`);
+            console.warn('Canvas not found for ticker: %s', ticker);
             return;
         }
 
@@ -961,7 +1029,8 @@ class MultiTickerManager {
 
         const promises = this.tickers.map(async (ticker) => {
             try {
-                const url = `${this.apiBaseUrl}/api/v2/timeseries/${ticker}?resolution=${this.currentResolution}`;
+                const url = `${this.apiBaseUrl}/api/v2/timeseries/${encodeURIComponent(ticker)}`
+                    + `?resolution=${encodeURIComponent(this.currentResolution)}`;
                 // Feature 1051: Include X-User-ID header for authentication
                 const response = await fetch(url, {
                     headers: {
@@ -973,7 +1042,7 @@ class MultiTickerManager {
                 this.bucketData[ticker] = data.buckets || [];
                 this.updateTickerChart(ticker, data.buckets || []);
             } catch (error) {
-                console.error(`Failed to load ${ticker}:`, error);
+                console.error('Failed to load %s:', ticker, error);
                 this.updateTickerStatus(ticker, 'Error');
             }
         });
@@ -1100,10 +1169,7 @@ class MultiTickerManager {
         const input = document.getElementById('multi-ticker-input');
         if (!input) return;
 
-        const newTickers = input.value.toUpperCase()
-            .split(',')
-            .map(t => t.trim())
-            .filter(t => t.length > 0);
+        const newTickers = sanitizeTickerList(input.value);
 
         if (newTickers.length === 0) {
             console.warn('No valid tickers entered');
@@ -1182,7 +1248,7 @@ class MultiTickerManager {
         if (!this.tickers.includes(ticker)) return;
         if (bucket.resolution !== this.currentResolution) return;
 
-        console.log(`Bucket update for ${ticker}:`, bucket);
+        console.log('Bucket update for %s:', ticker, bucket);
 
         // Update bucket data
         if (!this.bucketData[ticker]) {
@@ -1213,7 +1279,7 @@ class MultiTickerManager {
         Object.values(this.charts).forEach(chart => {
             if (chart) chart.destroy();
         });
-        this.charts = {};
+        this.charts = Object.create(null);
     }
 }
 

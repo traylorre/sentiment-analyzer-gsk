@@ -51,7 +51,6 @@ All PRs trigger the following required status checks:
 **What it does:**
 - Checks code formatting with black
 - Runs linting with ruff
-- Validates security rules (bandit)
 
 **Runs on:**
 - Every push to main

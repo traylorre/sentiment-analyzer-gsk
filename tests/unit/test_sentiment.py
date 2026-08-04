@@ -767,7 +767,7 @@ class TestS3ModelDownloadWithMoto:
 
             # Extract (mirrors sentiment.py lines 115-127)
             with tarfile.open(str(tar_path), "r:gz") as tar:
-                tar.extractall(path="/tmp")  # noqa: S202 - test fixture
+                tar.extractall(path="/tmp", filter="data")
 
             # Verify model was extracted
             assert model_path.exists(), f"Model path {model_path} should exist"
@@ -868,7 +868,7 @@ class TestS3ModelDownloadWithMoto:
             import tarfile
 
             with tarfile.open(tar_path, "r:gz") as tar:
-                tar.extractall(path=str(tmp_path))  # noqa: S202 - test fixture
+                tar.extractall(path=str(tmp_path), filter="data")
 
             # Verify tar exists before cleanup
             assert Path(tar_path).exists(), "tar.gz should exist before cleanup"
@@ -928,7 +928,7 @@ class TestS3ModelDownloadWithMoto:
                 from pathlib import Path
 
                 with tarfile.open(tar_path, "r:gz") as tar:
-                    tar.extractall(path=str(tmp_path))  # noqa: S202 - test fixture
+                    tar.extractall(path=str(tmp_path), filter="data")
 
                 # Cleanup
                 Path(tar_path).unlink()
