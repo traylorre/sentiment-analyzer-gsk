@@ -53,8 +53,8 @@ repos:
       - id: check-toml
 
   # Python formatter and linter (Ruff)
-  # Note: Black removed in feat(057) - Ruff formatter preserves pragma comments
-  # (# noqa, # nosec, # type:) by excluding them from line length calculations
+  # Ruff formatter preserves pragma comments (# noqa, # type:) by excluding them
+  # from line length calculations
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.14
     hooks:

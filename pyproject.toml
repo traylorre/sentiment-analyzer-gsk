@@ -62,8 +62,7 @@ dev = [
 # Tool Configuration
 # =============================================================================
 
-# Note: Black configuration removed in feat(057) - migrated to Ruff formatter
-# Ruff formatter preserves pragma comments (# noqa, # nosec, # type:) by excluding
+# Ruff formatter preserves pragma comments (# noqa, # type:) by excluding
 # them from line length calculations, preventing drift on long lines.
 
 [tool.ruff]
