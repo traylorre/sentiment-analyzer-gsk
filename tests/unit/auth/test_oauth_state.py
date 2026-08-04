@@ -45,6 +45,26 @@ class TestStoreOAuthState:
         assert state.used is False
         mock_table.put_item.assert_called_once()
 
+    def test_stores_ttl_derived_from_the_configured_lifetime(self, mock_table):
+        """The item is what actually expires, so the TTL is asserted on the item.
+
+        This previously rode on a log-field assertion, which only ever proved that a
+        constant had been copied into a log line.
+        """
+        before = datetime.now(UTC)
+        store_oauth_state(
+            mock_table, "state-ttl", "google", "https://example.com/callback"
+        )
+        after = datetime.now(UTC)
+
+        item = mock_table.put_item.call_args.kwargs["Item"]
+        assert isinstance(item["ttl_timestamp"], int)
+        assert (
+            int((before + timedelta(seconds=OAUTH_STATE_TTL_SECONDS)).timestamp())
+            <= item["ttl_timestamp"]
+            <= int((after + timedelta(seconds=OAUTH_STATE_TTL_SECONDS)).timestamp())
+        )
+
     def test_stores_with_user_id(self, mock_table):
         state = store_oauth_state(
             mock_table, "state-2", "github", "https://example.com/cb", user_id="u-1"
@@ -72,7 +92,12 @@ class TestStoreOAuthState:
         assert len(records) == 1
         assert not hasattr(records[0], "provider")
         assert records[0].has_user_id is False
-        assert records[0].ttl_seconds == OAUTH_STATE_TTL_SECONDS
+        # OAUTH_STATE_TTL_SECONDS is no longer logged. CodeQL's sensitive-data heuristic
+        # classifies any identifier containing "oauth" as a password, so the constant was
+        # reported as a cleartext credential; it never varied, so it was dropped rather
+        # than renamed. The TTL is asserted on the stored item instead, by
+        # test_stores_ttl_derived_from_the_configured_lifetime above.
+        assert not hasattr(records[0], "ttl_seconds")
 
 
 class TestGetOAuthState:

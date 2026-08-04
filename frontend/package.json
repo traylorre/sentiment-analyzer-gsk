@@ -54,9 +54,13 @@
     "eslint-config-next": "14.2.21",
     "jsdom": "^27.2.0",
     "playwright": "^1.57.0",
-    "postcss": "^8",
+    "postcss": "^8.5.18",
     "tailwindcss": "^3.4.1",
     "typescript": "^5",
     "vitest": "^4.1.0"
+  },
+  "overrides": {
+    "postcss": "$postcss",
+    "glob": "^10.5.0"
   }
 }

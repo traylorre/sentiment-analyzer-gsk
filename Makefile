@@ -135,7 +135,7 @@ check-test-target-headers: ## Verify all e2e test files declare what they target
 	fi
 	@printf '%b\n' "$(GREEN)✓ All e2e test files declare a target$(NC)"
 
-fmt: ## Format Python code (Ruff only - Black removed in feat(057))
+fmt: ## Format Python code (Ruff)
 	ruff format src tests
 	@echo "$(GREEN)✓ Formatting complete$(NC)"
 
@@ -161,34 +161,18 @@ security: ## Run security scanners (ADVISORY: reports findings, does not gate)
 	pip-audit --ignore-vuln PYSEC-2024-58 || true
 	@echo "$(YELLOW)⚠ Review security findings above$(NC)"
 
-# BLOCKING, and genuinely so: the Semgrep invocation carries --error and its exit code
-# reaches the shell, so a finding fails the stage. That gating was established by a prior
-# feature and is preserved unchanged here per FR-006.
-#
-# The Bandit line above it discards its exit code with `|| true` and therefore gates
-# nothing. That is deliberately NOT fixed here. Bandit is slated for removal in favour of
-# Semgrep, so hardening it would be work aimed at a tool on its way out, and a separate
-# board card tracks the removal. The stage as a whole still blocks, so the label is
-# accurate; only one of its two scanners is load-bearing.
-sast: ## Run SAST (Static Application Security Testing) - Bandit + Semgrep
-	@echo "$(YELLOW)Running Bandit (Python security linter)...$(NC)"
-	bandit -c pyproject.toml -r src/ -ll || true
-	@echo ""
+sast: ## Run SAST (Static Application Security Testing) - Semgrep
 	@echo "$(YELLOW)Running Semgrep (comprehensive SAST)...$(NC)"
 	@command -v semgrep >/dev/null 2>&1 || { echo "$(RED)✗ Semgrep not installed. Install: pip install -r requirements-dev.txt$(NC)"; exit 1; }
 	semgrep scan --config auto --error --severity ERROR --severity WARNING src/
 	@echo "$(GREEN)✓ SAST scan complete$(NC)"
 
-audit-pragma: ## Audit pragma comments (# noqa, # nosec) and dead scanning suppressions
+audit-pragma: ## Audit pragma comments (# noqa) and dead scanning suppressions
 	@echo "$(YELLOW)=== [BLOCKING] Unused # noqa comments (RUF100) ===$(NC)"
 	ruff check --extend-select RUF100 src/ tests/ scripts/
 	@echo ""
 	@echo "$(YELLOW)=== [BLOCKING] Dead inline scanning suppressions ===$(NC)"
 	@python3 scripts/check_dead_suppressions.py
-	@echo ""
-	@echo "$(YELLOW)=== [ADVISORY - never fails this target] # nosec usage (Bandit, suppressions disabled) ===$(NC)"
-	@bandit -r src/ scripts/ --ignore-nosec 2>/dev/null | grep -E "^(>>|Issue)" || true
-	@echo "$(YELLOW)(the line above is advisory by design; see FR-012)$(NC)"
 	@echo ""
 	@echo "$(GREEN)✓ Pragma audit complete$(NC)"
 
