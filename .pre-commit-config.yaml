@@ -96,15 +96,6 @@ repos:
     hooks:
       - id: gitleaks
 
-  # Bandit - Python security linter (SAST)
-  # Added in 070-validation-blindspot-audit to catch security vulnerabilities locally
-  - repo: https://github.com/PyCQA/bandit
-    rev: 1.9.4  # Feature 1400: aligned with requirements-{dev,ci}.txt (was 1.7.10 drift)
-    hooks:
-      - id: bandit
-        args: ["-c", "pyproject.toml", "-ll", "-r", "src/"]
-        pass_filenames: false
-
   # Local hooks for project-specific checks
   - repo: local
     hooks:

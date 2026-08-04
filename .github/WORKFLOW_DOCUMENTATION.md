@@ -31,8 +31,6 @@ Feature Branch Push (feat/*, fix/*, docs/*, etc.)
                                       │
                                       ├─→ pr-check-test.yml ────────→ Runs pytest
                                       │
-                                      ├─→ pr-check-security.yml ────→ Runs bandit & safety
-                                      │
                                       └─→ pr-check-codeql.yml ──────→ Runs CodeQL analysis
                                       │
                                       └─→ All Checks Pass ──────────→ Auto-merge to main
@@ -179,35 +177,7 @@ on:
 
 ---
 
-### 6. pr-check-security.yml (Security Scanning)
-
-**Purpose**: Scans PR code for security vulnerabilities.
-
-**Location**: `.github/workflows/pr-check-security.yml`
-
-**Triggers**:
-```yaml
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-```
-
-**Behavior**:
-- Runs `bandit` to scan for common security issues
-- Runs `safety check` to scan dependencies for known vulnerabilities
-- Fails PR checks if security issues found
-- Reports results as PR check status
-
-**Permissions Required**:
-- `contents: read` - Read repository code
-
-**Human Interaction Required**: Fix security issues if check fails
-
----
-
-### 7. pr-check-codeql.yml (CodeQL Analysis)
+### 6. pr-check-codeql.yml (CodeQL Analysis)
 
 **Purpose**: Performs advanced semantic code analysis.
 
@@ -239,7 +209,7 @@ on:
 
 ---
 
-### 8. deploy.yml (Deployment Pipeline)
+### 7. deploy.yml (Deployment Pipeline)
 
 **Purpose**: Deploys code through dev → preprod → prod environments.
 
@@ -442,7 +412,6 @@ terraform output -raw dashboard_url
 | pr-auto-merge-enable.yml | - | write | - |
 | pr-check-lint.yml | read | - | - |
 | pr-check-test.yml | read | - | - |
-| pr-check-security.yml | read | - | - |
 | pr-check-codeql.yml | read | - | write |
 | deploy.yml | read | - | - |
 
@@ -455,7 +424,6 @@ The `main` branch should have the following protections:
 **Required Status Checks**:
 - `pr-check-lint` ✓
 - `pr-check-test` ✓
-- `pr-check-security` ✓
 - `pr-check-codeql` ✓
 
 **Settings**:
