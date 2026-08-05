@@ -416,7 +416,4 @@ The cache is valid for 30 days. When it expires:
 
 ## Related Documentation
 
-- [DEPLOYMENT.md](DEPLOYMENT.md) - Deployment procedures
 - [GPG_SIGNING_SETUP.md](GPG_SIGNING_SETUP.md) - GPG signing configuration
-- [GIT_WORKFLOW.md](GIT_WORKFLOW.md) - Git workflow and branching
-- [GITHUB_SECRETS_SETUP.md](GITHUB_SECRETS_SETUP.md) - GitHub Actions secrets
