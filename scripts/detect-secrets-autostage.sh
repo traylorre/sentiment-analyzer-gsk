@@ -22,8 +22,11 @@ fail() {
     exit 1
 }
 
+COMPARE=scripts/baseline-volatile-compare.py
+
 command -v python3 >/dev/null 2>&1 || fail "python3 not found; it performs the volatile-vs-substantive baseline comparison"
 command -v detect-secrets-hook >/dev/null 2>&1 || fail "detect-secrets-hook not found on PATH; install the pinned bc-detect-secrets before committing"
+[ -f "$COMPARE" ] || fail "$COMPARE not found; it performs the volatile-vs-substantive baseline comparison (shared with CI)"
 [ -f "$BASELINE" ] || fail "$BASELINE not found; the hook needs the committed baseline"
 python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$BASELINE" 2>/dev/null \
     || fail "$BASELINE is not valid JSON; repair or regenerate it before committing"
@@ -37,28 +40,10 @@ run_hook() {
 
 # Exit 0 when the two baselines differ only in per-finding line_number values and the
 # top-level generated_at stamp; exit 1 when the difference is substantive; exit 2 on a
-# comparison crash, so a broken comparison can never masquerade as a verdict.
+# comparison crash, so a broken comparison can never masquerade as a verdict. The logic
+# lives in $COMPARE so CI's non-mutating step classifies with the same code.
 volatile_only() {
-    python3 - "$1" "$2" <<'PY'
-import json, sys
-
-def stripped(path):
-    with open(path) as f:
-        doc = json.load(f)
-    doc.pop("generated_at", None)
-    for findings in doc.get("results", {}).values():
-        for finding in findings:
-            finding.pop("line_number", None)
-    return doc
-
-try:
-    sys.exit(0 if stripped(sys.argv[1]) == stripped(sys.argv[2]) else 1)
-except SystemExit:
-    raise
-except Exception as exc:
-    print(f"baseline comparison error: {exc}", file=sys.stderr)
-    sys.exit(2)
-PY
+    python3 "$COMPARE" "$1" "$2"
 }
 
 for attempt in $(seq 1 "$MAX_RETRIES"); do
