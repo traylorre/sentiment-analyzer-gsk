@@ -30,7 +30,8 @@ src/ @traylorre
 tests/ @traylorre
 
 # Configuration and specification require @traylorre review
-SPEC.md @traylorre
+SERVICE.md @traylorre
+PRODUCT.md @traylorre
 .specify/memory/constitution.md @traylorre
 
 # GitHub Actions workflows require @traylorre review (prevent workflow bypass)

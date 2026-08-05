@@ -1,5 +1,7 @@
 # Chaos GameDay Pre-Flight Checklist
 
+> **QUARRYSOME**: unaudited; verify against code before trusting.
+
 **Purpose**: Verify all pre-conditions before executing a chaos plan. Every item must be checked. Any No-Go condition aborts the GameDay.
 
 **When to use**: Before every GameDay. Do not skip items even if "you just checked yesterday."

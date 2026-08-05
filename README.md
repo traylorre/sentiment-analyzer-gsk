@@ -594,7 +594,7 @@ sequenceDiagram
 
 | Document | Purpose |
 |----------|---------|
-| [SPEC.md](./SPEC.md) | Complete technical specification |
+| [PRODUCT.md](./PRODUCT.md) | Product intent and use cases |
 
 ### Running Locally
 
@@ -669,7 +669,7 @@ pre-commit install --hook-type pre-push
 
 ```bash
 # Read in this order:
-1. SPEC.md              # Complete technical specification
+1. SERVICE.md           # Documentation tree root
 2. CONTRIBUTING.md      # Collaboration guidelines
 3. SECURITY.md          # Security policy
 ```
@@ -879,7 +879,7 @@ aws cloudwatch describe-alarms \
 ```
 sentiment-analyzer-gsk/
 ├── README.md                    # This file - start here
-├── SPEC.md                      # Complete technical specification
+├── SERVICE.md                   # Documentation tree root
 ├── CONTRIBUTING.md              # Contribution guidelines
 ├── SECURITY.md                  # Security policy and vulnerability reporting
 ├── LICENSE                      # MIT License
@@ -999,7 +999,7 @@ See [SECURITY.md](./SECURITY.md) for full security policy.
 | Document | Purpose | Audience |
 |----------|---------|----------|
 | **[README.md](./README.md)** | Getting started, onboarding | All contributors |
-| **[SPEC.md](./SPEC.md)** | Complete technical specification | Developers, architects |
+| **[SERVICE.md](./SERVICE.md)** | Documentation tree root | Developers, architects |
 | **[CONTRIBUTING.md](./CONTRIBUTING.md)** | Collaboration guidelines | All contributors |
 | **[SECURITY.md](./SECURITY.md)** | Security policy | Security researchers, contributors |
 
@@ -1057,7 +1057,7 @@ _See [Contributors](https://github.com/traylorre/sentiment-analyzer-gsk/graphs/c
 
 ## Questions?
 
-1. Check [SPEC.md](./SPEC.md) for technical details
+1. Check [SERVICE.md](./SERVICE.md) for technical details
 2. Review [CONTRIBUTING.md](./CONTRIBUTING.md) for collaboration guidelines
 3. Search [existing issues](https://github.com/traylorre/sentiment-analyzer-gsk/issues)
 4. Ask in PR comments or create a new issue

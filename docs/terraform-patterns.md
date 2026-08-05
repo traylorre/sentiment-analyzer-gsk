@@ -1,5 +1,7 @@
 # Terraform Patterns
 
+> **QUARRYSOME**: unaudited; verify against code before trusting.
+
 ## Split Definition/Wiring (Feature 1290)
 
 ### Problem
@@ -74,4 +76,4 @@ This pattern is a workaround. The long-term fix is to migrate cross-module env v
 ### Related
 
 - `terraform_data.cognito_callback_patch` (main.tf) — similar pattern for Cognito ↔ Amplify cycle
-- `docs/x-ray/HL-x-ray-remediation-checklist.md` R22 — documents the replace-all danger of `update-function-configuration`
+- `docs/x-ray.md` documents the replace-all danger of `update-function-configuration`

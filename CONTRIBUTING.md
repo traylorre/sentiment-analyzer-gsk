@@ -203,7 +203,7 @@ Follow [README.md Getting Started](./README.md#getting-started) section:
 2. Clone repository
 3. Configure AWS profile
 4. Verify access
-5. Read SPEC.md
+5. Read SERVICE.md
 
 ---
 
@@ -295,7 +295,7 @@ git push origin feature/your-feature-name
 - [ ] No secrets or credentials committed
 - [ ] Tests pass locally
 - [ ] Documentation updated (if needed)
-- [ ] SPEC.md updated (if API/architecture changed)
+- [ ] SERVICE.md tree updated (if API/architecture changed)
 ```
 
 ### Review Process
@@ -317,7 +317,7 @@ git push origin feature/your-feature-name
 - @traylorre is automatically assigned (via CODEOWNERS)
 - Review focuses on:
   - Security implications
-  - Architecture alignment with SPEC.md
+  - Architecture alignment with docs/SERVICE-SHAPE.md
   - Code quality and maintainability
   - Test coverage
   - Documentation completeness
