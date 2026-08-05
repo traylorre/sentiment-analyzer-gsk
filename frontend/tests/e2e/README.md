@@ -1,5 +1,7 @@
 # Customer Dashboard E2E Tests
 
+> **QUARRYSOME**: unaudited; verify against code before trusting.
+
 This directory contains Playwright E2E tests for the **customer-facing Next.js dashboard** hosted on AWS Amplify.
 
 ## Target Dashboard

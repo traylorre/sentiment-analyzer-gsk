@@ -18,15 +18,15 @@ botocore==1.43.46
 
 
 # HTTP Client - Financial API adapters (Tiingo, Finnhub)
-requests==2.34.2
 httpx==0.28.1
+
+# HTTP client for the CORS tests only (tests/integration/test_cors_headers.py,
+# tests/e2e/test_cors_e2e.py, tests/e2e/test_cors_prod_headers.py); src/ uses httpx
+requests==2.34.2
 
 # Data Validation - Input/output schemas
 pydantic==2.13.4  # pinned: moto[all]==5.2.2 requires pydantic<=2.12.4
 email-validator==2.3.0
-
-# Logging - Structured JSON logs for CloudWatch
-python-json-logger==4.1.0
 
 # AWS X-Ray - Distributed tracing (Feature 006)
 aws-xray-sdk==2.15.0
