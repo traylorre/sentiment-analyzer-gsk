@@ -157,9 +157,9 @@ Ingests financial news from external sources (Tiingo, Finnhub) and returns senti
 - **Compute**: AWS Lambda (Python 3.13) - 6 functions (Ingestion, Analysis, Dashboard, SSE-Streaming, Notification, Metrics)
 - **Real-time**: SSE Lambda with custom Runtime API bootstrap for RESPONSE_STREAM mode
 - **Orchestration**: EventBridge, SNS, SQS
-- **Storage**: DynamoDB (on-demand capacity), S3 (static assets, ML models)
+- **Storage**: DynamoDB (on-demand capacity), S3 (ML models, ticker cache)
 - **Sentiment Model**: DistilBERT (fine-tuned for social media)
-- **Infrastructure**: Terraform with S3 backend and S3 native locking
+- **Infrastructure**: Terraform with S3 backend; state locking is not configured (see `docs/runbooks/terraform-state.md`)
 - **CI/CD**: GitHub Actions → Dev → Preprod → Prod promotion pipeline
 
 **Detailed Architecture Diagrams**: See [docs/diagrams/](./docs/diagrams/)
@@ -921,8 +921,7 @@ sentiment-analyzer-gsk/
 │   └── diagrams/                # Architecture diagrams
 │       ├── high-level-overview.mmd       # System overview
 │       ├── security-flow.mmd             # Security zones
-│       ├── sse-lambda-streaming.mmd      # SSE streaming flow
-│       └── cloudfront-multi-origin.mmd   # CDN routing
+│       └── sse-lambda-streaming.mmd      # SSE streaming flow
 │
 ├── specs/                       # Feature specifications
 │   └── {feature-id}-{name}/     # Feature specifications
