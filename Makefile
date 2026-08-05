@@ -1,6 +1,6 @@
 .PHONY: help install validate fmt fmt-check lint security sast audit-pragma audit-exemptions check-banned-terms test test-local test-unit test-integration test-e2e test-spec test-mutation \
         check-test-target-headers check-waitforresponse-race check-iam-patterns check-terraform-version \
-        localstack-up localstack-down localstack-wait localstack-logs localstack-status \
+        compose-preflight localstack-up localstack-down localstack-wait localstack-logs localstack-status \
         tf-init tf-plan tf-apply tf-destroy tf-init-local tf-plan-local tf-apply-local tf-destroy-local \
         cost cost-diff cost-baseline cost-check clean clean-all \
         check-annotation-budget check-annotation-pii regenerate-mermaid-url tf-output validate-mermaid \
@@ -233,16 +233,44 @@ test-mutation: ## Run mutation tests (requires mutmut)
 # ============================================================================
 
 LOCALSTACK_ENDPOINT ?= http://localhost:4566
+COMPOSE = docker compose
 
-localstack-up: ## Start LocalStack
-	docker-compose up -d localstack
+compose-preflight: ## Verify Docker CLI, daemon, and Compose v2 plugin before any Compose action
+	@command -v docker >/dev/null 2>&1 || { \
+		echo -e "$(RED)✗ Docker CLI not found.$(NC)"; \
+		echo "  Install Docker Engine first: https://docs.docker.com/engine/install/"; \
+		echo "  (Ubuntu/Debian: sudo apt-get install docker.io)"; \
+		exit 1; }
+	@docker info >/dev/null 2>&1 || { \
+		echo -e "$(RED)✗ Docker daemon unreachable (the CLI itself is installed).$(NC)"; \
+		echo "  Start it (e.g. sudo systemctl start docker) or check that your user is in the docker group."; \
+		exit 1; }
+	@docker compose version >/dev/null 2>&1 || { \
+		echo -e "$(RED)✗ Docker Compose v2 plugin missing (Docker daemon is healthy).$(NC)"; \
+		echo "  Ubuntu/Debian docker.io install: sudo apt-get install docker-compose-v2"; \
+		echo "  Docker CE repo install:          sudo apt-get install docker-compose-plugin"; \
+		echo "  Compose-free cleanup remains available via 'make clean'."; \
+		exit 1; }
+	@test -n "$$LOCALSTACK_AUTH_TOKEN" || { \
+		echo -e "$(RED)✗ LOCALSTACK_AUTH_TOKEN is not set (Docker and Compose are healthy).$(NC)"; \
+		echo "  LocalStack images v2026.3.1+ require an auth token (app.localstack.cloud)."; \
+		echo "  Plain:     export LOCALSTACK_AUTH_TOKEN=<token>"; \
+		echo "  1Password: export LOCALSTACK_AUTH_TOKEN=\$$(op read 'op://<vault>/LocalStack/auth-token')"; \
+		echo "  Compose-free cleanup remains available via 'make clean'."; \
+		exit 1; }
+
+localstack-up: compose-preflight ## Start LocalStack (on failure the output includes recovery steps)
+	@$(COMPOSE) up -d localstack || { \
+		echo -e "$(RED)✗ LocalStack start failed or was interrupted.$(NC)"; \
+		echo "  Recover by re-running 'make localstack-up' — it is safe to repeat."; \
+		exit 1; }
 	@echo "$(GREEN)LocalStack starting on :4566$(NC)"
 
-localstack-down: ## Stop LocalStack
-	docker-compose down
+localstack-down: compose-preflight ## Stop LocalStack
+	$(COMPOSE) down
 
-localstack-logs: ## Show LocalStack logs
-	docker-compose logs -f localstack
+localstack-logs: compose-preflight ## Show LocalStack logs
+	$(COMPOSE) logs -f localstack
 
 localstack-wait: ## Wait for LocalStack to be healthy
 	@echo "Waiting for LocalStack to be ready..."
@@ -343,6 +371,6 @@ clean: ## Clean generated files
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	@echo "$(GREEN)✓ Cleaned$(NC)"
 
-clean-all: clean localstack-down ## Clean everything including LocalStack
-	docker-compose down -v
+clean-all: compose-preflight clean localstack-down ## Clean everything including LocalStack
+	$(COMPOSE) down -v
 	rm -rf localstack-data
