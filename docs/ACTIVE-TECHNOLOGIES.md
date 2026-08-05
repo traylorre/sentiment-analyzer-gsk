@@ -18,6 +18,12 @@ per-spawn context. Architecture is in `docs/SERVICE-SHAPE.md`.
 | External | Tiingo and Finnhub (news), SendGrid (email), hCaptcha (bot protection) |
 | Tooling | Ruff, Semgrep, pre-commit, Terraform, pytest, Playwright, Vitest |
 
+## test-e2e
+
+`make test-e2e` runs `AWS_ENV=preprod pytest tests/e2e/ -v -m preprod`: the ADMIN dashboard
+suite (per the two-dashboards table in CLAUDE.md), against a live preprod deployment, which it
+requires. The customer dashboard's e2e suite is separate: `cd frontend && npx playwright test`.
+
 Two negatives worth stating, because an agent will otherwise go looking.
 
 There is no NewsAPI. Zero references in `src/`, `tests/` or `frontend/src/`.

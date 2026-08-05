@@ -20,6 +20,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TF_DIR="$REPO_ROOT/infrastructure/terraform"
 IAM_POLICY_FILE="$TF_DIR/ci-user-policy.tf"
+ALLOWLIST_FILE="$SCRIPT_DIR/iam-grandfathered-arns.txt"
 
 # Valid naming pattern: {env}-sentiment-{service}
 # After normalization, ${var.environment} becomes {env}
@@ -44,6 +45,15 @@ fi
 # Check if IAM policy file exists
 if [[ ! -f "$IAM_POLICY_FILE" ]]; then
     echo -e "${RED}ERROR: IAM policy file not found: $IAM_POLICY_FILE${NC}"
+    exit 1
+fi
+
+# The grandfathered-ARN allowlist is what lets this gate block NEW legacy patterns while
+# tolerating the live ones; without it every decision would be wrong in one direction,
+# so a missing or entry-less file fails closed rather than degrading to allow-all or deny-all.
+if [[ ! -f "$ALLOWLIST_FILE" ]] || ! grep -Eqv '^[[:space:]]*(#|$)' "$ALLOWLIST_FILE"; then
+    echo -e "${RED}ERROR: grandfathered-ARN allowlist missing or empty: $ALLOWLIST_FILE${NC}"
+    echo "Each entry is one extracted ARN pattern, preceded by a # reason line."
     exit 1
 fi
 
@@ -176,8 +186,24 @@ echo ""
 echo "Step 4: Checking for legacy patterns in IAM policy..."
 echo "-------------------------------------------"
 
+# Reason for an allowlisted pattern: the # comment line directly above its entry.
+allowlist_reason() {
+    local pattern="$1" reason="" entry
+    while IFS= read -r entry; do
+        if [[ "$entry" =~ ^[[:space:]]*# ]]; then
+            reason="${entry#*\#}"
+            reason="${reason# }"
+        elif [[ "$entry" == "$pattern" ]]; then
+            echo "$reason"
+            return 0
+        fi
+    done < "$ALLOWLIST_FILE"
+    echo "no reason recorded"
+}
+
 LEGACY_ARN_COUNT=0
 LEGACY_USER_COUNT=0
+GRANDFATHERED_COUNT=0
 while IFS= read -r line; do
     if [[ "$line" =~ sentiment-analyzer- ]] && [[ ! "$line" =~ ^[[:space:]]*# ]]; then
         # Distinguish between ARN patterns (fixable) and user references (AWS resource)
@@ -185,19 +211,36 @@ while IFS= read -r line; do
             echo -e "${YELLOW}LEGACY USER REF: $line${NC}"
             LEGACY_USER_COUNT=$((LEGACY_USER_COUNT + 1))
         else
-            echo -e "${RED}LEGACY ARN PATTERN: $line${NC}"
-            LEGACY_ARN_COUNT=$((LEGACY_ARN_COUNT + 1))
+            # The allowlist holds extracted ARN patterns, so compare the extracted
+            # pattern (same regex as step 3), never the raw line: raw lines carry
+            # indentation and trailing commas that would defeat an exact match.
+            arn=""
+            if [[ "$line" =~ \"arn:aws:[^\"]+\" ]]; then
+                arn="${BASH_REMATCH[0]}"
+                arn="${arn//\"/}"
+            fi
+            if [[ -n "$arn" ]] && grep -Fxq -- "$arn" "$ALLOWLIST_FILE"; then
+                echo -e "${YELLOW}GRANDFATHERED: $arn ($(allowlist_reason "$arn"))${NC}"
+                GRANDFATHERED_COUNT=$((GRANDFATHERED_COUNT + 1))
+            else
+                echo -e "${RED}LEGACY ARN PATTERN: $line${NC}"
+                LEGACY_ARN_COUNT=$((LEGACY_ARN_COUNT + 1))
+            fi
         fi
     fi
 done < "$IAM_POLICY_FILE"
 
-if [[ $LEGACY_ARN_COUNT -eq 0 ]] && [[ $LEGACY_USER_COUNT -eq 0 ]]; then
+if [[ $LEGACY_ARN_COUNT -eq 0 ]] && [[ $LEGACY_USER_COUNT -eq 0 ]] && [[ $GRANDFATHERED_COUNT -eq 0 ]]; then
     echo -e "${GREEN}No legacy patterns found in IAM policy${NC}"
 else
     echo ""
     if [[ $LEGACY_ARN_COUNT -gt 0 ]]; then
         echo -e "${RED}Found $LEGACY_ARN_COUNT legacy ARN patterns - MUST be removed${NC}"
         ERRORS=$((ERRORS + LEGACY_ARN_COUNT))
+    fi
+    if [[ $GRANDFATHERED_COUNT -gt 0 ]]; then
+        echo -e "${YELLOW}Found $GRANDFATHERED_COUNT grandfathered ARN patterns (allowlisted in $ALLOWLIST_FILE)${NC}"
+        # Not errors: allowlisted live resources whose rename requires migration
     fi
     if [[ $LEGACY_USER_COUNT -gt 0 ]]; then
         echo -e "${YELLOW}Found $LEGACY_USER_COUNT legacy IAM user references (AWS resources, can't rename in-place)${NC}"
@@ -248,8 +291,10 @@ echo "Resources checked: ${#RESOURCE_NAMES[@]}"
 echo "Legacy resources:  ${#LEGACY_RESOURCES[@]}"
 echo "Invalid resources: ${#INVALID_RESOURCES[@]}"
 echo ""
-echo -e "Errors:   ${RED}$ERRORS${NC}"
-echo -e "Warnings: ${YELLOW}$WARNINGS${NC}"
+echo -e "Errors:            ${RED}$ERRORS${NC}"
+echo -e "Grandfathered:     ${YELLOW}$GRANDFATHERED_COUNT${NC}"
+echo -e "User-ref warnings: ${YELLOW}$LEGACY_USER_COUNT${NC}"
+echo -e "Warnings:          ${YELLOW}$WARNINGS${NC}"
 echo ""
 
 if [[ $ERRORS -gt 0 ]]; then
