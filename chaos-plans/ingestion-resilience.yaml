@@ -3,7 +3,7 @@
 # Tests the sentiment analyzer's resilience to ingestion pipeline failures.
 # Covers: ingestion Lambda throttling and DynamoDB write denial.
 #
-# Execution: Follow docs/chaos-testing/gameday-runbook.md
+# Execution: Follow docs/chaos.md
 # Pre-flight: Complete docs/chaos-testing/preflight-checklist.md first
 
 name: ingestion-resilience

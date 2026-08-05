@@ -1,5 +1,7 @@
 # Performance Validation Methodology
 
+> **QUARRYSOME**: unaudited; verify against code before trusting.
+
 This document describes how performance is measured and validated for the Sentiment Analyzer dashboard.
 
 ## Performance Targets

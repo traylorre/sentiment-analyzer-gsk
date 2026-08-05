@@ -1,5 +1,7 @@
 # Terraform Backend Bootstrap
 
+> **QUARRYSOME**: unaudited; verify against code before trusting.
+
 Creates the S3 bucket that holds Terraform state. Run once per AWS account.
 
 Operational procedure (stale locks, force-unlock, importing secrets) is in

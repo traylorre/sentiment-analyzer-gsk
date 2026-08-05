@@ -1,5 +1,9 @@
 # Active Technologies
 
+> **CANON**: verified against code.
+
+![Python 3.13](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white) ![Next.js 16](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white) ![React 18](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black) ![TypeScript 5](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white) ![Terraform 1.9.8](https://img.shields.io/badge/Terraform-1.9.8-844FBA?logo=terraform&logoColor=white) ![AWS Lambda](https://img.shields.io/badge/AWS-Lambda-FF9900?logo=awslambda&logoColor=white)
+
 Lazy-loaded inventory. Load this when you need to look up what is in the service; it is not worth
 per-spawn context. Architecture is in `docs/SERVICE-SHAPE.md`.
 
@@ -12,7 +16,7 @@ per-spawn context. Architecture is in `docs/SERVICE-SHAPE.md`.
 |---|---|
 | Runtime | Python 3.13 (`requires-python = ">=3.13"`). Node is **split**: CI tests on 18, deploy builds on 20 |
 | Backend | aws-lambda-powertools, boto3, pydantic, httpx, orjson, PyJWT, aws-xray-sdk |
-| Frontend | Next.js 14, React 18, TypeScript 5, Zustand, TanStack Query, Tailwind |
+| Frontend | Next.js 16, React 18, TypeScript 5, Zustand, TanStack Query, Tailwind |
 | Charting | TradingView lightweight-charts and Chart.js (customer), Chart.js (admin) |
 | AWS | Lambda, DynamoDB, S3, SNS, EventBridge, Cognito, Amplify, API Gateway, CloudFront (SSE edge), WAF, KMS, Secrets Manager, X-Ray |
 | External | Tiingo and Finnhub (news), SendGrid (email), hCaptcha (bot protection) |

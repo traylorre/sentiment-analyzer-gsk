@@ -16,8 +16,6 @@ Please report security vulnerabilities privately to the project maintainers. Do 
 
 ✅ **Feature 006 Security Enhancements Implemented**
 
-**Last Security Review**: 2025-11-26
-**Status**: APPROVED FOR DEMO (Feature 006 Tiingo/Finnhub pivot complete)
 
 ### Critical Issues Status
 
@@ -86,3 +84,22 @@ When contributing to this project:
 - Validate and sanitize all external inputs
 - Follow AWS security best practices for IAM roles and policies
 - Enable MFA for all AWS and infrastructure accounts
+
+## Claims vs controls
+
+Each claim above checked against live code and terraform: whether a live control backs it, and where.
+
+Backed by a live control:
+
+- IP-based rate limiting (P0-1): per-IP, per-action limits tracked in DynamoDB with TTL cleanup. `src/lambdas/shared/middleware/rate_limit.py`.
+- Cognito authentication (P0-3, P0-4): backing infrastructure exists. `infrastructure/terraform/modules/cognito/`.
+- hCaptcha bot protection: `src/lambdas/shared/middleware/hcaptcha.py`.
+- Magic links (HMAC-signed passwordless authentication): `src/lambdas/dashboard/auth.py`.
+- Secrets Manager 5-minute TTL caching: `DEFAULT_CACHE_TTL_SECONDS = 300` at `src/lambdas/shared/secrets.py:45`.
+
+Not backed, or wrong in detail:
+
+- SSE connection limits "max 2 per IP" (P0-2): the code enforces a global cap of 100 connections (`MAX_CONNECTIONS` at `src/lambdas/dashboard/sse.py:60`). No per-IP limit of 2 exists anywhere in the codebase.
+- X-Ray "on all 6 Lambdas" (stated twice above): terraform declares 7 Lambda modules in `infrastructure/terraform/main.tf` (ingestion, analysis, dashboard, metrics, notification, sse_streaming, canary), of which 6 carry `tracing_mode = "Active"`.
+- Recommended Deployment Architecture: stale as a recommendation because the migration already happened. API Gateway at `infrastructure/terraform/main.tf:859`, WAF at `infrastructure/terraform/main.tf:932`, CloudFront for SSE at `infrastructure/terraform/main.tf:966`, dashboard `create_function_url = false` at `infrastructure/terraform/main.tf:508`. One detail remains open: the sse_streaming Lambda keeps a Function URL (`infrastructure/terraform/main.tf:824`, AWS_IAM auth with response streaming).
+- Security contact: the value on line 11 is the unconfigured placeholder text, in a public-facing policy.

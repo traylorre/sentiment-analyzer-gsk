@@ -399,7 +399,7 @@ class CircuitBreakerManager:
             # Feature 1224 -- Failure Policy: FAIL-OPEN (closed state).
             # When DynamoDB is unreachable, assume circuit is closed (allow traffic).
             # This prevents a DynamoDB outage from cascading into a full API shutdown.
-            # See docs/cache-failure-policies.md for the complete policy matrix.
+            # See docs/cache.md for the complete policy matrix.
             logger.warning(
                 "Circuit breaker state load failed, defaulting to closed (fail-open)",
                 extra={
