@@ -1,0 +1,14 @@
+{
+  "version": "0.2",
+  "currency": "USD",
+  "totalMonthlyCost": "42.50",
+  "diffTotalMonthlyCost": "3.25",
+  "projects": [
+    {
+      "name": "infrastructure/terraform",
+      "diff": {
+        "totalMonthlyCost": "3.25"
+      }
+    }
+  ]
+}
