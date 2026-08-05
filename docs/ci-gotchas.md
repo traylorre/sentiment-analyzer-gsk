@@ -12,29 +12,53 @@ Common pitfalls and their fixes discovered during development. Each entry follow
 
 **Symptom**: API calls return no data. Frontend shows empty state. No error in the browser console (CORS failures are opaque by design).
 
-**Root Cause**: Three locations in `infrastructure/terraform/modules/api_gateway/main.tf` had `"'*'"` for `Access-Control-Allow-Origin`:
-1. `local.cors_headers` (used by public route OPTIONS responses)
-2. `proxy_options` integration response (catch-all `{proxy+}` OPTIONS)
-3. `root_options` integration response (root `/` OPTIONS)
+**Root Cause**: six locations in `infrastructure/terraform/modules/api_gateway/main.tf` set
+`Access-Control-Allow-Origin`, and they do **not** all take the same value. Feature 1267 replaced
+`"'*'"` everywhere with origin echoing; commit `12abfbf` then had to revert half of that, because
+**API Gateway MOCK integrations reject `method.request.header.X` in `response_parameters`** and
+every `terraform apply` failed with `PutIntegrationResponse` 400.
 
-**Fix**: Replace `"'*'"` with `"method.request.header.Origin"` (origin echoing). This is the standard AWS API Gateway pattern that echoes the requesting Origin header verbatim.
+The split that survived, and the one to preserve:
+
+| Kind | Lines | Value | Why |
+|---|---|---|---|
+| Gateway responses (401/403/404) | `:77`, `:102`, `:126` | `method.request.header.origin` | echoing IS supported here |
+| MOCK integration responses (`cors_headers`, `proxy_options`, `root_options`) | `:229`, `:640`, `:704` | `"'${local.cors_origin}'"` | echoing is NOT supported here |
+
+**Do not "fix" the MOCK sites to `method.request.header.Origin`.** That reverts `12abfbf` and
+breaks every apply. The reasoning is in the code comment at `main.tf:210-213`; read it before
+touching any of the six.
+
+**Live hazard, unfixed**: `main.tf:214` is
 
 ```hcl
-# BEFORE (broken with credentials: 'include')
-"method.response.header.Access-Control-Allow-Origin" = "'*'"
-
-# AFTER (works with credentials: 'include')
-"method.response.header.Access-Control-Allow-Origin" = "method.request.header.Origin"
+cors_origin = length(var.cors_allowed_origins) > 0 ? var.cors_allowed_origins[0] : "*"
 ```
+
+so an environment with `cors_allowed_origins` unset emits `Access-Control-Allow-Origin: *` next to
+`Access-Control-Allow-Credentials: 'true'`, which is the exact defect this section is about. The
+wildcard-rejection validators (`variables.tf:73`, `modules/api_gateway/variables.tf:143`)
+short-circuit on an empty list, and the non-empty guard at `infrastructure/terraform/main.tf:44`
+only fires for `environment == "prod"`. Both checked-in tfvars are currently non-empty, so this is
+latent rather than firing.
+
+Second known gap: `local.cors_origin` is `var.cors_allowed_origins[0]`, so OPTIONS preflight
+returns only the **first** allowed origin. preprod lists four.
 
 Additionally:
 - Proxy and root OPTIONS responses carry `Access-Control-Allow-Credentials: 'true'`
-- `Vary: Origin` is set, to prevent CDN/proxy cache poisoning
+- `Vary: Origin` is set on the MOCK paths (`:231`, `:642`, `:706`) and is **absent** from the three
+  gateway responses, which are the ones that actually echo
 
-**Prevention**:
-- Unit tests in `tests/unit/test_api_gateway_cognito.py` parse the HCL and assert no wildcard `'*'` appears in any `Access-Control-Allow-Origin` value
+**Prevention** (weaker than it looks, do not rely on it):
+- `tests/unit/test_api_gateway_cognito.py:256` asserts no literal `'*'` appears in an
+  `Access-Control-Allow-Origin` value. It reads **unresolved HCL**, so it sees the string
+  `'${local.cors_origin}'` and cannot evaluate the `"*"` fallback above. It also skips
+  `aws_api_gateway_gateway_response` blocks entirely, and its acceptable-value set at `:288`
+  whitelists `method.request.header.Origin`, so the apply-breaking edit passes this test green.
 - Never use `Access-Control-Allow-Origin: *` when `Access-Control-Allow-Credentials: true` is set
-- Always include `Vary: Origin` when origin echoing is used
+- `Vary: Origin` belongs on any response that echoes the origin. The three gateway responses
+  currently violate this and nothing enforces it.
 
 ---
 
