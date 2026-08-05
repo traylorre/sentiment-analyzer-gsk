@@ -15,7 +15,7 @@ test.describe('Sentiment Data Visibility', { tag: '@external-api' }, () => {
     await searchInput.clear();
     await searchInput.fill(ticker);
 
-    // Handle 429 rate limiting on search endpoint
+    // Retry within the test on 429. Exhausting the retries is a break, not a skip.
     let retries = 0;
     const maxRetries = 3;
     let rateLimited = false;
@@ -38,7 +38,10 @@ test.describe('Sentiment Data Visibility', { tag: '@external-api' }, () => {
           retries++;
           rateLimited = false;
           if (retries >= maxRetries) {
-            test.skip(true, `Rate limited (429) after ${maxRetries} retries on search endpoint`);
+            throw new Error(
+              `Suggestion for ${ticker} did not appear: search endpoint returned 429 ` +
+                `after ${maxRetries} retries`
+            );
           }
           await page.waitForTimeout(2000);
           await searchInput.clear();
