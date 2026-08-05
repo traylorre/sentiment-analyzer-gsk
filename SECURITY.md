@@ -94,7 +94,7 @@ Backed by a live control:
 - IP-based rate limiting (P0-1): per-IP, per-action limits tracked in DynamoDB with TTL cleanup. `src/lambdas/shared/middleware/rate_limit.py`.
 - Cognito authentication (P0-3, P0-4): backing infrastructure exists. `infrastructure/terraform/modules/cognito/`.
 - hCaptcha bot protection: `src/lambdas/shared/middleware/hcaptcha.py`.
-- Magic links (HMAC-signed passwordless authentication): `src/lambdas/dashboard/auth.py`.
+- Magic links (single-use random-token passwordless authentication): `src/lambdas/dashboard/auth.py`.
 - Secrets Manager 5-minute TTL caching: `DEFAULT_CACHE_TTL_SECONDS = 300` at `src/lambdas/shared/secrets.py:45`.
 
 Not backed, or wrong in detail:

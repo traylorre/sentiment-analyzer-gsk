@@ -31,7 +31,7 @@ Rules:
 Three traps in that table. There is **no HTMX** in the admin dashboard despite the header string
 saying so; the string is historical and dozens of test files carry it. The
 `check-test-target-headers` gate (`Makefile:124`) greps only
-`Target:.*(Dashboard|Infrastructure)`, so the wording after that is convention, not enforcement. Second, the dashboard Lambda no longer has a Function
+`Target:.*(Dashboard|Infrastructure)`, so the wording after that is convention, not enforcement. Second, the dashboard Lambda has no Function
 URL; it is reached through API Gateway. Third, **routes do not discriminate**: both dashboards are
 served by `src/lambdas/dashboard/handler.py` and their route sets overlap, so the API row above is
 a usage example, not a partition. Check the caller, not the route.
@@ -76,7 +76,7 @@ Python work needs the venv, which is 3.13 while system Python is not:
   `pip-audit` is declared ADVISORY in the driver, so it cannot fail the run even in principle.
   Every other stage is BLOCKING; the `run_stage` lines in the validate driver
   (`Makefile`, `validate:` target) are the authoritative stage list. The driver runs all of
-  them and reports each before failing, so one broken stage no longer hides the ones behind it.
+  them and reports each before failing, so one broken stage cannot hide the ones behind it.
 - **SSE handler tests** need `make_function_url_event()` and `parse_streaming_response()` from
   `tests/conftest.py`. A hand-built API Gateway event returns 404 and reads as a routing bug.
 - **Checking security alerts before a push:** filtering `state` client-side returns 0, because the
