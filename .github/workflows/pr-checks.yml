@@ -324,12 +324,39 @@ jobs:
         run: pre-commit run --all-files --show-diff-on-failure
 
       - name: Detect secrets (non-mutating, blocking)
-        # Substitute for the skipped autostage wrapper. Read-only: compares secret
-        # hashes against the committed baseline, exits 1 on any NEW secret. Excludes
-        # tests/ (matches the local hook scope; gitleaks still scans tests/).
+        # Substitute for the skipped autostage wrapper. Fails on any NEW secret and on
+        # any substantive baseline change (those belong in the commit). The raw hook
+        # also exits 3 when its only rewrite is line_number/generated_at churn, which
+        # the local wrapper deliberately keeps out of commits, so that class is excused
+        # here via the same shared comparison the wrapper uses
+        # (scripts/baseline-volatile-compare.py). The checkout mutation stays inside
+        # this ephemeral runner; nothing is committed. Excludes tests/ (matches the
+        # local hook scope; gitleaks still scans tests/).
         run: |
           FILES="$(git ls-files | grep -vE '^tests/|^\.secrets\.baseline$')"
-          detect-secrets-hook --baseline .secrets.baseline $FILES
+          cp .secrets.baseline "${RUNNER_TEMP}/baseline.before"
+          HOOK_EXIT=0
+          detect-secrets-hook --baseline .secrets.baseline $FILES || HOOK_EXIT=$?
+          if [ "$HOOK_EXIT" -eq 0 ]; then
+            exit 0
+          fi
+          if [ "$HOOK_EXIT" -eq 3 ]; then
+            COMPARE_EXIT=0
+            python3 scripts/baseline-volatile-compare.py "${RUNNER_TEMP}/baseline.before" .secrets.baseline || COMPARE_EXIT=$?
+            if [ "$COMPARE_EXIT" -eq 0 ]; then
+              echo "Baseline rewrite is volatile-only (line_number/generated_at); the committed baseline is deliberately stable. Passing."
+              exit 0
+            fi
+            if [ "$COMPARE_EXIT" -eq 1 ]; then
+              echo "Baseline rewrite is SUBSTANTIVE. Commit the updated .secrets.baseline:"
+              echo "run pre-commit locally and include the staged baseline change in the PR."
+              git --no-pager diff .secrets.baseline
+              exit 1
+            fi
+            echo "Baseline comparison crashed (exit $COMPARE_EXIT); failing closed. See the error above."
+            exit 1
+          fi
+          exit "$HOOK_EXIT"
 
   # ========================================================================
   # JOB 4: CodeQL Analysis
