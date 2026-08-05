@@ -25,7 +25,7 @@ export async function GET(
   // 8.6 XSS fix). So this proxy currently 401s every request. SSE is out of
   // M1 scope; this is signposted, not fixed here. When SSE is picked up, the
   // token must come from the Authorization Bearer header (memory-only store),
-  // not a JS-readable cookie. See open-questions.md (SSE proxy auth).
+  // not a JS-readable cookie.
   // Cookie sent automatically (same origin) — see caveat above.
   const token = request.cookies.get('sentiment-access-token')?.value;
 

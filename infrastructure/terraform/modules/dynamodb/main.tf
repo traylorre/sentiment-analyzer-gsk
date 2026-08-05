@@ -52,7 +52,7 @@ resource "aws_dynamodb_table" "sentiment_items" {
 
   # GSI 2: by_tag
   # Query pattern: Get items by individual tag
-  # KNOWN GAP (see docs/cleanup-pristine/open-questions.md, Q6): no writer sets a
+  # KNOWN GAP: no writer sets a
   # scalar `tag` attribute (ingestion writes the `matched_tickers` list), so this GSI
   # is never populated and GET /api/v2/sentiment?tags= returns empty with a 200.
   # Tracked as a behavioral bug; do not rely on this index until a writer exists.
