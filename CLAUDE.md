@@ -118,6 +118,7 @@ both headings above; fold what lands there into that file rather than letting it
 
 - Rules that bind changes: `.specify/memory/constitution.md`
 - Architecture, topology, and what does not exist: `docs/SERVICE-SHAPE.md`
+- Stack inventory (what is installed and what does not exist): `docs/ACTIVE-TECHNOLOGIES.md`
 - Output schema, retention, model versioning: `docs/MODELING.md`
 - Metrics, alarms, dashboard privacy rules: `docs/OBSERVABILITY.md`
 - CI and build pitfalls: `docs/ci-gotchas.md`

@@ -15,12 +15,13 @@ per-spawn context. Architecture is in `docs/SERVICE-SHAPE.md`.
 | Layer | What |
 |---|---|
 | Runtime | Python 3.13 (`requires-python = ">=3.13"`). Node is **split**: CI tests on 18, deploy builds on 20 |
-| Backend | aws-lambda-powertools, boto3, pydantic, httpx, orjson, PyJWT, aws-xray-sdk |
-| Frontend | Next.js 16, React 18, TypeScript 5, Zustand, TanStack Query, Tailwind |
+| Backend | aws-lambda-powertools, boto3, pydantic, httpx, orjson, PyJWT, tenacity, aws-xray-sdk |
+| ML | transformers running DistilBERT. Model artifact, output schema and versioning: `docs/MODELING.md`. torch (CPU-only) enters through the analysis container image (`src/lambdas/analysis/requirements.txt`); `requirements-ci.txt` excludes torch and transformers, so CI never exercises real inference |
+| Frontend | Next.js 16, React 18, TypeScript 5, Zustand, TanStack Query, Tailwind, shadcn-style UI layer (Radix primitives, lucide-react, sonner, framer-motion) |
 | Charting | TradingView lightweight-charts and Chart.js (customer), Chart.js (admin) |
 | AWS | Lambda, DynamoDB, S3, SNS, EventBridge, Cognito, Amplify, API Gateway, CloudFront (SSE edge), WAF, KMS, Secrets Manager, X-Ray |
-| External | Tiingo and Finnhub (news), SendGrid (email), hCaptcha (bot protection) |
-| Tooling | Ruff, Semgrep, pre-commit, Terraform (pinned by `.terraform-version`, enforced by the blocking `check-terraform-version` stage), infracost (`cost*` targets and the PR cost gate), pytest, Playwright, Vitest |
+| External | Tiingo and Finnhub (news), SendGrid (email), Stripe (payments), hCaptcha (bot protection) |
+| Tooling | Ruff, mypy, ESLint, Semgrep, pre-commit, Terraform (pinned by `.terraform-version`, enforced by the blocking `check-terraform-version` stage), infracost (`cost*` targets and the PR cost gate), pytest, hypothesis, python-hcl2 (HCL parsing in terraform tests), Playwright, Vitest, Testing Library |
 
 ## test-e2e
 
