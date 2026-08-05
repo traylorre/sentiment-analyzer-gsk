@@ -22,8 +22,6 @@
 # Tests that DO pass and verify rate limiting is configured:
 # - test_rate_limit_headers_on_normal_response: Checks X-RateLimit-* headers
 # - test_requests_within_limit_succeed: Verifies normal operation
-#
-# See tests/e2e/SKIP_REASONS.md for full documentation.
 
 import asyncio
 

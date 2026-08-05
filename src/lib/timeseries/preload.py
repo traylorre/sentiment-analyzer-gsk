@@ -1,6 +1,6 @@
 """Preloading strategy for time-series data.
 
-UNWIRED (repo cleanup inventory, docs/cleanup-pristine/open-questions.md Q11):
+UNWIRED (repo cleanup inventory):
 this module has ZERO production callers - only tests import it. It implements
 FR-007/FR-008 adjacent-resolution preloading MUSTs, which are unimplemented everywhere. The wiring was never built. Kept in tree as a signpost, not dead weight:
 either wire it or formally descope the requirement before deleting.
