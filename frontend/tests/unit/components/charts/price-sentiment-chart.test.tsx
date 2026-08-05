@@ -358,14 +358,38 @@ describe('PriceSentimentChart', () => {
       expect(visibleRangeCallbacks.length).toBe(0);
     });
 
+    it('should NOT upgrade on an overshooting range event with no user gesture (phantom upgrade)', async () => {
+      // Programmatic setData/fitContent fire range events too. Ungated, an event
+      // reflecting the old viewport judged against a freshly shortened dataset reads
+      // as a zoom-out and silently reverts the range the user just picked.
+      sessionStorageData['ohlc_preferred_time_range'] = '1W';
+
+      render(<PriceSentimentChart ticker="AAPL" interactive={true} />);
+
+      // Overshooting range, but no wheel/touch/pointer gesture ever happened.
+      if (visibleRangeCallbacks.length > 0) {
+        visibleRangeCallbacks[0]({ from: -5, to: 10 });
+      }
+
+      // Wait past the 500ms upgrade debounce
+      await new Promise((resolve) => setTimeout(resolve, 700));
+
+      const setItemCalls = mockSessionStorage.setItem.mock.calls.filter(
+        (call: [string, string]) => call[0] === 'ohlc_preferred_time_range'
+      );
+      const lastTimeRangeSet = setItemCalls[setItemCalls.length - 1]?.[1];
+      expect(lastTimeRangeSet).toBe('1W');
+    });
+
     it('should upgrade from 1M to 3M when zoomed out past data bounds', async () => {
       // Start with 1M time range
       sessionStorageData['ohlc_preferred_time_range'] = '1M';
 
       render(<PriceSentimentChart ticker="AAPL" interactive={true} />);
 
-      // Wait for justFitContentRef to reset (100ms setTimeout in fitContent guard)
-      await new Promise((resolve) => setTimeout(resolve, 150));
+      // The upgrade is gesture-armed: only a wheel/touch/pointer gesture on the chart
+      // makes a subsequent range event upgrade-eligible.
+      fireEvent.wheel(screen.getByRole('img'));
 
       // Simulate zooming out past data bounds
       // With 2 data points, 30% threshold = 0.6
@@ -388,6 +412,10 @@ describe('PriceSentimentChart', () => {
 
       render(<PriceSentimentChart ticker="AAPL" interactive={true} />);
 
+      // Armed by a gesture, so the no-upgrade outcome exercises the overshoot
+      // threshold rather than the unarmed early-return.
+      fireEvent.wheel(screen.getByRole('img'));
+
       // Range within data bounds - no overshoot
       if (visibleRangeCallbacks.length > 0) {
         visibleRangeCallbacks[0]({ from: 0, to: 1 });
@@ -408,6 +436,9 @@ describe('PriceSentimentChart', () => {
       sessionStorageData['ohlc_preferred_time_range'] = '1Y';
 
       render(<PriceSentimentChart ticker="AAPL" interactive={true} />);
+
+      // Armed, so the no-upgrade outcome exercises the 1Y ceiling, not the arming.
+      fireEvent.wheel(screen.getByRole('img'));
 
       // Simulate zoom out past bounds while at 1Y
       if (visibleRangeCallbacks.length > 0) {

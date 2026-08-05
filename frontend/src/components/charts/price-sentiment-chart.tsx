@@ -110,7 +110,13 @@ export function PriceSentimentChart({
   const dataLengthRef = useRef(0);
   const timeRangeRef = useRef<TimeRange>(initialTimeRange);
   const upgradeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const justFitContentRef = useRef(false);
+  // The zoom-out auto-upgrade may only ever follow a real zoom gesture. Programmatic
+  // setData/fitContent also fire visible-range events, and judged against a freshly
+  // shortened dataset they read as a zoom-out, which would silently revert a range the
+  // user just picked. A wall-clock guard cannot close that window on a slow renderer,
+  // so the arming is by gesture: pointer/wheel/touch on the chart arms it, a data swap
+  // disarms it.
+  const userZoomRef = useRef(false);
 
   const [isReady, setIsReady] = useState(false);
   const [tooltip, setTooltip] = useState<TooltipData | null>(null);
@@ -344,7 +350,7 @@ export function PriceSentimentChart({
     // 1318: Subscribe to visible logical range changes for zoom-out auto-upgrade
     const handleVisibleRangeChange = (logicalRange: { from: number; to: number } | null) => {
       if (!logicalRange) return;
-      if (justFitContentRef.current) return;
+      if (!userZoomRef.current) return;
       const dataLen = dataLengthRef.current;
       if (dataLen === 0) return;
       if (upgradeTimeoutRef.current) return;
@@ -358,8 +364,17 @@ export function PriceSentimentChart({
       }
     };
 
+    const armUpgrade = () => {
+      userZoomRef.current = true;
+    };
+    const container = containerRef.current;
     if (interactive) {
       chart.timeScale().subscribeVisibleLogicalRangeChange(handleVisibleRangeChange);
+      if (container) {
+        container.addEventListener('wheel', armUpgrade, { passive: true });
+        container.addEventListener('touchstart', armUpgrade, { passive: true });
+        container.addEventListener('mousedown', armUpgrade);
+      }
     }
 
     // Handle resize
@@ -378,6 +393,11 @@ export function PriceSentimentChart({
       // 1318: Clean up zoom-out auto-upgrade
       if (interactive) {
         chart.timeScale().unsubscribeVisibleLogicalRangeChange(handleVisibleRangeChange);
+        if (container) {
+          container.removeEventListener('wheel', armUpgrade);
+          container.removeEventListener('touchstart', armUpgrade);
+          container.removeEventListener('mousedown', armUpgrade);
+        }
       }
       if (upgradeTimeoutRef.current) {
         clearTimeout(upgradeTimeoutRef.current);
@@ -425,17 +445,23 @@ export function PriceSentimentChart({
       }
     });
 
+    // A data swap disarms the zoom-out auto-upgrade and cancels any pending one:
+    // the overshoot that armed it was judged against the previous dataset.
+    userZoomRef.current = false;
+    if (upgradeTimeoutRef.current) {
+      clearTimeout(upgradeTimeoutRef.current);
+      upgradeTimeoutRef.current = null;
+    }
+
     candleSeriesRef.current.setData(chartData);
 
-    // Feature 1316: fitContent immediately after setData in the SAME useEffect.
-    // A separate useEffect + rAF caused a race condition: the first render's rAF
-    // (with partial sentiment data) would set a narrow viewport, and the second
-    // render's rAF was cancelled by React's cleanup before it could expand it.
-    // Sibling charts (atr-chart, sentiment-chart) already use this pattern.
+    // fitContent immediately after setData in the SAME useEffect. A separate
+    // useEffect + rAF races: the first render's rAF (with partial sentiment data)
+    // sets a narrow viewport, and the second render's rAF is cancelled by React's
+    // cleanup before it can expand it. Sibling charts (atr-chart, sentiment-chart)
+    // use this same pattern.
     if (chartRef.current) {
-      justFitContentRef.current = true;
       chartRef.current.timeScale().fitContent();
-      setTimeout(() => { justFitContentRef.current = false; }, 100);
     }
 
     // 1318: Track data length for zoom-out auto-upgrade threshold calculation
@@ -463,19 +489,21 @@ export function PriceSentimentChart({
       value: point.score,
     }));
 
+    // Same disarm as the price-data effect: sentiment can arrive late, and its
+    // fitContent below fires range events that must not read as a user zoom.
+    userZoomRef.current = false;
+    if (upgradeTimeoutRef.current) {
+      clearTimeout(upgradeTimeoutRef.current);
+      upgradeTimeoutRef.current = null;
+    }
+
     sentimentSeriesRef.current.setData(chartData);
 
-    // Feature 1316: fitContent after sentiment data too (may arrive after price data)
+    // fitContent after sentiment data too (it may arrive after price data)
     if (chartRef.current) {
-      justFitContentRef.current = true;
       chartRef.current.timeScale().fitContent();
-      setTimeout(() => { justFitContentRef.current = false; }, 100);
     }
   }, [sentimentData, resolution]);
-
-  // Note: fitContent() is now called inside the setData useEffect above (Feature 1316).
-  // A separate useEffect + rAF had a race condition where React's cleanup cancelled
-  // the rAF before it could fire with the full dataset.
 
   // Update series visibility
   useEffect(() => {
