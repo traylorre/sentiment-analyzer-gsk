@@ -2,9 +2,9 @@
 
 > **CANON**: verified against code.
 
-A pending schema-change proposal for streaming subscriptions (adjacency-list pattern, affects
-table schema, caching, and routes) sits in `docs/dynamodb-schema-change-quarrysome.md`; it is
-QUARRYSOME until the schema comb adjudicates it.
+A schema-change proposal for streaming subscriptions (adjacency-list pattern, affects table
+schema, caching, and routes) sits in `docs/dynamodb-schema-change-quarrysome.md`; adjudicated
+as current pending work, it stays QUARRYSOME until built.
 
 The inference path, what is actually persisted, and retention. Architecture is in
 `docs/SERVICE-SHAPE.md`.

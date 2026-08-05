@@ -11,9 +11,10 @@ Every file reachable from this tree carries exactly one marker line under its ti
 - `> **CANON**: verified against code.` The attaching pass or a category audit verified the
   file's claims. Trust it; when you find drift, that is a defect to card, not a reason to
   re-audit the tree.
-- `> **QUARRYSOME**: unaudited; verify against code before trusting.` The file was attached
-  without a full audit. Category audit passes promote QUARRYSOME to CANON; v1 of this doc set
-  is done when zero QUARRYSOME remain.
+- `> **QUARRYSOME**: unaudited; verify against code before trusting.` The file is not yet
+  reflected in code: attached without a full audit, or adjudicated as current pending work.
+  Audit passes promote QUARRYSOME to CANON or delete it; v1 of this doc set is done when every
+  remaining QUARRYSOME is adjudicated pending work.
 
 A file with neither marker is outside the tree and carries no trust claim either way.
 
