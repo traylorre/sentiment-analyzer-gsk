@@ -20,7 +20,6 @@ For On-Call Engineers:
     If tests fail with "Unexpected ERROR/WARNING logs":
     1. The test is catching a real issue - investigate the logs
     2. If the log is expected, add marker: @pytest.mark.expect_errors("pattern")
-    3. See docs/TESTING_LESSONS_LEARNED.md for details
 
 For Developers:
     - Import fixtures by name in test files (pytest auto-discovers conftest.py)
@@ -470,7 +469,7 @@ def sample_pending_item():
 # Log Validation Helpers
 # =============================================================================
 #
-# Philosophy (see docs/TESTING_LESSONS_LEARNED.md):
+# Philosophy:
 # - Production code logs normally (never test-aware)
 # - Tests explicitly assert on expected logs using caplog
 # - Helper functions reduce boilerplate

@@ -574,7 +574,6 @@ class TestSecurityMitigations:
     ===================================================
 
     Tests for security fixes implemented in response to dashboard security analysis.
-    See docs/DASHBOARD_SECURITY_ANALYSIS.md for full vulnerability assessment.
 
     Test Coverage:
     - P0-5: CORS origin validation (cross-origin attack prevention)

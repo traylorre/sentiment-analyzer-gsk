@@ -1252,7 +1252,6 @@ jobs:
             echo "$IMPORT_ERRORS"
             echo ""
             echo "This indicates a packaging/binary compatibility issue."
-            echo "See docs/security/PREPROD_HTTP_502_ROOT_CAUSE.md for troubleshooting."
             exit 1
           fi
 
@@ -1734,7 +1733,6 @@ jobs:
   # JOB 5: Build SSE Lambda Image (Production)
   # TEMPORARILY DISABLED: Production deployment skipped until ready for prod release
   # To re-enable: Remove `if: false` from jobs 5-7 and restore summary needs
-  # See: interview/FUTURE_IMPROVEMENTS.md for tracking
   # ========================================================================
   build-sse-image-prod:
     name: Build SSE Lambda Image (Production)

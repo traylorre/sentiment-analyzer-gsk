@@ -95,8 +95,6 @@ EXCLUDED_DIR_NAMES: frozenset[str] = frozenset(
 # mechanism, the inline marker below.
 EXCLUDED_PATH_PREFIXES: tuple[str, ...] = (
     "specs/archive/",
-    "docs/archive/",
-    "docs/archived-specs/",
     "specs/1217-web-framework-infra-purge/",
     ".specify/",
 )
