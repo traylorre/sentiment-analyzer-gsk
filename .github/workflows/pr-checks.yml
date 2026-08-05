@@ -276,8 +276,14 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
 
+      - name: Read terraform version pin
+        id: tfver
+        run: echo "version=$(cat .terraform-version)" >> "$GITHUB_OUTPUT"
+
       - name: Set up Terraform (for terraform_fmt hook)
         uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ steps.tfver.outputs.version }}
 
       - name: Install pre-commit + system-hook dependencies (pinned)
         run: |
