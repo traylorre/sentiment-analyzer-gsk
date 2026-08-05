@@ -74,9 +74,10 @@ repos:
       # - checkov baseline needs repo-root path but hook cd's into module dirs → local hook
 
   # Security checks - detect hardcoded secrets
-  # NOTE: Using local wrapper to auto-stage baseline updates (eliminates churn)
-  # The detect-secrets hook updates line numbers in .secrets.baseline on each scan,
-  # which causes infinite loops during commit. The wrapper auto-stages these changes.
+  # The scanner rewrites line_number/generated_at in .secrets.baseline whenever lines
+  # shift. The wrapper classifies each baseline change: volatile-only rewrites are
+  # restored byte-exact (nothing staged), substantive updates are auto-staged with a
+  # bounded retry, and hook failures always propagate (real findings exit 1).
   # See: scripts/detect-secrets-autostage.sh and docs/ci-gotchas.md
   - repo: local
     hooks:
@@ -236,7 +237,8 @@ repos:
 # This is exactly why the scan-waitforresponse-race hook above is ALSO a step in the
 # `Lint` job (002 FR-004). As a pre-commit hook alone it would be advisory, and a
 # contributor who skipped local hooks could merge a race with every check green.
-# It SKIPs detect-secrets (local autostage wrapper mutates+git-adds the baseline — no
+# It SKIPs detect-secrets (the local wrapper git-adds substantive baseline updates and
+# restores volatile-only rewrites — either way it mutates the tree, so it has no
 # place in a gate; CI runs the non-mutating detect-secrets-hook step instead) and
 # gitleaks (already a dedicated blocking `secrets-scan` job). CI and local hooks are
 # otherwise kept in sync. See specs/1400-validator-gating/.

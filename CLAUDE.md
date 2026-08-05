@@ -74,10 +74,9 @@ Python work needs the venv, which is 3.13 while system Python is not:
 - **Semgrep is the only security scanner that gates.** `pip-audit` (`Makefile:161`) ends in
   `|| true`, so a green run is no evidence it found nothing. The `security` stage that carries
   `pip-audit` is declared ADVISORY in the driver, so it cannot fail the run even in principle.
-  Every other stage is BLOCKING: `fmt-check`, `lint`, `sast`,
-  `check-banned-terms`, `check-test-target-headers` and `check-waitforresponse-race`. The driver
-  runs all of them and reports each before failing, so one broken stage no longer hides the ones
-  behind it.
+  Every other stage is BLOCKING; the `run_stage` lines in the validate driver
+  (`Makefile`, `validate:` target) are the authoritative stage list. The driver runs all of
+  them and reports each before failing, so one broken stage no longer hides the ones behind it.
 - **SSE handler tests** need `make_function_url_event()` and `parse_streaming_response()` from
   `tests/conftest.py`. A hand-built API Gateway event returns 404 and reads as a routing bug.
 - **Checking security alerts before a push:** filtering `state` client-side returns 0, because the

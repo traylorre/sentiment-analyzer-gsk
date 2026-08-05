@@ -1,12 +1,16 @@
-.PHONY: help install install-tools validate fmt fmt-check lint security sast audit-pragma audit-exemptions check-banned-terms test test-local test-unit test-integration test-e2e test-spec test-mutation \
-        check-test-target-headers check-waitforresponse-race check-iam-patterns \
+.PHONY: help install validate fmt fmt-check lint security sast audit-pragma audit-exemptions check-banned-terms test test-local test-unit test-integration test-e2e test-spec test-mutation \
+        check-test-target-headers check-waitforresponse-race check-iam-patterns check-terraform-version \
         localstack-up localstack-down localstack-wait localstack-logs localstack-status \
         tf-init tf-plan tf-apply tf-destroy tf-init-local tf-plan-local tf-apply-local tf-destroy-local \
-        cost cost-diff cost-baseline clean clean-all
+        cost cost-diff cost-baseline cost-check clean clean-all \
+        check-annotation-budget check-annotation-pii regenerate-mermaid-url tf-output validate-mermaid \
+        verify-dual-emit verify-dual-emit-json
 
 SHELL := /bin/bash
 TF_DIR := infrastructure/terraform
 ENV ?= dev
+COST_MONTHLY_LIMIT ?= 50
+COST_DELTA_LIMIT ?= 10
 
 # Colors
 GREEN := \033[0;32m
@@ -15,7 +19,7 @@ RED := \033[0;31m
 NC := \033[0m
 
 help: ## Show this help
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "$(GREEN)%-20s$(NC) %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "$(GREEN)%-20s$(NC) %s\n", $$1, $$2}'
 
 # ============================================================================
 # Setup
@@ -27,14 +31,6 @@ install: ## Install all dependencies
 	pre-commit install --install-hooks
 	pre-commit install --hook-type pre-push
 	@echo "$(GREEN)✓ Development environment ready$(NC)"
-
-install-tools: ## Install CLI tools via aqua
-	@if ! command -v aqua &>/dev/null; then \
-		echo "$(YELLOW)Installing aqua...$(NC)"; \
-		curl -sSfL https://raw.githubusercontent.com/aquaproj/aqua-installer/v3.0.1/aqua-installer | bash -s -- -v v2.27.4; \
-		echo "$(YELLOW)Add to PATH: export PATH=\"\$$HOME/.local/share/aquaproj-aqua/bin:\$$PATH\"$(NC)"; \
-	fi
-	PATH="$$HOME/.local/share/aquaproj-aqua/bin:$$PATH" aqua i -l
 
 # ============================================================================
 # Validation (Zero AWS Cost)
@@ -89,6 +85,8 @@ validate: ## Run every validation stage, report each, and gate on the blocking o
 	run_stage check-banned-terms         "legacy terms"        BLOCKING; \
 	run_stage check-test-target-headers  "test target headers" BLOCKING; \
 	run_stage check-waitforresponse-race "e2e race guard"      BLOCKING; \
+	run_stage check-terraform-version    "terraform version"   BLOCKING; \
+	run_stage check-iam-patterns         "iam arn patterns"    BLOCKING; \
 	echo ""; \
 	echo "================ validate summary ================"; \
 	fails=0; blocking=0; \
@@ -110,6 +108,9 @@ validate: ## Run every validation stage, report each, and gate on the blocking o
 check-waitforresponse-race: ## Detect act-then-wait waitForResponse races in frontend/tests/e2e/
 	@echo "Checking waitForResponse race ordering..."
 	@python3 scripts/scan-waitforresponse-race.py
+
+check-terraform-version: ## Verify the terraform binary and every pinned surface match .terraform-version
+	@scripts/check-terraform-version.sh
 
 # The guard exists because confusing the two dashboards has caused repeated incidents,
 # so every e2e file must declare what it targets. It previously accepted only the two
@@ -294,13 +295,17 @@ tf-output: ## Show Terraform outputs
 # ============================================================================
 
 cost: ## Analyze infrastructure costs
+	@scripts/cost-check.sh --preflight
 	infracost breakdown --path $(TF_DIR) --format table
 
 cost-diff: ## Compare costs to baseline
-	infracost diff --path $(TF_DIR) --compare-to infracost-baseline.json
+	infracost diff --path $(TF_DIR) --compare-to $(TF_DIR)/infracost-baseline.json
 
-cost-baseline: ## Save current costs as baseline
-	infracost breakdown --path $(TF_DIR) --format json > infracost-baseline.json
+cost-check: ## Gate projected costs: total <= COST_MONTHLY_LIMIT, delta <= COST_DELTA_LIMIT (USD/month)
+	@COST_MONTHLY_LIMIT="$(COST_MONTHLY_LIMIT)" COST_DELTA_LIMIT="$(COST_DELTA_LIMIT)" scripts/cost-check.sh
+
+cost-baseline: ## Regenerate the committed baseline: writes $(TF_DIR)/infracost-baseline.json from the current tree; run after intentional infra changes and commit the result (the only mutating cost target)
+	infracost breakdown --path $(TF_DIR) --format json --out-file $(TF_DIR)/infracost-baseline.json
 
 # ============================================================================
 # Documentation
@@ -334,7 +339,7 @@ check-annotation-budget: ## Check annotation count budget (FR-193)
 
 clean: ## Clean generated files
 	rm -rf .pytest_cache .coverage htmlcov
-	rm -rf $(TF_DIR)/.terraform $(TF_DIR)/*.tfplan
+	rm -rf $(TF_DIR)/.terraform $(TF_DIR)/tfplan
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	@echo "$(GREEN)✓ Cleaned$(NC)"
 
