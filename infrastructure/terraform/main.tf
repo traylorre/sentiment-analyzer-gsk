@@ -2,7 +2,7 @@
 # Regional Multi-AZ Architecture (region configured via aws_region variable)
 
 terraform {
-  required_version = ">= 1.0"
+  required_version = "1.9.8"
 
   required_providers {
     aws = {

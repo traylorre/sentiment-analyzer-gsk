@@ -1,0 +1,6 @@
+# Live deployer IAM users predate the naming convention; renaming a user in use breaks the CI credentials until re-provisioned
+arn:aws:iam::*:user/sentiment-analyzer-*-deployer
+# Live terraform state bucket; renaming requires a state migration
+arn:aws:s3:::sentiment-analyzer-terraform-state-*
+# Object-level ARN of the same live state bucket
+arn:aws:s3:::sentiment-analyzer-terraform-state-*/*
