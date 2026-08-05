@@ -64,7 +64,7 @@ jobs:
             --grep "@external-api" \
             --project="Desktop Chrome" \
             --workers=1 \
-            --retries=1 \
+            --retries=0 \
             --reporter=html,list
         env:
           CI: 'true'
