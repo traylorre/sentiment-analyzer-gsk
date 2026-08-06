@@ -1,5 +1,7 @@
 # Runbook: Terraform state, locks, and backend setup
 
+> **CANON**: verified against code.
+
 Load this when a terraform run is blocked, or when setting up state on a fresh clone. Not needed
 in normal work.
 
@@ -122,3 +124,10 @@ therefore adopts the cached backend, which on any working copy used for preprod 
 `preprod/terraform.tfstate`, and writes dev-named resources into it. Re-init explicitly with
 `-reconfigure` first, and take a `terraform state pull` backup, or edit the script's environment
 before invoking it.
+
+## Secret population
+
+Terraform creates the `tiingo`, `finnhub`, and `dashboard-api-key` secrets EMPTY; only the OAuth
+secrets get placeholder versions (`modules/secrets/main.tf:229`, `:257`, both with
+`ignore_changes`). Values are populated manually after apply, so a fresh environment serves 500s
+until someone does.

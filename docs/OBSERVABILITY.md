@@ -1,7 +1,10 @@
 # Observability: metrics, logs, and dashboard privacy
 
+> **CANON**: verified against code.
+
 What the service actually emits, and the rules that bind changes to it. Architecture is in
-`docs/SERVICE-SHAPE.md`; the two dashboards are distinguished in `CLAUDE.md`.
+`docs/SERVICE-SHAPE.md`; the two dashboards are distinguished in `CLAUDE.md`. Tracing is in
+`docs/x-ray.md`.
 
 ## Metric namespaces
 
@@ -69,6 +72,17 @@ Chaos endpoints are gated to `local`, `dev` and `test` only, fail-closed: unset,
 
 Rate limiting is per-user and applied where the route opts in, not globally
 (`src/lambdas/shared/middleware/rate_limit.py`).
+
+## Operational flows
+
+- Cadences: ingestion runs every 5 minutes, the metrics Lambda every 1 minute
+  (`infrastructure/terraform/modules/eventbridge/main.tf:6` and `:48`).
+- A stuck item is `status='pending'` older than 5 minutes, found via the `by_status` GSI
+  (`modules/dynamodb/main.tf:66-69`).
+- `StuckItems` is a metric only: the metrics Lambda emits it and no CloudWatch alarm is wired to
+  it. Quick check: query the `StuckItems` metric, then a COUNT over `by_status`.
+- Every DynamoDB table is on-demand (`PAY_PER_REQUEST`), so a throttling response means
+  hot-partition investigation, never a capacity raise.
 
 ## Not built
 

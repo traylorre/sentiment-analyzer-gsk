@@ -1,5 +1,7 @@
 # Scaling Runbook
 
+> **QUARRYSOME**: unaudited; verify against code before trusting.
+
 This document provides procedures for scaling the Sentiment Analyzer system in response to traffic changes.
 
 ## Architecture Overview

@@ -1,5 +1,7 @@
 # Terraform Patterns
 
+> **CANON**: verified against code.
+
 ## Split Definition/Wiring (Feature 1290)
 
 ### Problem
@@ -10,7 +12,9 @@ Terraform modules that cross-reference each other's outputs through Lambda envir
 
 Split Lambda configuration into two phases within a single `terraform apply`:
 
-1. **Definition**: Create the Lambda with placeholder env vars (`""`) for cross-module values
+1. **Definition**: Create the Lambda with a placeholder for the cross-module value: an
+   empty string (`SCHEDULER_ROLE_ARN = ""`) or a variable-seeded interim value
+   (`DASHBOARD_URL = var.frontend_url`, overwritten by wiring)
 2. **Wiring**: After all modules exist, a `terraform_data` resource with `local-exec` reads current env vars, merges the cross-module value, and writes back
 
 ```
@@ -69,9 +73,9 @@ Split Lambda configuration into two phases within a single `terraform apply`:
 
 ### Tech Debt
 
-This pattern is a workaround. The long-term fix is to migrate cross-module env vars to SSM Parameter Store, where Lambdas read values at runtime instead of receiving them as env vars. This eliminates the Terraform dependency entirely. See GitHub issue for tracking.
+This pattern is a workaround. The long-term fix is to migrate cross-module env vars to SSM Parameter Store, where Lambdas read values at runtime instead of receiving them as env vars. This eliminates the Terraform dependency entirely. Tracked in issue #850.
 
 ### Related
 
 - `terraform_data.cognito_callback_patch` (main.tf) — similar pattern for Cognito ↔ Amplify cycle
-- `docs/x-ray/HL-x-ray-remediation-checklist.md` R22 — documents the replace-all danger of `update-function-configuration`
+- `docs/x-ray.md` documents the replace-all danger of `update-function-configuration`
