@@ -1,6 +1,6 @@
 # Customer Dashboard E2E Tests
 
-> **QUARRYSOME**: unaudited; verify against code before trusting.
+> **CANON**: verified against code.
 
 This directory contains Playwright E2E tests for the **customer-facing Next.js dashboard** hosted on AWS Amplify.
 
@@ -8,7 +8,7 @@ This directory contains Playwright E2E tests for the **customer-facing Next.js d
 
 All tests in this directory target the **Customer Dashboard (Next.js/Amplify)** — the app at `https://main.d29tlmksqcx494.amplifyapp.com/`.
 
-For admin dashboard (Lambda HTMX) tests, see `tests/e2e/` at the repository root.
+For admin dashboard tests (Lambda behind API Gateway), see `tests/e2e/` at the repository root.
 
 ## Running Tests
 
@@ -75,6 +75,6 @@ Rules:
 | Dashboard | Directory | URL | Tech |
 |-----------|-----------|-----|------|
 | Customer (this dir) | `frontend/tests/e2e/` | Amplify or localhost:3000 | Next.js/React |
-| Admin | `tests/e2e/` (repo root) | Lambda Function URL | HTMX/Chart.js |
+| Admin | `tests/e2e/` (repo root) | Lambda behind API Gateway | Vanilla JS/Chart.js |
 
 The `make check-test-target-headers` target enforces that all Playwright test files have a `Target:` header comment.
