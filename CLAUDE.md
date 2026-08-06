@@ -102,6 +102,8 @@ Python work needs the venv, which is 3.13 while system Python is not:
   you the wrong answer.
 
 ## Active Technologies
+- Python 3.13 (repo venv; system Python differs, always activate) + boto3 (present), no new runtime dependencies; moto for unit (001-signed-fanout)
+- DynamoDB `sentiment_timeseries` (PK `{ticker}#{resolution}`, SK ISO (001-signed-fanout)
 
 Audited inventory: `docs/ACTIVE-TECHNOLOGIES.md`. The manifests (`requirements.txt`,
 `pyproject.toml`, `frontend/package.json`) are authoritative for versions.
