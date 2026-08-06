@@ -11,8 +11,8 @@
 # - See requirements-dev.txt for test dependencies
 
 # AWS SDK - Lambda runtime includes boto3, but we pin for local testing
-boto3==1.43.46
-botocore==1.43.46
+boto3==1.43.51
+botocore==1.43.51
 
 # ML/NLP - DistilBERT sentiment analysis
 # torch is not pinned here: it enters through the analysis container image
