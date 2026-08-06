@@ -1,10 +1,9 @@
 # Caches
 
-> **QUARRYSOME**: unaudited; verify against code before trusting.
+> **CANON**: verified against code.
 
 Every cache in the system: what it holds, how it expires, how it evicts, how it fails. One
-section per cache. Code references are to the current tree; where a claim was ported from an
-older document without re-verification it is marked (ported, unverified).
+section per cache, and one summary table under "Strategy and layers" enumerating them all.
 
 ## Cross-cutting machinery
 
@@ -19,6 +18,74 @@ older document without re-verification it is marked (ported, unverified).
   timestamp** when full (`min()` over stored timestamps). That is insertion-age eviction, not
   LRU; a hot entry written long ago is evicted before a cold one written recently. The SSE
   `ResolutionCache` is the exception and does true LRU.
+
+## Strategy and layers
+
+**Read strategy: everything is cache-aside.** In every cache below, application code checks
+the cache, fetches from the origin on a miss, and populates the cache itself on the read
+path. Nothing is read-through (no cache fetches its own origin transparently), nothing is
+refresh-ahead (no cache refreshes before expiry; the ticker cache's ETag check happens on
+expiry, not ahead of it), and nothing is write-behind (no deferred writes anywhere).
+
+**Write strategy: write-around.** Primary-data writes (ingestion, analysis, configuration
+mutations) go straight to DynamoDB and never pass through a cache. Caches learn about new
+data by TTL expiry, with two exceptions: the configuration caches are explicitly invalidated
+on create, update, and delete, and the OHLC L1 cache has an explicit per-ticker invalidation
+hook. The OHLC L2 write is population on the read path after an origin fetch, not
+write-through; no application write flows through it.
+
+**Layers.** Three server-side layers plus the client:
+
+1. **L1, per-container in-memory.** Dicts in Lambda global scope. Scoped to one warm
+   container; concurrent containers each hold their own copy and warm independently; dies
+   with the container. Every cache below except L2 and the client layer lives here.
+2. **L2, distributed: the `{env}-ohlc-cache` DynamoDB table.** Effectively a distributed
+   cache layer: shared by all containers, survives cold starts, expires via DynamoDB's
+   asynchronous TTL reaper (expired-but-unreaped items are served as hits, see below), no
+   application-side eviction or size bound (on-demand billing). It has no explicit
+   invalidation path; entries leave only by TTL reaping or overwrite.
+3. **Origin.** External APIs (Tiingo, Finnhub), the primary DynamoDB tables, Secrets
+   Manager, S3.
+4. **Client.** TanStack Query `staleTime` only. HTTP caching is disabled: the
+   security-headers middleware stamps `Cache-Control: no-store, no-cache, must-revalidate,
+   private` on every API response that does not set its own
+   (`src/lambdas/shared/middleware/security_headers.py:122-124`).
+
+**No conditional requests.** There is no ETag or `If-None-Match`/304 machinery anywhere
+between frontend and backend (repo-wide grep: zero hits in `src/lambdas/` and
+`frontend/src/`). The only ETag use in the system is the backend's own ticker cache
+revalidating against S3. No shared cache-key or ETag scheme between client and server
+exists today; if conditional GETs are ever added, key derivation cost becomes load-bearing
+and must be designed then.
+
+**Warming.** All caches warm lazily on first request; a cold container starts empty. The
+only measured warm profile is the SSE `ResolutionCache` (roughly 30 seconds to steady
+state, documented below). The deploy pipeline pre-warms the new dashboard Lambda version
+before flipping the `live` alias (deploy.yml, pre-warm gate); that warms containers, and
+whether it populates any cache depends on the paths the warm request touches, which is
+unmeasured.
+
+### All caches, enumerated
+
+| Cache | Scope | Eviction | Bound | TTL | Invalidation |
+|---|---|---|---|---|---|
+| OHLC L1 | per-container | oldest write (FIFO) | 256 | 300-3600s by resolution | explicit per-ticker or all, plus TTL |
+| OHLC L2 | distributed (DynamoDB) | none; async TTL reaper | unbounded | 5min or 90d per batch | none; TTL only |
+| Tiingo adapter | per-container | oldest write | 100 | 300-3600s by endpoint | TTL only |
+| Finnhub adapter | per-container | oldest write | 100 | 1800-3600s | TTL only |
+| Sentiment history | per-container | none | unbounded | 300s | TTL or `clear_cache()` |
+| Sentiment response | per-container | oldest write | 50 | 300s | TTL only |
+| Metrics | per-container | oldest write | 100 | 300s | TTL only |
+| Configuration | per-container | oldest write | 100 users | 60s | explicit on mutation, plus TTL |
+| Ticker | per-container | single entry | 1 | 300s, then ETag check | ETag change; stale-serve on failure |
+| SSE ResolutionCache | per-container | true LRU | 256 | equals resolution duration | TTL, expiry on read |
+| Secrets | per-container | none | key space is the few secret ids | 300s | TTL or `force_refresh` |
+| Quota tracker | per-container | none | key space is the few services | 10s | TTL only |
+| Circuit breaker | per-container | none | key space is the few services | 60s | TTL only |
+| Client (TanStack) | browser tab | library-managed | library-managed | staleTime 5min | refetch interval |
+
+Exact key construction for each cache is in its section below; "oldest write" means the
+entry with the oldest write timestamp is evicted at capacity, which is FIFO order, not LRU.
 
 ## OHLC L1: in-memory response cache (dashboard Lambda)
 
@@ -50,8 +117,9 @@ in the dashboard Lambda's warm global scope.
 `src/lambdas/shared/cache/ohlc_cache.py`, table `{env}-ohlc-cache` (`OHLC_CACHE_TABLE` env
 var, else `{ENVIRONMENT}-ohlc-cache`; terraform at
 `infrastructure/terraform/modules/dynamodb/main.tf:594`, PITR and `prevent_destroy` on).
-Write-through: the dashboard Lambda reads here on an L1 miss, then falls back to the adapter
-and writes fetched candles back synchronously.
+Cache-aside with synchronous population: the dashboard Lambda reads here on an L1 miss, then
+falls back to the adapter and writes fetched candles back on the same request. This is not
+write-through; no application data write flows through this table.
 
 - **Schema**: `PK = {TICKER}#{source}` (e.g. `AAPL#tiingo`), `SK = {resolution}#{ISO8601 UTC}`
   (`_build_pk`/`_build_sk`, `ohlc_cache.py:131-144`). Prices quantized to 4 decimals on write
@@ -130,8 +198,9 @@ jittered, matching the frontend's 5-minute refresh interval. Bound 50 entries
 
 `src/lambdas/dashboard/metrics.py:52-95`. In-memory cache of GSI query results. TTL 300s
 (`METRICS_CACHE_TTL`), jittered. Bound 100 entries (`METRICS_CACHE_MAX_ENTRIES`),
-oldest-write eviction. On DynamoDB failure the handler serves whatever is still within TTL;
-expired entries are misses and the query is retried (ported, unverified beyond the TTL path).
+oldest-write eviction. Within-TTL entries are served without touching DynamoDB. There is no
+stale-serving grace: an expired entry is a miss, the query runs, and a failed query raises
+and surfaces as an error (`metrics.py:232-244`); the next request retries.
 
 ## Configuration cache (dashboard)
 
@@ -252,10 +321,11 @@ is fail-conservative: after 3 consecutive DynamoDB failures it enters reduced-ra
 of the normal API call rate (`REDUCED_RATE_FRACTION`), and exits after 5 consecutive
 successes. Reads during an outage use the last cached count at the current rate.
 
-Recovery when the tracker disconnects (ported, unverified): check DynamoDB table health
+Recovery when the tracker disconnects: check DynamoDB table health
 (`aws dynamodb describe-table`), check throttling metrics, then Lambda IAM for
-`dynamodb:UpdateItem`. Instances exit reduced-rate mode automatically on the next successful
-write. Impact during the outage is slower data updates, not an outage.
+`dynamodb:UpdateItem`. Instances exit reduced-rate mode automatically after 5 consecutive
+successes (`quota_tracker.py:19`), not on the first one. Impact during the outage is slower
+data updates, not an outage.
 
 ## Circuit breaker state cache
 
@@ -270,8 +340,10 @@ traffic (fail-open, `circuit_breaker.py:399-406`); the failure is logged with
 TanStack Query `staleTime` is 5 minutes (`STALE_TIME_MS`,
 `frontend/src/lib/constants.ts:11`), matching `REFRESH_INTERVAL_SECONDS = 300`
 (`constants.ts:9`) and the server-side sentiment TTLs. Chart hooks expose `isStale` for the
-"data from X min ago" indicator. Whether OHLC responses also set `Cache-Control: no-store` is
-unverified.
+"data from X min ago" indicator. All API responses, OHLC included, carry
+`Cache-Control: no-store, no-cache, must-revalidate, private` from the security-headers
+middleware unless a handler overrides it (`security_headers.py:122-124`), so the browser's
+HTTP cache holds nothing; TanStack `staleTime` is the only client-side caching in play.
 
 ## What is not cached
 
