@@ -1,6 +1,6 @@
 # Chaos GameDay Pre-Flight Checklist
 
-> **QUARRYSOME**: unaudited; verify against code before trusting.
+> **CANON**: verified against code.
 
 **Purpose**: Verify all pre-conditions before executing a chaos plan. Every item must be checked. Any No-Go condition aborts the GameDay.
 
@@ -33,28 +33,21 @@
   ```
   Expected: empty output (no alarms in ALARM state)
 
-- [ ] Composite alarm in OK state:
-  ```bash
-  aws cloudwatch describe-alarms \
-    --alarm-names "preprod-critical-composite" \
-    --query "CompositeAlarms[].StateValue" \
-    --output text
-  ```
-  Expected: `OK`
+The `preprod-critical-composite` alarm does not exist in preprod (the cloudwatch-alarms
+module is gated off there), so there is no composite state to check. The prefix sweep
+above is the whole alarm check.
 
 ### 3. Dashboard Accessibility
 
-- [ ] Dashboard Function URL is reachable:
+- [ ] Dashboard reachable through API Gateway:
   ```bash
-  curl -s -o /dev/null -w "%{http_code}" https://<DASHBOARD_FUNCTION_URL>/health
+  curl -s -o /dev/null -w "%{http_code}" <api-url>/health
   ```
   Expected: `200`
 
-- [ ] Chaos endpoint responds:
-  ```bash
-  curl -s -o /dev/null -w "%{http_code}" https://<DASHBOARD_FUNCTION_URL>/chaos
-  ```
-  Expected: `200`
+The dashboard Lambda has no Function URL; it is reached through API Gateway. The chaos
+API is not served on preprod at all: the handler's environment gate returns 404 outside
+`local`, `dev`, and `test`. Every preprod chaos operation goes through `scripts/chaos/`.
 
 ### 4. Chaos Gate State
 
@@ -67,12 +60,16 @@
   ```
   Expected: `disarmed` (will be armed in execution step)
 
-- [ ] No active chaos experiments:
+- [ ] No active chaos experiments. An active injection leaves its pre-chaos snapshot
+  in SSM, so an empty snapshot path means nothing is running:
   ```bash
-  # Via dashboard API
-  curl -s https://<DASHBOARD_FUNCTION_URL>/api/chaos/experiments?status=running | python3 -m json.tool
+  aws ssm get-parameters-by-path \
+    --path "/chaos/preprod/snapshot/" \
+    --query "Parameters[].Name" \
+    --output text
   ```
-  Expected: empty list
+  Expected: empty output. `scripts/chaos/status.sh preprod` reports the same thing as
+  `Active Scenarios: none`.
 
 ### 5. Recent Ingestion Baseline
 
@@ -129,7 +126,7 @@
 |---|-----------|-----|
 | NG-1 | Any dependency reported as "degraded" by `status.sh` | Cannot distinguish chaos-induced failures from pre-existing ones. Report verdict will be `COMPROMISED`. |
 | NG-2 | Any CloudWatch alarm in ALARM state | Pre-existing alarm masks chaos-induced alarms. |
-| NG-3 | Dashboard Function URL unreachable | Cannot create/monitor/stop experiments via API. Fallback (`inject.sh`) is available but reduces observability. |
+| NG-3 | Dashboard unreachable through API Gateway | Cannot watch the dashboard during the run. Injection is unaffected; `scripts/chaos/` is the only preprod path regardless. |
 | NG-4 | Kill switch is "triggered" | Previous chaos experiment did not clean up. Run `scripts/chaos/andon-cord.sh preprod` first. |
 | NG-5 | Active chaos experiment already running | Only one experiment at a time. Stop the existing experiment first. |
 | NG-6 | No buddy operator available | Safety requirement. Never run chaos alone. |
