@@ -1,100 +1,39 @@
 # sentiment-analyzer-gsk
 
-[![Security](https://img.shields.io/badge/security-hardened-green.svg)](./SECURITY.md)
-[![Python 3.13](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/downloads/)
-[![Coverage](https://img.shields.io/badge/coverage%20gate-%E2%89%A580%25-brightgreen.svg)](./pyproject.toml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-[![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-261230.svg)](https://github.com/astral-sh/ruff)
-[![Terraform](https://img.shields.io/badge/terraform-1.9.8-623CE4.svg?logo=terraform)](https://www.terraform.io/)
-[![AWS](https://img.shields.io/badge/AWS-Lambda%20%7C%20DynamoDB-FF9900.svg?logo=amazon-aws)](https://aws.amazon.com/)
+Ever wonder how the market reacts to financial news? Should you buy, or should you
+sell? This service tries to answer that question by overlaying market sentiment
+against the stocks you pick.
 
-Serverless sentiment analysis for financial news. Ingests articles from Tiingo and
-Finnhub on a five-minute schedule, scores them with DistilBERT on Lambda, and streams
-the results to a live dashboard over SSE. Preprod and prod environments promoted
-through an automated pipeline with validation gates.
+<img src="docs/assets/hero-dashboard.png" alt="The deployed dashboard rendering daily candlesticks with the news-sentiment line overlaid, plus resolution and time-range controls." width="100%">
 
-<!-- GRAPHIC STUB: hero banner (product screenshot or animated dashboard capture) -->
+It does three things:
 
-## Pipeline
+1. **Watches the news.** Every five minutes it pulls financial articles from Tiingo
+   and Finnhub for the tickers you care about.
+2. **Reads them for you.** A DistilBERT model scores each article
+   positive, neutral, or negative, with a confidence score.
+3. **Shows you the picture as it forms.** Sentiment streams into a live dashboard
+   next to the price action, from one-minute buckets out to daily.
 
-[![PR Checks](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pr-checks.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pr-checks.yml)
-[![Deploy Pipeline](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/deploy.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/deploy.yml)
-[![Nightly External-API E2E](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/nightly-e2e.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/nightly-e2e.yml)
-
-```mermaid
-%%{init: {"theme": "dark", "themeVariables": {"primaryColor": "#4A90A4", "tertiaryColor": "#2d2d2d", "lineColor": "#88CCFF", "primaryTextColor": "#FFFFFF", "clusterBkg": "#2d2d2d", "clusterBorder": "#555555"}, "flowchart": {"curve": "basis", "nodeSpacing": 50, "rankSpacing": 60}}}%%
-flowchart LR
-    subgraph Build["Build Stage"]
-        build["Build Lambda<br/>Packages"]
-        test["Unit Tests<br/>(Mocked AWS)"]
-    end
-
-    subgraph Images["Container Images"]
-        sse_img["Build SSE<br/>Lambda Image"]
-        analysis_img["Build Analysis<br/>Lambda Image"]
-        dashboard_img["Build Dashboard<br/>Lambda Image"]
-    end
-
-    subgraph Preprod["Preprod Stage"]
-        deploy_preprod["Deploy<br/>Preprod"]
-        test_preprod["Integration<br/>Tests"]
-    end
-
-    subgraph Prod["Production Stage"]
-        deploy_prod["Deploy<br/>Prod"]
-        canary["Canary<br/>Test"]
-        summary["Summary"]
-    end
-
-    build --> test
-    test --> sse_img
-    test --> analysis_img
-    test --> dashboard_img
-    sse_img --> deploy_preprod
-    analysis_img --> deploy_preprod
-    dashboard_img --> deploy_preprod
-    deploy_preprod --> test_preprod
-    test_preprod --> deploy_prod
-    deploy_prod --> canary
-    canary --> summary
-
-    classDef buildNode fill:#3D5C3D,stroke:#4a7c4e,stroke-width:2px,color:#FFFFFF
-    classDef imageNode fill:#4A3D6B,stroke:#673ab7,stroke-width:2px,color:#FFFFFF
-    classDef preprodNode fill:#8B5A00,stroke:#c77800,stroke-width:2px,color:#FFFFFF
-    classDef prodNode fill:#6B2020,stroke:#b71c1c,stroke-width:2px,color:#FFFFFF
-
-    class build,test buildNode
-    class sse_img,analysis_img,dashboard_img imageNode
-    class deploy_preprod,test_preprod preprodNode
-    class deploy_prod,canary,summary prodNode
-```
-
-```bash
-gh run list --workflow=deploy.yml --limit 5   # pipeline status
-gh run watch                                  # follow the active run
-```
-
-## What it does
-
-- Fetches financial news from Tiingo and Finnhub in parallel, every 5 minutes
-- Deduplicates on a SHA256 key so the same story is scored once
-- Scores sentiment (positive / neutral / negative, confidence 0.0-1.0) with DistilBERT
-- Fans each score out to six timeseries resolutions (1m through 24h)
-- Streams updates to the browser over SSE, polling storage every 5 seconds
-- Emails threshold alerts and digests through SendGrid
+<!-- GRAPHIC STUB: animated GIF of the live dashboard streaming updates -->
 
 ## How it works
 
-Eight Lambda functions (ingestion, analysis, dashboard, SSE streaming, notification,
-metrics, canary, chaos-restore), listed with their roles in
-[docs/SERVICE-SHAPE.md](./docs/SERVICE-SHAPE.md). Python 3.13 throughout. EventBridge
-schedules ingestion; SNS carries analysis requests; SQS is the dead-letter path.
-Storage is six DynamoDB tables (on-demand) plus S3 for ML models and the ticker cache.
-The frontend is Next.js SSR on AWS Amplify against an API Gateway REST backend; SSE
-streams through CloudFront to a RESPONSE_STREAM Lambda with a custom Runtime API
-bootstrap. Infrastructure is Terraform (pinned 1.9.8) with an S3 backend; state
-locking is not configured, see
-[docs/runbooks/terraform-state.md](./docs/runbooks/terraform-state.md).
+```mermaid
+flowchart LR
+    news["Tiingo + Finnhub<br/>financial news"] --> ingest["Ingest<br/>every 5 min"]
+    ingest --> score["Score<br/>DistilBERT"]
+    score --> store["Store<br/>6 time resolutions"]
+    store --> stream["Stream<br/>SSE, 5s polls"]
+    stream --> you["Your browser"]
+```
+
+Serverless end to end on AWS: eight Lambda functions, six DynamoDB tables, and a
+Next.js dashboard on Amplify. No servers to babysit, nothing idle, and the whole
+stack tears down and redeploys from Terraform.
+
+<details>
+<summary><strong>Full architecture</strong> (system diagram and the life of one article)</summary>
 
 ```mermaid
 %%{init: {"theme": "dark", "themeVariables": {"primaryColor": "#4A90A4", "tertiaryColor": "#2d2d2d", "lineColor": "#88CCFF", "primaryTextColor": "#FFFFFF", "clusterBkg": "#2d2d2d", "clusterBorder": "#555555"}, "flowchart": {"curve": "basis", "nodeSpacing": 50, "rankSpacing": 60}}}%%
@@ -137,7 +76,7 @@ graph TB
             Notification[Notification Lambda<br/>Alerts + Digests]
         end
 
-        subgraph StorageLayer["Storage Layer ── 6 Tables"]
+        subgraph StorageLayer["Storage Layer: 6 tables + DLQ"]
             DDBItems[(sentiment-items<br/>News + Scores<br/>TTL: 30d)]
             DDBUsers[(sentiment-users<br/>Configs · Alerts<br/>Sessions)]
             DDBTimeseries[(sentiment-timeseries<br/>Multi-Resolution<br/>1m→24h buckets)]
@@ -217,7 +156,7 @@ graph TB
     class Cognito,Secrets authStyle
 ```
 
-The article's path through the system, end to end:
+The life of one article, end to end:
 
 ```mermaid
 %%{init: {"theme": "dark", "themeVariables": {"primaryColor": "#4A90A4", "lineColor": "#88CCFF", "primaryTextColor": "#FFFFFF", "actorTextColor": "#FFFFFF", "actorBkg": "#2B5F7C", "actorBorder": "#4A90A4", "signalColor": "#88CCFF", "signalTextColor": "#FFFFFF", "noteBkgColor": "#3D3D3D", "noteTextColor": "#FFFFFF", "activationBkgColor": "#2d2d2d"}}}%%
@@ -274,28 +213,93 @@ sequenceDiagram
     Note over SSE,User: RESPONSE_STREAM mode<br/>Custom Runtime API bootstrap<br/>Max 15 min connection
 ```
 
-<!-- GRAPHIC STUB: dashboard screenshot strip (customer dashboard, live stream view) -->
+The full diagram set lives in [docs/diagrams/](./docs/diagrams/), and
+[docs/SERVICE-SHAPE.md](./docs/SERVICE-SHAPE.md) is the written architecture.
 
-## Why this is cool
+</details>
 
-- **Streaming without WebSockets.** A Lambda holds an SSE connection open for up to 15
-  minutes in RESPONSE_STREAM mode, behind CloudFront with OAC SigV4. The custom Runtime
-  API bootstrap propagates trace IDs per invocation, so streams stay observable
+## The parts worth stealing
+
+- **SSE streaming from a Lambda.** No WebSocket infrastructure: one function holds
+  the connection open for up to 15 minutes in RESPONSE_STREAM mode behind
+  CloudFront, with a custom Runtime API bootstrap keeping traces honest
   ([docs/x-ray.md](./docs/x-ray.md)).
-- **Six-resolution timeseries fanout.** One scored article lands in 1m through 24h
-  buckets on write, so resolution switching reads pre-aggregated data
-  ([docs/operations/PERFORMANCE_VALIDATION.md](./docs/operations/PERFORMANCE_VALIDATION.md)).
-- **Fourteen caches, one strategy.** Every cache is cache-aside with write-around, from
-  in-memory adapter caches to a DynamoDB OHLC layer ([docs/cache.md](./docs/cache.md)).
-- **Chaos tooling with a kill switch.** Scripted fault injection against preprod with
-  SSM snapshots, an andon cord, and an auditable experiment log
+- **Pre-aggregated time travel.** Every scored article fans out to six resolutions
+  on write, so switching from a 1-minute view to a daily view is a key lookup, not
+  a recompute ([docs/operations/PERFORMANCE_VALIDATION.md](./docs/operations/PERFORMANCE_VALIDATION.md)).
+- **Chaos tooling with a kill switch.** Scripted fault injection against preprod,
+  SSM snapshots for restore, and an andon cord anyone can pull
   ([docs/chaos.md](./docs/chaos.md)).
-- **Serverless economics.** No idle compute, on-demand DynamoDB, budget alerts, and a
-  coverage-gated (≥80%) test suite keeping the whole thing deployable.
 
-## Documentation
+## Pipeline
 
-| Start here | |
+[![PR Checks](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pr-checks.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/pr-checks.yml)
+[![Deploy Pipeline](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/deploy.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/deploy.yml)
+[![Nightly External-API E2E](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/nightly-e2e.yml/badge.svg)](https://github.com/traylorre/sentiment-analyzer-gsk/actions/workflows/nightly-e2e.yml)
+
+Push to `main` and the pipeline takes it from there: build, unit tests against
+mocked AWS, container images, preprod deploy, integration tests, then prod, with a
+post-deploy canary smoke test.
+
+```mermaid
+%%{init: {"theme": "dark", "themeVariables": {"primaryColor": "#4A90A4", "tertiaryColor": "#2d2d2d", "lineColor": "#88CCFF", "primaryTextColor": "#FFFFFF", "clusterBkg": "#2d2d2d", "clusterBorder": "#555555"}, "flowchart": {"curve": "basis", "nodeSpacing": 50, "rankSpacing": 60}}}%%
+flowchart LR
+    subgraph Build["Build Stage"]
+        build["Build Lambda<br/>Packages"]
+        test["Unit Tests<br/>(Mocked AWS)"]
+    end
+
+    subgraph Images["Container Images"]
+        sse_img["Build SSE<br/>Lambda Image"]
+        analysis_img["Build Analysis<br/>Lambda Image"]
+        dashboard_img["Build Dashboard<br/>Lambda Image"]
+    end
+
+    subgraph Preprod["Preprod Stage"]
+        deploy_preprod["Deploy<br/>Preprod"]
+        test_preprod["Integration<br/>Tests"]
+    end
+
+    subgraph Prod["Production Stage"]
+        deploy_prod["Deploy<br/>Prod"]
+        canary["Canary<br/>Test"]
+        summary["Summary"]
+    end
+
+    build --> test
+    test --> sse_img
+    test --> analysis_img
+    test --> dashboard_img
+    sse_img --> deploy_preprod
+    analysis_img --> deploy_preprod
+    dashboard_img --> deploy_preprod
+    deploy_preprod --> test_preprod
+    test_preprod --> deploy_prod
+    deploy_prod --> canary
+    canary --> summary
+
+    classDef buildNode fill:#3D5C3D,stroke:#4a7c4e,stroke-width:2px,color:#FFFFFF
+    classDef imageNode fill:#4A3D6B,stroke:#673ab7,stroke-width:2px,color:#FFFFFF
+    classDef preprodNode fill:#8B5A00,stroke:#c77800,stroke-width:2px,color:#FFFFFF
+    classDef prodNode fill:#6B2020,stroke:#b71c1c,stroke-width:2px,color:#FFFFFF
+
+    class build,test buildNode
+    class sse_img,analysis_img,dashboard_img imageNode
+    class deploy_preprod,test_preprod preprodNode
+    class deploy_prod,canary,summary prodNode
+```
+
+## Under the hood
+
+[![Python 3.13](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/downloads/)
+[![Terraform](https://img.shields.io/badge/terraform-1.9.8-623CE4.svg?logo=terraform)](https://www.terraform.io/)
+[![AWS](https://img.shields.io/badge/AWS-Lambda%20%7C%20DynamoDB-FF9900.svg?logo=amazon-aws)](https://aws.amazon.com/)
+[![Coverage](https://img.shields.io/badge/coverage%20gate-%E2%89%A580%25-brightgreen.svg)](./pyproject.toml)
+[![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-261230.svg)](https://github.com/astral-sh/ruff)
+[![Security](https://img.shields.io/badge/security-hardened-green.svg)](./SECURITY.md)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+
+| Read this | For |
 |---|---|
 | [SERVICE.md](./SERVICE.md) | Documentation tree root |
 | [PRODUCT.md](./PRODUCT.md) | Product intent and use cases |
@@ -307,7 +311,6 @@ sequenceDiagram
 | [docs/MODELING.md](./docs/MODELING.md) | Output schema, retention, model versioning |
 | [docs/authorization.md](./docs/authorization.md) | Auth flows and security boundaries |
 | [SECURITY.md](./SECURITY.md) | Security policy and vulnerability reporting |
-| [docs/diagrams/](./docs/diagrams/) | Full diagram set (system, security, SSE, data flows) |
 
 ## License
 
