@@ -4,9 +4,7 @@ Ever wonder how the market reacts to financial news? Should you buy, or should y
 sell? This service tries to answer that question by overlaying market sentiment
 against the stocks you pick.
 
-<img src="docs/assets/hero-dashboard.png" alt="The deployed dashboard rendering a month of AAPL daily candlesticks with the news-sentiment line overlaid, plus resolution and time-range controls." width="100%">
-
-<p align="center"><em>A real screenshot of the deployed app rendering live data, not a mockup.</em></p>
+<img src="docs/assets/hero-dashboard.png" alt="The deployed dashboard rendering daily candlesticks with the news-sentiment line overlaid, plus resolution and time-range controls." width="100%">
 
 It does three things:
 
