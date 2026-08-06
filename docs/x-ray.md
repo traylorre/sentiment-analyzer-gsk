@@ -1,6 +1,6 @@
 # X-Ray Tracing
 
-> **QUARRYSOME**: unaudited; verify against code before trusting.
+> **CANON**: verified against code.
 
 ## How tracing is set up
 
@@ -8,7 +8,7 @@ Two stacks, split by Lambda type.
 
 **Non-streaming Lambdas** (dashboard, ingestion, analysis, notification, metrics, canary):
 Powertools Tracer, instantiated at module level per file (`Tracer(service=...)` in each
-handler, plus bare `Tracer()` in shared modules). Exceptions are auto-captured as
+handler, plus bare `Tracer()` in shared and other non-handler modules). Exceptions are auto-captured as
 subsegment faults by `@tracer.capture_method`.
 
 **SSE streaming Lambda** (`src/lambdas/sse_streaming/`): dual framework. Powertools
@@ -38,18 +38,22 @@ The OTel side, all in `src/lambdas/sse_streaming/`:
 - `collector-config.yaml`: processor-less pipeline (`otlp` receiver straight to
   `awsxray` exporter). The ADOT Lambda Extension binary has zero processors compiled
   in, so span retention rides on the SDK-side flush.
-- Streaming spans and their attributes: `dynamodb_poll` (`item_count`,
+- Streaming spans and their attributes, three in total: `dynamodb_poll` (`item_count`,
   `changed_count`, `poll_duration_ms`, `cache_hit_rate`, `cache_hit`) in
   `polling.py`; `sse_event_dispatch` (`event_type`, `latency_ms`) in `stream.py`;
-  `cloudwatch_put_metric` in `metrics.py`; connection spans (`connection_id`,
-  `session_id`) in `connection.py`.
+  `cloudwatch_put_metric` in `metrics.py`. `connection.py` creates no spans;
+  `connection_id` and `session_id` are dataclass fields that ride on structured log
+  entries for correlation.
 - Lifecycle guards in `stream.py`: a deadline check flushes proactively when under
   3000ms remain, and a `flush_fired` flag stops span creation afterward, since spans
   created post-flush have no export path. Client disconnect (`BrokenPipeError`) is
   annotated `client.disconnected=true` with status OK, not treated as an error.
   Caught exceptions get the explicit dual call: `set_status(ERROR)` plus
   `record_exception()`.
-- Every SSE event JSON payload carries a `trace_id` field for frontend correlation.
+- The global stream's live events and heartbeats carry a `trace_id` field for frontend
+  correlation, injected at yield (`stream.py:279`). Replayed buffer events, deadline
+  events, and everything from `generate_config_stream` (`stream.py:566`) go out without
+  one.
 
 **Canary** (`src/lambdas/canary/handler.py`): submits synthetic traces on a 5-minute
 EventBridge schedule, queries `GetTraceSummaries` with 30/60/90s retries, computes a
