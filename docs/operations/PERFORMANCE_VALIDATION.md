@@ -1,6 +1,6 @@
 # Performance Validation Methodology
 
-> **QUARRYSOME**: unaudited; verify against code before trusting.
+> **CANON**: verified against code.
 
 This document describes how performance is measured and validated for the Sentiment Analyzer dashboard.
 
@@ -8,8 +8,8 @@ This document describes how performance is measured and validated for the Sentim
 
 | Metric | Target | Spec |
 |--------|--------|------|
-| Resolution switching | p95 < 100ms | SC-002 |
-| Live update latency | p95 < 3000ms | SC-003 |
+| Resolution switching | p95 < 100ms | `specs/1018-validate-resolution-switching-perf/spec.md` |
+| Live update latency | p95 < 3000ms | `specs/1019-validate-live-update-latency/spec.md` |
 
 ---
 
@@ -22,14 +22,15 @@ Resolution switching latency measures the time from when a user clicks a resolut
 The dashboard JavaScript (`src/dashboard/timeseries.js`) includes Performance API instrumentation:
 
 ```javascript
-// At start of switchResolution()
-performance.mark('resolution-switch-start');
+// At start of switchResolution() (timeseries.js:310)
+const switchId = `resolution-switch-${Date.now()}`;
+performance.mark(`${switchId}-start`);
 
 // After chart.update() completes
-performance.mark('resolution-switch-end');
-performance.measure('resolution-switch', 'start', 'end');
+performance.mark(`${switchId}-end`);
+performance.measure(switchId, `${switchId}-start`, `${switchId}-end`);
 
-// Metrics exposed for testing
+// Metrics exposed for testing (timeseries.js:348)
 window.lastSwitchMetrics = {
     duration_ms: entry.duration,
     from_resolution: previousResolution,
@@ -148,21 +149,23 @@ Performance tests can vary based on:
 
 ## Part 2: Live Update Latency
 
-Live update latency measures the end-to-end time from when sentiment data is created (`origin_timestamp`) to when the client receives the event via SSE.
+Live update latency measures the time from when the SSE streaming Lambda builds an event to
+when the client receives it. `origin_timestamp` is stamped at event build
+(`src/lambdas/sse_streaming/stream.py:261`), not when the sentiment data was created, so the
+metric covers only the SSE-to-client hop. The upstream path (analysis write to SSE pickup) is
+not measured; that gap is carded on the tech-debt board ("SSE live-update latency metric is
+zero by construction").
 
-### Latency Breakdown
+### The Actual Delivery Path
 
-The end-to-end latency consists of 5 components:
+There is no SNS or SQS hop in this path. The SSE streaming Lambda polls DynamoDB for new
+buckets at 5-second intervals (`SSE_POLL_INTERVAL`, default 5;
+`src/lambdas/sse_streaming/polling.py`), serializes an event, and writes it to the open SSE
+connection. Unmeasured wall-clock latency is therefore dominated by the poll interval: a
+bucket written just after a poll waits up to 5 seconds before pickup, on top of the analysis
+and storage time upstream of the poll.
 
-| Component | Typical Range | Notes |
-|-----------|---------------|-------|
-| Analysis Lambda | 50-200ms | ML model inference time |
-| SNS Publish | 10-50ms | Publish to notification topic |
-| SQS Delivery | 50-100ms | Message visibility and polling |
-| SSE Lambda Processing | 5-10ms | Event serialization |
-| Network (client) | 50-500ms | Variable by client location |
-
-**Total Budget**: < 3000ms for p95 (SC-003)
+**Total budget**: < 3000ms for p95, measured on the hop the metric actually covers.
 
 ### Running the E2E Latency Test
 
@@ -373,14 +376,13 @@ Add section to this document explaining:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PREPROD_DASHBOARD_URL` | `https://preprod.sentiment.example.com` | Dashboard URL for E2E tests |
+| `PREPROD_DASHBOARD_URL` | per test: `test_resolution_switch_perf.py:49` and `test_live_update_latency.py:214` ship different placeholder defaults | Dashboard URL for E2E tests; set it explicitly |
 
 ## Related Files
 
 - **Resolution Switching Instrumentation**: `src/dashboard/timeseries.js`
 - **Resolution Switching Test**: `tests/e2e/test_resolution_switch_perf.py`
 - **Latency Test**: `tests/e2e/test_live_update_latency.py`
-- **Parent Spec**: `specs/1009-realtime-multi-resolution/spec.md` (SC-002, SC-003)
 - **Resolution Switching Spec**: `specs/1018-validate-resolution-switching-perf/spec.md`
 - **Latency Validation Spec**: `specs/1019-validate-live-update-latency/spec.md`
 - [CloudWatch Logs Insights Query Syntax](https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/CWL_QuerySyntax.html)
