@@ -19,8 +19,8 @@ Alarms section of `docs/OBSERVABILITY.md`.
 - The alarm-status widget in `modules/monitoring/dashboard.tf`, alarm outputs in
   `modules/{monitoring,dynamodb}/outputs.tf`, and the `create_*_alarm`/`alarm_actions`
   variables threaded through the root module calls
-- NOT deleted: the orphan `sentiment-analyzer-dev-dlq-has-messages` (no Terraform manages it,
-  and the deployer IAM user lacks `cloudwatch:DeleteAlarms`; owner deletes it by hand)
+- By CLI under the `dev-loop` profile, since no Terraform manages it: the orphan
+  `sentiment-analyzer-dev-dlq-has-messages`
 
 ## Kept in place
 

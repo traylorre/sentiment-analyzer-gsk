@@ -71,10 +71,9 @@ prior 30 days. Alarms were billed for existing, not for firing, so state never m
 | Misc | `alert-triggers-high` (`/Alerts`, never emitted), `dashboard-import-errors` (`/Packaging`, filter never matches), `chaos-iam-policy-attachment` (functional) | OK |
 | Never deployed (gated off by `enable_extended_cloudwatch_alarms`) | `modules/cloudwatch-alarms/` (canary heartbeat/completeness, silent-failure composite, per-Lambda extended set), `api-gateway-{4xx,5xx,latency}`, `waf-blocked-requests` | existed only in Terraform, count = 0 |
 
-Still live: `sentiment-analyzer-dev-dlq-has-messages`, an orphan from an old dev deploy that no
-current Terraform manages. Deleting it needs `cloudwatch:DeleteAlarms`, which the deployer IAM
-user does not hold, so it is an owner action:
-`aws cloudwatch delete-alarms --alarm-names sentiment-analyzer-dev-dlq-has-messages`.
+Also deleted, by CLI under the `dev-loop` profile because no current Terraform manages it and
+the preprod deployer lacks `cloudwatch:DeleteAlarms`: `sentiment-analyzer-dev-dlq-has-messages`,
+an orphan from an old dev deploy.
 
 ## Privacy rules
 
