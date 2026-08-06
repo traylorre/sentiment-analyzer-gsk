@@ -2,11 +2,13 @@
 
 > **QUARRYSOME**: unaudited; verify against code before trusting.
 
-Ingested design proposal, operator-supplied. It targets the many-to-many problem of streaming
-consumers subscribed to multiple tags and is expected to change the DynamoDB table schema, the
-caching strategy, and the routes. Adjudicate it in stage 1 of the QUARRYSOME promotion campaign
-(the DynamoDB schema comb) before implementing; the current-infrastructure claims below the rule
-line are the proposal's framing and have not been verified against this repo.
+Ingested design proposal, operator-supplied, adjudicated as current pending work: not
+implemented, and nothing in the live path supersedes it. It targets the many-to-many problem of
+streaming consumers subscribed to multiple tags and is expected to change the DynamoDB table
+schema, the caching strategy, and the routes. Connection tracking is in-memory in the SSE
+streaming Lambda today and no per-topic subscription rows exist. SSE implementation work is
+deferred by standing owner constraint; building this needs that constraint lifted and owner
+sign-off for the GSI.
 
 ## The problem
 
@@ -48,7 +50,7 @@ Decoupling connections into individual subscription records behind a GSI avoids 
 hot partitions, and serves both primary workflows (push by topic, clean up on disconnect) as
 single Query operations.
 
-## Adjudication notes for the schema comb
+## Build preconditions
 
 - Compare against the live SSE path before implementing: connection tracking is currently
   in-memory in the SSE streaming Lambda, and no per-topic subscription rows exist. Establish
