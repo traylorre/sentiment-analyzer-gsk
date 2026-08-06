@@ -1,6 +1,6 @@
 # Terraform Backend Bootstrap
 
-> **QUARRYSOME**: unaudited; verify against code before trusting.
+> **CANON**: verified against code.
 
 Creates the S3 bucket that holds Terraform state. Run once per AWS account.
 
