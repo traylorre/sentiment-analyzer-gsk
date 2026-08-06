@@ -7,6 +7,12 @@ passed 2026-08-06). Branch `001-signed-fanout` carries every artifact.
 Supersedes specs/001-signed-sentiment-fanout/card.md (folded in below, dir
 deleted at consolidation).
 
+Linked housekeeping (operator-commissioned, must not be lost when this card is
+deleted at ship): specs/001-specs-hygiene/card.md, which carries the
+.specify/specs/ stray adjudication and the audited wholesale cleanup of stale
+specs/ with the tags-not-retired-branch policy. That card is the durable record;
+this line is only a pointer.
+
 ## Symptom
 
 The dashboard's sentiment line pins near +1.0 for every ticker, range, and source
