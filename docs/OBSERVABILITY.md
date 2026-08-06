@@ -11,21 +11,21 @@ What the service actually emits, and the rules that bind changes to it. Architec
 There are eight, and only three are wired end to end. A query against the wrong namespace returns
 empty rather than erroring, so check this table before concluding a metric is missing.
 
-| Namespace | Code emits | IAM grants | Alarms on it |
-|---|---|---|---|
-| `SentimentAnalyzer` | yes | yes | yes |
-| `SentimentAnalyzer/SSE` | yes | yes | yes |
-| `SentimentAnalyzer/Canary` | yes | yes | yes |
-| `SentimentAnalyzer/Ingestion` | yes | **no** | yes |
-| `SentimentAnalyzer/Reliability` | yes | **no** | yes |
-| `SentimentAnalyzer/Alerts` | **no** | no | yes |
-| `SentimentAnalyzer/Notifications` | **no** | no | yes |
-| `SentimentAnalyzer/Packaging` | log metric filter | n/a | yes |
+| Namespace | Code emits | IAM grants |
+|---|---|---|
+| `SentimentAnalyzer` | yes | yes |
+| `SentimentAnalyzer/SSE` | yes | yes |
+| `SentimentAnalyzer/Canary` | yes | yes |
+| `SentimentAnalyzer/Ingestion` | yes | **no** |
+| `SentimentAnalyzer/Reliability` | yes | **no** |
+| `SentimentAnalyzer/Alerts` | **no** | no |
+| `SentimentAnalyzer/Notifications` | **no** | no |
+| `SentimentAnalyzer/Packaging` | log metric filter | n/a |
 
-Every bolded cell is an alarm on a metric that never arrives. `/Packaging` is broken too, by a
-third mechanism: its metric filter pattern has never matched a real log line. So five of the eight
-namespaces carry alarms that cannot fire. Do not read a green alarm on any of them as a healthy
-signal. Both defects are carded on `CLEANUP-BOARD.html`.
+Every bolded cell is a metric that never arrives: `/Ingestion` and `/Reliability` are emitted but
+the IAM grant is missing, `/Alerts` and `/Notifications` are never emitted at all. `/Packaging` is
+broken by a third mechanism: its metric filter pattern has never matched a real log line. Both
+defects are carded on `CLEANUP-BOARD.html`.
 
 Emitters: `src/lib/metrics.py` (`emit_metric`, `emit_metrics_batch`, default namespace, accepts an
 override), `ingestion/metrics.py`, `sse_streaming/metrics.py`, `canary/handler.py`, and inline
@@ -48,8 +48,33 @@ emitter for the current list rather than copying one from a spec.
 
 ## Alarms
 
-Alarms are Terraform, not code: `infrastructure/terraform/modules/monitoring/` and
-`modules/cloudwatch-alarms/`. Adding a metric does not create an alarm for it.
+There are none. Every alarm this stack owned was deleted on 2026-08-06 to stop billing past the
+10-alarm CloudWatch free tier, of which 8 slots are taken by the unrelated `dev-loop` stack in
+the same account. The definitions last exist at main commit `d7547e1e`; recovery path and
+preconditions are in `specs/001-alarm-restore/card.md`. The register below is what was removed
+and the state each alarm was in at deletion. When alarms return they are Terraform, not code,
+and adding a metric does not create an alarm for it.
+
+At deletion, 35 of the 36 live alarms sat in OK and every one had actions enabled, notifying one
+email subscriber (`scotthazlett+sentiment-alarm@gmail.com`). Only three had changed state in the
+prior 30 days. Alarms were billed for existing, not for firing, so state never mattered to cost.
+
+| Group (Terraform source at `d7547e1e`) | Alarms | State at deletion |
+|---|---|---|
+| Lambda errors and duration (`modules/lambda/main.tf`, `modules/monitoring/main.tf`) | `{ingestion,analysis,dashboard,notification,metrics,canary,sse-streaming}-errors`, `analysis-duration`, `lambda-{ingestion,analysis,dashboard}-errors`, `{analysis,dashboard}-latency-high` | OK; functional (AWS/Lambda metrics always arrive) |
+| DynamoDB (`modules/dynamodb/main.tf`) | `dynamodb-{user-errors,system-errors,write-throttles,high-read-capacity}` | OK; functional; write-throttles last flapped 2026-08-05 |
+| Queue and SNS (`modules/monitoring/main.tf`) | `dlq-depth-exceeded`, `sns-delivery-failures` | OK; functional |
+| Daily cost guards (`modules/monitoring/cost_alarm.tf`) | `dynamodb-daily-cost-high`, `lambda-daily-invocations-high`, `sns-daily-messages-high` | OK; functional (metric math over AWS namespaces) |
+| Ingestion health (`modules/monitoring/main.tf`) | `{tiingo,finnhub}-error-rate-high`, `circuit-breaker-open`, `collision-rate-{high,low}`, `anomalous-collision-rate` | OK but could never fire: `/Ingestion` namespace is IAM-blocked (table above) |
+| Notifications (`modules/monitoring/notification_alarm.tf`) | `notification-delivery-low`, `notification-lambda-errors`, `sendgrid-quota-{50,80}-percent` | OK; SendGrid pair could never fire: `/Notifications` is never emitted |
+| Pipeline liveness (`modules/monitoring/main.tf`) | `no-new-items-1h` | stuck in ALARM since 2025-12-05; investigate `NewItemsIngested` before restoring |
+| Misc | `alert-triggers-high` (`/Alerts`, never emitted), `dashboard-import-errors` (`/Packaging`, filter never matches), `chaos-iam-policy-attachment` (functional) | OK |
+| Never deployed (gated off by `enable_extended_cloudwatch_alarms`) | `modules/cloudwatch-alarms/` (canary heartbeat/completeness, silent-failure composite, per-Lambda extended set), `api-gateway-{4xx,5xx,latency}`, `waf-blocked-requests` | existed only in Terraform, count = 0 |
+
+Still live: `sentiment-analyzer-dev-dlq-has-messages`, an orphan from an old dev deploy that no
+current Terraform manages. Deleting it needs `cloudwatch:DeleteAlarms`, which the deployer IAM
+user does not hold, so it is an owner action:
+`aws cloudwatch delete-alarms --alarm-names sentiment-analyzer-dev-dlq-has-messages`.
 
 ## Privacy rules
 

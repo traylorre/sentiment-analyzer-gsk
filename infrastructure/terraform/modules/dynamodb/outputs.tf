@@ -40,21 +40,6 @@ output "backup_plan_id" {
   value       = var.enable_backup ? aws_backup_plan.dynamodb_daily[0].id : ""
 }
 
-output "cloudwatch_alarm_user_errors_arn" {
-  description = "ARN of the user errors CloudWatch alarm"
-  value       = aws_cloudwatch_metric_alarm.user_errors.arn
-}
-
-output "cloudwatch_alarm_system_errors_arn" {
-  description = "ARN of the system errors CloudWatch alarm"
-  value       = aws_cloudwatch_metric_alarm.system_errors.arn
-}
-
-output "cloudwatch_alarm_write_throttles_arn" {
-  description = "ARN of the write throttles CloudWatch alarm"
-  value       = aws_cloudwatch_metric_alarm.write_throttles.arn
-}
-
 # Feature 006: User Data Table Outputs
 output "feature_006_users_table_name" {
   description = "Name of the Feature 006 users DynamoDB table"
