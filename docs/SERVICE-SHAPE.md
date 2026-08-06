@@ -1,5 +1,7 @@
 # Service Shape
 
+> **CANON**: verified against code.
+
 What the sentiment analyzer is and how it is actually built. Load this when you need the service's
 architecture: mapping it, hunting doc drift, or implementing against it. The constitution
 (`.specify/memory/constitution.md`) carries the rules; this file carries the description.

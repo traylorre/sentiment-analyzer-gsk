@@ -214,7 +214,7 @@ else
   echo -e "${RED}❌ SOME TESTS FAILED${NC}"
   echo ""
   echo "CRITICAL: Fix IAM policies before deploying!"
-  echo "Review: infrastructure/docs/CREDENTIAL_SEPARATION_SETUP.md"
+  echo "Review: docs/authorization.md"
   echo ""
   exit 1
 fi

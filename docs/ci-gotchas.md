@@ -1,5 +1,7 @@
 # CI/CD Gotchas
 
+> **CANON**: verified against code.
+
 Common pitfalls and their fixes discovered during development. Each entry follows the pattern: Problem, Symptom, Fix, Prevention.
 
 ---
@@ -105,3 +107,23 @@ blocked. `trivy` and `checkov` are commit-stage and `.tf`-scoped. `tfsec` and
 `checkov` were removed from `pre-commit-terraform` (`.pre-commit-config.yaml:72-74`) and replaced
 by local hooks; `trivy-terraform` runs `--exit-code 0` and is currently decorative. Read
 `.pre-commit-config.yaml` for the live order rather than any prose copy.
+
+---
+
+## GitHub environments gate the deploy pipeline
+
+Three environments, configured only in GitHub settings, so this section is the sole written
+record: `preprod` (no reviewers, deploys automatically), `production` (required reviewer
+`@traylorre`), and `production-auto` (no reviewers; the Dependabot bypass, selected by a live
+conditional in `deploy.yml`).
+
+- `production-auto` must carry the same secrets as `production` or Dependabot deploys fail.
+- Secrets the pipeline consumes: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
+  `DASHBOARD_API_KEY`, `PREPROD_JWT_SECRET`, `PROD_JWT_SECRET`, plus `vars.AWS_REGION`.
+- Deployment branches are restricted to `main`.
+
+## Related CI surfaces
+
+- Terraform state, locks, and backend setup: `docs/runbooks/terraform-state.md`
+- Terraform module conventions: `docs/terraform-patterns.md`
+- One-time account bootstrap: `infrastructure/terraform/bootstrap/README.md`
