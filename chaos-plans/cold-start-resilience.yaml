@@ -3,7 +3,7 @@
 # Tests the sentiment analyzer's resilience to Lambda performance degradation.
 # Covers: forced cold starts (memory reduction) and timeout scenarios.
 #
-# Execution: Follow docs/chaos-testing/gameday-runbook.md
+# Execution: Follow docs/chaos.md
 # Pre-flight: Complete docs/chaos-testing/preflight-checklist.md first
 # Prerequisite: ingestion-resilience plan executed first (establishes baseline)
 

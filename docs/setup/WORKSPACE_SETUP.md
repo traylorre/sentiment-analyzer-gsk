@@ -1,5 +1,7 @@
 # Workspace Setup Guide
 
+> **CANON**: verified against code.
+
 Complete guide for setting up a development environment on a new machine.
 
 **Time to complete**: ~30 minutes (including tool installation)
@@ -296,6 +298,16 @@ pytest tests/integration/    # Integration tests (requires LocalStack)
 ```
 
 ## Troubleshooting
+
+### "gpg failed to sign the data" (WSL and headless shells)
+
+gpg cannot find a terminal to prompt on. Add to `~/.bashrc`:
+
+```bash
+export GPG_TTY=$(tty)
+```
+
+Commits showing "Unverified" on GitHub: `git config user.email` must match a uid on the GPG key.
 
 ### "AWS credentials not configured"
 

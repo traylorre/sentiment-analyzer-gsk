@@ -1,5 +1,7 @@
 # Terraform Backend Bootstrap
 
+> **CANON**: verified against code.
+
 Creates the S3 bucket that holds Terraform state. Run once per AWS account.
 
 Operational procedure (stale locks, force-unlock, importing secrets) is in
