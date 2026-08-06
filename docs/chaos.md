@@ -1,6 +1,6 @@
 # Chaos Testing
 
-> **QUARRYSOME**: unaudited; verify against code before trusting.
+> **CANON**: verified against code.
 
 Current state: not operational.
 
@@ -68,9 +68,11 @@ Both declare `environment: preprod` and require the gate armed.
   `/chaos/<env>/snapshot/` before injection, and restoration reads from there.
 - **Andon cord**: `scripts/chaos/andon-cord.sh <env>` sets the switch to `triggered`,
   restores every snapshot, and detaches deny policies.
-- **Auto-restore Lambda**: SNS-triggered by the critical composite CloudWatch alarm.
-  Same restore steps as the andon cord, idempotent, then disarms the switch. On partial
-  failure it leaves the switch at `triggered` for manual investigation.
+- **Auto-restore Lambda**: code-complete but not deployed. The terraform module
+  invocation is still a TODO in `infrastructure/terraform/main.tf`, and its intended
+  trigger, the `preprod-critical-composite` alarm, does not exist in preprod because
+  the cloudwatch-alarms module is gated off there. Until both land, deployed safety is
+  the kill switch, the snapshots, and the andon cord.
 - **Buddy operator**: every gameday has a second operator watching alarms, ready to
   pull the andon cord.
 
@@ -122,12 +124,12 @@ aws iam detach-role-policy --role-name preprod-ingestion-lambda-role \
   --policy-arn "arn:aws:iam::${ACCOUNT_ID}:policy/preprod-chaos-deny-dynamodb-write" || true
 aws iam detach-role-policy --role-name preprod-analysis-lambda-role \
   --policy-arn "arn:aws:iam::${ACCOUNT_ID}:policy/preprod-chaos-deny-dynamodb-write" || true
-aws lambda update-function-configuration --function-name preprod-sentiment-analysis --memory-size 512
-aws lambda update-function-configuration --function-name preprod-sentiment-ingestion --timeout 30
+aws lambda update-function-configuration --function-name preprod-sentiment-analysis --memory-size 2048
+aws lambda update-function-configuration --function-name preprod-sentiment-ingestion --timeout 60
 aws events enable-rule --name preprod-sentiment-ingestion-schedule
 aws ssm put-parameter --name "/chaos/preprod/kill-switch" \
   --value "disarmed" --type String --overwrite
 ```
 
-Escalation: buddy pulls the cord; unresolved after 5 minutes goes to the on-call
-engineer; on-call unavailable goes to the engineering lead.
+Escalation: buddy pulls the cord; if the cord fails, operator and buddy run the manual
+restore above. There is no escalation chain beyond the two of them.
