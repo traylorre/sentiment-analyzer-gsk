@@ -38,13 +38,13 @@ semgrep==1.172.0        # Comprehensive SAST (make sast gate)
 
 # Type Checking (optional but recommended)
 mypy==1.19.1
-boto3-stubs==1.43.46     # Type stubs for boto3
+boto3-stubs==1.43.51     # Type stubs for boto3
 
 # Testing Utilities
 httpx==0.28.1           # Async HTTP client for financial API adapters
 requests==2.34.2        # CORS tests import it directly; src/ uses httpx
 freezegun==1.5.5        # Time mocking for TTL tests
-hypothesis>=6.156.6
+hypothesis>=6.157.1
 
 # E2E Testing - Playwright for browser automation
 pytest-playwright>=0.8.0  # Pytest fixtures for Playwright (0.7.2 adds pytest 9.0+ support)
