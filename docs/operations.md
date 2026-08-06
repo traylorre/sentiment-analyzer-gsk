@@ -1,6 +1,6 @@
 # Operations
 
-> **QUARRYSOME**: unaudited; verify against code before trusting.
+> **CANON**: verified against code.
 
 Two procedures: diagnosing ingestion failures and rolling back a deployment. CI deploys
 preprod only; every production job in `.github/workflows/deploy.yml` carries `if: false`.
@@ -12,8 +12,10 @@ Commands below use `preprod-` names. Environment names come from
 The ingestion Lambda is `preprod-sentiment-ingestion`. EventBridge rule
 `preprod-sentiment-ingestion-schedule` fires it every 5 minutes, around the clock; there is
 no market-hours gate anywhere in the schedule or the handler
-(`infrastructure/terraform/modules/eventbridge/main.tf:3-6`). It pulls from Tiingo as
-primary and fails over to Finnhub (`src/lambdas/ingestion/parallel_fetcher.py`).
+(`infrastructure/terraform/modules/eventbridge/main.tf:3-6`). It fetches Tiingo and Finnhub
+in parallel (`src/lambdas/ingestion/parallel_fetcher.py`): `PARALLEL_INGESTION_ENABLED`
+defaults to true and Terraform does not override it (`src/lambdas/ingestion/handler.py:152-153`).
+Sequential Tiingo-then-Finnhub failover is only the fallback when that flag is off.
 
 ### What actually alerts
 
@@ -38,9 +40,11 @@ Work from the Lambda outward: its own logs, then its upstreams, then its downstr
    aws logs tail /aws/lambda/preprod-sentiment-ingestion --since 30m --filter-pattern "ERROR"
    ```
 
-2. Source APIs second. Check the Tiingo and Finnhub status pages. Failover is automatic; a
-   nonzero `FailoverCount` metric means the primary is the problem even while collection
-   still succeeds.
+2. Source APIs second. Check the Tiingo and Finnhub status pages. Parallel fetch tolerates
+   one source failing: the failing source logs an error and emits `SilentFailure/Count`
+   (dimension `FailurePath: parallel_fetcher_aggregate`) in `SentimentAnalyzer/Reliability`
+   (`src/lambdas/ingestion/parallel_fetcher.py:163-169`) while collection continues on the
+   other source.
 
 3. Circuit breaker third. State lives in the items table under `CIRCUIT#<service>`
    (`src/lambdas/ingestion/handler.py:801-806`); it opens after 5 failures and resets after
@@ -61,10 +65,11 @@ Work from the Lambda outward: its own logs, then its upstreams, then its downstr
      --query SecretString --output text | head -c 10
    ```
 
-5. Storage last. Write throttles have their own alarm,
-   `preprod-sentiment-dynamodb-write-throttles`
-   (`infrastructure/terraform/modules/dynamodb/main.tf:223`). If that alarm is quiet, the
-   problem is upstream of DynamoDB.
+5. Storage last. Despite its name, the alarm `preprod-sentiment-dynamodb-write-throttles`
+   (`infrastructure/terraform/modules/dynamodb/main.tf:222`) measures consumed write
+   capacity (`ConsumedWriteCapacityUnits` over 1000 per minute), not throttle events. A
+   quiet alarm means writes are not spiking; for actual throttles query the
+   `WriteThrottleEvents` metric in `AWS/DynamoDB` directly.
 
 ### Metrics
 
@@ -73,8 +78,10 @@ Namespace `SentimentAnalyzer/Ingestion` (`src/lambdas/ingestion/metrics.py:26-42
 - `CollectionSuccess` / `CollectionFailure` ratio
 - `CollectionLatencyMs` (alert threshold 30000 ms, `metrics.py:45`)
 - `ItemsCollected` and `ItemsDuplicate` per run
-- `FailoverCount` (normally 0)
 - `NotificationLatencyMs` (30 second SLA to downstream SNS)
+
+`FailoverCount` is declared (`metrics.py:29`) but nothing on the live path emits it;
+`record_failover` has no callers outside its own docstring. Do not wait on it.
 
 ```bash
 aws cloudwatch get-metric-statistics \
