@@ -382,7 +382,7 @@ def _get_sendgrid_api_key(secret_arn: str) -> str:
 def clear_api_key_cache() -> None:
     """Clear the API key cache (for testing).
 
-    This clears the shared secrets cache which has a 5-minute TTL.
+    This clears the shared secrets cache which has a 24-hour TTL.
     """
     from src.lambdas.shared.secrets import clear_cache
 

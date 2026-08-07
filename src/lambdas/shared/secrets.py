@@ -10,12 +10,15 @@ For On-Call Engineers:
     2. Lambda IAM role has secretsmanager:GetSecretValue permission
     3. Secret path format: ${environment}/sentiment-analyzer/<name>
 
-    Cache has 5-minute TTL. Lambda cold start refreshes cache automatically.
+    Cache has 24-hour TTL. Lambda cold start refreshes cache automatically.
     See SC-03, SC-05 in ON_CALL_SOP.md for secret-related incidents.
 
 For Developers:
     - Secrets are cached in memory to reduce API calls and latency
-    - Cache TTL is 5 minutes (configurable via SECRETS_CACHE_TTL_SECONDS)
+    - Cache TTL is 24 hours (configurable via SECRETS_CACHE_TTL_SECONDS);
+      in practice a warm container fetches each secret once, on cold start
+    - Every Secrets Manager fetch is a KMS Decrypt behind the scenes, and
+      KMS requests are billed; keep the TTL long unless rotation demands less
     - Use get_secret() for all secret retrieval
     - Never log secret values, only ARNs
 
@@ -41,8 +44,10 @@ from src.lib.cache_utils import CacheStats, get_global_emitter
 logger = logging.getLogger(__name__)
 
 # Cache configuration
-# On-Call Note: Reduce TTL if secrets need faster rotation pickup
-DEFAULT_CACHE_TTL_SECONDS = 300  # 5 minutes
+# On-Call Note: Reduce TTL (SECRETS_CACHE_TTL_SECONDS) if secrets need faster
+# rotation pickup. No secret currently rotates (rotation_lambda_arn = null in
+# infrastructure/terraform/main.tf), so the TTL is bounded by container lifetime.
+DEFAULT_CACHE_TTL_SECONDS = 86400  # 24 hours
 
 # Retry configuration
 RETRY_CONFIG = Config(
@@ -140,8 +145,8 @@ def get_secret(
     """
     Retrieve a secret from Secrets Manager with caching.
 
-    Secrets are cached in memory for 5 minutes to reduce API calls and latency.
-    Cache is automatically cleared on Lambda cold start.
+    Secrets are cached in memory for 24 hours to reduce API calls, latency, and
+    KMS Decrypt billing. Cache is automatically cleared on Lambda cold start.
 
     Args:
         secret_id: Secret name or ARN (e.g., "dev/sentiment-analyzer/tiingo")
