@@ -61,18 +61,6 @@ variable "enable_xray_tracing" {
   default     = true
 }
 
-variable "create_alarms" {
-  description = "Create CloudWatch alarms for API Gateway metrics"
-  type        = bool
-  default     = true
-}
-
-variable "alarm_actions" {
-  description = "SNS topic ARNs for alarm notifications"
-  type        = list(string)
-  default     = []
-}
-
 variable "error_4xx_threshold" {
   description = "Alarm threshold for 4XX errors (count per 5 minutes)"
   type        = number
