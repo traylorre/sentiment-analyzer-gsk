@@ -719,8 +719,9 @@ data "aws_iam_policy_document" "ci_deploy_iam" {
       "arn:aws:iam::*:role/*-backup-role",
       "arn:aws:iam::*:role/*-cognito-*",
       "arn:aws:iam::*:role/*-rum-*",
-      "arn:aws:iam::*:role/*-amplify-*", # Feature 1105: Amplify service role
-      "arn:aws:iam::*:role/*-chaos-*"    # Feature 1290: Chaos engineer + scheduler roles
+      "arn:aws:iam::*:role/*-amplify-*",               # Feature 1105: Amplify service role
+      "arn:aws:iam::*:role/*-chaos-*",                 # Feature 1290: Chaos engineer + scheduler roles
+      "arn:aws:iam::*:role/*-backfill-timeseries-role" # Feature 001-signed-fanout: reaches the live CI user only via the admin bootstrap apply (see header)
     ]
   }
 
@@ -788,8 +789,9 @@ data "aws_iam_policy_document" "ci_deploy_iam" {
       "arn:aws:iam::*:role/*-backup-role",
       "arn:aws:iam::*:role/*-cognito-*",
       "arn:aws:iam::*:role/*-rum-*",
-      "arn:aws:iam::*:role/*-amplify-*", # Feature 1105: Amplify service role
-      "arn:aws:iam::*:role/*-chaos-*"    # Feature 1290: Chaos engineer + scheduler roles
+      "arn:aws:iam::*:role/*-amplify-*",               # Feature 1105: Amplify service role
+      "arn:aws:iam::*:role/*-chaos-*",                 # Feature 1290: Chaos engineer + scheduler roles
+      "arn:aws:iam::*:role/*-backfill-timeseries-role" # Feature 001-signed-fanout: reaches the live CI user only via the admin bootstrap apply (see header)
     ]
   }
 
