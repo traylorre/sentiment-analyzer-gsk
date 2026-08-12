@@ -53,6 +53,7 @@ def aws(monkeypatch):
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", "testing")
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "testing")
     monkeypatch.setenv("AWS_REGION", "us-east-1")
+    monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
     with mock_aws():
         dynamodb = boto3.client("dynamodb", region_name="us-east-1")
         for table, keys in (
