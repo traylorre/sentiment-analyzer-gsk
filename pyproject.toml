@@ -51,7 +51,7 @@ dev = [
     "boto3>=1.34.0",
     "aws-xray-sdk>=2.12.0",
     # SAST tools
-    "semgrep==1.172.0",  # Feature 001-semgrep-gating: pinned to match requirements-dev.txt
+    "semgrep==1.174.0",  # Feature 001-semgrep-gating: pinned to match requirements-dev.txt
 ]
 
 [project.urls]
